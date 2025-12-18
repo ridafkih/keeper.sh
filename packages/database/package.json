@@ -6,9 +6,14 @@
   "private": true,
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/pg": "8.16.0",
+    "drizzle-kit": "0.31.8"
   },
   "dependencies": {
-    "@keeper.sh/log": "workspace:*"
+    "@keeper.sh/log": "workspace:*",
+    "dotenv": "17.2.3",
+    "drizzle-orm": "0.45.1",
+    "pg": "8.16.3"
   }
 }
