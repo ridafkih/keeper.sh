@@ -1,6 +1,7 @@
-import { text, pgTable, timestamp } from "drizzle-orm/pg-core";
+import { text, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
 
-export const calendarSnapshots = pgTable("calendar_snapshots", {
+export const calendarSnapshotsTable = pgTable("calendar_snapshots", {
+  id: uuid().notNull().primaryKey().defaultRandom(),
   createdAt: timestamp().notNull().defaultNow(),
   ical: text(),
 });

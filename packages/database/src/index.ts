@@ -1,4 +1,2 @@
-import { drizzle } from "drizzle-orm/node-postgres";
-import env from "@keeper.sh/env/database";
-
-export const database = drizzle(env.DATABASE_URL);
+export { database } from "./utils/database";
+export { insertCalendarSnapshot } from "./utils/calendar-snapshot";
