@@ -1,36 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@base-ui-components/react/button";
-import { getSession, signOut } from "@/lib/auth";
+import { useAuth } from "@/components/auth-provider";
+import { signOut } from "@/lib/auth";
 import styles from "./header.module.css";
 
 export function AuthNav() {
   const router = useRouter();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    getSession().then((session) => {
-      setIsLoggedIn(!!session?.user);
-      setIsLoading(false);
-    });
-  }, []);
+  const { user, isLoading, refresh } = useAuth();
 
   async function handleLogout() {
     await signOut();
-    setIsLoggedIn(false);
+    await refresh();
     router.push("/");
-    router.refresh();
   }
 
   if (isLoading) {
     return <nav className={styles.nav} />;
   }
 
-  if (isLoggedIn) {
+  if (user) {
     return (
       <nav className={styles.nav}>
         <Button onClick={handleLogout} className={styles.buttonSecondary}>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/header";
+import { useAuth } from "@/components/auth-provider";
 import {
   AuthFormContainer,
   AuthForm,
@@ -18,6 +19,7 @@ import { signUp } from "@/lib/auth";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { refresh } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -33,8 +35,8 @@ export default function RegisterPage() {
 
     try {
       await signUp(username, password, name || undefined);
+      await refresh();
       router.push("/dashboard");
-      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign up failed");
     } finally {

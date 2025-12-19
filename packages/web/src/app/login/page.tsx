@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/header";
+import { useAuth } from "@/components/auth-provider";
 import {
   AuthFormContainer,
   AuthForm,
@@ -18,6 +19,7 @@ import { signIn } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { refresh } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -32,8 +34,8 @@ export default function LoginPage() {
 
     try {
       await signIn(username, password);
+      await refresh();
       router.push("/dashboard");
-      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed");
     } finally {
