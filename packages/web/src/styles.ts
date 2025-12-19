@@ -140,17 +140,25 @@ export const agendaDayHeading = tv({
 });
 
 export const agendaEventList = tv({
-  base: "flex flex-col gap-1 list-none p-0 m-0",
+  base: "flex flex-col list-none p-0 m-0",
 });
 
 export const agendaEventItem = tv({
-  base: "flex gap-4 py-3 px-4 rounded-lg border-l-2",
+  base: "flex items-center gap-2 py-1 text-sm text-gray-500",
+});
+
+export const agendaEventTime = tv({
+  base: "tabular-nums text-gray-900 font-medium",
+});
+
+export const agendaEventDot = tv({
+  base: "w-1.5 h-1.5 rounded-full shrink-0",
   variants: {
     color: {
-      blue: "border-blue-500 bg-blue-50/30",
-      green: "border-green-500 bg-green-50/30",
-      purple: "border-purple-500 bg-purple-50/30",
-      orange: "border-orange-500 bg-orange-50/30",
+      blue: "bg-blue-500",
+      green: "bg-green-500",
+      purple: "bg-purple-500",
+      orange: "bg-orange-500",
     },
   },
   defaultVariants: {
@@ -158,20 +166,8 @@ export const agendaEventItem = tv({
   },
 });
 
-export const agendaEventTime = tv({
-  base: "text-sm text-gray-500 whitespace-nowrap tabular-nums w-36 shrink-0",
-});
-
-export const agendaEventContent = tv({
-  base: "flex flex-col gap-0.5 min-w-0",
-});
-
-export const agendaEventTitle = tv({
-  base: "text-sm font-medium text-gray-900 truncate",
-});
-
-export const agendaEventMeta = tv({
-  base: "text-xs text-gray-400",
+export const agendaEventSource = tv({
+  base: "text-gray-900 font-medium",
 });
 
 export const agendaEmptyDay = tv({

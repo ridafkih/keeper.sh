@@ -8,7 +8,8 @@ import {
   agendaEventList,
   agendaEventItem,
   agendaEventTime,
-  agendaEventMeta,
+  agendaEventDot,
+  agendaEventSource,
   agendaEmptyDay,
 } from "@/styles";
 
@@ -102,16 +103,24 @@ export function Calendar({
             {dayEvents.length > 0 ? (
               <ul className={agendaEventList()}>
                 {dayEvents.map((event) => (
-                  <li
-                    key={event.id}
-                    className={agendaEventItem({ color: getEventColor(event.calendarId) })}
-                  >
-                    <span className={agendaEventTime()}>
-                      {formatTime(new Date(event.startTime))} – {formatTime(new Date(event.endTime))}
+                  <li key={event.id} className={agendaEventItem()}>
+                    <span className={agendaEventDot({ color: getEventColor(event.calendarId) })} />
+                    <span>
+                      Busy from{" "}
+                      <span className={agendaEventTime()}>
+                        {formatTime(new Date(event.startTime))}
+                      </span>
+                      {" "}to{" "}
+                      <span className={agendaEventTime()}>
+                        {formatTime(new Date(event.endTime))}
+                      </span>
+                      {event.sourceName && (
+                        <>
+                          {" "}according to an event from{" "}
+                          <span className={agendaEventSource()}>{event.sourceName}</span>
+                        </>
+                      )}
                     </span>
-                    {event.sourceName && (
-                      <span className={agendaEventMeta()}>{event.sourceName}</span>
-                    )}
                   </li>
                 ))}
               </ul>
