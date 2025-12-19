@@ -5,7 +5,7 @@ import { baker } from "./baker";
 export const registerJobs = (jobs: CronOptions[]): ICron[] => {
   const crons: ICron[] = [];
 
-  log.info(`registering ${jobs.length} jobs`);
+  log.info({ jobs }, "registering jobs");
 
   for (const job of jobs) {
     log.info({ job }, `registering job '${job.name}'`);

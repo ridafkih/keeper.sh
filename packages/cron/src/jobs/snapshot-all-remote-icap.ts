@@ -16,11 +16,11 @@ const pullAndLogRemoteCalendar = async (
   id: string,
   { url, userId }: PullAndLogRemoteCalendarOptions,
 ) => {
-  log.info(`fetching remote calendar '${id}'`);
+  log.info({ id }, "fetching remote calendar");
 
   try {
     const result = await pullRemoteCalendar("icap", url);
-    log.info(`fetched remote calendar '${id}'`);
+    log.info({ id }, "fetched remote calendar");
     return { result, userId };
   } catch (error) {
     log.error({ error }, `could not fetch remote calendar '${id}'`);

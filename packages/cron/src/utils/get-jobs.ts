@@ -6,7 +6,7 @@ import { join } from "node:path";
  * @throws
  */
 export const getAllJobs = async (rootDirectory: string) => {
-  log.info(`scanning '${rootDirectory}' for jobs`);
+  log.info({ rootDirectory }, "scanning for jobs");
 
   const globPattern = join(rootDirectory, "**/*.{ts,js}");
   const globScanner = new Glob(globPattern);
@@ -16,7 +16,7 @@ export const getAllJobs = async (rootDirectory: string) => {
     return import(entrypoint).then((module) => module.default);
   });
 
-  log.info(`imported ${imports.length} jobs from '${rootDirectory}'`);
+  log.info({ "imports.length": imports.length }, `imported all jobs`);
 
   return Promise.all(imports);
 };
