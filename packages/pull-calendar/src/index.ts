@@ -40,12 +40,15 @@ export async function pullRemoteCalendar(
 ): Promise<JustICal | JustJSON | ICalOrJSON> {
   const outputs = typeof output === "string" ? [output] : output;
   const ical = await fetchRemoteText(url);
+  const json = convertIcsCalendar(undefined, ical);
+
+  if (!json.version || !json.prodId) {
+    throw new Error("missing required calendar properties");
+  }
 
   if (!outputs.includes("json")) {
     return { ical };
   }
-
-  const json = convertIcsCalendar(undefined, ical);
 
   if (!outputs.includes("ical")) {
     return { json };
