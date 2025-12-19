@@ -38,7 +38,12 @@ interface PlanCardProps {
   targetInterval: "monthly" | "yearly";
 }
 
-function PlanCardButton({
+const FeatureIcon = ({ included }: { included: boolean }) => {
+  const Icon = included ? Check : X;
+  return <Icon className={pricingFeatureIcon({ included })} />;
+};
+
+const PlanCardButton = ({
   plan,
   isCurrent,
   isCurrentInterval,
@@ -48,7 +53,7 @@ function PlanCardButton({
   onManage,
   onSwitchInterval,
   targetInterval,
-}: PlanCardProps) {
+}: PlanCardProps) => {
   if (isSubscriptionLoading) {
     return (
       <Button className={clsx(button({ variant: "secondary" }), "!opacity-0")} disabled>
@@ -103,9 +108,9 @@ function PlanCardButton({
       {isLoading ? "Loading..." : `Upgrade to ${plan.name}`}
     </Button>
   );
-}
+};
 
-export function PlanCard({
+export const PlanCard = ({
   plan,
   isCurrent,
   isCurrentInterval,
@@ -115,7 +120,7 @@ export function PlanCard({
   onManage,
   onSwitchInterval,
   targetInterval,
-}: PlanCardProps) {
+}: PlanCardProps) => {
   const showCurrentBadge = !isSubscriptionLoading && isCurrent && isCurrentInterval;
 
   return (
@@ -155,12 +160,8 @@ export function PlanCard({
       <ul className="flex flex-col gap-3 mb-6 flex-1">
         {plan.features.map((feature) => (
           <li key={feature.name} className={pricingFeature()}>
-            {feature.included ? (
-              <Check className={pricingFeatureIcon({ included: true })} />
-            ) : (
-              <X className={pricingFeatureIcon({ included: false })} />
-            )}
-            <span className={feature.included ? "" : "text-gray-400"}>
+            <FeatureIcon included={feature.included} />
+            <span className={clsx(!feature.included && "text-gray-400")}>
               {feature.name}
             </span>
           </li>
@@ -180,4 +181,4 @@ export function PlanCard({
       />
     </div>
   );
-}
+};

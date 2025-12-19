@@ -37,8 +37,8 @@ export default function RegisterPage() {
       await signUp(username, password, name);
       await refresh();
       router.push("/dashboard");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign up failed");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Sign up failed");
     } finally {
       setIsLoading(false);
     }

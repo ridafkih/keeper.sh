@@ -36,8 +36,8 @@ export default function LoginPage() {
       await signIn(username, password);
       await refresh();
       router.push("/dashboard");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign in failed");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Sign in failed");
     } finally {
       setIsLoading(false);
     }
