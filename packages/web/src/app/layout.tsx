@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Outfit } from "next/font/google";
-import { AuthProvider } from "@/components/auth-provider/auth-provider";
+import { AuthProvider } from "@/components/auth-provider";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -22,7 +22,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={outfit.className}>
         <AuthProvider>
-          <div className="root">{children}</div>
+          <div className="isolate min-h-dvh flex flex-col">{children}</div>
         </AuthProvider>
       </body>
     </html>

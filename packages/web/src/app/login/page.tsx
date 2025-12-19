@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Header } from "@/components/header/header";
-import { useAuth } from "@/components/auth-provider/auth-provider";
+import { Header } from "@/components/header";
+import { useAuth } from "@/components/auth-provider";
 import {
   AuthFormContainer,
   AuthForm,
@@ -13,8 +13,7 @@ import {
   AuthFormField,
   AuthFormSubmit,
   AuthFormFooter,
-  styles,
-} from "@/components/auth-form/auth-form";
+} from "@/components/auth-form";
 import { signIn } from "@/lib/auth";
 
 export default function LoginPage() {
@@ -44,7 +43,7 @@ export default function LoginPage() {
   }
 
   return (
-    <>
+    <div className="flex flex-col flex-1">
       <Header />
       <AuthFormContainer>
         <AuthForm onSubmit={handleSubmit}>
@@ -68,12 +67,15 @@ export default function LoginPage() {
           </AuthFormSubmit>
           <AuthFormFooter>
             Don&apos;t have an account?{" "}
-            <Link href="/register" className={styles.footerLink}>
+            <Link
+              href="/register"
+              className="text-gray-900 font-medium no-underline hover:underline"
+            >
               Register
             </Link>
           </AuthFormFooter>
         </AuthForm>
       </AuthFormContainer>
-    </>
+    </div>
   );
 }

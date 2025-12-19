@@ -1,52 +1,5 @@
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
+@import "tailwindcss";
 
-* {
-  margin: 0;
-}
-
-body {
-  position: relative;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-
-.root {
-  isolation: isolate;
-  min-height: 100vh;
-}
-
-.container {
-  max-width: 768px;
-  margin-inline: auto;
-  padding-inline: 1rem;
-}
-
-img,
-picture,
-video,
-canvas,
-svg {
-  display: block;
-  max-width: 100%;
-}
-
-input,
-button,
-textarea,
-select {
-  font: inherit;
-}
-
-p,
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  overflow-wrap: break-word;
+@theme {
+  --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
 }

@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Header } from "@/components/header/header";
-import { useAuth } from "@/components/auth-provider/auth-provider";
+import { Header } from "@/components/header";
+import { useAuth } from "@/components/auth-provider";
 import {
   AuthFormContainer,
   AuthForm,
@@ -13,8 +13,7 @@ import {
   AuthFormField,
   AuthFormSubmit,
   AuthFormFooter,
-  styles,
-} from "@/components/auth-form/auth-form";
+} from "@/components/auth-form";
 import { signUp } from "@/lib/auth";
 
 export default function RegisterPage() {
@@ -45,7 +44,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <>
+    <div className="flex flex-col flex-1">
       <Header />
       <AuthFormContainer>
         <AuthForm onSubmit={handleSubmit}>
@@ -73,17 +72,23 @@ export default function RegisterPage() {
             maxLength={128}
             autoComplete="new-password"
           />
-          <AuthFormSubmit isLoading={isLoading} loadingText="Creating account...">
+          <AuthFormSubmit
+            isLoading={isLoading}
+            loadingText="Creating account..."
+          >
             Create account
           </AuthFormSubmit>
           <AuthFormFooter>
             Already have an account?{" "}
-            <Link href="/login" className={styles.footerLink}>
+            <Link
+              href="/login"
+              className="text-gray-900 font-medium no-underline hover:underline"
+            >
               Login
             </Link>
           </AuthFormFooter>
         </AuthForm>
       </AuthFormContainer>
-    </>
+    </div>
   );
 }

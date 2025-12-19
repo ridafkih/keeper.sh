@@ -1,11 +1,10 @@
-import { Header } from "@/components/header/header";
-import styles from "./page.module.css";
+import { Header } from "@/components/header";
 
 export default function HomePage() {
   return (
     <>
       <Header />
-      <main className={styles.main}></main>
+      <main className="flex flex-col flex-1" />
     </>
   );
 }

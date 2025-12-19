@@ -2,10 +2,13 @@ import { Form } from "@base-ui-components/react/form";
 import { Field } from "@base-ui-components/react/field";
 import { Input } from "@base-ui-components/react/input";
 import { Button } from "@base-ui-components/react/button";
-import styles from "./auth-form.module.css";
 
 export function AuthFormContainer({ children }: { children: React.ReactNode }) {
-  return <main className={styles.container}>{children}</main>;
+  return (
+    <main className="flex-1 flex flex-col items-center justify-center p-8">
+      {children}
+    </main>
+  );
 }
 
 export function AuthForm({
@@ -16,19 +19,26 @@ export function AuthForm({
   children: React.ReactNode;
 }) {
   return (
-    <Form className={styles.form} onSubmit={onSubmit}>
+    <Form
+      className="w-full max-w-sm p-8 border border-neutral-200 rounded-xl bg-white"
+      onSubmit={onSubmit}
+    >
       {children}
     </Form>
   );
 }
 
 export function AuthFormTitle({ children }: { children: React.ReactNode }) {
-  return <h1 className={styles.title}>{children}</h1>;
+  return <h1 className="text-2xl font-bold mb-6 text-center">{children}</h1>;
 }
 
 export function AuthFormError({ message }: { message: string | null }) {
   if (!message) return null;
-  return <div className={styles.error}>{message}</div>;
+  return (
+    <div className="p-3 mb-4 rounded-md text-sm bg-red-50 text-red-600 border border-red-200">
+      {message}
+    </div>
+  );
 }
 
 export function AuthFormField({
@@ -49,8 +59,10 @@ export function AuthFormField({
   maxLength?: number;
 }) {
   return (
-    <Field.Root name={name} className={styles.field}>
-      <Field.Label className={styles.label}>{label}</Field.Label>
+    <Field.Root name={name} className="mb-4">
+      <Field.Label className="block text-sm font-medium mb-1.5 text-gray-700">
+        {label}
+      </Field.Label>
       <Input
         name={name}
         type={type}
@@ -58,7 +70,7 @@ export function AuthFormField({
         autoComplete={autoComplete}
         minLength={minLength}
         maxLength={maxLength}
-        className={styles.input}
+        className="w-full py-2.5 px-3 border border-gray-300 rounded-md text-base transition-[border-color,box-shadow] duration-150 focus:outline-none focus:border-gray-900 focus:ring-3 focus:ring-black/10"
       />
     </Field.Root>
   );
@@ -74,14 +86,16 @@ export function AuthFormSubmit({
   loadingText: string;
 }) {
   return (
-    <Button type="submit" disabled={isLoading} className={styles.submitButton}>
+    <Button
+      type="submit"
+      disabled={isLoading}
+      className="w-full py-3 px-4 mt-2 border-none rounded-md text-base font-medium bg-gray-900 text-white cursor-pointer transition-colors duration-150 hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+    >
       {isLoading ? loadingText : children}
     </Button>
   );
 }
 
 export function AuthFormFooter({ children }: { children: React.ReactNode }) {
-  return <p className={styles.footer}>{children}</p>;
+  return <p className="mt-6 text-center text-sm text-gray-500">{children}</p>;
 }
-
-export { styles };
