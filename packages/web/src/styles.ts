@@ -92,13 +92,7 @@ export const integrationCard = tv({
 });
 
 export const integrationIcon = tv({
-  base: "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
-  variants: {
-    provider: {
-      google: "bg-white border border-gray-200",
-      outlook: "bg-[#0078d4]",
-    },
-  },
+  base: "w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-white border border-gray-200",
 });
 
 export const integrationInfo = tv({
