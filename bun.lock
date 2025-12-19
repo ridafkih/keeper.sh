@@ -11,6 +11,7 @@
         "@keeper.sh/auth": "workspace:*",
         "@keeper.sh/database": "workspace:*",
         "@keeper.sh/log": "workspace:*",
+        "@keeper.sh/pull-calendar": "workspace:*",
         "drizzle-orm": "0.45.1",
       },
       "devDependencies": {

@@ -29,10 +29,7 @@ const getSession = async (request: Request) => {
 };
 
 const withAuth = (
-  callback: (
-    request: BunRequest<string>,
-    userId: string,
-  ) => Promise<Response>,
+  callback: (request: BunRequest<string>, userId: string) => Promise<Response>,
 ): BunRouteCallback => {
   return async (request) => {
     const session = await getSession(request);
