@@ -43,6 +43,13 @@
       "when": 1766119528843,
       "tag": "0005_dusty_nomad",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1766120385911,
+      "tag": "0006_curious_orphan",
+      "breakpoints": true
     }
   ]
 }
