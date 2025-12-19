@@ -55,7 +55,7 @@ export default function IntegrationsPage() {
 
   async function fetchSources() {
     try {
-      const response = await fetch("/api/calendar-sources");
+      const response = await fetch("/api/ics");
       if (response.ok) {
         const data = await response.json();
         setSources(data);
@@ -81,7 +81,7 @@ export default function IntegrationsPage() {
     const url = formData.get("url") as string;
 
     try {
-      const response = await fetch("/api/calendar-sources", {
+      const response = await fetch("/api/ics", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, url }),
@@ -104,7 +104,7 @@ export default function IntegrationsPage() {
 
   async function handleRemoveSource(id: string) {
     try {
-      const response = await fetch(`/api/calendar-sources/${id}`, {
+      const response = await fetch(`/api/ics/${id}`, {
         method: "DELETE",
       });
 
@@ -170,7 +170,10 @@ export default function IntegrationsPage() {
                 <Dialog.Description className="text-sm text-gray-500 mb-4">
                   Enter an iCal URL to import events from another calendar.
                 </Dialog.Description>
-                <form onSubmit={handleAddSource} className="flex flex-col gap-4">
+                <form
+                  onSubmit={handleAddSource}
+                  className="flex flex-col gap-4"
+                >
                   <div className="flex flex-col gap-1">
                     <label htmlFor="source-name" className={label()}>
                       Name

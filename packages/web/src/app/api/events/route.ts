@@ -8,7 +8,8 @@ if (!API_URL) {
 export async function GET(request: NextRequest) {
   const cookie = request.headers.get("Cookie");
 
-  const response = await fetch(`${API_URL}/api/events`, {
+  const url = new URL("/api/events", API_URL);
+  const response = await fetch(url.toString(), {
     headers: {
       ...(cookie && { Cookie: cookie }),
     },

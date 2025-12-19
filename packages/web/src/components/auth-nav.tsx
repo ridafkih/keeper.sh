@@ -1,5 +1,6 @@
 "use client";
 
+import clsx from "clsx";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@base-ui/react/button";
@@ -20,7 +21,26 @@ export function AuthNav() {
   }
 
   if (isLoading) {
-    return <nav className="flex gap-3" />;
+    if (isDashboard) {
+      return (
+        <nav className="flex gap-3">
+          <Button className={clsx(button({ variant: "secondary" }), "!opacity-0")} disabled>
+            Logout
+          </Button>
+        </nav>
+      );
+    }
+
+    return (
+      <nav className="flex gap-3">
+        <Button className={clsx(button({ variant: "secondary" }), "!opacity-0")} disabled>
+          Login
+        </Button>
+        <Button className={clsx(button({ variant: "primary" }), "!opacity-0")} disabled>
+          Register
+        </Button>
+      </nav>
+    );
   }
 
   if (user) {

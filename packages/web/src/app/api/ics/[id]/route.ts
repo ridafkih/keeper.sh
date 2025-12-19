@@ -11,7 +11,7 @@ export async function DELETE(
 ) {
   const { id } = await params;
 
-  const response = await fetch(`${API_URL}/api/calendar-sources/${id}`, {
+  const response = await fetch(`${API_URL}/api/ics/${id}`, {
     method: "DELETE",
     headers: {
       Cookie: request.headers.get("Cookie") || "",

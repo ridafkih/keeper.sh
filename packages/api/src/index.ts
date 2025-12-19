@@ -45,7 +45,7 @@ const withAuth = (
 const server = Bun.serve({
   port: 3000,
   routes: {
-    "/api/calendar-sources": {
+    "/api/ics": {
       GET: withTracing(
         withAuth(async (_request, userId) => {
           const sources = await database
@@ -86,7 +86,7 @@ const server = Bun.serve({
         }),
       ),
     },
-    "/api/calendar-sources/:id": {
+    "/api/ics/:id": {
       DELETE: withTracing(
         withAuth(async (request, userId) => {
           const { id } = request.params;
