@@ -54,7 +54,9 @@ export default {
     const users = await database.select({ id: user.id }).from(user);
     log.info("reconciling subscriptions for %s users", users.length);
 
-    const reconciliations = users.map((u) => reconcileUserSubscription(u.id));
+    const reconciliations = users.map((user) =>
+      reconcileUserSubscription(user.id),
+    );
     await Promise.allSettled(reconciliations);
 
     log.info("subscription reconciliation complete");
