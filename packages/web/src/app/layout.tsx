@@ -1,11 +1,11 @@
+import "./globals.css";
+
 import type { Metadata } from "next";
 import { Outfit } from "next/font/google";
 import { AuthProvider } from "@/components/auth-provider";
-import "./globals.css";
 
 const outfit = Outfit({
   subsets: ["latin"],
-  variable: "--font-outfit",
 });
 
 export const metadata: Metadata = {
@@ -20,7 +20,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={outfit.className}>
+      <body className={`${outfit.className} antialiased`}>
         <AuthProvider>
           <div className="isolate min-h-dvh flex flex-col">{children}</div>
         </AuthProvider>

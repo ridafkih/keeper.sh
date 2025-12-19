@@ -2,6 +2,7 @@ import { Form } from "@base-ui-components/react/form";
 import { Field } from "@base-ui-components/react/field";
 import { Input } from "@base-ui-components/react/input";
 import { Button } from "@base-ui-components/react/button";
+import { input, label, submitButton } from "@/styles";
 
 export function AuthFormContainer({ children }: { children: React.ReactNode }) {
   return (
@@ -43,7 +44,7 @@ export function AuthFormError({ message }: { message: string | null }) {
 
 export function AuthFormField({
   name,
-  label,
+  label: labelText,
   type = "text",
   required = false,
   autoComplete,
@@ -60,9 +61,7 @@ export function AuthFormField({
 }) {
   return (
     <Field.Root name={name} className="mb-4">
-      <Field.Label className="block text-sm font-medium mb-1.5 text-gray-700">
-        {label}
-      </Field.Label>
+      <Field.Label className={label()}>{labelText}</Field.Label>
       <Input
         name={name}
         type={type}
@@ -70,7 +69,7 @@ export function AuthFormField({
         autoComplete={autoComplete}
         minLength={minLength}
         maxLength={maxLength}
-        className="w-full py-2.5 px-3 border border-gray-300 rounded-md text-base transition-[border-color,box-shadow] duration-150 focus:outline-none focus:border-gray-900 focus:ring-3 focus:ring-black/10"
+        className={input()}
       />
     </Field.Root>
   );
@@ -86,11 +85,7 @@ export function AuthFormSubmit({
   loadingText: string;
 }) {
   return (
-    <Button
-      type="submit"
-      disabled={isLoading}
-      className="w-full py-3 px-4 mt-2 border-none rounded-md text-base font-medium bg-gray-900 text-white cursor-pointer transition-colors duration-150 hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-    >
+    <Button type="submit" disabled={isLoading} className={submitButton()}>
       {isLoading ? loadingText : children}
     </Button>
   );
