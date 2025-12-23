@@ -1,0 +1,15 @@
+{
+  "name": "@keeper.sh/integrations",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@keeper.sh/log": "workspace:*"
+  },
+  "devDependencies": {
+    "@keeper.sh/typescript-config": "workspace:*",
+    "@types/bun": "latest"
+  }
+}

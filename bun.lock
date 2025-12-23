@@ -106,6 +106,17 @@
         "@types/bun": "latest",
       },
     },
+    "packages/integrations": {
+      "name": "@keeper.sh/integrations",
+      "version": "0.0.1",
+      "dependencies": {
+        "@keeper.sh/log": "workspace:*",
+      },
+      "devDependencies": {
+        "@keeper.sh/typescript-config": "workspace:*",
+        "@types/bun": "latest",
+      },
+    },
     "packages/log": {
       "name": "@keeper.sh/log",
       "dependencies": {
@@ -378,6 +389,8 @@
     "@keeper.sh/database": ["@keeper.sh/database@workspace:packages/database"],
 
     "@keeper.sh/env": ["@keeper.sh/env@workspace:packages/env"],
+
+    "@keeper.sh/integrations": ["@keeper.sh/integrations@workspace:packages/integrations"],
 
     "@keeper.sh/log": ["@keeper.sh/log@workspace:packages/log"],
 
