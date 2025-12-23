@@ -38,7 +38,9 @@ export const EditNameDialog = ({
       await onSave(nameValue);
       onOpenChange(false);
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to update name");
+      setError(
+        error instanceof Error ? error.message : "Failed to update name",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -64,7 +66,7 @@ export const EditNameDialog = ({
         label="Name"
         type="text"
         value={nameValue}
-        onChange={(e) => setNameValue(e.target.value)}
+        onChange={(event) => setNameValue(event.target.value)}
         autoComplete="name"
       />
     </FormDialog>
@@ -109,7 +111,9 @@ export const ChangePasswordDialog = ({
       await onSave(currentPassword, newPassword);
       onOpenChange(false);
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to change password");
+      setError(
+        error instanceof Error ? error.message : "Failed to change password",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -182,7 +186,9 @@ export const DeleteAccountDialog = ({
     try {
       await onDelete(password);
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to delete account");
+      setError(
+        error instanceof Error ? error.message : "Failed to delete account",
+      );
       setIsSubmitting(false);
     }
   };

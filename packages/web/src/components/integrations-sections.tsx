@@ -263,6 +263,7 @@ interface BaseDestination {
   name: string;
   description: string;
   icon?: string;
+  pushesEvents?: boolean;
 }
 
 interface ConnectableDestination extends BaseDestination {
@@ -284,6 +285,7 @@ const DESTINATIONS: Destination[] = [
     name: "Google Calendar",
     description: "Sync your aggregated events to Google Calendar",
     icon: "/integrations/icon-google.svg",
+    pushesEvents: true,
   },
   {
     id: "outlook",
@@ -291,12 +293,14 @@ const DESTINATIONS: Destination[] = [
     description: "Sync your aggregated events to Outlook",
     icon: "/integrations/icon-outlook.svg",
     comingSoon: true,
+    pushesEvents: true,
   },
   {
     id: "caldav",
     name: "CalDAV",
     description: "Sync to any CalDAV-compatible server",
     comingSoon: true,
+    pushesEvents: true,
   },
 ];
 
@@ -468,11 +472,16 @@ const DestinationItem = ({
         open={isConfirmOpen}
         onOpenChange={setIsConfirmOpen}
         title={`Disconnect ${destination.name}`}
-        description={`Are you sure you want to disconnect ${destination.name}? Your events will no longer sync to this destination.`}
+        description={
+          destination.pushesEvents
+            ? `Synced events will remain on ${destination.name}. Remove sources first to clear them.`
+            : `Events will no longer sync to ${destination.name}.`
+        }
         confirmLabel="Disconnect"
         confirmingLabel="Disconnecting..."
         isConfirming={isDisconnecting}
         onConfirm={handleDisconnect}
+        requirePhrase={destination.pushesEvents ? "I understand" : undefined}
       />
     </>
   );
@@ -579,7 +588,9 @@ export const ICalLinkSection = () => {
   const toastManager = Toast.useToastManager();
   const { token, isLoading } = useIcalToken();
 
-  const icalUrl = token ? new URL(`/cal/${token}.ics`, BASE_URL).toString() : "";
+  const icalUrl = token
+    ? new URL(`/cal/${token}.ics`, BASE_URL).toString()
+    : "";
 
   const copyToClipboard = async () => {
     if (!icalUrl) return;
