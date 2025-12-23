@@ -72,12 +72,3 @@ export const syncStatusTable = pgTable(
   ],
 );
 
-export const userIcalTokensTable = pgTable("user_ical_tokens", {
-  userId: text()
-    .notNull()
-    .primaryKey()
-    .references(() => user.id, { onDelete: "cascade" }),
-  token: text().notNull().unique(),
-  createdAt: timestamp().notNull().defaultNow(),
-});
-

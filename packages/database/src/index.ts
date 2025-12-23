@@ -1,2 +1,2 @@
 export { database } from "./utils/database";
-export { account } from "./database/auth-schema";
+export { account, user } from "./database/auth-schema";
