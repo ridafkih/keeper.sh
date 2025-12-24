@@ -5,6 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "bun run --hot src/index.ts | pino-pretty",
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "start": "bun run dist/index.js",
     "types": "tsc --noEmit"
   },
   "devDependencies": {

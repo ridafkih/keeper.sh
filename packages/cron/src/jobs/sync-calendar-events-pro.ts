@@ -1,3 +1,3 @@
 import { createSyncJob } from "../utils/sync-calendar-events";
 
-export default createSyncJob("pro", "@every_20_seconds");
+export default createSyncJob("pro", "@every_1_minute");

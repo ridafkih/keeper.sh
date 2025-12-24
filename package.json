@@ -5,8 +5,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "clean": "bun x rimraf --glob **/.turbo/",
     "dev": "turbo run dev",
-    "types": "turbo run types"
+    "types": "turbo run types --parallel",
+    "build": "turbo run build",
+    "start": "turbo run start"
   },
   "workspaces": {
     "packages": [

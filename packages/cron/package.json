@@ -6,6 +6,8 @@
   "private": true,
   "scripts": {
     "dev": "bun run --watch . | pino-pretty",
+    "build": "bun build src/index.ts src/jobs/*.ts --outdir dist --target bun --splitting",
+    "start": "bun run dist/index.js",
     "types": "tsc --noEmit"
   },
   "devDependencies": {
