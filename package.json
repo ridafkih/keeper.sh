@@ -5,7 +5,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "turbo run dev --ui tui"
+    "dev": "turbo run dev",
+    "types": "turbo run types"
   },
   "workspaces": {
     "packages": [
