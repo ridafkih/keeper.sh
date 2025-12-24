@@ -1,6 +1,7 @@
 "use client";
 
 import type { FC } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/header";
@@ -77,29 +78,27 @@ const UsernameRegisterForm: FC = () => {
 
 const EmailRegisterForm: FC = () => {
   const router = useRouter();
-  const { isSubmitting, error, submit } = useFormSubmit();
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const email = String(formData.get("email") ?? "");
     router.push(`/register/complete?email=${encodeURIComponent(email)}`);
   };
 
-  const handleGoogleSignIn = async () => {
-    await submit(async () => {
-      await signInWithGoogle();
-    });
+  const handleGoogleSignIn = () => {
+    setIsRedirecting(true);
+    void signInWithGoogle();
   };
 
   return (
     <AuthForm onSubmit={handleSubmit}>
       <AuthFormTitle>Register</AuthFormTitle>
-      <AuthFormError message={error} />
 
       <AuthSocialButton
         onClick={handleGoogleSignIn}
-        isLoading={isSubmitting}
+        isLoading={isRedirecting}
         icon={<GoogleIcon className="size-4" />}
       >
         Continue with Google
@@ -115,7 +114,7 @@ const EmailRegisterForm: FC = () => {
         autoComplete="email"
       />
 
-      <AuthFormSubmit isLoading={isSubmitting}>Continue</AuthFormSubmit>
+      <AuthFormSubmit isLoading={false}>Continue</AuthFormSubmit>
 
       <AuthFormFooter>
         Already have an account?{" "}

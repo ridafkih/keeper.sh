@@ -1,7 +1,7 @@
 "use client";
 
 import type { FC } from "react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/header";
@@ -80,6 +80,7 @@ const EmailLoginForm: FC = () => {
   const router = useRouter();
   const { refresh } = useAuth();
   const { isSubmitting, error, submit } = useFormSubmit();
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
     if (
@@ -104,10 +105,9 @@ const EmailLoginForm: FC = () => {
     });
   };
 
-  const handleGoogleSignIn = async () => {
-    await submit(async () => {
-      await signInWithGoogle();
-    });
+  const handleGoogleSignIn = () => {
+    setIsRedirecting(true);
+    void signInWithGoogle();
   };
 
   return (
@@ -117,7 +117,7 @@ const EmailLoginForm: FC = () => {
 
       <AuthSocialButton
         onClick={handleGoogleSignIn}
-        isLoading={isSubmitting}
+        isLoading={isRedirecting}
         icon={<GoogleIcon className="size-4" />}
       >
         Continue with Google

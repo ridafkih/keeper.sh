@@ -1,0 +1,29 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/auth-provider";
+import { Header } from "@/components/header";
+import { AuthFormContainer } from "@/components/auth-form";
+
+export default function VerifyAuthenticationPage() {
+  const router = useRouter();
+  const { user, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (!isLoading && user) {
+      router.replace("/dashboard");
+    }
+  }, [user, isLoading, router]);
+
+  return (
+    <div className="flex flex-col flex-1">
+      <Header />
+      <AuthFormContainer>
+        <div className="w-full max-w-xs p-4 rounded-md bg-surface text-center">
+          <p className="text-sm text-foreground-muted">Redirecting...</p>
+        </div>
+      </AuthFormContainer>
+    </div>
+  );
+}
