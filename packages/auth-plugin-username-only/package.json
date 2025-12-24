@@ -9,8 +9,8 @@
     "@types/bun": "latest"
   },
   "dependencies": {
-    "better-auth": "1.4.7",
-    "better-call": "^1.0.5",
-    "zod": "^3.24.0"
+    "better-auth": "1.4.9",
+    "better-call": "^1.1.7",
+    "zod": "^4.2.1"
   }
 }

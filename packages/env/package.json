@@ -14,6 +14,6 @@
     "@types/bun": "latest"
   },
   "dependencies": {
-    "arkenv": "^0.7.8"
+    "arkenv": "^0.8.0"
   }
 }

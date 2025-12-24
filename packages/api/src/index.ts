@@ -189,9 +189,11 @@ const server = Bun.serve<BroadcastData>({
             throw new Error("Failed to create source");
           }
 
-          fetchAndSyncSource(source).catch((error) => {
-            log.error(error, "failed initial sync for source '%s'", source.id);
-          });
+          fetchAndSyncSource(source)
+            .then(() => syncDestinationsForUser(userId))
+            .catch((error) => {
+              log.error(error, "failed initial sync for source '%s'", source.id);
+            });
 
           return Response.json(source, { status: 201 });
         }),
