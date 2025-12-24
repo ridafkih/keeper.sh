@@ -36,7 +36,7 @@ const SourceItem = ({ source, onRemove }: SourceItemProps) => {
     <>
       <div className="flex items-center gap-2 px-3 py-2">
         <IconBox>
-          <LinkIcon size={14} className="text-zinc-500" />
+          <LinkIcon size={14} className="text-foreground-muted" />
         </IconBox>
         <div className="flex-1 min-w-0 flex flex-col">
           <TextLabel as="h2" className="tracking-tight">
@@ -62,7 +62,7 @@ const SourceItem = ({ source, onRemove }: SourceItemProps) => {
 };
 
 const UpgradeBanner = () => (
-  <div className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-lg">
+  <div className="flex items-center justify-between p-3 bg-warning-surface border border-warning-border rounded-lg">
     <BannerText variant="warning">
       You've reached the free plan limit of {FREE_SOURCE_LIMIT} sources.
     </BannerText>
@@ -197,7 +197,7 @@ export const CalendarSourcesSection = () => {
     if (isEmpty) {
       return (
         <EmptyState
-          icon={<LinkIcon size={16} className="text-zinc-400" />}
+          icon={<LinkIcon size={16} className="text-foreground-subtle" />}
           message="You don't have any sources yet, add one to start syncing events across your calendars."
           action={
             <div className="flex flex-col items-center gap-2">
@@ -231,7 +231,7 @@ export const CalendarSourcesSection = () => {
           </GhostButton>
         </div>
         {sources && sources.length > 0 && (
-          <div className="border-t border-zinc-200 divide-y divide-zinc-200">
+          <div className="border-t border-border divide-y divide-border">
             {sources.map((source) => (
               <SourceItem
                 key={source.id}

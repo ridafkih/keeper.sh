@@ -3,7 +3,7 @@ import { tv } from "tailwind-variants";
 import { TextBody } from "@/components/typography";
 
 const emptyState = tv({
-  base: "flex flex-col items-center gap-2 py-6 border border-dashed border-zinc-300 rounded-md",
+  base: "flex flex-col items-center gap-2 py-6 border border-dashed border-border-input rounded-md",
 });
 
 interface EmptyStateProps {

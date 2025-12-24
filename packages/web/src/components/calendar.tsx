@@ -27,14 +27,14 @@ const agendaEventDot = tv({
   },
 });
 
-const skeletonBar = tv({ base: "bg-zinc-200 rounded animate-pulse" });
+const skeletonBar = tv({ base: "bg-surface-skeleton rounded animate-pulse" });
 
 const SkeletonBar = ({ className }: { className?: string }) => (
   <div className={skeletonBar({ className })} />
 );
 
 const SkeletonEventItem = () => (
-  <li className="flex items-center gap-2 py-1 text-sm text-zinc-500">
+  <li className="flex items-center gap-2 py-1 text-sm text-foreground-muted">
     <SkeletonBar className="w-1.5 h-1.5 rounded-full shrink-0" />
     <SkeletonBar className="h-4 w-64" />
   </li>
@@ -44,7 +44,7 @@ const SkeletonDaySection = ({ index }: { index: number }) => {
   const eventCount = (index % 3) + 1;
   return (
     <section className="flex flex-col gap-2">
-      <div className="border-b border-zinc-200 pb-2">
+      <div className="border-b border-border pb-2">
         <SkeletonBar className="h-6 w-48" />
       </div>
       <ul className="flex flex-col list-none p-0 m-0">
@@ -74,7 +74,7 @@ export interface CalendarProps {
 
 const DayEventList = ({ events }: { events: CalendarEvent[] }) => {
   if (events.length === 0) {
-    return <p className="text-sm text-zinc-400 py-2">No events</p>;
+    return <p className="text-sm text-foreground-subtle py-2">No events</p>;
   }
 
   return (
@@ -82,7 +82,7 @@ const DayEventList = ({ events }: { events: CalendarEvent[] }) => {
       {events.map((event) => (
         <li
           key={event.id}
-          className="flex items-center gap-2 py-1 text-sm text-zinc-500 tracking-tight"
+          className="flex items-center gap-2 py-1 text-sm text-foreground-muted tracking-tight"
         >
           <span
             className={agendaEventDot({
@@ -91,18 +91,18 @@ const DayEventList = ({ events }: { events: CalendarEvent[] }) => {
           />
           <span>
             Busy from{" "}
-            <span className="tabular-nums text-zinc-900 font-medium">
+            <span className="tabular-nums text-foreground font-medium">
               {formatTime(new Date(event.startTime))}
             </span>{" "}
             to{" "}
-            <span className="tabular-nums text-zinc-900 font-medium">
+            <span className="tabular-nums text-foreground font-medium">
               {formatTime(new Date(event.endTime))}
             </span>
             {event.sourceName && (
               <>
                 {" "}
                 according to an event from{" "}
-                <span className="text-zinc-900 font-medium">
+                <span className="text-foreground font-medium">
                   {event.sourceName}
                 </span>
               </>
@@ -151,7 +151,7 @@ export const Calendar = ({
             ref={isLast ? lastSectionRef : undefined}
             className="flex flex-col gap-2"
           >
-            <h2 className="text-lg font-semibold text-zinc-900 border-b border-zinc-200 pb-2">
+            <h2 className="text-lg font-semibold text-foreground border-b border-border pb-2">
               {formatDayHeading(date)}
             </h2>
             <DayEventList events={getEventsForDay(date)} />

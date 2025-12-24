@@ -1,15 +1,15 @@
 import { tv } from "tailwind-variants";
 
 export const button = tv({
-  base: "inline-flex items-center justify-center rounded-md font-medium no-underline cursor-pointer transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-zinc-300",
+  base: "inline-flex items-center justify-center rounded-md font-medium no-underline cursor-pointer transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-emphasis disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-border-input",
   variants: {
     variant: {
       primary:
-        "bg-zinc-900 border border-zinc-900 text-white hover:bg-zinc-700 hover:border-zinc-700 disabled:hover:bg-zinc-900 disabled:hover:border-zinc-900",
+        "bg-primary border border-primary text-primary-foreground hover:bg-primary-hover hover:border-primary-hover disabled:hover:bg-primary disabled:hover:border-primary",
       secondary:
-        "bg-transparent border border-zinc-300 text-zinc-700 hover:bg-zinc-50 hover:border-zinc-400",
+        "bg-transparent border border-border-input text-foreground hover:bg-surface-subtle hover:border-foreground-subtle",
       danger:
-        "bg-transparent border border-red-300 text-red-600 hover:bg-red-50",
+        "bg-transparent border border-destructive-border text-destructive hover:bg-destructive-surface",
     },
     size: {
       default: "py-2 px-4 text-sm",
@@ -26,10 +26,10 @@ export const button = tv({
 });
 
 export const input = tv({
-  base: "w-full border border-zinc-300 rounded-md transition-[border-color,box-shadow] duration-150 focus:outline-none focus:border-zinc-900 focus:ring-3 focus:ring-black/10",
+  base: "w-full border border-border-input rounded-md transition-[border-color,box-shadow] duration-150 focus:outline-none focus:border-border-emphasis focus:ring-3 focus:ring-focus-ring",
   variants: {
     readonly: {
-      true: "bg-zinc-50 text-zinc-600",
+      true: "bg-surface-subtle text-foreground-secondary",
     },
     size: {
       default: "py-2.5 px-3 text-base",
@@ -42,7 +42,7 @@ export const input = tv({
 });
 
 export const dialogPopup = tv({
-  base: "fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white border border-zinc-200 rounded-md shadow-lg p-4 w-full",
+  base: "fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-surface-elevated border border-border rounded-md shadow-lg p-4 w-full",
   variants: {
     size: {
       sm: "max-w-xs",

@@ -36,10 +36,10 @@ function BillingHistory() {
           title="Billing History"
           description="View your past invoices and payment history"
         />
-        <div className="py-4 border border-zinc-200 rounded-md">
+        <div className="py-4 border border-border rounded-md">
           <div className="animate-pulse space-y-2 px-3">
-            <div className="h-3 bg-zinc-200 rounded w-3/4" />
-            <div className="h-3 bg-zinc-200 rounded w-1/2" />
+            <div className="h-3 bg-surface-skeleton rounded w-3/4" />
+            <div className="h-3 bg-surface-skeleton rounded w-1/2" />
           </div>
         </div>
       </Section>
@@ -54,7 +54,7 @@ function BillingHistory() {
           description="View your past invoices and payment history"
         />
         <EmptyState
-          icon={<Receipt size={20} className="text-zinc-400" />}
+          icon={<Receipt size={20} className="text-foreground-subtle" />}
           message="No billing history yet"
         />
       </Section>
@@ -67,9 +67,9 @@ function BillingHistory() {
         title="Billing History"
         description="View your past invoices and payment history"
       />
-      <div className="border border-zinc-200 rounded-md overflow-hidden">
+      <div className="border border-border rounded-md overflow-hidden">
         <table className="w-full">
-          <thead className="bg-zinc-50 border-b border-zinc-200">
+          <thead className="bg-surface-subtle border-b border-border">
             <tr>
               <th className="px-3 py-2 text-left">
                 <TextMeta>Date</TextMeta>
@@ -85,7 +85,7 @@ function BillingHistory() {
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-200">
+          <tbody className="divide-y divide-border">
             {orders.map((order) => (
               <tr key={order.id}>
                 <td className="px-3 py-2">
@@ -105,8 +105,8 @@ function BillingHistory() {
                   <span
                     className={
                       order.paid
-                        ? "text-green-700 bg-green-50 px-1.5 py-0.5 rounded-full text-xs font-medium"
-                        : "text-yellow-700 bg-yellow-50 px-1.5 py-0.5 rounded-full text-xs font-medium"
+                        ? "text-success-emphasis bg-success-surface px-1.5 py-0.5 rounded-full text-xs font-medium"
+                        : "text-warning bg-warning-surface px-1.5 py-0.5 rounded-full text-xs font-medium"
                     }
                   >
                     {order.paid ? "Paid" : "Pending"}
@@ -132,7 +132,7 @@ export default function BillingPage() {
         isSubscriptionLoading={isLoading}
         onSubscriptionChange={mutate}
       />
-      <Separator className="bg-zinc-200 h-px" />
+      <Separator className="bg-border h-px" />
       <BillingHistory />
     </PageContent>
   );

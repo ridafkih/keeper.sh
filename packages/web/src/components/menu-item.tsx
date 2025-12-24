@@ -6,9 +6,9 @@ const menuItemStyle = tv({
   base: "flex items-center gap-2 px-2 py-1 text-xs rounded",
   variants: {
     variant: {
-      default: "text-zinc-600 hover:bg-zinc-50 cursor-pointer",
-      danger: "text-red-600 hover:bg-zinc-50 cursor-pointer",
-      disabled: "text-zinc-400 cursor-not-allowed",
+      default: "text-foreground-secondary hover:bg-surface-subtle cursor-pointer",
+      danger: "text-destructive hover:bg-surface-subtle cursor-pointer",
+      disabled: "text-foreground-subtle cursor-not-allowed",
     },
   },
   defaultVariants: {

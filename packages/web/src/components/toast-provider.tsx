@@ -11,7 +11,7 @@ const ToastList: FC = () => {
     <Toast.Root
       key={toast.id}
       toast={toast}
-      className="bg-white border border-zinc-200 rounded-lg shadow-lg p-4 data-starting-style:opacity-0 data-starting-style:translate-y-2 data-ending-style:opacity-0 data-ending-style:translate-y-2 transition-all duration-200"
+      className="bg-surface-elevated border border-border rounded-lg shadow-lg p-4 data-starting-style:opacity-0 data-starting-style:translate-y-2 data-ending-style:opacity-0 data-ending-style:translate-y-2 transition-all duration-200"
     >
       <Toast.Title render={<TextLabel />}>{toast.title}</Toast.Title>
       {toast.description && (

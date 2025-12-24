@@ -3,7 +3,7 @@ import Link from "next/link";
 import { tv } from "tailwind-variants";
 
 const textLink = tv({
-  base: "text-xs text-zinc-500 hover:text-zinc-900 transition-colors",
+  base: "text-xs text-foreground-muted hover:text-foreground transition-colors",
 });
 
 type LinkProps = ComponentProps<typeof Link>;

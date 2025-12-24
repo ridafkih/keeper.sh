@@ -5,8 +5,8 @@ const card = tv({
   base: "border rounded-md",
   variants: {
     variant: {
-      default: "border-zinc-200",
-      danger: "border-red-300 bg-red-50",
+      default: "border-border",
+      danger: "border-destructive-border bg-destructive-surface",
     },
     padding: {
       none: "",

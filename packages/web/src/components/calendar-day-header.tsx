@@ -7,8 +7,8 @@ const calendarDayNumber = tv({
   base: "text-lg font-semibold",
   variants: {
     today: {
-      true: "bg-zinc-900 text-white w-8 h-8 rounded-full flex items-center justify-center",
-      false: "text-zinc-900",
+      true: "bg-primary text-primary-foreground w-8 h-8 rounded-full flex items-center justify-center",
+      false: "text-foreground",
     },
   },
 });
@@ -23,7 +23,7 @@ export const CalendarDayHeader: FC<CalendarDayHeaderProps> = ({ date }) => {
   const dayNumber = date.getDate();
 
   return (
-    <div className="flex flex-col items-center justify-center min-w-24 py-2 border-l border-zinc-200">
+    <div className="flex flex-col items-center justify-center min-w-24 py-2 border-l border-border">
       <TextMeta>{weekday}</TextMeta>
       <span className={calendarDayNumber({ today })}>{dayNumber}</span>
     </div>

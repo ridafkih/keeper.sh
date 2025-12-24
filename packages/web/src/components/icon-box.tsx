@@ -10,8 +10,8 @@ const iconBox = tv({
       lg: "size-10",
     },
     variant: {
-      default: "bg-zinc-100",
-      muted: "bg-zinc-50",
+      default: "bg-surface-muted",
+      muted: "bg-surface-subtle",
     },
   },
   defaultVariants: {

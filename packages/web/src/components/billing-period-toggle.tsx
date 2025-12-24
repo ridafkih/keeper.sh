@@ -24,20 +24,20 @@ export function BillingPeriodToggle({
           onChange(billingPeriodSchema.assert(values[0]));
         }
       }}
-      className="inline-grid grid-cols-2 rounded-md border border-zinc-200 p-0.5 bg-zinc-50"
+      className="inline-grid grid-cols-2 rounded-md border border-border p-0.5 bg-surface-subtle"
     >
       <Toggle
         value="monthly"
-        className="px-3 py-1.5 text-xs font-medium tracking-tight rounded transition-colors text-zinc-600 hover:text-zinc-900 data-pressed:bg-white data-pressed:text-zinc-900 data-pressed:shadow-sm cursor-pointer"
+        className="px-3 py-1.5 text-xs font-medium tracking-tight rounded transition-colors text-foreground-secondary hover:text-foreground data-pressed:bg-surface data-pressed:text-foreground data-pressed:shadow-sm cursor-pointer"
       >
         Monthly
       </Toggle>
       <Toggle
         value="yearly"
-        className="px-3 py-1.5 text-xs font-medium tracking-tight rounded transition-colors text-zinc-600 hover:text-zinc-900 data-pressed:bg-white data-pressed:text-zinc-900 data-pressed:shadow-sm cursor-pointer"
+        className="px-3 py-1.5 text-xs font-medium tracking-tight rounded transition-colors text-foreground-secondary hover:text-foreground data-pressed:bg-surface data-pressed:text-foreground data-pressed:shadow-sm cursor-pointer"
       >
         Yearly
-        <span className="ml-1.5 inline-flex items-center px-1 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+        <span className="ml-1.5 inline-flex items-center px-1 py-0.5 rounded text-xs font-medium bg-success-surface text-success-emphasis">
           -50%
         </span>
       </Toggle>

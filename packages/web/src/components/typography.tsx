@@ -8,28 +8,28 @@ interface TextProps {
   className?: string;
 }
 
-const pageTitle = tv({ base: "text-2xl font-bold text-zinc-900" });
-const sectionTitle = tv({ base: "text-lg font-semibold text-zinc-900" });
-const cardTitle = tv({ base: "text-sm font-semibold text-zinc-900 tracking-tight" });
-const subsectionTitle = tv({ base: "text-md font-semibold text-zinc-900 tracking-tighter" });
-const textBody = tv({ base: "text-sm text-zinc-500" });
-const textLabel = tv({ base: "text-sm font-medium text-zinc-900" });
-const textMeta = tv({ base: "text-xs font-medium text-zinc-500 tracking-tight" });
-const textCaption = tv({ base: "text-xs text-zinc-500 tracking-tight" });
-const fieldLabel = tv({ base: "text-xs font-medium text-zinc-600 tracking-tight" });
-const fieldValue = tv({ base: "text-sm text-zinc-900 tracking-tight" });
-const textMuted = tv({ base: "text-sm text-zinc-400" });
-const dangerLabel = tv({ base: "text-sm font-medium text-red-600" });
-const dangerText = tv({ base: "text-sm text-red-600" });
-const dangerFieldLabel = tv({ base: "text-xs font-medium text-red-700 tracking-tight" });
-const dangerFieldValue = tv({ base: "text-sm text-red-600 tracking-tight" });
+const pageTitle = tv({ base: "text-2xl font-bold text-foreground" });
+const sectionTitle = tv({ base: "text-lg font-semibold text-foreground" });
+const cardTitle = tv({ base: "text-sm font-semibold text-foreground tracking-tight" });
+const subsectionTitle = tv({ base: "text-md font-semibold text-foreground tracking-tighter" });
+const textBody = tv({ base: "text-sm text-foreground-muted" });
+const textLabel = tv({ base: "text-sm font-medium text-foreground" });
+const textMeta = tv({ base: "text-xs font-medium text-foreground-muted tracking-tight" });
+const textCaption = tv({ base: "text-xs text-foreground-muted tracking-tight" });
+const fieldLabel = tv({ base: "text-xs font-medium text-foreground-secondary tracking-tight" });
+const fieldValue = tv({ base: "text-sm text-foreground tracking-tight" });
+const textMuted = tv({ base: "text-sm text-foreground-subtle" });
+const dangerLabel = tv({ base: "text-sm font-medium text-destructive" });
+const dangerText = tv({ base: "text-sm text-destructive" });
+const dangerFieldLabel = tv({ base: "text-xs font-medium text-destructive-emphasis tracking-tight" });
+const dangerFieldValue = tv({ base: "text-sm text-destructive tracking-tight" });
 const bannerText = tv({
   base: "text-sm",
   variants: {
     variant: {
-      warning: "text-amber-800",
-      info: "text-blue-800",
-      success: "text-green-800",
+      warning: "text-warning",
+      info: "text-info",
+      success: "text-success-emphasis",
     },
   },
   defaultVariants: {

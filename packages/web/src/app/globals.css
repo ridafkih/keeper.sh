@@ -1,1 +1,41 @@
 @import "tailwindcss";
+
+@theme {
+  --color-background: var(--color-white);
+  --color-surface: var(--color-white);
+  --color-surface-elevated: var(--color-white);
+  --color-surface-subtle: var(--color-zinc-50);
+  --color-surface-muted: var(--color-zinc-100);
+  --color-surface-skeleton: var(--color-zinc-200);
+
+  --color-foreground: var(--color-zinc-900);
+  --color-foreground-secondary: var(--color-zinc-600);
+  --color-foreground-muted: var(--color-zinc-500);
+  --color-foreground-subtle: var(--color-zinc-400);
+  --color-foreground-disabled: var(--color-zinc-300);
+
+  --color-border: var(--color-zinc-200);
+  --color-border-emphasis: var(--color-zinc-900);
+  --color-border-input: var(--color-zinc-300);
+
+  --color-primary: var(--color-zinc-900);
+  --color-primary-hover: var(--color-zinc-700);
+  --color-primary-foreground: var(--color-white);
+  --color-focus-ring: oklch(0 0 0 / 0.1);
+
+  --color-destructive: var(--color-red-600);
+  --color-destructive-emphasis: var(--color-red-700);
+  --color-destructive-surface: var(--color-red-50);
+  --color-destructive-border: var(--color-red-200);
+
+  --color-success: var(--color-green-600);
+  --color-success-emphasis: var(--color-green-700);
+  --color-success-surface: var(--color-green-100);
+
+  --color-warning: var(--color-amber-800);
+  --color-warning-surface: var(--color-amber-50);
+  --color-warning-border: var(--color-amber-200);
+
+  --color-info: var(--color-blue-800);
+  --color-info-surface: var(--color-blue-100);
+}

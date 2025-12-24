@@ -26,7 +26,7 @@ const CopyablePhrase: FC<CopyablePhraseProps> = ({ phrase }) => {
     <button
       type="button"
       onClick={handleClick}
-      className="inline-flex items-center gap-1 font-medium text-zinc-900 hover:text-zinc-600 transition-colors"
+      className="inline-flex items-center gap-1 font-medium text-foreground hover:text-foreground-secondary transition-colors"
     >
       "{phrase}"{copied ? <Check size={12} /> : <Copy size={12} />}
     </button>
@@ -78,7 +78,7 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
           </Dialog.Description>
           {requirePhrase && (
             <div className="flex flex-col gap-1.5 mb-3">
-              <TextCaption as="span" className="text-zinc-600">
+              <TextCaption as="span" className="text-foreground-secondary">
                 Type <CopyablePhrase phrase={requirePhrase} /> to confirm
               </TextCaption>
               <input

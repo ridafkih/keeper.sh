@@ -21,9 +21,9 @@ const ICalLinkSkeleton: FC = () => (
         className: "flex flex-1 items-center animate-pulse",
       })}
     >
-      <div className="h-lh bg-zinc-200 rounded max-w-1/2 w-full" />
+      <div className="h-lh bg-surface-skeleton rounded max-w-1/2 w-full" />
     </div>
-    <div className="h-9 min-w-[6ch] px-1.5 bg-zinc-100 rounded-md animate-pulse" />
+    <div className="h-9 min-w-[6ch] px-1.5 bg-surface-muted rounded-md animate-pulse" />
   </div>
 );
 

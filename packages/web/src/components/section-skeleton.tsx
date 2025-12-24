@@ -8,8 +8,8 @@ interface SectionSkeletonProps {
 
 const HeaderSkeleton: FC = () => (
   <div className="flex flex-col gap-1">
-    <div className="h-5 bg-zinc-100 rounded w-32 animate-pulse" />
-    <div className="h-4 bg-zinc-100 rounded w-64 animate-pulse" />
+    <div className="h-5 bg-surface-muted rounded w-32 animate-pulse" />
+    <div className="h-4 bg-surface-muted rounded w-64 animate-pulse" />
   </div>
 );
 

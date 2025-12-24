@@ -8,12 +8,12 @@ const pricingCard = tv({
   base: "flex flex-col p-5 border rounded-lg transition-colors",
   variants: {
     current: {
-      true: "border-zinc-900",
+      true: "border-border-emphasis",
       false: "",
     },
     featured: {
-      true: "border-zinc-900 bg-zinc-50 shadow-sm",
-      false: "border-zinc-200 bg-white",
+      true: "border-border-emphasis bg-surface-subtle shadow-sm",
+      false: "border-border bg-surface",
     },
     muted: {
       true: "opacity-75",
@@ -31,8 +31,8 @@ const pricingBadge = tv({
   base: "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
   variants: {
     variant: {
-      current: "bg-zinc-900 text-white",
-      popular: "bg-blue-100 text-blue-800",
+      current: "bg-primary text-primary-foreground",
+      popular: "bg-info-surface text-info",
     },
     skeleton: {
       true: "opacity-0",
@@ -44,8 +44,8 @@ const pricingFeatureIcon = tv({
   base: "w-4 h-4 shrink-0",
   variants: {
     included: {
-      true: "text-green-600",
-      false: "text-zinc-300",
+      true: "text-success",
+      false: "text-foreground-disabled",
     },
   },
 });
@@ -54,7 +54,7 @@ const pricingFeatureText = tv({
   variants: {
     included: {
       true: "",
-      false: "text-zinc-400",
+      false: "text-foreground-subtle",
     },
   },
 });
@@ -178,7 +178,7 @@ export const PlanCard = ({
       })}
     >
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm tracking-tight font-semibold text-zinc-900">
+        <h3 className="text-sm tracking-tight font-semibold text-foreground">
           {plan.name}
         </h3>
         <div className="flex gap-1.5">
@@ -201,19 +201,19 @@ export const PlanCard = ({
       </div>
 
       <div className="mb-3">
-        <span className="text-3xl font-bold tracking-tight text-zinc-900">
+        <span className="text-3xl font-bold tracking-tight text-foreground">
           ${plan.price}
         </span>
-        <span className="text-sm text-zinc-500 font-normal">{plan.period}</span>
+        <span className="text-sm text-foreground-muted font-normal">{plan.period}</span>
       </div>
 
-      <p className="text-sm text-zinc-500 mb-4">{plan.description}</p>
+      <p className="text-sm text-foreground-muted mb-4">{plan.description}</p>
 
       <ul className="flex flex-col gap-2 mb-5 flex-1">
         {plan.features.map((feature) => (
           <li
             key={feature.name}
-            className="flex items-center gap-2 text-sm text-zinc-600"
+            className="flex items-center gap-2 text-sm text-foreground-secondary"
           >
             <FeatureIcon included={feature.included} />
             <span

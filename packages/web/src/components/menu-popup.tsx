@@ -3,7 +3,7 @@ import { Menu } from "@base-ui/react/menu";
 import { tv } from "tailwind-variants";
 
 const menuPopupStyle = tv({
-  base: "bg-white border border-zinc-200 rounded-md shadow-lg p-1",
+  base: "bg-surface-elevated border border-border rounded-md shadow-lg p-1",
   variants: {
     minWidth: {
       sm: "min-w-24",

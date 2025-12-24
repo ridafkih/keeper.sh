@@ -97,7 +97,7 @@ const DestinationAction = ({
           className="flex items-center gap-1.5"
         >
           {!isLoading && (
-            <span className="size-1.5 rounded-full bg-green-500" />
+            <span className="size-1.5 rounded-full bg-success" />
           )}
           {isLoading ? "..." : "Connected"}
         </GhostButton>
@@ -207,7 +207,7 @@ const DestinationItem = ({
                 height={14}
               />
             ) : (
-              <Server size={14} className="text-zinc-400" />
+              <Server size={14} className="text-foreground-subtle" />
             )}
           </IconBox>
           <div className="flex-1 min-w-0 flex flex-col">
@@ -334,7 +334,7 @@ export const DestinationsSection = () => {
             className={destination.comingSoon ? "opacity-50" : ""}
           />
         ) : (
-          <Server size={14} className="text-zinc-400" />
+          <Server size={14} className="text-foreground-subtle" />
         )}
         <span>{destination.name}</span>
         {destination.comingSoon && (
@@ -352,7 +352,7 @@ export const DestinationsSection = () => {
     if (isEmpty) {
       return (
         <EmptyState
-          icon={<Server size={16} className="text-zinc-400" />}
+          icon={<Server size={16} className="text-foreground-subtle" />}
           message="No destinations connected yet. Connect a calendar to push your aggregated events."
           action={
             <Menu.Root>
@@ -396,7 +396,7 @@ export const DestinationsSection = () => {
             </Menu.Portal>
           </Menu.Root>
         </div>
-        <div className="border-t border-zinc-200 divide-y divide-zinc-200">
+        <div className="border-t border-border divide-y divide-border">
           {connectedDestinations.map((destination) => (
             <DestinationItem
               key={destination.id}

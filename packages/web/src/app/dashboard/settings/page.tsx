@@ -74,7 +74,7 @@ export default function SettingsPage() {
               Edit
             </Button>
           </div>
-          <Separator className="bg-zinc-200 h-px" />
+          <Separator className="bg-border h-px" />
           <div>
             <FieldLabel as="div">Username</FieldLabel>
             <FieldValue as="div">{user?.username}</FieldValue>

@@ -7,11 +7,11 @@ import { Button } from "@/components/button";
 import { CardTitle, FieldLabel, TextBody, DangerText } from "@/components/typography";
 
 const authFormSubmit = tv({
-  base: "w-full py-1.5 px-3 mt-1 border-none rounded-md text-sm font-medium bg-zinc-900 text-white cursor-pointer transition-colors duration-150 hover:bg-zinc-700 disabled:bg-zinc-400 disabled:cursor-not-allowed",
+  base: "w-full py-1.5 px-3 mt-1 border-none rounded-md text-sm font-medium bg-primary text-primary-foreground cursor-pointer transition-colors duration-150 hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed",
 });
 
 const authFormInput = tv({
-  base: "w-full py-1.5 px-2 border border-zinc-300 rounded-md text-sm transition-[border-color,box-shadow] duration-150 focus:outline-none focus:border-zinc-900 focus:ring-3 focus:ring-black/10",
+  base: "w-full py-1.5 px-2 border border-border-input rounded-md text-sm transition-[border-color,box-shadow] duration-150 focus:outline-none focus:border-border-emphasis focus:ring-3 focus:ring-focus-ring",
 });
 
 export const AuthFormContainer: FC<PropsWithChildren> = ({ children }) => (
@@ -29,7 +29,7 @@ export const AuthForm: FC<PropsWithChildren<AuthFormProps>> = ({
   children,
 }) => (
   <Form
-    className="w-full max-w-xs p-4 border border-zinc-200 rounded-md bg-white"
+    className="w-full max-w-xs p-4 border border-border rounded-md bg-surface"
     onSubmit={onSubmit}
   >
     {children}
@@ -49,7 +49,7 @@ interface AuthFormErrorProps {
 export const AuthFormError: FC<AuthFormErrorProps> = ({ message }) => {
   if (!message) return null;
   return (
-    <div className="p-2 mb-3 rounded-md bg-red-50 border border-red-200">
+    <div className="p-2 mb-3 rounded-md bg-destructive-surface border border-destructive-border">
       <DangerText className="text-xs">{message}</DangerText>
     </div>
   );
