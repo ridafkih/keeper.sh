@@ -3,18 +3,17 @@ import { Button } from "@base-ui/react/button";
 import { tv } from "tailwind-variants";
 import type { PlanConfig } from "@/config/plans";
 import { button } from "@/styles";
-import { SectionTitle, TextBody } from "@/components/typography";
 
 const pricingCard = tv({
-  base: "flex flex-col p-6 border rounded-xl transition-colors",
+  base: "flex flex-col p-5 border rounded-lg transition-colors",
   variants: {
     current: {
-      true: "border-gray-900",
+      true: "border-zinc-900",
       false: "",
     },
     featured: {
-      true: "border-gray-900 bg-gray-50 shadow-sm",
-      false: "border-gray-200 bg-white",
+      true: "border-zinc-900 bg-zinc-50 shadow-sm",
+      false: "border-zinc-200 bg-white",
     },
     muted: {
       true: "opacity-75",
@@ -32,7 +31,7 @@ const pricingBadge = tv({
   base: "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
   variants: {
     variant: {
-      current: "bg-gray-900 text-white",
+      current: "bg-zinc-900 text-white",
       popular: "bg-blue-100 text-blue-800",
     },
     skeleton: {
@@ -46,7 +45,7 @@ const pricingFeatureIcon = tv({
   variants: {
     included: {
       true: "text-green-600",
-      false: "text-gray-300",
+      false: "text-zinc-300",
     },
   },
 });
@@ -55,12 +54,15 @@ const pricingFeatureText = tv({
   variants: {
     included: {
       true: "",
-      false: "text-gray-400",
+      false: "text-zinc-400",
     },
   },
 });
 
-type Plan = Omit<PlanConfig, "monthlyPrice" | "yearlyPrice" | "monthlyProductId" | "yearlyProductId"> & {
+type Plan = Omit<
+  PlanConfig,
+  "monthlyPrice" | "yearlyPrice" | "monthlyProductId" | "yearlyProductId"
+> & {
   price: number;
   period: string;
 };
@@ -175,8 +177,10 @@ export const PlanCard = ({
         muted: !plan.popular,
       })}
     >
-      <div className="flex items-center justify-between mb-4">
-        <SectionTitle as="h3">{plan.name}</SectionTitle>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm tracking-tight font-semibold text-zinc-900">
+          {plan.name}
+        </h3>
         <div className="flex gap-1.5">
           {(isSubscriptionLoading || showCurrentBadge) && (
             <span
@@ -196,18 +200,25 @@ export const PlanCard = ({
         </div>
       </div>
 
-      <div className="mb-4">
-        <span className="text-4xl font-bold text-gray-900">${plan.price}</span>
-        <span className="text-sm text-gray-500 font-normal">{plan.period}</span>
+      <div className="mb-3">
+        <span className="text-3xl font-bold tracking-tight text-zinc-900">
+          ${plan.price}
+        </span>
+        <span className="text-sm text-zinc-500 font-normal">{plan.period}</span>
       </div>
 
-      <TextBody className="mb-6">{plan.description}</TextBody>
+      <p className="text-sm text-zinc-500 mb-4">{plan.description}</p>
 
-      <ul className="flex flex-col gap-3 mb-6 flex-1">
+      <ul className="flex flex-col gap-2 mb-5 flex-1">
         {plan.features.map((feature) => (
-          <li key={feature.name} className="flex items-center gap-2 text-sm text-gray-600">
+          <li
+            key={feature.name}
+            className="flex items-center gap-2 text-sm text-zinc-600"
+          >
             <FeatureIcon included={feature.included} />
-            <span className={pricingFeatureText({ included: feature.included })}>
+            <span
+              className={pricingFeatureText({ included: feature.included })}
+            >
               {feature.name}
             </span>
           </li>

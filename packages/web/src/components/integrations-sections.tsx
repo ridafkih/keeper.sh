@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@base-ui/react/button";
+import { Menu } from "@base-ui/react/menu";
 import { FREE_SOURCE_LIMIT } from "@keeper.sh/premium/constants";
 import { Toast } from "@/components/toast-provider";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -18,7 +19,8 @@ import { useSyncStatus } from "@/hooks/use-sync-status";
 import { useIcalToken } from "@/hooks/use-ical-token";
 import { authClient } from "@/lib/auth-client";
 import { button, input } from "@/styles";
-import { TextBody, TextMuted, BannerText } from "@/components/typography";
+import { BannerText } from "@/components/typography";
+import { Link as LinkIcon, Server, Check, Plus } from "lucide-react";
 
 interface SourceItemProps {
   source: CalendarSource;
@@ -38,14 +40,19 @@ const SourceItem = ({ source, onRemove }: SourceItemProps) => {
 
   return (
     <>
-      <div className="flex items-center gap-4 p-4 border border-gray-200 rounded-lg transition-colors hover:border-gray-300">
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium text-gray-900">{source.name}</div>
-          <div className="text-sm text-gray-500 overflow-hidden truncate">{source.url}</div>
+      <div className="flex items-center gap-2 px-3 py-2">
+        <div className="size-8 grid place-items-center rounded bg-zinc-100 shrink-0">
+          <LinkIcon size={14} className="text-zinc-500" />
+        </div>
+        <div className="flex-1 min-w-0 flex flex-col">
+          <h2 className="text-sm tracking-tight font-medium">{source.name}</h2>
+          <span className="block text-xs tracking-tight text-zinc-500 truncate">
+            {source.url}
+          </span>
         </div>
         <Button
+          className="text-xs text-red-600 hover:text-red-700 hover:bg-zinc-50 cursor-pointer px-2 py-1 rounded-md"
           onClick={() => setIsConfirmOpen(true)}
-          className={button({ variant: "secondary" })}
         >
           Remove
         </Button>
@@ -60,34 +67,6 @@ const SourceItem = ({ source, onRemove }: SourceItemProps) => {
         isConfirming={isRemoving}
         onConfirm={handleConfirm}
       />
-    </>
-  );
-};
-
-interface SourcesListProps {
-  sources: CalendarSource[] | undefined;
-  isLoading: boolean;
-  onRemove: (id: string) => Promise<void>;
-}
-
-const SourcesList = ({ sources, isLoading, onRemove }: SourcesListProps) => {
-  if (isLoading) {
-    return <TextBody className="py-4">Loading...</TextBody>;
-  }
-
-  if (!sources?.length) {
-    return <TextBody className="py-4">No calendar sources added yet</TextBody>;
-  }
-
-  return (
-    <>
-      {sources.map((source) => (
-        <SourceItem
-          key={source.id}
-          source={source}
-          onRemove={() => onRemove(source.id)}
-        />
-      ))}
     </>
   );
 };
@@ -151,11 +130,6 @@ const AddSourceDialog = ({
       submittingLabel="Adding..."
       submitVariant="primary"
       onSubmit={handleSubmit}
-      trigger={
-        <Button className={button({ variant: "secondary" })}>
-          Add iCal Link
-        </Button>
-      }
     >
       <FormField
         id="source-name"
@@ -224,27 +198,51 @@ export const CalendarSourcesSection = () => {
     }
   };
 
+  const countLabel = isLoading
+    ? "Loading..."
+    : sources?.length === 1
+      ? "1 source"
+      : `${sources?.length ?? 0} sources`;
+
   return (
     <Section>
       <SectionHeader
         title="Calendar Sources"
         description="Add iCal links to import events from other calendars"
       />
-      <div className="flex flex-col gap-1.5">
-        <SourcesList
-          sources={sources}
-          isLoading={isLoading}
-          onRemove={handleRemoveSource}
-        />
-        {isAtLimit && <UpgradeBanner />}
-        {!isAtLimit && (
-          <AddSourceDialog
-            open={isDialogOpen}
-            onOpenChange={setIsDialogOpen}
-            onAdd={handleAddSource}
-          />
+      <div className="border border-zinc-200 rounded-md">
+        <div className="flex items-center justify-between px-3 py-2">
+          <span className="text-sm font-medium text-zinc-900">
+            {countLabel}
+          </span>
+          <button
+            onClick={() => setIsDialogOpen(true)}
+            className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50 cursor-pointer px-2 py-1 rounded-md"
+          >
+            <Plus size={12} />
+            New Source
+          </button>
+        </div>
+        {sources && sources.length > 0 && (
+          <div className="border-t border-zinc-200 divide-y divide-zinc-200">
+            {sources.map((source) => (
+              <SourceItem
+                key={source.id}
+                source={source}
+                onRemove={() => handleRemoveSource(source.id)}
+              />
+            ))}
+          </div>
         )}
       </div>
+      {isAtLimit && <UpgradeBanner />}
+      {!isAtLimit && (
+        <AddSourceDialog
+          open={isDialogOpen}
+          onOpenChange={setIsDialogOpen}
+          onAdd={handleAddSource}
+        />
+      )}
     </Section>
   );
 };
@@ -254,7 +252,6 @@ type SupportedProvider = "google";
 interface BaseDestination {
   id: string;
   name: string;
-  description: string;
   icon?: string;
   pushesEvents?: boolean;
 }
@@ -276,14 +273,12 @@ const DESTINATIONS: Destination[] = [
     id: "google",
     providerId: "google",
     name: "Google Calendar",
-    description: "Sync your aggregated events to Google Calendar",
     icon: "/integrations/icon-google.svg",
     pushesEvents: true,
   },
   {
     id: "outlook",
     name: "Outlook",
-    description: "Sync your aggregated events to Outlook",
     icon: "/integrations/icon-outlook.svg",
     comingSoon: true,
     pushesEvents: true,
@@ -291,7 +286,6 @@ const DESTINATIONS: Destination[] = [
   {
     id: "caldav",
     name: "CalDAV",
-    description: "Sync to any CalDAV-compatible server",
     comingSoon: true,
     pushesEvents: true,
   },
@@ -313,18 +307,44 @@ const DestinationAction = ({
   onDisconnect,
 }: DestinationActionProps) => {
   if (comingSoon) {
-    return <TextMuted>Coming soon</TextMuted>;
+    return (
+      <span className="text-xs text-zinc-400 ml-auto px-2 py-1">
+        Coming soon
+      </span>
+    );
   }
 
   if (isConnected) {
     return (
-      <Button
-        onClick={onDisconnect}
-        disabled={isLoading}
-        className={button({ variant: "secondary" })}
-      >
-        {isLoading ? "..." : "Disconnect"}
-      </Button>
+      <Menu.Root>
+        <Menu.Trigger
+          disabled={isLoading}
+          className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50 cursor-pointer px-2 py-1 rounded-md disabled:opacity-50"
+        >
+          {!isLoading && (
+            <span className="size-1.5 rounded-full bg-green-500" />
+          )}
+          {isLoading ? "..." : "Connected"}
+        </Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Positioner sideOffset={4} align="end">
+            <Menu.Popup className="bg-white border border-zinc-200 rounded-md shadow-lg p-1 min-w-[120px]">
+              <Menu.Item
+                onClick={onConnect}
+                className="px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-50 cursor-pointer rounded"
+              >
+                Reauthenticate
+              </Menu.Item>
+              <Menu.Item
+                onClick={onDisconnect}
+                className="px-2 py-1 text-xs text-red-600 hover:bg-zinc-50 cursor-pointer rounded"
+              >
+                Disconnect
+              </Menu.Item>
+            </Menu.Popup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      </Menu.Root>
     );
   }
 
@@ -332,7 +352,7 @@ const DestinationAction = ({
     <Button
       onClick={onConnect}
       disabled={isLoading}
-      className={button({ variant: "secondary" })}
+      className="text-xs text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 active:bg-zinc-100 hover:cursor-pointer ml-auto px-2 py-1 rounded-md disabled:opacity-50"
     >
       {isLoading ? "..." : "Connect"}
     </Button>
@@ -350,60 +370,33 @@ interface SyncStatusDisplayProps {
 }
 
 const STAGE_LABELS: Record<string, string> = {
-  fetching: "Fetching remote events",
-  comparing: "Comparing events",
+  fetching: "Fetching",
+  comparing: "Comparing",
   processing: "Processing",
 };
 
-const formatOperationType = (type: "add" | "remove"): string => {
-  return type === "add" ? "Adding" : "Removing";
-};
+const SyncStatusText = ({
+  syncStatus,
+}: {
+  syncStatus: SyncStatusDisplayProps;
+}) => {
+  const isSyncing = syncStatus.status === "syncing" && syncStatus.stage;
+  const { progress } = syncStatus;
+  const hasProgress = progress && progress.total > 0;
 
-const formatEventTime = (isoTime: string): string => {
-  const date = new Date(isoTime);
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-};
-
-const SyncStatusDisplay = ({
-  status,
-  stage,
-  localCount,
-  remoteCount,
-  progress,
-  lastOperation,
-  inSync,
-}: SyncStatusDisplayProps) => {
-  if (status === "syncing" && stage) {
-    const baseLabel = STAGE_LABELS[stage] ?? "Syncing";
-
-    if (stage === "processing" && lastOperation && progress) {
-      const operationLabel = formatOperationType(lastOperation.type);
-      const timeLabel = formatEventTime(lastOperation.eventTime);
-      return (
-        <TextMuted>
-          {operationLabel} event at {timeLabel} ({progress.current + 1}/
-          {progress.total})
-        </TextMuted>
-      );
-    }
-
-    if (progress && progress.total > 0) {
-      return (
-        <TextMuted>
-          {baseLabel} ({progress.current}/{progress.total})
-        </TextMuted>
-      );
-    }
-    return <TextMuted>{baseLabel}...</TextMuted>;
+  let label: string;
+  if (isSyncing) {
+    const stageLabel = STAGE_LABELS[syncStatus.stage!] ?? "Syncing";
+    label = hasProgress
+      ? `${stageLabel} (${progress.current}/${progress.total})`
+      : `${stageLabel}...`;
+  } else {
+    label = syncStatus.inSync
+      ? `${syncStatus.remoteCount} events synced`
+      : `${syncStatus.remoteCount}/${syncStatus.localCount} events`;
   }
 
-  return (
-    <TextMuted>
-      {inSync
-        ? `${remoteCount} events synced`
-        : `${remoteCount}/${localCount} events`}
-    </TextMuted>
-  );
+  return <span className="text-xs text-zinc-500">{label}</span>;
 };
 
 interface DestinationItemProps {
@@ -435,31 +428,36 @@ const DestinationItem = ({
 
   return (
     <>
-      <div className="flex items-center gap-4 p-4 border border-gray-200 rounded-lg transition-colors hover:border-gray-300">
-        <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-white border border-gray-200">
-          {destination.icon && (
-            <Image
-              src={destination.icon}
-              alt={destination.name}
-              width={20}
-              height={20}
-            />
-          )}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium text-gray-900">{destination.name}</div>
-          <div className="text-sm text-gray-500 overflow-hidden truncate">
-            {destination.description}
+      <div>
+        <div className="flex items-center gap-2 px-3 py-2">
+          <div className="size-8 grid place-items-center rounded bg-zinc-100 shrink-0">
+            {destination.icon ? (
+              <Image
+                src={destination.icon}
+                alt={destination.name}
+                width={14}
+                height={14}
+              />
+            ) : (
+              <Server size={14} className="text-zinc-400" />
+            )}
           </div>
-          {isConnected && syncStatus && <SyncStatusDisplay {...syncStatus} />}
+          <div className="flex-1 min-w-0 flex flex-col">
+            <h2 className="text-sm tracking-tight font-medium">
+              {destination.name}
+            </h2>
+            {isConnected && syncStatus && (
+              <SyncStatusText syncStatus={syncStatus} />
+            )}
+          </div>
+          <DestinationAction
+            comingSoon={destination.comingSoon}
+            isConnected={isConnected}
+            isLoading={isLoading}
+            onConnect={onConnect}
+            onDisconnect={() => setIsConfirmOpen(true)}
+          />
         </div>
-        <DestinationAction
-          comingSoon={destination.comingSoon}
-          isConnected={isConnected}
-          isLoading={isLoading}
-          onConnect={onConnect}
-          onDisconnect={() => setIsConfirmOpen(true)}
-        />
       </div>
       <ConfirmDialog
         open={isConfirmOpen}
@@ -488,11 +486,19 @@ export const DestinationsSection = () => {
   const toastManager = Toast.useToastManager();
   const [loadingProvider, setLoadingProvider] =
     useState<SupportedProvider | null>(null);
-  const { data: accounts, mutate: mutateAccounts } = useLinkedAccounts();
+  const {
+    data: accounts,
+    isLoading: isAccountsLoading,
+    mutate: mutateAccounts,
+  } = useLinkedAccounts();
   const { data: syncStatus } = useSyncStatus();
 
   const isProviderConnected = (providerId: SupportedProvider) =>
     accounts?.some((account) => account.providerId === providerId) ?? false;
+
+  const connectedDestinations = DESTINATIONS.filter(
+    (d) => isConnectable(d) && isProviderConnected(d.providerId),
+  ) as ConnectableDestination[];
 
   const getSyncStatus = (
     providerId: SupportedProvider,
@@ -539,37 +545,88 @@ export const DestinationsSection = () => {
     }
   };
 
+  const countLabel = isAccountsLoading
+    ? "Loading..."
+    : connectedDestinations.length === 1
+      ? "1 destination"
+      : `${connectedDestinations.length} destinations`;
+
   return (
     <Section>
       <SectionHeader
         title="Destinations"
         description="Push your aggregated events to other calendar apps"
       />
-      <div className="flex flex-col gap-1.5">
-        {DESTINATIONS.map((destination) => {
-          const connectable = isConnectable(destination);
-          return (
-            <DestinationItem
-              key={destination.id}
-              destination={destination}
-              isConnected={
-                connectable && isProviderConnected(destination.providerId)
-              }
-              isLoading={
-                connectable && loadingProvider === destination.providerId
-              }
-              onConnect={() =>
-                connectable && handleConnect(destination.providerId)
-              }
-              onDisconnect={async () => {
-                if (connectable) await handleDisconnect(destination.providerId);
-              }}
-              syncStatus={
-                connectable ? getSyncStatus(destination.providerId) : undefined
-              }
-            />
-          );
-        })}
+      <div className="border border-zinc-200 rounded-md">
+        <div className="flex items-center justify-between px-3 py-2">
+          <span className="text-sm font-medium text-zinc-900">
+            {countLabel}
+          </span>
+          <Menu.Root>
+            <Menu.Trigger className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50 cursor-pointer px-2 py-1 rounded-md">
+              <Plus size={12} />
+              Add Destination
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Positioner sideOffset={4} align="end">
+                <Menu.Popup className="bg-white border border-zinc-200 rounded-md shadow-lg p-1">
+                  {DESTINATIONS.map((destination) => {
+                    const connectable = isConnectable(destination);
+                    return (
+                      <Menu.Item
+                        key={destination.id}
+                        onClick={() =>
+                          connectable && handleConnect(destination.providerId)
+                        }
+                        disabled={destination.comingSoon}
+                        className={`flex items-center gap-2 px-2 py-1.5 text-xs rounded ${
+                          destination.comingSoon
+                            ? "text-zinc-400 cursor-not-allowed"
+                            : "text-zinc-600 hover:bg-zinc-50 cursor-pointer"
+                        }`}
+                      >
+                        {destination.icon ? (
+                          <Image
+                            src={destination.icon}
+                            alt={destination.name}
+                            width={14}
+                            height={14}
+                            className={
+                              destination.comingSoon ? "opacity-50" : ""
+                            }
+                          />
+                        ) : (
+                          <Server size={14} className="text-zinc-400" />
+                        )}
+                        <span>{destination.name}</span>
+                        {destination.comingSoon && (
+                          <span className="ml-4 text-xs">Unavailable</span>
+                        )}
+                      </Menu.Item>
+                    );
+                  })}
+                </Menu.Popup>
+              </Menu.Positioner>
+            </Menu.Portal>
+          </Menu.Root>
+        </div>
+        {connectedDestinations.length > 0 && (
+          <div className="border-t border-zinc-200 divide-y divide-zinc-200">
+            {connectedDestinations.map((destination) => (
+              <DestinationItem
+                key={destination.id}
+                destination={destination}
+                isConnected={true}
+                isLoading={loadingProvider === destination.providerId}
+                onConnect={() => handleConnect(destination.providerId)}
+                onDisconnect={async () =>
+                  handleDisconnect(destination.providerId)
+                }
+                syncStatus={getSyncStatus(destination.providerId)}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </Section>
   );
@@ -580,6 +637,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "";
 export const ICalLinkSection = () => {
   const toastManager = Toast.useToastManager();
   const { token, isLoading } = useIcalToken();
+  const [copied, setCopied] = useState(false);
 
   const icalUrl = token
     ? new URL(`/cal/${token}.ics`, BASE_URL).toString()
@@ -589,6 +647,8 @@ export const ICalLinkSection = () => {
     if (!icalUrl) return;
     await navigator.clipboard.writeText(icalUrl);
     toastManager.add({ title: "Copied to clipboard" });
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   };
 
   return (
@@ -597,19 +657,24 @@ export const ICalLinkSection = () => {
         title="Your iCal Link"
         description="Subscribe to this link to view your aggregated events"
       />
-      <div className="flex gap-2">
+      <div className="flex gap-1.5">
         <input
           type="text"
           value={isLoading ? "Loading..." : icalUrl}
           readOnly
-          className={input({ readonly: true, className: "flex-1" })}
+          className={input({ readonly: true, size: "sm", className: "flex-1" })}
         />
         <Button
           onClick={copyToClipboard}
           disabled={isLoading || !token}
-          className={button({ variant: "secondary" })}
+          className={button({
+            variant: "secondary",
+            size: "sm",
+            className: "relative",
+          })}
         >
-          Copy
+          <span className={copied ? "invisible" : ""}>Copy</span>
+          {copied && <Check size={16} className="absolute inset-0 m-auto" />}
         </Button>
       </div>
     </Section>

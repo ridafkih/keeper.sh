@@ -24,20 +24,20 @@ export function BillingPeriodToggle({
           onChange(billingPeriodSchema.assert(values[0]));
         }
       }}
-      className="inline-grid grid-cols-2 rounded-lg border border-gray-200 p-1 bg-gray-50"
+      className="inline-grid grid-cols-2 rounded-md border border-zinc-200 p-0.5 bg-zinc-50"
     >
       <Toggle
         value="monthly"
-        className="px-4 py-2 text-sm font-medium rounded-md transition-colors text-gray-600 hover:text-gray-900 data-[pressed]:bg-white data-[pressed]:text-gray-900 data-[pressed]:shadow-sm cursor-pointer"
+        className="px-3 py-1.5 text-xs font-medium tracking-tight rounded transition-colors text-zinc-600 hover:text-zinc-900 data-pressed:bg-white data-pressed:text-zinc-900 data-pressed:shadow-sm cursor-pointer"
       >
         Monthly
       </Toggle>
       <Toggle
         value="yearly"
-        className="px-4 py-2 text-sm font-medium rounded-md transition-colors text-gray-600 hover:text-gray-900 data-[pressed]:bg-white data-[pressed]:text-gray-900 data-[pressed]:shadow-sm cursor-pointer"
+        className="px-3 py-1.5 text-xs font-medium tracking-tight rounded transition-colors text-zinc-600 hover:text-zinc-900 data-pressed:bg-white data-pressed:text-zinc-900 data-pressed:shadow-sm cursor-pointer"
       >
         Yearly
-        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+        <span className="ml-1.5 inline-flex items-center px-1 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
           -50%
         </span>
       </Toggle>

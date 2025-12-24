@@ -20,7 +20,7 @@ const CopyablePhrase = ({ phrase }: { phrase: string }) => {
     <button
       type="button"
       onClick={handleClick}
-      className="inline-flex items-center gap-1 font-medium text-neutral-900 hover:text-neutral-600 transition-colors"
+      className="inline-flex items-center gap-1 font-medium text-zinc-900 hover:text-zinc-600 transition-colors"
     >
       "{phrase}"{copied ? <Check size={12} /> : <Copy size={12} />}
     </button>
@@ -67,34 +67,34 @@ export function ConfirmDialog({
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 bg-black/40 z-50" />
         <Dialog.Popup className={dialogPopup({ size: "sm" })}>
-          <Dialog.Title className="text-lg font-semibold text-gray-900 mb-1">
+          <Dialog.Title className="text-sm font-semibold text-zinc-900 tracking-tight">
             {title}
           </Dialog.Title>
-          <Dialog.Description className="text-sm text-gray-500 mb-4">
+          <Dialog.Description className="text-sm text-zinc-500 mt-1 mb-3">
             {description}
           </Dialog.Description>
           {requirePhrase && (
-            <div className="flex flex-col gap-1.5">
-              <span className="text-sm text-neutral-600">
+            <div className="flex flex-col gap-1.5 mb-3">
+              <span className="text-xs text-zinc-600">
                 Type <CopyablePhrase phrase={requirePhrase} /> to confirm
               </span>
               <input
                 type="text"
                 value={inputValue}
                 onChange={(event) => setInputValue(event.target.value)}
-                className={input()}
+                className={input({ size: "sm" })}
                 autoComplete="off"
               />
             </div>
           )}
-          <div className="flex gap-2 justify-end mt-2">
-            <Dialog.Close className={button({ variant: "secondary" })}>
+          <div className="flex gap-2 justify-end">
+            <Dialog.Close className={button({ variant: "secondary", size: "sm" })}>
               Cancel
             </Dialog.Close>
             <Button
               disabled={isConfirming || !phraseMatches}
               onClick={onConfirm}
-              className={button({ variant: confirmVariant })}
+              className={button({ variant: confirmVariant, size: "sm" })}
             >
               {isConfirming ? confirmingLabel : confirmLabel}
             </Button>

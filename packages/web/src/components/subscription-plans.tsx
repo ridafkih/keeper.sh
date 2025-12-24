@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Toast } from "@/components/toast-provider";
 import { PlanCard } from "@/components/plan-card";
+import { Section } from "@/components/section";
 import { SectionHeader } from "@/components/section-header";
 import {
   BillingPeriodToggle,
@@ -61,17 +62,15 @@ export function SubscriptionPlans({
     (currentInterval === "month" && billingPeriod === "monthly");
 
   return (
-    <section className="flex flex-col gap-4">
+    <Section>
       <SectionHeader
         title="Subscription Plan"
         description="Manage your subscription and billing details"
       />
 
-      <div className="flex items-center gap-3">
-        <BillingPeriodToggle value={billingPeriod} onChange={setBillingPeriodOverride} />
-      </div>
+      <BillingPeriodToggle value={billingPeriod} onChange={setBillingPeriodOverride} />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
         {plans.map((plan) => {
           const productId = isYearly
             ? plan.yearlyProductId
@@ -97,6 +96,6 @@ export function SubscriptionPlans({
           );
         })}
       </div>
-    </section>
+    </Section>
   );
 }

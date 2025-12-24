@@ -16,7 +16,6 @@ import { Section } from "@/components/section";
 import { SectionHeader } from "@/components/section-header";
 import { updateUser, changePassword, deleteAccount, signOut } from "@/lib/auth";
 import { button } from "@/styles";
-import { DangerLabel, DangerText } from "@/components/typography";
 
 export default function SettingsPage() {
   const { user, refresh } = useAuth();
@@ -55,23 +54,31 @@ export default function SettingsPage() {
           description="Manage your personal information"
         />
 
-        <div className="flex flex-col gap-4 p-4 border border-gray-200 rounded-lg">
+        <div className="flex flex-col gap-3 p-3 border border-zinc-200 rounded-md">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-gray-500">Display Name</div>
-              <div className="text-sm text-gray-900">{user?.name || "Not set"}</div>
+              <div className="text-xs font-medium text-zinc-500 tracking-tight">
+                Display Name
+              </div>
+              <div className="text-sm text-zinc-900 tracking-tight">
+                {user?.name || "Not set"}
+              </div>
             </div>
             <Button
               onClick={() => setIsEditingName(true)}
-              className={button({ variant: "secondary" })}
+              className={button({ variant: "secondary", size: "sm" })}
             >
               Edit
             </Button>
           </div>
-          <Separator className="bg-gray-200 h-px" />
+          <Separator className="bg-zinc-200 h-px" />
           <div>
-            <div className="text-sm font-medium text-gray-500">Username</div>
-            <div className="text-sm text-gray-900">{user?.username}</div>
+            <div className="text-xs font-medium text-zinc-500 tracking-tight">
+              Username
+            </div>
+            <div className="text-sm text-zinc-900 tracking-tight">
+              {user?.username}
+            </div>
           </div>
         </div>
       </Section>
@@ -82,15 +89,19 @@ export default function SettingsPage() {
           description="Manage your password and account security"
         />
 
-        <div className="flex flex-col gap-4 p-4 border border-gray-200 rounded-lg">
+        <div className="flex flex-col gap-3 p-3 border border-zinc-200 rounded-md">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-gray-500">Password</div>
-              <div className="text-sm text-gray-900">••••••••</div>
+              <div className="text-xs font-medium text-zinc-500 tracking-tight">
+                Password
+              </div>
+              <div className="text-sm text-zinc-900 tracking-tight">
+                ••••••••
+              </div>
             </div>
             <Button
               onClick={() => setIsChangingPassword(true)}
-              className={button({ variant: "secondary" })}
+              className={button({ variant: "secondary", size: "sm" })}
             >
               Change
             </Button>
@@ -104,17 +115,19 @@ export default function SettingsPage() {
           description="Irreversible actions for your account"
         />
 
-        <div className="flex flex-col gap-4 p-4 border border-red-300 bg-red-50 rounded-lg">
+        <div className="flex flex-col gap-3 p-3 border border-red-300 bg-red-50 rounded-md">
           <div className="flex items-center justify-between">
             <div>
-              <DangerLabel as="div">Delete Account</DangerLabel>
-              <DangerText as="div">
+              <div className="text-xs font-medium text-red-700 tracking-tight">
+                Delete Account
+              </div>
+              <div className="text-sm text-red-600 tracking-tight">
                 Permanently delete your account and all data
-              </DangerText>
+              </div>
             </div>
             <Button
               onClick={() => setIsDeletingAccount(true)}
-              className={button({ variant: "danger" })}
+              className={button({ variant: "danger", size: "sm" })}
             >
               Delete
             </Button>

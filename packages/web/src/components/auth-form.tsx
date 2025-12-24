@@ -21,7 +21,7 @@ export function AuthForm({
 }) {
   return (
     <Form
-      className="w-full max-w-sm p-8 border border-neutral-200 rounded-xl bg-white"
+      className="w-full max-w-sm p-8 border border-zinc-200 rounded-xl bg-white"
       onSubmit={onSubmit}
     >
       {children}
@@ -64,7 +64,7 @@ export function AuthFormField({
 }) {
   return (
     <Field.Root name={name} className="mb-4">
-      <Field.Label className="block text-sm font-medium mb-1.5 text-gray-700">
+      <Field.Label className="block text-sm font-medium mb-1.5 text-zinc-700">
         {labelText}
       </Field.Label>
       <Input
@@ -74,7 +74,7 @@ export function AuthFormField({
         autoComplete={autoComplete}
         minLength={minLength}
         maxLength={maxLength}
-        className="w-full py-2.5 px-3 border border-gray-300 rounded-md text-base transition-[border-color,box-shadow] duration-150 focus:outline-none focus:border-gray-900 focus:ring-3 focus:ring-black/10"
+        className="w-full py-2.5 px-3 border border-zinc-300 rounded-md text-base transition-[border-color,box-shadow] duration-150 focus:outline-none focus:border-zinc-900 focus:ring-3 focus:ring-black/10"
       />
     </Field.Root>
   );
@@ -93,7 +93,7 @@ export function AuthFormSubmit({
     <Button
       type="submit"
       disabled={isLoading}
-      className="w-full py-3 px-4 mt-2 border-none rounded-md text-base font-medium bg-gray-900 text-white cursor-pointer transition-colors duration-150 hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+      className="w-full py-3 px-4 mt-2 border-none rounded-md text-base font-medium bg-zinc-900 text-white cursor-pointer transition-colors duration-150 hover:bg-zinc-700 disabled:bg-zinc-400 disabled:cursor-not-allowed"
     >
       {isLoading ? loadingText : children}
     </Button>

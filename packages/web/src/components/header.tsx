@@ -14,10 +14,13 @@ export function Header() {
   const showMarketingNav = !isDashboard && !isAuthRoute;
 
   return (
-    <header className="border-b border-neutral-200">
-      <div className="flex justify-between items-center max-w-3xl mx-auto p-4">
-        <div className="flex items-center gap-6">
-          <Link href="/" className="text-2xl font-bold text-gray-900 no-underline">
+    <header className="border-b border-zinc-200">
+      <div className="flex justify-between items-center max-w-3xl mx-auto px-4 py-2.5">
+        <div className="flex items-center gap-4">
+          <Link
+            href="/"
+            className="text-base font-semibold text-zinc-900 no-underline tracking-tight"
+          >
             Keeper
           </Link>
           {showMarketingNav && <MarketingNav />}

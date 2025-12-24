@@ -33,7 +33,10 @@ export function FormField({
 }: FormFieldProps) {
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="block text-sm font-medium mb-1.5 text-gray-700">
+      <label
+        htmlFor={id}
+        className="text-xs font-medium text-zinc-600"
+      >
         {labelText}
       </label>
       <input
@@ -49,7 +52,7 @@ export function FormField({
         minLength={minLength}
         maxLength={maxLength}
         readOnly={readOnly}
-        className={input({ readonly: readOnly })}
+        className={input({ readonly: readOnly, size: "sm" })}
       />
     </div>
   );

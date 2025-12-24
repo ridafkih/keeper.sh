@@ -12,7 +12,7 @@ export function PageTitle({
   children,
 }: TextProps) {
   return (
-    <Component className={`text-2xl font-bold text-gray-900 ${className}`}>
+    <Component className={`text-2xl font-bold text-zinc-900 ${className}`}>
       {children}
     </Component>
   );
@@ -24,7 +24,7 @@ export function SectionTitle({
   children,
 }: TextProps) {
   return (
-    <Component className={`text-lg font-semibold text-gray-900 ${className}`}>
+    <Component className={`text-lg font-semibold text-zinc-900 ${className}`}>
       {children}
     </Component>
   );
@@ -36,7 +36,7 @@ export function TextBody({
   children,
 }: TextProps) {
   return (
-    <Component className={`text-sm text-gray-500 ${className}`}>
+    <Component className={`text-sm text-zinc-500 ${className}`}>
       {children}
     </Component>
   );
@@ -48,7 +48,7 @@ export function TextLabel({
   children,
 }: TextProps) {
   return (
-    <Component className={`text-sm font-medium text-gray-900 ${className}`}>
+    <Component className={`text-sm font-medium text-zinc-900 ${className}`}>
       {children}
     </Component>
   );
@@ -60,7 +60,7 @@ export function TextMeta({
   children,
 }: TextProps) {
   return (
-    <Component className={`text-xs font-medium text-gray-500 ${className}`}>
+    <Component className={`text-xs font-medium text-zinc-500 ${className}`}>
       {children}
     </Component>
   );
@@ -72,7 +72,7 @@ export function TextMuted({
   children,
 }: TextProps) {
   return (
-    <Component className={`text-sm text-gray-400 ${className}`}>
+    <Component className={`text-sm text-zinc-400 ${className}`}>
       {children}
     </Component>
   );

@@ -11,6 +11,11 @@ const navItems = [
     label: "GitHub",
     external: true,
   },
+  {
+    href: "https://github.com/ridafkih/keeper.sh/releases",
+    label: "Changelog",
+    external: true,
+  },
 ] as const;
 
 export function MarketingNav() {
@@ -32,7 +37,7 @@ export function MarketingNav() {
                   <NextLink href={item.href} />
                 )
               }
-              className="flex items-center px-3 py-2 rounded-md text-sm font-medium no-underline transition-colors text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              className="flex items-center px-2 py-1 rounded-md text-xs font-medium no-underline transition-colors text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50"
             >
               {item.label}
             </NavigationMenu.Link>

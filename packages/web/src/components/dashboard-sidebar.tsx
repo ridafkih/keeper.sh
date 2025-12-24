@@ -15,8 +15,8 @@ const sidebarLink = tv({
   base: "flex items-center text-sm gap-1 py-1 px-1.5 pr-8 rounded-sm tracking-tight",
   variants: {
     active: {
-      true: "bg-gray-100 text-gray-900",
-      false: "text-gray-600 hover:text-gray-900 hover:bg-gray-50",
+      true: "bg-zinc-100 text-zinc-900",
+      false: "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50",
     },
   },
   defaultVariants: {

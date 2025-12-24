@@ -10,8 +10,8 @@ import { button } from "@/styles";
 const AuthNavSkeleton = ({ isDashboard }: { isDashboard: boolean }) => {
   if (isDashboard) {
     return (
-      <nav className="flex gap-3">
-        <Button className={button({ variant: "secondary", skeleton: true })} disabled>
+      <nav className="flex gap-2">
+        <Button className={button({ variant: "secondary", size: "xs", skeleton: true })} disabled>
           Logout
         </Button>
       </nav>
@@ -19,11 +19,11 @@ const AuthNavSkeleton = ({ isDashboard }: { isDashboard: boolean }) => {
   }
 
   return (
-    <nav className="flex gap-3">
-      <Button className={button({ variant: "secondary", skeleton: true })} disabled>
+    <nav className="flex gap-2">
+      <Button className={button({ variant: "secondary", size: "xs", skeleton: true })} disabled>
         Login
       </Button>
-      <Button className={button({ variant: "primary", skeleton: true })} disabled>
+      <Button className={button({ variant: "primary", size: "xs", skeleton: true })} disabled>
         Register
       </Button>
     </nav>
@@ -31,19 +31,19 @@ const AuthNavSkeleton = ({ isDashboard }: { isDashboard: boolean }) => {
 };
 
 const DashboardNav = ({ onLogout }: { onLogout: () => void }) => (
-  <nav className="flex gap-3">
-    <Button onClick={onLogout} className={button({ variant: "secondary" })}>
+  <nav className="flex gap-2">
+    <Button onClick={onLogout} className={button({ variant: "secondary", size: "xs" })}>
       Logout
     </Button>
   </nav>
 );
 
 const AuthenticatedMarketingNav = () => (
-  <nav className="flex gap-3">
+  <nav className="flex gap-2">
     <Button
       render={<Link href="/dashboard" />}
       nativeButton={false}
-      className={button({ variant: "primary" })}
+      className={button({ variant: "primary", size: "xs" })}
     >
       Dashboard
     </Button>
@@ -51,18 +51,18 @@ const AuthenticatedMarketingNav = () => (
 );
 
 const UnauthenticatedNav = () => (
-  <nav className="flex gap-3">
+  <nav className="flex gap-2">
     <Button
       render={<Link href="/login" />}
       nativeButton={false}
-      className={button({ variant: "secondary" })}
+      className={button({ variant: "secondary", size: "xs" })}
     >
       Login
     </Button>
     <Button
       render={<Link href="/register" />}
       nativeButton={false}
-      className={button({ variant: "primary" })}
+      className={button({ variant: "primary", size: "xs" })}
     >
       Register
     </Button>
