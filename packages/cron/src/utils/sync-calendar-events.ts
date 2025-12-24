@@ -2,12 +2,9 @@ import type { CronOptions } from "cronbake";
 import { log } from "@keeper.sh/log";
 import { syncDestinationsForUser } from "@keeper.sh/integrations";
 import "@keeper.sh/integration-google-calendar";
-import {
-  fetchAndSyncSource,
-  getSourcesByPlan,
-  type Source,
-} from "../lib/sync-utils";
+import { fetchAndSyncSource, type Source } from "@keeper.sh/calendar";
 import type { Plan } from "@keeper.sh/premium";
+import { getSourcesByPlan } from "./get-sources";
 
 const syncUserSources = async (userId: string, sources: Source[]) => {
   await Promise.allSettled(sources.map(fetchAndSyncSource));

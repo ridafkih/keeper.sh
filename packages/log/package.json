@@ -6,8 +6,7 @@
   "private": true,
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",
-    "@types/bun": "latest",
-    "@types/pino": "^7.0.5"
+    "@types/bun": "latest"
   },
   "dependencies": {
     "pino": "10.1.0"

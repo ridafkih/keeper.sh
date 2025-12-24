@@ -2,7 +2,7 @@ import { Webhooks } from "@polar-sh/nextjs";
 import { log } from "@keeper.sh/log";
 import { database } from "@keeper.sh/database";
 import { userSubscriptionsTable } from "@keeper.sh/database/schema";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 const POLAR_WEBHOOK_SECRET = process.env.POLAR_WEBHOOK_SECRET;
 

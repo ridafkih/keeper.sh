@@ -1,10 +1,10 @@
 {
   "name": "@keeper.sh/env",
-  "types": "./src/index.ts",
   "exports": {
     "./auth": "./src/auth.ts",
     "./database": "./src/database.ts",
     "./database/seed": "./src/database/seed.ts",
+    "./database/drizzle-config": "./src/database/drizzle-config.ts",
     "./redis": "./src/redis.ts"
   },
   "type": "module",

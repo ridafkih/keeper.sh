@@ -8,9 +8,8 @@ import {
   syncStatusTable,
 } from "@keeper.sh/database/schema";
 import { user as userTable } from "@keeper.sh/database";
-import { pullRemoteCalendar } from "@keeper.sh/pull-calendar";
+import { pullRemoteCalendar, fetchAndSyncSource } from "@keeper.sh/calendar";
 import { canAddSource } from "@keeper.sh/premium";
-import { fetchAndSyncSource } from "@keeper.sh/sync-calendar";
 import { syncDestinationsForUser } from "@keeper.sh/integrations";
 import "@keeper.sh/integration-google-calendar";
 import { log } from "@keeper.sh/log";

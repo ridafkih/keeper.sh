@@ -39,3 +39,45 @@
   --color-info: var(--color-blue-800);
   --color-info-surface: var(--color-blue-100);
 }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: var(--color-zinc-950);
+    --color-surface: var(--color-zinc-900);
+    --color-surface-elevated: var(--color-zinc-800);
+    --color-surface-subtle: var(--color-zinc-800);
+    --color-surface-muted: var(--color-zinc-700);
+    --color-surface-skeleton: var(--color-zinc-600);
+
+    --color-foreground: var(--color-zinc-50);
+    --color-foreground-secondary: var(--color-zinc-300);
+    --color-foreground-muted: var(--color-zinc-400);
+    --color-foreground-subtle: var(--color-zinc-500);
+    --color-foreground-disabled: var(--color-zinc-600);
+
+    --color-border: var(--color-zinc-700);
+    --color-border-emphasis: var(--color-zinc-200);
+    --color-border-input: var(--color-zinc-600);
+
+    --color-primary: var(--color-zinc-50);
+    --color-primary-hover: var(--color-zinc-200);
+    --color-primary-foreground: var(--color-zinc-900);
+    --color-focus-ring: oklch(1 0 0 / 0.2);
+
+    --color-destructive: var(--color-red-400);
+    --color-destructive-emphasis: var(--color-red-300);
+    --color-destructive-surface: var(--color-red-950);
+    --color-destructive-border: var(--color-red-800);
+
+    --color-success: var(--color-green-400);
+    --color-success-emphasis: var(--color-green-300);
+    --color-success-surface: var(--color-green-950);
+
+    --color-warning: var(--color-amber-400);
+    --color-warning-surface: var(--color-amber-950);
+    --color-warning-border: var(--color-amber-700);
+
+    --color-info: var(--color-blue-400);
+    --color-info-surface: var(--color-blue-950);
+  }
+}

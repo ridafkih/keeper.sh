@@ -10,7 +10,6 @@
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/env": "workspace:*",
     "@keeper.sh/integrations": "workspace:*",
-    "@keeper.sh/log": "workspace:*",
     "@keeper.sh/premium": "workspace:*",
     "drizzle-orm": "0.45.1"
   },

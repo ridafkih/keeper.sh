@@ -4,7 +4,7 @@ import {
   remoteICalSourcesTable,
   calendarSnapshotsTable,
 } from "@keeper.sh/database/schema";
-import { pullRemoteCalendar } from "@keeper.sh/pull-calendar";
+import { pullRemoteCalendar } from "@keeper.sh/calendar";
 import { log } from "@keeper.sh/log";
 import { and, eq, lte } from "drizzle-orm";
 

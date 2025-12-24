@@ -10,11 +10,10 @@
   "dependencies": {
     "@base-ui/react": "1.0.0",
     "@keeper.sh/auth": "workspace:*",
-    "@keeper.sh/broadcast-client": "workspace:*",
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/database": "workspace:*",
-    "@keeper.sh/log": "workspace:*",
     "@keeper.sh/premium": "workspace:*",
+    "@keeper.sh/log": "workspace:*",
     "@polar-sh/better-auth": "^1.6.3",
     "@polar-sh/checkout": "^0.1.14",
     "@polar-sh/nextjs": "^0.9.3",

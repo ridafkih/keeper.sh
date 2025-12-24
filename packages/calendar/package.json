@@ -1,0 +1,19 @@
+{
+  "name": "@keeper.sh/calendar",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@keeper.sh/database": "workspace:*",
+    "@keeper.sh/log": "workspace:*",
+    "drizzle-orm": "0.45.1",
+    "ts-ics": "2.4.0"
+  },
+  "devDependencies": {
+    "@keeper.sh/typescript-config": "workspace:*",
+    "@types/bun": "latest"
+  }
+}

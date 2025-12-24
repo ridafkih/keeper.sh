@@ -20,8 +20,7 @@
     "@keeper.sh/integrations": "workspace:*",
     "@keeper.sh/log": "workspace:*",
     "@keeper.sh/premium": "workspace:*",
-    "@keeper.sh/pull-calendar": "workspace:*",
-    "@keeper.sh/sync-calendar": "workspace:*",
+    "@keeper.sh/calendar": "workspace:*",
     "drizzle-orm": "0.45.1",
     "ts-ics": "2.4.0"
   }

@@ -46,16 +46,6 @@ export async function signOut() {
   return response.json();
 }
 
-export async function getSession() {
-  const response = await fetch("/api/auth/get-session");
-
-  if (!response.ok) {
-    return null;
-  }
-
-  return response.json();
-}
-
 export async function updateUser(data: { name?: string; image?: string }) {
   const response = await fetch("/api/auth/update-user", {
     method: "POST",

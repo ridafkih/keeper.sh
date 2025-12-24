@@ -10,19 +10,33 @@ interface TextProps {
 
 const pageTitle = tv({ base: "text-2xl font-bold text-foreground" });
 const sectionTitle = tv({ base: "text-lg font-semibold text-foreground" });
-const cardTitle = tv({ base: "text-sm font-semibold text-foreground tracking-tight" });
-const subsectionTitle = tv({ base: "text-md font-semibold text-foreground tracking-tighter" });
+const cardTitle = tv({
+  base: "text-sm font-semibold text-foreground tracking-tight",
+});
+const subsectionTitle = tv({
+  base: "text-md font-semibold text-foreground tracking-tighter",
+});
 const textBody = tv({ base: "text-sm text-foreground-muted" });
 const textLabel = tv({ base: "text-sm font-medium text-foreground" });
-const textMeta = tv({ base: "text-xs font-medium text-foreground-muted tracking-tight" });
-const textCaption = tv({ base: "text-xs text-foreground-muted tracking-tight" });
-const fieldLabel = tv({ base: "text-xs font-medium text-foreground-secondary tracking-tight" });
+const textMeta = tv({
+  base: "text-xs font-medium text-foreground-muted tracking-tight",
+});
+const textCaption = tv({
+  base: "text-xs text-foreground-muted tracking-tight",
+});
+const fieldLabel = tv({
+  base: "text-xs font-medium text-foreground-secondary tracking-tight",
+});
 const fieldValue = tv({ base: "text-sm text-foreground tracking-tight" });
 const textMuted = tv({ base: "text-sm text-foreground-subtle" });
 const dangerLabel = tv({ base: "text-sm font-medium text-destructive" });
 const dangerText = tv({ base: "text-sm text-destructive" });
-const dangerFieldLabel = tv({ base: "text-xs font-medium text-destructive-emphasis tracking-tight" });
-const dangerFieldValue = tv({ base: "text-sm text-destructive tracking-tight" });
+const dangerFieldLabel = tv({
+  base: "text-xs font-medium text-destructive-emphasis tracking-tight",
+});
+const dangerFieldValue = tv({
+  base: "text-sm text-destructive tracking-tight",
+});
 const bannerText = tv({
   base: "text-sm",
   variants: {
@@ -37,18 +51,6 @@ const bannerText = tv({
   },
 });
 
-export const PageTitle: FC<PropsWithChildren<TextProps>> = ({
-  as: Component = "h1",
-  className,
-  children,
-}) => <Component className={pageTitle({ className })}>{children}</Component>;
-
-export const SectionTitle: FC<PropsWithChildren<TextProps>> = ({
-  as: Component = "h2",
-  className,
-  children,
-}) => <Component className={sectionTitle({ className })}>{children}</Component>;
-
 export const CardTitle: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "h3",
   className,
@@ -59,7 +61,9 @@ export const SubsectionTitle: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "h2",
   className,
   children,
-}) => <Component className={subsectionTitle({ className })}>{children}</Component>;
+}) => (
+  <Component className={subsectionTitle({ className })}>{children}</Component>
+);
 
 export const TextBody: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "p",
@@ -112,12 +116,6 @@ export const TextMuted: FC<PropsWithChildren<TextProps>> = ({
   children,
 }) => <Component className={textMuted({ className })}>{children}</Component>;
 
-export const DangerLabel: FC<PropsWithChildren<TextProps>> = ({
-  as: Component = "span",
-  className,
-  children,
-}) => <Component className={dangerLabel({ className })}>{children}</Component>;
-
 export const DangerText: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "span",
   className,
@@ -128,13 +126,17 @@ export const DangerFieldLabel: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "span",
   className,
   children,
-}) => <Component className={dangerFieldLabel({ className })}>{children}</Component>;
+}) => (
+  <Component className={dangerFieldLabel({ className })}>{children}</Component>
+);
 
 export const DangerFieldValue: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "span",
   className,
   children,
-}) => <Component className={dangerFieldValue({ className })}>{children}</Component>;
+}) => (
+  <Component className={dangerFieldValue({ className })}>{children}</Component>
+);
 
 type BannerVariant = "warning" | "info" | "success";
 

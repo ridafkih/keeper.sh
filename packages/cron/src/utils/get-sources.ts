@@ -2,8 +2,6 @@ import { database } from "@keeper.sh/database";
 import { remoteICalSourcesTable } from "@keeper.sh/database/schema";
 import { getUserPlan, type Plan } from "@keeper.sh/premium";
 
-export { fetchAndSyncSource, syncSourceFromSnapshot, type Source } from "@keeper.sh/sync-calendar";
-
 export async function getSourcesByPlan(targetPlan: Plan) {
   const sources = await database.select().from(remoteICalSourcesTable);
 
@@ -15,5 +13,7 @@ export async function getSourcesByPlan(targetPlan: Plan) {
     }
   }
 
-  return sources.filter((source) => userPlans.get(source.userId) === targetPlan);
+  return sources.filter(
+    (source) => userPlans.get(source.userId) === targetPlan,
+  );
 }

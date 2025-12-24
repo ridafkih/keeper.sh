@@ -64,7 +64,7 @@ export const CalendarSkeleton = ({ days = 7 }: { days?: number }) => (
   </div>
 );
 
-export interface CalendarProps {
+interface CalendarProps {
   events?: CalendarEvent[];
   startDate?: Date;
   daysToShow?: number;
