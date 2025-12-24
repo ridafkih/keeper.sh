@@ -73,32 +73,35 @@ const PasskeysList: FC<PasskeysListProps> = ({
   return (
     <Card padding="none">
       <div className="divide-y divide-border">
-        {passkeys.map((passkey) => (
-          <div
-            key={passkey.id}
-            className="flex items-center justify-between px-3 py-2"
-          >
-            <div className="flex items-center gap-2">
-              <Fingerprint className="size-4 text-foreground-muted" />
-              <div>
-                <TextLabel as="div">{passkey.name ?? "Passkey"}</TextLabel>
-                <TextCaption>
-                  Added {new Date(passkey.createdAt).toLocaleDateString()}
-                </TextCaption>
-              </div>
-            </div>
-            <Button
-              onClick={() => onDelete(passkey.id)}
-              className={button({ variant: "ghost", size: "xs" })}
+        {passkeys.map(({ id, name, createdAt }) => {
+          return (
+            <div
+              key={id}
+              className="flex items-center justify-between px-3 py-2"
             >
-              <Trash2 className="size-4 text-foreground-muted" />
-            </Button>
-          </div>
-        ))}
+              <div className="flex items-center gap-2">
+                <Fingerprint className="size-4 text-foreground-muted" />
+                <div className="flex flex-col">
+                  <TextLabel as="div">{name ?? "Passkey"}</TextLabel>
+                  <TextCaption>
+                    Added on {createdAt.toLocaleDateString()} at{" "}
+                    {createdAt.toLocaleTimeString()}
+                  </TextCaption>
+                </div>
+              </div>
+              <Button
+                onClick={() => onDelete(id)}
+                className={button({ variant: "ghost", size: "xs" })}
+              >
+                <Trash2 className="size-4 text-foreground-muted" />
+              </Button>
+            </div>
+          );
+        })}
       </div>
     </Card>
   );
-}
+};
 
 export default function SettingsPage() {
   const { user, refresh } = useAuth();
