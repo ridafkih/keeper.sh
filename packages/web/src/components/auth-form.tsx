@@ -4,7 +4,12 @@ import { Field } from "@base-ui/react/field";
 import { Input } from "@base-ui/react/input";
 import { tv } from "tailwind-variants";
 import { Button } from "@/components/button";
-import { CardTitle, FieldLabel, TextBody, DangerText } from "@/components/typography";
+import {
+  CardTitle,
+  FieldLabel,
+  TextBody,
+  DangerText,
+} from "@/components/typography";
 
 const authFormSubmit = tv({
   base: "w-full py-1.5 px-3 mt-1 border-none rounded-md text-sm font-medium bg-primary text-primary-foreground cursor-pointer transition-colors duration-150 hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed",
@@ -29,7 +34,7 @@ export const AuthForm: FC<PropsWithChildren<AuthFormProps>> = ({
   children,
 }) => (
   <Form
-    className="w-full max-w-xs p-4 border border-border rounded-md bg-surface"
+    className="w-full max-w-xs p-4 rounded-md bg-surface"
     onSubmit={onSubmit}
   >
     {children}

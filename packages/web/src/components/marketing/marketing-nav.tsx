@@ -6,8 +6,8 @@ import { NavigationMenu } from "@base-ui/react/navigation-menu";
 import { NavLink } from "@/components/nav-link";
 
 const navItems = [
-  { href: "/#features", label: "Features" },
-  { href: "/#pricing", label: "Pricing" },
+  { href: "/features", label: "Features" },
+  { href: "/pricing", label: "Pricing" },
   {
     href: "https://github.com/ridafkih/keeper.sh",
     label: "GitHub",
