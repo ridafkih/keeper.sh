@@ -1,5 +1,11 @@
 import { type } from "arktype";
 
+export const proxyableMethods = type(
+  "'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD'",
+);
+
+export type ProxyableMethods = typeof proxyableMethods.infer;
+
 export const planSchema = type("'free' | 'pro'");
 export type Plan = typeof planSchema.infer;
 

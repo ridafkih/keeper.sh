@@ -12,6 +12,7 @@
     "@base-ui/react": "1.0.0",
     "@better-auth/passkey": "^1.4.9",
     "@keeper.sh/auth": "workspace:*",
+    "@keeper.sh/env": "workspace:*",
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/log": "workspace:*",
