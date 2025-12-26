@@ -277,6 +277,7 @@
         "@keeper.sh/auth": "workspace:*",
         "@keeper.sh/data-schemas": "workspace:*",
         "@keeper.sh/database": "workspace:*",
+        "@keeper.sh/env": "workspace:*",
         "@keeper.sh/log": "workspace:*",
         "@keeper.sh/premium": "workspace:*",
         "@polar-sh/better-auth": "^1.6.3",
