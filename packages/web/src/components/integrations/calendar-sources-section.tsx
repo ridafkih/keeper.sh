@@ -257,8 +257,8 @@ export const CalendarSourcesSection = () => {
         title="Calendar Sources"
         description="Add iCal links to import events from other calendars"
       />
-      {renderContent()}
       {isAtLimit && <UpgradeBanner />}
+      {renderContent()}
       {!isAtLimit && (
         <AddSourceDialog
           open={isDialogOpen}

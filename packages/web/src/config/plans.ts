@@ -1,4 +1,7 @@
-import { FREE_SOURCE_LIMIT } from "@keeper.sh/premium/constants";
+import {
+  FREE_SOURCE_LIMIT,
+  FREE_DESTINATION_LIMIT,
+} from "@keeper.sh/premium/constants";
 
 export interface PlanConfig {
   id: string;
@@ -26,8 +29,8 @@ export const plans: PlanConfig[] = [
     description: "For personal use and getting started",
     features: [
       { name: `Up to ${FREE_SOURCE_LIMIT} calendar sources`, included: true },
+      { name: `${FREE_DESTINATION_LIMIT} push destination`, included: true },
       { name: "Aggregate iCal feed", included: true },
-      { name: "Push to external calendars", included: true },
       { name: "Standard syncing every 30 minutes", included: false },
     ],
   },
@@ -44,8 +47,8 @@ export const plans: PlanConfig[] = [
     popular: true,
     features: [
       { name: "Unlimited calendar sources", included: true },
+      { name: "Unlimited push destinations", included: true },
       { name: "Aggregate iCal feed", included: true },
-      { name: "Push to external calendars", included: true },
       { name: "Priority syncing every minute", included: true },
     ],
   },

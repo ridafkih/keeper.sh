@@ -11,7 +11,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { user as userTable } from "@keeper.sh/database";
 import { pullRemoteCalendar, fetchAndSyncSource } from "@keeper.sh/calendar";
-import { canAddSource } from "@keeper.sh/premium";
+import { canAddSource, canAddDestination } from "@keeper.sh/premium";
 import { syncDestinationsForUser } from "@keeper.sh/integrations";
 import "@keeper.sh/integration-google-calendar";
 import { log } from "@keeper.sh/log";
@@ -402,6 +402,28 @@ const server = Bun.serve<BroadcastData>({
               { error: "Unsupported provider" },
               { status: 400 },
             );
+          }
+
+          const existingDestinations = await database
+            .select({ id: calendarDestinationsTable.id })
+            .from(calendarDestinationsTable)
+            .where(eq(calendarDestinationsTable.userId, userId));
+
+          const allowed = await canAddDestination(
+            userId,
+            existingDestinations.length,
+          );
+
+          if (!allowed) {
+            const errorUrl = new URL(
+              "/dashboard/integrations",
+              env.BETTER_AUTH_URL,
+            );
+            errorUrl.searchParams.set(
+              "error",
+              "Destination limit reached. Upgrade to Pro for unlimited destinations.",
+            );
+            return Response.redirect(errorUrl.toString());
           }
 
           const callbackUrl = new URL(

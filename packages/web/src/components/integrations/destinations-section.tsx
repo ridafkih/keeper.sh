@@ -3,8 +3,10 @@
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { Button } from "@base-ui/react/button";
 import { Menu } from "@base-ui/react/menu";
+import { FREE_DESTINATION_LIMIT } from "@keeper.sh/premium/constants";
 import { Card } from "@/components/card";
 import { EmptyState } from "@/components/empty-state";
 import { GhostButton } from "@/components/ghost-button";
@@ -18,8 +20,9 @@ import { Section } from "@/components/section";
 import { SectionHeader } from "@/components/section-header";
 import { useConfirmAction } from "@/hooks/use-confirm-action";
 import { useLinkedAccounts } from "@/hooks/use-linked-accounts";
+import { useSubscription } from "@/hooks/use-subscription";
 import { useSyncStatus } from "@/hooks/use-sync-status";
-import { TextLabel, TextMeta, TextMuted } from "@/components/typography";
+import { TextLabel, TextMeta, TextMuted, BannerText } from "@/components/typography";
 import { button } from "@/styles";
 import { Server, Plus } from "lucide-react";
 
@@ -247,6 +250,20 @@ const isConnectable = (
   destination: Destination,
 ): destination is ConnectableDestination => !destination.comingSoon;
 
+const UpgradeBanner = () => (
+  <div className="flex items-center justify-between p-1 pl-3.5 bg-warning-surface border border-warning-border rounded-lg">
+    <BannerText variant="warning" className="text-xs">
+      You've reached the free plan limit of {FREE_DESTINATION_LIMIT} destination.
+    </BannerText>
+    <Link
+      href="/dashboard/billing"
+      className={button({ variant: "primary", size: "xs" })}
+    >
+      Upgrade to Pro
+    </Link>
+  </div>
+);
+
 export const DestinationsSection = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -257,7 +274,13 @@ export const DestinationsSection = () => {
     isLoading: isAccountsLoading,
     mutate: mutateAccounts,
   } = useLinkedAccounts();
+  const { data: subscription } = useSubscription();
   const { data: syncStatus } = useSyncStatus();
+
+  const isAtLimit =
+    subscription?.plan === "free" &&
+    accounts &&
+    accounts.length >= FREE_DESTINATION_LIMIT;
 
   const error = searchParams.get("error");
   const errorHandled = useRef(false);
@@ -394,20 +417,22 @@ export const DestinationsSection = () => {
               ? "1 destination"
               : `${destinationCount} destinations`}
           </TextLabel>
-          <Menu.Root>
-            <GhostButton
-              render={<Menu.Trigger />}
-              className="flex items-center gap-1"
-            >
-              <Plus size={12} />
-              New Destination
-            </GhostButton>
-            <Menu.Portal>
-              <Menu.Positioner sideOffset={4} align="end">
-                <MenuPopup>{destinationsMenuItems}</MenuPopup>
-              </Menu.Positioner>
-            </Menu.Portal>
-          </Menu.Root>
+          {!isAtLimit && (
+            <Menu.Root>
+              <GhostButton
+                render={<Menu.Trigger />}
+                className="flex items-center gap-1"
+              >
+                <Plus size={12} />
+                New Destination
+              </GhostButton>
+              <Menu.Portal>
+                <Menu.Positioner sideOffset={4} align="end">
+                  <MenuPopup>{destinationsMenuItems}</MenuPopup>
+                </Menu.Positioner>
+              </Menu.Portal>
+            </Menu.Root>
+          )}
         </div>
         <div className="border-t border-border divide-y divide-border">
           {accounts?.map((account) => {
@@ -439,6 +464,7 @@ export const DestinationsSection = () => {
         title="Destinations"
         description="Push your aggregated events to other calendar apps"
       />
+      {isAtLimit && <UpgradeBanner />}
       {renderContent()}
     </Section>
   );

@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 import {
   FREE_SOURCE_LIMIT,
   PRO_SOURCE_LIMIT,
+  FREE_DESTINATION_LIMIT,
+  PRO_DESTINATION_LIMIT,
   planSchema,
   type Plan,
 } from "./constants";
@@ -28,5 +30,18 @@ export async function canAddSource(
 ): Promise<boolean> {
   const plan = await getUserPlan(userId);
   const limit = getSourceLimit(plan);
+  return currentCount < limit;
+}
+
+export function getDestinationLimit(plan: Plan): number {
+  return plan === "pro" ? PRO_DESTINATION_LIMIT : FREE_DESTINATION_LIMIT;
+}
+
+export async function canAddDestination(
+  userId: string,
+  currentCount: number,
+): Promise<boolean> {
+  const plan = await getUserPlan(userId);
+  const limit = getDestinationLimit(plan);
   return currentCount < limit;
 }
