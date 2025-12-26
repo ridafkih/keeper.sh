@@ -2,6 +2,7 @@ import { createSourceSchema } from "@keeper.sh/data-schemas";
 import { generateIcsCalendar, type IcsCalendar, type IcsEvent } from "ts-ics";
 import { auth } from "@keeper.sh/auth";
 import { database } from "@keeper.sh/database";
+import env from "@keeper.sh/env/auth";
 import {
   remoteICalSourcesTable,
   eventStatesTable,
@@ -22,6 +23,15 @@ import {
 import { BunRequest } from "bun";
 import { eq, and, inArray, gte, lte, asc } from "drizzle-orm";
 import { socketTokens } from "./state";
+import {
+  getAuthorizationUrl,
+  exchangeCodeForTokens,
+  fetchUserInfo,
+  saveCalendarDestination,
+  listCalendarDestinations,
+  deleteCalendarDestination,
+  validateState,
+} from "./destinations";
 
 const TOKEN_TTL = 30_000;
 
@@ -351,6 +361,128 @@ const server = Bun.serve<BroadcastData>({
 
           const identifier = userData?.username ?? userId;
           return Response.json({ token: identifier });
+        }),
+      ),
+    },
+    "/api/destinations": {
+      GET: withTracing(
+        withAuth(async (_request, userId) => {
+          const destinations = await listCalendarDestinations(userId);
+          return Response.json(destinations);
+        }),
+      ),
+    },
+    "/api/destinations/authorize": {
+      GET: withTracing(
+        withAuth(async (request, userId) => {
+          const url = new URL(request.url);
+          const provider = url.searchParams.get("provider");
+
+          if (provider !== "google") {
+            return Response.json(
+              { error: "Unsupported provider" },
+              { status: 400 },
+            );
+          }
+
+          const callbackUrl = new URL(
+            `/api/destinations/callback/${provider}`,
+            env.BETTER_AUTH_URL,
+          );
+          const authUrl = getAuthorizationUrl(userId, {
+            callbackUrl: callbackUrl.toString(),
+          });
+
+          return Response.redirect(authUrl);
+        }),
+      ),
+    },
+    "/api/destinations/callback/:provider": {
+      GET: withTracing(async (request) => {
+        const url = new URL(request.url);
+        const code = url.searchParams.get("code");
+        const state = url.searchParams.get("state");
+        const error = url.searchParams.get("error");
+
+        const successUrl = new URL("/dashboard/integrations", env.BETTER_AUTH_URL);
+        successUrl.searchParams.set("destination", "connected");
+
+        const errorUrl = new URL("/dashboard/integrations", env.BETTER_AUTH_URL);
+        errorUrl.searchParams.set("destination", "error");
+
+        if (error) {
+          log.warn({ error }, "OAuth error returned from provider");
+          return Response.redirect(errorUrl.toString());
+        }
+
+        if (!code || !state) {
+          log.warn("Missing code or state in callback");
+          return Response.redirect(errorUrl.toString());
+        }
+
+        const userId = validateState(state);
+        if (!userId) {
+          log.warn("Invalid or expired state");
+          return Response.redirect(errorUrl.toString());
+        }
+
+        try {
+          const callbackUrl = new URL(
+            "/api/destinations/callback",
+            env.BETTER_AUTH_URL,
+          );
+          const tokens = await exchangeCodeForTokens(code, callbackUrl.toString());
+
+          if (!tokens.refresh_token) {
+            log.error("No refresh token in response");
+            return Response.redirect(errorUrl.toString());
+          }
+
+          const userInfo = await fetchUserInfo(tokens.access_token);
+          const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
+
+          await saveCalendarDestination(
+            userId,
+            "google",
+            userInfo.id,
+            userInfo.email,
+            tokens.access_token,
+            tokens.refresh_token,
+            expiresAt,
+          );
+
+          log.info({ userId, provider: "google" }, "calendar destination connected");
+
+          syncDestinationsForUser(userId).catch((err) => {
+            log.error(err, "failed to sync after destination connection");
+          });
+
+          return Response.redirect(successUrl.toString());
+        } catch (err) {
+          log.error(err, "failed to complete OAuth callback");
+          return Response.redirect(errorUrl.toString());
+        }
+      }),
+    },
+    "/api/destinations/:provider": {
+      DELETE: withTracing(
+        withAuth(async (request, userId) => {
+          const { provider } = request.params;
+
+          if (!provider) {
+            return Response.json(
+              { error: "Provider is required" },
+              { status: 400 },
+            );
+          }
+
+          const deleted = await deleteCalendarDestination(userId, provider);
+
+          if (!deleted) {
+            return Response.json({ error: "Not found" }, { status: 404 });
+          }
+
+          return Response.json({ success: true });
         }),
       ),
     },

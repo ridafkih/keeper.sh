@@ -51,6 +51,17 @@ export const googleTokenResponseSchema = type({
 });
 export type GoogleTokenResponse = typeof googleTokenResponseSchema.infer;
 
+export const googleUserInfoSchema = type({
+  id: "string",
+  email: "string",
+  "verified_email?": "boolean",
+  "name?": "string",
+  "given_name?": "string",
+  "family_name?": "string",
+  "picture?": "string",
+});
+export type GoogleUserInfo = typeof googleUserInfoSchema.infer;
+
 export const socketMessageSchema = type({
   event: "string",
   "data?": "unknown",

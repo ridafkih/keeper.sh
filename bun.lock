@@ -20,6 +20,7 @@
         "@keeper.sh/integration-google-calendar": "workspace:*",
         "@keeper.sh/integrations": "workspace:*",
         "@keeper.sh/log": "workspace:*",
+        "@keeper.sh/oauth-google": "workspace:*",
         "@keeper.sh/premium": "workspace:*",
         "drizzle-orm": "0.45.1",
         "ts-ics": "2.4.0",
@@ -162,8 +163,8 @@
       "dependencies": {
         "@keeper.sh/data-schemas": "workspace:*",
         "@keeper.sh/database": "workspace:*",
-        "@keeper.sh/env": "workspace:*",
         "@keeper.sh/integrations": "workspace:*",
+        "@keeper.sh/oauth-google": "workspace:*",
         "@keeper.sh/premium": "workspace:*",
         "drizzle-orm": "0.45.1",
       },
@@ -193,6 +194,19 @@
       "name": "@keeper.sh/log",
       "dependencies": {
         "pino": "10.1.0",
+      },
+      "devDependencies": {
+        "@keeper.sh/typescript-config": "workspace:*",
+        "@types/bun": "latest",
+        "typescript": "5.9.3",
+      },
+    },
+    "packages/oauth-google": {
+      "name": "@keeper.sh/oauth-google",
+      "version": "0.0.1",
+      "dependencies": {
+        "@keeper.sh/data-schemas": "workspace:*",
+        "@keeper.sh/env": "workspace:*",
       },
       "devDependencies": {
         "@keeper.sh/typescript-config": "workspace:*",
@@ -489,6 +503,8 @@
     "@keeper.sh/integrations": ["@keeper.sh/integrations@workspace:packages/integrations"],
 
     "@keeper.sh/log": ["@keeper.sh/log@workspace:packages/log"],
+
+    "@keeper.sh/oauth-google": ["@keeper.sh/oauth-google@workspace:packages/oauth-google"],
 
     "@keeper.sh/premium": ["@keeper.sh/premium@workspace:packages/premium"],
 

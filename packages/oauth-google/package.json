@@ -1,20 +1,16 @@
 {
-  "name": "@keeper.sh/integration-google-calendar",
-  "scripts": {
-    "types": "tsc --noEmit"
-  },
+  "name": "@keeper.sh/oauth-google",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
+  "scripts": {
+    "types": "tsc --noEmit"
+  },
   "dependencies": {
     "@keeper.sh/data-schemas": "workspace:*",
-    "@keeper.sh/database": "workspace:*",
-    "@keeper.sh/integrations": "workspace:*",
-    "@keeper.sh/oauth-google": "workspace:*",
-    "@keeper.sh/premium": "workspace:*",
-    "drizzle-orm": "0.45.1"
+    "@keeper.sh/env": "workspace:*"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",

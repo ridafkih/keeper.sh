@@ -18,7 +18,6 @@ import { SectionHeader } from "@/components/section-header";
 import { useConfirmAction } from "@/hooks/use-confirm-action";
 import { useLinkedAccounts } from "@/hooks/use-linked-accounts";
 import { useSyncStatus } from "@/hooks/use-sync-status";
-import { authClient } from "@/lib/auth-client";
 import { TextLabel, TextMeta, TextMuted } from "@/components/typography";
 import { button } from "@/styles";
 import { Server, Plus } from "lucide-react";
@@ -96,9 +95,7 @@ const DestinationAction = ({
           disabled={isLoading}
           className="flex items-center gap-1.5"
         >
-          {!isLoading && (
-            <span className="size-1.5 rounded-full bg-success" />
-          )}
+          {!isLoading && <span className="size-1.5 rounded-full bg-success" />}
           {isLoading ? "..." : "Connected"}
         </GhostButton>
         <Menu.Portal>
@@ -283,26 +280,24 @@ export const DestinationsSection = () => {
     };
   };
 
-  const handleConnect = async (providerId: SupportedProvider) => {
+  const handleConnect = (providerId: SupportedProvider) => {
     setLoadingProvider(providerId);
-    try {
-      await authClient.linkSocial({
-        provider: providerId,
-        callbackURL: "/dashboard/integrations",
-      });
-      await mutateAccounts();
-      toastManager.add({ title: `Connected to ${providerId}` });
-    } catch {
-      toastManager.add({ title: `Failed to connect` });
-    } finally {
-      setLoadingProvider(null);
-    }
+    const url = new URL("/api/destinations/authorize", window.location.origin);
+    url.searchParams.set("provider", providerId);
+    window.location.href = url.toString();
   };
 
   const handleDisconnect = async (providerId: SupportedProvider) => {
     setLoadingProvider(providerId);
     try {
-      await authClient.unlinkAccount({ providerId });
+      const response = await fetch(`/api/destinations/${providerId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to disconnect");
+      }
+
       await mutateAccounts();
       toastManager.add({ title: `Disconnected from ${providerId}` });
     } catch {

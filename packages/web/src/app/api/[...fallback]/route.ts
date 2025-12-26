@@ -14,11 +14,13 @@ type RequestHandler = (request: NextRequest) => Promise<Response>;
  * TODO: Evaluate whether we should just CORS the Bun API directly.
  */
 const forward: RequestHandler = (request) => {
-  const { pathname: originalPathname } = new URL(request.url);
-  const url = new URL(originalPathname, env.API_URL);
+  const { pathname, search } = new URL(request.url);
+  const url = new URL(pathname, env.API_URL);
+  url.search = search;
 
   return fetch(url.toString(), {
     method: request.method,
+    redirect: "manual",
     ...(request.headers && { headers: request.headers }),
     ...(request.body && { body: request.body }),
   });

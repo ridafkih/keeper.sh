@@ -12,16 +12,15 @@ import {
   googleEventSchema,
   googleEventListSchema,
   googleApiErrorSchema,
-  googleTokenResponseSchema,
   type GoogleEvent,
 } from "@keeper.sh/data-schemas";
-import { database, account } from "@keeper.sh/database";
+import { database } from "@keeper.sh/database";
+import { calendarDestinationsTable } from "@keeper.sh/database/schema";
 import { eq } from "drizzle-orm";
-import env from "@keeper.sh/env/auth";
+import { refreshAccessToken } from "@keeper.sh/oauth-google";
 import { getGoogleAccountForUser, getUserEvents } from "./sync";
 
 const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3/";
-const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 const RATE_LIMIT_DELAY_MS = 60_000;
 
@@ -78,55 +77,18 @@ export class GoogleCalendarProvider extends CalendarProvider<GoogleCalendarConfi
 
     this.childLog.info({ accountId }, "refreshing token");
 
-    if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
-      throw new Error("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set");
-    }
-
-    this.childLog.debug("sending token refresh request to Google");
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30_000);
-
-    const response = await fetch(GOOGLE_TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: env.GOOGLE_CLIENT_ID,
-        client_secret: env.GOOGLE_CLIENT_SECRET,
-        refresh_token: refreshToken,
-        grant_type: "refresh_token",
-      }),
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeoutId));
-
-    this.childLog.debug(
-      { status: response.status },
-      "received token refresh response",
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      this.childLog.error(
-        { status: response.status, error: errorText },
-        "token refresh failed",
-      );
-      throw new Error(`Token refresh failed: ${response.status}`);
-    }
-
-    this.childLog.debug("parsing token response");
-    const body = await response.json();
-    const tokenData = googleTokenResponseSchema.assert(body);
+    const tokenData = await refreshAccessToken(refreshToken);
     const newExpiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
 
     this.childLog.debug({ accountId }, "updating database with new token");
     await database
-      .update(account)
+      .update(calendarDestinationsTable)
       .set({
         accessToken: tokenData.access_token,
         accessTokenExpiresAt: newExpiresAt,
         updatedAt: new Date(),
       })
-      .where(eq(account.accountId, accountId));
+      .where(eq(calendarDestinationsTable.accountId, accountId));
 
     this.currentAccessToken = tokenData.access_token;
     this.config.accessTokenExpiresAt = newExpiresAt;

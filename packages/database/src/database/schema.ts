@@ -72,3 +72,27 @@ export const syncStatusTable = pgTable(
   ],
 );
 
+export const calendarDestinationsTable = pgTable(
+  "calendar_destinations",
+  {
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    provider: text().notNull(),
+    accountId: text().notNull(),
+    email: text(),
+    accessToken: text().notNull(),
+    refreshToken: text().notNull(),
+    accessTokenExpiresAt: timestamp().notNull(),
+    createdAt: timestamp().notNull().defaultNow(),
+    updatedAt: timestamp().notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("calendar_destinations_user_provider_idx").on(
+      table.userId,
+      table.provider
+    ),
+  ],
+);
+

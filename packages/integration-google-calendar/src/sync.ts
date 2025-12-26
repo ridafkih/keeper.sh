@@ -1,8 +1,9 @@
-import { database, account } from "@keeper.sh/database";
+import { database } from "@keeper.sh/database";
 import {
   remoteICalSourcesTable,
   eventStatesTable,
   userSubscriptionsTable,
+  calendarDestinationsTable,
 } from "@keeper.sh/database/schema";
 import { and, asc, eq, gte } from "drizzle-orm";
 import type { Plan } from "@keeper.sh/premium";
@@ -21,19 +22,19 @@ export const getGoogleAccountsByPlan = async (
 ): Promise<GoogleAccount[]> => {
   const results = await database
     .select({
-      userId: account.userId,
-      accountId: account.accountId,
-      accessToken: account.accessToken,
-      refreshToken: account.refreshToken,
-      accessTokenExpiresAt: account.accessTokenExpiresAt,
+      userId: calendarDestinationsTable.userId,
+      accountId: calendarDestinationsTable.accountId,
+      accessToken: calendarDestinationsTable.accessToken,
+      refreshToken: calendarDestinationsTable.refreshToken,
+      accessTokenExpiresAt: calendarDestinationsTable.accessTokenExpiresAt,
       plan: userSubscriptionsTable.plan,
     })
-    .from(account)
+    .from(calendarDestinationsTable)
     .leftJoin(
       userSubscriptionsTable,
-      eq(account.userId, userSubscriptionsTable.userId),
+      eq(calendarDestinationsTable.userId, userSubscriptionsTable.userId),
     )
-    .where(eq(account.providerId, "google"));
+    .where(eq(calendarDestinationsTable.provider, "google"));
 
   const accounts: GoogleAccount[] = [];
 
@@ -41,12 +42,7 @@ export const getGoogleAccountsByPlan = async (
     const { plan, accessToken, refreshToken, accessTokenExpiresAt } = result;
     const userPlan = plan ?? "free";
 
-    if (
-      userPlan !== targetPlan ||
-      accessToken === null ||
-      refreshToken === null ||
-      accessTokenExpiresAt === null
-    ) {
+    if (userPlan !== targetPlan) {
       continue;
     }
 
@@ -67,14 +63,19 @@ export const getGoogleAccountForUser = async (
 ): Promise<GoogleAccount | null> => {
   const results = await database
     .select({
-      userId: account.userId,
-      accountId: account.accountId,
-      accessToken: account.accessToken,
-      refreshToken: account.refreshToken,
-      accessTokenExpiresAt: account.accessTokenExpiresAt,
+      userId: calendarDestinationsTable.userId,
+      accountId: calendarDestinationsTable.accountId,
+      accessToken: calendarDestinationsTable.accessToken,
+      refreshToken: calendarDestinationsTable.refreshToken,
+      accessTokenExpiresAt: calendarDestinationsTable.accessTokenExpiresAt,
     })
-    .from(account)
-    .where(and(eq(account.providerId, "google"), eq(account.userId, userId)))
+    .from(calendarDestinationsTable)
+    .where(
+      and(
+        eq(calendarDestinationsTable.provider, "google"),
+        eq(calendarDestinationsTable.userId, userId),
+      ),
+    )
     .limit(1);
 
   const result = results[0];
@@ -82,21 +83,12 @@ export const getGoogleAccountForUser = async (
     return null;
   }
 
-  const { accessToken, refreshToken, accessTokenExpiresAt } = result;
-  if (
-    accessToken === null ||
-    refreshToken === null ||
-    accessTokenExpiresAt === null
-  ) {
-    return null;
-  }
-
   return {
     userId: result.userId,
     accountId: result.accountId,
-    accessToken,
-    refreshToken,
-    accessTokenExpiresAt,
+    accessToken: result.accessToken,
+    refreshToken: result.refreshToken,
+    accessTokenExpiresAt: result.accessTokenExpiresAt,
   };
 };
 
