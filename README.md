@@ -1,105 +1,114 @@
-# Keeper, Simple & Open-Source Calendar Syncing
+![]()
 
-_Keeper is open-source, released under the permissive GNU GPL-3.0 software license._
+# About
+Keeper is a simple & open-source calendar syncing tool. It allows you to pull events from remotely hosted iCal or ICS links, and push them to your main calendar so the time slots can align across all your calendars.
 
-Keeper allows you to source events from a remote source—granted they are provided in ICS/iCal format—and sync busy-free time slots to a remote calendar hosted on a remote calendar of your choice.
+# Stack & Tooling
 
-## Considerations
+These are a few of the tools I want to give special mention to for making Keeper an absolute pleasure to build.
 
-Before using Keeper, please take into account the following.
+- [Next.js 16](https://nextjs.org/) for creating the web interface.
+- [better-auth](http://better-auth.com/) for authentication and user management.
+- [arktype](https://arktype.io/) for lovely data validation.
+- [Polar](https://polar.sh/) for payments, usage and billing.
+- [Drizzle ORM](https://orm.drizzle.team/) for interacting with databases.
+- [Bun](https://bun.com/) for a speedy runtime and package manager.
+- [Turborepo](https://turborepo.com/) for optimizing workflow management.
+- [Docker](https://www.docker.com/) for containerization.
+- [Redis](https://redis.io/) for a fast in-memory data store.
+- [PostgreSQL](https://www.postgresql.org/) for the database.
+- [Knip](https://knip.dev/) for dead code and misconfiguration detection.
 
-1. **Keeper is timeslot-first.** This means that it does not _currently_ consider or sync summary, description, etc. If that's something you need, please consider an alternative like [OneCal](https://onecal.io/) for now.
-2. **Keeper only sources from publicly available iCal/ICS URLs** at the moment. This means that should your organization not allow or your calendar provider not provide one, Keeper will not work for you.
+# Features
+- Aggregating calendar events from remote sources
+- Event content agnostic syncing engine
+- Push aggregate events to one or more calendars
+- Open source under GPL-3.0
+- Easy to self-host
+- Easy-to-purge remote events
 
-## Directory
+# Bug Reports & Feature Requests
+If you encounter a bug or have an idea for a feature, you may [open an issue on GitHub](https://github.com/ridafkih/keeper.sh/issues) and it will be triaged and addressed as soon as possible.
 
-1. External Links
-    1. [View the Keeper website](https://keeper.sh/)
-    2. [Check issues to see what's coming to Keeper](https://github.com/ridafkih/keeper.sh/issues)
-        - [ ] Destination Outlook integration
-        - [ ] Destination CalDAV integration
-        - [ ] Destination iCloud integration
-        - [ ] Sync to multiple destinations of the same provider
-        - [ ] Mobile application using Expo
-        - [ ] Sync event summary and description
-        - [ ] Branding that isn't unbelievably plain
-    3. [Recent releases and changelogs](https://github.com/ridafkih/keeper.sh/releases)
-2. [Contributions](#contributions)
-3. [Self Hosting](#self-hosting)
-4. [FAQ](#faq)
-    1. [Why does this exist?](#why-does-this-exist)
-    2. [Why not use _this other_ service?](#why-not-use-this-other-service)
-    3. [How does the syncing work?](#how-does-the-syncing-work)
-5. Services
-    1. [@keeper.sh/api](./packages/api)
-    1. [@keeper.sh/cron](./packages/cron)
-6. Applications
-    1. @keeper.sh/cli _(Coming Soon)_
-    1. @keeper.sh/mobile _(Coming Soon)_
-    1. @keeper.sh/ssh _(Coming Soon)_
-    1. [@keeper.sh/web](./packages/web)
-7. Modules
-    1. [@keeper.sh/auth](./packages/auth)
-    1. [@keeper.sh/auth-plugin-username-only](./packages/auth-plugin-username-only)
-    1. [@keeper.sh/broadcast](./packages/broadcast)
-    1. [@keeper.sh/broadcast-client](./packages/broadcast-client)
-    1. [@keeper.sh/calendar](./packages/calendar)
-    1. [@keeper.sh/data-schemas](./packages/data-schemas)
-    1. [@keeper.sh/database](./packages/database)
-    1. [@keeper.sh/env](./packages/env)
-    1. @keeper.sh/eslint-config _(Coming Soon)_
-    1. [@keeper.sh/integration-google-calendar](./packages/integration-google-calendar)
-    1. [@keeper.sh/integrations](./packages/integrations)
-    1. [@keeper.sh/log](./packages/log)
-    1. [@keeper.sh/oauth-google](./packages/oauth-google)
-    1. [@keeper.sh/premium](./packages/premium)
-    1. [@keeper.sh/pull-calendar](./packages/pull-calendar)
-    1. [@keeper.sh/redis](./packages/redis)
-    1. [@keeper.sh/sync-calendar](./packages/sync-calendar)
-    1. [@keeper.sh/sync-events](./packages/sync-events)
-    1. [@keeper.sh/typescript-config](./packages/typescript-config)
+# Contributing
+High-value and high-quality contributions are appreciated. Before working on large features you intend to see merged, please open an issue first to discuss beforehand.
 
-## Contributions
+# Qs
 
-Valuable contributions are welcome, and appreciated.
+## Why does this exist?
 
-## Cloud Hosted Version
+Because I needed it. Ever since starting [Sedna](https://sedna.sh/)—the AI governance platform—I've had to work across three calendars. One for my business, one for work, and one for personal. 
 
-If you'd like to _just use_ Keeper, and not worry about hosting it yourself you can do so by signing up for Keeper at [https://keeper.sh/](https://keeper.sh/). The free plan allows for up to two sources, as well as 30-minute syncing intervals. The premium plan available for $8/mo., or $4/mo. when paying annually allows for unlimited source calendars and syncing every minute.
+Meetings have landed on top of one-another a frustratingly high number of times.
 
-## Self Hosting
+## Why not use _this other service_?
 
-If you'll be self-hosting Keeper, please consider sponsoring me or the project to support development or show your appreciation. Self-hosting the project gives you access to premium features like unlimited sources and frequent syncing for free!
+I've probably tried it. It was probably too finicky, ended up making me waste hours of my time having to delete stale events it didn't seem to want to track anymore, or just didn't sync reliably.
 
-Self-hosting guarantees your data never leaves your infrastructure as well. Perfect for privacy-conscious folk!
+## How does the syncing engine work?
 
-## FAQ
+Simply. It compares timeslots from the aggregate events of all your sources to events Keeper has created on the destination calendar, as identified by the `@keeper.sh` suffix on the event's remote UID. Keeper simply ensures that the correct number of events exist at any given timeslot.
 
-### Why does this exist?
+# Considerations
+1. **Keeper is timeslot first**, it does not consider nor does it sync summaries, descriptions, etc., if you need that I would recommend [OneCal](https://onecal.io/).
+2. **Keeper only sources from remote and publicly available iCal/ICS URLs** at the moment, so that means that if your security policy does not permit these, another solution may suit you better.
 
-Once I started [Sedna](https://sedna.sh/)—the shadow AI governance & management platform—I was working across three calendars and events were often being booked over one-another across personal coffee chats, work events, and prospective investor & client meetings.
+# Modules
 
-I needed a very simple syncing solution, and tried many available solutions to no avail.
+## Services
 
-### Why not use _this_ other service?
+1. [@keeper.sh/api](./packages/api)
+2. [@keeper.sh/cron](./packages/cron)
 
-Five reasons. 
-1. Other solutions are pretty expensive.
-2. Other solutions are rarely open-source.
-2. Other solutions can be finnicky.
-3. Other solutions require over-permissive event access to source calendars.
-4. Other solutions often create duplicate events with no way to purge them. Have you ever spent hours deleting three-years worth of synced events from your calendar? I have. Twice.
+## Applications
+1. @keeper.sh/cli _(Coming Soon)_
+1. @keeper.sh/mobile _(Coming Soon)_
+1. @keeper.sh/ssh _(Coming Soon)_
+1. [@keeper.sh/web](./packages/web)
 
-This means that if I wanted to use one of the existing services, I'd have to give a third-party full access to the events on my employer's, business' and personal calendars. Ew. iCal often has event metadata redaction at the source, so it's much more convenient, simple and secure for this use-case.
+## Modules
+1. [@keeper.sh/auth](./packages/auth)
+1. [@keeper.sh/auth-plugin-username-only](./packages/auth-plugin-username-only)
+1. [@keeper.sh/broadcast](./packages/broadcast)
+1. [@keeper.sh/broadcast-client](./packages/broadcast-client)
+1. [@keeper.sh/calendar](./packages/calendar)
+1. [@keeper.sh/data-schemas](./packages/data-schemas)
+1. [@keeper.sh/database](./packages/database)
+1. [@keeper.sh/env](./packages/env)
+1. @keeper.sh/eslint-config _(Coming Soon)_
+1. [@keeper.sh/integration-google-calendar](./packages/integration-google-calendar)
+1. [@keeper.sh/integrations](./packages/integrations)
+1. [@keeper.sh/log](./packages/log)
+1. [@keeper.sh/oauth-google](./packages/oauth-google)
+1. [@keeper.sh/premium](./packages/premium)
+1. [@keeper.sh/pull-calendar](./packages/pull-calendar)
+1. [@keeper.sh/redis](./packages/redis)
+1. [@keeper.sh/sync-calendar](./packages/sync-calendar)
+1. [@keeper.sh/sync-events](./packages/sync-events)
+1. [@keeper.sh/typescript-config](./packages/typescript-config)
 
-### How does the syncing work?
+# Cloud Hosted
 
-When you add a source URL, it is stored in the database. Every minute, a cron job will run which takes a snapshot of that remote source, and uses `ts-ics` to turn it into a JSON structure. Events are pulled from this structure, and stored in the database.
+I've made Keeper easy to self-host, but whether you simply want to support the project or don't want to deal with the hassle or overhead of configuring and running your own infrastructure cloud hosting is always an option.
 
-On an interval, the timeslots of the events from the local snapshot are compared to the timeslots of events _created by Keeper_ on the destination and Keeper will then reconcile any discrepencies if they exist.
+Head to [keeper.sh](https://keeper.sh) to get started with the cloud-hosted version. Use code `README` for 25% off.
 
-User adds new remote source → Cron A job snapshots ICS → Events are parsed and added to database → Cron job B triggers sync → Remote events are requested from destination → Events are compared to local snapshot → Discrepencies are resolved
+|  | Free | Pro (Cloud-Hosted) | Pro (Self-Hosted) |
+| - | - | - | - |
+| **Monthly Price** | $0 USD | $8 USD | $0 | 
+| **Annual Price** | $0 USD | $48 USD (-50%) | $0 |
+| **Refresh Interval** | 30 minutes | 1 minute | 1 minute
+| **Source Limit** | 2 | ∞ | ∞
+| **Destination Limit** | 1 | ∞ | ∞
 
-If Keeper thinks that according to the sources, two events should exist from 15:00 to 16:00 and it sees three, it will delete one. If it sees none, it will create two. 
+# Self Hosted
 
-Keeper does not consider events that it did not create in the reconciliation process by tagging remote UIDs with @keeper.sh. Imagine you have two source calendars: Calendar A & Calendar B as well as a destination calendar: Calendar C. All three have events from 15:00 to 16:00. Keeper will create two events from Calendar C, making a total for three events in that time slot on your destination calendar.
+By hosting Keeper yourself, you get all premium features for free, can guarantee data governance and autonomy, and it's fun.
+
+If you'll be self-hosting, please consider supporting me and development of the project by sponsoring me on GitHub.
+
+## Prerequisites
+
+## Configuration
+
+## Getting Started
