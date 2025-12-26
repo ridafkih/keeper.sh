@@ -5,9 +5,9 @@ export const HeroSection: FC = () => (
     <h1 className="text-4xl font-semibold tracking-tighter leading-tight text-foreground">
       Simple, open-source <span className="text-nowrap">calendar syncing</span>
     </h1>
-    <p className="text-foreground-secondary leading-relaxed max-w-[42ch]">
-      Aggregate events from multiple calendars into one anonymized feed. Push to
-      any calendar that supports iCal.
+    <p className="text-foreground-secondary leading-relaxed max-w-[48ch]">
+      Aggregate events from multiple calendars into one anonymized feed. Push
+      events to your main calendar.
     </p>
   </section>
 );
