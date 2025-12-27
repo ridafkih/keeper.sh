@@ -8,7 +8,6 @@ import {
   type SyncResult,
   type CalDAVConfig,
   type SyncContext,
-  type ListRemoteEventsOptions,
 } from "@keeper.sh/integrations";
 import { CalDAVClient } from "./caldav-client";
 import { eventToICalString, parseICalToRemoteEvent } from "./ics-converter";
@@ -49,6 +48,7 @@ export class CalDAVProvider extends CalendarProvider<CalDAVConfig> {
         password,
       },
     });
+
     this.rateLimiter = new RateLimiter(5);
   }
 
@@ -154,16 +154,16 @@ export class CalDAVProvider extends CalendarProvider<CalDAVConfig> {
     return results;
   }
 
-  async listRemoteEvents(
-    options: ListRemoteEventsOptions,
-  ): Promise<RemoteEvent[]> {
+  async listRemoteEvents(): Promise<RemoteEvent[]> {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const tenYearsOut = new Date(today);
     tenYearsOut.setFullYear(tenYearsOut.getFullYear() + 10);
 
-    const calendarUrl = await this.client.resolveCalendarUrl(this.config.calendarUrl);
+    const calendarUrl = await this.client.resolveCalendarUrl(
+      this.config.calendarUrl,
+    );
 
     const objects = await this.client.fetchCalendarObjects({
       calendarUrl,
@@ -184,7 +184,7 @@ export class CalDAVProvider extends CalendarProvider<CalDAVConfig> {
     let notKeeper = 0;
     let pastEvents = 0;
 
-    for (const { data, url } of objects) {
+    for (const { data } of objects) {
       if (!data) {
         noData++;
         continue;
@@ -202,8 +202,6 @@ export class CalDAVProvider extends CalendarProvider<CalDAVConfig> {
         continue;
       }
 
-      // Only filter out past events - include ALL future keeper events
-      // to properly detect and clean up duplicates
       if (parsed.endTime < today) {
         pastEvents++;
         continue;
@@ -212,12 +210,7 @@ export class CalDAVProvider extends CalendarProvider<CalDAVConfig> {
       remoteEvents.push(parsed);
     }
 
-    this.childLog.info(
-      { noData, parseFailed, notKeeper, pastEvents },
-      "remote event filtering breakdown",
-    );
-
-    this.childLog.info(
+    this.childLog.debug(
       {
         provider: this.name,
         objectCount: objects.length,

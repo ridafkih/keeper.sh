@@ -8,7 +8,7 @@ export const registerJobs = (jobs: CronOptions[]): ICron[] => {
   log.debug("registering %s jobs", jobs.length);
 
   for (const job of jobs) {
-    log.debug("registering job with name '%s'", job.name);
+    log.info("registering job with name '%s'", job.name);
     const cron = baker.add(job);
     crons.push(cron);
   }
