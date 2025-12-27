@@ -11,6 +11,7 @@
   "type": "module",
   "private": true,
   "dependencies": {
+    "@keeper.sh/env": "workspace:*",
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/database": "workspace:*",
     "drizzle-orm": "^0.45.1"
