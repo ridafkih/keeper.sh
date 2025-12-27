@@ -11,7 +11,7 @@ import {
   DESTINATIONS,
   isCalDAVDestination,
   type DestinationConfig,
-} from "@keeper.sh/destinations";
+} from "@keeper.sh/destinations-metadata";
 import { Card } from "@/components/card";
 import { EmptyState } from "@/components/empty-state";
 import { GhostButton } from "@/components/ghost-button";
