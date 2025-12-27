@@ -13,7 +13,7 @@
     "typescript": "5.9.3"
   },
   "dependencies": {
-    "@keeper.sh/destinations-metadata": "workspace:*",
+    "@keeper.sh/destination-metadata": "workspace:*",
     "@keeper.sh/integration-caldav": "workspace:*",
     "@keeper.sh/integration-fastmail": "workspace:*",
     "@keeper.sh/integration-google-calendar": "workspace:*",

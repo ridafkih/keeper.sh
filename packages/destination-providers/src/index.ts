@@ -25,4 +25,4 @@ export {
   getActiveDestinations,
   type DestinationConfig,
   type DestinationId,
-} from "@keeper.sh/destinations-metadata";
+} from "@keeper.sh/destination-metadata";

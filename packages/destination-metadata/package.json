@@ -1,5 +1,5 @@
 {
-  "name": "@keeper.sh/destinations-metadata",
+  "name": "@keeper.sh/destination-metadata",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "type": "module",

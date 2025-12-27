@@ -74,6 +74,8 @@ Simply. It compares timeslots from the aggregate events of all your sources to e
 1. [@keeper.sh/calendar](./packages/calendar)
 1. [@keeper.sh/data-schemas](./packages/data-schemas)
 1. [@keeper.sh/database](./packages/database)
+1. [@keeper.sh/destination-providers](./packages/destination-providers)
+1. [@keeper.sh/destination-metadata](./packages/destination-metadata)
 1. [@keeper.sh/encryption](./packages/encryption)
 1. [@keeper.sh/env](./packages/env)
 1. @keeper.sh/eslint-config _(Coming Soon)_
