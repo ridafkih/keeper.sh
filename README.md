@@ -53,48 +53,6 @@ Simply. It compares timeslots from the aggregate events of all your sources to e
 1. **Keeper is timeslot first**, it does not consider nor does it sync summaries, descriptions, etc., if you need that I would recommend [OneCal](https://onecal.io/).
 2. **Keeper only sources from remote and publicly available iCal/ICS URLs** at the moment, so that means that if your security policy does not permit these, another solution may suit you better.
 
-# Modules
-
-## Services
-
-1. [@keeper.sh/api](./packages/api)
-2. [@keeper.sh/cron](./packages/cron)
-
-## Applications
-1. @keeper.sh/cli _(Coming Soon)_
-1. @keeper.sh/mobile _(Coming Soon)_
-1. @keeper.sh/ssh _(Coming Soon)_
-1. [@keeper.sh/web](./packages/web)
-
-## Modules
-1. [@keeper.sh/auth](./packages/auth)
-1. [@keeper.sh/auth-plugin-username-only](./packages/auth-plugin-username-only)
-1. [@keeper.sh/broadcast](./packages/broadcast)
-1. [@keeper.sh/broadcast-client](./packages/broadcast-client)
-1. [@keeper.sh/calendar](./packages/calendar)
-1. [@keeper.sh/data-schemas](./packages/data-schemas)
-1. [@keeper.sh/database](./packages/database)
-1. [@keeper.sh/destination-providers](./packages/destination-providers)
-1. [@keeper.sh/destination-metadata](./packages/destination-metadata)
-1. [@keeper.sh/encryption](./packages/encryption)
-1. [@keeper.sh/env](./packages/env)
-1. @keeper.sh/eslint-config _(Coming Soon)_
-1. [@keeper.sh/integration-caldav](./packages/integration-caldav)
-1. [@keeper.sh/integration-fastmail](./packages/integration-fastmail)
-1. [@keeper.sh/integration-google-calendar](./packages/integration-google-calendar)
-1. [@keeper.sh/integration-icloud](./packages/integration-icloud)
-1. [@keeper.sh/integration-outlook](./packages/integration-outlook)
-1. [@keeper.sh/integrations](./packages/integrations)
-1. [@keeper.sh/log](./packages/log)
-1. [@keeper.sh/oauth-google](./packages/oauth-google)
-1. [@keeper.sh/oauth-microsoft](./packages/oauth-microsoft)
-1. [@keeper.sh/premium](./packages/premium)
-1. [@keeper.sh/pull-calendar](./packages/pull-calendar)
-1. [@keeper.sh/redis](./packages/redis)
-1. [@keeper.sh/sync-calendar](./packages/sync-calendar)
-1. [@keeper.sh/sync-events](./packages/sync-events)
-1. [@keeper.sh/typescript-config](./packages/typescript-config)
-
 # Cloud Hosted
 
 I've made Keeper easy to self-host, but whether you simply want to support the project or don't want to deal with the hassle or overhead of configuring and running your own infrastructure cloud hosting is always an option.
@@ -243,3 +201,45 @@ Once this is done, Keeper will be available at `http://localhost:3000` or the cu
 ```bash
 docker compose up -d
 ```
+
+# Modules
+
+## Services
+
+1. [@keeper.sh/api](./packages/api)
+2. [@keeper.sh/cron](./packages/cron)
+
+## Applications
+1. @keeper.sh/cli _(Coming Soon)_
+1. @keeper.sh/mobile _(Coming Soon)_
+1. @keeper.sh/ssh _(Coming Soon)_
+1. [@keeper.sh/web](./packages/web)
+
+## Modules
+1. [@keeper.sh/auth](./packages/auth)
+1. [@keeper.sh/auth-plugin-username-only](./packages/auth-plugin-username-only)
+1. [@keeper.sh/broadcast](./packages/broadcast)
+1. [@keeper.sh/broadcast-client](./packages/broadcast-client)
+1. [@keeper.sh/calendar](./packages/calendar)
+1. [@keeper.sh/data-schemas](./packages/data-schemas)
+1. [@keeper.sh/database](./packages/database)
+1. [@keeper.sh/destination-providers](./packages/destination-providers)
+1. [@keeper.sh/destination-metadata](./packages/destination-metadata)
+1. [@keeper.sh/encryption](./packages/encryption)
+1. [@keeper.sh/env](./packages/env)
+1. @keeper.sh/eslint-config _(Coming Soon)_
+1. [@keeper.sh/integration-caldav](./packages/integration-caldav)
+1. [@keeper.sh/integration-fastmail](./packages/integration-fastmail)
+1. [@keeper.sh/integration-google-calendar](./packages/integration-google-calendar)
+1. [@keeper.sh/integration-icloud](./packages/integration-icloud)
+1. [@keeper.sh/integration-outlook](./packages/integration-outlook)
+1. [@keeper.sh/integrations](./packages/integrations)
+1. [@keeper.sh/log](./packages/log)
+1. [@keeper.sh/oauth-google](./packages/oauth-google)
+1. [@keeper.sh/oauth-microsoft](./packages/oauth-microsoft)
+1. [@keeper.sh/premium](./packages/premium)
+1. [@keeper.sh/pull-calendar](./packages/pull-calendar)
+1. [@keeper.sh/redis](./packages/redis)
+1. [@keeper.sh/sync-calendar](./packages/sync-calendar)
+1. [@keeper.sh/sync-events](./packages/sync-events)
+1. [@keeper.sh/typescript-config](./packages/typescript-config)
