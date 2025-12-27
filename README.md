@@ -8,7 +8,7 @@ Keeper is a simple & open-source calendar syncing tool. It allows you to pull ev
 These are a few of the tools I want to give special mention to for making Keeper an absolute pleasure to build.
 
 - [Next.js 16](https://nextjs.org/) for creating the web interface.
-- [better-auth](http://better-auth.com/) for authentication and user management.
+- [better-auth](https://better-auth.com/) for authentication and user management.
 - [arktype](https://arktype.io/) for lovely data validation.
 - [Polar](https://polar.sh/) for payments, usage and billing.
 - [Drizzle ORM](https://orm.drizzle.team/) for interacting with databases.
@@ -117,6 +117,137 @@ If you'll be self-hosting, please consider supporting me and development of the 
 
 ## Prerequisites
 
-## Configuration
+- Docker and Docker Compose
+- (Optional) Google OAuth credentials for Google Calendar integration
+- (Optional) Microsoft OAuth credentials for Outlook integration
+- (Optional) Resend API key for email notifications
 
 ## Getting Started
+
+### Generate Secrets
+
+Running the following command will populate a `.env` file for you with required secrets for the Docker Compose configuration.
+
+```bash
+cat > .env << EOF
+DOMAIN=localhost:3000
+BETTER_AUTH_SECRET=$(openssl rand -base64 32)
+ENCRYPTION_KEY=$(openssl rand -base64 32)
+EOF
+```
+
+### Configuring Providers
+
+If you'd like to configure optional providers, you can refer to the [Google OAuth documentation](https://developers.google.com/identity/protocols/oauth2) on configuring your Google client ID and secret, and Outlook's documentation can be found on the [Microsoft documentation website](https://learn.microsoft.com/en-us/entra/architecture/auth-oauth2) where you can learn to configure Entra ID in the Azure portal to get your Microsoft client ID and secret.
+
+Once you've acquired them, simply add them to the environment variables to make them available as destinations.
+
+```bash
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+MICROSOFT_CLIENT_ID=
+MICROSOFT_CLIENT_SECRET=
+```
+
+### 3. Create Compose File
+
+Create a `compose.yaml`:
+
+```yaml
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: keeper
+      POSTGRES_PASSWORD: keeper
+      POSTGRES_DB: keeper
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+
+  api:
+    image: ghcr.io/ridafkih/keeper-api:latest
+    environment:
+      API_PORT: 3001
+      DATABASE_URL: postgres://keeper:keeper@postgres:5432/keeper
+      REDIS_URL: redis://redis:6379
+      BETTER_AUTH_URL: http://${DOMAIN:-localhost:3000}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      COMMERCIAL_MODE: false
+      PASSKEY_RP_ID: ${DOMAIN:-localhost:3000}
+      PASSKEY_RP_NAME: Keeper
+      PASSKEY_ORIGIN: http://${DOMAIN:-localhost:3000}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+    ports:
+      - "3001:3001"
+    depends_on:
+      - postgres
+      - redis
+
+  cron:
+    image: ghcr.io/ridafkih/keeper-cron:latest
+    environment:
+      DATABASE_URL: postgres://keeper:keeper@postgres:5432/keeper
+      REDIS_URL: redis://redis:6379
+      BETTER_AUTH_URL: http://${DOMAIN:-localhost:3000}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+    depends_on:
+      - postgres
+      - redis
+
+  web:
+    image: ghcr.io/ridafkih/keeper-web:latest
+    environment:
+      API_URL: http://api:3001
+      DATABASE_URL: postgres://keeper:keeper@postgres:5432/keeper
+      BETTER_AUTH_URL: http://${DOMAIN:-localhost:3000}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      COMMERCIAL_MODE: false
+      NEXT_PUBLIC_COMMERCIAL_MODE: false
+      NEXT_PUBLIC_BASE_URL: http://${DOMAIN:-localhost:3000}
+      NEXT_PUBLIC_SOCKET_URL: ws://${DOMAIN:-localhost:3001}
+      PASSKEY_RP_ID: ${DOMAIN:-localhost:3000}
+      PASSKEY_RP_NAME: Keeper
+      PASSKEY_ORIGIN: http://${DOMAIN:-localhost:3000}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
+  redis-data:
+```
+
+### 4. Start Keeper
+
+```bash
+docker compose up -d
+```
+
+Keeper will be available at `http://localhost:3000`.
+
+### Building from Source
+
+```bash
+docker build -f packages/api/Dockerfile -t keeper-api .
+docker build -f packages/cron/Dockerfile -t keeper-cron .
+docker build -f packages/web/Dockerfile -t keeper-web .
+```
