@@ -1,5 +1,6 @@
 import { database } from "@keeper.sh/database";
 import { userSubscriptionsTable } from "@keeper.sh/database/schema";
+import env from "@keeper.sh/env/auth";
 import { eq } from "drizzle-orm";
 import {
   FREE_SOURCE_LIMIT,
@@ -10,7 +11,11 @@ import {
   type Plan,
 } from "./constants";
 
-export async function getUserPlan(userId: string): Promise<Plan> {
+function isCommercialMode(): boolean {
+  return env.COMMERCIAL_MODE === true;
+}
+
+async function fetchUserSubscriptionPlan(userId: string): Promise<Plan> {
   const [subscription] = await database
     .select({ plan: userSubscriptionsTable.plan })
     .from(userSubscriptionsTable)
@@ -18,6 +23,14 @@ export async function getUserPlan(userId: string): Promise<Plan> {
     .limit(1);
 
   return planSchema.assert(subscription?.plan ?? "free");
+}
+
+export async function getUserPlan(userId: string): Promise<Plan> {
+  if (!isCommercialMode()) {
+    return "pro";
+  }
+
+  return fetchUserSubscriptionPlan(userId);
 }
 
 export function getSourceLimit(plan: Plan): number {
