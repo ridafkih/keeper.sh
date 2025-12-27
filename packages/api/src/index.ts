@@ -1,5 +1,9 @@
+import env from "@keeper.sh/env/api";
 import { database } from "@keeper.sh/database";
-import { syncStatusTable, calendarDestinationsTable } from "@keeper.sh/database/schema";
+import {
+  syncStatusTable,
+  calendarDestinationsTable,
+} from "@keeper.sh/database/schema";
 import { log } from "@keeper.sh/log";
 import {
   createWebsocketHandler,
@@ -62,7 +66,7 @@ const router = new Bun.FileSystemRouter({
 });
 
 const server = Bun.serve<BroadcastData>({
-  port: 3000,
+  port: env.API_PORT,
   websocket: websocketHandler,
   async fetch(request) {
     const url = new URL(request.url);

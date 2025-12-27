@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --bun next dev --turbopack -p 3001",
+    "dev": "bun --bun next dev --turbopack",
     "build": "bun --bun next build",
-    "start": "bun --bun next start -p 3001",
+    "start": "bun --bun next start",
     "types": "tsc --noEmit"
   },
   "dependencies": {

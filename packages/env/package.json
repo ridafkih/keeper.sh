@@ -4,6 +4,7 @@
     "types": "tsc --noEmit"
   },
   "exports": {
+    "./api": "./src/api.ts",
     "./auth": "./src/auth.ts",
     "./database": "./src/database.ts",
     "./database/seed": "./src/database/seed.ts",
