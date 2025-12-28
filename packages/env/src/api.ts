@@ -9,6 +9,7 @@ export default arkenv({
   COMMERCIAL_MODE: "boolean?",
   POLAR_ACCESS_TOKEN: "string?",
   POLAR_MODE: "'sandbox' | 'production' | undefined?",
+  POLAR_WEBHOOK_SECRET: "string?",
   GOOGLE_CLIENT_ID: "string?",
   GOOGLE_CLIENT_SECRET: "string?",
   MICROSOFT_CLIENT_ID: "string?",

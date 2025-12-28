@@ -13,7 +13,7 @@ import { eq } from "drizzle-orm";
 import { join } from "node:path";
 import { socketTokens } from "./utils/state";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
-import { database, broadcastService } from "./context";
+import { database, broadcastService, auth } from "./context";
 
 const validateSocketToken = (token: string): string | null => {
   const entry = socketTokens.get(token);
@@ -69,6 +69,10 @@ const server = Bun.serve<BroadcastData>({
   websocket: websocketHandler,
   async fetch(request) {
     const url = new URL(request.url);
+
+    if (url.pathname.startsWith("/api/auth")) {
+      return auth.handler(request);
+    }
 
     if (url.pathname === "/socket") {
       const token = url.searchParams.get("token");

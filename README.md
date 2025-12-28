@@ -184,27 +184,14 @@ services:
     image: ghcr.io/ridafkih/keeper-web:latest
     environment:
       API_URL: http://api:3001
-      DATABASE_URL: postgres://keeper:keeper@postgres:5432/keeper
-      BETTER_AUTH_URL: http://${DOMAIN:-localhost}:3000
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
-      COMMERCIAL_MODE: false
-      NEXT_PUBLIC_COMMERCIAL_MODE: false
       NEXT_PUBLIC_BASE_URL: http://${DOMAIN:-localhost}:3000
       NEXT_PUBLIC_SOCKET_URL: ws://${DOMAIN:-localhost}:3001/socket
-      PASSKEY_RP_ID: ${DOMAIN:-localhost}
-      PASSKEY_RP_NAME: Keeper
-      PASSKEY_ORIGIN: http://${DOMAIN:-localhost}:3000
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
-      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+      NEXT_PUBLIC_COMMERCIAL_MODE: false
     ports:
       - "3000:3000"
     depends_on:
       api:
         condition: service_started
-      postgres:
-        condition: service_healthy
 
 volumes:
   postgres-data:
