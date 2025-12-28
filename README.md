@@ -1,4 +1,5 @@
-![]()
+![](https://github.com/user-attachments/assets/09996180-326b-4081-b12b-f00393d1aa6e#gh-light-mode-only)
+![](https://github.com/user-attachments/assets/10546b8e-639d-44d1-a79d-b49a65f09724#gh-dark-mode-only)
 
 # About
 Keeper is a simple & open-source calendar syncing tool. It allows you to pull events from remotely hosted iCal or ICS links, and push them to your main calendar so the time slots can align across all your calendars.
