@@ -1,4 +1,6 @@
-import type { FC, PropsWithChildren } from "react";
+"use client";
+
+import { type FC, type PropsWithChildren, useEffect, useRef } from "react";
 import { Form } from "@base-ui/react/form";
 import { Field } from "@base-ui/react/field";
 import { Input } from "@base-ui/react/input";
@@ -32,14 +34,35 @@ interface AuthFormProps {
 export const AuthForm: FC<PropsWithChildren<AuthFormProps>> = ({
   onSubmit,
   children,
-}) => (
-  <Form
-    className="w-full max-w-xs p-4 rounded-md bg-surface flex flex-col gap-2"
-    onSubmit={onSubmit}
-  >
-    {children}
-  </Form>
-);
+}) => {
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    const form = formRef.current;
+    if (!form) return;
+
+    form.reset();
+
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        form.reset();
+      }
+    };
+
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, []);
+
+  return (
+    <Form
+      ref={formRef}
+      className="w-full max-w-xs p-4 rounded-md bg-surface flex flex-col gap-2"
+      onSubmit={onSubmit}
+    >
+      {children}
+    </Form>
+  );
+};
 
 export const AuthFormTitle: FC<PropsWithChildren> = ({ children }) => (
   <CardTitle as="h1" className="text-center">
@@ -72,6 +95,9 @@ interface AuthFormFieldProps {
   pattern?: string;
   disabled?: boolean;
   defaultValue?: string;
+  value?: string;
+  autoFocus?: boolean;
+  inputRef?: React.Ref<HTMLInputElement>;
 }
 
 export const AuthFormField: FC<AuthFormFieldProps> = ({
@@ -86,9 +112,13 @@ export const AuthFormField: FC<AuthFormFieldProps> = ({
   pattern,
   disabled,
   defaultValue,
+  value,
+  autoFocus,
+  inputRef,
 }) => (
   <Field.Root name={name} className="flex flex-col gap-1">
     <Input
+      ref={inputRef}
       name={name}
       type={type}
       placeholder={placeholder}
@@ -99,6 +129,8 @@ export const AuthFormField: FC<AuthFormFieldProps> = ({
       pattern={pattern}
       disabled={disabled}
       defaultValue={defaultValue}
+      value={value}
+      autoFocus={autoFocus}
       className={authFormInput({ disabled })}
     />
     {fieldAction}

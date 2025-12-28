@@ -1,7 +1,7 @@
 "use client";
 
 import type { FC } from "react";
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -26,6 +26,7 @@ const getServerSnapshot = () => null;
 export const CompleteRegistrationForm: FC = () => {
   const router = useRouter();
   const { isSubmitting, error, submit } = useFormSubmit();
+  const passwordRef = useRef<HTMLInputElement>(null);
 
   const email = useSyncExternalStore(
     subscribeToStorage,
@@ -33,8 +34,16 @@ export const CompleteRegistrationForm: FC = () => {
     getServerSnapshot,
   );
 
-  if (!email) {
+  useEffect(() => {
+    if (email !== null) return;
     router.replace("/register");
+  }, [email, router]);
+
+  useEffect(() => {
+    passwordRef.current?.focus();
+  }, [email]);
+
+  if (!email) {
     return null;
   }
 
@@ -70,6 +79,7 @@ export const CompleteRegistrationForm: FC = () => {
         minLength={8}
         maxLength={128}
         autoComplete="new-password"
+        inputRef={passwordRef}
       />
       <AuthFormSubmit isLoading={isSubmitting}>Create account</AuthFormSubmit>
       <AuthFormFooter>

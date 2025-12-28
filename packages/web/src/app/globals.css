@@ -40,6 +40,19 @@
   --color-info-surface: var(--color-blue-100);
 }
 
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-foreground);
+  -webkit-box-shadow: 0 0 0px 1000px var(--color-surface) inset;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+input:-webkit-autofill:disabled {
+  -webkit-text-fill-color: var(--color-foreground-muted);
+  -webkit-box-shadow: 0 0 0px 1000px var(--color-surface-subtle) inset;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --color-background: var(--color-zinc-950);
