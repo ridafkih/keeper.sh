@@ -62,13 +62,6 @@ export abstract class CalendarProvider<
       remoteEventCount: remoteEvents.length,
     });
 
-    await context.onDestinationSync?.({
-      userId,
-      destinationId,
-      localEventCount: localEvents.length,
-      remoteEventCount: remoteEvents.length,
-    });
-
     const operations = this.diffEvents(localEvents, remoteEvents);
     const addCount = operations.filter((op) => op.type === "add").length;
     const removeCount = operations.filter((op) => op.type === "remove").length;
@@ -80,6 +73,12 @@ export abstract class CalendarProvider<
 
     if (operations.length === 0) {
       this.childLog.debug({ userId }, "destination in sync");
+      await context.onDestinationSync?.({
+        userId,
+        destinationId,
+        localEventCount: localEvents.length,
+        remoteEventCount: remoteEvents.length,
+      });
       return { added: 0, removed: 0 };
     }
 
@@ -109,6 +108,7 @@ export abstract class CalendarProvider<
     let current = 0;
     let added = 0;
     let removed = 0;
+    let currentRemoteCount = params.remoteEventCount;
 
     for (const operation of operations) {
       const eventTime = this.getOperationEventTime(operation);
@@ -116,7 +116,7 @@ export abstract class CalendarProvider<
       this.emitProgress(params.context, {
         stage: "processing",
         localEventCount: params.localEventCount,
-        remoteEventCount: params.remoteEventCount,
+        remoteEventCount: currentRemoteCount,
         progress: { current, total },
         lastOperation: {
           type: operation.type,
@@ -127,10 +127,19 @@ export abstract class CalendarProvider<
       if (operation.type === "add") {
         await this.pushEvents([operation.event]);
         added++;
+        currentRemoteCount++;
       } else {
         await this.deleteEvents([operation.uid]);
         removed++;
+        currentRemoteCount--;
       }
+
+      await params.context.onDestinationSync?.({
+        userId: this.config.userId,
+        destinationId: this.config.destinationId,
+        localEventCount: params.localEventCount,
+        remoteEventCount: currentRemoteCount,
+      });
 
       current++;
     }

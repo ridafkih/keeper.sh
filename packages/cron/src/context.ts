@@ -49,14 +49,24 @@ export const destinationProviders = createDestinationProviders({
 });
 
 const onDestinationSync = async (result: DestinationSyncResult) => {
+  const now = new Date();
+
   await database
-    .update(syncStatusTable)
-    .set({
+    .insert(syncStatusTable)
+    .values({
+      destinationId: result.destinationId,
       localEventCount: result.localEventCount,
       remoteEventCount: result.remoteEventCount,
-      lastSyncedAt: new Date(),
+      lastSyncedAt: now,
     })
-    .where(eq(syncStatusTable.destinationId, result.destinationId));
+    .onConflictDoUpdate({
+      target: [syncStatusTable.destinationId],
+      set: {
+        localEventCount: result.localEventCount,
+        remoteEventCount: result.remoteEventCount,
+        lastSyncedAt: now,
+      },
+    });
 
   broadcastService.emit(result.userId, "sync:status", {
     destinationId: result.destinationId,
@@ -64,7 +74,7 @@ const onDestinationSync = async (result: DestinationSyncResult) => {
     localEventCount: result.localEventCount,
     remoteEventCount: result.remoteEventCount,
     inSync: result.localEventCount === result.remoteEventCount,
-    lastSyncedAt: new Date().toISOString(),
+    lastSyncedAt: now.toISOString(),
   });
 };
 
