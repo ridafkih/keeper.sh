@@ -134,6 +134,8 @@ export abstract class CalendarProvider<
 
       current++;
 
+      await params.context.refreshLock();
+
       this.emitProgress(params.context, {
         stage: "processing",
         localEventCount: params.localEventCount,

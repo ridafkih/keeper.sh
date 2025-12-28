@@ -13,6 +13,10 @@ export async function syncDestinationsForUser(
 ): Promise<void> {
   const context = await syncCoordinator.startSync(userId);
 
+  if (!context.acquired) {
+    return;
+  }
+
   try {
     const results = await Promise.allSettled(
       providers.map((provider) => provider.syncForUser(userId, context)),
