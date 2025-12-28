@@ -4,19 +4,22 @@ import type { FC } from "react";
 import NextLink from "next/link";
 import { NavigationMenu } from "@base-ui/react/navigation-menu";
 import { NavLink } from "@/components/nav-link";
+import clsx from "clsx";
 
 const navItems = [
-  { href: "/features", label: "Features" },
-  { href: "/pricing", label: "Pricing" },
+  { href: "/features", label: "Features", showOnMobile: false },
+  { href: "/pricing", label: "Pricing", showOnMobile: false },
   {
     href: "https://github.com/ridafkih/keeper.sh",
     label: "GitHub",
     external: true,
+    showOnMobile: false,
   },
   {
     href: "https://github.com/ridafkih/keeper.sh/releases",
     label: "Changelog",
     external: true,
+    showOnMobile: true,
   },
 ] as const;
 
@@ -24,7 +27,10 @@ export const MarketingNav: FC = () => (
   <NavigationMenu.Root className="flex">
     <NavigationMenu.List className="flex gap-1">
       {navItems.map((item) => (
-        <NavigationMenu.Item key={item.href}>
+        <NavigationMenu.Item
+          className={clsx(!item.showOnMobile && "hidden sm:block")}
+          key={item.href}
+        >
           <NavLink
             href={item.href}
             render={
