@@ -42,7 +42,9 @@ export const PricingCard: FC<PricingCardProps> = ({
   onBillingChange,
 }) => {
   const isFree = plan.monthlyPrice === 0;
-  const price = isYearly ? plan.yearlyPrice / 12 : plan.monthlyPrice;
+  const price = isYearly
+    ? (plan.yearlyPrice / 12).toFixed(2)
+    : plan.monthlyPrice.toFixed(2);
 
   return (
     <div className={card({ featured: plan.popular })}>
@@ -87,7 +89,7 @@ const PricingCardHeader: FC<{ name: string; popular?: boolean }> = ({
 );
 
 const PricingCardPrice: FC<{
-  price: number;
+  price: number | string;
   period: string;
   showPeriod: boolean;
 }> = ({ price, period, showPeriod }) => (
