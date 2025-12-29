@@ -1,23 +1,11 @@
 import useSWRSubscription from "swr/subscription";
 import { socketMessageSchema, syncStatusSchema, type SyncStatus } from "@keeper.sh/data-schemas";
 
-function getSocketUrl(): string {
-  const url = process.env.NEXT_PUBLIC_SOCKET_URL;
-  if (!url) throw new Error("NEXT_PUBLIC_SOCKET_URL is not set");
-  return url;
-}
-
-const fetchSocketToken = async (): Promise<string> => {
-  const response = await fetch("/api/socket/token");
-  if (!response.ok) throw new Error("Failed to fetch socket token");
-  const { token } = await response.json();
-  return token;
-};
-
-const createSocketUrl = (baseUrl: string, token: string): string => {
-  const url = new URL(baseUrl);
-  url.searchParams.set("token", token);
-  return url.toString();
+const fetchSocketUrl = async (): Promise<string> => {
+  const response = await fetch("/api/socket/url");
+  if (!response.ok) throw new Error("Failed to fetch socket URL");
+  const { socketUrl } = await response.json();
+  return socketUrl;
 };
 
 type SyncStatusRecord = Record<string, SyncStatus>;
@@ -34,11 +22,10 @@ export function useSyncStatus() {
       if (isClosing) return;
 
       try {
-        const baseUrl = getSocketUrl();
-        const token = await fetchSocketToken();
+        const socketUrl = await fetchSocketUrl();
         if (isClosing) return;
 
-        socket = new WebSocket(createSocketUrl(baseUrl, token));
+        socket = new WebSocket(socketUrl);
 
         socket.onmessage = (messageEvent) => {
           const message = JSON.parse(String(messageEvent.data));

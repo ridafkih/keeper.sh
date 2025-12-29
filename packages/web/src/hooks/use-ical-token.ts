@@ -2,6 +2,7 @@ import useSWR from "swr";
 
 interface IcalTokenResponse {
   token: string;
+  icalUrl: string | null;
 }
 
 const fetcher = async (url: string): Promise<IcalTokenResponse> => {
@@ -18,6 +19,7 @@ export const useIcalToken = () => {
 
   return {
     token: data?.token,
+    icalUrl: data?.icalUrl ?? null,
     error,
     isLoading,
   };

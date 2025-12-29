@@ -136,6 +136,7 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       COMMERCIAL_MODE: false
+      WEB_BASE_URL: http://${DOMAIN:-localhost}:3000
       PASSKEY_RP_ID: ${DOMAIN:-localhost}
       PASSKEY_RP_NAME: Keeper
       PASSKEY_ORIGIN: http://${DOMAIN:-localhost}:3000
@@ -173,9 +174,6 @@ services:
     image: ghcr.io/ridafkih/keeper-web:latest
     environment:
       API_URL: http://api:3001
-      NEXT_PUBLIC_BASE_URL: http://${DOMAIN:-localhost}:3000
-      NEXT_PUBLIC_SOCKET_URL: ws://${DOMAIN:-localhost}:3001/socket
-      NEXT_PUBLIC_COMMERCIAL_MODE: false
     ports:
       - "3000:3000"
     depends_on:
