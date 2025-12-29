@@ -6,9 +6,9 @@ import {
 } from "@keeper.sh/data-schemas";
 
 const MICROSOFT_AUTH_URL =
-  "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
+  "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
 const MICROSOFT_TOKEN_URL =
-  "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
+  "https://login.microsoftonline.com/common/oauth2/v2.0/token";
 const MICROSOFT_USERINFO_URL = "https://graph.microsoft.com/v1.0/me";
 
 export const MICROSOFT_CALENDAR_SCOPE = "Calendars.ReadWrite";
