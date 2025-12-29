@@ -20,7 +20,6 @@
       ]
     },
     "start": {
-      "dependsOn": ["build"],
       "passThroughEnv": [
         "LOG_LEVEL",
         "API_URL",

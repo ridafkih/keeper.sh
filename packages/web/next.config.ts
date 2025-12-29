@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 export default {
-  output: process.env.CI ? "standalone" : undefined,
+  output: "standalone",
   transpilePackages: [
     "@keeper.sh/auth",
     "@keeper.sh/database",
