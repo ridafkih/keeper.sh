@@ -44,12 +44,8 @@ export const ICalLinkSection: FC = () => {
         title="Your iCal Link"
         description="Subscribe to this link to view your aggregated events"
       />
-      {isLoading ? (
+      {isLoading || !icalUrl ? (
         <ICalLinkSkeleton />
-      ) : !icalUrl ? (
-        <p className="text-sm text-foreground-muted">
-          iCal link unavailable. WEB_BASE_URL may not be configured.
-        </p>
       ) : (
         <div className="flex gap-1.5">
           <input

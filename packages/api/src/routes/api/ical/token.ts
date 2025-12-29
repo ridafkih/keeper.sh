@@ -1,10 +1,10 @@
 import env from "@keeper.sh/env/api";
 import { withTracing, withAuth } from "../../../utils/middleware";
 import { getUserIdentifierToken } from "../../../utils/user";
+import { baseUrl } from "../../../context";
 
 const getIcalUrl = (token: string): string | null => {
-  if (!env.WEB_BASE_URL) return null;
-  const url = new URL(`/cal/${token}.ics`, env.WEB_BASE_URL);
+  const url = new URL(`/cal/${token}.ics`, baseUrl);
   return url.toString();
 };
 

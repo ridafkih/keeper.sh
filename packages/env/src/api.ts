@@ -6,7 +6,6 @@ export default arkenv({
   REDIS_URL: "string.url",
   BETTER_AUTH_SECRET: "string",
   BETTER_AUTH_URL: "string.url",
-  WEB_BASE_URL: "string.url?",
   COMMERCIAL_MODE: "boolean?",
   POLAR_ACCESS_TOKEN: "string?",
   POLAR_MODE: "'sandbox' | 'production' | undefined?",

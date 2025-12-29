@@ -23,7 +23,6 @@ export const { auth } = createAuth({
   database,
   secret: env.BETTER_AUTH_SECRET,
   baseUrl: env.BETTER_AUTH_URL,
-  webBaseUrl: env.WEB_BASE_URL,
   commercialMode: env.COMMERCIAL_MODE ?? false,
   polarAccessToken: env.POLAR_ACCESS_TOKEN,
   polarMode: env.POLAR_MODE,
@@ -110,7 +109,11 @@ const onSyncProgress = (update: SyncProgressUpdate) => {
   });
 };
 
-export const syncCoordinator = createSyncCoordinator({ redis, onDestinationSync, onSyncProgress });
+export const syncCoordinator = createSyncCoordinator({
+  redis,
+  onDestinationSync,
+  onSyncProgress,
+});
 
 export const baseUrl = env.BETTER_AUTH_URL;
 export const encryptionKey = env.ENCRYPTION_KEY;

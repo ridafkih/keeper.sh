@@ -136,7 +136,6 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       COMMERCIAL_MODE: false
-      WEB_BASE_URL: http://${DOMAIN:-localhost}:3000
       PASSKEY_RP_ID: ${DOMAIN:-localhost}
       PASSKEY_RP_NAME: Keeper
       PASSKEY_ORIGIN: http://${DOMAIN:-localhost}:3000
