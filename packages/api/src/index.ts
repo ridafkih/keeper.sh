@@ -23,6 +23,44 @@ const validateSocketToken = (token: string): string | null => {
   return entry.userId;
 };
 
+const isNullSession = (body: unknown): boolean => {
+  if (body === null) return true;
+  if (typeof body !== "object") return false;
+  if (!("session" in body)) return false;
+  return body.session === null;
+};
+
+const clearSessionCookies = (response: Response): Response => {
+  const headers = new Headers(response.headers);
+  const expiredCookie = "Path=/; Max-Age=0; HttpOnly; SameSite=Lax";
+  headers.append("Set-Cookie", `better-auth.session_token=; ${expiredCookie}`);
+  headers.append("Set-Cookie", `better-auth.session_data=; ${expiredCookie}`);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+};
+
+const handleAuthRequest = async (
+  pathname: string,
+  request: Request,
+): Promise<Response> => {
+  const response = await auth.handler(request);
+
+  if (pathname !== "/api/auth/get-session") {
+    return response;
+  }
+
+  const body = await response.clone().json();
+
+  if (!isNullSession(body)) {
+    return response;
+  }
+
+  return clearSessionCookies(response);
+};
+
 const sendInitialSyncStatus = async (userId: string, socket: Socket) => {
   const statuses = await database
     .select({
@@ -71,7 +109,7 @@ const server = Bun.serve<BroadcastData>({
     const url = new URL(request.url);
 
     if (url.pathname.startsWith("/api/auth")) {
-      return auth.handler(request);
+      return handleAuthRequest(url.pathname, request);
     }
 
     if (url.pathname === "/socket") {

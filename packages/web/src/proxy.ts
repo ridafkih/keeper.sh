@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
-
-const authRoutes = ["/login", "/register"];
-const protectedRoutes = ["/dashboard"];
+import { authRoutes, protectedRoutes } from "./config/routes";
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

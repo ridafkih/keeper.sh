@@ -20,5 +20,8 @@
     "knip": "5.78.0",
     "rimraf": "^6.1.2",
     "turbo": "2.7.2"
+  },
+  "dependencies": {
+    "react-error-boundary": "^6.0.1"
   }
 }

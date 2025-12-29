@@ -2,13 +2,14 @@
 
 import type { FC } from "react";
 import { useEffect } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import { Calendar } from "@/components/calendar";
 import { useEvents } from "@/hooks/use-events";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 
 const DAYS_PER_PAGE = 7;
 
-export const CalendarFeed: FC = () => {
+const CalendarFeedContent: FC = () => {
   const { events, isLoadingMore, loadMore, size } = useEvents();
   const { ref, isIntersecting } = useIntersectionObserver();
 
@@ -27,3 +28,9 @@ export const CalendarFeed: FC = () => {
     />
   );
 };
+
+export const CalendarFeed: FC = () => (
+  <ErrorBoundary fallback={null}>
+    <CalendarFeedContent />
+  </ErrorBoundary>
+);
