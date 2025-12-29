@@ -40,8 +40,8 @@ jobs:
           images: ${{ matrix.image }}
           tags: |
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref, '-') }}
+            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -56,6 +56,7 @@ jobs:
   deploy-railway:
     runs-on: ubuntu-latest
     needs: build-and-push
+    if: ${{ !contains(github.ref, '-') }}
     container: ghcr.io/railwayapp/cli:latest
     strategy:
       matrix:
