@@ -1,0 +1,4 @@
+#!/bin/bash
+exec 2>&1
+
+exec redis-server --bind 127.0.0.1 --port 6379 --daemonize no

@@ -5,11 +5,11 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ identifier: string }> },
 ) {
-  const { identifier } = await params;
-
   if (!env.API_URL) {
-    throw new Error("API_URL must be set");
+    return new Response(null, { status: 501 });
   }
+
+  const { identifier } = await params;
 
   const url = new URL(`/cal/${identifier}`, env.API_URL);
   const response = await fetch(url);

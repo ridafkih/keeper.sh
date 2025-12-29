@@ -1,0 +1,19 @@
+:80 {
+	handle /api/socket/url {
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3001
+	}
+
+	handle /socket {
+		reverse_proxy 127.0.0.1:3001 {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+}

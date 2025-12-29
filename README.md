@@ -64,16 +64,99 @@ If you'll be self-hosting, please consider supporting me and development of the 
 
 ## Prerequisites
 
-- Docker and Docker Compose
+- Docker (and Docker Compose for multi-container setup)
 - (Optional) Google OAuth credentials for Google Calendar integration
 - (Optional) Microsoft OAuth credentials for Outlook integration
-- (Optional) Resend API key for email notifications
 
-## Getting Started
+## Option 1: Standalone (Recommended)
+
+The standalone image bundles PostgreSQL, Redis, API, Cron, and Web into a single container with Caddy as a reverse proxy. This is the easiest way to get started.
+
+### Quick Start
+
+```bash
+docker run -d \
+  -p 80:80 \
+  -v keeper-data:/var/lib/postgresql/data \
+  -e BETTER_AUTH_SECRET=$(openssl rand -base64 32) \
+  -e ENCRYPTION_KEY=$(openssl rand -base64 32) \
+  ghcr.io/ridafkih/keeper-standalone:latest
+```
+
+Keeper will be available at `http://localhost`.
+
+### With OAuth Providers
+
+To enable Google Calendar and Outlook integrations:
+
+```bash
+docker run -d \
+  -p 80:80 \
+  -v keeper-data:/var/lib/postgresql/data \
+  -e BETTER_AUTH_SECRET=$(openssl rand -base64 32) \
+  -e ENCRYPTION_KEY=$(openssl rand -base64 32) \
+  -e GOOGLE_CLIENT_ID=your-google-client-id \
+  -e GOOGLE_CLIENT_SECRET=your-google-client-secret \
+  -e MICROSOFT_CLIENT_ID=your-microsoft-client-id \
+  -e MICROSOFT_CLIENT_SECRET=your-microsoft-client-secret \
+  ghcr.io/ridafkih/keeper-standalone:latest
+```
+
+### Custom Domain or Port
+
+If using a custom domain or non-standard port, set `BETTER_AUTH_URL`:
+
+```bash
+docker run -d \
+  -p 3000:80 \
+  -v keeper-data:/var/lib/postgresql/data \
+  -e BETTER_AUTH_SECRET=$(openssl rand -base64 32) \
+  -e ENCRYPTION_KEY=$(openssl rand -base64 32) \
+  -e BETTER_AUTH_URL=http://localhost:3000 \
+  ghcr.io/ridafkih/keeper-standalone:latest
+```
+
+### Using Docker Compose
+
+Create a `compose.yaml`:
+
+```yaml
+services:
+  keeper:
+    image: ghcr.io/ridafkih/keeper-standalone:latest
+    ports:
+      - "80:80"
+    volumes:
+      - keeper-data:/var/lib/postgresql/data
+    environment:
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      # BETTER_AUTH_URL: https://keeper.example.com  # Set if using custom domain
+
+volumes:
+  keeper-data:
+```
+
+Create a `.env` file:
+
+```bash
+cat > .env << EOF
+BETTER_AUTH_SECRET=$(openssl rand -base64 32)
+ENCRYPTION_KEY=$(openssl rand -base64 32)
+EOF
+```
+
+Start Keeper:
+
+```bash
+docker compose up -d
+```
+
+## Option 2: Multi-Container
+
+For more control over individual services, you can run each component separately.
 
 ### Generate Secrets
-
-Running the following command will populate a `.env` file for you with required secrets for the Docker Compose configuration.
 
 ```bash
 cat > .env << EOF
@@ -87,7 +170,7 @@ EOF
 
 If you'd like to configure optional providers, you can refer to the [Google OAuth documentation](https://developers.google.com/identity/protocols/oauth2) on configuring your Google client ID and secret, and Outlook's documentation can be found on the [Microsoft documentation website](https://learn.microsoft.com/en-us/entra/architecture/auth-oauth2) where you can learn to configure Entra ID in the Azure portal to get your Microsoft client ID and secret.
 
-Once you've acquired them, simply add them to the environment variables to make them available as destinations.
+Once you've acquired them, simply add them to the `.env` file:
 
 ```bash
 GOOGLE_CLIENT_ID=
@@ -97,10 +180,6 @@ MICROSOFT_CLIENT_SECRET=
 ```
 
 ### Create `compose.yaml`
-
-> [!CAUTION]
->
-> The following is an example of a minimum-viable `compose.yaml` which will define all the services to run Keeper. You can place it adjacent to the `.env` file we just created, but you should take a moment to securely configure the credentials for Redis, PostgreSQL, etc., away from the default values.
 
 ```yaml
 services:
@@ -188,11 +267,11 @@ volumes:
 
 ### Start Keeper
 
-Once this is done, Keeper will be available at `http://localhost:3000` or the custom domain you've set. You can pair this configuration with a reverse-proxy. I personally use, prefer and recommend [Caddy](https://caddyserver.com/) as it has a great configuration system and automatically manages certificates for you.
-
 ```bash
 docker compose up -d
 ```
+
+Keeper will be available at `http://localhost:3000`. You can pair this configuration with a reverse-proxy. I personally use, prefer and recommend [Caddy](https://caddyserver.com/) as it has a great configuration system and automatically manages certificates for you.
 
 # Modules
 

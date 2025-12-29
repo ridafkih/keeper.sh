@@ -1,0 +1,10 @@
+#!/bin/bash
+exec 2>&1
+
+PGDATA=/var/lib/postgresql/data
+
+if [ ! -f "$PGDATA/PG_VERSION" ]; then
+    su postgres -c "/usr/lib/postgresql/17/bin/initdb -D $PGDATA"
+fi
+
+exec su postgres -c "/usr/lib/postgresql/17/bin/postgres -D $PGDATA -c listen_addresses=localhost"

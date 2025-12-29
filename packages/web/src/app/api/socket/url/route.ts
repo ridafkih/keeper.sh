@@ -3,7 +3,7 @@ import env from "@keeper.sh/env/next/backend";
 
 export const GET = async (request: NextRequest) => {
   if (!env.API_URL) {
-    return new Response("API_URL is not configured", { status: 500 });
+    return new Response(null, { status: 501 });
   }
 
   const apiUrl = new URL("/api/socket/token", env.API_URL);
@@ -25,12 +25,10 @@ export const GET = async (request: NextRequest) => {
     return new Response("Missing host header", { status: 400 });
   }
 
-  const baseApiUrl = new URL(env.API_URL);
   const protocol =
     request.headers.get("x-forwarded-proto") === "https" ? "wss" : "ws";
 
-  const socketUrl = new URL("/socket", `${protocol}://${baseApiUrl.hostname}`);
-  socketUrl.port = apiUrl.port;
+  const socketUrl = new URL("/socket", `${protocol}://${host}`);
   socketUrl.searchParams.set("token", token);
 
   const socketUrlString = socketUrl.toString();

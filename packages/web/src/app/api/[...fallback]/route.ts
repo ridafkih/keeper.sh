@@ -14,11 +14,11 @@ type RequestHandler = (request: NextRequest) => Promise<Response>;
  * TODO: Evaluate whether we should just CORS the Bun API directly.
  */
 const forward: RequestHandler = async (request) => {
-  const { pathname, search } = new URL(request.url);
-
   if (!env.API_URL) {
-    throw Error("API_URL must be set");
+    return new Response(null, { status: 501 });
   }
+
+  const { pathname, search } = new URL(request.url);
 
   const url = new URL(pathname, env.API_URL);
   url.search = search;
