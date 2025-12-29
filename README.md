@@ -98,7 +98,9 @@ MICROSOFT_CLIENT_SECRET=
 
 ### Create `compose.yaml`
 
-Adjacent to the `.env` file you've created, create your `compose.yaml` which will define all the services required to run Keeper.
+> [!CAUTION]
+>
+> The following is an example of a minimum-viable `compose.yaml` which will define all the services to run Keeper. You can place it adjacent to the `.env` file we just created, but you should take a moment to securely configure the credentials for Redis, PostgreSQL, etc., away from the default values.
 
 ```yaml
 services:
