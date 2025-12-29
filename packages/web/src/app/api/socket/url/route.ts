@@ -29,7 +29,7 @@ export const GET = async (request: NextRequest) => {
   const protocol =
     request.headers.get("x-forwarded-proto") === "https" ? "wss" : "ws";
 
-  const socketUrl = new URL("/socket", `${protocol}://${host}`);
+  const socketUrl = new URL("/socket", `${protocol}://${baseApiUrl}`);
   socketUrl.port = apiUrl.port;
   socketUrl.searchParams.set("token", token);
 
