@@ -11,6 +11,7 @@ import type {
 import {
   getEventMappingsForDestination,
   createEventMapping,
+  deleteEventMapping,
   deleteEventMappingByDestinationUid,
   type EventMapping,
 } from "./mappings";
@@ -62,11 +63,22 @@ export abstract class CalendarProvider<
       remoteEventCount: remoteEvents.length,
     });
 
-    const operations = this.computeSyncOperations(
+    const { operations, staleMappingIds } = this.computeSyncOperations(
       localEvents,
       existingMappings,
       remoteEvents,
     );
+
+    if (staleMappingIds.length > 0) {
+      this.childLog.debug(
+        { userId, staleCount: staleMappingIds.length },
+        "deleting stale mappings",
+      );
+      await Promise.all(
+        staleMappingIds.map((id) => deleteEventMapping(database, id)),
+      );
+    }
+
     const addCount = operations.filter((op) => op.type === "add").length;
     const removeCount = operations.filter((op) => op.type === "remove").length;
 
@@ -114,17 +126,34 @@ export abstract class CalendarProvider<
     localEvents: SyncableEvent[],
     existingMappings: EventMapping[],
     remoteEvents: RemoteEvent[],
-  ): SyncOperation[] {
+  ): { operations: SyncOperation[]; staleMappingIds: string[] } {
     const localEventIds = new Set(localEvents.map((event) => event.id));
-    const mappedEventIds = new Set(existingMappings.map((m) => m.eventStateId));
+    const remoteEventUids = new Set(remoteEvents.map((event) => event.uid));
     const mappedDestinationUids = new Set(
       existingMappings.map(({ destinationEventUid }) => destinationEventUid),
     );
 
     const operations: SyncOperation[] = [];
+    const staleMappingIds: string[] = [];
+    const staleMappedEventIds = new Set<string>();
+
+    for (const mapping of existingMappings) {
+      const localEventExists = localEventIds.has(mapping.eventStateId);
+      const remoteEventExists = remoteEventUids.has(mapping.destinationEventUid);
+
+      if (localEventExists && !remoteEventExists) {
+        staleMappingIds.push(mapping.id);
+        staleMappedEventIds.add(mapping.eventStateId);
+      }
+    }
 
     for (const event of localEvents) {
-      if (!mappedEventIds.has(event.id)) {
+      const hasMapping = existingMappings.some(
+        (mapping) => mapping.eventStateId === event.id,
+      );
+      const hasStaleMapping = staleMappedEventIds.has(event.id);
+
+      if (!hasMapping || hasStaleMapping) {
         operations.push({ type: "add", event });
       }
     }
@@ -151,7 +180,10 @@ export abstract class CalendarProvider<
       }
     }
 
-    return this.sortOperationsByTime(operations);
+    return {
+      operations: this.sortOperationsByTime(operations),
+      staleMappingIds,
+    };
   }
 
   private sortOperationsByTime(operations: SyncOperation[]): SyncOperation[] {

@@ -4,4 +4,4 @@ export const generateEventUid = (): string => {
   return `${crypto.randomUUID()}${SUFFIX}`;
 };
 
-export const isKeeperEvent = (uid: string): boolean => uid.endsWith(SUFFIX);
+export const isKeeperEvent = (uid: string): boolean => uid.includes(SUFFIX);

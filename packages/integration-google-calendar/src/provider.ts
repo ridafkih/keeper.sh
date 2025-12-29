@@ -36,7 +36,9 @@ const isRateLimitError = (error: unknown): boolean => {
 };
 
 export interface OAuthProvider {
-  refreshAccessToken: (refreshToken: string) => Promise<{ access_token: string; expires_in: number }>;
+  refreshAccessToken: (
+    refreshToken: string,
+  ) => Promise<{ access_token: string; expires_in: number }>;
 }
 
 export interface GoogleCalendarProviderConfig {
@@ -112,7 +114,8 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
   }
 
   private async ensureValidToken(): Promise<void> {
-    const { database, accessTokenExpiresAt, refreshToken, accountId } = this.config;
+    const { database, accessTokenExpiresAt, refreshToken, accountId } =
+      this.config;
 
     if (accessTokenExpiresAt.getTime() > Date.now() + TOKEN_REFRESH_BUFFER_MS) {
       return;
@@ -202,7 +205,9 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
     return results;
   }
 
-  async listRemoteEvents(options: ListRemoteEventsOptions): Promise<RemoteEvent[]> {
+  async listRemoteEvents(
+    options: ListRemoteEventsOptions,
+  ): Promise<RemoteEvent[]> {
     await this.ensureValidToken();
     const remoteEvents: RemoteEvent[] = [];
 
