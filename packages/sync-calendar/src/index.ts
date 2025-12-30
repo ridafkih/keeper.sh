@@ -28,7 +28,9 @@ export interface SyncCalendarService {
   fetchAndSyncSource: (source: Source) => Promise<void>;
 }
 
-export const createSyncCalendarService = (database: BunSQLDatabase): SyncCalendarService => {
+export const createSyncCalendarService = (
+  database: BunSQLDatabase,
+): SyncCalendarService => {
   const getLatestSnapshot = async (sourceId: string) => {
     const [snapshot] = await database
       .select({ ical: calendarSnapshotsTable.ical })
@@ -41,15 +43,36 @@ export const createSyncCalendarService = (database: BunSQLDatabase): SyncCalenda
     return convertIcsCalendar(undefined, snapshot.ical);
   };
 
+  const toStoredEvent = (row: {
+    id: string;
+    sourceEventUid: string;
+    startTime: Date;
+    endTime: Date;
+  }) => ({
+    id: row.id,
+    uid: row.sourceEventUid,
+    startTime: row.startTime,
+    endTime: row.endTime,
+  });
+
   const getStoredEvents = async (sourceId: string) => {
-    return database
+    const results = await database
       .select({
         id: eventStatesTable.id,
+        sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
         endTime: eventStatesTable.endTime,
       })
       .from(eventStatesTable)
       .where(eq(eventStatesTable.sourceId, sourceId));
+
+    const events = [];
+    for (const row of results) {
+      if (row.sourceEventUid === null) continue;
+      events.push(toStoredEvent({ ...row, sourceEventUid: row.sourceEventUid }));
+    }
+
+    return events;
   };
 
   const removeEvents = async (sourceId: string, eventIds: string[]) => {
@@ -62,10 +85,11 @@ export const createSyncCalendarService = (database: BunSQLDatabase): SyncCalenda
 
   const addEvents = async (
     sourceId: string,
-    events: { startTime: Date; endTime: Date }[],
+    events: { uid: string; startTime: Date; endTime: Date }[],
   ) => {
     const rows = events.map((event) => ({
       sourceId,
+      sourceEventUid: event.uid,
       startTime: event.startTime,
       endTime: event.endTime,
     }));
@@ -120,7 +144,10 @@ export const createSyncCalendarService = (database: BunSQLDatabase): SyncCalenda
       log.trace("fetchAndSyncSource for source '%s' complete", source.id);
     } catch (error) {
       const syncError = new RemoteCalendarSyncError(source.id, error);
-      log.error({ error: syncError, sourceId: source.id }, "failed to fetch and sync source");
+      log.error(
+        { error: syncError, sourceId: source.id },
+        "failed to fetch and sync source",
+      );
       throw syncError;
     }
   };
