@@ -10,6 +10,7 @@ import {
   type GoogleCalendarConfig,
   type SyncContext,
   type ListRemoteEventsOptions,
+  type BroadcastSyncStatus,
 } from "@keeper.sh/integrations";
 import {
   googleEventSchema,
@@ -53,12 +54,13 @@ export interface OAuthProvider {
 export interface GoogleCalendarProviderConfig {
   database: BunSQLDatabase;
   oauthProvider: OAuthProvider;
+  broadcastSyncStatus?: BroadcastSyncStatus;
 }
 
 export const createGoogleCalendarProvider = (
   config: GoogleCalendarProviderConfig,
 ): DestinationProvider => {
-  const { database, oauthProvider } = config;
+  const { database, oauthProvider, broadcastSyncStatus } = config;
 
   const syncForUser = async (
     userId: string,
@@ -81,6 +83,7 @@ export const createGoogleCalendarProvider = (
             refreshToken: account.refreshToken,
             accessTokenExpiresAt: account.accessTokenExpiresAt,
             calendarId: "primary",
+            broadcastSyncStatus,
           },
           oauthProvider,
         );
@@ -123,12 +126,14 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
   }
 
   private async markNeedsReauthentication(): Promise<void> {
-    const { database, destinationId } = this.config;
+    const { database, destinationId, userId, broadcastSyncStatus } = this.config;
     this.childLog.warn({ destinationId }, "marking destination as needing reauthentication");
     await database
       .update(calendarDestinationsTable)
       .set({ needsReauthentication: true })
       .where(eq(calendarDestinationsTable.id, destinationId));
+
+    broadcastSyncStatus?.(userId, destinationId, { needsReauthentication: true });
   }
 
   private async ensureValidToken(): Promise<void> {
@@ -332,6 +337,11 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
 
       if (isAuthError(response.status, error)) {
         await this.markNeedsReauthentication();
+        return {
+          success: false,
+          error: error?.message ?? response.statusText,
+          shouldContinue: false,
+        };
       }
 
       return {
@@ -374,6 +384,11 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
 
         if (isAuthError(response.status, error)) {
           await this.markNeedsReauthentication();
+          return {
+            success: false,
+            error: error?.message ?? response.statusText,
+            shouldContinue: false,
+          };
         }
 
         return {

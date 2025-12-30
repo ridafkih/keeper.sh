@@ -9,6 +9,7 @@ import {
   type OutlookCalendarConfig,
   type SyncContext,
   type ListRemoteEventsOptions,
+  type BroadcastSyncStatus,
 } from "@keeper.sh/integrations";
 import {
   outlookEventSchema,
@@ -61,12 +62,13 @@ export interface OAuthProvider {
 export interface OutlookCalendarProviderConfig {
   database: BunSQLDatabase;
   oauthProvider: OAuthProvider;
+  broadcastSyncStatus?: BroadcastSyncStatus;
 }
 
 export const createOutlookCalendarProvider = (
   config: OutlookCalendarProviderConfig,
 ): DestinationProvider => {
-  const { database, oauthProvider } = config;
+  const { database, oauthProvider, broadcastSyncStatus } = config;
 
   const syncForUser = async (
     userId: string,
@@ -88,6 +90,7 @@ export const createOutlookCalendarProvider = (
             accessToken: account.accessToken,
             refreshToken: account.refreshToken,
             accessTokenExpiresAt: account.accessTokenExpiresAt,
+            broadcastSyncStatus,
           },
           oauthProvider,
         );
@@ -128,12 +131,14 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
   }
 
   private async markNeedsReauthentication(): Promise<void> {
-    const { database, destinationId } = this.config;
+    const { database, destinationId, userId, broadcastSyncStatus } = this.config;
     this.childLog.warn({ destinationId }, "marking destination as needing reauthentication");
     await database
       .update(calendarDestinationsTable)
       .set({ needsReauthentication: true })
       .where(eq(calendarDestinationsTable.id, destinationId));
+
+    broadcastSyncStatus?.(userId, destinationId, { needsReauthentication: true });
   }
 
   private async ensureValidToken(): Promise<void> {
@@ -327,6 +332,11 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
 
       if (isAuthError(response.status, error)) {
         await this.markNeedsReauthentication();
+        return {
+          success: false,
+          error: error?.message ?? response.statusText,
+          shouldContinue: false,
+        };
       }
 
       return {
@@ -360,6 +370,11 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
 
         if (isAuthError(response.status, error)) {
           await this.markNeedsReauthentication();
+          return {
+            success: false,
+            error: error?.message ?? response.statusText,
+            shouldContinue: false,
+          };
         }
 
         return {

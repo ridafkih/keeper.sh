@@ -123,6 +123,7 @@ export const syncStatusSchema = type({
   "lastOperation?": syncOperationSchema,
   "lastSyncedAt?": "string",
   inSync: "boolean",
+  "needsReauthentication?": "boolean",
 });
 export type SyncStatus = typeof syncStatusSchema.infer;
 

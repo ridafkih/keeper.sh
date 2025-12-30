@@ -58,10 +58,26 @@ export const oauthProviders = createOAuthProviders({
       : undefined,
 });
 
+const broadcastSyncStatus = (
+  userId: string,
+  destinationId: string,
+  data: { needsReauthentication: boolean },
+) => {
+  broadcastService.emit(userId, "sync:status", {
+    destinationId,
+    status: "idle",
+    localEventCount: 0,
+    remoteEventCount: 0,
+    inSync: false,
+    needsReauthentication: data.needsReauthentication,
+  });
+};
+
 export const destinationProviders = createDestinationProviders({
   database,
   oauthProviders,
   encryptionKey: env.ENCRYPTION_KEY ?? "",
+  broadcastSyncStatus,
 });
 
 const onDestinationSync = async (result: DestinationSyncResult) => {

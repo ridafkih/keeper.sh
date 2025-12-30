@@ -219,6 +219,10 @@ export abstract class CalendarProvider<
 
       if (operation.type === "add") {
         const [result] = await this.pushEvents([operation.event]);
+        if (result?.shouldContinue === false) {
+          this.childLog.debug("stopping sync due to shouldContinue=false");
+          break;
+        }
         if (result?.success && result.remoteId) {
           await createEventMapping(database, {
             eventStateId: operation.event.id,
@@ -233,6 +237,10 @@ export abstract class CalendarProvider<
         }
       } else {
         const [result] = await this.deleteEvents([operation.deleteId]);
+        if (result?.shouldContinue === false) {
+          this.childLog.debug("stopping sync due to shouldContinue=false");
+          break;
+        }
         if (result?.success) {
           await deleteEventMappingByDestinationUid(
             database,

@@ -17,11 +17,13 @@ export interface PushResult {
   remoteId?: string;
   deleteId?: string;
   error?: string;
+  shouldContinue?: boolean;
 }
 
 export interface DeleteResult {
   success: boolean;
   error?: string;
+  shouldContinue?: boolean;
 }
 
 export interface SyncResult {
@@ -44,10 +46,17 @@ export interface ListRemoteEventsOptions {
   until: Date;
 }
 
+export type BroadcastSyncStatus = (
+  userId: string,
+  destinationId: string,
+  data: { needsReauthentication: boolean },
+) => void;
+
 export interface ProviderConfig {
   database: BunSQLDatabase;
   userId: string;
   destinationId: string;
+  broadcastSyncStatus?: BroadcastSyncStatus;
 }
 
 export interface GoogleCalendarConfig extends ProviderConfig {

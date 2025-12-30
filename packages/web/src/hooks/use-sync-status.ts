@@ -1,4 +1,5 @@
 import useSWRSubscription from "swr/subscription";
+import { mutate } from "swr";
 import { socketMessageSchema, syncStatusSchema, type SyncStatus } from "@keeper.sh/data-schemas";
 
 const fetchSocketUrl = async (): Promise<string> => {
@@ -50,6 +51,10 @@ export function useSyncStatus() {
           if (!syncStatusSchema.allows(message.data)) {
             next(new Error("Invalid sync status data"));
             return;
+          }
+
+          if (message.data.needsReauthentication) {
+            mutate("linked-accounts");
           }
 
           statuses = { ...statuses, [message.data.destinationId]: message.data };

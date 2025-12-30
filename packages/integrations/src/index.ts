@@ -31,4 +31,5 @@ export type {
   OutlookCalendarConfig,
   CalDAVConfig,
   ListRemoteEventsOptions,
+  BroadcastSyncStatus,
 } from "./types";
