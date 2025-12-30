@@ -94,6 +94,8 @@ ENV REDIS_URL=redis://localhost:6379
 ENV API_PORT=3001
 ENV COMMERCIAL_MODE=false
 ENV BETTER_AUTH_URL=http://localhost
+ENV API_URL=http://127.0.0.1:3001
+ENV WEBSOCKET_URL=ws://localhost/socket
 
 EXPOSE 80
 
