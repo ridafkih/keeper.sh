@@ -20,6 +20,12 @@ const forward: RequestHandler = async (request) => {
 
   const { pathname, search } = new URL(request.url);
 
+  if (!env.API_URL) {
+    return new Response("The API_URL has not been configured", {
+      status: 501,
+    });
+  }
+
   const url = new URL(pathname, env.API_URL);
   url.search = search;
 
