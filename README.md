@@ -80,7 +80,7 @@ There are five images currently available, two of them are designed for convenie
 
 > [!NOTE]
 > - `keeper-standalone` auto-configures everything, putting both the Next.js and Bun API behind a single port so you don't have to worry about the `API_URL` and `WEBSOCKET_URL` environment variables.
-> - `keeper-services` and individual images require setting `WEBSOCKET_URL` unless you use a reverse proxy to route calls to `/api*` to the Next.js origin.
+> - `keeper-services` and individual images require setting `WEBSOCKET_URL` unless you use a reverse proxy to intercept calls calls from `/api*` on the Next.js origin to the Bun API.
 
 ## Images
 
