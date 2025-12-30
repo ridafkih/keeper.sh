@@ -1,6 +1,10 @@
 #!/bin/bash
 exec 2>&1
 
+until curl -sf http://127.0.0.1:3001/api/health > /dev/null; do
+  sleep 1
+done
+
 cd /app
 export HOSTNAME=0.0.0.0
 export PORT=3000

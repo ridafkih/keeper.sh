@@ -4,8 +4,13 @@ import { socketMessageSchema, syncStatusSchema, type SyncStatus } from "@keeper.
 const fetchSocketUrl = async (): Promise<string> => {
   const response = await fetch("/api/socket/url");
   if (!response.ok) throw new Error("Failed to fetch socket URL");
-  const { socketUrl } = await response.json();
-  return socketUrl;
+  const { socketUrl, socketPath } = await response.json();
+
+  if (socketUrl) return socketUrl;
+
+  const url = new URL(socketPath, window.location.origin);
+  url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return url.toString();
 };
 
 type SyncStatusRecord = Record<string, SyncStatus>;

@@ -14,8 +14,13 @@ const generateSocketToken = (userId: string): string => {
 export const GET = withTracing(
   withAuth(async ({ userId }) => {
     const token = generateSocketToken(userId);
-    const socketUrl = new URL(env.WEBSOCKET_URL);
-    socketUrl.searchParams.set("token", token);
-    return Response.json({ socketUrl: socketUrl.toString() });
+
+    if (env.WEBSOCKET_URL) {
+      const socketUrl = new URL(env.WEBSOCKET_URL);
+      socketUrl.searchParams.set("token", token);
+      return Response.json({ socketUrl: socketUrl.toString() });
+    }
+
+    return Response.json({ socketPath: `/api/socket?token=${token}` });
   }),
 );

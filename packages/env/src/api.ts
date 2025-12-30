@@ -4,7 +4,7 @@ export default arkenv({
   API_PORT: "number",
   DATABASE_URL: "string.url",
   REDIS_URL: "string.url",
-  WEBSOCKET_URL: "string.url",
+  WEBSOCKET_URL: "string.url?",
   BETTER_AUTH_SECRET: "string",
   BETTER_AUTH_URL: "string.url",
   COMMERCIAL_MODE: "boolean?",
