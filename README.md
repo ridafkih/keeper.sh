@@ -322,12 +322,10 @@ services:
       DATABASE_URL: postgres://keeper:keeper@postgres:5432/keeper
       REDIS_URL: redis://redis:6379
       WEBSOCKET_URL: ${WEBSOCKET_URL}
-      BETTER_AUTH_URL: ${DOMAIN:-http://localhost:3000}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       COMMERCIAL_MODE: false
-      PASSKEY_RP_NAME: Keeper
-      PASSKEY_ORIGIN: ${DOMAIN:-http://localhost:3000}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
