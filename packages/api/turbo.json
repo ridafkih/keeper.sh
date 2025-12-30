@@ -45,7 +45,8 @@
         "PASSKEY_RP_ID",
         "PASSKEY_RP_NAME",
         "PASSKEY_ORIGIN",
-        "ENCRYPTION_KEY"
+        "ENCRYPTION_KEY",
+        "WEBSOCKET_URL"
       ]
     }
   }
