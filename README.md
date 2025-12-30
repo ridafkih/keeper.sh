@@ -77,7 +77,7 @@ There are five images currently available, two of them are designed for convenie
 | GOOGLE_CLIENT_SECRET | `api`, `cron` | Optional. Required for Google Calendar integration. |
 | MICROSOFT_CLIENT_ID | `api`, `cron` | Optional. Required for Microsoft Outlook integration. |
 | MICROSOFT_CLIENT_SECRET | `api`, `cron` | Optional. Required for Microsoft Outlook integration. |
-| TRUSTED_ORIGINS | `api` | Optional. Comma-separated list of additional trusted origins for CSRF protection. Required when accessing from a URL other than `localhost`.<br><br>e.g. `http://192.168.1.100,http://keeper.local` |
+| TRUSTED_ORIGINS | `api` | Optional. Comma-separated list of additional trusted origins for CSRF protection.<br><br>e.g. `http://192.168.1.100,http://keeper.local,https://keeper.example.com` |
 
 > [!NOTE]
 > - `keeper-standalone` auto-configures everything, putting both the Next.js and Bun API behind a single port so you don't have to worry about the `API_URL` and `WEBSOCKET_URL` environment variables.
