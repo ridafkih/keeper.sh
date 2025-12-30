@@ -36,6 +36,15 @@ const isRateLimitError = (error: unknown): boolean => {
   return error.message.includes("429") || error.message.includes("throttled");
 };
 
+const isScopeError = (
+  status: number,
+  error: { code?: string } | undefined,
+): boolean => {
+  if (status !== 403) return false;
+  const code = error?.code;
+  return code === "Authorization_RequestDenied" || code === "ErrorAccessDenied";
+};
+
 export interface OAuthProvider {
   refreshAccessToken: (refreshToken: string) => Promise<{
     access_token: string;
@@ -111,6 +120,15 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
       Authorization: `Bearer ${this.currentAccessToken}`,
       "Content-Type": "application/json",
     };
+  }
+
+  private async markNeedsReauthentication(): Promise<void> {
+    const { database, destinationId } = this.config;
+    this.childLog.warn({ destinationId }, "marking destination as needing reauthentication");
+    await database
+      .update(calendarDestinationsTable)
+      .set({ needsReauthentication: true })
+      .where(eq(calendarDestinationsTable.id, destinationId));
   }
 
   private async ensureValidToken(): Promise<void> {
@@ -239,6 +257,11 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
           { status: response.status, error },
           "failed to list events",
         );
+
+        if (isScopeError(response.status, error)) {
+          await this.markNeedsReauthentication();
+        }
+
         throw new Error(error?.message ?? response.statusText);
       }
 

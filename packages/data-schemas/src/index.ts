@@ -38,7 +38,7 @@ export const googleEventListSchema = type({
 export type GoogleEventList = typeof googleEventListSchema.infer;
 
 export const googleApiErrorSchema = type({
-  "error?": { "message?": "string", "code?": "number" },
+  "error?": { "message?": "string", "code?": "number", "status?": "string" },
 });
 export type GoogleApiError = typeof googleApiErrorSchema.infer;
 
