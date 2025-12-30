@@ -1,4 +1,7 @@
-import { remoteICalSourcesTable, eventStatesTable } from "@keeper.sh/database/schema";
+import {
+  remoteICalSourcesTable,
+  eventStatesTable,
+} from "@keeper.sh/database/schema";
 import { generateIcsCalendar, type IcsCalendar, type IcsEvent } from "ts-ics";
 import { eq, inArray, asc } from "drizzle-orm";
 import { resolveUserIdentifier } from "./user";
@@ -53,7 +56,7 @@ export const generateUserCalendar = async (
     return formatEventsAsIcal([]);
   }
 
-  const sourceIds = sources.map((s) => s.id);
+  const sourceIds = sources.map(({ id }) => id);
   const events = await database
     .select({
       id: eventStatesTable.id,

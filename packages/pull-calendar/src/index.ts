@@ -47,7 +47,7 @@ export async function pullRemoteCalendar(
   const json = convertIcsCalendar(undefined, ical);
 
   if (!json.version || !json.prodId) {
-    throw new Error("missing required calendar properties");
+    throw new Error("Missing required calendar properties");
   }
 
   if (!outputs.includes("json")) {

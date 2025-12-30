@@ -92,29 +92,82 @@ const buildAuthenticatedUrl = (
   return parsed.toString();
 };
 
+interface CredentialsDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (username: string, password: string) => Promise<void>;
+}
+
+const CredentialsDialog = ({
+  open,
+  onOpenChange,
+  onSubmit,
+}: CredentialsDialogProps) => {
+  const { isSubmitting, error, submit } = useFormSubmit<boolean>();
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const formData = new FormData(event.currentTarget);
+    const username = formData.get("username");
+    const password = formData.get("password");
+
+    const result = await submit(async () => {
+      if (typeof username !== "string" || typeof password !== "string") {
+        throw new Error("There was an issue with the submitted data");
+      }
+
+      await onSubmit(username, password);
+      return true;
+    });
+
+    if (result) {
+      onOpenChange(false);
+    }
+  };
+
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Authentication Required"
+      description="This calendar requires credentials to access."
+      size="md"
+      error={error}
+      isSubmitting={isSubmitting}
+      submitLabel="Add Source"
+      submitVariant="primary"
+      onSubmit={handleSubmit}
+    >
+      <FormField
+        id="source-username"
+        name="username"
+        label="Username"
+        type="text"
+        autoComplete="username"
+        required
+      />
+      <FormField
+        id="source-password"
+        name="password"
+        label="Password"
+        type="password"
+        autoComplete="current-password"
+        required
+      />
+    </FormDialog>
+  );
+};
+
 const AddSourceDialog = ({
   open,
   onOpenChange,
   onAdd,
 }: AddSourceDialogProps) => {
-  const { isSubmitting, error, setError, submit } = useFormSubmit<boolean>();
-  const [showCredentials, setShowCredentials] = useState(false);
+  const { isSubmitting, error, submit } = useFormSubmit<boolean>();
+  const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [pendingUrl, setPendingUrl] = useState("");
   const [pendingName, setPendingName] = useState("");
-
-  const resetState = () => {
-    setShowCredentials(false);
-    setPendingUrl("");
-    setPendingName("");
-    setError(null);
-  };
-
-  const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) {
-      resetState();
-    }
-    onOpenChange(nextOpen);
-  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -133,7 +186,7 @@ const AddSourceDialog = ({
       if (response.authRequired) {
         setPendingUrl(url);
         setPendingName(name);
-        setShowCredentials(true);
+        setCredentialsOpen(true);
         return false;
       }
 
@@ -141,104 +194,58 @@ const AddSourceDialog = ({
     });
 
     if (result) {
-      handleOpenChange(false);
+      onOpenChange(false);
     }
   };
 
   const handleCredentialsSubmit = async (
-    event: React.FormEvent<HTMLFormElement>,
+    username: string,
+    password: string,
   ) => {
-    event.preventDefault();
-
-    const formData = new FormData(event.currentTarget);
-    const username = formData.get("username");
-    const password = formData.get("password");
-
-    const result = await submit(async () => {
-      if (typeof username !== "string" || typeof password !== "string") {
-        throw new Error("There was an issue with the submitted data");
-      }
-
-      const authenticatedUrl = buildAuthenticatedUrl(
-        pendingUrl,
-        username,
-        password,
-      );
-      await onAdd(pendingName, authenticatedUrl);
-      return true;
-    });
-
-    if (result) {
-      handleOpenChange(false);
-    }
+    const authenticatedUrl = buildAuthenticatedUrl(pendingUrl, username, password);
+    await onAdd(pendingName, authenticatedUrl);
+    onOpenChange(false);
   };
 
-  if (showCredentials) {
-    return (
+  return (
+    <>
       <FormDialog
         open={open}
-        onOpenChange={handleOpenChange}
-        title="Authentication Required"
-        description="This calendar requires credentials to access."
+        onOpenChange={onOpenChange}
+        title="Add Calendar Source"
+        description="Enter an iCal URL to import events from another calendar."
         size="md"
         error={error}
         isSubmitting={isSubmitting}
         submitLabel="Add Source"
         submitVariant="primary"
-        onSubmit={handleCredentialsSubmit}
+        onSubmit={handleSubmit}
       >
         <FormField
-          id="source-username"
-          name="username"
-          label="Username"
+          id="source-name"
+          name="name"
+          label="Name"
           type="text"
-          autoComplete="username"
+          placeholder="Work Calendar"
+          autoComplete="off"
           required
         />
         <FormField
-          id="source-password"
-          name="password"
-          label="Password"
-          type="password"
-          autoComplete="current-password"
+          id="source-url"
+          name="url"
+          label="iCal URL"
+          type="url"
+          placeholder="https://calendar.google.com/calendar/ical/..."
+          autoComplete="off"
           required
         />
       </FormDialog>
-    );
-  }
-
-  return (
-    <FormDialog
-      open={open}
-      onOpenChange={handleOpenChange}
-      title="Add Calendar Source"
-      description="Enter an iCal URL to import events from another calendar."
-      size="md"
-      error={error}
-      isSubmitting={isSubmitting}
-      submitLabel="Add Source"
-      submitVariant="primary"
-      onSubmit={handleSubmit}
-    >
-      <FormField
-        id="source-name"
-        name="name"
-        label="Name"
-        type="text"
-        placeholder="Work Calendar"
-        autoComplete="off"
-        required
+      <CredentialsDialog
+        open={credentialsOpen}
+        onOpenChange={setCredentialsOpen}
+        onSubmit={handleCredentialsSubmit}
       />
-      <FormField
-        id="source-url"
-        name="url"
-        label="iCal URL"
-        type="url"
-        placeholder="https://calendar.google.com/calendar/ical/..."
-        autoComplete="off"
-        required
-      />
-    </FormDialog>
+    </>
   );
 };
 
