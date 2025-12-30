@@ -112,7 +112,7 @@ const server = Bun.serve<BroadcastData>({
       return handleAuthRequest(url.pathname, request);
     }
 
-    if (url.pathname === "/socket") {
+    if (url.pathname === "/api/socket") {
       const token = url.searchParams.get("token");
       const userId = token ? validateSocketToken(token) : null;
 

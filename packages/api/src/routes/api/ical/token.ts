@@ -4,7 +4,7 @@ import { getUserIdentifierToken } from "../../../utils/user";
 import { baseUrl } from "../../../context";
 
 const getIcalUrl = (token: string): string | null => {
-  const url = new URL(`/cal/${token}.ics`, baseUrl);
+  const url = new URL(`/api/cal/${token}.ics`, baseUrl);
   return url.toString();
 };
 

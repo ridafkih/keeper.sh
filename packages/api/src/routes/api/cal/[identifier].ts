@@ -1,5 +1,5 @@
-import { withTracing } from "../../utils/middleware";
-import { generateUserCalendar, formatEventsAsIcal } from "../../utils/ical";
+import { withTracing } from "../../../utils/middleware";
+import { generateUserCalendar } from "../../../utils/ical";
 
 export const GET = withTracing(async ({ params }) => {
   const { identifier } = params;

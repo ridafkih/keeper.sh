@@ -67,10 +67,10 @@ There are five images currently available, two of them are designed for convenie
 | Name | Required | Description | Example(s) |
 | - | - | - | - |
 | BETTER_AUTH_URL | `true` | This should be equivalent to the base URL of the front-end, the same you use to navigate to the website on a browser. | `http://localhost:3000` |
-| API_URL | `true` | The URL that the Next.js backend will use to connect to the Bun API. | `http://localhost:3001`, `http://api:3001` |
-| WEBSOCKET_URL | `true` | The URL the client should use to connect to the WebSocket server hosted on the Bun API. | `ws://localhost:3001/socket` |
-| REDIS_URL | `true` | The URL that the API and Redis services will use to connect to Redis | `redis://localhost:6379`, `redis://username:password@redis:6379` |
-| DATABASE_URL | `true` | The URL that the API and Redis services will use to connect to PostgreSQL | `postgres://username:password@postgres:5432/database` |
+| API_URL | `true` | The URL that the Next.js backend will use to proxy requests to the Bun API. | `http://localhost:3001`, `http://api:3001` |
+| WEBSOCKET_URL | `true` | The URL the Bun API will return to clients for WebSocket connections. | `ws://localhost:3001/api/socket` |
+| REDIS_URL | `true` | The URL that the API and Cron services will use to connect to Redis. | `redis://localhost:6379`, `redis://username:password@redis:6379` |
+| DATABASE_URL | `true` | The URL that the API and Cron services will use to connect to PostgreSQL. | `postgres://username:password@postgres:5432/database` |
 | GOOGLE_CLIENT_ID | `false` | If you want to use Google OAuth, you must configure this. Reference instructions below. | `...` |
 | GOOGLE_CLIENT_SECRET | `false` | If you want to use Google OAuth, you must configure this. Reference instructions below. | `...` |
 | MICROSOFT_CLIENT_ID | `false` | If you want to use Microsoft OAuth, you must configure this. Reference instructions below. | `...` |
@@ -183,14 +183,13 @@ If you'd like to bring your own Redis and PostgreSQL, you can use the `keeper-se
 
 ```bash
 cat > .env << EOF
-# DATABASE_URL, REDIS_URL, API_URL, and WEBSOCKET_URL are required.
+# DATABASE_URL, REDIS_URL, and WEBSOCKET_URL are required.
 # *_CLIENT_ID and *_CLIENT_SECRET are optional.
 BETTER_AUTH_SECRET=$(openssl rand -base64 32)
 ENCRYPTION_KEY=$(openssl rand -base64 32)
 DATABASE_URL=postgres://keeper:keeper@postgres:5432/keeper
 REDIS_URL=redis://redis:6379
-API_URL=http://keeper:3001
-WEBSOCKET_URL=ws://localhost:3001/socket
+WEBSOCKET_URL=ws://localhost:3001/api/socket
 BETTER_AUTH_URL=http://localhost:3000
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
@@ -234,7 +233,6 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
-      API_URL: ${API_URL}
       WEBSOCKET_URL: ${WEBSOCKET_URL}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
@@ -275,7 +273,7 @@ cat > .env << EOF
 BETTER_AUTH_SECRET=$(openssl rand -base64 32)
 ENCRYPTION_KEY=$(openssl rand -base64 32)
 API_URL=http://api:3001
-WEBSOCKET_URL=ws://localhost:3001/socket
+WEBSOCKET_URL=ws://localhost:3001/api/socket
 POSTGRES_USER=keeper
 POSTGRES_PASSWORD=keeper
 POSTGRES_DB=keeper
@@ -322,6 +320,7 @@ services:
       API_PORT: 3001
       DATABASE_URL: postgres://keeper:keeper@postgres:5432/keeper
       REDIS_URL: redis://redis:6379
+      WEBSOCKET_URL: ${WEBSOCKET_URL}
       BETTER_AUTH_URL: ${DOMAIN:-http://localhost:3000}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
@@ -362,7 +361,6 @@ services:
     image: ghcr.io/ridafkih/keeper-web:latest
     environment:
       API_URL: ${API_URL}
-      WEBSOCKET_URL: ${WEBSOCKET_URL}
     ports:
       - "3000:3000"
     depends_on:
