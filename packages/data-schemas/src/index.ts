@@ -1,7 +1,7 @@
 import { type } from "arktype";
 
 export const proxyableMethods = type(
-  "'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD'",
+  "'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD' | 'OPTIONS'",
 );
 
 export type ProxyableMethods = typeof proxyableMethods.infer;

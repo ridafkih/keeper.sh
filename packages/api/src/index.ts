@@ -13,7 +13,13 @@ import { eq } from "drizzle-orm";
 import { join } from "node:path";
 import { socketTokens } from "./utils/state";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
-import { database, broadcastService, auth } from "./context";
+import {
+  database,
+  broadcastService,
+  auth,
+  trustedOrigins,
+  baseUrl,
+} from "./context";
 
 const validateSocketToken = (token: string): string | null => {
   const entry = socketTokens.get(token);
@@ -40,6 +46,61 @@ const clearSessionCookies = (response: Response): Response => {
     statusText: response.statusText,
     headers,
   });
+};
+
+type FetchHandler = (request: Request) => Promise<Response | undefined>;
+
+const withCors = (handler: FetchHandler): FetchHandler => {
+  const allowedOrigins = [...trustedOrigins];
+  if (baseUrl) allowedOrigins.push(baseUrl);
+
+  const isOriginAllowed = (origin: string | null): boolean => {
+    if (!origin) return false;
+    if (allowedOrigins.length === 0) return false;
+    return allowedOrigins.includes(origin);
+  };
+
+  const corsHeaders = (origin: string) => ({
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers":
+      "Content-Type, Authorization, X-Requested-With",
+  });
+
+  return async (request) => {
+    const origin = request.headers.get("Origin");
+
+    if (request.method === "OPTIONS") {
+      if (!origin || !isOriginAllowed(origin)) {
+        return new Response(null, { status: 403 });
+      }
+      return new Response(null, {
+        status: 204,
+        headers: {
+          ...corsHeaders(origin),
+          "Access-Control-Max-Age": "86400",
+        },
+      });
+    }
+
+    const response = await handler(request);
+
+    if (!response || !origin || !isOriginAllowed(origin)) {
+      return response;
+    }
+
+    const headers = new Headers(response.headers);
+    for (const [key, value] of Object.entries(corsHeaders(origin))) {
+      headers.set(key, value);
+    }
+
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  };
 };
 
 const handleAuthRequest = async (
@@ -102,64 +163,68 @@ const router = new Bun.FileSystemRouter({
   dir: join(import.meta.dirname, "routes"),
 });
 
+const handleRequest = async (
+  request: Request,
+): Promise<Response | undefined> => {
+  const url = new URL(request.url);
+
+  if (url.pathname.startsWith("/api/auth")) {
+    return handleAuthRequest(url.pathname, request);
+  }
+
+  if (url.pathname === "/api/socket") {
+    const token = url.searchParams.get("token");
+    const userId = token ? validateSocketToken(token) : null;
+
+    if (!userId) {
+      log.debug("socket upgrade unauthorized - invalid or missing token");
+      return new Response("Unauthorized", { status: 401 });
+    }
+
+    log.debug({ userId }, "socket upgrade authorized");
+
+    const upgraded = server.upgrade(request, {
+      data: { userId },
+    });
+
+    if (!upgraded) {
+      return new Response("WebSocket upgrade failed", { status: 500 });
+    }
+
+    return undefined;
+  }
+
+  const match = router.match(request);
+
+  if (!match) {
+    return new Response("Not found", { status: 404 });
+  }
+
+  const module: unknown = await import(match.filePath);
+
+  if (!isRouteModule(module)) {
+    return new Response("Internal server error", { status: 500 });
+  }
+
+  if (!isHttpMethod(request.method)) {
+    return new Response("Method not allowed", { status: 405 });
+  }
+
+  const handler = module[request.method];
+
+  if (!handler) {
+    return new Response("Method not allowed", { status: 405 });
+  }
+
+  return handler(request, match.params);
+};
+
 const server = Bun.serve<BroadcastData>({
   port: env.API_PORT,
   websocket: websocketHandler,
-  async fetch(request) {
-    const url = new URL(request.url);
-
-    if (url.pathname.startsWith("/api/auth")) {
-      return handleAuthRequest(url.pathname, request);
-    }
-
-    if (url.pathname === "/api/socket") {
-      const token = url.searchParams.get("token");
-      const userId = token ? validateSocketToken(token) : null;
-
-      if (!userId) {
-        log.debug("socket upgrade unauthorized - invalid or missing token");
-        return new Response("Unauthorized", { status: 401 });
-      }
-
-      log.debug({ userId }, "socket upgrade authorized");
-
-      const upgraded = server.upgrade(request, {
-        data: { userId },
-      });
-
-      if (!upgraded) {
-        return new Response("WebSocket upgrade failed", { status: 500 });
-      }
-
-      return undefined;
-    }
-
-    const match = router.match(request);
-
-    if (!match) {
-      return new Response("Not found", { status: 404 });
-    }
-
-    const module: unknown = await import(match.filePath);
-
-    if (!isRouteModule(module)) {
-      return new Response("Internal server error", { status: 500 });
-    }
-
-    if (!isHttpMethod(request.method)) {
-      return new Response("Method not allowed", { status: 405 });
-    }
-
-    const handler = module[request.method];
-
-    if (!handler) {
-      return new Response("Method not allowed", { status: 405 });
-    }
-
-    return handler(request, match.params);
-  },
+  fetch: withCors(handleRequest),
 });
 
 broadcastService.startSubscriber();
 
-log.info({ port: server.port }, "server started");
+log.info({ port: env.API_PORT }, "server started");

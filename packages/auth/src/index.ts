@@ -129,15 +129,13 @@ export const createAuth = (config: AuthConfig): AuthResult => {
     trustedOrigins,
     onAPIError: {
       onError(error: unknown) {
-        const body = "body" in error && error?.body;
-        const message =
-          "body" in body && typeof body?.message === "string"
-            ? body.message
-            : "";
+        if (typeof error !== "object" || error === null) return;
+        if (!("body" in error) || typeof error.body !== "object" || error.body === null) return;
+        if (!("message" in error.body) || typeof error.body.message !== "string") return;
 
-        if (message.toLowerCase().includes("invalid origin")) {
+        if (error.body.message.toLowerCase().includes("invalid origin")) {
           console.error(
-            "A request has failed due to an origin mismatch. If this was meant to be a valid request, please set the `TRUSTED_ORIGINS` environment variable to include the origin you intend on accessing Keeper from.\n\nThis should be a comma-delimited array of values, for more information please refer to the documentation on GitHub. https://github.com/ridafkih/keeper.sh#generate-keeper-standalone-environment-variables",
+            "A request has failed due to an origin mismatch. If this was meant to be a valid request, please set the `TRUSTED_ORIGINS` environment variable to include the origin you intend on accessing Keeper from.\n\nThis should be a comma-delimited array of values, for more information please refer to the documentation on GitHub. https://github.com/ridafkih/keeper.sh#accessing-keeper-from-non-localhost-urls",
           );
         }
       },
