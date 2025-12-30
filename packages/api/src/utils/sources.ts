@@ -16,11 +16,15 @@ export class SourceLimitError extends Error {
 }
 
 export class InvalidSourceUrlError extends Error {
+  public readonly authRequired: boolean;
+
   constructor(cause?: unknown) {
     if (cause instanceof CalendarFetchError) {
       super(cause.message);
+      this.authRequired = cause.authRequired;
     } else {
       super("Invalid calendar URL");
+      this.authRequired = false;
     }
     this.cause = cause;
   }

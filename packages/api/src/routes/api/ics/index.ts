@@ -28,7 +28,10 @@ export const POST = withTracing(
         return Response.json({ error: error.message }, { status: 402 });
       }
       if (error instanceof InvalidSourceUrlError) {
-        return Response.json({ error: error.message }, { status: 400 });
+        return Response.json(
+          { error: error.message, authRequired: error.authRequired },
+          { status: 400 },
+        );
       }
 
       log.error({ error }, "error parsing source body");
