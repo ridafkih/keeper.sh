@@ -9,10 +9,10 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  build:
+  build-core:
     strategy:
       matrix:
-        package: [api, cron, web, standalone, services]
+        package: [api, cron, web]
         arch: [amd64, arm64]
         include:
           - arch: amd64
@@ -50,15 +50,90 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.package }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.package }}-${{ matrix.arch }}
 
-  merge-manifests:
+  build-convenience:
+    strategy:
+      matrix:
+        package: [standalone, services]
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/keeper-${{ matrix.package }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref, '-') }}
+            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+          flavor: suffix=-${{ matrix.arch }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/${{ matrix.package }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.package }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.package }}-${{ matrix.arch }}
+
+  merge-core-manifests:
     runs-on: ubuntu-latest
-    needs: build
+    needs: build-core
     permissions:
       contents: read
       packages: write
     strategy:
       matrix:
-        package: [api, cron, web, standalone, services]
+        package: [api, cron, web]
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/keeper-${{ matrix.package }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref, '-') }}
+            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+      - name: Create multi-arch manifest
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          for tag in $TAGS; do
+            docker buildx imagetools create -t "$tag" \
+              "${tag}-amd64" \
+              "${tag}-arm64"
+          done
+
+  merge-convenience-manifests:
+    runs-on: ubuntu-latest
+    needs: build-convenience
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        package: [standalone, services]
     steps:
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -86,7 +161,7 @@ jobs:
 
   deploy-railway:
     runs-on: ubuntu-latest
-    needs: merge-manifests
+    needs: merge-core-manifests
     if: ${{ !contains(github.ref, '-') }}
     container: ghcr.io/railwayapp/cli:latest
     strategy:

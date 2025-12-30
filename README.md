@@ -64,19 +64,19 @@ There are five images currently available, two of them are designed for convenie
 
 ## Environment Variables
 
-| Name | Service(s) | Description | Example(s) |
-| - | - | - | - |
-| DATABASE_URL | `api`, `cron` | PostgreSQL connection URL. | `postgres://user:pass@postgres:5432/keeper` |
-| REDIS_URL | `api`, `cron` | Redis connection URL. | `redis://redis:6379` |
-| WEBSOCKET_URL | `api` | The URL the front-end will attempt to connect to the WebSocket using. | `ws://localhost:3001/api/socket` |
-| BETTER_AUTH_URL | `api` | The base URL of the front-end (used for auth redirects). | `http://localhost:3000` |
-| BETTER_AUTH_SECRET | `api` | Secret key for session signing. | `openssl rand -base64 32` |
-| API_URL | `web` | The URL the Next.js backend uses to proxy requests to the Bun API. | `http://api:3001` |
-| ENCRYPTION_KEY | `api`, `cron` | Key for encrypting CalDAV credentials at rest. | `openssl rand -base64 32` |
-| GOOGLE_CLIENT_ID | `api`, `cron` | Optional. Required for Google Calendar integration. | |
-| GOOGLE_CLIENT_SECRET | `api`, `cron` | Optional. Required for Google Calendar integration. | |
-| MICROSOFT_CLIENT_ID | `api`, `cron` | Optional. Required for Microsoft Outlook integration. | |
-| MICROSOFT_CLIENT_SECRET | `api`, `cron` | Optional. Required for Microsoft Outlook integration. | |
+| Name | Service(s) | Description |
+| - | - | - |
+| DATABASE_URL | `api`, `cron` | PostgreSQL connection URL.<br><br>e.g. `postgres://user:pass@postgres:5432/keeper` |
+| REDIS_URL | `api`, `cron` | Redis connection URL.<br><br>e.g. `redis://redis:6379` |
+| WEBSOCKET_URL | `api` | The URL the front-end will attempt to connect to the WebSocket using.<br><br>e.g. `ws://localhost:3001/api/socket` |
+| BETTER_AUTH_URL | `api` | The base URL of the front-end (used for auth redirects).<br><br>e.g. `http://localhost:3000` |
+| BETTER_AUTH_SECRET | `api` | Secret key for session signing.<br><br>e.g. `openssl rand -base64 32` |
+| API_URL | `web` | The URL the Next.js backend uses to proxy requests to the Bun API.<br><br>e.g. `http://api:3001` |
+| ENCRYPTION_KEY | `api`, `cron` | Key for encrypting CalDAV credentials at rest.<br><br>e.g. `openssl rand -base64 32` |
+| GOOGLE_CLIENT_ID | `api`, `cron` | Optional. Required for Google Calendar integration. |
+| GOOGLE_CLIENT_SECRET | `api`, `cron` | Optional. Required for Google Calendar integration. |
+| MICROSOFT_CLIENT_ID | `api`, `cron` | Optional. Required for Microsoft Outlook integration. |
+| MICROSOFT_CLIENT_SECRET | `api`, `cron` | Optional. Required for Microsoft Outlook integration. |
 
 > [!NOTE]
 > - `keeper-standalone` auto-configures everything, putting both the Next.js and Bun API behind a single port so you don't have to worry about the `API_URL` and `WEBSOCKET_URL` environment variables.
