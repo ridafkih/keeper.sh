@@ -14,16 +14,27 @@ export const GOOGLE_CALENDAR_SCOPE =
 export const GOOGLE_EMAIL_SCOPE =
   "https://www.googleapis.com/auth/userinfo.email";
 
-const pendingStates = new Map<string, { userId: string; expiresAt: number }>();
+interface PendingState {
+  userId: string;
+  destinationId: string | null;
+  expiresAt: number;
+}
 
-export const generateState = (userId: string): string => {
+export interface ValidatedState {
+  userId: string;
+  destinationId: string | null;
+}
+
+const pendingStates = new Map<string, PendingState>();
+
+export const generateState = (userId: string, destinationId?: string): string => {
   const state = crypto.randomUUID();
   const expiresAt = Date.now() + 10 * 60 * 1000;
-  pendingStates.set(state, { userId, expiresAt });
+  pendingStates.set(state, { userId, destinationId: destinationId ?? null, expiresAt });
   return state;
 };
 
-export const validateState = (state: string): string | null => {
+export const validateState = (state: string): ValidatedState | null => {
   const entry = pendingStates.get(state);
   if (!entry) return null;
 
@@ -31,7 +42,7 @@ export const validateState = (state: string): string | null => {
 
   if (Date.now() > entry.expiresAt) return null;
 
-  return entry.userId;
+  return { userId: entry.userId, destinationId: entry.destinationId };
 };
 
 export interface GoogleOAuthCredentials {
@@ -42,6 +53,7 @@ export interface GoogleOAuthCredentials {
 export interface AuthorizationUrlOptions {
   callbackUrl: string;
   scopes?: string[];
+  destinationId?: string;
 }
 
 export interface GoogleOAuthService {
@@ -59,7 +71,7 @@ export const createGoogleOAuthService = (
     userId: string,
     options: AuthorizationUrlOptions,
   ): string => {
-    const state = generateState(userId);
+    const state = generateState(userId, options.destinationId);
     const scopes = options.scopes ?? [GOOGLE_CALENDAR_SCOPE, GOOGLE_EMAIL_SCOPE];
 
     const url = new URL(GOOGLE_AUTH_URL);

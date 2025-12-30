@@ -49,7 +49,7 @@ export const fetchUserInfo = async (provider: string, accessToken: string) => {
   return oauthProvider.fetchUserInfo(accessToken);
 };
 
-export const validateState = (state: string): string | null => {
+export const validateState = (state: string) => {
   return oauthProviders.validateState(state);
 };
 
@@ -185,6 +185,18 @@ export const deleteCalendarDestination = async (
     .returning({ id: calendarDestinationsTable.id });
 
   return result.length > 0;
+};
+
+export const getDestinationAccountId = async (
+  destinationId: string,
+): Promise<string | null> => {
+  const [destination] = await database
+    .select({ accountId: calendarDestinationsTable.accountId })
+    .from(calendarDestinationsTable)
+    .where(eq(calendarDestinationsTable.id, destinationId))
+    .limit(1);
+
+  return destination?.accountId ?? null;
 };
 
 export const saveCalDAVDestination = async (

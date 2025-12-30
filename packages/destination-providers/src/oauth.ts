@@ -4,6 +4,7 @@ import {
   validateState as validateGoogleState,
   hasRequiredScopes as hasRequiredGoogleScopes,
   type GoogleOAuthCredentials,
+  type ValidatedState,
 } from "@keeper.sh/oauth-google";
 import {
   createMicrosoftOAuthService,
@@ -13,9 +14,12 @@ import {
   type MicrosoftOAuthCredentials,
 } from "@keeper.sh/oauth-microsoft";
 
+export type { ValidatedState };
+
 export interface AuthorizationUrlOptions {
   callbackUrl: string;
   scopes?: string[];
+  destinationId?: string;
 }
 
 export interface NormalizedUserInfo {
@@ -46,7 +50,7 @@ export interface OAuthProvidersConfig {
 export interface OAuthProviders {
   getProvider: (providerId: string) => OAuthProvider | undefined;
   isOAuthProvider: (providerId: string) => boolean;
-  validateState: (state: string) => string | null;
+  validateState: (state: string) => ValidatedState | null;
   hasRequiredScopes: (providerId: string, grantedScopes: string) => boolean;
 }
 
@@ -89,12 +93,12 @@ export const createOAuthProviders = (config: OAuthProvidersConfig): OAuthProvide
     return providerId in providers;
   };
 
-  const validateState = (state: string): string | null => {
-    const googleUserId = validateGoogleState(state);
-    if (googleUserId) return googleUserId;
+  const validateState = (state: string): ValidatedState | null => {
+    const googleResult = validateGoogleState(state);
+    if (googleResult) return googleResult;
 
-    const microsoftUserId = validateMicrosoftState(state);
-    if (microsoftUserId) return microsoftUserId;
+    const microsoftResult = validateMicrosoftState(state);
+    if (microsoftResult) return microsoftResult;
 
     return null;
   };

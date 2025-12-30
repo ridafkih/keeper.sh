@@ -5,6 +5,7 @@ import {
   saveCalendarDestination,
   validateState,
   hasRequiredScopes,
+  getDestinationAccountId,
 } from "./destinations";
 import { triggerDestinationSync } from "./sync";
 import { baseUrl } from "../context";
@@ -78,11 +79,13 @@ export const handleOAuthCallback = async (
     throw new OAuthError("Missing code or state", errorUrl);
   }
 
-  const userId = validateState(params.state);
-  if (!userId) {
+  const validatedState = validateState(params.state);
+  if (!validatedState) {
     log.warn("Invalid or expired state");
     throw new OAuthError("Invalid or expired state", errorUrl);
   }
+
+  const { userId, destinationId } = validatedState;
 
   const callbackUrl = new URL(
     `/api/destinations/callback/${params.provider}`,
@@ -101,6 +104,22 @@ export const handleOAuthCallback = async (
 
   const userInfo = await fetchUserInfo(params.provider, tokens.access_token);
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
+
+  if (destinationId) {
+    const existingAccountId = await getDestinationAccountId(destinationId);
+    if (existingAccountId && existingAccountId !== userInfo.id) {
+      log.warn(
+        { userId, destinationId, expectedAccountId: existingAccountId, actualAccountId: userInfo.id },
+        "reauthentication attempted with different account",
+      );
+      throw new OAuthError(
+        "Please reauthenticate with the same account",
+        buildRedirectUrl("/dashboard/integrations", {
+          error: "Please reauthenticate with the same account that was originally connected.",
+        }),
+      );
+    }
+  }
 
   const needsReauthentication = !hasRequiredScopes(params.provider, tokens.scope);
 

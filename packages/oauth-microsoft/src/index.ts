@@ -15,16 +15,27 @@ export const MICROSOFT_CALENDAR_SCOPE = "Calendars.ReadWrite";
 export const MICROSOFT_USER_SCOPE = "User.Read";
 export const MICROSOFT_OFFLINE_SCOPE = "offline_access";
 
-const pendingStates = new Map<string, { userId: string; expiresAt: number }>();
+interface PendingState {
+  userId: string;
+  destinationId: string | null;
+  expiresAt: number;
+}
 
-export const generateState = (userId: string): string => {
+export interface ValidatedState {
+  userId: string;
+  destinationId: string | null;
+}
+
+const pendingStates = new Map<string, PendingState>();
+
+export const generateState = (userId: string, destinationId?: string): string => {
   const state = crypto.randomUUID();
   const expiresAt = Date.now() + 10 * 60 * 1000;
-  pendingStates.set(state, { userId, expiresAt });
+  pendingStates.set(state, { userId, destinationId: destinationId ?? null, expiresAt });
   return state;
 };
 
-export const validateState = (state: string): string | null => {
+export const validateState = (state: string): ValidatedState | null => {
   const entry = pendingStates.get(state);
   if (!entry) return null;
 
@@ -32,7 +43,7 @@ export const validateState = (state: string): string | null => {
 
   if (Date.now() > entry.expiresAt) return null;
 
-  return entry.userId;
+  return { userId: entry.userId, destinationId: entry.destinationId };
 };
 
 export interface MicrosoftOAuthCredentials {
@@ -43,6 +54,7 @@ export interface MicrosoftOAuthCredentials {
 export interface AuthorizationUrlOptions {
   callbackUrl: string;
   scopes?: string[];
+  destinationId?: string;
 }
 
 export interface MicrosoftOAuthService {
@@ -60,7 +72,7 @@ export const createMicrosoftOAuthService = (
     userId: string,
     options: AuthorizationUrlOptions,
   ): string => {
-    const state = generateState(userId);
+    const state = generateState(userId, options.destinationId);
     const scopes = options.scopes ?? [
       MICROSOFT_CALENDAR_SCOPE,
       MICROSOFT_USER_SCOPE,

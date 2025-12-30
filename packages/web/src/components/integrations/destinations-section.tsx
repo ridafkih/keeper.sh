@@ -290,10 +290,11 @@ export const DestinationsSection = () => {
   const { data: subscription } = useSubscription();
   const { data: syncStatus } = useSyncStatus();
 
+  const workingAccountsCount =
+    accounts?.filter((account) => !account.needsReauthentication).length ?? 0;
   const isAtLimit =
     subscription?.plan === "free" &&
-    accounts &&
-    accounts.length >= FREE_DESTINATION_LIMIT;
+    workingAccountsCount >= FREE_DESTINATION_LIMIT;
 
   const error = searchParams.get("error");
   const errorHandled = useRef(false);
@@ -331,16 +332,19 @@ export const DestinationsSection = () => {
     };
   };
 
-  const handleConnect = (providerId: string) => {
+  const handleConnect = (providerId: string, destinationId?: string) => {
     if (isCalDAVProvider(providerId)) {
       setCaldavProvider(providerId);
       setCaldavDialogOpen(true);
       return;
     }
 
-    setLoadingId(providerId);
+    setLoadingId(destinationId ?? providerId);
     const url = new URL("/api/destinations/authorize", window.location.origin);
     url.searchParams.set("provider", providerId);
+    if (destinationId) {
+      url.searchParams.set("destinationId", destinationId);
+    }
     window.location.href = url.toString();
   };
 
@@ -472,7 +476,7 @@ export const DestinationsSection = () => {
                 isConnected={true}
                 needsReauthentication={account.needsReauthentication}
                 isLoading={loadingId === account.id}
-                onConnect={() => handleConnect(config.id)}
+                onConnect={() => handleConnect(config.id, account.id)}
                 onDisconnect={() => handleDisconnect(account.id, config.name)}
                 syncStatus={getSyncStatus(account.id)}
               />
