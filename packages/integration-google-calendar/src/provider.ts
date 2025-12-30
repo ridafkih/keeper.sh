@@ -35,11 +35,13 @@ const isRateLimitError = (error: unknown): boolean => {
   );
 };
 
-const isScopeError = (
+const isAuthError = (
   status: number,
   error: { code?: number; status?: string } | undefined,
 ): boolean => {
-  return status === 403 && error?.status === "PERMISSION_DENIED";
+  if (status === 403 && error?.status === "PERMISSION_DENIED") return true;
+  if (status === 401 && error?.status === "UNAUTHENTICATED") return true;
+  return false;
 };
 
 export interface OAuthProvider {
@@ -258,7 +260,7 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
           "failed to list events",
         );
 
-        if (isScopeError(response.status, error)) {
+        if (isAuthError(response.status, error)) {
           await this.markNeedsReauthentication();
         }
 
@@ -327,6 +329,11 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
         { status: response.status, error },
         "create event failed",
       );
+
+      if (isAuthError(response.status, error)) {
+        await this.markNeedsReauthentication();
+      }
+
       return {
         success: false,
         error: error?.message ?? response.statusText,
@@ -364,6 +371,11 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
           { status: response.status, uid, error },
           "delete event failed",
         );
+
+        if (isAuthError(response.status, error)) {
+          await this.markNeedsReauthentication();
+        }
+
         return {
           success: false,
           error: error?.message ?? response.statusText,

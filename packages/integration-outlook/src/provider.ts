@@ -36,13 +36,18 @@ const isRateLimitError = (error: unknown): boolean => {
   return error.message.includes("429") || error.message.includes("throttled");
 };
 
-const isScopeError = (
+const isAuthError = (
   status: number,
   error: { code?: string } | undefined,
 ): boolean => {
-  if (status !== 403) return false;
   const code = error?.code;
-  return code === "Authorization_RequestDenied" || code === "ErrorAccessDenied";
+  if (status === 403) {
+    return code === "Authorization_RequestDenied" || code === "ErrorAccessDenied";
+  }
+  if (status === 401) {
+    return code === "InvalidAuthenticationToken";
+  }
+  return false;
 };
 
 export interface OAuthProvider {
@@ -258,7 +263,7 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
           "failed to list events",
         );
 
-        if (isScopeError(response.status, error)) {
+        if (isAuthError(response.status, error)) {
           await this.markNeedsReauthentication();
         }
 
@@ -319,6 +324,11 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
         { status: response.status, error },
         "create event failed",
       );
+
+      if (isAuthError(response.status, error)) {
+        await this.markNeedsReauthentication();
+      }
+
       return {
         success: false,
         error: error?.message ?? response.statusText,
@@ -347,6 +357,11 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
           { status: response.status, eventId, error },
           "delete event failed",
         );
+
+        if (isAuthError(response.status, error)) {
+          await this.markNeedsReauthentication();
+        }
+
         return {
           success: false,
           error: error?.message ?? response.statusText,
