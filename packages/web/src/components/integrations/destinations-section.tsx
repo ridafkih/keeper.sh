@@ -62,6 +62,7 @@ const isConnectable = (destination: DestinationConfig): boolean =>
 interface DestinationActionProps {
   comingSoon?: boolean;
   isConnected: boolean;
+  needsReauthentication: boolean;
   isLoading: boolean;
   onConnect: () => void;
   onDisconnect: () => void;
@@ -70,6 +71,7 @@ interface DestinationActionProps {
 const DestinationAction = ({
   comingSoon,
   isConnected,
+  needsReauthentication,
   isLoading,
   onConnect,
   onDisconnect,
@@ -77,6 +79,31 @@ const DestinationAction = ({
   if (comingSoon) {
     return (
       <TextMuted className="ml-auto px-2 py-1 text-xs">Coming soon</TextMuted>
+    );
+  }
+
+  if (isConnected && needsReauthentication) {
+    return (
+      <Menu.Root>
+        <GhostButton
+          render={<Menu.Trigger />}
+          disabled={isLoading}
+          className="flex items-center gap-1.5 text-warning"
+        >
+          {!isLoading && <span className="size-1.5 rounded-full bg-warning" />}
+          {isLoading ? "..." : "Needs Reauthentication"}
+        </GhostButton>
+        <Menu.Portal>
+          <Menu.Positioner sideOffset={4} align="end">
+            <MenuPopup minWidth="md">
+              <MenuItem onClick={onConnect}>Reauthenticate</MenuItem>
+              <MenuItem variant="danger" onClick={onDisconnect}>
+                Disconnect
+              </MenuItem>
+            </MenuPopup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      </Menu.Root>
     );
   }
 
@@ -166,6 +193,7 @@ interface DestinationItemProps {
   destination: DestinationConfig & { name: string };
   syncStatus?: SyncStatusDisplayProps;
   isConnected: boolean;
+  needsReauthentication: boolean;
   isLoading: boolean;
   onConnect: () => void;
   onDisconnect: () => Promise<void>;
@@ -174,6 +202,7 @@ interface DestinationItemProps {
 const DestinationItem = ({
   destination,
   isConnected,
+  needsReauthentication,
   isLoading,
   onConnect,
   onDisconnect,
@@ -201,11 +230,14 @@ const DestinationItem = ({
             <TextLabel as="h2" className="tracking-tight">
               {destination.name}
             </TextLabel>
-            {isConnected && <SyncStatusText syncStatus={syncStatus} />}
+            {isConnected && !needsReauthentication && (
+              <SyncStatusText syncStatus={syncStatus} />
+            )}
           </div>
           <DestinationAction
             comingSoon={destination.comingSoon}
             isConnected={isConnected}
+            needsReauthentication={needsReauthentication}
             isLoading={isLoading}
             onConnect={onConnect}
             onDisconnect={open}
@@ -438,6 +470,7 @@ export const DestinationsSection = () => {
                   name: account.email ?? config.name,
                 }}
                 isConnected={true}
+                needsReauthentication={account.needsReauthentication}
                 isLoading={loadingId === account.id}
                 onConnect={() => handleConnect(config.id)}
                 onDisconnect={() => handleDisconnect(account.id, config.name)}
