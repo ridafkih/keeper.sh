@@ -35,6 +35,13 @@ const isRateLimitError = (error: unknown): boolean => {
   );
 };
 
+const isScopeError = (
+  status: number,
+  error: { code?: number; status?: string } | undefined,
+): boolean => {
+  return status === 403 && error?.status === "PERMISSION_DENIED";
+};
+
 export interface OAuthProvider {
   refreshAccessToken: (
     refreshToken: string,
@@ -111,6 +118,15 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
       Authorization: `Bearer ${this.currentAccessToken}`,
       "Content-Type": "application/json",
     };
+  }
+
+  private async markNeedsReauthentication(): Promise<void> {
+    const { database, destinationId } = this.config;
+    this.childLog.warn({ destinationId }, "marking destination as needing reauthentication");
+    await database
+      .update(calendarDestinationsTable)
+      .set({ needsReauthentication: true })
+      .where(eq(calendarDestinationsTable.id, destinationId));
   }
 
   private async ensureValidToken(): Promise<void> {
@@ -241,6 +257,11 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
           { status: response.status, error },
           "failed to list events",
         );
+
+        if (isScopeError(response.status, error)) {
+          await this.markNeedsReauthentication();
+        }
+
         throw new Error(error?.message ?? response.statusText);
       }
 
