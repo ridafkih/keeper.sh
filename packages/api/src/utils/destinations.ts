@@ -13,6 +13,10 @@ export const isOAuthProvider = (provider: string): boolean => {
   return oauthProviders.isOAuthProvider(provider);
 };
 
+export const hasRequiredScopes = (provider: string, grantedScopes: string): boolean => {
+  return oauthProviders.hasRequiredScopes(provider, grantedScopes);
+};
+
 export const getAuthorizationUrl = (
   provider: string,
   userId: string,
@@ -53,6 +57,7 @@ interface CalendarDestination {
   id: string;
   provider: string;
   email: string | null;
+  needsReauthentication: boolean;
 }
 
 export const saveCalendarDestination = async (
@@ -63,6 +68,7 @@ export const saveCalendarDestination = async (
   accessToken: string,
   refreshToken: string,
   expiresAt: Date,
+  needsReauthentication: boolean = false,
 ): Promise<void> => {
   const [existingDestination] = await database
     .select({
@@ -95,7 +101,7 @@ export const saveCalendarDestination = async (
 
     await database
       .update(calendarDestinationsTable)
-      .set({ email })
+      .set({ email, needsReauthentication })
       .where(eq(calendarDestinationsTable.id, existingDestination.id));
 
     await database
@@ -124,6 +130,7 @@ export const saveCalendarDestination = async (
         accountId,
         email,
         oauthCredentialId: credential.id,
+        needsReauthentication,
       })
       .onConflictDoUpdate({
         target: [
@@ -133,6 +140,7 @@ export const saveCalendarDestination = async (
         set: {
           email,
           oauthCredentialId: credential.id,
+          needsReauthentication,
         },
       })
       .returning({ id: calendarDestinationsTable.id });
@@ -154,6 +162,7 @@ export const listCalendarDestinations = async (
       id: calendarDestinationsTable.id,
       provider: calendarDestinationsTable.provider,
       email: calendarDestinationsTable.email,
+      needsReauthentication: calendarDestinationsTable.needsReauthentication,
     })
     .from(calendarDestinationsTable)
     .where(eq(calendarDestinationsTable.userId, userId));

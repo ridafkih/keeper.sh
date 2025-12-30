@@ -98,6 +98,7 @@ export const calendarDestinationsTable = pgTable(
     caldavCredentialId: uuid().references(() => caldavCredentialsTable.id, {
       onDelete: "cascade",
     }),
+    needsReauthentication: boolean().notNull().default(false),
     createdAt: timestamp().notNull().defaultNow(),
     updatedAt: timestamp().notNull().defaultNow().$onUpdate(() => new Date()),
   },

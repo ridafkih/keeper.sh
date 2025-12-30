@@ -149,4 +149,13 @@ export const fetchUserInfo = async (
   return microsoftUserInfoSchema.assert(body);
 };
 
+/**
+ * Checks if the granted scopes include all required scopes for calendar operations.
+ * Microsoft returns scopes as a space-separated string.
+ */
+export const hasRequiredScopes = (grantedScopes: string): boolean => {
+  const scopes = grantedScopes.toLowerCase().split(" ");
+  return scopes.includes(MICROSOFT_CALENDAR_SCOPE.toLowerCase());
+};
+
 export type { MicrosoftTokenResponse, MicrosoftUserInfo };

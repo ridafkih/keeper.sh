@@ -144,4 +144,13 @@ export const fetchUserInfo = async (
   return googleUserInfoSchema.assert(body);
 };
 
+/**
+ * Checks if the granted scopes include all required scopes for calendar operations.
+ * Google returns scopes as a space-separated string.
+ */
+export const hasRequiredScopes = (grantedScopes: string): boolean => {
+  const scopes = grantedScopes.split(" ");
+  return scopes.includes(GOOGLE_CALENDAR_SCOPE);
+};
+
 export type { GoogleTokenResponse, GoogleUserInfo };

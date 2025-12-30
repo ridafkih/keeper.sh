@@ -2,12 +2,14 @@ import {
   createGoogleOAuthService,
   fetchUserInfo as fetchGoogleUserInfo,
   validateState as validateGoogleState,
+  hasRequiredScopes as hasRequiredGoogleScopes,
   type GoogleOAuthCredentials,
 } from "@keeper.sh/oauth-google";
 import {
   createMicrosoftOAuthService,
   fetchUserInfo as fetchMicrosoftUserInfo,
   validateState as validateMicrosoftState,
+  hasRequiredScopes as hasRequiredMicrosoftScopes,
   type MicrosoftOAuthCredentials,
 } from "@keeper.sh/oauth-microsoft";
 
@@ -25,6 +27,7 @@ export interface OAuthTokens {
   access_token: string;
   refresh_token?: string;
   expires_in: number;
+  scope: string;
 }
 
 export interface OAuthProvider {
@@ -32,6 +35,7 @@ export interface OAuthProvider {
   exchangeCodeForTokens: (code: string, callbackUrl: string) => Promise<OAuthTokens>;
   fetchUserInfo: (accessToken: string) => Promise<NormalizedUserInfo>;
   refreshAccessToken: (refreshToken: string) => Promise<OAuthTokens>;
+  hasRequiredScopes: (grantedScopes: string) => boolean;
 }
 
 export interface OAuthProvidersConfig {
@@ -43,6 +47,7 @@ export interface OAuthProviders {
   getProvider: (providerId: string) => OAuthProvider | undefined;
   isOAuthProvider: (providerId: string) => boolean;
   validateState: (state: string) => string | null;
+  hasRequiredScopes: (providerId: string, grantedScopes: string) => boolean;
 }
 
 export const createOAuthProviders = (config: OAuthProvidersConfig): OAuthProviders => {
@@ -58,6 +63,7 @@ export const createOAuthProviders = (config: OAuthProvidersConfig): OAuthProvide
         const info = await fetchGoogleUserInfo(accessToken);
         return { id: info.id, email: info.email };
       },
+      hasRequiredScopes: hasRequiredGoogleScopes,
     };
   }
 
@@ -71,6 +77,7 @@ export const createOAuthProviders = (config: OAuthProvidersConfig): OAuthProvide
         const info = await fetchMicrosoftUserInfo(accessToken);
         return { id: info.id, email: info.mail ?? info.userPrincipalName ?? "" };
       },
+      hasRequiredScopes: hasRequiredMicrosoftScopes,
     };
   }
 
@@ -92,5 +99,11 @@ export const createOAuthProviders = (config: OAuthProvidersConfig): OAuthProvide
     return null;
   };
 
-  return { getProvider, isOAuthProvider, validateState };
+  const hasRequiredScopes = (providerId: string, grantedScopes: string): boolean => {
+    const provider = providers[providerId];
+    if (!provider) return false;
+    return provider.hasRequiredScopes(grantedScopes);
+  };
+
+  return { getProvider, isOAuthProvider, validateState, hasRequiredScopes };
 };

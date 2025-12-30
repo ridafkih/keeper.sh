@@ -4,6 +4,7 @@ import {
   fetchUserInfo,
   saveCalendarDestination,
   validateState,
+  hasRequiredScopes,
 } from "./destinations";
 import { triggerDestinationSync } from "./sync";
 import { baseUrl } from "../context";
@@ -101,6 +102,15 @@ export const handleOAuthCallback = async (
   const userInfo = await fetchUserInfo(params.provider, tokens.access_token);
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
 
+  const needsReauthentication = !hasRequiredScopes(params.provider, tokens.scope);
+
+  if (needsReauthentication) {
+    log.warn(
+      { userId, provider: params.provider, grantedScopes: tokens.scope },
+      "user did not grant required scopes",
+    );
+  }
+
   await saveCalendarDestination(
     userId,
     params.provider,
@@ -109,10 +119,11 @@ export const handleOAuthCallback = async (
     tokens.access_token,
     tokens.refresh_token,
     expiresAt,
+    needsReauthentication,
   );
 
   log.info(
-    { userId, provider: params.provider },
+    { userId, provider: params.provider, needsReauthentication },
     "calendar destination connected",
   );
 

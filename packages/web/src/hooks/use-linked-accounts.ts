@@ -4,12 +4,14 @@ interface LinkedAccount {
   id: string;
   providerId: string;
   email: string | null;
+  needsReauthentication: boolean;
 }
 
 interface DestinationResponse {
   id: string;
   provider: string;
   email: string | null;
+  needsReauthentication: boolean;
 }
 
 const fetchLinkedAccounts = async (): Promise<LinkedAccount[]> => {
@@ -20,6 +22,7 @@ const fetchLinkedAccounts = async (): Promise<LinkedAccount[]> => {
     id: destination.id,
     providerId: destination.provider,
     email: destination.email,
+    needsReauthentication: destination.needsReauthentication,
   }));
 };
 
