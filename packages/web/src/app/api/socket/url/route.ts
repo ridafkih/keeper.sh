@@ -1,16 +1,22 @@
 import { NextRequest } from "next/server";
 import env from "@keeper.sh/env/next/backend";
 
+const getBaseUrl = (request: NextRequest) => {
+  if (env.API_URL) return env.API_URL;
+  const protocol =
+    request.headers.get("x-forwarded-proto") === "https" ? "https:" : "http:";
+  return `${protocol}//${request.headers.get("host")}`;
+};
+
+const getSocketUrl = (request: NextRequest) => {
+  const url = new URL("/socket", getBaseUrl(request));
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  return url;
+};
+
 export const GET = async (request: NextRequest) => {
-  if (!env.API_URL) {
-    return new Response(null, { status: 501 });
-  }
-
-  const apiUrl = new URL("/api/socket/token", env.API_URL);
-
-  const response = await fetch(apiUrl.toString(), {
-    headers: request.headers,
-  });
+  const tokenUrl = new URL("/api/socket/token", getBaseUrl(request));
+  const response = await fetch(tokenUrl, { headers: request.headers });
 
   if (!response.ok) {
     return new Response("Failed to get socket token", {
@@ -19,19 +25,8 @@ export const GET = async (request: NextRequest) => {
   }
 
   const { token } = await response.json();
-
-  const host = request.headers.get("host");
-  if (!host) {
-    return new Response("Missing host header", { status: 400 });
-  }
-
-  const protocol =
-    request.headers.get("x-forwarded-proto") === "https" ? "wss" : "ws";
-
-  const socketUrl = new URL("/socket", `${protocol}://${host}`);
+  const socketUrl = getSocketUrl(request);
   socketUrl.searchParams.set("token", token);
 
-  const socketUrlString = socketUrl.toString();
-
-  return Response.json({ socketUrl: socketUrlString });
+  return Response.json({ socketUrl: socketUrl.toString() });
 };
