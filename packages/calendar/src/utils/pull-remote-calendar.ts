@@ -23,9 +23,30 @@ export class CalendarFetchError extends Error {
   }
 }
 
+interface ParsedUrl {
+  url: string;
+  headers: Record<string, string>;
+}
+
+const parseUrlWithCredentials = (url: string): ParsedUrl => {
+  const parsed = new URL(url);
+  const headers: Record<string, string> = {};
+
+  if (parsed.username || parsed.password) {
+    const credentials = `${decodeURIComponent(parsed.username)}:${decodeURIComponent(parsed.password)}`;
+    headers["Authorization"] = `Basic ${Buffer.from(credentials).toString("base64")}`;
+    parsed.username = "";
+    parsed.password = "";
+  }
+
+  return { url: parsed.toString(), headers };
+};
+
 const fetchRemoteText = async (url: string) => {
   log.trace("fetchRemoteText for '%s' started", url);
-  const response = await fetch(url);
+
+  const { url: cleanUrl, headers } = parseUrlWithCredentials(url);
+  const response = await fetch(cleanUrl, { headers });
 
   if (!response.ok) {
     log.debug(
