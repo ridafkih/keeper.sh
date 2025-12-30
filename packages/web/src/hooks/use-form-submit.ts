@@ -4,6 +4,7 @@ interface FormSubmitState<TResult> {
   isSubmitting: boolean;
   error: string | null;
   submit: (handler: () => Promise<TResult>) => Promise<TResult | undefined>;
+  setError: (error: string | null) => void;
   clearError: () => void;
 }
 
@@ -31,5 +32,5 @@ export function useFormSubmit<TResult = void>(): FormSubmitState<TResult> {
     }
   };
 
-  return { isSubmitting, error, submit, clearError };
+  return { isSubmitting, error, submit, setError, clearError };
 }

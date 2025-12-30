@@ -78,15 +78,43 @@ const UpgradeBanner = () => (
 interface AddSourceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAdd: (name: string, url: string) => Promise<void>;
+  onAdd: (name: string, url: string) => Promise<{ authRequired?: boolean }>;
 }
+
+const buildAuthenticatedUrl = (
+  url: string,
+  username: string,
+  password: string,
+): string => {
+  const parsed = new URL(url);
+  parsed.username = encodeURIComponent(username);
+  parsed.password = encodeURIComponent(password);
+  return parsed.toString();
+};
 
 const AddSourceDialog = ({
   open,
   onOpenChange,
   onAdd,
 }: AddSourceDialogProps) => {
-  const { isSubmitting, error, submit } = useFormSubmit<boolean>();
+  const { isSubmitting, error, setError, submit } = useFormSubmit<boolean>();
+  const [showCredentials, setShowCredentials] = useState(false);
+  const [pendingUrl, setPendingUrl] = useState("");
+  const [pendingName, setPendingName] = useState("");
+
+  const resetState = () => {
+    setShowCredentials(false);
+    setPendingUrl("");
+    setPendingName("");
+    setError(null);
+  };
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      resetState();
+    }
+    onOpenChange(nextOpen);
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -100,19 +128,89 @@ const AddSourceDialog = ({
         throw new Error("There was an issue with the submitted data");
       }
 
-      await onAdd(name, url);
+      const response = await onAdd(name, url);
+
+      if (response.authRequired) {
+        setPendingUrl(url);
+        setPendingName(name);
+        setShowCredentials(true);
+        return false;
+      }
+
       return true;
     });
 
     if (result) {
-      onOpenChange(false);
+      handleOpenChange(false);
     }
   };
+
+  const handleCredentialsSubmit = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+
+    const formData = new FormData(event.currentTarget);
+    const username = formData.get("username");
+    const password = formData.get("password");
+
+    const result = await submit(async () => {
+      if (typeof username !== "string" || typeof password !== "string") {
+        throw new Error("There was an issue with the submitted data");
+      }
+
+      const authenticatedUrl = buildAuthenticatedUrl(
+        pendingUrl,
+        username,
+        password,
+      );
+      await onAdd(pendingName, authenticatedUrl);
+      return true;
+    });
+
+    if (result) {
+      handleOpenChange(false);
+    }
+  };
+
+  if (showCredentials) {
+    return (
+      <FormDialog
+        open={open}
+        onOpenChange={handleOpenChange}
+        title="Authentication Required"
+        description="This calendar requires credentials to access."
+        size="md"
+        error={error}
+        isSubmitting={isSubmitting}
+        submitLabel="Add Source"
+        submitVariant="primary"
+        onSubmit={handleCredentialsSubmit}
+      >
+        <FormField
+          id="source-username"
+          name="username"
+          label="Username"
+          type="text"
+          autoComplete="username"
+          required
+        />
+        <FormField
+          id="source-password"
+          name="password"
+          label="Password"
+          type="password"
+          autoComplete="current-password"
+          required
+        />
+      </FormDialog>
+    );
+  }
 
   return (
     <FormDialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       title="Add Calendar Source"
       description="Enter an iCal URL to import events from another calendar."
       size="md"
@@ -155,7 +253,10 @@ export const CalendarSourcesSection = () => {
     sources &&
     sources.length >= FREE_SOURCE_LIMIT;
 
-  const handleAddSource = async (name: string, url: string) => {
+  const handleAddSource = async (
+    name: string,
+    url: string,
+  ): Promise<{ authRequired?: boolean }> => {
     const response = await fetch("/api/ics", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -168,11 +269,17 @@ export const CalendarSourcesSection = () => {
 
     if (!response.ok) {
       const data = await response.json();
+
+      if (data.authRequired) {
+        return { authRequired: true };
+      }
+
       throw new Error(data.error || "Failed to add source");
     }
 
     await mutate();
     toastManager.add({ title: "Calendar source added" });
+    return {};
   };
 
   const handleRemoveSource = async (id: string) => {
