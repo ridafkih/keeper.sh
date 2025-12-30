@@ -1,5 +1,8 @@
 export * from "./types";
-export { pullRemoteCalendar } from "./utils/pull-remote-calendar";
+export {
+  pullRemoteCalendar,
+  CalendarFetchError,
+} from "./utils/pull-remote-calendar";
 export { parseIcsEvents } from "./utils/parse-ics-events";
 export { diffEvents } from "./utils/diff-events";
 export { createSnapshot } from "./utils/create-snapshot";

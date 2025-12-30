@@ -1,5 +1,9 @@
 import { remoteICalSourcesTable } from "@keeper.sh/database/schema";
-import { pullRemoteCalendar, fetchAndSyncSource } from "@keeper.sh/calendar";
+import {
+  pullRemoteCalendar,
+  fetchAndSyncSource,
+  CalendarFetchError,
+} from "@keeper.sh/calendar";
 import { log } from "@keeper.sh/log";
 import { eq, and } from "drizzle-orm";
 import { triggerDestinationSync } from "./sync";
@@ -13,7 +17,11 @@ export class SourceLimitError extends Error {
 
 export class InvalidSourceUrlError extends Error {
   constructor(cause?: unknown) {
-    super("Invalid calendar URL");
+    if (cause instanceof CalendarFetchError) {
+      super(cause.message);
+    } else {
+      super("Invalid calendar URL");
+    }
     this.cause = cause;
   }
 }
