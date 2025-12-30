@@ -42,7 +42,12 @@ export const getGoogleAccountsByPlan = async (
       userSubscriptionsTable,
       eq(calendarDestinationsTable.userId, userSubscriptionsTable.userId),
     )
-    .where(eq(calendarDestinationsTable.provider, "google"));
+    .where(
+      and(
+        eq(calendarDestinationsTable.provider, "google"),
+        eq(calendarDestinationsTable.needsReauthentication, false),
+      ),
+    );
 
   const accounts: GoogleAccount[] = [];
 
@@ -89,6 +94,7 @@ export const getGoogleAccountsForUser = async (
       and(
         eq(calendarDestinationsTable.provider, "google"),
         eq(calendarDestinationsTable.userId, userId),
+        eq(calendarDestinationsTable.needsReauthentication, false),
       ),
     );
 

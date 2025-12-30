@@ -42,7 +42,12 @@ export const getOutlookAccountsByPlan = async (
       userSubscriptionsTable,
       eq(calendarDestinationsTable.userId, userSubscriptionsTable.userId),
     )
-    .where(eq(calendarDestinationsTable.provider, "outlook"));
+    .where(
+      and(
+        eq(calendarDestinationsTable.provider, "outlook"),
+        eq(calendarDestinationsTable.needsReauthentication, false),
+      ),
+    );
 
   const accounts: OutlookAccount[] = [];
 
@@ -89,6 +94,7 @@ export const getOutlookAccountsForUser = async (
       and(
         eq(calendarDestinationsTable.provider, "outlook"),
         eq(calendarDestinationsTable.userId, userId),
+        eq(calendarDestinationsTable.needsReauthentication, false),
       ),
     );
 
