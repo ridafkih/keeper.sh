@@ -89,10 +89,11 @@ const toBunApiHandler = <
   return partialHandlers;
 };
 
-export const { GET, POST, PUT, DELETE, HEAD } = toBunApiHandler([
+export const { GET, POST, PUT, DELETE, HEAD, OPTIONS } = toBunApiHandler([
   "GET",
   "POST",
   "PUT",
   "DELETE",
   "HEAD",
+  "OPTIONS",
 ]);
