@@ -58,67 +58,97 @@ Head to [keeper.sh](https://keeper.sh) to get started with the cloud-hosted vers
 
 # Self Hosted
 
-By hosting Keeper yourself, you get all premium features for free, can guarantee data governance and autonomy, and it's fun.
+By hosting Keeper yourself, you get all premium features for free, can guarantee data governance and autonomy, and it's fun. If you'll be self-hosting, please consider supporting me and development of the project by sponsoring me on GitHub.
 
-If you'll be self-hosting, please consider supporting me and development of the project by sponsoring me on GitHub.
+There are five images currently available, two of them are designed for convenience, while the three are designed to serve the granular underlying services.
+
+## Environment Variables
+
+| Name | Required | Description |
+| - | - | - |
+| BETTER_AUTH_URL | `true` | This should be equivalent to the base URL of the front-end, the same you use to navigate to the website on a browser. Next.js will proxy  |
+| API_URL | `false` | The URL you use to connect to the Bun API, which is hosted on port `3001` by default. This value will be used to construct the WebSocket URL for the front-end to connect to. Do note that if this is unset, we default to the same origin as Next.js. You can leave this unset _only if_ you have a reverse-proxy set to route requests to the Bun API. See an example of this in [this Caddyfile](./packages/standalone/rootfs/etc/caddy/Caddyfile) |
+| REDIS_URL | `true` | The URL that the API and Redis services will use to connect to Redis |
+| DATABASE_URL | `true` | The URL that the API and Redis services will use to connect to PostgreSQL |
+| GOOGLE_CLIENT_ID | `false` | If you want to use Google OAuth, you must configure this. Reference instructions below. |
+| GOOGLE_CLIENT_SECRET | `false` | If you want to use Google OAuth, you must configure this. Reference instructions below. |
+| MICROSOFT_CLIENT_ID | `false` | If you want to use Microsoft OAuth, you must configure this. Reference instructions below. |
+| MICROSOFT_CLIENT_SECRET | `false` | If you want to use Microsoft OAuth, you must configure this. Reference instructions below. |
+
+## Combined Images
+
+| Tag | Description | Included Services |
+| - | - | - |
+| `keeper-standalone:latest` | The "standalone" image is everything you need to get up and running with Keeper with as little configuration as possible. | `keeper-web`, `keeper-api`, `keeper-cron`, `redis`, `postgresql`, `caddy` |
+| `keeper-services:latest` | If you'd like for the Redis & Database to exist outside of the container, you can use the "services" image to launch without them included in the image. | `keeper-web`, `keeper-api`, `keeper-cron` |
+
+## Individual Images
+
+| Tag | Description |
+| - | - |
+| `keeper-web:latest` | An image containing the Next.js interface. |
+| `keeper-api:latest` | An image containing the Bun API service. |
+| `keeper-cron:latest` | An image containing the Bun cron service. |
 
 ## Prerequisites
 
-- Docker (and Docker Compose for multi-container setup)
-- (Optional) Google OAuth credentials for Google Calendar integration
-- (Optional) Microsoft OAuth credentials for Outlook integration
+### Docker & Docker Compose
 
-## Option 1: Standalone (Recommended)
+In order to install Docker Compose, please refer to the [official Docker documentation.](https://docs.docker.com/compose/install/).
 
-The standalone image bundles PostgreSQL, Redis, API, Cron, and Web into a single container with Caddy as a reverse proxy. This is the easiest way to get started.
+### Google OAuth Credentials
 
-### Quick Start
+> [!TIP]
+>
+> This is optional, although you will not be able to set Google Calendar as a destination without this.
+
+Reference the [official Google Cloud Platform documentation](https://support.google.com/cloud/answer/15549257) to generate valid credentials for Google OAuth. You must grant your consent screen the `calendar.events` and `userInfo.email` scopes.
+
+Once this is configured, set the client ID and client secret as the `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` environment variables at runtime.
+
+### Microsoft Azure Credentials
+
+> [!TIP]
+>
+> Once again, this is optional. If you do not configure this, you will not be able to configure Microsoft Outlook as a destination.
+
+Microsoft does not appear to do documentation well, the best I could find for non-legacy instructions on configuring OAuth is this [community thread.](https://learn.microsoft.com/en-us/answers/questions/4705805/how-to-set-up-oauth-2-0-for-outlook). The required scopes are `Calendars.ReadWrite`, `User.Read`, and `offline_access`. The client ID and secret for Microsoft go into the `MICROSOFT_CLIENT_ID` and `MICROSOFT_CLIENT_SECRET` environment variables respectively.
+
+## Standalone Container
+
+While you'd typically want to run containers granularly, if you just want to get up and running, a convenience image `keeper-standalone:latest` has been provided. This container contains the `cron`, `web`, `api`, services as well as a configured `redis`, `database`, and `caddy` instance that puts everything behind the same port. While this is the easiest way to spin up Keeper, it is not recognized as best-practice.
+
+### Generate `keeper-standalone` Environment Variables
+
+The following will generate a `.env` file that contains the key used to generate sessions, as well as the key that is used to encrypt CalDAV credentials at rest.
+
+```bash
+cat > .env << EOF
+# *_CLIENT_ID and *_CLIENT_SECRET are optional.
+BETTER_AUTH_SECRET=$(openssl rand -base64 32)
+ENCRYPTION_KEY=$(openssl rand -base64 32)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+MICROSOFT_CLIENT_ID=
+MICROSOFT_CLIENT_SECRET=
+EOF
+```
+
+### Run `keeper-standalone` with Docker
+
+If you'd like to just run using the Docker CLI, you can use the following command. I would however recommend [using a compose.yaml](#run-standalone-with-docker-compose) file.
 
 ```bash
 docker run -d \
   -p 80:80 \
   -v keeper-data:/var/lib/postgresql/data \
-  -e BETTER_AUTH_SECRET=$(openssl rand -base64 32) \
-  -e ENCRYPTION_KEY=$(openssl rand -base64 32) \
+  --env-file .env \
   ghcr.io/ridafkih/keeper-standalone:latest
 ```
 
-Keeper will be available at `http://localhost`.
+### Run `keeper-standalone` with Docker Compose
 
-### With OAuth Providers
-
-To enable Google Calendar and Outlook integrations:
-
-```bash
-docker run -d \
-  -p 80:80 \
-  -v keeper-data:/var/lib/postgresql/data \
-  -e BETTER_AUTH_SECRET=$(openssl rand -base64 32) \
-  -e ENCRYPTION_KEY=$(openssl rand -base64 32) \
-  -e GOOGLE_CLIENT_ID=your-google-client-id \
-  -e GOOGLE_CLIENT_SECRET=your-google-client-secret \
-  -e MICROSOFT_CLIENT_ID=your-microsoft-client-id \
-  -e MICROSOFT_CLIENT_SECRET=your-microsoft-client-secret \
-  ghcr.io/ridafkih/keeper-standalone:latest
-```
-
-### Custom Domain or Port
-
-If using a custom domain or non-standard port, set `BETTER_AUTH_URL`:
-
-```bash
-docker run -d \
-  -p 3000:80 \
-  -v keeper-data:/var/lib/postgresql/data \
-  -e BETTER_AUTH_SECRET=$(openssl rand -base64 32) \
-  -e ENCRYPTION_KEY=$(openssl rand -base64 32) \
-  -e BETTER_AUTH_URL=http://localhost:3000 \
-  ghcr.io/ridafkih/keeper-standalone:latest
-```
-
-### Using Docker Compose
-
-Create a `compose.yaml`:
+If you'd prefer to use a `compose.yaml` file, the following is an example. Remember to [populate your .env file first](#generate-keeper-standalone-environment-variables).
 
 ```yaml
 services:
@@ -131,57 +161,43 @@ services:
     environment:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-      # BETTER_AUTH_URL: https://keeper.example.com  # Set if using custom domain
 
 volumes:
   keeper-data:
 ```
 
-Create a `.env` file:
-
-```bash
-cat > .env << EOF
-BETTER_AUTH_SECRET=$(openssl rand -base64 32)
-ENCRYPTION_KEY=$(openssl rand -base64 32)
-EOF
-```
-
-Start Keeper:
+Once that's configured, you can launch Keeper using the following command.
 
 ```bash
 docker compose up -d
 ```
 
-## Option 2: Multi-Container
+With all said and done, you can access Keeper at http://localhost/. You can use a reverse-proxy like Nginx or Caddy to put Keeper behind a domain on your network.
 
-For more control over individual services, you can run each component separately.
+## Collective Services Image
 
-### Generate Secrets
+If you'd like to bring your own Redis and PostgreSQL, you can use the `keeper-services` image. This contains the `cron`, `web` and `api` services in one.
+
+### Generate `keeper-services` Environment Variables
 
 ```bash
 cat > .env << EOF
-DOMAIN=http://localhost:3000
+# DATABASE_URL and REDIS_URL are required.
+# *_CLIENT_ID and *_CLIENT_SECRET are optional.
 BETTER_AUTH_SECRET=$(openssl rand -base64 32)
 ENCRYPTION_KEY=$(openssl rand -base64 32)
-EOF
-```
-
-The `DOMAIN` value should include the scheme and port (for example `https://keeper.example.com`) so the app can use it directly without accidentally producing malformed URLs like `http://https://keeper.example.com:3000`.
-
-### Configuring Providers
-
-If you'd like to configure optional providers, you can refer to the [Google OAuth documentation](https://developers.google.com/identity/protocols/oauth2) on configuring your Google client ID and secret, and Outlook's documentation can be found on the [Microsoft documentation website](https://learn.microsoft.com/en-us/entra/architecture/auth-oauth2) where you can learn to configure Entra ID in the Azure portal to get your Microsoft client ID and secret.
-
-Once you've acquired them, simply add them to the `.env` file:
-
-```bash
+DATABASE_URL=
+REDIS_URL=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 MICROSOFT_CLIENT_ID=
 MICROSOFT_CLIENT_SECRET=
+EOF
 ```
 
-### Create `compose.yaml`
+### Run `keeper-services` with Docker Compose
+
+Once you've populated your environment variables, you can choose to run `redis` and `postgres` alongside the `keeper-services` image to get up and running.
 
 ```yaml
 services:
@@ -191,6 +207,90 @@ services:
       POSTGRES_USER: keeper
       POSTGRES_PASSWORD: keeper
       POSTGRES_DB: keeper
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keeper -d keeper"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  keeper:
+    image: ghcr.io/ridafkih/keeper-services:latest
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  redis-data:
+```
+
+> [!IMPORTANT]
+>
+> Next.js backend is serverless. It does not support WebSocket servers or long-lived connections. Because of this, we host the WebSocket server on the Bun API on port `3001`. If you run into issues with CORS, I'd recommend putting a reverse proxy in front of Next.js. [See this Caddyfile for an example of what this might look like.](./packages/standalone/rootfs/etc/caddy/Caddyfile).
+
+Once that's configured, you can launch Keeper using the following command.
+
+```bash
+docker compose up -d
+```
+
+## Individual Service Images
+
+While running services individually is considered best-practice, it is verbose and more complicated to configure. Each service is hosted in its own image.
+
+### Generate Individual Service Environment Variables
+
+```bash
+cat > .env << EOF
+# The only optional variables are *_CLIENT_ID, *_CLIENT_SECRET
+BETTER_AUTH_SECRET=$(openssl rand -base64 32)
+ENCRYPTION_KEY=$(openssl rand -base64 32)
+API_URL=
+POSTGRES_USER=
+POSTGRES_PASSWORD=
+POSTGRES_DB=
+REDIS_URL=
+BETTER_AUTH_URL=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+MICROSOFT_CLIENT_ID=
+MICROSOFT_CLIENT_SECRET=
+EOF
+```
+
+### Configure Individual Service `compose.yaml`
+
+```yaml
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -219,7 +319,6 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       COMMERCIAL_MODE: false
-      PASSKEY_RP_ID: ${DOMAIN:-localhost}
       PASSKEY_RP_NAME: Keeper
       PASSKEY_ORIGIN: ${DOMAIN:-http://localhost:3000}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
@@ -255,7 +354,7 @@ services:
   web:
     image: ghcr.io/ridafkih/keeper-web:latest
     environment:
-      API_URL: http://api:3001
+      API_URL: ${API_URL}
     ports:
       - "3000:3000"
     depends_on:
@@ -267,13 +366,11 @@ volumes:
   redis-data:
 ```
 
-### Start Keeper
+Once that's configured, you can launch Keeper using the following command.
 
 ```bash
 docker compose up -d
 ```
-
-Keeper will be available at `http://localhost:3000`. You can pair this configuration with a reverse-proxy. I personally use, prefer and recommend [Caddy](https://caddyserver.com/) as it has a great configuration system and automatically manages certificates for you.
 
 # Modules
 

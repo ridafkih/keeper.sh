@@ -1,0 +1,7 @@
+#!/bin/bash
+exec 2>&1
+
+cd /app
+export HOSTNAME=0.0.0.0
+export PORT=3000
+exec /root/.bun/bin/bun packages/web/server.js
