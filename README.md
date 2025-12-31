@@ -71,8 +71,20 @@ There are five images currently available, two of them are designed for convenie
 | WEBSOCKET_URL | `api` | The URL the front-end will attempt to connect to the WebSocket using.<br><br>e.g. `ws://localhost:3001/api/socket` |
 | BETTER_AUTH_URL | `api` | The base URL of the front-end (used for auth redirects).<br><br>e.g. `http://localhost:3000` |
 | BETTER_AUTH_SECRET | `api` | Secret key for session signing.<br><br>e.g. `openssl rand -base64 32` |
+| API_PORT | `api` | Port the Bun API listens on. Defaults to `3001` in container images. |
 | API_URL | `web` | The URL the Next.js backend uses to proxy requests to the Bun API.<br><br>e.g. `http://api:3001` |
+| NEXT_PUBLIC_COMMERCIAL_MODE | `web` | Toggle commercial mode in the web UI (`true`/`false`). |
+| NEXT_PUBLIC_POLAR_PRO_MONTHLY_PRODUCT_ID | `web` | Polar monthly product ID to power in-app upgrade links. |
+| NEXT_PUBLIC_POLAR_PRO_YEARLY_PRODUCT_ID | `web` | Polar yearly product ID to power in-app upgrade links. |
+| COMMERCIAL_MODE | `api`, `cron` | Enable Polar billing flow. Set to `true` if using Polar for subscriptions. |
+| POLAR_ACCESS_TOKEN | `api`, `cron` | Optional. Polar API token for subscription management. |
+| POLAR_MODE | `api`, `cron` | Optional. Polar environment, `sandbox` or `production`. |
+| POLAR_WEBHOOK_SECRET | `api` | Optional. Secret to verify Polar webhooks. |
 | ENCRYPTION_KEY | `api`, `cron` | Key for encrypting CalDAV credentials at rest.<br><br>e.g. `openssl rand -base64 32` |
+| RESEND_API_KEY | `api` | Optional. API key for sending emails via Resend. |
+| PASSKEY_RP_ID | `api` | Optional. Relying party ID for passkey authentication. |
+| PASSKEY_RP_NAME | `api` | Optional. Relying party display name for passkeys. |
+| PASSKEY_ORIGIN | `api` | Optional. Origin allowed for passkey flows (e.g., `https://keeper.example.com`). |
 | GOOGLE_CLIENT_ID | `api`, `cron` | Optional. Required for Google Calendar integration. |
 | GOOGLE_CLIENT_SECRET | `api`, `cron` | Optional. Required for Google Calendar integration. |
 | MICROSOFT_CLIENT_ID | `api`, `cron` | Optional. Required for Microsoft Outlook integration. |
