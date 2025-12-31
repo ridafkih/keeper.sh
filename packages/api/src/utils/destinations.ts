@@ -8,6 +8,7 @@ import { eq, and } from "drizzle-orm";
 import type { AuthorizationUrlOptions } from "@keeper.sh/destination-providers";
 import { database, oauthProviders } from "../context";
 import { triggerDestinationSync } from "./sync";
+import { createMappingsForNewDestination } from "./source-destination-mappings";
 
 export const isOAuthProvider = (provider: string): boolean => {
   return oauthProviders.isOAuthProvider(provider);
@@ -150,6 +151,8 @@ export const saveCalendarDestination = async (
         .insert(syncStatusTable)
         .values({ destinationId: destination.id })
         .onConflictDoNothing();
+
+      await createMappingsForNewDestination(userId, destination.id);
     }
   }
 };
@@ -289,6 +292,8 @@ export const saveCalDAVDestination = async (
         .insert(syncStatusTable)
         .values({ destinationId: destination.id })
         .onConflictDoNothing();
+
+      await createMappingsForNewDestination(userId, destination.id);
     }
   }
 };

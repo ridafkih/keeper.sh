@@ -9,6 +9,7 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "dependencies": {
+    "@keeper.sh/database": "workspace:*",
     "@keeper.sh/log": "workspace:*",
     "drizzle-orm": "^0.45.1"
   },

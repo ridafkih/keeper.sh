@@ -7,6 +7,7 @@ import {
 import { log } from "@keeper.sh/log";
 import { eq, and } from "drizzle-orm";
 import { triggerDestinationSync } from "./sync";
+import { createMappingsForNewSource } from "./source-destination-mappings";
 import { database, premiumService } from "../context";
 
 export class SourceLimitError extends Error {
@@ -38,14 +39,29 @@ interface Source {
   createdAt: Date;
 }
 
-/**
- * Gets all sources for a user.
- */
 export const getUserSources = async (userId: string): Promise<Source[]> => {
   return database
     .select()
     .from(remoteICalSourcesTable)
     .where(eq(remoteICalSourcesTable.userId, userId));
+};
+
+export const verifySourceOwnership = async (
+  userId: string,
+  sourceId: string,
+): Promise<boolean> => {
+  const [source] = await database
+    .select({ id: remoteICalSourcesTable.id })
+    .from(remoteICalSourcesTable)
+    .where(
+      and(
+        eq(remoteICalSourcesTable.id, sourceId),
+        eq(remoteICalSourcesTable.userId, userId),
+      ),
+    )
+    .limit(1);
+
+  return source !== undefined;
 };
 
 /**
@@ -90,6 +106,8 @@ export const createSource = async (
   if (!source) {
     throw new Error("Failed to create source");
   }
+
+  await createMappingsForNewSource(userId, source.id);
 
   fetchAndSyncSource(database, source)
     .then(() => triggerDestinationSync(userId))
