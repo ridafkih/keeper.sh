@@ -13,6 +13,7 @@ import {
   createEventMapping,
   deleteEventMapping,
   deleteEventMappingByDestinationUid,
+  countMappingsForDestination,
   type EventMapping,
 } from "./mappings";
 import { generateEventUid, isKeeperEvent } from "./event-identity";
@@ -89,11 +90,12 @@ export abstract class CalendarProvider<
 
     if (operations.length === 0) {
       this.childLog.debug({ userId }, "destination in sync");
+      const mappingCount = await countMappingsForDestination(database, destinationId);
       await context.onDestinationSync?.({
         userId,
         destinationId,
         localEventCount: localEvents.length,
-        remoteEventCount: remoteEvents.length,
+        remoteEventCount: mappingCount,
       });
       return { added: 0, removed: 0 };
     }
@@ -104,8 +106,7 @@ export abstract class CalendarProvider<
       remoteEventCount: remoteEvents.length,
     });
 
-    const finalRemoteCount =
-      remoteEvents.length + processed.added - processed.removed;
+    const finalRemoteCount = await countMappingsForDestination(database, destinationId);
     await context.onDestinationSync?.({
       userId,
       destinationId,
@@ -248,7 +249,7 @@ export abstract class CalendarProvider<
             operation.uid,
           );
           removed++;
-          currentRemoteCount--;
+          if (currentRemoteCount > 0) currentRemoteCount--;
         }
       }
 
