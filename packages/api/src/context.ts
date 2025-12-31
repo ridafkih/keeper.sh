@@ -39,7 +39,7 @@ export const { auth } = createAuth({
   passkeyRpId: env.PASSKEY_RP_ID,
   passkeyRpName: env.PASSKEY_RP_NAME,
   passkeyOrigin: env.PASSKEY_ORIGIN,
-  trustedOrigins: trustedOrigins.length > 0 ? trustedOrigins : undefined,
+  ...(trustedOrigins.length > 0 && { trustedOrigins }),
 });
 
 export const broadcastService = createBroadcastService({ redis });

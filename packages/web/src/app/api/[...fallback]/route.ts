@@ -37,7 +37,7 @@ const forward: RequestHandler = async (request) => {
     method: request.method,
     redirect: "manual",
     headers: requestHeaders,
-    ...(request.body && { body: request.body }),
+    ...(request.body && request.method !== "OPTIONS" && { body: request.body }),
   });
 
   const responseHeaders = new Headers(response.headers);

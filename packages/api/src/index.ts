@@ -72,9 +72,9 @@ const withCors = (handler: FetchHandler): FetchHandler => {
     const origin = request.headers.get("Origin");
 
     if (request.method === "OPTIONS") {
-      if (!origin || !isOriginAllowed(origin)) {
-        return new Response(null, { status: 403 });
-      }
+      if (!origin) return new Response(null, { status: 204 });
+      if (!isOriginAllowed(origin)) return new Response(null, { status: 403 });
+
       return new Response(null, {
         status: 204,
         headers: {
