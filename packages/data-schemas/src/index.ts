@@ -165,3 +165,8 @@ export const caldavConnectRequestSchema = type({
   "provider?": "string",
 });
 export type CalDAVConnectRequest = typeof caldavConnectRequestSchema.infer;
+
+export const updateSourceDestinationsSchema = type({
+  destinationIds: "string[]",
+});
+export type UpdateSourceDestinations = typeof updateSourceDestinationsSchema.infer;
