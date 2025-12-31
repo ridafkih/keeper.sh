@@ -43,7 +43,7 @@ import {
 } from "@/components/typography";
 import { button } from "@/styles";
 import { tv } from "tailwind-variants";
-import { Server, Plus, ChevronRight } from "lucide-react";
+import { Server, Plus, ChevronRight, ChevronDown } from "lucide-react";
 
 const syncStatusText = tv({
   slots: {
@@ -238,6 +238,7 @@ const DestinationAction = ({
       >
         {!isLoading && <span className={dot()} />}
         {isLoading ? "..." : statusText}
+        <ChevronDown size={12} />
       </GhostButton>
       <Menu.Portal>
         <Menu.Positioner sideOffset={4} align="end">
