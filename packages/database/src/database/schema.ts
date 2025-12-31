@@ -151,3 +151,25 @@ export const eventMappingsTable = pgTable(
     index("event_mappings_destination_idx").on(table.destinationId),
   ],
 );
+
+export const sourceDestinationMappingsTable = pgTable(
+  "source_destination_mappings",
+  {
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    sourceId: uuid()
+      .notNull()
+      .references(() => remoteICalSourcesTable.id, { onDelete: "cascade" }),
+    destinationId: uuid()
+      .notNull()
+      .references(() => calendarDestinationsTable.id, { onDelete: "cascade" }),
+    createdAt: timestamp().notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("source_destination_mapping_idx").on(
+      table.sourceId,
+      table.destinationId,
+    ),
+    index("source_destination_mappings_source_idx").on(table.sourceId),
+    index("source_destination_mappings_destination_idx").on(table.destinationId),
+  ],
+);
