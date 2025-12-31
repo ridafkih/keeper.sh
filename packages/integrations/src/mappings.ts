@@ -1,5 +1,5 @@
 import { eventMappingsTable } from "@keeper.sh/database/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, count, eq, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 export interface EventMapping {
@@ -69,4 +69,15 @@ export async function deleteEventMappingByDestinationUid(
         eq(eventMappingsTable.destinationEventUid, destinationEventUid),
       ),
     );
+}
+
+export async function countMappingsForDestination(
+  database: BunSQLDatabase,
+  destinationId: string,
+): Promise<number> {
+  const [result] = await database
+    .select({ count: count() })
+    .from(eventMappingsTable)
+    .where(eq(eventMappingsTable.destinationId, destinationId));
+  return result?.count ?? 0;
 }

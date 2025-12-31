@@ -49,7 +49,7 @@ const toSyncableEvents = (results: EventQueryResult[]): SyncableEvent[] => {
       startTime: result.startTime,
       endTime: result.endTime,
       sourceId: result.sourceId,
-      sourceName: result.sourceName,
+      sourceName: result.sourceName ?? undefined,
       sourceUrl: result.sourceUrl,
       summary: result.sourceName ?? "Busy",
     });
