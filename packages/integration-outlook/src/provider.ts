@@ -1,5 +1,6 @@
 import {
   CalendarProvider,
+  getEventsForDestination,
   type DestinationProvider,
   type SyncableEvent,
   type PushResult,
@@ -23,7 +24,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { getOutlookAccountsForUser, getUserEvents } from "./sync";
+import { getOutlookAccountsForUser } from "./sync";
 
 const MICROSOFT_GRAPH_API = "https://graph.microsoft.com/v1.0";
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
@@ -77,10 +78,13 @@ export const createOutlookCalendarProvider = (
     const outlookAccounts = await getOutlookAccountsForUser(database, userId);
     if (outlookAccounts.length === 0) return null;
 
-    const localEvents = await getUserEvents(database, userId);
-
     const results = await Promise.all(
-      outlookAccounts.map((account) => {
+      outlookAccounts.map(async (account) => {
+        const localEvents = await getEventsForDestination(
+          database,
+          account.destinationId,
+        );
+
         const provider = new OutlookCalendarProviderInstance(
           {
             database,

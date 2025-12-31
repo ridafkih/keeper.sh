@@ -1,6 +1,7 @@
 import {
   CalendarProvider,
   RateLimiter,
+  getEventsForDestination,
   type DestinationProvider,
   type SyncableEvent,
   type PushResult,
@@ -24,7 +25,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { getGoogleAccountsForUser, getUserEvents } from "./sync";
+import { getGoogleAccountsForUser } from "./sync";
 
 const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3/";
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
@@ -69,10 +70,13 @@ export const createGoogleCalendarProvider = (
     const googleAccounts = await getGoogleAccountsForUser(database, userId);
     if (googleAccounts.length === 0) return null;
 
-    const localEvents = await getUserEvents(database, userId);
-
     const results = await Promise.all(
-      googleAccounts.map((account) => {
+      googleAccounts.map(async (account) => {
+        const localEvents = await getEventsForDestination(
+          database,
+          account.destinationId,
+        );
+
         const provider = new GoogleCalendarProviderInstance(
           {
             database,

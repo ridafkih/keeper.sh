@@ -1,6 +1,7 @@
 import {
   CalendarProvider,
   RateLimiter,
+  getEventsForDestination,
   type DestinationProvider,
   type SyncableEvent,
   type PushResult,
@@ -13,7 +14,7 @@ import {
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { CalDAVClient } from "./caldav-client";
 import { eventToICalString, parseICalToRemoteEvent } from "./ics-converter";
-import { createCalDAVService, type CalDAVAccount } from "./sync";
+import { createCalDAVService } from "./sync";
 
 export interface CalDAVProviderOptions {
   providerId: string;
@@ -41,10 +42,13 @@ export const createCalDAVProvider = (
     const accounts = await caldavService.getCalDAVAccountsForUser(userId, options.providerId);
     if (accounts.length === 0) return null;
 
-    const localEvents = await caldavService.getUserEvents(userId);
-
     const results = await Promise.all(
-      accounts.map((account) => {
+      accounts.map(async (account) => {
+        const localEvents = await getEventsForDestination(
+          config.database,
+          account.destinationId,
+        );
+
         const password = caldavService.getDecryptedPassword(account.encryptedPassword);
         const provider = new CalDAVProviderInstance(
           {

@@ -3,7 +3,7 @@ import {
   eventStatesTable,
   remoteICalSourcesTable,
 } from "@keeper.sh/database/schema";
-import { eq, gte, inArray, asc } from "drizzle-orm";
+import { and, eq, gte, inArray, asc } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { SyncableEvent } from "./types";
 
@@ -23,6 +23,39 @@ const getMappedSourceIds = async (
     .where(eq(sourceDestinationMappingsTable.destinationId, destinationId));
 
   return mappings.map((mapping) => mapping.sourceId);
+};
+
+interface EventQueryResult {
+  id: string;
+  sourceEventUid: string | null;
+  startTime: Date;
+  endTime: Date;
+  sourceId: string;
+  sourceName: string | null;
+  sourceUrl: string;
+}
+
+const toSyncableEvents = (results: EventQueryResult[]): SyncableEvent[] => {
+  const syncableEvents: SyncableEvent[] = [];
+
+  for (const result of results) {
+    if (result.sourceEventUid === null) {
+      continue;
+    }
+
+    syncableEvents.push({
+      id: result.id,
+      sourceEventUid: result.sourceEventUid,
+      startTime: result.startTime,
+      endTime: result.endTime,
+      sourceId: result.sourceId,
+      sourceName: result.sourceName,
+      sourceUrl: result.sourceUrl,
+      summary: result.sourceName ?? "Busy",
+    });
+  }
+
+  return syncableEvents;
 };
 
 const fetchEventsForSources = async (
@@ -47,23 +80,14 @@ const fetchEventsForSources = async (
       eq(eventStatesTable.sourceId, remoteICalSourcesTable.id),
     )
     .where(
-      inArray(eventStatesTable.sourceId, sourceIds),
+      and(
+        inArray(eventStatesTable.sourceId, sourceIds),
+        gte(eventStatesTable.startTime, startOfToday),
+      ),
     )
-    .where(gte(eventStatesTable.startTime, startOfToday))
     .orderBy(asc(eventStatesTable.startTime));
 
-  return results
-    .filter((result) => result.sourceEventUid !== null)
-    .map((result) => ({
-      id: result.id,
-      sourceEventUid: result.sourceEventUid!,
-      startTime: result.startTime,
-      endTime: result.endTime,
-      sourceId: result.sourceId,
-      sourceName: result.sourceName,
-      sourceUrl: result.sourceUrl,
-      summary: result.sourceName ?? "Busy",
-    }));
+  return toSyncableEvents(results);
 };
 
 export const getEventsForDestination = async (
