@@ -1,6 +1,9 @@
+"use client";
+
 import type { FC } from "react";
 import Link from "next/link";
 import { Heart } from "lucide-react";
+import { track } from "@/lib/analytics";
 
 export const Footer: FC = () => (
   <footer className="flex flex-col gap-4 max-w-3xl mx-auto px-5 py-8 w-full">
@@ -19,11 +22,16 @@ export const Footer: FC = () => (
       <nav className="flex gap-4">
         <Link
           href="/privacy"
+          onClick={() => track("link_clicked", { target: "privacy" })}
           className="hover:text-foreground transition-colors"
         >
           Privacy Policy
         </Link>
-        <Link href="/terms" className="hover:text-foreground transition-colors">
+        <Link
+          href="/terms"
+          onClick={() => track("link_clicked", { target: "terms" })}
+          className="hover:text-foreground transition-colors"
+        >
           Terms & Conditions
         </Link>
       </nav>

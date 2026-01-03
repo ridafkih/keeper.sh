@@ -22,6 +22,7 @@ import { useFormSubmit } from "@/hooks/use-form-submit";
 import { authClient } from "@/lib/auth-client";
 import { signIn, signInWithEmail, signInWithGoogle } from "@/lib/auth";
 import { isCommercialMode } from "@/config/mode";
+import { track } from "@/lib/analytics";
 
 const UsernameLoginForm: FC = () => {
   const router = useRouter();
@@ -34,8 +35,10 @@ const UsernameLoginForm: FC = () => {
     const username = String(formData.get("username") ?? "");
     const password = String(formData.get("password") ?? "");
 
+    track("login_started", { method: "username" });
     await submit(async () => {
       await signIn(username, password);
+      track("login_completed", { method: "username" });
       await refresh();
       router.push("/dashboard");
     });
@@ -108,14 +111,17 @@ const EmailLoginForm: FC = () => {
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
 
+    track("login_started", { method: "email" });
     await submit(async () => {
       await signInWithEmail(email, password);
+      track("login_completed", { method: "email" });
       await refresh();
       router.push("/dashboard");
     });
   };
 
   const handleGoogleSignIn = () => {
+    track("login_started", { method: "google" });
     setIsRedirecting(true);
     void signInWithGoogle();
   };

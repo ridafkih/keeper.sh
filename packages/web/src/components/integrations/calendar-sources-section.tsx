@@ -22,6 +22,7 @@ import { useFormSubmit } from "@/hooks/use-form-submit";
 import { useSources, type CalendarSource } from "@/hooks/use-sources";
 import { useSubscription } from "@/hooks/use-subscription";
 import { button } from "@/styles";
+import { track } from "@/lib/analytics";
 import { Link as LinkIcon, Plus } from "lucide-react";
 
 interface SourceItemProps {
@@ -285,6 +286,7 @@ export const CalendarSourcesSection = () => {
     }
 
     await mutate();
+    track("source_added", { type: "url" });
     toastManager.add({ title: "Calendar source added" });
     return {};
   };
@@ -297,6 +299,7 @@ export const CalendarSourcesSection = () => {
 
       if (response.ok) {
         await mutate();
+        track("source_removed");
         toastManager.add({ title: "Calendar source removed" });
       }
     } catch {
@@ -320,7 +323,10 @@ export const CalendarSourcesSection = () => {
           action={
             <div className="flex flex-col items-center gap-2">
               <Button
-                onClick={() => setIsDialogOpen(true)}
+                onClick={() => {
+                  track("source_dropdown_opened");
+                  setIsDialogOpen(true);
+                }}
                 className={button({ variant: "primary", size: "xs" })}
               >
                 Add Calendar Source
@@ -342,7 +348,10 @@ export const CalendarSourcesSection = () => {
           </TextLabel>
           {!isAtLimit && (
             <GhostButton
-              onClick={() => setIsDialogOpen(true)}
+              onClick={() => {
+                track("source_dropdown_opened");
+                setIsDialogOpen(true);
+              }}
               className="flex items-center gap-1"
             >
               <Plus size={12} />

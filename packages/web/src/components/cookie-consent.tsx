@@ -1,0 +1,69 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { AnimatePresence, motion } from "motion/react";
+import { hasConsentChoice, setAnalyticsConsent, track } from "@/lib/analytics";
+import { button } from "@/styles";
+import { TextBody } from "@/components/typography";
+import clsx from "clsx";
+
+export const CookieConsent = () => {
+  const [showBanner, setShowBanner] = useState(() => !hasConsentChoice());
+
+  const handleChoice = (consent: boolean) => {
+    track(consent ? "consent_granted" : "consent_denied");
+    setAnalyticsConsent(consent);
+    setShowBanner(false);
+  };
+
+  return (
+    <AnimatePresence>
+      {showBanner && (
+        <motion.div
+          initial={{ gridTemplateRows: "0fr", opacity: 0 }}
+          animate={{ gridTemplateRows: "1fr", opacity: 1 }}
+          exit={{ gridTemplateRows: "0fr", opacity: 0 }}
+          transition={{ duration: 0.32, ease: "easeOut" }}
+          className="grid sticky bottom-2 ml-auto mr-2 pointer-events-auto"
+        >
+          <div className="overflow-hidden min-h-0 bg-background border border-border rounded-lg shadow-lg p-2 pl-4">
+            <div className="flex items-center gap-2 whitespace-nowrap">
+              <TextBody className="text-xs">
+                Can Keeper{" "}
+                <Link
+                  href="/privacy"
+                  className="underline text-foreground opacity-75 hover:opacity-100"
+                >
+                  use cookies for analytics?
+                </Link>
+              </TextBody>
+              <div className="grid grid-cols-2 gap-1">
+                <button
+                  type="button"
+                  onClick={() => handleChoice(true)}
+                  className={clsx(
+                    button({ variant: "secondary", size: "xs" }),
+                    "text-nowrap",
+                  )}
+                >
+                  Yes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChoice(false)}
+                  className={clsx(
+                    button({ variant: "secondary", size: "xs" }),
+                    "text-nowrap",
+                  )}
+                >
+                  No
+                </button>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};

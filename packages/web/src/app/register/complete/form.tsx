@@ -14,6 +14,7 @@ import {
 } from "@/components/auth-form";
 import { useFormSubmit } from "@/hooks/use-form-submit";
 import { signUpWithEmail } from "@/lib/auth";
+import { track } from "@/lib/analytics";
 
 const subscribeToStorage = (callback: () => void) => {
   window.addEventListener("storage", callback);
@@ -54,6 +55,7 @@ export const CompleteRegistrationForm: FC = () => {
 
     await submit(async () => {
       await signUpWithEmail(email, password);
+      track("registration_completed");
       sessionStorage.setItem("pendingVerificationEmail", email);
       router.push("/verify-email");
     });

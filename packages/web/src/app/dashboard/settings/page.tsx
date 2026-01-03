@@ -27,6 +27,7 @@ import { changePassword, deleteAccount, signOut } from "@/lib/auth";
 import { isCommercialMode } from "@/config/mode";
 import { authClient } from "@/lib/auth-client";
 import { button } from "@/styles";
+import { track } from "@/lib/analytics";
 
 const fetchPasskeys = async () => {
   const { data, error } = await authClient.passkey.listUserPasskeys();
@@ -113,6 +114,7 @@ export default function SettingsPage() {
     newPassword: string,
   ) => {
     await changePassword(currentPassword, newPassword);
+    track("password_changed");
     toastManager.add({ title: "Password changed" });
   };
 
@@ -131,6 +133,7 @@ export default function SettingsPage() {
         return;
       }
       await mutatePasskeys();
+      track("passkey_added");
       toastManager.add({ title: "Passkey added" });
     } finally {
       setIsAddingPasskey(false);
@@ -144,6 +147,7 @@ export default function SettingsPage() {
       return;
     }
     await mutatePasskeys();
+    track("passkey_deleted");
     toastManager.add({ title: "Passkey deleted" });
   };
 

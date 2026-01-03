@@ -8,6 +8,7 @@ import { Section } from "@/components/section";
 import { SectionHeader } from "@/components/section-header";
 import { useIcalToken } from "@/hooks/use-ical-token";
 import { button, input } from "@/styles";
+import { track } from "@/lib/analytics";
 import { Check } from "lucide-react";
 
 const ICalLinkSkeleton: FC = () => (
@@ -33,6 +34,7 @@ export const ICalLinkSection: FC = () => {
   const copyToClipboard = async () => {
     if (!icalUrl) return;
     await navigator.clipboard.writeText(icalUrl);
+    track("ical_link_copied");
     toastManager.add({ title: "Copied to clipboard" });
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);

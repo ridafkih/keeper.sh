@@ -42,6 +42,7 @@ import {
   BannerText,
 } from "@/components/typography";
 import { button } from "@/styles";
+import { track } from "@/lib/analytics";
 import { tv } from "tailwind-variants";
 import { Server, Plus, ChevronRight, ChevronDown } from "lucide-react";
 
@@ -92,7 +93,11 @@ const DestinationMenuItem = ({
 
   return (
     <MenuItem
-      onClick={() => connectable && onConnect(destination.id)}
+      onClick={() => {
+        if (!connectable) return;
+        track("destination_selected", { provider: destination.id });
+        onConnect(destination.id);
+      }}
       disabled={destination.comingSoon}
       variant={destination.comingSoon ? "disabled" : "default"}
       className="py-1.5"
@@ -539,6 +544,7 @@ export const DestinationsSection = () => {
 
   const handleCaldavSuccess = async () => {
     await mutateAccounts();
+    track("destination_connected", { provider: caldavProvider ?? "caldav" });
     toastManager.add({ title: "Calendar connected successfully" });
   };
 
@@ -557,6 +563,7 @@ export const DestinationsSection = () => {
       }
 
       await mutateAccounts();
+      track("destination_disconnected", { provider: providerName });
       toastManager.add({ title: `Disconnected from ${providerName}` });
     } catch {
       toastManager.add({ title: `Failed to disconnect` });
@@ -573,6 +580,7 @@ export const DestinationsSection = () => {
 
     const currentDestinations = getDestinationsForSource(sourceId, mappings);
     const isEnabled = currentDestinations.includes(destinationId);
+    track("mapping_toggled", { action: isEnabled ? "disabled" : "enabled" });
 
     const newDestinations: string[] = [];
     for (const destId of currentDestinations) {

@@ -1,12 +1,13 @@
 "use client";
 
 import type { FC, PropsWithChildren } from "react";
-import { createContext, useContext, useEffect } from "react";
+import { createContext, useContext, useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { userSchema, type User } from "@keeper.sh/data-schemas";
 import { authClient } from "@/lib/auth-client";
 import { protectedRoutes } from "@/config/routes";
+import { identify, track } from "@/lib/analytics";
 
 interface AuthContextValue {
   user: User | null;
@@ -29,6 +30,7 @@ export const AuthProvider: FC<PropsWithChildren> = ({ children }) => {
   const router = useRouter();
   const pathname = usePathname();
   const { data: user, isLoading, mutate } = useSWR("session", fetchSession);
+  const identifiedUserId = useRef<string | null>(null);
 
   useEffect(() => {
     if (isLoading) return;
@@ -37,6 +39,14 @@ export const AuthProvider: FC<PropsWithChildren> = ({ children }) => {
 
     router.replace("/login");
   }, [user, isLoading, pathname, router]);
+
+  useEffect(() => {
+    if (isLoading || !user) return;
+    if (identifiedUserId.current === user.id) return;
+
+    identifiedUserId.current = user.id;
+    identify({ id: user.id, email: user.email, name: user.name });
+  }, [user, isLoading]);
 
   const refresh = async () => {
     await mutate();

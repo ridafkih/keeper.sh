@@ -21,6 +21,7 @@ import { GoogleIcon } from "@/components/icons/google";
 import { useFormSubmit } from "@/hooks/use-form-submit";
 import { signUp, signInWithGoogle } from "@/lib/auth";
 import { isCommercialMode } from "@/config/mode";
+import { track } from "@/lib/analytics";
 
 const UsernameRegisterForm: FC = () => {
   const router = useRouter();
@@ -33,8 +34,10 @@ const UsernameRegisterForm: FC = () => {
     const username = String(formData.get("username") ?? "");
     const password = String(formData.get("password") ?? "");
 
+    track("registration_started", { method: "username" });
     await submit(async () => {
       await signUp(username, password);
+      track("registration_completed");
       await refresh();
       router.push("/dashboard");
     });
@@ -84,11 +87,13 @@ const EmailRegisterForm: FC = () => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const email = String(formData.get("email") ?? "");
+    track("registration_started", { method: "email" });
     sessionStorage.setItem("registrationEmail", email);
     router.push("/register/complete");
   };
 
   const handleGoogleSignIn = () => {
+    track("registration_started", { method: "google" });
     setIsRedirecting(true);
     void signInWithGoogle();
   };
