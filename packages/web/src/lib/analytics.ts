@@ -22,14 +22,17 @@ export const hasConsentChoice = (): boolean => {
   return value === "granted" || value === "denied";
 };
 
-interface IdentifyProps {
+export interface IdentifyProps {
   id: string;
   email?: string;
   name?: string;
 }
 
-export const identify = (user: IdentifyProps) => {
-  if (!hasAnalyticsConsent()) return;
+export const identify = (
+  user: IdentifyProps,
+  options: { gdprApplies: boolean },
+) => {
+  if (options.gdprApplies && !hasAnalyticsConsent()) return;
   window.visitors?.identify(user);
 };
 

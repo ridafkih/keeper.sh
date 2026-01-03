@@ -7,7 +7,8 @@ import useSWR from "swr";
 import { userSchema, type User } from "@keeper.sh/data-schemas";
 import { authClient } from "@/lib/auth-client";
 import { protectedRoutes } from "@/config/routes";
-import { identify, track } from "@/lib/analytics";
+import { identify } from "@/lib/analytics";
+import { useAnalytics } from "@/components/analytics-context";
 
 interface AuthContextValue {
   user: User | null;
@@ -29,6 +30,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export const AuthProvider: FC<PropsWithChildren> = ({ children }) => {
   const router = useRouter();
   const pathname = usePathname();
+  const { gdprApplies } = useAnalytics();
   const { data: user, isLoading, mutate } = useSWR("session", fetchSession);
   const identifiedUserId = useRef<string | null>(null);
 
@@ -45,8 +47,8 @@ export const AuthProvider: FC<PropsWithChildren> = ({ children }) => {
     if (identifiedUserId.current === user.id) return;
 
     identifiedUserId.current = user.id;
-    identify({ id: user.id, email: user.email, name: user.name });
-  }, [user, isLoading]);
+    identify({ id: user.id, email: user.email, name: user.name }, { gdprApplies });
+  }, [user, isLoading, gdprApplies]);
 
   const refresh = async () => {
     await mutate();

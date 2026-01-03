@@ -8,6 +8,7 @@ import { headers } from "next/headers";
 import clsx from "clsx";
 import { AuthProvider } from "@/components/auth-provider";
 import { AnalyticsProvider } from "@/components/analytics-provider";
+import { AnalyticsContextProvider } from "@/components/analytics-context";
 import { GDPR_COUNTRIES } from "@/config/analytics";
 import { JsonLd } from "@/components/json-ld";
 
@@ -61,17 +62,22 @@ const getCountry = cache(() =>
   headers().then((headers) => headers.get("x-vercel-ip-country") ?? ""),
 );
 
-const AnalyticsWrapper = () => {
+const Providers = ({ children }: { children: React.ReactNode }) => {
   const country = use(getCountry());
-  const requiresConsent = GDPR_COUNTRIES.has(country);
-
-  if (!NEXT_PUBLIC_VISITORS_NOW_TOKEN) return null;
+  const gdprApplies = GDPR_COUNTRIES.has(country);
 
   return (
-    <AnalyticsProvider
-      token={NEXT_PUBLIC_VISITORS_NOW_TOKEN}
-      requiresConsent={requiresConsent}
-    />
+    <AnalyticsContextProvider gdprApplies={gdprApplies}>
+      <AuthProvider>
+        <div className="isolate min-h-dvh flex flex-col">{children}</div>
+      </AuthProvider>
+      {NEXT_PUBLIC_VISITORS_NOW_TOKEN && (
+        <AnalyticsProvider
+          token={NEXT_PUBLIC_VISITORS_NOW_TOKEN}
+          gdprApplies={gdprApplies}
+        />
+      )}
+    </AnalyticsContextProvider>
   );
 };
 
@@ -86,11 +92,8 @@ export default function RootLayout({
         <JsonLd />
       </head>
       <body className={clsx(font.className, "bg-background antialiased")}>
-        <AuthProvider>
-          <div className="isolate min-h-dvh flex flex-col">{children}</div>
-        </AuthProvider>
         <Suspense>
-          <AnalyticsWrapper />
+          <Providers>{children}</Providers>
         </Suspense>
         <Analytics />
       </body>

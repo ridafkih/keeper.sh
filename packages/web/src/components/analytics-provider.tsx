@@ -13,12 +13,12 @@ const subscribe = (callback: () => void) => {
 
 interface AnalyticsProviderProps {
   token: string;
-  requiresConsent: boolean;
+  gdprApplies: boolean;
 }
 
 export const AnalyticsProvider = ({
   token,
-  requiresConsent,
+  gdprApplies,
 }: AnalyticsProviderProps) => {
   const pathname = usePathname();
   const hasConsent = useSyncExternalStore(
@@ -27,7 +27,7 @@ export const AnalyticsProvider = ({
     () => false,
   );
 
-  const persist = !requiresConsent || hasConsent;
+  const persist = !gdprApplies || hasConsent;
 
   useEffect(() => {
     track("page_view", { path: pathname });
