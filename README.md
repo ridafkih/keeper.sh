@@ -74,8 +74,9 @@ There are five images currently available, two of them are designed for convenie
 | API_PORT | `api` | Port the Bun API listens on. Defaults to `3001` in container images. |
 | API_URL | `web` | The URL the Next.js backend uses to proxy requests to the Bun API.<br><br>e.g. `http://api:3001` |
 | NEXT_PUBLIC_COMMERCIAL_MODE | `web` | Toggle commercial mode in the web UI (`true`/`false`). |
-| NEXT_PUBLIC_POLAR_PRO_MONTHLY_PRODUCT_ID | `web` | Polar monthly product ID to power in-app upgrade links. |
-| NEXT_PUBLIC_POLAR_PRO_YEARLY_PRODUCT_ID | `web` | Polar yearly product ID to power in-app upgrade links. |
+| NEXT_PUBLIC_POLAR_PRO_MONTHLY_PRODUCT_ID | `web` | Optional. Polar monthly product ID to power in-app upgrade links. |
+| NEXT_PUBLIC_POLAR_PRO_YEARLY_PRODUCT_ID | `web` | Optional. Polar yearly product ID to power in-app upgrade links. |
+| NEXT_PUBLIC_VISITORS_NOW_TOKEN | `web` | Optional. [visitors.now](https://visitors.now) token for analytics tracking |
 | COMMERCIAL_MODE | `api`, `cron` | Enable Polar billing flow. Set to `true` if using Polar for subscriptions. |
 | POLAR_ACCESS_TOKEN | `api`, `cron` | Optional. Polar API token for subscription management. |
 | POLAR_MODE | `api`, `cron` | Optional. Polar environment, `sandbox` or `production`. |
