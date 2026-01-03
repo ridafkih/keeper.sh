@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence } from "motion/react";
 import { hasConsentChoice, setAnalyticsConsent, track } from "@/lib/analytics";
 import { button } from "@/styles";
 import { TextBody } from "@/components/typography";
@@ -20,13 +20,7 @@ export const CookieConsent = () => {
   return (
     <AnimatePresence>
       {showBanner && (
-        <motion.div
-          initial={{ gridTemplateRows: "0fr", opacity: 0 }}
-          animate={{ gridTemplateRows: "1fr", opacity: 1 }}
-          exit={{ gridTemplateRows: "0fr", opacity: 0 }}
-          transition={{ duration: 0.32, ease: "easeOut" }}
-          className="grid sticky bottom-2 ml-auto mr-2 pointer-events-auto"
-        >
+        <div className="grid sticky bottom-2 ml-auto mr-2 pointer-events-auto">
           <div className="overflow-hidden min-h-0 bg-background border border-border rounded-lg shadow-lg p-2 pl-4">
             <div className="flex items-center gap-2 whitespace-nowrap">
               <TextBody className="text-xs">
@@ -62,7 +56,7 @@ export const CookieConsent = () => {
               </div>
             </div>
           </div>
-        </motion.div>
+        </div>
       )}
     </AnimatePresence>
   );
