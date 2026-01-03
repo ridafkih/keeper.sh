@@ -20,11 +20,6 @@ const websiteSchema = {
   url: SITE_URL,
   description:
     "Simple, open-source calendar syncing. Aggregate events from multiple calendars into one anonymized feed. Push events to one or many calendars.",
-  potentialAction: {
-    "@type": "SearchAction",
-    target: `${SITE_URL}/search?q={search_term_string}`,
-    "query-input": "required name=search_term_string",
-  },
 };
 
 const softwareSchema = {
