@@ -1,4 +1,11 @@
+import type { Metadata } from "next";
 import { MarketingPage } from "@/components/marketing/marketing-page";
+
+export const metadata: Metadata = {
+  title: "Privacy Policy",
+  description:
+    "Learn how Keeper collects, uses, and protects your data. We anonymize calendar events and prioritize your privacy.",
+};
 
 export default function PrivacyPage() {
   return (

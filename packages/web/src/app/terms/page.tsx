@@ -1,4 +1,11 @@
+import type { Metadata } from "next";
 import { MarketingPage } from "@/components/marketing/marketing-page";
+
+export const metadata: Metadata = {
+  title: "Terms & Conditions",
+  description:
+    "Terms and conditions for using Keeper calendar synchronization service. Open-source, GPL-3.0 licensed.",
+};
 
 export default function TermsPage() {
   return (

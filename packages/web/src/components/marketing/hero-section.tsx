@@ -9,7 +9,7 @@ export const HeroSection: FC = () => (
     </h1>
     <p className="text-foreground-secondary leading-relaxed max-w-[48ch]">
       Aggregate events from multiple calendars into one anonymized feed. Push
-      events to your main calendar.
+      events to one or many calendars.
     </p>
     <div className="flex gap-2">
       <Link
