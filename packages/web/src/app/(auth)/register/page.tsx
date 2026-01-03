@@ -4,7 +4,6 @@ import type { FC } from "react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Header } from "@/components/header";
 import { useAuth } from "@/components/auth-provider";
 import {
   AuthFormContainer,
@@ -136,12 +135,9 @@ const EmailRegisterForm: FC = () => {
 };
 
 const RegisterPage: FC = () => (
-  <div className="flex flex-col flex-1">
-    <Header />
-    <AuthFormContainer>
-      {isCommercialMode ? <EmailRegisterForm /> : <UsernameRegisterForm />}
-    </AuthFormContainer>
-  </div>
+  <AuthFormContainer>
+    {isCommercialMode ? <EmailRegisterForm /> : <UsernameRegisterForm />}
+  </AuthFormContainer>
 );
 
 export default RegisterPage;

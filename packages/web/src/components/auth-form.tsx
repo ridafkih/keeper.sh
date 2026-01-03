@@ -215,7 +215,11 @@ export const AuthFormCheckbox: FC<AuthFormCheckboxProps> = ({
 
   return (
     <label className={styles.root()}>
-      <Checkbox.Root name={name} defaultChecked={defaultChecked} className={styles.box()}>
+      <Checkbox.Root
+        name={name}
+        defaultChecked={defaultChecked}
+        className={styles.box()}
+      >
         <Checkbox.Indicator>
           <Check size={12} className={styles.indicator()} />
         </Checkbox.Indicator>

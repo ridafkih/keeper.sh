@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import { Header } from "@/components/header";
 import { AuthFormContainer } from "@/components/auth-form";
 import { ResetPasswordForm, InvalidTokenMessage } from "./form";
 
@@ -25,13 +24,10 @@ export default function ResetPasswordPage({
   searchParams,
 }: ResetPasswordPageProps) {
   return (
-    <div className="flex flex-col flex-1">
-      <Header />
-      <AuthFormContainer>
-        <Suspense>
-          <FormLoader searchParams={searchParams} />
-        </Suspense>
-      </AuthFormContainer>
-    </div>
+    <AuthFormContainer>
+      <Suspense>
+        <FormLoader searchParams={searchParams} />
+      </Suspense>
+    </AuthFormContainer>
   );
 }

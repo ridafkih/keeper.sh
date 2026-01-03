@@ -4,7 +4,6 @@ import type { FC } from "react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Header } from "@/components/header";
 import { useAuth } from "@/components/auth-provider";
 import {
   AuthFormContainer,
@@ -180,12 +179,9 @@ const EmailLoginForm: FC = () => {
 };
 
 const LoginPage: FC = () => (
-  <div className="flex flex-col flex-1">
-    <Header />
-    <AuthFormContainer>
-      {isCommercialMode ? <EmailLoginForm /> : <UsernameLoginForm />}
-    </AuthFormContainer>
-  </div>
+  <AuthFormContainer>
+    {isCommercialMode ? <EmailLoginForm /> : <UsernameLoginForm />}
+  </AuthFormContainer>
 );
 
 export default LoginPage;
