@@ -6,7 +6,7 @@ import { Heart } from "lucide-react";
 import { track } from "@/lib/analytics";
 
 export const Footer: FC = () => (
-  <footer className="flex flex-col gap-4 max-w-3xl mx-auto px-5 py-8 w-full">
+  <footer className="flex flex-col gap-4 max-w-3xl mx-auto px-5 py-4 w-full">
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-foreground-muted">
       <div className="flex items-center gap-1">
         Made with <Heart className="size-3" /> by{" "}

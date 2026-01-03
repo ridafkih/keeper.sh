@@ -7,7 +7,6 @@ import { Onest } from "next/font/google";
 import { headers } from "next/headers";
 import clsx from "clsx";
 import { AuthProvider } from "@/components/auth-provider";
-import { CookieConsent } from "@/components/cookie-consent";
 import { AnalyticsProvider } from "@/components/analytics-provider";
 import { GDPR_COUNTRIES } from "@/config/analytics";
 import { JsonLd } from "@/components/json-ld";
@@ -66,16 +65,13 @@ const AnalyticsWrapper = () => {
   const country = use(getCountry());
   const requiresConsent = GDPR_COUNTRIES.has(country);
 
+  if (!NEXT_PUBLIC_VISITORS_NOW_TOKEN) return null;
+
   return (
-    <>
-      {requiresConsent && <CookieConsent />}
-      {NEXT_PUBLIC_VISITORS_NOW_TOKEN && (
-        <AnalyticsProvider
-          token={NEXT_PUBLIC_VISITORS_NOW_TOKEN}
-          requiresConsent={requiresConsent}
-        />
-      )}
-    </>
+    <AnalyticsProvider
+      token={NEXT_PUBLIC_VISITORS_NOW_TOKEN}
+      requiresConsent={requiresConsent}
+    />
   );
 };
 

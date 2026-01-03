@@ -19,45 +19,47 @@ export const CookieConsent = () => {
 
   return (
     <AnimatePresence>
-      {showBanner && (
-        <div className="grid sticky bottom-2 ml-auto mr-2 pointer-events-auto">
-          <div className="overflow-hidden min-h-0 bg-background border border-border rounded-lg shadow-lg p-2 pl-4">
-            <div className="flex items-center gap-2 whitespace-nowrap">
-              <TextBody className="text-xs">
-                Can Keeper{" "}
-                <Link
-                  href="/privacy"
-                  className="underline text-foreground opacity-75 hover:opacity-100"
-                >
-                  use cookies for analytics?
-                </Link>
-              </TextBody>
-              <div className="grid grid-cols-2 gap-1">
-                <button
-                  type="button"
-                  onClick={() => handleChoice(true)}
-                  className={clsx(
-                    button({ variant: "secondary", size: "xs" }),
-                    "text-nowrap",
-                  )}
-                >
-                  Yes
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleChoice(false)}
-                  className={clsx(
-                    button({ variant: "secondary", size: "xs" }),
-                    "text-nowrap",
-                  )}
-                >
-                  No
-                </button>
+      <div className="sticky bottom-3 w-full flex justify-end max-w-3xl mx-auto px-3 pt-3">
+        {showBanner && (
+          <div className="grid mr-2 pointer-events-auto w-fit">
+            <div className="overflow-hidden min-h-0 bg-background border border-border rounded-lg shadow-lg p-2 pl-4">
+              <div className="flex items-center gap-2 whitespace-nowrap">
+                <TextBody className="text-xs">
+                  Can Keeper{" "}
+                  <Link
+                    href="/privacy"
+                    className="underline text-foreground opacity-75 hover:opacity-100"
+                  >
+                    use cookies for analytics?
+                  </Link>
+                </TextBody>
+                <div className="grid grid-cols-2 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleChoice(true)}
+                    className={clsx(
+                      button({ variant: "secondary", size: "xs" }),
+                      "text-nowrap",
+                    )}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleChoice(false)}
+                    className={clsx(
+                      button({ variant: "secondary", size: "xs" }),
+                      "text-nowrap",
+                    )}
+                  >
+                    No
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </AnimatePresence>
   );
 };
