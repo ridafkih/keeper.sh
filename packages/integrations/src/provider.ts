@@ -18,15 +18,12 @@ import {
 } from "./mappings";
 import { generateEventUid, isKeeperEvent } from "./event-identity";
 import type { SyncContext, SyncStage } from "./sync-coordinator";
-import { log } from "@keeper.sh/log";
 
 export abstract class CalendarProvider<
   TConfig extends ProviderConfig = ProviderConfig,
 > {
   abstract readonly name: string;
   abstract readonly id: string;
-
-  protected readonly childLog = log.child({ provider: this.constructor.name });
 
   constructor(protected config: TConfig) {}
 
@@ -41,11 +38,6 @@ export abstract class CalendarProvider<
     context: SyncContext,
   ): Promise<SyncResult> {
     const { database, userId, destinationId } = this.config;
-
-    this.childLog.debug(
-      { userId, localCount: localEvents.length },
-      "starting sync",
-    );
 
     this.emitProgress(context, {
       stage: "fetching",
@@ -71,10 +63,6 @@ export abstract class CalendarProvider<
     );
 
     if (staleMappingIds.length > 0) {
-      this.childLog.debug(
-        { userId, staleCount: staleMappingIds.length },
-        "deleting stale mappings",
-      );
       await Promise.all(
         staleMappingIds.map((id) => deleteEventMapping(database, id)),
       );
@@ -83,13 +71,7 @@ export abstract class CalendarProvider<
     const addCount = operations.filter((op) => op.type === "add").length;
     const removeCount = operations.filter((op) => op.type === "remove").length;
 
-    this.childLog.debug(
-      { userId, toAddCount: addCount, toRemoveCount: removeCount },
-      "diff complete",
-    );
-
     if (operations.length === 0) {
-      this.childLog.debug({ userId }, "destination in sync");
       const mappingCount = await countMappingsForDestination(database, destinationId);
       await context.onDestinationSync?.({
         userId,
@@ -114,11 +96,6 @@ export abstract class CalendarProvider<
       remoteEventCount: finalRemoteCount,
       broadcast: true,
     });
-
-    this.childLog.info(
-      { userId, added: processed.added, removed: processed.removed },
-      "sync complete",
-    );
 
     return processed;
   }
@@ -212,7 +189,6 @@ export abstract class CalendarProvider<
 
     for (const operation of operations) {
       if (!(await params.context.isCurrent())) {
-        this.childLog.debug("sync superseded, stopping");
         break;
       }
 
@@ -221,7 +197,6 @@ export abstract class CalendarProvider<
       if (operation.type === "add") {
         const [result] = await this.pushEvents([operation.event]);
         if (result?.shouldContinue === false) {
-          this.childLog.debug("stopping sync due to shouldContinue=false");
           break;
         }
         if (result?.success && result.remoteId) {
@@ -239,7 +214,6 @@ export abstract class CalendarProvider<
       } else {
         const [result] = await this.deleteEvents([operation.deleteId]);
         if (result?.shouldContinue === false) {
-          this.childLog.debug("stopping sync due to shouldContinue=false");
           break;
         }
         if (result?.success) {

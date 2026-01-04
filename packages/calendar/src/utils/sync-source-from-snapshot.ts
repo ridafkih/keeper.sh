@@ -6,7 +6,6 @@ import {
   eventMappingsTable,
 } from "@keeper.sh/database/schema";
 import { convertIcsCalendar } from "ts-ics";
-import { log } from "@keeper.sh/log";
 import { eq, inArray, desc } from "drizzle-orm";
 import { parseIcsEvents } from "./parse-ics-events";
 import { diffEvents } from "./diff-events";
@@ -61,7 +60,7 @@ const getUserMappedDestinationUids = async (
 
 const removeEvents = async (
   database: BunSQLDatabase,
-  sourceId: string,
+  _sourceId: string,
   events: { id: string; startTime: Date; endTime: Date }[],
 ) => {
   const eventIds = events.map(({ id }) => id);
@@ -69,15 +68,6 @@ const removeEvents = async (
   await database
     .delete(eventStatesTable)
     .where(inArray(eventStatesTable.id, eventIds));
-
-  for (const event of events) {
-    log.debug(
-      "removed event from source '%s': %s - %s",
-      sourceId,
-      event.startTime.toISOString(),
-      event.endTime.toISOString(),
-    );
-  }
 };
 
 const addEvents = async (
@@ -93,15 +83,6 @@ const addEvents = async (
   }));
 
   await database.insert(eventStatesTable).values(rows);
-
-  for (const event of events) {
-    log.debug(
-      "added event to source '%s': %s - %s",
-      sourceId,
-      event.startTime.toISOString(),
-      event.endTime.toISOString(),
-    );
-  }
 };
 
 type StoredEvent = Awaited<ReturnType<typeof getStoredEvents>>[number];
@@ -130,12 +111,8 @@ export async function syncSourceFromSnapshot(
   database: BunSQLDatabase,
   source: Source,
 ) {
-  log.trace("syncSourceFromSnapshot for source '%s' started", source.id);
-
   const icsCalendar = await getLatestSnapshot(database, source.id);
   if (!icsCalendar) {
-    log.debug("no snapshot found for source '%s'", source.id);
-    log.trace("syncSourceFromSnapshot for source '%s' complete", source.id);
     return;
   }
 
@@ -161,10 +138,4 @@ export async function syncSourceFromSnapshot(
   if (toAdd.length > 0) {
     await addEvents(database, source.id, toAdd);
   }
-
-  if (toAdd.length === 0 && eventsToRemove.length === 0) {
-    log.debug("source '%s' is in sync", source.id);
-  }
-
-  log.trace("syncSourceFromSnapshot for source '%s' complete", source.id);
 }

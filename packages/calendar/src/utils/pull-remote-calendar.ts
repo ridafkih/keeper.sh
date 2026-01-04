@@ -1,6 +1,5 @@
 import { fetch } from "bun";
 import { convertIcsCalendar } from "ts-ics";
-import { log } from "@keeper.sh/log";
 
 const normalizeCalendarUrl = (url: string): string => {
   if (url.startsWith("webcal://")) {
@@ -43,18 +42,10 @@ const parseUrlWithCredentials = (url: string): ParsedUrl => {
 };
 
 const fetchRemoteText = async (url: string) => {
-  log.trace("fetchRemoteText for '%s' started", url);
-
   const { url: cleanUrl, headers } = parseUrlWithCredentials(url);
   const response = await fetch(cleanUrl, { headers });
 
   if (!response.ok) {
-    log.debug(
-      "fetchRemoteText for '%s' failed with status %d",
-      url,
-      response.status,
-    );
-
     if (response.status === 401 || response.status === 403) {
       throw new CalendarFetchError(
         "Calendar requires authentication. Use a public URL or include credentials in the URL (https://user:pass@host/path).",
@@ -75,9 +66,7 @@ const fetchRemoteText = async (url: string) => {
     );
   }
 
-  const text = await response.text();
-  log.trace("fetchRemoteText for '%s' complete", url);
-  return text;
+  return response.text();
 };
 
 type ParsedCalendarResult = ReturnType<typeof convertIcsCalendar>;

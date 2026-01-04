@@ -1,5 +1,4 @@
 import { createSourceSchema } from "@keeper.sh/data-schemas";
-import { log } from "@keeper.sh/log";
 import { withTracing, withAuth } from "../../../utils/middleware";
 import {
   getUserSources,
@@ -34,7 +33,6 @@ export const POST = withTracing(
         );
       }
 
-      log.error({ error }, "error parsing source body");
       return Response.json(
         { error: "Name and URL are required" },
         { status: 400 },

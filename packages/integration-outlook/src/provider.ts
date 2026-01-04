@@ -136,7 +136,6 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
 
   private async markNeedsReauthentication(): Promise<void> {
     const { database, destinationId, userId, broadcastSyncStatus } = this.config;
-    this.childLog.warn({ destinationId }, "marking destination as needing reauthentication");
     await database
       .update(calendarDestinationsTable)
       .set({ needsReauthentication: true })
@@ -153,8 +152,6 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
       return;
     }
 
-    this.childLog.info({ accountId }, "refreshing token");
-
     const tokenData = await this.oauthProvider.refreshAccessToken(refreshToken);
     const newExpiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
 
@@ -167,7 +164,6 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
       .limit(1);
 
     if (destination?.oauthCredentialId) {
-      this.childLog.debug({ accountId }, "updating database with new token");
       await database
         .update(oauthCredentialsTable)
         .set({
@@ -180,13 +176,10 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
 
     this.currentAccessToken = tokenData.access_token;
     this.config.accessTokenExpiresAt = newExpiresAt;
-
-    this.childLog.debug({ accountId }, "token refreshed");
   }
 
   async pushEvents(events: SyncableEvent[]): Promise<PushResult[]> {
     await this.ensureValidToken();
-    this.childLog.info({ count: events.length }, "pushing events");
 
     const results: PushResult[] = [];
 
@@ -195,22 +188,15 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
       results.push(result);
 
       if (!result.success && isRateLimitError(new Error(result.error))) {
-        this.childLog.warn("rate limit hit, waiting before continuing");
         await delay(RATE_LIMIT_DELAY_MS);
       }
     }
 
-    const succeeded = results.filter(({ success }) => success).length;
-    this.childLog.info(
-      { succeeded, failed: results.length - succeeded },
-      "push complete",
-    );
     return results;
   }
 
   async deleteEvents(eventIds: string[]): Promise<DeleteResult[]> {
     await this.ensureValidToken();
-    this.childLog.info({ count: eventIds.length }, "deleting events");
 
     const results: DeleteResult[] = [];
 
@@ -219,16 +205,10 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
       results.push(result);
 
       if (!result.success && isRateLimitError(new Error(result.error))) {
-        this.childLog.warn("rate limit hit, waiting before continuing");
         await delay(RATE_LIMIT_DELAY_MS);
       }
     }
 
-    const succeeded = results.filter(({ success }) => success).length;
-    this.childLog.info(
-      { succeeded, failed: results.length - succeeded },
-      "delete complete",
-    );
     return results;
   }
 
@@ -267,10 +247,6 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
       if (!response.ok) {
         const body = await response.json();
         const { error } = microsoftApiErrorSchema.assert(body);
-        this.childLog.error(
-          { status: response.status, error },
-          "failed to list events",
-        );
 
         if (isAuthError(response.status, error)) {
           await this.markNeedsReauthentication();
@@ -299,7 +275,6 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
       nextLink = data["@odata.nextLink"];
     } while (nextLink);
 
-    this.childLog.debug({ count: remoteEvents.length }, "listed remote events");
     return remoteEvents;
   }
 
@@ -309,7 +284,6 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
     try {
       return this.createEvent(resource);
     } catch (error) {
-      this.childLog.error({ error }, "failed to push event");
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
@@ -329,10 +303,6 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
     if (!response.ok) {
       const body = await response.json();
       const { error } = microsoftApiErrorSchema.assert(body);
-      this.childLog.error(
-        { status: response.status, error },
-        "create event failed",
-      );
 
       if (isAuthError(response.status, error)) {
         await this.markNeedsReauthentication();
@@ -351,7 +321,6 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
 
     const body = await response.json();
     const event = outlookEventSchema.assert(body);
-    this.childLog.debug({ remoteId: event.iCalUId }, "event created");
     return { success: true, remoteId: event.iCalUId, deleteId: event.id };
   }
 
@@ -367,10 +336,6 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
       if (!response.ok && response.status !== 404) {
         const body = await response.json();
         const { error } = microsoftApiErrorSchema.assert(body);
-        this.childLog.error(
-          { status: response.status, eventId, error },
-          "delete event failed",
-        );
 
         if (isAuthError(response.status, error)) {
           await this.markNeedsReauthentication();
@@ -387,10 +352,8 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
         };
       }
 
-      this.childLog.debug({ eventId }, "event deleted");
       return { success: true };
     } catch (error) {
-      this.childLog.error({ eventId, error }, "failed to delete event");
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",

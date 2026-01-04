@@ -1,5 +1,4 @@
 import { createDAVClient } from "tsdav";
-import { log } from "@keeper.sh/log";
 
 export interface CalDAVClientConfig {
   serverUrl: string;
@@ -21,8 +20,6 @@ export interface CalendarObject {
   data?: string;
 }
 
-const childLog = log.child({ module: "caldav-client" });
-
 type DAVClientInstance = Awaited<ReturnType<typeof createDAVClient>>;
 
 export class CalDAVClient {
@@ -35,10 +32,6 @@ export class CalDAVClient {
 
   private async getClient(): Promise<DAVClientInstance> {
     if (!this.client) {
-      childLog.debug(
-        { serverUrl: this.config.serverUrl },
-        "creating CalDAV client",
-      );
       this.client = await createDAVClient({
         serverUrl: this.config.serverUrl,
         credentials: this.config.credentials,
@@ -52,8 +45,6 @@ export class CalDAVClient {
   async discoverCalendars(): Promise<CalendarInfo[]> {
     const client = await this.getClient();
     const calendars = await client.fetchCalendars();
-
-    childLog.debug({ count: calendars.length }, "discovered calendars");
 
     return calendars.map(({ url, displayName, ctag }) => ({
       url,
@@ -81,11 +72,6 @@ export class CalDAVClient {
   }): Promise<void> {
     const client = await this.getClient();
 
-    childLog.debug(
-      { calendarUrl: params.calendarUrl, filename: params.filename },
-      "creating calendar object",
-    );
-
     await client.createCalendarObject({
       calendar: { url: params.calendarUrl },
       filename: params.filename,
@@ -99,8 +85,6 @@ export class CalDAVClient {
   }): Promise<void> {
     const client = await this.getClient();
     const objectUrl = this.normalizeUrl(params.calendarUrl, params.filename);
-
-    childLog.debug({ objectUrl }, "deleting calendar object");
 
     await client.deleteCalendarObject({
       calendarObject: { url: objectUrl },
@@ -120,21 +104,11 @@ export class CalDAVClient {
         }
       : undefined;
 
-    childLog.debug(
-      { calendarUrl: params.calendarUrl, timeRange },
-      "fetching calendar objects",
-    );
-
     const objects = await client.fetchCalendarObjects({
       calendar: { url: params.calendarUrl },
       timeRange,
       expand: true,
     });
-
-    childLog.debug(
-      { count: objects.length, withData: objects.filter((o) => o.data).length },
-      "fetched objects",
-    );
 
     return objects;
   }

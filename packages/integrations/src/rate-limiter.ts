@@ -1,8 +1,4 @@
-import { log } from "@keeper.sh/log";
-
 type QueuedTask = () => Promise<void>;
-
-const rateLimiterLog = log.child({ module: "rate-limiter" });
 
 export class RateLimiter {
   private readonly concurrency: number;
@@ -38,10 +34,6 @@ export class RateLimiter {
 
   reportRateLimit(): void {
     this.backoffUntil = Date.now() + this.backoffMs;
-    rateLimiterLog.warn(
-      { backoffMs: this.backoffMs, backoffUntil: new Date(this.backoffUntil) },
-      "rate limit hit, backing off",
-    );
     this.backoffMs = Math.min(
       this.backoffMs * this.backoffMultiplier,
       this.maxBackoffMs,
@@ -51,7 +43,6 @@ export class RateLimiter {
 
   private resetBackoff(): void {
     if (this.backoffMs !== this.initialBackoffMs) {
-      rateLimiterLog.debug("resetting backoff after successful request");
       this.backoffMs = this.initialBackoffMs;
     }
   }

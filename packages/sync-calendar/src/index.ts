@@ -6,7 +6,6 @@ import {
 import { pullRemoteCalendar } from "@keeper.sh/pull-calendar";
 import { parseIcsEvents, diffEvents } from "@keeper.sh/sync-events";
 import { convertIcsCalendar } from "ts-ics";
-import { log } from "@keeper.sh/log";
 import { eq, inArray, desc } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
@@ -75,12 +74,10 @@ export const createSyncCalendarService = (
     return events;
   };
 
-  const removeEvents = async (sourceId: string, eventIds: string[]) => {
+  const removeEvents = async (_sourceId: string, eventIds: string[]) => {
     await database
       .delete(eventStatesTable)
       .where(inArray(eventStatesTable.id, eventIds));
-
-    log.debug("removed %s events from source '%s'", eventIds.length, sourceId);
   };
 
   const addEvents = async (
@@ -95,22 +92,15 @@ export const createSyncCalendarService = (
     }));
 
     await database.insert(eventStatesTable).values(rows);
-    log.debug("added %s events to source '%s'", events.length, sourceId);
   };
 
   const createSnapshot = async (sourceId: string, ical: string) => {
-    log.trace("createSnapshot for source '%s' started", sourceId);
     await database.insert(calendarSnapshotsTable).values({ sourceId, ical });
-    log.trace("createSnapshot for source '%s' complete", sourceId);
   };
 
   const syncSourceFromSnapshot = async (source: Source) => {
-    log.trace("syncSourceFromSnapshot for source '%s' started", source.id);
-
     const icsCalendar = await getLatestSnapshot(source.id);
     if (!icsCalendar) {
-      log.debug("no snapshot found for source '%s'", source.id);
-      log.trace("syncSourceFromSnapshot for source '%s' complete", source.id);
       return;
     }
 
@@ -126,30 +116,12 @@ export const createSyncCalendarService = (
     if (toAdd.length > 0) {
       await addEvents(source.id, toAdd);
     }
-
-    if (toAdd.length === 0 && toRemove.length === 0) {
-      log.debug("source '%s' is in sync", source.id);
-    }
-
-    log.trace("syncSourceFromSnapshot for source '%s' complete", source.id);
   };
 
   const fetchAndSyncSource = async (source: Source) => {
-    log.trace("fetchAndSyncSource for source '%s' started", source.id);
-
-    try {
-      const { ical } = await pullRemoteCalendar("ical", source.url);
-      await createSnapshot(source.id, ical);
-      await syncSourceFromSnapshot(source);
-      log.trace("fetchAndSyncSource for source '%s' complete", source.id);
-    } catch (error) {
-      const syncError = new RemoteCalendarSyncError(source.id, error);
-      log.error(
-        { error: syncError, sourceId: source.id },
-        "failed to fetch and sync source",
-      );
-      throw syncError;
-    }
+    const { ical } = await pullRemoteCalendar("ical", source.url);
+    await createSnapshot(source.id, ical);
+    await syncSourceFromSnapshot(source);
   };
 
   return { createSnapshot, syncSourceFromSnapshot, fetchAndSyncSource };

@@ -1,13 +1,9 @@
 import { fetch } from "bun";
 import { convertIcsCalendar } from "ts-ics";
-import { log } from "@keeper.sh/log";
 
 const fetchRemoteText = async (url: string) => {
-  log.trace("fetchRemoteText for '%s' started", url);
   const response = await fetch(url);
-  const text = await response.text();
-  log.trace("fetchRemoteText for '%s' complete", url);
-  return text;
+  return response.text();
 };
 
 type ParsedCalendarResult = ReturnType<typeof convertIcsCalendar>;

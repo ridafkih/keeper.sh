@@ -1,5 +1,4 @@
 import type { SyncResult } from "./types";
-import { log } from "@keeper.sh/log";
 import type { SyncContext, SyncCoordinator } from "./sync-coordinator";
 
 export interface DestinationProvider {
@@ -18,17 +17,7 @@ export async function syncDestinationsForUser(
       providers.map((provider) => provider.syncForUser(userId, context)),
     );
 
-    const isCurrent = await syncCoordinator.isSyncCurrent(context);
-
-    for (const result of results) {
-      if (result.status === "rejected" && isCurrent) {
-        log.error(
-          { err: result.reason },
-          "destination sync failed for user '%s'",
-          userId,
-        );
-      }
-    }
+    await syncCoordinator.isSyncCurrent(context);
   } finally {
     await syncCoordinator.endSync(context);
   }

@@ -1,4 +1,4 @@
-import { log, getWideEvent } from "@keeper.sh/log";
+import { getWideEvent } from "@keeper.sh/log";
 import type { RedisClient } from "bun";
 
 const SYNC_KEY_PREFIX = "sync:generation:";
@@ -66,7 +66,6 @@ export const createSyncCoordinator = (config: SyncCoordinatorConfig): SyncCoordi
     await redis.expire(key, SYNC_TTL_SECONDS);
 
     enrichWideEventWithSyncContext(userId, generation);
-    log.debug({ userId, generation }, "starting sync generation");
 
     const isCurrent = async (): Promise<boolean> => {
       const currentGeneration = await redis.get(key);
@@ -81,8 +80,7 @@ export const createSyncCoordinator = (config: SyncCoordinatorConfig): SyncCoordi
     return context.isCurrent();
   };
 
-  const endSync = async (context: SyncContext): Promise<void> => {
-    log.debug({ userId: context.userId, generation: context.generation }, "ending sync generation");
+  const endSync = async (_context: SyncContext): Promise<void> => {
   };
 
   return { startSync, isSyncCurrent, endSync };

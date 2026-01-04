@@ -1,20 +1,10 @@
 import type { CronOptions } from "cronbake";
 import { userSubscriptionsTable } from "@keeper.sh/database/schema";
 import { user } from "@keeper.sh/database/auth-schema";
-import { log } from "@keeper.sh/log";
 import { database, polarClient } from "../context";
+import { withCronWideEvent, setCronEventFields } from "../utils/with-wide-event";
 
-class SubscriptionReconcileError extends Error {
-  constructor(
-    public userId: string,
-    cause: unknown,
-  ) {
-    super(`Failed to reconcile subscription for user ${userId}`);
-    this.cause = cause;
-  }
-}
-
-async function reconcileUserSubscription(userId: string) {
+const reconcileUserSubscription = async (userId: string) => {
   if (!polarClient) return;
 
   try {
@@ -44,35 +34,41 @@ async function reconcileUserSubscription(userId: string) {
         },
       });
 
-    log.debug("reconciled user '%s' to plan '%s'", userId, plan);
-  } catch (error) {
-    const reconcileError = new SubscriptionReconcileError(userId, error);
-    log.error(
-      { error: reconcileError, userId },
-      "failed to reconcile subscription",
-    );
+  } catch {
   }
 }
 
-export default {
+const countReconciliationResults = (
+  results: PromiseSettledResult<void>[]
+): { succeeded: number; failed: number } => {
+  const succeeded = results.filter(
+    (result) => result.status === "fulfilled"
+  ).length;
+  const failed = results.filter(
+    (result) => result.status === "rejected"
+  ).length;
+  return { succeeded, failed };
+};
+
+export default withCronWideEvent({
   name: import.meta.file,
   cron: "0 0 * * * *",
   immediate: true,
   async callback() {
     if (!polarClient) {
-      log.debug("polar client not configured, skipping reconciliation");
+      setCronEventFields({ processedCount: 0 });
       return;
     }
 
     const users = await database.select({ id: user.id }).from(user);
-    log.info("reconciling subscriptions for %s users", users.length);
+    setCronEventFields({ processedCount: users.length });
 
-    const reconciliations = users.map((user) =>
-      reconcileUserSubscription(user.id),
+    const reconciliations = users.map((userRecord) =>
+      reconcileUserSubscription(userRecord.id)
     );
 
-    await Promise.allSettled(reconciliations);
-
-    log.info("subscription reconciliation complete");
+    const results = await Promise.allSettled(reconciliations);
+    const { failed } = countReconciliationResults(results);
+    setCronEventFields({ failedCount: failed });
   },
-} satisfies CronOptions;
+}) satisfies CronOptions;

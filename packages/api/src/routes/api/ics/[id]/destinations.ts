@@ -1,5 +1,4 @@
 import { updateSourceDestinationsSchema } from "@keeper.sh/data-schemas";
-import { log } from "@keeper.sh/log";
 import { withTracing, withAuth } from "../../../../utils/middleware";
 import {
   updateSourceMappings,
@@ -47,8 +46,7 @@ export const PUT = withTracing(
       triggerDestinationSync(userId);
 
       return Response.json({ success: true });
-    } catch (error) {
-      log.error({ error }, "error updating source destinations");
+    } catch {
       return Response.json(
         { error: "Invalid request body" },
         { status: 400 },

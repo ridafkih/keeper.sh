@@ -122,8 +122,7 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
             });
 
             return { success: true, remoteId: uid };
-          } catch (error) {
-            this.childLog.error({ error }, "failed to push event");
+          } catch {
             return { success: false, error: "Failed to push event" };
           }
         }),
@@ -151,7 +150,6 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
               return { success: true };
             }
 
-            this.childLog.error({ error, uid }, "failed to delete event");
             return { success: false, error: "Failed to delete event" };
           }
         }),
@@ -179,11 +177,6 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
         end: tenYearsOut.toISOString(),
       },
     });
-
-    this.childLog.debug(
-      { objectCount: objects.length },
-      "fetched calendar objects",
-    );
 
     const remoteEvents: RemoteEvent[] = [];
     let noData = 0;
@@ -217,15 +210,6 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
       remoteEvents.push(parsed);
     }
 
-    this.childLog.debug(
-      {
-        provider: this.name,
-        objectCount: objects.length,
-        keeperEventCount: remoteEvents.length,
-        calendarUrl: this.config.calendarUrl,
-      },
-      "listed remote events",
-    );
     return remoteEvents;
   }
 }

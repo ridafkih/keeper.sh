@@ -4,19 +4,9 @@ import {
   calendarSnapshotsTable,
 } from "@keeper.sh/database/schema";
 import { pullRemoteCalendar } from "@keeper.sh/calendar";
-import { log } from "@keeper.sh/log";
 import { and, eq, lte } from "drizzle-orm";
 import { database } from "../context";
-
-class CalendarFetchError extends Error {
-  constructor(
-    public sourceId: string,
-    cause: unknown,
-  ) {
-    super(`Failed to fetch remote calendar ${sourceId}`);
-    this.cause = cause;
-  }
-}
+import { withCronWideEvent, setCronEventFields } from "../utils/with-wide-event";
 
 type FetchResult = {
   ical: string;
@@ -27,17 +17,8 @@ const fetchRemoteCalendar = async (
   sourceId: string,
   url: string,
 ): Promise<FetchResult> => {
-  log.debug("fetching remote calendar '%s'", sourceId);
-
-  try {
-    const { ical } = await pullRemoteCalendar("ical", url);
-    log.debug("fetched remote calendar '%s'", sourceId);
-    return { ical, sourceId };
-  } catch (error) {
-    const fetchError = new CalendarFetchError(sourceId, error);
-    log.error({ error: fetchError, sourceId }, "could not fetch remote calendar");
-    throw fetchError;
-  }
+  const { ical } = await pullRemoteCalendar("ical", url);
+  return { ical, sourceId };
 };
 
 const insertSnapshot = async (
@@ -51,22 +32,12 @@ const insertSnapshot = async (
         createdAt: calendarSnapshotsTable.createdAt,
       });
 
-    if (!record) {
-      throw Error("Something went wrong inserting and returning the snapshot");
-    }
-
     return record;
-  } catch (error) {
-    log.error(error, "failed to submit entry into the database");
+  } catch {
+    return undefined;
   }
-
-  return undefined;
 };
 
-/**
- * @param referenceDate Records with timestamps 24 hours older than this will be deleted
- * @returns
- */
 const deleteStaleCalendarSnapshots = async (
   sourceId: string,
   referenceDate: Date,
@@ -75,51 +46,53 @@ const deleteStaleCalendarSnapshots = async (
     const timestamp = referenceDate.getTime();
     const dayBeforeTimestamp = timestamp - 24 * 60 * 60 * 1000;
 
-    const deletedRecords = await database
+    await database
       .delete(calendarSnapshotsTable)
       .where(
         and(
           eq(calendarSnapshotsTable.sourceId, sourceId),
           lte(calendarSnapshotsTable.createdAt, new Date(dayBeforeTimestamp)),
         ),
-      )
-      .returning({ id: calendarSnapshotsTable.id });
-
-    const deletedRecordsCount = deletedRecords.length;
-
-    log.debug(
-      "deleted %s snapshots with sourceId '%s'",
-      deletedRecordsCount,
-      sourceId,
-    );
-  } catch (error) {
-    log.error(error, "failed to delete snapshots with sourceId '%s'", sourceId);
+      );
+  } catch {
   }
 };
 
-export default {
+const countSettlementResults = (
+  settlements: PromiseSettledResult<FetchResult>[]
+): { succeeded: number; failed: number } => {
+  const succeeded = settlements.filter(
+    (settlement) => settlement.status === "fulfilled"
+  ).length;
+  const failed = settlements.filter(
+    (settlement) => settlement.status === "rejected"
+  ).length;
+  return { succeeded, failed };
+};
+
+export default withCronWideEvent({
   name: import.meta.file,
   cron: "@every_1_minutes",
   immediate: true,
   async callback() {
     const remoteSources = await database.select().from(remoteICalSourcesTable);
-    log.debug("fetched %s remote sources", remoteSources.length);
+    setCronEventFields({ sourceCount: remoteSources.length });
 
     const fetches = remoteSources.map(({ id, url }) =>
-      fetchRemoteCalendar(id, url),
+      fetchRemoteCalendar(id, url)
     );
 
-    log.debug("got %s remote sources", fetches.length);
-
     const settlements = await Promise.allSettled(fetches);
+    const { succeeded, failed } = countSettlementResults(settlements);
+    setCronEventFields({ processedCount: succeeded, failedCount: failed });
 
     for (const settlement of settlements) {
       if (settlement.status === "rejected") continue;
       const { ical, sourceId } = settlement.value;
       insertSnapshot({ sourceId, ical }).then((record) => {
         if (!record) return;
-        deleteStaleCalendarSnapshots(sourceId, record?.createdAt);
+        deleteStaleCalendarSnapshots(sourceId, record.createdAt);
       });
     }
   },
-} satisfies CronOptions;
+}) satisfies CronOptions;

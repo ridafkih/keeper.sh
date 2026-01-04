@@ -1,4 +1,3 @@
-import { log } from "@keeper.sh/log";
 import { withTracing } from "../../../../utils/middleware";
 import {
   parseOAuthCallback,
@@ -23,7 +22,6 @@ export const GET = withTracing(async ({ request, params }) => {
       return Response.redirect(error.redirectUrl.toString());
     }
 
-    log.error(error, "failed to complete OAuth callback");
     const errorUrl = buildRedirectUrl("/dashboard/integrations", {
       destination: "error",
       error: "Failed to connect",

@@ -1,4 +1,4 @@
-import { log, WideEvent, emitWideEvent } from "@keeper.sh/log";
+import { WideEvent, emitWideEvent, log } from "@keeper.sh/log";
 import {
   socketMessageSchema,
   broadcastMessageSchema,
@@ -39,11 +39,6 @@ const sendToUser = (userId: string, event: string, data: unknown): void => {
   for (const socket of userConnections) {
     socket.send(message);
   }
-
-  log.debug(
-    { userId, event, connectionCount: userConnections.size },
-    "broadcast sent to sockets",
-  );
 };
 
 export const createBroadcastService = (config: BroadcastConfig): BroadcastService => {
@@ -52,7 +47,6 @@ export const createBroadcastService = (config: BroadcastConfig): BroadcastServic
   const emit = (userId: string, event: string, data: unknown): void => {
     const message: BroadcastMessage = { userId, event, data };
     redis.publish(CHANNEL, JSON.stringify(message));
-    log.debug({ userId, event }, "broadcast published to redis");
   };
 
   const startSubscriber = async (): Promise<void> => {
@@ -61,7 +55,6 @@ export const createBroadcastService = (config: BroadcastConfig): BroadcastServic
     await subscriber.subscribe(CHANNEL, (message) => {
       const parsed = JSON.parse(message);
       if (!broadcastMessageSchema.allows(parsed)) {
-        log.error("invalid broadcast message received from redis");
         return;
       }
       sendToUser(parsed.userId, parsed.event, parsed.data);
@@ -75,7 +68,6 @@ export const createBroadcastService = (config: BroadcastConfig): BroadcastServic
 
 export const addConnection = (userId: string, socket: Socket): void => {
   const existing = connections.get(userId);
-  log.debug({ userId }, "adding connection");
 
   if (existing) {
     existing.add(socket);
@@ -93,7 +85,6 @@ export const removeConnection = (userId: string, socket: Socket): void => {
       connections.delete(userId);
     }
   }
-  log.debug({ userId }, "connection removed");
 };
 
 export const getConnectionCount = (userId: string): number => {
@@ -137,7 +128,6 @@ export const createWebsocketHandler = (options?: WebsocketHandlerOptions) => ({
   idleTimeout: 60,
   async open(socket: Socket) {
     const userId = socket.data.userId;
-    log.debug({ userId }, "socket opened");
     addConnection(userId, socket);
     pingIntervals.set(socket, startPing(socket));
 
@@ -150,7 +140,6 @@ export const createWebsocketHandler = (options?: WebsocketHandlerOptions) => ({
         errorType: error instanceof Error ? error.constructor.name : "Unknown",
         errorMessage: error instanceof Error ? error.message : String(error),
       });
-      log.error({ error, userId }, "onConnect callback failed");
     }
   },
   close(socket: Socket) {
@@ -168,7 +157,6 @@ export const createWebsocketHandler = (options?: WebsocketHandlerOptions) => ({
   message(socket: Socket, message: string | Buffer) {
     const data = JSON.parse(message.toString());
     if (!socketMessageSchema.allows(data)) {
-      log.warn({ userId: socket.data.userId }, "invalid socket message");
       return;
     }
 

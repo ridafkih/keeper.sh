@@ -229,11 +229,8 @@ const handleRequest = async (
     const userId = token ? validateSocketToken(token) : null;
 
     if (!userId) {
-      log.debug("socket upgrade unauthorized - invalid or missing token");
       return new Response("Unauthorized", { status: 401 });
     }
-
-    log.debug({ userId }, "socket upgrade authorized");
 
     const upgraded = server.upgrade(request, {
       data: { userId },

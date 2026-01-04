@@ -1,5 +1,4 @@
 import { caldavConnectRequestSchema } from "@keeper.sh/data-schemas";
-import { log } from "@keeper.sh/log";
 import { withTracing, withAuth } from "../../../../utils/middleware";
 import {
   createCalDAVDestination,
@@ -38,7 +37,6 @@ export const POST = withTracing(
         return Response.json({ error: error.message }, { status: 400 });
       }
 
-      log.error({ error }, "error parsing caldav body");
       return Response.json(
         { error: "All fields are required" },
         { status: 400 },

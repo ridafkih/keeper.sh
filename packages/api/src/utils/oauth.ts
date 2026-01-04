@@ -1,4 +1,3 @@
-import { log } from "@keeper.sh/log";
 import {
   exchangeCodeForTokens,
   fetchUserInfo,
@@ -65,23 +64,19 @@ export const handleOAuthCallback = async (
   });
 
   if (!params.provider) {
-    log.warn("Missing provider in callback URL");
     throw new OAuthError("Missing provider", errorUrl);
   }
 
   if (params.error) {
-    log.warn({ error: params.error }, "OAuth error returned from provider");
     throw new OAuthError("OAuth error from provider", errorUrl);
   }
 
   if (!params.code || !params.state) {
-    log.warn("Missing code or state in callback");
     throw new OAuthError("Missing code or state", errorUrl);
   }
 
   const validatedState = validateState(params.state);
   if (!validatedState) {
-    log.warn("Invalid or expired state");
     throw new OAuthError("Invalid or expired state", errorUrl);
   }
 
@@ -98,7 +93,6 @@ export const handleOAuthCallback = async (
   );
 
   if (!tokens.refresh_token) {
-    log.error("No refresh token in response");
     throw new OAuthError("No refresh token", errorUrl);
   }
 
@@ -108,10 +102,6 @@ export const handleOAuthCallback = async (
   if (destinationId) {
     const existingAccountId = await getDestinationAccountId(destinationId);
     if (existingAccountId && existingAccountId !== userInfo.id) {
-      log.warn(
-        { userId, destinationId, expectedAccountId: existingAccountId, actualAccountId: userInfo.id },
-        "reauthentication attempted with different account",
-      );
       throw new OAuthError(
         "Please reauthenticate with the same account",
         buildRedirectUrl("/dashboard/integrations", {
@@ -123,13 +113,6 @@ export const handleOAuthCallback = async (
 
   const needsReauthentication = !hasRequiredScopes(params.provider, tokens.scope);
 
-  if (needsReauthentication) {
-    log.warn(
-      { userId, provider: params.provider, grantedScopes: tokens.scope },
-      "user did not grant required scopes",
-    );
-  }
-
   await saveCalendarDestination(
     userId,
     params.provider,
@@ -139,11 +122,6 @@ export const handleOAuthCallback = async (
     tokens.refresh_token,
     expiresAt,
     needsReauthentication,
-  );
-
-  log.info(
-    { userId, provider: params.provider, needsReauthentication },
-    "calendar destination connected",
   );
 
   triggerDestinationSync(userId);

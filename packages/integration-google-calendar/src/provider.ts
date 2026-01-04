@@ -131,7 +131,6 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
 
   private async markNeedsReauthentication(): Promise<void> {
     const { database, destinationId, userId, broadcastSyncStatus } = this.config;
-    this.childLog.warn({ destinationId }, "marking destination as needing reauthentication");
     await database
       .update(calendarDestinationsTable)
       .set({ needsReauthentication: true })
@@ -148,12 +147,9 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
       return;
     }
 
-    this.childLog.info({ accountId }, "refreshing token");
-
     const tokenData = await this.oauthProvider.refreshAccessToken(refreshToken);
     const newExpiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
 
-    this.childLog.debug({ accountId }, "updating database with new token");
     const [destination] = await database
       .select({
         oauthCredentialId: calendarDestinationsTable.oauthCredentialId,
@@ -174,16 +170,10 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
 
     this.currentAccessToken = tokenData.access_token;
     this.config.accessTokenExpiresAt = newExpiresAt;
-
-    this.childLog.debug({ accountId }, "token refreshed");
   }
 
   async pushEvents(events: SyncableEvent[]): Promise<PushResult[]> {
     await this.ensureValidToken();
-    this.childLog.info(
-      { count: events.length, calendarId: this.config.calendarId },
-      "pushing events",
-    );
 
     const results = await Promise.all(
       events.map((event) =>
@@ -197,20 +187,11 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
       ),
     );
 
-    const succeeded = results.filter(({ success }) => success).length;
-    this.childLog.info(
-      { succeeded, failed: results.length - succeeded },
-      "push complete",
-    );
     return results;
   }
 
   async deleteEvents(eventIds: string[]): Promise<DeleteResult[]> {
     await this.ensureValidToken();
-    this.childLog.info(
-      { count: eventIds.length, calendarId: this.config.calendarId },
-      "deleting events",
-    );
 
     const results = await Promise.all(
       eventIds.map((eventId) =>
@@ -224,11 +205,6 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
       ),
     );
 
-    const succeeded = results.filter(({ success }) => success).length;
-    this.childLog.info(
-      { succeeded, failed: results.length - succeeded },
-      "delete complete",
-    );
     return results;
   }
 
@@ -264,10 +240,6 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
       if (!response.ok) {
         const body = await response.json();
         const { error } = googleApiErrorSchema.assert(body);
-        this.childLog.error(
-          { status: response.status, error },
-          "failed to list events",
-        );
 
         if (isAuthError(response.status, error)) {
           await this.markNeedsReauthentication();
@@ -298,7 +270,6 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
       pageToken = data.nextPageToken;
     } while (pageToken);
 
-    this.childLog.debug({ count: remoteEvents.length }, "listed remote events");
     return remoteEvents;
   }
 
@@ -307,14 +278,12 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
     const resource = this.toGoogleEvent(event, uid);
 
     try {
-      this.childLog.debug({ uid }, "creating event");
       const result = await this.createEvent(resource);
       if (result.success) {
         return { success: true, remoteId: uid };
       }
       return result;
-    } catch (error) {
-      this.childLog.error({ error, uid }, "failed to push event");
+    } catch {
       return { success: false, error: "Failed to push event" };
     }
   }
@@ -334,10 +303,6 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
     if (!response.ok) {
       const body = await response.json();
       const { error } = googleApiErrorSchema.assert(body);
-      this.childLog.error(
-        { status: response.status, error },
-        "create event failed",
-      );
 
       if (isAuthError(response.status, error)) {
         await this.markNeedsReauthentication();
@@ -355,7 +320,6 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
     }
 
     await response.json();
-    this.childLog.debug("event created");
     return { success: true };
   }
 
@@ -364,7 +328,6 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
       const existing = await this.findEventByUid(uid);
 
       if (!existing?.id) {
-        this.childLog.debug({ uid }, "event not found, skipping delete");
         return { success: true };
       }
 
@@ -381,10 +344,6 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
       if (!response.ok && response.status !== 404) {
         const body = await response.json();
         const { error } = googleApiErrorSchema.assert(body);
-        this.childLog.error(
-          { status: response.status, uid, error },
-          "delete event failed",
-        );
 
         if (isAuthError(response.status, error)) {
           await this.markNeedsReauthentication();
@@ -401,10 +360,8 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
         };
       }
 
-      this.childLog.debug({ uid, eventId: existing.id }, "event deleted");
       return { success: true };
-    } catch (error) {
-      this.childLog.error({ error, uid }, "failed to delete event");
+    } catch {
       return { success: false, error: "Failed to delete event" };
     }
   }
@@ -423,10 +380,6 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
     });
 
     if (!response.ok) {
-      this.childLog.warn(
-        { status: response.status, uid },
-        "failed to find event by uid",
-      );
       return null;
     }
 

@@ -4,7 +4,6 @@ import {
   discoverCalendars,
   CalDAVConnectionError,
 } from "../../../../utils/caldav";
-import { log } from "@keeper.sh/log";
 
 export const POST = withTracing(
   withAuth(async ({ request }) => {
@@ -25,7 +24,6 @@ export const POST = withTracing(
         return Response.json({ error: error.message }, { status: 400 });
       }
 
-      log.error({ error }, "error parsing caldav body");
       return Response.json(
         { error: "Server URL, username, and password are required" },
         { status: 400 },
