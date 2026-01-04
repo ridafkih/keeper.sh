@@ -1,7 +1,18 @@
 const CONSENT_KEY = "analytics_consent";
 
+const updateGoogleConsent = (granted: boolean) => {
+  const state = granted ? "granted" : "denied";
+  window.gtag?.("consent", "update", {
+    ad_storage: state,
+    ad_user_data: state,
+    ad_personalization: state,
+    analytics_storage: state,
+  });
+};
+
 export const setAnalyticsConsent = (granted: boolean) => {
   localStorage.setItem(CONSENT_KEY, granted ? "granted" : "denied");
+  updateGoogleConsent(granted);
   window.dispatchEvent(new StorageEvent("storage", { key: CONSENT_KEY }));
 };
 
@@ -42,5 +53,6 @@ declare global {
       identify: (props: IdentifyProps) => void;
       track: (event: string, properties?: EventProperties) => void;
     };
+    gtag?: (...args: unknown[]) => void;
   }
 }

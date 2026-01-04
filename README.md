@@ -77,6 +77,7 @@ There are five images currently available, two of them are designed for convenie
 | NEXT_PUBLIC_POLAR_PRO_MONTHLY_PRODUCT_ID | `web` | Optional. Polar monthly product ID to power in-app upgrade links. |
 | NEXT_PUBLIC_POLAR_PRO_YEARLY_PRODUCT_ID | `web` | Optional. Polar yearly product ID to power in-app upgrade links. |
 | NEXT_PUBLIC_VISITORS_NOW_TOKEN | `web` | Optional. [visitors.now](https://visitors.now) token for analytics tracking |
+| NEXT_PUBLIC_GOOGLE_ADS_ID | `web` | Optional. Google Ads conversion tracking ID (e.g., `AW-123456789`) |
 | COMMERCIAL_MODE | `api`, `cron` | Enable Polar billing flow. Set to `true` if using Polar for subscriptions. |
 | POLAR_ACCESS_TOKEN | `api`, `cron` | Optional. Polar API token for subscription management. |
 | POLAR_MODE | `api`, `cron` | Optional. Polar environment, `sandbox` or `production`. |
