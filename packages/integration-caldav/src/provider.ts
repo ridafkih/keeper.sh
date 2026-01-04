@@ -11,6 +11,7 @@ import {
   type CalDAVConfig,
   type SyncContext,
 } from "@keeper.sh/integrations";
+import { getWideEvent } from "@keeper.sh/log";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { CalDAVClient } from "./caldav-client";
 import { eventToICalString, parseICalToRemoteEvent } from "./ics-converter";
@@ -122,7 +123,8 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
             });
 
             return { success: true, remoteId: uid };
-          } catch {
+          } catch (error) {
+            getWideEvent()?.setError(error);
             return { success: false, error: "Failed to push event" };
           }
         }),

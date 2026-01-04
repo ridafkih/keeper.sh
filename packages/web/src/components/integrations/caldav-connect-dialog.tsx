@@ -180,7 +180,7 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
           <input
             type="url"
             value={serverUrl}
-            onChange={(e) => setServerUrl(e.target.value)}
+            onChange={(event) => setServerUrl(event.target.value)}
             placeholder="https://caldav.example.com/dav/"
             required
             className={input({ size: "sm" })}
@@ -197,7 +197,7 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
         <input
           type="text"
           value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          onChange={(event) => setUsername(event.target.value)}
           required
           autoComplete="username"
           className={input({ size: "sm" })}
@@ -213,7 +213,7 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
         <input
           type="password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(event) => setPassword(event.target.value)}
           required
           autoComplete="current-password"
           className={input({ size: "sm" })}
@@ -250,7 +250,7 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
         </label>
         <select
           value={selectedCalendar}
-          onChange={(e) => setSelectedCalendar(e.target.value)}
+          onChange={(event) => setSelectedCalendar(event.target.value)}
           required
           className={input({ size: "sm" })}
         >

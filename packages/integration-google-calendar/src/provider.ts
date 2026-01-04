@@ -13,6 +13,7 @@ import {
   type ListRemoteEventsOptions,
   type BroadcastSyncStatus,
 } from "@keeper.sh/integrations";
+import { getWideEvent } from "@keeper.sh/log";
 import {
   googleEventSchema,
   googleEventListSchema,
@@ -30,11 +31,16 @@ import { getGoogleAccountsForUser } from "./sync";
 const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3/";
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
-const isRateLimitError = (error: unknown): boolean => {
+const isRateLimitError = (error: unknown): error is Error => {
   if (!(error instanceof Error)) return false;
   return (
     error.message.includes("429") || error.message.includes("rateLimitExceeded")
   );
+};
+
+const hasRateLimitMessage = (message: string | undefined): boolean => {
+  if (!message) return false;
+  return message.includes("429") || message.includes("rateLimitExceeded");
 };
 
 const isAuthError = (
@@ -179,7 +185,7 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
       events.map((event) =>
         this.rateLimiter.execute(async (): Promise<PushResult> => {
           const result = await this.pushEvent(event);
-          if (!result.success && isRateLimitError(new Error(result.error))) {
+          if (!result.success && hasRateLimitMessage(result.error)) {
             this.rateLimiter.reportRateLimit();
           }
           return result;
@@ -197,7 +203,7 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
       eventIds.map((eventId) =>
         this.rateLimiter.execute(async (): Promise<DeleteResult> => {
           const result = await this.deleteEvent(eventId);
-          if (!result.success && isRateLimitError(new Error(result.error))) {
+          if (!result.success && hasRateLimitMessage(result.error)) {
             this.rateLimiter.reportRateLimit();
           }
           return result;
@@ -283,7 +289,8 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
         return { success: true, remoteId: uid };
       }
       return result;
-    } catch {
+    } catch (error) {
+      getWideEvent()?.setError(error);
       return { success: false, error: "Failed to push event" };
     }
   }
@@ -361,7 +368,8 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
       }
 
       return { success: true };
-    } catch {
+    } catch (error) {
+      getWideEvent()?.setError(error);
       return { success: false, error: "Failed to delete event" };
     }
   }

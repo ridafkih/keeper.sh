@@ -10,16 +10,12 @@ import { AuthProvider } from "@/components/auth-provider";
 import { AnalyticsProvider } from "@/components/analytics-provider";
 import { AnalyticsContextProvider } from "@/components/analytics-context";
 import { GDPR_COUNTRIES } from "@/config/analytics";
+import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from "@/config/site";
 import { JsonLd } from "@/components/json-ld";
 
 const font = Onest({
   subsets: ["latin"],
 });
-
-const SITE_URL = "https://keeper.sh";
-const SITE_NAME = "Keeper";
-const SITE_DESCRIPTION =
-  "Simple, open-source calendar syncing. Aggregate events from multiple calendars into one anonymized feed. Push events to one or many calendars.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

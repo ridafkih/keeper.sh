@@ -307,20 +307,18 @@ const SyncStatusText = ({ syncStatus }: SyncStatusTextProps) => {
   const loading = !hasReceivedStatus.current;
   const { text, skeleton } = syncStatusText({ loading });
 
-  const isProcessing =
-    syncStatus?.status === "syncing" &&
+  const progress = syncStatus?.status === "syncing" &&
     syncStatus.stage === "processing" &&
     syncStatus.progress &&
-    syncStatus.progress.total > 0;
+    syncStatus.progress.total > 0
+      ? syncStatus.progress
+      : null;
 
   return (
     <TextMeta className="relative w-fit">
       <span className={text()}>
-        {isProcessing ? (
-          <SyncProgress
-            current={syncStatus.progress!.current}
-            total={syncStatus.progress!.total}
-          />
+        {progress ? (
+          <SyncProgress current={progress.current} total={progress.total} />
         ) : (
           <SyncedCount count={syncStatus?.remoteCount ?? 0} />
         )}

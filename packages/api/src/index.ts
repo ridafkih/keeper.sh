@@ -35,7 +35,7 @@ const validateSocketToken = (token: string): string | null => {
   return entry.userId;
 };
 
-const isNullSession = (body: unknown): boolean => {
+const isNullSession = (body: unknown): body is null | { session: null } => {
   if (body === null) return true;
   if (typeof body !== "object") return false;
   if (!("session" in body)) return false;

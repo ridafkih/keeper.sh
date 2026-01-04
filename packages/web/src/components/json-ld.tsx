@@ -1,6 +1,5 @@
 import type { FC } from "react";
-
-const SITE_URL = "https://keeper.sh";
+import { SITE_URL } from "@/config/site";
 
 const organizationSchema = {
   "@context": "https://schema.org",
