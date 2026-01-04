@@ -1,8 +1,12 @@
 import { PolarEmbedCheckout } from "@polar-sh/checkout/embed";
+import {
+  checkoutSuccessEventSchema,
+  type CheckoutSuccessEvent,
+} from "@keeper.sh/data-schemas";
 import { authClient } from "@/lib/auth-client";
 
 interface CheckoutOptions {
-  onSuccess?: () => void;
+  onSuccess?: (data: CheckoutSuccessEvent) => void;
 }
 
 export async function openCheckout(
@@ -21,8 +25,13 @@ export async function openCheckout(
 
   const checkout = await PolarEmbedCheckout.create(response.data.url, "light");
 
-  checkout.addEventListener("success", () => {
-    options?.onSuccess?.();
+  checkout.addEventListener("success", (event) => {
+    const detail = event.detail;
+    if (!checkoutSuccessEventSchema.allows(detail)) {
+      options?.onSuccess?.({});
+      return;
+    }
+    options?.onSuccess?.(detail);
   });
 }
 

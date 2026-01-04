@@ -170,3 +170,10 @@ export const updateSourceDestinationsSchema = type({
   destinationIds: "string[]",
 });
 export type UpdateSourceDestinations = typeof updateSourceDestinationsSchema.infer;
+
+export const checkoutSuccessEventSchema = type({
+  "id?": "string",
+  "totalAmount?": "number",
+  "currency?": "string",
+});
+export type CheckoutSuccessEvent = typeof checkoutSuccessEventSchema.infer;

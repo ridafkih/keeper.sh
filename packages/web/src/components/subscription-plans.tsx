@@ -12,6 +12,7 @@ import {
 } from "@/components/billing-period-toggle";
 import { plans } from "@/config/plans";
 import { openCheckout, openCustomerPortal } from "@/utils/checkout";
+import { reportPurchaseConversion } from "@/lib/analytics";
 
 interface SubscriptionPlansProps {
   currentPlan?: "free" | "pro";
@@ -49,7 +50,12 @@ export const SubscriptionPlans: FC<SubscriptionPlansProps> = ({
 
     try {
       await openCheckout(productId, {
-        onSuccess: () => {
+        onSuccess: (data) => {
+          reportPurchaseConversion({
+            value: data.totalAmount ? data.totalAmount / 100 : undefined,
+            currency: data.currency,
+            transactionId: data.id,
+          });
           toastManager.add({ title: "Subscription updated successfully" });
           onSubscriptionChange();
         },
