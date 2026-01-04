@@ -1,5 +1,7 @@
 import { createSourceSchema } from "@keeper.sh/data-schemas";
+import { HTTP_STATUS } from "@keeper.sh/shared";
 import { withTracing, withAuth } from "../../../utils/middleware";
+import { ErrorResponse } from "../../../utils/responses";
 import {
   getUserSources,
   createSource,
@@ -24,19 +26,16 @@ export const POST = withTracing(
       return Response.json(source, { status: 201 });
     } catch (error) {
       if (error instanceof SourceLimitError) {
-        return Response.json({ error: error.message }, { status: 402 });
+        return ErrorResponse.paymentRequired(error.message);
       }
       if (error instanceof InvalidSourceUrlError) {
         return Response.json(
           { error: error.message, authRequired: error.authRequired },
-          { status: 400 },
+          { status: HTTP_STATUS.BAD_REQUEST },
         );
       }
 
-      return Response.json(
-        { error: "Name and URL are required" },
-        { status: 400 },
-      );
+      return ErrorResponse.badRequest("Name and URL are required");
     }
   }),
 );

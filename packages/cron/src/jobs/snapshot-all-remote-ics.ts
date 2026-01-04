@@ -4,6 +4,7 @@ import {
   calendarSnapshotsTable,
 } from "@keeper.sh/database/schema";
 import { pullRemoteCalendar } from "@keeper.sh/calendar";
+import { getWideEvent } from "@keeper.sh/log";
 import { and, eq, lte } from "drizzle-orm";
 import { database } from "../context";
 import { withCronWideEvent, setCronEventFields } from "../utils/with-wide-event";
@@ -33,7 +34,8 @@ const insertSnapshot = async (
       });
 
     return record;
-  } catch {
+  } catch (error) {
+    getWideEvent()?.setError(error);
     return undefined;
   }
 };
@@ -54,7 +56,8 @@ const deleteStaleCalendarSnapshots = async (
           lte(calendarSnapshotsTable.createdAt, new Date(dayBeforeTimestamp)),
         ),
       );
-  } catch {
+  } catch (error) {
+    getWideEvent()?.setError(error);
   }
 };
 

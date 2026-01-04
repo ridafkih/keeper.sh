@@ -2,14 +2,11 @@ import {
   validateEvent,
   WebhookVerificationError,
 } from "@polar-sh/sdk/webhooks";
-import {
-  WideEvent,
-  runWithWideEvent,
-  emitWideEvent,
-} from "@keeper.sh/log";
+import { WideEvent, runWithWideEvent, emitWideEvent } from "@keeper.sh/log";
 import { userSubscriptionsTable } from "@keeper.sh/database/schema";
 import { database } from "../../../context";
 import env from "@keeper.sh/env/api";
+import { ErrorResponse } from "../../../utils/responses";
 
 const upsertSubscription = async (
   userId: string,
@@ -79,7 +76,7 @@ export async function POST(request: Request): Promise<Response> {
   const webhookSecret = env.POLAR_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
-    return new Response(null, { status: 501 });
+    return ErrorResponse.notImplemented();
   }
 
   const wideEvent = new WideEvent("api");
@@ -128,7 +125,7 @@ export async function POST(request: Request): Promise<Response> {
     } catch (error) {
       if (error instanceof WebhookVerificationError) {
         wideEvent.set({ error: true, errorType: "WebhookVerificationError" });
-        return new Response(null, { status: 403 });
+        return ErrorResponse.unauthorized();
       }
       wideEvent.setError(error);
       throw error;

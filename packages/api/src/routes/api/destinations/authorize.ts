@@ -1,6 +1,7 @@
 import { calendarDestinationsTable } from "@keeper.sh/database/schema";
 import { eq, and } from "drizzle-orm";
 import { withTracing, withAuth } from "../../../utils/middleware";
+import { ErrorResponse } from "../../../utils/responses";
 import {
   getAuthorizationUrl,
   isOAuthProvider,
@@ -38,7 +39,7 @@ export const GET = withTracing(
     const destinationId = url.searchParams.get("destinationId");
 
     if (!provider || !isOAuthProvider(provider)) {
-      return Response.json({ error: "Unsupported provider" }, { status: 400 });
+      return ErrorResponse.badRequest("Unsupported provider");
     }
 
     const isReauthentication = destinationId !== null;
@@ -46,7 +47,7 @@ export const GET = withTracing(
     if (isReauthentication) {
       const ownsDestination = await userOwnsDestination(userId, destinationId);
       if (!ownsDestination) {
-        return Response.json({ error: "Destination not found" }, { status: 404 });
+        return ErrorResponse.notFound("Destination not found");
       }
     } else {
       const destinationCount = await countUserDestinations(userId);

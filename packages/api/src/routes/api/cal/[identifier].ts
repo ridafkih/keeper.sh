@@ -1,18 +1,19 @@
 import { withTracing } from "../../../utils/middleware";
 import { generateUserCalendar } from "../../../utils/ical";
+import { ErrorResponse } from "../../../utils/responses";
 
 export const GET = withTracing(async ({ params }) => {
   const { identifier } = params;
 
   if (!identifier?.endsWith(".ics")) {
-    return new Response("Not found", { status: 404 });
+    return ErrorResponse.notFound();
   }
 
   const cleanIdentifier = identifier.slice(0, -4);
   const calendar = await generateUserCalendar(cleanIdentifier);
 
   if (calendar === null) {
-    return new Response("Not found", { status: 404 });
+    return ErrorResponse.notFound();
   }
 
   return new Response(calendar, {

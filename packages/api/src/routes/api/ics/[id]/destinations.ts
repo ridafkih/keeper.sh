@@ -1,5 +1,7 @@
 import { updateSourceDestinationsSchema } from "@keeper.sh/data-schemas";
+import { getWideEvent } from "@keeper.sh/log";
 import { withTracing, withAuth } from "../../../../utils/middleware";
+import { ErrorResponse } from "../../../../utils/responses";
 import {
   updateSourceMappings,
   getDestinationsForSource,
@@ -12,12 +14,12 @@ export const GET = withTracing(
     const { id: sourceId } = params;
 
     if (!sourceId) {
-      return Response.json({ error: "Source ID is required" }, { status: 400 });
+      return ErrorResponse.badRequest("Source ID is required");
     }
 
     const isOwner = await verifySourceOwnership(userId, sourceId);
     if (!isOwner) {
-      return Response.json({ error: "Not found" }, { status: 404 });
+      return ErrorResponse.notFound();
     }
 
     const destinationIds = await getDestinationsForSource(sourceId);
@@ -30,12 +32,12 @@ export const PUT = withTracing(
     const { id: sourceId } = params;
 
     if (!sourceId) {
-      return Response.json({ error: "Source ID is required" }, { status: 400 });
+      return ErrorResponse.badRequest("Source ID is required");
     }
 
     const isOwner = await verifySourceOwnership(userId, sourceId);
     if (!isOwner) {
-      return Response.json({ error: "Not found" }, { status: 404 });
+      return ErrorResponse.notFound();
     }
 
     try {
@@ -46,11 +48,9 @@ export const PUT = withTracing(
       triggerDestinationSync(userId);
 
       return Response.json({ success: true });
-    } catch {
-      return Response.json(
-        { error: "Invalid request body" },
-        { status: 400 },
-      );
+    } catch (error) {
+      getWideEvent()?.setError(error);
+      return ErrorResponse.badRequest("Invalid request body");
     }
   }),
 );

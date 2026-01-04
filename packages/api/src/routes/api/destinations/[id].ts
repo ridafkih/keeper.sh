@@ -1,4 +1,5 @@
 import { withTracing, withAuth } from "../../../utils/middleware";
+import { ErrorResponse } from "../../../utils/responses";
 import { deleteCalendarDestination } from "../../../utils/destinations";
 
 export const DELETE = withTracing(
@@ -6,16 +7,13 @@ export const DELETE = withTracing(
     const { id } = params;
 
     if (!id) {
-      return Response.json(
-        { error: "Destination ID is required" },
-        { status: 400 },
-      );
+      return ErrorResponse.badRequest("Destination ID is required");
     }
 
     const deleted = await deleteCalendarDestination(userId, id);
 
     if (!deleted) {
-      return Response.json({ error: "Not found" }, { status: 404 });
+      return ErrorResponse.notFound();
     }
 
     return Response.json({ success: true });

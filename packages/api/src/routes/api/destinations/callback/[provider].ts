@@ -1,4 +1,5 @@
 import { withTracing } from "../../../../utils/middleware";
+import { ErrorResponse } from "../../../../utils/responses";
 import {
   parseOAuthCallback,
   handleOAuthCallback,
@@ -10,7 +11,7 @@ export const GET = withTracing(async ({ request, params }) => {
   const { provider } = params;
 
   if (!provider) {
-    return new Response("Not found", { status: 404 });
+    return ErrorResponse.notFound();
   }
 
   try {

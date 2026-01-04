@@ -6,6 +6,7 @@ import {
   getWideEvent,
   type WideEventFields,
 } from "@keeper.sh/log";
+import { ErrorResponse } from "./responses";
 import {
   remoteICalSourcesTable,
   calendarDestinationsTable,
@@ -60,7 +61,8 @@ const fetchUserPlan = async (
 ): Promise<"free" | "pro" | undefined> => {
   try {
     return await premiumService.getUserPlan(userId);
-  } catch {
+  } catch (error) {
+    getWideEvent()?.setError(error);
     return undefined;
   }
 };
@@ -81,7 +83,8 @@ const fetchUserCounts = async (
       sourceCount: sources?.count ?? 0,
       destinationCount: destinations?.count ?? 0,
     };
-  } catch {
+  } catch (error) {
+    getWideEvent()?.setError(error);
     return undefined;
   }
 };
@@ -138,7 +141,7 @@ export const withAuth = (
     event?.endTiming("auth");
 
     if (!session?.user?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
+      return ErrorResponse.unauthorized();
     }
 
     await enrichWithUserContext(session.user.id);

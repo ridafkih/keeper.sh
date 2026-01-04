@@ -1,5 +1,6 @@
 import { caldavConnectRequestSchema } from "@keeper.sh/data-schemas";
 import { withTracing, withAuth } from "../../../../utils/middleware";
+import { ErrorResponse } from "../../../../utils/responses";
 import {
   createCalDAVDestination,
   isValidProvider,
@@ -17,7 +18,7 @@ export const POST = withTracing(
 
       const providerName = provider ?? "caldav";
       if (!isValidProvider(providerName)) {
-        return Response.json({ error: "Invalid provider" }, { status: 400 });
+        return ErrorResponse.badRequest("Invalid provider");
       }
 
       await createCalDAVDestination(
@@ -31,16 +32,13 @@ export const POST = withTracing(
       return Response.json({ success: true }, { status: 201 });
     } catch (error) {
       if (error instanceof DestinationLimitError) {
-        return Response.json({ error: error.message }, { status: 402 });
+        return ErrorResponse.paymentRequired(error.message);
       }
       if (error instanceof CalDAVConnectionError) {
-        return Response.json({ error: error.message }, { status: 400 });
+        return ErrorResponse.badRequest(error.message);
       }
 
-      return Response.json(
-        { error: "All fields are required" },
-        { status: 400 },
-      );
+      return ErrorResponse.badRequest("All fields are required");
     }
   }),
 );
