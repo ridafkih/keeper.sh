@@ -5,7 +5,7 @@ import {
 import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { eq } from "drizzle-orm";
 import { CalendarProvider } from "./provider";
-import type { OAuthProviderConfig } from "./types";
+import type { OAuthProviderConfig, PushResult, DeleteResult } from "./types";
 
 export interface OAuthRefreshResult {
   access_token: string;
@@ -15,6 +15,12 @@ export interface OAuthRefreshResult {
 
 export interface OAuthTokenProvider {
   refreshAccessToken: (refreshToken: string) => Promise<OAuthRefreshResult>;
+}
+
+export interface AuthErrorResult {
+  success: false;
+  error: string;
+  shouldContinue: false;
 }
 
 export abstract class OAuthCalendarProvider<
@@ -43,6 +49,17 @@ export abstract class OAuthCalendarProvider<
       .where(eq(calendarDestinationsTable.id, destinationId));
 
     broadcastSyncStatus?.(userId, destinationId, { needsReauthentication: true });
+  }
+
+  protected async handleAuthErrorResponse(
+    errorMessage: string,
+  ): Promise<AuthErrorResult> {
+    await this.markNeedsReauthentication();
+    return {
+      success: false,
+      error: errorMessage,
+      shouldContinue: false,
+    };
   }
 
   protected async ensureValidToken(): Promise<void> {

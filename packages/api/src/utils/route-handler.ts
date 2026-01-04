@@ -23,5 +23,10 @@ const HTTP_METHODS: HttpMethod[] = [
 export const isHttpMethod = (method: string): method is HttpMethod =>
   HTTP_METHODS.some((httpMethod) => httpMethod === method);
 
-export const isRouteModule = (module: unknown): module is RouteModule =>
-  typeof module === "object" && module !== null;
+export const isRouteModule = (module: unknown): module is RouteModule => {
+  if (typeof module !== "object" || module === null) return false;
+  const record = module as Record<string, unknown>;
+  return HTTP_METHODS.some(
+    (method) => typeof record[method] === "function",
+  );
+};
