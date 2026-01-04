@@ -10,7 +10,7 @@
   "types": "src/index.ts",
   "dependencies": {
     "@keeper.sh/integration-caldav": "workspace:*",
-    "@keeper.sh/integrations": "workspace:*"
+    "@keeper.sh/integration": "workspace:*"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",

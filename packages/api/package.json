@@ -16,7 +16,6 @@
     "typescript": "5.9.3"
   },
   "dependencies": {
-    "@keeper.sh/shared": "workspace:*",
     "@keeper.sh/auth": "workspace:*",
     "@keeper.sh/broadcast": "workspace:*",
     "@keeper.sh/calendar": "workspace:*",
@@ -26,10 +25,11 @@
     "@keeper.sh/encryption": "workspace:*",
     "@keeper.sh/env": "workspace:*",
     "@keeper.sh/integration-caldav": "workspace:*",
-    "@keeper.sh/integrations": "workspace:*",
+    "@keeper.sh/integration": "workspace:*",
     "@keeper.sh/log": "workspace:*",
     "@keeper.sh/premium": "workspace:*",
     "@keeper.sh/redis": "workspace:*",
+    "@keeper.sh/constants": "workspace:*",
     "@polar-sh/sdk": "^0.42.1",
     "drizzle-orm": "0.45.1",
     "ts-ics": "2.4.0"

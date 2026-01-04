@@ -4,7 +4,7 @@ import {
   type IcsCalendar,
   type IcsEvent,
 } from "ts-ics";
-import type { SyncableEvent, RemoteEvent } from "@keeper.sh/integrations";
+import type { SyncableEvent, RemoteEvent } from "@keeper.sh/integration";
 
 export const eventToICalString = (
   event: SyncableEvent,

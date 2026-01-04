@@ -13,7 +13,7 @@ import {
   createSyncCoordinator,
   type DestinationSyncResult,
   type SyncProgressUpdate,
-} from "@keeper.sh/integrations";
+} from "@keeper.sh/integration";
 import { eq } from "drizzle-orm";
 
 export const database = createDatabase(env.DATABASE_URL);

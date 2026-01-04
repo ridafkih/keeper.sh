@@ -1,4 +1,5 @@
 import { socketMessageSchema } from "@keeper.sh/data-schemas";
+import { WEBSOCKET_RECONNECT_DELAY_MS } from "@keeper.sh/constants";
 
 type EventCallback = (data: unknown) => void;
 
@@ -61,7 +62,7 @@ export class BroadcastClient {
   private scheduleReconnect(): void {
     this.reconnectTimer = setTimeout(() => {
       this.connect();
-    }, 3000);
+    }, WEBSOCKET_RECONNECT_DELAY_MS);
   }
 
   disconnect(): void {

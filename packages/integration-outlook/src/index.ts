@@ -1,8 +1,8 @@
 export {
   createOutlookCalendarProvider,
   type OutlookCalendarProviderConfig,
-  type OAuthProvider,
 } from "./provider";
+export { type OAuthTokenProvider } from "@keeper.sh/integration";
 export {
   getOutlookAccountsByPlan,
   getOutlookAccountsForUser,

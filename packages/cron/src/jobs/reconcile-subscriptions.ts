@@ -4,6 +4,7 @@ import { user } from "@keeper.sh/database/auth-schema";
 import { getWideEvent } from "@keeper.sh/log";
 import { database, polarClient } from "../context";
 import { withCronWideEvent, setCronEventFields } from "../utils/with-wide-event";
+import { countSettledResults } from "../utils/count-settled-results";
 
 const reconcileUserSubscription = async (userId: string) => {
   if (!polarClient) return;
@@ -40,18 +41,6 @@ const reconcileUserSubscription = async (userId: string) => {
   }
 }
 
-const countReconciliationResults = (
-  results: PromiseSettledResult<void>[]
-): { succeeded: number; failed: number } => {
-  const succeeded = results.filter(
-    (result) => result.status === "fulfilled"
-  ).length;
-  const failed = results.filter(
-    (result) => result.status === "rejected"
-  ).length;
-  return { succeeded, failed };
-};
-
 export default withCronWideEvent({
   name: import.meta.file,
   cron: "0 0 * * * *",
@@ -70,7 +59,7 @@ export default withCronWideEvent({
     );
 
     const results = await Promise.allSettled(reconciliations);
-    const { failed } = countReconciliationResults(results);
+    const { failed } = countSettledResults(results);
     setCronEventFields({ failedCount: failed });
   },
 }) satisfies CronOptions;

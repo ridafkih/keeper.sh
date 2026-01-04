@@ -4,6 +4,13 @@ import {
   type MicrosoftTokenResponse,
   type MicrosoftUserInfo,
 } from "@keeper.sh/data-schemas";
+import {
+  generateState,
+  validateState,
+  type ValidatedState,
+} from "@keeper.sh/oauth";
+
+export { generateState, validateState, type ValidatedState };
 
 const MICROSOFT_AUTH_URL =
   "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
@@ -14,37 +21,6 @@ const MICROSOFT_USERINFO_URL = "https://graph.microsoft.com/v1.0/me";
 export const MICROSOFT_CALENDAR_SCOPE = "Calendars.ReadWrite";
 export const MICROSOFT_USER_SCOPE = "User.Read";
 export const MICROSOFT_OFFLINE_SCOPE = "offline_access";
-
-interface PendingState {
-  userId: string;
-  destinationId: string | null;
-  expiresAt: number;
-}
-
-export interface ValidatedState {
-  userId: string;
-  destinationId: string | null;
-}
-
-const pendingStates = new Map<string, PendingState>();
-
-export const generateState = (userId: string, destinationId?: string): string => {
-  const state = crypto.randomUUID();
-  const expiresAt = Date.now() + 10 * 60 * 1000;
-  pendingStates.set(state, { userId, destinationId: destinationId ?? null, expiresAt });
-  return state;
-};
-
-export const validateState = (state: string): ValidatedState | null => {
-  const entry = pendingStates.get(state);
-  if (!entry) return null;
-
-  pendingStates.delete(state);
-
-  if (Date.now() > entry.expiresAt) return null;
-
-  return { userId: entry.userId, destinationId: entry.destinationId };
-};
 
 export interface MicrosoftOAuthCredentials {
   clientId: string;

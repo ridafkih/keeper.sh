@@ -7,7 +7,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, asc, eq, gte } from "drizzle-orm";
 import type { Plan } from "@keeper.sh/premium";
-import type { SyncableEvent } from "@keeper.sh/integrations";
+import type { SyncableEvent } from "@keeper.sh/integration";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 export interface GoogleAccount {
@@ -52,7 +52,8 @@ export const getGoogleAccountsByPlan = async (
   const accounts: GoogleAccount[] = [];
 
   for (const result of results) {
-    const { plan, accessToken, refreshToken, accessTokenExpiresAt, accountId } = result;
+    const { plan, accessToken, refreshToken, accessTokenExpiresAt, accountId } =
+      result;
     const userPlan = plan ?? "free";
 
     if (userPlan !== targetPlan) {
@@ -157,4 +158,3 @@ export const getUserEvents = async (
 
   return events;
 };
-

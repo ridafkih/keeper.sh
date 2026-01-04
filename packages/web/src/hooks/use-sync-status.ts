@@ -1,6 +1,7 @@
 import useSWRSubscription from "swr/subscription";
 import { mutate } from "swr";
 import { socketMessageSchema, syncStatusSchema, type SyncStatus } from "@keeper.sh/data-schemas";
+import { WEBSOCKET_RECONNECT_DELAY_MS } from "@keeper.sh/constants";
 
 const fetchSocketUrl = async (): Promise<string> => {
   const response = await fetch("/api/socket/url");
@@ -63,7 +64,7 @@ export function useSyncStatus() {
 
         socket.onclose = () => {
           if (isClosing) return;
-          reconnectTimer = setTimeout(connect, 3000);
+          reconnectTimer = setTimeout(connect, WEBSOCKET_RECONNECT_DELAY_MS);
         };
 
         socket.onerror = () => {
@@ -71,7 +72,7 @@ export function useSyncStatus() {
         };
       } catch {
         if (isClosing) return;
-        reconnectTimer = setTimeout(connect, 3000);
+        reconnectTimer = setTimeout(connect, WEBSOCKET_RECONNECT_DELAY_MS);
       }
     };
 

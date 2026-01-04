@@ -8,6 +8,7 @@ import { getWideEvent } from "@keeper.sh/log";
 import { and, eq, lte } from "drizzle-orm";
 import { database } from "../context";
 import { withCronWideEvent, setCronEventFields } from "../utils/with-wide-event";
+import { countSettledResults } from "../utils/count-settled-results";
 
 type FetchResult = {
   ical: string;
@@ -61,18 +62,6 @@ const deleteStaleCalendarSnapshots = async (
   }
 };
 
-const countSettlementResults = (
-  settlements: PromiseSettledResult<FetchResult>[]
-): { succeeded: number; failed: number } => {
-  const succeeded = settlements.filter(
-    (settlement) => settlement.status === "fulfilled"
-  ).length;
-  const failed = settlements.filter(
-    (settlement) => settlement.status === "rejected"
-  ).length;
-  return { succeeded, failed };
-};
-
 export default withCronWideEvent({
   name: import.meta.file,
   cron: "@every_1_minutes",
@@ -86,7 +75,7 @@ export default withCronWideEvent({
     );
 
     const settlements = await Promise.allSettled(fetches);
-    const { succeeded, failed } = countSettlementResults(settlements);
+    const { succeeded, failed } = countSettledResults(settlements);
     setCronEventFields({ processedCount: succeeded, failedCount: failed });
 
     for (const settlement of settlements) {

@@ -1,5 +1,6 @@
 import { fetch } from "bun";
 import { convertIcsCalendar } from "ts-ics";
+import { HTTP_STATUS } from "@keeper.sh/constants";
 
 const normalizeCalendarUrl = (url: string): string => {
   if (url.startsWith("webcal://")) {
@@ -18,7 +19,9 @@ export class CalendarFetchError extends Error {
   ) {
     super(message);
     this.name = "CalendarFetchError";
-    this.authRequired = statusCode === 401 || statusCode === 403;
+    this.authRequired =
+      statusCode === HTTP_STATUS.UNAUTHORIZED ||
+      statusCode === HTTP_STATUS.FORBIDDEN;
   }
 }
 
@@ -46,14 +49,17 @@ const fetchRemoteText = async (url: string) => {
   const response = await fetch(cleanUrl, { headers });
 
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
+    if (
+      response.status === HTTP_STATUS.UNAUTHORIZED ||
+      response.status === HTTP_STATUS.FORBIDDEN
+    ) {
       throw new CalendarFetchError(
         "Calendar requires authentication. Use a public URL or include credentials in the URL (https://user:pass@host/path).",
         response.status,
       );
     }
 
-    if (response.status === 404) {
+    if (response.status === HTTP_STATUS.NOT_FOUND) {
       throw new CalendarFetchError(
         "Calendar not found. Check that the URL is correct.",
         response.status,

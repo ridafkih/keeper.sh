@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@base-ui/react/button";
 import { TextLink } from "@/components/text-link";
 import { FREE_SOURCE_LIMIT } from "@keeper.sh/premium/constants";
+import { HTTP_STATUS } from "@keeper.sh/constants";
 import { Card } from "@/components/card";
 import { EmptyState } from "@/components/empty-state";
 import { GhostButton } from "@/components/ghost-button";
@@ -271,7 +272,7 @@ export const CalendarSourcesSection = () => {
       body: JSON.stringify({ name, url }),
     });
 
-    if (response.status === 402) {
+    if (response.status === HTTP_STATUS.PAYMENT_REQUIRED) {
       throw new Error("Source limit reached. Please upgrade to Pro.");
     }
 

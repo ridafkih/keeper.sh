@@ -16,6 +16,7 @@
     "@keeper.sh/env": "workspace:*",
     "@keeper.sh/log": "workspace:*",
     "@keeper.sh/premium": "workspace:*",
+    "@keeper.sh/constants": "workspace:*",
     "@polar-sh/better-auth": "^1.6.3",
     "@polar-sh/checkout": "^0.1.14",
     "@polar-sh/sdk": "^0.42.1",

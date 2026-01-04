@@ -13,6 +13,6 @@
     "typescript": "5.9.3"
   },
   "dependencies": {
-    "ts-ics": "2.4.0"
+    "@keeper.sh/calendar": "workspace:*"
   }
 }

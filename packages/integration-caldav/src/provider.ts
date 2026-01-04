@@ -10,7 +10,7 @@ import {
   type SyncResult,
   type CalDAVConfig,
   type SyncContext,
-} from "@keeper.sh/integrations";
+} from "@keeper.sh/integration";
 import { getWideEvent } from "@keeper.sh/log";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { CalDAVClient } from "./caldav-client";
@@ -40,7 +40,10 @@ export const createCalDAVProvider = (
     userId: string,
     context: SyncContext,
   ): Promise<SyncResult | null> => {
-    const accounts = await caldavService.getCalDAVAccountsForUser(userId, options.providerId);
+    const accounts = await caldavService.getCalDAVAccountsForUser(
+      userId,
+      options.providerId,
+    );
     if (accounts.length === 0) return null;
 
     const results = await Promise.all(
@@ -50,7 +53,9 @@ export const createCalDAVProvider = (
           account.destinationId,
         );
 
-        const password = caldavService.getDecryptedPassword(account.encryptedPassword);
+        const password = caldavService.getDecryptedPassword(
+          account.encryptedPassword,
+        );
         const provider = new CalDAVProviderInstance(
           {
             database: config.database,

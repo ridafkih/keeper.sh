@@ -22,10 +22,11 @@
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/destination-providers": "workspace:*",
     "@keeper.sh/env": "workspace:*",
-    "@keeper.sh/integrations": "workspace:*",
+    "@keeper.sh/integration": "workspace:*",
     "@keeper.sh/log": "workspace:*",
     "@keeper.sh/premium": "workspace:*",
     "@keeper.sh/redis": "workspace:*",
+    "@keeper.sh/constants": "workspace:*",
     "@polar-sh/sdk": "^0.42.1",
     "cronbake": "0.4.0",
     "drizzle-orm": "^0.45.1"

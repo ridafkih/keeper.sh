@@ -7,6 +7,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { Button } from "@/components/button";
 import { button, input, dialogPopup } from "@/styles";
 import { CardTitle, TextBody, TextCaption } from "@/components/typography";
+import { TOOLTIP_CLEAR_DELAY_MS } from "@keeper.sh/constants";
 
 interface CopyablePhraseProps {
   phrase: string;
@@ -19,7 +20,7 @@ const CopyablePhrase: FC<CopyablePhraseProps> = ({ phrase }) => {
     event.stopPropagation();
     await navigator.clipboard.writeText(phrase);
     setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    setTimeout(() => setCopied(false), TOOLTIP_CLEAR_DELAY_MS);
   };
 
   return (
