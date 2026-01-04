@@ -16,6 +16,7 @@
     "typescript": "5.9.3"
   },
   "dependencies": {
+    "@keeper.sh/shared": "workspace:*",
     "@keeper.sh/auth": "workspace:*",
     "@keeper.sh/broadcast": "workspace:*",
     "@keeper.sh/calendar": "workspace:*",

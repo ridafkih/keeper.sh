@@ -29,6 +29,7 @@
         "@keeper.sh/log": "workspace:*",
         "@keeper.sh/premium": "workspace:*",
         "@keeper.sh/redis": "workspace:*",
+        "@keeper.sh/shared": "workspace:*",
         "@polar-sh/sdk": "^0.42.1",
         "drizzle-orm": "0.45.1",
         "ts-ics": "2.4.0",
@@ -246,6 +247,7 @@
         "@keeper.sh/data-schemas": "workspace:*",
         "@keeper.sh/database": "workspace:*",
         "@keeper.sh/integrations": "workspace:*",
+        "@keeper.sh/log": "workspace:*",
         "@keeper.sh/premium": "workspace:*",
         "drizzle-orm": "0.45.1",
       },
@@ -360,6 +362,14 @@
     },
     "packages/redis": {
       "name": "@keeper.sh/redis",
+      "devDependencies": {
+        "@keeper.sh/typescript-config": "workspace:*",
+        "@types/bun": "latest",
+        "typescript": "5.9.3",
+      },
+    },
+    "packages/shared": {
+      "name": "@keeper.sh/shared",
       "devDependencies": {
         "@keeper.sh/typescript-config": "workspace:*",
         "@types/bun": "latest",
@@ -846,6 +856,8 @@
     "@keeper.sh/pull-calendar": ["@keeper.sh/pull-calendar@workspace:packages/pull-calendar"],
 
     "@keeper.sh/redis": ["@keeper.sh/redis@workspace:packages/redis"],
+
+    "@keeper.sh/shared": ["@keeper.sh/shared@workspace:packages/shared"],
 
     "@keeper.sh/sync-calendar": ["@keeper.sh/sync-calendar@workspace:packages/sync-calendar"],
 

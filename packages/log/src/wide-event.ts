@@ -47,7 +47,7 @@ export class WideEvent {
   get = <Key extends keyof WideEventFields>(
     key: Key
   ): WideEventFields[Key] | undefined => {
-    return this.fields[key] as WideEventFields[Key] | undefined;
+    return this.fields[key];
   };
 
   startTiming = (timingName: string): void => {
@@ -71,14 +71,34 @@ export class WideEvent {
   };
 
   finalize = (): WideEventFields => {
+    const { requestId, startTime, serviceBoundary } = this.fields;
+
+    if (!requestId) {
+      throw new Error("WideEvent requestId was not initialized");
+    }
+    if (startTime === undefined) {
+      throw new Error("WideEvent startTime was not initialized");
+    }
+    if (!serviceBoundary) {
+      throw new Error("WideEvent serviceBoundary was not initialized");
+    }
+
     const endTime = Date.now();
-    const startTime = this.fields.startTime ?? endTime;
     return {
       ...this.fields,
+      requestId,
+      startTime,
+      serviceBoundary,
       endTime,
       durationMs: calculateDuration(startTime, endTime),
-    } as WideEventFields;
+    };
   };
 
-  getRequestId = (): string => this.fields.requestId!;
+  getRequestId = (): string => {
+    const requestId = this.fields.requestId;
+    if (!requestId) {
+      throw new Error("WideEvent requestId was not initialized");
+    }
+    return requestId;
+  };
 }

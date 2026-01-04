@@ -33,9 +33,14 @@ const KEEPER_CATEGORY = "keeper.sh";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const isRateLimitError = (error: unknown): boolean => {
+const isRateLimitError = (error: unknown): error is Error => {
   if (!(error instanceof Error)) return false;
   return error.message.includes("429") || error.message.includes("throttled");
+};
+
+const hasRateLimitMessage = (message: string | undefined): boolean => {
+  if (!message) return false;
+  return message.includes("429") || message.includes("throttled");
 };
 
 const isAuthError = (
@@ -187,7 +192,7 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
       const result = await this.pushEvent(event);
       results.push(result);
 
-      if (!result.success && isRateLimitError(new Error(result.error))) {
+      if (!result.success && hasRateLimitMessage(result.error)) {
         await delay(RATE_LIMIT_DELAY_MS);
       }
     }
@@ -204,7 +209,7 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
       const result = await this.deleteEvent(eventId);
       results.push(result);
 
-      if (!result.success && isRateLimitError(new Error(result.error))) {
+      if (!result.success && hasRateLimitMessage(result.error)) {
         await delay(RATE_LIMIT_DELAY_MS);
       }
     }
