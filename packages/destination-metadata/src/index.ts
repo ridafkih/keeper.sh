@@ -40,10 +40,17 @@ export const DESTINATIONS: DestinationConfig[] = [
 
 export type DestinationId = (typeof DESTINATIONS)[number]["id"];
 
+const CALDAV_DESTINATIONS = DESTINATIONS.filter(
+  (destination): destination is DestinationConfig & { type: "caldav" } =>
+    destination.type === "caldav",
+);
+
+export type CalDAVDestinationId = (typeof CALDAV_DESTINATIONS)[number]["id"];
+
 export const getDestination = (id: string): DestinationConfig | undefined =>
   DESTINATIONS.find((destination) => destination.id === id);
 
-export const isCalDAVDestination = (id: string): boolean => {
+export const isCalDAVDestination = (id: string): id is CalDAVDestinationId => {
   const destination = getDestination(id);
   return destination?.type === "caldav";
 };

@@ -11,6 +11,7 @@ import {
   DESTINATIONS,
   isCalDAVDestination,
   type DestinationConfig,
+  type CalDAVDestinationId,
 } from "@keeper.sh/destination-metadata";
 import { Card } from "@/components/card";
 import { EmptyState } from "@/components/empty-state";
@@ -72,9 +73,7 @@ const destinationStatus = tv({
   },
 });
 
-type CalDAVProvider = "fastmail" | "icloud" | "caldav";
-
-const isCalDAVProvider = (provider: string): provider is CalDAVProvider =>
+const isCalDAVProvider = (provider: string): provider is CalDAVDestinationId =>
   isCalDAVDestination(provider);
 
 const isConnectable = (destination: DestinationConfig): boolean =>
@@ -466,7 +465,7 @@ export const DestinationsSection = () => {
   const toastManager = Toast.useToastManager();
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [caldavDialogOpen, setCaldavDialogOpen] = useState(false);
-  const [caldavProvider, setCaldavProvider] = useState<CalDAVProvider | null>(
+  const [caldavProvider, setCaldavProvider] = useState<CalDAVDestinationId | null>(
     null,
   );
   const {

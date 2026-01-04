@@ -253,19 +253,13 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
       const body = await response.json();
       const { error } = googleApiErrorSchema.assert(body);
 
+      const errorMessage = error?.message ?? response.statusText;
+
       if (isAuthError(response.status, error)) {
-        await this.markNeedsReauthentication();
-        return {
-          success: false,
-          error: error?.message ?? response.statusText,
-          shouldContinue: false,
-        };
+        return this.handleAuthErrorResponse(errorMessage);
       }
 
-      return {
-        success: false,
-        error: error?.message ?? response.statusText,
-      };
+      return { success: false, error: errorMessage };
     }
 
     await response.json();
@@ -293,20 +287,13 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
       if (!response.ok && response.status !== HTTP_STATUS.NOT_FOUND) {
         const body = await response.json();
         const { error } = googleApiErrorSchema.assert(body);
+        const errorMessage = error?.message ?? response.statusText;
 
         if (isAuthError(response.status, error)) {
-          await this.markNeedsReauthentication();
-          return {
-            success: false,
-            error: error?.message ?? response.statusText,
-            shouldContinue: false,
-          };
+          return this.handleAuthErrorResponse(errorMessage);
         }
 
-        return {
-          success: false,
-          error: error?.message ?? response.statusText,
-        };
+        return { success: false, error: errorMessage };
       }
 
       return { success: true };
