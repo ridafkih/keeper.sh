@@ -6,9 +6,8 @@ import {
   MS_PER_HOUR,
   MS_PER_DAY,
   MS_PER_WEEK,
+  KEEPER_EVENT_SUFFIX,
 } from "@keeper.sh/constants";
-
-const FILTER_SUFFIX = "@keeper.sh";
 
 const durationToMs = (duration: IcsDuration): number => {
   const { weeks = 0, days = 0, hours = 0, minutes = 0, seconds = 0 } = duration;
@@ -34,7 +33,7 @@ const getEventEndTime = (event: IcsEvent, startTime: Date): Date => {
 };
 
 const isKeeperEvent = (uid: string | undefined): boolean =>
-  uid?.endsWith(FILTER_SUFFIX) ?? false;
+  uid?.endsWith(KEEPER_EVENT_SUFFIX) ?? false;
 
 export const parseIcsEvents = (calendar: IcsCalendar): EventTimeSlot[] => {
   const result: EventTimeSlot[] = [];

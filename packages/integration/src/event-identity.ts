@@ -1,7 +1,8 @@
-const SUFFIX = "@keeper.sh";
+import { KEEPER_EVENT_SUFFIX } from "@keeper.sh/constants";
 
 export const generateEventUid = (): string => {
-  return `${crypto.randomUUID()}${SUFFIX}`;
+  return `${crypto.randomUUID()}${KEEPER_EVENT_SUFFIX}`;
 };
 
-export const isKeeperEvent = (uid: string): boolean => uid.endsWith(SUFFIX);
+export const isKeeperEvent = (uid: string): boolean =>
+  uid.endsWith(KEEPER_EVENT_SUFFIX);

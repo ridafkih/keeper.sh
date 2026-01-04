@@ -15,3 +15,6 @@ export const TOKEN_TTL_MS = 30_000;
 export const TOKEN_REFRESH_BUFFER_MS = 5 * MS_PER_MINUTE;
 export const RATE_LIMIT_DELAY_MS = 60 * MS_PER_SECOND;
 export const SYNC_TTL_SECONDS = SECONDS_PER_DAY;
+
+export const KEEPER_EVENT_SUFFIX = "@keeper.sh";
+export const KEEPER_CATEGORY = "keeper.sh";

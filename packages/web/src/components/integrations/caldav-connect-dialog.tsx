@@ -11,8 +11,7 @@ import {
   DangerText,
 } from "@/components/typography";
 import { HTTP_STATUS } from "@keeper.sh/constants";
-
-type CalDAVProvider = "fastmail" | "icloud" | "caldav";
+import { type CalDAVDestinationId } from "@keeper.sh/destination-metadata";
 
 interface CalendarOption {
   url: string;
@@ -28,7 +27,7 @@ interface ProviderConfig {
   passwordHelp: string;
 }
 
-const PROVIDER_CONFIGS: Record<CalDAVProvider, ProviderConfig> = {
+const PROVIDER_CONFIGS: Record<CalDAVDestinationId, ProviderConfig> = {
   fastmail: {
     name: "FastMail",
     serverUrl: "https://caldav.fastmail.com/",
@@ -59,7 +58,7 @@ const PROVIDER_CONFIGS: Record<CalDAVProvider, ProviderConfig> = {
 interface CalDAVConnectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  provider: CalDAVProvider;
+  provider: CalDAVDestinationId;
   onSuccess: () => void;
 }
 

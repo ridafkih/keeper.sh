@@ -6,7 +6,7 @@ export interface DestinationConfig {
   comingSoon?: boolean;
 }
 
-export const DESTINATIONS: DestinationConfig[] = [
+const DESTINATIONS_CONST = [
   {
     id: "google",
     name: "Google Calendar",
@@ -36,16 +36,18 @@ export const DESTINATIONS: DestinationConfig[] = [
     name: "CalDAV",
     type: "caldav",
   },
-];
+] as const;
 
-export type DestinationId = (typeof DESTINATIONS)[number]["id"];
+export const DESTINATIONS: DestinationConfig[] = [...DESTINATIONS_CONST];
 
-const CALDAV_DESTINATIONS = DESTINATIONS.filter(
-  (destination): destination is DestinationConfig & { type: "caldav" } =>
-    destination.type === "caldav",
-);
+export type DestinationId = (typeof DESTINATIONS_CONST)[number]["id"];
 
-export type CalDAVDestinationId = (typeof CALDAV_DESTINATIONS)[number]["id"];
+type CalDAVDestination = Extract<
+  (typeof DESTINATIONS_CONST)[number],
+  { type: "caldav" }
+>;
+
+export type CalDAVDestinationId = CalDAVDestination["id"];
 
 export const getDestination = (id: string): DestinationConfig | undefined =>
   DESTINATIONS.find((destination) => destination.id === id);

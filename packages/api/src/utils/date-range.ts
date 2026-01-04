@@ -1,3 +1,5 @@
+import { MS_PER_WEEK } from "@keeper.sh/constants";
+
 interface DateRange {
   from: Date;
   to: Date;
@@ -20,7 +22,7 @@ export const parseDateRangeParams = (url: URL): DateRange => {
   const from = fromParam ? new Date(fromParam) : now;
   const to = toParam
     ? new Date(toParam)
-    : new Date(from.getTime() + 7 * 24 * 60 * 60 * 1000);
+    : new Date(from.getTime() + MS_PER_WEEK);
 
   return { from, to };
 };

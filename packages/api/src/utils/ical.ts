@@ -2,6 +2,7 @@ import {
   remoteICalSourcesTable,
   eventStatesTable,
 } from "@keeper.sh/database/schema";
+import { KEEPER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { generateIcsCalendar, type IcsCalendar, type IcsEvent } from "ts-ics";
 import { eq, inArray, asc } from "drizzle-orm";
 import { resolveUserIdentifier } from "./user";
@@ -18,7 +19,7 @@ interface CalendarEvent {
  */
 export const formatEventsAsIcal = (events: CalendarEvent[]): string => {
   const icsEvents: IcsEvent[] = events.map((event) => ({
-    uid: `${event.id}@keeper.sh`,
+    uid: `${event.id}${KEEPER_EVENT_SUFFIX}`,
     stamp: { date: new Date() },
     start: { date: event.startTime },
     end: { date: event.endTime },

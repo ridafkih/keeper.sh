@@ -1,5 +1,6 @@
 import {
   OAuthCalendarProvider,
+  RateLimiter,
   getEventsForDestination,
   type OAuthTokenProvider,
   type DestinationProvider,
@@ -19,19 +20,11 @@ import {
   microsoftApiErrorSchema,
   type OutlookEvent,
 } from "@keeper.sh/data-schemas";
-import { HTTP_STATUS, RATE_LIMIT_DELAY_MS } from "@keeper.sh/constants";
+import { HTTP_STATUS, KEEPER_CATEGORY } from "@keeper.sh/constants";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { getOutlookAccountsForUser } from "./sync";
 
 const MICROSOFT_GRAPH_API = "https://graph.microsoft.com/v1.0";
-const KEEPER_CATEGORY = "keeper.sh";
-
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const isRateLimitError = (error: unknown): error is Error => {
-  if (!(error instanceof Error)) return false;
-  return error.message.includes("429") || error.message.includes("throttled");
-};
 
 const hasRateLimitMessage = (message: string | undefined): boolean => {
   if (!message) return false;
@@ -113,25 +106,28 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
   readonly id = "outlook";
 
   protected oauthProvider: OAuthTokenProvider;
+  private rateLimiter: RateLimiter;
 
   constructor(config: OutlookCalendarConfig, oauthProvider: OAuthTokenProvider) {
     super(config);
+    this.rateLimiter = new RateLimiter(10);
     this.oauthProvider = oauthProvider;
   }
 
   async pushEvents(events: SyncableEvent[]): Promise<PushResult[]> {
     await this.ensureValidToken();
 
-    const results: PushResult[] = [];
-
-    for (const event of events) {
-      const result = await this.pushEvent(event);
-      results.push(result);
-
-      if (!result.success && hasRateLimitMessage(result.error)) {
-        await delay(RATE_LIMIT_DELAY_MS);
-      }
-    }
+    const results = await Promise.all(
+      events.map((event) =>
+        this.rateLimiter.execute(async (): Promise<PushResult> => {
+          const result = await this.pushEvent(event);
+          if (!result.success && hasRateLimitMessage(result.error)) {
+            this.rateLimiter.reportRateLimit();
+          }
+          return result;
+        }),
+      ),
+    );
 
     return results;
   }
@@ -139,16 +135,17 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
   async deleteEvents(eventIds: string[]): Promise<DeleteResult[]> {
     await this.ensureValidToken();
 
-    const results: DeleteResult[] = [];
-
-    for (const eventId of eventIds) {
-      const result = await this.deleteEvent(eventId);
-      results.push(result);
-
-      if (!result.success && hasRateLimitMessage(result.error)) {
-        await delay(RATE_LIMIT_DELAY_MS);
-      }
-    }
+    const results = await Promise.all(
+      eventIds.map((eventId) =>
+        this.rateLimiter.execute(async (): Promise<DeleteResult> => {
+          const result = await this.deleteEvent(eventId);
+          if (!result.success && hasRateLimitMessage(result.error)) {
+            this.rateLimiter.reportRateLimit();
+          }
+          return result;
+        }),
+      ),
+    );
 
     return results;
   }
