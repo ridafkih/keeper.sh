@@ -1,4 +1,4 @@
-import { log } from "@keeper.sh/log";
+import { log, WideEvent, emitWideEvent } from "@keeper.sh/log";
 import {
   socketMessageSchema,
   broadcastMessageSchema,
@@ -104,6 +104,21 @@ const sendPing = (socket: Socket) => {
   socket.send(JSON.stringify({ event: "ping" }));
 };
 
+const emitWebSocketEvent = (
+  userId: string,
+  operationName: string,
+  additionalFields?: Record<string, unknown>
+): void => {
+  const event = new WideEvent("websocket");
+  event.set({
+    userId,
+    operationType: "connection",
+    operationName,
+    ...additionalFields,
+  });
+  emitWideEvent(event.finalize());
+};
+
 const startPing = (socket: Socket) => {
   sendPing(socket);
 
@@ -121,20 +136,34 @@ const startPing = (socket: Socket) => {
 export const createWebsocketHandler = (options?: WebsocketHandlerOptions) => ({
   idleTimeout: 60,
   async open(socket: Socket) {
-    log.debug({ userId: socket.data.userId }, "socket opened");
-    addConnection(socket.data.userId, socket);
+    const userId = socket.data.userId;
+    log.debug({ userId }, "socket opened");
+    addConnection(userId, socket);
     pingIntervals.set(socket, startPing(socket));
+
     try {
-      await options?.onConnect?.(socket.data.userId, socket);
+      await options?.onConnect?.(userId, socket);
+      emitWebSocketEvent(userId, "websocket:open");
     } catch (error) {
-      log.error({ error, userId: socket.data.userId }, "onConnect callback failed");
+      emitWebSocketEvent(userId, "websocket:open", {
+        error: true,
+        errorType: error instanceof Error ? error.constructor.name : "Unknown",
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      log.error({ error, userId }, "onConnect callback failed");
     }
   },
   close(socket: Socket) {
+    const userId = socket.data.userId;
     const interval = pingIntervals.get(socket);
-    if (!interval) return removeConnection(socket.data.userId, socket);
-    clearInterval(interval);
-    pingIntervals.delete(socket);
+
+    if (interval) {
+      clearInterval(interval);
+      pingIntervals.delete(socket);
+    }
+
+    removeConnection(userId, socket);
+    emitWebSocketEvent(userId, "websocket:close");
   },
   message(socket: Socket, message: string | Buffer) {
     const data = JSON.parse(message.toString());

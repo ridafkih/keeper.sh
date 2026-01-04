@@ -3,7 +3,13 @@ import {
   syncStatusTable,
   calendarDestinationsTable,
 } from "@keeper.sh/database/schema";
-import { log } from "@keeper.sh/log";
+import {
+  log,
+  WideEvent,
+  runWithWideEvent,
+  emitWideEvent,
+  type WideEventFields,
+} from "@keeper.sh/log";
 import {
   createWebsocketHandler,
   type BroadcastData,
@@ -103,12 +109,36 @@ const withCors = (handler: FetchHandler): FetchHandler => {
   };
 };
 
-const handleAuthRequest = async (
-  pathname: string,
+const extractAuthContext = (
   request: Request,
-): Promise<Response> => {
-  const response = await auth.handler(request);
+  pathname: string
+): Partial<WideEventFields> => ({
+  operationType: "auth",
+  operationName: `${request.method} ${pathname}`,
+  httpMethod: request.method,
+  httpPath: pathname,
+  httpUserAgent: request.headers.get("user-agent") ?? undefined,
+  httpOrigin: request.headers.get("origin") ?? undefined,
+});
 
+const handleAuthResponseStatus = (
+  event: WideEvent,
+  response: Response
+): void => {
+  event.set({ httpStatusCode: response.status });
+  if (response.status >= 400) {
+    event.set({
+      error: true,
+      errorType: "AuthError",
+      errorMessage: `HTTP ${response.status}`,
+    });
+  }
+};
+
+const processAuthResponse = async (
+  pathname: string,
+  response: Response
+): Promise<Response> => {
   if (pathname !== "/api/auth/get-session") {
     return response;
   }
@@ -120,6 +150,28 @@ const handleAuthRequest = async (
   }
 
   return clearSessionCookies(response);
+};
+
+const handleAuthRequest = async (
+  pathname: string,
+  request: Request
+): Promise<Response> => {
+  const event = new WideEvent("api");
+  event.set(extractAuthContext(request, pathname));
+
+  return runWithWideEvent(event, async () => {
+    try {
+      const response = await auth.handler(request);
+      handleAuthResponseStatus(event, response);
+      return processAuthResponse(pathname, response);
+    } catch (error) {
+      event.setError(error);
+      event.set({ httpStatusCode: 500 });
+      throw error;
+    } finally {
+      emitWideEvent(event.finalize());
+    }
+  });
 };
 
 const sendInitialSyncStatus = async (userId: string, socket: Socket) => {
