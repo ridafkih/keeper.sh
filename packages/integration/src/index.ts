@@ -26,6 +26,12 @@ export {
   deleteEventMapping,
   type EventMapping,
 } from "./mappings";
+export {
+  getOAuthAccountsByPlan,
+  getOAuthAccountsForUser,
+  getUserEventsForSync,
+  type OAuthAccount,
+} from "./oauth-accounts";
 export type {
   SyncableEvent,
   PushResult,
