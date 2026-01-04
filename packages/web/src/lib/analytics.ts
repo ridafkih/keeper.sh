@@ -53,9 +53,14 @@ interface ConversionOptions {
   transactionId?: string;
 }
 
+const { NEXT_PUBLIC_GOOGLE_ADS_ID, NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_LABEL } =
+  process.env;
+
 export const reportPurchaseConversion = (options?: ConversionOptions) => {
+  if (!NEXT_PUBLIC_GOOGLE_ADS_ID || !NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_LABEL)
+    return;
   window.gtag?.("event", "conversion", {
-    send_to: "AW-17852330024/fTtUCObCy9wbEKjg08BC",
+    send_to: `${NEXT_PUBLIC_GOOGLE_ADS_ID}/${NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_LABEL}`,
     ...options,
   });
 };
