@@ -56,9 +56,7 @@ interface ConversionOptions {
 export const reportPurchaseConversion = (options?: ConversionOptions) => {
   window.gtag?.("event", "conversion", {
     send_to: "AW-17852330024/fTtUCObCy9wbEKjg08BC",
-    value: options?.value ?? 1.0,
-    currency: options?.currency ?? "CAD",
-    transaction_id: options?.transactionId ?? "",
+    ...options,
   });
 };
 
