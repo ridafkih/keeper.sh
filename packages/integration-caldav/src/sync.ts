@@ -7,7 +7,7 @@ import {
 import { decryptPassword } from "@keeper.sh/encryption";
 import { and, asc, eq, gte, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type { SyncableEvent } from "@keeper.sh/integrations";
+import type { SyncableEvent } from "@keeper.sh/integration";
 
 export interface CalDAVAccount {
   destinationId: string;

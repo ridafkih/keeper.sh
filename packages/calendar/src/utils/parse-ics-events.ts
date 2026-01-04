@@ -1,13 +1,14 @@
 import type { IcsCalendar, IcsEvent, IcsDuration } from "ts-ics";
 import type { EventTimeSlot } from "../types";
+import {
+  MS_PER_SECOND,
+  MS_PER_MINUTE,
+  MS_PER_HOUR,
+  MS_PER_DAY,
+  MS_PER_WEEK,
+} from "@keeper.sh/constants";
 
 const FILTER_SUFFIX = "@keeper.sh";
-
-const MS_PER_SECOND = 1000;
-const MS_PER_MINUTE = MS_PER_SECOND * 60;
-const MS_PER_HOUR = MS_PER_MINUTE * 60;
-const MS_PER_DAY = MS_PER_HOUR * 24;
-const MS_PER_WEEK = MS_PER_DAY * 7;
 
 const durationToMs = (duration: IcsDuration): number => {
   const { weeks = 0, days = 0, hours = 0, minutes = 0, seconds = 0 } = duration;

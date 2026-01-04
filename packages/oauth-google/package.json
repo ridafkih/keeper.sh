@@ -9,7 +9,8 @@
     "types": "tsc --noEmit"
   },
   "dependencies": {
-    "@keeper.sh/data-schemas": "workspace:*"
+    "@keeper.sh/data-schemas": "workspace:*",
+    "@keeper.sh/oauth": "workspace:*"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",

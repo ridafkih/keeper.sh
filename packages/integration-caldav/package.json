@@ -17,7 +17,7 @@
   "dependencies": {
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/encryption": "workspace:*",
-    "@keeper.sh/integrations": "workspace:*",
+    "@keeper.sh/integration": "workspace:*",
     "@keeper.sh/log": "workspace:*",
     "drizzle-orm": "0.45.1",
     "tsdav": "2.1.6",

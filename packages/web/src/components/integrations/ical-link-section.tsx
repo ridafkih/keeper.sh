@@ -10,6 +10,7 @@ import { useIcalToken } from "@/hooks/use-ical-token";
 import { button, input } from "@/styles";
 import { track } from "@/lib/analytics";
 import { Check } from "lucide-react";
+import { TOOLTIP_CLEAR_DELAY_MS } from "@keeper.sh/constants";
 
 const ICalLinkSkeleton: FC = () => (
   <div className="flex gap-1.5">
@@ -37,7 +38,7 @@ export const ICalLinkSection: FC = () => {
     track("ical_link_copied");
     toastManager.add({ title: "Copied to clipboard" });
     setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    setTimeout(() => setCopied(false), TOOLTIP_CLEAR_DELAY_MS);
   };
 
   return (

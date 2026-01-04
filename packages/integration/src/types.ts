@@ -59,20 +59,18 @@ export interface ProviderConfig {
   broadcastSyncStatus?: BroadcastSyncStatus;
 }
 
-export interface GoogleCalendarConfig extends ProviderConfig {
+export interface OAuthProviderConfig extends ProviderConfig {
   accountId: string;
   accessToken: string;
   refreshToken: string;
   accessTokenExpiresAt: Date;
+}
+
+export interface GoogleCalendarConfig extends OAuthProviderConfig {
   calendarId: string;
 }
 
-export interface OutlookCalendarConfig extends ProviderConfig {
-  accountId: string;
-  accessToken: string;
-  refreshToken: string;
-  accessTokenExpiresAt: Date;
-}
+export interface OutlookCalendarConfig extends OAuthProviderConfig {}
 
 export interface CalDAVConfig extends ProviderConfig {
   serverUrl: string;

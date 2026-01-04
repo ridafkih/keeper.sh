@@ -1,8 +1,8 @@
 export {
   createGoogleCalendarProvider,
   type GoogleCalendarProviderConfig,
-  type OAuthProvider,
 } from "./provider";
+export { type OAuthTokenProvider } from "@keeper.sh/integration";
 export {
   getGoogleAccountsByPlan,
   getGoogleAccountsForUser,

@@ -1,4 +1,7 @@
-import type { DestinationProvider, BroadcastSyncStatus } from "@keeper.sh/integrations";
+import type {
+  DestinationProvider,
+  BroadcastSyncStatus,
+} from "@keeper.sh/integration";
 import { createGoogleCalendarProvider } from "@keeper.sh/integration-google-calendar";
 import { createCalDAVProvider } from "@keeper.sh/integration-caldav";
 import { createFastMailProvider } from "@keeper.sh/integration-fastmail";
@@ -17,18 +20,31 @@ export interface DestinationProvidersConfig {
 export const createDestinationProviders = (
   config: DestinationProvidersConfig,
 ): DestinationProvider[] => {
-  const { database, oauthProviders, encryptionKey, broadcastSyncStatus } = config;
+  const { database, oauthProviders, encryptionKey, broadcastSyncStatus } =
+    config;
 
   const providers: DestinationProvider[] = [];
 
   const googleOAuth = oauthProviders.getProvider("google");
   if (googleOAuth) {
-    providers.push(createGoogleCalendarProvider({ database, oauthProvider: googleOAuth, broadcastSyncStatus }));
+    providers.push(
+      createGoogleCalendarProvider({
+        database,
+        oauthProvider: googleOAuth,
+        broadcastSyncStatus,
+      }),
+    );
   }
 
   const outlookOAuth = oauthProviders.getProvider("outlook");
   if (outlookOAuth) {
-    providers.push(createOutlookCalendarProvider({ database, oauthProvider: outlookOAuth, broadcastSyncStatus }));
+    providers.push(
+      createOutlookCalendarProvider({
+        database,
+        oauthProvider: outlookOAuth,
+        broadcastSyncStatus,
+      }),
+    );
   }
 
   providers.push(createCalDAVProvider({ database, encryptionKey }));

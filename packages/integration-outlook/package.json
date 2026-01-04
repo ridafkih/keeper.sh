@@ -11,8 +11,9 @@
   "dependencies": {
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/database": "workspace:*",
-    "@keeper.sh/integrations": "workspace:*",
+    "@keeper.sh/integration": "workspace:*",
     "@keeper.sh/premium": "workspace:*",
+    "@keeper.sh/constants": "workspace:*",
     "drizzle-orm": "0.45.1"
   },
   "devDependencies": {

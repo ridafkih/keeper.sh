@@ -4,6 +4,13 @@ import {
   type GoogleTokenResponse,
   type GoogleUserInfo,
 } from "@keeper.sh/data-schemas";
+import {
+  generateState,
+  validateState,
+  type ValidatedState,
+} from "@keeper.sh/oauth";
+
+export { generateState, validateState, type ValidatedState };
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -13,37 +20,6 @@ export const GOOGLE_CALENDAR_SCOPE =
   "https://www.googleapis.com/auth/calendar.events";
 export const GOOGLE_EMAIL_SCOPE =
   "https://www.googleapis.com/auth/userinfo.email";
-
-interface PendingState {
-  userId: string;
-  destinationId: string | null;
-  expiresAt: number;
-}
-
-export interface ValidatedState {
-  userId: string;
-  destinationId: string | null;
-}
-
-const pendingStates = new Map<string, PendingState>();
-
-export const generateState = (userId: string, destinationId?: string): string => {
-  const state = crypto.randomUUID();
-  const expiresAt = Date.now() + 10 * 60 * 1000;
-  pendingStates.set(state, { userId, destinationId: destinationId ?? null, expiresAt });
-  return state;
-};
-
-export const validateState = (state: string): ValidatedState | null => {
-  const entry = pendingStates.get(state);
-  if (!entry) return null;
-
-  pendingStates.delete(state);
-
-  if (Date.now() > entry.expiresAt) return null;
-
-  return { userId: entry.userId, destinationId: entry.destinationId };
-};
 
 export interface GoogleOAuthCredentials {
   clientId: string;

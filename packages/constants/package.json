@@ -1,5 +1,5 @@
 {
-  "name": "@keeper.sh/shared",
+  "name": "@keeper.sh/constants",
   "scripts": {
     "types": "tsc --noEmit"
   },

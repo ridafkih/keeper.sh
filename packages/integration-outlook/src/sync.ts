@@ -7,7 +7,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, asc, eq, gte } from "drizzle-orm";
 import type { Plan } from "@keeper.sh/premium";
-import type { SyncableEvent } from "@keeper.sh/integrations";
+import type { SyncableEvent } from "@keeper.sh/integration";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 export interface OutlookAccount {

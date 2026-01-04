@@ -1,4 +1,4 @@
-import { HTTP_STATUS } from "@keeper.sh/shared";
+import { HTTP_STATUS } from "@keeper.sh/constants";
 
 export class ErrorResponse {
   private static create(status: number, message: string | null): Response {

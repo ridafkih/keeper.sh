@@ -2,7 +2,7 @@ import {
   createCalDAVProvider,
   type CalDAVProviderConfig,
 } from "@keeper.sh/integration-caldav";
-import type { DestinationProvider } from "@keeper.sh/integrations";
+import type { DestinationProvider } from "@keeper.sh/integration";
 
 export const ICLOUD_SERVER_URL = "https://caldav.icloud.com/";
 

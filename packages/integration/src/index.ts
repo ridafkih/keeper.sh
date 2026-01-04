@@ -1,4 +1,9 @@
 export { CalendarProvider } from "./provider";
+export {
+  OAuthCalendarProvider,
+  type OAuthRefreshResult,
+  type OAuthTokenProvider,
+} from "./oauth-provider";
 export { generateEventUid, isKeeperEvent } from "./event-identity";
 export { RateLimiter } from "./rate-limiter";
 export { getEventsForDestination } from "./events";
@@ -28,6 +33,7 @@ export type {
   SyncResult,
   RemoteEvent,
   ProviderConfig,
+  OAuthProviderConfig,
   GoogleCalendarConfig,
   OutlookCalendarConfig,
   CalDAVConfig,

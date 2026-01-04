@@ -1,6 +1,7 @@
 import {
-  CalendarProvider,
+  OAuthCalendarProvider,
   getEventsForDestination,
+  type OAuthTokenProvider,
   type DestinationProvider,
   type SyncableEvent,
   type PushResult,
@@ -11,24 +12,18 @@ import {
   type SyncContext,
   type ListRemoteEventsOptions,
   type BroadcastSyncStatus,
-} from "@keeper.sh/integrations";
+} from "@keeper.sh/integration";
 import {
   outlookEventSchema,
   outlookEventListSchema,
   microsoftApiErrorSchema,
   type OutlookEvent,
 } from "@keeper.sh/data-schemas";
-import {
-  oauthCredentialsTable,
-  calendarDestinationsTable,
-} from "@keeper.sh/database/schema";
-import { eq } from "drizzle-orm";
+import { HTTP_STATUS, RATE_LIMIT_DELAY_MS } from "@keeper.sh/constants";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { getOutlookAccountsForUser } from "./sync";
 
 const MICROSOFT_GRAPH_API = "https://graph.microsoft.com/v1.0";
-const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
-const RATE_LIMIT_DELAY_MS = 60_000;
 const KEEPER_CATEGORY = "keeper.sh";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -48,26 +43,20 @@ const isAuthError = (
   error: { code?: string } | undefined,
 ): boolean => {
   const code = error?.code;
-  if (status === 403) {
-    return code === "Authorization_RequestDenied" || code === "ErrorAccessDenied";
+  if (status === HTTP_STATUS.FORBIDDEN) {
+    return (
+      code === "Authorization_RequestDenied" || code === "ErrorAccessDenied"
+    );
   }
-  if (status === 401) {
+  if (status === HTTP_STATUS.UNAUTHORIZED) {
     return code === "InvalidAuthenticationToken";
   }
   return false;
 };
 
-export interface OAuthProvider {
-  refreshAccessToken: (refreshToken: string) => Promise<{
-    access_token: string;
-    refresh_token?: string;
-    expires_in: number;
-  }>;
-}
-
 export interface OutlookCalendarProviderConfig {
   database: BunSQLDatabase;
-  oauthProvider: OAuthProvider;
+  oauthProvider: OAuthTokenProvider;
   broadcastSyncStatus?: BroadcastSyncStatus;
 }
 
@@ -119,68 +108,15 @@ export const createOutlookCalendarProvider = (
   return { syncForUser };
 };
 
-class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarConfig> {
+class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalendarConfig> {
   readonly name = "Outlook Calendar";
   readonly id = "outlook";
 
-  private currentAccessToken: string;
-  private oauthProvider: OAuthProvider;
+  protected oauthProvider: OAuthTokenProvider;
 
-  constructor(config: OutlookCalendarConfig, oauthProvider: OAuthProvider) {
+  constructor(config: OutlookCalendarConfig, oauthProvider: OAuthTokenProvider) {
     super(config);
-    this.currentAccessToken = config.accessToken;
     this.oauthProvider = oauthProvider;
-  }
-
-  private get headers(): Record<string, string> {
-    return {
-      Authorization: `Bearer ${this.currentAccessToken}`,
-      "Content-Type": "application/json",
-    };
-  }
-
-  private async markNeedsReauthentication(): Promise<void> {
-    const { database, destinationId, userId, broadcastSyncStatus } = this.config;
-    await database
-      .update(calendarDestinationsTable)
-      .set({ needsReauthentication: true })
-      .where(eq(calendarDestinationsTable.id, destinationId));
-
-    broadcastSyncStatus?.(userId, destinationId, { needsReauthentication: true });
-  }
-
-  private async ensureValidToken(): Promise<void> {
-    const { database, accessTokenExpiresAt, refreshToken, accountId, destinationId } =
-      this.config;
-
-    if (accessTokenExpiresAt.getTime() > Date.now() + TOKEN_REFRESH_BUFFER_MS) {
-      return;
-    }
-
-    const tokenData = await this.oauthProvider.refreshAccessToken(refreshToken);
-    const newExpiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
-
-    const [destination] = await database
-      .select({
-        oauthCredentialId: calendarDestinationsTable.oauthCredentialId,
-      })
-      .from(calendarDestinationsTable)
-      .where(eq(calendarDestinationsTable.id, destinationId))
-      .limit(1);
-
-    if (destination?.oauthCredentialId) {
-      await database
-        .update(oauthCredentialsTable)
-        .set({
-          accessToken: tokenData.access_token,
-          refreshToken: tokenData.refresh_token ?? refreshToken,
-          expiresAt: newExpiresAt,
-        })
-        .where(eq(oauthCredentialsTable.id, destination.oauthCredentialId));
-    }
-
-    this.currentAccessToken = tokenData.access_token;
-    this.config.accessTokenExpiresAt = newExpiresAt;
   }
 
   async pushEvents(events: SyncableEvent[]): Promise<PushResult[]> {
@@ -338,7 +274,7 @@ class OutlookCalendarProviderInstance extends CalendarProvider<OutlookCalendarCo
         headers: this.headers,
       });
 
-      if (!response.ok && response.status !== 404) {
+      if (!response.ok && response.status !== HTTP_STATUS.NOT_FOUND) {
         const body = await response.json();
         const { error } = microsoftApiErrorSchema.assert(body);
 

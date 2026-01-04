@@ -1,6 +1,6 @@
 import type { CronOptions } from "cronbake";
 import type { Plan } from "@keeper.sh/premium";
-import { syncDestinationsForUser } from "@keeper.sh/integrations";
+import { syncDestinationsForUser } from "@keeper.sh/integration";
 import { fetchAndSyncSource, type Source } from "@keeper.sh/calendar";
 import {
   getSourcesByPlan,
@@ -28,7 +28,7 @@ const groupSourcesByUser = (sources: Source[]): Map<string, Source[]> => {
 
 const ensureUsersWithDestinationsIncluded = (
   sourcesByUser: Map<string, Source[]>,
-  usersWithDestinations: string[]
+  usersWithDestinations: string[],
 ): void => {
   for (const userId of usersWithDestinations) {
     if (!sourcesByUser.has(userId)) {
@@ -56,12 +56,12 @@ export const createSyncJob = (plan: Plan, cron: string): CronOptions =>
       ensureUsersWithDestinationsIncluded(sourcesByUser, usersWithDestinations);
 
       const userSyncs = Array.from(sourcesByUser.entries()).map(
-        ([userId, userSources]) => syncUserSources(userId, userSources)
+        ([userId, userSources]) => syncUserSources(userId, userSources),
       );
 
       const results = await Promise.allSettled(userSyncs);
       const failedCount = results.filter(
-        (result) => result.status === "rejected"
+        (result) => result.status === "rejected",
       ).length;
 
       setCronEventFields({ failedCount });

@@ -450,7 +450,7 @@ docker compose up -d
 1. [@keeper.sh/integration-google-calendar](./packages/integration-google-calendar)
 1. [@keeper.sh/integration-icloud](./packages/integration-icloud)
 1. [@keeper.sh/integration-outlook](./packages/integration-outlook)
-1. [@keeper.sh/integrations](./packages/integrations)
+1. [@keeper.sh/integration](./packages/integrations)
 1. [@keeper.sh/log](./packages/log)
 1. [@keeper.sh/oauth-google](./packages/oauth-google)
 1. [@keeper.sh/oauth-microsoft](./packages/oauth-microsoft)

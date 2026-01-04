@@ -1,7 +1,8 @@
 import {
-  CalendarProvider,
+  OAuthCalendarProvider,
   RateLimiter,
   getEventsForDestination,
+  type OAuthTokenProvider,
   type DestinationProvider,
   type SyncableEvent,
   type PushResult,
@@ -12,24 +13,18 @@ import {
   type SyncContext,
   type ListRemoteEventsOptions,
   type BroadcastSyncStatus,
-} from "@keeper.sh/integrations";
+} from "@keeper.sh/integration";
 import { getWideEvent } from "@keeper.sh/log";
 import {
-  googleEventSchema,
   googleEventListSchema,
   googleApiErrorSchema,
   type GoogleEvent,
 } from "@keeper.sh/data-schemas";
-import {
-  oauthCredentialsTable,
-  calendarDestinationsTable,
-} from "@keeper.sh/database/schema";
-import { eq } from "drizzle-orm";
+import { HTTP_STATUS } from "@keeper.sh/constants";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { getGoogleAccountsForUser } from "./sync";
 
 const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3/";
-const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
 const isRateLimitError = (error: unknown): error is Error => {
   if (!(error instanceof Error)) return false;
@@ -47,20 +42,19 @@ const isAuthError = (
   status: number,
   error: { code?: number; status?: string } | undefined,
 ): boolean => {
-  if (status === 403 && error?.status === "PERMISSION_DENIED") return true;
-  if (status === 401 && error?.status === "UNAUTHENTICATED") return true;
+  if (status === HTTP_STATUS.FORBIDDEN && error?.status === "PERMISSION_DENIED")
+    return true;
+  if (
+    status === HTTP_STATUS.UNAUTHORIZED &&
+    error?.status === "UNAUTHENTICATED"
+  )
+    return true;
   return false;
 };
 
-export interface OAuthProvider {
-  refreshAccessToken: (
-    refreshToken: string,
-  ) => Promise<{ access_token: string; expires_in: number }>;
-}
-
 export interface GoogleCalendarProviderConfig {
   database: BunSQLDatabase;
-  oauthProvider: OAuthProvider;
+  oauthProvider: OAuthTokenProvider;
   broadcastSyncStatus?: BroadcastSyncStatus;
 }
 
@@ -113,69 +107,17 @@ export const createGoogleCalendarProvider = (
   return { syncForUser };
 };
 
-class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConfig> {
+class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalendarConfig> {
   readonly name = "Google Calendar";
   readonly id = "google";
 
-  private currentAccessToken: string;
+  protected oauthProvider: OAuthTokenProvider;
   private rateLimiter: RateLimiter;
-  private oauthProvider: OAuthProvider;
 
-  constructor(config: GoogleCalendarConfig, oauthProvider: OAuthProvider) {
+  constructor(config: GoogleCalendarConfig, oauthProvider: OAuthTokenProvider) {
     super(config);
-    this.currentAccessToken = config.accessToken;
     this.rateLimiter = new RateLimiter(10);
     this.oauthProvider = oauthProvider;
-  }
-
-  private get headers(): Record<string, string> {
-    return {
-      Authorization: `Bearer ${this.currentAccessToken}`,
-      "Content-Type": "application/json",
-    };
-  }
-
-  private async markNeedsReauthentication(): Promise<void> {
-    const { database, destinationId, userId, broadcastSyncStatus } = this.config;
-    await database
-      .update(calendarDestinationsTable)
-      .set({ needsReauthentication: true })
-      .where(eq(calendarDestinationsTable.id, destinationId));
-
-    broadcastSyncStatus?.(userId, destinationId, { needsReauthentication: true });
-  }
-
-  private async ensureValidToken(): Promise<void> {
-    const { database, accessTokenExpiresAt, refreshToken, accountId } =
-      this.config;
-
-    if (accessTokenExpiresAt.getTime() > Date.now() + TOKEN_REFRESH_BUFFER_MS) {
-      return;
-    }
-
-    const tokenData = await this.oauthProvider.refreshAccessToken(refreshToken);
-    const newExpiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
-
-    const [destination] = await database
-      .select({
-        oauthCredentialId: calendarDestinationsTable.oauthCredentialId,
-      })
-      .from(calendarDestinationsTable)
-      .where(eq(calendarDestinationsTable.accountId, accountId))
-      .limit(1);
-
-    if (destination?.oauthCredentialId) {
-      await database
-        .update(oauthCredentialsTable)
-        .set({
-          accessToken: tokenData.access_token,
-          expiresAt: newExpiresAt,
-        })
-        .where(eq(oauthCredentialsTable.id, destination.oauthCredentialId));
-    }
-
-    this.currentAccessToken = tokenData.access_token;
-    this.config.accessTokenExpiresAt = newExpiresAt;
   }
 
   async pushEvents(events: SyncableEvent[]): Promise<PushResult[]> {
@@ -348,7 +290,7 @@ class GoogleCalendarProviderInstance extends CalendarProvider<GoogleCalendarConf
         headers: this.headers,
       });
 
-      if (!response.ok && response.status !== 404) {
+      if (!response.ok && response.status !== HTTP_STATUS.NOT_FOUND) {
         const body = await response.json();
         const { error } = googleApiErrorSchema.assert(body);
 

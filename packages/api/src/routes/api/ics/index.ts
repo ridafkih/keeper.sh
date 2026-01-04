@@ -1,5 +1,5 @@
 import { createSourceSchema } from "@keeper.sh/data-schemas";
-import { HTTP_STATUS } from "@keeper.sh/shared";
+import { HTTP_STATUS } from "@keeper.sh/constants";
 import { withTracing, withAuth } from "../../../utils/middleware";
 import { ErrorResponse } from "../../../utils/responses";
 import {

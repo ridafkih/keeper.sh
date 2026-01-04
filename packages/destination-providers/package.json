@@ -19,7 +19,7 @@
     "@keeper.sh/integration-google-calendar": "workspace:*",
     "@keeper.sh/integration-icloud": "workspace:*",
     "@keeper.sh/integration-outlook": "workspace:*",
-    "@keeper.sh/integrations": "workspace:*",
+    "@keeper.sh/integration": "workspace:*",
     "@keeper.sh/oauth-google": "workspace:*",
     "@keeper.sh/oauth-microsoft": "workspace:*",
     "drizzle-orm": "^0.45.1"

@@ -10,6 +10,7 @@ import {
   TextCaption,
   DangerText,
 } from "@/components/typography";
+import { HTTP_STATUS } from "@keeper.sh/constants";
 
 type CalDAVProvider = "fastmail" | "icloud" | "caldav";
 
@@ -154,7 +155,7 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
       if (!response.ok) {
         const data = await response.json();
 
-        if (response.status === 402) {
+        if (response.status === HTTP_STATUS.PAYMENT_REQUIRED) {
           return setError("Destination limit reached. Upgrade to Pro.");
         }
 

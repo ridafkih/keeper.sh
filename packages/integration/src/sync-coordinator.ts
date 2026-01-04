@@ -1,8 +1,8 @@
 import { getWideEvent } from "@keeper.sh/log";
+import { SYNC_TTL_SECONDS } from "@keeper.sh/constants";
 import type { RedisClient } from "bun";
 
 const SYNC_KEY_PREFIX = "sync:generation:";
-const SYNC_TTL_SECONDS = 86400;
 
 const getSyncKey = (userId: string): string => `${SYNC_KEY_PREFIX}${userId}`;
 

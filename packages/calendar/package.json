@@ -12,6 +12,7 @@
   "dependencies": {
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/log": "workspace:*",
+    "@keeper.sh/constants": "workspace:*",
     "drizzle-orm": "0.45.1",
     "ts-ics": "2.4.0"
   },

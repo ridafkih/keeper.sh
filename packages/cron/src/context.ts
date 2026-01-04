@@ -12,7 +12,7 @@ import {
   createSyncCoordinator,
   type DestinationSyncResult,
   type SyncProgressUpdate,
-} from "@keeper.sh/integrations";
+} from "@keeper.sh/integration";
 import { Polar } from "@polar-sh/sdk";
 import { eq } from "drizzle-orm";
 
@@ -93,7 +93,11 @@ const onSyncProgress = (update: SyncProgressUpdate) => {
   });
 };
 
-export const syncCoordinator = createSyncCoordinator({ redis, onDestinationSync, onSyncProgress });
+export const syncCoordinator = createSyncCoordinator({
+  redis,
+  onDestinationSync,
+  onSyncProgress,
+});
 
 export const polarClient =
   env.POLAR_ACCESS_TOKEN && env.POLAR_MODE
