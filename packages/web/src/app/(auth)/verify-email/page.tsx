@@ -19,7 +19,7 @@ const getPendingEmail = (): string | null | undefined => {
   return sessionStorage.getItem("pendingVerificationEmail");
 };
 
-export default function VerifyEmailPage(): ReactNode {
+const VerifyEmailPage = (): ReactNode => {
   const router = useRouter();
   const { user, isLoading } = useAuth();
   const { isSubmitting, error, submit } = useFormSubmit();
@@ -88,4 +88,6 @@ export default function VerifyEmailPage(): ReactNode {
       </div>
     </AuthFormContainer>
   );
-}
+};
+
+export default VerifyEmailPage;

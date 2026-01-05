@@ -37,11 +37,11 @@ interface FeaturesSectionProps {
   showHeading?: boolean;
 }
 
-const getHeading = (showHeading: boolean): string | undefined => {
+const getHeading = (showHeading: boolean): string | null => {
   if (showHeading) {
     return "Features";
   }
-  return undefined;
+  return null;
 };
 
 export const FeaturesSection: FC<FeaturesSectionProps> = ({ showHeading = true }) => {

@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   title: "Pricing",
 };
 
-export default function PricingPage(): ReactNode {
+const PricingPage = (): ReactNode => {
   if (!isCommercialMode) {
     redirect("/dashboard");
   }
@@ -21,4 +21,6 @@ export default function PricingPage(): ReactNode {
       <PricingSection showHeading={false} />
     </MarketingPage>
   );
-}
+};
+
+export default PricingPage;

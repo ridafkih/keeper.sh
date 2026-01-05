@@ -2,7 +2,7 @@ import type { FC, PropsWithChildren } from "react";
 
 interface MarketingSectionProps {
   id?: string;
-  heading?: string;
+  heading?: string | null;
 }
 
 export const MarketingSection: FC<PropsWithChildren<MarketingSectionProps>> = ({

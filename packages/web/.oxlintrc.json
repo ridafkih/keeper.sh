@@ -15,13 +15,21 @@
     }
   },
   "categories": {
+    "nursery": "off",
     "restriction": "off"
   },
   "rules": {
+    "func-style": ["error", "expression"],
     "react/jsx-key": "error",
     "react/no-children-prop": "error",
     "react-hooks/rules-of-hooks": "error",
     "react-hooks/exhaustive-deps": "warn",
-    "import/first": "off"
+    "import/first": "off",
+    "import/exports-last": "off",
+    "import/unambiguous": "off",
+    "no-default-export": "off",
+    "no-void": "off",
+    "promise/catch-or-return": "off",
+    "react/no-danger": "off"
   }
 }

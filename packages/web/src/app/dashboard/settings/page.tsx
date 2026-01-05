@@ -40,6 +40,7 @@ const fetchPasskeys = async (): Promise<Passkey[]> => {
   return data ?? [];
 };
 
+
 interface PasskeysListProps {
   passkeys: Passkey[] | undefined;
   isLoading: boolean;
@@ -87,7 +88,7 @@ const PasskeysList: FC<PasskeysListProps> = ({ passkeys, isLoading, onDelete }) 
   );
 };
 
-export default function SettingsPage(): ReactNode {
+export default (): ReactNode => {
   const { user } = useAuth();
   const router = useRouter();
   const toastManager = Toast.useToastManager();

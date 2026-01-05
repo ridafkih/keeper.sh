@@ -8,8 +8,7 @@ export const metadata: Metadata = {
   title: "Privacy Policy",
 };
 
-export default function PrivacyPage(): ReactNode {
-  return (
+const PrivacyPage = (): ReactNode => (
     <MarketingPage title="Privacy Policy" description="Last updated: December 2025">
       <div className="text-sm text-foreground-secondary flex flex-col gap-8">
         <section className="flex flex-col gap-3">
@@ -176,5 +175,6 @@ export default function PrivacyPage(): ReactNode {
         </section>
       </div>
     </MarketingPage>
-  );
-}
+);
+
+export default PrivacyPage;

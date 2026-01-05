@@ -8,18 +8,18 @@ import {
 import { PageContent } from "@/components/page-content";
 import { SectionSkeleton } from "@/components/section-skeleton";
 
-export default function IntegrationsPage(): ReactNode {
-  return (
-    <PageContent>
-      <Suspense fallback={<SectionSkeleton rows={2} />}>
-        <CalendarSourcesSection />
-      </Suspense>
-      <Suspense fallback={<SectionSkeleton rows={2} />}>
-        <DestinationsSection />
-      </Suspense>
-      <Suspense fallback={<SectionSkeleton rows={1} />}>
-        <ICalLinkSection />
-      </Suspense>
-    </PageContent>
-  );
-}
+const IntegrationsPage = (): ReactNode => (
+  <PageContent>
+    <Suspense fallback={<SectionSkeleton rows={2} />}>
+      <CalendarSourcesSection />
+    </Suspense>
+    <Suspense fallback={<SectionSkeleton rows={2} />}>
+      <DestinationsSection />
+    </Suspense>
+    <Suspense fallback={<SectionSkeleton rows={1} />}>
+      <ICalLinkSection />
+    </Suspense>
+  </PageContent>
+);
+
+export default IntegrationsPage;

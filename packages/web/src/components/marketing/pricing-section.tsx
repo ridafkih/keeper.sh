@@ -10,11 +10,11 @@ interface PricingSectionProps {
   showHeading?: boolean;
 }
 
-const getHeading = (showHeading: boolean): string | undefined => {
+const getHeading = (showHeading: boolean): string | null => {
   if (showHeading) {
     return "Pricing";
   }
-  return undefined;
+  return null;
 };
 
 export const PricingSection: FC<PricingSectionProps> = ({ showHeading = true }) => {

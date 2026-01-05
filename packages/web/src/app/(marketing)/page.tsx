@@ -6,7 +6,7 @@ import { FeaturesSection } from "@/components/marketing/features-section";
 import { PricingSection } from "@/components/marketing/pricing-section";
 import { isCommercialMode } from "@/config/mode";
 
-export default function HomePage(): ReactNode {
+const HomePage = (): ReactNode => {
   if (!isCommercialMode) {
     redirect("/dashboard");
   }
@@ -18,4 +18,6 @@ export default function HomePage(): ReactNode {
       <PricingSection />
     </MarketingPage>
   );
-}
+};
+
+export default HomePage;

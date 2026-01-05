@@ -8,8 +8,7 @@ export const metadata: Metadata = {
   title: "Terms & Conditions",
 };
 
-export default function TermsPage(): ReactNode {
-  return (
+const TermsPage = (): ReactNode => (
     <MarketingPage title="Terms & Conditions" description="Last updated: December 2025">
       <div className="text-sm text-foreground-secondary flex flex-col gap-8">
         <section className="flex flex-col gap-3">
@@ -222,5 +221,6 @@ export default function TermsPage(): ReactNode {
         </section>
       </div>
     </MarketingPage>
-  );
-}
+);
+
+export default TermsPage;

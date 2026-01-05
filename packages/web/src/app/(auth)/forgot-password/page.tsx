@@ -17,7 +17,7 @@ import { CardTitle, TextBody } from "@/components/typography";
 import { useFormSubmit } from "@/hooks/use-form-submit";
 import { forgotPassword } from "@/lib/auth";
 
-export default function ForgotPasswordPage(): ReactNode {
+const ForgotPasswordPage = (): ReactNode => {
   const [emailSent, setEmailSent] = useState(false);
   const { isSubmitting, error, submit } = useFormSubmit();
 
@@ -88,4 +88,6 @@ export default function ForgotPasswordPage(): ReactNode {
       </AuthForm>
     </AuthFormContainer>
   );
-}
+};
+
+export default ForgotPasswordPage;

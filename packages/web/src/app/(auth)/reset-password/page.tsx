@@ -21,12 +21,12 @@ interface ResetPasswordPageProps {
   searchParams: Promise<{ token?: string }>;
 }
 
-export default function ResetPasswordPage({ searchParams }: ResetPasswordPageProps): ReactNode {
-  return (
-    <AuthFormContainer>
-      <Suspense>
-        <FormLoader searchParams={searchParams} />
-      </Suspense>
-    </AuthFormContainer>
-  );
-}
+const ResetPasswordPage = ({ searchParams }: ResetPasswordPageProps): ReactNode => (
+  <AuthFormContainer>
+    <Suspense>
+      <FormLoader searchParams={searchParams} />
+    </Suspense>
+  </AuthFormContainer>
+);
+
+export default ResetPasswordPage;

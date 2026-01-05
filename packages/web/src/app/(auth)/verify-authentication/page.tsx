@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
 import { AuthFormContainer } from "@/components/auth-form";
 
-export default function VerifyAuthenticationPage(): ReactNode {
+const VerifyAuthenticationPage = (): ReactNode => {
   const router = useRouter();
   const { user, isLoading } = useAuth();
 
@@ -23,4 +23,6 @@ export default function VerifyAuthenticationPage(): ReactNode {
       </div>
     </AuthFormContainer>
   );
-}
+};
+
+export default VerifyAuthenticationPage;

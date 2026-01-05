@@ -96,7 +96,8 @@ const isPageLoading = (
   if (!data) {
     return false;
   }
-  return data[size - FIRST_PAGE_SIZE] === undefined;
+  const page = data[size - FIRST_PAGE_SIZE];
+  return page === null || page === void 0;
 };
 
 const useEvents = ({ startDate }: UseEventsOptions = {}): UseEventsResult => {

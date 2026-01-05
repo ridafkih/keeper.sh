@@ -9,13 +9,13 @@ export const metadata: Metadata = {
   title: "Features",
 };
 
-export default function FeaturesPage(): ReactNode {
-  return (
-    <MarketingPage
-      title="Features"
-      description="Everything you need to keep your calendars in sync."
-    >
-      <FeaturesSection showHeading={false} />
-    </MarketingPage>
-  );
-}
+const FeaturesPage = (): ReactNode => (
+  <MarketingPage
+    title="Features"
+    description="Everything you need to keep your calendars in sync."
+  >
+    <FeaturesSection showHeading={false} />
+  </MarketingPage>
+);
+
+export default FeaturesPage;
