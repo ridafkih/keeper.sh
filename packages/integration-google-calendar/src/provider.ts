@@ -3,6 +3,7 @@ import {
   createOAuthDestinationProvider,
   generateEventUid,
   isKeeperEvent,
+  getErrorMessage,
   type OAuthTokenProvider,
   type DestinationProvider,
   type SyncableEvent,
@@ -25,6 +26,7 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { getGoogleAccountsForUser, type GoogleAccount } from "./sync";
 
 const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3/";
+const GOOGLE_CALENDAR_MAX_RESULTS = 2500;
 
 const isRateLimitError = (error: unknown): error is Error => {
   if (!(error instanceof Error)) return false;
@@ -153,7 +155,7 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
       GOOGLE_CALENDAR_API,
     );
 
-    url.searchParams.set("maxResults", "2500");
+    url.searchParams.set("maxResults", String(GOOGLE_CALENDAR_MAX_RESULTS));
     url.searchParams.set("timeMin", today.toISOString());
     url.searchParams.set("timeMax", until.toISOString());
     if (pageToken) {
@@ -195,8 +197,7 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
       return result;
     } catch (error) {
       getWideEvent()?.setError(error);
-      const message = error instanceof Error ? error.message : "Unknown error";
-      return { success: false, error: `Failed to push event: ${message}` };
+      return { success: false, error: getErrorMessage(error) };
     }
   }
 
@@ -262,8 +263,7 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
       return { success: true };
     } catch (error) {
       getWideEvent()?.setError(error);
-      const message = error instanceof Error ? error.message : "Unknown error";
-      return { success: false, error: `Failed to delete event: ${message}` };
+      return { success: false, error: getErrorMessage(error) };
     }
   }
 

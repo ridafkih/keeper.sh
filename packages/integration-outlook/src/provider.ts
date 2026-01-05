@@ -1,6 +1,7 @@
 import {
   OAuthCalendarProvider,
   createOAuthDestinationProvider,
+  getErrorMessage,
   type OAuthTokenProvider,
   type DestinationProvider,
   type SyncableEvent,
@@ -23,6 +24,7 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { getOutlookAccountsForUser, type OutlookAccount } from "./sync";
 
 const MICROSOFT_GRAPH_API = "https://graph.microsoft.com/v1.0";
+const OUTLOOK_PAGE_SIZE = 100;
 
 const hasRateLimitMessage = (message: string | undefined): boolean => {
   if (!message) return false;
@@ -149,7 +151,7 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
       "$filter",
       `categories/any(c:c eq '${KEEPER_CATEGORY}') and start/dateTime ge '${today.toISOString()}' and start/dateTime le '${until.toISOString()}'`,
     );
-    url.searchParams.set("$top", "100");
+    url.searchParams.set("$top", String(OUTLOOK_PAGE_SIZE));
     url.searchParams.set("$select", "id,iCalUId,subject,start,end,categories");
 
     return url;
@@ -177,10 +179,9 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     try {
       return this.createEvent(resource);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
       return {
         success: false,
-        error: `Failed to push event: ${message}`,
+        error: getErrorMessage(error),
       };
     }
   }
@@ -234,10 +235,9 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
 
       return { success: true };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
       return {
         success: false,
-        error: `Failed to delete event: ${message}`,
+        error: getErrorMessage(error),
       };
     }
   }

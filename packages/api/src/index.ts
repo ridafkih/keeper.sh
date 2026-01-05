@@ -1,4 +1,6 @@
 import env from "@keeper.sh/env/api";
+
+const CORS_MAX_AGE_SECONDS = 86400;
 import {
   syncStatusTable,
   calendarDestinationsTable,
@@ -85,7 +87,7 @@ const withCors = (handler: FetchHandler): FetchHandler => {
         status: 204,
         headers: {
           ...corsHeaders(origin),
-          "Access-Control-Max-Age": "86400",
+          "Access-Control-Max-Age": String(CORS_MAX_AGE_SECONDS),
         },
       });
     }

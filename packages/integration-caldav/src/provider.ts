@@ -4,6 +4,7 @@ import {
   getEventsForDestination,
   generateEventUid,
   isKeeperEvent,
+  getErrorMessage,
   type DestinationProvider,
   type SyncableEvent,
   type PushResult,
@@ -133,8 +134,7 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
             return { success: true, remoteId: uid };
           } catch (error) {
             getWideEvent()?.setError(error);
-            const message = error instanceof Error ? error.message : "Unknown error";
-            return { success: false, error: `Failed to push event: ${message}` };
+            return { success: false, error: getErrorMessage(error) };
           }
         }),
       ),
@@ -161,8 +161,7 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
               return { success: true };
             }
 
-            const message = error instanceof Error ? error.message : "Unknown error";
-            return { success: false, error: `Failed to delete event: ${message}` };
+            return { success: false, error: getErrorMessage(error) };
           }
         }),
       ),

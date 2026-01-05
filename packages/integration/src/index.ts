@@ -11,6 +11,7 @@ export {
 } from "./create-oauth-provider";
 export { generateEventUid, isKeeperEvent } from "./event-identity";
 export { RateLimiter } from "./rate-limiter";
+export { getErrorMessage } from "./error-utils";
 export { getEventsForDestination } from "./events";
 export {
   syncDestinationsForUser,
