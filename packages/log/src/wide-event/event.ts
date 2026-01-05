@@ -1,9 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ServiceBoundary, WideEventFields } from "./types";
 
-const createInitialFields = (
-  serviceBoundary: ServiceBoundary
-): Partial<WideEventFields> => ({
+const createInitialFields = (serviceBoundary: ServiceBoundary): Partial<WideEventFields> => ({
   requestId: randomUUID(),
   startTime: Date.now(),
   serviceBoundary,
@@ -11,7 +9,7 @@ const createInitialFields = (
 });
 
 const extractErrorFields = (
-  error: unknown
+  error: unknown,
 ): Pick<WideEventFields, "error" | "errorType" | "errorMessage" | "errorCode"> => {
   if (error instanceof Error) {
     return {
@@ -28,8 +26,7 @@ const extractErrorFields = (
   };
 };
 
-const calculateDuration = (startTime: number, endTime: number): number =>
-  endTime - startTime;
+const calculateDuration = (startTime: number, endTime: number): number => endTime - startTime;
 
 export class WideEvent {
   private fields: Partial<WideEventFields>;
@@ -44,9 +41,7 @@ export class WideEvent {
     return this;
   };
 
-  get = <Key extends keyof WideEventFields>(
-    key: Key
-  ): WideEventFields[Key] | undefined => {
+  get = <Key extends keyof WideEventFields>(key: Key): WideEventFields[Key] | undefined => {
     return this.fields[key];
   };
 

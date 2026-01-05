@@ -8,8 +8,8 @@ export const HeroSection: FC = () => (
       Simple, open-source calendar syncing
     </h1>
     <p className="text-foreground-secondary leading-relaxed max-w-[48ch]">
-      Aggregate events from multiple calendars into one anonymized feed. Push
-      events to one or many calendars.
+      Aggregate events from multiple calendars into one anonymized feed. Push events to one or many
+      calendars.
     </p>
     <div className="flex gap-2">
       <Link

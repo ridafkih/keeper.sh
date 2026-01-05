@@ -39,10 +39,7 @@ export interface IdentifyProps {
   name?: string;
 }
 
-export const identify = (
-  user: IdentifyProps,
-  options: { gdprApplies: boolean },
-) => {
+export const identify = (user: IdentifyProps, options: { gdprApplies: boolean }) => {
   if (options.gdprApplies && !hasAnalyticsConsent()) return;
   window.visitors?.identify(user);
 };
@@ -53,12 +50,10 @@ interface ConversionOptions {
   transactionId?: string;
 }
 
-const { NEXT_PUBLIC_GOOGLE_ADS_ID, NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_LABEL } =
-  process.env;
+const { NEXT_PUBLIC_GOOGLE_ADS_ID, NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_LABEL } = process.env;
 
 export const reportPurchaseConversion = (options?: ConversionOptions) => {
-  if (!NEXT_PUBLIC_GOOGLE_ADS_ID || !NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_LABEL)
-    return;
+  if (!NEXT_PUBLIC_GOOGLE_ADS_ID || !NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_LABEL) return;
   window.gtag?.("event", "conversion", {
     send_to: `${NEXT_PUBLIC_GOOGLE_ADS_ID}/${NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_LABEL}`,
     ...options,

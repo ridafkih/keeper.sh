@@ -1,7 +1,4 @@
-import {
-  remoteICalSourcesTable,
-  eventStatesTable,
-} from "@keeper.sh/database/schema";
+import { remoteICalSourcesTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { KEEPER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { generateIcsCalendar, type IcsCalendar, type IcsEvent } from "ts-ics";
 import { eq, inArray, asc } from "drizzle-orm";
@@ -39,9 +36,7 @@ export const formatEventsAsIcal = (events: CalendarEvent[]): string => {
  * Generates an iCal calendar for a user by their identifier.
  * Returns null if user not found.
  */
-export const generateUserCalendar = async (
-  identifier: string,
-): Promise<string | null> => {
+export const generateUserCalendar = async (identifier: string): Promise<string | null> => {
   const userId = await resolveUserIdentifier(identifier);
 
   if (!userId) {

@@ -29,11 +29,7 @@ export const CompleteRegistrationForm: FC = () => {
   const { isSubmitting, error, submit } = useFormSubmit();
   const passwordRef = useRef<HTMLInputElement>(null);
 
-  const email = useSyncExternalStore(
-    subscribeToStorage,
-    getRegistrationEmail,
-    getServerSnapshot,
-  );
+  const email = useSyncExternalStore(subscribeToStorage, getRegistrationEmail, getServerSnapshot);
 
   useEffect(() => {
     if (email !== null) return;
@@ -86,10 +82,7 @@ export const CompleteRegistrationForm: FC = () => {
       <AuthFormSubmit isLoading={isSubmitting}>Create account</AuthFormSubmit>
       <AuthFormFooter>
         Already have an account?{" "}
-        <Link
-          href="/login"
-          className="text-foreground font-medium no-underline hover:underline"
-        >
+        <Link href="/login" className="text-foreground font-medium no-underline hover:underline">
           Login
         </Link>
       </AuthFormFooter>

@@ -94,9 +94,7 @@ function BillingHistoryTable({ orders }: { orders: CustomerOrder[] }) {
                   <FieldValue>{formatDate(order.createdAt)}</FieldValue>
                 </td>
                 <td className="px-3 py-2">
-                  <FieldValue>
-                    {order.product?.name ?? order.description}
-                  </FieldValue>
+                  <FieldValue>{order.product?.name ?? order.description}</FieldValue>
                 </td>
                 <td className="px-3 py-2">
                   <FieldValue className="tabular-nums">

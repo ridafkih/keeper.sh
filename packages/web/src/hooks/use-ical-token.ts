@@ -12,10 +12,7 @@ const fetcher = async (url: string): Promise<IcalTokenResponse> => {
 };
 
 export const useIcalToken = () => {
-  const { data, error, isLoading } = useSWR<IcalTokenResponse>(
-    "/api/ical/token",
-    fetcher,
-  );
+  const { data, error, isLoading } = useSWR<IcalTokenResponse>("/api/ical/token", fetcher);
 
   return {
     token: data?.token,

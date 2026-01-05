@@ -1,7 +1,4 @@
-import {
-  validateEvent,
-  WebhookVerificationError,
-} from "@polar-sh/sdk/webhooks";
+import { validateEvent, WebhookVerificationError } from "@polar-sh/sdk/webhooks";
 import { WideEvent, runWithWideEvent, emitWideEvent } from "@keeper.sh/log";
 import { userSubscriptionsTable } from "@keeper.sh/database/schema";
 import { database } from "../../../context";

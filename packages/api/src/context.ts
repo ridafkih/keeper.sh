@@ -5,10 +5,7 @@ import { createRedis } from "@keeper.sh/redis";
 import { createAuth } from "@keeper.sh/auth";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { createPremiumService } from "@keeper.sh/premium";
-import {
-  createOAuthProviders,
-  createDestinationProviders,
-} from "@keeper.sh/destination-providers";
+import { createOAuthProviders, createDestinationProviders } from "@keeper.sh/destination-providers";
 import {
   createSyncCoordinator,
   type DestinationSyncResult,

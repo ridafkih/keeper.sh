@@ -42,10 +42,7 @@ export const DESTINATIONS: DestinationConfig[] = [...DESTINATIONS_CONST];
 
 export type DestinationId = (typeof DESTINATIONS_CONST)[number]["id"];
 
-type CalDAVDestination = Extract<
-  (typeof DESTINATIONS_CONST)[number],
-  { type: "caldav" }
->;
+type CalDAVDestination = Extract<(typeof DESTINATIONS_CONST)[number], { type: "caldav" }>;
 
 export type CalDAVDestinationId = CalDAVDestination["id"];
 

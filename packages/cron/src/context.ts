@@ -4,10 +4,7 @@ import { syncStatusTable } from "@keeper.sh/database/schema";
 import { createRedis } from "@keeper.sh/redis";
 import { createPremiumService } from "@keeper.sh/premium";
 import { createBroadcastService } from "@keeper.sh/broadcast";
-import {
-  createOAuthProviders,
-  createDestinationProviders,
-} from "@keeper.sh/destination-providers";
+import { createOAuthProviders, createDestinationProviders } from "@keeper.sh/destination-providers";
 import {
   createSyncCoordinator,
   type DestinationSyncResult,

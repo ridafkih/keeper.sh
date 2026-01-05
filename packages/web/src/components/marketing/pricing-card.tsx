@@ -36,15 +36,9 @@ interface PricingCardProps {
   onBillingChange: (yearly: boolean) => void;
 }
 
-export const PricingCard: FC<PricingCardProps> = ({
-  plan,
-  isYearly,
-  onBillingChange,
-}) => {
+export const PricingCard: FC<PricingCardProps> = ({ plan, isYearly, onBillingChange }) => {
   const isFree = plan.monthlyPrice === 0;
-  const price = isYearly
-    ? (plan.yearlyPrice / 12).toFixed(2)
-    : plan.monthlyPrice.toFixed(2);
+  const price = isYearly ? (plan.yearlyPrice / 12).toFixed(2) : plan.monthlyPrice.toFixed(2);
 
   return (
     <div className={card({ featured: plan.popular })}>
@@ -54,11 +48,7 @@ export const PricingCard: FC<PricingCardProps> = ({
         period={isYearly ? " per month billed yearly" : " per month"}
         showPeriod={!isFree}
       />
-      <BillingToggle
-        isYearly={isYearly}
-        onChange={onBillingChange}
-        hidden={isFree}
-      />
+      <BillingToggle isYearly={isYearly} onChange={onBillingChange} hidden={isFree} />
       <p className="text-sm text-foreground-muted mb-4">{plan.description}</p>
       <PricingCardFeatures features={plan.features} />
       <Button
@@ -72,14 +62,9 @@ export const PricingCard: FC<PricingCardProps> = ({
   );
 };
 
-const PricingCardHeader: FC<{ name: string; popular?: boolean }> = ({
-  name,
-  popular,
-}) => (
+const PricingCardHeader: FC<{ name: string; popular?: boolean }> = ({ name, popular }) => (
   <div className="flex items-center justify-between mb-3">
-    <h3 className="text-sm tracking-tight font-semibold text-foreground">
-      {name}
-    </h3>
+    <h3 className="text-sm tracking-tight font-semibold text-foreground">{name}</h3>
     {popular && (
       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-info-surface text-info">
         Popular
@@ -94,14 +79,8 @@ const PricingCardPrice: FC<{
   showPeriod: boolean;
 }> = ({ price, period, showPeriod }) => (
   <div className="mb-2">
-    <span className="text-3xl font-bold tracking-tight text-foreground">
-      ${price}
-    </span>
-    {showPeriod && (
-      <span className="text-sm text-foreground-muted font-normal">
-        {period}
-      </span>
-    )}
+    <span className="text-3xl font-bold tracking-tight text-foreground">${price}</span>
+    {showPeriod && <span className="text-sm text-foreground-muted font-normal">{period}</span>}
   </div>
 );
 
@@ -110,9 +89,7 @@ const BillingToggle: FC<{
   onChange: (yearly: boolean) => void;
   hidden: boolean;
 }> = ({ isYearly, onChange, hidden }) => (
-  <label
-    className={`flex items-center gap-2 mb-4 cursor-pointer ${hidden ? "invisible" : ""}`}
-  >
+  <label className={`flex items-center gap-2 mb-4 cursor-pointer ${hidden ? "invisible" : ""}`}>
     <Switch.Root
       checked={isYearly}
       onCheckedChange={onChange}
@@ -141,9 +118,7 @@ const PricingCardFeatures: FC<{
           className="flex items-center gap-2 text-sm text-foreground-secondary"
         >
           <Icon className={featureIcon({ included: feature.included })} />
-          <span className={feature.included ? "" : "text-foreground-subtle"}>
-            {feature.name}
-          </span>
+          <span className={feature.included ? "" : "text-foreground-subtle"}>{feature.name}</span>
         </li>
       );
     })}

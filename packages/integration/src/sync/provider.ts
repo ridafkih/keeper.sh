@@ -18,9 +18,7 @@ import {
 } from "../events/mappings";
 import type { SyncContext, SyncStage } from "./coordinator";
 
-export abstract class CalendarProvider<
-  TConfig extends ProviderConfig = ProviderConfig,
-> {
+export abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig> {
   abstract readonly name: string;
   abstract readonly id: string;
 
@@ -28,14 +26,9 @@ export abstract class CalendarProvider<
 
   abstract pushEvents(events: SyncableEvent[]): Promise<PushResult[]>;
   abstract deleteEvents(eventIds: string[]): Promise<DeleteResult[]>;
-  abstract listRemoteEvents(
-    options: ListRemoteEventsOptions,
-  ): Promise<RemoteEvent[]>;
+  abstract listRemoteEvents(options: ListRemoteEventsOptions): Promise<RemoteEvent[]>;
 
-  async sync(
-    localEvents: SyncableEvent[],
-    context: SyncContext,
-  ): Promise<SyncResult> {
+  async sync(localEvents: SyncableEvent[], context: SyncContext): Promise<SyncResult> {
     const { database, userId, destinationId } = this.config;
 
     this.emitProgress(context, {
@@ -62,9 +55,7 @@ export abstract class CalendarProvider<
     );
 
     if (staleMappingIds.length > 0) {
-      await Promise.all(
-        staleMappingIds.map((id) => deleteEventMapping(database, id)),
-      );
+      await Promise.all(staleMappingIds.map((id) => deleteEventMapping(database, id)));
     }
 
     const addCount = operations.filter((op) => op.type === "add").length;
@@ -164,9 +155,7 @@ export abstract class CalendarProvider<
     const operations: SyncOperation[] = [];
 
     for (const event of localEvents) {
-      const hasMapping = existingMappings.some(
-        (mapping) => mapping.eventStateId === event.id,
-      );
+      const hasMapping = existingMappings.some((mapping) => mapping.eventStateId === event.id);
       const hasStaleMapping = staleMappedEventIds.has(event.id);
 
       if (!hasMapping || hasStaleMapping) {
@@ -263,11 +252,7 @@ export abstract class CalendarProvider<
           break;
         }
         if (result?.success) {
-          await deleteEventMappingByDestinationUid(
-            database,
-            destinationId,
-            operation.uid,
-          );
+          await deleteEventMappingByDestinationUid(database, destinationId, operation.uid);
           removed++;
           if (currentRemoteCount > 0) currentRemoteCount--;
         }

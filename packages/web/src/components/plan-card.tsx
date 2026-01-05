@@ -97,10 +97,7 @@ const PlanCardButton = ({
 }: PlanCardProps) => {
   if (isSubscriptionLoading) {
     return (
-      <Button
-        className={button({ variant: "secondary", skeleton: true })}
-        disabled
-      >
+      <Button className={button({ variant: "secondary", skeleton: true })} disabled>
         Upgrade
       </Button>
     );
@@ -123,8 +120,7 @@ const PlanCardButton = ({
   }
 
   if (isCurrent && !isCurrentInterval) {
-    const label =
-      targetInterval === "yearly" ? "Switch to Yearly" : "Switch to Monthly";
+    const label = targetInterval === "yearly" ? "Switch to Yearly" : "Switch to Monthly";
     return (
       <Button
         className={button({ variant: "primary" })}
@@ -145,11 +141,7 @@ const PlanCardButton = ({
   }
 
   return (
-    <Button
-      className={button({ variant: "primary" })}
-      onClick={onUpgrade}
-      disabled={isLoading}
-    >
+    <Button className={button({ variant: "primary" })} onClick={onUpgrade} disabled={isLoading}>
       {isLoading ? "Loading..." : `Upgrade to ${plan.name}`}
     </Button>
   );
@@ -166,8 +158,7 @@ export const PlanCard = ({
   onSwitchInterval,
   targetInterval,
 }: PlanCardProps) => {
-  const showCurrentBadge =
-    !isSubscriptionLoading && isCurrent && isCurrentInterval;
+  const showCurrentBadge = !isSubscriptionLoading && isCurrent && isCurrentInterval;
 
   return (
     <div
@@ -178,9 +169,7 @@ export const PlanCard = ({
       })}
     >
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm tracking-tight font-semibold text-foreground">
-          {plan.name}
-        </h3>
+        <h3 className="text-sm tracking-tight font-semibold text-foreground">{plan.name}</h3>
         <div className="flex gap-1.5">
           {(isSubscriptionLoading || showCurrentBadge) && (
             <span
@@ -192,21 +181,13 @@ export const PlanCard = ({
               Current
             </span>
           )}
-          {plan.popular && (
-            <span className={pricingBadge({ variant: "popular" })}>
-              Popular
-            </span>
-          )}
+          {plan.popular && <span className={pricingBadge({ variant: "popular" })}>Popular</span>}
         </div>
       </div>
 
       <div className="mb-3">
-        <span className="text-3xl font-bold tracking-tight text-foreground">
-          ${plan.price}
-        </span>
-        <span className="text-sm text-foreground-muted font-normal">
-          {plan.period}
-        </span>
+        <span className="text-3xl font-bold tracking-tight text-foreground">${plan.price}</span>
+        <span className="text-sm text-foreground-muted font-normal">{plan.period}</span>
       </div>
 
       <p className="text-sm text-foreground-muted mb-4">{plan.description}</p>
@@ -218,9 +199,7 @@ export const PlanCard = ({
             className="flex items-center gap-2 text-sm text-foreground-secondary"
           >
             <FeatureIcon included={feature.included} />
-            <span
-              className={pricingFeatureText({ included: feature.included })}
-            >
+            <span className={pricingFeatureText({ included: feature.included })}>
               {feature.name}
             </span>
           </li>

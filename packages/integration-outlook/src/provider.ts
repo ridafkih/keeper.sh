@@ -31,15 +31,10 @@ const hasRateLimitMessage = (message: string | undefined): boolean => {
   return message.includes("429") || message.includes("throttled");
 };
 
-const isAuthError = (
-  status: number,
-  error: { code?: string } | undefined,
-): boolean => {
+const isAuthError = (status: number, error: { code?: string } | undefined): boolean => {
   const code = error?.code;
   if (status === HTTP_STATUS.FORBIDDEN) {
-    return (
-      code === "Authorization_RequestDenied" || code === "ErrorAccessDenied"
-    );
+    return code === "Authorization_RequestDenied" || code === "ErrorAccessDenied";
   }
   if (status === HTTP_STATUS.UNAUTHORIZED) {
     return code === "InvalidAuthenticationToken";
@@ -93,9 +88,7 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     return hasRateLimitMessage(error);
   }
 
-  async listRemoteEvents(
-    options: ListRemoteEventsOptions,
-  ): Promise<RemoteEvent[]> {
+  async listRemoteEvents(options: ListRemoteEventsOptions): Promise<RemoteEvent[]> {
     await this.ensureValidToken();
     const remoteEvents: RemoteEvent[] = [];
     let nextLink: string | undefined;
@@ -137,11 +130,7 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     return remoteEvents;
   }
 
-  private buildListEventsUrl(
-    today: Date,
-    until: Date,
-    nextLink?: string,
-  ): URL {
+  private buildListEventsUrl(today: Date, until: Date, nextLink?: string): URL {
     if (nextLink) {
       return new URL(nextLink);
     }
@@ -242,9 +231,7 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     }
   }
 
-  private parseEventTime(
-    time: { dateTime?: string; timeZone?: string } | undefined,
-  ): Date | null {
+  private parseEventTime(time: { dateTime?: string; timeZone?: string } | undefined): Date | null {
     if (!time?.dateTime) return null;
 
     if (time.timeZone === "UTC" && !time.dateTime.endsWith("Z")) {
@@ -257,9 +244,7 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
   private toOutlookEvent(event: SyncableEvent): OutlookEvent {
     return {
       subject: event.summary,
-      body: event.description
-        ? { contentType: "text", content: event.description }
-        : undefined,
+      body: event.description ? { contentType: "text", content: event.description } : undefined,
       start: { dateTime: event.startTime.toISOString(), timeZone: "UTC" },
       end: { dateTime: event.endTime.toISOString(), timeZone: "UTC" },
       categories: [KEEPER_CATEGORY],

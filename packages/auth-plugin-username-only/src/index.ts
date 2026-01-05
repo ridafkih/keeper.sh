@@ -6,9 +6,7 @@ import { createSignInEndpoint } from "./endpoints/sign-in";
 
 export type { UsernameOnlyOptions } from "./utils/config";
 
-export const usernameOnly = (
-  options?: UsernameOnlyOptions,
-): BetterAuthPlugin => {
+export const usernameOnly = (options?: UsernameOnlyOptions): BetterAuthPlugin => {
   const config = resolveConfig(options);
 
   return {

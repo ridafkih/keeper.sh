@@ -32,16 +32,10 @@ const AuthNavSkeleton: FC<AuthNavSkeletonProps> = ({ isDashboard }) => {
 
   return (
     <nav className="flex gap-2">
-      <Button
-        className={button({ variant: "secondary", size: "xs", skeleton: true })}
-        disabled
-      >
+      <Button className={button({ variant: "secondary", size: "xs", skeleton: true })} disabled>
         Login
       </Button>
-      <Button
-        className={button({ variant: "primary", size: "xs", skeleton: true })}
-        disabled
-      >
+      <Button className={button({ variant: "primary", size: "xs", skeleton: true })} disabled>
         Register
       </Button>
     </nav>
@@ -54,10 +48,7 @@ interface DashboardNavProps {
 
 const DashboardNav: FC<DashboardNavProps> = ({ onLogout }) => (
   <nav className="flex gap-2">
-    <Button
-      onClick={onLogout}
-      className={button({ variant: "secondary", size: "xs" })}
-    >
+    <Button onClick={onLogout} className={button({ variant: "secondary", size: "xs" })}>
       Logout
     </Button>
   </nav>

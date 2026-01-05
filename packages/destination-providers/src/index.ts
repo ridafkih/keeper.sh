@@ -1,7 +1,4 @@
-import type {
-  DestinationProvider,
-  BroadcastSyncStatus,
-} from "@keeper.sh/integration";
+import type { DestinationProvider, BroadcastSyncStatus } from "@keeper.sh/integration";
 import { createGoogleCalendarProvider } from "@keeper.sh/integration-google-calendar";
 import { createCalDAVProvider } from "@keeper.sh/integration-caldav";
 import { createFastMailProvider } from "@keeper.sh/integration-fastmail";
@@ -20,8 +17,7 @@ export interface DestinationProvidersConfig {
 export const createDestinationProviders = (
   config: DestinationProvidersConfig,
 ): DestinationProvider[] => {
-  const { database, oauthProviders, encryptionKey, broadcastSyncStatus } =
-    config;
+  const { database, oauthProviders, encryptionKey, broadcastSyncStatus } = config;
 
   const providers: DestinationProvider[] = [];
 

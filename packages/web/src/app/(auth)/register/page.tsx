@@ -67,10 +67,7 @@ const UsernameRegisterForm: FC = () => {
       <AuthFormSubmit isLoading={isSubmitting}>Create account</AuthFormSubmit>
       <AuthFormFooter>
         Already have an account?{" "}
-        <Link
-          href="/login"
-          className="text-foreground font-medium no-underline hover:underline"
-        >
+        <Link href="/login" className="text-foreground font-medium no-underline hover:underline">
           Login
         </Link>
       </AuthFormFooter>
@@ -111,22 +108,13 @@ const EmailRegisterForm: FC = () => {
 
       <AuthFormDivider />
 
-      <AuthFormField
-        name="email"
-        placeholder="Email"
-        type="email"
-        required
-        autoComplete="email"
-      />
+      <AuthFormField name="email" placeholder="Email" type="email" required autoComplete="email" />
 
       <AuthFormSubmit isLoading={false}>Continue</AuthFormSubmit>
 
       <AuthFormFooter>
         Already have an account?{" "}
-        <Link
-          href="/login"
-          className="text-foreground font-medium no-underline hover:underline"
-        >
+        <Link href="/login" className="text-foreground font-medium no-underline hover:underline">
           Login
         </Link>
       </AuthFormFooter>

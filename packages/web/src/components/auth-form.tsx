@@ -24,19 +24,14 @@ const authFormInput = tv({
 });
 
 export const AuthFormContainer: FC<PropsWithChildren> = ({ children }) => (
-  <main className="flex-1 flex flex-col items-center justify-center p-4">
-    {children}
-  </main>
+  <main className="flex-1 flex flex-col items-center justify-center p-4">{children}</main>
 );
 
 interface AuthFormProps {
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 }
 
-export const AuthForm: FC<PropsWithChildren<AuthFormProps>> = ({
-  onSubmit,
-  children,
-}) => {
+export const AuthForm: FC<PropsWithChildren<AuthFormProps>> = ({ onSubmit, children }) => {
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -180,12 +175,7 @@ export const AuthSocialButton: FC<PropsWithChildren<AuthSocialButtonProps>> = ({
   icon,
   children,
 }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    disabled={isLoading}
-    className={authSocialButton()}
-  >
+  <button type="button" onClick={onClick} disabled={isLoading} className={authSocialButton()}>
     {icon}
     {children}
   </button>
@@ -215,11 +205,7 @@ export const AuthFormCheckbox: FC<AuthFormCheckboxProps> = ({
 
   return (
     <label className={styles.root()}>
-      <Checkbox.Root
-        name={name}
-        defaultChecked={defaultChecked}
-        className={styles.box()}
-      >
+      <Checkbox.Root name={name} defaultChecked={defaultChecked} className={styles.box()}>
         <Checkbox.Indicator>
           <Check size={12} className={styles.indicator()} />
         </Checkbox.Indicator>

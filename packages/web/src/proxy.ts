@@ -7,9 +7,7 @@ export function proxy(request: NextRequest) {
   const sessionCookie = getSessionCookie(request);
 
   const isAuthRoute = authRoutes.some((route) => pathname.startsWith(route));
-  const isProtectedRoute = protectedRoutes.some((route) =>
-    pathname.startsWith(route),
-  );
+  const isProtectedRoute = protectedRoutes.some((route) => pathname.startsWith(route));
 
   if (isProtectedRoute && !sessionCookie) {
     return NextResponse.redirect(new URL("/login", request.url));

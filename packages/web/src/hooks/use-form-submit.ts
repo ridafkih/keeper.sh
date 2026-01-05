@@ -14,9 +14,7 @@ export function useFormSubmit<TResult = void>(): FormSubmitState<TResult> {
 
   const clearError = () => setError(null);
 
-  const submit = async (
-    handler: () => Promise<TResult>,
-  ): Promise<TResult | undefined> => {
+  const submit = async (handler: () => Promise<TResult>): Promise<TResult | undefined> => {
     setError(null);
     setIsSubmitting(true);
 

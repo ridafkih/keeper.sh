@@ -3,10 +3,7 @@ import type { EventTimeSlot, StoredEventTimeSlot, EventDiff } from "../types";
 const eventIdentityKey = (event: EventTimeSlot): string =>
   `${event.uid}:${event.startTime.getTime()}:${event.endTime.getTime()}`;
 
-export const diffEvents = (
-  remote: EventTimeSlot[],
-  stored: StoredEventTimeSlot[],
-): EventDiff => {
+export const diffEvents = (remote: EventTimeSlot[], stored: StoredEventTimeSlot[]): EventDiff => {
   const remoteByKey = new Map<string, EventTimeSlot>();
   for (const event of remote) {
     remoteByKey.set(eventIdentityKey(event), event);

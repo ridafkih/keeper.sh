@@ -21,7 +21,5 @@ export const AnalyticsContextProvider = ({
   gdprApplies,
   children,
 }: AnalyticsContextProviderProps) => (
-  <AnalyticsContext.Provider value={{ gdprApplies }}>
-    {children}
-  </AnalyticsContext.Provider>
+  <AnalyticsContext.Provider value={{ gdprApplies }}>{children}</AnalyticsContext.Provider>
 );

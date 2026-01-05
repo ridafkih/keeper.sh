@@ -37,20 +37,14 @@ export const CookieConsent = () => {
                   <button
                     type="button"
                     onClick={() => handleChoice(true)}
-                    className={clsx(
-                      button({ variant: "secondary", size: "xs" }),
-                      "text-nowrap",
-                    )}
+                    className={clsx(button({ variant: "secondary", size: "xs" }), "text-nowrap")}
                   >
                     Yes
                   </button>
                   <button
                     type="button"
                     onClick={() => handleChoice(false)}
-                    className={clsx(
-                      button({ variant: "secondary", size: "xs" }),
-                      "text-nowrap",
-                    )}
+                    className={clsx(button({ variant: "secondary", size: "xs" }), "text-nowrap")}
                   >
                     No
                   </button>

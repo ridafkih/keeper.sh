@@ -7,10 +7,7 @@ import Link from "next/link";
 import { Button } from "@base-ui/react/button";
 import { Menu } from "@base-ui/react/menu";
 import { FREE_DESTINATION_LIMIT } from "@keeper.sh/premium/constants";
-import {
-  DESTINATIONS,
-  type DestinationConfig,
-} from "@keeper.sh/destination-metadata";
+import { DESTINATIONS, type DestinationConfig } from "@keeper.sh/destination-metadata";
 import { Card } from "@/components/card";
 import { EmptyState } from "@/components/empty-state";
 import { GhostButton } from "@/components/ghost-button";
@@ -31,12 +28,7 @@ import {
   useDestinationsManager,
   type SyncStatusDisplayProps,
 } from "@/hooks/use-destinations-manager";
-import {
-  TextLabel,
-  TextMeta,
-  TextMuted,
-  BannerText,
-} from "@/components/typography";
+import { TextLabel, TextMeta, TextMuted, BannerText } from "@/components/typography";
 import { button } from "@/styles";
 import { track } from "@/lib/analytics";
 import { tv } from "tailwind-variants";
@@ -68,18 +60,14 @@ const destinationStatus = tv({
   },
 });
 
-const isConnectable = (destination: DestinationConfig): boolean =>
-  !destination.comingSoon;
+const isConnectable = (destination: DestinationConfig): boolean => !destination.comingSoon;
 
 interface DestinationMenuItemProps {
   destination: DestinationConfig;
   onConnect: (providerId: string) => void;
 }
 
-const DestinationMenuItem = ({
-  destination,
-  onConnect,
-}: DestinationMenuItemProps) => {
+const DestinationMenuItem = ({ destination, onConnect }: DestinationMenuItemProps) => {
   const connectable = isConnectable(destination);
 
   return (
@@ -105,9 +93,7 @@ const DestinationMenuItem = ({
         <Server size={14} className="text-foreground-subtle" />
       )}
       <span>{destination.name}</span>
-      {destination.comingSoon && (
-        <span className="ml-4 text-xs">Unavailable</span>
-      )}
+      {destination.comingSoon && <span className="ml-4 text-xs">Unavailable</span>}
     </MenuItem>
   );
 };
@@ -119,11 +105,7 @@ interface DestinationsMenuProps {
 const DestinationsMenu = ({ onConnect }: DestinationsMenuProps) => (
   <>
     {DESTINATIONS.map((destination) => (
-      <DestinationMenuItem
-        key={destination.id}
-        destination={destination}
-        onConnect={onConnect}
-      />
+      <DestinationMenuItem key={destination.id} destination={destination} onConnect={onConnect} />
     ))}
   </>
 );
@@ -207,9 +189,7 @@ const DestinationAction = ({
   onToggleSource,
 }: DestinationActionProps) => {
   if (comingSoon) {
-    return (
-      <TextMuted className="ml-auto px-2 py-1 text-xs">Coming soon</TextMuted>
-    );
+    return <TextMuted className="ml-auto px-2 py-1 text-xs">Coming soon</TextMuted>;
   }
 
   if (!isConnected) {
@@ -220,18 +200,12 @@ const DestinationAction = ({
     );
   }
 
-  const statusText = needsReauthentication
-    ? "Needs Reauthentication"
-    : "Connected";
+  const statusText = needsReauthentication ? "Needs Reauthentication" : "Connected";
   const { trigger, dot } = destinationStatus({ needsReauthentication });
 
   return (
     <Menu.Root>
-      <GhostButton
-        render={<Menu.Trigger />}
-        disabled={isLoading}
-        className={trigger()}
-      >
+      <GhostButton render={<Menu.Trigger />} disabled={isLoading} className={trigger()}>
         {!isLoading && <span className={dot()} />}
         {isLoading ? "..." : statusText}
         <ChevronDown size={12} />
@@ -345,12 +319,7 @@ const DestinationItem = ({
         <div className="flex items-center gap-2 px-3 py-2">
           <IconBox>
             {destination.icon ? (
-              <Image
-                src={destination.icon}
-                alt={destination.name}
-                width={14}
-                height={14}
-              />
+              <Image src={destination.icon} alt={destination.name} width={14} height={14} />
             ) : (
               <Server size={14} className="text-foreground-subtle" />
             )}
@@ -359,9 +328,7 @@ const DestinationItem = ({
             <TextLabel as="h2" className="tracking-tight">
               {destination.name}
             </TextLabel>
-            {isConnected && !needsReauthentication && (
-              <SyncStatusText syncStatus={syncStatus} />
-            )}
+            {isConnected && !needsReauthentication && <SyncStatusText syncStatus={syncStatus} />}
           </div>
           <DestinationAction
             destinationId={destinationId}
@@ -397,11 +364,7 @@ interface NewDestinationMenuProps {
   align?: "start" | "center" | "end";
 }
 
-const NewDestinationMenu = ({
-  onConnect,
-  trigger,
-  align = "start",
-}: NewDestinationMenuProps) => (
+const NewDestinationMenu = ({ onConnect, trigger, align = "start" }: NewDestinationMenuProps) => (
   <Menu.Root>
     {trigger}
     <Menu.Portal>
@@ -417,13 +380,9 @@ const NewDestinationMenu = ({
 const UpgradeBanner = () => (
   <div className="flex items-center justify-between p-1 pl-3.5 bg-warning-surface border border-warning-border rounded-lg">
     <BannerText variant="warning" className="text-xs">
-      You've reached the free plan limit of {FREE_DESTINATION_LIMIT}{" "}
-      destination.
+      You've reached the free plan limit of {FREE_DESTINATION_LIMIT} destination.
     </BannerText>
-    <Link
-      href="/dashboard/billing"
-      className={button({ variant: "primary", size: "xs" })}
-    >
+    <Link href="/dashboard/billing" className={button({ variant: "primary", size: "xs" })}>
       Upgrade to Pro
     </Link>
   </div>
@@ -494,9 +453,7 @@ export const DestinationsSection = () => {
           mappings={mappings}
           onConnect={() => handleConnect(config.id, account.id)}
           onDisconnect={() => handleDisconnect(account.id, config.name)}
-          onToggleSource={(sourceId) =>
-            handleToggleSource(account.id, sourceId)
-          }
+          onToggleSource={(sourceId) => handleToggleSource(account.id, sourceId)}
           syncStatus={getSyncStatus(account.id)}
         />,
       );
@@ -532,9 +489,7 @@ export const DestinationsSection = () => {
     }
 
     const countLabel =
-      destinationCount === 1
-        ? "1 destination"
-        : `${destinationCount} destinations`;
+      destinationCount === 1 ? "1 destination" : `${destinationCount} destinations`;
 
     return (
       <Card>
@@ -545,10 +500,7 @@ export const DestinationsSection = () => {
               onConnect={handleConnect}
               align="end"
               trigger={
-                <GhostButton
-                  render={<Menu.Trigger />}
-                  className="flex items-center gap-1"
-                >
+                <GhostButton render={<Menu.Trigger />} className="flex items-center gap-1">
                   <Plus size={12} />
                   New Destination
                 </GhostButton>

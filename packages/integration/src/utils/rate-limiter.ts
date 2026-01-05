@@ -34,10 +34,7 @@ export class RateLimiter {
 
   reportRateLimit(): void {
     this.backoffUntil = Date.now() + this.backoffMs;
-    this.backoffMs = Math.min(
-      this.backoffMs * this.backoffMultiplier,
-      this.maxBackoffMs,
-    );
+    this.backoffMs = Math.min(this.backoffMs * this.backoffMultiplier, this.maxBackoffMs);
     this.scheduleQueueProcessing();
   }
 

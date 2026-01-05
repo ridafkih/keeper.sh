@@ -51,9 +51,7 @@ export const FormDialog: FC<PropsWithChildren<FormDialogProps>> = ({
             </DangerText>
           )}
           <div className="flex gap-2 justify-end">
-            <Dialog.Close
-              className={button({ variant: "secondary", size: "sm" })}
-            >
+            <Dialog.Close className={button({ variant: "secondary", size: "sm" })}>
               Cancel
             </Dialog.Close>
             <Button

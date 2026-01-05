@@ -63,15 +63,10 @@ export default function VerifyEmailPage() {
         </CardTitle>
 
         <TextBody className="text-sm text-foreground-muted mb-4">
-          We sent you a verification link. Click the link in your email to
-          verify your account.
+          We sent you a verification link. Click the link in your email to verify your account.
         </TextBody>
 
-        {error && (
-          <TextBody className="text-sm text-destructive mb-4">
-            {error}
-          </TextBody>
-        )}
+        {error && <TextBody className="text-sm text-destructive mb-4">{error}</TextBody>}
 
         <Button
           onClick={handleResend}

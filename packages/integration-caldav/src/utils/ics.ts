@@ -1,15 +1,7 @@
-import {
-  generateIcsCalendar,
-  convertIcsCalendar,
-  type IcsCalendar,
-  type IcsEvent,
-} from "ts-ics";
+import { generateIcsCalendar, convertIcsCalendar, type IcsCalendar, type IcsEvent } from "ts-ics";
 import type { SyncableEvent, RemoteEvent } from "@keeper.sh/integration";
 
-export const eventToICalString = (
-  event: SyncableEvent,
-  uid: string,
-): string => {
+export const eventToICalString = (event: SyncableEvent, uid: string): string => {
   const icsEvent: IcsEvent = {
     uid,
     stamp: { date: new Date() },
@@ -28,9 +20,7 @@ export const eventToICalString = (
   return generateIcsCalendar(calendar);
 };
 
-export const parseICalToRemoteEvent = (
-  icsString: string,
-): RemoteEvent | null => {
+export const parseICalToRemoteEvent = (icsString: string): RemoteEvent | null => {
   const calendar = convertIcsCalendar(undefined, icsString);
   const [event] = calendar.events ?? [];
 

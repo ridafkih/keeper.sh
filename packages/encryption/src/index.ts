@@ -1,17 +1,10 @@
 import { secretbox, randomBytes } from "tweetnacl";
-import {
-  decodeBase64,
-  encodeBase64,
-  decodeUTF8,
-  encodeUTF8,
-} from "tweetnacl-util";
+import { decodeBase64, encodeBase64, decodeUTF8, encodeUTF8 } from "tweetnacl-util";
 
 const parseKey = (key: string): Uint8Array => {
   const decoded = decodeBase64(key);
   if (decoded.length !== secretbox.keyLength) {
-    throw new Error(
-      `Encryption key must be ${secretbox.keyLength} bytes (base64 encoded)`,
-    );
+    throw new Error(`Encryption key must be ${secretbox.keyLength} bytes (base64 encoded)`);
   }
   return decoded;
 };

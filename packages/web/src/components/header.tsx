@@ -22,10 +22,7 @@ export const Header: FC = () => {
           href="/"
           className="px-1.5 text-base font-semibold text-foreground no-underline tracking-tight hover:bg-surface-subtle rounded-md flex items-center gap-1.5"
         >
-          <KeeperLogo
-            aria-label="The Keeper logo"
-            className="size-3 text-foreground"
-          />
+          <KeeperLogo aria-label="The Keeper logo" className="size-3 text-foreground" />
           Keeper
         </Link>
         {showMarketingNav && <MarketingNav />}

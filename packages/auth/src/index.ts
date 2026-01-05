@@ -106,8 +106,7 @@ export const createAuth = (config: AuthConfig): AuthResult => {
     );
   }
 
-  const socialProviders: Parameters<typeof betterAuth>[0]["socialProviders"] =
-    {};
+  const socialProviders: Parameters<typeof betterAuth>[0]["socialProviders"] = {};
 
   if (googleClientId && googleClientSecret) {
     socialProviders.google = {

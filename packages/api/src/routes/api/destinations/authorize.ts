@@ -2,10 +2,7 @@ import { calendarDestinationsTable } from "@keeper.sh/database/schema";
 import { eq, and } from "drizzle-orm";
 import { withTracing, withAuth } from "../../../utils/middleware";
 import { ErrorResponse } from "../../../utils/responses";
-import {
-  getAuthorizationUrl,
-  isOAuthProvider,
-} from "../../../utils/destinations";
+import { getAuthorizationUrl, isOAuthProvider } from "../../../utils/destinations";
 import { database, premiumService, baseUrl } from "../../../context";
 
 const userOwnsDestination = async (userId: string, destinationId: string) => {
@@ -63,10 +60,7 @@ export const GET = withTracing(
       }
     }
 
-    const callbackUrl = new URL(
-      `/api/destinations/callback/${provider}`,
-      baseUrl,
-    );
+    const callbackUrl = new URL(`/api/destinations/callback/${provider}`, baseUrl);
     const authUrl = getAuthorizationUrl(provider, userId, {
       callbackUrl: callbackUrl.toString(),
       destinationId: destinationId ?? undefined,

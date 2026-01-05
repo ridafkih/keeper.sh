@@ -12,11 +12,7 @@ interface NavLinkProps extends Omit<BaseNavLinkProps, "className"> {
   className?: string;
 }
 
-export const NavLink: FC<PropsWithChildren<NavLinkProps>> = ({
-  className,
-  children,
-  ...props
-}) => (
+export const NavLink: FC<PropsWithChildren<NavLinkProps>> = ({ className, children, ...props }) => (
   <NavigationMenu.Link className={navLinkStyle({ className })} {...props}>
     {children}
   </NavigationMenu.Link>

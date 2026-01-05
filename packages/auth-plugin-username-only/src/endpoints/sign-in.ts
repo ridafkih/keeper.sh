@@ -50,10 +50,7 @@ export const createSignInEndpoint = () =>
         throw new APIError("UNAUTHORIZED", INVALID_CREDENTIALS_ERROR);
       }
 
-      const session = await context.context.internalAdapter.createSession(
-        user.id,
-        false,
-      );
+      const session = await context.context.internalAdapter.createSession(user.id, false);
 
       await context.setSignedCookie(
         context.context.authCookies.sessionToken.name,

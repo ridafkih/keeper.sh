@@ -34,8 +34,7 @@ interface DestinationsManagerCallbacks {
   onNavigate: (url: string) => void;
 }
 
-const isConnectable = (destination: DestinationConfig): boolean =>
-  !destination.comingSoon;
+const isConnectable = (destination: DestinationConfig): boolean => !destination.comingSoon;
 
 const isCalDAVProvider = (provider: string): provider is CalDAVDestinationId =>
   isCalDAVDestination(provider);
@@ -53,14 +52,11 @@ const getDestinationsForSource = (
   return destinationIds;
 };
 
-export const useDestinationsManager = (
-  callbacks: DestinationsManagerCallbacks,
-) => {
+export const useDestinationsManager = (callbacks: DestinationsManagerCallbacks) => {
   const { onToast, onNavigate } = callbacks;
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [caldavDialogOpen, setCaldavDialogOpen] = useState(false);
-  const [caldavProvider, setCaldavProvider] =
-    useState<CalDAVDestinationId | null>(null);
+  const [caldavProvider, setCaldavProvider] = useState<CalDAVDestinationId | null>(null);
 
   const {
     data: accounts,
@@ -75,22 +71,16 @@ export const useDestinationsManager = (
   const workingAccountsCount =
     accounts?.filter((account) => !account.needsReauthentication).length ?? 0;
 
-  const isAtLimit =
-    subscription?.plan === "free" &&
-    workingAccountsCount >= FREE_DESTINATION_LIMIT;
+  const isAtLimit = subscription?.plan === "free" && workingAccountsCount >= FREE_DESTINATION_LIMIT;
 
   const destinationCount = accounts?.length ?? 0;
   const isEmpty = !isAccountsLoading && destinationCount === 0;
 
-  const getDestinationConfig = useCallback(
-    (providerId: string): DestinationConfig | undefined => {
-      return DESTINATIONS.find(
-        (destination) =>
-          isConnectable(destination) && destination.id === providerId,
-      );
-    },
-    [],
-  );
+  const getDestinationConfig = useCallback((providerId: string): DestinationConfig | undefined => {
+    return DESTINATIONS.find(
+      (destination) => isConnectable(destination) && destination.id === providerId,
+    );
+  }, []);
 
   const getSyncStatus = useCallback(
     (destinationId: string): SyncStatusDisplayProps | undefined => {
@@ -118,10 +108,7 @@ export const useDestinationsManager = (
       }
 
       setLoadingId(destinationId ?? providerId);
-      const url = new URL(
-        "/api/destinations/authorize",
-        window.location.origin,
-      );
+      const url = new URL("/api/destinations/authorize", window.location.origin);
       url.searchParams.set("provider", providerId);
 
       if (destinationId) {
@@ -184,8 +171,7 @@ export const useDestinationsManager = (
       const optimisticData: SourceDestinationMapping[] = [];
       for (const mapping of mappings) {
         const isTargetMapping =
-          mapping.sourceId === sourceId &&
-          mapping.destinationId === destinationId;
+          mapping.sourceId === sourceId && mapping.destinationId === destinationId;
 
         if (isTargetMapping) continue;
 

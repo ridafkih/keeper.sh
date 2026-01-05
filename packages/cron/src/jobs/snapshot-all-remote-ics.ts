@@ -1,8 +1,5 @@
 import type { CronOptions } from "cronbake";
-import {
-  remoteICalSourcesTable,
-  calendarSnapshotsTable,
-} from "@keeper.sh/database/schema";
+import { remoteICalSourcesTable, calendarSnapshotsTable } from "@keeper.sh/database/schema";
 import { MS_PER_DAY } from "@keeper.sh/constants";
 import { pullRemoteCalendar } from "@keeper.sh/calendar";
 import { WideEvent, runWithWideEvent, emitWideEvent } from "@keeper.sh/log";
@@ -16,31 +13,20 @@ type FetchResult = {
   sourceId: string;
 };
 
-const fetchRemoteCalendar = async (
-  sourceId: string,
-  url: string,
-): Promise<FetchResult> => {
+const fetchRemoteCalendar = async (sourceId: string, url: string): Promise<FetchResult> => {
   const { ical } = await pullRemoteCalendar("ical", url);
   return { ical, sourceId };
 };
 
-const insertSnapshot = async (
-  payload: typeof calendarSnapshotsTable.$inferInsert,
-) => {
-  const [record] = await database
-    .insert(calendarSnapshotsTable)
-    .values(payload)
-    .returning({
-      createdAt: calendarSnapshotsTable.createdAt,
-    });
+const insertSnapshot = async (payload: typeof calendarSnapshotsTable.$inferInsert) => {
+  const [record] = await database.insert(calendarSnapshotsTable).values(payload).returning({
+    createdAt: calendarSnapshotsTable.createdAt,
+  });
 
   return record;
 };
 
-const deleteStaleCalendarSnapshots = async (
-  sourceId: string,
-  referenceDate: Date,
-) => {
+const deleteStaleCalendarSnapshots = async (sourceId: string, referenceDate: Date) => {
   const dayBeforeTimestamp = referenceDate.getTime() - MS_PER_DAY;
 
   await database
@@ -83,9 +69,7 @@ export default withCronWideEvent({
     const remoteSources = await database.select().from(remoteICalSourcesTable);
     setCronEventFields({ sourceCount: remoteSources.length });
 
-    const fetches = remoteSources.map(({ id, url }) =>
-      fetchRemoteCalendar(id, url)
-    );
+    const fetches = remoteSources.map(({ id, url }) => fetchRemoteCalendar(id, url));
 
     const settlements = await Promise.allSettled(fetches);
     const { succeeded, failed } = countSettledResults(settlements);

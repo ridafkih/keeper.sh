@@ -68,10 +68,7 @@ const Providers = ({ children }: { children: React.ReactNode }) => {
         <div className="isolate min-h-dvh flex flex-col">{children}</div>
       </AuthProvider>
       {NEXT_PUBLIC_VISITORS_NOW_TOKEN && (
-        <AnalyticsProvider
-          token={NEXT_PUBLIC_VISITORS_NOW_TOKEN}
-          gdprApplies={gdprApplies}
-        />
+        <AnalyticsProvider token={NEXT_PUBLIC_VISITORS_NOW_TOKEN} gdprApplies={gdprApplies} />
       )}
     </AnalyticsContextProvider>
   );

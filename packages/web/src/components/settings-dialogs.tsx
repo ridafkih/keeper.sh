@@ -18,11 +18,7 @@ interface ChangePasswordDialogProps extends DialogProps {
   onSave: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
-export const ChangePasswordDialog = ({
-  open,
-  onOpenChange,
-  onSave,
-}: ChangePasswordDialogProps) => {
+export const ChangePasswordDialog = ({ open, onOpenChange, onSave }: ChangePasswordDialogProps) => {
   const { isSubmitting, error, submit } = useFormSubmit<boolean>();
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -98,11 +94,7 @@ interface DeleteAccountDialogProps extends DialogProps {
   onDelete: (password: string) => Promise<void>;
 }
 
-export const DeleteAccountDialog = ({
-  open,
-  onOpenChange,
-  onDelete,
-}: DeleteAccountDialogProps) => {
+export const DeleteAccountDialog = ({ open, onOpenChange, onDelete }: DeleteAccountDialogProps) => {
   const { isSubmitting, error, submit } = useFormSubmit();
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {

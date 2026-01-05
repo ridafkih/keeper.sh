@@ -106,12 +106,8 @@
           "name": "calendar_destinations_userId_user_id_fk",
           "tableFrom": "calendar_destinations",
           "tableTo": "user",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -166,12 +162,8 @@
           "name": "calendar_snapshots_sourceId_remote_ical_sources_id_fk",
           "tableFrom": "calendar_snapshots",
           "tableTo": "remote_ical_sources",
-          "columnsFrom": [
-            "sourceId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["sourceId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -241,12 +233,8 @@
           "name": "event_states_sourceId_remote_ical_sources_id_fk",
           "tableFrom": "event_states",
           "tableTo": "remote_ical_sources",
-          "columnsFrom": [
-            "sourceId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["sourceId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -300,12 +288,8 @@
           "name": "remote_ical_sources_userId_user_id_fk",
           "tableFrom": "remote_ical_sources",
           "tableTo": "user",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -383,12 +367,8 @@
           "name": "sync_status_destinationId_calendar_destinations_id_fk",
           "tableFrom": "sync_status",
           "tableTo": "calendar_destinations",
-          "columnsFrom": [
-            "destinationId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["destinationId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -436,12 +416,8 @@
           "name": "user_subscriptions_userId_user_id_fk",
           "tableFrom": "user_subscriptions",
           "tableTo": "user",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -543,12 +519,8 @@
           "name": "account_userId_user_id_fk",
           "tableFrom": "account",
           "tableTo": "user",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -636,12 +608,8 @@
           "name": "passkey_userId_user_id_fk",
           "tableFrom": "passkey",
           "tableTo": "user",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -713,12 +681,8 @@
           "name": "session_userId_user_id_fk",
           "tableFrom": "session",
           "tableTo": "user",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -728,9 +692,7 @@
         "session_token_unique": {
           "name": "session_token_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
+          "columns": ["token"]
         }
       },
       "policies": {},
@@ -800,16 +762,12 @@
         "user_username_unique": {
           "name": "user_username_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "username"
-          ]
+          "columns": ["username"]
         },
         "user_email_unique": {
           "name": "user_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},

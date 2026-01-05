@@ -7,11 +7,7 @@ interface SectionHeaderProps {
   action?: React.ReactNode;
 }
 
-export const SectionHeader: FC<SectionHeaderProps> = ({
-  title,
-  description,
-  action,
-}) => (
+export const SectionHeader: FC<SectionHeaderProps> = ({ title, description, action }) => (
   <div className="flex items-start justify-between gap-4">
     <div>
       <SubsectionTitle>{title}</SubsectionTitle>

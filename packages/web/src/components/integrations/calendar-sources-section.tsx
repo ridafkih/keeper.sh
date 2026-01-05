@@ -68,10 +68,7 @@ const UpgradeBanner = () => (
     <BannerText variant="warning" className="text-xs">
       You've reached the free plan limit of {FREE_SOURCE_LIMIT} sources.
     </BannerText>
-    <Link
-      href="/dashboard/billing"
-      className={button({ variant: "primary", size: "xs" })}
-    >
+    <Link href="/dashboard/billing" className={button({ variant: "primary", size: "xs" })}>
       Upgrade to Pro
     </Link>
   </div>
@@ -83,11 +80,7 @@ interface AddSourceDialogProps {
   onAdd: (name: string, url: string) => Promise<{ authRequired?: boolean }>;
 }
 
-const buildAuthenticatedUrl = (
-  url: string,
-  username: string,
-  password: string,
-): string => {
+const buildAuthenticatedUrl = (url: string, username: string, password: string): string => {
   const parsed = new URL(url);
   parsed.username = encodeURIComponent(username);
   parsed.password = encodeURIComponent(password);
@@ -100,11 +93,7 @@ interface CredentialsDialogProps {
   onSubmit: (username: string, password: string) => Promise<void>;
 }
 
-const CredentialsDialog = ({
-  open,
-  onOpenChange,
-  onSubmit,
-}: CredentialsDialogProps) => {
+const CredentialsDialog = ({ open, onOpenChange, onSubmit }: CredentialsDialogProps) => {
   const { isSubmitting, error, submit } = useFormSubmit<boolean>();
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -161,11 +150,7 @@ const CredentialsDialog = ({
   );
 };
 
-const AddSourceDialog = ({
-  open,
-  onOpenChange,
-  onAdd,
-}: AddSourceDialogProps) => {
+const AddSourceDialog = ({ open, onOpenChange, onAdd }: AddSourceDialogProps) => {
   const { isSubmitting, error, submit } = useFormSubmit<boolean>();
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [pendingUrl, setPendingUrl] = useState("");
@@ -200,10 +185,7 @@ const AddSourceDialog = ({
     }
   };
 
-  const handleCredentialsSubmit = async (
-    username: string,
-    password: string,
-  ) => {
+  const handleCredentialsSubmit = async (username: string, password: string) => {
     const authenticatedUrl = buildAuthenticatedUrl(pendingUrl, username, password);
     await onAdd(pendingName, authenticatedUrl);
     onOpenChange(false);
@@ -257,10 +239,7 @@ export const CalendarSourcesSection = () => {
   const { data: subscription } = useSubscription();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  const isAtLimit =
-    subscription?.plan === "free" &&
-    sources &&
-    sources.length >= FREE_SOURCE_LIMIT;
+  const isAtLimit = subscription?.plan === "free" && sources && sources.length >= FREE_SOURCE_LIMIT;
 
   const handleAddSource = async (
     name: string,
@@ -344,9 +323,7 @@ export const CalendarSourcesSection = () => {
     return (
       <Card>
         <div className="flex items-center justify-between px-3 py-2">
-          <TextLabel>
-            {sourceCount === 1 ? "1 source" : `${sourceCount} sources`}
-          </TextLabel>
+          <TextLabel>{sourceCount === 1 ? "1 source" : `${sourceCount} sources`}</TextLabel>
           {!isAtLimit && (
             <GhostButton
               onClick={() => {

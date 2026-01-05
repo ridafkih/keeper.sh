@@ -18,10 +18,7 @@ interface AnalyticsProviderProps {
   gdprApplies: boolean;
 }
 
-export const AnalyticsProvider = ({
-  token,
-  gdprApplies,
-}: AnalyticsProviderProps) => {
+export const AnalyticsProvider = ({ token, gdprApplies }: AnalyticsProviderProps) => {
   const pathname = usePathname();
   const hasConsent = useSyncExternalStore(
     subscribe,

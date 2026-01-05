@@ -13,9 +13,7 @@ interface SourceDestinationMapping {
   createdAt: Date;
 }
 
-export const getUserMappings = async (
-  userId: string,
-): Promise<SourceDestinationMapping[]> => {
+export const getUserMappings = async (userId: string): Promise<SourceDestinationMapping[]> => {
   const userSources = await database
     .select({ id: remoteICalSourcesTable.id })
     .from(remoteICalSourcesTable)
@@ -33,9 +31,7 @@ export const getUserMappings = async (
     .where(inArray(sourceDestinationMappingsTable.sourceId, sourceIds));
 };
 
-export const getSourcesForDestination = async (
-  destinationId: string,
-): Promise<string[]> => {
+export const getSourcesForDestination = async (destinationId: string): Promise<string[]> => {
   const mappings = await database
     .select({ sourceId: sourceDestinationMappingsTable.sourceId })
     .from(sourceDestinationMappingsTable)
@@ -44,9 +40,7 @@ export const getSourcesForDestination = async (
   return mappings.map((mapping) => mapping.sourceId);
 };
 
-export const getDestinationsForSource = async (
-  sourceId: string,
-): Promise<string[]> => {
+export const getDestinationsForSource = async (sourceId: string): Promise<string[]> => {
   const mappings = await database
     .select({ destinationId: sourceDestinationMappingsTable.destinationId })
     .from(sourceDestinationMappingsTable)
@@ -135,17 +129,13 @@ export const createMappingsForNewDestination = async (
     .onConflictDoNothing();
 };
 
-export const deleteMappingsForSource = async (
-  sourceId: string,
-): Promise<void> => {
+export const deleteMappingsForSource = async (sourceId: string): Promise<void> => {
   await database
     .delete(sourceDestinationMappingsTable)
     .where(eq(sourceDestinationMappingsTable.sourceId, sourceId));
 };
 
-export const deleteMappingsForDestination = async (
-  destinationId: string,
-): Promise<void> => {
+export const deleteMappingsForDestination = async (destinationId: string): Promise<void> => {
   await database
     .delete(sourceDestinationMappingsTable)
     .where(eq(sourceDestinationMappingsTable.destinationId, destinationId));

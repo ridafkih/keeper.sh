@@ -3,13 +3,7 @@
 import type { FC } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  CalendarDays,
-  Puzzle,
-  CreditCard,
-  Settings,
-  type LucideIcon,
-} from "lucide-react";
+import { CalendarDays, Puzzle, CreditCard, Settings, type LucideIcon } from "lucide-react";
 import { tv } from "tailwind-variants";
 import { isCommercialMode } from "@/config/mode";
 
@@ -18,8 +12,7 @@ const sidebarLink = tv({
   variants: {
     active: {
       true: "bg-surface-muted text-foreground",
-      false:
-        "text-foreground-secondary hover:text-foreground hover:bg-surface-subtle",
+      false: "text-foreground-secondary hover:text-foreground hover:bg-surface-subtle",
     },
   },
   defaultVariants: {

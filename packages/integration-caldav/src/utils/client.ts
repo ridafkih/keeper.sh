@@ -49,8 +49,7 @@ export class CalDAVClient {
     return calendars.map(({ url, displayName, ctag }) => ({
       url,
       ctag,
-      displayName:
-        typeof displayName === "string" ? displayName : "Unnamed Calendar",
+      displayName: typeof displayName === "string" ? displayName : "Unnamed Calendar",
     }));
   }
 
@@ -79,10 +78,7 @@ export class CalDAVClient {
     });
   }
 
-  async deleteCalendarObject(params: {
-    calendarUrl: string;
-    filename: string;
-  }): Promise<void> {
+  async deleteCalendarObject(params: { calendarUrl: string; filename: string }): Promise<void> {
     const client = await this.getClient();
     const objectUrl = this.normalizeUrl(params.calendarUrl, params.filename);
 
@@ -119,8 +115,6 @@ export class CalDAVClient {
   }
 }
 
-export const createCalDAVClient = (
-  config: CalDAVClientConfig,
-): CalDAVClient => {
+export const createCalDAVClient = (config: CalDAVClientConfig): CalDAVClient => {
   return new CalDAVClient(config);
 };

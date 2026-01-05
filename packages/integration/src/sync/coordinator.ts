@@ -6,10 +6,7 @@ const SYNC_KEY_PREFIX = "sync:generation:";
 
 const getSyncKey = (userId: string): string => `${SYNC_KEY_PREFIX}${userId}`;
 
-const enrichWideEventWithSyncContext = (
-  userId: string,
-  generation: number
-): void => {
+const enrichWideEventWithSyncContext = (userId: string, generation: number): void => {
   const event = getWideEvent();
   if (!event) return;
   event.set({ userId, syncGeneration: generation });
