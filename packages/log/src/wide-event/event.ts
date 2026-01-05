@@ -2,40 +2,44 @@ import type { ServiceBoundary, WideEventFields } from "./types";
 import { randomUUID } from "node:crypto";
 
 const createInitialFields = (serviceBoundary: ServiceBoundary): Partial<WideEventFields> => ({
-  httpMethod: null,
-  httpOrigin: null,
-  httpPath: null,
-  httpStatusCode: null,
-  httpUserAgent: null,
   requestId: randomUUID(),
   serviceBoundary,
   startTime: Date.now(),
   timings: {},
 });
 
-const extractErrorFields = (
-  error: unknown,
-): Pick<WideEventFields, "error" | "errorType" | "errorMessage" | "errorCode"> => {
-  if (error instanceof Error) {
-    const baseFields = {
-      error: true as const,
-      errorMessage: error.message,
-      errorType: error.constructor.name,
+type ErrorFields = Pick<
+  WideEventFields,
+  "error" | "errorType" | "errorMessage" | "errorCode" | "errorStack" | "errorCause"
+>;
+
+const formatCause = (cause: Error): string => `${cause.name}: ${cause.message}`;
+
+const extractErrorFields = (error: unknown): ErrorFields => {
+  if (!(error instanceof Error)) {
+    return {
+      error: true,
+      errorMessage: String(error),
+      errorType: "Unknown",
     };
-
-    const hasCodeInError = "code" in error;
-
-    if (!hasCodeInError) {
-      return baseFields;
-    }
-
-    return { ...baseFields, errorCode: String(error.code) };
   }
-  return {
+
+  const fields: ErrorFields = {
     error: true,
-    errorMessage: String(error),
-    errorType: "Unknown",
+    errorMessage: error.message,
+    errorStack: error.stack,
+    errorType: error.constructor.name,
   };
+
+  if ("code" in error) {
+    fields.errorCode = String(error.code);
+  }
+
+  if (error.cause instanceof Error) {
+    fields.errorCause = formatCause(error.cause);
+  }
+
+  return fields;
 };
 
 const calculateDuration = (startTime: number, endTime: number): number => endTime - startTime;
@@ -97,11 +101,6 @@ export class WideEvent {
       ...this.fields,
       durationMs: calculateDuration(startTime, endTime),
       endTime,
-      httpMethod: this.fields.httpMethod ?? null,
-      httpOrigin: this.fields.httpOrigin ?? null,
-      httpPath: this.fields.httpPath ?? null,
-      httpStatusCode: this.fields.httpStatusCode ?? null,
-      httpUserAgent: this.fields.httpUserAgent ?? null,
       requestId,
       serviceBoundary,
       startTime,

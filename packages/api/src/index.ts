@@ -2,7 +2,7 @@ import type { MaybePromise } from "bun";
 import env from "@keeper.sh/env/api";
 import { syncStatusTable, calendarDestinationsTable } from "@keeper.sh/database/schema";
 
-import { log, WideEvent, runWithWideEvent, emitWideEvent } from "@keeper.sh/log";
+import { WideEvent, runWithWideEvent, emitWideEvent } from "@keeper.sh/log";
 import type { WideEventFields } from "@keeper.sh/log";
 import { createWebsocketHandler } from "@keeper.sh/broadcast";
 import type { BroadcastData, Socket } from "@keeper.sh/broadcast";
@@ -121,14 +121,18 @@ const withCors = (handler: FetchHandler): FetchHandler => {
   };
 };
 
-const extractAuthContext = (request: Request, pathname: string): Partial<WideEventFields> => ({
-  httpMethod: request.method,
-  httpOrigin: request.headers.get("origin"),
-  httpPath: pathname,
-  httpUserAgent: request.headers.get("user-agent"),
-  operationName: `${request.method} ${pathname}`,
-  operationType: "auth",
-});
+const extractAuthContext = (request: Request, pathname: string): Partial<WideEventFields> => {
+  const origin = request.headers.get("origin");
+  const userAgent = request.headers.get("user-agent");
+  return {
+    httpMethod: request.method,
+    httpPath: pathname,
+    operationName: `${request.method} ${pathname}`,
+    operationType: "auth",
+    ...(origin && { httpOrigin: origin }),
+    ...(userAgent && { httpUserAgent: userAgent }),
+  };
+};
 
 const handleAuthResponseStatus = (event: WideEvent, response: Response): void => {
   event.set({ httpStatusCode: response.status });
@@ -274,4 +278,10 @@ const server = Bun.serve<BroadcastData>({
 
 broadcastService.startSubscriber();
 
-log.info({ port: env.API_PORT }, "server started");
+const startupEvent = new WideEvent("api");
+startupEvent.set({
+  operationType: "lifecycle",
+  operationName: "api:start",
+  port: env.API_PORT,
+});
+emitWideEvent(startupEvent.finalize());

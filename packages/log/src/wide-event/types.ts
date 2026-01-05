@@ -10,11 +10,11 @@ interface WideEventFields {
   operationType?: string;
   operationName?: string;
 
-  httpMethod: string | null;
-  httpPath: string | null;
-  httpStatusCode: number | null;
-  httpUserAgent: string | null;
-  httpOrigin: string | null;
+  httpMethod?: string;
+  httpPath?: string;
+  httpStatusCode?: number;
+  httpUserAgent?: string;
+  httpOrigin?: string;
 
   userId?: string;
   userEmail?: string;
@@ -42,6 +42,8 @@ interface WideEventFields {
   errorType?: string;
   errorMessage?: string;
   errorCode?: string;
+  errorStack?: string;
+  errorCause?: string;
 
   timings?: Record<string, number>;
 

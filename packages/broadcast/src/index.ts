@@ -1,4 +1,4 @@
-import { WideEvent, emitWideEvent, log } from "@keeper.sh/log";
+import { WideEvent, emitWideEvent } from "@keeper.sh/log";
 import type { WideEventFields } from "@keeper.sh/log";
 import { broadcastMessageSchema } from "@keeper.sh/data-schemas";
 import type { BroadcastMessage } from "@keeper.sh/data-schemas";
@@ -68,7 +68,12 @@ const createBroadcastService = (config: BroadcastConfig): BroadcastService => {
       sendToUser(parsed.userId, parsed.event, parsed.data);
     });
 
-    log.info("broadcast subscriber started");
+    const event = new WideEvent("api");
+    event.set({
+      operationType: "lifecycle",
+      operationName: "broadcast:subscriber:start",
+    });
+    emitWideEvent(event.finalize());
   };
 
   return { emit, startSubscriber };
