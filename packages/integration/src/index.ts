@@ -5,6 +5,10 @@ export {
   type OAuthTokenProvider,
   type AuthErrorResult,
 } from "./oauth-provider";
+export {
+  createOAuthDestinationProvider,
+  type CreateOAuthProviderOptions,
+} from "./create-oauth-provider";
 export { generateEventUid, isKeeperEvent } from "./event-identity";
 export { RateLimiter } from "./rate-limiter";
 export { getEventsForDestination } from "./events";

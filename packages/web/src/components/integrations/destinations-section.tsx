@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -9,9 +9,7 @@ import { Menu } from "@base-ui/react/menu";
 import { FREE_DESTINATION_LIMIT } from "@keeper.sh/premium/constants";
 import {
   DESTINATIONS,
-  isCalDAVDestination,
   type DestinationConfig,
-  type CalDAVDestinationId,
 } from "@keeper.sh/destination-metadata";
 import { Card } from "@/components/card";
 import { EmptyState } from "@/components/empty-state";
@@ -27,15 +25,12 @@ import { Section } from "@/components/section";
 import { SectionHeader } from "@/components/section-header";
 import { CalDAVConnectDialog } from "@/components/integrations/caldav-connect-dialog";
 import { useConfirmAction } from "@/hooks/use-confirm-action";
-import { useLinkedAccounts } from "@/hooks/use-linked-accounts";
+import { type SourceDestinationMapping } from "@/hooks/use-mappings";
+import { type CalendarSource } from "@/hooks/use-sources";
 import {
-  useMappings,
-  updateSourceDestinations,
-  type SourceDestinationMapping,
-} from "@/hooks/use-mappings";
-import { useSources, type CalendarSource } from "@/hooks/use-sources";
-import { useSubscription } from "@/hooks/use-subscription";
-import { useSyncStatus } from "@/hooks/use-sync-status";
+  useDestinationsManager,
+  type SyncStatusDisplayProps,
+} from "@/hooks/use-destinations-manager";
 import {
   TextLabel,
   TextMeta,
@@ -72,9 +67,6 @@ const destinationStatus = tv({
     },
   },
 });
-
-const isCalDAVProvider = (provider: string): provider is CalDAVDestinationId =>
-  isCalDAVDestination(provider);
 
 const isConnectable = (destination: DestinationConfig): boolean =>
   !destination.comingSoon;
@@ -264,16 +256,6 @@ const DestinationAction = ({
   );
 };
 
-interface SyncStatusDisplayProps {
-  status: "idle" | "syncing";
-  stage?: "fetching" | "comparing" | "processing";
-  localCount: number;
-  remoteCount: number;
-  progress?: { current: number; total: number };
-  lastOperation?: { type: "add" | "remove"; eventTime: string };
-  inSync: boolean;
-}
-
 interface SyncStatusTextProps {
   syncStatus?: SyncStatusDisplayProps;
 }
@@ -446,44 +428,39 @@ const UpgradeBanner = () => (
   </div>
 );
 
-const getDestinationsForSource = (
-  sourceId: string,
-  mappings: SourceDestinationMapping[],
-): string[] => {
-  const destinationIds: string[] = [];
-  for (const mapping of mappings) {
-    if (mapping.sourceId === sourceId) {
-      destinationIds.push(mapping.destinationId);
-    }
-  }
-  return destinationIds;
-};
-
 export const DestinationsSection = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const toastManager = Toast.useToastManager();
-  const [loadingId, setLoadingId] = useState<string | null>(null);
-  const [caldavDialogOpen, setCaldavDialogOpen] = useState(false);
-  const [caldavProvider, setCaldavProvider] = useState<CalDAVDestinationId | null>(
-    null,
+
+  const onToast = useCallback(
+    (message: string) => toastManager.add({ title: message }),
+    [toastManager],
   );
+
+  const onNavigate = useCallback((url: string) => {
+    window.location.href = url;
+  }, []);
+
   const {
-    data: accounts,
-    isLoading: isAccountsLoading,
-    mutate: mutateAccounts,
-  } = useLinkedAccounts();
-  const { data: sources } = useSources();
-  const { data: mappings, mutate: mutateMappings } = useMappings();
-  const { data: subscription } = useSubscription();
-  const { data: syncStatus } = useSyncStatus();
-
-  const workingAccountsCount =
-    accounts?.filter((account) => !account.needsReauthentication).length ?? 0;
-
-  const isAtLimit =
-    subscription?.plan === "free" &&
-    workingAccountsCount >= FREE_DESTINATION_LIMIT;
+    accounts,
+    sources,
+    mappings,
+    isAccountsLoading,
+    loadingId,
+    caldavDialogOpen,
+    caldavProvider,
+    isAtLimit,
+    destinationCount,
+    isEmpty,
+    handleConnect,
+    handleDisconnect,
+    handleToggleSource,
+    handleCaldavSuccess,
+    setCaldavDialogOpen,
+    getDestinationConfig,
+    getSyncStatus,
+  } = useDestinationsManager({ onToast, onNavigate });
 
   const error = searchParams.get("error");
   const errorHandled = useRef(false);
@@ -494,130 +471,7 @@ export const DestinationsSection = () => {
       toastManager.add({ title: error });
       router.replace("/dashboard/integrations");
     }
-  }, [error]);
-
-  const getDestinationConfig = (
-    providerId: string,
-  ): DestinationConfig | undefined => {
-    return DESTINATIONS.find(
-      (destination) =>
-        isConnectable(destination) && destination.id === providerId,
-    );
-  };
-
-  const getSyncStatus = (
-    destinationId: string,
-  ): SyncStatusDisplayProps | undefined => {
-    const destinationStatus = syncStatus?.[destinationId];
-    if (!destinationStatus) return undefined;
-    return {
-      status: destinationStatus.status,
-      stage: destinationStatus.stage,
-      localCount: destinationStatus.localEventCount,
-      remoteCount: destinationStatus.remoteEventCount,
-      progress: destinationStatus.progress,
-      lastOperation: destinationStatus.lastOperation,
-      inSync: destinationStatus.inSync,
-    };
-  };
-
-  const handleConnect = (providerId: string, destinationId?: string) => {
-    if (isCalDAVProvider(providerId)) {
-      setCaldavProvider(providerId);
-      setCaldavDialogOpen(true);
-      return;
-    }
-
-    setLoadingId(destinationId ?? providerId);
-    const url = new URL("/api/destinations/authorize", window.location.origin);
-    url.searchParams.set("provider", providerId);
-
-    if (destinationId) {
-      url.searchParams.set("destinationId", destinationId);
-    }
-
-    window.location.href = url.toString();
-  };
-
-  const handleCaldavSuccess = async () => {
-    await mutateAccounts();
-    track("destination_connected", { provider: caldavProvider ?? "caldav" });
-    toastManager.add({ title: "Calendar connected successfully" });
-  };
-
-  const handleDisconnect = async (
-    destinationId: string,
-    providerName: string,
-  ) => {
-    setLoadingId(destinationId);
-    try {
-      const response = await fetch(`/api/destinations/${destinationId}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to disconnect");
-      }
-
-      await mutateAccounts();
-      track("destination_disconnected", { provider: providerName });
-      toastManager.add({ title: `Disconnected from ${providerName}` });
-    } catch {
-      toastManager.add({ title: `Failed to disconnect` });
-    } finally {
-      setLoadingId(null);
-    }
-  };
-
-  const handleToggleSource = async (
-    destinationId: string,
-    sourceId: string,
-  ) => {
-    if (!mappings) return;
-
-    const currentDestinations = getDestinationsForSource(sourceId, mappings);
-    const isEnabled = currentDestinations.includes(destinationId);
-    track("mapping_toggled", { action: isEnabled ? "disabled" : "enabled" });
-
-    const newDestinations: string[] = [];
-    for (const destId of currentDestinations) {
-      if (destId !== destinationId) {
-        newDestinations.push(destId);
-      }
-    }
-    if (!isEnabled) {
-      newDestinations.push(destinationId);
-    }
-
-    const optimisticData: SourceDestinationMapping[] = [];
-    for (const mapping of mappings) {
-      const isTargetMapping =
-        mapping.sourceId === sourceId &&
-        mapping.destinationId === destinationId;
-
-      if (isTargetMapping) continue;
-
-      optimisticData.push(mapping);
-    }
-    if (!isEnabled) {
-      optimisticData.push({
-        id: crypto.randomUUID(),
-        sourceId,
-        destinationId,
-        createdAt: new Date().toISOString(),
-      });
-    }
-
-    try {
-      await mutateMappings(optimisticData, { revalidate: false });
-      await updateSourceDestinations(sourceId, newDestinations);
-    } finally {
-      await mutateMappings();
-    }
-  };
-
-  const destinationCount = accounts?.length ?? 0;
-  const isEmpty = !isAccountsLoading && destinationCount === 0;
+  }, [error, toastManager, router]);
 
   const renderDestinationItems = () => {
     const items: React.ReactNode[] = [];
@@ -635,8 +489,8 @@ export const DestinationsSection = () => {
           isConnected={true}
           needsReauthentication={account.needsReauthentication}
           isLoading={loadingId === account.id}
-          sources={sources ?? []}
-          mappings={mappings ?? []}
+          sources={sources}
+          mappings={mappings}
           onConnect={() => handleConnect(config.id, account.id)}
           onDisconnect={() => handleDisconnect(account.id, config.name)}
           onToggleSource={(sourceId) =>

@@ -1,16 +1,13 @@
 import {
   OAuthCalendarProvider,
-  RateLimiter,
-  getEventsForDestination,
+  createOAuthDestinationProvider,
   type OAuthTokenProvider,
   type DestinationProvider,
   type SyncableEvent,
   type PushResult,
   type DeleteResult,
   type RemoteEvent,
-  type SyncResult,
   type OutlookCalendarConfig,
-  type SyncContext,
   type ListRemoteEventsOptions,
   type BroadcastSyncStatus,
 } from "@keeper.sh/integration";
@@ -23,7 +20,7 @@ import {
 import { HTTP_STATUS, KEEPER_CATEGORY } from "@keeper.sh/constants";
 import { getStartOfToday } from "@keeper.sh/date-utils";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { getOutlookAccountsForUser } from "./sync";
+import { getOutlookAccountsForUser, type OutlookAccount } from "./sync";
 
 const MICROSOFT_GRAPH_API = "https://graph.microsoft.com/v1.0";
 
@@ -59,47 +56,24 @@ export const createOutlookCalendarProvider = (
 ): DestinationProvider => {
   const { database, oauthProvider, broadcastSyncStatus } = config;
 
-  const syncForUser = async (
-    userId: string,
-    context: SyncContext,
-  ): Promise<SyncResult | null> => {
-    const outlookAccounts = await getOutlookAccountsForUser(database, userId);
-    if (outlookAccounts.length === 0) return null;
-
-    const results = await Promise.all(
-      outlookAccounts.map(async (account) => {
-        const localEvents = await getEventsForDestination(
-          database,
-          account.destinationId,
-        );
-
-        const provider = new OutlookCalendarProviderInstance(
-          {
-            database,
-            destinationId: account.destinationId,
-            userId: account.userId,
-            accountId: account.accountId,
-            accessToken: account.accessToken,
-            refreshToken: account.refreshToken,
-            accessTokenExpiresAt: account.accessTokenExpiresAt,
-            broadcastSyncStatus,
-          },
-          oauthProvider,
-        );
-        return provider.sync(localEvents, context);
-      }),
-    );
-
-    return results.reduce<SyncResult>(
-      (combined, result) => ({
-        added: combined.added + result.added,
-        removed: combined.removed + result.removed,
-      }),
-      { added: 0, removed: 0 },
-    );
-  };
-
-  return { syncForUser };
+  return createOAuthDestinationProvider<OutlookAccount, OutlookCalendarConfig>({
+    database,
+    oauthProvider,
+    broadcastSyncStatus,
+    getAccountsForUser: getOutlookAccountsForUser,
+    createProviderInstance: (providerConfig, oauth) =>
+      new OutlookCalendarProviderInstance(providerConfig, oauth),
+    buildConfig: (db, account, broadcast) => ({
+      database: db,
+      destinationId: account.destinationId,
+      userId: account.userId,
+      accountId: account.accountId,
+      accessToken: account.accessToken,
+      refreshToken: account.refreshToken,
+      accessTokenExpiresAt: account.accessTokenExpiresAt,
+      broadcastSyncStatus: broadcast,
+    }),
+  });
 };
 
 class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalendarConfig> {
@@ -107,48 +81,14 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
   readonly id = "outlook";
 
   protected oauthProvider: OAuthTokenProvider;
-  private rateLimiter: RateLimiter;
 
   constructor(config: OutlookCalendarConfig, oauthProvider: OAuthTokenProvider) {
     super(config);
-    this.rateLimiter = new RateLimiter(10);
     this.oauthProvider = oauthProvider;
   }
 
-  async pushEvents(events: SyncableEvent[]): Promise<PushResult[]> {
-    await this.ensureValidToken();
-
-    const results = await Promise.all(
-      events.map((event) =>
-        this.rateLimiter.execute(async (): Promise<PushResult> => {
-          const result = await this.pushEvent(event);
-          if (!result.success && hasRateLimitMessage(result.error)) {
-            this.rateLimiter.reportRateLimit();
-          }
-          return result;
-        }),
-      ),
-    );
-
-    return results;
-  }
-
-  async deleteEvents(eventIds: string[]): Promise<DeleteResult[]> {
-    await this.ensureValidToken();
-
-    const results = await Promise.all(
-      eventIds.map((eventId) =>
-        this.rateLimiter.execute(async (): Promise<DeleteResult> => {
-          const result = await this.deleteEvent(eventId);
-          if (!result.success && hasRateLimitMessage(result.error)) {
-            this.rateLimiter.reportRateLimit();
-          }
-          return result;
-        }),
-      ),
-    );
-
-    return results;
+  protected isRateLimitError(error: string | undefined): boolean {
+    return hasRateLimitMessage(error);
   }
 
   async listRemoteEvents(
@@ -231,7 +171,7 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     };
   }
 
-  private async pushEvent(event: SyncableEvent): Promise<PushResult> {
+  protected async pushEvent(event: SyncableEvent): Promise<PushResult> {
     const resource = this.toOutlookEvent(event);
 
     try {
@@ -271,7 +211,7 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     return { success: true, remoteId: event.iCalUId, deleteId: event.id };
   }
 
-  private async deleteEvent(eventId: string): Promise<DeleteResult> {
+  protected async deleteEvent(eventId: string): Promise<DeleteResult> {
     try {
       const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${eventId}`);
 

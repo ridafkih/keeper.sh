@@ -5,7 +5,13 @@ import {
 import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { eq } from "drizzle-orm";
 import { CalendarProvider } from "./provider";
-import type { OAuthProviderConfig, PushResult, DeleteResult } from "./types";
+import { RateLimiter } from "./rate-limiter";
+import type {
+  OAuthProviderConfig,
+  SyncableEvent,
+  PushResult,
+  DeleteResult,
+} from "./types";
 
 export interface OAuthRefreshResult {
   access_token: string;
@@ -28,11 +34,48 @@ export abstract class OAuthCalendarProvider<
 > extends CalendarProvider<TConfig> {
   protected currentAccessToken: string;
   protected abstract oauthProvider: OAuthTokenProvider;
+  protected rateLimiter = new RateLimiter(10);
 
   constructor(config: TConfig) {
     super(config);
     this.currentAccessToken = config.accessToken;
   }
+
+  async pushEvents(events: SyncableEvent[]): Promise<PushResult[]> {
+    await this.ensureValidToken();
+
+    return Promise.all(
+      events.map((event) =>
+        this.rateLimiter.execute(async (): Promise<PushResult> => {
+          const result = await this.pushEvent(event);
+          if (!result.success && this.isRateLimitError(result.error)) {
+            this.rateLimiter.reportRateLimit();
+          }
+          return result;
+        }),
+      ),
+    );
+  }
+
+  async deleteEvents(eventIds: string[]): Promise<DeleteResult[]> {
+    await this.ensureValidToken();
+
+    return Promise.all(
+      eventIds.map((eventId) =>
+        this.rateLimiter.execute(async (): Promise<DeleteResult> => {
+          const result = await this.deleteEvent(eventId);
+          if (!result.success && this.isRateLimitError(result.error)) {
+            this.rateLimiter.reportRateLimit();
+          }
+          return result;
+        }),
+      ),
+    );
+  }
+
+  protected abstract pushEvent(event: SyncableEvent): Promise<PushResult>;
+  protected abstract deleteEvent(eventId: string): Promise<DeleteResult>;
+  protected abstract isRateLimitError(error: string | undefined): boolean;
 
   protected get headers(): Record<string, string> {
     return {

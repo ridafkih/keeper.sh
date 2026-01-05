@@ -29,8 +29,6 @@ export const isRouteModule = (module: unknown): module is RouteModule => {
   const record: Record<string, unknown> = { ...module };
 
   return HTTP_METHODS.some((method) => {
-    if (isHttpMethod(method)) {
-      typeof record[method] === "function";
-    }
+    return isHttpMethod(method) && typeof record[method] === "function";
   });
 };

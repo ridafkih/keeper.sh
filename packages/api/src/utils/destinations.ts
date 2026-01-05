@@ -14,7 +14,10 @@ export const isOAuthProvider = (provider: string): boolean => {
   return oauthProviders.isOAuthProvider(provider);
 };
 
-export const hasRequiredScopes = (provider: string, grantedScopes: string): boolean => {
+export const hasRequiredScopes = (
+  provider: string,
+  grantedScopes: string,
+): boolean => {
   return oauthProviders.hasRequiredScopes(provider, grantedScopes);
 };
 
@@ -115,6 +118,56 @@ const setupNewDestination = async (
   await createMappingsForNewDestination(userId, destinationId);
 };
 
+interface DestinationInsertData {
+  userId: string;
+  provider: string;
+  accountId: string;
+  email: string | null;
+  oauthCredentialId?: string;
+  caldavCredentialId?: string;
+  needsReauthentication?: boolean;
+}
+
+const upsertDestination = async (
+  data: DestinationInsertData,
+): Promise<string | undefined> => {
+  const {
+    oauthCredentialId,
+    caldavCredentialId,
+    needsReauthentication,
+    ...base
+  } = data;
+
+  const setClause: Record<string, unknown> = { email: base.email };
+
+  if (oauthCredentialId !== undefined) {
+    setClause.oauthCredentialId = oauthCredentialId;
+    setClause.needsReauthentication = needsReauthentication ?? false;
+  }
+  if (caldavCredentialId !== undefined) {
+    setClause.caldavCredentialId = caldavCredentialId;
+  }
+
+  const [destination] = await database
+    .insert(calendarDestinationsTable)
+    .values({
+      ...base,
+      oauthCredentialId,
+      caldavCredentialId,
+      needsReauthentication,
+    })
+    .onConflictDoUpdate({
+      target: [
+        calendarDestinationsTable.provider,
+        calendarDestinationsTable.accountId,
+      ],
+      set: setClause,
+    })
+    .returning({ id: calendarDestinationsTable.id });
+
+  return destination?.id;
+};
+
 export const saveCalendarDestination = async (
   userId: string,
   provider: string,
@@ -125,14 +178,19 @@ export const saveCalendarDestination = async (
   expiresAt: Date,
   needsReauthentication: boolean = false,
 ): Promise<void> => {
-  const existingDestination = await findExistingDestination(provider, accountId);
+  const existingDestination = await findExistingDestination(
+    provider,
+    accountId,
+  );
   validateDestinationOwnership(existingDestination, userId);
 
   if (existingDestination?.oauthCredentialId) {
     await database
       .update(oauthCredentialsTable)
       .set({ accessToken, refreshToken, expiresAt })
-      .where(eq(oauthCredentialsTable.id, existingDestination.oauthCredentialId));
+      .where(
+        eq(oauthCredentialsTable.id, existingDestination.oauthCredentialId),
+      );
 
     await database
       .update(calendarDestinationsTable)
@@ -152,31 +210,17 @@ export const saveCalendarDestination = async (
     throw new Error("Failed to create OAuth credentials");
   }
 
-  const [destination] = await database
-    .insert(calendarDestinationsTable)
-    .values({
-      userId,
-      provider,
-      accountId,
-      email,
-      oauthCredentialId: credential.id,
-      needsReauthentication,
-    })
-    .onConflictDoUpdate({
-      target: [
-        calendarDestinationsTable.provider,
-        calendarDestinationsTable.accountId,
-      ],
-      set: {
-        email,
-        oauthCredentialId: credential.id,
-        needsReauthentication,
-      },
-    })
-    .returning({ id: calendarDestinationsTable.id });
+  const destinationId = await upsertDestination({
+    userId,
+    provider,
+    accountId,
+    email,
+    oauthCredentialId: credential.id,
+    needsReauthentication,
+  });
 
-  if (destination) {
-    await setupNewDestination(userId, destination.id);
+  if (destinationId) {
+    await setupNewDestination(userId, destinationId);
   }
 };
 
@@ -235,14 +279,19 @@ export const saveCalDAVDestination = async (
   username: string,
   encryptedPassword: string,
 ): Promise<void> => {
-  const existingDestination = await findExistingDestination(provider, accountId);
+  const existingDestination = await findExistingDestination(
+    provider,
+    accountId,
+  );
   validateDestinationOwnership(existingDestination, userId);
 
   if (existingDestination?.caldavCredentialId) {
     await database
       .update(caldavCredentialsTable)
       .set({ serverUrl, calendarUrl, username, encryptedPassword })
-      .where(eq(caldavCredentialsTable.id, existingDestination.caldavCredentialId));
+      .where(
+        eq(caldavCredentialsTable.id, existingDestination.caldavCredentialId),
+      );
 
     await database
       .update(calendarDestinationsTable)
@@ -262,28 +311,15 @@ export const saveCalDAVDestination = async (
     throw new Error("Failed to create CalDAV credentials");
   }
 
-  const [destination] = await database
-    .insert(calendarDestinationsTable)
-    .values({
-      userId,
-      provider,
-      accountId,
-      email,
-      caldavCredentialId: credential.id,
-    })
-    .onConflictDoUpdate({
-      target: [
-        calendarDestinationsTable.provider,
-        calendarDestinationsTable.accountId,
-      ],
-      set: {
-        email,
-        caldavCredentialId: credential.id,
-      },
-    })
-    .returning({ id: calendarDestinationsTable.id });
+  const destinationId = await upsertDestination({
+    userId,
+    provider,
+    accountId,
+    email,
+    caldavCredentialId: credential.id,
+  });
 
-  if (destination) {
-    await setupNewDestination(userId, destination.id);
+  if (destinationId) {
+    await setupNewDestination(userId, destinationId);
   }
 };

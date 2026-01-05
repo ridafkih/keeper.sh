@@ -1,7 +1,6 @@
 import {
   OAuthCalendarProvider,
-  RateLimiter,
-  getEventsForDestination,
+  createOAuthDestinationProvider,
   generateEventUid,
   isKeeperEvent,
   type OAuthTokenProvider,
@@ -10,9 +9,7 @@ import {
   type PushResult,
   type DeleteResult,
   type RemoteEvent,
-  type SyncResult,
   type GoogleCalendarConfig,
-  type SyncContext,
   type ListRemoteEventsOptions,
   type BroadcastSyncStatus,
 } from "@keeper.sh/integration";
@@ -25,7 +22,7 @@ import {
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { getStartOfToday } from "@keeper.sh/date-utils";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { getGoogleAccountsForUser } from "./sync";
+import { getGoogleAccountsForUser, type GoogleAccount } from "./sync";
 
 const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3/";
 
@@ -66,48 +63,25 @@ export const createGoogleCalendarProvider = (
 ): DestinationProvider => {
   const { database, oauthProvider, broadcastSyncStatus } = config;
 
-  const syncForUser = async (
-    userId: string,
-    context: SyncContext,
-  ): Promise<SyncResult | null> => {
-    const googleAccounts = await getGoogleAccountsForUser(database, userId);
-    if (googleAccounts.length === 0) return null;
-
-    const results = await Promise.all(
-      googleAccounts.map(async (account) => {
-        const localEvents = await getEventsForDestination(
-          database,
-          account.destinationId,
-        );
-
-        const provider = new GoogleCalendarProviderInstance(
-          {
-            database,
-            destinationId: account.destinationId,
-            userId: account.userId,
-            accountId: account.accountId,
-            accessToken: account.accessToken,
-            refreshToken: account.refreshToken,
-            accessTokenExpiresAt: account.accessTokenExpiresAt,
-            calendarId: "primary",
-            broadcastSyncStatus,
-          },
-          oauthProvider,
-        );
-        return provider.sync(localEvents, context);
-      }),
-    );
-
-    return results.reduce<SyncResult>(
-      (combined, result) => ({
-        added: combined.added + result.added,
-        removed: combined.removed + result.removed,
-      }),
-      { added: 0, removed: 0 },
-    );
-  };
-
-  return { syncForUser };
+  return createOAuthDestinationProvider<GoogleAccount, GoogleCalendarConfig>({
+    database,
+    oauthProvider,
+    broadcastSyncStatus,
+    getAccountsForUser: getGoogleAccountsForUser,
+    createProviderInstance: (providerConfig, oauth) =>
+      new GoogleCalendarProviderInstance(providerConfig, oauth),
+    buildConfig: (db, account, broadcast) => ({
+      database: db,
+      destinationId: account.destinationId,
+      userId: account.userId,
+      accountId: account.accountId,
+      accessToken: account.accessToken,
+      refreshToken: account.refreshToken,
+      accessTokenExpiresAt: account.accessTokenExpiresAt,
+      calendarId: "primary",
+      broadcastSyncStatus: broadcast,
+    }),
+  });
 };
 
 class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalendarConfig> {
@@ -115,48 +89,14 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
   readonly id = "google";
 
   protected oauthProvider: OAuthTokenProvider;
-  private rateLimiter: RateLimiter;
 
   constructor(config: GoogleCalendarConfig, oauthProvider: OAuthTokenProvider) {
     super(config);
-    this.rateLimiter = new RateLimiter(10);
     this.oauthProvider = oauthProvider;
   }
 
-  async pushEvents(events: SyncableEvent[]): Promise<PushResult[]> {
-    await this.ensureValidToken();
-
-    const results = await Promise.all(
-      events.map((event) =>
-        this.rateLimiter.execute(async (): Promise<PushResult> => {
-          const result = await this.pushEvent(event);
-          if (!result.success && hasRateLimitMessage(result.error)) {
-            this.rateLimiter.reportRateLimit();
-          }
-          return result;
-        }),
-      ),
-    );
-
-    return results;
-  }
-
-  async deleteEvents(eventIds: string[]): Promise<DeleteResult[]> {
-    await this.ensureValidToken();
-
-    const results = await Promise.all(
-      eventIds.map((eventId) =>
-        this.rateLimiter.execute(async (): Promise<DeleteResult> => {
-          const result = await this.deleteEvent(eventId);
-          if (!result.success && hasRateLimitMessage(result.error)) {
-            this.rateLimiter.reportRateLimit();
-          }
-          return result;
-        }),
-      ),
-    );
-
-    return results;
+  protected isRateLimitError(error: string | undefined): boolean {
+    return hasRateLimitMessage(error);
   }
 
   async listRemoteEvents(
@@ -243,7 +183,7 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
     };
   }
 
-  private async pushEvent(event: SyncableEvent): Promise<PushResult> {
+  protected async pushEvent(event: SyncableEvent): Promise<PushResult> {
     const uid = generateEventUid();
     const resource = this.toGoogleEvent(event, uid);
 
@@ -289,7 +229,7 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
     return { success: true };
   }
 
-  private async deleteEvent(uid: string): Promise<DeleteResult> {
+  protected async deleteEvent(uid: string): Promise<DeleteResult> {
     try {
       const existing = await this.findEventByUid(uid);
 
