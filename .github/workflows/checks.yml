@@ -1,4 +1,4 @@
-name: CI
+name: Check Code Standards
 
 on:
   pull_request:
