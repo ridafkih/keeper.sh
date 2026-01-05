@@ -2,7 +2,7 @@
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "ignore": ["**/*.css", "packages/cron/src/jobs/**/*"],
   "ignoreBinaries": [],
-  "ignoreDependencies": [],
+  "ignoreDependencies": ["@svgr/webpack"],
   "ignoreWorkspaces": ["packages/typescript-config"],
   "workspaces": {
     "packages/*": {
