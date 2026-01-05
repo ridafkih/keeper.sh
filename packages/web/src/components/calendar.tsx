@@ -141,12 +141,13 @@ const Calendar = ({
     <div className="flex flex-col gap-6 max-w-2xl">
       {days.map((date, index) => {
         const isLast = index === days.length - 1;
-        const sectionRef = ((): typeof lastSectionRef | null => {
+        const getSectionRef = (): typeof lastSectionRef | null => {
           if (isLast) {
             return lastSectionRef;
           }
           return null;
-        })();
+        };
+        const sectionRef = getSectionRef();
         return (
           <section key={date.toISOString()} ref={sectionRef} className="flex flex-col gap-2">
             <h2 className="text-lg font-semibold text-foreground border-b border-border pb-2">

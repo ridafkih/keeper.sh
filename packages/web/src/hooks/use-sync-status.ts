@@ -6,14 +6,16 @@ import { WEBSOCKET_RECONNECT_DELAY_MS } from "@keeper.sh/constants";
 type SyncStatusRecord = Record<string, SyncStatus>;
 type Next = (error?: Error | null, data?: SyncStatusRecord) => void;
 
+const getWebSocketProtocol = (): string => {
+  if (globalThis.location.protocol === "https:") {
+    return "wss:";
+  }
+  return "ws:";
+};
+
 const buildWebSocketUrl = (socketPath: string): string => {
   const url = new URL(socketPath, globalThis.location.origin);
-  url.protocol = ((): string => {
-    if (globalThis.location.protocol === "https:") {
-      return "wss:";
-    }
-    return "ws:";
-  })();
+  url.protocol = getWebSocketProtocol();
   return url.toString();
 };
 

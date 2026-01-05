@@ -11,11 +11,11 @@
   },
   "categories": {
     "correctness": "error",
-    "suspicious": "warn",
-    "pedantic": "warn",
-    "perf": "warn",
-    "style": "warn",
-    "restriction": "warn"
+    "suspicious": "error",
+    "pedantic": "error",
+    "perf": "error",
+    "style": "error",
+    "restriction": "error"
   },
   "rules": {
     "eqeqeq": ["error", "always"],

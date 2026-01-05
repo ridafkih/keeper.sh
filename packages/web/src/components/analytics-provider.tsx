@@ -29,12 +29,24 @@ export const AnalyticsProvider = ({ token, gdprApplies }: AnalyticsProviderProps
   );
 
   const canTrack = !gdprApplies || hasConsent;
-  const consentState = ((): "granted" | "denied" => {
+
+  const getConsentState = (): "granted" | "denied" => {
     if (canTrack) {
       return "granted";
     }
     return "denied";
-  })();
+  };
+
+  const consentState = getConsentState();
+
+  const getScriptKey = (): string => {
+    if (canTrack) {
+      return "persist";
+    }
+    return "no-persist";
+  };
+
+  const scriptKey = getScriptKey();
 
   useEffect(() => {
     track("page_view", { path: pathname });
@@ -43,12 +55,7 @@ export const AnalyticsProvider = ({ token, gdprApplies }: AnalyticsProviderProps
   return (
     <>
       <Script
-        key={((): string => {
-          if (canTrack) {
-            return "persist";
-          }
-          return "no-persist";
-        })()}
+        key={scriptKey}
         src="https://cdn.visitors.now/v.js"
         data-token={token}
         {...(canTrack && { "data-persist": true })}

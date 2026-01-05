@@ -52,7 +52,7 @@ interface OAuthConfig {
   clientSecret: string;
 }
 
-const googleConfig = ((): OAuthConfig | null => {
+const buildGoogleConfig = (): OAuthConfig | null => {
   if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
     return {
       clientId: env.GOOGLE_CLIENT_ID,
@@ -60,9 +60,9 @@ const googleConfig = ((): OAuthConfig | null => {
     };
   }
   return null;
-})();
+};
 
-const microsoftConfig = ((): OAuthConfig | null => {
+const buildMicrosoftConfig = (): OAuthConfig | null => {
   if (env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET) {
     return {
       clientId: env.MICROSOFT_CLIENT_ID,
@@ -70,7 +70,10 @@ const microsoftConfig = ((): OAuthConfig | null => {
     };
   }
   return null;
-})();
+};
+
+const googleConfig = buildGoogleConfig();
+const microsoftConfig = buildMicrosoftConfig();
 
 const oauthProviders = createOAuthProviders({
   google: googleConfig,

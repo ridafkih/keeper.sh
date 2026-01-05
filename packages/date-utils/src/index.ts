@@ -101,23 +101,27 @@ interface NormalizedDateRange {
   end: Date;
 }
 
+const parseFromParam = (fromParam: string | null, fallback: Date): Date => {
+  if (fromParam) {
+    return new Date(fromParam);
+  }
+  return fallback;
+};
+
+const parseToParam = (toParam: string | null, from: Date): Date => {
+  if (toParam) {
+    return new Date(toParam);
+  }
+  return new Date(from.getTime() + MS_PER_WEEK);
+};
+
 const parseDateRangeParams = (url: URL): DateRange => {
   const fromParam = url.searchParams.get("from");
   const toParam = url.searchParams.get("to");
 
   const now = new Date();
-  const from = ((): Date => {
-    if (fromParam) {
-      return new Date(fromParam);
-    }
-    return now;
-  })();
-  const to = ((): Date => {
-    if (toParam) {
-      return new Date(toParam);
-    }
-    return new Date(from.getTime() + MS_PER_WEEK);
-  })();
+  const from = parseFromParam(fromParam, now);
+  const to = parseToParam(toParam, from);
 
   return { from, to };
 };

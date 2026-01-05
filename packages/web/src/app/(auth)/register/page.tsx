@@ -122,13 +122,15 @@ const EmailRegisterForm: FC = () => {
   );
 };
 
+const getRegisterFormComponent = (): ReactNode => {
+  if (isCommercialMode) {
+    return <EmailRegisterForm />;
+  }
+  return <UsernameRegisterForm />;
+};
+
 const RegisterPage = (): ReactNode => {
-  const formComponent = ((): ReactNode => {
-    if (isCommercialMode) {
-      return <EmailRegisterForm />;
-    }
-    return <UsernameRegisterForm />;
-  })();
+  const formComponent = getRegisterFormComponent();
   return <AuthFormContainer>{formComponent}</AuthFormContainer>;
 };
 

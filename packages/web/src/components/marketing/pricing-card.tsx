@@ -36,26 +36,32 @@ interface PricingCardProps {
   onBillingChange: (yearly: boolean) => void;
 }
 
+const getPrice = (plan: PlanConfig, isYearly: boolean): string => {
+  if (isYearly) {
+    return (plan.yearlyPrice / 12).toFixed(2);
+  }
+  return plan.monthlyPrice.toFixed(2);
+};
+
+const getPeriod = (isYearly: boolean): string => {
+  if (isYearly) {
+    return " per month billed yearly";
+  }
+  return " per month";
+};
+
+const getButtonVariant = (popular: boolean): "primary" | "secondary" => {
+  if (popular) {
+    return "primary";
+  }
+  return "secondary";
+};
+
 const PricingCard: FC<PricingCardProps> = ({ plan, isYearly, onBillingChange }) => {
   const isFree = plan.monthlyPrice === 0;
-  const price = ((): string => {
-    if (isYearly) {
-      return (plan.yearlyPrice / 12).toFixed(2);
-    }
-    return plan.monthlyPrice.toFixed(2);
-  })();
-  const period = ((): string => {
-    if (isYearly) {
-      return " per month billed yearly";
-    }
-    return " per month";
-  })();
-  const buttonVariant = ((): "primary" | "secondary" => {
-    if (plan.popular) {
-      return "primary";
-    }
-    return "secondary";
-  })();
+  const price = getPrice(plan, isYearly);
+  const period = getPeriod(isYearly);
+  const buttonVariant = getButtonVariant(plan.popular ?? false);
 
   return (
     <div className={card({ featured: plan.popular })}>
@@ -97,17 +103,19 @@ const PricingCardPrice: FC<{
   </div>
 );
 
+const getVisibilityClass = (hidden: boolean): string => {
+  if (hidden) {
+    return "invisible";
+  }
+  return "";
+};
+
 const BillingToggle: FC<{
   isYearly: boolean;
   onChange: (yearly: boolean) => void;
   hidden: boolean;
 }> = ({ isYearly, onChange, hidden }) => {
-  const visibilityClass = ((): string => {
-    if (hidden) {
-      return "invisible";
-    }
-    return "";
-  })();
+  const visibilityClass = getVisibilityClass(hidden);
   return (
     <label
       htmlFor="billing-toggle"
@@ -131,23 +139,27 @@ const BillingToggle: FC<{
   );
 };
 
+const getFeatureIcon = (included: boolean): typeof Check | typeof MinusIcon => {
+  if (included) {
+    return Check;
+  }
+  return MinusIcon;
+};
+
+const getFeatureTextClass = (included: boolean): string => {
+  if (included) {
+    return "";
+  }
+  return "text-foreground-subtle";
+};
+
 const PricingCardFeatures: FC<{
   features: PlanConfig["features"];
 }> = ({ features }) => (
   <ul className="flex flex-col gap-2 mb-5 flex-1">
     {features.map((feature) => {
-      const Icon = ((): typeof Check | typeof MinusIcon => {
-        if (feature.included) {
-          return Check;
-        }
-        return MinusIcon;
-      })();
-      const featureTextClass = ((): string => {
-        if (feature.included) {
-          return "";
-        }
-        return "text-foreground-subtle";
-      })();
+      const Icon = getFeatureIcon(feature.included);
+      const featureTextClass = getFeatureTextClass(feature.included);
       return (
         <li
           key={feature.name}

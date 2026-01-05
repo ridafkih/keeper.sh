@@ -80,13 +80,15 @@ interface PlanCardProps {
   targetInterval: "monthly" | "yearly";
 }
 
+const getFeatureIconComponent = (included: boolean): typeof Check | typeof MinusIcon => {
+  if (included) {
+    return Check;
+  }
+  return MinusIcon;
+};
+
 const FeatureIcon = ({ included }: { included: boolean }): ReactNode => {
-  const Icon = ((): typeof Check | typeof MinusIcon => {
-    if (included) {
-      return Check;
-    }
-    return MinusIcon;
-  })();
+  const Icon = getFeatureIconComponent(included);
   return <Icon className={pricingFeatureIcon({ included })} />;
 };
 
@@ -126,18 +128,20 @@ const PlanCardButton = ({
   }
 
   if (isCurrent && !isCurrentInterval) {
-    const label = ((): string => {
+    const getIntervalLabel = (): string => {
       if (targetInterval === "yearly") {
         return "Switch to Yearly";
       }
       return "Switch to Monthly";
-    })();
-    const buttonText = ((): string => {
+    };
+    const label = getIntervalLabel();
+    const getButtonText = (): string => {
       if (isLoading) {
         return "Loading...";
       }
       return label;
-    })();
+    };
+    const buttonText = getButtonText();
     return (
       <Button
         className={button({ variant: "primary" })}
@@ -157,12 +161,13 @@ const PlanCardButton = ({
     );
   }
 
-  const upgradeButtonText = ((): string => {
+  const getUpgradeButtonText = (): string => {
     if (isLoading) {
       return "Loading...";
     }
     return `Upgrade to ${plan.name}`;
-  })();
+  };
+  const upgradeButtonText = getUpgradeButtonText();
   return (
     <Button className={button({ variant: "primary" })} onClick={onUpgrade} disabled={isLoading}>
       {upgradeButtonText}

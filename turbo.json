@@ -22,6 +22,7 @@
     },
     "lint": {
       "dependsOn": ["^lint"],
+      "inputs": [".oxlintrc.json"],
       "cache": true
     }
   }

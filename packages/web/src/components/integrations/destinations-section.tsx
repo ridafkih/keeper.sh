@@ -62,10 +62,39 @@ const destinationStatus = tv({
 
 const isConnectable = (destination: DestinationConfig): boolean => !destination.comingSoon;
 
+const getMenuItemVariant = (comingSoon: boolean): "disabled" | "default" => {
+  if (comingSoon) {
+    return "disabled";
+  }
+  return "default";
+};
+
+const getImageOpacityClass = (comingSoon: boolean): string => {
+  if (comingSoon) {
+    return "opacity-50";
+  }
+  return "";
+};
+
 interface DestinationMenuItemProps {
   destination: DestinationConfig;
   onConnect: (providerId: string) => void;
 }
+
+const DestinationMenuItemIcon = ({ destination }: { destination: DestinationConfig }): ReactNode => {
+  if (destination.icon) {
+    return (
+      <Image
+        src={destination.icon}
+        alt={destination.name}
+        width={14}
+        height={14}
+        className={getImageOpacityClass(destination.comingSoon ?? false)}
+      />
+    );
+  }
+  return <Server size={14} className="text-foreground-subtle" />;
+};
 
 const DestinationMenuItem = ({ destination, onConnect }: DestinationMenuItemProps): ReactNode => {
   const connectable = isConnectable(destination);
@@ -80,33 +109,10 @@ const DestinationMenuItem = ({ destination, onConnect }: DestinationMenuItemProp
         onConnect(destination.id);
       }}
       disabled={destination.comingSoon}
-      variant={((): "disabled" | "default" => {
-        if (destination.comingSoon) {
-          return "disabled";
-        }
-        return "default";
-      })()}
+      variant={getMenuItemVariant(destination.comingSoon ?? false)}
       className="py-1.5"
     >
-      {((): ReactNode => {
-        if (destination.icon) {
-          return (
-            <Image
-              src={destination.icon}
-              alt={destination.name}
-              width={14}
-              height={14}
-              className={((): string => {
-                if (destination.comingSoon) {
-                  return "opacity-50";
-                }
-                return "";
-              })()}
-            />
-          );
-        }
-        return <Server size={14} className="text-foreground-subtle" />;
-      })()}
+      <DestinationMenuItemIcon destination={destination} />
       <span>{destination.name}</span>
       {destination.comingSoon && <span className="ml-4 text-xs">Unavailable</span>}
     </MenuItem>
@@ -208,12 +214,13 @@ const DestinationAction = ({
   }
 
   if (!isConnected) {
-    const connectButtonText = ((): string => {
+    const getConnectButtonText = (): string => {
       if (isLoading) {
         return "...";
       }
       return "Connect";
-    })();
+    };
+    const connectButtonText = getConnectButtonText();
     return (
       <GhostButton onClick={onConnect} disabled={isLoading} className="ml-auto">
         {connectButtonText}
@@ -221,19 +228,21 @@ const DestinationAction = ({
     );
   }
 
-  const statusText = ((): string => {
+  const getStatusText = (): string => {
     if (needsReauthentication) {
       return "Needs Reauthentication";
     }
     return "Connected";
-  })();
+  };
+  const statusText = getStatusText();
   const { trigger, dot } = destinationStatus({ needsReauthentication });
-  const displayText = ((): string => {
+  const getDisplayText = (): string => {
     if (isLoading) {
       return "...";
     }
     return statusText;
-  })();
+  };
+  const displayText = getDisplayText();
 
   return (
     <Menu.Root>
@@ -296,7 +305,7 @@ const SyncStatusText = ({ syncStatus }: SyncStatusTextProps): ReactNode => {
   const loading = !hasReceivedStatus.current;
   const { text, skeleton } = syncStatusText({ loading });
 
-  const progress = ((): { current: number; total: number } | null => {
+  const getProgress = (): { current: number; total: number } | null => {
     if (
       syncStatus?.status === "syncing" &&
       syncStatus.stage === "processing" &&
@@ -306,14 +315,16 @@ const SyncStatusText = ({ syncStatus }: SyncStatusTextProps): ReactNode => {
       return syncStatus.progress;
     }
     return null;
-  })();
+  };
+  const progress = getProgress();
 
-  const statusContent = ((): ReactNode => {
+  const getStatusContent = (): ReactNode => {
     if (progress) {
       return <SyncProgress current={progress.current} total={progress.total} />;
     }
     return <SyncedCount count={syncStatus?.remoteCount ?? 0} />;
-  })();
+  };
+  const statusContent = getStatusContent();
 
   return (
     <TextMeta className="relative w-fit">
@@ -352,12 +363,13 @@ const DestinationItem = ({
 }: DestinationItemProps): ReactNode => {
   const { isOpen, isConfirming, open, setIsOpen, confirm } = useConfirmAction();
 
-  const iconContent = ((): ReactNode => {
+  const getIconContent = (): ReactNode => {
     if (destination.icon) {
       return <Image src={destination.icon} alt={destination.name} width={14} height={14} />;
     }
     return <Server size={14} className="text-foreground-subtle" />;
-  })();
+  };
+  const iconContent = getIconContent();
 
   return (
     <>
@@ -534,12 +546,13 @@ export const DestinationsSection = (): ReactNode => {
       );
     }
 
-    const countLabel = ((): string => {
+    const getCountLabel = (): string => {
       if (destinationCount === 1) {
         return "1 destination";
       }
       return `${destinationCount} destinations`;
-    })();
+    };
+    const countLabel = getCountLabel();
 
     return (
       <Card>

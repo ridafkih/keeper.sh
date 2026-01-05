@@ -13,7 +13,7 @@ export const Button: FC<PropsWithChildren<ButtonProps>> = ({
   className,
   ...props
 }) => {
-  const content = ((): React.ReactNode => {
+  const renderContent = (): React.ReactNode => {
     if (isLoading) {
       return (
         <span className="relative inline-flex items-center justify-center">
@@ -25,10 +25,11 @@ export const Button: FC<PropsWithChildren<ButtonProps>> = ({
       );
     }
     return children;
-  })();
+  };
+
   return (
     <BaseButton disabled={isLoading || disabled} className={className} {...props}>
-      {content}
+      {renderContent()}
     </BaseButton>
   );
 };

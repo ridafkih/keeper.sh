@@ -170,13 +170,15 @@ const EmailLoginForm: FC = () => {
   );
 };
 
+const getLoginFormComponent = (): ReactNode => {
+  if (isCommercialMode) {
+    return <EmailLoginForm />;
+  }
+  return <UsernameLoginForm />;
+};
+
 const LoginPage = (): ReactNode => {
-  const formComponent = ((): ReactNode => {
-    if (isCommercialMode) {
-      return <EmailLoginForm />;
-    }
-    return <UsernameLoginForm />;
-  })();
+  const formComponent = getLoginFormComponent();
   return <AuthFormContainer>{formComponent}</AuthFormContainer>;
 };
 

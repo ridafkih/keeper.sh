@@ -8,6 +8,13 @@ import { userSubscriptionsTable } from "@keeper.sh/database/schema";
 
 const HTTP_OK = 200;
 
+const getPlanFromActiveStatus = (active: boolean): "pro" | "free" => {
+  if (active) {
+    return "pro";
+  }
+  return "free";
+};
+
 const upsertSubscription = async (
   userId: string,
   plan: "free" | "pro",
@@ -53,12 +60,7 @@ const handleSubscriptionUpdated = async (
     return new Response(null, { status: HTTP_OK });
   }
 
-  const plan = ((): "pro" | "free" => {
-    if (isActive) {
-      return "pro";
-    }
-    return "free";
-  })();
+  const plan = getPlanFromActiveStatus(isActive);
   event.set({ subscriptionPlan: plan, userId });
   await upsertSubscription(userId, plan, subscriptionId);
   return new Response(null, { status: HTTP_OK });

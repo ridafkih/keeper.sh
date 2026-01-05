@@ -67,12 +67,14 @@ const createAuth = (config: AuthConfig): AuthResult => {
     trustedOrigins,
   } = config;
 
-  const resend = ((): Resend | null => {
+  const buildResendClient = (): Resend | null => {
     if (resendApiKey) {
       return new Resend(resendApiKey);
     }
     return null;
-  })();
+  };
+
+  const resend = buildResendClient();
 
   const plugins: BetterAuthPlugin[] = [];
 
@@ -80,7 +82,7 @@ const createAuth = (config: AuthConfig): AuthResult => {
     plugins.push(usernameOnly());
   }
 
-  const polarClient = ((): Polar | null => {
+  const buildPolarClient = (): Polar | null => {
     if (polarAccessToken && polarMode) {
       return new Polar({
         accessToken: polarAccessToken,
@@ -88,16 +90,19 @@ const createAuth = (config: AuthConfig): AuthResult => {
       });
     }
     return null;
-  })();
+  };
+
+  const polarClient = buildPolarClient();
 
   if (polarClient) {
-    const checkoutSuccessUrl = ((): string => {
+    const buildCheckoutSuccessUrl = (): string => {
       if (!webBaseUrl) {
         return "/dashboard/billing?success=true";
       }
-
       return new URL("/dashboard/billing?success=true", webBaseUrl).toString();
-    })();
+    };
+
+    const checkoutSuccessUrl = buildCheckoutSuccessUrl();
 
     plugins.push(
       polar({

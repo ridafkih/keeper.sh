@@ -9,16 +9,18 @@ import { button } from "@/styles";
 import { TextBody } from "@/components/typography";
 import { clsx } from "clsx";
 
+const getConsentEventName = (consent: boolean): string => {
+  if (consent) {
+    return "consent_granted";
+  }
+  return "consent_denied";
+};
+
 export const CookieConsent = (): ReactNode => {
   const [showBanner, setShowBanner] = useState((): boolean => !hasConsentChoice());
 
   const handleChoice = (consent: boolean): void => {
-    const eventName = ((): string => {
-      if (consent) {
-        return "consent_granted";
-      }
-      return "consent_denied";
-    })();
+    const eventName = getConsentEventName(consent);
     track(eventName);
     setAnalyticsConsent(consent);
     setShowBanner(false);

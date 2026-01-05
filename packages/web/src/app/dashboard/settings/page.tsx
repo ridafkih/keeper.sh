@@ -96,12 +96,27 @@ export default function SettingsPage(): ReactNode {
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isAddingPasskey, setIsAddingPasskey] = useState(false);
 
-  const passkeysKey = ((): string | null => {
+  const getPasskeysKey = (): string | null => {
     if (isCommercialMode) {
       return "passkeys";
     }
     return null;
-  })();
+  };
+  const passkeysKey = getPasskeysKey();
+
+  const getProfileFieldLabel = (): string => {
+    if (isCommercialMode) {
+      return "Email";
+    }
+    return "Username";
+  };
+
+  const getProfileFieldValue = (): string | undefined => {
+    if (isCommercialMode) {
+      return user?.email;
+    }
+    return user?.username;
+  };
   const {
     data: passkeys,
     isLoading: isLoadingPasskeys,
@@ -157,22 +172,8 @@ export default function SettingsPage(): ReactNode {
 
         <Card padding="sm">
           <div>
-            <FieldLabel as="div">
-              {((): string => {
-                if (isCommercialMode) {
-                  return "Email";
-                }
-                return "Username";
-              })()}
-            </FieldLabel>
-            <FieldValue as="div">
-              {((): string | undefined => {
-                if (isCommercialMode) {
-                  return user?.email;
-                }
-                return user?.username;
-              })()}
-            </FieldValue>
+            <FieldLabel as="div">{getProfileFieldLabel()}</FieldLabel>
+            <FieldValue as="div">{getProfileFieldValue()}</FieldValue>
           </div>
         </Card>
       </Section>

@@ -18,7 +18,12 @@ const premiumService = createPremiumService({
   database,
 });
 
-const googleConfig = ((): { clientId: string; clientSecret: string } | null => {
+interface OAuthConfig {
+  clientId: string;
+  clientSecret: string;
+}
+
+const buildGoogleConfig = (): OAuthConfig | null => {
   if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
     return {
       clientId: env.GOOGLE_CLIENT_ID,
@@ -26,9 +31,9 @@ const googleConfig = ((): { clientId: string; clientSecret: string } | null => {
     };
   }
   return null;
-})();
+};
 
-const microsoftConfig = ((): { clientId: string; clientSecret: string } | null => {
+const buildMicrosoftConfig = (): OAuthConfig | null => {
   if (env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET) {
     return {
       clientId: env.MICROSOFT_CLIENT_ID,
@@ -36,7 +41,10 @@ const microsoftConfig = ((): { clientId: string; clientSecret: string } | null =
     };
   }
   return null;
-})();
+};
+
+const googleConfig = buildGoogleConfig();
+const microsoftConfig = buildMicrosoftConfig();
 
 const oauthProviders = createOAuthProviders({
   google: googleConfig,
