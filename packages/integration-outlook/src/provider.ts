@@ -21,6 +21,7 @@ import {
   type OutlookEvent,
 } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS, KEEPER_CATEGORY } from "@keeper.sh/constants";
+import { getStartOfToday } from "@keeper.sh/date-utils";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { getOutlookAccountsForUser } from "./sync";
 
@@ -157,8 +158,7 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     const remoteEvents: RemoteEvent[] = [];
     let nextLink: string | undefined;
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = getStartOfToday();
 
     do {
       const url = nextLink
@@ -222,9 +222,10 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     try {
       return this.createEvent(resource);
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: `Failed to push event: ${message}`,
       };
     }
   }
@@ -278,9 +279,10 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
 
       return { success: true };
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: `Failed to delete event: ${message}`,
       };
     }
   }

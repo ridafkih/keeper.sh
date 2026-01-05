@@ -12,6 +12,7 @@
     "@keeper.sh/log": "workspace:*",
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/database": "workspace:*",
+    "@keeper.sh/date-utils": "workspace:*",
     "@keeper.sh/integration": "workspace:*",
     "@keeper.sh/premium": "workspace:*",
     "@keeper.sh/constants": "workspace:*",

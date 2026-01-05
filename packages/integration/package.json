@@ -10,6 +10,7 @@
   "types": "src/index.ts",
   "dependencies": {
     "@keeper.sh/database": "workspace:*",
+    "@keeper.sh/date-utils": "workspace:*",
     "@keeper.sh/log": "workspace:*",
     "@keeper.sh/constants": "workspace:*",
     "@keeper.sh/premium": "workspace:*",

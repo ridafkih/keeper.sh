@@ -12,7 +12,7 @@ interface CheckoutOptions {
 export async function openCheckout(
   productId: string,
   options?: CheckoutOptions,
-) {
+): Promise<void> {
   const response = await authClient.checkout({
     products: [productId],
     redirect: false,
@@ -35,6 +35,6 @@ export async function openCheckout(
   });
 }
 
-export async function openCustomerPortal() {
+export async function openCustomerPortal(): Promise<void> {
   await authClient.customer.portal();
 }

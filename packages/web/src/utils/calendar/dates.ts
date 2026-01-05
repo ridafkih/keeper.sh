@@ -1,4 +1,4 @@
-export const getDaysFromDate = (startDate: Date, count: number) => {
+export const getDaysFromDate = (startDate: Date, count: number): Date[] => {
   return Array.from({ length: count }, (_, offset) => {
     const date = new Date(startDate);
     date.setDate(date.getDate() + offset);

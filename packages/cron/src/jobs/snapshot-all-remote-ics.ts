@@ -3,8 +3,9 @@ import {
   remoteICalSourcesTable,
   calendarSnapshotsTable,
 } from "@keeper.sh/database/schema";
+import { MS_PER_DAY } from "@keeper.sh/constants";
 import { pullRemoteCalendar } from "@keeper.sh/calendar";
-import { getWideEvent } from "@keeper.sh/log";
+import { WideEvent, runWithWideEvent, emitWideEvent } from "@keeper.sh/log";
 import { and, eq, lte } from "drizzle-orm";
 import { database } from "../context";
 import { withCronWideEvent, setCronEventFields } from "../utils/with-wide-event";
@@ -26,40 +27,52 @@ const fetchRemoteCalendar = async (
 const insertSnapshot = async (
   payload: typeof calendarSnapshotsTable.$inferInsert,
 ) => {
-  try {
-    const [record] = await database
-      .insert(calendarSnapshotsTable)
-      .values(payload)
-      .returning({
-        createdAt: calendarSnapshotsTable.createdAt,
-      });
+  const [record] = await database
+    .insert(calendarSnapshotsTable)
+    .values(payload)
+    .returning({
+      createdAt: calendarSnapshotsTable.createdAt,
+    });
 
-    return record;
-  } catch (error) {
-    getWideEvent()?.setError(error);
-    return undefined;
-  }
+  return record;
 };
 
 const deleteStaleCalendarSnapshots = async (
   sourceId: string,
   referenceDate: Date,
 ) => {
-  try {
-    const timestamp = referenceDate.getTime();
-    const dayBeforeTimestamp = timestamp - 24 * 60 * 60 * 1000;
+  const dayBeforeTimestamp = referenceDate.getTime() - MS_PER_DAY;
 
-    await database
-      .delete(calendarSnapshotsTable)
-      .where(
-        and(
-          eq(calendarSnapshotsTable.sourceId, sourceId),
-          lte(calendarSnapshotsTable.createdAt, new Date(dayBeforeTimestamp)),
-        ),
-      );
-  } catch (error) {
-    getWideEvent()?.setError(error);
-  }
+  await database
+    .delete(calendarSnapshotsTable)
+    .where(
+      and(
+        eq(calendarSnapshotsTable.sourceId, sourceId),
+        lte(calendarSnapshotsTable.createdAt, new Date(dayBeforeTimestamp)),
+      ),
+    );
+};
+
+const processSnapshot = async (sourceId: string, ical: string): Promise<void> => {
+  const event = new WideEvent("cron");
+  event.set({
+    operationType: "snapshot",
+    operationName: "snapshot-insertion",
+    sourceId,
+  });
+
+  await runWithWideEvent(event, async () => {
+    try {
+      const record = await insertSnapshot({ sourceId, ical });
+      if (record) {
+        await deleteStaleCalendarSnapshots(sourceId, record.createdAt);
+      }
+    } catch (error) {
+      event.setError(error);
+    } finally {
+      emitWideEvent(event.finalize());
+    }
+  });
 };
 
 export default withCronWideEvent({
@@ -78,13 +91,13 @@ export default withCronWideEvent({
     const { succeeded, failed } = countSettledResults(settlements);
     setCronEventFields({ processedCount: succeeded, failedCount: failed });
 
+    const insertions: Promise<void>[] = [];
     for (const settlement of settlements) {
-      if (settlement.status === "rejected") continue;
-      const { ical, sourceId } = settlement.value;
-      insertSnapshot({ sourceId, ical }).then((record) => {
-        if (!record) return;
-        deleteStaleCalendarSnapshots(sourceId, record.createdAt);
-      });
+      if (settlement.status === "fulfilled") {
+        insertions.push(processSnapshot(settlement.value.sourceId, settlement.value.ical));
+      }
     }
+
+    await Promise.allSettled(insertions);
   },
 }) satisfies CronOptions;

@@ -4,6 +4,7 @@ import {
   calendarDestinationsTable,
   caldavCredentialsTable,
 } from "@keeper.sh/database/schema";
+import { getStartOfToday } from "@keeper.sh/date-utils";
 import { decryptPassword } from "@keeper.sh/encryption";
 import { and, asc, eq, gte, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
@@ -111,8 +112,7 @@ export const createCalDAVService = (config: CalDAVConfig): CalDAVService => {
   };
 
   const getUserEvents = async (userId: string): Promise<SyncableEvent[]> => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = getStartOfToday();
 
     const results = await database
       .select({

@@ -16,7 +16,6 @@ import {
   countMappingsForDestination,
   type EventMapping,
 } from "./mappings";
-import { generateEventUid, isKeeperEvent } from "./event-identity";
 import type { SyncContext, SyncStage } from "./sync-coordinator";
 
 export abstract class CalendarProvider<
@@ -286,13 +285,5 @@ export abstract class CalendarProvider<
       lastOperation: params.lastOperation,
       inSync: false,
     });
-  }
-
-  protected generateUid(): string {
-    return generateEventUid();
-  }
-
-  protected isKeeperEvent(uid: string): boolean {
-    return isKeeperEvent(uid);
   }
 }

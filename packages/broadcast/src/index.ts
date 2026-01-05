@@ -1,4 +1,4 @@
-import { WideEvent, emitWideEvent, log } from "@keeper.sh/log";
+import { WideEvent, emitWideEvent, log, type WideEventFields } from "@keeper.sh/log";
 import {
   socketMessageSchema,
   broadcastMessageSchema,
@@ -98,7 +98,7 @@ const sendPing = (socket: Socket) => {
 const emitWebSocketEvent = (
   userId: string,
   operationName: string,
-  additionalFields?: Record<string, unknown>
+  additionalFields?: Partial<WideEventFields>
 ): void => {
   const event = new WideEvent("websocket");
   event.set({

@@ -2,6 +2,8 @@ import {
   OAuthCalendarProvider,
   RateLimiter,
   getEventsForDestination,
+  generateEventUid,
+  isKeeperEvent,
   type OAuthTokenProvider,
   type DestinationProvider,
   type SyncableEvent,
@@ -21,6 +23,7 @@ import {
   type GoogleEvent,
 } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
+import { getStartOfToday } from "@keeper.sh/date-utils";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { getGoogleAccountsForUser } from "./sync";
 
@@ -164,8 +167,7 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
 
     let pageToken: string | undefined;
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = getStartOfToday();
 
     do {
       const url = new URL(
@@ -200,7 +202,7 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
       const data = googleEventListSchema.assert(body);
 
       for (const event of data.items ?? []) {
-        if (event.iCalUID && this.isKeeperEvent(event.iCalUID)) {
+        if (event.iCalUID && isKeeperEvent(event.iCalUID)) {
           const startTime = this.parseEventTime(event.start);
           const endTime = this.parseEventTime(event.end);
 
@@ -222,7 +224,7 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
   }
 
   private async pushEvent(event: SyncableEvent): Promise<PushResult> {
-    const uid = this.generateUid();
+    const uid = generateEventUid();
     const resource = this.toGoogleEvent(event, uid);
 
     try {
@@ -233,7 +235,8 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
       return result;
     } catch (error) {
       getWideEvent()?.setError(error);
-      return { success: false, error: "Failed to push event" };
+      const message = error instanceof Error ? error.message : "Unknown error";
+      return { success: false, error: `Failed to push event: ${message}` };
     }
   }
 
@@ -299,7 +302,8 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
       return { success: true };
     } catch (error) {
       getWideEvent()?.setError(error);
-      return { success: false, error: "Failed to delete event" };
+      const message = error instanceof Error ? error.message : "Unknown error";
+      return { success: false, error: `Failed to delete event: ${message}` };
     }
   }
 

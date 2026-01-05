@@ -3,15 +3,10 @@ import {
   eventStatesTable,
   remoteICalSourcesTable,
 } from "@keeper.sh/database/schema";
+import { getStartOfToday } from "@keeper.sh/date-utils";
 import { and, eq, gte, inArray, asc } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { SyncableEvent } from "./types";
-
-const getStartOfToday = (): Date => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return today;
-};
 
 const getMappedSourceIds = async (
   database: BunSQLDatabase,

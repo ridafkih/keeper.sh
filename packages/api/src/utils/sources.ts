@@ -4,6 +4,7 @@ import {
   fetchAndSyncSource,
   CalendarFetchError,
 } from "@keeper.sh/calendar";
+import { getWideEvent } from "@keeper.sh/log";
 import { eq, and } from "drizzle-orm";
 import { triggerDestinationSync } from "./sync";
 import { createMappingsForNewSource } from "./source-destination-mappings";
@@ -110,7 +111,9 @@ export const createSource = async (
 
   fetchAndSyncSource(database, source)
     .then(() => triggerDestinationSync(userId))
-    .catch(() => {});
+    .catch((error) => {
+      getWideEvent()?.setError(error);
+    });
 
   return source;
 };

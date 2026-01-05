@@ -5,6 +5,7 @@ import {
   calendarDestinationsTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
+import { getStartOfToday } from "@keeper.sh/date-utils";
 import { and, asc, eq, gte } from "drizzle-orm";
 import type { Plan } from "@keeper.sh/premium";
 import type { SyncableEvent } from "./types";
@@ -115,8 +116,7 @@ export const getUserEventsForSync = async (
   database: BunSQLDatabase,
   userId: string,
 ): Promise<SyncableEvent[]> => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = getStartOfToday();
 
   const results = await database
     .select({

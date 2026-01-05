@@ -54,7 +54,6 @@ export interface SyncCoordinatorConfig {
 export interface SyncCoordinator {
   startSync: (userId: string) => Promise<SyncContext>;
   isSyncCurrent: (context: SyncContext) => Promise<boolean>;
-  endSync: (context: SyncContext) => Promise<void>;
 }
 
 export const createSyncCoordinator = (config: SyncCoordinatorConfig): SyncCoordinator => {
@@ -80,8 +79,5 @@ export const createSyncCoordinator = (config: SyncCoordinatorConfig): SyncCoordi
     return context.isCurrent();
   };
 
-  const endSync = async (_context: SyncContext): Promise<void> => {
-  };
-
-  return { startSync, isSyncCurrent, endSync };
+  return { startSync, isSyncCurrent };
 };

@@ -1,0 +1,15 @@
+{
+  "name": "@keeper.sh/date-utils",
+  "scripts": {
+    "types": "tsc --noEmit"
+  },
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@keeper.sh/typescript-config": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "5.9.3"
+  }
+}

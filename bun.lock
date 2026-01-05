@@ -169,6 +169,14 @@
         "typescript": "5.9.3",
       },
     },
+    "packages/date-utils": {
+      "name": "@keeper.sh/date-utils",
+      "devDependencies": {
+        "@keeper.sh/typescript-config": "workspace:*",
+        "@types/bun": "latest",
+        "typescript": "5.9.3",
+      },
+    },
     "packages/destination-metadata": {
       "name": "@keeper.sh/destination-metadata",
       "devDependencies": {
@@ -226,6 +234,7 @@
       "dependencies": {
         "@keeper.sh/constants": "workspace:*",
         "@keeper.sh/database": "workspace:*",
+        "@keeper.sh/date-utils": "workspace:*",
         "@keeper.sh/log": "workspace:*",
         "@keeper.sh/premium": "workspace:*",
         "drizzle-orm": "^0.45.1",
@@ -241,6 +250,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@keeper.sh/database": "workspace:*",
+        "@keeper.sh/date-utils": "workspace:*",
         "@keeper.sh/encryption": "workspace:*",
         "@keeper.sh/integration": "workspace:*",
         "@keeper.sh/log": "workspace:*",
@@ -274,6 +284,7 @@
         "@keeper.sh/constants": "workspace:*",
         "@keeper.sh/data-schemas": "workspace:*",
         "@keeper.sh/database": "workspace:*",
+        "@keeper.sh/date-utils": "workspace:*",
         "@keeper.sh/integration": "workspace:*",
         "@keeper.sh/log": "workspace:*",
         "@keeper.sh/premium": "workspace:*",
@@ -305,6 +316,7 @@
         "@keeper.sh/constants": "workspace:*",
         "@keeper.sh/data-schemas": "workspace:*",
         "@keeper.sh/database": "workspace:*",
+        "@keeper.sh/date-utils": "workspace:*",
         "@keeper.sh/integration": "workspace:*",
         "@keeper.sh/premium": "workspace:*",
         "drizzle-orm": "0.45.1",
@@ -848,6 +860,8 @@
     "@keeper.sh/data-schemas": ["@keeper.sh/data-schemas@workspace:packages/data-schemas"],
 
     "@keeper.sh/database": ["@keeper.sh/database@workspace:packages/database"],
+
+    "@keeper.sh/date-utils": ["@keeper.sh/date-utils@workspace:packages/date-utils"],
 
     "@keeper.sh/destination-metadata": ["@keeper.sh/destination-metadata@workspace:packages/destination-metadata"],
 

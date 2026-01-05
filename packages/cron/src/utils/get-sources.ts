@@ -5,7 +5,9 @@ import {
 import type { Plan } from "@keeper.sh/premium";
 import { database, premiumService } from "../context";
 
-export async function getSourcesByPlan(targetPlan: Plan) {
+export async function getSourcesByPlan(
+  targetPlan: Plan,
+): Promise<(typeof remoteICalSourcesTable.$inferSelect)[]> {
   const sources = await database.select().from(remoteICalSourcesTable);
 
   const userPlans = new Map<string, Plan>();

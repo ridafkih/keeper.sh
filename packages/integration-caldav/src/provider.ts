@@ -2,6 +2,8 @@ import {
   CalendarProvider,
   RateLimiter,
   getEventsForDestination,
+  generateEventUid,
+  isKeeperEvent,
   type DestinationProvider,
   type SyncableEvent,
   type PushResult,
@@ -11,6 +13,7 @@ import {
   type CalDAVConfig,
   type SyncContext,
 } from "@keeper.sh/integration";
+import { getStartOfToday } from "@keeper.sh/date-utils";
 import { getWideEvent } from "@keeper.sh/log";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { CalDAVClient } from "./caldav-client";
@@ -118,7 +121,7 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
       events.map((event) =>
         this.rateLimiter.execute(async (): Promise<PushResult> => {
           try {
-            const uid = this.generateUid();
+            const uid = generateEventUid();
             const iCalString = eventToICalString(event, uid);
 
             await this.client.createCalendarObject({
@@ -130,7 +133,8 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
             return { success: true, remoteId: uid };
           } catch (error) {
             getWideEvent()?.setError(error);
-            return { success: false, error: "Failed to push event" };
+            const message = error instanceof Error ? error.message : "Unknown error";
+            return { success: false, error: `Failed to push event: ${message}` };
           }
         }),
       ),
@@ -157,7 +161,8 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
               return { success: true };
             }
 
-            return { success: false, error: "Failed to delete event" };
+            const message = error instanceof Error ? error.message : "Unknown error";
+            return { success: false, error: `Failed to delete event: ${message}` };
           }
         }),
       ),
@@ -167,8 +172,7 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
   }
 
   async listRemoteEvents(): Promise<RemoteEvent[]> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = getStartOfToday();
 
     const tenYearsOut = new Date(today);
     tenYearsOut.setFullYear(tenYearsOut.getFullYear() + 10);
@@ -204,7 +208,7 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
         continue;
       }
 
-      if (!this.isKeeperEvent(parsed.uid)) {
+      if (!isKeeperEvent(parsed.uid)) {
         notKeeper++;
         continue;
       }

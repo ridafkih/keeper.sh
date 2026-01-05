@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@keeper.sh/database": "workspace:*",
+    "@keeper.sh/date-utils": "workspace:*",
     "@keeper.sh/encryption": "workspace:*",
     "@keeper.sh/integration": "workspace:*",
     "@keeper.sh/log": "workspace:*",
