@@ -22,6 +22,7 @@
         "@keeper.sh/constants": "workspace:*",
         "@keeper.sh/data-schemas": "workspace:*",
         "@keeper.sh/database": "workspace:*",
+        "@keeper.sh/date-utils": "workspace:*",
         "@keeper.sh/destination-providers": "workspace:*",
         "@keeper.sh/encryption": "workspace:*",
         "@keeper.sh/env": "workspace:*",
@@ -171,6 +172,9 @@
     },
     "packages/date-utils": {
       "name": "@keeper.sh/date-utils",
+      "dependencies": {
+        "@keeper.sh/constants": "workspace:*",
+      },
       "devDependencies": {
         "@keeper.sh/typescript-config": "workspace:*",
         "@types/bun": "latest",
@@ -449,6 +453,7 @@
         "@better-auth/passkey": "^1.4.9",
         "@keeper.sh/constants": "workspace:*",
         "@keeper.sh/data-schemas": "workspace:*",
+        "@keeper.sh/date-utils": "workspace:*",
         "@keeper.sh/destination-metadata": "workspace:*",
         "@keeper.sh/env": "workspace:*",
         "@keeper.sh/log": "workspace:*",

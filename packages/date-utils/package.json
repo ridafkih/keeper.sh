@@ -7,6 +7,9 @@
   "types": "src/index.ts",
   "type": "module",
   "private": true,
+  "dependencies": {
+    "@keeper.sh/constants": "workspace:*"
+  },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",
     "@types/bun": "latest",

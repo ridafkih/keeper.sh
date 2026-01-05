@@ -20,6 +20,7 @@
     "@keeper.sh/broadcast": "workspace:*",
     "@keeper.sh/calendar": "workspace:*",
     "@keeper.sh/data-schemas": "workspace:*",
+    "@keeper.sh/date-utils": "workspace:*",
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/destination-providers": "workspace:*",
     "@keeper.sh/encryption": "workspace:*",

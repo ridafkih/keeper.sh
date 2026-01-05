@@ -110,11 +110,40 @@ export abstract class CalendarProvider<
       existingMappings.map(({ destinationEventUid }) => destinationEventUid),
     );
 
-    const operations: SyncOperation[] = [];
+    const { staleMappingIds, staleMappedEventIds } = this.identifyStaleMappings(
+      existingMappings,
+      localEventIds,
+      remoteEventUids,
+    );
+
+    const addOperations = this.buildAddOperations(
+      localEvents,
+      existingMappings,
+      staleMappedEventIds,
+    );
+
+    const removeOperations = this.buildRemoveOperations(
+      existingMappings,
+      remoteEvents,
+      localEventIds,
+      mappedDestinationUids,
+    );
+
+    return {
+      operations: this.sortOperationsByTime([...addOperations, ...removeOperations]),
+      staleMappingIds,
+    };
+  }
+
+  private identifyStaleMappings(
+    mappings: EventMapping[],
+    localEventIds: Set<string>,
+    remoteEventUids: Set<string>,
+  ): { staleMappingIds: string[]; staleMappedEventIds: Set<string> } {
     const staleMappingIds: string[] = [];
     const staleMappedEventIds = new Set<string>();
 
-    for (const mapping of existingMappings) {
+    for (const mapping of mappings) {
       const localEventExists = localEventIds.has(mapping.eventStateId);
       const remoteEventExists = remoteEventUids.has(mapping.destinationEventUid);
 
@@ -123,6 +152,16 @@ export abstract class CalendarProvider<
         staleMappedEventIds.add(mapping.eventStateId);
       }
     }
+
+    return { staleMappingIds, staleMappedEventIds };
+  }
+
+  private buildAddOperations(
+    localEvents: SyncableEvent[],
+    existingMappings: EventMapping[],
+    staleMappedEventIds: Set<string>,
+  ): SyncOperation[] {
+    const operations: SyncOperation[] = [];
 
     for (const event of localEvents) {
       const hasMapping = existingMappings.some(
@@ -134,6 +173,17 @@ export abstract class CalendarProvider<
         operations.push({ type: "add", event });
       }
     }
+
+    return operations;
+  }
+
+  private buildRemoveOperations(
+    existingMappings: EventMapping[],
+    remoteEvents: RemoteEvent[],
+    localEventIds: Set<string>,
+    mappedDestinationUids: Set<string>,
+  ): SyncOperation[] {
+    const operations: SyncOperation[] = [];
 
     for (const mapping of existingMappings) {
       if (!localEventIds.has(mapping.eventStateId)) {
@@ -157,10 +207,7 @@ export abstract class CalendarProvider<
       }
     }
 
-    return {
-      operations: this.sortOperationsByTime(operations),
-      staleMappingIds,
-    };
+    return operations;
   }
 
   private sortOperationsByTime(operations: SyncOperation[]): SyncOperation[] {

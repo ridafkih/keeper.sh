@@ -161,21 +161,7 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     const today = getStartOfToday();
 
     do {
-      const url = nextLink
-        ? new URL(nextLink)
-        : new URL(`${MICROSOFT_GRAPH_API}/me/calendar/events`);
-
-      if (!nextLink) {
-        url.searchParams.set(
-          "$filter",
-          `categories/any(c:c eq '${KEEPER_CATEGORY}') and start/dateTime ge '${today.toISOString()}' and start/dateTime le '${options.until.toISOString()}'`,
-        );
-        url.searchParams.set("$top", "100");
-        url.searchParams.set(
-          "$select",
-          "id,iCalUId,subject,start,end,categories",
-        );
-      }
+      const url = this.buildListEventsUrl(today, options.until, nextLink);
 
       const response = await fetch(url, {
         method: "GET",
@@ -197,16 +183,9 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
       const data = outlookEventListSchema.assert(body);
 
       for (const event of data.value ?? []) {
-        const startTime = this.parseEventTime(event.start);
-        const endTime = this.parseEventTime(event.end);
-
-        if (event.id && event.iCalUId && startTime && endTime) {
-          remoteEvents.push({
-            uid: event.iCalUId,
-            deleteId: event.id,
-            startTime,
-            endTime,
-          });
+        const remoteEvent = this.transformOutlookEvent(event);
+        if (remoteEvent) {
+          remoteEvents.push(remoteEvent);
         }
       }
 
@@ -214,6 +193,42 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     } while (nextLink);
 
     return remoteEvents;
+  }
+
+  private buildListEventsUrl(
+    today: Date,
+    until: Date,
+    nextLink?: string,
+  ): URL {
+    if (nextLink) {
+      return new URL(nextLink);
+    }
+
+    const url = new URL(`${MICROSOFT_GRAPH_API}/me/calendar/events`);
+    url.searchParams.set(
+      "$filter",
+      `categories/any(c:c eq '${KEEPER_CATEGORY}') and start/dateTime ge '${today.toISOString()}' and start/dateTime le '${until.toISOString()}'`,
+    );
+    url.searchParams.set("$top", "100");
+    url.searchParams.set("$select", "id,iCalUId,subject,start,end,categories");
+
+    return url;
+  }
+
+  private transformOutlookEvent(event: OutlookEvent): RemoteEvent | null {
+    const startTime = this.parseEventTime(event.start);
+    const endTime = this.parseEventTime(event.end);
+
+    if (!event.id || !event.iCalUId || !startTime || !endTime) {
+      return null;
+    }
+
+    return {
+      uid: event.iCalUId,
+      deleteId: event.id,
+      startTime,
+      endTime,
+    };
   }
 
   private async pushEvent(event: SyncableEvent): Promise<PushResult> {

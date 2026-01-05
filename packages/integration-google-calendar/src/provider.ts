@@ -166,21 +166,10 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
     const remoteEvents: RemoteEvent[] = [];
 
     let pageToken: string | undefined;
-
     const today = getStartOfToday();
 
     do {
-      const url = new URL(
-        `calendars/${encodeURIComponent(this.config.calendarId)}/events`,
-        GOOGLE_CALENDAR_API,
-      );
-
-      url.searchParams.set("maxResults", "2500");
-      url.searchParams.set("timeMin", today.toISOString());
-      url.searchParams.set("timeMax", options.until.toISOString());
-      if (pageToken) {
-        url.searchParams.set("pageToken", pageToken);
-      }
+      const url = this.buildListEventsUrl(today, options.until, pageToken);
 
       const response = await fetch(url, {
         method: "GET",
@@ -202,18 +191,9 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
       const data = googleEventListSchema.assert(body);
 
       for (const event of data.items ?? []) {
-        if (event.iCalUID && isKeeperEvent(event.iCalUID)) {
-          const startTime = this.parseEventTime(event.start);
-          const endTime = this.parseEventTime(event.end);
-
-          if (startTime && endTime) {
-            remoteEvents.push({
-              uid: event.iCalUID,
-              deleteId: event.iCalUID,
-              startTime,
-              endTime,
-            });
-          }
+        const remoteEvent = this.transformGoogleEvent(event);
+        if (remoteEvent) {
+          remoteEvents.push(remoteEvent);
         }
       }
 
@@ -221,6 +201,46 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
     } while (pageToken);
 
     return remoteEvents;
+  }
+
+  private buildListEventsUrl(
+    today: Date,
+    until: Date,
+    pageToken?: string,
+  ): URL {
+    const url = new URL(
+      `calendars/${encodeURIComponent(this.config.calendarId)}/events`,
+      GOOGLE_CALENDAR_API,
+    );
+
+    url.searchParams.set("maxResults", "2500");
+    url.searchParams.set("timeMin", today.toISOString());
+    url.searchParams.set("timeMax", until.toISOString());
+    if (pageToken) {
+      url.searchParams.set("pageToken", pageToken);
+    }
+
+    return url;
+  }
+
+  private transformGoogleEvent(event: GoogleEvent): RemoteEvent | null {
+    if (!event.iCalUID || !isKeeperEvent(event.iCalUID)) {
+      return null;
+    }
+
+    const startTime = this.parseEventTime(event.start);
+    const endTime = this.parseEventTime(event.end);
+
+    if (!startTime || !endTime) {
+      return null;
+    }
+
+    return {
+      uid: event.iCalUID,
+      deleteId: event.iCalUID,
+      startTime,
+      endTime,
+    };
   }
 
   private async pushEvent(event: SyncableEvent): Promise<PushResult> {

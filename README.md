@@ -440,6 +440,7 @@ docker compose up -d
 1. [@keeper.sh/calendar](./packages/calendar)
 1. [@keeper.sh/constants](./packages/constants)
 1. [@keeper.sh/data-schemas](./packages/data-schemas)
+1. [@keeper.sh/date-utils](./packages/date-utils)
 1. [@keeper.sh/database](./packages/database)
 1. [@keeper.sh/destination-metadata](./packages/destination-metadata)
 1. [@keeper.sh/destination-providers](./packages/destination-providers)

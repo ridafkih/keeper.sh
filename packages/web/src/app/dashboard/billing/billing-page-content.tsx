@@ -10,6 +10,7 @@ import { SectionHeader } from "@/components/section-header";
 import { TextMeta, FieldValue } from "@/components/typography";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useOrders } from "@/hooks/use-orders";
+import { formatDate } from "@keeper.sh/date-utils";
 import { CustomerOrder } from "@polar-sh/sdk/models/components/customerorder.js";
 
 function formatCurrency(amount: number, currency: string): string {
@@ -17,14 +18,6 @@ function formatCurrency(amount: number, currency: string): string {
     style: "currency",
     currency: currency.toUpperCase(),
   }).format(amount / 100);
-}
-
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  }).format(date);
 }
 
 function BillingHistoryLoading() {
