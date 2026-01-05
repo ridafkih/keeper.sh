@@ -1,7 +1,8 @@
 {
   "name": "@keeper.sh/sync-calendar",
   "scripts": {
-    "types": "tsc --noEmit"
+    "types": "tsc --noEmit",
+    "lint": "oxlint ."
   },
   "exports": {
     ".": "./src/index.ts"

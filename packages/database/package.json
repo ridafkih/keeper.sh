@@ -11,7 +11,8 @@
     "push": "drizzle-kit push",
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
-    "types": "tsc --noEmit"
+    "types": "tsc --noEmit",
+    "lint": "oxlint ."
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",

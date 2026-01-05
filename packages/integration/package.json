@@ -1,7 +1,8 @@
 {
   "name": "@keeper.sh/integration",
   "scripts": {
-    "types": "tsc --noEmit"
+    "types": "tsc --noEmit",
+    "lint": "oxlint ."
   },
   "version": "0.0.1",
   "private": true,

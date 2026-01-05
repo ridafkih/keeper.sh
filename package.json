@@ -9,7 +9,8 @@
     "dev": "turbo run dev",
     "types": "turbo run types --parallel",
     "build": "turbo run build",
-    "start": "turbo run start"
+    "start": "turbo run start",
+    "lint": "turbo run lint"
   },
   "workspaces": {
     "packages": [
@@ -18,6 +19,7 @@
   },
   "devDependencies": {
     "knip": "5.78.0",
+    "oxlint": "^1.36.0",
     "rimraf": "^6.1.2",
     "turbo": "2.7.2"
   },

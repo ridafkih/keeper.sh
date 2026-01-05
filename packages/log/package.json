@@ -1,7 +1,8 @@
 {
   "name": "@keeper.sh/log",
   "scripts": {
-    "types": "tsc --noEmit"
+    "types": "tsc --noEmit",
+    "lint": "oxlint ."
   },
   "main": "src/index.ts",
   "types": "src/index.ts",

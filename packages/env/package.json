@@ -1,7 +1,8 @@
 {
   "name": "@keeper.sh/env",
   "scripts": {
-    "types": "tsc --noEmit"
+    "types": "tsc --noEmit",
+    "lint": "oxlint ."
   },
   "exports": {
     "./api": "./src/api.ts",

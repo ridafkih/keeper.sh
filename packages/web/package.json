@@ -6,7 +6,8 @@
     "dev": "bun --bun next dev --turbopack",
     "build": "bun --bun next build",
     "start": "bun --bun next start",
-    "types": "tsc --noEmit"
+    "types": "tsc --noEmit",
+    "lint": "oxlint ."
   },
   "dependencies": {
     "@base-ui/react": "1.0.0",

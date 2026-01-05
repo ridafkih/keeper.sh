@@ -19,6 +19,10 @@
     },
     "migrate": {
       "cache": false
+    },
+    "lint": {
+      "dependsOn": ["^lint"],
+      "cache": true
     }
   }
 }

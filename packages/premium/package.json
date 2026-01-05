@@ -1,7 +1,8 @@
 {
   "name": "@keeper.sh/premium",
   "scripts": {
-    "types": "tsc --noEmit"
+    "types": "tsc --noEmit",
+    "lint": "oxlint ."
   },
   "types": "./src/index.ts",
   "exports": {
