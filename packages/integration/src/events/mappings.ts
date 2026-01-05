@@ -41,19 +41,14 @@ export async function createEventMapping(
     endTime: Date;
   },
 ): Promise<void> {
-  await database
-    .insert(eventMappingsTable)
-    .values(params)
-    .onConflictDoNothing();
+  await database.insert(eventMappingsTable).values(params).onConflictDoNothing();
 }
 
 export async function deleteEventMapping(
   database: BunSQLDatabase,
   mappingId: string,
 ): Promise<void> {
-  await database
-    .delete(eventMappingsTable)
-    .where(eq(eventMappingsTable.id, mappingId));
+  await database.delete(eventMappingsTable).where(eq(eventMappingsTable.id, mappingId));
 }
 
 export async function deleteEventMappingByDestinationUid(

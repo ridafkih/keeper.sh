@@ -48,12 +48,8 @@
           "name": "calendar_snapshots_userId_users_id_fk",
           "tableFrom": "calendar_snapshots",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -107,12 +103,8 @@
           "name": "calendars_userId_users_id_fk",
           "tableFrom": "calendars",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -166,12 +158,8 @@
           "name": "event_states_calendarId_calendars_id_fk",
           "tableFrom": "event_states",
           "tableTo": "calendars",
-          "columnsFrom": [
-            "calendarId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["calendarId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -219,12 +207,8 @@
           "name": "remote_ical_sources_userId_users_id_fk",
           "tableFrom": "remote_ical_sources",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }

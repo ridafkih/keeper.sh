@@ -1,12 +1,12 @@
 {
   "name": "@keeper.sh/database",
+  "private": true,
+  "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/database/schema.ts",
     "./auth-schema": "./src/database/auth-schema.ts"
   },
-  "type": "module",
-  "private": true,
   "scripts": {
     "push": "drizzle-kit push",
     "generate": "drizzle-kit generate",
@@ -14,15 +14,15 @@
     "types": "tsc --noEmit",
     "lint": "oxlint ."
   },
+  "dependencies": {
+    "drizzle-orm": "0.45.1",
+    "pg": "8.16.3"
+  },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",
     "@types/bun": "latest",
     "@types/pg": "8.16.0",
     "drizzle-kit": "0.31.8",
     "typescript": "5.9.3"
-  },
-  "dependencies": {
-    "drizzle-orm": "0.45.1",
-    "pg": "8.16.3"
   }
 }

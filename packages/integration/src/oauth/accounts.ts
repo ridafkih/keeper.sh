@@ -54,8 +54,7 @@ export const getOAuthAccountsByPlan = async (
   const accounts: OAuthAccount[] = [];
 
   for (const result of results) {
-    const { plan, accessToken, refreshToken, accessTokenExpiresAt, accountId } =
-      result;
+    const { plan, accessToken, refreshToken, accessTokenExpiresAt, accountId } = result;
     const userPlan = plan ?? "free";
 
     if (userPlan !== targetPlan) {
@@ -129,16 +128,8 @@ export const getUserEventsForSync = async (
       sourceUrl: remoteICalSourcesTable.url,
     })
     .from(eventStatesTable)
-    .innerJoin(
-      remoteICalSourcesTable,
-      eq(eventStatesTable.sourceId, remoteICalSourcesTable.id),
-    )
-    .where(
-      and(
-        eq(remoteICalSourcesTable.userId, userId),
-        gte(eventStatesTable.startTime, today),
-      ),
-    )
+    .innerJoin(remoteICalSourcesTable, eq(eventStatesTable.sourceId, remoteICalSourcesTable.id))
+    .where(and(eq(remoteICalSourcesTable.userId, userId), gte(eventStatesTable.startTime, today)))
     .orderBy(asc(eventStatesTable.startTime));
 
   const events: SyncableEvent[] = [];

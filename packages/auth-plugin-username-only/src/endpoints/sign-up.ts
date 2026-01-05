@@ -18,10 +18,7 @@ export const createSignUpEndpoint = (config: UsernameOnlyConfig) =>
             /^[a-zA-Z0-9._-]+$/,
             "username can only contain letters, numbers, dots, underscores, and hyphens",
           ),
-        password: z
-          .string()
-          .min(config.minPasswordLength)
-          .max(config.maxPasswordLength),
+        password: z.string().min(config.minPasswordLength).max(config.maxPasswordLength),
         name: z.string().optional(),
       }),
     },
@@ -65,10 +62,7 @@ export const createSignUpEndpoint = (config: UsernameOnlyConfig) =>
         },
       });
 
-      const session = await context.context.internalAdapter.createSession(
-        user.id,
-        false,
-      );
+      const session = await context.context.internalAdapter.createSession(user.id, false);
 
       await context.setSignedCookie(
         context.context.authCookies.sessionToken.name,

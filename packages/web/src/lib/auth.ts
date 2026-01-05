@@ -97,10 +97,7 @@ export async function signOut() {
   return response.json();
 }
 
-export async function changePassword(
-  currentPassword: string,
-  newPassword: string,
-) {
+export async function changePassword(currentPassword: string, newPassword: string) {
   const response = await fetch("/api/auth/change-password", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

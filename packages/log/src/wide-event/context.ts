@@ -5,7 +5,7 @@ const wideEventStorage = new AsyncLocalStorage<WideEvent>();
 
 export const runWithWideEvent = <Result>(
   event: WideEvent,
-  callback: () => Result | Promise<Result>
+  callback: () => Result | Promise<Result>,
 ): Result | Promise<Result> => wideEventStorage.run(event, callback);
 
 export const getWideEvent = (): WideEvent | undefined => wideEventStorage.getStore();

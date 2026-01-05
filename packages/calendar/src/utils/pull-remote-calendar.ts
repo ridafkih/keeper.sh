@@ -20,8 +20,7 @@ export class CalendarFetchError extends Error {
     super(message);
     this.name = "CalendarFetchError";
     this.authRequired =
-      statusCode === HTTP_STATUS.UNAUTHORIZED ||
-      statusCode === HTTP_STATUS.FORBIDDEN;
+      statusCode === HTTP_STATUS.UNAUTHORIZED || statusCode === HTTP_STATUS.FORBIDDEN;
   }
 }
 
@@ -49,10 +48,7 @@ const fetchRemoteText = async (url: string) => {
   const response = await fetch(cleanUrl, { headers });
 
   if (!response.ok) {
-    if (
-      response.status === HTTP_STATUS.UNAUTHORIZED ||
-      response.status === HTTP_STATUS.FORBIDDEN
-    ) {
+    if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
       throw new CalendarFetchError(
         "Calendar requires authentication. Use a public URL or include credentials in the URL (https://user:pass@host/path).",
         response.status,
@@ -85,15 +81,9 @@ type JustICal = { ical: string; json?: never };
 type JustJSON = { json: ParsedCalendarResult; ical?: never };
 type ICalOrJSON = Omit<JustICal, "json"> & Omit<JustJSON, "ical">;
 
-export async function pullRemoteCalendar(
-  output: OutputICal,
-  url: string,
-): Promise<JustICal>;
+export async function pullRemoteCalendar(output: OutputICal, url: string): Promise<JustICal>;
 
-export async function pullRemoteCalendar(
-  output: OutputJSON,
-  url: string,
-): Promise<JustJSON>;
+export async function pullRemoteCalendar(output: OutputJSON, url: string): Promise<JustJSON>;
 
 export async function pullRemoteCalendar(
   output: OutputICALOrJSON,

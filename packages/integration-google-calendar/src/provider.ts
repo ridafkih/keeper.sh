@@ -30,9 +30,7 @@ const GOOGLE_CALENDAR_MAX_RESULTS = 2500;
 
 const isRateLimitError = (error: unknown): error is Error => {
   if (!(error instanceof Error)) return false;
-  return (
-    error.message.includes("429") || error.message.includes("rateLimitExceeded")
-  );
+  return error.message.includes("429") || error.message.includes("rateLimitExceeded");
 };
 
 const hasRateLimitMessage = (message: string | undefined): boolean => {
@@ -44,13 +42,8 @@ const isAuthError = (
   status: number,
   error: { code?: number; status?: string } | undefined,
 ): boolean => {
-  if (status === HTTP_STATUS.FORBIDDEN && error?.status === "PERMISSION_DENIED")
-    return true;
-  if (
-    status === HTTP_STATUS.UNAUTHORIZED &&
-    error?.status === "UNAUTHENTICATED"
-  )
-    return true;
+  if (status === HTTP_STATUS.FORBIDDEN && error?.status === "PERMISSION_DENIED") return true;
+  if (status === HTTP_STATUS.UNAUTHORIZED && error?.status === "UNAUTHENTICATED") return true;
   return false;
 };
 
@@ -101,9 +94,7 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
     return hasRateLimitMessage(error);
   }
 
-  async listRemoteEvents(
-    options: ListRemoteEventsOptions,
-  ): Promise<RemoteEvent[]> {
+  async listRemoteEvents(options: ListRemoteEventsOptions): Promise<RemoteEvent[]> {
     await this.ensureValidToken();
     const remoteEvents: RemoteEvent[] = [];
 
@@ -145,11 +136,7 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
     return remoteEvents;
   }
 
-  private buildListEventsUrl(
-    today: Date,
-    until: Date,
-    pageToken?: string,
-  ): URL {
+  private buildListEventsUrl(today: Date, until: Date, pageToken?: string): URL {
     const url = new URL(
       `calendars/${encodeURIComponent(this.config.calendarId)}/events`,
       GOOGLE_CALENDAR_API,
@@ -290,9 +277,7 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
     return item ?? null;
   }
 
-  private parseEventTime(
-    time: { dateTime?: string; date?: string } | undefined,
-  ): Date | null {
+  private parseEventTime(time: { dateTime?: string; date?: string } | undefined): Date | null {
     if (time?.dateTime) return new Date(time.dateTime);
     if (time?.date) return new Date(time.date);
     return null;

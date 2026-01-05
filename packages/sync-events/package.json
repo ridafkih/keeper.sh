@@ -1,19 +1,19 @@
 {
   "name": "@keeper.sh/sync-events",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "scripts": {
     "types": "tsc --noEmit",
     "lint": "oxlint ."
   },
-  "main": "src/index.ts",
-  "types": "src/index.ts",
-  "type": "module",
-  "private": true,
+  "dependencies": {
+    "@keeper.sh/calendar": "workspace:*"
+  },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",
     "@types/bun": "latest",
     "typescript": "5.9.3"
-  },
-  "dependencies": {
-    "@keeper.sh/calendar": "workspace:*"
   }
 }

@@ -43,11 +43,7 @@ interface PasskeysListProps {
   onDelete: (id: string) => void;
 }
 
-const PasskeysList: FC<PasskeysListProps> = ({
-  passkeys,
-  isLoading,
-  onDelete,
-}) => {
+const PasskeysList: FC<PasskeysListProps> = ({ passkeys, isLoading, onDelete }) => {
   if (isLoading) {
     return <ListSkeleton rows={1} />;
   }
@@ -66,17 +62,13 @@ const PasskeysList: FC<PasskeysListProps> = ({
       <div className="divide-y divide-border">
         {passkeys.map(({ id, name, createdAt }) => {
           return (
-            <div
-              key={id}
-              className="flex items-center justify-between px-3 py-2"
-            >
+            <div key={id} className="flex items-center justify-between px-3 py-2">
               <div className="flex items-center gap-2">
                 <Fingerprint className="size-4 text-foreground-muted" />
                 <div className="flex flex-col">
                   <TextLabel as="div">{name ?? "Passkey"}</TextLabel>
                   <TextCaption>
-                    Added on {createdAt.toLocaleDateString()} at{" "}
-                    {createdAt.toLocaleTimeString()}
+                    Added on {createdAt.toLocaleDateString()} at {createdAt.toLocaleTimeString()}
                   </TextCaption>
                 </div>
               </div>
@@ -109,10 +101,7 @@ export default function SettingsPage() {
     mutate: mutatePasskeys,
   } = useSWR(isCommercialMode ? "passkeys" : null, fetchPasskeys);
 
-  const handleChangePassword = async (
-    currentPassword: string,
-    newPassword: string,
-  ) => {
+  const handleChangePassword = async (currentPassword: string, newPassword: string) => {
     await changePassword(currentPassword, newPassword);
     track("password_changed");
     toastManager.add({ title: "Password changed" });
@@ -154,28 +143,18 @@ export default function SettingsPage() {
   return (
     <PageContent>
       <Section>
-        <SectionHeader
-          title="Profile"
-          description="Manage your personal information"
-        />
+        <SectionHeader title="Profile" description="Manage your personal information" />
 
         <Card padding="sm">
           <div>
-            <FieldLabel as="div">
-              {isCommercialMode ? "Email" : "Username"}
-            </FieldLabel>
-            <FieldValue as="div">
-              {isCommercialMode ? user?.email : user?.username}
-            </FieldValue>
+            <FieldLabel as="div">{isCommercialMode ? "Email" : "Username"}</FieldLabel>
+            <FieldValue as="div">{isCommercialMode ? user?.email : user?.username}</FieldValue>
           </div>
         </Card>
       </Section>
 
       <Section>
-        <SectionHeader
-          title="Security"
-          description="Manage your password and account security"
-        />
+        <SectionHeader title="Security" description="Manage your password and account security" />
 
         <Card padding="sm" className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
@@ -218,10 +197,7 @@ export default function SettingsPage() {
       )}
 
       <Section>
-        <SectionHeader
-          title="Danger Zone"
-          description="Irreversible actions for your account"
-        />
+        <SectionHeader title="Danger Zone" description="Irreversible actions for your account" />
 
         <Card variant="danger" padding="sm" className="flex flex-col gap-3">
           <div className="flex items-center justify-between">

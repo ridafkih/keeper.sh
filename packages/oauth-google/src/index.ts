@@ -4,11 +4,7 @@ import {
   type GoogleTokenResponse,
   type GoogleUserInfo,
 } from "@keeper.sh/data-schemas";
-import {
-  generateState,
-  validateState,
-  type ValidatedState,
-} from "@keeper.sh/oauth";
+import { generateState, validateState, type ValidatedState } from "@keeper.sh/oauth";
 
 export { generateState, validateState, type ValidatedState };
 
@@ -16,10 +12,8 @@ const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
 
-export const GOOGLE_CALENDAR_SCOPE =
-  "https://www.googleapis.com/auth/calendar.events";
-export const GOOGLE_EMAIL_SCOPE =
-  "https://www.googleapis.com/auth/userinfo.email";
+export const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+export const GOOGLE_EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
 
 export interface GoogleOAuthCredentials {
   clientId: string;
@@ -43,10 +37,7 @@ export const createGoogleOAuthService = (
 ): GoogleOAuthService => {
   const { clientId, clientSecret } = credentials;
 
-  const getAuthorizationUrl = (
-    userId: string,
-    options: AuthorizationUrlOptions,
-  ): string => {
+  const getAuthorizationUrl = (userId: string, options: AuthorizationUrlOptions): string => {
     const state = generateState(userId, options.destinationId);
     const scopes = options.scopes ?? [GOOGLE_CALENDAR_SCOPE, GOOGLE_EMAIL_SCOPE];
 
@@ -87,9 +78,7 @@ export const createGoogleOAuthService = (
     return googleTokenResponseSchema.assert(body);
   };
 
-  const refreshAccessToken = async (
-    refreshToken: string,
-  ): Promise<GoogleTokenResponse> => {
+  const refreshAccessToken = async (refreshToken: string): Promise<GoogleTokenResponse> => {
     const response = await fetch(GOOGLE_TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -117,9 +106,7 @@ export const createGoogleOAuthService = (
   };
 };
 
-export const fetchUserInfo = async (
-  accessToken: string,
-): Promise<GoogleUserInfo> => {
+export const fetchUserInfo = async (accessToken: string): Promise<GoogleUserInfo> => {
   const response = await fetch(GOOGLE_USERINFO_URL, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });

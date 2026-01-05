@@ -20,9 +20,7 @@ interface ResetPasswordPageProps {
   searchParams: Promise<{ token?: string }>;
 }
 
-export default function ResetPasswordPage({
-  searchParams,
-}: ResetPasswordPageProps) {
+export default function ResetPasswordPage({ searchParams }: ResetPasswordPageProps) {
   return (
     <AuthFormContainer>
       <Suspense>

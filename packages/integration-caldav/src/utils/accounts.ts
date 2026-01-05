@@ -28,10 +28,7 @@ export interface CalDAVServiceConfig {
 }
 
 export interface CalDAVService {
-  getCalDAVAccountsForUser: (
-    userId: string,
-    providerFilter?: string,
-  ) => Promise<CalDAVAccount[]>;
+  getCalDAVAccountsForUser: (userId: string, providerFilter?: string) => Promise<CalDAVAccount[]>;
   getCalDAVAccountsByProvider: (provider: string) => Promise<CalDAVAccount[]>;
   getDecryptedPassword: (encryptedPassword: string) => string;
   getUserEvents: (userId: string) => Promise<SyncableEvent[]>;
@@ -67,21 +64,14 @@ export const createCalDAVService = (config: CalDAVServiceConfig): CalDAVService 
       .from(calendarDestinationsTable)
       .innerJoin(
         caldavCredentialsTable,
-        eq(
-          calendarDestinationsTable.caldavCredentialId,
-          caldavCredentialsTable.id,
-        ),
+        eq(calendarDestinationsTable.caldavCredentialId, caldavCredentialsTable.id),
       )
-      .where(
-        and(providerCondition, eq(calendarDestinationsTable.userId, userId)),
-      );
+      .where(and(providerCondition, eq(calendarDestinationsTable.userId, userId)));
 
     return results;
   };
 
-  const getCalDAVAccountsByProvider = async (
-    provider: string,
-  ): Promise<CalDAVAccount[]> => {
+  const getCalDAVAccountsByProvider = async (provider: string): Promise<CalDAVAccount[]> => {
     const results = await database
       .select({
         destinationId: calendarDestinationsTable.id,
@@ -97,10 +87,7 @@ export const createCalDAVService = (config: CalDAVServiceConfig): CalDAVService 
       .from(calendarDestinationsTable)
       .innerJoin(
         caldavCredentialsTable,
-        eq(
-          calendarDestinationsTable.caldavCredentialId,
-          caldavCredentialsTable.id,
-        ),
+        eq(calendarDestinationsTable.caldavCredentialId, caldavCredentialsTable.id),
       )
       .where(eq(calendarDestinationsTable.provider, provider));
 
@@ -125,16 +112,8 @@ export const createCalDAVService = (config: CalDAVServiceConfig): CalDAVService 
         sourceUrl: remoteICalSourcesTable.url,
       })
       .from(eventStatesTable)
-      .innerJoin(
-        remoteICalSourcesTable,
-        eq(eventStatesTable.sourceId, remoteICalSourcesTable.id),
-      )
-      .where(
-        and(
-          eq(remoteICalSourcesTable.userId, userId),
-          gte(eventStatesTable.startTime, today),
-        ),
-      )
+      .innerJoin(remoteICalSourcesTable, eq(eventStatesTable.sourceId, remoteICalSourcesTable.id))
+      .where(and(eq(remoteICalSourcesTable.userId, userId), gte(eventStatesTable.startTime, today)))
       .orderBy(asc(eventStatesTable.startTime));
 
     const events: SyncableEvent[] = [];

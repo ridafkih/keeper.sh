@@ -1,16 +1,16 @@
 {
   "name": "@keeper.sh/premium",
-  "scripts": {
-    "types": "tsc --noEmit",
-    "lint": "oxlint ."
-  },
+  "private": true,
+  "type": "module",
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
     "./constants": "./src/constants.ts"
   },
-  "type": "module",
-  "private": true,
+  "scripts": {
+    "types": "tsc --noEmit",
+    "lint": "oxlint ."
+  },
   "dependencies": {
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/database": "workspace:*",

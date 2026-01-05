@@ -13,12 +13,8 @@ export const MarketingPage: FC<PropsWithChildren<MarketingPageProps>> = ({
   <>
     {title && (
       <div>
-        <h1 className="text-3xl font-medium tracking-tight text-foreground mb-2">
-          {title}
-        </h1>
-        {description && (
-          <p className="text-foreground-secondary">{description}</p>
-        )}
+        <h1 className="text-3xl font-medium tracking-tight text-foreground mb-2">{title}</h1>
+        {description && <p className="text-foreground-secondary">{description}</p>}
       </div>
     )}
     {children}

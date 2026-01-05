@@ -98,7 +98,7 @@ const sendPing = (socket: Socket) => {
 const emitWebSocketEvent = (
   userId: string,
   operationName: string,
-  additionalFields?: Partial<WideEventFields>
+  additionalFields?: Partial<WideEventFields>,
 ): void => {
   const event = new WideEvent("websocket");
   event.set({

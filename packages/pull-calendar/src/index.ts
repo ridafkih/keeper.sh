@@ -16,15 +16,9 @@ type JustICal = { ical: string; json?: never };
 type JustJSON = { json: ParsedCalendarResult; ical?: never };
 type ICalOrJSON = Omit<JustICal, "json"> & Omit<JustJSON, "ical">;
 
-export async function pullRemoteCalendar(
-  output: OutputICal,
-  url: string,
-): Promise<JustICal>;
+export async function pullRemoteCalendar(output: OutputICal, url: string): Promise<JustICal>;
 
-export async function pullRemoteCalendar(
-  output: OutputJSON,
-  url: string,
-): Promise<JustJSON>;
+export async function pullRemoteCalendar(output: OutputJSON, url: string): Promise<JustJSON>;
 
 export async function pullRemoteCalendar(
   output: OutputICALOrJSON,

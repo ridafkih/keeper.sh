@@ -1,7 +1,4 @@
-import type {
-  WideEventFields,
-  WideEventEmitFunction,
-} from "./types";
+import type { WideEventFields, WideEventEmitFunction } from "./types";
 
 const formatEventMessage = (event: WideEventFields): string =>
   `${event.operationName ?? "unknown"}`;

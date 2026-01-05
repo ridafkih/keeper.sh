@@ -1,7 +1,4 @@
-import {
-  FREE_SOURCE_LIMIT,
-  FREE_DESTINATION_LIMIT,
-} from "@keeper.sh/premium/constants";
+import { FREE_SOURCE_LIMIT, FREE_DESTINATION_LIMIT } from "@keeper.sh/premium/constants";
 
 export interface PlanConfig {
   id: string;
@@ -39,10 +36,8 @@ export const plans: PlanConfig[] = [
     name: "Pro",
     monthlyPrice: 5,
     yearlyPrice: 42,
-    monthlyProductId:
-      process.env.NEXT_PUBLIC_POLAR_PRO_MONTHLY_PRODUCT_ID ?? null,
-    yearlyProductId:
-      process.env.NEXT_PUBLIC_POLAR_PRO_YEARLY_PRODUCT_ID ?? null,
+    monthlyProductId: process.env.NEXT_PUBLIC_POLAR_PRO_MONTHLY_PRODUCT_ID ?? null,
+    yearlyProductId: process.env.NEXT_PUBLIC_POLAR_PRO_YEARLY_PRODUCT_ID ?? null,
     description: "For power users who need more",
     popular: true,
     features: [

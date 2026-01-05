@@ -7,9 +7,7 @@ import { database } from "../context";
  * Tries username first, then falls back to userId.
  * Returns null if no user is found.
  */
-export const resolveUserIdentifier = async (
-  identifier: string,
-): Promise<string | null> => {
+export const resolveUserIdentifier = async (identifier: string): Promise<string | null> => {
   const [userByUsername] = await database
     .select({ id: userTable.id })
     .from(userTable)
@@ -33,9 +31,7 @@ export const resolveUserIdentifier = async (
  * Gets the public identifier token for a user.
  * Returns username if set, otherwise returns userId.
  */
-export const getUserIdentifierToken = async (
-  userId: string,
-): Promise<string> => {
+export const getUserIdentifierToken = async (userId: string): Promise<string> => {
   const [userData] = await database
     .select({ username: userTable.username })
     .from(userTable)

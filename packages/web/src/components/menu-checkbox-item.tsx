@@ -13,10 +13,7 @@ const indicatorStyle = tv({
 
 type BaseMenuCheckboxItemProps = ComponentProps<typeof Menu.CheckboxItem>;
 
-interface MenuCheckboxItemProps extends Omit<
-  BaseMenuCheckboxItemProps,
-  "className"
-> {
+interface MenuCheckboxItemProps extends Omit<BaseMenuCheckboxItemProps, "className"> {
   className?: string;
 }
 
@@ -25,10 +22,7 @@ export const MenuCheckboxItem: FC<PropsWithChildren<MenuCheckboxItemProps>> = ({
   children,
   ...props
 }) => (
-  <Menu.CheckboxItem
-    className={menuCheckboxItemStyle({ className })}
-    {...props}
-  >
+  <Menu.CheckboxItem className={menuCheckboxItemStyle({ className })} {...props}>
     <Menu.CheckboxItemIndicator className={indicatorStyle()} keepMounted>
       <Check size={12} />
     </Menu.CheckboxItemIndicator>

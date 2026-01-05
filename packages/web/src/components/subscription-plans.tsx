@@ -6,10 +6,7 @@ import { Toast } from "@/components/toast-provider";
 import { PlanCard } from "@/components/plan-card";
 import { Section } from "@/components/section";
 import { SectionHeader } from "@/components/section-header";
-import {
-  BillingPeriodToggle,
-  type BillingPeriod,
-} from "@/components/billing-period-toggle";
+import { BillingPeriodToggle, type BillingPeriod } from "@/components/billing-period-toggle";
 import { plans } from "@/config/plans";
 import { openCheckout, openCustomerPortal } from "@/utils/checkout";
 import { reportPurchaseConversion } from "@/lib/analytics";
@@ -37,13 +34,9 @@ export const SubscriptionPlans: FC<SubscriptionPlansProps> = ({
 }) => {
   const toastManager = Toast.useToastManager();
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
-  const [billingPeriodOverride, setBillingPeriodOverride] =
-    useState<BillingPeriod | null>(null);
+  const [billingPeriodOverride, setBillingPeriodOverride] = useState<BillingPeriod | null>(null);
 
-  const billingPeriod = deriveBillingPeriod(
-    billingPeriodOverride,
-    currentInterval,
-  );
+  const billingPeriod = deriveBillingPeriod(billingPeriodOverride, currentInterval);
 
   const handleUpgrade = async (productId: string) => {
     setIsCheckoutLoading(true);
@@ -87,16 +80,11 @@ export const SubscriptionPlans: FC<SubscriptionPlansProps> = ({
         description="Manage your subscription and billing details"
       />
 
-      <BillingPeriodToggle
-        value={billingPeriod}
-        onChange={setBillingPeriodOverride}
-      />
+      <BillingPeriodToggle value={billingPeriod} onChange={setBillingPeriodOverride} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl">
         {plans.map((plan) => {
-          const productId = isYearly
-            ? plan.yearlyProductId
-            : plan.monthlyProductId;
+          const productId = isYearly ? plan.yearlyProductId : plan.monthlyProductId;
 
           const periodText = isYearly ? " per year" : " per month";
           const showPeriodText = plan.monthlyPrice > 0;

@@ -61,9 +61,7 @@ export const SubsectionTitle: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "h2",
   className,
   children,
-}) => (
-  <Component className={subsectionTitle({ className })}>{children}</Component>
-);
+}) => <Component className={subsectionTitle({ className })}>{children}</Component>;
 
 export const TextBody: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "p",
@@ -126,17 +124,13 @@ export const DangerFieldLabel: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "span",
   className,
   children,
-}) => (
-  <Component className={dangerFieldLabel({ className })}>{children}</Component>
-);
+}) => <Component className={dangerFieldLabel({ className })}>{children}</Component>;
 
 export const DangerFieldValue: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "span",
   className,
   children,
-}) => (
-  <Component className={dangerFieldValue({ className })}>{children}</Component>
-);
+}) => <Component className={dangerFieldValue({ className })}>{children}</Component>;
 
 type BannerVariant = "warning" | "info" | "success";
 
@@ -149,8 +143,4 @@ export const BannerText: FC<PropsWithChildren<BannerTextProps>> = ({
   variant = "warning",
   className,
   children,
-}) => (
-  <Component className={bannerText({ variant, className })}>
-    {children}
-  </Component>
-);
+}) => <Component className={bannerText({ variant, className })}>{children}</Component>;

@@ -90,17 +90,12 @@ export const parseDateRangeParams = (url: URL): DateRange => {
 
   const now = new Date();
   const from = fromParam ? new Date(fromParam) : now;
-  const to = toParam
-    ? new Date(toParam)
-    : new Date(from.getTime() + MS_PER_WEEK);
+  const to = toParam ? new Date(toParam) : new Date(from.getTime() + MS_PER_WEEK);
 
   return { from, to };
 };
 
-export const normalizeDateRange = (
-  from: Date,
-  to: Date,
-): NormalizedDateRange => {
+export const normalizeDateRange = (from: Date, to: Date): NormalizedDateRange => {
   const start = new Date(from);
   start.setHours(0, 0, 0, 0);
 

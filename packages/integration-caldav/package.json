@@ -1,9 +1,5 @@
 {
   "name": "@keeper.sh/integration-caldav",
-  "scripts": {
-    "types": "tsc --noEmit",
-    "lint": "oxlint ."
-  },
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -15,6 +11,10 @@
     "./sync": "./src/sync.ts",
     "./client": "./src/caldav-client.ts"
   },
+  "scripts": {
+    "types": "tsc --noEmit",
+    "lint": "oxlint ."
+  },
   "dependencies": {
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/date-utils": "workspace:*",
@@ -22,8 +22,8 @@
     "@keeper.sh/integration": "workspace:*",
     "@keeper.sh/log": "workspace:*",
     "drizzle-orm": "0.45.1",
-    "tsdav": "2.1.6",
-    "ts-ics": "2.4.0"
+    "ts-ics": "2.4.0",
+    "tsdav": "2.1.6"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",

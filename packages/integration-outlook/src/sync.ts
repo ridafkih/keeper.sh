@@ -22,7 +22,5 @@ export const getOutlookAccountsForUser = (
   userId: string,
 ): Promise<OutlookAccount[]> => getOAuthAccountsForUser(database, PROVIDER, userId);
 
-export const getUserEvents = (
-  database: BunSQLDatabase,
-  userId: string,
-): Promise<SyncableEvent[]> => getUserEventsForSync(database, userId);
+export const getUserEvents = (database: BunSQLDatabase, userId: string): Promise<SyncableEvent[]> =>
+  getUserEventsForSync(database, userId);

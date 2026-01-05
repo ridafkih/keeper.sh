@@ -14,10 +14,7 @@ export const isOAuthProvider = (provider: string): boolean => {
   return oauthProviders.isOAuthProvider(provider);
 };
 
-export const hasRequiredScopes = (
-  provider: string,
-  grantedScopes: string,
-): boolean => {
+export const hasRequiredScopes = (provider: string, grantedScopes: string): boolean => {
   return oauthProviders.hasRequiredScopes(provider, grantedScopes);
 };
 
@@ -104,16 +101,10 @@ const validateDestinationOwnership = (
 };
 
 const initializeSyncStatus = async (destinationId: string): Promise<void> => {
-  await database
-    .insert(syncStatusTable)
-    .values({ destinationId })
-    .onConflictDoNothing();
+  await database.insert(syncStatusTable).values({ destinationId }).onConflictDoNothing();
 };
 
-const setupNewDestination = async (
-  userId: string,
-  destinationId: string,
-): Promise<void> => {
+const setupNewDestination = async (userId: string, destinationId: string): Promise<void> => {
   await initializeSyncStatus(destinationId);
   await createMappingsForNewDestination(userId, destinationId);
 };
@@ -128,15 +119,8 @@ interface DestinationInsertData {
   needsReauthentication?: boolean;
 }
 
-const upsertDestination = async (
-  data: DestinationInsertData,
-): Promise<string | undefined> => {
-  const {
-    oauthCredentialId,
-    caldavCredentialId,
-    needsReauthentication,
-    ...base
-  } = data;
+const upsertDestination = async (data: DestinationInsertData): Promise<string | undefined> => {
+  const { oauthCredentialId, caldavCredentialId, needsReauthentication, ...base } = data;
 
   const setClause: Record<string, unknown> = { email: base.email };
 
@@ -157,10 +141,7 @@ const upsertDestination = async (
       needsReauthentication,
     })
     .onConflictDoUpdate({
-      target: [
-        calendarDestinationsTable.provider,
-        calendarDestinationsTable.accountId,
-      ],
+      target: [calendarDestinationsTable.provider, calendarDestinationsTable.accountId],
       set: setClause,
     })
     .returning({ id: calendarDestinationsTable.id });
@@ -178,19 +159,14 @@ export const saveCalendarDestination = async (
   expiresAt: Date,
   needsReauthentication: boolean = false,
 ): Promise<void> => {
-  const existingDestination = await findExistingDestination(
-    provider,
-    accountId,
-  );
+  const existingDestination = await findExistingDestination(provider, accountId);
   validateDestinationOwnership(existingDestination, userId);
 
   if (existingDestination?.oauthCredentialId) {
     await database
       .update(oauthCredentialsTable)
       .set({ accessToken, refreshToken, expiresAt })
-      .where(
-        eq(oauthCredentialsTable.id, existingDestination.oauthCredentialId),
-      );
+      .where(eq(oauthCredentialsTable.id, existingDestination.oauthCredentialId));
 
     await database
       .update(calendarDestinationsTable)
@@ -224,9 +200,7 @@ export const saveCalendarDestination = async (
   }
 };
 
-export const listCalendarDestinations = async (
-  userId: string,
-): Promise<CalendarDestination[]> => {
+export const listCalendarDestinations = async (userId: string): Promise<CalendarDestination[]> => {
   const destinations = await database
     .select({
       id: calendarDestinationsTable.id,
@@ -257,9 +231,7 @@ export const deleteCalendarDestination = async (
   return result.length > 0;
 };
 
-export const getDestinationAccountId = async (
-  destinationId: string,
-): Promise<string | null> => {
+export const getDestinationAccountId = async (destinationId: string): Promise<string | null> => {
   const [destination] = await database
     .select({ accountId: calendarDestinationsTable.accountId })
     .from(calendarDestinationsTable)
@@ -279,19 +251,14 @@ export const saveCalDAVDestination = async (
   username: string,
   encryptedPassword: string,
 ): Promise<void> => {
-  const existingDestination = await findExistingDestination(
-    provider,
-    accountId,
-  );
+  const existingDestination = await findExistingDestination(provider, accountId);
   validateDestinationOwnership(existingDestination, userId);
 
   if (existingDestination?.caldavCredentialId) {
     await database
       .update(caldavCredentialsTable)
       .set({ serverUrl, calendarUrl, username, encryptedPassword })
-      .where(
-        eq(caldavCredentialsTable.id, existingDestination.caldavCredentialId),
-      );
+      .where(eq(caldavCredentialsTable.id, existingDestination.caldavCredentialId));
 
     await database
       .update(calendarDestinationsTable)

@@ -12,9 +12,7 @@ export async function syncDestinationsForUser(
 ): Promise<void> {
   const context = await syncCoordinator.startSync(userId);
 
-  await Promise.allSettled(
-    providers.map((provider) => provider.syncForUser(userId, context)),
-  );
+  await Promise.allSettled(providers.map((provider) => provider.syncForUser(userId, context)));
 
   await syncCoordinator.isSyncCurrent(context);
 }

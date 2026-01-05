@@ -19,10 +19,7 @@ interface OAuthCallbackParams {
 /**
  * Parses OAuth callback parameters from a request.
  */
-export const parseOAuthCallback = (
-  request: Request,
-  provider: string,
-): OAuthCallbackParams => {
+export const parseOAuthCallback = (request: Request, provider: string): OAuthCallbackParams => {
   const url = new URL(request.url);
   return {
     code: url.searchParams.get("code"),
@@ -35,10 +32,7 @@ export const parseOAuthCallback = (
 /**
  * Builds a redirect URL with optional parameters.
  */
-export const buildRedirectUrl = (
-  path: string,
-  params?: Record<string, string>,
-): URL => {
+export const buildRedirectUrl = (path: string, params?: Record<string, string>): URL => {
   const url = new URL(path, baseUrl);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
@@ -82,15 +76,8 @@ export const handleOAuthCallback = async (
 
   const { userId, destinationId } = validatedState;
 
-  const callbackUrl = new URL(
-    `/api/destinations/callback/${params.provider}`,
-    baseUrl,
-  );
-  const tokens = await exchangeCodeForTokens(
-    params.provider,
-    params.code,
-    callbackUrl.toString(),
-  );
+  const callbackUrl = new URL(`/api/destinations/callback/${params.provider}`, baseUrl);
+  const tokens = await exchangeCodeForTokens(params.provider, params.code, callbackUrl.toString());
 
   if (!tokens.refresh_token) {
     throw new OAuthError("No refresh token", errorUrl);

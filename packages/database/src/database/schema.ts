@@ -60,7 +60,10 @@ export const userSubscriptionsTable = pgTable("user_subscriptions", {
     .references(() => user.id, { onDelete: "cascade" }),
   plan: text().notNull().default("free"),
   polarSubscriptionId: text(),
-  updatedAt: timestamp().notNull().defaultNow().$onUpdate(() => new Date()),
+  updatedAt: timestamp()
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
 });
 
 export const oauthCredentialsTable = pgTable("oauth_credentials", {
@@ -69,7 +72,10 @@ export const oauthCredentialsTable = pgTable("oauth_credentials", {
   refreshToken: text().notNull(),
   expiresAt: timestamp().notNull(),
   createdAt: timestamp().notNull().defaultNow(),
-  updatedAt: timestamp().notNull().defaultNow().$onUpdate(() => new Date()),
+  updatedAt: timestamp()
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
 });
 
 export const caldavCredentialsTable = pgTable("caldav_credentials", {
@@ -79,7 +85,10 @@ export const caldavCredentialsTable = pgTable("caldav_credentials", {
   username: text().notNull(),
   encryptedPassword: text().notNull(),
   createdAt: timestamp().notNull().defaultNow(),
-  updatedAt: timestamp().notNull().defaultNow().$onUpdate(() => new Date()),
+  updatedAt: timestamp()
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
 });
 
 export const calendarDestinationsTable = pgTable(
@@ -100,13 +109,13 @@ export const calendarDestinationsTable = pgTable(
     }),
     needsReauthentication: boolean().notNull().default(false),
     createdAt: timestamp().notNull().defaultNow(),
-    updatedAt: timestamp().notNull().defaultNow().$onUpdate(() => new Date()),
+    updatedAt: timestamp()
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
   },
   (table) => [
-    uniqueIndex("calendar_destinations_provider_account_idx").on(
-      table.provider,
-      table.accountId,
-    ),
+    uniqueIndex("calendar_destinations_provider_account_idx").on(table.provider, table.accountId),
   ],
 );
 
@@ -120,11 +129,12 @@ export const syncStatusTable = pgTable(
     localEventCount: integer().notNull().default(0),
     remoteEventCount: integer().notNull().default(0),
     lastSyncedAt: timestamp(),
-    updatedAt: timestamp().notNull().defaultNow().$onUpdate(() => new Date()),
+    updatedAt: timestamp()
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
   },
-  (table) => [
-    uniqueIndex("sync_status_destination_idx").on(table.destinationId),
-  ],
+  (table) => [uniqueIndex("sync_status_destination_idx").on(table.destinationId)],
 );
 
 export const eventMappingsTable = pgTable(
@@ -144,10 +154,7 @@ export const eventMappingsTable = pgTable(
     createdAt: timestamp().notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("event_mappings_event_dest_idx").on(
-      table.eventStateId,
-      table.destinationId,
-    ),
+    uniqueIndex("event_mappings_event_dest_idx").on(table.eventStateId, table.destinationId),
     index("event_mappings_destination_idx").on(table.destinationId),
   ],
 );
@@ -165,10 +172,7 @@ export const sourceDestinationMappingsTable = pgTable(
     createdAt: timestamp().notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("source_destination_mapping_idx").on(
-      table.sourceId,
-      table.destinationId,
-    ),
+    uniqueIndex("source_destination_mapping_idx").on(table.sourceId, table.destinationId),
     index("source_destination_mappings_source_idx").on(table.sourceId),
     index("source_destination_mappings_destination_idx").on(table.destinationId),
   ],

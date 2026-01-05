@@ -10,9 +10,7 @@ interface PricingSectionProps {
   showHeading?: boolean;
 }
 
-export const PricingSection: FC<PricingSectionProps> = ({
-  showHeading = true,
-}) => {
+export const PricingSection: FC<PricingSectionProps> = ({ showHeading = true }) => {
   const [isYearly, setIsYearly] = useState(true);
 
   return (

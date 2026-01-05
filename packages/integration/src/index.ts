@@ -13,10 +13,7 @@ export { generateEventUid, isKeeperEvent } from "./events/identity";
 export { RateLimiter } from "./utils/rate-limiter";
 export { getErrorMessage } from "./utils/error";
 export { getEventsForDestination } from "./events/events";
-export {
-  syncDestinationsForUser,
-  type DestinationProvider,
-} from "./sync/destinations";
+export { syncDestinationsForUser, type DestinationProvider } from "./sync/destinations";
 export {
   createSyncCoordinator,
   type SyncContext,

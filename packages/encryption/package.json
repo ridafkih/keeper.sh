@@ -1,20 +1,20 @@
 {
   "name": "@keeper.sh/encryption",
+  "private": true,
+  "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
-  "type": "module",
-  "private": true,
   "scripts": {
     "types": "tsc --noEmit",
     "lint": "oxlint ."
+  },
+  "dependencies": {
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",
     "@types/bun": "latest",
     "typescript": "5.9.3"
-  },
-  "dependencies": {
-    "tweetnacl": "^1.0.3",
-    "tweetnacl-util": "^0.15.1"
   }
 }

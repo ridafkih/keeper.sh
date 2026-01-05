@@ -1,21 +1,21 @@
 {
   "name": "@keeper.sh/broadcast",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "scripts": {
     "types": "tsc --noEmit",
     "lint": "oxlint ."
-  },
-  "main": "src/index.ts",
-  "types": "src/index.ts",
-  "type": "module",
-  "private": true,
-  "devDependencies": {
-    "@keeper.sh/typescript-config": "workspace:*",
-    "@types/bun": "latest",
-    "typescript": "5.9.3"
   },
   "dependencies": {
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/log": "workspace:*",
     "@keeper.sh/redis": "workspace:*"
+  },
+  "devDependencies": {
+    "@keeper.sh/typescript-config": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "5.9.3"
   }
 }

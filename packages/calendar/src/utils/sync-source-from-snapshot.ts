@@ -13,10 +13,7 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 export type Source = typeof remoteICalSourcesTable.$inferSelect;
 
-const getLatestSnapshot = async (
-  database: BunSQLDatabase,
-  sourceId: string,
-) => {
+const getLatestSnapshot = async (database: BunSQLDatabase, sourceId: string) => {
   const [snapshot] = await database
     .select({ ical: calendarSnapshotsTable.ical })
     .from(calendarSnapshotsTable)
@@ -53,9 +50,7 @@ const getUserMappedDestinationUids = async (
     )
     .where(eq(calendarDestinationsTable.userId, userId));
 
-  return new Set(
-    results.map(({ destinationEventUid }) => destinationEventUid),
-  );
+  return new Set(results.map(({ destinationEventUid }) => destinationEventUid));
 };
 
 const removeEvents = async (
@@ -65,9 +60,7 @@ const removeEvents = async (
 ) => {
   const eventIds = events.map(({ id }) => id);
 
-  await database
-    .delete(eventStatesTable)
-    .where(inArray(eventStatesTable.id, eventIds));
+  await database.delete(eventStatesTable).where(inArray(eventStatesTable.id, eventIds));
 };
 
 const addEvents = async (
@@ -107,10 +100,7 @@ const partitionStoredEvents = (events: StoredEvent[]) => {
   return { legacyEvents, eventsWithUid };
 };
 
-export async function syncSourceFromSnapshot(
-  database: BunSQLDatabase,
-  source: Source,
-) {
+export async function syncSourceFromSnapshot(database: BunSQLDatabase, source: Source) {
   const icsCalendar = await getLatestSnapshot(database, source.id);
   if (!icsCalendar) {
     return;
@@ -122,9 +112,7 @@ export async function syncSourceFromSnapshot(
     getStoredEvents(database, source.id),
   ]);
 
-  const remoteEvents = parsedEvents.filter(
-    (event) => !mappedUids.has(event.uid),
-  );
+  const remoteEvents = parsedEvents.filter((event) => !mappedUids.has(event.uid));
 
   const { legacyEvents, eventsWithUid } = partitionStoredEvents(storedEvents);
   const { toAdd, toRemove } = diffEvents(remoteEvents, eventsWithUid);

@@ -2,9 +2,11 @@
 ![](https://github.com/user-attachments/assets/10546b8e-639d-44d1-a79d-b49a65f09724#gh-dark-mode-only)
 
 # About
+
 Keeper is a simple & open-source calendar syncing tool. It allows you to pull events from remotely hosted iCal or ICS links, and push them to one or many calendars so the time slots can align across them all.
 
 # Features
+
 - Aggregating calendar events from remote sources
 - Event content agnostic syncing engine
 - Push aggregate events to one or more calendars
@@ -13,16 +15,18 @@ Keeper is a simple & open-source calendar syncing tool. It allows you to pull ev
 - Easy-to-purge remote events
 
 # Bug Reports & Feature Requests
+
 If you encounter a bug or have an idea for a feature, you may [open an issue on GitHub](https://github.com/ridafkih/keeper.sh/issues) and it will be triaged and addressed as soon as possible.
 
 # Contributing
+
 High-value and high-quality contributions are appreciated. Before working on large features you intend to see merged, please open an issue first to discuss beforehand.
 
 # Qs
 
 ## Why does this exist?
 
-Because I needed it. Ever since starting [Sedna](https://sedna.sh/)—the AI governance platform—I've had to work across three calendars. One for my business, one for work, and one for personal. 
+Because I needed it. Ever since starting [Sedna](https://sedna.sh/)—the AI governance platform—I've had to work across three calendars. One for my business, one for work, and one for personal.
 
 Meetings have landed on top of one-another a frustratingly high number of times.
 
@@ -39,6 +43,7 @@ I've probably tried it. It was probably too finicky, ended up making me waste ho
 Events are flagged as having been created by Keeper either using a `@keeper.sh` suffix on the remote UID, or in the case of a platform like Outlook that doesn't support custom UIDs, we just put it in a `"keeper.sh"` category.
 
 # Considerations
+
 1. **Keeper tracks timeslots, not event details**, summaries, descriptions, etc., for now. If you need that I would recommend [OneCal](https://onecal.io/).
 2. **Keeper only sources from remote and publicly available iCal/ICS URLs** at the moment, so that means that if your security policy does not permit these, another solution may suit you better.
 
@@ -48,13 +53,13 @@ I've made Keeper easy to self-host, but whether you simply want to support the p
 
 Head to [keeper.sh](https://keeper.sh) to get started with the cloud-hosted version. Use code `README` for 25% off.
 
-|  | Free | Pro (Cloud-Hosted) | Pro (Self-Hosted) |
-| - | - | - | - |
-| **Monthly Price** | $0 USD | $5 USD | $0 | 
-| **Annual Price** | $0 USD | $42 USD (-30%) | $0 |
-| **Refresh Interval** | 30 minutes | 1 minute | 1 minute
-| **Source Limit** | 2 | ∞ | ∞
-| **Destination Limit** | 1 | ∞ | ∞
+|                       | Free       | Pro (Cloud-Hosted) | Pro (Self-Hosted) |
+| --------------------- | ---------- | ------------------ | ----------------- |
+| **Monthly Price**     | $0 USD     | $5 USD             | $0                |
+| **Annual Price**      | $0 USD     | $42 USD (-30%)     | $0                |
+| **Refresh Interval**  | 30 minutes | 1 minute           | 1 minute          |
+| **Source Limit**      | 2          | ∞                  | ∞                 |
+| **Destination Limit** | 1          | ∞                  | ∞                 |
 
 # Self Hosted
 
@@ -64,49 +69,50 @@ There are five images currently available, two of them are designed for convenie
 
 ## Environment Variables
 
-| Name | Service(s) | Description |
-| - | - | - |
-| DATABASE_URL | `api`, `cron` | PostgreSQL connection URL.<br><br>e.g. `postgres://user:pass@postgres:5432/keeper` |
-| REDIS_URL | `api`, `cron` | Redis connection URL.<br><br>e.g. `redis://redis:6379` |
-| WEBSOCKET_URL | `api` | The URL the front-end will attempt to connect to the WebSocket using.<br><br>e.g. `ws://localhost:3001/api/socket` |
-| BETTER_AUTH_URL | `api` | The base URL of the front-end (used for auth redirects).<br><br>e.g. `http://localhost:3000` |
-| BETTER_AUTH_SECRET | `api` | Secret key for session signing.<br><br>e.g. `openssl rand -base64 32` |
-| API_PORT | `api` | Port the Bun API listens on. Defaults to `3001` in container images. |
-| API_URL | `web` | The URL the Next.js backend uses to proxy requests to the Bun API.<br><br>e.g. `http://api:3001` |
-| NEXT_PUBLIC_COMMERCIAL_MODE | `web` | Toggle commercial mode in the web UI (`true`/`false`). |
-| NEXT_PUBLIC_POLAR_PRO_MONTHLY_PRODUCT_ID | `web` | Optional. Polar monthly product ID to power in-app upgrade links. |
-| NEXT_PUBLIC_POLAR_PRO_YEARLY_PRODUCT_ID | `web` | Optional. Polar yearly product ID to power in-app upgrade links. |
-| NEXT_PUBLIC_VISITORS_NOW_TOKEN | `web` | Optional. [visitors.now](https://visitors.now) token for analytics tracking |
-| NEXT_PUBLIC_GOOGLE_ADS_ID | `web` | Optional. Google Ads conversion tracking ID (e.g., `AW-123456789`) |
-| NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_LABEL | `web` | Optional. Google Ads conversion label for purchase tracking |
-| COMMERCIAL_MODE | `api`, `cron` | Enable Polar billing flow. Set to `true` if using Polar for subscriptions. |
-| POLAR_ACCESS_TOKEN | `api`, `cron` | Optional. Polar API token for subscription management. |
-| POLAR_MODE | `api`, `cron` | Optional. Polar environment, `sandbox` or `production`. |
-| POLAR_WEBHOOK_SECRET | `api` | Optional. Secret to verify Polar webhooks. |
-| ENCRYPTION_KEY | `api`, `cron` | Key for encrypting CalDAV credentials at rest.<br><br>e.g. `openssl rand -base64 32` |
-| RESEND_API_KEY | `api` | Optional. API key for sending emails via Resend. |
-| PASSKEY_RP_ID | `api` | Optional. Relying party ID for passkey authentication. |
-| PASSKEY_RP_NAME | `api` | Optional. Relying party display name for passkeys. |
-| PASSKEY_ORIGIN | `api` | Optional. Origin allowed for passkey flows (e.g., `https://keeper.example.com`). |
-| GOOGLE_CLIENT_ID | `api`, `cron` | Optional. Required for Google Calendar integration. |
-| GOOGLE_CLIENT_SECRET | `api`, `cron` | Optional. Required for Google Calendar integration. |
-| MICROSOFT_CLIENT_ID | `api`, `cron` | Optional. Required for Microsoft Outlook integration. |
-| MICROSOFT_CLIENT_SECRET | `api`, `cron` | Optional. Required for Microsoft Outlook integration. |
-| TRUSTED_ORIGINS | `api` | Optional. Comma-separated list of additional trusted origins for CSRF protection.<br><br>e.g. `http://192.168.1.100,http://keeper.local,https://keeper.example.com` |
+| Name                                     | Service(s)    | Description                                                                                                                                                         |
+| ---------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DATABASE_URL                             | `api`, `cron` | PostgreSQL connection URL.<br><br>e.g. `postgres://user:pass@postgres:5432/keeper`                                                                                  |
+| REDIS_URL                                | `api`, `cron` | Redis connection URL.<br><br>e.g. `redis://redis:6379`                                                                                                              |
+| WEBSOCKET_URL                            | `api`         | The URL the front-end will attempt to connect to the WebSocket using.<br><br>e.g. `ws://localhost:3001/api/socket`                                                  |
+| BETTER_AUTH_URL                          | `api`         | The base URL of the front-end (used for auth redirects).<br><br>e.g. `http://localhost:3000`                                                                        |
+| BETTER_AUTH_SECRET                       | `api`         | Secret key for session signing.<br><br>e.g. `openssl rand -base64 32`                                                                                               |
+| API_PORT                                 | `api`         | Port the Bun API listens on. Defaults to `3001` in container images.                                                                                                |
+| API_URL                                  | `web`         | The URL the Next.js backend uses to proxy requests to the Bun API.<br><br>e.g. `http://api:3001`                                                                    |
+| NEXT_PUBLIC_COMMERCIAL_MODE              | `web`         | Toggle commercial mode in the web UI (`true`/`false`).                                                                                                              |
+| NEXT_PUBLIC_POLAR_PRO_MONTHLY_PRODUCT_ID | `web`         | Optional. Polar monthly product ID to power in-app upgrade links.                                                                                                   |
+| NEXT_PUBLIC_POLAR_PRO_YEARLY_PRODUCT_ID  | `web`         | Optional. Polar yearly product ID to power in-app upgrade links.                                                                                                    |
+| NEXT_PUBLIC_VISITORS_NOW_TOKEN           | `web`         | Optional. [visitors.now](https://visitors.now) token for analytics tracking                                                                                         |
+| NEXT_PUBLIC_GOOGLE_ADS_ID                | `web`         | Optional. Google Ads conversion tracking ID (e.g., `AW-123456789`)                                                                                                  |
+| NEXT_PUBLIC_GOOGLE_ADS_CONVERSION_LABEL  | `web`         | Optional. Google Ads conversion label for purchase tracking                                                                                                         |
+| COMMERCIAL_MODE                          | `api`, `cron` | Enable Polar billing flow. Set to `true` if using Polar for subscriptions.                                                                                          |
+| POLAR_ACCESS_TOKEN                       | `api`, `cron` | Optional. Polar API token for subscription management.                                                                                                              |
+| POLAR_MODE                               | `api`, `cron` | Optional. Polar environment, `sandbox` or `production`.                                                                                                             |
+| POLAR_WEBHOOK_SECRET                     | `api`         | Optional. Secret to verify Polar webhooks.                                                                                                                          |
+| ENCRYPTION_KEY                           | `api`, `cron` | Key for encrypting CalDAV credentials at rest.<br><br>e.g. `openssl rand -base64 32`                                                                                |
+| RESEND_API_KEY                           | `api`         | Optional. API key for sending emails via Resend.                                                                                                                    |
+| PASSKEY_RP_ID                            | `api`         | Optional. Relying party ID for passkey authentication.                                                                                                              |
+| PASSKEY_RP_NAME                          | `api`         | Optional. Relying party display name for passkeys.                                                                                                                  |
+| PASSKEY_ORIGIN                           | `api`         | Optional. Origin allowed for passkey flows (e.g., `https://keeper.example.com`).                                                                                    |
+| GOOGLE_CLIENT_ID                         | `api`, `cron` | Optional. Required for Google Calendar integration.                                                                                                                 |
+| GOOGLE_CLIENT_SECRET                     | `api`, `cron` | Optional. Required for Google Calendar integration.                                                                                                                 |
+| MICROSOFT_CLIENT_ID                      | `api`, `cron` | Optional. Required for Microsoft Outlook integration.                                                                                                               |
+| MICROSOFT_CLIENT_SECRET                  | `api`, `cron` | Optional. Required for Microsoft Outlook integration.                                                                                                               |
+| TRUSTED_ORIGINS                          | `api`         | Optional. Comma-separated list of additional trusted origins for CSRF protection.<br><br>e.g. `http://192.168.1.100,http://keeper.local,https://keeper.example.com` |
 
 > [!NOTE]
+>
 > - `keeper-standalone` auto-configures everything, putting both the Next.js and Bun API behind a single port so you don't have to worry about the `API_URL` and `WEBSOCKET_URL` environment variables.
 > - `keeper-services` and individual images require setting `WEBSOCKET_URL` unless you use a reverse proxy to intercept calls from `/api*` on the Next.js origin to the Bun API.
 
 ## Images
 
-| Tag | Description | Included Services |
-| - | - | - |
-| `keeper-standalone:latest` | The "standalone" image is everything you need to get up and running with Keeper with as little configuration as possible. | `keeper-web`, `keeper-api`, `keeper-cron`, `redis`, `postgresql`, `caddy` |
-| `keeper-services:latest` | If you'd like for the Redis & Database to exist outside of the container, you can use the "services" image to launch without them included in the image. | `keeper-web`, `keeper-api`, `keeper-cron` |
-| `keeper-web:latest` | An image containing the Next.js interface. | `keeper-web` |
-| `keeper-api:latest` | An image containing the Bun API service. | `keeper-api` |
-| `keeper-cron:latest` | An image containing the Bun cron service. | `keeper-cron` |
+| Tag                        | Description                                                                                                                                              | Included Services                                                         |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `keeper-standalone:latest` | The "standalone" image is everything you need to get up and running with Keeper with as little configuration as possible.                                | `keeper-web`, `keeper-api`, `keeper-cron`, `redis`, `postgresql`, `caddy` |
+| `keeper-services:latest`   | If you'd like for the Redis & Database to exist outside of the container, you can use the "services" image to launch without them included in the image. | `keeper-web`, `keeper-api`, `keeper-cron`                                 |
+| `keeper-web:latest`        | An image containing the Next.js interface.                                                                                                               | `keeper-web`                                                              |
+| `keeper-api:latest`        | An image containing the Bun API service.                                                                                                                 | `keeper-api`                                                              |
+| `keeper-cron:latest`       | An image containing the Bun cron service.                                                                                                                | `keeper-cron`                                                             |
 
 ## Prerequisites
 
@@ -148,10 +154,11 @@ The following will generate a `.env` file that contains the key used to generate
 >
 > Here is an example where we would be accessing Keeper from the LAN IP and where we
 > are routing Keeper through a reverse proxy that hosts it at https://keeper.example.com/
+>
 > ```bash
 > TRUSTED_ORIGINS=http://10.0.0.2:3000,https://keeper.example.com
 > ```
-> 
+>
 > Without this, you will fail CSRF checks on the `better-auth` package.
 
 ```bash
@@ -427,12 +434,14 @@ docker compose up -d
 2. [@keeper.sh/cron](./packages/cron)
 
 ## Applications
+
 1. @keeper.sh/cli _(Coming Soon)_
 1. @keeper.sh/mobile _(Coming Soon)_
 1. @keeper.sh/ssh _(Coming Soon)_
 1. [@keeper.sh/web](./packages/web)
 
 ## Modules
+
 1. [@keeper.sh/auth](./packages/auth)
 1. [@keeper.sh/auth-plugin-username-only](./packages/auth-plugin-username-only)
 1. [@keeper.sh/broadcast](./packages/broadcast)

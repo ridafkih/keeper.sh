@@ -40,26 +40,15 @@ export const createCalDAVProvider = (
 ): DestinationProvider => {
   const caldavService = createCalDAVService(config);
 
-  const syncForUser = async (
-    userId: string,
-    context: SyncContext,
-  ): Promise<SyncResult | null> => {
-    const accounts = await caldavService.getCalDAVAccountsForUser(
-      userId,
-      options.providerId,
-    );
+  const syncForUser = async (userId: string, context: SyncContext): Promise<SyncResult | null> => {
+    const accounts = await caldavService.getCalDAVAccountsForUser(userId, options.providerId);
     if (accounts.length === 0) return null;
 
     const results = await Promise.all(
       accounts.map(async (account) => {
-        const localEvents = await getEventsForDestination(
-          config.database,
-          account.destinationId,
-        );
+        const localEvents = await getEventsForDestination(config.database, account.destinationId);
 
-        const password = caldavService.getDecryptedPassword(
-          account.encryptedPassword,
-        );
+        const password = caldavService.getDecryptedPassword(account.encryptedPassword);
         const provider = new CalDAVProviderInstance(
           {
             database: config.database,
@@ -154,8 +143,7 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
             });
             return { success: true };
           } catch (error) {
-            const notFound =
-              error instanceof Error && error.message.includes("404");
+            const notFound = error instanceof Error && error.message.includes("404");
 
             if (notFound) {
               return { success: true };
@@ -176,9 +164,7 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
     const tenYearsOut = new Date(today);
     tenYearsOut.setFullYear(tenYearsOut.getFullYear() + 10);
 
-    const calendarUrl = await this.client.resolveCalendarUrl(
-      this.config.calendarUrl,
-    );
+    const calendarUrl = await this.client.resolveCalendarUrl(this.config.calendarUrl);
 
     const objects = await this.client.fetchCalendarObjects({
       calendarUrl,

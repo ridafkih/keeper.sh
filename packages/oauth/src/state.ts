@@ -13,10 +13,7 @@ export interface ValidatedState {
 
 const pendingStates = new Map<string, PendingState>();
 
-export const generateState = (
-  userId: string,
-  destinationId?: string,
-): string => {
+export const generateState = (userId: string, destinationId?: string): string => {
   const state = crypto.randomUUID();
   const expiresAt = Date.now() + 10 * MS_PER_MINUTE;
   pendingStates.set(state, {

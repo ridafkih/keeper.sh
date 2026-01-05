@@ -27,9 +27,7 @@ export interface SyncCalendarService {
   fetchAndSyncSource: (source: Source) => Promise<void>;
 }
 
-export const createSyncCalendarService = (
-  database: BunSQLDatabase,
-): SyncCalendarService => {
+export const createSyncCalendarService = (database: BunSQLDatabase): SyncCalendarService => {
   const getLatestSnapshot = async (sourceId: string) => {
     const [snapshot] = await database
       .select({ ical: calendarSnapshotsTable.ical })
@@ -75,9 +73,7 @@ export const createSyncCalendarService = (
   };
 
   const removeEvents = async (_sourceId: string, eventIds: string[]) => {
-    await database
-      .delete(eventStatesTable)
-      .where(inArray(eventStatesTable.id, eventIds));
+    await database.delete(eventStatesTable).where(inArray(eventStatesTable.id, eventIds));
   };
 
   const addEvents = async (

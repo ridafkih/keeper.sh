@@ -1,18 +1,12 @@
 import { PolarEmbedCheckout } from "@polar-sh/checkout/embed";
-import {
-  checkoutSuccessEventSchema,
-  type CheckoutSuccessEvent,
-} from "@keeper.sh/data-schemas";
+import { checkoutSuccessEventSchema, type CheckoutSuccessEvent } from "@keeper.sh/data-schemas";
 import { authClient } from "@/lib/auth-client";
 
 interface CheckoutOptions {
   onSuccess?: (data: CheckoutSuccessEvent) => void;
 }
 
-export async function openCheckout(
-  productId: string,
-  options?: CheckoutOptions,
-): Promise<void> {
+export async function openCheckout(productId: string, options?: CheckoutOptions): Promise<void> {
   const response = await authClient.checkout({
     products: [productId],
     redirect: false,

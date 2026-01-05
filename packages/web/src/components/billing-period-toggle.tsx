@@ -1,7 +1,4 @@
-import {
-  billingPeriodSchema,
-  type BillingPeriod,
-} from "@keeper.sh/data-schemas";
+import { billingPeriodSchema, type BillingPeriod } from "@keeper.sh/data-schemas";
 import { ToggleGroup } from "@base-ui/react/toggle-group";
 import { Toggle } from "@base-ui/react/toggle";
 
@@ -12,10 +9,7 @@ interface BillingPeriodToggleProps {
   onChange: (value: BillingPeriod) => void;
 }
 
-export function BillingPeriodToggle({
-  value,
-  onChange,
-}: BillingPeriodToggleProps) {
+export function BillingPeriodToggle({ value, onChange }: BillingPeriodToggleProps) {
   return (
     <ToggleGroup
       value={[value]}

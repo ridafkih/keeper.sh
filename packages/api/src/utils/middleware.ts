@@ -7,10 +7,7 @@ import {
   type WideEventFields,
 } from "@keeper.sh/log";
 import { ErrorResponse } from "./responses";
-import {
-  remoteICalSourcesTable,
-  calendarDestinationsTable,
-} from "@keeper.sh/database/schema";
+import { remoteICalSourcesTable, calendarDestinationsTable } from "@keeper.sh/database/schema";
 import { eq, count } from "drizzle-orm";
 import { auth, database, premiumService } from "../context";
 
@@ -23,15 +20,10 @@ interface AuthenticatedRouteContext extends RouteContext {
   userId: string;
 }
 
-export type RouteHandler = (
-  request: Request,
-  params: Record<string, string>
-) => Promise<Response>;
+export type RouteHandler = (request: Request, params: Record<string, string>) => Promise<Response>;
 
 type RouteCallback = (ctx: RouteContext) => Promise<Response>;
-type AuthenticatedRouteCallback = (
-  ctx: AuthenticatedRouteContext
-) => Promise<Response>;
+type AuthenticatedRouteCallback = (ctx: AuthenticatedRouteContext) => Promise<Response>;
 
 const extractHttpContext = (request: Request): Partial<WideEventFields> => {
   const url = new URL(request.url);
@@ -56,9 +48,7 @@ const handleResponseStatus = (event: WideEvent, status: number): void => {
   }
 };
 
-const fetchUserPlan = async (
-  userId: string
-): Promise<"free" | "pro" | undefined> => {
+const fetchUserPlan = async (userId: string): Promise<"free" | "pro" | undefined> => {
   try {
     return await premiumService.getUserPlan(userId);
   } catch (error) {
@@ -68,7 +58,7 @@ const fetchUserPlan = async (
 };
 
 const fetchUserCounts = async (
-  userId: string
+  userId: string,
 ): Promise<{ sourceCount: number; destinationCount: number } | undefined> => {
   try {
     const [sources] = await database
@@ -95,10 +85,7 @@ const enrichWithUserContext = async (userId: string): Promise<void> => {
 
   event.set({ userId });
 
-  const [plan, counts] = await Promise.all([
-    fetchUserPlan(userId),
-    fetchUserCounts(userId),
-  ]);
+  const [plan, counts] = await Promise.all([fetchUserPlan(userId), fetchUserCounts(userId)]);
 
   if (plan) event.set({ subscriptionPlan: plan });
   if (counts) event.set(counts);
@@ -111,7 +98,8 @@ const getSession = async (request: Request) => {
   return session;
 };
 
-export const withWideEvent = (handler: RouteCallback): RouteHandler =>
+export const withWideEvent =
+  (handler: RouteCallback): RouteHandler =>
   async (request, params) => {
     const event = new WideEvent("api");
     event.set(extractHttpContext(request));
@@ -131,9 +119,8 @@ export const withWideEvent = (handler: RouteCallback): RouteHandler =>
     });
   };
 
-export const withAuth = (
-  handler: AuthenticatedRouteCallback
-): RouteCallback =>
+export const withAuth =
+  (handler: AuthenticatedRouteCallback): RouteCallback =>
   async ({ request, params }) => {
     const event = getWideEvent();
     event?.startTiming("auth");

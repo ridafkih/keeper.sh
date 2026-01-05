@@ -4,12 +4,7 @@ import { useState, type FC } from "react";
 import { Dialog } from "@base-ui/react/dialog";
 import { Button } from "@/components/button";
 import { button, input, dialogPopup } from "@/styles";
-import {
-  CardTitle,
-  TextBody,
-  TextCaption,
-  DangerText,
-} from "@/components/typography";
+import { CardTitle, TextBody, TextCaption, DangerText } from "@/components/typography";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { type CalDAVDestinationId } from "@keeper.sh/destination-metadata";
 
@@ -34,8 +29,7 @@ const PROVIDER_CONFIGS: Record<CalDAVDestinationId, ProviderConfig> = {
     usernameLabel: "Email",
     usernameHelp: "Your FastMail email address",
     passwordLabel: "App Password",
-    passwordHelp:
-      "Generate one at Settings → Password & Security → Third-party apps",
+    passwordHelp: "Generate one at Settings → Password & Security → Third-party apps",
   },
   icloud: {
     name: "iCloud",
@@ -174,9 +168,7 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
     <form onSubmit={handleDiscoverCalendars} className="flex flex-col gap-3">
       {provider === "caldav" && (
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-foreground">
-            Server URL
-          </label>
+          <label className="text-sm font-medium text-foreground">Server URL</label>
           <input
             type="url"
             value={serverUrl}
@@ -191,9 +183,7 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
         </div>
       )}
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-foreground">
-          {config.usernameLabel}
-        </label>
+        <label className="text-sm font-medium text-foreground">{config.usernameLabel}</label>
         <input
           type="text"
           value={username}
@@ -207,9 +197,7 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
         </TextCaption>
       </div>
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-foreground">
-          {config.passwordLabel}
-        </label>
+        <label className="text-sm font-medium text-foreground">{config.passwordLabel}</label>
         <input
           type="password"
           value={password}
@@ -228,9 +216,7 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
         </DangerText>
       )}
       <div className="flex gap-2 justify-end">
-        <Dialog.Close className={button({ variant: "secondary", size: "sm" })}>
-          Cancel
-        </Dialog.Close>
+        <Dialog.Close className={button({ variant: "secondary", size: "sm" })}>Cancel</Dialog.Close>
         <Button
           type="submit"
           isLoading={isLoading}
@@ -245,9 +231,7 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
   const renderCalendarStep = () => (
     <form onSubmit={handleConnect} className="flex flex-col gap-3">
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-foreground">
-          Select Calendar
-        </label>
+        <label className="text-sm font-medium text-foreground">Select Calendar</label>
         <select
           value={selectedCalendar}
           onChange={(event) => setSelectedCalendar(event.target.value)}
@@ -293,17 +277,13 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 bg-black/40 z-50" />
         <Dialog.Popup className={dialogPopup({ size: "md" })}>
-          <Dialog.Title render={<CardTitle />}>
-            Connect {config.name}
-          </Dialog.Title>
+          <Dialog.Title render={<CardTitle />}>Connect {config.name}</Dialog.Title>
           <Dialog.Description render={<TextBody className="mt-1 mb-3" />}>
             {step === "credentials"
               ? `Enter your ${config.name} credentials to connect your calendar.`
               : "Choose which calendar to sync events to."}
           </Dialog.Description>
-          {step === "credentials"
-            ? renderCredentialsStep()
-            : renderCalendarStep()}
+          {step === "credentials" ? renderCredentialsStep() : renderCalendarStep()}
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>

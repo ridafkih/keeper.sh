@@ -6,11 +6,5 @@ interface GoogleIconProps {
 }
 
 export const GoogleIcon: FC<GoogleIconProps> = ({ className }) => (
-  <Image
-    src="/integrations/icon-google.svg"
-    alt=""
-    width={16}
-    height={16}
-    className={className}
-  />
+  <Image src="/integrations/icon-google.svg" alt="" width={16} height={16} className={className} />
 );

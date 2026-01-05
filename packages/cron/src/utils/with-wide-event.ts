@@ -15,7 +15,7 @@ const extractCronContext = (options: CronOptions): Partial<WideEventFields> => (
 
 const executeWithWideEvent = async (
   event: WideEvent,
-  callback: () => void | Promise<void>
+  callback: () => void | Promise<void>,
 ): Promise<void> => {
   return runWithWideEvent(event, async () => {
     try {

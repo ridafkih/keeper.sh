@@ -56,10 +56,7 @@ export const ResetPasswordForm: FC<ResetPasswordFormProps> = ({ token }) => {
           Your password has been successfully reset.
         </TextBody>
 
-        <Link
-          href="/login"
-          className="text-sm text-foreground font-medium hover:underline"
-        >
+        <Link href="/login" className="text-sm text-foreground font-medium hover:underline">
           Back to login
         </Link>
       </div>
@@ -104,10 +101,7 @@ export const InvalidTokenMessage: FC = () => (
       This password reset link is invalid or has expired.
     </TextBody>
 
-    <Link
-      href="/forgot-password"
-      className="text-sm text-foreground font-medium hover:underline"
-    >
+    <Link href="/forgot-password" className="text-sm text-foreground font-medium hover:underline">
       Request a new link
     </Link>
   </div>

@@ -102,9 +102,7 @@ const DayEventList = ({ events }: { events: CalendarEvent[] }) => {
               <>
                 {" "}
                 according to an event from{" "}
-                <span className="text-foreground font-medium">
-                  {event.sourceName}
-                </span>
+                <span className="text-foreground font-medium">{event.sourceName}</span>
               </>
             )}
           </span>
@@ -135,10 +133,7 @@ export const Calendar = ({
   const getEventsForDay = (date: Date): CalendarEvent[] => {
     return events
       .filter((event) => isSameDay(new Date(event.startTime), date))
-      .sort(
-        (a, b) =>
-          new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
-      );
+      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
   };
 
   return (

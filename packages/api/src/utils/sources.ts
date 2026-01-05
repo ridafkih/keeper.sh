@@ -1,9 +1,5 @@
 import { remoteICalSourcesTable } from "@keeper.sh/database/schema";
-import {
-  pullRemoteCalendar,
-  fetchAndSyncSource,
-  CalendarFetchError,
-} from "@keeper.sh/calendar";
+import { pullRemoteCalendar, fetchAndSyncSource, CalendarFetchError } from "@keeper.sh/calendar";
 import { getWideEvent } from "@keeper.sh/log";
 import { eq, and } from "drizzle-orm";
 import { triggerDestinationSync } from "./sync";
@@ -46,19 +42,11 @@ export const getUserSources = async (userId: string): Promise<Source[]> => {
     .where(eq(remoteICalSourcesTable.userId, userId));
 };
 
-export const verifySourceOwnership = async (
-  userId: string,
-  sourceId: string,
-): Promise<boolean> => {
+export const verifySourceOwnership = async (userId: string, sourceId: string): Promise<boolean> => {
   const [source] = await database
     .select({ id: remoteICalSourcesTable.id })
     .from(remoteICalSourcesTable)
-    .where(
-      and(
-        eq(remoteICalSourcesTable.id, sourceId),
-        eq(remoteICalSourcesTable.userId, userId),
-      ),
-    )
+    .where(and(eq(remoteICalSourcesTable.id, sourceId), eq(remoteICalSourcesTable.userId, userId)))
     .limit(1);
 
   return source !== undefined;
@@ -77,11 +65,7 @@ const validateSourceUrl = async (url: string): Promise<void> => {
  * Validates the URL, checks limits, and triggers initial sync.
  * Throws if limit reached or URL invalid.
  */
-export const createSource = async (
-  userId: string,
-  name: string,
-  url: string,
-): Promise<Source> => {
+export const createSource = async (userId: string, name: string, url: string): Promise<Source> => {
   const existingSources = await database
     .select({ id: remoteICalSourcesTable.id })
     .from(remoteICalSourcesTable)
@@ -123,18 +107,10 @@ export const createSource = async (
  * Returns true if deleted, false if not found.
  * Triggers destination sync after deletion.
  */
-export const deleteSource = async (
-  userId: string,
-  sourceId: string,
-): Promise<boolean> => {
+export const deleteSource = async (userId: string, sourceId: string): Promise<boolean> => {
   const [deleted] = await database
     .delete(remoteICalSourcesTable)
-    .where(
-      and(
-        eq(remoteICalSourcesTable.id, sourceId),
-        eq(remoteICalSourcesTable.userId, userId),
-      ),
-    )
+    .where(and(eq(remoteICalSourcesTable.id, sourceId), eq(remoteICalSourcesTable.userId, userId)))
     .returning();
 
   if (deleted) {

@@ -1,12 +1,7 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { OAuthTokenProvider } from "./provider";
 import type { DestinationProvider } from "../sync/destinations";
-import type {
-  SyncResult,
-  SyncableEvent,
-  OAuthProviderConfig,
-  BroadcastSyncStatus,
-} from "../types";
+import type { SyncResult, SyncableEvent, OAuthProviderConfig, BroadcastSyncStatus } from "../types";
 import type { SyncContext } from "../sync/coordinator";
 import { getEventsForDestination } from "../events/events";
 import { OAuthCalendarProvider } from "./provider";
@@ -19,10 +14,7 @@ export interface CreateOAuthProviderOptions<
   database: BunSQLDatabase;
   oauthProvider: OAuthTokenProvider;
   broadcastSyncStatus?: BroadcastSyncStatus;
-  getAccountsForUser: (
-    database: BunSQLDatabase,
-    userId: string,
-  ) => Promise<TAccount[]>;
+  getAccountsForUser: (database: BunSQLDatabase, userId: string) => Promise<TAccount[]>;
   createProviderInstance: (
     config: TConfig,
     oauthProvider: OAuthTokenProvider,
@@ -49,19 +41,13 @@ export const createOAuthDestinationProvider = <
     buildConfig,
   } = options;
 
-  const syncForUser = async (
-    userId: string,
-    context: SyncContext,
-  ): Promise<SyncResult | null> => {
+  const syncForUser = async (userId: string, context: SyncContext): Promise<SyncResult | null> => {
     const accounts = await getAccountsForUser(database, userId);
     if (accounts.length === 0) return null;
 
     const results = await Promise.all(
       accounts.map(async (account) => {
-        const localEvents = await getEventsForDestination(
-          database,
-          account.destinationId,
-        );
+        const localEvents = await getEventsForDestination(database, account.destinationId);
 
         const config = buildConfig(database, account, broadcastSyncStatus);
         const provider = createProviderInstance(config, oauthProvider);

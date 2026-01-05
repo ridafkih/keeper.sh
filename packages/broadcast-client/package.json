@@ -1,19 +1,19 @@
 {
   "name": "@keeper.sh/broadcast-client",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "scripts": {
     "types": "tsc --noEmit",
     "lint": "oxlint ."
   },
-  "main": "src/index.ts",
-  "types": "src/index.ts",
-  "type": "module",
-  "private": true,
+  "dependencies": {
+    "@keeper.sh/constants": "workspace:*",
+    "@keeper.sh/data-schemas": "workspace:*"
+  },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",
     "typescript": "5.9.3"
-  },
-  "dependencies": {
-    "@keeper.sh/data-schemas": "workspace:*",
-    "@keeper.sh/constants": "workspace:*"
   }
 }

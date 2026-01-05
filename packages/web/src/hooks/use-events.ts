@@ -61,16 +61,13 @@ export function useEvents({ startDate }: UseEventsOptions = {}) {
     return url.toString();
   };
 
-  const { data, size, setSize, isLoading, isValidating } = useSWRInfinite(
-    getKey,
-    fetchEvents,
-    { suspense: true, revalidateFirstPage: false },
-  );
+  const { data, size, setSize, isLoading, isValidating } = useSWRInfinite(getKey, fetchEvents, {
+    suspense: true,
+    revalidateFirstPage: false,
+  });
 
   const allEvents = data?.flat() ?? [];
-  const events = Array.from(
-    new Map(allEvents.map((event) => [event.id, event])).values(),
-  );
+  const events = Array.from(new Map(allEvents.map((event) => [event.id, event])).values());
   const isLoadingMore =
     isLoading || (size > 0 && data !== undefined && data[size - 1] === undefined);
 

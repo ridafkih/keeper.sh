@@ -46,14 +46,10 @@ export default function ForgotPasswordPage() {
           </CardTitle>
 
           <TextBody className="text-sm text-foreground-muted mb-4">
-            If an account exists with that email, we sent you a password reset
-            link.
+            If an account exists with that email, we sent you a password reset link.
           </TextBody>
 
-          <Link
-            href="/login"
-            className="text-sm text-foreground font-medium hover:underline"
-          >
+          <Link href="/login" className="text-sm text-foreground font-medium hover:underline">
             Back to login
           </Link>
         </div>
@@ -67,8 +63,7 @@ export default function ForgotPasswordPage() {
         <AuthFormTitle>Reset password</AuthFormTitle>
 
         <TextBody className="text-sm text-foreground-muted mb-3 text-center">
-          Enter your email and we&apos;ll send you a link to reset your
-          password.
+          Enter your email and we&apos;ll send you a link to reset your password.
         </TextBody>
 
         <AuthFormError message={error} />
@@ -81,16 +76,11 @@ export default function ForgotPasswordPage() {
           autoComplete="email"
         />
 
-        <AuthFormSubmit isLoading={isSubmitting}>
-          Send reset link
-        </AuthFormSubmit>
+        <AuthFormSubmit isLoading={isSubmitting}>Send reset link</AuthFormSubmit>
 
         <AuthFormFooter>
           Remember your password?{" "}
-          <Link
-            href="/login"
-            className="text-foreground font-medium no-underline hover:underline"
-          >
+          <Link href="/login" className="text-foreground font-medium no-underline hover:underline">
             Login
           </Link>
         </AuthFormFooter>

@@ -4,18 +4,12 @@ import {
   type MicrosoftTokenResponse,
   type MicrosoftUserInfo,
 } from "@keeper.sh/data-schemas";
-import {
-  generateState,
-  validateState,
-  type ValidatedState,
-} from "@keeper.sh/oauth";
+import { generateState, validateState, type ValidatedState } from "@keeper.sh/oauth";
 
 export { generateState, validateState, type ValidatedState };
 
-const MICROSOFT_AUTH_URL =
-  "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
-const MICROSOFT_TOKEN_URL =
-  "https://login.microsoftonline.com/common/oauth2/v2.0/token";
+const MICROSOFT_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
+const MICROSOFT_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
 const MICROSOFT_USERINFO_URL = "https://graph.microsoft.com/v1.0/me";
 
 export const MICROSOFT_CALENDAR_SCOPE = "Calendars.ReadWrite";
@@ -44,10 +38,7 @@ export const createMicrosoftOAuthService = (
 ): MicrosoftOAuthService => {
   const { clientId, clientSecret } = credentials;
 
-  const getAuthorizationUrl = (
-    userId: string,
-    options: AuthorizationUrlOptions,
-  ): string => {
+  const getAuthorizationUrl = (userId: string, options: AuthorizationUrlOptions): string => {
     const state = generateState(userId, options.destinationId);
     const scopes = options.scopes ?? [
       MICROSOFT_CALENDAR_SCOPE,
@@ -92,9 +83,7 @@ export const createMicrosoftOAuthService = (
     return microsoftTokenResponseSchema.assert(body);
   };
 
-  const refreshAccessToken = async (
-    refreshToken: string,
-  ): Promise<MicrosoftTokenResponse> => {
+  const refreshAccessToken = async (refreshToken: string): Promise<MicrosoftTokenResponse> => {
     const response = await fetch(MICROSOFT_TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -122,9 +111,7 @@ export const createMicrosoftOAuthService = (
   };
 };
 
-export const fetchUserInfo = async (
-  accessToken: string,
-): Promise<MicrosoftUserInfo> => {
+export const fetchUserInfo = async (accessToken: string): Promise<MicrosoftUserInfo> => {
   const response = await fetch(MICROSOFT_USERINFO_URL, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });

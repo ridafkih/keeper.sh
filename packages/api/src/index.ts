@@ -1,10 +1,7 @@
 import env from "@keeper.sh/env/api";
 
 const CORS_MAX_AGE_SECONDS = 86400;
-import {
-  syncStatusTable,
-  calendarDestinationsTable,
-} from "@keeper.sh/database/schema";
+import { syncStatusTable, calendarDestinationsTable } from "@keeper.sh/database/schema";
 import {
   log,
   WideEvent,
@@ -12,22 +9,12 @@ import {
   emitWideEvent,
   type WideEventFields,
 } from "@keeper.sh/log";
-import {
-  createWebsocketHandler,
-  type BroadcastData,
-  type Socket,
-} from "@keeper.sh/broadcast";
+import { createWebsocketHandler, type BroadcastData, type Socket } from "@keeper.sh/broadcast";
 import { eq } from "drizzle-orm";
 import { join } from "node:path";
 import { socketTokens } from "./utils/state";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
-import {
-  database,
-  broadcastService,
-  auth,
-  trustedOrigins,
-  baseUrl,
-} from "./context";
+import { database, broadcastService, auth, trustedOrigins, baseUrl } from "./context";
 
 const validateSocketToken = (token: string): string | null => {
   const entry = socketTokens.get(token);
@@ -72,8 +59,7 @@ const withCors = (handler: FetchHandler): FetchHandler => {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers":
-      "Content-Type, Authorization, X-Requested-With",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
   });
 
   return async (request) => {
@@ -111,10 +97,7 @@ const withCors = (handler: FetchHandler): FetchHandler => {
   };
 };
 
-const extractAuthContext = (
-  request: Request,
-  pathname: string
-): Partial<WideEventFields> => ({
+const extractAuthContext = (request: Request, pathname: string): Partial<WideEventFields> => ({
   operationType: "auth",
   operationName: `${request.method} ${pathname}`,
   httpMethod: request.method,
@@ -123,10 +106,7 @@ const extractAuthContext = (
   httpOrigin: request.headers.get("origin") ?? undefined,
 });
 
-const handleAuthResponseStatus = (
-  event: WideEvent,
-  response: Response
-): void => {
+const handleAuthResponseStatus = (event: WideEvent, response: Response): void => {
   event.set({ httpStatusCode: response.status });
   if (response.status >= 400) {
     event.set({
@@ -137,10 +117,7 @@ const handleAuthResponseStatus = (
   }
 };
 
-const processAuthResponse = async (
-  pathname: string,
-  response: Response
-): Promise<Response> => {
+const processAuthResponse = async (pathname: string, response: Response): Promise<Response> => {
   if (pathname !== "/api/auth/get-session") {
     return response;
   }
@@ -154,10 +131,7 @@ const processAuthResponse = async (
   return clearSessionCookies(response);
 };
 
-const handleAuthRequest = async (
-  pathname: string,
-  request: Request
-): Promise<Response> => {
+const handleAuthRequest = async (pathname: string, request: Request): Promise<Response> => {
   const event = new WideEvent("api");
   event.set(extractAuthContext(request, pathname));
 
@@ -217,9 +191,7 @@ const router = new Bun.FileSystemRouter({
   dir: join(import.meta.dirname, "routes"),
 });
 
-const handleRequest = async (
-  request: Request,
-): Promise<Response | undefined> => {
+const handleRequest = async (request: Request): Promise<Response | undefined> => {
   const url = new URL(request.url);
 
   if (url.pathname.startsWith("/api/auth")) {

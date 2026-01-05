@@ -51,19 +51,13 @@ export const createPremiumService = (config: PremiumConfig): PremiumService => {
     return plan === "pro" ? PRO_DESTINATION_LIMIT : FREE_DESTINATION_LIMIT;
   };
 
-  const canAddSource = async (
-    userId: string,
-    currentCount: number,
-  ): Promise<boolean> => {
+  const canAddSource = async (userId: string, currentCount: number): Promise<boolean> => {
     const plan = await getUserPlan(userId);
     const limit = getSourceLimit(plan);
     return currentCount < limit;
   };
 
-  const canAddDestination = async (
-    userId: string,
-    currentCount: number,
-  ): Promise<boolean> => {
+  const canAddDestination = async (userId: string, currentCount: number): Promise<boolean> => {
     const plan = await getUserPlan(userId);
     const limit = getDestinationLimit(plan);
     return currentCount < limit;

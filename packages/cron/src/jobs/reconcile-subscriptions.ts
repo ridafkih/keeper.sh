@@ -35,11 +35,10 @@ const reconcileUserSubscription = async (userId: string) => {
           polarSubscriptionId,
         },
       });
-
   } catch (error) {
     getWideEvent()?.setError(error);
   }
-}
+};
 
 export default withCronWideEvent({
   name: import.meta.file,
@@ -54,9 +53,7 @@ export default withCronWideEvent({
     const users = await database.select({ id: user.id }).from(user);
     setCronEventFields({ processedCount: users.length });
 
-    const reconciliations = users.map((userRecord) =>
-      reconcileUserSubscription(userRecord.id)
-    );
+    const reconciliations = users.map((userRecord) => reconcileUserSubscription(userRecord.id));
 
     const results = await Promise.allSettled(reconciliations);
     const { failed } = countSettledResults(results);

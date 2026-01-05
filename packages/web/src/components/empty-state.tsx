@@ -13,12 +13,7 @@ interface EmptyStateProps {
   className?: string;
 }
 
-export const EmptyState: FC<EmptyStateProps> = ({
-  icon,
-  message,
-  action,
-  className,
-}) => (
+export const EmptyState: FC<EmptyStateProps> = ({ icon, message, action, className }) => (
   <div className={emptyState({ className })}>
     {icon}
     <TextBody className="text-center max-w-[36ch]">{message}</TextBody>

@@ -70,10 +70,7 @@ const fetchEventsForSources = async (
       sourceUrl: remoteICalSourcesTable.url,
     })
     .from(eventStatesTable)
-    .innerJoin(
-      remoteICalSourcesTable,
-      eq(eventStatesTable.sourceId, remoteICalSourcesTable.id),
-    )
+    .innerJoin(remoteICalSourcesTable, eq(eventStatesTable.sourceId, remoteICalSourcesTable.id))
     .where(
       and(
         inArray(eventStatesTable.sourceId, sourceIds),

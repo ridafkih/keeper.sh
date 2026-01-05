@@ -1,19 +1,19 @@
 {
   "name": "@keeper.sh/calendar",
+  "private": true,
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "types": "tsc --noEmit",
     "lint": "oxlint ."
   },
-  "exports": {
-    ".": "./src/index.ts"
-  },
-  "types": "./src/index.ts",
-  "type": "module",
-  "private": true,
   "dependencies": {
+    "@keeper.sh/constants": "workspace:*",
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/log": "workspace:*",
-    "@keeper.sh/constants": "workspace:*",
     "drizzle-orm": "0.45.1",
     "ts-ics": "2.4.0"
   },

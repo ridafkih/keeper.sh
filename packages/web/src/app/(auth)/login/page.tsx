@@ -47,12 +47,7 @@ const UsernameLoginForm: FC = () => {
     <AuthForm onSubmit={handleSubmit}>
       <AuthFormTitle>Login</AuthFormTitle>
       <AuthFormError message={error} />
-      <AuthFormField
-        name="username"
-        placeholder="Username"
-        required
-        autoComplete="username"
-      />
+      <AuthFormField name="username" placeholder="Username" required autoComplete="username" />
       <AuthFormField
         name="password"
         placeholder="Password"
@@ -63,10 +58,7 @@ const UsernameLoginForm: FC = () => {
       <AuthFormSubmit isLoading={isSubmitting}>Sign in</AuthFormSubmit>
       <AuthFormFooter>
         Don&apos;t have an account?{" "}
-        <Link
-          href="/register"
-          className="text-foreground font-medium no-underline hover:underline"
-        >
+        <Link href="/register" className="text-foreground font-medium no-underline hover:underline">
           Register
         </Link>
       </AuthFormFooter>
@@ -167,10 +159,7 @@ const EmailLoginForm: FC = () => {
 
       <AuthFormFooter>
         Don&apos;t have an account?{" "}
-        <Link
-          href="/register"
-          className="text-foreground font-medium no-underline hover:underline"
-        >
+        <Link href="/register" className="text-foreground font-medium no-underline hover:underline">
           Register
         </Link>
       </AuthFormFooter>

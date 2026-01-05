@@ -1,8 +1,5 @@
 import env from "@keeper.sh/env/next/backend";
-import {
-  proxyableMethods,
-  type ProxyableMethods,
-} from "@keeper.sh/data-schemas";
+import { proxyableMethods, type ProxyableMethods } from "@keeper.sh/data-schemas";
 import { NextRequest } from "next/server";
 
 type RequestHandler = (request: NextRequest) => Promise<Response>;
@@ -54,18 +51,13 @@ const forward: RequestHandler = async (request) => {
 const toBunApiHandler = <
   MethodArray extends readonly ProxyableMethods[],
   MethodList extends MethodArray[number],
-  Handlers extends Record<MethodList, RequestHandler> = Record<
-    MethodArray[number],
-    RequestHandler
-  >,
+  Handlers extends Record<MethodList, RequestHandler> = Record<MethodArray[number], RequestHandler>,
 >(
   allowedMethods: MethodArray,
 ): Handlers => {
   proxyableMethods.array().assert(allowedMethods);
 
-  const hasAllAllowedMethods = (
-    candidate: typeof partialHandlers,
-  ): candidate is Handlers => {
+  const hasAllAllowedMethods = (candidate: typeof partialHandlers): candidate is Handlers => {
     for (const allowedMethod of allowedMethods) {
       if (allowedMethod in candidate) continue;
       return false;
