@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ServiceBoundary, WideEventFields } from "./wide-event-types";
+import type { ServiceBoundary, WideEventFields } from "./types";
 
 const createInitialFields = (
   serviceBoundary: ServiceBoundary

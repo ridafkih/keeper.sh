@@ -1,7 +1,7 @@
 import type {
   WideEventFields,
   WideEventEmitFunction,
-} from "./wide-event-types";
+} from "./types";
 
 const formatEventMessage = (event: WideEventFields): string =>
   `${event.operationName ?? "unknown"}`;

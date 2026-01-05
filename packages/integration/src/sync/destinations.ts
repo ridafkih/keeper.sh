@@ -1,5 +1,5 @@
-import type { SyncResult } from "./types";
-import type { SyncContext, SyncCoordinator } from "./sync-coordinator";
+import type { SyncResult } from "../types";
+import type { SyncContext, SyncCoordinator } from "./coordinator";
 
 export interface DestinationProvider {
   syncForUser(userId: string, context: SyncContext): Promise<SyncResult | null>;

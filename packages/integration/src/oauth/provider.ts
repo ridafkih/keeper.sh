@@ -4,14 +4,14 @@ import {
 } from "@keeper.sh/database/schema";
 import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { eq } from "drizzle-orm";
-import { CalendarProvider } from "./provider";
-import { RateLimiter } from "./rate-limiter";
+import { CalendarProvider } from "../sync/provider";
+import { RateLimiter } from "../utils/rate-limiter";
 import type {
   OAuthProviderConfig,
   SyncableEvent,
   PushResult,
   DeleteResult,
-} from "./types";
+} from "../types";
 
 export interface OAuthRefreshResult {
   access_token: string;

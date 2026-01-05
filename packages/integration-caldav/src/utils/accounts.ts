@@ -22,7 +22,7 @@ export interface CalDAVAccount {
   encryptedPassword: string;
 }
 
-export interface CalDAVConfig {
+export interface CalDAVServiceConfig {
   database: BunSQLDatabase;
   encryptionKey: string;
 }
@@ -37,7 +37,7 @@ export interface CalDAVService {
   getUserEvents: (userId: string) => Promise<SyncableEvent[]>;
 }
 
-export const createCalDAVService = (config: CalDAVConfig): CalDAVService => {
+export const createCalDAVService = (config: CalDAVServiceConfig): CalDAVService => {
   const { database, encryptionKey } = config;
 
   const getCalDAVAccountsForUser = async (

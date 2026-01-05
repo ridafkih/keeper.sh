@@ -8,7 +8,7 @@ import {
 import { getStartOfToday } from "@keeper.sh/date-utils";
 import { and, asc, eq, gte } from "drizzle-orm";
 import type { Plan } from "@keeper.sh/premium";
-import type { SyncableEvent } from "./types";
+import type { SyncableEvent } from "../types";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 export interface OAuthAccount {

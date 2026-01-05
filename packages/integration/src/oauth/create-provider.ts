@@ -1,16 +1,16 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type { OAuthTokenProvider } from "./oauth-provider";
-import type { DestinationProvider } from "./destinations";
+import type { OAuthTokenProvider } from "./provider";
+import type { DestinationProvider } from "../sync/destinations";
 import type {
   SyncResult,
   SyncableEvent,
   OAuthProviderConfig,
   BroadcastSyncStatus,
-} from "./types";
-import type { SyncContext } from "./sync-coordinator";
-import { getEventsForDestination } from "./events";
-import { OAuthCalendarProvider } from "./oauth-provider";
-import type { OAuthAccount } from "./oauth-accounts";
+} from "../types";
+import type { SyncContext } from "../sync/coordinator";
+import { getEventsForDestination } from "../events/events";
+import { OAuthCalendarProvider } from "./provider";
+import type { OAuthAccount } from "./accounts";
 
 export interface CreateOAuthProviderOptions<
   TAccount extends OAuthAccount,

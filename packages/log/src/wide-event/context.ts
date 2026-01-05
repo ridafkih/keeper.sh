@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { WideEvent } from "./wide-event";
+import { WideEvent } from "./event";
 
 const wideEventStorage = new AsyncLocalStorage<WideEvent>();
 

@@ -7,7 +7,7 @@ import type {
   ProviderConfig,
   SyncOperation,
   ListRemoteEventsOptions,
-} from "./types";
+} from "../types";
 import {
   getEventMappingsForDestination,
   createEventMapping,
@@ -15,8 +15,8 @@ import {
   deleteEventMappingByDestinationUid,
   countMappingsForDestination,
   type EventMapping,
-} from "./mappings";
-import type { SyncContext, SyncStage } from "./sync-coordinator";
+} from "../events/mappings";
+import type { SyncContext, SyncStage } from "./coordinator";
 
 export abstract class CalendarProvider<
   TConfig extends ProviderConfig = ProviderConfig,

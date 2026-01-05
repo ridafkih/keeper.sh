@@ -6,7 +6,7 @@ import {
 import { getStartOfToday } from "@keeper.sh/date-utils";
 import { and, eq, gte, inArray, asc } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type { SyncableEvent } from "./types";
+import type { SyncableEvent } from "../types";
 
 const getMappedSourceIds = async (
   database: BunSQLDatabase,

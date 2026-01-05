@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useMemo } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -288,7 +288,8 @@ const SyncStatusText = ({ syncStatus }: SyncStatusTextProps) => {
   const loading = !hasReceivedStatus.current;
   const { text, skeleton } = syncStatusText({ loading });
 
-  const progress = syncStatus?.status === "syncing" &&
+  const progress =
+    syncStatus?.status === "syncing" &&
     syncStatus.stage === "processing" &&
     syncStatus.progress &&
     syncStatus.progress.total > 0

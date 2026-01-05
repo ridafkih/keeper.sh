@@ -3,11 +3,16 @@ export {
   type CalDAVProviderConfig,
   type CalDAVProviderOptions,
 } from "./provider";
-export { CalDAVClient, createCalDAVClient, type CalDAVClientConfig, type CalendarInfo } from "./caldav-client";
-export { eventToICalString, parseICalToRemoteEvent } from "./ics-converter";
+export {
+  CalDAVClient,
+  createCalDAVClient,
+  type CalDAVClientConfig,
+  type CalendarInfo,
+} from "./utils/client";
+export { eventToICalString, parseICalToRemoteEvent } from "./utils/ics";
 export {
   createCalDAVService,
-  type CalDAVConfig,
+  type CalDAVServiceConfig,
   type CalDAVService,
   type CalDAVAccount,
-} from "./sync";
+} from "./utils/accounts";

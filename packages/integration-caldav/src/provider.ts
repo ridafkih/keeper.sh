@@ -17,9 +17,9 @@ import {
 import { getStartOfToday } from "@keeper.sh/date-utils";
 import { getWideEvent } from "@keeper.sh/log";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { CalDAVClient } from "./caldav-client";
-import { eventToICalString, parseICalToRemoteEvent } from "./ics-converter";
-import { createCalDAVService } from "./sync";
+import { CalDAVClient } from "./utils/client";
+import { eventToICalString, parseICalToRemoteEvent } from "./utils/ics";
+import { createCalDAVService } from "./utils/accounts";
 
 export interface CalDAVProviderOptions {
   providerId: string;

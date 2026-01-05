@@ -1,22 +1,22 @@
-export { CalendarProvider } from "./provider";
+export { CalendarProvider } from "./sync/provider";
 export {
   OAuthCalendarProvider,
   type OAuthRefreshResult,
   type OAuthTokenProvider,
   type AuthErrorResult,
-} from "./oauth-provider";
+} from "./oauth/provider";
 export {
   createOAuthDestinationProvider,
   type CreateOAuthProviderOptions,
-} from "./create-oauth-provider";
-export { generateEventUid, isKeeperEvent } from "./event-identity";
-export { RateLimiter } from "./rate-limiter";
-export { getErrorMessage } from "./error-utils";
-export { getEventsForDestination } from "./events";
+} from "./oauth/create-provider";
+export { generateEventUid, isKeeperEvent } from "./events/identity";
+export { RateLimiter } from "./utils/rate-limiter";
+export { getErrorMessage } from "./utils/error";
+export { getEventsForDestination } from "./events/events";
 export {
   syncDestinationsForUser,
   type DestinationProvider,
-} from "./destinations";
+} from "./sync/destinations";
 export {
   createSyncCoordinator,
   type SyncContext,
@@ -25,19 +25,19 @@ export {
   type DestinationSyncResult,
   type SyncProgressUpdate,
   type SyncStage,
-} from "./sync-coordinator";
+} from "./sync/coordinator";
 export {
   getEventMappingsForDestination,
   createEventMapping,
   deleteEventMapping,
   type EventMapping,
-} from "./mappings";
+} from "./events/mappings";
 export {
   getOAuthAccountsByPlan,
   getOAuthAccountsForUser,
   getUserEventsForSync,
   type OAuthAccount,
-} from "./oauth-accounts";
+} from "./oauth/accounts";
 export type {
   SyncableEvent,
   PushResult,
