@@ -1,4 +1,4 @@
-import { withTracing } from "../../../../utils/middleware";
+import { withWideEvent } from "../../../../utils/middleware";
 import { ErrorResponse } from "../../../../utils/responses";
 import {
   OAuthError,
@@ -7,7 +7,7 @@ import {
   parseOAuthCallback,
 } from "../../../../utils/oauth";
 
-const GET = withTracing(async ({ request, params }) => {
+const GET = withWideEvent(async ({ request, params }) => {
   const { provider } = params;
 
   if (!provider) {

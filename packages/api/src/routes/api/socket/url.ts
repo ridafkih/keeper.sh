@@ -1,8 +1,8 @@
 import env from "@keeper.sh/env/api";
-import { withAuth, withTracing } from "../../../utils/middleware";
+import { withAuth, withWideEvent } from "../../../utils/middleware";
 import { generateSocketToken } from "../../../utils/socket-token";
 
-const GET = withTracing(
+const GET = withWideEvent(
   withAuth(({ userId }) => {
     const token = generateSocketToken(userId);
 

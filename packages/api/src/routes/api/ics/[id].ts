@@ -1,8 +1,8 @@
-import { withAuth, withTracing } from "../../../utils/middleware";
+import { withAuth, withWideEvent } from "../../../utils/middleware";
 import { ErrorResponse } from "../../../utils/responses";
 import { deleteSource } from "../../../utils/sources";
 
-export const DELETE = withTracing(
+export const DELETE = withWideEvent(
   withAuth(async ({ params, userId }) => {
     const { id } = params;
 

@@ -7,9 +7,7 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./provider": "./src/provider.ts",
-    "./sync": "./src/sync.ts",
-    "./client": "./src/caldav-client.ts"
+    "./provider": "./src/provider.ts"
   },
   "scripts": {
     "types": "tsc --noEmit",

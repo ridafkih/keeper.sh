@@ -1,9 +1,9 @@
 import { caldavDiscoverRequestSchema } from "@keeper.sh/data-schemas";
-import { withAuth, withTracing } from "../../../../utils/middleware";
+import { withAuth, withWideEvent } from "../../../../utils/middleware";
 import { ErrorResponse } from "../../../../utils/responses";
 import { CalDAVConnectionError, discoverCalendars } from "../../../../utils/caldav";
 
-const POST = withTracing(
+const POST = withWideEvent(
   withAuth(async ({ request }) => {
     const body = await request.json();
 

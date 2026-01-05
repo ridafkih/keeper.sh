@@ -144,7 +144,5 @@ const withAuth =
     return handler({ params, request, userId: session.user.id });
   };
 
-const withTracing = withWideEvent;
-
-export { withWideEvent, withAuth, withTracing };
+export { withAuth, withWideEvent };
 export type { RouteHandler };

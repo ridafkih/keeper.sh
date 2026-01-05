@@ -1,6 +1,6 @@
 import { calendarDestinationsTable } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
-import { withAuth, withTracing } from "../../../utils/middleware";
+import { withAuth, withWideEvent } from "../../../utils/middleware";
 import { ErrorResponse } from "../../../utils/responses";
 import { getAuthorizationUrl, isOAuthProvider } from "../../../utils/destinations";
 import { baseUrl, database, premiumService } from "../../../context";
@@ -31,7 +31,7 @@ const countUserDestinations = async (userId: string): Promise<number> => {
   return destinations.length;
 };
 
-const GET = withTracing(
+const GET = withWideEvent(
   withAuth(async ({ request, userId }) => {
     const url = new URL(request.url);
     const provider = url.searchParams.get("provider");

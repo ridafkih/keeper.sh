@@ -1,7 +1,7 @@
-import { withAuth, withTracing } from "../../../utils/middleware";
+import { withAuth, withWideEvent } from "../../../utils/middleware";
 import { getEventsInRange } from "../../../utils/events";
 
-export const GET = withTracing(
+export const GET = withWideEvent(
   withAuth(async ({ request, userId }) => {
     const url = new URL(request.url);
     const events = await getEventsInRange(userId, url);

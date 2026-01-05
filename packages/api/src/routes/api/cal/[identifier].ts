@@ -1,10 +1,10 @@
-import { withTracing } from "../../../utils/middleware";
+import { withWideEvent } from "../../../utils/middleware";
 import { generateUserCalendar } from "../../../utils/ical";
 import { ErrorResponse } from "../../../utils/responses";
 
 const ICS_EXTENSION_LENGTH = 4;
 
-const GET = withTracing(async ({ params }) => {
+const GET = withWideEvent(async ({ params }) => {
   const { identifier } = params;
 
   if (!identifier?.endsWith(".ics")) {

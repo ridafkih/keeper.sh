@@ -1,6 +1,6 @@
 import { updateSourceDestinationsSchema } from "@keeper.sh/data-schemas";
 import { getWideEvent } from "@keeper.sh/log";
-import { withAuth, withTracing } from "../../../../utils/middleware";
+import { withAuth, withWideEvent } from "../../../../utils/middleware";
 import { ErrorResponse } from "../../../../utils/responses";
 import {
   getDestinationsForSource,
@@ -9,7 +9,7 @@ import {
 import { verifySourceOwnership } from "../../../../utils/sources";
 import { triggerDestinationSync } from "../../../../utils/sync";
 
-const GET = withTracing(
+const GET = withWideEvent(
   withAuth(async ({ params, userId }) => {
     const { id: sourceId } = params;
 
@@ -27,7 +27,7 @@ const GET = withTracing(
   }),
 );
 
-const PUT = withTracing(
+const PUT = withWideEvent(
   withAuth(async ({ request, params, userId }) => {
     const { id: sourceId } = params;
 

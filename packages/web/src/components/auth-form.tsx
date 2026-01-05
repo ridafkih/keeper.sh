@@ -5,8 +5,6 @@ import type { FC, PropsWithChildren } from "react";
 import { Form } from "@base-ui/react/form";
 import { Field } from "@base-ui/react/field";
 import { Input } from "@base-ui/react/input";
-import { Checkbox } from "@base-ui/react/checkbox";
-import { Check } from "lucide-react";
 import { tv } from "tailwind-variants";
 import { Button } from "@/components/button";
 import { CardTitle, DangerText, TextBody } from "@/components/typography";
@@ -182,36 +180,6 @@ const AuthSocialButton: FC<PropsWithChildren<AuthSocialButtonProps>> = ({
   </button>
 );
 
-const authFormCheckbox = tv({
-  slots: {
-    box: "size-4 flex items-center justify-center rounded border border-border-input transition-colors data-[checked]:bg-primary data-[checked]:border-primary",
-    indicator: "text-primary-foreground",
-    label: "text-xs text-foreground-secondary select-none",
-    root: "flex items-center gap-2 cursor-pointer",
-  },
-});
-
-interface AuthFormCheckboxProps {
-  name: string;
-  label: React.ReactNode;
-  defaultChecked?: boolean;
-}
-
-const AuthFormCheckbox: FC<AuthFormCheckboxProps> = ({ name, label, defaultChecked = false }) => {
-  const styles = authFormCheckbox();
-
-  return (
-    <label className={styles.root()}>
-      <Checkbox.Root name={name} defaultChecked={defaultChecked} className={styles.box()}>
-        <Checkbox.Indicator>
-          <Check size={12} className={styles.indicator()} />
-        </Checkbox.Indicator>
-      </Checkbox.Root>
-      <span className={styles.label()}>{label}</span>
-    </label>
-  );
-};
-
 export {
   AuthFormContainer,
   AuthForm,
@@ -222,5 +190,4 @@ export {
   AuthFormFooter,
   AuthFormDivider,
   AuthSocialButton,
-  AuthFormCheckbox,
 };

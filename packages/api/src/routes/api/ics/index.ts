@@ -1,6 +1,6 @@
 import { createSourceSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import { withAuth, withTracing } from "../../../utils/middleware";
+import { withAuth, withWideEvent } from "../../../utils/middleware";
 import { ErrorResponse } from "../../../utils/responses";
 import {
   InvalidSourceUrlError,
@@ -9,14 +9,14 @@ import {
   getUserSources,
 } from "../../../utils/sources";
 
-const GET = withTracing(
+const GET = withWideEvent(
   withAuth(async ({ userId }) => {
     const sources = await getUserSources(userId);
     return Response.json(sources);
   }),
 );
 
-const POST = withTracing(
+const POST = withWideEvent(
   withAuth(async ({ request, userId }) => {
     const body = await request.json();
 

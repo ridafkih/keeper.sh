@@ -1,1 +1,1 @@
-export { formatTime, formatDayHeading, formatWeekday, formatHour } from "@keeper.sh/date-utils";
+export { formatTime, formatDayHeading } from "@keeper.sh/date-utils";

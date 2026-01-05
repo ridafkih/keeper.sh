@@ -69,4 +69,4 @@ const generateUserCalendar = async (identifier: string): Promise<string | null> 
   return formatEventsAsIcal(events);
 };
 
-export { formatEventsAsIcal, generateUserCalendar };
+export { generateUserCalendar };
