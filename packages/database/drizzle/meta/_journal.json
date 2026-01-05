@@ -204,6 +204,13 @@
       "when": 1767142927049,
       "tag": "0028_lush_sumo",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1767608421759,
+      "tag": "0029_huge_yellow_claw",
+      "breakpoints": true
     }
   ]
 }

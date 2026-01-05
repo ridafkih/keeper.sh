@@ -23,6 +23,7 @@ const remoteICalSourcesTable = pgTable("remote_ical_sources", {
 });
 
 const calendarSnapshotsTable = pgTable("calendar_snapshots", {
+  contentHash: text(),
   createdAt: timestamp().notNull().defaultNow(),
   ical: text().notNull(),
   id: uuid().notNull().primaryKey().defaultRandom(),
