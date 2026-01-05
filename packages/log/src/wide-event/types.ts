@@ -47,6 +47,11 @@ interface WideEventFields {
 
   timings?: Record<string, number>;
 
+  service?: string;
+  timeout?: number;
+  timedOut?: boolean;
+  flags?: string[];
+
   [key: string]: unknown;
 }
 

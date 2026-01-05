@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@keeper.sh/broadcast": "workspace:*",
+    "@keeper.sh/entry-point": "workspace:*",
     "@keeper.sh/calendar": "workspace:*",
     "@keeper.sh/constants": "workspace:*",
     "@keeper.sh/database": "workspace:*",

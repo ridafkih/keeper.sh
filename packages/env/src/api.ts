@@ -1,6 +1,6 @@
 import arkenv from "arkenv";
 
-export default arkenv({
+const schema = {
   API_PORT: "number",
   BETTER_AUTH_SECRET: "string",
   BETTER_AUTH_URL: "string.url",
@@ -21,4 +21,7 @@ export default arkenv({
   RESEND_API_KEY: "string?",
   TRUSTED_ORIGINS: "string?",
   WEBSOCKET_URL: "string.url?",
-});
+} as const;
+
+export { schema };
+export default arkenv(schema);

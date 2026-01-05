@@ -1,6 +1,6 @@
 import arkenv from "arkenv";
 
-export default arkenv({
+const schema = {
   COMMERCIAL_MODE: "boolean?",
   DATABASE_URL: "string.url",
   ENCRYPTION_KEY: "string?",
@@ -11,4 +11,7 @@ export default arkenv({
   POLAR_ACCESS_TOKEN: "string?",
   POLAR_MODE: "'sandbox' | 'production' | undefined?",
   REDIS_URL: "string.url",
-});
+} as const;
+
+export { schema };
+export default arkenv(schema);

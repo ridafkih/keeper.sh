@@ -26,6 +26,7 @@
         "@keeper.sh/date-utils": "workspace:*",
         "@keeper.sh/destination-providers": "workspace:*",
         "@keeper.sh/encryption": "workspace:*",
+        "@keeper.sh/entry-point": "workspace:*",
         "@keeper.sh/env": "workspace:*",
         "@keeper.sh/integration": "workspace:*",
         "@keeper.sh/integration-caldav": "workspace:*",
@@ -129,6 +130,7 @@
         "@keeper.sh/constants": "workspace:*",
         "@keeper.sh/database": "workspace:*",
         "@keeper.sh/destination-providers": "workspace:*",
+        "@keeper.sh/entry-point": "workspace:*",
         "@keeper.sh/env": "workspace:*",
         "@keeper.sh/integration": "workspace:*",
         "@keeper.sh/log": "workspace:*",
@@ -214,6 +216,18 @@
       "dependencies": {
         "tweetnacl": "^1.0.3",
         "tweetnacl-util": "^0.15.1",
+      },
+      "devDependencies": {
+        "@keeper.sh/typescript-config": "workspace:*",
+        "@types/bun": "latest",
+        "typescript": "5.9.3",
+      },
+    },
+    "packages/entry-point": {
+      "name": "@keeper.sh/entry-point",
+      "dependencies": {
+        "@keeper.sh/log": "workspace:*",
+        "arkenv": "0.8.1",
       },
       "devDependencies": {
         "@keeper.sh/typescript-config": "workspace:*",
@@ -869,6 +883,8 @@
     "@keeper.sh/destination-providers": ["@keeper.sh/destination-providers@workspace:packages/destination-providers"],
 
     "@keeper.sh/encryption": ["@keeper.sh/encryption@workspace:packages/encryption"],
+
+    "@keeper.sh/entry-point": ["@keeper.sh/entry-point@workspace:packages/entry-point"],
 
     "@keeper.sh/env": ["@keeper.sh/env@workspace:packages/env"],
 

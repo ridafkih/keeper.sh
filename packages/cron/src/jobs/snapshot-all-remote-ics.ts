@@ -78,9 +78,21 @@ export default withCronWideEvent({
     setCronEventFields({ failedCount: failed, processedCount: succeeded });
 
     const insertions: Promise<void>[] = [];
-    for (const settlement of settlements) {
+    for (const [index, settlement] of settlements.entries()) {
       if (settlement.status === "fulfilled") {
         insertions.push(processSnapshot(settlement.value.sourceId, settlement.value.ical));
+      } else {
+        const source = remoteSources[index];
+        if (source) {
+          const event = new WideEvent("cron");
+          event.set({
+            operationName: "snapshot-fetch",
+            operationType: "snapshot",
+            sourceId: source.id,
+          });
+          event.setError(settlement.reason);
+          emitWideEvent(event.finalize());
+        }
       }
     }
 

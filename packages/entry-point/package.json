@@ -1,0 +1,21 @@
+{
+  "name": "@keeper.sh/entry-point",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "types": "tsc --noEmit",
+    "lint": "oxlint ."
+  },
+  "dependencies": {
+    "@keeper.sh/log": "workspace:*",
+    "arkenv": "0.8.1"
+  },
+  "devDependencies": {
+    "@keeper.sh/typescript-config": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "5.9.3"
+  }
+}
