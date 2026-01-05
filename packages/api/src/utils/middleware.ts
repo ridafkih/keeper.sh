@@ -26,13 +26,15 @@ type AuthenticatedRouteCallback = (ctx: AuthenticatedRouteContext) => MaybePromi
 
 const extractHttpContext = (request: Request): Partial<WideEventFields> => {
   const url = new URL(request.url);
+  const origin = request.headers.get("origin");
+  const userAgent = request.headers.get("user-agent");
   return {
     httpMethod: request.method,
-    httpOrigin: request.headers.get("origin") ?? null,
     httpPath: url.pathname,
-    httpUserAgent: request.headers.get("user-agent") ?? null,
     operationName: `${request.method} ${url.pathname}`,
     operationType: "http",
+    ...(origin && { httpOrigin: origin }),
+    ...(userAgent && { httpUserAgent: userAgent }),
   };
 };
 
