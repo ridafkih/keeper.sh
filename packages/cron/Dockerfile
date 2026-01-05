@@ -1,30 +1,27 @@
-FROM oven/bun:1 AS foundation
+FROM oven/bun:1 AS base
 WORKDIR /app
 
-FROM foundation AS prepare
-RUN bun install --global turbo
+FROM base AS source
 COPY . .
+
+FROM base AS prune
+RUN bun install --global turbo
+COPY --from=source /app .
 RUN turbo prune @keeper.sh/cron --docker
 
-FROM foundation AS build
-COPY --from=prepare /app/out/json/ .
+FROM base AS build
+COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile
+COPY --from=prune /app/out/full/ .
+RUN bun run --cwd packages/cron build
 
-COPY --from=prepare /app/out/full/ .
-RUN bun run build --filter=@keeper.sh/cron
-
-FROM foundation AS runtime
-RUN bun install --global turbo
-
-COPY --from=prepare /app/out/json/ .
+FROM base AS runtime
+COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile --production
-
-COPY --from=build /app/turbo.json ./turbo.json
-COPY --from=build /app/packages/cron/turbo.json ./packages/cron/turbo.json
 COPY --from=build /app/packages/cron/dist ./packages/cron/dist
-COPY --from=build /app/packages/cron/package.json ./packages/cron/package.json
+COPY --from=source /app/packages/cron/entrypoint.sh ./packages/cron/entrypoint.sh
+RUN chmod +x ./packages/cron/entrypoint.sh
 
 ENV NODE_ENV=production
-ENV TURBO_TELEMETRY_DISABLED=1
 
-CMD ["turbo", "start"]
+ENTRYPOINT ["./packages/cron/entrypoint.sh"]

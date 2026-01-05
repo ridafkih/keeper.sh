@@ -1,22 +1,24 @@
 ARG S6_OVERLAY_VERSION=3.2.0.2
 
-FROM oven/bun:1 AS foundation
+FROM oven/bun:1 AS base
 WORKDIR /app
 
-FROM foundation AS prepare
-RUN bun install --global turbo
+FROM base AS source
 COPY . .
+
+FROM base AS prune
+RUN bun install --global turbo
+COPY --from=source /app .
 RUN turbo prune @keeper.sh/api @keeper.sh/cron @keeper.sh/web --docker
 
-FROM foundation AS build
-RUN bun install --global turbo
-
-COPY --from=prepare /app/out/json/ .
+FROM base AS build
+COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile
-
-COPY --from=prepare /app/out/full/ .
+COPY --from=prune /app/out/full/ .
 ENV NEXT_PUBLIC_COMMERCIAL_MODE=false
-RUN turbo build --filter=@keeper.sh/api --filter=@keeper.sh/cron --filter=@keeper.sh/web
+RUN bun run --cwd packages/api build && \
+    bun run --cwd packages/cron build && \
+    bun run --cwd packages/web build
 
 FROM debian:bookworm-slim AS runtime
 
@@ -60,18 +62,14 @@ RUN case "${TARGETARCH}" in \
 
 WORKDIR /app
 
-RUN bun install --global turbo
-
-COPY --from=prepare /app/out/json/ .
+COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile --production
-
-COPY --from=build /app/turbo.json ./turbo.json
-COPY --from=build /app/packages/api/turbo.json ./packages/api/turbo.json
-COPY --from=build /app/packages/cron/turbo.json ./packages/cron/turbo.json
 
 COPY --from=build /app/packages/api/dist ./packages/api/dist
 COPY --from=build /app/packages/cron/dist ./packages/cron/dist
-COPY --from=build /app/packages/database ./packages/database
+COPY --from=build /app/packages/database/src ./packages/database/src
+COPY --from=build /app/packages/database/drizzle.config.ts ./packages/database/
+COPY --from=source /app/packages/database/drizzle ./packages/database/drizzle
 
 COPY --from=build /app/packages/web/.next/standalone ./
 COPY --from=build /app/packages/web/.next/static ./packages/web/.next/static
@@ -84,7 +82,6 @@ RUN chmod +x /etc/s6-overlay/s6-rc.d/*/run /etc/s6-overlay/scripts/* \
   && chown -R postgres:postgres /var/lib/postgresql /run/postgresql
 
 ENV NODE_ENV=production
-ENV TURBO_TELEMETRY_DISABLED=1
 ENV S6_KEEP_ENV=1
 ENV S6_BEHAVIOUR_IF_STAGE2_FAILS=2
 ENV S6_CMD_WAIT_FOR_SERVICES_MAXTIME=60000
