@@ -33,15 +33,6 @@ const getUserMappings = async (userId: string): Promise<SourceDestinationMapping
     .where(inArray(sourceDestinationMappingsTable.sourceId, sourceIds));
 };
 
-const getSourcesForDestination = async (destinationId: string): Promise<string[]> => {
-  const mappings = await database
-    .select({ sourceId: sourceDestinationMappingsTable.sourceId })
-    .from(sourceDestinationMappingsTable)
-    .where(eq(sourceDestinationMappingsTable.destinationId, destinationId));
-
-  return mappings.map((mapping) => mapping.sourceId);
-};
-
 const getDestinationsForSource = async (sourceId: string): Promise<string[]> => {
   const mappings = await database
     .select({ destinationId: sourceDestinationMappingsTable.destinationId })
@@ -126,25 +117,10 @@ const createMappingsForNewDestination = async (
     .onConflictDoNothing();
 };
 
-const deleteMappingsForSource = async (sourceId: string): Promise<void> => {
-  await database
-    .delete(sourceDestinationMappingsTable)
-    .where(eq(sourceDestinationMappingsTable.sourceId, sourceId));
-};
-
-const deleteMappingsForDestination = async (destinationId: string): Promise<void> => {
-  await database
-    .delete(sourceDestinationMappingsTable)
-    .where(eq(sourceDestinationMappingsTable.destinationId, destinationId));
-};
-
 export {
   getUserMappings,
-  getSourcesForDestination,
   getDestinationsForSource,
   updateSourceMappings,
   createMappingsForNewSource,
   createMappingsForNewDestination,
-  deleteMappingsForSource,
-  deleteMappingsForDestination,
 };

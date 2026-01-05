@@ -1,9 +1,9 @@
 import { calendarDestinationsTable, syncStatusTable } from "@keeper.sh/database/schema";
 import { eq } from "drizzle-orm";
-import { withAuth, withTracing } from "../../../utils/middleware";
+import { withAuth, withWideEvent } from "../../../utils/middleware";
 import { database } from "../../../context";
 
-const GET = withTracing(
+const GET = withWideEvent(
   withAuth(async ({ userId }) => {
     const statuses = await database
       .select({

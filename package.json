@@ -14,7 +14,8 @@
     "types": "turbo run types --parallel",
     "build": "turbo run build",
     "start": "turbo run start",
-    "lint": "turbo run lint"
+    "lint": "turbo run lint",
+    "unused": "knip"
   },
   "dependencies": {
     "react-error-boundary": "^6.0.1"

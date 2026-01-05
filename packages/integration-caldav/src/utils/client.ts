@@ -126,4 +126,4 @@ class CalDAVClient {
 const createCalDAVClient = (config: CalDAVClientConfig): CalDAVClient => new CalDAVClient(config);
 
 export { CalDAVClient, createCalDAVClient };
-export type { CalDAVClientConfig, CalendarInfo, CalendarObject };
+export type { CalDAVClientConfig, CalendarInfo };

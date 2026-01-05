@@ -96,5 +96,3 @@ export {
   identify,
   reportPurchaseConversion,
 };
-
-export type { IdentifyProps };

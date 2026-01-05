@@ -1,5 +1,5 @@
 import { caldavConnectRequestSchema } from "@keeper.sh/data-schemas";
-import { withAuth, withTracing } from "../../../../utils/middleware";
+import { withAuth, withWideEvent } from "../../../../utils/middleware";
 import { ErrorResponse } from "../../../../utils/responses";
 import {
   CalDAVConnectionError,
@@ -8,7 +8,7 @@ import {
   isValidProvider,
 } from "../../../../utils/caldav";
 
-const POST = withTracing(
+const POST = withWideEvent(
   withAuth(async ({ request, userId }) => {
     const body = await request.json();
 

@@ -1,4 +1,4 @@
-import { withAuth, withTracing } from "../../../utils/middleware";
+import { withAuth, withWideEvent } from "../../../utils/middleware";
 import { getUserIdentifierToken } from "../../../utils/user";
 import { baseUrl } from "../../../context";
 
@@ -7,7 +7,7 @@ const getIcalUrl = (token: string): string | null => {
   return url.toString();
 };
 
-const GET = withTracing(
+const GET = withWideEvent(
   withAuth(async ({ userId }) => {
     const token = await getUserIdentifierToken(userId);
     const icalUrl = getIcalUrl(token);

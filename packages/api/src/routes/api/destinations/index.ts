@@ -1,7 +1,7 @@
-import { withAuth, withTracing } from "../../../utils/middleware";
+import { withAuth, withWideEvent } from "../../../utils/middleware";
 import { listCalendarDestinations } from "../../../utils/destinations";
 
-export const GET = withTracing(
+export const GET = withWideEvent(
   withAuth(async ({ userId }) => {
     const destinations = await listCalendarDestinations(userId);
     return Response.json(destinations);

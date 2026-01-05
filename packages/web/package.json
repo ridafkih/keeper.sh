@@ -17,7 +17,6 @@
     "@keeper.sh/date-utils": "workspace:*",
     "@keeper.sh/destination-metadata": "workspace:*",
     "@keeper.sh/env": "workspace:*",
-    "@keeper.sh/log": "workspace:*",
     "@keeper.sh/premium": "workspace:*",
     "@polar-sh/better-auth": "^1.6.3",
     "@polar-sh/checkout": "^0.1.14",
@@ -39,7 +38,6 @@
     "zod": "^4.2.1"
   },
   "devDependencies": {
-    "@svgr/webpack": "^8.1.0",
     "@types/node": "25.0.3",
     "@types/react": "19.2.7",
     "typescript": "5.9.3"
