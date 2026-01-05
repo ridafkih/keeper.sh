@@ -3,19 +3,19 @@ import { tv } from "tailwind-variants";
 
 const card = tv({
   base: "border rounded-md",
+  defaultVariants: {
+    padding: "none",
+    variant: "default",
+  },
   variants: {
-    variant: {
-      default: "border-border",
-      danger: "border-destructive-border bg-destructive-surface",
-    },
     padding: {
       none: "",
       sm: "p-3",
     },
-  },
-  defaultVariants: {
-    variant: "default",
-    padding: "none",
+    variant: {
+      danger: "border-destructive-border bg-destructive-surface",
+      default: "border-border",
+    },
   },
 });
 
@@ -30,4 +30,4 @@ export const Card: FC<PropsWithChildren<CardProps>> = ({
   padding,
   className,
   children,
-}) => <div className={card({ variant, padding, className })}>{children}</div>;
+}) => <div className={card({ className, padding, variant })}>{children}</div>;

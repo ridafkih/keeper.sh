@@ -1,9 +1,9 @@
 import { caldavDiscoverRequestSchema } from "@keeper.sh/data-schemas";
-import { withTracing, withAuth } from "../../../../utils/middleware";
+import { withAuth, withTracing } from "../../../../utils/middleware";
 import { ErrorResponse } from "../../../../utils/responses";
-import { discoverCalendars, CalDAVConnectionError } from "../../../../utils/caldav";
+import { CalDAVConnectionError, discoverCalendars } from "../../../../utils/caldav";
 
-export const POST = withTracing(
+const POST = withTracing(
   withAuth(async ({ request }) => {
     const body = await request.json();
 
@@ -11,17 +11,19 @@ export const POST = withTracing(
       const { serverUrl, username, password } = caldavDiscoverRequestSchema.assert(body);
 
       const calendars = await discoverCalendars(serverUrl, {
-        username,
         password,
+        username,
       });
 
       return Response.json({ calendars });
     } catch (error) {
       if (error instanceof CalDAVConnectionError) {
-        return ErrorResponse.badRequest(error.message);
+        return ErrorResponse.badRequest(error.message).toResponse();
       }
 
-      return ErrorResponse.badRequest("Server URL, username, and password are required");
+      return ErrorResponse.badRequest("Server URL, username, and password are required").toResponse();
     }
   }),
 );
+
+export { POST };

@@ -1,59 +1,76 @@
 import { MS_PER_WEEK } from "@keeper.sh/constants";
 
-export const getStartOfToday = (): Date => {
+const HOURS_START_OF_DAY = 0;
+const MINUTES_START = 0;
+const SECONDS_START = 0;
+const MILLISECONDS_START = 0;
+const HOURS_END_OF_DAY = 23;
+const MINUTES_END = 59;
+const SECONDS_END = 59;
+const MILLISECONDS_END = 999;
+const MIDNIGHT_HOUR = 0;
+const NOON_HOUR = 12;
+const DAY_OFFSET_INCREMENT = 1;
+const HOURS_PER_HALF_DAY = 12;
+const TWO_DIGIT_FORMAT = "2-digit" as const;
+
+const getStartOfToday = (): Date => {
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  today.setHours(HOURS_START_OF_DAY, MINUTES_START, SECONDS_START, MILLISECONDS_START);
   return today;
 };
 
-export const isSameDay = (first: Date, second: Date): boolean => {
-  return (
-    first.getFullYear() === second.getFullYear() &&
-    first.getMonth() === second.getMonth() &&
-    first.getDate() === second.getDate()
-  );
-};
+const isSameDay = (first: Date, second: Date): boolean =>
+  first.getFullYear() === second.getFullYear() &&
+  first.getMonth() === second.getMonth() &&
+  first.getDate() === second.getDate();
 
-export const getDaysFromDate = (startDate: Date, count: number): Date[] => {
-  return Array.from({ length: count }, (_, offset) => {
+const getDaysFromDate = (startDate: Date, count: number): Date[] => {
+  const days: Date[] = [];
+  for (let offset = 0; offset < count; offset++) {
     const date = new Date(startDate);
     date.setDate(date.getDate() + offset);
-    return date;
-  });
+    days.push(date);
+  }
+  return days;
 };
 
-export const formatWeekday = (date: Date): string => {
-  return date.toLocaleDateString("en-US", { weekday: "short" });
+const formatWeekday = (date: Date): string =>
+  date.toLocaleDateString("en-US", { weekday: "short" });
+
+const formatHour = (hour: number): string => {
+  if (hour === MIDNIGHT_HOUR) {
+    return "12 AM";
+  }
+  if (hour === NOON_HOUR) {
+    return "12 PM";
+  }
+  if (hour < NOON_HOUR) {
+    return `${hour} AM`;
+  }
+  return `${hour - HOURS_PER_HALF_DAY} PM`;
 };
 
-export const formatHour = (hour: number): string => {
-  if (hour === 0) return "12 AM";
-  if (hour === 12) return "12 PM";
-  return hour < 12 ? `${hour} AM` : `${hour - 12} PM`;
-};
-
-export const formatTime = (date: Date): string => {
-  return date.toLocaleTimeString("en-US", {
+const formatTime = (date: Date): string =>
+  date.toLocaleTimeString("en-US", {
     hour: "numeric",
-    minute: "2-digit",
     hour12: true,
+    minute: TWO_DIGIT_FORMAT,
   });
-};
 
-export const formatDate = (date: Date): string => {
-  return new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "short",
+const formatDate = (date: Date): string =>
+  new Intl.DateTimeFormat("en-US", {
     day: "numeric",
+    month: "short",
+    year: "numeric",
   }).format(date);
-};
 
-export const formatDayHeading = (date: Date): string => {
+const formatDayHeading = (date: Date): string => {
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  today.setHours(HOURS_START_OF_DAY, MINUTES_START, SECONDS_START, MILLISECONDS_START);
 
   const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setDate(tomorrow.getDate() + DAY_OFFSET_INCREMENT);
 
   if (isSameDay(date, today)) {
     return "Today";
@@ -74,33 +91,58 @@ export const formatDayHeading = (date: Date): string => {
   });
 };
 
-export interface DateRange {
+interface DateRange {
   from: Date;
   to: Date;
 }
 
-export interface NormalizedDateRange {
+interface NormalizedDateRange {
   start: Date;
   end: Date;
 }
 
-export const parseDateRangeParams = (url: URL): DateRange => {
+const parseDateRangeParams = (url: URL): DateRange => {
   const fromParam = url.searchParams.get("from");
   const toParam = url.searchParams.get("to");
 
   const now = new Date();
-  const from = fromParam ? new Date(fromParam) : now;
-  const to = toParam ? new Date(toParam) : new Date(from.getTime() + MS_PER_WEEK);
+  const from = ((): Date => {
+    if (fromParam) {
+      return new Date(fromParam);
+    }
+    return now;
+  })();
+  const to = ((): Date => {
+    if (toParam) {
+      return new Date(toParam);
+    }
+    return new Date(from.getTime() + MS_PER_WEEK);
+  })();
 
   return { from, to };
 };
 
-export const normalizeDateRange = (from: Date, to: Date): NormalizedDateRange => {
+const normalizeDateRange = (from: Date, to: Date): NormalizedDateRange => {
   const start = new Date(from);
-  start.setHours(0, 0, 0, 0);
+  start.setHours(HOURS_START_OF_DAY, MINUTES_START, SECONDS_START, MILLISECONDS_START);
 
   const end = new Date(to);
-  end.setHours(23, 59, 59, 999);
+  end.setHours(HOURS_END_OF_DAY, MINUTES_END, SECONDS_END, MILLISECONDS_END);
 
-  return { start, end };
+  return { end, start };
 };
+
+export {
+  getStartOfToday,
+  isSameDay,
+  getDaysFromDate,
+  formatWeekday,
+  formatHour,
+  formatTime,
+  formatDate,
+  formatDayHeading,
+  parseDateRangeParams,
+  normalizeDateRange,
+};
+
+export type { DateRange, NormalizedDateRange };

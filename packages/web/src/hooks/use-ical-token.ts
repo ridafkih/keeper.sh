@@ -7,17 +7,26 @@ interface IcalTokenResponse {
 
 const fetcher = async (url: string): Promise<IcalTokenResponse> => {
   const response = await fetch(url);
-  if (!response.ok) throw new Error("Failed to fetch");
+  if (!response.ok) {
+    throw new Error("Failed to fetch");
+  }
   return response.json();
 };
 
-export const useIcalToken = () => {
+interface IcalTokenResult {
+  error: Error | undefined;
+  icalUrl: string | null;
+  isLoading: boolean;
+  token: string | undefined;
+}
+
+export const useIcalToken = (): IcalTokenResult => {
   const { data, error, isLoading } = useSWR<IcalTokenResponse>("/api/ical/token", fetcher);
 
   return {
-    token: data?.token,
-    icalUrl: data?.icalUrl ?? null,
     error,
+    icalUrl: data?.icalUrl ?? null,
     isLoading,
+    token: data?.token,
   };
 };

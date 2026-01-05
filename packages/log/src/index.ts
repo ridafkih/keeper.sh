@@ -1,10 +1,11 @@
 import pino from "pino";
 import { createWideEventEmitter } from "./wide-event/emitter";
 
-export const log = pino({ level: process.env.LOG_LEVEL ?? "info" });
+const log = pino({ level: process.env.LOG_LEVEL ?? "info" });
 
-export const emitWideEvent = createWideEventEmitter((fields, message) => log.info(fields, message));
+const emitWideEvent = createWideEventEmitter((fields, message) => log.info(fields, message));
 
+export { log, emitWideEvent };
 export { WideEvent } from "./wide-event/event";
 export { runWithWideEvent, getWideEvent, requireWideEvent } from "./wide-event/context";
 export { createWideEventEmitter } from "./wide-event/emitter";

@@ -1,6 +1,6 @@
 "use client";
 
-import type { FC } from "react";
+import type { FC, ReactNode } from "react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -16,12 +16,12 @@ import { SectionHeader } from "@/components/section-header";
 import { EmptyState } from "@/components/empty-state";
 import { ListSkeleton } from "@/components/list-skeleton";
 import {
-  FieldLabel,
-  FieldValue,
   DangerFieldLabel,
   DangerFieldValue,
-  TextLabel,
+  FieldLabel,
+  FieldValue,
   TextCaption,
+  TextLabel,
 } from "@/components/typography";
 import { changePassword, deleteAccount, signOut } from "@/lib/auth";
 import { isCommercialMode } from "@/config/mode";
@@ -29,13 +29,16 @@ import { authClient } from "@/lib/auth-client";
 import { button } from "@/styles";
 import { track } from "@/lib/analytics";
 
-const fetchPasskeys = async () => {
+type PasskeyData = Awaited<ReturnType<typeof authClient.passkey.listUserPasskeys>>["data"];
+type Passkey = NonNullable<PasskeyData>[number];
+
+const fetchPasskeys = async (): Promise<Passkey[]> => {
   const { data, error } = await authClient.passkey.listUserPasskeys();
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
   return data ?? [];
 };
-
-type Passkey = Awaited<ReturnType<typeof fetchPasskeys>>[number];
 
 interface PasskeysListProps {
   passkeys: Passkey[] | undefined;
@@ -60,34 +63,32 @@ const PasskeysList: FC<PasskeysListProps> = ({ passkeys, isLoading, onDelete }) 
   return (
     <Card padding="none">
       <div className="divide-y divide-border">
-        {passkeys.map(({ id, name, createdAt }) => {
-          return (
-            <div key={id} className="flex items-center justify-between px-3 py-2">
-              <div className="flex items-center gap-2">
-                <Fingerprint className="size-4 text-foreground-muted" />
-                <div className="flex flex-col">
-                  <TextLabel as="div">{name ?? "Passkey"}</TextLabel>
-                  <TextCaption>
-                    Added on {createdAt.toLocaleDateString()} at {createdAt.toLocaleTimeString()}
-                  </TextCaption>
-                </div>
+        {passkeys.map(({ id, name, createdAt }) => (
+          <div key={id} className="flex items-center justify-between px-3 py-2">
+            <div className="flex items-center gap-2">
+              <Fingerprint className="size-4 text-foreground-muted" />
+              <div className="flex flex-col">
+                <TextLabel as="div">{name ?? "Passkey"}</TextLabel>
+                <TextCaption>
+                  Added on {createdAt.toLocaleDateString()} at {createdAt.toLocaleTimeString()}
+                </TextCaption>
               </div>
-              <Button
-                onClick={() => onDelete(id)}
-                className={button({ variant: "ghost", size: "xs" })}
-              >
-                <Trash2 className="size-4 text-foreground-muted" />
-              </Button>
             </div>
-          );
-        })}
+            <Button
+              onClick={() => onDelete(id)}
+              className={button({ size: "xs", variant: "ghost" })}
+            >
+              <Trash2 className="size-4 text-foreground-muted" />
+            </Button>
+          </div>
+        ))}
       </div>
     </Card>
   );
 };
 
-export default function SettingsPage() {
-  const { user, refresh } = useAuth();
+export default function SettingsPage(): ReactNode {
+  const { user } = useAuth();
   const router = useRouter();
   const toastManager = Toast.useToastManager();
 
@@ -95,25 +96,34 @@ export default function SettingsPage() {
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isAddingPasskey, setIsAddingPasskey] = useState(false);
 
+  const passkeysKey = ((): string | null => {
+    if (isCommercialMode) {
+      return "passkeys";
+    }
+    return null;
+  })();
   const {
     data: passkeys,
     isLoading: isLoadingPasskeys,
     mutate: mutatePasskeys,
-  } = useSWR(isCommercialMode ? "passkeys" : null, fetchPasskeys);
+  } = useSWR(passkeysKey, fetchPasskeys);
 
-  const handleChangePassword = async (currentPassword: string, newPassword: string) => {
+  const handleChangePassword = async (
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> => {
     await changePassword(currentPassword, newPassword);
     track("password_changed");
     toastManager.add({ title: "Password changed" });
   };
 
-  const handleDeleteAccount = async (password: string) => {
+  const handleDeleteAccount = async (password: string): Promise<void> => {
     await deleteAccount(password);
     await signOut();
     router.push("/");
   };
 
-  const handleAddPasskey = async () => {
+  const handleAddPasskey = async (): Promise<void> => {
     setIsAddingPasskey(true);
     try {
       const { error } = await authClient.passkey.addPasskey();
@@ -129,7 +139,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDeletePasskey = async (id: string) => {
+  const handleDeletePasskey = async (id: string): Promise<void> => {
     const { error } = await authClient.passkey.deletePasskey({ id });
     if (error) {
       toastManager.add({ title: error.message ?? "Failed to delete passkey" });
@@ -147,8 +157,22 @@ export default function SettingsPage() {
 
         <Card padding="sm">
           <div>
-            <FieldLabel as="div">{isCommercialMode ? "Email" : "Username"}</FieldLabel>
-            <FieldValue as="div">{isCommercialMode ? user?.email : user?.username}</FieldValue>
+            <FieldLabel as="div">
+              {((): string => {
+                if (isCommercialMode) {
+                  return "Email";
+                }
+                return "Username";
+              })()}
+            </FieldLabel>
+            <FieldValue as="div">
+              {((): string | undefined => {
+                if (isCommercialMode) {
+                  return user?.email;
+                }
+                return user?.username;
+              })()}
+            </FieldValue>
           </div>
         </Card>
       </Section>
@@ -164,7 +188,7 @@ export default function SettingsPage() {
             </div>
             <Button
               onClick={() => setIsChangingPassword(true)}
-              className={button({ variant: "secondary", size: "xs" })}
+              className={button({ size: "xs", variant: "secondary" })}
             >
               Change
             </Button>
@@ -181,7 +205,7 @@ export default function SettingsPage() {
               <Button
                 onClick={handleAddPasskey}
                 disabled={isAddingPasskey}
-                className={button({ variant: "secondary", size: "xs" })}
+                className={button({ size: "xs", variant: "secondary" })}
               >
                 Add passkey
               </Button>
@@ -209,7 +233,7 @@ export default function SettingsPage() {
             </div>
             <Button
               onClick={() => setIsDeletingAccount(true)}
-              className={button({ variant: "danger", size: "xs" })}
+              className={button({ size: "xs", variant: "danger" })}
             >
               Delete
             </Button>

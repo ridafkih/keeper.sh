@@ -1,4 +1,4 @@
-import type { FC, PropsWithChildren, ComponentProps } from "react";
+import type { ComponentProps, FC, PropsWithChildren } from "react";
 import { NavigationMenu } from "@base-ui/react/navigation-menu";
 import { tv } from "tailwind-variants";
 

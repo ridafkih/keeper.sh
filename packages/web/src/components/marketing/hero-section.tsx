@@ -15,7 +15,7 @@ export const HeroSection: FC = () => (
       <Link
         href="https://github.com/ridafkih/keeper.sh"
         target="_blank"
-        className={button({ variant: "primary", size: "xs" })}
+        className={button({ size: "xs", variant: "primary" })}
       >
         View GitHub
       </Link>

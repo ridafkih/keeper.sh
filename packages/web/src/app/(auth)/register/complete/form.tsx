@@ -1,30 +1,30 @@
 "use client";
 
-import type { FC } from "react";
+import type { ReactNode } from "react";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   AuthForm,
-  AuthFormTitle,
   AuthFormError,
   AuthFormField,
-  AuthFormSubmit,
   AuthFormFooter,
+  AuthFormSubmit,
+  AuthFormTitle,
 } from "@/components/auth-form";
 import { useFormSubmit } from "@/hooks/use-form-submit";
 import { signUpWithEmail } from "@/lib/auth";
 import { track } from "@/lib/analytics";
 
-const subscribeToStorage = (callback: () => void) => {
+const subscribeToStorage = (callback: () => void): (() => void) => {
   window.addEventListener("storage", callback);
-  return () => window.removeEventListener("storage", callback);
+  return (): void => window.removeEventListener("storage", callback);
 };
 
-const getRegistrationEmail = () => sessionStorage.getItem("registrationEmail");
-const getServerSnapshot = () => null;
+const getRegistrationEmail = (): string | null => sessionStorage.getItem("registrationEmail");
+const getServerSnapshot = (): null => null;
 
-export const CompleteRegistrationForm: FC = () => {
+export const CompleteRegistrationForm = (): ReactNode => {
   const router = useRouter();
   const { isSubmitting, error, submit } = useFormSubmit();
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -32,7 +32,9 @@ export const CompleteRegistrationForm: FC = () => {
   const email = useSyncExternalStore(subscribeToStorage, getRegistrationEmail, getServerSnapshot);
 
   useEffect(() => {
-    if (email !== null) return;
+    if (email !== null) {
+      return;
+    }
     router.replace("/register");
   }, [email, router]);
 
@@ -41,10 +43,10 @@ export const CompleteRegistrationForm: FC = () => {
   }, [email]);
 
   if (!email) {
-    return null;
+    return;
   }
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const password = String(formData.get("password") ?? "");

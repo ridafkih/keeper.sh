@@ -8,9 +8,9 @@ import { hasAnalyticsConsent, track } from "@/lib/analytics";
 
 const { NEXT_PUBLIC_GOOGLE_ADS_ID } = process.env;
 
-const subscribe = (callback: () => void) => {
+const subscribe = (callback: () => void): (() => void) => {
   window.addEventListener("storage", callback);
-  return () => window.removeEventListener("storage", callback);
+  return (): void => window.removeEventListener("storage", callback);
 };
 
 interface AnalyticsProviderProps {
@@ -18,16 +18,23 @@ interface AnalyticsProviderProps {
   gdprApplies: boolean;
 }
 
-export const AnalyticsProvider = ({ token, gdprApplies }: AnalyticsProviderProps) => {
+import type { ReactNode } from "react";
+
+export const AnalyticsProvider = ({ token, gdprApplies }: AnalyticsProviderProps): ReactNode => {
   const pathname = usePathname();
   const hasConsent = useSyncExternalStore(
     subscribe,
-    () => hasAnalyticsConsent(),
-    () => false,
+    (): boolean => hasAnalyticsConsent(),
+    (): boolean => false,
   );
 
   const canTrack = !gdprApplies || hasConsent;
-  const consentState = canTrack ? "granted" : "denied";
+  const consentState = ((): "granted" | "denied" => {
+    if (canTrack) {
+      return "granted";
+    }
+    return "denied";
+  })();
 
   useEffect(() => {
     track("page_view", { path: pathname });
@@ -36,7 +43,12 @@ export const AnalyticsProvider = ({ token, gdprApplies }: AnalyticsProviderProps
   return (
     <>
       <Script
-        key={canTrack ? "persist" : "no-persist"}
+        key={((): string => {
+          if (canTrack) {
+            return "persist";
+          }
+          return "no-persist";
+        })()}
         src="https://cdn.visitors.now/v.js"
         data-token={token}
         {...(canTrack && { "data-persist": true })}

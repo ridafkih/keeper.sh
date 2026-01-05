@@ -1,8 +1,9 @@
+import type { ReactNode } from "react";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/marketing/footer";
 import { ConsentBanner } from "@/components/consent-banner";
 
-export default function MarketingLayout({ children }: { children: React.ReactNode }) {
+export default function MarketingLayout({ children }: { children: React.ReactNode }): ReactNode {
   return (
     <>
       <Header />

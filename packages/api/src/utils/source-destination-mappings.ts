@@ -1,10 +1,12 @@
 import {
-  sourceDestinationMappingsTable,
-  remoteICalSourcesTable,
   calendarDestinationsTable,
+  remoteICalSourcesTable,
+  sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { database } from "../context";
+
+const EMPTY_LIST_COUNT = 0;
 
 interface SourceDestinationMapping {
   id: string;
@@ -13,7 +15,7 @@ interface SourceDestinationMapping {
   createdAt: Date;
 }
 
-export const getUserMappings = async (userId: string): Promise<SourceDestinationMapping[]> => {
+const getUserMappings = async (userId: string): Promise<SourceDestinationMapping[]> => {
   const userSources = await database
     .select({ id: remoteICalSourcesTable.id })
     .from(remoteICalSourcesTable)
@@ -21,7 +23,7 @@ export const getUserMappings = async (userId: string): Promise<SourceDestination
 
   const sourceIds = userSources.map((source) => source.id);
 
-  if (sourceIds.length === 0) {
+  if (sourceIds.length === EMPTY_LIST_COUNT) {
     return [];
   }
 
@@ -31,7 +33,7 @@ export const getUserMappings = async (userId: string): Promise<SourceDestination
     .where(inArray(sourceDestinationMappingsTable.sourceId, sourceIds));
 };
 
-export const getSourcesForDestination = async (destinationId: string): Promise<string[]> => {
+const getSourcesForDestination = async (destinationId: string): Promise<string[]> => {
   const mappings = await database
     .select({ sourceId: sourceDestinationMappingsTable.sourceId })
     .from(sourceDestinationMappingsTable)
@@ -40,7 +42,7 @@ export const getSourcesForDestination = async (destinationId: string): Promise<s
   return mappings.map((mapping) => mapping.sourceId);
 };
 
-export const getDestinationsForSource = async (sourceId: string): Promise<string[]> => {
+const getDestinationsForSource = async (sourceId: string): Promise<string[]> => {
   const mappings = await database
     .select({ destinationId: sourceDestinationMappingsTable.destinationId })
     .from(sourceDestinationMappingsTable)
@@ -49,7 +51,7 @@ export const getDestinationsForSource = async (sourceId: string): Promise<string
   return mappings.map((mapping) => mapping.destinationId);
 };
 
-export const updateSourceMappings = async (
+const updateSourceMappings = async (
   userId: string,
   sourceId: string,
   destinationIds: string[],
@@ -59,19 +61,17 @@ export const updateSourceMappings = async (
     .from(calendarDestinationsTable)
     .where(eq(calendarDestinationsTable.userId, userId));
 
-  const validDestinationIds = userDestinations.map((dest) => dest.id);
-  const filteredDestinationIds = destinationIds.filter((destId) =>
-    validDestinationIds.includes(destId),
-  );
+  const validDestinationIds = new Set(userDestinations.map((dest) => dest.id));
+  const filteredDestinationIds = destinationIds.filter((destId) => validDestinationIds.has(destId));
 
   await database
     .delete(sourceDestinationMappingsTable)
     .where(eq(sourceDestinationMappingsTable.sourceId, sourceId));
 
-  if (filteredDestinationIds.length > 0) {
+  if (filteredDestinationIds.length > EMPTY_LIST_COUNT) {
     const mappingsToInsert = filteredDestinationIds.map((destinationId) => ({
-      sourceId,
       destinationId,
+      sourceId,
     }));
 
     await database
@@ -81,22 +81,19 @@ export const updateSourceMappings = async (
   }
 };
 
-export const createMappingsForNewSource = async (
-  userId: string,
-  sourceId: string,
-): Promise<void> => {
+const createMappingsForNewSource = async (userId: string, sourceId: string): Promise<void> => {
   const userDestinations = await database
     .select({ id: calendarDestinationsTable.id })
     .from(calendarDestinationsTable)
     .where(eq(calendarDestinationsTable.userId, userId));
 
-  if (userDestinations.length === 0) {
+  if (userDestinations.length === EMPTY_LIST_COUNT) {
     return;
   }
 
   const mappingsToInsert = userDestinations.map((destination) => ({
-    sourceId,
     destinationId: destination.id,
+    sourceId,
   }));
 
   await database
@@ -105,7 +102,7 @@ export const createMappingsForNewSource = async (
     .onConflictDoNothing();
 };
 
-export const createMappingsForNewDestination = async (
+const createMappingsForNewDestination = async (
   userId: string,
   destinationId: string,
 ): Promise<void> => {
@@ -114,13 +111,13 @@ export const createMappingsForNewDestination = async (
     .from(remoteICalSourcesTable)
     .where(eq(remoteICalSourcesTable.userId, userId));
 
-  if (userSources.length === 0) {
+  if (userSources.length === EMPTY_LIST_COUNT) {
     return;
   }
 
   const mappingsToInsert = userSources.map((source) => ({
-    sourceId: source.id,
     destinationId,
+    sourceId: source.id,
   }));
 
   await database
@@ -129,14 +126,25 @@ export const createMappingsForNewDestination = async (
     .onConflictDoNothing();
 };
 
-export const deleteMappingsForSource = async (sourceId: string): Promise<void> => {
+const deleteMappingsForSource = async (sourceId: string): Promise<void> => {
   await database
     .delete(sourceDestinationMappingsTable)
     .where(eq(sourceDestinationMappingsTable.sourceId, sourceId));
 };
 
-export const deleteMappingsForDestination = async (destinationId: string): Promise<void> => {
+const deleteMappingsForDestination = async (destinationId: string): Promise<void> => {
   await database
     .delete(sourceDestinationMappingsTable)
     .where(eq(sourceDestinationMappingsTable.destinationId, destinationId));
+};
+
+export {
+  getUserMappings,
+  getSourcesForDestination,
+  getDestinationsForSource,
+  updateSourceMappings,
+  createMappingsForNewSource,
+  createMappingsForNewDestination,
+  deleteMappingsForSource,
+  deleteMappingsForDestination,
 };

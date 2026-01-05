@@ -1,9 +1,9 @@
 import {
-  remoteICalSourcesTable,
-  eventStatesTable,
-  userSubscriptionsTable,
   calendarDestinationsTable,
+  eventStatesTable,
   oauthCredentialsTable,
+  remoteICalSourcesTable,
+  userSubscriptionsTable,
 } from "@keeper.sh/database/schema";
 import { getStartOfToday } from "@keeper.sh/date-utils";
 import { and, asc, eq, gte } from "drizzle-orm";
@@ -11,7 +11,7 @@ import type { Plan } from "@keeper.sh/premium";
 import type { SyncableEvent } from "../types";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
-export interface OAuthAccount {
+interface OAuthAccount {
   destinationId: string;
   userId: string;
   accountId: string;
@@ -20,20 +20,20 @@ export interface OAuthAccount {
   accessTokenExpiresAt: Date;
 }
 
-export const getOAuthAccountsByPlan = async (
+const getOAuthAccountsByPlan = async (
   database: BunSQLDatabase,
   provider: string,
   targetPlan: Plan,
 ): Promise<OAuthAccount[]> => {
   const results = await database
     .select({
-      destinationId: calendarDestinationsTable.id,
-      userId: calendarDestinationsTable.userId,
-      accountId: calendarDestinationsTable.accountId,
       accessToken: oauthCredentialsTable.accessToken,
-      refreshToken: oauthCredentialsTable.refreshToken,
       accessTokenExpiresAt: oauthCredentialsTable.expiresAt,
+      accountId: calendarDestinationsTable.accountId,
+      destinationId: calendarDestinationsTable.id,
       plan: userSubscriptionsTable.plan,
+      refreshToken: oauthCredentialsTable.refreshToken,
+      userId: calendarDestinationsTable.userId,
     })
     .from(calendarDestinationsTable)
     .innerJoin(
@@ -62,31 +62,31 @@ export const getOAuthAccountsByPlan = async (
     }
 
     accounts.push({
-      destinationId: result.destinationId,
-      userId: result.userId,
-      accountId,
       accessToken,
-      refreshToken,
       accessTokenExpiresAt,
+      accountId,
+      destinationId: result.destinationId,
+      refreshToken,
+      userId: result.userId,
     });
   }
 
   return accounts;
 };
 
-export const getOAuthAccountsForUser = async (
+const getOAuthAccountsForUser = async (
   database: BunSQLDatabase,
   provider: string,
   userId: string,
 ): Promise<OAuthAccount[]> => {
   const results = await database
     .select({
-      destinationId: calendarDestinationsTable.id,
-      userId: calendarDestinationsTable.userId,
-      accountId: calendarDestinationsTable.accountId,
       accessToken: oauthCredentialsTable.accessToken,
-      refreshToken: oauthCredentialsTable.refreshToken,
       accessTokenExpiresAt: oauthCredentialsTable.expiresAt,
+      accountId: calendarDestinationsTable.accountId,
+      destinationId: calendarDestinationsTable.id,
+      refreshToken: oauthCredentialsTable.refreshToken,
+      userId: calendarDestinationsTable.userId,
     })
     .from(calendarDestinationsTable)
     .innerJoin(
@@ -102,16 +102,16 @@ export const getOAuthAccountsForUser = async (
     );
 
   return results.map((result) => ({
-    destinationId: result.destinationId,
-    userId: result.userId,
-    accountId: result.accountId,
     accessToken: result.accessToken,
-    refreshToken: result.refreshToken,
     accessTokenExpiresAt: result.accessTokenExpiresAt,
+    accountId: result.accountId,
+    destinationId: result.destinationId,
+    refreshToken: result.refreshToken,
+    userId: result.userId,
   }));
 };
 
-export const getUserEventsForSync = async (
+const getUserEventsForSync = async (
   database: BunSQLDatabase,
   userId: string,
 ): Promise<SyncableEvent[]> => {
@@ -119,13 +119,13 @@ export const getUserEventsForSync = async (
 
   const results = await database
     .select({
+      endTime: eventStatesTable.endTime,
       id: eventStatesTable.id,
       sourceEventUid: eventStatesTable.sourceEventUid,
-      startTime: eventStatesTable.startTime,
-      endTime: eventStatesTable.endTime,
       sourceId: eventStatesTable.sourceId,
       sourceName: remoteICalSourcesTable.name,
       sourceUrl: remoteICalSourcesTable.url,
+      startTime: eventStatesTable.startTime,
     })
     .from(eventStatesTable)
     .innerJoin(remoteICalSourcesTable, eq(eventStatesTable.sourceId, remoteICalSourcesTable.id))
@@ -135,19 +135,24 @@ export const getUserEventsForSync = async (
   const events: SyncableEvent[] = [];
 
   for (const result of results) {
-    if (result.sourceEventUid === null) continue;
+    if (result.sourceEventUid === null) {
+      continue;
+    }
 
     events.push({
+      endTime: result.endTime,
       id: result.id,
       sourceEventUid: result.sourceEventUid,
-      startTime: result.startTime,
-      endTime: result.endTime,
       sourceId: result.sourceId,
       sourceName: result.sourceName,
       sourceUrl: result.sourceUrl,
+      startTime: result.startTime,
       summary: result.sourceName ?? "Busy",
     });
   }
 
   return events;
 };
+
+export { getOAuthAccountsByPlan, getOAuthAccountsForUser, getUserEventsForSync };
+export type { OAuthAccount };

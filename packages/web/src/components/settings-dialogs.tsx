@@ -1,13 +1,15 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { stringSchema } from "@keeper.sh/data-schemas";
 import { FormDialog } from "@/components/form-dialog";
 import { FormField } from "@/components/form-field";
 import { useFormSubmit } from "@/hooks/use-form-submit";
 
-function getStringFromFormData(formData: FormData, key: string): string {
-  return stringSchema.assert(formData.get(key));
-}
+const MIN_PASSWORD_LENGTH = 8;
+
+const getStringFromFormData = (formData: FormData, key: string): string =>
+  stringSchema.assert(formData.get(key));
 
 interface DialogProps {
   open: boolean;
@@ -18,10 +20,14 @@ interface ChangePasswordDialogProps extends DialogProps {
   onSave: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
-export const ChangePasswordDialog = ({ open, onOpenChange, onSave }: ChangePasswordDialogProps) => {
+const ChangePasswordDialog = ({
+  open,
+  onOpenChange,
+  onSave,
+}: ChangePasswordDialogProps): ReactNode => {
   const { isSubmitting, error, submit } = useFormSubmit<boolean>();
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
 
     const formData = new FormData(event.currentTarget);
@@ -34,7 +40,7 @@ export const ChangePasswordDialog = ({ open, onOpenChange, onSave }: ChangePassw
         throw new Error("New passwords do not match");
       }
 
-      if (newPassword.length < 8) {
+      if (newPassword.length < MIN_PASSWORD_LENGTH) {
         throw new Error("New password must be at least 8 characters");
       }
 
@@ -94,10 +100,14 @@ interface DeleteAccountDialogProps extends DialogProps {
   onDelete: (password: string) => Promise<void>;
 }
 
-export const DeleteAccountDialog = ({ open, onOpenChange, onDelete }: DeleteAccountDialogProps) => {
+const DeleteAccountDialog = ({
+  open,
+  onOpenChange,
+  onDelete,
+}: DeleteAccountDialogProps): ReactNode => {
   const { isSubmitting, error, submit } = useFormSubmit();
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
 
     const formData = new FormData(event.currentTarget);
@@ -132,3 +142,5 @@ export const DeleteAccountDialog = ({ open, onOpenChange, onDelete }: DeleteAcco
     </FormDialog>
   );
 };
+
+export { ChangePasswordDialog, DeleteAccountDialog };

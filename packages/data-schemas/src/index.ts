@@ -1,177 +1,232 @@
 import { type } from "arktype";
 
-export const proxyableMethods = type("'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD' | 'OPTIONS'");
+const proxyableMethods = type("'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD' | 'OPTIONS'");
 
-export type ProxyableMethods = typeof proxyableMethods.infer;
+type ProxyableMethods = typeof proxyableMethods.infer;
 
-export const planSchema = type("'free' | 'pro'");
-export type Plan = typeof planSchema.infer;
+const planSchema = type("'free' | 'pro'");
+type Plan = typeof planSchema.infer;
 
-export const billingPeriodSchema = type("'monthly' | 'yearly'");
-export type BillingPeriod = typeof billingPeriodSchema.infer;
+const billingPeriodSchema = type("'monthly' | 'yearly'");
+type BillingPeriod = typeof billingPeriodSchema.infer;
 
-export const createSourceSchema = type({
+const createSourceSchema = type({
   name: "string",
   url: "string",
 });
 
-export type CreateSource = typeof createSourceSchema.infer;
+type CreateSource = typeof createSourceSchema.infer;
 
-export const stringSchema = type("string");
+const stringSchema = type("string");
 
-export const googleEventSchema = type({
-  "id?": "string",
-  "iCalUID?": "string",
-  "summary?": "string",
+const googleEventSchema = type({
   "description?": "string",
-  "start?": { "dateTime?": "string", "timeZone?": "string" },
   "end?": { "dateTime?": "string", "timeZone?": "string" },
+  "iCalUID?": "string",
+  "id?": "string",
+  "start?": { "dateTime?": "string", "timeZone?": "string" },
+  "summary?": "string",
 });
-export type GoogleEvent = typeof googleEventSchema.infer;
+type GoogleEvent = typeof googleEventSchema.infer;
 
-export const googleEventListSchema = type({
+const googleEventListSchema = type({
   "items?": googleEventSchema.array(),
   "nextPageToken?": "string",
 });
-export type GoogleEventList = typeof googleEventListSchema.infer;
+type GoogleEventList = typeof googleEventListSchema.infer;
 
-export const googleApiErrorSchema = type({
-  "error?": { "message?": "string", "code?": "number", "status?": "string" },
+const googleApiErrorSchema = type({
+  "error?": { "code?": "number", "message?": "string", "status?": "string" },
 });
-export type GoogleApiError = typeof googleApiErrorSchema.infer;
+type GoogleApiError = typeof googleApiErrorSchema.infer;
 
-export const googleTokenResponseSchema = type({
+const googleTokenResponseSchema = type({
   access_token: "string",
   expires_in: "number",
   "refresh_token?": "string",
   scope: "string",
   token_type: "string",
 });
-export type GoogleTokenResponse = typeof googleTokenResponseSchema.infer;
+type GoogleTokenResponse = typeof googleTokenResponseSchema.infer;
 
-export const googleUserInfoSchema = type({
-  id: "string",
+const googleUserInfoSchema = type({
   email: "string",
-  "verified_email?": "boolean",
-  "name?": "string",
-  "given_name?": "string",
   "family_name?": "string",
+  "given_name?": "string",
+  id: "string",
+  "name?": "string",
   "picture?": "string",
+  "verified_email?": "boolean",
 });
-export type GoogleUserInfo = typeof googleUserInfoSchema.infer;
+type GoogleUserInfo = typeof googleUserInfoSchema.infer;
 
-export const microsoftTokenResponseSchema = type({
+const microsoftTokenResponseSchema = type({
   access_token: "string",
-  token_type: "string",
   expires_in: "number",
   "refresh_token?": "string",
   scope: "string",
+  token_type: "string",
 });
-export type MicrosoftTokenResponse = typeof microsoftTokenResponseSchema.infer;
+type MicrosoftTokenResponse = typeof microsoftTokenResponseSchema.infer;
 
-export const microsoftUserInfoSchema = type({
+const microsoftUserInfoSchema = type({
+  "displayName?": "string",
   id: "string",
   "mail?": "string",
   "userPrincipalName?": "string",
-  "displayName?": "string",
 });
-export type MicrosoftUserInfo = typeof microsoftUserInfoSchema.infer;
+type MicrosoftUserInfo = typeof microsoftUserInfoSchema.infer;
 
-export const outlookEventSchema = type({
-  "id?": "string",
-  "iCalUId?": "string",
-  "subject?": "string",
-  "body?": { "contentType?": "string", "content?": "string" },
-  "start?": { "dateTime?": "string", "timeZone?": "string" },
-  "end?": { "dateTime?": "string", "timeZone?": "string" },
+const outlookEventSchema = type({
+  "body": type({ "content?": "string", "contentType?": "string" }).or(type('null')),
   "categories?": "string[]",
+  "end?": { "dateTime?": "string", "timeZone?": "string" },
+  "iCalUId?": "string",
+  "id?": "string",
+  "start?": { "dateTime?": "string", "timeZone?": "string" },
+  "subject?": "string",
 });
-export type OutlookEvent = typeof outlookEventSchema.infer;
+type OutlookEvent = typeof outlookEventSchema.infer;
 
-export const outlookEventListSchema = type({
-  "value?": outlookEventSchema.array(),
+const outlookEventListSchema = type({
   "@odata.nextLink?": "string",
+  "value?": outlookEventSchema.array(),
 });
-export type OutlookEventList = typeof outlookEventListSchema.infer;
+type OutlookEventList = typeof outlookEventListSchema.infer;
 
-export const microsoftApiErrorSchema = type({
+const microsoftApiErrorSchema = type({
   "error?": { "code?": "string", "message?": "string" },
 });
-export type MicrosoftApiError = typeof microsoftApiErrorSchema.infer;
+type MicrosoftApiError = typeof microsoftApiErrorSchema.infer;
 
-export const socketMessageSchema = type({
-  event: "string",
+const socketMessageSchema = type({
   "data?": "unknown",
+  event: "string",
 });
-export type SocketMessage = typeof socketMessageSchema.infer;
+type SocketMessage = typeof socketMessageSchema.infer;
 
-export const syncOperationSchema = type({
-  type: "'add' | 'remove'",
+const syncOperationSchema = type({
   eventTime: "string",
+  type: "'add' | 'remove'",
 });
-export type SyncOperation = typeof syncOperationSchema.infer;
+type SyncOperation = typeof syncOperationSchema.infer;
 
-export const syncStatusSchema = type({
+const syncStatusSchema = type({
   destinationId: "string",
-  status: "'idle' | 'syncing'",
-  "stage?": "'fetching' | 'comparing' | 'processing'",
-  localEventCount: "number",
-  remoteEventCount: "number",
-  "progress?": { current: "number", total: "number" },
+  inSync: "boolean",
   "lastOperation?": syncOperationSchema,
   "lastSyncedAt?": "string",
-  inSync: "boolean",
+  localEventCount: "number",
   "needsReauthentication?": "boolean",
+  "progress?": { current: "number", total: "number" },
+  remoteEventCount: "number",
+  "stage?": "'fetching' | 'comparing' | 'processing'",
+  status: "'idle' | 'syncing'",
 });
-export type SyncStatus = typeof syncStatusSchema.infer;
+type SyncStatus = typeof syncStatusSchema.infer;
 
-export const broadcastMessageSchema = type({
-  userId: "string",
-  event: "string",
+const broadcastMessageSchema = type({
   data: "unknown",
+  event: "string",
+  userId: "string",
 });
-export type BroadcastMessage = typeof broadcastMessageSchema.infer;
+type BroadcastMessage = typeof broadcastMessageSchema.infer;
 
-export const userSchema = type({
-  id: "string",
-  "username?": "string",
-  "name?": "string",
+const userSchema = type({
   "email?": "string",
   "emailVerified?": "boolean",
+  id: "string",
+  "name?": "string",
+  "username?": "string",
 });
-export type User = typeof userSchema.infer;
+type User = typeof userSchema.infer;
 
-export const signUpBodySchema = type({
+const signUpBodySchema = type({
   email: "string",
   "name?": "string",
   "password?": "string",
 });
-export type SignUpBody = typeof signUpBodySchema.infer;
+type SignUpBody = typeof signUpBodySchema.infer;
 
-export const caldavDiscoverRequestSchema = type({
+const caldavDiscoverRequestSchema = type({
+  password: "string",
   serverUrl: "string",
   username: "string",
-  password: "string",
 });
-export type CalDAVDiscoverRequest = typeof caldavDiscoverRequestSchema.infer;
+type CalDAVDiscoverRequest = typeof caldavDiscoverRequestSchema.infer;
 
-export const caldavConnectRequestSchema = type({
-  serverUrl: "string",
-  username: "string",
-  password: "string",
+const caldavConnectRequestSchema = type({
   calendarUrl: "string",
+  password: "string",
   "provider?": "string",
+  serverUrl: "string",
+  username: "string",
 });
-export type CalDAVConnectRequest = typeof caldavConnectRequestSchema.infer;
+type CalDAVConnectRequest = typeof caldavConnectRequestSchema.infer;
 
-export const updateSourceDestinationsSchema = type({
+const updateSourceDestinationsSchema = type({
   destinationIds: "string[]",
 });
-export type UpdateSourceDestinations = typeof updateSourceDestinationsSchema.infer;
+type UpdateSourceDestinations = typeof updateSourceDestinationsSchema.infer;
 
-export const checkoutSuccessEventSchema = type({
+const checkoutSuccessEventSchema = type({
+  "currency?": "string",
   "id?": "string",
   "totalAmount?": "number",
-  "currency?": "string",
 });
-export type CheckoutSuccessEvent = typeof checkoutSuccessEventSchema.infer;
+type CheckoutSuccessEvent = typeof checkoutSuccessEventSchema.infer;
+
+export {
+  proxyableMethods,
+  planSchema,
+  billingPeriodSchema,
+  createSourceSchema,
+  stringSchema,
+  googleEventSchema,
+  googleEventListSchema,
+  googleApiErrorSchema,
+  googleTokenResponseSchema,
+  googleUserInfoSchema,
+  microsoftTokenResponseSchema,
+  microsoftUserInfoSchema,
+  outlookEventSchema,
+  outlookEventListSchema,
+  microsoftApiErrorSchema,
+  socketMessageSchema,
+  syncOperationSchema,
+  syncStatusSchema,
+  broadcastMessageSchema,
+  userSchema,
+  signUpBodySchema,
+  caldavDiscoverRequestSchema,
+  caldavConnectRequestSchema,
+  updateSourceDestinationsSchema,
+  checkoutSuccessEventSchema,
+};
+
+export type {
+  ProxyableMethods,
+  Plan,
+  BillingPeriod,
+  CreateSource,
+  GoogleEvent,
+  GoogleEventList,
+  GoogleApiError,
+  GoogleTokenResponse,
+  GoogleUserInfo,
+  MicrosoftTokenResponse,
+  MicrosoftUserInfo,
+  OutlookEvent,
+  OutlookEventList,
+  MicrosoftApiError,
+  SocketMessage,
+  SyncOperation,
+  SyncStatus,
+  BroadcastMessage,
+  User,
+  SignUpBody,
+  CalDAVDiscoverRequest,
+  CalDAVConnectRequest,
+  UpdateSourceDestinations,
+  CheckoutSuccessEvent,
+};

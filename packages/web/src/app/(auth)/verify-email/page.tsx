@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Mail } from "lucide-react";
 import { AuthFormContainer } from "@/components/auth-form";
@@ -11,12 +12,14 @@ import { useFormSubmit } from "@/hooks/use-form-submit";
 import { CardTitle, TextBody } from "@/components/typography";
 import { button } from "@/styles";
 
-const getPendingEmail = () => {
-  if (typeof window === "undefined") return null;
+const getPendingEmail = (): string | null | undefined => {
+  if (typeof window === "undefined") {
+    return;
+  }
   return sessionStorage.getItem("pendingVerificationEmail");
 };
 
-export default function VerifyEmailPage() {
+export default function VerifyEmailPage(): ReactNode {
   const router = useRouter();
   const { user, isLoading } = useAuth();
   const { isSubmitting, error, submit } = useFormSubmit();
@@ -30,23 +33,25 @@ export default function VerifyEmailPage() {
 
   const email = user?.email ?? getPendingEmail();
 
-  async function handleResend() {
-    if (!email) return;
+  const handleResend = async (): Promise<void> => {
+    if (!email) {
+      return;
+    }
 
     await submit(async () => {
       const { error } = await authClient.sendVerificationEmail({
-        email,
         callbackURL: "/dashboard",
+        email,
       });
 
       if (error) {
         throw new Error(error.message ?? "Failed to resend verification email");
       }
     });
-  }
+  };
 
   if (isLoading || user?.emailVerified) {
-    return null;
+    return;
   }
 
   return (
@@ -73,9 +78,9 @@ export default function VerifyEmailPage() {
           isLoading={isSubmitting}
           disabled={!email}
           className={button({
-            variant: "secondary",
-            size: "sm",
             className: "w-full",
+            size: "sm",
+            variant: "secondary",
           })}
         >
           Resend verification email

@@ -1,10 +1,15 @@
-import { randomUUID } from "node:crypto";
 import type { ServiceBoundary, WideEventFields } from "./types";
+import { randomUUID } from "node:crypto";
 
 const createInitialFields = (serviceBoundary: ServiceBoundary): Partial<WideEventFields> => ({
+  httpMethod: null,
+  httpOrigin: null,
+  httpPath: null,
+  httpStatusCode: null,
+  httpUserAgent: null,
   requestId: randomUUID(),
-  startTime: Date.now(),
   serviceBoundary,
+  startTime: Date.now(),
   timings: {},
 });
 
@@ -12,17 +17,24 @@ const extractErrorFields = (
   error: unknown,
 ): Pick<WideEventFields, "error" | "errorType" | "errorMessage" | "errorCode"> => {
   if (error instanceof Error) {
-    return {
-      error: true,
-      errorType: error.constructor.name,
+    const baseFields = {
+      error: true as const,
       errorMessage: error.message,
-      errorCode: "code" in error ? String(error.code) : undefined,
+      errorType: error.constructor.name,
     };
+
+    const hasCodeInError = "code" in error;
+
+    if (!hasCodeInError) {
+      return baseFields;
+    }
+
+    return { ...baseFields, errorCode: String(error.code) };
   }
   return {
     error: true,
-    errorType: "Unknown",
     errorMessage: String(error),
+    errorType: "Unknown",
   };
 };
 
@@ -30,7 +42,7 @@ const calculateDuration = (startTime: number, endTime: number): number => endTim
 
 export class WideEvent {
   private fields: Partial<WideEventFields>;
-  private timingStarts: Map<string, number> = new Map();
+  private timingStarts = new Map<string, number>();
 
   constructor(serviceBoundary: ServiceBoundary) {
     this.fields = createInitialFields(serviceBoundary);
@@ -41,17 +53,19 @@ export class WideEvent {
     return this;
   };
 
-  get = <Key extends keyof WideEventFields>(key: Key): WideEventFields[Key] | undefined => {
-    return this.fields[key];
-  };
+  get = <Key extends keyof WideEventFields>(key: Key): WideEventFields[Key] | undefined =>
+    this.fields[key];
 
   startTiming = (timingName: string): void => {
     this.timingStarts.set(timingName, performance.now());
   };
 
-  endTiming = (timingName: string): number | undefined => {
-    const timingStart = this.timingStarts.get(timingName);
-    if (timingStart === undefined) return undefined;
+  endTiming = (timingName: string): number | null => {
+    const timingStart = this.timingStarts.get(timingName) ?? null;
+
+    if (timingStart === null) {
+      return null;
+    }
 
     const duration = Math.round(performance.now() - timingStart);
     this.timingStarts.delete(timingName);
@@ -66,12 +80,12 @@ export class WideEvent {
   };
 
   finalize = (): WideEventFields => {
-    const { requestId, startTime, serviceBoundary } = this.fields;
+    const { requestId, startTime = null, serviceBoundary } = this.fields;
 
     if (!requestId) {
       throw new Error("WideEvent requestId was not initialized");
     }
-    if (startTime === undefined) {
+    if (startTime === null) {
       throw new Error("WideEvent startTime was not initialized");
     }
     if (!serviceBoundary) {
@@ -81,16 +95,21 @@ export class WideEvent {
     const endTime = Date.now();
     return {
       ...this.fields,
-      requestId,
-      startTime,
-      serviceBoundary,
-      endTime,
       durationMs: calculateDuration(startTime, endTime),
+      endTime,
+      httpMethod: this.fields.httpMethod ?? null,
+      httpOrigin: this.fields.httpOrigin ?? null,
+      httpPath: this.fields.httpPath ?? null,
+      httpStatusCode: this.fields.httpStatusCode ?? null,
+      httpUserAgent: this.fields.httpUserAgent ?? null,
+      requestId,
+      serviceBoundary,
+      startTime,
     };
   };
 
   getRequestId = (): string => {
-    const requestId = this.fields.requestId;
+    const { requestId } = this.fields;
     if (!requestId) {
       throw new Error("WideEvent requestId was not initialized");
     }

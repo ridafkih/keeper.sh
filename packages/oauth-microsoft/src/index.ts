@@ -1,39 +1,34 @@
-import {
-  microsoftTokenResponseSchema,
-  microsoftUserInfoSchema,
-  type MicrosoftTokenResponse,
-  type MicrosoftUserInfo,
-} from "@keeper.sh/data-schemas";
-import { generateState, validateState, type ValidatedState } from "@keeper.sh/oauth";
-
-export { generateState, validateState, type ValidatedState };
+import { microsoftTokenResponseSchema, microsoftUserInfoSchema } from "@keeper.sh/data-schemas";
+import type { MicrosoftTokenResponse, MicrosoftUserInfo } from "@keeper.sh/data-schemas";
+import { generateState, validateState } from "@keeper.sh/oauth";
+import type { ValidatedState } from "@keeper.sh/oauth";
 
 const MICROSOFT_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
 const MICROSOFT_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
 const MICROSOFT_USERINFO_URL = "https://graph.microsoft.com/v1.0/me";
 
-export const MICROSOFT_CALENDAR_SCOPE = "Calendars.ReadWrite";
-export const MICROSOFT_USER_SCOPE = "User.Read";
-export const MICROSOFT_OFFLINE_SCOPE = "offline_access";
+const MICROSOFT_CALENDAR_SCOPE = "Calendars.ReadWrite";
+const MICROSOFT_USER_SCOPE = "User.Read";
+const MICROSOFT_OFFLINE_SCOPE = "offline_access";
 
-export interface MicrosoftOAuthCredentials {
+interface MicrosoftOAuthCredentials {
   clientId: string;
   clientSecret: string;
 }
 
-export interface AuthorizationUrlOptions {
+interface AuthorizationUrlOptions {
   callbackUrl: string;
   scopes?: string[];
   destinationId?: string;
 }
 
-export interface MicrosoftOAuthService {
+interface MicrosoftOAuthService {
   getAuthorizationUrl: (userId: string, options: AuthorizationUrlOptions) => string;
   exchangeCodeForTokens: (code: string, callbackUrl: string) => Promise<MicrosoftTokenResponse>;
   refreshAccessToken: (refreshToken: string) => Promise<MicrosoftTokenResponse>;
 }
 
-export const createMicrosoftOAuthService = (
+const createMicrosoftOAuthService = (
   credentials: MicrosoftOAuthCredentials,
 ): MicrosoftOAuthService => {
   const { clientId, clientSecret } = credentials;
@@ -63,8 +58,6 @@ export const createMicrosoftOAuthService = (
     callbackUrl: string,
   ): Promise<MicrosoftTokenResponse> => {
     const response = await fetch(MICROSOFT_TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         client_id: clientId,
         client_secret: clientSecret,
@@ -72,6 +65,8 @@ export const createMicrosoftOAuthService = (
         grant_type: "authorization_code",
         redirect_uri: callbackUrl,
       }),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      method: "POST",
     });
 
     if (!response.ok) {
@@ -85,14 +80,14 @@ export const createMicrosoftOAuthService = (
 
   const refreshAccessToken = async (refreshToken: string): Promise<MicrosoftTokenResponse> => {
     const response = await fetch(MICROSOFT_TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         client_id: clientId,
         client_secret: clientSecret,
-        refresh_token: refreshToken,
         grant_type: "refresh_token",
+        refresh_token: refreshToken,
       }),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      method: "POST",
     });
 
     if (!response.ok) {
@@ -105,13 +100,13 @@ export const createMicrosoftOAuthService = (
   };
 
   return {
-    getAuthorizationUrl,
     exchangeCodeForTokens,
+    getAuthorizationUrl,
     refreshAccessToken,
   };
 };
 
-export const fetchUserInfo = async (accessToken: string): Promise<MicrosoftUserInfo> => {
+const fetchUserInfo = async (accessToken: string): Promise<MicrosoftUserInfo> => {
   const response = await fetch(MICROSOFT_USERINFO_URL, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -128,9 +123,26 @@ export const fetchUserInfo = async (accessToken: string): Promise<MicrosoftUserI
  * Checks if the granted scopes include all required scopes for calendar operations.
  * Microsoft returns scopes as a space-separated string.
  */
-export const hasRequiredScopes = (grantedScopes: string): boolean => {
+const hasRequiredScopes = (grantedScopes: string): boolean => {
   const scopes = grantedScopes.toLowerCase().split(" ");
   return scopes.includes(MICROSOFT_CALENDAR_SCOPE.toLowerCase());
 };
 
-export type { MicrosoftTokenResponse, MicrosoftUserInfo };
+export {
+  generateState,
+  validateState,
+  MICROSOFT_CALENDAR_SCOPE,
+  MICROSOFT_USER_SCOPE,
+  MICROSOFT_OFFLINE_SCOPE,
+  createMicrosoftOAuthService,
+  fetchUserInfo,
+  hasRequiredScopes,
+};
+export type {
+  ValidatedState,
+  MicrosoftOAuthCredentials,
+  AuthorizationUrlOptions,
+  MicrosoftOAuthService,
+  MicrosoftTokenResponse,
+  MicrosoftUserInfo,
+};

@@ -1,22 +1,26 @@
-import { Suspense, use, cache } from "react";
+import { Suspense, cache, use } from "react";
+import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import { CookieConsent } from "@/components/cookie-consent";
 import { GDPR_COUNTRIES } from "@/config/analytics";
 
-const getCountry = cache(() =>
-  headers().then((headers) => headers.get("x-vercel-ip-country") ?? ""),
+const getCountry = cache(
+  (): Promise<string> =>
+    headers().then((headers): string => headers.get("x-vercel-ip-country") ?? ""),
 );
 
-const ConsentBannerInner = () => {
+const ConsentBannerInner = (): ReactNode => {
   const country = use(getCountry());
   const requiresConsent = GDPR_COUNTRIES.has(country);
 
-  if (!requiresConsent) return null;
+  if (!requiresConsent) {
+    return;
+  }
 
   return <CookieConsent />;
 };
 
-export const ConsentBanner = () => (
+export const ConsentBanner = (): ReactNode => (
   <Suspense>
     <ConsentBannerInner />
   </Suspense>

@@ -1,25 +1,26 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 import { FREE_DESTINATION_LIMIT } from "@keeper.sh/premium/constants";
-import {
-  DESTINATIONS,
-  isCalDAVDestination,
-  type DestinationConfig,
-  type CalDAVDestinationId,
-} from "@keeper.sh/destination-metadata";
+import { DESTINATIONS, isCalDAVDestination } from "@keeper.sh/destination-metadata";
+import type { CalDAVDestinationId, DestinationConfig } from "@keeper.sh/destination-metadata";
 import { useLinkedAccounts } from "./use-linked-accounts";
-import {
-  useMappings,
-  updateSourceDestinations,
-  type SourceDestinationMapping,
-} from "./use-mappings";
-import { useSources, type CalendarSource } from "./use-sources";
+import { updateSourceDestinations, useMappings } from "./use-mappings";
+import type { SourceDestinationMapping } from "./use-mappings";
+import { useSources } from "./use-sources";
+import type { CalendarSource } from "./use-sources";
 import { useSubscription } from "./use-subscription";
 import { useSyncStatus } from "./use-sync-status";
 import { track } from "@/lib/analytics";
 
-export interface SyncStatusDisplayProps {
+const getToggleActionLabel = (wasEnabled: boolean): string => {
+  if (wasEnabled) {
+    return "disabled";
+  }
+  return "enabled";
+};
+
+interface SyncStatusDisplayProps {
   status: "idle" | "syncing";
   stage?: "fetching" | "comparing" | "processing";
   localCount: number;
@@ -52,7 +53,51 @@ const getDestinationsForSource = (
   return destinationIds;
 };
 
-export const useDestinationsManager = (callbacks: DestinationsManagerCallbacks) => {
+interface LinkedAccount {
+  id: string;
+  providerId: string;
+  email: string | null;
+  needsReauthentication: boolean;
+}
+
+interface SyncStatusEntry {
+  status: "idle" | "syncing";
+  stage?: "fetching" | "comparing" | "processing";
+  localEventCount: number;
+  remoteEventCount: number;
+  progress?: { current: number; total: number };
+  lastOperation?: { type: "add" | "remove"; eventTime: string };
+  inSync: boolean;
+  needsReauthentication?: boolean;
+  destinationId: string;
+}
+
+type SyncStatusRecord = Record<string, SyncStatusEntry>;
+
+interface DestinationsManagerResult {
+  accounts: LinkedAccount[] | undefined;
+  caldavDialogOpen: boolean;
+  caldavProvider: CalDAVDestinationId | null;
+  destinationCount: number;
+  getDestinationConfig: (providerId: string) => DestinationConfig | undefined;
+  getSyncStatus: (destinationId: string) => SyncStatusDisplayProps | null;
+  handleCaldavSuccess: () => Promise<void>;
+  handleConnect: (providerId: string, destinationId?: string) => void;
+  handleDisconnect: (destinationId: string, providerName: string) => Promise<void>;
+  handleToggleSource: (destinationId: string, sourceId: string) => Promise<void>;
+  isAccountsLoading: boolean;
+  isAtLimit: boolean;
+  isEmpty: boolean;
+  loadingId: string | null;
+  mappings: SourceDestinationMapping[];
+  setCaldavDialogOpen: (open: boolean) => void;
+  sources: CalendarSource[];
+  syncStatus: SyncStatusRecord | undefined;
+}
+
+const useDestinationsManager = (
+  callbacks: DestinationsManagerCallbacks,
+): DestinationsManagerResult => {
   const { onToast, onNavigate } = callbacks;
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [caldavDialogOpen, setCaldavDialogOpen] = useState(false);
@@ -76,24 +121,28 @@ export const useDestinationsManager = (callbacks: DestinationsManagerCallbacks) 
   const destinationCount = accounts?.length ?? 0;
   const isEmpty = !isAccountsLoading && destinationCount === 0;
 
-  const getDestinationConfig = useCallback((providerId: string): DestinationConfig | undefined => {
-    return DESTINATIONS.find(
-      (destination) => isConnectable(destination) && destination.id === providerId,
-    );
-  }, []);
+  const getDestinationConfig = useCallback(
+    (providerId: string): DestinationConfig | undefined =>
+      DESTINATIONS.find(
+        (destination) => isConnectable(destination) && destination.id === providerId,
+      ),
+    [],
+  );
 
   const getSyncStatus = useCallback(
-    (destinationId: string): SyncStatusDisplayProps | undefined => {
+    (destinationId: string): SyncStatusDisplayProps | null => {
       const destinationStatus = syncStatus?.[destinationId];
-      if (!destinationStatus) return undefined;
+      if (!destinationStatus) {
+        return null;
+      }
       return {
-        status: destinationStatus.status,
-        stage: destinationStatus.stage,
-        localCount: destinationStatus.localEventCount,
-        remoteCount: destinationStatus.remoteEventCount,
-        progress: destinationStatus.progress,
-        lastOperation: destinationStatus.lastOperation,
         inSync: destinationStatus.inSync,
+        lastOperation: destinationStatus.lastOperation,
+        localCount: destinationStatus.localEventCount,
+        progress: destinationStatus.progress,
+        remoteCount: destinationStatus.remoteEventCount,
+        stage: destinationStatus.stage,
+        status: destinationStatus.status,
       };
     },
     [syncStatus],
@@ -152,11 +201,14 @@ export const useDestinationsManager = (callbacks: DestinationsManagerCallbacks) 
 
   const handleToggleSource = useCallback(
     async (destinationId: string, sourceId: string) => {
-      if (!mappings) return;
+      if (!mappings) {
+        return;
+      }
 
       const currentDestinations = getDestinationsForSource(sourceId, mappings);
       const isEnabled = currentDestinations.includes(destinationId);
-      track("mapping_toggled", { action: isEnabled ? "disabled" : "enabled" });
+      const trackAction = getToggleActionLabel(isEnabled);
+      track("mapping_toggled", { action: trackAction });
 
       const newDestinations: string[] = [];
       for (const destId of currentDestinations) {
@@ -173,16 +225,18 @@ export const useDestinationsManager = (callbacks: DestinationsManagerCallbacks) 
         const isTargetMapping =
           mapping.sourceId === sourceId && mapping.destinationId === destinationId;
 
-        if (isTargetMapping) continue;
+        if (isTargetMapping) {
+          continue;
+        }
 
         optimisticData.push(mapping);
       }
       if (!isEnabled) {
         optimisticData.push({
+          createdAt: new Date().toISOString(),
+          destinationId,
           id: crypto.randomUUID(),
           sourceId,
-          destinationId,
-          createdAt: new Date().toISOString(),
         });
       }
 
@@ -196,28 +250,31 @@ export const useDestinationsManager = (callbacks: DestinationsManagerCallbacks) 
     [mappings, mutateMappings],
   );
 
-  const handleCaldavDialogChange = useCallback((open: boolean) => {
+  const handleCaldavDialogChange = useCallback((open: boolean): void => {
     setCaldavDialogOpen(open);
   }, []);
 
   return {
     accounts,
-    sources: sources ?? [],
-    mappings: mappings ?? [],
-    syncStatus,
-    isAccountsLoading,
-    loadingId,
     caldavDialogOpen,
     caldavProvider,
-    isAtLimit,
     destinationCount,
-    isEmpty,
+    getDestinationConfig,
+    getSyncStatus,
+    handleCaldavSuccess,
     handleConnect,
     handleDisconnect,
     handleToggleSource,
-    handleCaldavSuccess,
+    isAccountsLoading,
+    isAtLimit,
+    isEmpty,
+    loadingId,
+    mappings: mappings ?? [],
     setCaldavDialogOpen: handleCaldavDialogChange,
-    getDestinationConfig,
-    getSyncStatus,
+    sources: sources ?? [],
+    syncStatus,
   };
 };
+
+export { useDestinationsManager };
+export type { SyncStatusDisplayProps };

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, type FC } from "react";
+import { useState } from "react";
+import type { FC, ReactNode } from "react";
 import { Dialog } from "@base-ui/react/dialog";
 import { Button } from "@/components/button";
-import { button, input, dialogPopup } from "@/styles";
-import { CardTitle, TextBody, TextCaption, DangerText } from "@/components/typography";
+import { button, dialogPopup, input } from "@/styles";
+import { CardTitle, DangerText, TextBody, TextCaption } from "@/components/typography";
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import { type CalDAVDestinationId } from "@keeper.sh/destination-metadata";
+import type { CalDAVDestinationId } from "@keeper.sh/destination-metadata";
 
 interface CalendarOption {
   url: string;
@@ -23,29 +24,29 @@ interface ProviderConfig {
 }
 
 const PROVIDER_CONFIGS: Record<CalDAVDestinationId, ProviderConfig> = {
+  caldav: {
+    name: "CalDAV",
+    passwordHelp: "Your CalDAV password or app password",
+    passwordLabel: "Password",
+    serverUrl: "",
+    usernameHelp: "Your CalDAV username",
+    usernameLabel: "Username",
+  },
   fastmail: {
     name: "FastMail",
-    serverUrl: "https://caldav.fastmail.com/",
-    usernameLabel: "Email",
-    usernameHelp: "Your FastMail email address",
-    passwordLabel: "App Password",
     passwordHelp: "Generate one at Settings → Password & Security → Third-party apps",
+    passwordLabel: "App Password",
+    serverUrl: "https://caldav.fastmail.com/",
+    usernameHelp: "Your FastMail email address",
+    usernameLabel: "Email",
   },
   icloud: {
     name: "iCloud",
-    serverUrl: "https://caldav.icloud.com/",
-    usernameLabel: "Apple ID",
-    usernameHelp: "Your Apple ID email address",
-    passwordLabel: "App-Specific Password",
     passwordHelp: "Generate one at appleid.apple.com → Sign-In and Security",
-  },
-  caldav: {
-    name: "CalDAV",
-    serverUrl: "",
-    usernameLabel: "Username",
-    usernameHelp: "Your CalDAV username",
-    passwordLabel: "Password",
-    passwordHelp: "Your CalDAV password or app password",
+    passwordLabel: "App-Specific Password",
+    serverUrl: "https://caldav.icloud.com/",
+    usernameHelp: "Your Apple ID email address",
+    usernameLabel: "Apple ID",
   },
 };
 
@@ -75,7 +76,7 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const resetForm = () => {
+  const resetForm = (): void => {
     setStep("credentials");
     setServerUrl(config.serverUrl);
     setUsername("");
@@ -85,23 +86,23 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
     setError(null);
   };
 
-  const handleOpenChange = (nextOpen: boolean) => {
+  const handleOpenChange = (nextOpen: boolean): void => {
     if (!nextOpen) {
       resetForm();
     }
     onOpenChange(nextOpen);
   };
 
-  const handleDiscoverCalendars = async (event: React.FormEvent) => {
+  const handleDiscoverCalendars = async (event: React.FormEvent): Promise<void> => {
     event.preventDefault();
     setIsLoading(true);
     setError(null);
 
     try {
       const response = await fetch("/api/destinations/caldav/discover", {
-        method: "POST",
+        body: JSON.stringify({ password, serverUrl, username }),
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ serverUrl, username, password }),
+        method: "POST",
       });
 
       if (!response.ok) {
@@ -127,22 +128,22 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
     }
   };
 
-  const handleConnect = async (event: React.FormEvent) => {
+  const handleConnect = async (event: React.FormEvent): Promise<void> => {
     event.preventDefault();
     setIsLoading(true);
     setError(null);
 
     try {
       const response = await fetch("/api/destinations/caldav", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          calendarUrl: selectedCalendar,
+          password,
+          provider,
           serverUrl,
           username,
-          password,
-          calendarUrl: selectedCalendar,
-          provider,
         }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
       });
 
       if (!response.ok) {
@@ -164,12 +165,15 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
     }
   };
 
-  const renderCredentialsStep = () => (
+  const renderCredentialsStep = (): ReactNode => (
     <form onSubmit={handleDiscoverCalendars} className="flex flex-col gap-3">
       {provider === "caldav" && (
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-foreground">Server URL</label>
+          <label htmlFor="caldav-server-url" className="text-sm font-medium text-foreground">
+            Server URL
+          </label>
           <input
+            id="caldav-server-url"
             type="url"
             value={serverUrl}
             onChange={(event) => setServerUrl(event.target.value)}
@@ -183,8 +187,11 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
         </div>
       )}
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-foreground">{config.usernameLabel}</label>
+        <label htmlFor="caldav-username" className="text-sm font-medium text-foreground">
+          {config.usernameLabel}
+        </label>
         <input
+          id="caldav-username"
           type="text"
           value={username}
           onChange={(event) => setUsername(event.target.value)}
@@ -197,8 +204,11 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
         </TextCaption>
       </div>
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-foreground">{config.passwordLabel}</label>
+        <label htmlFor="caldav-password" className="text-sm font-medium text-foreground">
+          {config.passwordLabel}
+        </label>
         <input
+          id="caldav-password"
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
@@ -216,11 +226,11 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
         </DangerText>
       )}
       <div className="flex gap-2 justify-end">
-        <Dialog.Close className={button({ variant: "secondary", size: "sm" })}>Cancel</Dialog.Close>
+        <Dialog.Close className={button({ size: "sm", variant: "secondary" })}>Cancel</Dialog.Close>
         <Button
           type="submit"
           isLoading={isLoading}
-          className={button({ variant: "primary", size: "sm" })}
+          className={button({ size: "sm", variant: "primary" })}
         >
           Continue
         </Button>
@@ -228,11 +238,14 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
     </form>
   );
 
-  const renderCalendarStep = () => (
+  const renderCalendarStep = (): ReactNode => (
     <form onSubmit={handleConnect} className="flex flex-col gap-3">
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-foreground">Select Calendar</label>
+        <label htmlFor="caldav-calendar-select" className="text-sm font-medium text-foreground">
+          Select Calendar
+        </label>
         <select
+          id="caldav-calendar-select"
           value={selectedCalendar}
           onChange={(event) => setSelectedCalendar(event.target.value)}
           required
@@ -257,14 +270,14 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
         <button
           type="button"
           onClick={() => setStep("credentials")}
-          className={button({ variant: "secondary", size: "sm" })}
+          className={button({ size: "sm", variant: "secondary" })}
         >
           Back
         </button>
         <Button
           type="submit"
           isLoading={isLoading}
-          className={button({ variant: "primary", size: "sm" })}
+          className={button({ size: "sm", variant: "primary" })}
         >
           Connect
         </Button>
@@ -279,11 +292,19 @@ export const CalDAVConnectDialog: FC<CalDAVConnectDialogProps> = ({
         <Dialog.Popup className={dialogPopup({ size: "md" })}>
           <Dialog.Title render={<CardTitle />}>Connect {config.name}</Dialog.Title>
           <Dialog.Description render={<TextBody className="mt-1 mb-3" />}>
-            {step === "credentials"
-              ? `Enter your ${config.name} credentials to connect your calendar.`
-              : "Choose which calendar to sync events to."}
+            {(() => {
+              if (step === "credentials") {
+                return `Enter your ${config.name} credentials to connect your calendar.`;
+              }
+              return "Choose which calendar to sync events to.";
+            })()}
           </Dialog.Description>
-          {step === "credentials" ? renderCredentialsStep() : renderCalendarStep()}
+          {(() => {
+            if (step === "credentials") {
+              return renderCredentialsStep();
+            }
+            return renderCalendarStep();
+          })()}
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>

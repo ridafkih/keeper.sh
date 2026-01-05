@@ -1,3 +1,5 @@
 import type { CronOptions } from "cronbake";
 
-export const injectJobs = (configurations: CronOptions[]) => configurations;
+const injectJobs = (configurations: CronOptions[]): CronOptions[] => configurations;
+
+export { injectJobs };

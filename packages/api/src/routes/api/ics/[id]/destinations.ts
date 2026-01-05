@@ -1,25 +1,25 @@
 import { updateSourceDestinationsSchema } from "@keeper.sh/data-schemas";
 import { getWideEvent } from "@keeper.sh/log";
-import { withTracing, withAuth } from "../../../../utils/middleware";
+import { withAuth, withTracing } from "../../../../utils/middleware";
 import { ErrorResponse } from "../../../../utils/responses";
 import {
-  updateSourceMappings,
   getDestinationsForSource,
+  updateSourceMappings,
 } from "../../../../utils/source-destination-mappings";
 import { verifySourceOwnership } from "../../../../utils/sources";
 import { triggerDestinationSync } from "../../../../utils/sync";
 
-export const GET = withTracing(
+const GET = withTracing(
   withAuth(async ({ params, userId }) => {
     const { id: sourceId } = params;
 
     if (!sourceId) {
-      return ErrorResponse.badRequest("Source ID is required");
+      return ErrorResponse.badRequest("Source ID is required").toResponse();
     }
 
     const isOwner = await verifySourceOwnership(userId, sourceId);
     if (!isOwner) {
-      return ErrorResponse.notFound();
+      return ErrorResponse.notFound().toResponse();
     }
 
     const destinationIds = await getDestinationsForSource(sourceId);
@@ -27,17 +27,17 @@ export const GET = withTracing(
   }),
 );
 
-export const PUT = withTracing(
+const PUT = withTracing(
   withAuth(async ({ request, params, userId }) => {
     const { id: sourceId } = params;
 
     if (!sourceId) {
-      return ErrorResponse.badRequest("Source ID is required");
+      return ErrorResponse.badRequest("Source ID is required").toResponse();
     }
 
     const isOwner = await verifySourceOwnership(userId, sourceId);
     if (!isOwner) {
-      return ErrorResponse.notFound();
+      return ErrorResponse.notFound().toResponse();
     }
 
     try {
@@ -50,7 +50,9 @@ export const PUT = withTracing(
       return Response.json({ success: true });
     } catch (error) {
       getWideEvent()?.setError(error);
-      return ErrorResponse.badRequest("Invalid request body");
+      return ErrorResponse.badRequest("Invalid request body").toResponse();
     }
   }),
 );
+
+export { GET, PUT };

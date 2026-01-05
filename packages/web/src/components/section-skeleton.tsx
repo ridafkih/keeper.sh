@@ -2,6 +2,8 @@ import type { FC } from "react";
 import { Section } from "@/components/section";
 import { ListSkeleton } from "@/components/list-skeleton";
 
+const DEFAULT_SKELETON_ROWS = 2;
+
 interface SectionSkeletonProps {
   rows?: number;
 }
@@ -13,7 +15,7 @@ const HeaderSkeleton: FC = () => (
   </div>
 );
 
-export const SectionSkeleton: FC<SectionSkeletonProps> = ({ rows = 2 }) => (
+export const SectionSkeleton: FC<SectionSkeletonProps> = ({ rows = DEFAULT_SKELETON_ROWS }) => (
   <Section>
     <HeaderSkeleton />
     <ListSkeleton rows={rows} />

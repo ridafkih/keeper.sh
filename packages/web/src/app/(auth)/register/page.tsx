@@ -1,24 +1,24 @@
 "use client";
 
-import type { FC } from "react";
+import type { FC, ReactNode } from "react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/auth-provider";
 import {
-  AuthFormContainer,
   AuthForm,
-  AuthFormTitle,
+  AuthFormContainer,
+  AuthFormDivider,
   AuthFormError,
   AuthFormField,
-  AuthFormSubmit,
   AuthFormFooter,
-  AuthFormDivider,
+  AuthFormSubmit,
+  AuthFormTitle,
   AuthSocialButton,
 } from "@/components/auth-form";
 import { GoogleIcon } from "@/components/icons/google";
 import { useFormSubmit } from "@/hooks/use-form-submit";
-import { signUp, signInWithGoogle } from "@/lib/auth";
+import { signInWithGoogle, signUp } from "@/lib/auth";
 import { isCommercialMode } from "@/config/mode";
 import { track } from "@/lib/analytics";
 
@@ -27,7 +27,7 @@ const UsernameRegisterForm: FC = () => {
   const { refresh } = useAuth();
   const { isSubmitting, error, submit } = useFormSubmit();
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const username = String(formData.get("username") ?? "");
@@ -79,7 +79,7 @@ const EmailRegisterForm: FC = () => {
   const router = useRouter();
   const [isRedirecting, setIsRedirecting] = useState(false);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const email = String(formData.get("email") ?? "");
@@ -88,7 +88,7 @@ const EmailRegisterForm: FC = () => {
     router.push("/register/complete");
   };
 
-  const handleGoogleSignIn = () => {
+  const handleGoogleSignIn = (): void => {
     track("registration_started", { method: "google" });
     setIsRedirecting(true);
     void signInWithGoogle();
@@ -122,10 +122,14 @@ const EmailRegisterForm: FC = () => {
   );
 };
 
-const RegisterPage: FC = () => (
-  <AuthFormContainer>
-    {isCommercialMode ? <EmailRegisterForm /> : <UsernameRegisterForm />}
-  </AuthFormContainer>
-);
+const RegisterPage = (): ReactNode => {
+  const formComponent = ((): ReactNode => {
+    if (isCommercialMode) {
+      return <EmailRegisterForm />;
+    }
+    return <UsernameRegisterForm />;
+  })();
+  return <AuthFormContainer>{formComponent}</AuthFormContainer>;
+};
 
 export default RegisterPage;

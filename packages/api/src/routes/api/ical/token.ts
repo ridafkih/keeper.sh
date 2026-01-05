@@ -1,5 +1,4 @@
-import env from "@keeper.sh/env/api";
-import { withTracing, withAuth } from "../../../utils/middleware";
+import { withAuth, withTracing } from "../../../utils/middleware";
 import { getUserIdentifierToken } from "../../../utils/user";
 import { baseUrl } from "../../../context";
 
@@ -8,10 +7,12 @@ const getIcalUrl = (token: string): string | null => {
   return url.toString();
 };
 
-export const GET = withTracing(
+const GET = withTracing(
   withAuth(async ({ userId }) => {
     const token = await getUserIdentifierToken(userId);
     const icalUrl = getIcalUrl(token);
-    return Response.json({ token, icalUrl });
+    return Response.json({ icalUrl, token });
   }),
 );
+
+export { GET };

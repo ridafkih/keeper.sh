@@ -1,6 +1,6 @@
-export type ServiceBoundary = "api" | "cron" | "sync" | "websocket" | "web";
+type ServiceBoundary = "api" | "cron" | "sync" | "websocket" | "web";
 
-export interface WideEventFields {
+interface WideEventFields {
   requestId: string;
   startTime: number;
   endTime?: number;
@@ -10,11 +10,11 @@ export interface WideEventFields {
   operationType?: string;
   operationName?: string;
 
-  httpMethod?: string;
-  httpPath?: string;
-  httpStatusCode?: number;
-  httpUserAgent?: string;
-  httpOrigin?: string;
+  httpMethod: string | null;
+  httpPath: string | null;
+  httpStatusCode: number | null;
+  httpUserAgent: string | null;
+  httpOrigin: string | null;
 
   userId?: string;
   userEmail?: string;
@@ -48,4 +48,6 @@ export interface WideEventFields {
   [key: string]: unknown;
 }
 
-export type WideEventEmitFunction = (event: WideEventFields) => void;
+type WideEventEmitFunction = (event: WideEventFields) => void;
+
+export type { ServiceBoundary, WideEventFields, WideEventEmitFunction };

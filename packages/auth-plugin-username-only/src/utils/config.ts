@@ -1,20 +1,23 @@
-export type UsernameOnlyOptions = {
+interface UsernameOnlyOptions {
   minUsernameLength?: number;
   maxUsernameLength?: number;
   minPasswordLength?: number;
   maxPasswordLength?: number;
-};
+}
 
-export type UsernameOnlyConfig = Required<UsernameOnlyOptions>;
+type UsernameOnlyConfig = Required<UsernameOnlyOptions>;
 
 const defaultOptions: UsernameOnlyConfig = {
-  minUsernameLength: 3,
+  maxPasswordLength: 128,
   maxUsernameLength: 32,
   minPasswordLength: 8,
-  maxPasswordLength: 128,
+  minUsernameLength: 3,
 };
 
-export const resolveConfig = (options?: UsernameOnlyOptions): UsernameOnlyConfig => ({
+const resolveConfig = (options?: UsernameOnlyOptions): UsernameOnlyConfig => ({
   ...defaultOptions,
   ...options,
 });
+
+export { resolveConfig };
+export type { UsernameOnlyOptions, UsernameOnlyConfig };

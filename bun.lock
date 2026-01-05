@@ -254,6 +254,7 @@
       "name": "@keeper.sh/integration-caldav",
       "version": "0.0.1",
       "dependencies": {
+        "@keeper.sh/calendar": "workspace:*",
         "@keeper.sh/database": "workspace:*",
         "@keeper.sh/date-utils": "workspace:*",
         "@keeper.sh/encryption": "workspace:*",
@@ -397,8 +398,8 @@
     "packages/pull-calendar": {
       "name": "@keeper.sh/pull-calendar",
       "dependencies": {
+        "@keeper.sh/calendar": "workspace:*",
         "@keeper.sh/log": "workspace:*",
-        "ts-ics": "2.4.0",
       },
       "devDependencies": {
         "@keeper.sh/typescript-config": "workspace:*",
@@ -417,12 +418,12 @@
     "packages/sync-calendar": {
       "name": "@keeper.sh/sync-calendar",
       "dependencies": {
+        "@keeper.sh/calendar": "workspace:*",
         "@keeper.sh/database": "workspace:*",
         "@keeper.sh/log": "workspace:*",
         "@keeper.sh/pull-calendar": "workspace:*",
         "@keeper.sh/sync-events": "workspace:*",
         "drizzle-orm": "0.45.1",
-        "ts-ics": "2.4.0",
       },
       "devDependencies": {
         "@keeper.sh/typescript-config": "workspace:*",

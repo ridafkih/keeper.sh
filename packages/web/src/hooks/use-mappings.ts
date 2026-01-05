@@ -1,35 +1,37 @@
-import useSWR from "swr";
+import useSWR, { type SWRResponse } from "swr";
 
-export interface SourceDestinationMapping {
+interface SourceDestinationMapping {
   id: string;
   sourceId: string;
   destinationId: string;
   createdAt: string;
 }
 
-async function fetchMappings(): Promise<SourceDestinationMapping[]> {
+const fetchMappings = async (): Promise<SourceDestinationMapping[]> => {
   const response = await fetch("/api/mappings");
   if (!response.ok) {
     throw new Error("Failed to fetch mappings");
   }
   return response.json();
-}
+};
 
-export function useMappings() {
-  return useSWR("source-destination-mappings", fetchMappings);
-}
+const useMappings = (): SWRResponse<SourceDestinationMapping[]> =>
+  useSWR("source-destination-mappings", fetchMappings);
 
-export async function updateSourceDestinations(
+const updateSourceDestinations = async (
   sourceId: string,
   destinationIds: string[],
-): Promise<void> {
+): Promise<void> => {
   const response = await fetch(`/api/ics/${sourceId}/destinations`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ destinationIds }),
+    headers: { "Content-Type": "application/json" },
+    method: "PUT",
   });
 
   if (!response.ok) {
     throw new Error("Failed to update source destinations");
   }
-}
+};
+
+export { useMappings, updateSourceDestinations };
+export type { SourceDestinationMapping };

@@ -1,33 +1,38 @@
+import { HTTP_STATUS, KEEPER_CATEGORY } from "@keeper.sh/constants";
+import type { OutlookEvent } from "@keeper.sh/data-schemas";
+import {
+  microsoftApiErrorSchema,
+  outlookEventListSchema,
+  outlookEventSchema,
+} from "@keeper.sh/data-schemas";
+import { getStartOfToday } from "@keeper.sh/date-utils";
+import type {
+  BroadcastSyncStatus,
+  DeleteResult,
+  DestinationProvider,
+  ListRemoteEventsOptions,
+  OAuthTokenProvider,
+  OutlookCalendarConfig,
+  PushResult,
+  RemoteEvent,
+  SyncableEvent,
+} from "@keeper.sh/integration";
 import {
   OAuthCalendarProvider,
   createOAuthDestinationProvider,
   getErrorMessage,
-  type OAuthTokenProvider,
-  type DestinationProvider,
-  type SyncableEvent,
-  type PushResult,
-  type DeleteResult,
-  type RemoteEvent,
-  type OutlookCalendarConfig,
-  type ListRemoteEventsOptions,
-  type BroadcastSyncStatus,
 } from "@keeper.sh/integration";
-import {
-  outlookEventSchema,
-  outlookEventListSchema,
-  microsoftApiErrorSchema,
-  type OutlookEvent,
-} from "@keeper.sh/data-schemas";
-import { HTTP_STATUS, KEEPER_CATEGORY } from "@keeper.sh/constants";
-import { getStartOfToday } from "@keeper.sh/date-utils";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { getOutlookAccountsForUser, type OutlookAccount } from "./sync";
+import type { OutlookAccount } from "./sync";
+import { getOutlookAccountsForUser } from "./sync";
 
 const MICROSOFT_GRAPH_API = "https://graph.microsoft.com/v1.0";
 const OUTLOOK_PAGE_SIZE = 100;
 
 const hasRateLimitMessage = (message: string | undefined): boolean => {
-  if (!message) return false;
+  if (!message) {
+    return false;
+  }
   return message.includes("429") || message.includes("throttled");
 };
 
@@ -42,34 +47,34 @@ const isAuthError = (status: number, error: { code?: string } | undefined): bool
   return false;
 };
 
-export interface OutlookCalendarProviderConfig {
+interface OutlookCalendarProviderConfig {
   database: BunSQLDatabase;
   oauthProvider: OAuthTokenProvider;
   broadcastSyncStatus?: BroadcastSyncStatus;
 }
 
-export const createOutlookCalendarProvider = (
+const createOutlookCalendarProvider = (
   config: OutlookCalendarProviderConfig,
 ): DestinationProvider => {
   const { database, oauthProvider, broadcastSyncStatus } = config;
 
   return createOAuthDestinationProvider<OutlookAccount, OutlookCalendarConfig>({
-    database,
-    oauthProvider,
     broadcastSyncStatus,
-    getAccountsForUser: getOutlookAccountsForUser,
-    createProviderInstance: (providerConfig, oauth) =>
-      new OutlookCalendarProviderInstance(providerConfig, oauth),
     buildConfig: (db, account, broadcast) => ({
+      accessToken: account.accessToken,
+      accessTokenExpiresAt: account.accessTokenExpiresAt,
+      accountId: account.accountId,
+      broadcastSyncStatus: broadcast,
       database: db,
       destinationId: account.destinationId,
-      userId: account.userId,
-      accountId: account.accountId,
-      accessToken: account.accessToken,
       refreshToken: account.refreshToken,
-      accessTokenExpiresAt: account.accessTokenExpiresAt,
-      broadcastSyncStatus: broadcast,
+      userId: account.userId,
     }),
+    createProviderInstance: (providerConfig, oauth) =>
+      new OutlookCalendarProviderInstance(providerConfig, oauth),
+    database,
+    getAccountsForUser: getOutlookAccountsForUser,
+    oauthProvider,
   });
 };
 
@@ -85,22 +90,22 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
   }
 
   protected isRateLimitError(error: string | undefined): boolean {
-    return hasRateLimitMessage(error);
+    return hasRateLimitMessage(error) && this.rateLimiter !== null;
   }
 
   async listRemoteEvents(options: ListRemoteEventsOptions): Promise<RemoteEvent[]> {
     await this.ensureValidToken();
     const remoteEvents: RemoteEvent[] = [];
-    let nextLink: string | undefined;
+    let nextLink: string | null = null;
 
     const today = getStartOfToday();
 
     do {
-      const url = this.buildListEventsUrl(today, options.until, nextLink);
+      const url = OutlookCalendarProviderInstance.buildListEventsUrl(today, options.until, nextLink);
 
       const response = await fetch(url, {
-        method: "GET",
         headers: this.headers,
+        method: "GET",
       });
 
       if (!response.ok) {
@@ -118,19 +123,19 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
       const data = outlookEventListSchema.assert(body);
 
       for (const event of data.value ?? []) {
-        const remoteEvent = this.transformOutlookEvent(event);
+        const remoteEvent = OutlookCalendarProviderInstance.transformOutlookEvent(event);
         if (remoteEvent) {
           remoteEvents.push(remoteEvent);
         }
       }
 
-      nextLink = data["@odata.nextLink"];
+      nextLink = data["@odata.nextLink"] ?? null;
     } while (nextLink);
 
     return remoteEvents;
   }
 
-  private buildListEventsUrl(today: Date, until: Date, nextLink?: string): URL {
+  private static buildListEventsUrl(today: Date, until: Date, nextLink: string | null): URL {
     if (nextLink) {
       return new URL(nextLink);
     }
@@ -146,31 +151,31 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     return url;
   }
 
-  private transformOutlookEvent(event: OutlookEvent): RemoteEvent | null {
-    const startTime = this.parseEventTime(event.start);
-    const endTime = this.parseEventTime(event.end);
+  private static transformOutlookEvent(event: OutlookEvent): RemoteEvent | null {
+    const startTime = OutlookCalendarProviderInstance.parseEventTime(event.start);
+    const endTime = OutlookCalendarProviderInstance.parseEventTime(event.end);
 
     if (!event.id || !event.iCalUId || !startTime || !endTime) {
       return null;
     }
 
     return {
-      uid: event.iCalUId,
       deleteId: event.id,
-      startTime,
       endTime,
+      startTime,
+      uid: event.iCalUId,
     };
   }
 
   protected async pushEvent(event: SyncableEvent): Promise<PushResult> {
-    const resource = this.toOutlookEvent(event);
+    const resource = OutlookCalendarProviderInstance.toOutlookEvent(event);
 
     try {
-      return this.createEvent(resource);
+      return await this.createEvent(resource);
     } catch (error) {
       return {
-        success: false,
         error: getErrorMessage(error),
+        success: false,
       };
     }
   }
@@ -179,9 +184,9 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     const url = new URL(`${MICROSOFT_GRAPH_API}/me/calendar/events`);
 
     const response = await fetch(url, {
-      method: "POST",
-      headers: this.headers,
       body: JSON.stringify(resource),
+      headers: this.headers,
+      method: "POST",
     });
 
     if (!response.ok) {
@@ -193,12 +198,12 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
         return this.handleAuthErrorResponse(errorMessage);
       }
 
-      return { success: false, error: errorMessage };
+      return { error: errorMessage, success: false };
     }
 
     const body = await response.json();
     const event = outlookEventSchema.assert(body);
-    return { success: true, remoteId: event.iCalUId, deleteId: event.id };
+    return { deleteId: event.id, remoteId: event.iCalUId, success: true };
   }
 
   protected async deleteEvent(eventId: string): Promise<DeleteResult> {
@@ -206,8 +211,8 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
       const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${eventId}`);
 
       const response = await fetch(url, {
-        method: "DELETE",
         headers: this.headers,
+        method: "DELETE",
       });
 
       if (!response.ok && response.status !== HTTP_STATUS.NOT_FOUND) {
@@ -219,35 +224,53 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
           return this.handleAuthErrorResponse(errorMessage);
         }
 
-        return { success: false, error: errorMessage };
+        return { error: errorMessage, success: false };
       }
 
       return { success: true };
     } catch (error) {
       return {
-        success: false,
         error: getErrorMessage(error),
+        success: false,
       };
     }
   }
 
-  private parseEventTime(time: { dateTime?: string; timeZone?: string } | undefined): Date | null {
-    if (!time?.dateTime) return null;
+  private static parseEventTime(time: { dateTime?: string; timeZone?: string } | undefined): Date | null {
+    if (!time?.dateTime) {
+      return null;
+    }
 
     if (time.timeZone === "UTC" && !time.dateTime.endsWith("Z")) {
-      return new Date(time.dateTime + "Z");
+      return new Date(`${time.dateTime}Z`);
     }
 
     return new Date(time.dateTime);
   }
 
-  private toOutlookEvent(event: SyncableEvent): OutlookEvent {
+  private static getBodyFromSyncableEvent(event: SyncableEvent): OutlookEvent["body"] {
+    if (!event.description) {
+      return null;
+    }
+
     return {
-      subject: event.summary,
-      body: event.description ? { contentType: "text", content: event.description } : undefined,
-      start: { dateTime: event.startTime.toISOString(), timeZone: "UTC" },
-      end: { dateTime: event.endTime.toISOString(), timeZone: "UTC" },
+      content: event.description,
+      contentType: "text",
+    }
+  }
+
+  private static toOutlookEvent(event: SyncableEvent): OutlookEvent {
+    const body = OutlookCalendarProviderInstance.getBodyFromSyncableEvent(event);
+
+    return {
+      body,
       categories: [KEEPER_CATEGORY],
+      end: { dateTime: event.endTime.toISOString(), timeZone: "UTC" },
+      start: { dateTime: event.startTime.toISOString(), timeZone: "UTC" },
+      subject: event.summary,
     };
   }
 }
+
+export { createOutlookCalendarProvider };
+export type { OutlookCalendarProviderConfig };

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { Button } from "@base-ui/react/button";
 import { TextLink } from "@/components/text-link";
@@ -17,21 +18,29 @@ import { FormField } from "@/components/form-field";
 import { IconBox } from "@/components/icon-box";
 import { Section } from "@/components/section";
 import { SectionHeader } from "@/components/section-header";
-import { BannerText, TextLabel, TextCaption } from "@/components/typography";
+import { BannerText, TextCaption, TextLabel } from "@/components/typography";
 import { useConfirmAction } from "@/hooks/use-confirm-action";
 import { useFormSubmit } from "@/hooks/use-form-submit";
-import { useSources, type CalendarSource } from "@/hooks/use-sources";
+import { useSources } from "@/hooks/use-sources";
+import type { CalendarSource } from "@/hooks/use-sources";
 import { useSubscription } from "@/hooks/use-subscription";
 import { button } from "@/styles";
 import { track } from "@/lib/analytics";
 import { Link as LinkIcon, Plus } from "lucide-react";
+
+const formatSourceCountLabel = (count: number): string => {
+  if (count === 1) {
+    return "1 source";
+  }
+  return `${count} sources`;
+};
 
 interface SourceItemProps {
   source: CalendarSource;
   onRemove: () => Promise<void>;
 }
 
-const SourceItem = ({ source, onRemove }: SourceItemProps) => {
+const SourceItem = ({ source, onRemove }: SourceItemProps): ReactNode => {
   const { isOpen, isConfirming, open, setIsOpen, confirm } = useConfirmAction();
 
   return (
@@ -63,12 +72,12 @@ const SourceItem = ({ source, onRemove }: SourceItemProps) => {
   );
 };
 
-const UpgradeBanner = () => (
+const UpgradeBanner = (): ReactNode => (
   <div className="flex items-center justify-between p-1 pl-3.5 bg-warning-surface border border-warning-border rounded-lg">
     <BannerText variant="warning" className="text-xs">
       You've reached the free plan limit of {FREE_SOURCE_LIMIT} sources.
     </BannerText>
-    <Link href="/dashboard/billing" className={button({ variant: "primary", size: "xs" })}>
+    <Link href="/dashboard/billing" className={button({ size: "xs", variant: "primary" })}>
       Upgrade to Pro
     </Link>
   </div>
@@ -93,10 +102,10 @@ interface CredentialsDialogProps {
   onSubmit: (username: string, password: string) => Promise<void>;
 }
 
-const CredentialsDialog = ({ open, onOpenChange, onSubmit }: CredentialsDialogProps) => {
+const CredentialsDialog = ({ open, onOpenChange, onSubmit }: CredentialsDialogProps): ReactNode => {
   const { isSubmitting, error, submit } = useFormSubmit<boolean>();
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
 
     const formData = new FormData(event.currentTarget);
@@ -105,7 +114,7 @@ const CredentialsDialog = ({ open, onOpenChange, onSubmit }: CredentialsDialogPr
 
     const result = await submit(async () => {
       if (typeof username !== "string" || typeof password !== "string") {
-        throw new Error("There was an issue with the submitted data");
+        throw new TypeError("There was an issue with the submitted data");
       }
 
       await onSubmit(username, password);
@@ -150,13 +159,13 @@ const CredentialsDialog = ({ open, onOpenChange, onSubmit }: CredentialsDialogPr
   );
 };
 
-const AddSourceDialog = ({ open, onOpenChange, onAdd }: AddSourceDialogProps) => {
+const AddSourceDialog = ({ open, onOpenChange, onAdd }: AddSourceDialogProps): ReactNode => {
   const { isSubmitting, error, submit } = useFormSubmit<boolean>();
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [pendingUrl, setPendingUrl] = useState("");
   const [pendingName, setPendingName] = useState("");
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
 
     const formData = new FormData(event.currentTarget);
@@ -165,7 +174,7 @@ const AddSourceDialog = ({ open, onOpenChange, onAdd }: AddSourceDialogProps) =>
 
     const result = await submit(async () => {
       if (typeof name !== "string" || typeof url !== "string") {
-        throw new Error("There was an issue with the submitted data");
+        throw new TypeError("There was an issue with the submitted data");
       }
 
       const response = await onAdd(name, url);
@@ -185,7 +194,7 @@ const AddSourceDialog = ({ open, onOpenChange, onAdd }: AddSourceDialogProps) =>
     }
   };
 
-  const handleCredentialsSubmit = async (username: string, password: string) => {
+  const handleCredentialsSubmit = async (username: string, password: string): Promise<void> => {
     const authenticatedUrl = buildAuthenticatedUrl(pendingUrl, username, password);
     await onAdd(pendingName, authenticatedUrl);
     onOpenChange(false);
@@ -233,7 +242,7 @@ const AddSourceDialog = ({ open, onOpenChange, onAdd }: AddSourceDialogProps) =>
   );
 };
 
-export const CalendarSourcesSection = () => {
+export const CalendarSourcesSection = (): ReactNode => {
   const toastManager = Toast.useToastManager();
   const { data: sources, isLoading, mutate } = useSources();
   const { data: subscription } = useSubscription();
@@ -246,9 +255,9 @@ export const CalendarSourcesSection = () => {
     url: string,
   ): Promise<{ authRequired?: boolean }> => {
     const response = await fetch("/api/ics", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, url }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
     });
 
     if (response.status === HTTP_STATUS.PAYMENT_REQUIRED) {
@@ -271,7 +280,7 @@ export const CalendarSourcesSection = () => {
     return {};
   };
 
-  const handleRemoveSource = async (id: string) => {
+  const handleRemoveSource = async (id: string): Promise<void> => {
     try {
       const response = await fetch(`/api/ics/${id}`, {
         method: "DELETE",
@@ -290,7 +299,7 @@ export const CalendarSourcesSection = () => {
   const isEmpty = !isLoading && (!sources || sources.length === 0);
   const sourceCount = sources?.length ?? 0;
 
-  const renderContent = () => {
+  const renderContent = (): ReactNode => {
     if (isLoading) {
       return <ListSkeleton rows={2} />;
     }
@@ -307,7 +316,7 @@ export const CalendarSourcesSection = () => {
                   track("source_dropdown_opened");
                   setIsDialogOpen(true);
                 }}
-                className={button({ variant: "primary", size: "xs" })}
+                className={button({ size: "xs", variant: "primary" })}
               >
                 Add Calendar Source
               </Button>
@@ -320,10 +329,12 @@ export const CalendarSourcesSection = () => {
       );
     }
 
+    const sourceCountLabel = formatSourceCountLabel(sourceCount);
+
     return (
       <Card>
         <div className="flex items-center justify-between px-3 py-2">
-          <TextLabel>{sourceCount === 1 ? "1 source" : `${sourceCount} sources`}</TextLabel>
+          <TextLabel>{sourceCountLabel}</TextLabel>
           {!isAtLimit && (
             <GhostButton
               onClick={() => {

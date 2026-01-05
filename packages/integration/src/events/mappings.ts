@@ -2,7 +2,9 @@ import { eventMappingsTable } from "@keeper.sh/database/schema";
 import { and, count, eq, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
-export interface EventMapping {
+const DEFAULT_COUNT = 0;
+
+interface EventMapping {
   id: string;
   eventStateId: string;
   destinationId: string;
@@ -12,25 +14,24 @@ export interface EventMapping {
   endTime: Date;
 }
 
-export async function getEventMappingsForDestination(
+const getEventMappingsForDestination = (
   database: BunSQLDatabase,
   destinationId: string,
-): Promise<EventMapping[]> {
-  return database
+): Promise<EventMapping[]> =>
+  database
     .select({
-      id: eventMappingsTable.id,
-      eventStateId: eventMappingsTable.eventStateId,
-      destinationId: eventMappingsTable.destinationId,
-      destinationEventUid: eventMappingsTable.destinationEventUid,
       deleteIdentifier: sql<string>`coalesce(${eventMappingsTable.deleteIdentifier}, ${eventMappingsTable.destinationEventUid})`,
-      startTime: eventMappingsTable.startTime,
+      destinationEventUid: eventMappingsTable.destinationEventUid,
+      destinationId: eventMappingsTable.destinationId,
       endTime: eventMappingsTable.endTime,
+      eventStateId: eventMappingsTable.eventStateId,
+      id: eventMappingsTable.id,
+      startTime: eventMappingsTable.startTime,
     })
     .from(eventMappingsTable)
     .where(eq(eventMappingsTable.destinationId, destinationId));
-}
 
-export async function createEventMapping(
+const createEventMapping = async (
   database: BunSQLDatabase,
   params: {
     eventStateId: string;
@@ -40,22 +41,19 @@ export async function createEventMapping(
     startTime: Date;
     endTime: Date;
   },
-): Promise<void> {
+): Promise<void> => {
   await database.insert(eventMappingsTable).values(params).onConflictDoNothing();
-}
+};
 
-export async function deleteEventMapping(
-  database: BunSQLDatabase,
-  mappingId: string,
-): Promise<void> {
+const deleteEventMapping = async (database: BunSQLDatabase, mappingId: string): Promise<void> => {
   await database.delete(eventMappingsTable).where(eq(eventMappingsTable.id, mappingId));
-}
+};
 
-export async function deleteEventMappingByDestinationUid(
+const deleteEventMappingByDestinationUid = async (
   database: BunSQLDatabase,
   destinationId: string,
   destinationEventUid: string,
-): Promise<void> {
+): Promise<void> => {
   await database
     .delete(eventMappingsTable)
     .where(
@@ -64,15 +62,24 @@ export async function deleteEventMappingByDestinationUid(
         eq(eventMappingsTable.destinationEventUid, destinationEventUid),
       ),
     );
-}
+};
 
-export async function countMappingsForDestination(
+const countMappingsForDestination = async (
   database: BunSQLDatabase,
   destinationId: string,
-): Promise<number> {
+): Promise<number> => {
   const [result] = await database
     .select({ count: count() })
     .from(eventMappingsTable)
     .where(eq(eventMappingsTable.destinationId, destinationId));
-  return result?.count ?? 0;
-}
+  return result?.count ?? DEFAULT_COUNT;
+};
+
+export {
+  getEventMappingsForDestination,
+  createEventMapping,
+  deleteEventMapping,
+  deleteEventMappingByDestinationUid,
+  countMappingsForDestination,
+};
+export type { EventMapping };

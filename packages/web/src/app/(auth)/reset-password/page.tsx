@@ -1,12 +1,13 @@
 import { Suspense } from "react";
+import type { ReactNode } from "react";
 import { AuthFormContainer } from "@/components/auth-form";
-import { ResetPasswordForm, InvalidTokenMessage } from "./form";
+import { InvalidTokenMessage, ResetPasswordForm } from "./form";
 
 interface FormLoaderProps {
   searchParams: Promise<{ token?: string }>;
 }
 
-async function FormLoader({ searchParams }: FormLoaderProps) {
+const FormLoader = async ({ searchParams }: FormLoaderProps): Promise<ReactNode> => {
   const { token } = await searchParams;
 
   if (!token) {
@@ -14,13 +15,13 @@ async function FormLoader({ searchParams }: FormLoaderProps) {
   }
 
   return <ResetPasswordForm token={token} />;
-}
+};
 
 interface ResetPasswordPageProps {
   searchParams: Promise<{ token?: string }>;
 }
 
-export default function ResetPasswordPage({ searchParams }: ResetPasswordPageProps) {
+export default function ResetPasswordPage({ searchParams }: ResetPasswordPageProps): ReactNode {
   return (
     <AuthFormContainer>
       <Suspense>

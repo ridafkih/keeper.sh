@@ -1,40 +1,50 @@
 import { fetch } from "bun";
-import { convertIcsCalendar } from "ts-ics";
+import { parseIcsCalendar } from "@keeper.sh/calendar";
 
-const fetchRemoteText = async (url: string) => {
+const fetchRemoteText = async (url: string): Promise<string> => {
   const response = await fetch(url);
   return response.text();
 };
 
-type ParsedCalendarResult = ReturnType<typeof convertIcsCalendar>;
+type ParsedCalendarResult = ReturnType<typeof parseIcsCalendar>;
 
 type OutputICal = "ical" | ["ical"];
 type OutputJSON = "json" | ["json"];
 type OutputICALOrJSON = ["ical", "json"] | ["json", "ical"];
 
-type JustICal = { ical: string; json?: never };
-type JustJSON = { json: ParsedCalendarResult; ical?: never };
+interface JustICal {
+  ical: string;
+  json?: never;
+}
+interface JustJSON {
+  json: ParsedCalendarResult;
+  ical?: never;
+}
 type ICalOrJSON = Omit<JustICal, "json"> & Omit<JustJSON, "ical">;
 
-export async function pullRemoteCalendar(output: OutputICal, url: string): Promise<JustICal>;
+const normalizeOutputToArray = (output: OutputJSON | OutputICal | OutputICALOrJSON): string[] => {
+  if (typeof output === "string") {
+    return [output];
+  }
+  return output;
+};
 
-export async function pullRemoteCalendar(output: OutputJSON, url: string): Promise<JustJSON>;
+async function pullRemoteCalendar(output: OutputICal, url: string): Promise<JustICal>;
 
-export async function pullRemoteCalendar(
-  output: OutputICALOrJSON,
-  url: string,
-): Promise<ICalOrJSON>;
+async function pullRemoteCalendar(output: OutputJSON, url: string): Promise<JustJSON>;
+
+async function pullRemoteCalendar(output: OutputICALOrJSON, url: string): Promise<ICalOrJSON>;
 
 /**
  * @throws
  */
-export async function pullRemoteCalendar(
+async function pullRemoteCalendar(
   output: OutputJSON | OutputICal | OutputICALOrJSON,
   url: string,
 ): Promise<JustICal | JustJSON | ICalOrJSON> {
-  const outputs = typeof output === "string" ? [output] : output;
+  const outputs = normalizeOutputToArray(output);
   const ical = await fetchRemoteText(url);
-  const json = convertIcsCalendar(undefined, ical);
+  const json = parseIcsCalendar({ icsString: ical });
 
   if (!json.version || !json.prodId) {
     throw new Error("Missing required calendar properties");
@@ -48,5 +58,7 @@ export async function pullRemoteCalendar(
     return { json };
   }
 
-  return { json, ical };
+  return { ical, json };
 }
+
+export { pullRemoteCalendar };

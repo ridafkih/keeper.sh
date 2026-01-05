@@ -1,13 +1,19 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { OAuthTokenProvider } from "./provider";
 import type { DestinationProvider } from "../sync/destinations";
-import type { SyncResult, SyncableEvent, OAuthProviderConfig, BroadcastSyncStatus } from "../types";
+import type { BroadcastSyncStatus, OAuthProviderConfig, SyncResult, SyncableEvent } from "../types";
 import type { SyncContext } from "../sync/coordinator";
 import { getEventsForDestination } from "../events/events";
-import { OAuthCalendarProvider } from "./provider";
+import type { OAuthCalendarProvider } from "./provider";
 import type { OAuthAccount } from "./accounts";
 
-export interface CreateOAuthProviderOptions<
+const EMPTY_ACCOUNTS_COUNT = 0;
+const INITIAL_ADDED_COUNT = 0;
+const INITIAL_ADD_FAILED_COUNT = 0;
+const INITIAL_REMOVED_COUNT = 0;
+const INITIAL_REMOVE_FAILED_COUNT = 0;
+
+interface CreateOAuthProviderOptions<
   TAccount extends OAuthAccount,
   TConfig extends OAuthProviderConfig,
 > {
@@ -26,7 +32,7 @@ export interface CreateOAuthProviderOptions<
   ) => TConfig;
 }
 
-export const createOAuthDestinationProvider = <
+const createOAuthDestinationProvider = <
   TAccount extends OAuthAccount,
   TConfig extends OAuthProviderConfig,
 >(
@@ -43,7 +49,9 @@ export const createOAuthDestinationProvider = <
 
   const syncForUser = async (userId: string, context: SyncContext): Promise<SyncResult | null> => {
     const accounts = await getAccountsForUser(database, userId);
-    if (accounts.length === 0) return null;
+    if (accounts.length === EMPTY_ACCOUNTS_COUNT) {
+      return null;
+    }
 
     const results = await Promise.all(
       accounts.map(async (account) => {
@@ -55,14 +63,23 @@ export const createOAuthDestinationProvider = <
       }),
     );
 
-    return results.reduce<SyncResult>(
-      (combined, result) => ({
-        added: combined.added + result.added,
-        removed: combined.removed + result.removed,
-      }),
-      { added: 0, removed: 0 },
-    );
+    const combined: SyncResult = {
+      addFailed: INITIAL_ADD_FAILED_COUNT,
+      added: INITIAL_ADDED_COUNT,
+      removeFailed: INITIAL_REMOVE_FAILED_COUNT,
+      removed: INITIAL_REMOVED_COUNT,
+    };
+    for (const result of results) {
+      combined.added += result.added;
+      combined.addFailed += result.addFailed;
+      combined.removed += result.removed;
+      combined.removeFailed += result.removeFailed;
+    }
+    return combined;
   };
 
   return { syncForUser };
 };
+
+export { createOAuthDestinationProvider };
+export type { CreateOAuthProviderOptions };

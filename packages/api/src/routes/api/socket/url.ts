@@ -1,9 +1,9 @@
 import env from "@keeper.sh/env/api";
-import { withTracing, withAuth } from "../../../utils/middleware";
+import { withAuth, withTracing } from "../../../utils/middleware";
 import { generateSocketToken } from "../../../utils/socket-token";
 
-export const GET = withTracing(
-  withAuth(async ({ userId }) => {
+const GET = withTracing(
+  withAuth(({ userId }) => {
     const token = generateSocketToken(userId);
 
     if (env.WEBSOCKET_URL) {
@@ -15,3 +15,5 @@ export const GET = withTracing(
     return Response.json({ socketPath: `/api/socket?token=${token}` });
   }),
 );
+
+export { GET };

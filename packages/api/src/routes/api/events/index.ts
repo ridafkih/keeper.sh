@@ -1,4 +1,4 @@
-import { withTracing, withAuth } from "../../../utils/middleware";
+import { withAuth, withTracing } from "../../../utils/middleware";
 import { getEventsInRange } from "../../../utils/events";
 
 export const GET = withTracing(

@@ -12,13 +12,20 @@ import { track } from "@/lib/analytics";
 import { Check } from "lucide-react";
 import { TOOLTIP_CLEAR_DELAY_MS } from "@keeper.sh/constants";
 
+const getCopyButtonVisibility = (isCopied: boolean): string => {
+  if (isCopied) {
+    return "invisible";
+  }
+  return "";
+};
+
 const ICalLinkSkeleton: FC = () => (
   <div className="flex gap-1.5">
     <div
       className={input({
+        className: "flex flex-1 items-center animate-pulse",
         readonly: true,
         size: "sm",
-        className: "flex flex-1 items-center animate-pulse",
       })}
     >
       <div className="h-lh bg-surface-skeleton rounded max-w-1/2 w-full" />
@@ -32,8 +39,10 @@ export const ICalLinkSection: FC = () => {
   const { icalUrl, isLoading } = useIcalToken();
   const [copied, setCopied] = useState(false);
 
-  const copyToClipboard = async () => {
-    if (!icalUrl) return;
+  const copyToClipboard = async (): Promise<void> => {
+    if (!icalUrl) {
+      return;
+    }
     await navigator.clipboard.writeText(icalUrl);
     track("ical_link_copied");
     toastManager.add({ title: "Copied to clipboard" });
@@ -47,29 +56,28 @@ export const ICalLinkSection: FC = () => {
         title="Your iCal Link"
         description="Subscribe to this link to view your aggregated events"
       />
-      {isLoading || !icalUrl ? (
-        <ICalLinkSkeleton />
-      ) : (
+      {(isLoading || !icalUrl) && <ICalLinkSkeleton />}
+      {!isLoading && icalUrl && (
         <div className="flex gap-1.5">
           <input
             type="text"
             value={icalUrl}
             readOnly
             className={input({
+              className: "flex-1",
               readonly: true,
               size: "sm",
-              className: "flex-1",
             })}
           />
           <Button
             onClick={copyToClipboard}
             className={button({
-              variant: "secondary",
-              size: "sm",
               className: "relative",
+              size: "sm",
+              variant: "secondary",
             })}
           >
-            <span className={copied ? "invisible" : ""}>Copy</span>
+            <span className={getCopyButtonVisibility(copied)}>Copy</span>
             {copied && <Check size={16} className="absolute inset-0 m-auto" />}
           </Button>
         </div>

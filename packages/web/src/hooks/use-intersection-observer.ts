@@ -1,12 +1,17 @@
 import { useCallback, useRef, useState } from "react";
 
-interface UseIntersectionObserverOptions extends IntersectionObserverInit {}
+type UseIntersectionObserverOptions = IntersectionObserverInit;
 
-export function useIntersectionObserver({
+interface UseIntersectionObserverResult {
+  isIntersecting: boolean;
+  ref: (node: HTMLElement | null) => void;
+}
+
+export const useIntersectionObserver = ({
   root,
   rootMargin = "200px",
   threshold,
-}: UseIntersectionObserverOptions = {}) {
+}: UseIntersectionObserverOptions = {}): UseIntersectionObserverResult => {
   const [isIntersecting, setIsIntersecting] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
@@ -16,7 +21,9 @@ export function useIntersectionObserver({
         observerRef.current.disconnect();
       }
 
-      if (!node) return;
+      if (!node) {
+        return;
+      }
 
       observerRef.current = new IntersectionObserver(
         ([entry]) => {
@@ -30,5 +37,5 @@ export function useIntersectionObserver({
     [root, rootMargin, threshold],
   );
 
-  return { ref, isIntersecting };
-}
+  return { isIntersecting, ref };
+};

@@ -1,18 +1,20 @@
 import { remoteICalSourcesTable } from "@keeper.sh/database/schema";
-import { pullRemoteCalendar, fetchAndSyncSource, CalendarFetchError } from "@keeper.sh/calendar";
+import { CalendarFetchError, fetchAndSyncSource, pullRemoteCalendar } from "@keeper.sh/calendar";
 import { getWideEvent } from "@keeper.sh/log";
-import { eq, and } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { triggerDestinationSync } from "./sync";
 import { createMappingsForNewSource } from "./source-destination-mappings";
 import { database, premiumService } from "../context";
 
-export class SourceLimitError extends Error {
+const FIRST_RESULT_LIMIT = 1;
+
+class SourceLimitError extends Error {
   constructor() {
     super("Source limit reached. Upgrade to Pro for unlimited sources.");
   }
 }
 
-export class InvalidSourceUrlError extends Error {
+class InvalidSourceUrlError extends Error {
   public readonly authRequired: boolean;
 
   constructor(cause?: unknown) {
@@ -35,21 +37,17 @@ interface Source {
   createdAt: Date;
 }
 
-export const getUserSources = async (userId: string): Promise<Source[]> => {
-  return database
-    .select()
-    .from(remoteICalSourcesTable)
-    .where(eq(remoteICalSourcesTable.userId, userId));
-};
+const getUserSources = (userId: string): Promise<Source[]> =>
+  database.select().from(remoteICalSourcesTable).where(eq(remoteICalSourcesTable.userId, userId));
 
-export const verifySourceOwnership = async (userId: string, sourceId: string): Promise<boolean> => {
+const verifySourceOwnership = async (userId: string, sourceId: string): Promise<boolean> => {
   const [source] = await database
     .select({ id: remoteICalSourcesTable.id })
     .from(remoteICalSourcesTable)
     .where(and(eq(remoteICalSourcesTable.id, sourceId), eq(remoteICalSourcesTable.userId, userId)))
-    .limit(1);
+    .limit(FIRST_RESULT_LIMIT);
 
-  return source !== undefined;
+  return Boolean(source);
 };
 
 /**
@@ -65,7 +63,7 @@ const validateSourceUrl = async (url: string): Promise<void> => {
  * Validates the URL, checks limits, and triggers initial sync.
  * Throws if limit reached or URL invalid.
  */
-export const createSource = async (userId: string, name: string, url: string): Promise<Source> => {
+const createSource = async (userId: string, name: string, url: string): Promise<Source> => {
   const existingSources = await database
     .select({ id: remoteICalSourcesTable.id })
     .from(remoteICalSourcesTable)
@@ -84,7 +82,7 @@ export const createSource = async (userId: string, name: string, url: string): P
 
   const [source] = await database
     .insert(remoteICalSourcesTable)
-    .values({ userId, name, url })
+    .values({ name, url, userId })
     .returning();
 
   if (!source) {
@@ -107,7 +105,7 @@ export const createSource = async (userId: string, name: string, url: string): P
  * Returns true if deleted, false if not found.
  * Triggers destination sync after deletion.
  */
-export const deleteSource = async (userId: string, sourceId: string): Promise<boolean> => {
+const deleteSource = async (userId: string, sourceId: string): Promise<boolean> => {
   const [deleted] = await database
     .delete(remoteICalSourcesTable)
     .where(and(eq(remoteICalSourcesTable.id, sourceId), eq(remoteICalSourcesTable.userId, userId)))
@@ -119,4 +117,13 @@ export const deleteSource = async (userId: string, sourceId: string): Promise<bo
   }
 
   return false;
+};
+
+export {
+  SourceLimitError,
+  InvalidSourceUrlError,
+  getUserSources,
+  verifySourceOwnership,
+  createSource,
+  deleteSource,
 };

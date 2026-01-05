@@ -3,20 +3,32 @@ import { userSubscriptionsTable } from "@keeper.sh/database/schema";
 import { user } from "@keeper.sh/database/auth-schema";
 import { getWideEvent } from "@keeper.sh/log";
 import { database, polarClient } from "../context";
-import { withCronWideEvent, setCronEventFields } from "../utils/with-wide-event";
+import { setCronEventFields, withCronWideEvent } from "../utils/with-wide-event";
 import { countSettledResults } from "../utils/count-settled-results";
 
-const reconcileUserSubscription = async (userId: string) => {
-  if (!polarClient) return;
+const EMPTY_SUBSCRIPTIONS_COUNT = 0;
+const INITIAL_PROCESSED_COUNT = 0;
+
+const getPlanFromSubscriptionStatus = (hasActive: boolean): "pro" | "free" => {
+  if (hasActive) {
+    return "pro";
+  }
+  return "free";
+};
+
+const reconcileUserSubscription = async (userId: string): Promise<void> => {
+  if (!polarClient) {
+    return;
+  }
 
   try {
     const subscriptions = await polarClient.subscriptions.list({
-      externalCustomerId: userId,
       active: true,
+      externalCustomerId: userId,
     });
 
-    const hasActiveSubscription = subscriptions.result.items.length > 0;
-    const plan = hasActiveSubscription ? "pro" : "free";
+    const hasActiveSubscription = subscriptions.result.items.length > EMPTY_SUBSCRIPTIONS_COUNT;
+    const plan = getPlanFromSubscriptionStatus(hasActiveSubscription);
 
     const [polarSubscription] = subscriptions.result.items;
     const polarSubscriptionId = polarSubscription?.id ?? null;
@@ -24,16 +36,16 @@ const reconcileUserSubscription = async (userId: string) => {
     await database
       .insert(userSubscriptionsTable)
       .values({
-        userId,
         plan,
         polarSubscriptionId,
+        userId,
       })
       .onConflictDoUpdate({
-        target: userSubscriptionsTable.userId,
         set: {
           plan,
           polarSubscriptionId,
         },
+        target: userSubscriptionsTable.userId,
       });
   } catch (error) {
     getWideEvent()?.setError(error);
@@ -41,12 +53,9 @@ const reconcileUserSubscription = async (userId: string) => {
 };
 
 export default withCronWideEvent({
-  name: import.meta.file,
-  cron: "0 0 * * * *",
-  immediate: true,
   async callback() {
     if (!polarClient) {
-      setCronEventFields({ processedCount: 0 });
+      setCronEventFields({ processedCount: INITIAL_PROCESSED_COUNT });
       return;
     }
 
@@ -59,4 +68,7 @@ export default withCronWideEvent({
     const { failed } = countSettledResults(results);
     setCronEventFields({ failedCount: failed });
   },
+  cron: "0 0 * * * *",
+  immediate: true,
+  name: import.meta.file,
 }) satisfies CronOptions;

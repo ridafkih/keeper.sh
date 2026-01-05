@@ -1,8 +1,8 @@
-import { withTracing, withAuth } from "../../../utils/middleware";
+import { withAuth, withTracing } from "../../../utils/middleware";
 import { generateSocketToken } from "../../../utils/socket-token";
 
 export const GET = withTracing(
-  withAuth(async ({ userId }) => {
+  withAuth(({ userId }) => {
     const token = generateSocketToken(userId);
     return Response.json({ token });
   }),

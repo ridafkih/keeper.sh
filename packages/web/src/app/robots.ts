@@ -4,9 +4,9 @@ export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
       {
-        userAgent: "*",
         allow: "/",
         disallow: ["/dashboard", "/api", "/verify-email", "/forgot-password"],
+        userAgent: "*",
       },
     ],
     sitemap: "https://keeper.sh/sitemap.xml",

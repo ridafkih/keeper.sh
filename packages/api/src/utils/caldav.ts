@@ -4,15 +4,15 @@ import { encryptPassword } from "@keeper.sh/encryption";
 import { eq } from "drizzle-orm";
 import { saveCalDAVDestination } from "./destinations";
 import { triggerDestinationSync } from "./sync";
-import { database, premiumService, encryptionKey } from "../context";
+import { database, encryptionKey, premiumService } from "../context";
 
-export class DestinationLimitError extends Error {
+class DestinationLimitError extends Error {
   constructor() {
     super("Destination limit reached. Upgrade to Pro.");
   }
 }
 
-export class CalDAVConnectionError extends Error {
+class CalDAVConnectionError extends Error {
   constructor(cause?: unknown) {
     super("Failed to connect. Check credentials and server URL.");
     this.cause = cause;
@@ -35,28 +35,28 @@ type CalDAVProvider = (typeof VALID_PROVIDERS)[number];
 /**
  * Validates that a provider name is valid.
  */
-export const isValidProvider = (provider: string): provider is CalDAVProvider =>
+const isValidProvider = (provider: string): provider is CalDAVProvider =>
   VALID_PROVIDERS.some((validProvider) => validProvider === provider);
 
 /**
  * Discovers calendars available at a CalDAV server.
  * Throws CalDAVConnectionError if connection fails.
  */
-export const discoverCalendars = async (
+const discoverCalendars = async (
   serverUrl: string,
   credentials: CalDAVCredentials,
 ): Promise<DiscoveredCalendar[]> => {
   try {
     const client = createCalDAVClient({
-      serverUrl,
       credentials,
+      serverUrl,
     });
 
     const calendars = await client.discoverCalendars();
 
     return calendars.map((calendar) => ({
-      url: calendar.url,
       displayName: calendar.displayName,
+      url: calendar.url,
     }));
   } catch (error) {
     throw new CalDAVConnectionError(error);
@@ -72,8 +72,8 @@ const validateCredentials = async (
   credentials: CalDAVCredentials,
 ): Promise<void> => {
   const client = createCalDAVClient({
-    serverUrl,
     credentials,
+    serverUrl,
   });
 
   await client.discoverCalendars();
@@ -84,7 +84,7 @@ const validateCredentials = async (
  * Validates credentials, checks limits, encrypts password, and triggers sync.
  * Throws if limit reached or credentials invalid.
  */
-export const createCalDAVDestination = async (
+const createCalDAVDestination = async (
   userId: string,
   provider: CalDAVProvider,
   serverUrl: string,
@@ -127,4 +127,12 @@ export const createCalDAVDestination = async (
   );
 
   triggerDestinationSync(userId);
+};
+
+export {
+  DestinationLimitError,
+  CalDAVConnectionError,
+  isValidProvider,
+  discoverCalendars,
+  createCalDAVDestination,
 };

@@ -1,33 +1,47 @@
+import type { MaybePromise } from "bun";
 import env from "@keeper.sh/env/api";
-
-const CORS_MAX_AGE_SECONDS = 86400;
 import { syncStatusTable, calendarDestinationsTable } from "@keeper.sh/database/schema";
-import {
-  log,
-  WideEvent,
-  runWithWideEvent,
-  emitWideEvent,
-  type WideEventFields,
-} from "@keeper.sh/log";
-import { createWebsocketHandler, type BroadcastData, type Socket } from "@keeper.sh/broadcast";
+
+import { log, WideEvent, runWithWideEvent, emitWideEvent } from "@keeper.sh/log";
+import type { WideEventFields } from "@keeper.sh/log";
+import { createWebsocketHandler } from "@keeper.sh/broadcast";
+import type { BroadcastData, Socket } from "@keeper.sh/broadcast";
 import { eq } from "drizzle-orm";
 import { join } from "node:path";
 import { socketTokens } from "./utils/state";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
 import { database, broadcastService, auth, trustedOrigins, baseUrl } from "./context";
 
+const CORS_MAX_AGE_SECONDS = 86_400;
+const HTTP_NO_CONTENT = 204;
+const HTTP_FORBIDDEN = 403;
+const HTTP_UNAUTHORIZED = 401;
+const HTTP_NOT_FOUND = 404;
+const HTTP_METHOD_NOT_ALLOWED = 405;
+const HTTP_INTERNAL_SERVER_ERROR = 500;
+const HTTP_ERROR_THRESHOLD = 400;
+const EMPTY_ORIGINS_COUNT = 0;
+
 const validateSocketToken = (token: string): string | null => {
   const entry = socketTokens.get(token);
-  if (!entry) return null;
+  if (!entry) {
+    return null;
+  }
   clearTimeout(entry.timeout);
   socketTokens.delete(token);
   return entry.userId;
 };
 
 const isNullSession = (body: unknown): body is null | { session: null } => {
-  if (body === null) return true;
-  if (typeof body !== "object") return false;
-  if (!("session" in body)) return false;
+  if (body === null) {
+    return true;
+  }
+  if (typeof body !== "object") {
+    return false;
+  }
+  if (!("session" in body)) {
+    return false;
+  }
   return body.session === null;
 };
 
@@ -37,44 +51,54 @@ const clearSessionCookies = (response: Response): Response => {
   headers.append("Set-Cookie", `better-auth.session_token=; ${expiredCookie}`);
   headers.append("Set-Cookie", `better-auth.session_data=; ${expiredCookie}`);
   return new Response(response.body, {
+    headers,
     status: response.status,
     statusText: response.statusText,
-    headers,
   });
 };
 
-type FetchHandler = (request: Request) => Promise<Response | undefined>;
+type FetchHandler = (request: Request) => MaybePromise<Response | undefined>;
+
+const corsHeaders = (origin: string): Record<string, string> => ({
+  "Access-Control-Allow-Credentials": "true",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Origin": origin,
+});
 
 const withCors = (handler: FetchHandler): FetchHandler => {
   const allowedOrigins = [...trustedOrigins];
-  if (baseUrl) allowedOrigins.push(baseUrl);
+  if (baseUrl) {
+    allowedOrigins.push(baseUrl);
+  }
 
   const isOriginAllowed = (origin: string | null): boolean => {
-    if (!origin) return false;
-    if (allowedOrigins.length === 0) return false;
+    if (!origin) {
+      return false;
+    }
+    if (allowedOrigins.length === EMPTY_ORIGINS_COUNT) {
+      return false;
+    }
     return allowedOrigins.includes(origin);
   };
 
-  const corsHeaders = (origin: string) => ({
-    "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
-  });
-
-  return async (request) => {
+  return async (request): Promise<Response | undefined> => {
     const origin = request.headers.get("Origin");
 
     if (request.method === "OPTIONS") {
-      if (!origin) return new Response(null, { status: 204 });
-      if (!isOriginAllowed(origin)) return new Response(null, { status: 403 });
+      if (!origin) {
+        return new Response(null, { status: HTTP_NO_CONTENT });
+      }
+      if (!isOriginAllowed(origin)) {
+        return new Response(null, { status: HTTP_FORBIDDEN });
+      }
 
       return new Response(null, {
-        status: 204,
         headers: {
           ...corsHeaders(origin),
           "Access-Control-Max-Age": String(CORS_MAX_AGE_SECONDS),
         },
+        status: HTTP_NO_CONTENT,
       });
     }
 
@@ -90,29 +114,29 @@ const withCors = (handler: FetchHandler): FetchHandler => {
     }
 
     return new Response(response.body, {
+      headers,
       status: response.status,
       statusText: response.statusText,
-      headers,
     });
   };
 };
 
 const extractAuthContext = (request: Request, pathname: string): Partial<WideEventFields> => ({
-  operationType: "auth",
-  operationName: `${request.method} ${pathname}`,
   httpMethod: request.method,
+  httpOrigin: request.headers.get("origin"),
   httpPath: pathname,
-  httpUserAgent: request.headers.get("user-agent") ?? undefined,
-  httpOrigin: request.headers.get("origin") ?? undefined,
+  httpUserAgent: request.headers.get("user-agent"),
+  operationName: `${request.method} ${pathname}`,
+  operationType: "auth",
 });
 
 const handleAuthResponseStatus = (event: WideEvent, response: Response): void => {
   event.set({ httpStatusCode: response.status });
-  if (response.status >= 400) {
+  if (response.status >= HTTP_ERROR_THRESHOLD) {
     event.set({
       error: true,
-      errorType: "AuthError",
       errorMessage: `HTTP ${response.status}`,
+      errorType: "AuthError",
     });
   }
 };
@@ -131,7 +155,7 @@ const processAuthResponse = async (pathname: string, response: Response): Promis
   return clearSessionCookies(response);
 };
 
-const handleAuthRequest = async (pathname: string, request: Request): Promise<Response> => {
+const handleAuthRequest = (pathname: string, request: Request): MaybePromise<Response> => {
   const event = new WideEvent("api");
   event.set(extractAuthContext(request, pathname));
 
@@ -142,7 +166,7 @@ const handleAuthRequest = async (pathname: string, request: Request): Promise<Re
       return processAuthResponse(pathname, response);
     } catch (error) {
       event.setError(error);
-      event.set({ httpStatusCode: 500 });
+      event.set({ httpStatusCode: HTTP_INTERNAL_SERVER_ERROR });
       throw error;
     } finally {
       emitWideEvent(event.finalize());
@@ -150,13 +174,13 @@ const handleAuthRequest = async (pathname: string, request: Request): Promise<Re
   });
 };
 
-const sendInitialSyncStatus = async (userId: string, socket: Socket) => {
+const sendInitialSyncStatus = async (userId: string, socket: Socket): Promise<void> => {
   const statuses = await database
     .select({
       destinationId: syncStatusTable.destinationId,
+      lastSyncedAt: syncStatusTable.lastSyncedAt,
       localEventCount: syncStatusTable.localEventCount,
       remoteEventCount: syncStatusTable.remoteEventCount,
-      lastSyncedAt: syncStatusTable.lastSyncedAt,
     })
     .from(syncStatusTable)
     .innerJoin(
@@ -168,15 +192,15 @@ const sendInitialSyncStatus = async (userId: string, socket: Socket) => {
   for (const status of statuses) {
     socket.send(
       JSON.stringify({
-        event: "sync:status",
         data: {
           destinationId: status.destinationId,
-          status: "idle",
+          inSync: status.localEventCount === status.remoteEventCount,
+          lastSyncedAt: status.lastSyncedAt?.toISOString(),
           localEventCount: status.localEventCount,
           remoteEventCount: status.remoteEventCount,
-          lastSyncedAt: status.lastSyncedAt?.toISOString(),
-          inSync: status.localEventCount === status.remoteEventCount,
+          status: "idle",
         },
+        event: "sync:status",
       }),
     );
   }
@@ -187,8 +211,8 @@ const websocketHandler = createWebsocketHandler({
 });
 
 const router = new Bun.FileSystemRouter({
-  style: "nextjs",
   dir: join(import.meta.dirname, "routes"),
+  style: "nextjs",
 });
 
 const handleRequest = async (request: Request): Promise<Response | undefined> => {
@@ -200,10 +224,10 @@ const handleRequest = async (request: Request): Promise<Response | undefined> =>
 
   if (url.pathname === "/api/socket") {
     const token = url.searchParams.get("token");
-    const userId = token ? validateSocketToken(token) : null;
+    const userId = token && validateSocketToken(token);
 
     if (!userId) {
-      return new Response("Unauthorized", { status: 401 });
+      return new Response("Unauthorized", { status: HTTP_UNAUTHORIZED });
     }
 
     const upgraded = server.upgrade(request, {
@@ -211,41 +235,41 @@ const handleRequest = async (request: Request): Promise<Response | undefined> =>
     });
 
     if (!upgraded) {
-      return new Response("WebSocket upgrade failed", { status: 500 });
+      return new Response("WebSocket upgrade failed", { status: HTTP_INTERNAL_SERVER_ERROR });
     }
 
-    return undefined;
+    return;
   }
 
   const match = router.match(request);
 
   if (!match) {
-    return new Response("Not found", { status: 404 });
+    return new Response("Not found", { status: HTTP_NOT_FOUND });
   }
 
   const module: unknown = await import(match.filePath);
 
   if (!isRouteModule(module)) {
-    return new Response("Internal server error", { status: 500 });
+    return new Response("Internal server error", { status: HTTP_INTERNAL_SERVER_ERROR });
   }
 
   if (!isHttpMethod(request.method)) {
-    return new Response("Method not allowed", { status: 405 });
+    return new Response("Method not allowed", { status: HTTP_METHOD_NOT_ALLOWED });
   }
 
   const handler = module[request.method];
 
   if (!handler) {
-    return new Response("Method not allowed", { status: 405 });
+    return new Response("Method not allowed", { status: HTTP_METHOD_NOT_ALLOWED });
   }
 
   return handler(request, match.params);
 };
 
 const server = Bun.serve<BroadcastData>({
+  fetch: withCors(handleRequest),
   port: env.API_PORT,
   websocket: websocketHandler,
-  fetch: withCors(handleRequest),
 });
 
 broadcastService.startSubscriber();

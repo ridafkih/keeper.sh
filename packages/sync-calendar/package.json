@@ -11,12 +11,12 @@
     "lint": "oxlint ."
   },
   "dependencies": {
+    "@keeper.sh/calendar": "workspace:*",
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/log": "workspace:*",
     "@keeper.sh/pull-calendar": "workspace:*",
     "@keeper.sh/sync-events": "workspace:*",
-    "drizzle-orm": "0.45.1",
-    "ts-ics": "2.4.0"
+    "drizzle-orm": "0.45.1"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",

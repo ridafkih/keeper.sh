@@ -1,21 +1,21 @@
-export type EventTimeSlot = {
+interface EventTimeSlot {
   uid: string;
   startTime: Date;
   endTime: Date;
-};
+}
 
-export type StoredEventTimeSlot = EventTimeSlot & {
+type StoredEventTimeSlot = EventTimeSlot & {
   id: string;
 };
 
-export type EventDiff = {
+interface EventDiff {
   toAdd: EventTimeSlot[];
   toRemove: StoredEventTimeSlot[];
-};
+}
 
-export type SerializedIcsCalendar = {
+interface SerializedIcsCalendar {
   version: string;
-  events?: Array<{
+  events?: {
     uid?: string;
     start: { date: string };
     end?: { date: string };
@@ -26,5 +26,7 @@ export type SerializedIcsCalendar = {
       minutes?: number;
       seconds?: number;
     };
-  }>;
-};
+  }[];
+}
+
+export type { EventTimeSlot, StoredEventTimeSlot, EventDiff, SerializedIcsCalendar };

@@ -1,17 +1,17 @@
-import type { FC, PropsWithChildren, ComponentProps } from "react";
+import type { ComponentProps, FC, PropsWithChildren } from "react";
 import { Button } from "@base-ui/react/button";
 import { tv } from "tailwind-variants";
 
 const ghostButton = tv({
   base: "text-xs px-2 py-1 rounded-md cursor-pointer transition-colors",
-  variants: {
-    variant: {
-      default: "text-foreground-muted hover:text-foreground hover:bg-surface-subtle",
-      danger: "text-destructive hover:text-destructive-emphasis hover:bg-surface-subtle",
-    },
-  },
   defaultVariants: {
     variant: "default",
+  },
+  variants: {
+    variant: {
+      danger: "text-destructive hover:text-destructive-emphasis hover:bg-surface-subtle",
+      default: "text-foreground-muted hover:text-foreground hover:bg-surface-subtle",
+    },
   },
 });
 
@@ -28,7 +28,7 @@ export const GhostButton: FC<PropsWithChildren<GhostButtonProps>> = ({
   children,
   ...props
 }) => (
-  <Button className={ghostButton({ variant, className })} {...props}>
+  <Button className={ghostButton({ className, variant })} {...props}>
     {children}
   </Button>
 );

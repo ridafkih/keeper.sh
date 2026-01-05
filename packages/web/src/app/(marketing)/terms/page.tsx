@@ -1,13 +1,14 @@
+import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import { MarketingPage } from "@/components/marketing/marketing-page";
 
 export const metadata: Metadata = {
-  title: "Terms & Conditions",
   description:
     "Terms and conditions for using Keeper calendar synchronization service. Open-source, GPL-3.0 licensed.",
+  title: "Terms & Conditions",
 };
 
-export default function TermsPage() {
+export default function TermsPage(): ReactNode {
   return (
     <MarketingPage title="Terms & Conditions" description="Last updated: December 2025">
       <div className="text-sm text-foreground-secondary flex flex-col gap-8">

@@ -1,24 +1,28 @@
 import {
+  caldavCredentialsTable,
   calendarDestinationsTable,
   oauthCredentialsTable,
-  caldavCredentialsTable,
   syncStatusTable,
 } from "@keeper.sh/database/schema";
-import { eq, and } from "drizzle-orm";
-import type { AuthorizationUrlOptions } from "@keeper.sh/destination-providers";
+import { and, eq } from "drizzle-orm";
+import type {
+  AuthorizationUrlOptions,
+  OAuthTokens,
+  NormalizedUserInfo as OAuthUserInfo,
+  ValidatedState,
+} from "@keeper.sh/destination-providers";
 import { database, oauthProviders } from "../context";
-import { triggerDestinationSync } from "./sync";
 import { createMappingsForNewDestination } from "./source-destination-mappings";
 
-export const isOAuthProvider = (provider: string): boolean => {
-  return oauthProviders.isOAuthProvider(provider);
-};
+const FIRST_RESULT_LIMIT = 1;
+const EMPTY_RESULT_COUNT = 0;
 
-export const hasRequiredScopes = (provider: string, grantedScopes: string): boolean => {
-  return oauthProviders.hasRequiredScopes(provider, grantedScopes);
-};
+const isOAuthProvider = (provider: string): boolean => oauthProviders.isOAuthProvider(provider);
 
-export const getAuthorizationUrl = (
+const hasRequiredScopes = (provider: string, grantedScopes: string): boolean =>
+  oauthProviders.hasRequiredScopes(provider, grantedScopes);
+
+const getAuthorizationUrl = (
   provider: string,
   userId: string,
   options: AuthorizationUrlOptions,
@@ -30,11 +34,11 @@ export const getAuthorizationUrl = (
   return oauthProvider.getAuthorizationUrl(userId, options);
 };
 
-export const exchangeCodeForTokens = async (
+const exchangeCodeForTokens = (
   provider: string,
   code: string,
   callbackUrl: string,
-) => {
+): Promise<OAuthTokens> => {
   const oauthProvider = oauthProviders.getProvider(provider);
   if (!oauthProvider) {
     throw new Error(`OAuth provider not found: ${provider}`);
@@ -42,7 +46,7 @@ export const exchangeCodeForTokens = async (
   return oauthProvider.exchangeCodeForTokens(code, callbackUrl);
 };
 
-export const fetchUserInfo = async (provider: string, accessToken: string) => {
+const fetchUserInfo = (provider: string, accessToken: string): Promise<OAuthUserInfo> => {
   const oauthProvider = oauthProviders.getProvider(provider);
   if (!oauthProvider) {
     throw new Error(`OAuth provider not found: ${provider}`);
@@ -50,9 +54,7 @@ export const fetchUserInfo = async (provider: string, accessToken: string) => {
   return oauthProvider.fetchUserInfo(accessToken);
 };
 
-export const validateState = (state: string) => {
-  return oauthProviders.validateState(state);
-};
+const validateState = (state: string): ValidatedState | null => oauthProviders.validateState(state);
 
 interface CalendarDestination {
   id: string;
@@ -74,10 +76,10 @@ const findExistingDestination = async (
 ): Promise<ExistingDestination | undefined> => {
   const [destination] = await database
     .select({
-      id: calendarDestinationsTable.id,
-      userId: calendarDestinationsTable.userId,
-      oauthCredentialId: calendarDestinationsTable.oauthCredentialId,
       caldavCredentialId: calendarDestinationsTable.caldavCredentialId,
+      id: calendarDestinationsTable.id,
+      oauthCredentialId: calendarDestinationsTable.oauthCredentialId,
+      userId: calendarDestinationsTable.userId,
     })
     .from(calendarDestinationsTable)
     .where(
@@ -86,7 +88,7 @@ const findExistingDestination = async (
         eq(calendarDestinationsTable.accountId, accountId),
       ),
     )
-    .limit(1);
+    .limit(FIRST_RESULT_LIMIT);
 
   return destination;
 };
@@ -124,11 +126,11 @@ const upsertDestination = async (data: DestinationInsertData): Promise<string | 
 
   const setClause: Record<string, unknown> = { email: base.email };
 
-  if (oauthCredentialId !== undefined) {
+  if (oauthCredentialId) {
     setClause.oauthCredentialId = oauthCredentialId;
     setClause.needsReauthentication = needsReauthentication ?? false;
   }
-  if (caldavCredentialId !== undefined) {
+  if (caldavCredentialId) {
     setClause.caldavCredentialId = caldavCredentialId;
   }
 
@@ -141,15 +143,15 @@ const upsertDestination = async (data: DestinationInsertData): Promise<string | 
       needsReauthentication,
     })
     .onConflictDoUpdate({
-      target: [calendarDestinationsTable.provider, calendarDestinationsTable.accountId],
       set: setClause,
+      target: [calendarDestinationsTable.provider, calendarDestinationsTable.accountId],
     })
     .returning({ id: calendarDestinationsTable.id });
 
   return destination?.id;
 };
 
-export const saveCalendarDestination = async (
+const saveCalendarDestination = async (
   userId: string,
   provider: string,
   accountId: string,
@@ -157,7 +159,7 @@ export const saveCalendarDestination = async (
   accessToken: string,
   refreshToken: string,
   expiresAt: Date,
-  needsReauthentication: boolean = false,
+  needsReauthentication = false,
 ): Promise<void> => {
   const existingDestination = await findExistingDestination(provider, accountId);
   validateDestinationOwnership(existingDestination, userId);
@@ -165,7 +167,7 @@ export const saveCalendarDestination = async (
   if (existingDestination?.oauthCredentialId) {
     await database
       .update(oauthCredentialsTable)
-      .set({ accessToken, refreshToken, expiresAt })
+      .set({ accessToken, expiresAt, refreshToken })
       .where(eq(oauthCredentialsTable.id, existingDestination.oauthCredentialId));
 
     await database
@@ -179,7 +181,7 @@ export const saveCalendarDestination = async (
 
   const [credential] = await database
     .insert(oauthCredentialsTable)
-    .values({ accessToken, refreshToken, expiresAt })
+    .values({ accessToken, expiresAt, refreshToken })
     .returning({ id: oauthCredentialsTable.id });
 
   if (!credential) {
@@ -187,12 +189,12 @@ export const saveCalendarDestination = async (
   }
 
   const destinationId = await upsertDestination({
-    userId,
-    provider,
     accountId,
     email,
-    oauthCredentialId: credential.id,
     needsReauthentication,
+    oauthCredentialId: credential.id,
+    provider,
+    userId,
   });
 
   if (destinationId) {
@@ -200,13 +202,13 @@ export const saveCalendarDestination = async (
   }
 };
 
-export const listCalendarDestinations = async (userId: string): Promise<CalendarDestination[]> => {
+const listCalendarDestinations = async (userId: string): Promise<CalendarDestination[]> => {
   const destinations = await database
     .select({
-      id: calendarDestinationsTable.id,
-      provider: calendarDestinationsTable.provider,
       email: calendarDestinationsTable.email,
+      id: calendarDestinationsTable.id,
       needsReauthentication: calendarDestinationsTable.needsReauthentication,
+      provider: calendarDestinationsTable.provider,
     })
     .from(calendarDestinationsTable)
     .where(eq(calendarDestinationsTable.userId, userId));
@@ -214,7 +216,7 @@ export const listCalendarDestinations = async (userId: string): Promise<Calendar
   return destinations;
 };
 
-export const deleteCalendarDestination = async (
+const deleteCalendarDestination = async (
   userId: string,
   destinationId: string,
 ): Promise<boolean> => {
@@ -228,20 +230,23 @@ export const deleteCalendarDestination = async (
     )
     .returning({ id: calendarDestinationsTable.id });
 
-  return result.length > 0;
+  return result.length > EMPTY_RESULT_COUNT;
 };
 
-export const getDestinationAccountId = async (destinationId: string): Promise<string | null> => {
+const getDestinationAccountId = async (destinationId: string): Promise<string | null> => {
   const [destination] = await database
     .select({ accountId: calendarDestinationsTable.accountId })
     .from(calendarDestinationsTable)
     .where(eq(calendarDestinationsTable.id, destinationId))
-    .limit(1);
+    .limit(FIRST_RESULT_LIMIT);
 
-  return destination?.accountId ?? null;
+  if (destination?.accountId) {
+    return destination.accountId;
+  }
+  return null;
 };
 
-export const saveCalDAVDestination = async (
+const saveCalDAVDestination = async (
   userId: string,
   provider: string,
   accountId: string,
@@ -257,7 +262,7 @@ export const saveCalDAVDestination = async (
   if (existingDestination?.caldavCredentialId) {
     await database
       .update(caldavCredentialsTable)
-      .set({ serverUrl, calendarUrl, username, encryptedPassword })
+      .set({ calendarUrl, encryptedPassword, serverUrl, username })
       .where(eq(caldavCredentialsTable.id, existingDestination.caldavCredentialId));
 
     await database
@@ -271,7 +276,7 @@ export const saveCalDAVDestination = async (
 
   const [credential] = await database
     .insert(caldavCredentialsTable)
-    .values({ serverUrl, calendarUrl, username, encryptedPassword })
+    .values({ calendarUrl, encryptedPassword, serverUrl, username })
     .returning({ id: caldavCredentialsTable.id });
 
   if (!credential) {
@@ -279,14 +284,28 @@ export const saveCalDAVDestination = async (
   }
 
   const destinationId = await upsertDestination({
-    userId,
-    provider,
     accountId,
-    email,
     caldavCredentialId: credential.id,
+    email,
+    provider,
+    userId,
   });
 
   if (destinationId) {
     await setupNewDestination(userId, destinationId);
   }
+};
+
+export {
+  isOAuthProvider,
+  hasRequiredScopes,
+  getAuthorizationUrl,
+  exchangeCodeForTokens,
+  fetchUserInfo,
+  validateState,
+  saveCalendarDestination,
+  listCalendarDestinations,
+  deleteCalendarDestination,
+  getDestinationAccountId,
+  saveCalDAVDestination,
 };

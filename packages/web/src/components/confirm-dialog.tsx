@@ -2,12 +2,26 @@
 
 import type { FC } from "react";
 import { useState } from "react";
-import { Copy, Check } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import { Dialog } from "@base-ui/react/dialog";
 import { Button } from "@/components/button";
-import { button, input, dialogPopup } from "@/styles";
+import { button, dialogPopup, input } from "@/styles";
 import { CardTitle, TextBody, TextCaption } from "@/components/typography";
 import { TOOLTIP_CLEAR_DELAY_MS } from "@keeper.sh/constants";
+
+const doesInputMatchRequiredPhrase = (input: string, phrase: string | undefined): boolean => {
+  if (!phrase) {
+    return true;
+  }
+  return input.toLowerCase() === phrase.toLowerCase();
+};
+
+const renderCopyIcon = (isCopied: boolean): React.ReactNode => {
+  if (isCopied) {
+    return <Check size={12} />;
+  }
+  return <Copy size={12} />;
+};
 
 interface CopyablePhraseProps {
   phrase: string;
@@ -16,7 +30,7 @@ interface CopyablePhraseProps {
 const CopyablePhrase: FC<CopyablePhraseProps> = ({ phrase }) => {
   const [copied, setCopied] = useState(false);
 
-  const handleClick = async (event: React.MouseEvent) => {
+  const handleClick = async (event: React.MouseEvent): Promise<void> => {
     event.stopPropagation();
     await navigator.clipboard.writeText(phrase);
     setCopied(true);
@@ -29,7 +43,8 @@ const CopyablePhrase: FC<CopyablePhraseProps> = ({ phrase }) => {
       onClick={handleClick}
       className="inline-flex items-center gap-1 font-medium text-foreground hover:text-foreground-secondary transition-colors"
     >
-      "{phrase}"{copied ? <Check size={12} /> : <Copy size={12} />}
+      "{phrase}"
+      {renderCopyIcon(copied)}
     </button>
   );
 };
@@ -59,14 +74,14 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
 }) => {
   const [inputValue, setInputValue] = useState("");
 
-  const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) setInputValue("");
+  const handleOpenChange = (nextOpen: boolean): void => {
+    if (!nextOpen) {
+      setInputValue("");
+    }
     onOpenChange(nextOpen);
   };
 
-  const phraseMatches = requirePhrase
-    ? inputValue.toLowerCase() === requirePhrase.toLowerCase()
-    : true;
+  const phraseMatches = doesInputMatchRequiredPhrase(inputValue, requirePhrase);
 
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
@@ -92,14 +107,14 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
             </div>
           )}
           <div className="flex gap-2 justify-end">
-            <Dialog.Close className={button({ variant: "secondary", size: "sm" })}>
+            <Dialog.Close className={button({ size: "sm", variant: "secondary" })}>
               Cancel
             </Dialog.Close>
             <Button
               disabled={!phraseMatches}
               isLoading={isConfirming}
               onClick={onConfirm}
-              className={button({ variant: confirmVariant, size: "sm" })}
+              className={button({ size: "sm", variant: confirmVariant })}
             >
               {confirmLabel}
             </Button>

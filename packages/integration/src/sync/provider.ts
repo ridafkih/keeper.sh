@@ -1,24 +1,35 @@
 import type {
-  SyncableEvent,
-  PushResult,
   DeleteResult,
-  SyncResult,
-  RemoteEvent,
-  ProviderConfig,
-  SyncOperation,
   ListRemoteEventsOptions,
+  ProviderConfig,
+  PushResult,
+  RemoteEvent,
+  SyncOperation,
+  SyncResult,
+  SyncableEvent,
 } from "../types";
 import {
-  getEventMappingsForDestination,
+  countMappingsForDestination,
   createEventMapping,
   deleteEventMapping,
   deleteEventMappingByDestinationUid,
-  countMappingsForDestination,
-  type EventMapping,
+  getEventMappingsForDestination,
 } from "../events/mappings";
+import type { EventMapping } from "../events/mappings";
 import type { SyncContext, SyncStage } from "./coordinator";
 
-export abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig> {
+const INITIAL_REMOTE_EVENT_COUNT = 0;
+const EMPTY_STALE_MAPPINGS_COUNT = 0;
+const EMPTY_OPERATIONS_COUNT = 0;
+const INITIAL_CURRENT_COUNT = 0;
+const INITIAL_ADDED_COUNT = 0;
+const INITIAL_ADD_FAILED_COUNT = 0;
+const INITIAL_REMOVED_COUNT = 0;
+const INITIAL_REMOVE_FAILED_COUNT = 0;
+const YEARS_UNTIL_FUTURE = 10;
+const MIN_REMOTE_COUNT = 0;
+
+abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig> {
   abstract readonly name: string;
   abstract readonly id: string;
 
@@ -32,44 +43,46 @@ export abstract class CalendarProvider<TConfig extends ProviderConfig = Provider
     const { database, userId, destinationId } = this.config;
 
     this.emitProgress(context, {
-      stage: "fetching",
       localEventCount: localEvents.length,
-      remoteEventCount: 0,
+      remoteEventCount: INITIAL_REMOTE_EVENT_COUNT,
+      stage: "fetching",
     });
 
     const [existingMappings, remoteEvents] = await Promise.all([
       getEventMappingsForDestination(database, destinationId),
-      this.listRemoteEvents({ until: this.getTenYearsFromNow() }),
+      this.listRemoteEvents({ until: CalendarProvider.getTenYearsFromNow() }),
     ]);
 
     this.emitProgress(context, {
-      stage: "comparing",
       localEventCount: localEvents.length,
       remoteEventCount: remoteEvents.length,
+      stage: "comparing",
     });
 
-    const { operations, staleMappingIds } = this.computeSyncOperations(
+    const { operations, staleMappingIds } = CalendarProvider.computeSyncOperations(
       localEvents,
       existingMappings,
       remoteEvents,
     );
 
-    if (staleMappingIds.length > 0) {
+    if (staleMappingIds.length > EMPTY_STALE_MAPPINGS_COUNT) {
       await Promise.all(staleMappingIds.map((id) => deleteEventMapping(database, id)));
     }
 
-    const addCount = operations.filter((op) => op.type === "add").length;
-    const removeCount = operations.filter((op) => op.type === "remove").length;
-
-    if (operations.length === 0) {
+    if (operations.length === EMPTY_OPERATIONS_COUNT) {
       const mappingCount = await countMappingsForDestination(database, destinationId);
       await context.onDestinationSync?.({
-        userId,
         destinationId,
         localEventCount: localEvents.length,
         remoteEventCount: mappingCount,
+        userId,
       });
-      return { added: 0, removed: 0 };
+      return {
+        addFailed: INITIAL_ADD_FAILED_COUNT,
+        added: INITIAL_ADDED_COUNT,
+        removeFailed: INITIAL_REMOVE_FAILED_COUNT,
+        removed: INITIAL_REMOVED_COUNT,
+      };
     }
 
     const processed = await this.processOperations(operations, {
@@ -80,17 +93,17 @@ export abstract class CalendarProvider<TConfig extends ProviderConfig = Provider
 
     const finalRemoteCount = await countMappingsForDestination(database, destinationId);
     await context.onDestinationSync?.({
-      userId,
+      broadcast: true,
       destinationId,
       localEventCount: localEvents.length,
       remoteEventCount: finalRemoteCount,
-      broadcast: true,
+      userId,
     });
 
     return processed;
   }
 
-  private computeSyncOperations(
+  private static computeSyncOperations(
     localEvents: SyncableEvent[],
     existingMappings: EventMapping[],
     remoteEvents: RemoteEvent[],
@@ -101,19 +114,19 @@ export abstract class CalendarProvider<TConfig extends ProviderConfig = Provider
       existingMappings.map(({ destinationEventUid }) => destinationEventUid),
     );
 
-    const { staleMappingIds, staleMappedEventIds } = this.identifyStaleMappings(
+    const { staleMappingIds, staleMappedEventIds } = CalendarProvider.identifyStaleMappings(
       existingMappings,
       localEventIds,
       remoteEventUids,
     );
 
-    const addOperations = this.buildAddOperations(
+    const addOperations = CalendarProvider.buildAddOperations(
       localEvents,
       existingMappings,
       staleMappedEventIds,
     );
 
-    const removeOperations = this.buildRemoveOperations(
+    const removeOperations = CalendarProvider.buildRemoveOperations(
       existingMappings,
       remoteEvents,
       localEventIds,
@@ -121,12 +134,12 @@ export abstract class CalendarProvider<TConfig extends ProviderConfig = Provider
     );
 
     return {
-      operations: this.sortOperationsByTime([...addOperations, ...removeOperations]),
+      operations: CalendarProvider.sortOperationsByTime([...addOperations, ...removeOperations]),
       staleMappingIds,
     };
   }
 
-  private identifyStaleMappings(
+  private static identifyStaleMappings(
     mappings: EventMapping[],
     localEventIds: Set<string>,
     remoteEventUids: Set<string>,
@@ -144,10 +157,10 @@ export abstract class CalendarProvider<TConfig extends ProviderConfig = Provider
       }
     }
 
-    return { staleMappingIds, staleMappedEventIds };
+    return { staleMappedEventIds, staleMappingIds };
   }
 
-  private buildAddOperations(
+  private static buildAddOperations(
     localEvents: SyncableEvent[],
     existingMappings: EventMapping[],
     staleMappedEventIds: Set<string>,
@@ -159,14 +172,14 @@ export abstract class CalendarProvider<TConfig extends ProviderConfig = Provider
       const hasStaleMapping = staleMappedEventIds.has(event.id);
 
       if (!hasMapping || hasStaleMapping) {
-        operations.push({ type: "add", event });
+        operations.push({ event, type: "add" });
       }
     }
 
     return operations;
   }
 
-  private buildRemoveOperations(
+  private static buildRemoveOperations(
     existingMappings: EventMapping[],
     remoteEvents: RemoteEvent[],
     localEventIds: Set<string>,
@@ -177,10 +190,10 @@ export abstract class CalendarProvider<TConfig extends ProviderConfig = Provider
     for (const mapping of existingMappings) {
       if (!localEventIds.has(mapping.eventStateId)) {
         operations.push({
-          type: "remove",
-          uid: mapping.destinationEventUid,
           deleteId: mapping.deleteIdentifier,
           startTime: mapping.startTime,
+          type: "remove",
+          uid: mapping.destinationEventUid,
         });
       }
     }
@@ -188,10 +201,10 @@ export abstract class CalendarProvider<TConfig extends ProviderConfig = Provider
     for (const remoteEvent of remoteEvents) {
       if (!mappedDestinationUids.has(remoteEvent.uid)) {
         operations.push({
-          type: "remove",
-          uid: remoteEvent.uid,
           deleteId: remoteEvent.deleteId,
           startTime: remoteEvent.startTime,
+          type: "remove",
+          uid: remoteEvent.uid,
         });
       }
     }
@@ -199,10 +212,10 @@ export abstract class CalendarProvider<TConfig extends ProviderConfig = Provider
     return operations;
   }
 
-  private sortOperationsByTime(operations: SyncOperation[]): SyncOperation[] {
-    return operations.sort((first, second) => {
-      const firstTime = this.getOperationEventTime(first).getTime();
-      const secondTime = this.getOperationEventTime(second).getTime();
+  private static sortOperationsByTime(operations: SyncOperation[]): SyncOperation[] {
+    return operations.toSorted((first, second) => {
+      const firstTime = CalendarProvider.getOperationEventTime(first).getTime();
+      const secondTime = CalendarProvider.getOperationEventTime(second).getTime();
       return firstTime - secondTime;
     });
   }
@@ -217,9 +230,11 @@ export abstract class CalendarProvider<TConfig extends ProviderConfig = Provider
   ): Promise<SyncResult> {
     const { database, destinationId } = this.config;
     const total = operations.length;
-    let current = 0;
-    let added = 0;
-    let removed = 0;
+    let current = INITIAL_CURRENT_COUNT;
+    let added = INITIAL_ADDED_COUNT;
+    let addFailed = INITIAL_ADD_FAILED_COUNT;
+    let removed = INITIAL_REMOVED_COUNT;
+    let removeFailed = INITIAL_REMOVE_FAILED_COUNT;
     let currentRemoteCount = params.remoteEventCount;
 
     for (const operation of operations) {
@@ -227,7 +242,7 @@ export abstract class CalendarProvider<TConfig extends ProviderConfig = Provider
         break;
       }
 
-      const eventTime = this.getOperationEventTime(operation);
+      const eventTime = CalendarProvider.getOperationEventTime(operation);
 
       if (operation.type === "add") {
         const [result] = await this.pushEvents([operation.event]);
@@ -236,15 +251,17 @@ export abstract class CalendarProvider<TConfig extends ProviderConfig = Provider
         }
         if (result?.success && result.remoteId) {
           await createEventMapping(database, {
-            eventStateId: operation.event.id,
-            destinationId,
-            destinationEventUid: result.remoteId,
             deleteIdentifier: result.deleteId,
-            startTime: operation.event.startTime,
+            destinationEventUid: result.remoteId,
+            destinationId,
             endTime: operation.event.endTime,
+            eventStateId: operation.event.id,
+            startTime: operation.event.startTime,
           });
           added++;
           currentRemoteCount++;
+        } else if (!result?.success) {
+          addFailed++;
         }
       } else {
         const [result] = await this.deleteEvents([operation.deleteId]);
@@ -254,45 +271,49 @@ export abstract class CalendarProvider<TConfig extends ProviderConfig = Provider
         if (result?.success) {
           await deleteEventMappingByDestinationUid(database, destinationId, operation.uid);
           removed++;
-          if (currentRemoteCount > 0) currentRemoteCount--;
+          if (currentRemoteCount > MIN_REMOTE_COUNT) {
+            currentRemoteCount--;
+          }
+        } else {
+          removeFailed++;
         }
       }
 
       current++;
 
       this.emitProgress(params.context, {
-        stage: "processing",
-        localEventCount: params.localEventCount,
-        remoteEventCount: currentRemoteCount,
-        progress: { current, total },
         lastOperation: {
-          type: operation.type,
           eventTime: eventTime.toISOString(),
+          type: operation.type,
         },
+        localEventCount: params.localEventCount,
+        progress: { current, total },
+        remoteEventCount: currentRemoteCount,
+        stage: "processing",
       });
 
       await params.context.onDestinationSync?.({
-        userId: this.config.userId,
+        broadcast: false,
         destinationId: this.config.destinationId,
         localEventCount: params.localEventCount,
         remoteEventCount: currentRemoteCount,
-        broadcast: false,
+        userId: this.config.userId,
       });
     }
 
-    return { added, removed };
+    return { addFailed, added, removeFailed, removed };
   }
 
-  private getOperationEventTime(operation: SyncOperation): Date {
+  private static getOperationEventTime(operation: SyncOperation): Date {
     if (operation.type === "add") {
       return operation.event.startTime;
     }
     return operation.startTime;
   }
 
-  private getTenYearsFromNow(): Date {
+  private static getTenYearsFromNow(): Date {
     const date = new Date();
-    date.setFullYear(date.getFullYear() + 10);
+    date.setFullYear(date.getFullYear() + YEARS_UNTIL_FUTURE);
     return date;
   }
 
@@ -307,15 +328,17 @@ export abstract class CalendarProvider<TConfig extends ProviderConfig = Provider
     },
   ): void {
     context.onSyncProgress?.({
-      userId: this.config.userId,
       destinationId: this.config.destinationId,
-      status: "syncing",
-      stage: params.stage,
-      localEventCount: params.localEventCount,
-      remoteEventCount: params.remoteEventCount,
-      progress: params.progress,
-      lastOperation: params.lastOperation,
       inSync: false,
+      lastOperation: params.lastOperation,
+      localEventCount: params.localEventCount,
+      progress: params.progress,
+      remoteEventCount: params.remoteEventCount,
+      stage: params.stage,
+      status: "syncing",
+      userId: this.config.userId,
     });
   }
 }
+
+export { CalendarProvider };

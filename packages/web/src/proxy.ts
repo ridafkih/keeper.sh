@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 import { authRoutes, protectedRoutes } from "./config/routes";
 
-export function proxy(request: NextRequest) {
+// oxlint-disable-next-line group-exports
+export const proxy = (request: NextRequest): NextResponse => {
   const { pathname } = request.nextUrl;
   const sessionCookie = getSessionCookie(request);
 
@@ -18,8 +19,9 @@ export function proxy(request: NextRequest) {
   }
 
   return NextResponse.next();
-}
+};
 
+// oxlint-disable-next-line group-exports
 export const config = {
   matcher: ["/dashboard/:path*", "/login", "/register"],
 };

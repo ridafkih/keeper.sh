@@ -1,4 +1,4 @@
-export type User = {
+interface User {
   id: string;
   username: string;
   name: string;
@@ -6,9 +6,9 @@ export type User = {
   emailVerified: boolean;
   createdAt: Date;
   updatedAt: Date;
-};
+}
 
-export type CredentialAccount = {
+interface CredentialAccount {
   id: string;
   userId: string;
   accountId: string;
@@ -16,4 +16,6 @@ export type CredentialAccount = {
   password: string;
   createdAt: Date;
   updatedAt: Date;
-};
+}
+
+export type { User, CredentialAccount };

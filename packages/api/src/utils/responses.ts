@@ -1,43 +1,53 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
 
-export class ErrorResponse {
-  private static create(status: number, message: string | null): Response {
-    return Response.json({ error: message }, { status });
+class ErrorResponse {
+  private readonly status: number;
+  private readonly message: string | null;
+
+  constructor(status: number, message: string | null = null) {
+    this.status = status;
+    this.message = message;
   }
 
-  static badRequest(message: string | null = null): Response {
-    return this.create(HTTP_STATUS.BAD_REQUEST, message);
+  toResponse(): Response {
+    return Response.json({ error: this.message }, { status: this.status });
   }
 
-  static unauthorized(message: string | null = null): Response {
-    return this.create(HTTP_STATUS.UNAUTHORIZED, message);
+  static badRequest(message: string | null = null): ErrorResponse {
+    return new ErrorResponse(HTTP_STATUS.BAD_REQUEST, message);
   }
 
-  static paymentRequired(message: string | null = null): Response {
-    return this.create(HTTP_STATUS.PAYMENT_REQUIRED, message);
+  static unauthorized(message: string | null = null): ErrorResponse {
+    return new ErrorResponse(HTTP_STATUS.UNAUTHORIZED, message);
   }
 
-  static forbidden(message: string | null = null): Response {
-    return this.create(HTTP_STATUS.FORBIDDEN, message);
+  static paymentRequired(message: string | null = null): ErrorResponse {
+    return new ErrorResponse(HTTP_STATUS.PAYMENT_REQUIRED, message);
   }
 
-  static notFound(message: string | null = null): Response {
-    return this.create(HTTP_STATUS.NOT_FOUND, message);
+  static forbidden(message: string | null = null): ErrorResponse {
+    return new ErrorResponse(HTTP_STATUS.FORBIDDEN, message);
   }
 
-  static conflict(message: string | null = null): Response {
-    return this.create(HTTP_STATUS.CONFLICT, message);
+  static notFound(message: string | null = null): ErrorResponse {
+    return new ErrorResponse(HTTP_STATUS.NOT_FOUND, message);
   }
 
-  static tooManyRequests(message: string | null = null): Response {
-    return this.create(HTTP_STATUS.TOO_MANY_REQUESTS, message);
+  static conflict(message: string | null = null): ErrorResponse {
+    return new ErrorResponse(HTTP_STATUS.CONFLICT, message);
   }
 
-  static notImplemented(message: string | null = null): Response {
-    return this.create(HTTP_STATUS.NOT_IMPLEMENTED, message);
+  static tooManyRequests(message: string | null = null): ErrorResponse {
+    return new ErrorResponse(HTTP_STATUS.TOO_MANY_REQUESTS, message);
   }
 
-  static internal(message: string | null = null): Response {
-    return this.create(HTTP_STATUS.INTERNAL_SERVER_ERROR, message);
+  static notImplemented(message: string | null = null): ErrorResponse {
+    return new ErrorResponse(HTTP_STATUS.NOT_IMPLEMENTED, message);
+  }
+
+  static internal(message: string | null = null): ErrorResponse {
+    return new ErrorResponse(HTTP_STATUS.INTERNAL_SERVER_ERROR, message);
   }
 }
+
+export { ErrorResponse };

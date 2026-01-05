@@ -1,4 +1,4 @@
-import type { DestinationProvider, BroadcastSyncStatus } from "@keeper.sh/integration";
+import type { BroadcastSyncStatus, DestinationProvider } from "@keeper.sh/integration";
 import { createGoogleCalendarProvider } from "@keeper.sh/integration-google-calendar";
 import { createCalDAVProvider } from "@keeper.sh/integration-caldav";
 import { createFastMailProvider } from "@keeper.sh/integration-fastmail";
@@ -7,16 +7,14 @@ import { createOutlookCalendarProvider } from "@keeper.sh/integration-outlook";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { OAuthProvider, OAuthProviders } from "./oauth";
 
-export interface DestinationProvidersConfig {
+interface DestinationProvidersConfig {
   database: BunSQLDatabase;
   oauthProviders: OAuthProviders;
   encryptionKey: string;
   broadcastSyncStatus?: BroadcastSyncStatus;
 }
 
-export const createDestinationProviders = (
-  config: DestinationProvidersConfig,
-): DestinationProvider[] => {
+const createDestinationProviders = (config: DestinationProvidersConfig): DestinationProvider[] => {
   const { database, oauthProviders, encryptionKey, broadcastSyncStatus } = config;
 
   const providers: DestinationProvider[] = [];
@@ -25,9 +23,9 @@ export const createDestinationProviders = (
   if (googleOAuth) {
     providers.push(
       createGoogleCalendarProvider({
+        broadcastSyncStatus,
         database,
         oauthProvider: googleOAuth,
-        broadcastSyncStatus,
       }),
     );
   }
@@ -36,9 +34,9 @@ export const createDestinationProviders = (
   if (outlookOAuth) {
     providers.push(
       createOutlookCalendarProvider({
+        broadcastSyncStatus,
         database,
         oauthProvider: outlookOAuth,
-        broadcastSyncStatus,
       }),
     );
   }
@@ -51,12 +49,14 @@ export const createDestinationProviders = (
 };
 
 export {
+  createDestinationProviders,
   createGoogleCalendarProvider,
   createCalDAVProvider,
   createFastMailProvider,
   createICloudProvider,
   createOutlookCalendarProvider,
 };
+export type { DestinationProvidersConfig };
 
 export {
   DESTINATIONS,
@@ -75,4 +75,5 @@ export {
   type OAuthTokens,
   type NormalizedUserInfo,
   type AuthorizationUrlOptions,
+  type ValidatedState,
 } from "./oauth";

@@ -1,6 +1,6 @@
 import { createDAVClient } from "tsdav";
 
-export interface CalDAVClientConfig {
+interface CalDAVClientConfig {
   serverUrl: string;
   credentials: {
     username: string;
@@ -8,13 +8,13 @@ export interface CalDAVClientConfig {
   };
 }
 
-export interface CalendarInfo {
+interface CalendarInfo {
   url: string;
   displayName: string;
   ctag?: string;
 }
 
-export interface CalendarObject {
+interface CalendarObject {
   url: string;
   etag?: string;
   data?: string;
@@ -22,7 +22,14 @@ export interface CalendarObject {
 
 type DAVClientInstance = Awaited<ReturnType<typeof createDAVClient>>;
 
-export class CalDAVClient {
+const getDisplayName = (name: unknown): string => {
+  if (typeof name === "string") {
+    return name;
+  }
+  return "Unnamed Calendar";
+};
+
+class CalDAVClient {
   private client: DAVClientInstance | null = null;
   private config: CalDAVClientConfig;
 
@@ -33,10 +40,10 @@ export class CalDAVClient {
   private async getClient(): Promise<DAVClientInstance> {
     if (!this.client) {
       this.client = await createDAVClient({
-        serverUrl: this.config.serverUrl,
-        credentials: this.config.credentials,
         authMethod: "Basic",
+        credentials: this.config.credentials,
         defaultAccountType: "caldav",
+        serverUrl: this.config.serverUrl,
       });
     }
     return this.client;
@@ -47,9 +54,9 @@ export class CalDAVClient {
     const calendars = await client.fetchCalendars();
 
     return calendars.map(({ url, displayName, ctag }) => ({
-      url,
       ctag,
-      displayName: typeof displayName === "string" ? displayName : "Unnamed Calendar",
+      displayName: getDisplayName(displayName),
+      url,
     }));
   }
 
@@ -80,7 +87,7 @@ export class CalDAVClient {
 
   async deleteCalendarObject(params: { calendarUrl: string; filename: string }): Promise<void> {
     const client = await this.getClient();
-    const objectUrl = this.normalizeUrl(params.calendarUrl, params.filename);
+    const objectUrl = CalDAVClient.normalizeUrl(params.calendarUrl, params.filename);
 
     await client.deleteCalendarObject({
       calendarObject: { url: objectUrl },
@@ -93,28 +100,30 @@ export class CalDAVClient {
   }): Promise<CalendarObject[]> {
     const client = await this.getClient();
 
-    const timeRange = params.timeRange
-      ? {
-          start: params.timeRange.start,
-          end: params.timeRange.end,
-        }
-      : undefined;
-
     const objects = await client.fetchCalendarObjects({
       calendar: { url: params.calendarUrl },
-      timeRange,
       expand: true,
+      ...(params.timeRange && { timeRange: params.timeRange }),
     });
 
     return objects;
   }
 
-  private normalizeUrl(calendarUrl: string, filename: string): string {
-    const base = calendarUrl.endsWith("/") ? calendarUrl : `${calendarUrl}/`;
+  private static ensureTrailingSlash(url: string): string {
+    if (url.endsWith("/")) {
+      return url;
+    }
+
+    return `${url}/`;
+  }
+
+  private static normalizeUrl(calendarUrl: string, filename: string): string {
+    const base = CalDAVClient.ensureTrailingSlash(calendarUrl);
     return `${base}${filename}`;
   }
 }
 
-export const createCalDAVClient = (config: CalDAVClientConfig): CalDAVClient => {
-  return new CalDAVClient(config);
-};
+const createCalDAVClient = (config: CalDAVClientConfig): CalDAVClient => new CalDAVClient(config);
+
+export { CalDAVClient, createCalDAVClient };
+export type { CalDAVClientConfig, CalendarInfo, CalendarObject };

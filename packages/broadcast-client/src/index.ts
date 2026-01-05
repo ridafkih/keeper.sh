@@ -3,6 +3,15 @@ import { WEBSOCKET_RECONNECT_DELAY_MS } from "@keeper.sh/constants";
 
 type EventCallback = (data: unknown) => void;
 
+const invokeListeners = (listeners: Set<EventCallback> | undefined, data?: unknown): void => {
+  if (!listeners) {
+    return;
+  }
+  for (const callback of listeners) {
+    callback(data);
+  }
+};
+
 export class BroadcastClient {
   private socket: WebSocket | null = null;
   private listeners = new Map<string, Set<EventCallback>>();
@@ -15,14 +24,13 @@ export class BroadcastClient {
     this.shouldReconnect = true;
     this.socket = new WebSocket(this.url);
 
-    this.socket.onopen = () => {
-      this.listeners.get("$open")?.forEach((callback) => callback(null));
-    };
+    this.socket.addEventListener("open", () => {
+      invokeListeners(this.listeners.get("$open"));
+    });
 
-    this.socket.onmessage = (messageEvent) => {
+    this.socket.addEventListener("message", (messageEvent) => {
       const data = JSON.parse(String(messageEvent.data));
       if (!socketMessageSchema.allows(data)) {
-        console.warn("invalid broadcast message");
         return;
       }
 
@@ -31,18 +39,20 @@ export class BroadcastClient {
         return;
       }
 
-      this.listeners.get(data.event)?.forEach((callback) => callback(data.data));
-    };
+      invokeListeners(this.listeners.get(data.event), data.data);
+    });
 
-    this.socket.onclose = () => {
-      this.listeners.get("$close")?.forEach((callback) => callback(null));
-      if (!this.shouldReconnect) return;
+    this.socket.addEventListener("close", () => {
+      invokeListeners(this.listeners.get("$close"));
+      if (!this.shouldReconnect) {
+        return;
+      }
       this.scheduleReconnect();
-    };
+    });
 
-    this.socket.onerror = () => {
-      this.listeners.get("$error")?.forEach((callback) => callback(null));
-    };
+    this.socket.addEventListener("error", () => {
+      invokeListeners(this.listeners.get("$error"));
+    });
   }
 
   on(event: string, callback: EventCallback): () => void {
@@ -54,13 +64,13 @@ export class BroadcastClient {
       this.listeners.set(event, new Set([callback]));
     }
 
-    return () => {
+    return (): void => {
       this.listeners.get(event)?.delete(callback);
     };
   }
 
   private scheduleReconnect(): void {
-    this.reconnectTimer = setTimeout(() => {
+    this.reconnectTimer = setTimeout((): void => {
       this.connect();
     }, WEBSOCKET_RECONNECT_DELAY_MS);
   }

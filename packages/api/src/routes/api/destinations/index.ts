@@ -1,4 +1,4 @@
-import { withTracing, withAuth } from "../../../utils/middleware";
+import { withAuth, withTracing } from "../../../utils/middleware";
 import { listCalendarDestinations } from "../../../utils/destinations";
 
 export const GET = withTracing(

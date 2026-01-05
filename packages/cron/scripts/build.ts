@@ -1,9 +1,9 @@
-import { build, Glob } from "bun";
+import { Glob, build } from "bun";
 
 const ROUTES_GLOB = new Glob("src/jobs/**/*.ts");
 const ENTRY_POINT_GLOB = new Glob("src/index.ts");
 
-const entrypoints = Array.from([...ROUTES_GLOB.scanSync(), ...ENTRY_POINT_GLOB.scanSync()]);
+const entrypoints = [...ROUTES_GLOB.scanSync(), ...ENTRY_POINT_GLOB.scanSync()];
 
 build({
   entrypoints,

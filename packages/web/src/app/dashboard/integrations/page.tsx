@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import type { ReactNode } from "react";
 import {
   CalendarSourcesSection,
   DestinationsSection,
@@ -7,7 +8,7 @@ import {
 import { PageContent } from "@/components/page-content";
 import { SectionSkeleton } from "@/components/section-skeleton";
 
-export default function IntegrationsPage() {
+export default function IntegrationsPage(): ReactNode {
   return (
     <PageContent>
       <Suspense fallback={<SectionSkeleton rows={2} />}>

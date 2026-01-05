@@ -1,16 +1,15 @@
 "use client";
 
-import type { FC } from "react";
+import type { ReactNode } from "react";
 import { useState } from "react";
 import Link from "next/link";
 import { CheckCircle } from "lucide-react";
 import {
-  AuthFormContainer,
   AuthForm,
-  AuthFormTitle,
   AuthFormError,
   AuthFormField,
   AuthFormSubmit,
+  AuthFormTitle,
 } from "@/components/auth-form";
 import { CardTitle, TextBody } from "@/components/typography";
 import { useFormSubmit } from "@/hooks/use-form-submit";
@@ -20,11 +19,11 @@ interface ResetPasswordFormProps {
   token: string;
 }
 
-export const ResetPasswordForm: FC<ResetPasswordFormProps> = ({ token }) => {
+const ResetPasswordForm = ({ token }: ResetPasswordFormProps): ReactNode => {
   const [success, setSuccess] = useState(false);
   const { isSubmitting, error, submit } = useFormSubmit();
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
 
     const formData = new FormData(event.currentTarget);
@@ -93,7 +92,7 @@ export const ResetPasswordForm: FC<ResetPasswordFormProps> = ({ token }) => {
   );
 };
 
-export const InvalidTokenMessage: FC = () => (
+const InvalidTokenMessage = (): ReactNode => (
   <div className="w-full max-w-xs p-4 rounded-md bg-surface text-center flex flex-col gap-2">
     <CardTitle as="h1">Invalid link</CardTitle>
 
@@ -106,3 +105,5 @@ export const InvalidTokenMessage: FC = () => (
     </Link>
   </div>
 );
+
+export { ResetPasswordForm, InvalidTokenMessage };

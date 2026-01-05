@@ -14,8 +14,12 @@ const CalendarFeedContent: FC = () => {
   const { ref, isIntersecting } = useIntersectionObserver();
 
   useEffect(() => {
-    if (!isIntersecting) return;
-    if (isLoadingMore) return;
+    if (!isIntersecting) {
+      return;
+    }
+    if (isLoadingMore) {
+      return;
+    }
     loadMore();
   }, [isIntersecting, isLoadingMore, loadMore]);
 

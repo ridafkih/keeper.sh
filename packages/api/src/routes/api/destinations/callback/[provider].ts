@@ -1,17 +1,17 @@
 import { withTracing } from "../../../../utils/middleware";
 import { ErrorResponse } from "../../../../utils/responses";
 import {
-  parseOAuthCallback,
-  handleOAuthCallback,
-  buildRedirectUrl,
   OAuthError,
+  buildRedirectUrl,
+  handleOAuthCallback,
+  parseOAuthCallback,
 } from "../../../../utils/oauth";
 
-export const GET = withTracing(async ({ request, params }) => {
+const GET = withTracing(async ({ request, params }) => {
   const { provider } = params;
 
   if (!provider) {
-    return ErrorResponse.notFound();
+    return ErrorResponse.notFound().toResponse();
   }
 
   try {
@@ -30,3 +30,5 @@ export const GET = withTracing(async ({ request, params }) => {
     return Response.redirect(errorUrl.toString());
   }
 });
+
+export { GET };

@@ -1,18 +1,20 @@
 import {
   CalendarProvider,
   RateLimiter,
-  getEventsForDestination,
   generateEventUid,
-  isKeeperEvent,
   getErrorMessage,
-  type DestinationProvider,
-  type SyncableEvent,
-  type PushResult,
-  type DeleteResult,
-  type RemoteEvent,
-  type SyncResult,
-  type CalDAVConfig,
-  type SyncContext,
+  getEventsForDestination,
+  isKeeperEvent,
+} from "@keeper.sh/integration";
+import type {
+  CalDAVConfig,
+  DeleteResult,
+  DestinationProvider,
+  PushResult,
+  RemoteEvent,
+  SyncContext,
+  SyncResult,
+  SyncableEvent,
 } from "@keeper.sh/integration";
 import { getStartOfToday } from "@keeper.sh/date-utils";
 import { getWideEvent } from "@keeper.sh/log";
@@ -21,28 +23,40 @@ import { CalDAVClient } from "./utils/client";
 import { eventToICalString, parseICalToRemoteEvent } from "./utils/ics";
 import { createCalDAVService } from "./utils/accounts";
 
-export interface CalDAVProviderOptions {
+const EMPTY_ACCOUNTS_COUNT = 0;
+const INITIAL_ADDED_COUNT = 0;
+const INITIAL_ADD_FAILED_COUNT = 0;
+const INITIAL_REMOVED_COUNT = 0;
+const INITIAL_REMOVE_FAILED_COUNT = 0;
+const CALDAV_RATE_LIMIT_CONCURRENCY = 5;
+const YEARS_UNTIL_FUTURE = 10;
+
+interface CalDAVProviderOptions {
   providerId: string;
   providerName: string;
 }
 
-export interface CalDAVProviderConfig {
+interface CalDAVProviderConfig {
   database: BunSQLDatabase;
   encryptionKey: string;
 }
 
-export const createCalDAVProvider = (
+const DEFAULT_CALDAV_OPTIONS: CalDAVProviderOptions = {
+  providerId: "caldav",
+  providerName: "CalDAV",
+};
+
+const createCalDAVProvider = (
   config: CalDAVProviderConfig,
-  options: CalDAVProviderOptions = {
-    providerId: "caldav",
-    providerName: "CalDAV",
-  },
+  options: CalDAVProviderOptions = DEFAULT_CALDAV_OPTIONS,
 ): DestinationProvider => {
   const caldavService = createCalDAVService(config);
 
   const syncForUser = async (userId: string, context: SyncContext): Promise<SyncResult | null> => {
     const accounts = await caldavService.getCalDAVAccountsForUser(userId, options.providerId);
-    if (accounts.length === 0) return null;
+    if (accounts.length === EMPTY_ACCOUNTS_COUNT) {
+      return null;
+    }
 
     const results = await Promise.all(
       accounts.map(async (account) => {
@@ -51,12 +65,12 @@ export const createCalDAVProvider = (
         const password = caldavService.getDecryptedPassword(account.encryptedPassword);
         const provider = new CalDAVProviderInstance(
           {
+            calendarUrl: account.calendarUrl,
             database: config.database,
             destinationId: account.destinationId,
-            userId: account.userId,
             serverUrl: account.serverUrl,
+            userId: account.userId,
             username: account.username,
-            calendarUrl: account.calendarUrl,
           },
           password,
           options,
@@ -65,13 +79,19 @@ export const createCalDAVProvider = (
       }),
     );
 
-    return results.reduce<SyncResult>(
-      (combined, result) => ({
-        added: combined.added + result.added,
-        removed: combined.removed + result.removed,
-      }),
-      { added: 0, removed: 0 },
-    );
+    const combined: SyncResult = {
+      addFailed: INITIAL_ADD_FAILED_COUNT,
+      added: INITIAL_ADDED_COUNT,
+      removeFailed: INITIAL_REMOVE_FAILED_COUNT,
+      removed: INITIAL_REMOVED_COUNT,
+    };
+    for (const result of results) {
+      combined.added += result.added;
+      combined.addFailed += result.addFailed;
+      combined.removed += result.removed;
+      combined.removeFailed += result.removeFailed;
+    }
+    return combined;
   };
 
   return { syncForUser };
@@ -87,23 +107,20 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
   constructor(
     config: CalDAVConfig,
     password: string,
-    options: CalDAVProviderOptions = {
-      providerId: "caldav",
-      providerName: "CalDAV",
-    },
+    options: CalDAVProviderOptions = DEFAULT_CALDAV_OPTIONS,
   ) {
     super(config);
     this.id = options.providerId;
     this.name = options.providerName;
     this.client = new CalDAVClient({
-      serverUrl: config.serverUrl,
       credentials: {
-        username: config.username,
         password,
+        username: config.username,
       },
+      serverUrl: config.serverUrl,
     });
 
-    this.rateLimiter = new RateLimiter(5);
+    this.rateLimiter = new RateLimiter({ concurrency: CALDAV_RATE_LIMIT_CONCURRENCY });
   }
 
   async pushEvents(events: SyncableEvent[]): Promise<PushResult[]> {
@@ -120,10 +137,10 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
               iCalString,
             });
 
-            return { success: true, remoteId: uid };
+            return { remoteId: uid, success: true };
           } catch (error) {
             getWideEvent()?.setError(error);
-            return { success: false, error: getErrorMessage(error) };
+            return { error: getErrorMessage(error), success: false };
           }
         }),
       ),
@@ -149,7 +166,7 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
               return { success: true };
             }
 
-            return { success: false, error: getErrorMessage(error) };
+            return { error: getErrorMessage(error), success: false };
           }
         }),
       ),
@@ -162,44 +179,36 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
     const today = getStartOfToday();
 
     const tenYearsOut = new Date(today);
-    tenYearsOut.setFullYear(tenYearsOut.getFullYear() + 10);
+    tenYearsOut.setFullYear(tenYearsOut.getFullYear() + YEARS_UNTIL_FUTURE);
 
     const calendarUrl = await this.client.resolveCalendarUrl(this.config.calendarUrl);
 
     const objects = await this.client.fetchCalendarObjects({
       calendarUrl,
       timeRange: {
-        start: today.toISOString(),
         end: tenYearsOut.toISOString(),
+        start: today.toISOString(),
       },
     });
 
     const remoteEvents: RemoteEvent[] = [];
-    let noData = 0;
-    let parseFailed = 0;
-    let notKeeper = 0;
-    let pastEvents = 0;
 
     for (const { data } of objects) {
       if (!data) {
-        noData++;
         continue;
       }
 
       const parsed = parseICalToRemoteEvent(data);
 
       if (!parsed) {
-        parseFailed++;
         continue;
       }
 
       if (!isKeeperEvent(parsed.uid)) {
-        notKeeper++;
         continue;
       }
 
       if (parsed.endTime < today) {
-        pastEvents++;
         continue;
       }
 
@@ -209,3 +218,6 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
     return remoteEvents;
   }
 }
+
+export { createCalDAVProvider };
+export type { CalDAVProviderOptions, CalDAVProviderConfig };

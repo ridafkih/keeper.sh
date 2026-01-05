@@ -1,15 +1,15 @@
-import {
-  remoteICalSourcesTable,
-  eventStatesTable,
-  calendarSnapshotsTable,
-} from "@keeper.sh/database/schema";
+import type { remoteICalSourcesTable } from "@keeper.sh/database/schema";
+import { calendarSnapshotsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { pullRemoteCalendar } from "@keeper.sh/pull-calendar";
-import { parseIcsEvents, diffEvents } from "@keeper.sh/sync-events";
-import { convertIcsCalendar } from "ts-ics";
-import { eq, inArray, desc } from "drizzle-orm";
+import { diffEvents, parseIcsEvents } from "@keeper.sh/sync-events";
+import { parseIcsCalendar } from "@keeper.sh/calendar";
+import { desc, eq, inArray } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
-export class RemoteCalendarSyncError extends Error {
+const FIRST_RESULT_LIMIT = 1;
+const EMPTY_EVENTS_COUNT = 0;
+
+class RemoteCalendarSyncError extends Error {
   constructor(
     public sourceId: string,
     cause: unknown,
@@ -19,82 +19,90 @@ export class RemoteCalendarSyncError extends Error {
   }
 }
 
-export type Source = typeof remoteICalSourcesTable.$inferSelect;
+type Source = typeof remoteICalSourcesTable.$inferSelect;
 
-export interface SyncCalendarService {
+interface SyncCalendarService {
   createSnapshot: (sourceId: string, ical: string) => Promise<void>;
   syncSourceFromSnapshot: (source: Source) => Promise<void>;
   fetchAndSyncSource: (source: Source) => Promise<void>;
 }
 
-export const createSyncCalendarService = (database: BunSQLDatabase): SyncCalendarService => {
-  const getLatestSnapshot = async (sourceId: string) => {
+const toStoredEvent = (row: {
+  id: string;
+  sourceEventUid: string;
+  startTime: Date;
+  endTime: Date;
+}): { endTime: Date; id: string; startTime: Date; uid: string } => ({
+  endTime: row.endTime,
+  id: row.id,
+  startTime: row.startTime,
+  uid: row.sourceEventUid,
+});
+
+const createSyncCalendarService = (database: BunSQLDatabase): SyncCalendarService => {
+  const getLatestSnapshot = async (
+    sourceId: string,
+  ): Promise<ReturnType<typeof parseIcsCalendar> | null> => {
     const [snapshot] = await database
       .select({ ical: calendarSnapshotsTable.ical })
       .from(calendarSnapshotsTable)
       .where(eq(calendarSnapshotsTable.sourceId, sourceId))
       .orderBy(desc(calendarSnapshotsTable.createdAt))
-      .limit(1);
+      .limit(FIRST_RESULT_LIMIT);
 
-    if (!snapshot?.ical) return null;
-    return convertIcsCalendar(undefined, snapshot.ical);
+    if (!snapshot?.ical) {
+      return null;
+    }
+    return parseIcsCalendar({ icsString: snapshot.ical });
   };
 
-  const toStoredEvent = (row: {
-    id: string;
-    sourceEventUid: string;
-    startTime: Date;
-    endTime: Date;
-  }) => ({
-    id: row.id,
-    uid: row.sourceEventUid,
-    startTime: row.startTime,
-    endTime: row.endTime,
-  });
-
-  const getStoredEvents = async (sourceId: string) => {
+  const getStoredEvents = async (
+    sourceId: string,
+  ): Promise<{ endTime: Date; id: string; startTime: Date; uid: string }[]> => {
     const results = await database
       .select({
+        endTime: eventStatesTable.endTime,
         id: eventStatesTable.id,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
-        endTime: eventStatesTable.endTime,
       })
       .from(eventStatesTable)
       .where(eq(eventStatesTable.sourceId, sourceId));
 
     const events = [];
     for (const row of results) {
-      if (row.sourceEventUid === null) continue;
+      if (row.sourceEventUid === null) {
+        continue;
+      }
       events.push(toStoredEvent({ ...row, sourceEventUid: row.sourceEventUid }));
     }
 
     return events;
   };
 
-  const removeEvents = async (_sourceId: string, eventIds: string[]) => {
+  const removeEvents = async (_sourceId: string, eventIds: string[]): Promise<void> => {
     await database.delete(eventStatesTable).where(inArray(eventStatesTable.id, eventIds));
   };
 
   const addEvents = async (
     sourceId: string,
     events: { uid: string; startTime: Date; endTime: Date }[],
-  ) => {
+  ): Promise<void> => {
     const rows = events.map((event) => ({
-      sourceId,
-      sourceEventUid: event.uid,
-      startTime: event.startTime,
       endTime: event.endTime,
+      sourceEventUid: event.uid,
+      sourceId,
+      startTime: event.startTime,
     }));
 
     await database.insert(eventStatesTable).values(rows);
   };
 
-  const createSnapshot = async (sourceId: string, ical: string) => {
-    await database.insert(calendarSnapshotsTable).values({ sourceId, ical });
+  const createSnapshot = async (sourceId: string, ical: string): Promise<void> => {
+    await database.insert(calendarSnapshotsTable).values({ ical, sourceId });
   };
 
-  const syncSourceFromSnapshot = async (source: Source) => {
+  const syncSourceFromSnapshot = async (source: Source): Promise<void> => {
     const icsCalendar = await getLatestSnapshot(source.id);
     if (!icsCalendar) {
       return;
@@ -104,21 +112,24 @@ export const createSyncCalendarService = (database: BunSQLDatabase): SyncCalenda
     const storedEvents = await getStoredEvents(source.id);
     const { toAdd, toRemove } = diffEvents(remoteEvents, storedEvents);
 
-    if (toRemove.length > 0) {
+    if (toRemove.length > EMPTY_EVENTS_COUNT) {
       const eventIds = toRemove.map((event) => event.id);
       await removeEvents(source.id, eventIds);
     }
 
-    if (toAdd.length > 0) {
+    if (toAdd.length > EMPTY_EVENTS_COUNT) {
       await addEvents(source.id, toAdd);
     }
   };
 
-  const fetchAndSyncSource = async (source: Source) => {
+  const fetchAndSyncSource = async (source: Source): Promise<void> => {
     const { ical } = await pullRemoteCalendar("ical", source.url);
     await createSnapshot(source.id, ical);
     await syncSourceFromSnapshot(source);
   };
 
-  return { createSnapshot, syncSourceFromSnapshot, fetchAndSyncSource };
+  return { createSnapshot, fetchAndSyncSource, syncSourceFromSnapshot };
 };
+
+export { RemoteCalendarSyncError, createSyncCalendarService };
+export type { Source, SyncCalendarService };

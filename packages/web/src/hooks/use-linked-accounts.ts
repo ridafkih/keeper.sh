@@ -1,4 +1,4 @@
-import useSWR from "swr";
+import useSWR, { type SWRResponse } from "swr";
 
 interface LinkedAccount {
   id: string;
@@ -16,16 +16,17 @@ interface DestinationResponse {
 
 const fetchLinkedAccounts = async (): Promise<LinkedAccount[]> => {
   const response = await fetch("/api/destinations");
-  if (!response.ok) throw new Error("Failed to fetch linked accounts");
+  if (!response.ok) {
+    throw new Error("Failed to fetch linked accounts");
+  }
   const data: DestinationResponse[] = await response.json();
   return data.map((destination) => ({
-    id: destination.id,
-    providerId: destination.provider,
     email: destination.email,
+    id: destination.id,
     needsReauthentication: destination.needsReauthentication,
+    providerId: destination.provider,
   }));
 };
 
-export const useLinkedAccounts = () => {
-  return useSWR("linked-accounts", fetchLinkedAccounts);
-};
+export const useLinkedAccounts = (): SWRResponse<LinkedAccount[]> =>
+  useSWR("linked-accounts", fetchLinkedAccounts);

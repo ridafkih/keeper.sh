@@ -1,6 +1,6 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
-export interface SyncableEvent {
+interface SyncableEvent {
   id: string;
   sourceEventUid: string;
   startTime: Date;
@@ -8,11 +8,11 @@ export interface SyncableEvent {
   summary: string;
   description?: string;
   sourceId: string;
-  sourceName?: string;
+  sourceName: string | null;
   sourceUrl: string;
 }
 
-export interface PushResult {
+interface PushResult {
   success: boolean;
   remoteId?: string;
   deleteId?: string;
@@ -20,60 +20,78 @@ export interface PushResult {
   shouldContinue?: boolean;
 }
 
-export interface DeleteResult {
+interface DeleteResult {
   success: boolean;
   error?: string;
   shouldContinue?: boolean;
 }
 
-export interface SyncResult {
+interface SyncResult {
   added: number;
+  addFailed: number;
   removed: number;
+  removeFailed: number;
 }
 
-export interface RemoteEvent {
+interface RemoteEvent {
   uid: string;
   deleteId: string;
   startTime: Date;
   endTime: Date;
 }
 
-export type SyncOperation =
+type SyncOperation =
   | { type: "add"; event: SyncableEvent }
   | { type: "remove"; uid: string; deleteId: string; startTime: Date };
 
-export interface ListRemoteEventsOptions {
+interface ListRemoteEventsOptions {
   until: Date;
 }
 
-export type BroadcastSyncStatus = (
+type BroadcastSyncStatus = (
   userId: string,
   destinationId: string,
   data: { needsReauthentication: boolean },
 ) => void;
 
-export interface ProviderConfig {
+interface ProviderConfig {
   database: BunSQLDatabase;
   userId: string;
   destinationId: string;
   broadcastSyncStatus?: BroadcastSyncStatus;
 }
 
-export interface OAuthProviderConfig extends ProviderConfig {
+interface OAuthProviderConfig extends ProviderConfig {
   accountId: string;
   accessToken: string;
   refreshToken: string;
   accessTokenExpiresAt: Date;
 }
 
-export interface GoogleCalendarConfig extends OAuthProviderConfig {
+interface GoogleCalendarConfig extends OAuthProviderConfig {
   calendarId: string;
 }
 
-export interface OutlookCalendarConfig extends OAuthProviderConfig {}
+type OutlookCalendarConfig = OAuthProviderConfig;
 
-export interface CalDAVConfig extends ProviderConfig {
+interface CalDAVConfig extends ProviderConfig {
   serverUrl: string;
   username: string;
   calendarUrl: string;
 }
+
+export type {
+  SyncableEvent,
+  PushResult,
+  DeleteResult,
+  SyncResult,
+  RemoteEvent,
+  SyncOperation,
+  ListRemoteEventsOptions,
+  BroadcastSyncStatus,
+  ProviderConfig,
+  OAuthProviderConfig,
+  GoogleCalendarConfig,
+  OutlookCalendarConfig,
+  CalDAVConfig,
+};

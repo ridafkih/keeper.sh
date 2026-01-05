@@ -9,8 +9,8 @@
     "lint": "oxlint ."
   },
   "dependencies": {
-    "@keeper.sh/log": "workspace:*",
-    "ts-ics": "2.4.0"
+    "@keeper.sh/calendar": "workspace:*",
+    "@keeper.sh/log": "workspace:*"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",

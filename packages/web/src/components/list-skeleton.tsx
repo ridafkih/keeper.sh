@@ -1,4 +1,4 @@
-import type { FC } from "react";
+import type { FC, ReactNode } from "react";
 import { Card } from "@/components/card";
 
 interface ListSkeletonProps {
@@ -15,16 +15,18 @@ const SkeletonRow: FC = () => (
   </div>
 );
 
-export const ListSkeleton: FC<ListSkeletonProps> = ({ rows = 2 }) => (
-  <Card>
-    <div className="flex items-center justify-between px-3 py-2">
-      <div className="h-4 bg-surface-muted rounded w-20 animate-pulse" />
-      <div className="h-4 bg-surface-muted rounded w-24 animate-pulse" />
-    </div>
-    <div className="border-t border-border divide-y divide-border">
-      {Array.from({ length: rows }).map((_, index) => (
-        <SkeletonRow key={index} />
-      ))}
-    </div>
-  </Card>
-);
+export const ListSkeleton: FC<ListSkeletonProps> = ({ rows = 2 }) => {
+  const skeletonRows: ReactNode[] = [];
+  for (let index = 0; index < rows; index++) {
+    skeletonRows.push(<SkeletonRow key={index} />);
+  }
+  return (
+    <Card>
+      <div className="flex items-center justify-between px-3 py-2">
+        <div className="h-4 bg-surface-muted rounded w-20 animate-pulse" />
+        <div className="h-4 bg-surface-muted rounded w-24 animate-pulse" />
+      </div>
+      <div className="border-t border-border divide-y divide-border">{skeletonRows}</div>
+    </Card>
+  );
+};

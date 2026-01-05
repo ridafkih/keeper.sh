@@ -1,10 +1,10 @@
-import { remoteICalSourcesTable, calendarDestinationsTable } from "@keeper.sh/database/schema";
+import { calendarDestinationsTable, remoteICalSourcesTable } from "@keeper.sh/database/schema";
 import type { Plan } from "@keeper.sh/premium";
 import { database, premiumService } from "../context";
 
-export async function getSourcesByPlan(
+const getSourcesByPlan = async (
   targetPlan: Plan,
-): Promise<(typeof remoteICalSourcesTable.$inferSelect)[]> {
+): Promise<(typeof remoteICalSourcesTable.$inferSelect)[]> => {
   const sources = await database.select().from(remoteICalSourcesTable);
 
   const userPlans = new Map<string, Plan>();
@@ -16,9 +16,9 @@ export async function getSourcesByPlan(
   }
 
   return sources.filter((source) => userPlans.get(source.userId) === targetPlan);
-}
+};
 
-export async function getUsersWithDestinationsByPlan(targetPlan: Plan): Promise<string[]> {
+const getUsersWithDestinationsByPlan = async (targetPlan: Plan): Promise<string[]> => {
   const destinations = await database
     .select({ userId: calendarDestinationsTable.userId })
     .from(calendarDestinationsTable);
@@ -34,4 +34,6 @@ export async function getUsersWithDestinationsByPlan(targetPlan: Plan): Promise<
   }
 
   return usersWithPlan;
-}
+};
+
+export { getSourcesByPlan, getUsersWithDestinationsByPlan };

@@ -1,18 +1,25 @@
 "use client";
 
 import { useState } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { AnimatePresence } from "motion/react";
 import { hasConsentChoice, setAnalyticsConsent, track } from "@/lib/analytics";
 import { button } from "@/styles";
 import { TextBody } from "@/components/typography";
-import clsx from "clsx";
+import { clsx } from "clsx";
 
-export const CookieConsent = () => {
-  const [showBanner, setShowBanner] = useState(() => !hasConsentChoice());
+export const CookieConsent = (): ReactNode => {
+  const [showBanner, setShowBanner] = useState((): boolean => !hasConsentChoice());
 
-  const handleChoice = (consent: boolean) => {
-    track(consent ? "consent_granted" : "consent_denied");
+  const handleChoice = (consent: boolean): void => {
+    const eventName = ((): string => {
+      if (consent) {
+        return "consent_granted";
+      }
+      return "consent_denied";
+    })();
+    track(eventName);
     setAnalyticsConsent(consent);
     setShowBanner(false);
   };
@@ -37,14 +44,14 @@ export const CookieConsent = () => {
                   <button
                     type="button"
                     onClick={() => handleChoice(true)}
-                    className={clsx(button({ variant: "secondary", size: "xs" }), "text-nowrap")}
+                    className={clsx(button({ size: "xs", variant: "secondary" }), "text-nowrap")}
                   >
                     Yes
                   </button>
                   <button
                     type="button"
                     onClick={() => handleChoice(false)}
-                    className={clsx(button({ variant: "secondary", size: "xs" }), "text-nowrap")}
+                    className={clsx(button({ size: "xs", variant: "secondary" }), "text-nowrap")}
                   >
                     No
                   </button>

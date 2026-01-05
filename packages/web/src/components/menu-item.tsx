@@ -1,18 +1,18 @@
-import type { FC, PropsWithChildren, ComponentProps } from "react";
+import type { ComponentProps, FC, PropsWithChildren } from "react";
 import { Menu } from "@base-ui/react/menu";
 import { tv } from "tailwind-variants";
 
 const menuItemStyle = tv({
   base: "flex items-center gap-2 px-2 py-1 text-xs rounded",
-  variants: {
-    variant: {
-      default: "text-foreground-secondary hover:bg-surface-muted cursor-pointer",
-      danger: "text-destructive hover:bg-surface-muted cursor-pointer",
-      disabled: "text-foreground-subtle cursor-not-allowed",
-    },
-  },
   defaultVariants: {
     variant: "default",
+  },
+  variants: {
+    variant: {
+      danger: "text-destructive hover:bg-surface-muted cursor-pointer",
+      default: "text-foreground-secondary hover:bg-surface-muted cursor-pointer",
+      disabled: "text-foreground-subtle cursor-not-allowed",
+    },
   },
 });
 
@@ -23,13 +23,15 @@ interface MenuItemProps extends Omit<BaseMenuItemProps, "className"> {
   className?: string;
 }
 
-export const MenuItem: FC<PropsWithChildren<MenuItemProps>> = ({
+const MenuItem: FC<PropsWithChildren<MenuItemProps>> = ({
   variant,
   className,
   children,
   ...props
 }) => (
-  <Menu.Item className={menuItemStyle({ variant, className })} {...props}>
+  <Menu.Item className={menuItemStyle({ className, variant })} {...props}>
     {children}
   </Menu.Item>
 );
+
+export { MenuItem };

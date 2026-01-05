@@ -1,4 +1,4 @@
-import type { FC, PropsWithChildren, ComponentProps } from "react";
+import type { ComponentProps, FC, PropsWithChildren } from "react";
 import { Menu } from "@base-ui/react/menu";
 import { tv } from "tailwind-variants";
 
@@ -6,8 +6,8 @@ const menuPopupStyle = tv({
   base: "bg-surface-elevated border border-border rounded-md shadow-lg p-1",
   variants: {
     minWidth: {
-      sm: "min-w-24",
       md: "min-w-30",
+      sm: "min-w-24",
     },
   },
 });
@@ -25,7 +25,7 @@ export const MenuPopup: FC<PropsWithChildren<MenuPopupProps>> = ({
   children,
   ...props
 }) => (
-  <Menu.Popup className={menuPopupStyle({ minWidth, className })} {...props}>
+  <Menu.Popup className={menuPopupStyle({ className, minWidth })} {...props}>
     {children}
   </Menu.Popup>
 );

@@ -1,4 +1,4 @@
-export interface DestinationConfig {
+interface DestinationConfig {
   id: string;
   name: string;
   icon?: string;
@@ -8,27 +8,27 @@ export interface DestinationConfig {
 
 const DESTINATIONS_CONST = [
   {
+    icon: "/integrations/icon-google.svg",
     id: "google",
     name: "Google Calendar",
-    icon: "/integrations/icon-google.svg",
     type: "oauth",
   },
   {
+    icon: "/integrations/icon-outlook.svg",
     id: "outlook",
     name: "Outlook",
-    icon: "/integrations/icon-outlook.svg",
     type: "oauth",
   },
   {
+    icon: "/integrations/icon-fastmail.svg",
     id: "fastmail",
     name: "FastMail",
-    icon: "/integrations/icon-fastmail.svg",
     type: "caldav",
   },
   {
+    icon: "/integrations/icon-icloud.svg",
     id: "icloud",
     name: "iCloud",
-    icon: "/integrations/icon-icloud.svg",
     type: "caldav",
   },
   {
@@ -38,21 +38,24 @@ const DESTINATIONS_CONST = [
   },
 ] as const;
 
-export const DESTINATIONS: DestinationConfig[] = [...DESTINATIONS_CONST];
+const DESTINATIONS: DestinationConfig[] = [...DESTINATIONS_CONST];
 
-export type DestinationId = (typeof DESTINATIONS_CONST)[number]["id"];
+type DestinationId = (typeof DESTINATIONS_CONST)[number]["id"];
 
 type CalDAVDestination = Extract<(typeof DESTINATIONS_CONST)[number], { type: "caldav" }>;
 
-export type CalDAVDestinationId = CalDAVDestination["id"];
+type CalDAVDestinationId = CalDAVDestination["id"];
 
-export const getDestination = (id: string): DestinationConfig | undefined =>
+const getDestination = (id: string): DestinationConfig | undefined =>
   DESTINATIONS.find((destination) => destination.id === id);
 
-export const isCalDAVDestination = (id: string): id is CalDAVDestinationId => {
+const isCalDAVDestination = (id: string): id is CalDAVDestinationId => {
   const destination = getDestination(id);
   return destination?.type === "caldav";
 };
 
-export const getActiveDestinations = (): DestinationConfig[] =>
+const getActiveDestinations = (): DestinationConfig[] =>
   DESTINATIONS.filter((destination) => !destination.comingSoon);
+
+export { DESTINATIONS, getDestination, isCalDAVDestination, getActiveDestinations };
+export type { DestinationConfig, DestinationId, CalDAVDestinationId };

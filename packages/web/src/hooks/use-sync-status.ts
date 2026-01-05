@@ -1,40 +1,57 @@
-import useSWRSubscription from "swr/subscription";
+import useSWRSubscription, { type SWRSubscriptionResponse } from "swr/subscription";
 import { mutate } from "swr";
 import { socketMessageSchema, syncStatusSchema, type SyncStatus } from "@keeper.sh/data-schemas";
 import { WEBSOCKET_RECONNECT_DELAY_MS } from "@keeper.sh/constants";
 
-const fetchSocketUrl = async (): Promise<string> => {
-  const response = await fetch("/api/socket/url");
-  if (!response.ok) throw new Error("Failed to fetch socket URL");
-  const { socketUrl, socketPath } = await response.json();
-
-  if (socketUrl) return socketUrl;
-
-  const url = new URL(socketPath, window.location.origin);
-  url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return url.toString();
-};
-
 type SyncStatusRecord = Record<string, SyncStatus>;
 type Next = (error?: Error | null, data?: SyncStatusRecord) => void;
 
-export function useSyncStatus() {
-  return useSWRSubscription("sync-status", (_, { next }: { next: Next }) => {
+const buildWebSocketUrl = (socketPath: string): string => {
+  const url = new URL(socketPath, globalThis.location.origin);
+  url.protocol = ((): string => {
+    if (globalThis.location.protocol === "https:") {
+      return "wss:";
+    }
+    return "ws:";
+  })();
+  return url.toString();
+};
+
+const fetchSocketUrl = async (): Promise<string> => {
+  const response = await fetch("/api/socket/url");
+  if (!response.ok) {
+    throw new Error("Failed to fetch socket URL");
+  }
+  const { socketUrl, socketPath } = await response.json();
+
+  if (socketUrl) {
+    return socketUrl;
+  }
+
+  return buildWebSocketUrl(socketPath);
+};
+
+export const useSyncStatus = (): SWRSubscriptionResponse<SyncStatusRecord, Error> =>
+  useSWRSubscription("sync-status", (_key, { next }: { next: Next }): (() => void) => {
     let socket: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let statuses: SyncStatusRecord = {};
     let isClosing = false;
 
-    const connect = async () => {
-      if (isClosing) return;
+    const connect = async (): Promise<void> => {
+      if (isClosing) {
+        return;
+      }
 
       try {
         const socketUrl = await fetchSocketUrl();
-        if (isClosing) return;
+        if (isClosing) {
+          return;
+        }
 
         socket = new WebSocket(socketUrl);
 
-        socket.onmessage = (messageEvent) => {
+        socket.addEventListener("message", (messageEvent) => {
           const message = JSON.parse(String(messageEvent.data));
 
           if (!socketMessageSchema.allows(message)) {
@@ -47,7 +64,9 @@ export function useSyncStatus() {
             return;
           }
 
-          if (message.event !== "sync:status") return;
+          if (message.event !== "sync:status") {
+            return;
+          }
 
           if (!syncStatusSchema.allows(message.data)) {
             next(new Error("Invalid sync status data"));
@@ -60,28 +79,33 @@ export function useSyncStatus() {
 
           statuses = { ...statuses, [message.data.destinationId]: message.data };
           next(null, statuses);
-        };
+        });
 
-        socket.onclose = () => {
-          if (isClosing) return;
+        socket.addEventListener("close", () => {
+          if (isClosing) {
+            return;
+          }
           reconnectTimer = setTimeout(connect, WEBSOCKET_RECONNECT_DELAY_MS);
-        };
+        });
 
-        socket.onerror = () => {
+        socket.addEventListener("error", () => {
           next(new Error("WebSocket error"));
-        };
+        });
       } catch {
-        if (isClosing) return;
+        if (isClosing) {
+          return;
+        }
         reconnectTimer = setTimeout(connect, WEBSOCKET_RECONNECT_DELAY_MS);
       }
     };
 
     connect();
 
-    return () => {
+    return (): void => {
       isClosing = true;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+      }
       socket?.close();
     };
   });
-}

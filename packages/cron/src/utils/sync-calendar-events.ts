@@ -1,14 +1,16 @@
 import type { CronOptions } from "cronbake";
 import type { Plan } from "@keeper.sh/premium";
 import { syncDestinationsForUser } from "@keeper.sh/integration";
-import { fetchAndSyncSource, type Source } from "@keeper.sh/calendar";
+import type { SyncResult } from "@keeper.sh/integration";
+import { fetchAndSyncSource } from "@keeper.sh/calendar";
+import type { Source } from "@keeper.sh/calendar";
 import { getSourcesByPlan, getUsersWithDestinationsByPlan } from "./get-sources";
-import { withCronWideEvent, setCronEventFields } from "./with-wide-event";
+import { setCronEventFields, withCronWideEvent } from "./with-wide-event";
 import { database, destinationProviders, syncCoordinator } from "../context";
 
-const syncUserSources = async (userId: string, sources: Source[]) => {
+const syncUserSources = async (userId: string, sources: Source[]): Promise<SyncResult> => {
   await Promise.allSettled(sources.map((source) => fetchAndSyncSource(database, source)));
-  await syncDestinationsForUser(userId, destinationProviders, syncCoordinator);
+  return syncDestinationsForUser(userId, destinationProviders, syncCoordinator);
 };
 
 const groupSourcesByUser = (sources: Source[]): Map<string, Source[]> => {
@@ -32,31 +34,61 @@ const ensureUsersWithDestinationsIncluded = (
   }
 };
 
-export const createSyncJob = (plan: Plan, cron: string): CronOptions =>
+const INITIAL_ADDED_COUNT = 0;
+const INITIAL_ADD_FAILED_COUNT = 0;
+const INITIAL_REMOVED_COUNT = 0;
+const INITIAL_REMOVE_FAILED_COUNT = 0;
+
+const createSyncJob = (plan: Plan, cron: string): CronOptions =>
   withCronWideEvent({
-    name: `sync-calendar-events-${plan}`,
-    cron,
-    immediate: process.env.NODE_ENV !== "production",
-    async callback() {
+    async callback(): Promise<void> {
       const sources = await getSourcesByPlan(plan);
       const usersWithDestinations = await getUsersWithDestinationsByPlan(plan);
 
       setCronEventFields({
-        subscriptionPlan: plan,
-        sourceCount: sources.length,
         processedCount: usersWithDestinations.length,
+        sourceCount: sources.length,
+        subscriptionPlan: plan,
       });
 
       const sourcesByUser = groupSourcesByUser(sources);
       ensureUsersWithDestinationsIncluded(sourcesByUser, usersWithDestinations);
 
-      const userSyncs = Array.from(sourcesByUser.entries()).map(([userId, userSources]) =>
+      const userSyncs = [...sourcesByUser.entries()].map(([userId, userSources]) =>
         syncUserSources(userId, userSources),
       );
 
-      const results = await Promise.allSettled(userSyncs);
-      const failedCount = results.filter((result) => result.status === "rejected").length;
+      const settledResults = await Promise.allSettled(userSyncs);
+      const userFailedCount = settledResults.filter((result) => result.status === "rejected").length;
 
-      setCronEventFields({ failedCount });
+      const totals: SyncResult = {
+        addFailed: INITIAL_ADD_FAILED_COUNT,
+        added: INITIAL_ADDED_COUNT,
+        removeFailed: INITIAL_REMOVE_FAILED_COUNT,
+        removed: INITIAL_REMOVED_COUNT,
+      };
+
+      for (const settled of settledResults) {
+        if (settled.status !== "fulfilled") {
+          continue;
+        }
+        totals.added += settled.value.added;
+        totals.addFailed += settled.value.addFailed;
+        totals.removed += settled.value.removed;
+        totals.removeFailed += settled.value.removeFailed;
+      }
+
+      setCronEventFields({
+        eventsAdded: totals.added,
+        eventsAddFailed: totals.addFailed,
+        eventsRemoved: totals.removed,
+        eventsRemoveFailed: totals.removeFailed,
+        userFailedCount,
+      });
     },
+    cron,
+    immediate: process.env.NODE_ENV !== "production",
+    name: `sync-calendar-events-${plan}`,
   });
+
+export { createSyncJob };

@@ -1,13 +1,14 @@
+import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import { MarketingPage } from "@/components/marketing/marketing-page";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy",
   description:
     "Learn how Keeper collects, uses, and protects your data. We anonymize calendar events and prioritize your privacy.",
+  title: "Privacy Policy",
 };
 
-export default function PrivacyPage() {
+export default function PrivacyPage(): ReactNode {
   return (
     <MarketingPage title="Privacy Policy" description="Last updated: December 2025">
       <div className="text-sm text-foreground-secondary flex flex-col gap-8">

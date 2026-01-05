@@ -1,9 +1,7 @@
 import { RedisClient } from "bun";
 
-export const createRedis = (url: string): RedisClient => {
-  return new RedisClient(url);
-};
+const createRedis = (url: string): RedisClient => new RedisClient(url);
 
-export const createSubscriber = async (redis: RedisClient): Promise<RedisClient> => {
-  return redis.duplicate();
-};
+const createSubscriber = (redis: RedisClient): Promise<RedisClient> => redis.duplicate();
+
+export { createRedis, createSubscriber };

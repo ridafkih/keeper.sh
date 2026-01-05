@@ -2,7 +2,11 @@ import { calendarSnapshotsTable, remoteICalSourcesTable } from "@keeper.sh/datab
 import { eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
-export async function createSnapshot(database: BunSQLDatabase, sourceId: string, ical: string) {
+const createSnapshot = async (
+  database: BunSQLDatabase,
+  sourceId: string,
+  ical: string,
+): Promise<void> => {
   const [source] = await database
     .select({ id: remoteICalSourcesTable.id })
     .from(remoteICalSourcesTable)
@@ -12,5 +16,7 @@ export async function createSnapshot(database: BunSQLDatabase, sourceId: string,
     return;
   }
 
-  await database.insert(calendarSnapshotsTable).values({ sourceId, ical });
-}
+  await database.insert(calendarSnapshotsTable).values({ ical, sourceId });
+};
+
+export { createSnapshot };

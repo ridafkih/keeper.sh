@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Receipt } from "lucide-react";
 import { Separator } from "@base-ui/react/separator";
 import { EmptyState } from "@/components/empty-state";
@@ -7,63 +8,51 @@ import { SubscriptionPlans } from "@/components/subscription-plans";
 import { PageContent } from "@/components/page-content";
 import { Section } from "@/components/section";
 import { SectionHeader } from "@/components/section-header";
-import { TextMeta, FieldValue } from "@/components/typography";
+import { FieldValue, TextMeta } from "@/components/typography";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useOrders } from "@/hooks/use-orders";
 import { formatDate } from "@keeper.sh/date-utils";
-import { CustomerOrder } from "@polar-sh/sdk/models/components/customerorder.js";
+import type { CustomerOrder } from "@polar-sh/sdk/models/components/customerorder.js";
 
-function formatCurrency(amount: number, currency: string): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
+const CENTS_PER_DOLLAR = 100;
+
+const formatCurrency = (amount: number, currency: string): string =>
+  new Intl.NumberFormat("en-US", {
     currency: currency.toUpperCase(),
-  }).format(amount / 100);
-}
+    style: "currency",
+  }).format(amount / CENTS_PER_DOLLAR);
 
-function BillingHistoryLoading() {
-  return (
-    <Section>
-      <SectionHeader
-        title="Billing History"
-        description="View your past invoices and payment history"
-      />
-      <div className="py-4 border border-border rounded-md">
-        <div className="animate-pulse space-y-2 px-3">
-          <div className="h-3 bg-surface-skeleton rounded w-3/4" />
-          <div className="h-3 bg-surface-skeleton rounded w-1/2" />
-        </div>
+const BillingHistoryLoading = (): ReactNode => (
+  <Section>
+    <SectionHeader
+      title="Billing History"
+      description="View your past invoices and payment history"
+    />
+    <div className="py-4 border border-border rounded-md">
+      <div className="animate-pulse space-y-2 px-3">
+        <div className="h-3 bg-surface-skeleton rounded w-3/4" />
+        <div className="h-3 bg-surface-skeleton rounded w-1/2" />
       </div>
-    </Section>
-  );
-}
+    </div>
+  </Section>
+);
 
-function BillingHistoryEmpty() {
-  return (
-    <Section>
-      <SectionHeader
-        title="Billing History"
-        description="View your past invoices and payment history"
-      />
-      <EmptyState
-        icon={<Receipt size={20} className="text-foreground-subtle" />}
-        message="No billing history yet"
-      />
-    </Section>
-  );
-}
+const RECEIPT_ICON_SIZE = 20;
 
-interface Order {
-  id: string;
-  createdAt: Date;
-  product?: { name: string };
-  description?: string;
-  totalAmount: number;
-  currency: string;
-  paid: boolean;
-}
+const BillingHistoryEmpty = (): ReactNode => (
+  <Section>
+    <SectionHeader
+      title="Billing History"
+      description="View your past invoices and payment history"
+    />
+    <EmptyState
+      icon={<Receipt size={RECEIPT_ICON_SIZE} className="text-foreground-subtle" />}
+      message="No billing history yet"
+    />
+  </Section>
+);
 
-function BillingHistoryTable({ orders }: { orders: CustomerOrder[] }) {
-  return (
+const BillingHistoryTable = ({ orders }: { orders: CustomerOrder[] }): ReactNode => (
     <Section>
       <SectionHeader
         title="Billing History"
@@ -103,13 +92,19 @@ function BillingHistoryTable({ orders }: { orders: CustomerOrder[] }) {
                 </td>
                 <td className="px-3 py-2">
                   <span
-                    className={
-                      order.paid
-                        ? "text-success-emphasis bg-success-surface px-1.5 py-0.5 rounded-full text-xs font-medium"
-                        : "text-warning bg-warning-surface px-1.5 py-0.5 rounded-full text-xs font-medium"
-                    }
+                    className={((): string => {
+                      if (order.paid) {
+                        return "text-success-emphasis bg-success-surface px-1.5 py-0.5 rounded-full text-xs font-medium";
+                      }
+                      return "text-warning bg-warning-surface px-1.5 py-0.5 rounded-full text-xs font-medium";
+                    })()}
                   >
-                    {order.paid ? "Paid" : "Pending"}
+                    {((): string => {
+                      if (order.paid) {
+                        return "Paid";
+                      }
+                      return "Pending";
+                    })()}
                   </span>
                 </td>
               </tr>
@@ -118,24 +113,25 @@ function BillingHistoryTable({ orders }: { orders: CustomerOrder[] }) {
         </table>
       </div>
     </Section>
-  );
-}
+);
 
-function BillingHistory() {
+const EMPTY_ORDERS_COUNT = 0;
+
+const BillingHistory = (): ReactNode => {
   const { data: orders, isLoading } = useOrders();
 
   if (isLoading) {
     return <BillingHistoryLoading />;
   }
 
-  if (!orders || orders.length === 0) {
+  if (!orders || orders.length === EMPTY_ORDERS_COUNT) {
     return <BillingHistoryEmpty />;
   }
 
   return <BillingHistoryTable orders={orders} />;
-}
+};
 
-export function BillingPageContent() {
+export const BillingPageContent = (): ReactNode => {
   const { data: subscription, isLoading, mutate } = useSubscription();
 
   return (
@@ -150,4 +146,4 @@ export function BillingPageContent() {
       <BillingHistory />
     </PageContent>
   );
-}
+};

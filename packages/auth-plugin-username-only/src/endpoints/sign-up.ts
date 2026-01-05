@@ -4,12 +4,13 @@ import { z } from "zod";
 import type { UsernameOnlyConfig } from "../utils/config";
 import type { User } from "../types";
 
-export const createSignUpEndpoint = (config: UsernameOnlyConfig) =>
+const createSignUpEndpoint = (config: UsernameOnlyConfig) =>
   createAuthEndpoint(
     "/username-only/sign-up",
     {
-      method: "POST",
       body: z.object({
+        name: z.string().optional(),
+        password: z.string().min(config.minPasswordLength).max(config.maxPasswordLength),
         username: z
           .string()
           .min(config.minUsernameLength)
@@ -18,9 +19,8 @@ export const createSignUpEndpoint = (config: UsernameOnlyConfig) =>
             /^[a-zA-Z0-9._-]+$/,
             "username can only contain letters, numbers, dots, underscores, and hyphens",
           ),
-        password: z.string().min(config.minPasswordLength).max(config.maxPasswordLength),
-        name: z.string().optional(),
       }),
+      method: "POST",
     },
     async (context) => {
       const { username, password, name } = context.body;
@@ -39,27 +39,27 @@ export const createSignUpEndpoint = (config: UsernameOnlyConfig) =>
       const hashedPassword = await context.context.password.hash(password);
 
       const user = await context.context.adapter.create<User>({
-        model: "user",
         data: {
-          username,
-          name: name ?? username,
+          createdAt: new Date(),
           email: `${username}@local`,
           emailVerified: true,
-          createdAt: new Date(),
+          name: name ?? username,
           updatedAt: new Date(),
+          username,
         },
+        model: "user",
       });
 
       await context.context.adapter.create({
-        model: "account",
         data: {
-          userId: user.id,
           accountId: user.id,
-          providerId: "credential",
-          password: hashedPassword,
           createdAt: new Date(),
+          password: hashedPassword,
+          providerId: "credential",
           updatedAt: new Date(),
+          userId: user.id,
         },
+        model: "account",
       });
 
       const session = await context.context.internalAdapter.createSession(user.id, false);
@@ -71,6 +71,8 @@ export const createSignUpEndpoint = (config: UsernameOnlyConfig) =>
         context.context.authCookies.sessionToken.options,
       );
 
-      return context.json({ user, session });
+      return context.json({ session, user });
     },
   );
+
+export { createSignUpEndpoint };

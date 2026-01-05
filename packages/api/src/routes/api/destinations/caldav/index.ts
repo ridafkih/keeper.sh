@@ -1,14 +1,14 @@
 import { caldavConnectRequestSchema } from "@keeper.sh/data-schemas";
-import { withTracing, withAuth } from "../../../../utils/middleware";
+import { withAuth, withTracing } from "../../../../utils/middleware";
 import { ErrorResponse } from "../../../../utils/responses";
 import {
+  CalDAVConnectionError,
+  DestinationLimitError,
   createCalDAVDestination,
   isValidProvider,
-  DestinationLimitError,
-  CalDAVConnectionError,
 } from "../../../../utils/caldav";
 
-export const POST = withTracing(
+const POST = withTracing(
   withAuth(async ({ request, userId }) => {
     const body = await request.json();
 
@@ -18,27 +18,29 @@ export const POST = withTracing(
 
       const providerName = provider ?? "caldav";
       if (!isValidProvider(providerName)) {
-        return ErrorResponse.badRequest("Invalid provider");
+        return ErrorResponse.badRequest("Invalid provider").toResponse();
       }
 
       await createCalDAVDestination(
         userId,
         providerName,
         serverUrl,
-        { username, password },
+        { password, username },
         calendarUrl,
       );
 
       return Response.json({ success: true }, { status: 201 });
     } catch (error) {
       if (error instanceof DestinationLimitError) {
-        return ErrorResponse.paymentRequired(error.message);
+        return ErrorResponse.paymentRequired(error.message).toResponse();
       }
       if (error instanceof CalDAVConnectionError) {
-        return ErrorResponse.badRequest(error.message);
+        return ErrorResponse.badRequest(error.message).toResponse();
       }
 
-      return ErrorResponse.badRequest("All fields are required");
+      return ErrorResponse.badRequest("All fields are required").toResponse();
     }
   }),
 );
+
+export { POST };

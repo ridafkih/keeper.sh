@@ -3,32 +3,34 @@ import { useState } from "react";
 interface FormSubmitState<TResult> {
   isSubmitting: boolean;
   error: string | null;
-  submit: (handler: () => Promise<TResult>) => Promise<TResult | undefined>;
+  submit: (handler: () => Promise<TResult>) => Promise<TResult | null>;
   setError: (error: string | null) => void;
   clearError: () => void;
 }
 
-export function useFormSubmit<TResult = void>(): FormSubmitState<TResult> {
+export const useFormSubmit = <TResult = void>(): FormSubmitState<TResult> => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const clearError = () => setError(null);
+  const clearError = (): void => setError(null);
 
-  const submit = async (handler: () => Promise<TResult>): Promise<TResult | undefined> => {
+  const submit = async (handler: () => Promise<TResult>): Promise<TResult | null> => {
     setError(null);
     setIsSubmitting(true);
 
     try {
       const result = await handler();
       return result;
-    } catch (thrown) {
-      if (!(thrown instanceof Error)) throw thrown;
-      setError(thrown.message);
-      return undefined;
+    } catch (error) {
+      if (!(error instanceof Error)) {
+        throw error;
+      }
+      setError(error.message);
+      return null;
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  return { isSubmitting, error, submit, setError, clearError };
-}
+  return { clearError, error, isSubmitting, setError, submit };
+};

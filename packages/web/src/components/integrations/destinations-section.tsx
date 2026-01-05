@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef } from "react";
+import type { ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@base-ui/react/button";
 import { Menu } from "@base-ui/react/menu";
 import { FREE_DESTINATION_LIMIT } from "@keeper.sh/premium/constants";
-import { DESTINATIONS, type DestinationConfig } from "@keeper.sh/destination-metadata";
+import { DESTINATIONS } from "@keeper.sh/destination-metadata";
+import type { DestinationConfig } from "@keeper.sh/destination-metadata";
 import { Card } from "@/components/card";
 import { EmptyState } from "@/components/empty-state";
 import { GhostButton } from "@/components/ghost-button";
@@ -22,40 +24,38 @@ import { Section } from "@/components/section";
 import { SectionHeader } from "@/components/section-header";
 import { CalDAVConnectDialog } from "@/components/integrations/caldav-connect-dialog";
 import { useConfirmAction } from "@/hooks/use-confirm-action";
-import { type SourceDestinationMapping } from "@/hooks/use-mappings";
-import { type CalendarSource } from "@/hooks/use-sources";
-import {
-  useDestinationsManager,
-  type SyncStatusDisplayProps,
-} from "@/hooks/use-destinations-manager";
-import { TextLabel, TextMeta, TextMuted, BannerText } from "@/components/typography";
+import type { SourceDestinationMapping } from "@/hooks/use-mappings";
+import type { CalendarSource } from "@/hooks/use-sources";
+import { useDestinationsManager } from "@/hooks/use-destinations-manager";
+import type { SyncStatusDisplayProps } from "@/hooks/use-destinations-manager";
+import { BannerText, TextLabel, TextMeta, TextMuted } from "@/components/typography";
 import { button } from "@/styles";
 import { track } from "@/lib/analytics";
 import { tv } from "tailwind-variants";
-import { Server, Plus, ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Server } from "lucide-react";
 
 const syncStatusText = tv({
   slots: {
-    text: "",
     skeleton: "absolute inset-0 bg-surface-muted rounded animate-pulse",
+    text: "",
   },
   variants: {
     loading: {
-      true: { text: "invisible" },
       false: { skeleton: "hidden" },
+      true: { text: "invisible" },
     },
   },
 });
 
 const destinationStatus = tv({
   slots: {
-    trigger: "flex items-center gap-1.5",
     dot: "size-1.5 rounded-full",
+    trigger: "flex items-center gap-1.5",
   },
   variants: {
     needsReauthentication: {
-      true: { trigger: "text-warning", dot: "bg-warning" },
       false: { dot: "bg-success" },
+      true: { dot: "bg-warning", trigger: "text-warning" },
     },
   },
 });
@@ -67,31 +67,46 @@ interface DestinationMenuItemProps {
   onConnect: (providerId: string) => void;
 }
 
-const DestinationMenuItem = ({ destination, onConnect }: DestinationMenuItemProps) => {
+const DestinationMenuItem = ({ destination, onConnect }: DestinationMenuItemProps): ReactNode => {
   const connectable = isConnectable(destination);
 
   return (
     <MenuItem
       onClick={() => {
-        if (!connectable) return;
+        if (!connectable) {
+          return;
+        }
         track("destination_selected", { provider: destination.id });
         onConnect(destination.id);
       }}
       disabled={destination.comingSoon}
-      variant={destination.comingSoon ? "disabled" : "default"}
+      variant={((): "disabled" | "default" => {
+        if (destination.comingSoon) {
+          return "disabled";
+        }
+        return "default";
+      })()}
       className="py-1.5"
     >
-      {destination.icon ? (
-        <Image
-          src={destination.icon}
-          alt={destination.name}
-          width={14}
-          height={14}
-          className={destination.comingSoon ? "opacity-50" : ""}
-        />
-      ) : (
-        <Server size={14} className="text-foreground-subtle" />
-      )}
+      {((): ReactNode => {
+        if (destination.icon) {
+          return (
+            <Image
+              src={destination.icon}
+              alt={destination.name}
+              width={14}
+              height={14}
+              className={((): string => {
+                if (destination.comingSoon) {
+                  return "opacity-50";
+                }
+                return "";
+              })()}
+            />
+          );
+        }
+        return <Server size={14} className="text-foreground-subtle" />;
+      })()}
       <span>{destination.name}</span>
       {destination.comingSoon && <span className="ml-4 text-xs">Unavailable</span>}
     </MenuItem>
@@ -102,7 +117,7 @@ interface DestinationsMenuProps {
   onConnect: (providerId: string) => void;
 }
 
-const DestinationsMenu = ({ onConnect }: DestinationsMenuProps) => (
+const DestinationsMenu = ({ onConnect }: DestinationsMenuProps): ReactNode => (
   <>
     {DESTINATIONS.map((destination) => (
       <DestinationMenuItem key={destination.id} destination={destination} onConnect={onConnect} />
@@ -122,7 +137,7 @@ const SourcesSubmenu = ({
   sources,
   mappings,
   onToggleSource,
-}: SourcesSubmenuProps) => {
+}: SourcesSubmenuProps): ReactNode => {
   const enabledSourceIds = new Set<string>();
   for (const mapping of mappings) {
     if (mapping.destinationId === destinationId) {
@@ -187,27 +202,44 @@ const DestinationAction = ({
   onConnect,
   onDisconnect,
   onToggleSource,
-}: DestinationActionProps) => {
+}: DestinationActionProps): ReactNode => {
   if (comingSoon) {
     return <TextMuted className="ml-auto px-2 py-1 text-xs">Coming soon</TextMuted>;
   }
 
   if (!isConnected) {
+    const connectButtonText = ((): string => {
+      if (isLoading) {
+        return "...";
+      }
+      return "Connect";
+    })();
     return (
       <GhostButton onClick={onConnect} disabled={isLoading} className="ml-auto">
-        {isLoading ? "..." : "Connect"}
+        {connectButtonText}
       </GhostButton>
     );
   }
 
-  const statusText = needsReauthentication ? "Needs Reauthentication" : "Connected";
+  const statusText = ((): string => {
+    if (needsReauthentication) {
+      return "Needs Reauthentication";
+    }
+    return "Connected";
+  })();
   const { trigger, dot } = destinationStatus({ needsReauthentication });
+  const displayText = ((): string => {
+    if (isLoading) {
+      return "...";
+    }
+    return statusText;
+  })();
 
   return (
     <Menu.Root>
       <GhostButton render={<Menu.Trigger />} disabled={isLoading} className={trigger()}>
         {!isLoading && <span className={dot()} />}
-        {isLoading ? "..." : statusText}
+        {displayText}
         <ChevronDown size={12} />
       </GhostButton>
       <Menu.Portal>
@@ -231,7 +263,7 @@ const DestinationAction = ({
 };
 
 interface SyncStatusTextProps {
-  syncStatus?: SyncStatusDisplayProps;
+  syncStatus: SyncStatusDisplayProps | null;
 }
 
 interface SyncProgressProps {
@@ -239,7 +271,7 @@ interface SyncProgressProps {
   total: number;
 }
 
-const SyncProgress = ({ current, total }: SyncProgressProps) => (
+const SyncProgress = ({ current, total }: SyncProgressProps): ReactNode => (
   <>
     Syncing (
     <span className="tabular-nums">
@@ -253,32 +285,39 @@ interface SyncedCountProps {
   count: number;
 }
 
-const SyncedCount = ({ count }: SyncedCountProps) => <>{count} events synced</>;
+const SyncedCount = ({ count }: SyncedCountProps): ReactNode => <>{count} events synced</>;
 
-const SyncStatusText = ({ syncStatus }: SyncStatusTextProps) => {
+const SyncStatusText = ({ syncStatus }: SyncStatusTextProps): ReactNode => {
   const hasReceivedStatus = useRef(false);
-  if (syncStatus) hasReceivedStatus.current = true;
+  if (syncStatus) {
+    hasReceivedStatus.current = true;
+  }
 
   const loading = !hasReceivedStatus.current;
   const { text, skeleton } = syncStatusText({ loading });
 
-  const progress =
-    syncStatus?.status === "syncing" &&
-    syncStatus.stage === "processing" &&
-    syncStatus.progress &&
-    syncStatus.progress.total > 0
-      ? syncStatus.progress
-      : null;
+  const progress = ((): { current: number; total: number } | null => {
+    if (
+      syncStatus?.status === "syncing" &&
+      syncStatus.stage === "processing" &&
+      syncStatus.progress &&
+      syncStatus.progress.total > 0
+    ) {
+      return syncStatus.progress;
+    }
+    return null;
+  })();
+
+  const statusContent = ((): ReactNode => {
+    if (progress) {
+      return <SyncProgress current={progress.current} total={progress.total} />;
+    }
+    return <SyncedCount count={syncStatus?.remoteCount ?? 0} />;
+  })();
 
   return (
     <TextMeta className="relative w-fit">
-      <span className={text()}>
-        {progress ? (
-          <SyncProgress current={progress.current} total={progress.total} />
-        ) : (
-          <SyncedCount count={syncStatus?.remoteCount ?? 0} />
-        )}
-      </span>
+      <span className={text()}>{statusContent}</span>
       <span className={skeleton()} />
     </TextMeta>
   );
@@ -287,7 +326,7 @@ const SyncStatusText = ({ syncStatus }: SyncStatusTextProps) => {
 interface DestinationItemProps {
   destinationId: string;
   destination: DestinationConfig & { name: string };
-  syncStatus?: SyncStatusDisplayProps;
+  syncStatus: SyncStatusDisplayProps | null;
   isConnected: boolean;
   needsReauthentication: boolean;
   isLoading: boolean;
@@ -310,20 +349,21 @@ const DestinationItem = ({
   onDisconnect,
   onToggleSource,
   syncStatus,
-}: DestinationItemProps) => {
+}: DestinationItemProps): ReactNode => {
   const { isOpen, isConfirming, open, setIsOpen, confirm } = useConfirmAction();
+
+  const iconContent = ((): ReactNode => {
+    if (destination.icon) {
+      return <Image src={destination.icon} alt={destination.name} width={14} height={14} />;
+    }
+    return <Server size={14} className="text-foreground-subtle" />;
+  })();
 
   return (
     <>
       <div>
         <div className="flex items-center gap-2 px-3 py-2">
-          <IconBox>
-            {destination.icon ? (
-              <Image src={destination.icon} alt={destination.name} width={14} height={14} />
-            ) : (
-              <Server size={14} className="text-foreground-subtle" />
-            )}
-          </IconBox>
+          <IconBox>{iconContent}</IconBox>
           <div className="flex-1 min-w-0 flex flex-col">
             <TextLabel as="h2" className="tracking-tight">
               {destination.name}
@@ -364,7 +404,11 @@ interface NewDestinationMenuProps {
   align?: "start" | "center" | "end";
 }
 
-const NewDestinationMenu = ({ onConnect, trigger, align = "start" }: NewDestinationMenuProps) => (
+const NewDestinationMenu = ({
+  onConnect,
+  trigger,
+  align = "start",
+}: NewDestinationMenuProps): ReactNode => (
   <Menu.Root>
     {trigger}
     <Menu.Portal>
@@ -377,18 +421,18 @@ const NewDestinationMenu = ({ onConnect, trigger, align = "start" }: NewDestinat
   </Menu.Root>
 );
 
-const UpgradeBanner = () => (
+const UpgradeBanner = (): ReactNode => (
   <div className="flex items-center justify-between p-1 pl-3.5 bg-warning-surface border border-warning-border rounded-lg">
     <BannerText variant="warning" className="text-xs">
       You've reached the free plan limit of {FREE_DESTINATION_LIMIT} destination.
     </BannerText>
-    <Link href="/dashboard/billing" className={button({ variant: "primary", size: "xs" })}>
+    <Link href="/dashboard/billing" className={button({ size: "xs", variant: "primary" })}>
       Upgrade to Pro
     </Link>
   </div>
 );
 
-export const DestinationsSection = () => {
+export const DestinationsSection = (): ReactNode => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const toastManager = Toast.useToastManager();
@@ -420,7 +464,7 @@ export const DestinationsSection = () => {
     setCaldavDialogOpen,
     getDestinationConfig,
     getSyncStatus,
-  } = useDestinationsManager({ onToast, onNavigate });
+  } = useDestinationsManager({ onNavigate, onToast });
 
   const error = searchParams.get("error");
   const errorHandled = useRef(false);
@@ -433,11 +477,13 @@ export const DestinationsSection = () => {
     }
   }, [error, toastManager, router]);
 
-  const renderDestinationItems = () => {
+  const renderDestinationItems = (): ReactNode[] => {
     const items: React.ReactNode[] = [];
     for (const account of accounts ?? []) {
       const config = getDestinationConfig(account.providerId);
-      if (!config) continue;
+      if (!config) {
+        continue;
+      }
       items.push(
         <DestinationItem
           key={account.id}
@@ -446,7 +492,7 @@ export const DestinationsSection = () => {
             ...config,
             name: account.email ?? config.name,
           }}
-          isConnected={true}
+          isConnected
           needsReauthentication={account.needsReauthentication}
           isLoading={loadingId === account.id}
           sources={sources}
@@ -461,7 +507,7 @@ export const DestinationsSection = () => {
     return items;
   };
 
-  const renderContent = () => {
+  const renderContent = (): ReactNode => {
     if (isAccountsLoading) {
       return <ListSkeleton rows={1} />;
     }
@@ -477,7 +523,7 @@ export const DestinationsSection = () => {
               trigger={
                 <Button
                   render={<Menu.Trigger />}
-                  className={button({ variant: "primary", size: "xs" })}
+                  className={button({ size: "xs", variant: "primary" })}
                 >
                   New Destination
                 </Button>
@@ -488,8 +534,12 @@ export const DestinationsSection = () => {
       );
     }
 
-    const countLabel =
-      destinationCount === 1 ? "1 destination" : `${destinationCount} destinations`;
+    const countLabel = ((): string => {
+      if (destinationCount === 1) {
+        return "1 destination";
+      }
+      return `${destinationCount} destinations`;
+    })();
 
     return (
       <Card>

@@ -1,32 +1,40 @@
-import { oauthCredentialsTable, calendarDestinationsTable } from "@keeper.sh/database/schema";
+import { calendarDestinationsTable, oauthCredentialsTable } from "@keeper.sh/database/schema";
 import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { eq } from "drizzle-orm";
 import { CalendarProvider } from "../sync/provider";
 import { RateLimiter } from "../utils/rate-limiter";
-import type { OAuthProviderConfig, SyncableEvent, PushResult, DeleteResult } from "../types";
+import type { DeleteResult, OAuthProviderConfig, PushResult, SyncableEvent } from "../types";
 
-export interface OAuthRefreshResult {
+const DEFAULT_CONCURRENCY = 10;
+const DEFAULT_REQUESTS_PER_MINUTE = 600;
+const MS_PER_SECOND = 1000;
+const FIRST_RESULT_LIMIT = 1;
+
+interface OAuthRefreshResult {
   access_token: string;
   refresh_token?: string;
   expires_in: number;
 }
 
-export interface OAuthTokenProvider {
+interface OAuthTokenProvider {
   refreshAccessToken: (refreshToken: string) => Promise<OAuthRefreshResult>;
 }
 
-export interface AuthErrorResult {
+interface AuthErrorResult {
   success: false;
   error: string;
   shouldContinue: false;
 }
 
-export abstract class OAuthCalendarProvider<
+abstract class OAuthCalendarProvider<
   TConfig extends OAuthProviderConfig = OAuthProviderConfig,
 > extends CalendarProvider<TConfig> {
   protected currentAccessToken: string;
   protected abstract oauthProvider: OAuthTokenProvider;
-  protected rateLimiter = new RateLimiter(10);
+  protected rateLimiter = new RateLimiter({
+    concurrency: DEFAULT_CONCURRENCY,
+    requestsPerMinute: DEFAULT_REQUESTS_PER_MINUTE,
+  });
 
   constructor(config: TConfig) {
     super(config);
@@ -89,9 +97,9 @@ export abstract class OAuthCalendarProvider<
   protected async handleAuthErrorResponse(errorMessage: string): Promise<AuthErrorResult> {
     await this.markNeedsReauthentication();
     return {
-      success: false,
       error: errorMessage,
       shouldContinue: false,
+      success: false,
     };
   }
 
@@ -103,7 +111,7 @@ export abstract class OAuthCalendarProvider<
     }
 
     const tokenData = await this.oauthProvider.refreshAccessToken(refreshToken);
-    const newExpiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
+    const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);
 
     const [destination] = await database
       .select({
@@ -111,15 +119,15 @@ export abstract class OAuthCalendarProvider<
       })
       .from(calendarDestinationsTable)
       .where(eq(calendarDestinationsTable.id, destinationId))
-      .limit(1);
+      .limit(FIRST_RESULT_LIMIT);
 
     if (destination?.oauthCredentialId) {
       await database
         .update(oauthCredentialsTable)
         .set({
           accessToken: tokenData.access_token,
-          refreshToken: tokenData.refresh_token ?? refreshToken,
           expiresAt: newExpiresAt,
+          refreshToken: tokenData.refresh_token ?? refreshToken,
         })
         .where(eq(oauthCredentialsTable.id, destination.oauthCredentialId));
     }
@@ -128,3 +136,6 @@ export abstract class OAuthCalendarProvider<
     this.config.accessTokenExpiresAt = newExpiresAt;
   }
 }
+
+export { OAuthCalendarProvider };
+export type { OAuthRefreshResult, OAuthTokenProvider, AuthErrorResult };

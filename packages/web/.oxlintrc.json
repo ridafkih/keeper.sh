@@ -1,16 +1,27 @@
 {
   "$schema": "../../node_modules/oxlint/configuration_schema.json",
   "extends": ["../../.oxlintrc.json"],
-  "plugins": ["import", "typescript", "unicorn", "promise", "react", "react-hooks", "jsx-a11y"],
+  "plugins": [
+    "import",
+    "typescript",
+    "unicorn",
+    "promise",
+    "react",
+    "jsx-a11y"
+  ],
   "settings": {
     "react": {
       "version": "19"
     }
   },
+  "categories": {
+    "restriction": "off"
+  },
   "rules": {
     "react/jsx-key": "error",
     "react/no-children-prop": "error",
     "react-hooks/rules-of-hooks": "error",
-    "react-hooks/exhaustive-deps": "warn"
+    "react-hooks/exhaustive-deps": "warn",
+    "import/first": "off"
   }
 }

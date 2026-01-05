@@ -1,12 +1,18 @@
 import { betterAuth } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { passkey } from "@better-auth/passkey";
-import { polar, checkout, portal } from "@polar-sh/better-auth";
+import { passkey as passkeyPlugin } from "@better-auth/passkey";
+import { checkout, polar, portal } from "@polar-sh/better-auth";
 import { Polar } from "@polar-sh/sdk";
 import { Resend } from "resend";
 import { usernameOnly } from "@keeper.sh/auth-plugin-username-only";
-import * as authSchema from "@keeper.sh/database/auth-schema";
+import {
+  user as userTable,
+  session as sessionTable,
+  account as accountTable,
+  verification as verificationTable,
+  passkey as passkeyTable,
+} from "@keeper.sh/database/auth-schema";
 import { signUpBodySchema } from "@keeper.sh/data-schemas";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { BetterAuthPlugin, User } from "better-auth";
@@ -21,7 +27,7 @@ interface SendEmailParams {
   url: string;
 }
 
-export interface AuthConfig {
+interface AuthConfig {
   database: BunSQLDatabase;
   secret: string;
   baseUrl: string;
@@ -38,12 +44,12 @@ export interface AuthConfig {
   trustedOrigins?: string[];
 }
 
-export interface AuthResult {
+interface AuthResult {
   auth: ReturnType<typeof betterAuth>;
   polarClient: Polar | null;
 }
 
-export const createAuth = (config: AuthConfig): AuthResult => {
+const createAuth = (config: AuthConfig): AuthResult => {
   const {
     database,
     secret,
@@ -61,7 +67,12 @@ export const createAuth = (config: AuthConfig): AuthResult => {
     trustedOrigins,
   } = config;
 
-  const resend = resendApiKey ? new Resend(resendApiKey) : null;
+  const resend = ((): Resend | null => {
+    if (resendApiKey) {
+      return new Resend(resendApiKey);
+    }
+    return null;
+  })();
 
   const plugins: BetterAuthPlugin[] = [];
 
@@ -69,18 +80,24 @@ export const createAuth = (config: AuthConfig): AuthResult => {
     plugins.push(usernameOnly());
   }
 
-  const polarClient =
-    polarAccessToken && polarMode
-      ? new Polar({
-          accessToken: polarAccessToken,
-          server: polarMode,
-        })
-      : null;
+  const polarClient = ((): Polar | null => {
+    if (polarAccessToken && polarMode) {
+      return new Polar({
+        accessToken: polarAccessToken,
+        server: polarMode,
+      });
+    }
+    return null;
+  })();
 
   if (polarClient) {
-    const checkoutSuccessUrl = webBaseUrl
-      ? new URL("/dashboard/billing?success=true", webBaseUrl).toString()
-      : "/dashboard/billing?success=true";
+    const checkoutSuccessUrl = ((): string => {
+      if (!webBaseUrl) {
+        return "/dashboard/billing?success=true";
+      }
+
+      return new URL("/dashboard/billing?success=true", webBaseUrl).toString();
+    })();
 
     plugins.push(
       polar({
@@ -98,95 +115,81 @@ export const createAuth = (config: AuthConfig): AuthResult => {
 
   if (commercialMode && passkeyRpId && passkeyOrigin) {
     plugins.push(
-      passkey({
+      passkeyPlugin({
+        origin: passkeyOrigin,
         rpID: passkeyRpId,
         rpName: passkeyRpName,
-        origin: passkeyOrigin,
       }),
     );
   }
 
-  const socialProviders: Parameters<typeof betterAuth>[0]["socialProviders"] = {};
+  const socialProviders: Parameters<typeof betterAuth>[0]["socialProviders"] = {
+    // Empty object to be populated conditionally below
+  };
 
   if (googleClientId && googleClientSecret) {
     socialProviders.google = {
+      accessType: "offline",
       clientId: googleClientId,
       clientSecret: googleClientSecret,
-      accessType: "offline",
       prompt: "consent",
       scope: ["https://www.googleapis.com/auth/calendar.events"],
     };
   }
 
   const auth = betterAuth({
-    database: drizzleAdapter(database, {
-      provider: "pg",
-      schema: authSchema,
-    }),
-    secret,
-    baseURL: baseUrl,
-    trustedOrigins,
-    onAPIError: {
-      onError(error: unknown) {
-        if (typeof error !== "object" || error === null) return;
-        if (!("body" in error) || typeof error.body !== "object" || error.body === null) return;
-        if (!("message" in error.body) || typeof error.body.message !== "string") return;
-
-        if (error.body.message.toLowerCase().includes("invalid origin")) {
-          console.error(
-            "A request has failed due to an origin mismatch. If this was meant to be a valid request, please set the `TRUSTED_ORIGINS` environment variable to include the origin you intend on accessing Keeper from.\n\nThis should be a comma-delimited array of values, for more information please refer to the documentation on GitHub. https://github.com/ridafkih/keeper.sh#accessing-keeper-from-non-localhost-urls",
-          );
-        }
-      },
-    },
-    emailVerification: {
-      autoSignInAfterVerification: true,
-      sendVerificationEmail: async ({ user, url }: SendEmailParams) => {
-        if (!resend) return;
-        await resend.emails.send({
-          to: user.email,
-          template: {
-            id: "email-verification",
-            variables: { url, name: user.name },
-          },
-        });
-      },
-    },
-    emailAndPassword: {
-      enabled: commercialMode,
-      requireEmailVerification: commercialMode,
-      sendResetPassword: async ({ user, url }: SendEmailParams) => {
-        if (!resend) return;
-        await resend.emails.send({
-          to: user.email,
-          template: {
-            id: "password-reset",
-            variables: { url, name: user.name },
-          },
-        });
-      },
-    },
-    socialProviders,
     account: {
       accountLinking: {
         allowDifferentEmails: true,
       },
     },
-    user: {
-      deleteUser: {
-        enabled: true,
-        afterDelete: async (user) => {
-          if (!polarClient) return;
-
-          await polarClient.customers.deleteExternal({
-            externalId: user.id,
-          });
-        },
+    baseURL: baseUrl,
+    database: drizzleAdapter(database, {
+      provider: "pg",
+      schema: {
+        account: accountTable,
+        passkey: passkeyTable,
+        session: sessionTable,
+        user: userTable,
+        verification: verificationTable,
+      },
+    }),
+    emailAndPassword: {
+      enabled: commercialMode,
+      requireEmailVerification: commercialMode,
+      sendResetPassword: async ({ user, url }: SendEmailParams) => {
+        if (!resend) {
+          return;
+        }
+        await resend.emails.send({
+          template: {
+            id: "password-reset",
+            variables: { name: user.name, url },
+          },
+          to: user.email,
+        });
+      },
+    },
+    emailVerification: {
+      autoSignInAfterVerification: true,
+      sendVerificationEmail: async ({ user, url }: SendEmailParams) => {
+        if (!resend) {
+          return;
+        }
+        await resend.emails.send({
+          template: {
+            id: "email-verification",
+            variables: { name: user.name, url },
+          },
+          to: user.email,
+        });
       },
     },
     hooks: {
       before: createAuthMiddleware(async (context) => {
-        if (context.path !== "/sign-up/email") return;
+        if (context.path !== "/sign-up/email") {
+          return;
+        }
         const { email } = signUpBodySchema.assert(context.body);
         const existingUser = await context.context.adapter.findOne<User>({
           model: "user",
@@ -195,12 +198,53 @@ export const createAuth = (config: AuthConfig): AuthResult => {
             { field: "emailVerified", value: false },
           ],
         });
-        if (!existingUser) return;
+        if (!existingUser) {
+          return;
+        }
         await context.context.internalAdapter.deleteUser(existingUser.id);
       }),
     },
+    onAPIError: {
+      onError(error: unknown) {
+        if (typeof error !== "object" || error === null) {
+          return;
+        }
+        if (!("body" in error) || typeof error.body !== "object" || error.body === null) {
+          return;
+        }
+        if (!("message" in error.body) || typeof error.body.message !== "string") {
+          return;
+        }
+
+        if (error.body.message.toLowerCase().includes("invalid origin")) {
+          process.stderr.write(
+            "A request has failed due to an origin mismatch. If this was meant to be a valid request, please set the `TRUSTED_ORIGINS` environment variable to include the origin you intend on accessing Keeper from.\n\nThis should be a comma-delimited array of values, for more information please refer to the documentation on GitHub. https://github.com/ridafkih/keeper.sh#accessing-keeper-from-non-localhost-urls",
+          );
+        }
+      },
+    },
     plugins,
+    secret,
+    socialProviders,
+    trustedOrigins,
+    user: {
+      deleteUser: {
+        afterDelete: async (user) => {
+          if (!polarClient) {
+            return;
+          }
+
+          await polarClient.customers.deleteExternal({
+            externalId: user.id,
+          });
+        },
+        enabled: true,
+      },
+    },
   });
 
-  return { auth, polarClient };
+  return { auth, polarClient: polarClient ?? null };
 };
+
+export { createAuth };
+export type { AuthConfig, AuthResult };

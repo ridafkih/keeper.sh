@@ -9,14 +9,14 @@ interface ConfirmActionState {
   confirm: (action: () => Promise<void>) => Promise<void>;
 }
 
-export function useConfirmAction(): ConfirmActionState {
+export const useConfirmAction = (): ConfirmActionState => {
   const [isOpen, setIsOpen] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
 
-  const open = () => setIsOpen(true);
-  const close = () => setIsOpen(false);
+  const open = (): void => setIsOpen(true);
+  const close = (): void => setIsOpen(false);
 
-  const confirm = async (action: () => Promise<void>) => {
+  const confirm = async (action: () => Promise<void>): Promise<void> => {
     setIsConfirming(true);
     try {
       await action();
@@ -26,5 +26,5 @@ export function useConfirmAction(): ConfirmActionState {
     }
   };
 
-  return { isOpen, isConfirming, open, close, setIsOpen, confirm };
-}
+  return { close, confirm, isConfirming, isOpen, open, setIsOpen };
+};

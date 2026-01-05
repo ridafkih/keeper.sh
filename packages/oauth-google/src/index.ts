@@ -1,40 +1,33 @@
-import {
-  googleTokenResponseSchema,
-  googleUserInfoSchema,
-  type GoogleTokenResponse,
-  type GoogleUserInfo,
-} from "@keeper.sh/data-schemas";
-import { generateState, validateState, type ValidatedState } from "@keeper.sh/oauth";
-
-export { generateState, validateState, type ValidatedState };
+import { googleTokenResponseSchema, googleUserInfoSchema } from "@keeper.sh/data-schemas";
+import type { GoogleTokenResponse, GoogleUserInfo } from "@keeper.sh/data-schemas";
+import { generateState, validateState } from "@keeper.sh/oauth";
+import type { ValidatedState } from "@keeper.sh/oauth";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
 
-export const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
-export const GOOGLE_EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
+const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+const GOOGLE_EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
 
-export interface GoogleOAuthCredentials {
+interface GoogleOAuthCredentials {
   clientId: string;
   clientSecret: string;
 }
 
-export interface AuthorizationUrlOptions {
+interface AuthorizationUrlOptions {
   callbackUrl: string;
   scopes?: string[];
   destinationId?: string;
 }
 
-export interface GoogleOAuthService {
+interface GoogleOAuthService {
   getAuthorizationUrl: (userId: string, options: AuthorizationUrlOptions) => string;
   exchangeCodeForTokens: (code: string, callbackUrl: string) => Promise<GoogleTokenResponse>;
   refreshAccessToken: (refreshToken: string) => Promise<GoogleTokenResponse>;
 }
 
-export const createGoogleOAuthService = (
-  credentials: GoogleOAuthCredentials,
-): GoogleOAuthService => {
+const createGoogleOAuthService = (credentials: GoogleOAuthCredentials): GoogleOAuthService => {
   const { clientId, clientSecret } = credentials;
 
   const getAuthorizationUrl = (userId: string, options: AuthorizationUrlOptions): string => {
@@ -58,8 +51,6 @@ export const createGoogleOAuthService = (
     callbackUrl: string,
   ): Promise<GoogleTokenResponse> => {
     const response = await fetch(GOOGLE_TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         client_id: clientId,
         client_secret: clientSecret,
@@ -67,6 +58,8 @@ export const createGoogleOAuthService = (
         grant_type: "authorization_code",
         redirect_uri: callbackUrl,
       }),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      method: "POST",
     });
 
     if (!response.ok) {
@@ -80,14 +73,14 @@ export const createGoogleOAuthService = (
 
   const refreshAccessToken = async (refreshToken: string): Promise<GoogleTokenResponse> => {
     const response = await fetch(GOOGLE_TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         client_id: clientId,
         client_secret: clientSecret,
-        refresh_token: refreshToken,
         grant_type: "refresh_token",
+        refresh_token: refreshToken,
       }),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      method: "POST",
     });
 
     if (!response.ok) {
@@ -100,13 +93,13 @@ export const createGoogleOAuthService = (
   };
 
   return {
-    getAuthorizationUrl,
     exchangeCodeForTokens,
+    getAuthorizationUrl,
     refreshAccessToken,
   };
 };
 
-export const fetchUserInfo = async (accessToken: string): Promise<GoogleUserInfo> => {
+const fetchUserInfo = async (accessToken: string): Promise<GoogleUserInfo> => {
   const response = await fetch(GOOGLE_USERINFO_URL, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -123,9 +116,25 @@ export const fetchUserInfo = async (accessToken: string): Promise<GoogleUserInfo
  * Checks if the granted scopes include all required scopes for calendar operations.
  * Google returns scopes as a space-separated string.
  */
-export const hasRequiredScopes = (grantedScopes: string): boolean => {
+const hasRequiredScopes = (grantedScopes: string): boolean => {
   const scopes = grantedScopes.split(" ");
   return scopes.includes(GOOGLE_CALENDAR_SCOPE);
 };
 
-export type { GoogleTokenResponse, GoogleUserInfo };
+export {
+  generateState,
+  validateState,
+  GOOGLE_CALENDAR_SCOPE,
+  GOOGLE_EMAIL_SCOPE,
+  createGoogleOAuthService,
+  fetchUserInfo,
+  hasRequiredScopes,
+};
+export type {
+  ValidatedState,
+  GoogleOAuthCredentials,
+  AuthorizationUrlOptions,
+  GoogleOAuthService,
+  GoogleTokenResponse,
+  GoogleUserInfo,
+};

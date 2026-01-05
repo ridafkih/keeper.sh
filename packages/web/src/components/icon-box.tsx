@@ -3,20 +3,20 @@ import { tv } from "tailwind-variants";
 
 const iconBox = tv({
   base: "grid place-items-center rounded shrink-0",
+  defaultVariants: {
+    size: "md",
+    variant: "default",
+  },
   variants: {
     size: {
-      sm: "size-6",
-      md: "size-8",
       lg: "size-10",
+      md: "size-8",
+      sm: "size-6",
     },
     variant: {
       default: "bg-surface-muted",
       muted: "bg-surface-subtle",
     },
-  },
-  defaultVariants: {
-    size: "md",
-    variant: "default",
   },
 });
 
@@ -31,4 +31,4 @@ export const IconBox: FC<PropsWithChildren<IconBoxProps>> = ({
   size,
   variant,
   className,
-}) => <div className={iconBox({ size, variant, className })}>{children}</div>;
+}) => <div className={iconBox({ className, size, variant })}>{children}</div>;

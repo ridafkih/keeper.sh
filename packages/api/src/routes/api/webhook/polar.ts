@@ -1,94 +1,103 @@
-import { validateEvent, WebhookVerificationError } from "@polar-sh/sdk/webhooks";
-import { WideEvent, runWithWideEvent, emitWideEvent } from "@keeper.sh/log";
-import { userSubscriptionsTable } from "@keeper.sh/database/schema";
+import type { MaybePromise } from "bun";
+import { WebhookVerificationError, validateEvent } from "@polar-sh/sdk/webhooks";
+import { WideEvent, emitWideEvent, runWithWideEvent } from "@keeper.sh/log";
+import { ErrorResponse } from "../../../utils/responses";
 import { database } from "../../../context";
 import env from "@keeper.sh/env/api";
-import { ErrorResponse } from "../../../utils/responses";
+import { userSubscriptionsTable } from "@keeper.sh/database/schema";
+
+const HTTP_OK = 200;
 
 const upsertSubscription = async (
   userId: string,
   plan: "free" | "pro",
   polarSubscriptionId: string,
-) => {
+): Promise<void> => {
   await database
     .insert(userSubscriptionsTable)
     .values({
-      userId,
       plan,
       polarSubscriptionId,
+      userId,
     })
     .onConflictDoUpdate({
-      target: userSubscriptionsTable.userId,
       set: {
         plan,
         polarSubscriptionId,
       },
+      target: userSubscriptionsTable.userId,
     });
 };
 
 const handleSubscriptionCreated = async (
   event: WideEvent,
-  userId: string | undefined,
+  userId: string | null,
   subscriptionId: string,
-) => {
+): Promise<Response> => {
   if (!userId) {
-    return new Response(null, { status: 200 });
+    return new Response(null, { status: HTTP_OK });
   }
 
   event.set({ userId });
   await upsertSubscription(userId, "pro", subscriptionId);
-  return new Response(null, { status: 200 });
+  return new Response(null, { status: HTTP_OK });
 };
 
 const handleSubscriptionUpdated = async (
   event: WideEvent,
-  userId: string | undefined,
+  userId: string | null,
   subscriptionId: string,
   isActive: boolean,
-) => {
+): Promise<Response> => {
   if (!userId) {
-    return new Response(null, { status: 200 });
+    return new Response(null, { status: HTTP_OK });
   }
 
-  event.set({ userId, subscriptionPlan: isActive ? "pro" : "free" });
-  await upsertSubscription(userId, isActive ? "pro" : "free", subscriptionId);
-  return new Response(null, { status: 200 });
+  const plan = ((): "pro" | "free" => {
+    if (isActive) {
+      return "pro";
+    }
+    return "free";
+  })();
+  event.set({ subscriptionPlan: plan, userId });
+  await upsertSubscription(userId, plan, subscriptionId);
+  return new Response(null, { status: HTTP_OK });
 };
 
 const handleSubscriptionCanceled = async (
   event: WideEvent,
-  userId: string | undefined,
+  userId: string | null,
   subscriptionId: string,
-) => {
+): Promise<Response> => {
   if (!userId) {
-    return new Response(null, { status: 200 });
+    return new Response(null, { status: HTTP_OK });
   }
 
-  event.set({ userId, subscriptionPlan: "free" });
+  event.set({ subscriptionPlan: "free", userId });
   await upsertSubscription(userId, "free", subscriptionId);
-  return new Response(null, { status: 200 });
+  return new Response(null, { status: HTTP_OK });
 };
 
-export async function POST(request: Request): Promise<Response> {
+const POST = (request: Request): MaybePromise<Response> => {
   const webhookSecret = env.POLAR_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
-    return ErrorResponse.notImplemented();
+    return ErrorResponse.notImplemented().toResponse();
   }
 
   const wideEvent = new WideEvent("api");
   wideEvent.set({
-    operationType: "webhook",
     operationName: "polar",
+    operationType: "webhook",
   });
 
   return runWithWideEvent(wideEvent, async () => {
     try {
       const body = await request.text();
       const headers: Record<string, string> = {};
-      request.headers.forEach((value, key) => {
+      for (const [key, value] of request.headers.entries()) {
         headers[key] = value;
-      });
+      }
 
       const event = validateEvent(body, headers, webhookSecret);
       wideEvent.set({ operationName: `polar:${event.type}` });
@@ -96,7 +105,7 @@ export async function POST(request: Request): Promise<Response> {
       if (event.type === "subscription.created") {
         return handleSubscriptionCreated(
           wideEvent,
-          event.data.customer.externalId ?? undefined,
+          event.data.customer.externalId ?? null,
           event.data.id,
         );
       }
@@ -104,7 +113,7 @@ export async function POST(request: Request): Promise<Response> {
       if (event.type === "subscription.updated") {
         return handleSubscriptionUpdated(
           wideEvent,
-          event.data.customer.externalId ?? undefined,
+          event.data.customer.externalId ?? null,
           event.data.id,
           event.data.status === "active",
         );
@@ -113,16 +122,16 @@ export async function POST(request: Request): Promise<Response> {
       if (event.type === "subscription.canceled") {
         return handleSubscriptionCanceled(
           wideEvent,
-          event.data.customer.externalId ?? undefined,
+          event.data.customer.externalId ?? null,
           event.data.id,
         );
       }
 
-      return new Response(null, { status: 200 });
+      return new Response(null, { status: HTTP_OK });
     } catch (error) {
       if (error instanceof WebhookVerificationError) {
         wideEvent.set({ error: true, errorType: "WebhookVerificationError" });
-        return ErrorResponse.unauthorized();
+        return ErrorResponse.unauthorized().toResponse();
       }
       wideEvent.setError(error);
       throw error;
@@ -130,4 +139,6 @@ export async function POST(request: Request): Promise<Response> {
       emitWideEvent(wideEvent.finalize());
     }
   });
-}
+};
+
+export { POST };

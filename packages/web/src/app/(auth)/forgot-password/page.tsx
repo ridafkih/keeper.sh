@@ -1,26 +1,27 @@
 "use client";
 
 import { useState } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { Mail } from "lucide-react";
 import {
-  AuthFormContainer,
   AuthForm,
-  AuthFormTitle,
+  AuthFormContainer,
   AuthFormError,
   AuthFormField,
-  AuthFormSubmit,
   AuthFormFooter,
+  AuthFormSubmit,
+  AuthFormTitle,
 } from "@/components/auth-form";
 import { CardTitle, TextBody } from "@/components/typography";
 import { useFormSubmit } from "@/hooks/use-form-submit";
 import { forgotPassword } from "@/lib/auth";
 
-export default function ForgotPasswordPage() {
+export default function ForgotPasswordPage(): ReactNode {
   const [emailSent, setEmailSent] = useState(false);
   const { isSubmitting, error, submit } = useFormSubmit();
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const email = String(formData.get("email") ?? "");
@@ -29,7 +30,7 @@ export default function ForgotPasswordPage() {
       await forgotPassword(email);
       setEmailSent(true);
     });
-  }
+  };
 
   if (emailSent) {
     return (

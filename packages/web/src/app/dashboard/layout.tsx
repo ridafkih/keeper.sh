@@ -1,9 +1,10 @@
+import type { ReactNode } from "react";
 import { Header } from "@/components/header";
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { ToastProvider } from "@/components/toast-provider";
 import { ConsentBanner } from "@/components/consent-banner";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({ children }: { children: React.ReactNode }): ReactNode {
   return (
     <ToastProvider>
       <Header />

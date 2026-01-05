@@ -4,65 +4,67 @@ import type { RefCallback } from "react";
 import type { CalendarEvent } from "@/hooks/use-events";
 import { tv } from "tailwind-variants";
 import {
+  formatDayHeading,
+  formatTime,
+  getColorFromUrl,
   getDaysFromDate,
   isSameDay,
-  formatTime,
-  formatDayHeading,
-  getColorFromUrl,
 } from "@/utils/calendar";
 import { TextBody } from "@/components/typography";
 
 const agendaEventDot = tv({
   base: "size-1.5 rounded-full shrink-0",
+  defaultVariants: {
+    color: "blue",
+  },
   variants: {
     color: {
       blue: "bg-blue-500",
       green: "bg-green-500",
-      purple: "bg-purple-500",
       orange: "bg-orange-500",
+      purple: "bg-purple-500",
     },
-  },
-  defaultVariants: {
-    color: "blue",
   },
 });
 
 const skeletonBar = tv({ base: "bg-surface-skeleton rounded animate-pulse" });
 
-const SkeletonBar = ({ className }: { className?: string }) => (
+import type { ReactNode } from "react";
+
+const SkeletonBar = ({ className }: { className?: string }): ReactNode => (
   <div className={skeletonBar({ className })} />
 );
 
-const SkeletonEventItem = () => (
+const SkeletonEventItem = (): ReactNode => (
   <li className="flex items-center gap-2 py-1 text-sm text-foreground-muted">
     <SkeletonBar className="w-1.5 h-1.5 rounded-full shrink-0" />
     <SkeletonBar className="h-4 w-64" />
   </li>
 );
 
-const SkeletonDaySection = ({ index }: { index: number }) => {
+const SkeletonDaySection = ({ index }: { index: number }): ReactNode => {
   const eventCount = (index % 3) + 1;
+  const eventItems: ReactNode[] = [];
+  for (let eventIndex = 0; eventIndex < eventCount; eventIndex++) {
+    eventItems.push(<SkeletonEventItem key={eventIndex} />);
+  }
   return (
     <section className="flex flex-col gap-2">
       <div className="border-b border-border pb-2">
         <SkeletonBar className="h-6 w-48" />
       </div>
-      <ul className="flex flex-col list-none p-0 m-0">
-        {Array.from({ length: eventCount }).map((_, eventIndex) => (
-          <SkeletonEventItem key={eventIndex} />
-        ))}
-      </ul>
+      <ul className="flex flex-col list-none p-0 m-0">{eventItems}</ul>
     </section>
   );
 };
 
-export const CalendarSkeleton = ({ days = 7 }: { days?: number }) => (
-  <div className="flex flex-col gap-6 max-w-2xl">
-    {Array.from({ length: days }).map((_, dayIndex) => (
-      <SkeletonDaySection key={dayIndex} index={dayIndex} />
-    ))}
-  </div>
-);
+const CalendarSkeleton = ({ days = 7 }: { days?: number }): ReactNode => {
+  const daySections: ReactNode[] = [];
+  for (let dayIndex = 0; dayIndex < days; dayIndex++) {
+    daySections.push(<SkeletonDaySection key={dayIndex} index={dayIndex} />);
+  }
+  return <div className="flex flex-col gap-6 max-w-2xl">{daySections}</div>;
+};
 
 interface CalendarProps {
   events?: CalendarEvent[];
@@ -72,7 +74,7 @@ interface CalendarProps {
   lastSectionRef?: RefCallback<HTMLElement>;
 }
 
-const DayEventList = ({ events }: { events: CalendarEvent[] }) => {
+const DayEventList = ({ events }: { events: CalendarEvent[] }): ReactNode => {
   if (events.length === 0) {
     return <p className="text-sm text-foreground-subtle py-2">No events</p>;
   }
@@ -112,40 +114,41 @@ const DayEventList = ({ events }: { events: CalendarEvent[] }) => {
   );
 };
 
-const LoadingIndicator = () => (
+const LoadingIndicator = (): ReactNode => (
   <div className="py-4 text-center">
     <TextBody>Loading more events...</TextBody>
   </div>
 );
 
-export const Calendar = ({
+const Calendar = ({
   events = [],
   startDate = new Date(),
   daysToShow = 7,
   isLoadingMore = false,
   lastSectionRef,
-}: CalendarProps) => {
+}: CalendarProps): ReactNode => {
   const normalizedStartDate = new Date(startDate);
   normalizedStartDate.setHours(0, 0, 0, 0);
 
   const days = getDaysFromDate(normalizedStartDate, daysToShow);
 
-  const getEventsForDay = (date: Date): CalendarEvent[] => {
-    return events
+  const getEventsForDay = (date: Date): CalendarEvent[] =>
+    events
       .filter((event) => isSameDay(new Date(event.startTime), date))
-      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
-  };
+      .sort((first, second) => new Date(first.startTime).getTime() - new Date(second.startTime).getTime());
 
   return (
     <div className="flex flex-col gap-6 max-w-2xl">
       {days.map((date, index) => {
         const isLast = index === days.length - 1;
+        const sectionRef = ((): typeof lastSectionRef | null => {
+          if (isLast) {
+            return lastSectionRef;
+          }
+          return null;
+        })();
         return (
-          <section
-            key={date.toISOString()}
-            ref={isLast ? lastSectionRef : undefined}
-            className="flex flex-col gap-2"
-          >
+          <section key={date.toISOString()} ref={sectionRef} className="flex flex-col gap-2">
             <h2 className="text-lg font-semibold text-foreground border-b border-border pb-2">
               {formatDayHeading(date)}
             </h2>
@@ -157,3 +160,5 @@ export const Calendar = ({
     </div>
   );
 };
+
+export { CalendarSkeleton, Calendar };

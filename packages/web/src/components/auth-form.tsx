@@ -1,6 +1,7 @@
 "use client";
 
-import { type FC, type PropsWithChildren, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
+import type { FC, PropsWithChildren } from "react";
 import { Form } from "@base-ui/react/form";
 import { Field } from "@base-ui/react/field";
 import { Input } from "@base-ui/react/input";
@@ -8,7 +9,7 @@ import { Checkbox } from "@base-ui/react/checkbox";
 import { Check } from "lucide-react";
 import { tv } from "tailwind-variants";
 import { Button } from "@/components/button";
-import { CardTitle, TextBody, DangerText } from "@/components/typography";
+import { CardTitle, DangerText, TextBody } from "@/components/typography";
 
 const authFormSubmit = tv({
   base: "w-full py-1.5 px-3 border-none rounded-md text-sm font-medium bg-primary text-primary-foreground cursor-pointer transition-colors duration-150 hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed",
@@ -23,7 +24,7 @@ const authFormInput = tv({
   },
 });
 
-export const AuthFormContainer: FC<PropsWithChildren> = ({ children }) => (
+const AuthFormContainer: FC<PropsWithChildren> = ({ children }) => (
   <main className="flex-1 flex flex-col items-center justify-center p-4">{children}</main>
 );
 
@@ -31,23 +32,25 @@ interface AuthFormProps {
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 }
 
-export const AuthForm: FC<PropsWithChildren<AuthFormProps>> = ({ onSubmit, children }) => {
+const AuthForm: FC<PropsWithChildren<AuthFormProps>> = ({ onSubmit, children }) => {
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     const form = formRef.current;
-    if (!form) return;
+    if (!form) {
+      return;
+    }
 
     form.reset();
 
-    const handlePageShow = (event: PageTransitionEvent) => {
+    const handlePageShow = (event: PageTransitionEvent): void => {
       if (event.persisted) {
         form.reset();
       }
     };
 
     window.addEventListener("pageshow", handlePageShow);
-    return () => window.removeEventListener("pageshow", handlePageShow);
+    return (): void => window.removeEventListener("pageshow", handlePageShow);
   }, []);
 
   return (
@@ -61,7 +64,7 @@ export const AuthForm: FC<PropsWithChildren<AuthFormProps>> = ({ onSubmit, child
   );
 };
 
-export const AuthFormTitle: FC<PropsWithChildren> = ({ children }) => (
+const AuthFormTitle: FC<PropsWithChildren> = ({ children }) => (
   <CardTitle as="h1" className="text-center">
     {children}
   </CardTitle>
@@ -71,8 +74,10 @@ interface AuthFormErrorProps {
   message: string | null;
 }
 
-export const AuthFormError: FC<AuthFormErrorProps> = ({ message }) => {
-  if (!message) return null;
+const AuthFormError: FC<AuthFormErrorProps> = ({ message }) => {
+  if (!message) {
+    return;
+  }
   return (
     <div className="px-2 py-1 rounded-md bg-destructive-surface border border-destructive-border">
       <DangerText className="text-xs">{message}</DangerText>
@@ -93,11 +98,11 @@ interface AuthFormFieldProps {
   disabled?: boolean;
   defaultValue?: string;
   value?: string;
-  autoFocus?: boolean;
+  _autoFocus?: boolean;
   inputRef?: React.Ref<HTMLInputElement>;
 }
 
-export const AuthFormField: FC<AuthFormFieldProps> = ({
+const AuthFormField: FC<AuthFormFieldProps> = ({
   name,
   placeholder,
   fieldAction,
@@ -110,7 +115,7 @@ export const AuthFormField: FC<AuthFormFieldProps> = ({
   disabled,
   defaultValue,
   value,
-  autoFocus,
+  _autoFocus,
   inputRef,
 }) => (
   <Field.Root name={name} className="flex flex-col gap-1">
@@ -127,7 +132,6 @@ export const AuthFormField: FC<AuthFormFieldProps> = ({
       disabled={disabled}
       defaultValue={defaultValue}
       value={value}
-      autoFocus={autoFocus}
       className={authFormInput({ disabled })}
     />
     {fieldAction}
@@ -138,20 +142,17 @@ interface AuthFormSubmitProps {
   isLoading: boolean;
 }
 
-export const AuthFormSubmit: FC<PropsWithChildren<AuthFormSubmitProps>> = ({
-  isLoading,
-  children,
-}) => (
+const AuthFormSubmit: FC<PropsWithChildren<AuthFormSubmitProps>> = ({ isLoading, children }) => (
   <Button type="submit" isLoading={isLoading} className={authFormSubmit()}>
     {children}
   </Button>
 );
 
-export const AuthFormFooter: FC<PropsWithChildren> = ({ children }) => (
+const AuthFormFooter: FC<PropsWithChildren> = ({ children }) => (
   <TextBody className="text-xs text-center">{children}</TextBody>
 );
 
-export const AuthFormDivider: FC = () => (
+const AuthFormDivider: FC = () => (
   <div className="flex items-center gap-3">
     <div className="flex-1 h-px bg-border" />
     <span className="text-xs text-foreground-muted">or</span>
@@ -169,7 +170,7 @@ interface AuthSocialButtonProps {
   icon: React.ReactNode;
 }
 
-export const AuthSocialButton: FC<PropsWithChildren<AuthSocialButtonProps>> = ({
+const AuthSocialButton: FC<PropsWithChildren<AuthSocialButtonProps>> = ({
   onClick,
   isLoading,
   icon,
@@ -183,10 +184,10 @@ export const AuthSocialButton: FC<PropsWithChildren<AuthSocialButtonProps>> = ({
 
 const authFormCheckbox = tv({
   slots: {
-    root: "flex items-center gap-2 cursor-pointer",
     box: "size-4 flex items-center justify-center rounded border border-border-input transition-colors data-[checked]:bg-primary data-[checked]:border-primary",
     indicator: "text-primary-foreground",
     label: "text-xs text-foreground-secondary select-none",
+    root: "flex items-center gap-2 cursor-pointer",
   },
 });
 
@@ -196,11 +197,7 @@ interface AuthFormCheckboxProps {
   defaultChecked?: boolean;
 }
 
-export const AuthFormCheckbox: FC<AuthFormCheckboxProps> = ({
-  name,
-  label,
-  defaultChecked = false,
-}) => {
+const AuthFormCheckbox: FC<AuthFormCheckboxProps> = ({ name, label, defaultChecked = false }) => {
   const styles = authFormCheckbox();
 
   return (
@@ -213,4 +210,17 @@ export const AuthFormCheckbox: FC<AuthFormCheckboxProps> = ({
       <span className={styles.label()}>{label}</span>
     </label>
   );
+};
+
+export {
+  AuthFormContainer,
+  AuthForm,
+  AuthFormTitle,
+  AuthFormError,
+  AuthFormField,
+  AuthFormSubmit,
+  AuthFormFooter,
+  AuthFormDivider,
+  AuthSocialButton,
+  AuthFormCheckbox,
 };

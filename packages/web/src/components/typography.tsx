@@ -8,8 +8,8 @@ interface TextProps {
   className?: string;
 }
 
-const pageTitle = tv({ base: "text-2xl font-bold text-foreground" });
-const sectionTitle = tv({ base: "text-lg font-semibold text-foreground" });
+const _pageTitle = tv({ base: "text-2xl font-bold text-foreground" });
+const _sectionTitle = tv({ base: "text-lg font-semibold text-foreground" });
 const cardTitle = tv({
   base: "text-sm font-semibold text-foreground tracking-tight",
 });
@@ -29,7 +29,7 @@ const fieldLabel = tv({
 });
 const fieldValue = tv({ base: "text-sm text-foreground tracking-tight" });
 const textMuted = tv({ base: "text-sm text-foreground-subtle" });
-const dangerLabel = tv({ base: "text-sm font-medium text-destructive" });
+const _dangerLabel = tv({ base: "text-sm font-medium text-destructive" });
 const dangerText = tv({ base: "text-sm text-destructive" });
 const dangerFieldLabel = tv({
   base: "text-xs font-medium text-destructive tracking-tight",
@@ -39,49 +39,49 @@ const dangerFieldValue = tv({
 });
 const bannerText = tv({
   base: "text-sm",
-  variants: {
-    variant: {
-      warning: "text-warning",
-      info: "text-info",
-      success: "text-success-emphasis",
-    },
-  },
   defaultVariants: {
     variant: "warning",
   },
+  variants: {
+    variant: {
+      info: "text-info",
+      success: "text-success-emphasis",
+      warning: "text-warning",
+    },
+  },
 });
 
-export const CardTitle: FC<PropsWithChildren<TextProps>> = ({
+const CardTitle: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "h3",
   className,
   children,
 }) => <Component className={cardTitle({ className })}>{children}</Component>;
 
-export const SubsectionTitle: FC<PropsWithChildren<TextProps>> = ({
+const SubsectionTitle: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "h2",
   className,
   children,
 }) => <Component className={subsectionTitle({ className })}>{children}</Component>;
 
-export const TextBody: FC<PropsWithChildren<TextProps>> = ({
+const TextBody: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "p",
   className,
   children,
 }) => <Component className={textBody({ className })}>{children}</Component>;
 
-export const TextLabel: FC<PropsWithChildren<TextProps>> = ({
+const TextLabel: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "span",
   className,
   children,
 }) => <Component className={textLabel({ className })}>{children}</Component>;
 
-export const TextMeta: FC<PropsWithChildren<TextProps>> = ({
+const TextMeta: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "span",
   className,
   children,
 }) => <Component className={textMeta({ className })}>{children}</Component>;
 
-export const TextCaption: FC<PropsWithChildren<TextProps>> = ({
+const TextCaption: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "span",
   className,
   children,
@@ -91,7 +91,7 @@ interface FieldLabelProps extends TextProps {
   htmlFor?: string;
 }
 
-export const FieldLabel: FC<PropsWithChildren<FieldLabelProps>> = ({
+const FieldLabel: FC<PropsWithChildren<FieldLabelProps>> = ({
   as: Component = "label",
   className,
   htmlFor,
@@ -102,31 +102,31 @@ export const FieldLabel: FC<PropsWithChildren<FieldLabelProps>> = ({
   </Component>
 );
 
-export const FieldValue: FC<PropsWithChildren<TextProps>> = ({
+const FieldValue: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "span",
   className,
   children,
 }) => <Component className={fieldValue({ className })}>{children}</Component>;
 
-export const TextMuted: FC<PropsWithChildren<TextProps>> = ({
+const TextMuted: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "span",
   className,
   children,
 }) => <Component className={textMuted({ className })}>{children}</Component>;
 
-export const DangerText: FC<PropsWithChildren<TextProps>> = ({
+const DangerText: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "span",
   className,
   children,
 }) => <Component className={dangerText({ className })}>{children}</Component>;
 
-export const DangerFieldLabel: FC<PropsWithChildren<TextProps>> = ({
+const DangerFieldLabel: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "span",
   className,
   children,
 }) => <Component className={dangerFieldLabel({ className })}>{children}</Component>;
 
-export const DangerFieldValue: FC<PropsWithChildren<TextProps>> = ({
+const DangerFieldValue: FC<PropsWithChildren<TextProps>> = ({
   as: Component = "span",
   className,
   children,
@@ -138,9 +138,25 @@ interface BannerTextProps extends TextProps {
   variant?: BannerVariant;
 }
 
-export const BannerText: FC<PropsWithChildren<BannerTextProps>> = ({
+const BannerText: FC<PropsWithChildren<BannerTextProps>> = ({
   as: Component = "span",
   variant = "warning",
   className,
   children,
-}) => <Component className={bannerText({ variant, className })}>{children}</Component>;
+}) => <Component className={bannerText({ className, variant })}>{children}</Component>;
+
+export {
+  CardTitle,
+  SubsectionTitle,
+  TextBody,
+  TextLabel,
+  TextMeta,
+  TextCaption,
+  FieldLabel,
+  FieldValue,
+  TextMuted,
+  DangerText,
+  DangerFieldLabel,
+  DangerFieldValue,
+  BannerText,
+};

@@ -1,4 +1,4 @@
-import { withTracing, withAuth } from "../../../utils/middleware";
+import { withAuth, withTracing } from "../../../utils/middleware";
 import { getUserMappings } from "../../../utils/source-destination-mappings";
 
 export const GET = withTracing(

@@ -1,7 +1,9 @@
 import type { ServerWebSocket } from "bun";
 
-export interface BroadcastData {
+interface BroadcastData {
   userId: string;
 }
 
-export type Socket = ServerWebSocket<BroadcastData>;
+type Socket = ServerWebSocket<BroadcastData>;
+
+export type { BroadcastData, Socket };

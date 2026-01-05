@@ -1,6 +1,7 @@
 import env from "@keeper.sh/env/next/backend";
-import { proxyableMethods, type ProxyableMethods } from "@keeper.sh/data-schemas";
-import { NextRequest } from "next/server";
+import { proxyableMethods } from "@keeper.sh/data-schemas";
+import type { ProxyableMethods } from "@keeper.sh/data-schemas";
+import type { NextRequest } from "next/server";
 
 type RequestHandler = (request: NextRequest) => Promise<Response>;
 
@@ -42,9 +43,9 @@ const forward: RequestHandler = async (request) => {
   responseHeaders.delete("Content-Length");
 
   return new Response(response.body, {
+    headers: responseHeaders,
     status: response.status,
     statusText: response.statusText,
-    headers: responseHeaders,
   });
 };
 
@@ -59,7 +60,9 @@ const toBunApiHandler = <
 
   const hasAllAllowedMethods = (candidate: typeof partialHandlers): candidate is Handlers => {
     for (const allowedMethod of allowedMethods) {
-      if (allowedMethod in candidate) continue;
+      if (allowedMethod in candidate) {
+        continue;
+      }
       return false;
     }
 
@@ -73,7 +76,7 @@ const toBunApiHandler = <
   }
 
   if (!hasAllAllowedMethods(partialHandlers)) {
-    throw Error(
+    throw new Error(
       "This should never happen, all allowed methods were not passed to the Next.js-Bun API forwarding handler generator.",
     );
   }

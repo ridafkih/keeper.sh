@@ -4,4 +4,6 @@ interface SocketTokenEntry {
 }
 
 // TODO: Move to Redis
-export const socketTokens = new Map<string, SocketTokenEntry>();
+const socketTokens = new Map<string, SocketTokenEntry>();
+
+export { socketTokens };

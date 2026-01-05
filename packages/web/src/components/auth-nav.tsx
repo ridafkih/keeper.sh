@@ -18,9 +18,9 @@ const AuthNavSkeleton: FC<AuthNavSkeletonProps> = ({ isDashboard }) => {
       <nav className="flex gap-2">
         <Button
           className={button({
-            variant: "secondary",
             size: "xs",
             skeleton: true,
+            variant: "secondary",
           })}
           disabled
         >
@@ -32,10 +32,10 @@ const AuthNavSkeleton: FC<AuthNavSkeletonProps> = ({ isDashboard }) => {
 
   return (
     <nav className="flex gap-2">
-      <Button className={button({ variant: "secondary", size: "xs", skeleton: true })} disabled>
+      <Button className={button({ size: "xs", skeleton: true, variant: "secondary" })} disabled>
         Login
       </Button>
-      <Button className={button({ variant: "primary", size: "xs", skeleton: true })} disabled>
+      <Button className={button({ size: "xs", skeleton: true, variant: "primary" })} disabled>
         Register
       </Button>
     </nav>
@@ -48,7 +48,7 @@ interface DashboardNavProps {
 
 const DashboardNav: FC<DashboardNavProps> = ({ onLogout }) => (
   <nav className="flex gap-2">
-    <Button onClick={onLogout} className={button({ variant: "secondary", size: "xs" })}>
+    <Button onClick={onLogout} className={button({ size: "xs", variant: "secondary" })}>
       Logout
     </Button>
   </nav>
@@ -59,7 +59,7 @@ const AuthenticatedMarketingNav: FC = () => (
     <Button
       render={<Link href="/dashboard" />}
       nativeButton={false}
-      className={button({ variant: "primary", size: "xs" })}
+      className={button({ size: "xs", variant: "primary" })}
     >
       Dashboard
     </Button>
@@ -71,14 +71,14 @@ const UnauthenticatedNav: FC = () => (
     <Button
       render={<Link href="/login" />}
       nativeButton={false}
-      className={button({ variant: "secondary", size: "xs" })}
+      className={button({ size: "xs", variant: "secondary" })}
     >
       Login
     </Button>
     <Button
       render={<Link href="/register" />}
       nativeButton={false}
-      className={button({ variant: "primary", size: "xs" })}
+      className={button({ size: "xs", variant: "primary" })}
     >
       Register
     </Button>
@@ -91,14 +91,20 @@ export const AuthNav: FC = () => {
   const { user, isLoading, refresh } = useAuth();
   const isDashboard = pathname.startsWith("/dashboard");
 
-  const handleLogout = async () => {
+  const handleLogout = async (): Promise<void> => {
     await signOut();
     await refresh();
     router.push("/");
   };
 
-  if (isLoading) return <AuthNavSkeleton isDashboard={isDashboard} />;
-  if (!user) return <UnauthenticatedNav />;
-  if (!isDashboard) return <AuthenticatedMarketingNav />;
+  if (isLoading) {
+    return <AuthNavSkeleton isDashboard={isDashboard} />;
+  }
+  if (!user) {
+    return <UnauthenticatedNav />;
+  }
+  if (!isDashboard) {
+    return <AuthenticatedMarketingNav />;
+  }
   return <DashboardNav onLogout={handleLogout} />;
 };

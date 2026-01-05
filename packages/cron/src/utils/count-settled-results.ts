@@ -1,12 +1,12 @@
 /**
  * Counts the number of fulfilled and rejected promises from Promise.allSettled results.
  */
-export const countSettledResults = <T>(
-  results: PromiseSettledResult<T>[],
+const countSettledResults = <TResult>(
+  results: PromiseSettledResult<TResult>[],
 ): { succeeded: number; failed: number } => {
   const report = {
-    succeeded: 0,
     failed: 0,
+    succeeded: 0,
   };
 
   for (const result of results) {
@@ -23,3 +23,5 @@ export const countSettledResults = <T>(
 
   return report;
 };
+
+export { countSettledResults };

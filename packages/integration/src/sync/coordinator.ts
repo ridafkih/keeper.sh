@@ -8,11 +8,13 @@ const getSyncKey = (userId: string): string => `${SYNC_KEY_PREFIX}${userId}`;
 
 const enrichWideEventWithSyncContext = (userId: string, generation: number): void => {
   const event = getWideEvent();
-  if (!event) return;
-  event.set({ userId, syncGeneration: generation });
+  if (!event) {
+    return;
+  }
+  event.set({ syncGeneration: generation, userId });
 };
 
-export interface DestinationSyncResult {
+interface DestinationSyncResult {
   userId: string;
   destinationId: string;
   localEventCount: number;
@@ -20,9 +22,9 @@ export interface DestinationSyncResult {
   broadcast?: boolean;
 }
 
-export type SyncStage = "fetching" | "comparing" | "processing";
+type SyncStage = "fetching" | "comparing" | "processing";
 
-export interface SyncProgressUpdate {
+interface SyncProgressUpdate {
   userId: string;
   destinationId: string;
   status: "syncing";
@@ -34,7 +36,7 @@ export interface SyncProgressUpdate {
   inSync: false;
 }
 
-export interface SyncContext {
+interface SyncContext {
   userId: string;
   generation: number;
   isCurrent: () => Promise<boolean>;
@@ -42,18 +44,20 @@ export interface SyncContext {
   onSyncProgress?: (update: SyncProgressUpdate) => void;
 }
 
-export interface SyncCoordinatorConfig {
+interface SyncCoordinatorConfig {
   redis: RedisClient;
   onDestinationSync?: (result: DestinationSyncResult) => Promise<void>;
   onSyncProgress?: (update: SyncProgressUpdate) => void;
 }
 
-export interface SyncCoordinator {
+interface SyncCoordinator {
   startSync: (userId: string) => Promise<SyncContext>;
   isSyncCurrent: (context: SyncContext) => Promise<boolean>;
 }
 
-export const createSyncCoordinator = (config: SyncCoordinatorConfig): SyncCoordinator => {
+const isSyncCurrent = (context: SyncContext): Promise<boolean> => context.isCurrent();
+
+const createSyncCoordinator = (config: SyncCoordinatorConfig): SyncCoordinator => {
   const { redis, onDestinationSync, onSyncProgress } = config;
 
   const startSync = async (userId: string): Promise<SyncContext> => {
@@ -65,16 +69,24 @@ export const createSyncCoordinator = (config: SyncCoordinatorConfig): SyncCoordi
 
     const isCurrent = async (): Promise<boolean> => {
       const currentGeneration = await redis.get(key);
-      if (currentGeneration === null) return false;
-      return parseInt(currentGeneration, 10) === generation;
+      if (currentGeneration === null) {
+        return false;
+      }
+      return Number.parseInt(currentGeneration, 10) === generation;
     };
 
-    return { userId, generation, isCurrent, onDestinationSync, onSyncProgress };
+    return { generation, isCurrent, onDestinationSync, onSyncProgress, userId };
   };
 
-  const isSyncCurrent = async (context: SyncContext): Promise<boolean> => {
-    return context.isCurrent();
-  };
+  return { isSyncCurrent, startSync };
+};
 
-  return { startSync, isSyncCurrent };
+export { createSyncCoordinator };
+export type {
+  DestinationSyncResult,
+  SyncStage,
+  SyncProgressUpdate,
+  SyncContext,
+  SyncCoordinatorConfig,
+  SyncCoordinator,
 };

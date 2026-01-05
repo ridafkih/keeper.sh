@@ -1,21 +1,21 @@
 import { createAuthEndpoint } from "better-auth/api";
 import { APIError } from "better-call";
 import { z } from "zod";
-import type { User, CredentialAccount } from "../types";
+import type { CredentialAccount, User } from "../types";
 
 const INVALID_CREDENTIALS_ERROR = {
   message: "invalid username or password",
 };
 
-export const createSignInEndpoint = () =>
+const createSignInEndpoint = () =>
   createAuthEndpoint(
     "/username-only/sign-in",
     {
-      method: "POST",
       body: z.object({
-        username: z.string().regex(/^[a-zA-Z0-9._-]+$/),
         password: z.string(),
+        username: z.string().regex(/^[a-zA-Z0-9._-]+$/),
       }),
+      method: "POST",
     },
     async (context) => {
       const { username, password } = context.body;
@@ -59,6 +59,8 @@ export const createSignInEndpoint = () =>
         context.context.authCookies.sessionToken.options,
       );
 
-      return context.json({ user, session });
+      return context.json({ session, user });
     },
   );
+
+export { createSignInEndpoint };

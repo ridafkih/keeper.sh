@@ -1,24 +1,26 @@
 import type { CronOptions } from "cronbake";
-import { remoteICalSourcesTable, calendarSnapshotsTable } from "@keeper.sh/database/schema";
+import { calendarSnapshotsTable, remoteICalSourcesTable } from "@keeper.sh/database/schema";
 import { MS_PER_DAY } from "@keeper.sh/constants";
 import { pullRemoteCalendar } from "@keeper.sh/calendar";
-import { WideEvent, runWithWideEvent, emitWideEvent } from "@keeper.sh/log";
+import { WideEvent, emitWideEvent, runWithWideEvent } from "@keeper.sh/log";
 import { and, eq, lte } from "drizzle-orm";
 import { database } from "../context";
-import { withCronWideEvent, setCronEventFields } from "../utils/with-wide-event";
+import { setCronEventFields, withCronWideEvent } from "../utils/with-wide-event";
 import { countSettledResults } from "../utils/count-settled-results";
 
-type FetchResult = {
+interface FetchResult {
   ical: string;
   sourceId: string;
-};
+}
 
 const fetchRemoteCalendar = async (sourceId: string, url: string): Promise<FetchResult> => {
   const { ical } = await pullRemoteCalendar("ical", url);
   return { ical, sourceId };
 };
 
-const insertSnapshot = async (payload: typeof calendarSnapshotsTable.$inferInsert) => {
+const insertSnapshot = async (
+  payload: typeof calendarSnapshotsTable.$inferInsert,
+): Promise<{ createdAt: Date } | undefined> => {
   const [record] = await database.insert(calendarSnapshotsTable).values(payload).returning({
     createdAt: calendarSnapshotsTable.createdAt,
   });
@@ -26,7 +28,10 @@ const insertSnapshot = async (payload: typeof calendarSnapshotsTable.$inferInser
   return record;
 };
 
-const deleteStaleCalendarSnapshots = async (sourceId: string, referenceDate: Date) => {
+const deleteStaleCalendarSnapshots = async (
+  sourceId: string,
+  referenceDate: Date,
+): Promise<void> => {
   const dayBeforeTimestamp = referenceDate.getTime() - MS_PER_DAY;
 
   await database
@@ -42,14 +47,14 @@ const deleteStaleCalendarSnapshots = async (sourceId: string, referenceDate: Dat
 const processSnapshot = async (sourceId: string, ical: string): Promise<void> => {
   const event = new WideEvent("cron");
   event.set({
-    operationType: "snapshot",
     operationName: "snapshot-insertion",
+    operationType: "snapshot",
     sourceId,
   });
 
   await runWithWideEvent(event, async () => {
     try {
-      const record = await insertSnapshot({ sourceId, ical });
+      const record = await insertSnapshot({ ical, sourceId });
       if (record) {
         await deleteStaleCalendarSnapshots(sourceId, record.createdAt);
       }
@@ -62,9 +67,6 @@ const processSnapshot = async (sourceId: string, ical: string): Promise<void> =>
 };
 
 export default withCronWideEvent({
-  name: import.meta.file,
-  cron: "@every_1_minutes",
-  immediate: true,
   async callback() {
     const remoteSources = await database.select().from(remoteICalSourcesTable);
     setCronEventFields({ sourceCount: remoteSources.length });
@@ -73,7 +75,7 @@ export default withCronWideEvent({
 
     const settlements = await Promise.allSettled(fetches);
     const { succeeded, failed } = countSettledResults(settlements);
-    setCronEventFields({ processedCount: succeeded, failedCount: failed });
+    setCronEventFields({ failedCount: failed, processedCount: succeeded });
 
     const insertions: Promise<void>[] = [];
     for (const settlement of settlements) {
@@ -84,4 +86,7 @@ export default withCronWideEvent({
 
     await Promise.allSettled(insertions);
   },
+  cron: "@every_1_minutes",
+  immediate: true,
+  name: import.meta.file,
 }) satisfies CronOptions;

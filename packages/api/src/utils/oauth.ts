@@ -1,13 +1,15 @@
 import {
   exchangeCodeForTokens,
   fetchUserInfo,
+  getDestinationAccountId,
+  hasRequiredScopes,
   saveCalendarDestination,
   validateState,
-  hasRequiredScopes,
-  getDestinationAccountId,
 } from "./destinations";
 import { triggerDestinationSync } from "./sync";
 import { baseUrl } from "../context";
+
+const MS_PER_SECOND = 1000;
 
 interface OAuthCallbackParams {
   code: string | null;
@@ -19,20 +21,20 @@ interface OAuthCallbackParams {
 /**
  * Parses OAuth callback parameters from a request.
  */
-export const parseOAuthCallback = (request: Request, provider: string): OAuthCallbackParams => {
+const parseOAuthCallback = (request: Request, provider: string): OAuthCallbackParams => {
   const url = new URL(request.url);
   return {
     code: url.searchParams.get("code"),
-    state: url.searchParams.get("state"),
     error: url.searchParams.get("error"),
     provider,
+    state: url.searchParams.get("state"),
   };
 };
 
 /**
  * Builds a redirect URL with optional parameters.
  */
-export const buildRedirectUrl = (path: string, params?: Record<string, string>): URL => {
+const buildRedirectUrl = (path: string, params?: Record<string, string>): URL => {
   const url = new URL(path, baseUrl);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
@@ -43,11 +45,24 @@ export const buildRedirectUrl = (path: string, params?: Record<string, string>):
 };
 
 /**
+ * Error class for OAuth failures that includes a redirect URL.
+ */
+class OAuthError extends Error {
+  constructor(
+    message: string,
+    public redirectUrl: URL,
+  ) {
+    super(message);
+    this.name = "OAuthError";
+  }
+}
+
+/**
  * Handles a successful OAuth callback - exchanges code for tokens and saves destination.
  * Returns the userId if successful.
  * Throws if validation fails or tokens are missing.
  */
-export const handleOAuthCallback = async (
+const handleOAuthCallback = async (
   params: OAuthCallbackParams,
 ): Promise<{ userId: string; redirectUrl: URL }> => {
   const successUrl = buildRedirectUrl("/dashboard/integrations", {
@@ -84,7 +99,7 @@ export const handleOAuthCallback = async (
   }
 
   const userInfo = await fetchUserInfo(params.provider, tokens.access_token);
-  const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
+  const expiresAt = new Date(Date.now() + tokens.expires_in * MS_PER_SECOND);
 
   if (destinationId) {
     const existingAccountId = await getDestinationAccountId(destinationId);
@@ -113,18 +128,7 @@ export const handleOAuthCallback = async (
 
   triggerDestinationSync(userId);
 
-  return { userId, redirectUrl: successUrl };
+  return { redirectUrl: successUrl, userId };
 };
 
-/**
- * Error class for OAuth failures that includes a redirect URL.
- */
-export class OAuthError extends Error {
-  constructor(
-    message: string,
-    public redirectUrl: URL,
-  ) {
-    super(message);
-    this.name = "OAuthError";
-  }
-}
+export { parseOAuthCallback, buildRedirectUrl, handleOAuthCallback, OAuthError };

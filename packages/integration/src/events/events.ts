@@ -1,12 +1,14 @@
 import {
-  sourceDestinationMappingsTable,
   eventStatesTable,
   remoteICalSourcesTable,
+  sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import { getStartOfToday } from "@keeper.sh/date-utils";
-import { and, eq, gte, inArray, asc } from "drizzle-orm";
+import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { SyncableEvent } from "../types";
+
+const EMPTY_SOURCES_COUNT = 0;
 
 const getMappedSourceIds = async (
   database: BunSQLDatabase,
@@ -38,15 +40,18 @@ const toSyncableEvents = (results: EventQueryResult[]): SyncableEvent[] => {
       continue;
     }
 
+    const { sourceName = null } = result ?? {};
+    const summary = sourceName ?? "Busy";
+
     syncableEvents.push({
+      endTime: result.endTime,
       id: result.id,
       sourceEventUid: result.sourceEventUid,
-      startTime: result.startTime,
-      endTime: result.endTime,
       sourceId: result.sourceId,
-      sourceName: result.sourceName ?? undefined,
+      sourceName,
       sourceUrl: result.sourceUrl,
-      summary: result.sourceName ?? "Busy",
+      startTime: result.startTime,
+      summary,
     });
   }
 
@@ -61,13 +66,13 @@ const fetchEventsForSources = async (
 
   const results = await database
     .select({
+      endTime: eventStatesTable.endTime,
       id: eventStatesTable.id,
       sourceEventUid: eventStatesTable.sourceEventUid,
-      startTime: eventStatesTable.startTime,
-      endTime: eventStatesTable.endTime,
       sourceId: eventStatesTable.sourceId,
       sourceName: remoteICalSourcesTable.name,
       sourceUrl: remoteICalSourcesTable.url,
+      startTime: eventStatesTable.startTime,
     })
     .from(eventStatesTable)
     .innerJoin(remoteICalSourcesTable, eq(eventStatesTable.sourceId, remoteICalSourcesTable.id))
@@ -82,15 +87,17 @@ const fetchEventsForSources = async (
   return toSyncableEvents(results);
 };
 
-export const getEventsForDestination = async (
+const getEventsForDestination = async (
   database: BunSQLDatabase,
   destinationId: string,
 ): Promise<SyncableEvent[]> => {
   const mappedSourceIds = await getMappedSourceIds(database, destinationId);
 
-  if (mappedSourceIds.length === 0) {
+  if (mappedSourceIds.length === EMPTY_SOURCES_COUNT) {
     return [];
   }
 
   return fetchEventsForSources(database, mappedSourceIds);
 };
+
+export { getEventsForDestination };

@@ -16,6 +16,7 @@
     "lint": "oxlint ."
   },
   "dependencies": {
+    "@keeper.sh/calendar": "workspace:*",
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/date-utils": "workspace:*",
     "@keeper.sh/encryption": "workspace:*",

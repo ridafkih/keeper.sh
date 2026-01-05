@@ -1,10 +1,10 @@
 "use client";
 
-import type { FC, PropsWithChildren } from "react";
+import type { FC, PropsWithChildren, ReactElement } from "react";
 import { Dialog } from "@base-ui/react/dialog";
 import { Button } from "@/components/button";
 import { button, dialogPopup } from "@/styles";
-import { CardTitle, TextBody, DangerText } from "@/components/typography";
+import { CardTitle, DangerText, TextBody } from "@/components/typography";
 
 interface FormDialogProps {
   open: boolean;
@@ -17,7 +17,7 @@ interface FormDialogProps {
   submitLabel: string;
   submitVariant: "primary" | "danger";
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
-  trigger?: React.ReactElement;
+  trigger?: ReactElement;
 }
 
 export const FormDialog: FC<PropsWithChildren<FormDialogProps>> = ({
@@ -51,13 +51,13 @@ export const FormDialog: FC<PropsWithChildren<FormDialogProps>> = ({
             </DangerText>
           )}
           <div className="flex gap-2 justify-end">
-            <Dialog.Close className={button({ variant: "secondary", size: "sm" })}>
+            <Dialog.Close className={button({ size: "sm", variant: "secondary" })}>
               Cancel
             </Dialog.Close>
             <Button
               type="submit"
               isLoading={isSubmitting}
-              className={button({ variant: submitVariant, size: "sm" })}
+              className={button({ size: "sm", variant: submitVariant })}
             >
               {submitLabel}
             </Button>

@@ -4,8 +4,8 @@ export const schema: BetterAuthPlugin["schema"] = {
   user: {
     fields: {
       username: {
-        type: "string",
         required: true,
+        type: "string",
         unique: true,
       },
     },
