@@ -2,7 +2,7 @@ import type { Config } from "drizzle-kit";
 import { defineConfig } from "drizzle-kit";
 import { join } from "node:path";
 
-export default ((): Config | null => {
+export default ((): Config | void => {
   if (process.env.DATABASE_URL) {
     return defineConfig({
       dbCredentials: {
@@ -16,5 +16,4 @@ export default ((): Config | null => {
       ],
     });
   }
-  return null;
 })();
