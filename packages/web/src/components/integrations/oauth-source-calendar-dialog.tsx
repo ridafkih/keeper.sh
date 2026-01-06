@@ -36,7 +36,10 @@ export const OAuthSourceCalendarDialog: FC<OAuthSourceCalendarDialogProps> = ({
   const sourcePreferences = providerDefinition?.sourcePreferences;
 
   const buildDefaultPreferences = (): Record<string, boolean> => {
-    if (!sourcePreferences) return {};
+    if (!sourcePreferences) {
+      return {};
+    };
+
     return Object.fromEntries(
       sourcePreferences.options.map(({ id, defaultValue }) => [id, defaultValue]),
     );
@@ -58,10 +61,16 @@ export const OAuthSourceCalendarDialog: FC<OAuthSourceCalendarDialogProps> = ({
   };
 
   const getSubmittablePreferences = (): Record<string, boolean> => {
-    if (!sourcePreferences) return {};
+    if (!sourcePreferences) {
+      return {}
+    };
+
     const submittable: Record<string, boolean> = {};
     for (const option of sourcePreferences.options) {
-      if (option.disabled) continue;
+      if (option.disabled) {
+        continue;
+      };
+
       submittable[option.id] = preferences[option.id] ?? option.defaultValue;
     }
     return submittable;

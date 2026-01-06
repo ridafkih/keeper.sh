@@ -49,7 +49,6 @@ const PUT = withWideEvent(
 
       return Response.json({ success: true });
     } catch (error) {
-      console.log(error);
       getWideEvent()?.setError(error);
       return ErrorResponse.badRequest("Invalid request body").toResponse();
     }
