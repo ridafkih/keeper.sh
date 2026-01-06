@@ -1,19 +1,23 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Pool } from "pg";
+import { Client } from "pg";
 import { join } from "node:path";
 
-const databaseUrl = process.env.DATABASE_URL;
+const connectionString = Bun.env.DATABASE_URL;
 
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL is required");
+if (!connectionString) {
+  throw new Error("DATABASE_URL is missing");
 }
 
-const pool = new Pool({ connectionString: databaseUrl });
-const db = drizzle(pool);
-
-await migrate(db, {
-  migrationsFolder: join(__dirname, "..", "drizzle"),
+const connection = new Client({
+  connectionString: connectionString,
 });
 
-await pool.end();
+export const database = drizzle(connection);
+await connection.connect();
+
+await migrate(database, {
+  migrationsFolder: join(import.meta.dirname, "..", "drizzle"),
+})
+
+connection.end()

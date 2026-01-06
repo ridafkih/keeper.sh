@@ -253,6 +253,13 @@
       "when": 1767701139116,
       "tag": "0035_known_silk_fever",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1767726486605,
+      "tag": "0036_late_bastion",
+      "breakpoints": true
     }
   ]
 }
