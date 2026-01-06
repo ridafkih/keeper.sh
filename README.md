@@ -126,7 +126,7 @@ In order to install Docker Compose, please refer to the [official Docker documen
 >
 > This is optional, although you will not be able to set Google Calendar as a destination without this.
 
-Reference the [official Google Cloud Platform documentation](https://support.google.com/cloud/answer/15549257) to generate valid credentials for Google OAuth. You must grant your consent screen the `calendar.events` and `userInfo.email` scopes.
+Reference the [official Google Cloud Platform documentation](https://support.google.com/cloud/answer/15549257) to generate valid credentials for Google OAuth. You must grant your consent screen the `calendar.events`, `calendar.calendarlist.readonly`, and `userinfo.email` scopes.
 
 Once this is configured, set the client ID and client secret as the `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` environment variables at runtime.
 
