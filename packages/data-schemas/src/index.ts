@@ -78,7 +78,7 @@ const microsoftUserInfoSchema = type({
 type MicrosoftUserInfo = typeof microsoftUserInfoSchema.infer;
 
 const outlookEventSchema = type({
-  "body": type({ "content?": "string", "contentType?": "string" }).or(type('null')),
+  "body?": type({ "content?": "string", "contentType?": "string" }).or(type('null')),
   "categories?": "string[]",
   "end?": { "dateTime?": "string", "timeZone?": "string" },
   "iCalUId?": "string",
