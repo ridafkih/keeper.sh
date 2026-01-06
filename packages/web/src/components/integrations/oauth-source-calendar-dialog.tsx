@@ -7,8 +7,8 @@ import { Button } from "@/components/button";
 import { button, dialogPopup, input } from "@/styles";
 import { CardTitle, DangerText, TextBody, TextCaption } from "@/components/typography";
 import { HTTP_STATUS } from "@keeper.sh/constants";
-
-type OAuthSourceProvider = "google" | "outlook";
+import { getProvider } from "@keeper.sh/provider-registry";
+import type { OAuthProviderId } from "@keeper.sh/provider-registry";
 
 interface CalendarOption {
   id: string;
@@ -19,15 +19,10 @@ interface CalendarOption {
 interface OAuthSourceCalendarDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  provider: OAuthSourceProvider;
+  provider: OAuthProviderId;
   credentialId: string;
   onSuccess: () => void;
 }
-
-const PROVIDER_NAMES: Record<OAuthSourceProvider, string> = {
-  google: "Google Calendar",
-  outlook: "Outlook",
-};
 
 export const OAuthSourceCalendarDialog: FC<OAuthSourceCalendarDialogProps> = ({
   open,
@@ -36,7 +31,7 @@ export const OAuthSourceCalendarDialog: FC<OAuthSourceCalendarDialogProps> = ({
   credentialId,
   onSuccess,
 }) => {
-  const providerName = PROVIDER_NAMES[provider];
+  const providerName = getProvider(provider)?.name ?? provider;
 
   const [calendars, setCalendars] = useState<CalendarOption[]>([]);
   const [selectedCalendar, setSelectedCalendar] = useState("");
@@ -249,5 +244,3 @@ export const OAuthSourceCalendarDialog: FC<OAuthSourceCalendarDialogProps> = ({
     </Dialog.Root>
   );
 };
-
-export type { OAuthSourceProvider };
