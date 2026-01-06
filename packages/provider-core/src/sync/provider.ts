@@ -16,6 +16,7 @@ import {
   getEventMappingsForDestination,
 } from "../events/mappings";
 import type { EventMapping } from "../events/mappings";
+import { isKeeperEvent } from "../events/identity";
 import type { SyncContext, SyncStage } from "./coordinator";
 import { getWideEvent } from "@keeper.sh/log";
 
@@ -219,17 +220,23 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
     }
 
     for (const remoteEvent of remoteEvents) {
-      if (!mappedDestinationUids.has(remoteEvent.uid)) {
-        if (remoteEvent.startTime > now) {
-          continue;
-        }
-        operations.push({
-          deleteId: remoteEvent.deleteId,
-          startTime: remoteEvent.startTime,
-          type: "remove",
-          uid: remoteEvent.uid,
-        });
+      if (mappedDestinationUids.has(remoteEvent.uid)) {
+        continue;
       }
+
+      const isOrphanedKeeperEvent = isKeeperEvent(remoteEvent.uid);
+      const isPastEvent = remoteEvent.startTime <= now;
+
+      if (!isOrphanedKeeperEvent && !isPastEvent) {
+        continue;
+      }
+
+      operations.push({
+        deleteId: remoteEvent.deleteId,
+        startTime: remoteEvent.startTime,
+        type: "remove",
+        uid: remoteEvent.uid,
+      });
     }
 
     return operations;
