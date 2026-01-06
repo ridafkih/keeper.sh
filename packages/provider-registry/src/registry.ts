@@ -16,12 +16,26 @@ const outlookDefinition = {
 
 const caldavDefinition = {
   authType: "caldav",
+  caldav: {
+    passwordHelp: "Your CalDAV password or app password",
+    passwordLabel: "Password",
+    serverUrl: "",
+    usernameHelp: "Your CalDAV username",
+    usernameLabel: "Username",
+  },
   id: "caldav",
   name: "CalDAV",
 } as const satisfies ProviderDefinition;
 
 const fastmailDefinition = {
   authType: "caldav",
+  caldav: {
+    passwordHelp: "Generate one at Settings → Password & Security → Third-party apps",
+    passwordLabel: "App Password",
+    serverUrl: "https://caldav.fastmail.com/",
+    usernameHelp: "Your FastMail email address",
+    usernameLabel: "Email",
+  },
   icon: "/integrations/icon-fastmail.svg",
   id: "fastmail",
   name: "FastMail",
@@ -29,6 +43,13 @@ const fastmailDefinition = {
 
 const icloudDefinition = {
   authType: "caldav",
+  caldav: {
+    passwordHelp: "Generate one at appleid.apple.com → Sign-In and Security",
+    passwordLabel: "App-Specific Password",
+    serverUrl: "https://caldav.icloud.com/",
+    usernameHelp: "Your Apple ID email address",
+    usernameLabel: "Apple ID",
+  },
   icon: "/integrations/icon-icloud.svg",
   id: "icloud",
   name: "iCloud",
@@ -44,15 +65,18 @@ const PROVIDER_DEFINITIONS = [
 
 type ProviderId = (typeof PROVIDER_DEFINITIONS)[number]["id"];
 
-type OAuthProviderId = Extract<
+type OAuthProviderDefinition = Extract<
   (typeof PROVIDER_DEFINITIONS)[number],
   { authType: "oauth" }
->["id"];
+>;
 
-type CalDAVProviderId = Extract<
+type CalDAVProviderDefinition = Extract<
   (typeof PROVIDER_DEFINITIONS)[number],
   { authType: "caldav" }
->["id"];
+>;
+
+type OAuthProviderId = OAuthProviderDefinition["id"];
+type CalDAVProviderId = CalDAVProviderDefinition["id"];
 
 const getProvider = (id: string): ProviderDefinition | undefined =>
   PROVIDER_DEFINITIONS.find((provider) => provider.id === id);
@@ -60,9 +84,11 @@ const getProvider = (id: string): ProviderDefinition | undefined =>
 const getProvidersByAuthType = (authType: AuthType): ProviderDefinition[] =>
   PROVIDER_DEFINITIONS.filter((provider) => provider.authType === authType);
 
-const getOAuthProviders = (): ProviderDefinition[] => getProvidersByAuthType("oauth");
+const getOAuthProviders = (): OAuthProviderDefinition[] =>
+  PROVIDER_DEFINITIONS.filter((provider): provider is OAuthProviderDefinition => provider.authType === "oauth");
 
-const getCalDAVProviders = (): ProviderDefinition[] => getProvidersByAuthType("caldav");
+const getCalDAVProviders = (): CalDAVProviderDefinition[] =>
+  PROVIDER_DEFINITIONS.filter((provider): provider is CalDAVProviderDefinition => provider.authType === "caldav");
 
 const isCalDAVProvider = (id: string): id is CalDAVProviderId => {
   const provider = getProvider(id);
@@ -91,4 +117,4 @@ export {
   isProviderId,
   getActiveProviders,
 };
-export type { ProviderId, OAuthProviderId, CalDAVProviderId };
+export type { ProviderId, OAuthProviderId, CalDAVProviderId, OAuthProviderDefinition, CalDAVProviderDefinition };

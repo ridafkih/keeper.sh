@@ -1,5 +1,9 @@
 import useSWR, { type SWRResponse } from "swr";
-import { isProviderId, type ProviderId } from "@keeper.sh/provider-registry";
+import {
+  getOAuthProviders,
+  isProviderId,
+  type ProviderId,
+} from "@keeper.sh/provider-registry";
 
 type SourceType = "ics" | ProviderId;
 
@@ -31,55 +35,23 @@ interface CalDAVSource {
   name: string;
   provider: string;
   calendarUrl: string;
-  serverUrl: string;
-  username: string;
 }
 
-const fetchIcsSources = async (): Promise<ICSSource[]> => {
-  const response = await fetch("/api/ics");
+const fetchJson = async <T>(url: string): Promise<T[]> => {
+  const response = await fetch(url);
   if (!response.ok) {
     return [];
   }
   return response.json();
-};
-
-const fetchGoogleSources = async (): Promise<OAuthSource[]> => {
-  const response = await fetch("/api/sources/google");
-  if (!response.ok) {
-    return [];
-  }
-  return response.json();
-};
-
-const fetchOutlookSources = async (): Promise<OAuthSource[]> => {
-  const response = await fetch("/api/sources/outlook");
-  if (!response.ok) {
-    return [];
-  }
-  return response.json();
-};
-
-const fetchCalDAVSources = async (): Promise<CalDAVSource[]> => {
-  const response = await fetch("/api/sources/caldav");
-  if (!response.ok) {
-    return [];
-  }
-  return response.json();
-};
-
-const mapProviderToSourceType = (provider: string): SourceType => {
-  if (!isProviderId(provider)) {
-    throw new Error(`Unknown provider: ${provider}`);
-  }
-  return provider;
 };
 
 const fetchAllSources = async (): Promise<UnifiedSource[]> => {
-  const [icsSources, googleSources, outlookSources, caldavSources] = await Promise.all([
-    fetchIcsSources(),
-    fetchGoogleSources(),
-    fetchOutlookSources(),
-    fetchCalDAVSources(),
+  const oauthProviders = getOAuthProviders();
+
+  const [icsSources, caldavSources, ...oauthResults] = await Promise.all([
+    fetchJson<ICSSource>("/api/ics"),
+    fetchJson<CalDAVSource>("/api/sources/caldav"),
+    ...oauthProviders.map(({ id }) => fetchJson<OAuthSource>(`/api/sources/${id}`)),
   ]);
 
   const unified: UnifiedSource[] = [];
@@ -93,34 +65,31 @@ const fetchAllSources = async (): Promise<UnifiedSource[]> => {
     });
   }
 
-  for (const source of googleSources) {
-    unified.push({
-      email: source.email ?? undefined,
-      id: source.id,
-      name: source.name,
-      provider: source.provider,
-      type: "google",
-    });
-  }
-
-  for (const source of outlookSources) {
-    unified.push({
-      email: source.email ?? undefined,
-      id: source.id,
-      name: source.name,
-      provider: source.provider,
-      type: "outlook",
-    });
-  }
-
   for (const source of caldavSources) {
+    if (!isProviderId(source.provider)) {
+      continue;
+    }
     unified.push({
       id: source.id,
       name: source.name,
       provider: source.provider,
-      type: mapProviderToSourceType(source.provider),
+      type: source.provider,
       url: source.calendarUrl,
     });
+  }
+
+  for (const [index, provider] of oauthProviders.entries()) {
+    const sources = oauthResults[index] ?? [];
+
+    for (const source of sources) {
+      unified.push({
+        email: source.email ?? undefined,
+        id: source.id,
+        name: source.name,
+        provider: source.provider,
+        type: provider.id,
+      });
+    }
   }
 
   return unified;

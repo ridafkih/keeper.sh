@@ -58,6 +58,7 @@ export {
 } from "./oauth/accounts";
 export type {
   AuthType,
+  CalDAVProviderConfig,
   ProviderDefinition,
   SyncableEvent,
   PushResult,

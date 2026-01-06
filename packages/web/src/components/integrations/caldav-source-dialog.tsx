@@ -7,7 +7,8 @@ import { Button } from "@/components/button";
 import { button, dialogPopup, input } from "@/styles";
 import { CardTitle, DangerText, TextBody, TextCaption } from "@/components/typography";
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import type { CalDAVProviderId } from "@keeper.sh/provider-registry";
+import { getProvider } from "@keeper.sh/provider-registry";
+import type { CalDAVProviderId, CalDAVProviderConfig } from "@keeper.sh/provider-registry";
 
 type CalDAVSourceProvider = CalDAVProviderId;
 
@@ -16,40 +17,12 @@ interface CalendarOption {
   displayName: string;
 }
 
-interface ProviderConfig {
-  name: string;
-  serverUrl: string;
-  usernameLabel: string;
-  usernameHelp: string;
-  passwordLabel: string;
-  passwordHelp: string;
-}
-
-const PROVIDER_CONFIGS: Record<CalDAVSourceProvider, ProviderConfig> = {
-  caldav: {
-    name: "CalDAV",
-    passwordHelp: "Your CalDAV password or app password",
-    passwordLabel: "Password",
-    serverUrl: "",
-    usernameHelp: "Your CalDAV username",
-    usernameLabel: "Username",
-  },
-  fastmail: {
-    name: "FastMail",
-    passwordHelp: "Generate one at Settings → Password & Security → Third-party apps",
-    passwordLabel: "App Password",
-    serverUrl: "https://caldav.fastmail.com/",
-    usernameHelp: "Your FastMail email address",
-    usernameLabel: "Email",
-  },
-  icloud: {
-    name: "iCloud",
-    passwordHelp: "Generate one at appleid.apple.com → Sign-In and Security",
-    passwordLabel: "App-Specific Password",
-    serverUrl: "https://caldav.icloud.com/",
-    usernameHelp: "Your Apple ID email address",
-    usernameLabel: "Apple ID",
-  },
+const getCalDAVConfig = (providerId: CalDAVProviderId): CalDAVProviderConfig => {
+  const provider = getProvider(providerId);
+  if (!provider?.caldav) {
+    throw new Error(`Provider ${providerId} is missing CalDAV configuration`);
+  }
+  return provider.caldav;
 };
 
 interface CalDAVSourceDialogProps {
@@ -74,7 +47,11 @@ export const CalDAVSourceDialog: FC<CalDAVSourceDialogProps> = ({
   provider,
   onSuccess,
 }) => {
-  const config = PROVIDER_CONFIGS[provider];
+  const providerDefinition = getProvider(provider);
+  if (!providerDefinition) {
+    throw new Error(`Unknown provider: ${provider}`);
+  }
+  const config = getCalDAVConfig(provider);
 
   const [step, setStep] = useState<Step>("credentials");
   const [serverUrl, setServerUrl] = useState(config.serverUrl);
@@ -334,9 +311,9 @@ export const CalDAVSourceDialog: FC<CalDAVSourceDialogProps> = ({
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 bg-black/40 z-50" />
         <Dialog.Popup className={dialogPopup({ size: "md" })}>
-          <Dialog.Title render={<CardTitle />}>Add {config.name} Source</Dialog.Title>
+          <Dialog.Title render={<CardTitle />}>Add {providerDefinition.name} Source</Dialog.Title>
           <Dialog.Description render={<TextBody className="mt-1 mb-3" />}>
-            {getDialogDescription(step, config.name)}
+            {getDialogDescription(step, providerDefinition.name)}
           </Dialog.Description>
           {renderCurrentStep(step)}
         </Dialog.Popup>
