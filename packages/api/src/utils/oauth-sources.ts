@@ -5,7 +5,7 @@ import {
   oauthSourceCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
-import { executeBackgroundTask } from "./background-task";
+import { spawnBackgroundJob } from "./background-task";
 import { getSourceProvider } from "@keeper.sh/provider-registry/server";
 import { database, premiumService, oauthProviders } from "../context";
 import { createMappingsForNewSource } from "./source-destination-mappings";
@@ -312,7 +312,7 @@ const createOAuthSource = async (
 
   await createMappingsForNewSource(userId, source.id);
 
-  executeBackgroundTask("oauth-source-sync", { userId, provider }, async () => {
+  spawnBackgroundJob("oauth-source-sync", { userId, provider }, async () => {
     await syncOAuthSourcesByProvider(provider);
     triggerDestinationSync(userId);
   });

@@ -3,7 +3,7 @@ import { createGoogleCalendarSourceProvider } from "@keeper.sh/provider-google-c
 import { createOutlookSourceProvider } from "@keeper.sh/provider-outlook";
 import { createGoogleOAuthService } from "@keeper.sh/oauth-google";
 import { createMicrosoftOAuthService } from "@keeper.sh/oauth-microsoft";
-import { WideEvent, emitWideEvent, runWithWideEvent } from "@keeper.sh/log";
+import { WideEvent, emitWideEvent, runWithWideEvent, log } from "@keeper.sh/log";
 import { database } from "../context";
 import { setCronEventFields, withCronWideEvent } from "../utils/with-wide-event";
 import env from "@keeper.sh/env/cron";
@@ -36,11 +36,19 @@ const syncGoogleSources = async (): Promise<void> => {
       event.set({
         eventsAdded: result.eventsAdded,
         eventsRemoved: result.eventsRemoved,
-        sourceSyncErrors: result.errors?.length ?? 0,
+        sourceSyncErrorCount: result.errors?.length ?? 0,
       });
       if (result.errors && result.errors.length > 0) {
         for (const error of result.errors) {
-          event.setError(error);
+          const errorEvent = new WideEvent("cron");
+          errorEvent.set({
+            operationName: "sync-oauth-source-error",
+            operationType: "oauth-source-sync-error",
+            provider: event.get("provider"),
+            parentRequestId: event.getRequestId(),
+          });
+          errorEvent.setError(error);
+          log.error(errorEvent.finalize(), "OAuth source sync error");
         }
       }
     } catch (error) {
@@ -79,11 +87,19 @@ const syncOutlookSources = async (): Promise<void> => {
       event.set({
         eventsAdded: result.eventsAdded,
         eventsRemoved: result.eventsRemoved,
-        sourceSyncErrors: result.errors?.length ?? 0,
+        sourceSyncErrorCount: result.errors?.length ?? 0,
       });
       if (result.errors && result.errors.length > 0) {
         for (const error of result.errors) {
-          event.setError(error);
+          const errorEvent = new WideEvent("cron");
+          errorEvent.set({
+            operationName: "sync-oauth-source-error",
+            operationType: "oauth-source-sync-error",
+            provider: event.get("provider"),
+            parentRequestId: event.getRequestId(),
+          });
+          errorEvent.setError(error);
+          log.error(errorEvent.finalize(), "OAuth source sync error");
         }
       }
     } catch (error) {

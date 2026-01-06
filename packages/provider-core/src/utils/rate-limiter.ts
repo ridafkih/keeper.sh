@@ -151,7 +151,7 @@ class RateLimiter {
 
   private async executeTask(task: QueuedTask): Promise<void> {
     try {
-      await task()
+      await task();
     } finally {
       this.activeCount--;
       this.processQueue();

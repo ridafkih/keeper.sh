@@ -27,6 +27,7 @@ interface WideEventFields {
   sourceId?: string;
   destinationId?: string;
   provider?: string;
+  parentRequestId?: string;
 
   syncGeneration?: number;
   eventsAdded?: number;

@@ -1,5 +1,5 @@
 import type { MaybePromise } from "bun";
-import { WideEvent, emitWideEvent, getWideEvent, runWithWideEvent } from "@keeper.sh/log";
+import { WideEvent, emitWideEvent, getWideEvent, runWithWideEvent, log } from "@keeper.sh/log";
 import type { WideEventFields } from "@keeper.sh/log";
 import { ErrorResponse } from "./responses";
 import { calendarDestinationsTable, calendarSourcesTable } from "@keeper.sh/database/schema";
@@ -53,7 +53,8 @@ const fetchUserPlan = async (userId: string): Promise<"free" | "pro" | null> => 
   try {
     return await premiumService.getUserPlan(userId);
   } catch (error) {
-    getWideEvent()?.setError(error);
+    const requestId = getWideEvent()?.getRequestId();
+    log.error({ userId, requestId, error }, "Failed to fetch user plan for enrichment");
     return null;
   }
 };
@@ -75,7 +76,8 @@ const fetchUserCounts = async (
       sourceCount: sources?.count ?? DEFAULT_COUNT,
     };
   } catch (error) {
-    getWideEvent()?.setError(error);
+    const requestId = getWideEvent()?.getRequestId();
+    log.error({ userId, requestId, error }, "Failed to fetch user counts for enrichment");
     return null;
   }
 };

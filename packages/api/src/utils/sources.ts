@@ -3,7 +3,7 @@ import { CalendarFetchError, fetchAndSyncSource, pullRemoteCalendar } from "@kee
 import { and, eq } from "drizzle-orm";
 import { triggerDestinationSync } from "./sync";
 import { createMappingsForNewSource } from "./source-destination-mappings";
-import { executeBackgroundTask } from "./background-task";
+import { spawnBackgroundJob } from "./background-task";
 import { database, premiumService } from "../context";
 
 const FIRST_RESULT_LIMIT = 1;
@@ -106,7 +106,7 @@ const createSource = async (userId: string, name: string, url: string): Promise<
 
   await createMappingsForNewSource(userId, source.id);
 
-  executeBackgroundTask("ical-source-sync", { userId, sourceId: source.id }, async () => {
+  spawnBackgroundJob("ical-source-sync", { userId, sourceId: source.id }, async () => {
     await fetchAndSyncSource(database, source);
     triggerDestinationSync(userId);
   });
