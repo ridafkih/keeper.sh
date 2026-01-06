@@ -126,7 +126,13 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
       return;
     }
 
-    const tokenData = await this.oauthProvider.refreshAccessToken(refreshToken);
+    const tokenData = await this.oauthProvider
+      .refreshAccessToken(refreshToken)
+      .catch(async (error) => {
+        await this.markNeedsReauthentication();
+        throw error;
+      });
+
     const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);
 
     if (oauthSourceCredentialId) {
