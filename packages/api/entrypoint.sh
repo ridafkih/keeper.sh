@@ -1,7 +1,5 @@
 #!/bin/sh
 set -e
 
-cd /app/packages/database
-bunx drizzle-kit migrate
-cd /app
+bun /app/packages/database/scripts/migrate.ts
 exec bun packages/api/dist/index.js

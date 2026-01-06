@@ -1,5 +1,4 @@
 #!/bin/bash
 set -e
 
-cd /app
-/root/.bun/bin/bun run --cwd packages/database drizzle-kit migrate
+/root/.bun/bin/bun /app/packages/database/scripts/migrate.ts

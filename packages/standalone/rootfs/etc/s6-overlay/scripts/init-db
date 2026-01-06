@@ -11,5 +11,4 @@ if ! su postgres -c "/usr/lib/postgresql/17/bin/psql -tAc \"SELECT 1 FROM pg_dat
     su postgres -c "/usr/lib/postgresql/17/bin/psql -c \"ALTER USER keeper WITH PASSWORD 'keeper'\""
 fi
 
-cd /app
-/root/.bun/bin/bun run --cwd packages/database drizzle-kit migrate
+/root/.bun/bin/bun /app/packages/database/scripts/migrate.ts
