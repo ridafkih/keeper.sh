@@ -5,8 +5,8 @@ import { createRedis } from "@keeper.sh/redis";
 import { createPremiumService } from "@keeper.sh/premium";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { createDestinationProviders, createOAuthProviders } from "@keeper.sh/destination-providers";
-import { createSyncCoordinator } from "@keeper.sh/integration";
-import type { DestinationSyncResult, SyncProgressUpdate } from "@keeper.sh/integration";
+import { createSyncCoordinator } from "@keeper.sh/provider-core";
+import type { DestinationSyncResult, SyncProgressUpdate } from "@keeper.sh/provider-core";
 import { Polar } from "@polar-sh/sdk";
 
 const database = createDatabase(env.DATABASE_URL);

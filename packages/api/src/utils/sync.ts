@@ -1,4 +1,4 @@
-import { syncDestinationsForUser } from "@keeper.sh/integration";
+import { syncDestinationsForUser } from "@keeper.sh/provider-core";
 import { WideEvent, emitWideEvent, runWithWideEvent } from "@keeper.sh/log";
 import { destinationProviders, syncCoordinator } from "../context";
 

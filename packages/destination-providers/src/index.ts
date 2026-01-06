@@ -1,9 +1,9 @@
-import type { BroadcastSyncStatus, DestinationProvider } from "@keeper.sh/integration";
-import { createGoogleCalendarProvider } from "@keeper.sh/integration-google-calendar";
-import { createCalDAVProvider } from "@keeper.sh/integration-caldav";
-import { createFastMailProvider } from "@keeper.sh/integration-fastmail";
-import { createICloudProvider } from "@keeper.sh/integration-icloud";
-import { createOutlookCalendarProvider } from "@keeper.sh/integration-outlook";
+import type { BroadcastSyncStatus, DestinationProvider } from "@keeper.sh/provider-core";
+import { createGoogleCalendarProvider } from "@keeper.sh/provider-google-calendar";
+import { createCalDAVProvider } from "@keeper.sh/provider-caldav";
+import { createFastMailProvider } from "@keeper.sh/provider-fastmail";
+import { createICloudProvider } from "@keeper.sh/provider-icloud";
+import { createOutlookCalendarProvider } from "@keeper.sh/provider-outlook";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { OAuthProvider, OAuthProviders } from "./oauth";
 
@@ -57,15 +57,6 @@ export {
   createOutlookCalendarProvider,
 };
 export type { DestinationProvidersConfig };
-
-export {
-  DESTINATIONS,
-  getDestination,
-  isCalDAVDestination,
-  getActiveDestinations,
-  type DestinationConfig,
-  type DestinationId,
-} from "@keeper.sh/destination-metadata";
 
 export {
   createOAuthProviders,

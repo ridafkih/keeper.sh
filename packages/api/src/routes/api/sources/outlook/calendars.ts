@@ -1,4 +1,4 @@
-import { listUserCalendars, CalendarListError } from "@keeper.sh/provider-google-calendar";
+import { listUserCalendars, CalendarListError } from "@keeper.sh/provider-outlook";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { withAuth, withWideEvent } from "../../../../utils/middleware";
 import { ErrorResponse } from "../../../../utils/responses";
@@ -7,9 +7,9 @@ import {
   DestinationProviderMismatchError,
   getOAuthDestinationCredentials,
 } from "../../../../utils/oauth-sources";
-import { refreshGoogleAccessToken } from "../../../../utils/oauth-refresh";
+import { refreshMicrosoftAccessToken } from "../../../../utils/oauth-refresh";
 
-const GOOGLE_PROVIDER = "google";
+const OUTLOOK_PROVIDER = "outlook";
 
 interface CredentialsWithExpiry {
   accessToken: string;
@@ -22,7 +22,7 @@ const getValidAccessToken = async (
   credentials: CredentialsWithExpiry,
 ): Promise<string> => {
   if (credentials.expiresAt < new Date()) {
-    const refreshed = await refreshGoogleAccessToken(destinationId, credentials.refreshToken);
+    const refreshed = await refreshMicrosoftAccessToken(destinationId, credentials.refreshToken);
     const { accessToken } = refreshed;
     return accessToken;
   }
@@ -40,7 +40,7 @@ export const GET = withWideEvent(
     }
 
     try {
-      const credentials = await getOAuthDestinationCredentials(userId, destinationId, GOOGLE_PROVIDER);
+      const credentials = await getOAuthDestinationCredentials(userId, destinationId, OUTLOOK_PROVIDER);
       const accessToken = await getValidAccessToken(destinationId, credentials);
 
       const calendars = await listUserCalendars(accessToken);

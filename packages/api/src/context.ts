@@ -6,8 +6,8 @@ import { createAuth } from "@keeper.sh/auth";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { createPremiumService } from "@keeper.sh/premium";
 import { createDestinationProviders, createOAuthProviders } from "@keeper.sh/destination-providers";
-import { createSyncCoordinator } from "@keeper.sh/integration";
-import type { DestinationSyncResult, SyncProgressUpdate } from "@keeper.sh/integration";
+import { createSyncCoordinator } from "@keeper.sh/provider-core";
+import type { DestinationSyncResult, SyncProgressUpdate } from "@keeper.sh/provider-core";
 
 const INITIAL_EVENT_COUNT = 0;
 const MIN_TRUSTED_ORIGINS_COUNT = 0;

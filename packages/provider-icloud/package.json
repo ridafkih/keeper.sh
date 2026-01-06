@@ -1,0 +1,21 @@
+{
+  "name": "@keeper.sh/provider-icloud",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "types": "tsc --noEmit",
+    "lint": "oxlint ."
+  },
+  "dependencies": {
+    "@keeper.sh/provider-core": "workspace:*",
+    "@keeper.sh/provider-caldav": "workspace:*"
+  },
+  "devDependencies": {
+    "@keeper.sh/typescript-config": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "5.9.3"
+  }
+}
