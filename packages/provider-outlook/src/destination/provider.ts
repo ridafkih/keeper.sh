@@ -234,7 +234,7 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     const body = OutlookCalendarProviderInstance.getBodyFromSyncableEvent(event);
 
     return {
-      body,
+      ...(body && { body }),
       categories: [KEEPER_CATEGORY],
       end: { dateTime: event.endTime.toISOString(), timeZone: "UTC" },
       start: { dateTime: event.startTime.toISOString(), timeZone: "UTC" },
