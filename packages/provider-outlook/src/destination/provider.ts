@@ -144,6 +144,7 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     return {
       deleteId: event.id,
       endTime,
+      isKeeperEvent: event.categories?.includes(KEEPER_CATEGORY) ?? false,
       startTime,
       uid: event.iCalUId,
     };

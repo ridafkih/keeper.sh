@@ -148,6 +148,7 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
     return {
       deleteId: event.iCalUID,
       endTime,
+      isKeeperEvent: isKeeperEvent(event.iCalUID),
       startTime,
       uid: event.iCalUID,
     };

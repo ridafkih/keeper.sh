@@ -2,6 +2,7 @@ import { generateIcsCalendar } from "ts-ics";
 import { parseIcsCalendar } from "@keeper.sh/calendar";
 import type { IcsCalendar, IcsEvent } from "ts-ics";
 import type { RemoteEvent, SyncableEvent } from "@keeper.sh/provider-core";
+import { isKeeperEvent } from "@keeper.sh/provider-core";
 
 const eventToICalString = (event: SyncableEvent, uid: string): string => {
   const icsEvent: IcsEvent = {
@@ -33,6 +34,7 @@ const parseICalToRemoteEvent = (icsString: string): RemoteEvent | null => {
   return {
     deleteId: event.uid,
     endTime: new Date(event.end.date),
+    isKeeperEvent: isKeeperEvent(event.uid),
     startTime: new Date(event.start.date),
     uid: event.uid,
   };

@@ -57,6 +57,7 @@ interface RemoteEvent {
   deleteId: string;
   startTime: Date;
   endTime: Date;
+  isKeeperEvent: boolean;
 }
 
 type SyncOperation =

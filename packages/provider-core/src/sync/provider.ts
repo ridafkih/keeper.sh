@@ -16,7 +16,6 @@ import {
   getEventMappingsForDestination,
 } from "../events/mappings";
 import type { EventMapping } from "../events/mappings";
-import { isKeeperEvent } from "../events/identity";
 import type { SyncContext, SyncStage } from "./coordinator";
 import { getWideEvent } from "@keeper.sh/log";
 
@@ -224,7 +223,7 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
         continue;
       }
 
-      const isOrphanedKeeperEvent = isKeeperEvent(remoteEvent.uid);
+      const isOrphanedKeeperEvent = remoteEvent.isKeeperEvent;
       const isPastEvent = remoteEvent.startTime <= now;
 
       if (!isOrphanedKeeperEvent && !isPastEvent) {
