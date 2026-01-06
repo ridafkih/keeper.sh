@@ -17,6 +17,7 @@ import {
 } from "../events/mappings";
 import type { EventMapping } from "../events/mappings";
 import type { SyncContext, SyncStage } from "./coordinator";
+import { getWideEvent } from "@keeper.sh/log";
 
 const INITIAL_REMOTE_EVENT_COUNT = 0;
 const EMPTY_STALE_MAPPINGS_COUNT = 0;
@@ -42,66 +43,83 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
   async sync(localEvents: SyncableEvent[], context: SyncContext): Promise<SyncResult> {
     const { database, userId, destinationId } = this.config;
 
-    this.emitProgress(context, {
-      localEventCount: localEvents.length,
-      remoteEventCount: INITIAL_REMOTE_EVENT_COUNT,
-      stage: "fetching",
-    });
+    try {
+      this.emitProgress(context, {
+        localEventCount: localEvents.length,
+        remoteEventCount: INITIAL_REMOTE_EVENT_COUNT,
+        stage: "fetching",
+      });
 
-    const [existingMappings, remoteEvents] = await Promise.all([
-      getEventMappingsForDestination(database, destinationId),
-      this.listRemoteEvents({ until: CalendarProvider.getFutureDate() }),
-    ]);
+      const [existingMappings, remoteEvents] = await Promise.all([
+        getEventMappingsForDestination(database, destinationId),
+        this.listRemoteEvents({ until: CalendarProvider.getFutureDate() }),
+      ]);
 
-    this.emitProgress(context, {
-      localEventCount: localEvents.length,
-      remoteEventCount: remoteEvents.length,
-      stage: "comparing",
-    });
+      this.emitProgress(context, {
+        localEventCount: localEvents.length,
+        remoteEventCount: remoteEvents.length,
+        stage: "comparing",
+      });
 
-    const { operations, staleMappingIds } = CalendarProvider.computeSyncOperations(
-      localEvents,
-      existingMappings,
-      remoteEvents,
-    );
+      const { operations, staleMappingIds } = CalendarProvider.computeSyncOperations(
+        localEvents,
+        existingMappings,
+        remoteEvents,
+      );
 
-    if (staleMappingIds.length > EMPTY_STALE_MAPPINGS_COUNT) {
-      const staleMappings = existingMappings.filter((mapping) => staleMappingIds.includes(mapping.id));
-      await Promise.all(staleMappings.map((mapping) => deleteEventMapping(database, mapping.id)));
-    }
+      if (staleMappingIds.length > EMPTY_STALE_MAPPINGS_COUNT) {
+        const staleMappings = existingMappings.filter((mapping) => staleMappingIds.includes(mapping.id));
+        await Promise.all(staleMappings.map((mapping) => deleteEventMapping(database, mapping.id)));
+      }
 
-    if (operations.length === EMPTY_OPERATIONS_COUNT) {
-      const mappingCount = await countMappingsForDestination(database, destinationId);
+      if (operations.length === EMPTY_OPERATIONS_COUNT) {
+        const mappingCount = await countMappingsForDestination(database, destinationId);
+        await context.onDestinationSync?.({
+          destinationId,
+          localEventCount: localEvents.length,
+          remoteEventCount: mappingCount,
+          userId,
+        });
+        return {
+          addFailed: INITIAL_ADD_FAILED_COUNT,
+          added: INITIAL_ADDED_COUNT,
+          removeFailed: INITIAL_REMOVE_FAILED_COUNT,
+          removed: INITIAL_REMOVED_COUNT,
+        };
+      }
+
+      const processed = await this.processOperations(operations, {
+        context,
+        localEventCount: localEvents.length,
+        remoteEventCount: remoteEvents.length,
+      });
+
+      const finalRemoteCount = await countMappingsForDestination(database, destinationId);
       await context.onDestinationSync?.({
+        broadcast: true,
         destinationId,
         localEventCount: localEvents.length,
-        remoteEventCount: mappingCount,
+        remoteEventCount: finalRemoteCount,
         userId,
       });
-      return {
-        addFailed: INITIAL_ADD_FAILED_COUNT,
-        added: INITIAL_ADDED_COUNT,
-        removeFailed: INITIAL_REMOVE_FAILED_COUNT,
-        removed: INITIAL_REMOVED_COUNT,
-      };
+
+      return processed;
+    } catch (error) {
+      getWideEvent()?.setError(error);
+
+      context.onSyncProgress?.({
+        destinationId: this.config.destinationId,
+        error: error instanceof Error ? error.message : "Unknown sync error",
+        inSync: false,
+        localEventCount: localEvents.length,
+        remoteEventCount: INITIAL_REMOTE_EVENT_COUNT,
+        stage: "error",
+        status: "error",
+        userId: this.config.userId,
+      });
+
+      throw error;
     }
-
-    const processed = await this.processOperations(operations, {
-      context,
-      localEventCount: localEvents.length,
-      remoteEventCount: remoteEvents.length,
-    });
-
-    const finalRemoteCount = await countMappingsForDestination(database, destinationId);
-    await context.onDestinationSync?.({
-      broadcast: true,
-      destinationId,
-      localEventCount: localEvents.length,
-      remoteEventCount: finalRemoteCount,
-      userId,
-    });
-
-    return processed;
   }
 
   private static computeSyncOperations(

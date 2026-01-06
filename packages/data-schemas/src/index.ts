@@ -113,6 +113,7 @@ type SyncOperation = typeof syncOperationSchema.infer;
 
 const syncStatusSchema = type({
   destinationId: "string",
+  "error?": "string",
   inSync: "boolean",
   "lastOperation?": syncOperationSchema,
   "lastSyncedAt?": "string",
@@ -120,8 +121,8 @@ const syncStatusSchema = type({
   "needsReauthentication?": "boolean",
   "progress?": { current: "number", total: "number" },
   remoteEventCount: "number",
-  "stage?": "'fetching' | 'comparing' | 'processing'",
-  status: "'idle' | 'syncing'",
+  "stage?": "'fetching' | 'comparing' | 'processing' | 'error'",
+  status: "'idle' | 'syncing' | 'error'",
 });
 type SyncStatus = typeof syncStatusSchema.infer;
 

@@ -22,18 +22,19 @@ interface DestinationSyncResult {
   broadcast?: boolean;
 }
 
-type SyncStage = "fetching" | "comparing" | "processing";
+type SyncStage = "fetching" | "comparing" | "processing" | "error";
 
 interface SyncProgressUpdate {
   userId: string;
   destinationId: string;
-  status: "syncing";
+  status: "syncing" | "error";
   stage: SyncStage;
   localEventCount: number;
   remoteEventCount: number;
   progress?: { current: number; total: number };
   lastOperation?: { type: "add" | "remove"; eventTime: string };
   inSync: false;
+  error?: string;
 }
 
 interface SyncContext {
