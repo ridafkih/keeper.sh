@@ -165,12 +165,5 @@ const deleteOAuthSourceCredential = async (
 };
 
 export {
-  SourceCredentialNotFoundError,
-  SourceCredentialProviderMismatchError,
-  getUserOAuthSourceCredentials,
-  getOAuthSourceCredential,
   createOAuthSourceCredential,
-  deleteOAuthSourceCredential,
 };
-
-export type { OAuthSourceCredential, CreateOAuthSourceCredentialData };

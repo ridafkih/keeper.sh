@@ -64,5 +64,4 @@ const NewSourceMenu = ({ onSelect, trigger, align = "start" }: NewSourceMenuProp
   </Menu.Root>
 );
 
-export { NewSourceMenu, SourcesMenu };
-export type { SourceType };
+export { NewSourceMenu };

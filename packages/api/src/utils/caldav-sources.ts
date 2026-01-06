@@ -247,5 +247,3 @@ export {
   deleteCalDAVSource,
   verifyCalDAVSourceOwnership,
 };
-
-export type { CalDAVSource, CreateCalDAVSourceData };

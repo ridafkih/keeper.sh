@@ -331,10 +331,3 @@ export {
   createOAuthSource,
   deleteOAuthSource,
 };
-
-export type {
-  OAuthCalendarSource,
-  OAuthDestinationWithCredentials,
-  OAuthSourceWithCredentials,
-  CreateOAuthSourceOptions,
-};
