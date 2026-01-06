@@ -13,7 +13,7 @@ const connection = new Client({
   connectionString: connectionString,
 });
 
-export const database = drizzle(connection);
+const database = drizzle(connection);
 await connection.connect();
 
 await migrate(database, {
