@@ -154,6 +154,7 @@ const useDestinationsManager = (
         return null;
       }
       return {
+        error: destinationStatus.error,
         inSync: destinationStatus.inSync,
         lastOperation: destinationStatus.lastOperation,
         localCount: destinationStatus.localEventCount,
