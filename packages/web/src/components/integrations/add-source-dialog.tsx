@@ -4,12 +4,12 @@ import type { ReactNode } from "react";
 import Image from "next/image";
 import { Menu } from "@base-ui/react/menu";
 import { PROVIDER_DEFINITIONS } from "@keeper.sh/provider-registry";
-import type { ProviderDefinition } from "@keeper.sh/provider-registry";
+import type { ProviderDefinition, ProviderId } from "@keeper.sh/provider-registry";
 import { MenuItem } from "@/components/menu-item";
 import { MenuPopup } from "@/components/menu-popup";
 import { Link as LinkIcon, Server } from "lucide-react";
 
-type SourceType = "ics" | "google" | "outlook" | "caldav" | "fastmail" | "icloud";
+type SourceType = "ics" | ProviderId;
 
 interface SourceMenuItemIconProps {
   provider: ProviderDefinition;

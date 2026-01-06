@@ -31,9 +31,9 @@ import { NewSourceMenu } from "./add-source-dialog";
 import { CalDAVSourceDialog } from "./caldav-source-dialog";
 import type { CalDAVSourceProvider } from "./caldav-source-dialog";
 import { OAuthSourceCalendarDialog } from "./oauth-source-calendar-dialog";
-import type { OAuthSourceProvider } from "./oauth-source-calendar-dialog";
 import { Menu } from "@base-ui/react/menu";
-import { PROVIDER_DEFINITIONS, getProvider } from "@keeper.sh/provider-registry";
+import { getProvider, isOAuthProvider, isCalDAVProvider } from "@keeper.sh/provider-registry";
+import type { OAuthProviderId, CalDAVProviderId } from "@keeper.sh/provider-registry";
 import Image from "next/image";
 import { Link as LinkIcon, Plus, Calendar, Server } from "lucide-react";
 
@@ -273,27 +273,24 @@ const ICSSourceDialog = ({ open, onOpenChange, onAdd }: ICSSourceDialogProps): R
 };
 
 const getRemoveEndpoint = (source: UnifiedSource): string => {
-  switch (source.type) {
-    case "google": {
-      return `/api/sources/google/${source.id}`;
-    }
-    case "outlook": {
-      return `/api/sources/outlook/${source.id}`;
-    }
-    case "caldav":
-    case "fastmail":
-    case "icloud": {
-      return `/api/sources/caldav/${source.id}`;
-    }
-    default: {
-      return `/api/ics/${source.id}`;
-    }
+  if (source.type === "ics") {
+    return `/api/ics/${source.id}`;
   }
+
+  if (isOAuthProvider(source.type)) {
+    return `/api/sources/${source.type}/${source.id}`;
+  }
+
+  if (isCalDAVProvider(source.type)) {
+    return `/api/sources/caldav/${source.id}`;
+  }
+
+  return `/api/ics/${source.id}`;
 };
 
 interface PendingOAuthSource {
   credentialId: string;
-  provider: OAuthSourceProvider;
+  provider: OAuthProviderId;
 }
 
 export const CalendarSourcesSection = (): ReactNode => {
@@ -326,8 +323,7 @@ export const CalendarSourcesSection = (): ReactNode => {
       return;
     }
 
-    const isValidOAuthProvider = provider === "google" || provider === "outlook";
-    if (source === "connected" && sourceCredentialId && provider && isValidOAuthProvider) {
+    if (source === "connected" && sourceCredentialId && provider && isOAuthProvider(provider)) {
       oauthHandled.current = true;
       setPendingOAuthSource({ credentialId: sourceCredentialId, provider });
       router.replace("/dashboard/integrations");
@@ -339,31 +335,18 @@ export const CalendarSourcesSection = (): ReactNode => {
   const handleSelectSourceType = (type: SourceType): void => {
     track("source_type_selected", { type });
 
-    switch (type) {
-      case "ics": {
-        setIsIcsDialogOpen(true);
-        break;
-      }
-      case "google": {
-        window.location.href = "/api/sources/authorize?provider=google";
-        break;
-      }
-      case "outlook": {
-        window.location.href = "/api/sources/authorize?provider=outlook";
-        break;
-      }
-      case "caldav": {
-        setCaldavProvider("caldav");
-        break;
-      }
-      case "fastmail": {
-        setCaldavProvider("fastmail");
-        break;
-      }
-      case "icloud": {
-        setCaldavProvider("icloud");
-        break;
-      }
+    if (type === "ics") {
+      setIsIcsDialogOpen(true);
+      return;
+    }
+
+    if (isOAuthProvider(type)) {
+      window.location.href = `/api/sources/authorize?provider=${type}`;
+      return;
+    }
+
+    if (isCalDAVProvider(type)) {
+      setCaldavProvider(type);
     }
   };
 

@@ -7,8 +7,9 @@ import { Button } from "@/components/button";
 import { button, dialogPopup, input } from "@/styles";
 import { CardTitle, DangerText, TextBody, TextCaption } from "@/components/typography";
 import { HTTP_STATUS } from "@keeper.sh/constants";
+import type { CalDAVProviderId } from "@keeper.sh/provider-registry";
 
-type CalDAVSourceProvider = "caldav" | "fastmail" | "icloud";
+type CalDAVSourceProvider = CalDAVProviderId;
 
 interface CalendarOption {
   url: string;
