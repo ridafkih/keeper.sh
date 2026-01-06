@@ -21,8 +21,10 @@
     "@keeper.sh/env": "workspace:*",
     "@keeper.sh/integration": "workspace:*",
     "@keeper.sh/log": "workspace:*",
+    "@keeper.sh/oauth-google": "workspace:*",
     "@keeper.sh/premium": "workspace:*",
     "@keeper.sh/redis": "workspace:*",
+    "@keeper.sh/source-google-calendar": "workspace:*",
     "@polar-sh/sdk": "^0.42.1",
     "cronbake": "0.4.0",
     "drizzle-orm": "^0.45.1"

@@ -181,6 +181,103 @@ const sourceDestinationMappingsTable = pgTable(
   ],
 );
 
+const oauthCalendarSourcesTable = pgTable(
+  "oauth_calendar_sources",
+  {
+    createdAt: timestamp().notNull().defaultNow(),
+    destinationId: uuid()
+      .notNull()
+      .references(() => calendarDestinationsTable.id, { onDelete: "cascade" }),
+    externalCalendarId: text().notNull(),
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    name: text().notNull(),
+    provider: text().notNull(),
+    syncToken: text(),
+    updatedAt: timestamp()
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    uniqueIndex("oauth_calendar_sources_user_calendar_idx").on(
+      table.userId,
+      table.destinationId,
+      table.externalCalendarId,
+    ),
+    index("oauth_calendar_sources_user_idx").on(table.userId),
+    index("oauth_calendar_sources_destination_idx").on(table.destinationId),
+    index("oauth_calendar_sources_provider_idx").on(table.provider),
+  ],
+);
+
+const oauthSourceDestinationMappingsTable = pgTable(
+  "oauth_source_destination_mappings",
+  {
+    createdAt: timestamp().notNull().defaultNow(),
+    destinationId: uuid()
+      .notNull()
+      .references(() => calendarDestinationsTable.id, { onDelete: "cascade" }),
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    oauthSourceId: uuid()
+      .notNull()
+      .references(() => oauthCalendarSourcesTable.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    uniqueIndex("oauth_source_destination_mapping_idx").on(table.oauthSourceId, table.destinationId),
+    index("oauth_source_destination_mappings_source_idx").on(table.oauthSourceId),
+    index("oauth_source_destination_mappings_destination_idx").on(table.destinationId),
+  ],
+);
+
+const oauthEventStatesTable = pgTable(
+  "oauth_event_states",
+  {
+    createdAt: timestamp().notNull().defaultNow(),
+    endTime: timestamp().notNull(),
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    oauthSourceId: uuid()
+      .notNull()
+      .references(() => oauthCalendarSourcesTable.id, { onDelete: "cascade" }),
+    sourceEventUid: text(),
+    startTime: timestamp().notNull(),
+  },
+  (table) => [
+    index("oauth_event_states_start_time_idx").on(table.startTime),
+    uniqueIndex("oauth_event_states_identity_idx").on(
+      table.oauthSourceId,
+      table.sourceEventUid,
+      table.startTime,
+      table.endTime,
+    ),
+    index("oauth_event_states_source_idx").on(table.oauthSourceId),
+  ],
+);
+
+const oauthEventMappingsTable = pgTable(
+  "oauth_event_mappings",
+  {
+    createdAt: timestamp().notNull().defaultNow(),
+    deleteIdentifier: text(),
+    destinationEventUid: text().notNull(),
+    destinationId: uuid()
+      .notNull()
+      .references(() => calendarDestinationsTable.id, { onDelete: "cascade" }),
+    endTime: timestamp().notNull(),
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    oauthEventStateId: uuid()
+      .notNull()
+      .references(() => oauthEventStatesTable.id, { onDelete: "cascade" }),
+    startTime: timestamp().notNull(),
+  },
+  (table) => [
+    uniqueIndex("oauth_event_mappings_event_dest_idx").on(table.oauthEventStateId, table.destinationId),
+    index("oauth_event_mappings_destination_idx").on(table.destinationId),
+  ],
+);
+
 export {
   remoteICalSourcesTable,
   calendarSnapshotsTable,
@@ -192,4 +289,8 @@ export {
   syncStatusTable,
   eventMappingsTable,
   sourceDestinationMappingsTable,
+  oauthCalendarSourcesTable,
+  oauthSourceDestinationMappingsTable,
+  oauthEventStatesTable,
+  oauthEventMappingsTable,
 };

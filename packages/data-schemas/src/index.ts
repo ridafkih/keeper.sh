@@ -176,6 +176,47 @@ const checkoutSuccessEventSchema = type({
 });
 type CheckoutSuccessEvent = typeof checkoutSuccessEventSchema.infer;
 
+const googleCalendarListEntrySchema = type({
+  accessRole: "'freeBusyReader' | 'reader' | 'writer' | 'owner'",
+  "backgroundColor?": "string",
+  "description?": "string",
+  "foregroundColor?": "string",
+  id: "string",
+  "primary?": "boolean",
+  summary: "string",
+});
+type GoogleCalendarListEntry = typeof googleCalendarListEntrySchema.infer;
+
+const googleCalendarListResponseSchema = type({
+  items: googleCalendarListEntrySchema.array(),
+  kind: "'calendar#calendarList'",
+  "nextPageToken?": "string",
+});
+type GoogleCalendarListResponse = typeof googleCalendarListResponseSchema.infer;
+
+const createOAuthSourceSchema = type({
+  externalCalendarId: "string",
+  destinationId: "string",
+  name: "string",
+});
+type CreateOAuthSource = typeof createOAuthSourceSchema.infer;
+
+const oauthCalendarSourceSchema = type({
+  createdAt: "string",
+  destinationId: "string",
+  email: "string | null",
+  externalCalendarId: "string",
+  id: "string",
+  name: "string",
+  provider: "string",
+});
+type OAuthCalendarSource = typeof oauthCalendarSourceSchema.infer;
+
+const updateOAuthSourceDestinationsSchema = type({
+  destinationIds: "string[]",
+});
+type UpdateOAuthSourceDestinations = typeof updateOAuthSourceDestinationsSchema.infer;
+
 export {
   proxyableMethods,
   planSchema,
@@ -202,6 +243,11 @@ export {
   caldavConnectRequestSchema,
   updateSourceDestinationsSchema,
   checkoutSuccessEventSchema,
+  googleCalendarListEntrySchema,
+  googleCalendarListResponseSchema,
+  createOAuthSourceSchema,
+  oauthCalendarSourceSchema,
+  updateOAuthSourceDestinationsSchema,
 };
 
 export type {
@@ -229,4 +275,9 @@ export type {
   CalDAVConnectRequest,
   UpdateSourceDestinations,
   CheckoutSuccessEvent,
+  GoogleCalendarListEntry,
+  GoogleCalendarListResponse,
+  CreateOAuthSource,
+  OAuthCalendarSource,
+  UpdateOAuthSourceDestinations,
 };

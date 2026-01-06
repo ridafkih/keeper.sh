@@ -5,6 +5,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { eq, inArray } from "drizzle-orm";
 import { database } from "../context";
+import { createOAuthSourceMappingsForNewDestination } from "./oauth-source-destination-mappings";
 
 const EMPTY_LIST_COUNT = 0;
 
@@ -102,19 +103,19 @@ const createMappingsForNewDestination = async (
     .from(remoteICalSourcesTable)
     .where(eq(remoteICalSourcesTable.userId, userId));
 
-  if (userSources.length === EMPTY_LIST_COUNT) {
-    return;
+  if (userSources.length > EMPTY_LIST_COUNT) {
+    const mappingsToInsert = userSources.map((source) => ({
+      destinationId,
+      sourceId: source.id,
+    }));
+
+    await database
+      .insert(sourceDestinationMappingsTable)
+      .values(mappingsToInsert)
+      .onConflictDoNothing();
   }
 
-  const mappingsToInsert = userSources.map((source) => ({
-    destinationId,
-    sourceId: source.id,
-  }));
-
-  await database
-    .insert(sourceDestinationMappingsTable)
-    .values(mappingsToInsert)
-    .onConflictDoNothing();
+  await createOAuthSourceMappingsForNewDestination(userId, destinationId);
 };
 
 export {

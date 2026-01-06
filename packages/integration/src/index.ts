@@ -9,6 +9,16 @@ export {
   createOAuthDestinationProvider,
   type CreateOAuthProviderOptions,
 } from "./oauth/create-provider";
+export {
+  OAuthSourceProvider,
+  type FetchEventsResult,
+} from "./oauth/source-provider";
+export {
+  createOAuthSourceProvider,
+  type CreateOAuthSourceProviderOptions,
+  type OAuthSourceAccount,
+  type SourceProvider,
+} from "./oauth/create-source-provider";
 export { generateEventUid, isKeeperEvent } from "./events/identity";
 export { RateLimiter, type RateLimiterConfig } from "./utils/rate-limiter";
 export { getErrorMessage } from "./utils/error";
@@ -48,4 +58,7 @@ export type {
   CalDAVConfig,
   ListRemoteEventsOptions,
   BroadcastSyncStatus,
+  SourceEvent,
+  SourceSyncResult,
+  OAuthSourceConfig,
 } from "./types";

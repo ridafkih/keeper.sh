@@ -158,6 +158,7 @@ const encryptionKey = env.ENCRYPTION_KEY;
 
 export {
   database,
+  env,
   trustedOrigins,
   auth,
   broadcastService,

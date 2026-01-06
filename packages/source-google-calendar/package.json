@@ -1,0 +1,24 @@
+{
+  "name": "@keeper.sh/source-google-calendar",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "types": "tsc --noEmit",
+    "lint": "oxlint ."
+  },
+  "dependencies": {
+    "@keeper.sh/constants": "workspace:*",
+    "@keeper.sh/data-schemas": "workspace:*",
+    "@keeper.sh/database": "workspace:*",
+    "@keeper.sh/integration": "workspace:*",
+    "drizzle-orm": "^0.45.1"
+  },
+  "devDependencies": {
+    "@keeper.sh/typescript-config": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "5.9.3"
+  }
+}

@@ -211,6 +211,13 @@
       "when": 1767608421759,
       "tag": "0029_huge_yellow_claw",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1767652504812,
+      "tag": "0030_youthful_speed",
+      "breakpoints": true
     }
   ]
 }

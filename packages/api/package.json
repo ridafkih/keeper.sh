@@ -25,8 +25,10 @@
     "@keeper.sh/integration": "workspace:*",
     "@keeper.sh/integration-caldav": "workspace:*",
     "@keeper.sh/log": "workspace:*",
+    "@keeper.sh/oauth-google": "workspace:*",
     "@keeper.sh/premium": "workspace:*",
     "@keeper.sh/redis": "workspace:*",
+    "@keeper.sh/source-google-calendar": "workspace:*",
     "@polar-sh/sdk": "^0.42.1",
     "drizzle-orm": "0.45.1",
     "ts-ics": "2.4.0"

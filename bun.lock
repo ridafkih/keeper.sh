@@ -31,8 +31,10 @@
         "@keeper.sh/integration": "workspace:*",
         "@keeper.sh/integration-caldav": "workspace:*",
         "@keeper.sh/log": "workspace:*",
+        "@keeper.sh/oauth-google": "workspace:*",
         "@keeper.sh/premium": "workspace:*",
         "@keeper.sh/redis": "workspace:*",
+        "@keeper.sh/source-google-calendar": "workspace:*",
         "@polar-sh/sdk": "^0.42.1",
         "drizzle-orm": "0.45.1",
         "ts-ics": "2.4.0",
@@ -134,8 +136,10 @@
         "@keeper.sh/env": "workspace:*",
         "@keeper.sh/integration": "workspace:*",
         "@keeper.sh/log": "workspace:*",
+        "@keeper.sh/oauth-google": "workspace:*",
         "@keeper.sh/premium": "workspace:*",
         "@keeper.sh/redis": "workspace:*",
+        "@keeper.sh/source-google-calendar": "workspace:*",
         "@polar-sh/sdk": "^0.42.1",
         "cronbake": "0.4.0",
         "drizzle-orm": "^0.45.1",
@@ -419,6 +423,22 @@
     },
     "packages/redis": {
       "name": "@keeper.sh/redis",
+      "devDependencies": {
+        "@keeper.sh/typescript-config": "workspace:*",
+        "@types/bun": "latest",
+        "typescript": "5.9.3",
+      },
+    },
+    "packages/source-google-calendar": {
+      "name": "@keeper.sh/source-google-calendar",
+      "version": "0.0.1",
+      "dependencies": {
+        "@keeper.sh/constants": "workspace:*",
+        "@keeper.sh/data-schemas": "workspace:*",
+        "@keeper.sh/database": "workspace:*",
+        "@keeper.sh/integration": "workspace:*",
+        "drizzle-orm": "^0.45.1",
+      },
       "devDependencies": {
         "@keeper.sh/typescript-config": "workspace:*",
         "@types/bun": "latest",
@@ -913,6 +933,8 @@
     "@keeper.sh/pull-calendar": ["@keeper.sh/pull-calendar@workspace:packages/pull-calendar"],
 
     "@keeper.sh/redis": ["@keeper.sh/redis@workspace:packages/redis"],
+
+    "@keeper.sh/source-google-calendar": ["@keeper.sh/source-google-calendar@workspace:packages/source-google-calendar"],
 
     "@keeper.sh/sync-calendar": ["@keeper.sh/sync-calendar@workspace:packages/sync-calendar"],
 

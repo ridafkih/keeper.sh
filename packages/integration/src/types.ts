@@ -80,6 +80,32 @@ interface CalDAVConfig extends ProviderConfig {
   calendarUrl: string;
 }
 
+interface SourceEvent {
+  uid: string;
+  startTime: Date;
+  endTime: Date;
+}
+
+interface SourceSyncResult {
+  eventsAdded: number;
+  eventsRemoved: number;
+  syncToken?: string;
+  fullSyncRequired?: boolean;
+}
+
+interface OAuthSourceConfig {
+  database: BunSQLDatabase;
+  userId: string;
+  sourceId: string;
+  destinationId: string;
+  externalCalendarId: string;
+  accessToken: string;
+  refreshToken: string;
+  accessTokenExpiresAt: Date;
+  syncToken: string | null;
+  oauthCredentialId: string;
+}
+
 export type {
   SyncableEvent,
   PushResult,
@@ -94,4 +120,7 @@ export type {
   GoogleCalendarConfig,
   OutlookCalendarConfig,
   CalDAVConfig,
+  SourceEvent,
+  SourceSyncResult,
+  OAuthSourceConfig,
 };
