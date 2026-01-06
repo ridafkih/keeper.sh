@@ -1,9 +1,9 @@
 import { calendarSourcesTable } from "@keeper.sh/database/schema";
 import { CalendarFetchError, fetchAndSyncSource, pullRemoteCalendar } from "@keeper.sh/calendar";
-import { getWideEvent } from "@keeper.sh/log";
 import { and, eq } from "drizzle-orm";
 import { triggerDestinationSync } from "./sync";
 import { createMappingsForNewSource } from "./source-destination-mappings";
+import { executeBackgroundTask } from "./background-task";
 import { database, premiumService } from "../context";
 
 const FIRST_RESULT_LIMIT = 1;
@@ -106,11 +106,10 @@ const createSource = async (userId: string, name: string, url: string): Promise<
 
   await createMappingsForNewSource(userId, source.id);
 
-  fetchAndSyncSource(database, source)
-    .then(() => triggerDestinationSync(userId))
-    .catch((error) => {
-      getWideEvent()?.setError(error);
-    });
+  executeBackgroundTask("ical-source-sync", { userId, sourceId: source.id }, async () => {
+    await fetchAndSyncSource(database, source);
+    triggerDestinationSync(userId);
+  });
 
   return source;
 };

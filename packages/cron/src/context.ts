@@ -4,7 +4,7 @@ import { syncStatusTable } from "@keeper.sh/database/schema";
 import { createRedis } from "@keeper.sh/redis";
 import { createPremiumService } from "@keeper.sh/premium";
 import { createBroadcastService } from "@keeper.sh/broadcast";
-import { createSyncCoordinator, createOAuthProviders } from "@keeper.sh/provider-core";
+import { createSyncCoordinator, createOAuthProviders, buildOAuthConfigs } from "@keeper.sh/provider-core";
 import { createDestinationProviders } from "@keeper.sh/provider-registry/server";
 import type { DestinationSyncResult, SyncProgressUpdate } from "@keeper.sh/provider-core";
 import { Polar } from "@polar-sh/sdk";
@@ -18,42 +18,12 @@ const premiumService = createPremiumService({
   database,
 });
 
-interface OAuthConfig {
-  clientId: string;
-  clientSecret: string;
-}
-
-const buildGoogleConfig = (): OAuthConfig | null => {
-  if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
-    return {
-      clientId: env.GOOGLE_CLIENT_ID,
-      clientSecret: env.GOOGLE_CLIENT_SECRET,
-    };
-  }
-  return null;
-};
-
-const buildMicrosoftConfig = (): OAuthConfig | null => {
-  if (env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET) {
-    return {
-      clientId: env.MICROSOFT_CLIENT_ID,
-      clientSecret: env.MICROSOFT_CLIENT_SECRET,
-    };
-  }
-  return null;
-};
-
-const googleConfig = buildGoogleConfig();
-const microsoftConfig = buildMicrosoftConfig();
-
-const oauthProviders = createOAuthProviders({
-  google: googleConfig,
-  microsoft: microsoftConfig,
-});
+const oauthConfigs = buildOAuthConfigs(env);
+const oauthProviders = createOAuthProviders(oauthConfigs);
 
 const destinationProviders = createDestinationProviders({
   database,
-  encryptionKey: env.ENCRYPTION_KEY ?? "",
+  encryptionKey: env.ENCRYPTION_KEY,
   oauthProviders,
 });
 

@@ -1,10 +1,10 @@
 import env from "@keeper.sh/env/api";
 import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { generateSocketToken } from "../../../utils/socket-token";
+import { generateSocketToken } from "../../../utils/state";
 
 const GET = withWideEvent(
-  withAuth(({ userId }) => {
-    const token = generateSocketToken(userId);
+  withAuth(async ({ userId }) => {
+    const token = await generateSocketToken(userId);
 
     if (env.WEBSOCKET_URL) {
       const socketUrl = new URL(env.WEBSOCKET_URL);

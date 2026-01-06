@@ -5,7 +5,7 @@ import {
   oauthSourceCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
-import { getWideEvent } from "@keeper.sh/log";
+import { executeBackgroundTask } from "./background-task";
 import { getSourceProvider } from "@keeper.sh/provider-registry/server";
 import { database, premiumService, oauthProviders } from "../context";
 import { createMappingsForNewSource } from "./source-destination-mappings";
@@ -312,11 +312,10 @@ const createOAuthSource = async (
 
   await createMappingsForNewSource(userId, source.id);
 
-  syncOAuthSourcesByProvider(provider)
-    .then(() => triggerDestinationSync(userId))
-    .catch((error) => {
-      getWideEvent()?.setError(error);
-    });
+  executeBackgroundTask("oauth-source-sync", { userId, provider }, async () => {
+    await syncOAuthSourcesByProvider(provider);
+    triggerDestinationSync(userId);
+  });
 
   return {
     email: credential.email,

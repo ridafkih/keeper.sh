@@ -10,7 +10,7 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 interface DestinationProvidersConfig {
   database: BunSQLDatabase;
   oauthProviders: OAuthProviders;
-  encryptionKey: string;
+  encryptionKey?: string;
   broadcastSyncStatus?: BroadcastSyncStatus;
 }
 
@@ -84,10 +84,12 @@ const createDestinationProviders = (config: DestinationProvidersConfig): Destina
     }
   }
 
-  for (const provider of getCalDAVProviders()) {
-    const factory = CALDAV_FACTORIES[provider.id];
-    if (factory) {
-      providers.push(factory({ database, encryptionKey }));
+  if (encryptionKey) {
+    for (const provider of getCalDAVProviders()) {
+      const factory = CALDAV_FACTORIES[provider.id];
+      if (factory) {
+        providers.push(factory({ database, encryptionKey }));
+      }
     }
   }
 

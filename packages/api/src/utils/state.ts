@@ -1,19 +1,27 @@
-interface SocketTokenEntry {
-  userId: string;
-  timeout: ReturnType<typeof setTimeout>;
-}
+import { TOKEN_TTL_MS } from "@keeper.sh/constants";
+import { redis } from "../context";
 
-// TODO: Move to Redis
-const socketTokens = new Map<string, SocketTokenEntry>();
+const SOCKET_TOKEN_PREFIX = "socket:token:";
+const TOKEN_TTL_SECONDS = Math.ceil(TOKEN_TTL_MS / 1000);
 
-const validateSocketToken = (token: string): string | null => {
-  const tokenEntry = socketTokens.get(token);
-  if (!tokenEntry) {
-    return null;
-  }
-  clearTimeout(tokenEntry.timeout);
-  socketTokens.delete(token);
-  return tokenEntry.userId;
+const getTokenKey = (token: string): string => `${SOCKET_TOKEN_PREFIX}${token}`;
+
+const generateSocketToken = async (userId: string): Promise<string> => {
+  const token = crypto.randomUUID();
+  const key = getTokenKey(token);
+  await redis.set(key, userId);
+  await redis.expire(key, TOKEN_TTL_SECONDS);
+  return token;
 };
 
-export { socketTokens, validateSocketToken };
+const validateSocketToken = async (token: string): Promise<string | null> => {
+  const key = getTokenKey(token);
+  const userId = await redis.get(key);
+  if (!userId) {
+    return null;
+  }
+  await redis.del(key);
+  return userId;
+};
+
+export { generateSocketToken, validateSocketToken };

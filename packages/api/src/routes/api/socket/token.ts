@@ -1,9 +1,9 @@
 import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { generateSocketToken } from "../../../utils/socket-token";
+import { generateSocketToken } from "../../../utils/state";
 
 export const GET = withWideEvent(
-  withAuth(({ userId }) => {
-    const token = generateSocketToken(userId);
+  withAuth(async ({ userId }) => {
+    const token = await generateSocketToken(userId);
     return Response.json({ token });
   }),
 );

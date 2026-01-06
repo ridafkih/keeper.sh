@@ -149,13 +149,13 @@ class RateLimiter {
     }
   }
 
-  private executeTask(task: QueuedTask): void {
-    task()
-      .finally(() => {
-        this.activeCount--;
-        this.processQueue();
-      })
-      .catch(() => null);
+  private async executeTask(task: QueuedTask): Promise<void> {
+    try {
+      await task()
+    } finally {
+      this.activeCount--;
+      this.processQueue();
+    }
   }
 }
 

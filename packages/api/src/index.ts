@@ -34,7 +34,7 @@ entry("api")
 
         if (url.pathname === "/api/socket") {
           const token = url.searchParams.get("token");
-          const userId = token && validateSocketToken(token);
+          const userId = token && (await validateSocketToken(token));
 
           if (!userId) {
             return new Response("Unauthorized", { status: HTTP_UNAUTHORIZED });
