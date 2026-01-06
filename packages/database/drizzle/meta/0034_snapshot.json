@@ -1,6 +1,6 @@
 {
-  "id": "37af1026-6001-4876-b2ec-8473b98b773d",
-  "prevId": "57a12523-bd19-4862-8f30-b447ba3cad35",
+  "id": "57a12523-bd19-4862-8f30-b447ba3cad35",
+  "prevId": "08626cf5-4b9c-4d93-bc68-1e7ec1a0db41",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -325,27 +325,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "excludeFocusTime": {
-          "name": "excludeFocusTime",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "excludeOutOfOffice": {
-          "name": "excludeOutOfOffice",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "excludeWorkingLocation": {
-          "name": "excludeWorkingLocation",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "externalCalendarId": {
           "name": "externalCalendarId",
