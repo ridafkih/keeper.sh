@@ -57,4 +57,8 @@ const dialogPopup = tv({
   },
 });
 
-export { button, input, dialogPopup };
+const checkbox = tv({
+  base: "size-4 rounded border border-border-input bg-transparent accent-primary cursor-pointer",
+});
+
+export { button, input, dialogPopup, checkbox };

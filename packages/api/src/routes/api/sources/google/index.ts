@@ -26,18 +26,18 @@ const POST = withWideEvent(
 
     try {
       const {
-        excludeFocusTime,
-        excludeOutOfOffice,
-        excludeWorkingLocation,
         externalCalendarId,
         name,
         oauthSourceCredentialId,
+        syncFocusTime,
+        syncOutOfOffice,
+        syncWorkingLocation,
       } = createOAuthSourceSchema.assert(body);
 
       const source = await createOAuthSource({
-        excludeFocusTime,
-        excludeOutOfOffice,
-        excludeWorkingLocation,
+        excludeFocusTime: syncFocusTime === undefined ? undefined : !syncFocusTime,
+        excludeOutOfOffice: syncOutOfOffice === undefined ? undefined : !syncOutOfOffice,
+        excludeWorkingLocation: syncWorkingLocation === undefined ? undefined : !syncWorkingLocation,
         externalCalendarId,
         name,
         oauthCredentialId: oauthSourceCredentialId ?? "",

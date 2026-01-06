@@ -1,4 +1,3 @@
--- Drop legacy tables (use IF EXISTS in case they don't exist)
 DROP TABLE IF EXISTS "caldav_event_mappings" CASCADE;--> statement-breakpoint
 DROP TABLE IF EXISTS "caldav_event_states" CASCADE;--> statement-breakpoint
 DROP TABLE IF EXISTS "caldav_source_destination_mappings" CASCADE;--> statement-breakpoint

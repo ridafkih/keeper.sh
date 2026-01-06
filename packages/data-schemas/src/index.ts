@@ -197,12 +197,12 @@ type GoogleCalendarListResponse = typeof googleCalendarListResponseSchema.infer;
 
 const createOAuthSourceSchema = type({
   "destinationId?": "string",
-  "excludeFocusTime?": "boolean",
-  "excludeOutOfOffice?": "boolean",
-  "excludeWorkingLocation?": "boolean",
   externalCalendarId: "string",
   name: "string",
   "oauthSourceCredentialId?": "string",
+  "syncFocusTime?": "boolean",
+  "syncOutOfOffice?": "boolean",
+  "syncWorkingLocation?": "boolean",
 });
 type CreateOAuthSource = typeof createOAuthSourceSchema.infer;
 

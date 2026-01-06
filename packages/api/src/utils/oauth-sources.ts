@@ -5,7 +5,9 @@ import {
   oauthSourceCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
-import { database, premiumService } from "../context";
+import { getWideEvent } from "@keeper.sh/log";
+import { getSourceProvider } from "@keeper.sh/provider-registry/server";
+import { database, premiumService, oauthProviders } from "../context";
 import { createMappingsForNewSource } from "./source-destination-mappings";
 import { triggerDestinationSync } from "./sync";
 
@@ -226,6 +228,14 @@ interface CreateOAuthSourceOptions {
   excludeWorkingLocation?: boolean;
 }
 
+const syncOAuthSourcesByProvider = async (providerId: string): Promise<void> => {
+  const sourceProvider = getSourceProvider(providerId, { database, oauthProviders });
+  if (!sourceProvider) {
+    return;
+  }
+  await sourceProvider.syncAllSources();
+};
+
 const createOAuthSource = async (
   options: CreateOAuthSourceOptions,
 ): Promise<OAuthCalendarSource> => {
@@ -235,9 +245,9 @@ const createOAuthSource = async (
     name,
     provider,
     oauthCredentialId,
-    excludeFocusTime = true,
-    excludeOutOfOffice = true,
-    excludeWorkingLocation = true,
+    excludeFocusTime = false,
+    excludeOutOfOffice = false,
+    excludeWorkingLocation = false,
   } = options;
 
   const [credential] = await database
@@ -302,7 +312,11 @@ const createOAuthSource = async (
 
   await createMappingsForNewSource(userId, source.id);
 
-  triggerDestinationSync(userId);
+  syncOAuthSourcesByProvider(provider)
+    .then(() => triggerDestinationSync(userId))
+    .catch((error) => {
+      getWideEvent()?.setError(error);
+    });
 
   return {
     email: credential.email,

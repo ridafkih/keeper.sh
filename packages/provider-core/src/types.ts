@@ -2,6 +2,20 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 type AuthType = "oauth" | "caldav";
 
+interface SourcePreferenceOption {
+  id: string;
+  label: string;
+  description?: string;
+  defaultValue: boolean;
+  disabled?: boolean;
+}
+
+interface SourcePreferencesConfig {
+  label: string;
+  description?: string;
+  options: SourcePreferenceOption[];
+}
+
 interface CalDAVProviderConfig {
   serverUrl: string;
   usernameLabel: string;
@@ -17,6 +31,7 @@ interface ProviderDefinition {
   icon?: string;
   comingSoon?: boolean;
   caldav?: CalDAVProviderConfig;
+  sourcePreferences?: SourcePreferencesConfig;
 }
 
 interface SyncableEvent {
@@ -132,6 +147,8 @@ export type {
   AuthType,
   CalDAVProviderConfig,
   ProviderDefinition,
+  SourcePreferenceOption,
+  SourcePreferencesConfig,
   SyncableEvent,
   PushResult,
   DeleteResult,

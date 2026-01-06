@@ -1,9 +1,9 @@
-import type { BroadcastSyncStatus, DestinationProvider, OAuthProvider, OAuthProviders } from "@keeper.sh/provider-core";
-import { createGoogleCalendarProvider } from "@keeper.sh/provider-google-calendar";
+import type { BroadcastSyncStatus, DestinationProvider, OAuthProvider, OAuthProviders, SourceProvider } from "@keeper.sh/provider-core";
+import { createGoogleCalendarProvider, createGoogleCalendarSourceProvider } from "@keeper.sh/provider-google-calendar";
 import { createCalDAVProvider } from "@keeper.sh/provider-caldav";
 import { createFastMailProvider } from "@keeper.sh/provider-fastmail";
 import { createICloudProvider } from "@keeper.sh/provider-icloud";
-import { createOutlookCalendarProvider } from "@keeper.sh/provider-outlook";
+import { createOutlookCalendarProvider, createOutlookSourceProvider } from "@keeper.sh/provider-outlook";
 import { getOAuthProviders, getCalDAVProviders } from "./registry";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
@@ -39,6 +39,38 @@ const CALDAV_FACTORIES: Record<string, CalDAVFactory> = {
   icloud: createICloudProvider,
 };
 
+interface SourceFactoryConfig {
+  database: BunSQLDatabase;
+  oauthProvider: OAuthProvider;
+}
+
+type SourceFactory = (config: SourceFactoryConfig) => SourceProvider;
+
+const SOURCE_OAUTH_FACTORIES: Record<string, SourceFactory> = {
+  google: createGoogleCalendarSourceProvider,
+  outlook: createOutlookSourceProvider,
+};
+
+interface SourceProvidersConfig {
+  database: BunSQLDatabase;
+  oauthProviders: OAuthProviders;
+}
+
+const getSourceProvider = (
+  providerId: string,
+  config: SourceProvidersConfig,
+): SourceProvider | null => {
+  const { database, oauthProviders } = config;
+  const factory = SOURCE_OAUTH_FACTORIES[providerId];
+  const oauth = oauthProviders.getProvider(providerId);
+
+  if (!factory || !oauth) {
+    return null;
+  }
+
+  return factory({ database, oauthProvider: oauth });
+};
+
 const createDestinationProviders = (config: DestinationProvidersConfig): DestinationProvider[] => {
   const { database, oauthProviders, encryptionKey, broadcastSyncStatus } = config;
 
@@ -64,10 +96,11 @@ const createDestinationProviders = (config: DestinationProvidersConfig): Destina
 
 export {
   createDestinationProviders,
+  getSourceProvider,
   createGoogleCalendarProvider,
   createCalDAVProvider,
   createFastMailProvider,
   createICloudProvider,
   createOutlookCalendarProvider,
 };
-export type { DestinationProvidersConfig };
+export type { DestinationProvidersConfig, SourceProvidersConfig };
