@@ -221,12 +221,24 @@ interface CreateOAuthSourceOptions {
   name: string;
   provider: string;
   oauthCredentialId: string;
+  excludeFocusTime?: boolean;
+  excludeOutOfOffice?: boolean;
+  excludeWorkingLocation?: boolean;
 }
 
 const createOAuthSource = async (
   options: CreateOAuthSourceOptions,
 ): Promise<OAuthCalendarSource> => {
-  const { userId, externalCalendarId, name, provider, oauthCredentialId } = options;
+  const {
+    userId,
+    externalCalendarId,
+    name,
+    provider,
+    oauthCredentialId,
+    excludeFocusTime = true,
+    excludeOutOfOffice = true,
+    excludeWorkingLocation = true,
+  } = options;
 
   const [credential] = await database
     .select({ email: oauthSourceCredentialsTable.email })
@@ -272,6 +284,9 @@ const createOAuthSource = async (
   const [source] = await database
     .insert(calendarSourcesTable)
     .values({
+      excludeFocusTime,
+      excludeOutOfOffice,
+      excludeWorkingLocation,
       externalCalendarId,
       name,
       oauthCredentialId,
