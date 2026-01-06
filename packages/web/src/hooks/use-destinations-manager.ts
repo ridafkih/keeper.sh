@@ -79,8 +79,8 @@ interface LinkedAccount {
 }
 
 interface SyncStatusEntry {
-  status: "idle" | "syncing";
-  stage?: "fetching" | "comparing" | "processing";
+  status: "idle" | "syncing" | "error";
+  stage?: "fetching" | "comparing" | "processing" | "error";
   localEventCount: number;
   remoteEventCount: number;
   progress?: { current: number; total: number };
@@ -88,6 +88,7 @@ interface SyncStatusEntry {
   inSync: boolean;
   needsReauthentication?: boolean;
   destinationId: string;
+  error?: string;
 }
 
 type SyncStatusRecord = Record<string, SyncStatusEntry>;
