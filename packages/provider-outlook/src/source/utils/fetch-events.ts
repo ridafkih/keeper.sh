@@ -1,0 +1,152 @@
+import type {
+  FetchEventsOptions,
+  FetchEventsResult,
+  OutlookCalendarEvent,
+  OutlookEventsListResponse,
+  EventTimeSlot,
+} from "../types";
+import { MICROSOFT_GRAPH_API, OUTLOOK_PAGE_SIZE, GONE_STATUS } from "../../shared/api";
+import { isSimpleAuthError } from "../../shared/errors";
+import { parseEventDateTime } from "../../shared/date-time";
+
+class EventsFetchError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly authRequired = false,
+  ) {
+    super(message);
+    this.name = "EventsFetchError";
+  }
+}
+
+interface PageFetchOptions {
+  accessToken: string;
+  calendarId: string;
+  deltaLink?: string;
+  timeMin?: Date;
+  timeMax?: Date;
+  nextLink?: string;
+}
+
+interface PageFetchResult {
+  data: OutlookEventsListResponse;
+  fullSyncRequired: false;
+}
+
+interface FullSyncRequiredResult {
+  fullSyncRequired: true;
+}
+
+const buildInitialUrl = (calendarId: string, timeMin?: Date, timeMax?: Date): URL => {
+  const encodedCalendarId = encodeURIComponent(calendarId);
+  const url = new URL(`${MICROSOFT_GRAPH_API}/me/calendars/${encodedCalendarId}/events/delta`);
+
+  url.searchParams.set("$select", "id,iCalUId,subject,start,end");
+  url.searchParams.set("$top", String(OUTLOOK_PAGE_SIZE));
+
+  if (timeMin) {
+    url.searchParams.set("startDateTime", timeMin.toISOString());
+  }
+  if (timeMax) {
+    url.searchParams.set("endDateTime", timeMax.toISOString());
+  }
+
+  return url;
+};
+
+const fetchEventsPage = async (
+  options: PageFetchOptions,
+): Promise<PageFetchResult | FullSyncRequiredResult> => {
+  const { accessToken, calendarId, deltaLink, timeMin, timeMax, nextLink } = options;
+
+  let url = buildInitialUrl(calendarId, timeMin, timeMax);
+  if (nextLink) {
+    url = new URL(nextLink);
+  } else if (deltaLink) {
+    url = new URL(deltaLink);
+  }
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Prefer: `odata.maxpagesize=${OUTLOOK_PAGE_SIZE}`,
+    },
+  });
+
+  if (response.status === GONE_STATUS) {
+    return { fullSyncRequired: true };
+  }
+
+  if (!response.ok) {
+    const authRequired = isSimpleAuthError(response.status);
+    throw new EventsFetchError(
+      `Failed to fetch events: ${response.status}`,
+      response.status,
+      authRequired,
+    );
+  }
+
+  const data = (await response.json()) as OutlookEventsListResponse;
+  return { data, fullSyncRequired: false };
+};
+
+const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEventsResult> => {
+  const { accessToken, calendarId, deltaLink, timeMin, timeMax } = options;
+
+  const events: OutlookCalendarEvent[] = [];
+
+  const initialResult = await fetchEventsPage({
+    accessToken,
+    calendarId,
+    deltaLink,
+    timeMax,
+    timeMin,
+  });
+
+  if (initialResult.fullSyncRequired) {
+    return { events: [], fullSyncRequired: true };
+  }
+
+  events.push(...initialResult.data.value);
+  let lastDeltaLink = initialResult.data["@odata.deltaLink"];
+  let nextLink = initialResult.data["@odata.nextLink"];
+
+  while (nextLink) {
+    const pageResult = await fetchEventsPage({
+      accessToken,
+      calendarId,
+      nextLink,
+      timeMax,
+      timeMin,
+    });
+
+    if (pageResult.fullSyncRequired) {
+      return { events: [], fullSyncRequired: true };
+    }
+
+    events.push(...pageResult.data.value);
+
+    if (pageResult.data["@odata.deltaLink"]) {
+      lastDeltaLink = pageResult.data["@odata.deltaLink"];
+    }
+    nextLink = pageResult.data["@odata.nextLink"];
+  }
+
+  return {
+    events,
+    fullSyncRequired: false,
+    nextDeltaLink: lastDeltaLink,
+  };
+};
+
+const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] =>
+  events
+    .filter((event) => event.start && event.end && event.iCalUId)
+    .map((event) => ({
+      endTime: parseEventDateTime(event.end),
+      startTime: parseEventDateTime(event.start),
+      uid: event.iCalUId ?? event.id,
+    }));
+
+export { fetchCalendarEvents, parseOutlookEvents, EventsFetchError };

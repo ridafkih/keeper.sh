@@ -1,7 +1,7 @@
 import type { CronOptions } from "cronbake";
 import type { Plan } from "@keeper.sh/premium";
-import { syncDestinationsForUser } from "@keeper.sh/integration";
-import type { SyncResult } from "@keeper.sh/integration";
+import { syncDestinationsForUser } from "@keeper.sh/provider-core";
+import type { SyncResult } from "@keeper.sh/provider-core";
 import { fetchAndSyncSource } from "@keeper.sh/calendar";
 import type { Source } from "@keeper.sh/calendar";
 import { getSourcesByPlan, getUsersWithDestinationsByPlan } from "./get-sources";
