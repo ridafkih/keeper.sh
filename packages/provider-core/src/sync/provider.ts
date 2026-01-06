@@ -109,7 +109,7 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
 
       context.onSyncProgress?.({
         destinationId: this.config.destinationId,
-        error: error instanceof Error ? error.message : "Unknown sync error",
+        error: String(error),
         inSync: false,
         localEventCount: localEvents.length,
         remoteEventCount: INITIAL_REMOTE_EVENT_COUNT,

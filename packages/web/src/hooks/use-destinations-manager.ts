@@ -21,13 +21,14 @@ const getToggleActionLabel = (wasEnabled: boolean): string => {
 };
 
 interface SyncStatusDisplayProps {
-  status: "idle" | "syncing";
-  stage?: "fetching" | "comparing" | "processing";
+  status: "idle" | "syncing" | "error";
+  stage?: "fetching" | "comparing" | "processing" | "error";
   localCount: number;
   remoteCount: number;
   progress?: { current: number; total: number };
   lastOperation?: { type: "add" | "remove"; eventTime: string };
   inSync: boolean;
+  error?: string;
 }
 
 interface DestinationsManagerCallbacks {
