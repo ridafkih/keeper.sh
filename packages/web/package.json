@@ -15,7 +15,7 @@
     "@keeper.sh/constants": "workspace:*",
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/date-utils": "workspace:*",
-    "@keeper.sh/destination-metadata": "workspace:*",
+    "@keeper.sh/provider-registry": "workspace:*",
     "@keeper.sh/env": "workspace:*",
     "@keeper.sh/premium": "workspace:*",
     "@polar-sh/better-auth": "^1.6.3",

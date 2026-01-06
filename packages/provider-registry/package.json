@@ -1,23 +1,24 @@
 {
-  "name": "@keeper.sh/destination-providers",
+  "name": "@keeper.sh/provider-registry",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts"
+  },
   "scripts": {
     "types": "tsc --noEmit",
     "lint": "oxlint ."
   },
   "dependencies": {
-    "@keeper.sh/destination-metadata": "workspace:*",
     "@keeper.sh/provider-core": "workspace:*",
     "@keeper.sh/provider-caldav": "workspace:*",
     "@keeper.sh/provider-fastmail": "workspace:*",
-    "@keeper.sh/provider-icloud": "workspace:*",
     "@keeper.sh/provider-google-calendar": "workspace:*",
+    "@keeper.sh/provider-icloud": "workspace:*",
     "@keeper.sh/provider-outlook": "workspace:*",
-    "@keeper.sh/oauth-google": "workspace:*",
-    "@keeper.sh/oauth-microsoft": "workspace:*",
     "drizzle-orm": "^0.45.1"
   },
   "devDependencies": {

@@ -1,5 +1,15 @@
 export { CalendarProvider } from "./sync/provider";
 export {
+  createOAuthProviders,
+  type ValidatedState,
+  type AuthorizationUrlOptions,
+  type NormalizedUserInfo,
+  type OAuthTokens,
+  type OAuthProvider,
+  type OAuthProvidersConfig,
+  type OAuthProviders,
+} from "./oauth/providers";
+export {
   OAuthCalendarProvider,
   type OAuthRefreshResult,
   type OAuthTokenProvider,
@@ -47,6 +57,8 @@ export {
   type OAuthAccount,
 } from "./oauth/accounts";
 export type {
+  AuthType,
+  ProviderDefinition,
   SyncableEvent,
   PushResult,
   DeleteResult,

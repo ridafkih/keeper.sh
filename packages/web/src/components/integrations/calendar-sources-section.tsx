@@ -27,20 +27,15 @@ import type { UnifiedSource, SourceType } from "@/hooks/use-all-sources";
 import { useSubscription } from "@/hooks/use-subscription";
 import { button } from "@/styles";
 import { track } from "@/lib/analytics";
-import { AddSourceDialog } from "./add-source-dialog";
+import { NewSourceMenu } from "./add-source-dialog";
 import { CalDAVSourceDialog } from "./caldav-source-dialog";
 import type { CalDAVSourceProvider } from "./caldav-source-dialog";
 import { OAuthSourceCalendarDialog } from "./oauth-source-calendar-dialog";
 import type { OAuthSourceProvider } from "./oauth-source-calendar-dialog";
-import {
-  Link as LinkIcon,
-  Plus,
-  Calendar,
-  Cloud,
-  Mail,
-  Apple,
-  Server,
-} from "lucide-react";
+import { Menu } from "@base-ui/react/menu";
+import { PROVIDER_DEFINITIONS, getProvider } from "@keeper.sh/provider-registry";
+import Image from "next/image";
+import { Link as LinkIcon, Plus, Calendar, Server } from "lucide-react";
 
 const formatSourceCountLabel = (count: number): string => {
   if (count === 1) {
@@ -50,26 +45,16 @@ const formatSourceCountLabel = (count: number): string => {
 };
 
 const getSourceIcon = (type: SourceType): ReactNode => {
-  switch (type) {
-    case "google": {
-      return <Calendar size={14} className="text-foreground-muted" />;
-    }
-    case "outlook": {
-      return <Cloud size={14} className="text-foreground-muted" />;
-    }
-    case "fastmail": {
-      return <Mail size={14} className="text-foreground-muted" />;
-    }
-    case "icloud": {
-      return <Apple size={14} className="text-foreground-muted" />;
-    }
-    case "caldav": {
-      return <Server size={14} className="text-foreground-muted" />;
-    }
-    default: {
-      return <LinkIcon size={14} className="text-foreground-muted" />;
-    }
+  if (type === "ics") {
+    return <LinkIcon size={14} className="text-foreground-muted" />;
   }
+
+  const provider = getProvider(type);
+  if (provider?.icon) {
+    return <Image src={provider.icon} alt={provider.name} width={14} height={14} />;
+  }
+
+  return <Server size={14} className="text-foreground-muted" />;
 };
 
 const getSourceSubtitle = (source: UnifiedSource): string => {
@@ -318,7 +303,6 @@ export const CalendarSourcesSection = (): ReactNode => {
   const { data: sources, isLoading, mutate } = useAllSources();
   const { data: subscription } = useSubscription();
 
-  const [isTypeSelectorOpen, setIsTypeSelectorOpen] = useState(false);
   const [isIcsDialogOpen, setIsIcsDialogOpen] = useState(false);
   const [caldavProvider, setCaldavProvider] = useState<CalDAVSourceProvider | null>(null);
   const [pendingOAuthSource, setPendingOAuthSource] = useState<PendingOAuthSource | null>(null);
@@ -459,15 +443,18 @@ export const CalendarSourcesSection = (): ReactNode => {
           message="You don't have any sources yet, add one to start syncing events across your calendars."
           action={
             <div className="flex flex-col items-center gap-2">
-              <Button
-                onClick={() => {
-                  track("source_dropdown_opened");
-                  setIsTypeSelectorOpen(true);
-                }}
-                className={button({ size: "xs", variant: "primary" })}
-              >
-                Add Calendar Source
-              </Button>
+              <NewSourceMenu
+                onSelect={handleSelectSourceType}
+                trigger={
+                  <Button
+                    render={<Menu.Trigger />}
+                    onClick={() => track("source_dropdown_opened")}
+                    className={button({ size: "xs", variant: "primary" })}
+                  >
+                    Add Calendar Source
+                  </Button>
+                }
+              />
               <TextLink href="https://keeper.sh/#how-it-works" target="_blank">
                 Learn More
               </TextLink>
@@ -484,16 +471,20 @@ export const CalendarSourcesSection = (): ReactNode => {
         <div className="flex items-center justify-between px-3 py-2">
           <TextLabel>{sourceCountLabel}</TextLabel>
           {!isAtLimit && (
-            <GhostButton
-              onClick={() => {
-                track("source_dropdown_opened");
-                setIsTypeSelectorOpen(true);
-              }}
-              className="flex items-center gap-1"
-            >
-              <Plus size={12} />
-              New Source
-            </GhostButton>
+            <NewSourceMenu
+              onSelect={handleSelectSourceType}
+              align="end"
+              trigger={
+                <GhostButton
+                  render={<Menu.Trigger />}
+                  onClick={() => track("source_dropdown_opened")}
+                  className="flex items-center gap-1"
+                >
+                  <Plus size={12} />
+                  New Source
+                </GhostButton>
+              }
+            />
           )}
         </div>
         {sources && sources.length > 0 && (
@@ -521,11 +512,6 @@ export const CalendarSourcesSection = (): ReactNode => {
       {renderContent()}
       {!isAtLimit && (
         <>
-          <AddSourceDialog
-            open={isTypeSelectorOpen}
-            onOpenChange={setIsTypeSelectorOpen}
-            onSelectType={handleSelectSourceType}
-          />
           <ICSSourceDialog
             open={isIcsDialogOpen}
             onOpenChange={setIsIcsDialogOpen}

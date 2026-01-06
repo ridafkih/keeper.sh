@@ -5,8 +5,8 @@ import { createRedis } from "@keeper.sh/redis";
 import { createAuth } from "@keeper.sh/auth";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { createPremiumService } from "@keeper.sh/premium";
-import { createDestinationProviders, createOAuthProviders } from "@keeper.sh/destination-providers";
-import { createSyncCoordinator } from "@keeper.sh/provider-core";
+import { createSyncCoordinator, createOAuthProviders } from "@keeper.sh/provider-core";
+import { createDestinationProviders } from "@keeper.sh/provider-registry/server";
 import type { DestinationSyncResult, SyncProgressUpdate } from "@keeper.sh/provider-core";
 
 const INITIAL_EVENT_COUNT = 0;

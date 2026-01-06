@@ -1,6 +1,7 @@
 import useSWR, { type SWRResponse } from "swr";
+import { isProviderId, type ProviderId } from "@keeper.sh/provider-registry";
 
-type SourceType = "ics" | "google" | "outlook" | "caldav" | "fastmail" | "icloud";
+type SourceType = "ics" | ProviderId;
 
 interface UnifiedSource {
   id: string;
@@ -67,17 +68,10 @@ const fetchCalDAVSources = async (): Promise<CalDAVSource[]> => {
 };
 
 const mapProviderToSourceType = (provider: string): SourceType => {
-  switch (provider) {
-    case "fastmail": {
-      return "fastmail";
-    }
-    case "icloud": {
-      return "icloud";
-    }
-    default: {
-      return "caldav";
-    }
+  if (!isProviderId(provider)) {
+    throw new Error(`Unknown provider: ${provider}`);
   }
+  return provider;
 };
 
 const fetchAllSources = async (): Promise<UnifiedSource[]> => {

@@ -7,7 +7,7 @@ import { Button } from "@/components/button";
 import { button, dialogPopup, input } from "@/styles";
 import { CardTitle, DangerText, TextBody, TextCaption } from "@/components/typography";
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import type { CalDAVDestinationId } from "@keeper.sh/destination-metadata";
+import type { CalDAVProviderId } from "@keeper.sh/provider-registry";
 
 interface CalendarOption {
   url: string;
@@ -23,7 +23,7 @@ interface ProviderConfig {
   passwordHelp: string;
 }
 
-const PROVIDER_CONFIGS: Record<CalDAVDestinationId, ProviderConfig> = {
+const PROVIDER_CONFIGS: Record<CalDAVProviderId, ProviderConfig> = {
   caldav: {
     name: "CalDAV",
     passwordHelp: "Your CalDAV password or app password",
@@ -53,7 +53,7 @@ const PROVIDER_CONFIGS: Record<CalDAVDestinationId, ProviderConfig> = {
 interface CalDAVConnectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  provider: CalDAVDestinationId;
+  provider: CalDAVProviderId;
   onSuccess: () => void;
 }
 

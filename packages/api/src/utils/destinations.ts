@@ -10,7 +10,7 @@ import type {
   OAuthTokens,
   NormalizedUserInfo as OAuthUserInfo,
   ValidatedState,
-} from "@keeper.sh/destination-providers";
+} from "@keeper.sh/provider-core";
 import { database, oauthProviders } from "../context";
 import { createMappingsForNewDestination } from "./source-destination-mappings";
 

@@ -1,106 +1,68 @@
 "use client";
 
-import type { FC, ReactNode } from "react";
-import { Dialog } from "@base-ui/react/dialog";
-import { dialogPopup } from "@/styles";
-import { CardTitle, TextBody, TextCaption } from "@/components/typography";
-import { Link as LinkIcon, Calendar, Cloud, Mail, Apple, Server } from "lucide-react";
+import type { ReactNode } from "react";
+import Image from "next/image";
+import { Menu } from "@base-ui/react/menu";
+import { PROVIDER_DEFINITIONS } from "@keeper.sh/provider-registry";
+import type { ProviderDefinition } from "@keeper.sh/provider-registry";
+import { MenuItem } from "@/components/menu-item";
+import { MenuPopup } from "@/components/menu-popup";
+import { Link as LinkIcon, Server } from "lucide-react";
 
 type SourceType = "ics" | "google" | "outlook" | "caldav" | "fastmail" | "icloud";
 
-interface SourceTypeOption {
-  id: SourceType;
-  name: string;
-  description: string;
-  icon: ReactNode;
+interface SourceMenuItemIconProps {
+  provider: ProviderDefinition;
 }
 
-const SOURCE_TYPE_OPTIONS: SourceTypeOption[] = [
-  {
-    description: "Import events from any iCal/ICS feed URL",
-    icon: <LinkIcon size={16} />,
-    id: "ics",
-    name: "iCal Link",
-  },
-  {
-    description: "Connect your Google Calendar",
-    icon: <Calendar size={16} />,
-    id: "google",
-    name: "Google Calendar",
-  },
-  {
-    description: "Connect your Outlook Calendar",
-    icon: <Cloud size={16} />,
-    id: "outlook",
-    name: "Outlook",
-  },
-  {
-    description: "Connect any CalDAV-compatible calendar",
-    icon: <Server size={16} />,
-    id: "caldav",
-    name: "CalDAV",
-  },
-  {
-    description: "Connect your FastMail calendar",
-    icon: <Mail size={16} />,
-    id: "fastmail",
-    name: "FastMail",
-  },
-  {
-    description: "Connect your iCloud calendar",
-    icon: <Apple size={16} />,
-    id: "icloud",
-    name: "iCloud",
-  },
-];
-
-interface AddSourceDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSelectType: (type: SourceType) => void;
-}
-
-export const AddSourceDialog: FC<AddSourceDialogProps> = ({
-  open,
-  onOpenChange,
-  onSelectType,
-}) => {
-  const handleSelect = (type: SourceType): void => {
-    onSelectType(type);
-    onOpenChange(false);
-  };
-
-  return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 bg-black/40 z-50" />
-        <Dialog.Popup className={dialogPopup({ size: "md" })}>
-          <Dialog.Title render={<CardTitle />}>Add Calendar Source</Dialog.Title>
-          <Dialog.Description render={<TextBody className="mt-1 mb-4" />}>
-            Choose how you want to add a calendar source.
-          </Dialog.Description>
-          <div className="flex flex-col gap-2">
-            {SOURCE_TYPE_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => handleSelect(option.id)}
-                className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-border-hover hover:bg-background-hover transition-colors text-left"
-              >
-                <div className="flex items-center justify-center w-8 h-8 rounded-md bg-background-subtle text-foreground-muted">
-                  {option.icon}
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm font-medium text-foreground">{option.name}</div>
-                  <TextCaption>{option.description}</TextCaption>
-                </div>
-              </button>
-            ))}
-          </div>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
+const SourceMenuItemIcon = ({ provider }: SourceMenuItemIconProps): ReactNode => {
+  if (provider.icon) {
+    return <Image src={provider.icon} alt={provider.name} width={14} height={14} />;
+  }
+  return <Server size={14} className="text-foreground-subtle" />;
 };
 
+interface SourcesMenuProps {
+  onSelect: (type: SourceType) => void;
+}
+
+const SourcesMenu = ({ onSelect }: SourcesMenuProps): ReactNode => (
+  <>
+    <MenuItem onClick={() => onSelect("ics")} className="py-1.5">
+      <LinkIcon size={14} className="text-foreground-subtle" />
+      <span>iCal Link</span>
+    </MenuItem>
+    {PROVIDER_DEFINITIONS.map((provider) => (
+      <MenuItem
+        key={provider.id}
+        onClick={() => onSelect(provider.id as SourceType)}
+        className="py-1.5"
+      >
+        <SourceMenuItemIcon provider={provider} />
+        <span>{provider.name}</span>
+      </MenuItem>
+    ))}
+  </>
+);
+
+interface NewSourceMenuProps {
+  onSelect: (type: SourceType) => void;
+  trigger: ReactNode;
+  align?: "start" | "center" | "end";
+}
+
+const NewSourceMenu = ({ onSelect, trigger, align = "start" }: NewSourceMenuProps): ReactNode => (
+  <Menu.Root>
+    {trigger}
+    <Menu.Portal>
+      <Menu.Positioner sideOffset={4} align={align}>
+        <MenuPopup>
+          <SourcesMenu onSelect={onSelect} />
+        </MenuPopup>
+      </Menu.Positioner>
+    </Menu.Portal>
+  </Menu.Root>
+);
+
+export { NewSourceMenu, SourcesMenu };
 export type { SourceType };

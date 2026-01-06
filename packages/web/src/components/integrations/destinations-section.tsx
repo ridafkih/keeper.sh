@@ -8,8 +8,8 @@ import Link from "next/link";
 import { Button } from "@base-ui/react/button";
 import { Menu } from "@base-ui/react/menu";
 import { FREE_DESTINATION_LIMIT } from "@keeper.sh/premium/constants";
-import { DESTINATIONS } from "@keeper.sh/destination-metadata";
-import type { DestinationConfig } from "@keeper.sh/destination-metadata";
+import { PROVIDER_DEFINITIONS } from "@keeper.sh/provider-registry";
+import type { ProviderDefinition } from "@keeper.sh/provider-registry";
 import { Card } from "@/components/card";
 import { EmptyState } from "@/components/empty-state";
 import { GhostButton } from "@/components/ghost-button";
@@ -60,7 +60,7 @@ const destinationStatus = tv({
   },
 });
 
-const isConnectable = (destination: DestinationConfig): boolean => !destination.comingSoon;
+const isConnectable = (provider: ProviderDefinition): boolean => !provider.comingSoon;
 
 const getMenuItemVariant = (comingSoon: boolean): "disabled" | "default" => {
   if (comingSoon) {
@@ -76,28 +76,28 @@ const getImageOpacityClass = (comingSoon: boolean): string => {
   return "";
 };
 
-interface DestinationMenuItemProps {
-  destination: DestinationConfig;
+interface ProviderMenuItemProps {
+  provider: ProviderDefinition;
   onConnect: (providerId: string) => void;
 }
 
-const DestinationMenuItemIcon = ({ destination }: { destination: DestinationConfig }): ReactNode => {
-  if (destination.icon) {
+const ProviderMenuItemIcon = ({ provider }: { provider: ProviderDefinition }): ReactNode => {
+  if (provider.icon) {
     return (
       <Image
-        src={destination.icon}
-        alt={destination.name}
+        src={provider.icon}
+        alt={provider.name}
         width={14}
         height={14}
-        className={getImageOpacityClass(destination.comingSoon ?? false)}
+        className={getImageOpacityClass(provider.comingSoon ?? false)}
       />
     );
   }
   return <Server size={14} className="text-foreground-subtle" />;
 };
 
-const DestinationMenuItem = ({ destination, onConnect }: DestinationMenuItemProps): ReactNode => {
-  const connectable = isConnectable(destination);
+const ProviderMenuItem = ({ provider, onConnect }: ProviderMenuItemProps): ReactNode => {
+  const connectable = isConnectable(provider);
 
   return (
     <MenuItem
@@ -105,16 +105,16 @@ const DestinationMenuItem = ({ destination, onConnect }: DestinationMenuItemProp
         if (!connectable) {
           return;
         }
-        track("destination_selected", { provider: destination.id });
-        onConnect(destination.id);
+        track("destination_selected", { provider: provider.id });
+        onConnect(provider.id);
       }}
-      disabled={destination.comingSoon}
-      variant={getMenuItemVariant(destination.comingSoon ?? false)}
+      disabled={provider.comingSoon}
+      variant={getMenuItemVariant(provider.comingSoon ?? false)}
       className="py-1.5"
     >
-      <DestinationMenuItemIcon destination={destination} />
-      <span>{destination.name}</span>
-      {destination.comingSoon && <span className="ml-4 text-xs">Unavailable</span>}
+      <ProviderMenuItemIcon provider={provider} />
+      <span>{provider.name}</span>
+      {provider.comingSoon && <span className="ml-4 text-xs">Unavailable</span>}
     </MenuItem>
   );
 };
@@ -125,8 +125,8 @@ interface DestinationsMenuProps {
 
 const DestinationsMenu = ({ onConnect }: DestinationsMenuProps): ReactNode => (
   <>
-    {DESTINATIONS.map((destination) => (
-      <DestinationMenuItem key={destination.id} destination={destination} onConnect={onConnect} />
+    {PROVIDER_DEFINITIONS.map((provider) => (
+      <ProviderMenuItem key={provider.id} provider={provider} onConnect={onConnect} />
     ))}
   </>
 );
@@ -336,7 +336,7 @@ const SyncStatusText = ({ syncStatus }: SyncStatusTextProps): ReactNode => {
 
 interface DestinationItemProps {
   destinationId: string;
-  destination: DestinationConfig & { name: string };
+  provider: ProviderDefinition & { name: string };
   syncStatus: SyncStatusDisplayProps | null;
   isConnected: boolean;
   needsReauthentication: boolean;
@@ -350,7 +350,7 @@ interface DestinationItemProps {
 
 const DestinationItem = ({
   destinationId,
-  destination,
+  provider,
   isConnected,
   needsReauthentication,
   isLoading,
@@ -364,8 +364,8 @@ const DestinationItem = ({
   const { isOpen, isConfirming, open, setIsOpen, confirm } = useConfirmAction();
 
   const getIconContent = (): ReactNode => {
-    if (destination.icon) {
-      return <Image src={destination.icon} alt={destination.name} width={14} height={14} />;
+    if (provider.icon) {
+      return <Image src={provider.icon} alt={provider.name} width={14} height={14} />;
     }
     return <Server size={14} className="text-foreground-subtle" />;
   };
@@ -378,13 +378,13 @@ const DestinationItem = ({
           <IconBox>{iconContent}</IconBox>
           <div className="flex-1 min-w-0 flex flex-col">
             <TextLabel as="h2" className="tracking-tight">
-              {destination.name}
+              {provider.name}
             </TextLabel>
             {isConnected && !needsReauthentication && <SyncStatusText syncStatus={syncStatus} />}
           </div>
           <DestinationAction
             destinationId={destinationId}
-            comingSoon={destination.comingSoon}
+            comingSoon={provider.comingSoon}
             isConnected={isConnected}
             needsReauthentication={needsReauthentication}
             isLoading={isLoading}
@@ -399,8 +399,8 @@ const DestinationItem = ({
       <ConfirmDialog
         open={isOpen}
         onOpenChange={setIsOpen}
-        title={`Disconnect ${destination.name}`}
-        description={`Synced events will remain on ${destination.name}. Remove sources first to clear them.`}
+        title={`Disconnect ${provider.name}`}
+        description={`Synced events will remain on ${provider.name}. Remove sources first to clear them.`}
         confirmLabel="Disconnect"
         isConfirming={isConfirming}
         onConfirm={() => confirm(onDisconnect)}
@@ -474,7 +474,7 @@ export const DestinationsSection = (): ReactNode => {
     handleToggleSource,
     handleCaldavSuccess,
     setCaldavDialogOpen,
-    getDestinationConfig,
+    getProviderConfig,
     getSyncStatus,
   } = useDestinationsManager({ onNavigate, onToast });
 
@@ -492,7 +492,7 @@ export const DestinationsSection = (): ReactNode => {
   const renderDestinationItems = (): ReactNode[] => {
     const items: React.ReactNode[] = [];
     for (const account of accounts ?? []) {
-      const config = getDestinationConfig(account.providerId);
+      const config = getProviderConfig(account.providerId);
       if (!config) {
         continue;
       }
@@ -500,7 +500,7 @@ export const DestinationsSection = (): ReactNode => {
         <DestinationItem
           key={account.id}
           destinationId={account.id}
-          destination={{
+          provider={{
             ...config,
             name: account.email ?? config.name,
           }}

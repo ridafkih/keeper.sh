@@ -77,7 +77,13 @@ export const GET = withWideEvent(
 
     try {
       const accessToken = await getAccessToken(userId, credentialId, destinationId);
-      const calendars = await listUserCalendars(accessToken);
+      const outlookCalendars = await listUserCalendars(accessToken);
+
+      const calendars = outlookCalendars.map(({ id, name, isDefaultCalendar }) => ({
+        id,
+        summary: name,
+        primary: isDefaultCalendar,
+      }));
 
       return Response.json({ calendars });
     } catch (error) {

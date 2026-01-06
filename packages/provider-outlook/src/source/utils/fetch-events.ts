@@ -5,7 +5,7 @@ import type {
   OutlookEventsListResponse,
   EventTimeSlot,
 } from "../types";
-import { MICROSOFT_GRAPH_API, OUTLOOK_PAGE_SIZE, GONE_STATUS } from "../../shared/api";
+import { MICROSOFT_GRAPH_API, GONE_STATUS } from "../../shared/api";
 import { isSimpleAuthError } from "../../shared/errors";
 import { parseEventDateTime } from "../../shared/date-time";
 import { isKeeperEvent } from "@keeper.sh/provider-core";
@@ -39,39 +39,44 @@ interface FullSyncRequiredResult {
   fullSyncRequired: true;
 }
 
-const buildInitialUrl = (calendarId: string, timeMin?: Date, timeMax?: Date): URL => {
+const buildInitialUrl = (calendarId: string, timeMin: Date, timeMax: Date): URL => {
   const encodedCalendarId = encodeURIComponent(calendarId);
-  const url = new URL(`${MICROSOFT_GRAPH_API}/me/calendars/${encodedCalendarId}/events/delta`);
+  const url = new URL(`${MICROSOFT_GRAPH_API}/me/calendars/${encodedCalendarId}/calendarView/delta`);
 
+  url.searchParams.set("startDateTime", timeMin.toISOString());
+  url.searchParams.set("endDateTime", timeMax.toISOString());
   url.searchParams.set("$select", "id,iCalUId,subject,start,end");
-  url.searchParams.set("$top", String(OUTLOOK_PAGE_SIZE));
-
-  if (timeMin) {
-    url.searchParams.set("startDateTime", timeMin.toISOString());
-  }
-  if (timeMax) {
-    url.searchParams.set("endDateTime", timeMax.toISOString());
-  }
 
   return url;
+};
+
+const getRequestUrl = (options: PageFetchOptions): URL => {
+  const { calendarId, deltaLink, timeMin, timeMax, nextLink } = options;
+
+  if (nextLink) {
+    return new URL(nextLink);
+  }
+
+  if (deltaLink) {
+    return new URL(deltaLink);
+  }
+
+  if (timeMin && timeMax) {
+    return buildInitialUrl(calendarId, timeMin, timeMax);
+  }
+
+  throw new Error("Either deltaLink/nextLink or timeMin/timeMax is required");
 };
 
 const fetchEventsPage = async (
   options: PageFetchOptions,
 ): Promise<PageFetchResult | FullSyncRequiredResult> => {
-  const { accessToken, calendarId, deltaLink, timeMin, timeMax, nextLink } = options;
-
-  let url = buildInitialUrl(calendarId, timeMin, timeMax);
-  if (nextLink) {
-    url = new URL(nextLink);
-  } else if (deltaLink) {
-    url = new URL(deltaLink);
-  }
+  const { accessToken } = options;
+  const url = getRequestUrl(options);
 
   const response = await fetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      Prefer: `odata.maxpagesize=${OUTLOOK_PAGE_SIZE}`,
     },
   });
 

@@ -1,11 +1,26 @@
 import type { CronOptions } from "cronbake";
 import { createCalDAVSourceProvider } from "@keeper.sh/provider-caldav";
+import type { CalDAVSourceProvider } from "@keeper.sh/provider-caldav";
 import { createFastMailSourceProvider } from "@keeper.sh/provider-fastmail";
 import { createICloudSourceProvider } from "@keeper.sh/provider-icloud";
+import { getCalDAVProviders } from "@keeper.sh/provider-registry";
 import { WideEvent, emitWideEvent, runWithWideEvent } from "@keeper.sh/log";
 import env from "@keeper.sh/env/cron";
 import { database } from "../context";
 import { setCronEventFields, withCronWideEvent } from "../utils/with-wide-event";
+
+interface SourceProviderConfig {
+  database: typeof database;
+  encryptionKey: string;
+}
+
+type SourceProviderFactory = (config: SourceProviderConfig) => CalDAVSourceProvider;
+
+const SOURCE_PROVIDER_FACTORIES: Record<string, SourceProviderFactory> = {
+  caldav: createCalDAVSourceProvider,
+  fastmail: createFastMailSourceProvider,
+  icloud: createICloudSourceProvider,
+};
 
 const syncCalDAVSourcesForProvider = async (
   providerName: string,
@@ -15,26 +30,15 @@ const syncCalDAVSourcesForProvider = async (
     return;
   }
 
-  const providerConfig = {
+  const factory = SOURCE_PROVIDER_FACTORIES[providerId];
+  if (!factory) {
+    return;
+  }
+
+  const provider = factory({
     database,
     encryptionKey: env.ENCRYPTION_KEY,
-  };
-
-  const createProvider = (): ReturnType<typeof createCalDAVSourceProvider> => {
-    switch (providerId) {
-      case "fastmail": {
-        return createFastMailSourceProvider(providerConfig);
-      }
-      case "icloud": {
-        return createICloudSourceProvider(providerConfig);
-      }
-      default: {
-        return createCalDAVSourceProvider(providerConfig);
-      }
-    }
-  };
-
-  const provider = createProvider();
+  });
 
   const event = new WideEvent("cron");
   event.set({
@@ -59,11 +63,10 @@ const syncCalDAVSourcesForProvider = async (
 };
 
 const syncAllCalDAVSources = async (): Promise<void> => {
-  await Promise.all([
-    syncCalDAVSourcesForProvider("CalDAV", "caldav"),
-    syncCalDAVSourcesForProvider("FastMail", "fastmail"),
-    syncCalDAVSourcesForProvider("iCloud", "icloud"),
-  ]);
+  const caldavProviders = getCalDAVProviders();
+  await Promise.all(
+    caldavProviders.map((provider) => syncCalDAVSourcesForProvider(provider.name, provider.id)),
+  );
 };
 
 export default withCronWideEvent({

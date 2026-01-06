@@ -2,8 +2,8 @@
 
 import { useCallback, useState } from "react";
 import { FREE_DESTINATION_LIMIT } from "@keeper.sh/premium/constants";
-import { DESTINATIONS, isCalDAVDestination } from "@keeper.sh/destination-metadata";
-import type { CalDAVDestinationId, DestinationConfig } from "@keeper.sh/destination-metadata";
+import { PROVIDER_DEFINITIONS, isCalDAVProvider } from "@keeper.sh/provider-registry";
+import type { CalDAVProviderId, ProviderDefinition } from "@keeper.sh/provider-registry";
 import { useLinkedAccounts } from "./use-linked-accounts";
 import { updateSourceDestinations, useMappings } from "./use-mappings";
 import type { SourceDestinationMapping, SourceType } from "./use-mappings";
@@ -35,10 +35,10 @@ interface DestinationsManagerCallbacks {
   onNavigate: (url: string) => void;
 }
 
-const isConnectable = (destination: DestinationConfig): boolean => !destination.comingSoon;
+const isConnectable = (provider: ProviderDefinition): boolean => !provider.comingSoon;
 
-const isCalDAVProvider = (provider: string): provider is CalDAVDestinationId =>
-  isCalDAVDestination(provider);
+const isCalDAVProviderType = (provider: string): provider is CalDAVProviderId =>
+  isCalDAVProvider(provider);
 
 const getDestinationsForSource = (
   sourceId: string,
@@ -94,9 +94,9 @@ type SyncStatusRecord = Record<string, SyncStatusEntry>;
 interface DestinationsManagerResult {
   accounts: LinkedAccount[] | undefined;
   caldavDialogOpen: boolean;
-  caldavProvider: CalDAVDestinationId | null;
+  caldavProvider: CalDAVProviderId | null;
   destinationCount: number;
-  getDestinationConfig: (providerId: string) => DestinationConfig | undefined;
+  getProviderConfig: (providerId: string) => ProviderDefinition | undefined;
   getSyncStatus: (destinationId: string) => SyncStatusDisplayProps | null;
   handleCaldavSuccess: () => Promise<void>;
   handleConnect: (providerId: string, destinationId?: string) => void;
@@ -118,7 +118,7 @@ const useDestinationsManager = (
   const { onToast, onNavigate } = callbacks;
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [caldavDialogOpen, setCaldavDialogOpen] = useState(false);
-  const [caldavProvider, setCaldavProvider] = useState<CalDAVDestinationId | null>(null);
+  const [caldavProvider, setCaldavProvider] = useState<CalDAVProviderId | null>(null);
 
   const {
     data: accounts,
@@ -138,10 +138,10 @@ const useDestinationsManager = (
   const destinationCount = accounts?.length ?? 0;
   const isEmpty = !isAccountsLoading && destinationCount === 0;
 
-  const getDestinationConfig = useCallback(
-    (providerId: string): DestinationConfig | undefined =>
-      DESTINATIONS.find(
-        (destination) => isConnectable(destination) && destination.id === providerId,
+  const getProviderConfig = useCallback(
+    (providerId: string): ProviderDefinition | undefined =>
+      PROVIDER_DEFINITIONS.find(
+        (provider) => isConnectable(provider) && provider.id === providerId,
       ),
     [],
   );
@@ -167,7 +167,7 @@ const useDestinationsManager = (
 
   const handleConnect = useCallback(
     (providerId: string, destinationId?: string) => {
-      if (isCalDAVProvider(providerId)) {
+      if (isCalDAVProviderType(providerId)) {
         setCaldavProvider(providerId);
         setCaldavDialogOpen(true);
         return;
@@ -283,7 +283,7 @@ const useDestinationsManager = (
     caldavDialogOpen,
     caldavProvider,
     destinationCount,
-    getDestinationConfig,
+    getProviderConfig,
     getSyncStatus,
     handleCaldavSuccess,
     handleConnect,

@@ -1,6 +1,8 @@
 import { calendarDestinationsTable } from "@keeper.sh/database/schema";
 import { createCalDAVClient } from "@keeper.sh/provider-caldav";
 import { encryptPassword } from "@keeper.sh/encryption";
+import { isCalDAVProvider } from "@keeper.sh/provider-registry";
+import type { CalDAVProviderId } from "@keeper.sh/provider-registry";
 import { eq } from "drizzle-orm";
 import { saveCalDAVDestination } from "./destinations";
 import { triggerDestinationSync } from "./sync";
@@ -29,14 +31,11 @@ interface DiscoveredCalendar {
   displayName: string | undefined;
 }
 
-const VALID_PROVIDERS = ["caldav", "fastmail", "icloud"] as const;
-type CalDAVProvider = (typeof VALID_PROVIDERS)[number];
-
 /**
- * Validates that a provider name is valid.
+ * Validates that a provider name is a valid CalDAV provider.
  */
-const isValidProvider = (provider: string): provider is CalDAVProvider =>
-  VALID_PROVIDERS.some((validProvider) => validProvider === provider);
+const isValidProvider = (provider: string): provider is CalDAVProviderId =>
+  isCalDAVProvider(provider);
 
 /**
  * Discovers calendars available at a CalDAV server.
@@ -86,7 +85,7 @@ const validateCredentials = async (
  */
 const createCalDAVDestination = async (
   userId: string,
-  provider: CalDAVProvider,
+  provider: CalDAVProviderId,
   serverUrl: string,
   credentials: CalDAVCredentials,
   calendarUrl: string,
