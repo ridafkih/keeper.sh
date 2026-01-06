@@ -1,4 +1,4 @@
-import { eventStatesTable, remoteICalSourcesTable } from "@keeper.sh/database/schema";
+import { calendarSourcesTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import { normalizeDateRange, parseDateRangeParams } from "./date-range";
 import { database } from "../context";
@@ -7,7 +7,7 @@ const EMPTY_SOURCES_COUNT = 0;
 
 interface SourceMetadata {
   name: string;
-  url: string;
+  url: string | null;
 }
 
 interface EnrichedEvent {
@@ -16,7 +16,7 @@ interface EnrichedEvent {
   endTime: Date;
   calendarId: string;
   sourceName: string | undefined;
-  sourceUrl: string | undefined;
+  sourceUrl: string | null | undefined;
 }
 
 /**
@@ -28,12 +28,12 @@ const getEventsInRange = async (userId: string, url: URL): Promise<EnrichedEvent
 
   const sources = await database
     .select({
-      id: remoteICalSourcesTable.id,
-      name: remoteICalSourcesTable.name,
-      url: remoteICalSourcesTable.url,
+      id: calendarSourcesTable.id,
+      name: calendarSourcesTable.name,
+      url: calendarSourcesTable.url,
     })
-    .from(remoteICalSourcesTable)
-    .where(eq(remoteICalSourcesTable.userId, userId));
+    .from(calendarSourcesTable)
+    .where(eq(calendarSourcesTable.userId, userId));
 
   if (sources.length === EMPTY_SOURCES_COUNT) {
     return [];

@@ -17,6 +17,7 @@ interface AuthorizationUrlOptions {
   callbackUrl: string;
   scopes?: string[];
   destinationId?: string;
+  sourceCredentialId?: string;
 }
 
 interface NormalizedUserInfo {

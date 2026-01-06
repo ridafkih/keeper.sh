@@ -6,9 +6,9 @@ import { DESTINATIONS, isCalDAVDestination } from "@keeper.sh/destination-metada
 import type { CalDAVDestinationId, DestinationConfig } from "@keeper.sh/destination-metadata";
 import { useLinkedAccounts } from "./use-linked-accounts";
 import { updateSourceDestinations, useMappings } from "./use-mappings";
-import type { SourceDestinationMapping } from "./use-mappings";
-import { useSources } from "./use-sources";
-import type { CalendarSource } from "./use-sources";
+import type { SourceDestinationMapping, SourceType } from "./use-mappings";
+import { useAllSources } from "./use-all-sources";
+import type { UnifiedSource } from "./use-all-sources";
 import { useSubscription } from "./use-subscription";
 import { useSyncStatus } from "./use-sync-status";
 import { track } from "@/lib/analytics";
@@ -53,6 +53,23 @@ const getDestinationsForSource = (
   return destinationIds;
 };
 
+const getSourceTypeForMapping = (source: UnifiedSource): SourceType => {
+  switch (source.type) {
+    case "google":
+    case "outlook": {
+      return "oauth";
+    }
+    case "caldav":
+    case "fastmail":
+    case "icloud": {
+      return "caldav";
+    }
+    default: {
+      return "ics";
+    }
+  }
+};
+
 interface LinkedAccount {
   id: string;
   providerId: string;
@@ -91,7 +108,7 @@ interface DestinationsManagerResult {
   loadingId: string | null;
   mappings: SourceDestinationMapping[];
   setCaldavDialogOpen: (open: boolean) => void;
-  sources: CalendarSource[];
+  sources: UnifiedSource[];
   syncStatus: SyncStatusRecord | undefined;
 }
 
@@ -108,7 +125,7 @@ const useDestinationsManager = (
     isLoading: isAccountsLoading,
     mutate: mutateAccounts,
   } = useLinkedAccounts();
-  const { data: sources } = useSources();
+  const { data: sources } = useAllSources();
   const { data: mappings, mutate: mutateMappings } = useMappings();
   const { data: subscription } = useSubscription();
   const { data: syncStatus } = useSyncStatus();
@@ -201,10 +218,16 @@ const useDestinationsManager = (
 
   const handleToggleSource = useCallback(
     async (destinationId: string, sourceId: string) => {
-      if (!mappings) {
+      if (!mappings || !sources) {
         return;
       }
 
+      const source = sources.find((src) => src.id === sourceId);
+      if (!source) {
+        return;
+      }
+
+      const sourceType = getSourceTypeForMapping(source);
       const currentDestinations = getDestinationsForSource(sourceId, mappings);
       const isEnabled = currentDestinations.includes(destinationId);
       const trackAction = getToggleActionLabel(isEnabled);
@@ -237,17 +260,18 @@ const useDestinationsManager = (
           destinationId,
           id: crypto.randomUUID(),
           sourceId,
+          sourceType,
         });
       }
 
       try {
         await mutateMappings(optimisticData, { revalidate: false });
-        await updateSourceDestinations(sourceId, newDestinations);
+        await updateSourceDestinations(sourceId, newDestinations, sourceType);
       } finally {
         await mutateMappings();
       }
     },
-    [mappings, mutateMappings],
+    [mappings, sources, mutateMappings],
   );
 
   const handleCaldavDialogChange = useCallback((open: boolean): void => {

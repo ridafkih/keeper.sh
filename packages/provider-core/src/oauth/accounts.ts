@@ -1,8 +1,8 @@
 import {
   calendarDestinationsTable,
+  calendarSourcesTable,
   eventStatesTable,
   oauthCredentialsTable,
-  remoteICalSourcesTable,
   userSubscriptionsTable,
 } from "@keeper.sh/database/schema";
 import { getStartOfToday } from "@keeper.sh/date-utils";
@@ -123,13 +123,14 @@ const getUserEventsForSync = async (
       id: eventStatesTable.id,
       sourceEventUid: eventStatesTable.sourceEventUid,
       sourceId: eventStatesTable.sourceId,
-      sourceName: remoteICalSourcesTable.name,
-      sourceUrl: remoteICalSourcesTable.url,
+      sourceName: calendarSourcesTable.name,
+      sourceType: calendarSourcesTable.sourceType,
+      sourceUrl: calendarSourcesTable.url,
       startTime: eventStatesTable.startTime,
     })
     .from(eventStatesTable)
-    .innerJoin(remoteICalSourcesTable, eq(eventStatesTable.sourceId, remoteICalSourcesTable.id))
-    .where(and(eq(remoteICalSourcesTable.userId, userId), gte(eventStatesTable.startTime, today)))
+    .innerJoin(calendarSourcesTable, eq(eventStatesTable.sourceId, calendarSourcesTable.id))
+    .where(and(eq(calendarSourcesTable.userId, userId), gte(eventStatesTable.startTime, today)))
     .orderBy(asc(eventStatesTable.startTime));
 
   const events: SyncableEvent[] = [];
@@ -145,7 +146,7 @@ const getUserEventsForSync = async (
       sourceEventUid: result.sourceEventUid,
       sourceId: result.sourceId,
       sourceName: result.sourceName,
-      sourceUrl: result.sourceUrl,
+      sourceUrl: result.sourceUrl ?? result.sourceType,
       startTime: result.startTime,
       summary: result.sourceName ?? "Busy",
     });

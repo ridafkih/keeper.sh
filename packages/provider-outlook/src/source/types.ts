@@ -20,6 +20,10 @@ interface OutlookEventDateTime {
   timeZone: string;
 }
 
+interface OutlookRemovedInfo {
+  reason: "deleted" | "changed";
+}
+
 interface OutlookCalendarEvent {
   id: string;
   iCalUId?: string;
@@ -28,6 +32,7 @@ interface OutlookCalendarEvent {
   end: OutlookEventDateTime;
   createdDateTime?: string;
   lastModifiedDateTime?: string;
+  "@removed"?: OutlookRemovedInfo;
 }
 
 interface OutlookEventsListResponse {
@@ -48,6 +53,8 @@ interface FetchEventsResult {
   events: OutlookCalendarEvent[];
   nextDeltaLink?: string;
   fullSyncRequired: boolean;
+  isDeltaSync?: boolean;
+  cancelledEventUids?: string[];
 }
 
 interface EventTimeSlot {

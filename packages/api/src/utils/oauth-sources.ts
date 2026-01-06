@@ -1,14 +1,16 @@
 import {
   calendarDestinationsTable,
-  oauthCalendarSourcesTable,
+  calendarSourcesTable,
   oauthCredentialsTable,
+  oauthSourceCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
 import { database, premiumService } from "../context";
-import { createOAuthSourceMappingsForNewSource } from "./oauth-source-destination-mappings";
+import { createMappingsForNewSource } from "./source-destination-mappings";
 import { triggerDestinationSync } from "./sync";
 
 const FIRST_RESULT_LIMIT = 1;
+const OAUTH_SOURCE_TYPE = "oauth";
 
 class OAuthSourceLimitError extends Error {
   constructor() {
@@ -36,17 +38,21 @@ class DuplicateSourceError extends Error {
 
 interface OAuthCalendarSource {
   id: string;
-  userId: string;
-  destinationId: string;
-  externalCalendarId: string;
-  provider: string;
   name: string;
+  provider: string;
   email: string | null;
-  createdAt: Date;
 }
 
 interface OAuthDestinationWithCredentials {
   destinationId: string;
+  email: string | null;
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: Date;
+}
+
+interface OAuthSourceWithCredentials {
+  credentialId: string;
   email: string | null;
   accessToken: string;
   refreshToken: string;
@@ -59,28 +65,39 @@ const getUserOAuthSources = async (
 ): Promise<OAuthCalendarSource[]> => {
   const sources = await database
     .select({
-      createdAt: oauthCalendarSourcesTable.createdAt,
-      destinationId: oauthCalendarSourcesTable.destinationId,
-      email: calendarDestinationsTable.email,
-      externalCalendarId: oauthCalendarSourcesTable.externalCalendarId,
-      id: oauthCalendarSourcesTable.id,
-      name: oauthCalendarSourcesTable.name,
-      provider: oauthCalendarSourcesTable.provider,
-      userId: oauthCalendarSourcesTable.userId,
+      createdAt: calendarSourcesTable.createdAt,
+      email: oauthSourceCredentialsTable.email,
+      externalCalendarId: calendarSourcesTable.externalCalendarId,
+      id: calendarSourcesTable.id,
+      name: calendarSourcesTable.name,
+      oauthCredentialId: calendarSourcesTable.oauthCredentialId,
+      provider: calendarSourcesTable.provider,
+      userId: calendarSourcesTable.userId,
     })
-    .from(oauthCalendarSourcesTable)
-    .innerJoin(
-      calendarDestinationsTable,
-      eq(oauthCalendarSourcesTable.destinationId, calendarDestinationsTable.id),
+    .from(calendarSourcesTable)
+    .leftJoin(
+      oauthSourceCredentialsTable,
+      eq(calendarSourcesTable.oauthCredentialId, oauthSourceCredentialsTable.id),
     )
     .where(
       and(
-        eq(oauthCalendarSourcesTable.userId, userId),
-        eq(oauthCalendarSourcesTable.provider, provider),
+        eq(calendarSourcesTable.userId, userId),
+        eq(calendarSourcesTable.sourceType, OAUTH_SOURCE_TYPE),
+        eq(calendarSourcesTable.provider, provider),
       ),
     );
 
-  return sources;
+  return sources.map((source) => {
+    if (!source.provider) {
+      throw new Error(`OAuth source ${source.id} is missing provider`);
+    }
+    return {
+      email: source.email,
+      id: source.id,
+      name: source.name,
+      provider: source.provider,
+    };
+  });
 };
 
 const verifyOAuthSourceOwnership = async (
@@ -88,12 +105,13 @@ const verifyOAuthSourceOwnership = async (
   sourceId: string,
 ): Promise<boolean> => {
   const [source] = await database
-    .select({ id: oauthCalendarSourcesTable.id })
-    .from(oauthCalendarSourcesTable)
+    .select({ id: calendarSourcesTable.id })
+    .from(calendarSourcesTable)
     .where(
       and(
-        eq(oauthCalendarSourcesTable.id, sourceId),
-        eq(oauthCalendarSourcesTable.userId, userId),
+        eq(calendarSourcesTable.id, sourceId),
+        eq(calendarSourcesTable.userId, userId),
+        eq(calendarSourcesTable.sourceType, OAUTH_SOURCE_TYPE),
       ),
     )
     .limit(FIRST_RESULT_LIMIT);
@@ -145,19 +163,90 @@ const getOAuthDestinationCredentials = async (
   };
 };
 
-const createOAuthSource = async (
+class SourceCredentialNotFoundError extends Error {
+  constructor() {
+    super("Source credential not found or not owned by user");
+  }
+}
+
+class SourceCredentialProviderMismatchError extends Error {
+  constructor(provider: string) {
+    super(`Source credential is not a ${provider} account`);
+  }
+}
+
+const getOAuthSourceCredentials = async (
   userId: string,
-  destinationId: string,
-  externalCalendarId: string,
-  name: string,
+  credentialId: string,
   provider: string,
+): Promise<OAuthSourceWithCredentials> => {
+  const [result] = await database
+    .select({
+      accessToken: oauthSourceCredentialsTable.accessToken,
+      credentialId: oauthSourceCredentialsTable.id,
+      email: oauthSourceCredentialsTable.email,
+      expiresAt: oauthSourceCredentialsTable.expiresAt,
+      provider: oauthSourceCredentialsTable.provider,
+      refreshToken: oauthSourceCredentialsTable.refreshToken,
+    })
+    .from(oauthSourceCredentialsTable)
+    .where(
+      and(
+        eq(oauthSourceCredentialsTable.id, credentialId),
+        eq(oauthSourceCredentialsTable.userId, userId),
+      ),
+    )
+    .limit(FIRST_RESULT_LIMIT);
+
+  if (!result) {
+    throw new SourceCredentialNotFoundError();
+  }
+
+  if (result.provider !== provider) {
+    throw new SourceCredentialProviderMismatchError(provider);
+  }
+
+  return {
+    accessToken: result.accessToken,
+    credentialId: result.credentialId,
+    email: result.email,
+    expiresAt: result.expiresAt,
+    refreshToken: result.refreshToken,
+  };
+};
+
+interface CreateOAuthSourceOptions {
+  userId: string;
+  externalCalendarId: string;
+  name: string;
+  provider: string;
+  oauthCredentialId: string;
+}
+
+const createOAuthSource = async (
+  options: CreateOAuthSourceOptions,
 ): Promise<OAuthCalendarSource> => {
-  const destination = await getOAuthDestinationCredentials(userId, destinationId, provider);
+  const { userId, externalCalendarId, name, provider, oauthCredentialId } = options;
+
+  const [credential] = await database
+    .select({ email: oauthSourceCredentialsTable.email })
+    .from(oauthSourceCredentialsTable)
+    .where(
+      and(
+        eq(oauthSourceCredentialsTable.id, oauthCredentialId),
+        eq(oauthSourceCredentialsTable.userId, userId),
+      ),
+    )
+    .limit(FIRST_RESULT_LIMIT);
+
+  if (!credential) {
+    throw new Error("Source credential not found");
+  }
 
   const existingSources = await database
-    .select({ id: oauthCalendarSourcesTable.id })
-    .from(oauthCalendarSourcesTable)
-    .where(eq(oauthCalendarSourcesTable.userId, userId));
+    .select({ id: calendarSourcesTable.id })
+    .from(calendarSourcesTable)
+    .where(eq(calendarSourcesTable.userId, userId));
 
   const allowed = await premiumService.canAddSource(userId, existingSources.length);
   if (!allowed) {
@@ -165,13 +254,13 @@ const createOAuthSource = async (
   }
 
   const [existingSource] = await database
-    .select({ id: oauthCalendarSourcesTable.id })
-    .from(oauthCalendarSourcesTable)
+    .select({ id: calendarSourcesTable.id })
+    .from(calendarSourcesTable)
     .where(
       and(
-        eq(oauthCalendarSourcesTable.userId, userId),
-        eq(oauthCalendarSourcesTable.destinationId, destinationId),
-        eq(oauthCalendarSourcesTable.externalCalendarId, externalCalendarId),
+        eq(calendarSourcesTable.userId, userId),
+        eq(calendarSourcesTable.externalCalendarId, externalCalendarId),
+        eq(calendarSourcesTable.oauthCredentialId, oauthCredentialId),
       ),
     )
     .limit(FIRST_RESULT_LIMIT);
@@ -181,12 +270,13 @@ const createOAuthSource = async (
   }
 
   const [source] = await database
-    .insert(oauthCalendarSourcesTable)
+    .insert(calendarSourcesTable)
     .values({
-      destinationId,
       externalCalendarId,
       name,
+      oauthCredentialId,
       provider,
+      sourceType: OAUTH_SOURCE_TYPE,
       userId,
     })
     .returning();
@@ -195,23 +285,26 @@ const createOAuthSource = async (
     throw new Error("Failed to create OAuth calendar source");
   }
 
-  await createOAuthSourceMappingsForNewSource(userId, source.id);
+  await createMappingsForNewSource(userId, source.id);
 
   triggerDestinationSync(userId);
 
   return {
-    ...source,
-    email: destination.email,
+    email: credential.email,
+    id: source.id,
+    name: source.name,
+    provider,
   };
 };
 
 const deleteOAuthSource = async (userId: string, sourceId: string): Promise<boolean> => {
   const [deleted] = await database
-    .delete(oauthCalendarSourcesTable)
+    .delete(calendarSourcesTable)
     .where(
       and(
-        eq(oauthCalendarSourcesTable.id, sourceId),
-        eq(oauthCalendarSourcesTable.userId, userId),
+        eq(calendarSourcesTable.id, sourceId),
+        eq(calendarSourcesTable.userId, userId),
+        eq(calendarSourcesTable.sourceType, OAUTH_SOURCE_TYPE),
       ),
     )
     .returning();
@@ -229,11 +322,19 @@ export {
   DestinationNotFoundError,
   DestinationProviderMismatchError,
   DuplicateSourceError,
+  SourceCredentialNotFoundError,
+  SourceCredentialProviderMismatchError,
   getUserOAuthSources,
   verifyOAuthSourceOwnership,
   getOAuthDestinationCredentials,
+  getOAuthSourceCredentials,
   createOAuthSource,
   deleteOAuthSource,
 };
 
-export type { OAuthCalendarSource, OAuthDestinationWithCredentials };
+export type {
+  OAuthCalendarSource,
+  OAuthDestinationWithCredentials,
+  OAuthSourceWithCredentials,
+  CreateOAuthSourceOptions,
+};

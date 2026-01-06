@@ -7,16 +7,24 @@ const EMPTY_SOURCES_COUNT = 0;
 const INITIAL_ADDED_COUNT = 0;
 const INITIAL_REMOVED_COUNT = 0;
 
+const toError = (reason: unknown): Error => {
+  if (reason instanceof Error) {
+    return reason;
+  }
+  return new Error(String(reason));
+};
+
 interface OAuthSourceAccount {
   sourceId: string;
   userId: string;
-  destinationId: string;
   externalCalendarId: string;
   syncToken: string | null;
   accessToken: string;
   refreshToken: string;
   accessTokenExpiresAt: Date;
-  oauthCredentialId: string;
+  credentialId: string;
+  oauthCredentialId?: string;
+  oauthSourceCredentialId?: string;
   provider: string;
 }
 
@@ -48,6 +56,7 @@ const createOAuthSourceProvider = <
 
   const syncAllSources = async (): Promise<SourceSyncResult> => {
     const sources = await getAllSources(database);
+
     if (sources.length === EMPTY_SOURCES_COUNT) {
       return { eventsAdded: INITIAL_ADDED_COUNT, eventsRemoved: INITIAL_REMOVED_COUNT };
     }
@@ -65,11 +74,19 @@ const createOAuthSourceProvider = <
       eventsRemoved: INITIAL_REMOVED_COUNT,
     };
 
+    const errors: Error[] = [];
+
     for (const result of results) {
       if (result.status === "fulfilled") {
         combined.eventsAdded += result.value.eventsAdded;
         combined.eventsRemoved += result.value.eventsRemoved;
+      } else {
+        errors.push(toError(result.reason));
       }
+    }
+
+    if (errors.length > EMPTY_SOURCES_COUNT) {
+      combined.errors = errors;
     }
 
     return combined;

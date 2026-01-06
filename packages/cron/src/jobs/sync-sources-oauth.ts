@@ -36,7 +36,13 @@ const syncGoogleSources = async (): Promise<void> => {
       event.set({
         eventsAdded: result.eventsAdded,
         eventsRemoved: result.eventsRemoved,
+        sourceSyncErrors: result.errors?.length ?? 0,
       });
+      if (result.errors && result.errors.length > 0) {
+        for (const error of result.errors) {
+          event.setError(error);
+        }
+      }
     } catch (error) {
       event.setError(error);
     } finally {
@@ -73,7 +79,13 @@ const syncOutlookSources = async (): Promise<void> => {
       event.set({
         eventsAdded: result.eventsAdded,
         eventsRemoved: result.eventsRemoved,
+        sourceSyncErrors: result.errors?.length ?? 0,
       });
+      if (result.errors && result.errors.length > 0) {
+        for (const error of result.errors) {
+          event.setError(error);
+        }
+      }
     } catch (error) {
       event.setError(error);
     } finally {

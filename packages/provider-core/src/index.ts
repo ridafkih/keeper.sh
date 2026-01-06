@@ -12,6 +12,7 @@ export {
 export {
   OAuthSourceProvider,
   type FetchEventsResult,
+  type ProcessEventsOptions,
 } from "./oauth/source-provider";
 export {
   createOAuthSourceProvider,

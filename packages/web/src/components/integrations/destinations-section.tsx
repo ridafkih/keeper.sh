@@ -25,7 +25,7 @@ import { SectionHeader } from "@/components/section-header";
 import { CalDAVConnectDialog } from "@/components/integrations/caldav-connect-dialog";
 import { useConfirmAction } from "@/hooks/use-confirm-action";
 import type { SourceDestinationMapping } from "@/hooks/use-mappings";
-import type { CalendarSource } from "@/hooks/use-sources";
+import type { UnifiedSource } from "@/hooks/use-all-sources";
 import { useDestinationsManager } from "@/hooks/use-destinations-manager";
 import type { SyncStatusDisplayProps } from "@/hooks/use-destinations-manager";
 import { BannerText, TextLabel, TextMeta, TextMuted } from "@/components/typography";
@@ -133,7 +133,7 @@ const DestinationsMenu = ({ onConnect }: DestinationsMenuProps): ReactNode => (
 
 interface SourcesSubmenuProps {
   destinationId: string;
-  sources: CalendarSource[];
+  sources: UnifiedSource[];
   mappings: SourceDestinationMapping[];
   onToggleSource: (sourceId: string) => void;
 }
@@ -190,7 +190,7 @@ interface DestinationActionProps {
   isConnected: boolean;
   needsReauthentication: boolean;
   isLoading: boolean;
-  sources: CalendarSource[];
+  sources: UnifiedSource[];
   mappings: SourceDestinationMapping[];
   onConnect: () => void;
   onDisconnect: () => void;
@@ -341,7 +341,7 @@ interface DestinationItemProps {
   isConnected: boolean;
   needsReauthentication: boolean;
   isLoading: boolean;
-  sources: CalendarSource[];
+  sources: UnifiedSource[];
   mappings: SourceDestinationMapping[];
   onConnect: () => void;
   onDisconnect: () => Promise<void>;

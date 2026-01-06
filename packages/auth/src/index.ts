@@ -128,9 +128,7 @@ const createAuth = (config: AuthConfig): AuthResult => {
     );
   }
 
-  const socialProviders: Parameters<typeof betterAuth>[0]["socialProviders"] = {
-    // Empty object to be populated conditionally below
-  };
+  const socialProviders: Parameters<typeof betterAuth>[0]["socialProviders"] = {};
 
   if (googleClientId && googleClientSecret) {
     socialProviders.google = {

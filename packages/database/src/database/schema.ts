@@ -12,15 +12,100 @@ import { user } from "./auth-schema";
 
 const DEFAULT_EVENT_COUNT = 0;
 
-const remoteICalSourcesTable = pgTable("remote_ical_sources", {
+const oauthCredentialsTable = pgTable("oauth_credentials", {
+  accessToken: text().notNull(),
   createdAt: timestamp().notNull().defaultNow(),
+  expiresAt: timestamp().notNull(),
   id: uuid().notNull().primaryKey().defaultRandom(),
-  name: text().notNull(),
-  url: text().notNull(),
-  userId: text()
+  refreshToken: text().notNull(),
+  updatedAt: timestamp()
     .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
+    .defaultNow()
+    .$onUpdate(() => new Date()),
 });
+
+const oauthSourceCredentialsTable = pgTable(
+  "oauth_source_credentials",
+  {
+    accessToken: text().notNull(),
+    createdAt: timestamp().notNull().defaultNow(),
+    email: text(),
+    expiresAt: timestamp().notNull(),
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    needsReauthentication: boolean().notNull().default(false),
+    provider: text().notNull(),
+    refreshToken: text().notNull(),
+    updatedAt: timestamp()
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("oauth_source_credentials_user_idx").on(table.userId),
+    index("oauth_source_credentials_provider_idx").on(table.provider),
+  ],
+);
+
+const caldavCredentialsTable = pgTable("caldav_credentials", {
+  calendarUrl: text().notNull(),
+  createdAt: timestamp().notNull().defaultNow(),
+  encryptedPassword: text().notNull(),
+  id: uuid().notNull().primaryKey().defaultRandom(),
+  serverUrl: text().notNull(),
+  updatedAt: timestamp()
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+  username: text().notNull(),
+});
+
+const caldavSourceCredentialsTable = pgTable("caldav_source_credentials", {
+  createdAt: timestamp().notNull().defaultNow(),
+  encryptedPassword: text().notNull(),
+  id: uuid().notNull().primaryKey().defaultRandom(),
+  serverUrl: text().notNull(),
+  updatedAt: timestamp()
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+  username: text().notNull(),
+});
+
+const calendarSourcesTable = pgTable(
+  "calendar_sources",
+  {
+    caldavCredentialId: uuid().references(() => caldavSourceCredentialsTable.id, {
+      onDelete: "set null",
+    }),
+    calendarUrl: text(),
+    createdAt: timestamp().notNull().defaultNow(),
+    externalCalendarId: text(),
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    name: text().notNull(),
+    oauthCredentialId: uuid().references(() => oauthSourceCredentialsTable.id, {
+      onDelete: "set null",
+    }),
+    provider: text(),
+    sourceType: text().notNull(),
+    syncToken: text(),
+    updatedAt: timestamp()
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    url: text(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("calendar_sources_user_idx").on(table.userId),
+    index("calendar_sources_type_idx").on(table.sourceType),
+    index("calendar_sources_provider_idx").on(table.provider),
+  ],
+);
 
 const calendarSnapshotsTable = pgTable("calendar_snapshots", {
   contentHash: text(),
@@ -30,7 +115,7 @@ const calendarSnapshotsTable = pgTable("calendar_snapshots", {
   public: boolean().notNull().default(false),
   sourceId: uuid()
     .notNull()
-    .references(() => remoteICalSourcesTable.id, { onDelete: "cascade" }),
+    .references(() => calendarSourcesTable.id, { onDelete: "cascade" }),
 });
 
 const eventStatesTable = pgTable(
@@ -42,11 +127,12 @@ const eventStatesTable = pgTable(
     sourceEventUid: text(),
     sourceId: uuid()
       .notNull()
-      .references(() => remoteICalSourcesTable.id, { onDelete: "cascade" }),
+      .references(() => calendarSourcesTable.id, { onDelete: "cascade" }),
     startTime: timestamp().notNull(),
   },
   (table) => [
     index("event_states_start_time_idx").on(table.startTime),
+    index("event_states_source_idx").on(table.sourceId),
     uniqueIndex("event_states_identity_idx").on(
       table.sourceId,
       table.sourceEventUid,
@@ -67,31 +153,6 @@ const userSubscriptionsTable = pgTable("user_subscriptions", {
     .notNull()
     .primaryKey()
     .references(() => user.id, { onDelete: "cascade" }),
-});
-
-const oauthCredentialsTable = pgTable("oauth_credentials", {
-  accessToken: text().notNull(),
-  createdAt: timestamp().notNull().defaultNow(),
-  expiresAt: timestamp().notNull(),
-  id: uuid().notNull().primaryKey().defaultRandom(),
-  refreshToken: text().notNull(),
-  updatedAt: timestamp()
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-});
-
-const caldavCredentialsTable = pgTable("caldav_credentials", {
-  calendarUrl: text().notNull(),
-  createdAt: timestamp().notNull().defaultNow(),
-  encryptedPassword: text().notNull(),
-  id: uuid().notNull().primaryKey().defaultRandom(),
-  serverUrl: text().notNull(),
-  updatedAt: timestamp()
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-  username: text().notNull(),
 });
 
 const calendarDestinationsTable = pgTable(
@@ -172,7 +233,7 @@ const sourceDestinationMappingsTable = pgTable(
     id: uuid().notNull().primaryKey().defaultRandom(),
     sourceId: uuid()
       .notNull()
-      .references(() => remoteICalSourcesTable.id, { onDelete: "cascade" }),
+      .references(() => calendarSourcesTable.id, { onDelete: "cascade" }),
   },
   (table) => [
     uniqueIndex("source_destination_mapping_idx").on(table.sourceId, table.destinationId),
@@ -181,116 +242,17 @@ const sourceDestinationMappingsTable = pgTable(
   ],
 );
 
-const oauthCalendarSourcesTable = pgTable(
-  "oauth_calendar_sources",
-  {
-    createdAt: timestamp().notNull().defaultNow(),
-    destinationId: uuid()
-      .notNull()
-      .references(() => calendarDestinationsTable.id, { onDelete: "cascade" }),
-    externalCalendarId: text().notNull(),
-    id: uuid().notNull().primaryKey().defaultRandom(),
-    name: text().notNull(),
-    provider: text().notNull(),
-    syncToken: text(),
-    updatedAt: timestamp()
-      .notNull()
-      .defaultNow()
-      .$onUpdate(() => new Date()),
-    userId: text()
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-  },
-  (table) => [
-    uniqueIndex("oauth_calendar_sources_user_calendar_idx").on(
-      table.userId,
-      table.destinationId,
-      table.externalCalendarId,
-    ),
-    index("oauth_calendar_sources_user_idx").on(table.userId),
-    index("oauth_calendar_sources_destination_idx").on(table.destinationId),
-    index("oauth_calendar_sources_provider_idx").on(table.provider),
-  ],
-);
-
-const oauthSourceDestinationMappingsTable = pgTable(
-  "oauth_source_destination_mappings",
-  {
-    createdAt: timestamp().notNull().defaultNow(),
-    destinationId: uuid()
-      .notNull()
-      .references(() => calendarDestinationsTable.id, { onDelete: "cascade" }),
-    id: uuid().notNull().primaryKey().defaultRandom(),
-    oauthSourceId: uuid()
-      .notNull()
-      .references(() => oauthCalendarSourcesTable.id, { onDelete: "cascade" }),
-  },
-  (table) => [
-    uniqueIndex("oauth_source_destination_mapping_idx").on(table.oauthSourceId, table.destinationId),
-    index("oauth_source_destination_mappings_source_idx").on(table.oauthSourceId),
-    index("oauth_source_destination_mappings_destination_idx").on(table.destinationId),
-  ],
-);
-
-const oauthEventStatesTable = pgTable(
-  "oauth_event_states",
-  {
-    createdAt: timestamp().notNull().defaultNow(),
-    endTime: timestamp().notNull(),
-    id: uuid().notNull().primaryKey().defaultRandom(),
-    oauthSourceId: uuid()
-      .notNull()
-      .references(() => oauthCalendarSourcesTable.id, { onDelete: "cascade" }),
-    sourceEventUid: text(),
-    startTime: timestamp().notNull(),
-  },
-  (table) => [
-    index("oauth_event_states_start_time_idx").on(table.startTime),
-    uniqueIndex("oauth_event_states_identity_idx").on(
-      table.oauthSourceId,
-      table.sourceEventUid,
-      table.startTime,
-      table.endTime,
-    ),
-    index("oauth_event_states_source_idx").on(table.oauthSourceId),
-  ],
-);
-
-const oauthEventMappingsTable = pgTable(
-  "oauth_event_mappings",
-  {
-    createdAt: timestamp().notNull().defaultNow(),
-    deleteIdentifier: text(),
-    destinationEventUid: text().notNull(),
-    destinationId: uuid()
-      .notNull()
-      .references(() => calendarDestinationsTable.id, { onDelete: "cascade" }),
-    endTime: timestamp().notNull(),
-    id: uuid().notNull().primaryKey().defaultRandom(),
-    oauthEventStateId: uuid()
-      .notNull()
-      .references(() => oauthEventStatesTable.id, { onDelete: "cascade" }),
-    startTime: timestamp().notNull(),
-  },
-  (table) => [
-    uniqueIndex("oauth_event_mappings_event_dest_idx").on(table.oauthEventStateId, table.destinationId),
-    index("oauth_event_mappings_destination_idx").on(table.destinationId),
-  ],
-);
-
 export {
-  remoteICalSourcesTable,
-  calendarSnapshotsTable,
-  eventStatesTable,
-  userSubscriptionsTable,
-  oauthCredentialsTable,
   caldavCredentialsTable,
+  caldavSourceCredentialsTable,
   calendarDestinationsTable,
-  syncStatusTable,
+  calendarSnapshotsTable,
+  calendarSourcesTable,
   eventMappingsTable,
+  eventStatesTable,
+  oauthCredentialsTable,
+  oauthSourceCredentialsTable,
   sourceDestinationMappingsTable,
-  oauthCalendarSourcesTable,
-  oauthSourceDestinationMappingsTable,
-  oauthEventStatesTable,
-  oauthEventMappingsTable,
+  syncStatusTable,
+  userSubscriptionsTable,
 };

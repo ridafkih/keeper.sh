@@ -1,11 +1,11 @@
-import { updateOAuthSourceDestinationsSchema } from "@keeper.sh/data-schemas";
+import { updateSourceDestinationsSchema } from "@keeper.sh/data-schemas";
 import { getWideEvent } from "@keeper.sh/log";
 import { withAuth, withWideEvent } from "../../../../../utils/middleware";
 import { ErrorResponse } from "../../../../../utils/responses";
 import {
-  getDestinationsForOAuthSource,
-  updateOAuthSourceMappings,
-} from "../../../../../utils/oauth-source-destination-mappings";
+  getDestinationsForSource,
+  updateSourceMappings,
+} from "../../../../../utils/source-destination-mappings";
 import { verifyOAuthSourceOwnership } from "../../../../../utils/oauth-sources";
 import { triggerDestinationSync } from "../../../../../utils/sync";
 
@@ -22,7 +22,7 @@ const GET = withWideEvent(
       return ErrorResponse.notFound().toResponse();
     }
 
-    const destinationIds = await getDestinationsForOAuthSource(sourceId);
+    const destinationIds = await getDestinationsForSource(sourceId);
     return Response.json({ destinationIds });
   }),
 );
@@ -42,9 +42,9 @@ const PUT = withWideEvent(
 
     try {
       const body = await request.json();
-      const { destinationIds } = updateOAuthSourceDestinationsSchema.assert(body);
+      const { destinationIds } = updateSourceDestinationsSchema.assert(body);
 
-      await updateOAuthSourceMappings(userId, sourceId, destinationIds);
+      await updateSourceMappings(userId, sourceId, destinationIds);
       triggerDestinationSync(userId);
 
       return Response.json({ success: true });

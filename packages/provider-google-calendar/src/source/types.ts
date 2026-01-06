@@ -51,6 +51,8 @@ interface FetchEventsResult {
   events: GoogleCalendarEvent[];
   nextSyncToken?: string;
   fullSyncRequired: boolean;
+  isDeltaSync?: boolean;
+  cancelledEventUids?: string[];
 }
 
 interface EventTimeSlot {

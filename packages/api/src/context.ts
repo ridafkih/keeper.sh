@@ -28,6 +28,7 @@ const { auth } = createAuth({
   database,
   secret: env.BETTER_AUTH_SECRET,
   baseUrl: env.BETTER_AUTH_URL,
+  webBaseUrl: env.BETTER_AUTH_URL,
   commercialMode: env.COMMERCIAL_MODE ?? false,
   polarAccessToken: env.POLAR_ACCESS_TOKEN,
   polarMode: env.POLAR_MODE,

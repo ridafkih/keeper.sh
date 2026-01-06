@@ -1,4 +1,4 @@
-import type { remoteICalSourcesTable } from "@keeper.sh/database/schema";
+import type { calendarSourcesTable } from "@keeper.sh/database/schema";
 import { calendarSnapshotsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { pullRemoteCalendar } from "@keeper.sh/pull-calendar";
 import { diffEvents, parseIcsEvents } from "@keeper.sh/sync-events";
@@ -19,7 +19,7 @@ class RemoteCalendarSyncError extends Error {
   }
 }
 
-type Source = typeof remoteICalSourcesTable.$inferSelect;
+type Source = typeof calendarSourcesTable.$inferSelect;
 
 interface SyncCalendarService {
   createSnapshot: (sourceId: string, ical: string) => Promise<void>;
@@ -123,6 +123,9 @@ const createSyncCalendarService = (database: BunSQLDatabase): SyncCalendarServic
   };
 
   const fetchAndSyncSource = async (source: Source): Promise<void> => {
+    if (!source.url) {
+      throw new Error(`Source ${source.id} is missing url`);
+    }
     const { ical } = await pullRemoteCalendar("ical", source.url);
     await createSnapshot(source.id, ical);
     await syncSourceFromSnapshot(source);

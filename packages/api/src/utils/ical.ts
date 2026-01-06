@@ -1,12 +1,13 @@
-import { eventStatesTable, remoteICalSourcesTable } from "@keeper.sh/database/schema";
+import { calendarSourcesTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { KEEPER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { generateIcsCalendar } from "ts-ics";
 import type { IcsCalendar, IcsEvent } from "ts-ics";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { resolveUserIdentifier } from "./user";
 import { database } from "../context";
 
 const EMPTY_SOURCES_COUNT = 0;
+const ICAL_SOURCE_TYPE = "ical";
 
 interface CalendarEvent {
   id: string;
@@ -47,9 +48,14 @@ const generateUserCalendar = async (identifier: string): Promise<string | null> 
   }
 
   const sources = await database
-    .select({ id: remoteICalSourcesTable.id })
-    .from(remoteICalSourcesTable)
-    .where(eq(remoteICalSourcesTable.userId, userId));
+    .select({ id: calendarSourcesTable.id })
+    .from(calendarSourcesTable)
+    .where(
+      and(
+        eq(calendarSourcesTable.userId, userId),
+        eq(calendarSourcesTable.sourceType, ICAL_SOURCE_TYPE),
+      ),
+    );
 
   if (sources.length === EMPTY_SOURCES_COUNT) {
     return formatEventsAsIcal([]);

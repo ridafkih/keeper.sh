@@ -1,4 +1,4 @@
-import { remoteICalSourcesTable } from "@keeper.sh/database/schema";
+import { calendarSourcesTable } from "@keeper.sh/database/schema";
 import { CalendarFetchError, fetchAndSyncSource, pullRemoteCalendar } from "@keeper.sh/calendar";
 import { getWideEvent } from "@keeper.sh/log";
 import { and, eq } from "drizzle-orm";
@@ -7,6 +7,7 @@ import { createMappingsForNewSource } from "./source-destination-mappings";
 import { database, premiumService } from "../context";
 
 const FIRST_RESULT_LIMIT = 1;
+const ICAL_SOURCE_TYPE = "ical";
 
 class SourceLimitError extends Error {
   constructor() {
@@ -33,18 +34,32 @@ interface Source {
   id: string;
   userId: string;
   name: string;
-  url: string;
+  url: string | null;
   createdAt: Date;
 }
 
-const getUserSources = (userId: string): Promise<Source[]> =>
-  database.select().from(remoteICalSourcesTable).where(eq(remoteICalSourcesTable.userId, userId));
+const getUserSources = async (userId: string): Promise<Source[]> => {
+  const sources = await database
+    .select()
+    .from(calendarSourcesTable)
+    .where(
+      and(eq(calendarSourcesTable.userId, userId), eq(calendarSourcesTable.sourceType, ICAL_SOURCE_TYPE)),
+    );
+
+  return sources;
+};
 
 const verifySourceOwnership = async (userId: string, sourceId: string): Promise<boolean> => {
   const [source] = await database
-    .select({ id: remoteICalSourcesTable.id })
-    .from(remoteICalSourcesTable)
-    .where(and(eq(remoteICalSourcesTable.id, sourceId), eq(remoteICalSourcesTable.userId, userId)))
+    .select({ id: calendarSourcesTable.id })
+    .from(calendarSourcesTable)
+    .where(
+      and(
+        eq(calendarSourcesTable.id, sourceId),
+        eq(calendarSourcesTable.userId, userId),
+        eq(calendarSourcesTable.sourceType, ICAL_SOURCE_TYPE),
+      ),
+    )
     .limit(FIRST_RESULT_LIMIT);
 
   return Boolean(source);
@@ -65,9 +80,9 @@ const validateSourceUrl = async (url: string): Promise<void> => {
  */
 const createSource = async (userId: string, name: string, url: string): Promise<Source> => {
   const existingSources = await database
-    .select({ id: remoteICalSourcesTable.id })
-    .from(remoteICalSourcesTable)
-    .where(eq(remoteICalSourcesTable.userId, userId));
+    .select({ id: calendarSourcesTable.id })
+    .from(calendarSourcesTable)
+    .where(eq(calendarSourcesTable.userId, userId));
 
   const allowed = await premiumService.canAddSource(userId, existingSources.length);
   if (!allowed) {
@@ -81,8 +96,8 @@ const createSource = async (userId: string, name: string, url: string): Promise<
   }
 
   const [source] = await database
-    .insert(remoteICalSourcesTable)
-    .values({ name, url, userId })
+    .insert(calendarSourcesTable)
+    .values({ name, sourceType: ICAL_SOURCE_TYPE, url, userId })
     .returning();
 
   if (!source) {
@@ -107,8 +122,14 @@ const createSource = async (userId: string, name: string, url: string): Promise<
  */
 const deleteSource = async (userId: string, sourceId: string): Promise<boolean> => {
   const [deleted] = await database
-    .delete(remoteICalSourcesTable)
-    .where(and(eq(remoteICalSourcesTable.id, sourceId), eq(remoteICalSourcesTable.userId, userId)))
+    .delete(calendarSourcesTable)
+    .where(
+      and(
+        eq(calendarSourcesTable.id, sourceId),
+        eq(calendarSourcesTable.userId, userId),
+        eq(calendarSourcesTable.sourceType, ICAL_SOURCE_TYPE),
+      ),
+    )
     .returning();
 
   if (deleted) {

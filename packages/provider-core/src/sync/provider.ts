@@ -26,7 +26,7 @@ const INITIAL_ADDED_COUNT = 0;
 const INITIAL_ADD_FAILED_COUNT = 0;
 const INITIAL_REMOVED_COUNT = 0;
 const INITIAL_REMOVE_FAILED_COUNT = 0;
-const YEARS_UNTIL_FUTURE = 10;
+const YEARS_UNTIL_FUTURE = 2;
 const MIN_REMOTE_COUNT = 0;
 
 abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig> {
@@ -50,7 +50,7 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
 
     const [existingMappings, remoteEvents] = await Promise.all([
       getEventMappingsForDestination(database, destinationId),
-      this.listRemoteEvents({ until: CalendarProvider.getTenYearsFromNow() }),
+      this.listRemoteEvents({ until: CalendarProvider.getFutureDate() }),
     ]);
 
     this.emitProgress(context, {
@@ -66,7 +66,8 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
     );
 
     if (staleMappingIds.length > EMPTY_STALE_MAPPINGS_COUNT) {
-      await Promise.all(staleMappingIds.map((id) => deleteEventMapping(database, id)));
+      const staleMappings = existingMappings.filter((mapping) => staleMappingIds.includes(mapping.id));
+      await Promise.all(staleMappings.map((mapping) => deleteEventMapping(database, mapping.id)));
     }
 
     if (operations.length === EMPTY_OPERATIONS_COUNT) {
@@ -186,6 +187,7 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
     mappedDestinationUids: Set<string>,
   ): SyncOperation[] {
     const operations: SyncOperation[] = [];
+    const now = new Date();
 
     for (const mapping of existingMappings) {
       if (!localEventIds.has(mapping.eventStateId)) {
@@ -200,6 +202,9 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
 
     for (const remoteEvent of remoteEvents) {
       if (!mappedDestinationUids.has(remoteEvent.uid)) {
+        if (remoteEvent.startTime > now) {
+          continue;
+        }
         operations.push({
           deleteId: remoteEvent.deleteId,
           startTime: remoteEvent.startTime,
@@ -311,7 +316,7 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
     return operation.startTime;
   }
 
-  private static getTenYearsFromNow(): Date {
+  private static getFutureDate(): Date {
     const date = new Date();
     date.setFullYear(date.getFullYear() + YEARS_UNTIL_FUTURE);
     return date;

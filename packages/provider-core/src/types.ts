@@ -9,7 +9,7 @@ interface SyncableEvent {
   description?: string;
   sourceId: string;
   sourceName: string | null;
-  sourceUrl: string;
+  sourceUrl: string | null;
 }
 
 interface PushResult {
@@ -91,19 +91,21 @@ interface SourceSyncResult {
   eventsRemoved: number;
   syncToken?: string;
   fullSyncRequired?: boolean;
+  errors?: Error[];
 }
 
 interface OAuthSourceConfig {
   database: BunSQLDatabase;
   userId: string;
   sourceId: string;
-  destinationId: string;
   externalCalendarId: string;
   accessToken: string;
   refreshToken: string;
   accessTokenExpiresAt: Date;
   syncToken: string | null;
-  oauthCredentialId: string;
+  destinationId?: string;
+  oauthCredentialId?: string;
+  oauthSourceCredentialId?: string;
 }
 
 export type {

@@ -1,4 +1,4 @@
-import { calendarSnapshotsTable, remoteICalSourcesTable } from "@keeper.sh/database/schema";
+import { calendarSnapshotsTable, calendarSourcesTable } from "@keeper.sh/database/schema";
 import { eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
@@ -8,9 +8,9 @@ const createSnapshot = async (
   ical: string,
 ): Promise<void> => {
   const [source] = await database
-    .select({ id: remoteICalSourcesTable.id })
-    .from(remoteICalSourcesTable)
-    .where(eq(remoteICalSourcesTable.id, sourceId));
+    .select({ id: calendarSourcesTable.id })
+    .from(calendarSourcesTable)
+    .where(eq(calendarSourcesTable.id, sourceId));
 
   if (!source) {
     return;

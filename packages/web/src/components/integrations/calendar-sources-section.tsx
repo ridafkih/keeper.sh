@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@base-ui/react/button";
 import { TextLink } from "@/components/text-link";
 import { FREE_SOURCE_LIMIT } from "@keeper.sh/premium/constants";
@@ -21,12 +22,25 @@ import { SectionHeader } from "@/components/section-header";
 import { BannerText, TextCaption, TextLabel } from "@/components/typography";
 import { useConfirmAction } from "@/hooks/use-confirm-action";
 import { useFormSubmit } from "@/hooks/use-form-submit";
-import { useSources } from "@/hooks/use-sources";
-import type { CalendarSource } from "@/hooks/use-sources";
+import { useAllSources } from "@/hooks/use-all-sources";
+import type { UnifiedSource, SourceType } from "@/hooks/use-all-sources";
 import { useSubscription } from "@/hooks/use-subscription";
 import { button } from "@/styles";
 import { track } from "@/lib/analytics";
-import { Link as LinkIcon, Plus } from "lucide-react";
+import { AddSourceDialog } from "./add-source-dialog";
+import { CalDAVSourceDialog } from "./caldav-source-dialog";
+import type { CalDAVSourceProvider } from "./caldav-source-dialog";
+import { OAuthSourceCalendarDialog } from "./oauth-source-calendar-dialog";
+import type { OAuthSourceProvider } from "./oauth-source-calendar-dialog";
+import {
+  Link as LinkIcon,
+  Plus,
+  Calendar,
+  Cloud,
+  Mail,
+  Apple,
+  Server,
+} from "lucide-react";
 
 const formatSourceCountLabel = (count: number): string => {
   if (count === 1) {
@@ -35,8 +49,41 @@ const formatSourceCountLabel = (count: number): string => {
   return `${count} sources`;
 };
 
+const getSourceIcon = (type: SourceType): ReactNode => {
+  switch (type) {
+    case "google": {
+      return <Calendar size={14} className="text-foreground-muted" />;
+    }
+    case "outlook": {
+      return <Cloud size={14} className="text-foreground-muted" />;
+    }
+    case "fastmail": {
+      return <Mail size={14} className="text-foreground-muted" />;
+    }
+    case "icloud": {
+      return <Apple size={14} className="text-foreground-muted" />;
+    }
+    case "caldav": {
+      return <Server size={14} className="text-foreground-muted" />;
+    }
+    default: {
+      return <LinkIcon size={14} className="text-foreground-muted" />;
+    }
+  }
+};
+
+const getSourceSubtitle = (source: UnifiedSource): string => {
+  if (source.email) {
+    return source.email;
+  }
+  if (source.url) {
+    return source.url;
+  }
+  return source.type;
+};
+
 interface SourceItemProps {
-  source: CalendarSource;
+  source: UnifiedSource;
   onRemove: () => Promise<void>;
 }
 
@@ -46,14 +93,12 @@ const SourceItem = ({ source, onRemove }: SourceItemProps): ReactNode => {
   return (
     <>
       <div className="flex items-center gap-2 px-3 py-2">
-        <IconBox>
-          <LinkIcon size={14} className="text-foreground-muted" />
-        </IconBox>
+        <IconBox>{getSourceIcon(source.type)}</IconBox>
         <div className="flex-1 min-w-0 flex flex-col">
           <TextLabel as="h2" className="tracking-tight">
             {source.name}
           </TextLabel>
-          <TextCaption className="truncate">{source.url}</TextCaption>
+          <TextCaption className="truncate">{getSourceSubtitle(source)}</TextCaption>
         </div>
         <GhostButton variant="danger" onClick={open}>
           Remove
@@ -83,7 +128,7 @@ const UpgradeBanner = (): ReactNode => (
   </div>
 );
 
-interface AddSourceDialogProps {
+interface ICSSourceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAdd: (name: string, url: string) => Promise<{ authRequired?: boolean }>;
@@ -159,7 +204,7 @@ const CredentialsDialog = ({ open, onOpenChange, onSubmit }: CredentialsDialogPr
   );
 };
 
-const AddSourceDialog = ({ open, onOpenChange, onAdd }: AddSourceDialogProps): ReactNode => {
+const ICSSourceDialog = ({ open, onOpenChange, onAdd }: ICSSourceDialogProps): ReactNode => {
   const { isSubmitting, error, submit } = useFormSubmit<boolean>();
   const [credentialsOpen, setCredentialsOpen] = useState(false);
   const [pendingUrl, setPendingUrl] = useState("");
@@ -205,7 +250,7 @@ const AddSourceDialog = ({ open, onOpenChange, onAdd }: AddSourceDialogProps): R
       <FormDialog
         open={open}
         onOpenChange={onOpenChange}
-        title="Add Calendar Source"
+        title="Add iCal Source"
         description="Enter an iCal URL to import events from another calendar."
         size="md"
         error={error}
@@ -242,15 +287,103 @@ const AddSourceDialog = ({ open, onOpenChange, onAdd }: AddSourceDialogProps): R
   );
 };
 
+const getRemoveEndpoint = (source: UnifiedSource): string => {
+  switch (source.type) {
+    case "google": {
+      return `/api/sources/google/${source.id}`;
+    }
+    case "outlook": {
+      return `/api/sources/outlook/${source.id}`;
+    }
+    case "caldav":
+    case "fastmail":
+    case "icloud": {
+      return `/api/sources/caldav/${source.id}`;
+    }
+    default: {
+      return `/api/ics/${source.id}`;
+    }
+  }
+};
+
+interface PendingOAuthSource {
+  credentialId: string;
+  provider: OAuthSourceProvider;
+}
+
 export const CalendarSourcesSection = (): ReactNode => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const toastManager = Toast.useToastManager();
-  const { data: sources, isLoading, mutate } = useSources();
+  const { data: sources, isLoading, mutate } = useAllSources();
   const { data: subscription } = useSubscription();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  const [isTypeSelectorOpen, setIsTypeSelectorOpen] = useState(false);
+  const [isIcsDialogOpen, setIsIcsDialogOpen] = useState(false);
+  const [caldavProvider, setCaldavProvider] = useState<CalDAVSourceProvider | null>(null);
+  const [pendingOAuthSource, setPendingOAuthSource] = useState<PendingOAuthSource | null>(null);
+
+  const oauthHandled = useRef(false);
+
+  useEffect(() => {
+    if (oauthHandled.current) {
+      return;
+    }
+
+    const source = searchParams.get("source");
+    const sourceCredentialId = searchParams.get("sourceCredentialId");
+    const provider = searchParams.get("provider");
+    const error = searchParams.get("error");
+
+    if (error && source === "error") {
+      oauthHandled.current = true;
+      toastManager.add({ title: error });
+      router.replace("/dashboard/integrations");
+      return;
+    }
+
+    const isValidOAuthProvider = provider === "google" || provider === "outlook";
+    if (source === "connected" && sourceCredentialId && provider && isValidOAuthProvider) {
+      oauthHandled.current = true;
+      setPendingOAuthSource({ credentialId: sourceCredentialId, provider });
+      router.replace("/dashboard/integrations");
+    }
+  }, [searchParams, toastManager, router]);
 
   const isAtLimit = subscription?.plan === "free" && sources && sources.length >= FREE_SOURCE_LIMIT;
 
-  const handleAddSource = async (
+  const handleSelectSourceType = (type: SourceType): void => {
+    track("source_type_selected", { type });
+
+    switch (type) {
+      case "ics": {
+        setIsIcsDialogOpen(true);
+        break;
+      }
+      case "google": {
+        window.location.href = "/api/sources/authorize?provider=google";
+        break;
+      }
+      case "outlook": {
+        window.location.href = "/api/sources/authorize?provider=outlook";
+        break;
+      }
+      case "caldav": {
+        setCaldavProvider("caldav");
+        break;
+      }
+      case "fastmail": {
+        setCaldavProvider("fastmail");
+        break;
+      }
+      case "icloud": {
+        setCaldavProvider("icloud");
+        break;
+      }
+    }
+  };
+
+  const handleAddIcsSource = async (
     name: string,
     url: string,
   ): Promise<{ authRequired?: boolean }> => {
@@ -275,20 +408,35 @@ export const CalendarSourcesSection = (): ReactNode => {
     }
 
     await mutate();
-    track("source_added", { type: "url" });
+    track("source_added", { type: "ics" });
     toastManager.add({ title: "Calendar source added" });
     return {};
   };
 
-  const handleRemoveSource = async (id: string): Promise<void> => {
+  const handleCalDAVSuccess = async (): Promise<void> => {
+    await mutate();
+    if (caldavProvider) {
+      track("source_added", { type: caldavProvider });
+    }
+    toastManager.add({ title: "Calendar source added" });
+  };
+
+  const handleOAuthSourceSuccess = async (): Promise<void> => {
+    await mutate();
+    if (pendingOAuthSource) {
+      track("source_added", { type: pendingOAuthSource.provider });
+    }
+    toastManager.add({ title: "Calendar source added" });
+  };
+
+  const handleRemoveSource = async (source: UnifiedSource): Promise<void> => {
     try {
-      const response = await fetch(`/api/ics/${id}`, {
-        method: "DELETE",
-      });
+      const endpoint = getRemoveEndpoint(source);
+      const response = await fetch(endpoint, { method: "DELETE" });
 
       if (response.ok) {
         await mutate();
-        track("source_removed");
+        track("source_removed", { type: source.type });
         toastManager.add({ title: "Calendar source removed" });
       }
     } catch {
@@ -307,14 +455,14 @@ export const CalendarSourcesSection = (): ReactNode => {
     if (isEmpty) {
       return (
         <EmptyState
-          icon={<LinkIcon size={16} className="text-foreground-subtle" />}
+          icon={<Calendar size={16} className="text-foreground-subtle" />}
           message="You don't have any sources yet, add one to start syncing events across your calendars."
           action={
             <div className="flex flex-col items-center gap-2">
               <Button
                 onClick={() => {
                   track("source_dropdown_opened");
-                  setIsDialogOpen(true);
+                  setIsTypeSelectorOpen(true);
                 }}
                 className={button({ size: "xs", variant: "primary" })}
               >
@@ -339,7 +487,7 @@ export const CalendarSourcesSection = (): ReactNode => {
             <GhostButton
               onClick={() => {
                 track("source_dropdown_opened");
-                setIsDialogOpen(true);
+                setIsTypeSelectorOpen(true);
               }}
               className="flex items-center gap-1"
             >
@@ -354,7 +502,7 @@ export const CalendarSourcesSection = (): ReactNode => {
               <SourceItem
                 key={source.id}
                 source={source}
-                onRemove={() => handleRemoveSource(source.id)}
+                onRemove={() => handleRemoveSource(source)}
               />
             ))}
           </div>
@@ -367,15 +515,47 @@ export const CalendarSourcesSection = (): ReactNode => {
     <Section>
       <SectionHeader
         title="Calendar Sources"
-        description="Add iCal links to import events from other calendars"
+        description="Add calendars from various providers to import events"
       />
       {isAtLimit && <UpgradeBanner />}
       {renderContent()}
       {!isAtLimit && (
-        <AddSourceDialog
-          open={isDialogOpen}
-          onOpenChange={setIsDialogOpen}
-          onAdd={handleAddSource}
+        <>
+          <AddSourceDialog
+            open={isTypeSelectorOpen}
+            onOpenChange={setIsTypeSelectorOpen}
+            onSelectType={handleSelectSourceType}
+          />
+          <ICSSourceDialog
+            open={isIcsDialogOpen}
+            onOpenChange={setIsIcsDialogOpen}
+            onAdd={handleAddIcsSource}
+          />
+          {caldavProvider && (
+            <CalDAVSourceDialog
+              open={Boolean(caldavProvider)}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setCaldavProvider(null);
+                }
+              }}
+              provider={caldavProvider}
+              onSuccess={handleCalDAVSuccess}
+            />
+          )}
+        </>
+      )}
+      {pendingOAuthSource && (
+        <OAuthSourceCalendarDialog
+          open={Boolean(pendingOAuthSource)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPendingOAuthSource(null);
+            }
+          }}
+          provider={pendingOAuthSource.provider}
+          credentialId={pendingOAuthSource.credentialId}
+          onSuccess={handleOAuthSourceSuccess}
         />
       )}
     </Section>

@@ -8,6 +8,7 @@ import type {
 import { MICROSOFT_GRAPH_API, OUTLOOK_PAGE_SIZE, GONE_STATUS } from "../../shared/api";
 import { isSimpleAuthError } from "../../shared/errors";
 import { parseEventDateTime } from "../../shared/date-time";
+import { isKeeperEvent } from "@keeper.sh/provider-core";
 
 class EventsFetchError extends Error {
   constructor(
@@ -95,6 +96,8 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
   const { accessToken, calendarId, deltaLink, timeMin, timeMax } = options;
 
   const events: OutlookCalendarEvent[] = [];
+  const cancelledEventUids: string[] = [];
+  const isDeltaSync = Boolean(deltaLink);
 
   const initialResult = await fetchEventsPage({
     accessToken,
@@ -108,7 +111,15 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
     return { events: [], fullSyncRequired: true };
   }
 
-  events.push(...initialResult.data.value);
+  for (const event of initialResult.data.value) {
+    if (event["@removed"]) {
+      const uid = event.iCalUId ?? event.id;
+      cancelledEventUids.push(uid);
+    } else {
+      events.push(event);
+    }
+  }
+
   let lastDeltaLink = initialResult.data["@odata.deltaLink"];
   let nextLink = initialResult.data["@odata.nextLink"];
 
@@ -125,7 +136,14 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
       return { events: [], fullSyncRequired: true };
     }
 
-    events.push(...pageResult.data.value);
+    for (const event of pageResult.data.value) {
+      if (event["@removed"]) {
+        const uid = event.iCalUId ?? event.id;
+        cancelledEventUids.push(uid);
+      } else {
+        events.push(event);
+      }
+    }
 
     if (pageResult.data["@odata.deltaLink"]) {
       lastDeltaLink = pageResult.data["@odata.deltaLink"];
@@ -133,20 +151,38 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
     nextLink = pageResult.data["@odata.nextLink"];
   }
 
-  return {
+  const result: FetchEventsResult = {
     events,
     fullSyncRequired: false,
+    isDeltaSync,
     nextDeltaLink: lastDeltaLink,
   };
+
+  if (isDeltaSync) {
+    result.cancelledEventUids = cancelledEventUids;
+  }
+
+  return result;
 };
 
-const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] =>
-  events
-    .filter((event) => event.start && event.end && event.iCalUId)
-    .map((event) => ({
+const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => {
+  const result: EventTimeSlot[] = [];
+
+  for (const event of events) {
+    if (!event.start || !event.end || !event.iCalUId) {
+      continue;
+    }
+    if (isKeeperEvent(event.iCalUId)) {
+      continue;
+    }
+    result.push({
       endTime: parseEventDateTime(event.end),
       startTime: parseEventDateTime(event.start),
-      uid: event.iCalUId ?? event.id,
-    }));
+      uid: event.iCalUId,
+    });
+  }
+
+  return result;
+};
 
 export { fetchCalendarEvents, parseOutlookEvents, EventsFetchError };

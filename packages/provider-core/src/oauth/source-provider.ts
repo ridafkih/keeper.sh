@@ -1,7 +1,8 @@
 import {
   calendarDestinationsTable,
-  oauthCalendarSourcesTable,
+  calendarSourcesTable,
   oauthCredentialsTable,
+  oauthSourceCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { eq } from "drizzle-orm";
@@ -14,6 +15,14 @@ interface FetchEventsResult {
   events: SourceEvent[];
   nextSyncToken?: string;
   fullSyncRequired?: boolean;
+  isDeltaSync?: boolean;
+  cancelledEventUids?: string[];
+}
+
+interface ProcessEventsOptions {
+  nextSyncToken?: string;
+  isDeltaSync?: boolean;
+  cancelledEventUids?: string[];
 }
 
 abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSourceConfig> {
@@ -39,43 +48,79 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
     if (result.fullSyncRequired) {
       await this.clearSyncToken();
       const fullResult = await this.fetchEvents(null);
-      return this.processEvents(fullResult.events, fullResult.nextSyncToken);
+      return this.processEvents(fullResult.events, {
+        cancelledEventUids: fullResult.cancelledEventUids,
+        isDeltaSync: fullResult.isDeltaSync,
+        nextSyncToken: fullResult.nextSyncToken,
+      });
     }
 
-    return this.processEvents(result.events, result.nextSyncToken);
+    const processResult = await this.processEvents(result.events, {
+      cancelledEventUids: result.cancelledEventUids,
+      isDeltaSync: result.isDeltaSync,
+      nextSyncToken: result.nextSyncToken,
+    });
+
+    if (processResult.fullSyncRequired) {
+      const fullResult = await this.fetchEvents(null);
+      return this.processEvents(fullResult.events, {
+        cancelledEventUids: fullResult.cancelledEventUids,
+        isDeltaSync: false,
+        nextSyncToken: fullResult.nextSyncToken,
+      });
+    }
+
+    return processResult;
   }
 
   protected abstract processEvents(
     events: SourceEvent[],
-    nextSyncToken?: string,
+    options: ProcessEventsOptions,
   ): Promise<SourceSyncResult>;
 
   protected async clearSyncToken(): Promise<void> {
     const { database, sourceId } = this.config;
     await database
-      .update(oauthCalendarSourcesTable)
+      .update(calendarSourcesTable)
       .set({ syncToken: null })
-      .where(eq(oauthCalendarSourcesTable.id, sourceId));
+      .where(eq(calendarSourcesTable.id, sourceId));
   }
 
   protected async updateSyncToken(syncToken: string): Promise<void> {
     const { database, sourceId } = this.config;
     await database
-      .update(oauthCalendarSourcesTable)
+      .update(calendarSourcesTable)
       .set({ syncToken })
-      .where(eq(oauthCalendarSourcesTable.id, sourceId));
+      .where(eq(calendarSourcesTable.id, sourceId));
   }
 
   protected async markNeedsReauthentication(): Promise<void> {
-    const { database, destinationId } = this.config;
-    await database
-      .update(calendarDestinationsTable)
-      .set({ needsReauthentication: true })
-      .where(eq(calendarDestinationsTable.id, destinationId));
+    const { database, destinationId, oauthSourceCredentialId } = this.config;
+
+    if (oauthSourceCredentialId) {
+      await database
+        .update(oauthSourceCredentialsTable)
+        .set({ needsReauthentication: true })
+        .where(eq(oauthSourceCredentialsTable.id, oauthSourceCredentialId));
+      return;
+    }
+
+    if (destinationId) {
+      await database
+        .update(calendarDestinationsTable)
+        .set({ needsReauthentication: true })
+        .where(eq(calendarDestinationsTable.id, destinationId));
+    }
   }
 
   protected async ensureValidToken(): Promise<void> {
-    const { database, accessTokenExpiresAt, refreshToken, oauthCredentialId } = this.config;
+    const {
+      database,
+      accessTokenExpiresAt,
+      refreshToken,
+      oauthCredentialId,
+      oauthSourceCredentialId,
+    } = this.config;
 
     if (accessTokenExpiresAt.getTime() > Date.now() + TOKEN_REFRESH_BUFFER_MS) {
       return;
@@ -84,14 +129,25 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
     const tokenData = await this.oauthProvider.refreshAccessToken(refreshToken);
     const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);
 
-    await database
-      .update(oauthCredentialsTable)
-      .set({
-        accessToken: tokenData.access_token,
-        expiresAt: newExpiresAt,
-        refreshToken: tokenData.refresh_token ?? refreshToken,
-      })
-      .where(eq(oauthCredentialsTable.id, oauthCredentialId));
+    if (oauthSourceCredentialId) {
+      await database
+        .update(oauthSourceCredentialsTable)
+        .set({
+          accessToken: tokenData.access_token,
+          expiresAt: newExpiresAt,
+          refreshToken: tokenData.refresh_token ?? refreshToken,
+        })
+        .where(eq(oauthSourceCredentialsTable.id, oauthSourceCredentialId));
+    } else if (oauthCredentialId) {
+      await database
+        .update(oauthCredentialsTable)
+        .set({
+          accessToken: tokenData.access_token,
+          expiresAt: newExpiresAt,
+          refreshToken: tokenData.refresh_token ?? refreshToken,
+        })
+        .where(eq(oauthCredentialsTable.id, oauthCredentialId));
+    }
 
     this.currentAccessToken = tokenData.access_token;
     this.config.accessTokenExpiresAt = newExpiresAt;
@@ -106,4 +162,4 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
 }
 
 export { OAuthSourceProvider };
-export type { FetchEventsResult };
+export type { FetchEventsResult, ProcessEventsOptions };

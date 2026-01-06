@@ -1,11 +1,10 @@
 import {
   calendarDestinationsTable,
-  remoteICalSourcesTable,
+  calendarSourcesTable,
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import { eq, inArray } from "drizzle-orm";
 import { database } from "../context";
-import { createOAuthSourceMappingsForNewDestination } from "./oauth-source-destination-mappings";
 
 const EMPTY_LIST_COUNT = 0;
 
@@ -14,24 +13,34 @@ interface SourceDestinationMapping {
   sourceId: string;
   destinationId: string;
   createdAt: Date;
+  sourceType: string;
 }
 
 const getUserMappings = async (userId: string): Promise<SourceDestinationMapping[]> => {
   const userSources = await database
-    .select({ id: remoteICalSourcesTable.id })
-    .from(remoteICalSourcesTable)
-    .where(eq(remoteICalSourcesTable.userId, userId));
+    .select({
+      id: calendarSourcesTable.id,
+      sourceType: calendarSourcesTable.sourceType,
+    })
+    .from(calendarSourcesTable)
+    .where(eq(calendarSourcesTable.userId, userId));
 
-  const sourceIds = userSources.map((source) => source.id);
-
-  if (sourceIds.length === EMPTY_LIST_COUNT) {
+  if (userSources.length === EMPTY_LIST_COUNT) {
     return [];
   }
 
-  return database
+  const sourceIds = userSources.map((source) => source.id);
+  const sourceTypeMap = new Map(userSources.map((source) => [source.id, source.sourceType]));
+
+  const mappings = await database
     .select()
     .from(sourceDestinationMappingsTable)
     .where(inArray(sourceDestinationMappingsTable.sourceId, sourceIds));
+
+  return mappings.map((mapping) => ({
+    ...mapping,
+    sourceType: sourceTypeMap.get(mapping.sourceId) ?? "unknown",
+  }));
 };
 
 const getDestinationsForSource = async (sourceId: string): Promise<string[]> => {
@@ -99,23 +108,23 @@ const createMappingsForNewDestination = async (
   destinationId: string,
 ): Promise<void> => {
   const userSources = await database
-    .select({ id: remoteICalSourcesTable.id })
-    .from(remoteICalSourcesTable)
-    .where(eq(remoteICalSourcesTable.userId, userId));
+    .select({ id: calendarSourcesTable.id })
+    .from(calendarSourcesTable)
+    .where(eq(calendarSourcesTable.userId, userId));
 
-  if (userSources.length > EMPTY_LIST_COUNT) {
-    const mappingsToInsert = userSources.map((source) => ({
-      destinationId,
-      sourceId: source.id,
-    }));
-
-    await database
-      .insert(sourceDestinationMappingsTable)
-      .values(mappingsToInsert)
-      .onConflictDoNothing();
+  if (userSources.length === EMPTY_LIST_COUNT) {
+    return;
   }
 
-  await createOAuthSourceMappingsForNewDestination(userId, destinationId);
+  const mappingsToInsert = userSources.map((source) => ({
+    destinationId,
+    sourceId: source.id,
+  }));
+
+  await database
+    .insert(sourceDestinationMappingsTable)
+    .values(mappingsToInsert)
+    .onConflictDoNothing();
 };
 
 export {

@@ -19,7 +19,6 @@ export type {
   EventTimeSlot,
 } from "./source/types";
 
-// Destination exports
 export {
   createGoogleCalendarProvider,
   type GoogleCalendarProviderConfig,
@@ -32,7 +31,6 @@ export {
   type GoogleAccount,
 } from "./destination/sync";
 
-// Shared exports
 export {
   GOOGLE_CALENDAR_API,
   GOOGLE_CALENDAR_EVENTS_URL,

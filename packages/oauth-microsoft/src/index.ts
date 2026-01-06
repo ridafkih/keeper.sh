@@ -20,6 +20,7 @@ interface AuthorizationUrlOptions {
   callbackUrl: string;
   scopes?: string[];
   destinationId?: string;
+  sourceCredentialId?: string;
 }
 
 interface MicrosoftOAuthService {
@@ -34,7 +35,10 @@ const createMicrosoftOAuthService = (
   const { clientId, clientSecret } = credentials;
 
   const getAuthorizationUrl = (userId: string, options: AuthorizationUrlOptions): string => {
-    const state = generateState(userId, options.destinationId);
+    const state = generateState(userId, {
+      destinationId: options.destinationId,
+      sourceCredentialId: options.sourceCredentialId,
+    });
     const scopes = options.scopes ?? [
       MICROSOFT_CALENDAR_SCOPE,
       MICROSOFT_USER_SCOPE,

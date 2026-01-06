@@ -4,22 +4,24 @@ import {
   type FetchEventsResult as BaseFetchEventsResult,
   type OAuthSourceConfig,
   type OAuthTokenProvider,
+  type ProcessEventsOptions,
   type SourceEvent,
   type SourceProvider,
   type SourceSyncResult,
 } from "@keeper.sh/provider-core";
 import {
-  oauthEventStatesTable,
-  oauthCalendarSourcesTable,
-  oauthCredentialsTable,
-  calendarDestinationsTable,
+  calendarSourcesTable,
+  eventStatesTable,
+  oauthSourceCredentialsTable,
 } from "@keeper.sh/database/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { getStartOfToday } from "@keeper.sh/date-utils";
+import { and, eq, inArray, lt, or, gt } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { fetchCalendarEvents, parseOutlookEvents } from "./utils/fetch-events";
 
 const OUTLOOK_PROVIDER_ID = "outlook";
 const EMPTY_COUNT = 0;
+const YEARS_UNTIL_FUTURE = 2;
 
 interface OutlookSourceConfig extends OAuthSourceConfig {
   sourceName: string;
@@ -45,6 +47,12 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
 
     if (syncToken) {
       fetchOptions.deltaLink = syncToken;
+    } else {
+      const today = getStartOfToday();
+      const futureDate = new Date(today);
+      futureDate.setFullYear(futureDate.getFullYear() + YEARS_UNTIL_FUTURE);
+      fetchOptions.timeMin = today;
+      fetchOptions.timeMax = futureDate;
     }
 
     const result = await fetchCalendarEvents(fetchOptions);
@@ -54,56 +62,79 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
     }
 
     const events = parseOutlookEvents(result.events);
-    return {
+    const fetchResult: BaseFetchEventsResult = {
       events,
       fullSyncRequired: false,
+      isDeltaSync: result.isDeltaSync,
       nextSyncToken: result.nextDeltaLink,
     };
+
+    if (result.cancelledEventUids) {
+      fetchResult.cancelledEventUids = result.cancelledEventUids;
+    }
+
+    return fetchResult;
   }
 
   protected async processEvents(
     events: SourceEvent[],
-    nextSyncToken?: string,
+    options: ProcessEventsOptions,
   ): Promise<SourceSyncResult> {
     const { database, sourceId } = this.config;
+    const { nextSyncToken, isDeltaSync, cancelledEventUids } = options;
+
+    const needsFullResync = await OutlookSourceProvider.hasOutOfRangeEvents(database, sourceId);
+
+    if (needsFullResync) {
+      await OutlookSourceProvider.clearSourceAndResetToken(database, sourceId);
+      return {
+        eventsAdded: EMPTY_COUNT,
+        eventsRemoved: EMPTY_COUNT,
+        fullSyncRequired: true,
+      };
+    }
 
     const existingEvents = await database
       .select({
-        id: oauthEventStatesTable.id,
-        sourceEventUid: oauthEventStatesTable.sourceEventUid,
+        id: eventStatesTable.id,
+        sourceEventUid: eventStatesTable.sourceEventUid,
       })
-      .from(oauthEventStatesTable)
-      .where(eq(oauthEventStatesTable.oauthSourceId, sourceId));
+      .from(eventStatesTable)
+      .where(eq(eventStatesTable.sourceId, sourceId));
 
     const existingUids = new Set(existingEvents.map((event) => event.sourceEventUid));
-    const incomingUids = new Set(events.map((event) => event.uid));
 
     const toAdd = events.filter((event) => !existingUids.has(event.uid));
-    const toRemoveUids = existingEvents
-      .filter((event) => event.sourceEventUid && !incomingUids.has(event.sourceEventUid))
-      .map((event) => event.sourceEventUid)
-      .filter((uid): uid is string => uid !== null);
+
+    const toRemoveUids = OutlookSourceProvider.calculateEventsToRemove(
+      existingEvents,
+      events,
+      isDeltaSync,
+      cancelledEventUids,
+    );
 
     if (toRemoveUids.length > EMPTY_COUNT) {
       await database
-        .delete(oauthEventStatesTable)
+        .delete(eventStatesTable)
         .where(
           and(
-            eq(oauthEventStatesTable.oauthSourceId, sourceId),
-            inArray(oauthEventStatesTable.sourceEventUid, toRemoveUids),
+            eq(eventStatesTable.sourceId, sourceId),
+            inArray(eventStatesTable.sourceEventUid, toRemoveUids),
           ),
         );
     }
 
     if (toAdd.length > EMPTY_COUNT) {
-      await database.insert(oauthEventStatesTable).values(
-        toAdd.map((event) => ({
-          endTime: event.endTime,
-          oauthSourceId: sourceId,
-          sourceEventUid: event.uid,
-          startTime: event.startTime,
-        })),
-      );
+      await database
+        .insert(eventStatesTable)
+        .values(
+          toAdd.map((event) => ({
+            endTime: event.endTime,
+            sourceEventUid: event.uid,
+            sourceId,
+            startTime: event.startTime,
+          })),
+        );
     }
 
     if (nextSyncToken) {
@@ -116,18 +147,83 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       syncToken: nextSyncToken,
     };
   }
+
+  private static async hasOutOfRangeEvents(
+    database: BunSQLDatabase,
+    sourceId: string,
+  ): Promise<boolean> {
+    const today = getStartOfToday();
+    const futureDate = new Date(today);
+    futureDate.setFullYear(futureDate.getFullYear() + YEARS_UNTIL_FUTURE);
+
+    const outOfRange = await database
+      .select({ id: eventStatesTable.id })
+      .from(eventStatesTable)
+      .where(
+        and(
+          eq(eventStatesTable.sourceId, sourceId),
+          or(
+            lt(eventStatesTable.endTime, today),
+            gt(eventStatesTable.startTime, futureDate),
+          ),
+        ),
+      )
+      .limit(1);
+
+    return outOfRange.length > EMPTY_COUNT;
+  }
+
+  private static async clearSourceAndResetToken(
+    database: BunSQLDatabase,
+    sourceId: string,
+  ): Promise<void> {
+    await database
+      .delete(eventStatesTable)
+      .where(eq(eventStatesTable.sourceId, sourceId));
+
+    await database
+      .update(calendarSourcesTable)
+      .set({ syncToken: null })
+      .where(eq(calendarSourcesTable.id, sourceId));
+  }
+
+  private static calculateEventsToRemove(
+    existingEvents: { id: string; sourceEventUid: string | null }[],
+    incomingEvents: SourceEvent[],
+    isDeltaSync?: boolean,
+    cancelledEventUids?: string[],
+  ): string[] {
+    if (isDeltaSync) {
+      if (!cancelledEventUids || cancelledEventUids.length === EMPTY_COUNT) {
+        return [];
+      }
+      const existingUidSet = new Set(
+        existingEvents
+          .map((event) => event.sourceEventUid)
+          .filter((uid): uid is string => uid !== null),
+      );
+      return cancelledEventUids.filter((uid) => existingUidSet.has(uid));
+    }
+
+    const incomingUids = new Set(incomingEvents.map((event) => event.uid));
+    return existingEvents
+      .filter((event) => event.sourceEventUid && !incomingUids.has(event.sourceEventUid))
+      .map((event) => event.sourceEventUid)
+      .filter((uid): uid is string => uid !== null);
+  }
 }
 
 interface OutlookSourceAccount {
   sourceId: string;
   userId: string;
-  destinationId: string;
   externalCalendarId: string;
   syncToken: string | null;
   accessToken: string;
   refreshToken: string;
   accessTokenExpiresAt: Date;
-  oauthCredentialId: string;
+  credentialId: string;
+  oauthCredentialId?: string;
+  oauthSourceCredentialId?: string;
   provider: string;
   sourceName: string;
 }
@@ -148,9 +244,9 @@ const createOutlookSourceProvider = (
       accessTokenExpiresAt: account.accessTokenExpiresAt,
       database: db,
       deltaLink: account.syncToken,
-      destinationId: account.destinationId,
       externalCalendarId: account.externalCalendarId,
       oauthCredentialId: account.oauthCredentialId,
+      oauthSourceCredentialId: account.oauthSourceCredentialId,
       refreshToken: account.refreshToken,
       sourceId: account.sourceId,
       sourceName: account.sourceName,
@@ -170,32 +266,43 @@ const getOutlookSourcesWithCredentials = async (
 ): Promise<OutlookSourceAccount[]> => {
   const sources = await database
     .select({
-      accessToken: oauthCredentialsTable.accessToken,
-      accessTokenExpiresAt: oauthCredentialsTable.expiresAt,
-      destinationId: oauthCalendarSourcesTable.destinationId,
-      externalCalendarId: oauthCalendarSourcesTable.externalCalendarId,
-      oauthCredentialId: calendarDestinationsTable.oauthCredentialId,
-      provider: oauthCalendarSourcesTable.provider,
-      refreshToken: oauthCredentialsTable.refreshToken,
-      sourceId: oauthCalendarSourcesTable.id,
-      sourceName: oauthCalendarSourcesTable.name,
-      syncToken: oauthCalendarSourcesTable.syncToken,
-      userId: oauthCalendarSourcesTable.userId,
+      accessToken: oauthSourceCredentialsTable.accessToken,
+      accessTokenExpiresAt: oauthSourceCredentialsTable.expiresAt,
+      credentialId: oauthSourceCredentialsTable.id,
+      externalCalendarId: calendarSourcesTable.externalCalendarId,
+      oauthSourceCredentialId: oauthSourceCredentialsTable.id,
+      provider: calendarSourcesTable.provider,
+      refreshToken: oauthSourceCredentialsTable.refreshToken,
+      sourceId: calendarSourcesTable.id,
+      sourceName: calendarSourcesTable.name,
+      syncToken: calendarSourcesTable.syncToken,
+      userId: calendarSourcesTable.userId,
     })
-    .from(oauthCalendarSourcesTable)
+    .from(calendarSourcesTable)
     .innerJoin(
-      calendarDestinationsTable,
-      eq(oauthCalendarSourcesTable.destinationId, calendarDestinationsTable.id),
+      oauthSourceCredentialsTable,
+      eq(calendarSourcesTable.oauthCredentialId, oauthSourceCredentialsTable.id),
     )
-    .innerJoin(
-      oauthCredentialsTable,
-      eq(calendarDestinationsTable.oauthCredentialId, oauthCredentialsTable.id),
-    )
-    .where(eq(oauthCalendarSourcesTable.provider, OUTLOOK_PROVIDER_ID));
+    .where(
+      and(
+        eq(calendarSourcesTable.sourceType, "oauth"),
+        eq(calendarSourcesTable.provider, OUTLOOK_PROVIDER_ID),
+      ),
+    );
 
-  return sources.filter(
-    (source): source is OutlookSourceAccount => source.oauthCredentialId !== null,
-  );
+  return sources.map((source) => {
+    if (!source.externalCalendarId) {
+      throw new Error(`Outlook source ${source.sourceId} is missing externalCalendarId`);
+    }
+    if (!source.provider) {
+      throw new Error(`Outlook source ${source.sourceId} is missing provider`);
+    }
+    return {
+      ...source,
+      externalCalendarId: source.externalCalendarId,
+      provider: source.provider,
+    };
+  });
 };
 
 export { createOutlookSourceProvider, OutlookSourceProvider };

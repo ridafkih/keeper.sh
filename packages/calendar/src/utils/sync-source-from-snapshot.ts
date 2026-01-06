@@ -1,4 +1,4 @@
-import type { remoteICalSourcesTable } from "@keeper.sh/database/schema";
+import type { calendarSourcesTable } from "@keeper.sh/database/schema";
 import {
   calendarDestinationsTable,
   calendarSnapshotsTable,
@@ -14,7 +14,7 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 const FIRST_SNAPSHOT_INDEX = 1;
 const MINIMUM_EVENTS_TO_PROCESS = 0;
 
-type Source = typeof remoteICalSourcesTable.$inferSelect;
+type Source = typeof calendarSourcesTable.$inferSelect;
 
 const getLatestSnapshot = async (
   database: BunSQLDatabase,

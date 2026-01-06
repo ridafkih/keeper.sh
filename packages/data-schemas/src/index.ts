@@ -195,11 +195,29 @@ const googleCalendarListResponseSchema = type({
 type GoogleCalendarListResponse = typeof googleCalendarListResponseSchema.infer;
 
 const createOAuthSourceSchema = type({
+  "destinationId?": "string",
   externalCalendarId: "string",
-  destinationId: "string",
   name: "string",
+  "oauthSourceCredentialId?": "string",
 });
 type CreateOAuthSource = typeof createOAuthSourceSchema.infer;
+
+const createCalDAVSourceSchema = type({
+  calendarUrl: "string",
+  name: "string",
+  password: "string",
+  provider: "'caldav' | 'fastmail' | 'icloud'",
+  serverUrl: "string",
+  username: "string",
+});
+type CreateCalDAVSource = typeof createCalDAVSourceSchema.infer;
+
+const caldavDiscoverSourceSchema = type({
+  password: "string",
+  serverUrl: "string",
+  username: "string",
+});
+type CalDAVDiscoverSource = typeof caldavDiscoverSourceSchema.infer;
 
 const oauthCalendarSourceSchema = type({
   createdAt: "string",
@@ -246,6 +264,8 @@ export {
   googleCalendarListEntrySchema,
   googleCalendarListResponseSchema,
   createOAuthSourceSchema,
+  createCalDAVSourceSchema,
+  caldavDiscoverSourceSchema,
   oauthCalendarSourceSchema,
   updateOAuthSourceDestinationsSchema,
 };
@@ -278,6 +298,8 @@ export type {
   GoogleCalendarListEntry,
   GoogleCalendarListResponse,
   CreateOAuthSource,
+  CreateCalDAVSource,
+  CalDAVDiscoverSource,
   OAuthCalendarSource,
   UpdateOAuthSourceDestinations,
 };

@@ -8,6 +8,7 @@ const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
 
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+const GOOGLE_CALENDAR_LIST_SCOPE = "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
 const GOOGLE_EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
 
 interface GoogleOAuthCredentials {
@@ -19,6 +20,7 @@ interface AuthorizationUrlOptions {
   callbackUrl: string;
   scopes?: string[];
   destinationId?: string;
+  sourceCredentialId?: string;
 }
 
 interface GoogleOAuthService {
@@ -31,8 +33,11 @@ const createGoogleOAuthService = (credentials: GoogleOAuthCredentials): GoogleOA
   const { clientId, clientSecret } = credentials;
 
   const getAuthorizationUrl = (userId: string, options: AuthorizationUrlOptions): string => {
-    const state = generateState(userId, options.destinationId);
-    const scopes = options.scopes ?? [GOOGLE_CALENDAR_SCOPE, GOOGLE_EMAIL_SCOPE];
+    const state = generateState(userId, {
+      destinationId: options.destinationId,
+      sourceCredentialId: options.sourceCredentialId,
+    });
+    const scopes = options.scopes ?? [GOOGLE_CALENDAR_SCOPE, GOOGLE_CALENDAR_LIST_SCOPE, GOOGLE_EMAIL_SCOPE];
 
     const url = new URL(GOOGLE_AUTH_URL);
     url.searchParams.set("client_id", clientId);
@@ -125,6 +130,7 @@ export {
   generateState,
   validateState,
   GOOGLE_CALENDAR_SCOPE,
+  GOOGLE_CALENDAR_LIST_SCOPE,
   GOOGLE_EMAIL_SCOPE,
   createGoogleOAuthService,
   fetchUserInfo,

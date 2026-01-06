@@ -2,7 +2,7 @@ import type { MaybePromise } from "bun";
 import { WideEvent, emitWideEvent, getWideEvent, runWithWideEvent } from "@keeper.sh/log";
 import type { WideEventFields } from "@keeper.sh/log";
 import { ErrorResponse } from "./responses";
-import { calendarDestinationsTable, remoteICalSourcesTable } from "@keeper.sh/database/schema";
+import { calendarDestinationsTable, calendarSourcesTable } from "@keeper.sh/database/schema";
 import { count, eq } from "drizzle-orm";
 import { auth, database, premiumService } from "../context";
 
@@ -64,8 +64,8 @@ const fetchUserCounts = async (
   try {
     const [sources] = await database
       .select({ count: count() })
-      .from(remoteICalSourcesTable)
-      .where(eq(remoteICalSourcesTable.userId, userId));
+      .from(calendarSourcesTable)
+      .where(eq(calendarSourcesTable.userId, userId));
     const [destinations] = await database
       .select({ count: count() })
       .from(calendarDestinationsTable)

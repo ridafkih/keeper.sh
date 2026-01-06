@@ -29,7 +29,7 @@ const INITIAL_ADD_FAILED_COUNT = 0;
 const INITIAL_REMOVED_COUNT = 0;
 const INITIAL_REMOVE_FAILED_COUNT = 0;
 const CALDAV_RATE_LIMIT_CONCURRENCY = 5;
-const YEARS_UNTIL_FUTURE = 10;
+const YEARS_UNTIL_FUTURE = 2;
 
 const DEFAULT_CALDAV_OPTIONS: CalDAVProviderOptions = {
   providerId: "caldav",
@@ -168,15 +168,15 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
   async listRemoteEvents(): Promise<RemoteEvent[]> {
     const today = getStartOfToday();
 
-    const tenYearsOut = new Date(today);
-    tenYearsOut.setFullYear(tenYearsOut.getFullYear() + YEARS_UNTIL_FUTURE);
+    const futureDate = new Date(today);
+    futureDate.setFullYear(futureDate.getFullYear() + YEARS_UNTIL_FUTURE);
 
     const calendarUrl = await this.client.resolveCalendarUrl(this.config.calendarUrl);
 
     const objects = await this.client.fetchCalendarObjects({
       calendarUrl,
       timeRange: {
-        end: tenYearsOut.toISOString(),
+        end: futureDate.toISOString(),
         start: today.toISOString(),
       },
     });

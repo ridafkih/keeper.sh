@@ -5,9 +5,15 @@ import { ErrorResponse } from "../../../../utils/responses";
 import {
   DestinationNotFoundError,
   DestinationProviderMismatchError,
+  SourceCredentialNotFoundError,
+  SourceCredentialProviderMismatchError,
   getOAuthDestinationCredentials,
+  getOAuthSourceCredentials,
 } from "../../../../utils/oauth-sources";
-import { refreshGoogleAccessToken } from "../../../../utils/oauth-refresh";
+import {
+  refreshGoogleAccessToken,
+  refreshGoogleSourceAccessToken,
+} from "../../../../utils/oauth-refresh";
 
 const GOOGLE_PROVIDER = "google";
 
@@ -17,32 +23,60 @@ interface CredentialsWithExpiry {
   expiresAt: Date;
 }
 
-const getValidAccessToken = async (
+const getValidDestinationAccessToken = async (
   destinationId: string,
   credentials: CredentialsWithExpiry,
 ): Promise<string> => {
   if (credentials.expiresAt < new Date()) {
     const refreshed = await refreshGoogleAccessToken(destinationId, credentials.refreshToken);
-    const { accessToken } = refreshed;
-    return accessToken;
+    return refreshed.accessToken;
   }
-  const { accessToken } = credentials;
-  return accessToken;
+  return credentials.accessToken;
+};
+
+const getValidSourceAccessToken = async (
+  credentialId: string,
+  credentials: CredentialsWithExpiry,
+): Promise<string> => {
+  if (credentials.expiresAt < new Date()) {
+    const refreshed = await refreshGoogleSourceAccessToken(credentialId, credentials.refreshToken);
+    return refreshed.accessToken;
+  }
+  return credentials.accessToken;
+};
+
+const getAccessToken = async (
+  userId: string,
+  credentialId: string | null,
+  destinationId: string | null,
+): Promise<string> => {
+  if (credentialId) {
+    const credentials = await getOAuthSourceCredentials(userId, credentialId, GOOGLE_PROVIDER);
+    return getValidSourceAccessToken(credentialId, credentials);
+  }
+
+  if (destinationId) {
+    const credentials = await getOAuthDestinationCredentials(userId, destinationId, GOOGLE_PROVIDER);
+    return getValidDestinationAccessToken(destinationId, credentials);
+  }
+
+  throw new Error("Either credentialId or destinationId is required");
 };
 
 export const GET = withWideEvent(
   withAuth(async ({ request, userId }) => {
     const url = new URL(request.url);
     const destinationId = url.searchParams.get("destinationId");
+    const credentialId = url.searchParams.get("credentialId");
 
-    if (!destinationId) {
-      return ErrorResponse.badRequest("destinationId query parameter is required").toResponse();
+    if (!destinationId && !credentialId) {
+      return ErrorResponse.badRequest(
+        "Either destinationId or credentialId query parameter is required",
+      ).toResponse();
     }
 
     try {
-      const credentials = await getOAuthDestinationCredentials(userId, destinationId, GOOGLE_PROVIDER);
-      const accessToken = await getValidAccessToken(destinationId, credentials);
-
+      const accessToken = await getAccessToken(userId, credentialId, destinationId);
       const calendars = await listUserCalendars(accessToken);
 
       return Response.json({ calendars });
@@ -51,6 +85,12 @@ export const GET = withWideEvent(
         return ErrorResponse.notFound(error.message).toResponse();
       }
       if (error instanceof DestinationProviderMismatchError) {
+        return ErrorResponse.badRequest(error.message).toResponse();
+      }
+      if (error instanceof SourceCredentialNotFoundError) {
+        return ErrorResponse.notFound(error.message).toResponse();
+      }
+      if (error instanceof SourceCredentialProviderMismatchError) {
         return ErrorResponse.badRequest(error.message).toResponse();
       }
       if (error instanceof CalendarListError) {

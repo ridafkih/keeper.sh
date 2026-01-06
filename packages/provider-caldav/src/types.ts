@@ -23,6 +23,38 @@ interface CalDAVAccount {
   encryptedPassword: string;
 }
 
+interface CalDAVSourceAccount {
+  sourceId: string;
+  userId: string;
+  provider: string;
+  serverUrl: string;
+  calendarUrl: string;
+  name: string;
+  username: string;
+  encryptedPassword: string;
+  syncToken: string | null;
+}
+
+interface CalDAVSourceConfig {
+  database: BunSQLDatabase;
+  sourceId: string;
+  userId: string;
+  calendarUrl: string;
+  serverUrl: string;
+  syncToken: string | null;
+}
+
+interface CalDAVSourceProviderConfig {
+  database: BunSQLDatabase;
+  encryptionKey: string;
+}
+
+interface CalDAVSourceSyncResult {
+  eventsAdded: number;
+  eventsRemoved: number;
+  syncToken: string | null;
+}
+
 interface CalDAVServiceConfig {
   database: BunSQLDatabase;
   encryptionKey: string;
@@ -57,4 +89,8 @@ export type {
   CalDAVService,
   CalDAVClientConfig,
   CalendarInfo,
+  CalDAVSourceAccount,
+  CalDAVSourceConfig,
+  CalDAVSourceProviderConfig,
+  CalDAVSourceSyncResult,
 };

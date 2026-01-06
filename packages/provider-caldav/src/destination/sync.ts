@@ -1,13 +1,12 @@
 import {
   caldavCredentialsTable,
   calendarDestinationsTable,
+  calendarSourcesTable,
   eventStatesTable,
-  remoteICalSourcesTable,
 } from "@keeper.sh/database/schema";
 import { getStartOfToday } from "@keeper.sh/date-utils";
 import { decryptPassword } from "@keeper.sh/encryption";
 import { and, asc, eq, gte, or } from "drizzle-orm";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { SyncableEvent } from "@keeper.sh/provider-core";
 import type { CalDAVAccount, CalDAVService, CalDAVServiceConfig } from "../types";
 
@@ -90,13 +89,13 @@ const createCalDAVService = (config: CalDAVServiceConfig): CalDAVService => {
         id: eventStatesTable.id,
         sourceEventUid: eventStatesTable.sourceEventUid,
         sourceId: eventStatesTable.sourceId,
-        sourceName: remoteICalSourcesTable.name,
-        sourceUrl: remoteICalSourcesTable.url,
+        sourceName: calendarSourcesTable.name,
+        sourceUrl: calendarSourcesTable.url,
         startTime: eventStatesTable.startTime,
       })
       .from(eventStatesTable)
-      .innerJoin(remoteICalSourcesTable, eq(eventStatesTable.sourceId, remoteICalSourcesTable.id))
-      .where(and(eq(remoteICalSourcesTable.userId, userId), gte(eventStatesTable.startTime, today)))
+      .innerJoin(calendarSourcesTable, eq(eventStatesTable.sourceId, calendarSourcesTable.id))
+      .where(and(eq(calendarSourcesTable.userId, userId), gte(eventStatesTable.startTime, today)))
       .orderBy(asc(eventStatesTable.startTime));
 
     const events: SyncableEvent[] = [];

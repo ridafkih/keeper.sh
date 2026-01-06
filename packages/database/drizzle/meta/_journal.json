@@ -218,6 +218,34 @@
       "when": 1767652504812,
       "tag": "0030_youthful_speed",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1767668096932,
+      "tag": "0031_glorious_joshua_kane",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1767678842064,
+      "tag": "0032_dapper_patch",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1767679418918,
+      "tag": "0033_square_tomorrow_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1767760000000,
+      "tag": "0034_cleanup_keeper_events",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,5 @@
 import type { CronOptions } from "cronbake";
-import { calendarSnapshotsTable, remoteICalSourcesTable } from "@keeper.sh/database/schema";
+import { calendarSnapshotsTable, calendarSourcesTable } from "@keeper.sh/database/schema";
 import { MS_PER_HOUR } from "@keeper.sh/constants";
 import { pullRemoteCalendar } from "@keeper.sh/calendar";
 import { WideEvent, emitWideEvent, runWithWideEvent } from "@keeper.sh/log";
@@ -7,6 +7,8 @@ import { and, desc, eq, lte } from "drizzle-orm";
 import { database } from "../context";
 import { setCronEventFields, withCronWideEvent } from "../utils/with-wide-event";
 import { countSettledResults } from "../utils/count-settled-results";
+
+const ICAL_SOURCE_TYPE = "ical";
 
 interface FetchResult {
   ical: string;
@@ -92,10 +94,18 @@ const processSnapshot = async (sourceId: string, ical: string): Promise<void> =>
 
 export default withCronWideEvent({
   async callback() {
-    const remoteSources = await database.select().from(remoteICalSourcesTable);
+    const remoteSources = await database
+      .select()
+      .from(calendarSourcesTable)
+      .where(eq(calendarSourcesTable.sourceType, ICAL_SOURCE_TYPE));
     setCronEventFields({ sourceCount: remoteSources.length });
 
-    const fetches = remoteSources.map(({ id, url }) => fetchRemoteCalendar(id, url));
+    const fetches = remoteSources.map(({ id, url }) => {
+      if (!url) {
+        throw new Error(`Source ${id} is missing url`);
+      }
+      return fetchRemoteCalendar(id, url);
+    });
 
     const settlements = await Promise.allSettled(fetches);
     const { succeeded, failed } = countSettledResults(settlements);

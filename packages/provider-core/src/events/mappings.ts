@@ -1,5 +1,5 @@
 import { eventMappingsTable } from "@keeper.sh/database/schema";
-import { and, count, eq, sql } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 const DEFAULT_COUNT = 0;
@@ -14,13 +14,13 @@ interface EventMapping {
   endTime: Date;
 }
 
-const getEventMappingsForDestination = (
+const getEventMappingsForDestination = async (
   database: BunSQLDatabase,
   destinationId: string,
-): Promise<EventMapping[]> =>
-  database
+): Promise<EventMapping[]> => {
+  const mappings = await database
     .select({
-      deleteIdentifier: sql<string>`coalesce(${eventMappingsTable.deleteIdentifier}, ${eventMappingsTable.destinationEventUid})`,
+      deleteIdentifier: eventMappingsTable.deleteIdentifier,
       destinationEventUid: eventMappingsTable.destinationEventUid,
       destinationId: eventMappingsTable.destinationId,
       endTime: eventMappingsTable.endTime,
@@ -30,6 +30,12 @@ const getEventMappingsForDestination = (
     })
     .from(eventMappingsTable)
     .where(eq(eventMappingsTable.destinationId, destinationId));
+
+  return mappings.map((mapping) => ({
+    ...mapping,
+    deleteIdentifier: mapping.deleteIdentifier ?? mapping.destinationEventUid,
+  }));
+};
 
 const createEventMapping = async (
   database: BunSQLDatabase,
@@ -42,10 +48,23 @@ const createEventMapping = async (
     endTime: Date;
   },
 ): Promise<void> => {
-  await database.insert(eventMappingsTable).values(params).onConflictDoNothing();
+  await database
+    .insert(eventMappingsTable)
+    .values({
+      deleteIdentifier: params.deleteIdentifier,
+      destinationEventUid: params.destinationEventUid,
+      destinationId: params.destinationId,
+      endTime: params.endTime,
+      eventStateId: params.eventStateId,
+      startTime: params.startTime,
+    })
+    .onConflictDoNothing();
 };
 
-const deleteEventMapping = async (database: BunSQLDatabase, mappingId: string): Promise<void> => {
+const deleteEventMapping = async (
+  database: BunSQLDatabase,
+  mappingId: string,
+): Promise<void> => {
   await database.delete(eventMappingsTable).where(eq(eventMappingsTable.id, mappingId));
 };
 
@@ -72,6 +91,7 @@ const countMappingsForDestination = async (
     .select({ count: count() })
     .from(eventMappingsTable)
     .where(eq(eventMappingsTable.destinationId, destinationId));
+
   return result?.count ?? DEFAULT_COUNT;
 };
 

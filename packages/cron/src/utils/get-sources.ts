@@ -1,11 +1,23 @@
-import { calendarDestinationsTable, remoteICalSourcesTable } from "@keeper.sh/database/schema";
+import { calendarDestinationsTable, calendarSourcesTable } from "@keeper.sh/database/schema";
+import { eq } from "drizzle-orm";
 import type { Plan } from "@keeper.sh/premium";
 import { database, premiumService } from "../context";
 
+const fetchSources = (sourceType?: string) => {
+  if (sourceType) {
+    return database
+      .select()
+      .from(calendarSourcesTable)
+      .where(eq(calendarSourcesTable.sourceType, sourceType));
+  }
+  return database.select().from(calendarSourcesTable);
+};
+
 const getSourcesByPlan = async (
   targetPlan: Plan,
-): Promise<(typeof remoteICalSourcesTable.$inferSelect)[]> => {
-  const sources = await database.select().from(remoteICalSourcesTable);
+  sourceType?: string,
+): Promise<(typeof calendarSourcesTable.$inferSelect)[]> => {
+  const sources = await fetchSources(sourceType);
 
   const userPlans = new Map<string, Plan>();
 

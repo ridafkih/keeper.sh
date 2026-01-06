@@ -5,6 +5,9 @@ import { syncSourceFromSnapshot } from "./sync-source-from-snapshot";
 import type { Source } from "./sync-source-from-snapshot";
 
 const fetchAndSyncSource = async (database: BunSQLDatabase, source: Source): Promise<void> => {
+  if (!source.url) {
+    throw new Error(`Source ${source.id} is missing url`);
+  }
   const { ical } = await pullRemoteCalendar("ical", source.url);
   await createSnapshot(database, source.id, ical);
   await syncSourceFromSnapshot(database, source);
