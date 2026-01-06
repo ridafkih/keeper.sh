@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { FREE_DESTINATION_LIMIT } from "@keeper.sh/premium/constants";
-import { PROVIDER_DEFINITIONS, isCalDAVProvider, isOAuthProvider, getProvider } from "@keeper.sh/provider-registry";
+import { PROVIDER_DEFINITIONS, isCalDAVProvider, getProvider } from "@keeper.sh/provider-registry";
 import type { CalDAVProviderId, ProviderDefinition } from "@keeper.sh/provider-registry";
 import { useLinkedAccounts } from "./use-linked-accounts";
 import { updateSourceDestinations, useMappings } from "./use-mappings";

@@ -33,7 +33,7 @@ import type { CalDAVSourceProvider } from "./caldav-source-dialog";
 import { OAuthSourceCalendarDialog } from "./oauth-source-calendar-dialog";
 import { Menu } from "@base-ui/react/menu";
 import { getProvider, isOAuthProvider, isCalDAVProvider } from "@keeper.sh/provider-registry";
-import type { OAuthProviderId, CalDAVProviderId } from "@keeper.sh/provider-registry";
+import type { OAuthProviderId } from "@keeper.sh/provider-registry";
 import Image from "next/image";
 import { Link as LinkIcon, Plus, Calendar, Server } from "lucide-react";
 
