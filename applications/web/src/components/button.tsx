@@ -1,18 +1,38 @@
 import type { ComponentProps, FC, PropsWithChildren } from "react";
 import { Button as BaseButton } from "@base-ui/react/button";
+import { tv, type VariantProps } from "tailwind-variants";
 import { Spinner } from "@/components/spinner";
 
-type ButtonProps = ComponentProps<typeof BaseButton> & {
-  isLoading?: boolean;
-};
+const buttonVariants = tv({
+  base: "",
+  variants: {
+    size: {
+      default: "",
+      small: "text-sm py-1 px-2",
+    },
+  },
+  defaultVariants: {
+    size: "default",
+  },
+});
+
+type ButtonVariantProps = VariantProps<typeof buttonVariants>;
+
+type ButtonProps = ComponentProps<typeof BaseButton> &
+  ButtonVariantProps & {
+    isLoading?: boolean;
+  };
 
 export const Button: FC<PropsWithChildren<ButtonProps>> = ({
   isLoading,
   children,
   disabled,
   className,
+  size,
   ...props
 }) => {
+  const resolvedClassName = typeof className === "string" ? className : undefined;
+
   const renderContent = (): React.ReactNode => {
     if (isLoading) {
       return (
@@ -28,7 +48,11 @@ export const Button: FC<PropsWithChildren<ButtonProps>> = ({
   };
 
   return (
-    <BaseButton disabled={isLoading || disabled} className={className} {...props}>
+    <BaseButton
+      disabled={isLoading || disabled}
+      className={buttonVariants({ size, className: resolvedClassName })}
+      {...props}
+    >
       {renderContent()}
     </BaseButton>
   );

@@ -9,15 +9,20 @@ import { Copy } from "./components/copy";
 import { Button, ButtonText, ButtonIcon } from "./components/button";
 import { Scaffold } from "./components/scaffold";
 import { Dock, DockItem } from "./components/dock";
+import Link from "next/link";
 
 export default function Playground() {
   const [isSyncHovered, setIsSyncHovered] = useState(false);
 
   return (
     <Scaffold>
-      <div className="flex flex-col gap-8 pb-8 pt-32">
+      <header className="flex gap-0.5 items-center justify-end">
+        <Button variant="ghost" size="small">Login</Button>
+        <Button variant="primary" size="small">Register</Button>
+      </header>
+      <div className="flex flex-col gap-8">
         <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2">
             <Heading1>All of your calendars in-sync.</Heading1>
             <Copy>
               Keeper connects to all of your calendar accounts, and syncs the events between them. Released open-source under AGPL-3.0.
@@ -32,7 +37,7 @@ export default function Playground() {
               <ButtonText>Sync Calendars</ButtonText>
               <ButtonIcon icon={ArrowRight} />
             </Button>
-            <Button variant="outline">
+            <Button href="https://github.com/ridafkih/keeper.sh" target="_blank" variant="outline">
               <ButtonText>View GitHub</ButtonText>
               <ButtonIcon icon={ArrowUpRight} />
             </Button>
