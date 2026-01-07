@@ -4,19 +4,22 @@ import type { FC, PropsWithChildren } from "react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import type { LucideIcon } from "lucide-react";
 import { clsx } from "clsx";
+import { atom, useAtomValue, useSetAtom } from "jotai";
 
-const useHash = () => {
-  const [hash, setHash] = useState<string>("");
+const hashAtom = atom("");
+
+const HashSync: FC = () => {
+  const setHash = useSetAtom(hashAtom);
   const params = useParams();
 
   useEffect(() => {
     setHash(decodeURIComponent(window.location.hash.replace("#", "")));
-  }, [params]);
+  }, [params, setHash]);
 
-  return hash;
+  return null;
 };
 
 interface DockIndicatorProps {
@@ -24,7 +27,7 @@ interface DockIndicatorProps {
 }
 
 const DockIndicator: FC<DockIndicatorProps> = ({ attributedHash }) => {
-  const hash = useHash();
+  const hash = useAtomValue(hashAtom);
 
   if (hash !== attributedHash) {
     return null;
@@ -73,6 +76,7 @@ interface DockProps {
 
 const Dock: FC<PropsWithChildren<DockProps>> = ({ position = "bottom", children }) => (
   <>
+    <HashSync />
     <nav
       className={clsx(
         "left-0 right-0 mx-auto p-1.5 rounded-full bg-neutral-950 w-fit text-neutral-300",
