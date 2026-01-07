@@ -5,7 +5,7 @@ import { Suspense, cache, use } from "react";
 import type { ReactNode } from "react";
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
-import { Onest as onest } from "next/font/google";
+import { DM_Sans as onest } from "next/font/google";
 import { headers } from "next/headers";
 import { clsx } from "clsx";
 import { AuthProvider } from "@/components/auth-provider";
