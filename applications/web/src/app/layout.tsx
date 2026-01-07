@@ -5,7 +5,7 @@ import { Suspense, cache, use } from "react";
 import type { ReactNode } from "react";
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
-import { DM_Sans as onest } from "next/font/google";
+import { Geist as Font } from "next/font/google";
 import { headers } from "next/headers";
 import { clsx } from "clsx";
 import { AuthProvider } from "@/components/auth-provider";
@@ -15,7 +15,7 @@ import { GDPR_COUNTRIES } from "@/config/analytics";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/config/site";
 import { JsonLd } from "@/components/json-ld";
 
-const font = onest({
+const font = Font({
   subsets: ["latin"],
 });
 
