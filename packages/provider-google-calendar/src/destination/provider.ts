@@ -255,7 +255,7 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
     event?.endTiming("findEventByUid");
 
     if (!response.ok) {
-      event?.set({ findEventByUidStatus: response.status });
+      event?.set({ "find_event_by_uid.status": response.status });
       return null;
     }
 

@@ -89,23 +89,23 @@ const syncOAuthSources = async (): Promise<void> => {
   const event = WideEvent.grasp();
   if (googleResult) {
     event?.set({
-      googleEventsAdded: googleResult.eventsAdded,
-      googleEventsRemoved: googleResult.eventsRemoved,
-      googleErrorCount: googleResult.errorCount,
+      "google.events.added": googleResult.eventsAdded,
+      "google.events.removed": googleResult.eventsRemoved,
+      "google.error.count": googleResult.errorCount,
     });
   }
   if (outlookResult) {
     event?.set({
-      outlookEventsAdded: outlookResult.eventsAdded,
-      outlookEventsRemoved: outlookResult.eventsRemoved,
-      outlookErrorCount: outlookResult.errorCount,
+      "outlook.events.added": outlookResult.eventsAdded,
+      "outlook.events.removed": outlookResult.eventsRemoved,
+      "outlook.error.count": outlookResult.errorCount,
     });
   }
 };
 
 export default withCronWideEvent({
   async callback() {
-    setCronEventFields({ jobType: "oauth-source-sync" });
+    setCronEventFields({ "job.type": "oauth-source-sync" });
     await syncOAuthSources();
   },
   cron: "@every_1_minutes",

@@ -45,7 +45,7 @@ const handleSubscriptionCreated = async (
     return new Response(null, { status: HTTP_OK });
   }
 
-  event.set({ userId });
+  event.set({ "user.id": userId });
   await upsertSubscription(userId, "pro", subscriptionId);
   return new Response(null, { status: HTTP_OK });
 };
@@ -61,7 +61,7 @@ const handleSubscriptionUpdated = async (
   }
 
   const plan = getPlanFromActiveStatus(isActive);
-  event.set({ subscriptionPlan: plan, userId });
+  event.set({ "subscription.plan": plan, "user.id": userId });
   await upsertSubscription(userId, plan, subscriptionId);
   return new Response(null, { status: HTTP_OK });
 };
@@ -75,7 +75,7 @@ const handleSubscriptionCanceled = async (
     return new Response(null, { status: HTTP_OK });
   }
 
-  event.set({ subscriptionPlan: "free", userId });
+  event.set({ "subscription.plan": "free", "user.id": userId });
   await upsertSubscription(userId, "free", subscriptionId);
   return new Response(null, { status: HTTP_OK });
 };

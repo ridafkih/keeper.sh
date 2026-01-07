@@ -147,7 +147,7 @@ const withWideEvent =
         return response;
       } catch (error) {
         event.addError(error);
-        event.set({ httpStatusCode: HTTP_INTERNAL_SERVER_ERROR });
+        event.set({ "http.status_code": HTTP_INTERNAL_SERVER_ERROR });
         throw error;
       } finally {
         event.emit();

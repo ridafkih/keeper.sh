@@ -57,10 +57,10 @@ const emitLifecycleEvent = (
 ): void => {
   const event = new WideEvent();
   event.set({
-    operationType: "lifecycle",
-    operationName: `${service}:start`,
-    service,
-    flags: serializeFlags(flags),
+    "operation.type": "lifecycle",
+    "operation.name": `${service}:start`,
+    "service.name": service,
+    "service.flags": serializeFlags(flags),
     ...serializeContext(context),
   });
 

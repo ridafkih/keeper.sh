@@ -96,7 +96,7 @@ export default withCronWideEvent({
       .select()
       .from(calendarSourcesTable)
       .where(eq(calendarSourcesTable.sourceType, ICAL_SOURCE_TYPE));
-    setCronEventFields({ sourceCount: remoteSources.length });
+    setCronEventFields({ "source.count": remoteSources.length });
 
     const fetches = remoteSources.map(({ id, url }) => {
       if (!url) {
@@ -109,7 +109,7 @@ export default withCronWideEvent({
     event?.endTiming("fetchSources");
 
     const { succeeded: fetchSucceeded, failed: fetchFailed } = countSettledResults(settlements);
-    setCronEventFields({ fetchFailedCount: fetchFailed, fetchSucceededCount: fetchSucceeded });
+    setCronEventFields({ "fetch.failed.count": fetchFailed, "fetch.succeeded.count": fetchSucceeded });
 
     event?.startTiming("processSnapshots");
     const insertions: Promise<SnapshotResult>[] = [];
@@ -127,9 +127,9 @@ export default withCronWideEvent({
     const insertedCount = insertionResults.length - skippedCount - insertErrorCount;
 
     setCronEventFields({
-      insertErrorCount,
-      insertedCount,
-      skippedCount,
+      "insert.error.count": insertErrorCount,
+      "insert.count": insertedCount,
+      "skipped.count": skippedCount,
     });
   },
   cron: "@every_1_minutes",

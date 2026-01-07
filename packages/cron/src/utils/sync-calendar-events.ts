@@ -46,9 +46,9 @@ const createSyncJob = (plan: Plan, cron: string): CronOptions =>
       const usersWithDestinations = await getUsersWithDestinationsByPlan(plan);
 
       setCronEventFields({
-        processedCount: usersWithDestinations.length,
-        sourceCount: sources.length,
-        subscriptionPlan: plan,
+        "processed.count": usersWithDestinations.length,
+        "source.count": sources.length,
+        "subscription.plan": plan,
       });
 
       const sourcesByUser = groupSourcesByUser(sources);
@@ -79,11 +79,11 @@ const createSyncJob = (plan: Plan, cron: string): CronOptions =>
       }
 
       setCronEventFields({
-        eventsAdded: totals.added,
-        eventsAddFailed: totals.addFailed,
-        eventsRemoved: totals.removed,
-        eventsRemoveFailed: totals.removeFailed,
-        userFailedCount,
+        "events.added": totals.added,
+        "events.add_failed": totals.addFailed,
+        "events.removed": totals.removed,
+        "events.remove_failed": totals.removeFailed,
+        "user.failed.count": userFailedCount,
       });
     },
     cron,

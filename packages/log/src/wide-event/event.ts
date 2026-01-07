@@ -125,7 +125,7 @@ class WideEvent {
     this.fields["request.timing.end"] = endTime;
     this.fields["request.duration.ms"] = endTime - startTime;
 
-    const operationName = this.fields["operation.name"] ?? "Keeper__HardcodedUnknownOperationName";
+    const operationName = String(this.fields["operation.name"] ?? "unknown");
     log.info(this.fields, operationName);
   }
 

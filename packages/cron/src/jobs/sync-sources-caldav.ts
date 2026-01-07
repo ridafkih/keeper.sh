@@ -75,8 +75,8 @@ const syncAllCalDAVSources = async (): Promise<void> => {
   for (const result of results) {
     if (result) {
       event?.set({
-        [`${result.providerId}EventsAdded`]: result.eventsAdded,
-        [`${result.providerId}EventsRemoved`]: result.eventsRemoved,
+        [`${result.providerId}.events.added`]: result.eventsAdded,
+        [`${result.providerId}.events.removed`]: result.eventsRemoved,
       });
     }
   }
@@ -84,7 +84,7 @@ const syncAllCalDAVSources = async (): Promise<void> => {
 
 export default withCronWideEvent({
   async callback() {
-    setCronEventFields({ jobType: "caldav-source-sync" });
+    setCronEventFields({ "job.type": "caldav-source-sync" });
     await syncAllCalDAVSources();
   },
   cron: "@every_1_minutes",

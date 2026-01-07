@@ -11,7 +11,7 @@ const enrichWideEventWithSyncContext = (userId: string, generation: number): voi
   if (!event) {
     return;
   }
-  event.set({ syncGeneration: generation, userId });
+  event.set({ "sync.generation": generation, "user.id": userId });
 };
 
 interface DestinationSyncResult {

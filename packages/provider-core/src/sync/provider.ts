@@ -291,9 +291,9 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
           currentRemoteCount++;
         } else {
           WideEvent.grasp()?.set({
-            pushError: result?.error,
-            pushRemoteId: result?.remoteId,
-            pushSuccess: result?.success,
+            "push.error": result?.error,
+            "push.remote_id": result?.remoteId,
+            "push.success": result?.success,
           });
           addFailed++;
         }

@@ -55,18 +55,18 @@ const reconcileUserSubscription = async (userId: string): Promise<void> => {
 export default withCronWideEvent({
   async callback() {
     if (!polarClient) {
-      setCronEventFields({ processedCount: INITIAL_PROCESSED_COUNT });
+      setCronEventFields({ "processed.count": INITIAL_PROCESSED_COUNT });
       return;
     }
 
     const users = await database.select({ id: user.id }).from(user);
-    setCronEventFields({ processedCount: users.length });
+    setCronEventFields({ "processed.count": users.length });
 
     const reconciliations = users.map((userRecord) => reconcileUserSubscription(userRecord.id));
 
     const results = await Promise.allSettled(reconciliations);
     const { failed } = countSettledResults(results);
-    setCronEventFields({ failedCount: failed });
+    setCronEventFields({ "failed.count": failed });
   },
   cron: "0 0 * * * *",
   immediate: true,
