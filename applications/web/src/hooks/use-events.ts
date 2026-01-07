@@ -89,10 +89,7 @@ const getKey = (pageIndex: number, startDate?: Date): string => {
   return buildEventsUrl(from, to);
 };
 
-const isPageLoading = (
-  data: CalendarEvent[][] | undefined,
-  size: number,
-): boolean => {
+const isPageLoading = (data: CalendarEvent[][] | undefined, size: number): boolean => {
   if (!data) {
     return false;
   }

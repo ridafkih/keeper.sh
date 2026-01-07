@@ -7,10 +7,7 @@ import { baseUrl, database } from "../../../context";
 
 const FIRST_RESULT_LIMIT = 1;
 
-const userOwnsSourceCredential = async (
-  userId: string,
-  credentialId: string,
-): Promise<boolean> => {
+const userOwnsSourceCredential = async (userId: string, credentialId: string): Promise<boolean> => {
   const [credential] = await database
     .select({ id: oauthSourceCredentialsTable.id })
     .from(oauthSourceCredentialsTable)

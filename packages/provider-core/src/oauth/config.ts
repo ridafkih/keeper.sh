@@ -24,7 +24,7 @@ const getCredentials = (
   }
 
   if (!clientSecret) {
-    return null
+    return null;
   }
 
   return { clientId, clientSecret };

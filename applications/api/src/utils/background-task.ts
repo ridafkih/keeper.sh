@@ -8,14 +8,14 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const getParentFields = (): Record<`parent.${string}`, string> => {
   const parentRequestId = WideEvent.grasp()?.get("request.id") ?? "";
 
-  if (typeof parentRequestId !== 'string') {
-    return {}
+  if (typeof parentRequestId !== "string") {
+    return {};
   }
 
   return {
     "parent.request.id": parentRequestId,
-  }
-}
+  };
+};
 
 const spawnBackgroundJob = <TResult>(
   jobName: string,

@@ -11,7 +11,7 @@ const log = pino({ level: process.env.LOG_LEVEL ?? "info" });
 const getErrorType = (error: unknown): string => {
   if (error instanceof Error) {
     return error.constructor.name;
-  };
+  }
 
   return "Keeper__HardcodedUnknownError";
 };
@@ -52,7 +52,9 @@ class WideEvent {
 
   static require(): WideEvent {
     const event = storage.getStore();
-    if (!event) {throw new Error("No WideEvent in current context");}
+    if (!event) {
+      throw new Error("No WideEvent in current context");
+    }
     return event;
   }
 

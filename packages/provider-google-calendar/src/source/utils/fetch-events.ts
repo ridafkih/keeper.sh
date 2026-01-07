@@ -5,7 +5,11 @@ import type {
   GoogleEventsListResponse,
   EventTimeSlot,
 } from "../types";
-import { GOOGLE_CALENDAR_EVENTS_URL, GOOGLE_CALENDAR_MAX_RESULTS, GONE_STATUS } from "../../shared/api";
+import {
+  GOOGLE_CALENDAR_EVENTS_URL,
+  GOOGLE_CALENDAR_MAX_RESULTS,
+  GONE_STATUS,
+} from "../../shared/api";
 import { isSimpleAuthError } from "../../shared/errors";
 import { parseEventDateTime } from "../../shared/date-time";
 import { isKeeperEvent } from "@keeper.sh/provider-core";
@@ -88,7 +92,14 @@ const fetchEventsPage = async (
 };
 
 const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEventsResult> => {
-  const { accessToken, calendarId, syncToken, timeMin, timeMax, maxResults = GOOGLE_CALENDAR_MAX_RESULTS } = options;
+  const {
+    accessToken,
+    calendarId,
+    syncToken,
+    timeMin,
+    timeMax,
+    maxResults = GOOGLE_CALENDAR_MAX_RESULTS,
+  } = options;
 
   const baseUrl = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events`;
   const events: GoogleCalendarEvent[] = [];

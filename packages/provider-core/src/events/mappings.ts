@@ -61,10 +61,7 @@ const createEventMapping = async (
     .onConflictDoNothing();
 };
 
-const deleteEventMapping = async (
-  database: BunSQLDatabase,
-  mappingId: string,
-): Promise<void> => {
+const deleteEventMapping = async (database: BunSQLDatabase, mappingId: string): Promise<void> => {
   await database.delete(eventMappingsTable).where(eq(eventMappingsTable.id, mappingId));
 };
 

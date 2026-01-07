@@ -57,7 +57,8 @@
     "max-params": "off",
     "max-classes-per-file": "off",
     "sort-imports": "off",
-    "sort-keys": "off"
+    "sort-keys": "off",
+    "id-length": ["error", { "exceptions": ["x", "y"] }]
   },
   "ignorePatterns": [
     "**/node_modules/**",

@@ -10,10 +10,7 @@ export const metadata: Metadata = {
 };
 
 const FeaturesPage = (): ReactNode => (
-  <MarketingPage
-    title="Features"
-    description="Everything you need to keep your calendars in sync."
-  >
+  <MarketingPage title="Features" description="Everything you need to keep your calendars in sync.">
     <FeaturesSection showHeading={false} />
   </MarketingPage>
 );

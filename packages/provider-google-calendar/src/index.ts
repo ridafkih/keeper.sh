@@ -1,6 +1,10 @@
 // Source exports
 export { listUserCalendars, CalendarListError } from "./source/utils/list-calendars";
-export { fetchCalendarEvents, parseGoogleEvents, EventsFetchError } from "./source/utils/fetch-events";
+export {
+  fetchCalendarEvents,
+  parseGoogleEvents,
+  EventsFetchError,
+} from "./source/utils/fetch-events";
 export {
   createGoogleCalendarSourceProvider,
   GoogleCalendarSourceProvider,
@@ -40,8 +44,4 @@ export {
 } from "./shared/api";
 export { hasRateLimitMessage, isAuthError, isSimpleAuthError } from "./shared/errors";
 export { parseEventDateTime, parseEventTime } from "./shared/date-time";
-export type {
-  GoogleDateTime,
-  PartialGoogleDateTime,
-  GoogleApiError,
-} from "./types";
+export type { GoogleDateTime, PartialGoogleDateTime, GoogleApiError } from "./types";

@@ -56,7 +56,11 @@ const getAccessToken = async (
   }
 
   if (destinationId) {
-    const credentials = await getOAuthDestinationCredentials(userId, destinationId, GOOGLE_PROVIDER);
+    const credentials = await getOAuthDestinationCredentials(
+      userId,
+      destinationId,
+      GOOGLE_PROVIDER,
+    );
     return getValidDestinationAccessToken(destinationId, credentials);
   }
 

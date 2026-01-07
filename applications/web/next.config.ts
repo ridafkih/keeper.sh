@@ -2,17 +2,17 @@ import type { NextConfig } from "next";
 
 const getOutputType = () => {
   if (process.env.NODE_ENV === "production") {
-      return "standalone";
+    return "standalone";
   }
 
   return null;
-}
+};
 
 const output = getOutputType();
 
 const config: NextConfig = {
   cacheComponents: true,
-  ...output && { output },
+  ...(output && { output }),
   serverExternalPackages: [
     "pino",
     "pino-pretty",

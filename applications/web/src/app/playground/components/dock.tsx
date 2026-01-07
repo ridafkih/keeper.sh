@@ -1,12 +1,12 @@
 "use client";
 
-import { FC, PropsWithChildren } from "react";
+import type { FC, PropsWithChildren } from "react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LucideIcon } from "lucide-react";
-import clsx from "clsx";
+import type { LucideIcon } from "lucide-react";
+import { clsx } from "clsx";
 
 const useHash = () => {
   const [hash, setHash] = useState<string>("");
@@ -19,14 +19,16 @@ const useHash = () => {
   return hash;
 };
 
-type DockIndicatorProps = {
+interface DockIndicatorProps {
   attributedHash: string;
-};
+}
 
 const DockIndicator: FC<DockIndicatorProps> = ({ attributedHash }) => {
   const hash = useHash();
 
-  if (hash !== attributedHash) return null;
+  if (hash !== attributedHash) {
+    return null;
+  }
 
   return (
     <motion.div
@@ -39,13 +41,13 @@ const DockIndicator: FC<DockIndicatorProps> = ({ attributedHash }) => {
   );
 };
 
-type DockItemProps = {
+interface DockItemProps {
   href: string;
   hash: string;
   icon: LucideIcon;
-};
+}
 
-export const DockItem: FC<DockItemProps> = ({ href, hash, icon: Icon }) => (
+const DockItem: FC<DockItemProps> = ({ href, hash, icon: Icon }) => (
   <li>
     <Link
       draggable={false}
@@ -59,23 +61,28 @@ export const DockItem: FC<DockItemProps> = ({ href, hash, icon: Icon }) => (
 );
 
 const getDockPositionClassName = (position: DockProps["position"]) => {
-  if (position === "top") return { className: "absolute top-8" };
+  if (position === "top") {
+    return { className: "absolute top-8" };
+  }
   return { className: "fixed bottom-8" };
+};
+
+interface DockProps {
+  position?: "top" | "bottom";
 }
 
-type DockProps = {
-  position?: "top" | "bottom";
-};
+const Dock: FC<PropsWithChildren<DockProps>> = ({ position = "bottom", children }) => (
+  <>
+    <nav
+      className={clsx(
+        "left-0 right-0 mx-auto p-1.5 rounded-full bg-neutral-950 w-fit text-neutral-300",
+        getDockPositionClassName(position).className,
+      )}
+    >
+      <ul className="flex items-center">{children}</ul>
+    </nav>
+    <div className="h-12" />
+  </>
+);
 
-export const Dock: FC<PropsWithChildren<DockProps>> = ({ position = "bottom", children }) => {
-  return (
-    <>
-      <nav className={clsx("left-0 right-0 mx-auto p-1.5 rounded-full bg-neutral-950 w-fit text-neutral-300", getDockPositionClassName(position).className)}>
-        <ul className="flex items-center">
-          {children}
-        </ul>
-      </nav>
-      <div className="h-12" />
-    </>
-  )
-};
+export { Dock, DockItem };

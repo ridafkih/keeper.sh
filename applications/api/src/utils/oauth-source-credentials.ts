@@ -61,7 +61,4 @@ const createOAuthSourceCredential = async (
   return credential.id;
 };
 
-
-export {
-  createOAuthSourceCredential,
-};
+export { createOAuthSourceCredential };

@@ -40,7 +40,6 @@ const fetchPasskeys = async (): Promise<Passkey[]> => {
   return data ?? [];
 };
 
-
 interface PasskeysListProps {
   passkeys: Passkey[] | undefined;
   isLoading: boolean;
@@ -256,4 +255,4 @@ export default (): ReactNode => {
       />
     </PageContent>
   );
-}
+};

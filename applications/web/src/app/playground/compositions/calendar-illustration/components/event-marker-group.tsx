@@ -1,10 +1,10 @@
-import { FC } from "react";
+import type { FC } from "react";
 
 import { EventMarker } from "./event-marker";
 
-type EventMarkerGroupProps = {
+interface EventMarkerGroupProps {
   colors: string[];
-};
+}
 
 export const EventMarkerGroup: FC<EventMarkerGroupProps> = ({ colors }) => (
   <div className="flex justify-center gap-0.5 mt-auto">

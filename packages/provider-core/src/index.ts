@@ -9,7 +9,12 @@ export {
   type OAuthProvidersConfig,
   type OAuthProviders,
 } from "./oauth/providers";
-export { buildOAuthConfigs, type OAuthCredentials, type OAuthEnv, type OAuthConfigs } from "./oauth/config";
+export {
+  buildOAuthConfigs,
+  type OAuthCredentials,
+  type OAuthEnv,
+  type OAuthConfigs,
+} from "./oauth/config";
 export {
   OAuthCalendarProvider,
   type OAuthRefreshResult,

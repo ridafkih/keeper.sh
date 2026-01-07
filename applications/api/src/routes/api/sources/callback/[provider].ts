@@ -1,7 +1,11 @@
 import { withWideEvent } from "../../../../utils/middleware";
 import { ErrorResponse } from "../../../../utils/responses";
 import { buildRedirectUrl, OAuthError } from "../../../../utils/oauth";
-import { exchangeCodeForTokens, fetchUserInfo, validateState } from "../../../../utils/destinations";
+import {
+  exchangeCodeForTokens,
+  fetchUserInfo,
+  validateState,
+} from "../../../../utils/destinations";
 import { createOAuthSourceCredential } from "../../../../utils/oauth-source-credentials";
 import { baseUrl } from "../../../../context";
 

@@ -9,5 +9,16 @@ export {
   isProviderId,
   getActiveProviders,
 } from "./registry";
-export type { ProviderId, OAuthProviderId, CalDAVProviderId, OAuthProviderDefinition, CalDAVProviderDefinition } from "./registry";
-export type { AuthType, CalDAVProviderConfig, ProviderDefinition, SourcePreferenceOption } from "@keeper.sh/provider-core";
+export type {
+  ProviderId,
+  OAuthProviderId,
+  CalDAVProviderId,
+  OAuthProviderDefinition,
+  CalDAVProviderDefinition,
+} from "./registry";
+export type {
+  AuthType,
+  CalDAVProviderConfig,
+  ProviderDefinition,
+  SourcePreferenceOption,
+} from "@keeper.sh/provider-core";

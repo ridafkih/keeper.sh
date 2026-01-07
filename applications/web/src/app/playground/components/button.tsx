@@ -8,12 +8,9 @@ const buttonVariants = tv({
   base: "tracking-tighter font-medium rounded-full w-fit hover:cursor-pointer flex items-center gap-1.5",
   variants: {
     variant: {
-      primary:
-        "bg-neutral-800 border-y border-y-neutral-500 text-white hover:brightness-90",
-      outline:
-        "border border-neutral-300 hover:backdrop-brightness-95",
-      ghost:
-        "border border-transparent hover:backdrop-brightness-95",
+      primary: "bg-neutral-800 border-y border-y-neutral-500 text-white hover:brightness-90",
+      outline: "border border-neutral-300 hover:backdrop-brightness-95",
+      ghost: "border border-transparent hover:backdrop-brightness-95",
     },
     size: {
       default: "py-1.5 px-4 text-sm",
@@ -32,18 +29,28 @@ interface ButtonBaseProps extends ButtonVariantProps {
   className?: string;
 }
 
-interface ButtonAsButtonProps extends ButtonBaseProps, Omit<ButtonHTMLAttributes<HTMLButtonElement>, keyof ButtonBaseProps> {
+interface ButtonAsButtonProps
+  extends ButtonBaseProps, Omit<ButtonHTMLAttributes<HTMLButtonElement>, keyof ButtonBaseProps> {
   href?: undefined;
 }
 
-interface ButtonAsLinkProps extends ButtonBaseProps, Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof ButtonBaseProps | "href"> {
+interface ButtonAsLinkProps
+  extends
+    ButtonBaseProps,
+    Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof ButtonBaseProps | "href"> {
   href: string;
 }
 
 type ButtonProps = ButtonAsButtonProps | ButtonAsLinkProps;
 
 const extractButtonProps = (props: ButtonAsButtonProps) => {
-  const { variant: _variant, size: _size, className: _className, href: _href, ...buttonProps } = props;
+  const {
+    variant: _variant,
+    size: _size,
+    className: _className,
+    href: _href,
+    ...buttonProps
+  } = props;
   return buttonProps;
 };
 
@@ -74,8 +81,6 @@ interface ButtonIconProps {
   icon: LucideIcon;
 }
 
-const ButtonIcon: FC<ButtonIconProps> = ({ icon: Icon }) => (
-  <Icon size={14} className="-mr-1" />
-);
+const ButtonIcon: FC<ButtonIconProps> = ({ icon: Icon }) => <Icon size={14} className="-mr-1" />;
 
 export { Button, ButtonText, ButtonIcon };

@@ -1,5 +1,9 @@
 export { listUserCalendars, CalendarListError } from "./source/utils/list-calendars";
-export { fetchCalendarEvents, parseOutlookEvents, EventsFetchError } from "./source/utils/fetch-events";
+export {
+  fetchCalendarEvents,
+  parseOutlookEvents,
+  EventsFetchError,
+} from "./source/utils/fetch-events";
 export {
   createOutlookSourceProvider,
   OutlookSourceProvider,
@@ -33,8 +37,4 @@ export {
 export { MICROSOFT_GRAPH_API, OUTLOOK_PAGE_SIZE, GONE_STATUS } from "./shared/api";
 export { hasRateLimitMessage, isAuthError, isSimpleAuthError } from "./shared/errors";
 export { parseEventDateTime, parseEventTime } from "./shared/date-time";
-export type {
-  OutlookDateTime,
-  PartialOutlookDateTime,
-  MicrosoftApiError,
-} from "./types";
+export type { OutlookDateTime, PartialOutlookDateTime, MicrosoftApiError } from "./types";

@@ -10,9 +10,7 @@ import { and, asc, eq, gte, or } from "drizzle-orm";
 import type { SyncableEvent } from "@keeper.sh/provider-core";
 import type { CalDAVAccount, CalDAVService, CalDAVServiceConfig } from "../types";
 
-const buildProviderCondition = (
-  filter?: string,
-): ReturnType<typeof eq> | ReturnType<typeof or> => {
+const buildProviderCondition = (filter?: string): ReturnType<typeof eq> | ReturnType<typeof or> => {
   if (filter) {
     return eq(calendarDestinationsTable.provider, filter);
   }

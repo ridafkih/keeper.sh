@@ -1,7 +1,4 @@
-import {
-  caldavSourceCredentialsTable,
-  calendarSourcesTable,
-} from "@keeper.sh/database/schema";
+import { caldavSourceCredentialsTable, calendarSourcesTable } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
 import { decryptPassword } from "@keeper.sh/encryption";
 import type { CalDAVSourceAccount, CalDAVSourceProviderConfig } from "../types";

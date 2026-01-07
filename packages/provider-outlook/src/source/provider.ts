@@ -125,16 +125,14 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
     }
 
     if (toAdd.length > EMPTY_COUNT) {
-      await database
-        .insert(eventStatesTable)
-        .values(
-          toAdd.map((event) => ({
-            endTime: event.endTime,
-            sourceEventUid: event.uid,
-            sourceId,
-            startTime: event.startTime,
-          })),
-        );
+      await database.insert(eventStatesTable).values(
+        toAdd.map((event) => ({
+          endTime: event.endTime,
+          sourceEventUid: event.uid,
+          sourceId,
+          startTime: event.startTime,
+        })),
+      );
     }
 
     if (nextSyncToken) {
@@ -162,10 +160,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       .where(
         and(
           eq(eventStatesTable.sourceId, sourceId),
-          or(
-            lt(eventStatesTable.endTime, today),
-            gt(eventStatesTable.startTime, futureDate),
-          ),
+          or(lt(eventStatesTable.endTime, today), gt(eventStatesTable.startTime, futureDate)),
         ),
       )
       .limit(1);
@@ -177,9 +172,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
     database: BunSQLDatabase,
     sourceId: string,
   ): Promise<void> {
-    await database
-      .delete(eventStatesTable)
-      .where(eq(eventStatesTable.sourceId, sourceId));
+    await database.delete(eventStatesTable).where(eq(eventStatesTable.sourceId, sourceId));
 
     await database
       .update(calendarSourcesTable)
@@ -233,9 +226,7 @@ interface CreateOutlookSourceProviderConfig {
   oauthProvider: OAuthTokenProvider;
 }
 
-const createOutlookSourceProvider = (
-  config: CreateOutlookSourceProviderConfig,
-): SourceProvider => {
+const createOutlookSourceProvider = (config: CreateOutlookSourceProviderConfig): SourceProvider => {
   const { database, oauthProvider } = config;
 
   return createOAuthSourceProvider<OutlookSourceAccount, OutlookSourceConfig>({

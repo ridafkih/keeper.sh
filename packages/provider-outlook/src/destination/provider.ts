@@ -84,7 +84,11 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     const today = getStartOfToday();
 
     do {
-      const url = OutlookCalendarProviderInstance.buildListEventsUrl(today, options.until, nextLink);
+      const url = OutlookCalendarProviderInstance.buildListEventsUrl(
+        today,
+        options.until,
+        nextLink,
+      );
 
       const response = await fetch(url, {
         headers: this.headers,

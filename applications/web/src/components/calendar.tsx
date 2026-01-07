@@ -135,7 +135,10 @@ const Calendar = ({
   const getEventsForDay = (date: Date): CalendarEvent[] =>
     events
       .filter((event) => isSameDay(new Date(event.startTime), date))
-      .sort((first, second) => new Date(first.startTime).getTime() - new Date(second.startTime).getTime());
+      .sort(
+        (first, second) =>
+          new Date(first.startTime).getTime() - new Date(second.startTime).getTime(),
+      );
 
   return (
     <div className="flex flex-col gap-6 max-w-2xl">

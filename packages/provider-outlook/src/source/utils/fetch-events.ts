@@ -41,7 +41,9 @@ interface FullSyncRequiredResult {
 
 const buildInitialUrl = (calendarId: string, timeMin: Date, timeMax: Date): URL => {
   const encodedCalendarId = encodeURIComponent(calendarId);
-  const url = new URL(`${MICROSOFT_GRAPH_API}/me/calendars/${encodedCalendarId}/calendarView/delta`);
+  const url = new URL(
+    `${MICROSOFT_GRAPH_API}/me/calendars/${encodedCalendarId}/calendarView/delta`,
+  );
 
   url.searchParams.set("startDateTime", timeMin.toISOString());
   url.searchParams.set("endDateTime", timeMax.toISOString());

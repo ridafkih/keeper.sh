@@ -160,12 +160,8 @@
           "name": "caldav_event_mappings_caldavEventStateId_caldav_event_states_id_fk",
           "tableFrom": "caldav_event_mappings",
           "tableTo": "caldav_event_states",
-          "columnsFrom": [
-            "caldavEventStateId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["caldavEventStateId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -173,12 +169,8 @@
           "name": "caldav_event_mappings_destinationId_calendar_destinations_id_fk",
           "tableFrom": "caldav_event_mappings",
           "tableTo": "calendar_destinations",
-          "columnsFrom": [
-            "destinationId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["destinationId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -302,12 +294,8 @@
           "name": "caldav_event_states_caldavSourceId_caldav_sources_id_fk",
           "tableFrom": "caldav_event_states",
           "tableTo": "caldav_sources",
-          "columnsFrom": [
-            "caldavSourceId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["caldavSourceId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -459,12 +447,8 @@
           "name": "caldav_source_destination_mappings_caldavSourceId_caldav_sources_id_fk",
           "tableFrom": "caldav_source_destination_mappings",
           "tableTo": "caldav_sources",
-          "columnsFrom": [
-            "caldavSourceId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["caldavSourceId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -472,12 +456,8 @@
           "name": "caldav_source_destination_mappings_destinationId_calendar_destinations_id_fk",
           "tableFrom": "caldav_source_destination_mappings",
           "tableTo": "calendar_destinations",
-          "columnsFrom": [
-            "destinationId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["destinationId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -608,12 +588,8 @@
           "name": "caldav_sources_credentialId_caldav_source_credentials_id_fk",
           "tableFrom": "caldav_sources",
           "tableTo": "caldav_source_credentials",
-          "columnsFrom": [
-            "credentialId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["credentialId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -621,12 +597,8 @@
           "name": "caldav_sources_userId_user_id_fk",
           "tableFrom": "caldav_sources",
           "tableTo": "user",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -734,12 +706,8 @@
           "name": "calendar_destinations_caldavCredentialId_caldav_credentials_id_fk",
           "tableFrom": "calendar_destinations",
           "tableTo": "caldav_credentials",
-          "columnsFrom": [
-            "caldavCredentialId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["caldavCredentialId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -747,12 +715,8 @@
           "name": "calendar_destinations_oauthCredentialId_oauth_credentials_id_fk",
           "tableFrom": "calendar_destinations",
           "tableTo": "oauth_credentials",
-          "columnsFrom": [
-            "oauthCredentialId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["oauthCredentialId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -760,12 +724,8 @@
           "name": "calendar_destinations_userId_user_id_fk",
           "tableFrom": "calendar_destinations",
           "tableTo": "user",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -826,12 +786,8 @@
           "name": "calendar_snapshots_sourceId_remote_ical_sources_id_fk",
           "tableFrom": "calendar_snapshots",
           "tableTo": "remote_ical_sources",
-          "columnsFrom": [
-            "sourceId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["sourceId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -980,12 +936,8 @@
           "name": "calendar_sources_caldavCredentialId_caldav_source_credentials_id_fk",
           "tableFrom": "calendar_sources",
           "tableTo": "caldav_source_credentials",
-          "columnsFrom": [
-            "caldavCredentialId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["caldavCredentialId"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -993,12 +945,8 @@
           "name": "calendar_sources_oauthCredentialId_oauth_source_credentials_id_fk",
           "tableFrom": "calendar_sources",
           "tableTo": "oauth_source_credentials",
-          "columnsFrom": [
-            "oauthCredentialId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["oauthCredentialId"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1006,12 +954,8 @@
           "name": "calendar_sources_userId_user_id_fk",
           "tableFrom": "calendar_sources",
           "tableTo": "user",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1120,12 +1064,8 @@
           "name": "event_mappings_destinationId_calendar_destinations_id_fk",
           "tableFrom": "event_mappings",
           "tableTo": "calendar_destinations",
-          "columnsFrom": [
-            "destinationId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["destinationId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1133,12 +1073,8 @@
           "name": "event_mappings_eventStateId_event_states_id_fk",
           "tableFrom": "event_mappings",
           "tableTo": "event_states",
-          "columnsFrom": [
-            "eventStateId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["eventStateId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1262,12 +1198,8 @@
           "name": "event_states_sourceId_calendar_sources_id_fk",
           "tableFrom": "event_states",
           "tableTo": "calendar_sources",
-          "columnsFrom": [
-            "sourceId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["sourceId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1440,12 +1372,8 @@
           "name": "oauth_calendar_sources_destinationId_calendar_destinations_id_fk",
           "tableFrom": "oauth_calendar_sources",
           "tableTo": "calendar_destinations",
-          "columnsFrom": [
-            "destinationId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["destinationId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1453,12 +1381,8 @@
           "name": "oauth_calendar_sources_oauthSourceCredentialId_oauth_source_credentials_id_fk",
           "tableFrom": "oauth_calendar_sources",
           "tableTo": "oauth_source_credentials",
-          "columnsFrom": [
-            "oauthSourceCredentialId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["oauthSourceCredentialId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1466,12 +1390,8 @@
           "name": "oauth_calendar_sources_userId_user_id_fk",
           "tableFrom": "oauth_calendar_sources",
           "tableTo": "user",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1632,12 +1552,8 @@
           "name": "oauth_event_mappings_destinationId_calendar_destinations_id_fk",
           "tableFrom": "oauth_event_mappings",
           "tableTo": "calendar_destinations",
-          "columnsFrom": [
-            "destinationId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["destinationId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1645,12 +1561,8 @@
           "name": "oauth_event_mappings_oauthEventStateId_oauth_event_states_id_fk",
           "tableFrom": "oauth_event_mappings",
           "tableTo": "oauth_event_states",
-          "columnsFrom": [
-            "oauthEventStateId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["oauthEventStateId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1774,12 +1686,8 @@
           "name": "oauth_event_states_oauthSourceId_oauth_calendar_sources_id_fk",
           "tableFrom": "oauth_event_states",
           "tableTo": "oauth_calendar_sources",
-          "columnsFrom": [
-            "oauthSourceId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["oauthSourceId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1896,12 +1804,8 @@
           "name": "oauth_source_credentials_userId_user_id_fk",
           "tableFrom": "oauth_source_credentials",
           "tableTo": "user",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2001,12 +1905,8 @@
           "name": "oauth_source_destination_mappings_destinationId_calendar_destinations_id_fk",
           "tableFrom": "oauth_source_destination_mappings",
           "tableTo": "calendar_destinations",
-          "columnsFrom": [
-            "destinationId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["destinationId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2014,12 +1914,8 @@
           "name": "oauth_source_destination_mappings_oauthSourceId_oauth_calendar_sources_id_fk",
           "tableFrom": "oauth_source_destination_mappings",
           "tableTo": "oauth_calendar_sources",
-          "columnsFrom": [
-            "oauthSourceId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["oauthSourceId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2073,12 +1969,8 @@
           "name": "remote_ical_sources_userId_user_id_fk",
           "tableFrom": "remote_ical_sources",
           "tableTo": "user",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2178,12 +2070,8 @@
           "name": "source_destination_mappings_destinationId_calendar_destinations_id_fk",
           "tableFrom": "source_destination_mappings",
           "tableTo": "calendar_destinations",
-          "columnsFrom": [
-            "destinationId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["destinationId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2191,12 +2079,8 @@
           "name": "source_destination_mappings_sourceId_calendar_sources_id_fk",
           "tableFrom": "source_destination_mappings",
           "tableTo": "calendar_sources",
-          "columnsFrom": [
-            "sourceId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["sourceId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2274,12 +2158,8 @@
           "name": "sync_status_destinationId_calendar_destinations_id_fk",
           "tableFrom": "sync_status",
           "tableTo": "calendar_destinations",
-          "columnsFrom": [
-            "destinationId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["destinationId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2327,12 +2207,8 @@
           "name": "user_subscriptions_userId_user_id_fk",
           "tableFrom": "user_subscriptions",
           "tableTo": "user",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2434,12 +2310,8 @@
           "name": "account_userId_user_id_fk",
           "tableFrom": "account",
           "tableTo": "user",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2527,12 +2399,8 @@
           "name": "passkey_userId_user_id_fk",
           "tableFrom": "passkey",
           "tableTo": "user",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2604,12 +2472,8 @@
           "name": "session_userId_user_id_fk",
           "tableFrom": "session",
           "tableTo": "user",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2619,9 +2483,7 @@
         "session_token_unique": {
           "name": "session_token_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
+          "columns": ["token"]
         }
       },
       "policies": {},
@@ -2691,16 +2553,12 @@
         "user_email_unique": {
           "name": "user_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         },
         "user_username_unique": {
           "name": "user_username_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "username"
-          ]
+          "columns": ["username"]
         }
       },
       "policies": {},

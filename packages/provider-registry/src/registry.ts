@@ -6,7 +6,8 @@ const googleCalendarDefinition = {
   id: "google",
   name: "Google Calendar",
   sourcePreferences: {
-    description: "Uncheck events of the following types to prevent them from syncing to destinations.",
+    description:
+      "Uncheck events of the following types to prevent them from syncing to destinations.",
     label: "Event Sync Types",
     options: [
       {
@@ -112,10 +113,14 @@ const getProvidersByAuthType = (authType: AuthType): ProviderDefinition[] =>
   PROVIDER_DEFINITIONS.filter((provider) => provider.authType === authType);
 
 const getOAuthProviders = (): OAuthProviderDefinition[] =>
-  PROVIDER_DEFINITIONS.filter((provider): provider is OAuthProviderDefinition => provider.authType === "oauth");
+  PROVIDER_DEFINITIONS.filter(
+    (provider): provider is OAuthProviderDefinition => provider.authType === "oauth",
+  );
 
 const getCalDAVProviders = (): CalDAVProviderDefinition[] =>
-  PROVIDER_DEFINITIONS.filter((provider): provider is CalDAVProviderDefinition => provider.authType === "caldav");
+  PROVIDER_DEFINITIONS.filter(
+    (provider): provider is CalDAVProviderDefinition => provider.authType === "caldav",
+  );
 
 const isCalDAVProvider = (id: string): id is CalDAVProviderId => {
   const provider = getProvider(id);
@@ -144,4 +149,10 @@ export {
   isProviderId,
   getActiveProviders,
 };
-export type { ProviderId, OAuthProviderId, CalDAVProviderId, OAuthProviderDefinition, CalDAVProviderDefinition };
+export type {
+  ProviderId,
+  OAuthProviderId,
+  CalDAVProviderId,
+  OAuthProviderDefinition,
+  CalDAVProviderDefinition,
+};

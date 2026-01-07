@@ -21,7 +21,9 @@ const POST = withWideEvent(
         return ErrorResponse.badRequest(error.message).toResponse();
       }
 
-      return ErrorResponse.badRequest("Server URL, username, and password are required").toResponse();
+      return ErrorResponse.badRequest(
+        "Server URL, username, and password are required",
+      ).toResponse();
     }
   }),
 );

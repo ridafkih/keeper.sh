@@ -53,66 +53,66 @@ const BillingHistoryEmpty = (): ReactNode => (
 );
 
 const BillingHistoryTable = ({ orders }: { orders: CustomerOrder[] }): ReactNode => (
-    <Section>
-      <SectionHeader
-        title="Billing History"
-        description="View your past invoices and payment history"
-      />
-      <div className="border border-border rounded-md overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-surface-subtle border-b border-border">
-            <tr>
-              <th className="px-3 py-2 text-left">
-                <TextMeta>Date</TextMeta>
-              </th>
-              <th className="px-3 py-2 text-left">
-                <TextMeta>Description</TextMeta>
-              </th>
-              <th className="px-3 py-2 text-left">
-                <TextMeta>Amount</TextMeta>
-              </th>
-              <th className="px-3 py-2 text-left">
-                <TextMeta>Status</TextMeta>
-              </th>
+  <Section>
+    <SectionHeader
+      title="Billing History"
+      description="View your past invoices and payment history"
+    />
+    <div className="border border-border rounded-md overflow-hidden">
+      <table className="w-full">
+        <thead className="bg-surface-subtle border-b border-border">
+          <tr>
+            <th className="px-3 py-2 text-left">
+              <TextMeta>Date</TextMeta>
+            </th>
+            <th className="px-3 py-2 text-left">
+              <TextMeta>Description</TextMeta>
+            </th>
+            <th className="px-3 py-2 text-left">
+              <TextMeta>Amount</TextMeta>
+            </th>
+            <th className="px-3 py-2 text-left">
+              <TextMeta>Status</TextMeta>
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {orders.map((order) => (
+            <tr key={order.id}>
+              <td className="px-3 py-2">
+                <FieldValue>{formatDate(order.createdAt)}</FieldValue>
+              </td>
+              <td className="px-3 py-2">
+                <FieldValue>{order.product?.name ?? order.description}</FieldValue>
+              </td>
+              <td className="px-3 py-2">
+                <FieldValue className="tabular-nums">
+                  {formatCurrency(order.totalAmount, order.currency)}
+                </FieldValue>
+              </td>
+              <td className="px-3 py-2">
+                <span
+                  className={((): string => {
+                    if (order.paid) {
+                      return "text-success-emphasis bg-success-surface px-1.5 py-0.5 rounded-full text-xs font-medium";
+                    }
+                    return "text-warning bg-warning-surface px-1.5 py-0.5 rounded-full text-xs font-medium";
+                  })()}
+                >
+                  {((): string => {
+                    if (order.paid) {
+                      return "Paid";
+                    }
+                    return "Pending";
+                  })()}
+                </span>
+              </td>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {orders.map((order) => (
-              <tr key={order.id}>
-                <td className="px-3 py-2">
-                  <FieldValue>{formatDate(order.createdAt)}</FieldValue>
-                </td>
-                <td className="px-3 py-2">
-                  <FieldValue>{order.product?.name ?? order.description}</FieldValue>
-                </td>
-                <td className="px-3 py-2">
-                  <FieldValue className="tabular-nums">
-                    {formatCurrency(order.totalAmount, order.currency)}
-                  </FieldValue>
-                </td>
-                <td className="px-3 py-2">
-                  <span
-                    className={((): string => {
-                      if (order.paid) {
-                        return "text-success-emphasis bg-success-surface px-1.5 py-0.5 rounded-full text-xs font-medium";
-                      }
-                      return "text-warning bg-warning-surface px-1.5 py-0.5 rounded-full text-xs font-medium";
-                    })()}
-                  >
-                    {((): string => {
-                      if (order.paid) {
-                        return "Paid";
-                      }
-                      return "Pending";
-                    })()}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Section>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </Section>
 );
 
 const EMPTY_ORDERS_COUNT = 0;

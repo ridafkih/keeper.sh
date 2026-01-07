@@ -109,7 +109,10 @@ export default withCronWideEvent({
     event?.endTiming("fetchSources");
 
     const { succeeded: fetchSucceeded, failed: fetchFailed } = countSettledResults(settlements);
-    setCronEventFields({ "fetch.failed.count": fetchFailed, "fetch.succeeded.count": fetchSucceeded });
+    setCronEventFields({
+      "fetch.failed.count": fetchFailed,
+      "fetch.succeeded.count": fetchSucceeded,
+    });
 
     event?.startTiming("processSnapshots");
     const insertions: Promise<SnapshotResult>[] = [];

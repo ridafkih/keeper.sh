@@ -1,12 +1,12 @@
-import { FC } from "react";
+import type { FC } from "react";
 
 import { hasEvents } from "../utils/events";
 import { EventMarkerGroup } from "./event-marker-group";
 
-type CalendarDayProps = {
+interface CalendarDayProps {
   day: number;
   eventColors: string[];
-};
+}
 
 export const CalendarDay: FC<CalendarDayProps> = ({ day, eventColors }) => (
   <div className="relative overflow-hidden aspect-square bg-neutral-50 p-1.5 flex flex-col">

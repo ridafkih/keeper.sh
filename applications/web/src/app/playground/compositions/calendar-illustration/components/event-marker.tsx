@@ -1,8 +1,8 @@
-import { FC } from "react";
+import type { FC } from "react";
 
-type EventMarkerProps = {
+interface EventMarkerProps {
   color: string;
-};
+}
 
 export const EventMarker: FC<EventMarkerProps> = ({ color }) => (
   <div className="size-1.25 rounded-full" style={{ backgroundColor: color }} />

@@ -38,7 +38,7 @@ export const OAuthSourceCalendarDialog: FC<OAuthSourceCalendarDialogProps> = ({
   const buildDefaultPreferences = (): Record<string, boolean> => {
     if (!sourcePreferences) {
       return {};
-    };
+    }
 
     return Object.fromEntries(
       sourcePreferences.options.map(({ id, defaultValue }) => [id, defaultValue]),
@@ -62,14 +62,14 @@ export const OAuthSourceCalendarDialog: FC<OAuthSourceCalendarDialogProps> = ({
 
   const getSubmittablePreferences = (): Record<string, boolean> => {
     if (!sourcePreferences) {
-      return {}
-    };
+      return {};
+    }
 
     const submittable: Record<string, boolean> = {};
     for (const option of sourcePreferences.options) {
       if (option.disabled) {
         continue;
-      };
+      }
 
       submittable[option.id] = preferences[option.id] ?? option.defaultValue;
     }
@@ -85,7 +85,6 @@ export const OAuthSourceCalendarDialog: FC<OAuthSourceCalendarDialogProps> = ({
     setError(null);
 
     const fetchCalendars = async (): Promise<void> => {
-
       try {
         const response = await fetch(
           `/api/sources/${provider}/calendars?credentialId=${credentialId}`,
@@ -250,9 +249,7 @@ export const OAuthSourceCalendarDialog: FC<OAuthSourceCalendarDialogProps> = ({
         </div>
         {sourcePreferences && (
           <div className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-foreground">
-              {sourcePreferences.label}
-            </span>
+            <span className="text-sm font-medium text-foreground">{sourcePreferences.label}</span>
             {sourcePreferences.description && (
               <TextCaption as="span" className="text-foreground-muted">
                 {sourcePreferences.description}
@@ -260,7 +257,10 @@ export const OAuthSourceCalendarDialog: FC<OAuthSourceCalendarDialogProps> = ({
             )}
             <div className="flex flex-col gap-2 mt-1">
               {sourcePreferences.options.map((option) => (
-                <label key={option.id} className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                <label
+                  key={option.id}
+                  className="flex items-center gap-2 text-sm text-foreground cursor-pointer"
+                >
                   <input
                     type="checkbox"
                     checked={getOptionChecked(option)}

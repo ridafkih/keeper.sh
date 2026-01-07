@@ -4,7 +4,11 @@ import { syncStatusTable } from "@keeper.sh/database/schema";
 import { createRedis } from "@keeper.sh/redis";
 import { createPremiumService } from "@keeper.sh/premium";
 import { createBroadcastService } from "@keeper.sh/broadcast";
-import { createSyncCoordinator, createOAuthProviders, buildOAuthConfigs } from "@keeper.sh/provider-core";
+import {
+  createSyncCoordinator,
+  createOAuthProviders,
+  buildOAuthConfigs,
+} from "@keeper.sh/provider-core";
 import { createDestinationProviders } from "@keeper.sh/provider-registry/server";
 import type { DestinationSyncResult, SyncProgressUpdate } from "@keeper.sh/provider-core";
 import { Polar } from "@polar-sh/sdk";

@@ -37,10 +37,7 @@ const POST = withWideEvent(
         return ErrorResponse.paymentRequired(error.message).toResponse();
       }
       if (error instanceof DuplicateCalDAVSourceError) {
-        return Response.json(
-          { error: error.message },
-          { status: HTTP_STATUS.CONFLICT },
-        );
+        return Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT });
       }
 
       return ErrorResponse.badRequest("Invalid request body").toResponse();

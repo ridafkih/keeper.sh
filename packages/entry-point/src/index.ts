@@ -138,9 +138,10 @@ const entry = (timeout = 5000) => {
       ) => {
         type AwaitedSetupResult = Awaited<InstantiatedSetupCallbackReturnType>;
 
-        type SetupExtension = AwaitedSetupResult extends Record<string, unknown>
-          ? AwaitedSetupResult
-          : Record<never, never>;
+        type SetupExtension =
+          AwaitedSetupResult extends Record<string, unknown>
+            ? AwaitedSetupResult
+            : Record<never, never>;
 
         const validateEnvironment = () => {
           flags.add("env-validating");

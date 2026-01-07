@@ -39,7 +39,10 @@ const getValidSourceAccessToken = async (
   credentials: CredentialsWithExpiry,
 ): Promise<string> => {
   if (credentials.expiresAt < new Date()) {
-    const refreshed = await refreshMicrosoftSourceAccessToken(credentialId, credentials.refreshToken);
+    const refreshed = await refreshMicrosoftSourceAccessToken(
+      credentialId,
+      credentials.refreshToken,
+    );
     return refreshed.accessToken;
   }
   return credentials.accessToken;
@@ -56,7 +59,11 @@ const getAccessToken = async (
   }
 
   if (destinationId) {
-    const credentials = await getOAuthDestinationCredentials(userId, destinationId, OUTLOOK_PROVIDER);
+    const credentials = await getOAuthDestinationCredentials(
+      userId,
+      destinationId,
+      OUTLOOK_PROVIDER,
+    );
     return getValidDestinationAccessToken(destinationId, credentials);
   }
 

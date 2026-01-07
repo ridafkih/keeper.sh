@@ -43,8 +43,7 @@ const CopyablePhrase: FC<CopyablePhraseProps> = ({ phrase }) => {
       onClick={handleClick}
       className="inline-flex items-center gap-1 font-medium text-foreground hover:text-foreground-secondary transition-colors"
     >
-      "{phrase}"
-      {renderCopyIcon(copied)}
+      "{phrase}"{renderCopyIcon(copied)}
     </button>
   );
 };

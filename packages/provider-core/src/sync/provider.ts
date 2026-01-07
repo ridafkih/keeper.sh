@@ -68,7 +68,9 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
       );
 
       if (staleMappingIds.length > EMPTY_STALE_MAPPINGS_COUNT) {
-        const staleMappings = existingMappings.filter((mapping) => staleMappingIds.includes(mapping.id));
+        const staleMappings = existingMappings.filter((mapping) =>
+          staleMappingIds.includes(mapping.id),
+        );
         await Promise.all(staleMappings.map((mapping) => deleteEventMapping(database, mapping.id)));
       }
 

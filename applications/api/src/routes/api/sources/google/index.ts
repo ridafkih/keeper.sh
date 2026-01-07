@@ -35,9 +35,9 @@ const POST = withWideEvent(
       } = createOAuthSourceSchema.assert(body);
 
       const source = await createOAuthSource({
-        ...!syncFocusTime && { excludeFocusTime: true },
-        ...!syncOutOfOffice && { excludeOutOfOffice: true },
-        ...!syncWorkingLocation && { excludeWorkingLocation: true },
+        ...(!syncFocusTime && { excludeFocusTime: true }),
+        ...(!syncOutOfOffice && { excludeOutOfOffice: true }),
+        ...(!syncWorkingLocation && { excludeWorkingLocation: true }),
         externalCalendarId,
         name,
         oauthCredentialId: oauthSourceCredentialId ?? "",
@@ -57,10 +57,7 @@ const POST = withWideEvent(
         return ErrorResponse.badRequest(error.message).toResponse();
       }
       if (error instanceof DuplicateSourceError) {
-        return Response.json(
-          { error: error.message },
-          { status: HTTP_STATUS.CONFLICT },
-        );
+        return Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT });
       }
 
       return ErrorResponse.badRequest("Invalid request body").toResponse();

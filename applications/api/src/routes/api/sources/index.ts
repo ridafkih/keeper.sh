@@ -30,7 +30,7 @@ const GET = withWideEvent(
         id: source.id,
         name: source.name,
         type: "ics",
-        ...source.url && { url: source.url },
+        ...(source.url && { url: source.url }),
       });
     }
 
@@ -49,7 +49,7 @@ const GET = withWideEvent(
 
       for (const source of providerSources) {
         sources.push({
-          ...source.email && { email: source.email },
+          ...(source.email && { email: source.email }),
           id: source.id,
           name: source.name,
           provider: source.provider,

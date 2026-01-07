@@ -43,7 +43,10 @@ const getUserSources = async (userId: string): Promise<Source[]> => {
     .select()
     .from(calendarSourcesTable)
     .where(
-      and(eq(calendarSourcesTable.userId, userId), eq(calendarSourcesTable.sourceType, ICAL_SOURCE_TYPE)),
+      and(
+        eq(calendarSourcesTable.userId, userId),
+        eq(calendarSourcesTable.sourceType, ICAL_SOURCE_TYPE),
+      ),
     );
 
   return sources;

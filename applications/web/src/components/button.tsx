@@ -16,6 +16,14 @@ const buttonVariants = tv({
   },
 });
 
+const getClassNameAsString = (candidateClassName: unknown): string | null => {
+  if (typeof candidateClassName !== 'string') {
+    return null;
+  }
+
+  return candidateClassName;
+}
+
 type ButtonVariantProps = VariantProps<typeof buttonVariants>;
 
 type ButtonProps = ComponentProps<typeof BaseButton> &
@@ -23,16 +31,13 @@ type ButtonProps = ComponentProps<typeof BaseButton> &
     isLoading?: boolean;
   };
 
-export const Button: FC<PropsWithChildren<ButtonProps>> = ({
+const Button: FC<PropsWithChildren<ButtonProps>> = ({
   isLoading,
   children,
   disabled,
-  className,
   size,
   ...props
 }) => {
-  const resolvedClassName = typeof className === "string" ? className : undefined;
-
   const renderContent = (): React.ReactNode => {
     if (isLoading) {
       return (
@@ -47,13 +52,17 @@ export const Button: FC<PropsWithChildren<ButtonProps>> = ({
     return children;
   };
 
+  const className = getClassNameAsString(props.className);
+
   return (
     <BaseButton
       disabled={isLoading || disabled}
-      className={buttonVariants({ size, className: resolvedClassName })}
+      className={buttonVariants({ size, className })}
       {...props}
     >
       {renderContent()}
     </BaseButton>
   );
 };
+
+export { Button }

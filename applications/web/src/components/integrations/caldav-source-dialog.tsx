@@ -239,7 +239,10 @@ export const CalDAVSourceDialog: FC<CalDAVSourceDialogProps> = ({
   const renderCalendarStep = (): ReactNode => (
     <form onSubmit={handleConnect} className="flex flex-col gap-3">
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="caldav-source-calendar-select" className="text-sm font-medium text-foreground">
+        <label
+          htmlFor="caldav-source-calendar-select"
+          className="text-sm font-medium text-foreground"
+        >
           Select Calendar
         </label>
         <select

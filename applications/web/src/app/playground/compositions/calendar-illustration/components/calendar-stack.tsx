@@ -1,11 +1,11 @@
-import { FC } from "react";
+import type { FC } from "react";
 
 import { createBackLeftSkew, createBackRightSkew, createFrontSkew } from "../utils/stack";
 import { Calendar } from "./calendar";
 
-type CalendarStackProps = {
+interface CalendarStackProps {
   emphasized?: boolean;
-};
+}
 
 export const CalendarStack: FC<CalendarStackProps> = ({ emphasized }) => (
   <div className="relative grid grid-cols-1 grid-rows-1 *:row-start-1 *:col-start-1">

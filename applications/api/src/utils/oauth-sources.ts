@@ -102,10 +102,7 @@ const getUserOAuthSources = async (
   });
 };
 
-const verifyOAuthSourceOwnership = async (
-  userId: string,
-  sourceId: string,
-): Promise<boolean> => {
+const verifyOAuthSourceOwnership = async (userId: string, sourceId: string): Promise<boolean> => {
   const [source] = await database
     .select({ id: calendarSourcesTable.id })
     .from(calendarSourcesTable)

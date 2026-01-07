@@ -59,7 +59,9 @@ const createSyncJob = (plan: Plan, cron: string): CronOptions =>
       );
 
       const settledResults = await Promise.allSettled(userSyncs);
-      const userFailedCount = settledResults.filter((result) => result.status === "rejected").length;
+      const userFailedCount = settledResults.filter(
+        (result) => result.status === "rejected",
+      ).length;
 
       const totals: SyncResult = {
         addFailed: INITIAL_ADD_FAILED_COUNT,

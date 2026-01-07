@@ -37,7 +37,11 @@ const createGoogleOAuthService = (credentials: GoogleOAuthCredentials): GoogleOA
       destinationId: options.destinationId,
       sourceCredentialId: options.sourceCredentialId,
     });
-    const scopes = options.scopes ?? [GOOGLE_CALENDAR_SCOPE, GOOGLE_CALENDAR_LIST_SCOPE, GOOGLE_EMAIL_SCOPE];
+    const scopes = options.scopes ?? [
+      GOOGLE_CALENDAR_SCOPE,
+      GOOGLE_CALENDAR_LIST_SCOPE,
+      GOOGLE_EMAIL_SCOPE,
+    ];
 
     const url = new URL(GOOGLE_AUTH_URL);
     url.searchParams.set("client_id", clientId);

@@ -1,15 +1,15 @@
-import { FC } from "react";
+import type { FC } from "react";
 
 import { type EventRecord, getEventColorsForDayIfVisible } from "../utils/events";
 import { createGridIndices, indexToDayNumber } from "../utils/calendar-grid";
 import { CalendarDay } from "./calendar-day";
 
-export type CalendarGridProps = {
+interface CalendarGridProps {
   events: EventRecord;
   columns?: number;
   rows?: number;
   daysInMonth?: number;
-};
+}
 
 export const CalendarGrid: FC<CalendarGridProps> = ({
   events,
@@ -23,7 +23,12 @@ export const CalendarGrid: FC<CalendarGridProps> = ({
     <div className="grid grid-cols-7 gap-0.5 overflow-hidden rounded-xl">
       {indices.map((index) => {
         const dayNumber = indexToDayNumber(index, daysInMonth);
-        const eventColors = getEventColorsForDayIfVisible(events, dayNumber, index, daysInMonth - 1);
+        const eventColors = getEventColorsForDayIfVisible(
+          events,
+          dayNumber,
+          index,
+          daysInMonth - 1,
+        );
 
         return <CalendarDay key={index} day={dayNumber} eventColors={eventColors} />;
       })}

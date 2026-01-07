@@ -206,9 +206,7 @@ const deleteCalDAVSource = async (userId: string, sourceId: string): Promise<boo
     throw new CalDAVSourceNotFoundError();
   }
 
-  await database
-    .delete(calendarSourcesTable)
-    .where(eq(calendarSourcesTable.id, sourceId));
+  await database.delete(calendarSourcesTable).where(eq(calendarSourcesTable.id, sourceId));
 
   if (source.caldavCredentialId) {
     await database
@@ -219,10 +217,7 @@ const deleteCalDAVSource = async (userId: string, sourceId: string): Promise<boo
   return true;
 };
 
-const verifyCalDAVSourceOwnership = async (
-  userId: string,
-  sourceId: string,
-): Promise<boolean> => {
+const verifyCalDAVSourceOwnership = async (userId: string, sourceId: string): Promise<boolean> => {
   const [source] = await database
     .select({ id: calendarSourcesTable.id })
     .from(calendarSourcesTable)
