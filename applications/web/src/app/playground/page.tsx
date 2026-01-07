@@ -2,7 +2,6 @@
 
 import KeeperSvg from "@/assets/keeper.svg";
 
-import { useState } from "react";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -13,7 +12,11 @@ import {
   ReceiptIcon,
 } from "lucide-react";
 
-import { CalendarStack } from "./compositions/calendar-illustration/calendar-illustration";
+import {
+  CalendarStack,
+  SyncCalendarsButton,
+  SyncHoverProvider,
+} from "./compositions/calendar-illustration/calendar-illustration";
 import { Heading1, Heading2 } from "./components/heading";
 import { Copy } from "./components/copy";
 import { Button, ButtonText, ButtonIcon } from "./components/button";
@@ -23,8 +26,6 @@ import { LinkOut } from "./components/link-out";
 import { PricingGrid, PricingTier, PricingFeatureList, PricingFeature } from "./components/pricing";
 
 export default function Playground() {
-  const [isSyncHovered, setIsSyncHovered] = useState(false);
-
   return (
     <Scaffold>
       <header className="flex justify-between items-center">
@@ -47,23 +48,21 @@ export default function Playground() {
               Released open-source under AGPL-3.0.
             </Copy>
           </div>
-          <div className="flex flex-wrap gap-1">
-            <Button
-              variant="primary"
-              onMouseEnter={() => setIsSyncHovered(true)}
-              onMouseLeave={() => setIsSyncHovered(false)}
-            >
-              <ButtonText>Sync Calendars</ButtonText>
-              <ButtonIcon icon={ArrowRight} />
-            </Button>
-            <Button href="https://github.com/ridafkih/keeper.sh" target="_blank" variant="outline">
-              <ButtonText>View GitHub</ButtonText>
-              <ButtonIcon icon={ArrowUpRight} />
-            </Button>
-          </div>
-        </div>
-        <div className="py-8">
-          <CalendarStack emphasized={isSyncHovered} />
+          <SyncHoverProvider>
+            <div className="flex flex-wrap gap-1">
+              <SyncCalendarsButton>
+                <ButtonText>Sync Calendars</ButtonText>
+                <ButtonIcon icon={ArrowRight} />
+              </SyncCalendarsButton>
+              <Button href="https://github.com/ridafkih/keeper.sh" target="_blank" variant="outline">
+                <ButtonText>View GitHub</ButtonText>
+                <ButtonIcon icon={ArrowUpRight} />
+              </Button>
+            </div>
+            <div className="py-8">
+              <CalendarStack />
+            </div>
+          </SyncHoverProvider>
         </div>
         <div className="flex flex-col gap-4">
           <Heading2>How does it work?</Heading2>
@@ -92,7 +91,7 @@ export default function Playground() {
                 <PricingFeature>Unlimited destinations</PricingFeature>
                 <PricingFeature>Sync every minute</PricingFeature>
               </PricingFeatureList>
-              <LinkOut href="/register?plan=pro">Upgrade to Pro</LinkOut>
+              <LinkOut href="/register?plan=pro">Support the project</LinkOut>
             </PricingTier>
           </PricingGrid>
         </div>

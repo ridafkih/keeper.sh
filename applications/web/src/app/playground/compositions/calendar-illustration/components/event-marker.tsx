@@ -4,6 +4,8 @@ interface EventMarkerProps {
   color: string;
 }
 
-export const EventMarker: FC<EventMarkerProps> = ({ color }) => (
+const EventMarker: FC<EventMarkerProps> = ({ color }) => (
   <div className="size-1.25 rounded-full" style={{ backgroundColor: color }} />
 );
+
+export { EventMarker };

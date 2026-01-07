@@ -8,7 +8,7 @@ interface CalendarDayProps {
   eventColors: string[];
 }
 
-export const CalendarDay: FC<CalendarDayProps> = ({ day, eventColors }) => (
+const CalendarDay: FC<CalendarDayProps> = ({ day, eventColors }) => (
   <div className="relative overflow-hidden aspect-square bg-neutral-50 p-1.5 flex flex-col">
     <div className="text-[0.625rem] text-neutral-500 text-center font-semibold">
       {day.toString()}
@@ -16,3 +16,5 @@ export const CalendarDay: FC<CalendarDayProps> = ({ day, eventColors }) => (
     {hasEvents(eventColors) && <EventMarkerGroup colors={eventColors} />}
   </div>
 );
+
+export { CalendarDay };

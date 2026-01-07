@@ -1,9 +1,7 @@
-import type { FC, ReactNode } from "react";
+import type { FC, PropsWithChildren } from "react";
 
-interface CalendarFrameProps {
-  children: ReactNode;
-}
-
-export const CalendarFrame: FC<CalendarFrameProps> = ({ children }) => (
+const CalendarFrame: FC<PropsWithChildren> = ({ children }) => (
   <div className="p-0.5 bg-neutral-200">{children}</div>
 );
+
+export { CalendarFrame };

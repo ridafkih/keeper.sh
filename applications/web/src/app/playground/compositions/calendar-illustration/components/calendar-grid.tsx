@@ -11,7 +11,7 @@ interface CalendarGridProps {
   daysInMonth?: number;
 }
 
-export const CalendarGrid: FC<CalendarGridProps> = ({
+const CalendarGrid: FC<CalendarGridProps> = ({
   events,
   columns = 7,
   rows = 5,
@@ -35,3 +35,5 @@ export const CalendarGrid: FC<CalendarGridProps> = ({
     </div>
   );
 };
+
+export { CalendarGrid };

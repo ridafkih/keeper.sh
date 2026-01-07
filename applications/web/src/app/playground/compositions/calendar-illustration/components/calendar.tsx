@@ -9,14 +9,15 @@ import { CalendarGrid } from "./calendar-grid";
 interface CalendarProps {
   skew: SkewTuple;
   events: EventRecord;
-  emphasized?: boolean;
   className?: string;
 }
 
-export const Calendar: FC<CalendarProps> = ({ skew, events, emphasized, className }) => (
-  <AnimatedCard skew={skew} emphasized={emphasized} className={className}>
+const Calendar: FC<CalendarProps> = ({ skew, events, className }) => (
+  <AnimatedCard skew={skew} className={className}>
     <CalendarFrame>
       <CalendarGrid events={events} />
     </CalendarFrame>
   </AnimatedCard>
 );
+
+export { Calendar };

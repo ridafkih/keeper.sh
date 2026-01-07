@@ -25,6 +25,7 @@
     "@vercel/analytics": "^1.6.1",
     "better-auth": "1.4.9",
     "clsx": "^2.1.1",
+    "jotai": "^2.16.1",
     "lucide-react": "^0.562.0",
     "motion": "^12.23.26",
     "next": "16.1.1",
