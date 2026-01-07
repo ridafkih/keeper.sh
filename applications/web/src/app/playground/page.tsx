@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link"
-import { Fragment } from "react/jsx-runtime"
-import { motion, useMotionValue, useMotionValueEvent, useTransform, useVelocity } from "motion/react";
+import { motion } from "motion/react";
 
 import { ArrowRight, ArrowUpRight, BoltIcon, CalendarsIcon, CalendarSyncIcon, HomeIcon, ReceiptIcon } from "lucide-react"
 import { FC, PropsWithChildren, useEffect, useState } from "react";
@@ -11,24 +10,17 @@ import { useParams } from "next/navigation";
 import { Lora } from "next/font/google";
 import clsx from "clsx";
 
+import { LandingPageIllustrativeCalendarStack } from "./components/landing-page-illustrative-calendar";
+
 const lora = Lora()
 
-const getHash = () => {
-  if (typeof window !== 'undefined') {
-    return decodeURIComponent(window.location.hash.replace("#", ""))
-  }
-
-  return '';
-}
-
 const useHash = () => {
-  const [hash, setHash] = useState<string>(getHash());
-
+  const [hash, setHash] = useState<string>("");
   const params = useParams();
 
   useEffect(() => {
-    setHash(getHash());
-  }, [params])
+    setHash(decodeURIComponent(window.location.hash.replace("#", "")));
+  }, [params]);
 
   return { hash };
 }
@@ -49,28 +41,6 @@ const Indicator: FC<PropsWithChildren<IndicatorOptions>> = ({ attributedHash }) 
       transition={{ duration: 0.16, ease: [0.5, 0, 0, 1] }}
       className="absolute inset-0 size-full rounded-full z-10 bg-neutral-800 border-y border-y-neutral-500"
     />
-  )
-}
-
-const Matrix = () => {
-  return (
-    <div className="p-0.5 bg-neutral-200 rounded-[0.875rem]">
-      <div className="grid grid-cols-7 gap-0.5 overflow-hidden rounded-xl">
-        {[...Array(7 * 5)].map((_, index) => {
-          return (
-            <div
-              key={index.toString()}
-              className={clsx(
-              "relative overflow-hidden aspect-square bg-neutral-50 p-1.5",
-              "after:absolute after"
-              )}
-            >
-              <div className="text-[0.625rem] text-neutral-500 text-center font-semibold">{((index % 31) + 1).toString()}</div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
   )
 }
 
@@ -95,7 +65,7 @@ export default function Playground() {
             <button className="tracking-tighter font-medium rounded-full border border-transparent w-fit py-1.5 px-4 text-sm hover:cursor-pointer hover:backdrop-brightness-95">Get Started</button>
           </div>
         </div>
-        <Matrix />
+        <LandingPageIllustrativeCalendarStack />
         <nav className="fixed left-0 right-0 mx-auto bottom-8 p-1.5 rounded-full bg-neutral-950 w-fit text-neutral-300">
           <ul className="flex items-center">
             <li>
