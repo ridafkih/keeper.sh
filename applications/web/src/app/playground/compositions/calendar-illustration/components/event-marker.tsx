@@ -5,5 +5,5 @@ type EventMarkerProps = {
 };
 
 export const EventMarker: FC<EventMarkerProps> = ({ color }) => (
-  <div className="size-1.5 rounded-full" style={{ backgroundColor: color }} />
+  <div className="size-1.25 rounded-full" style={{ backgroundColor: color }} />
 );
