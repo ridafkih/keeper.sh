@@ -10,7 +10,7 @@ Keeper is a simple & open-source calendar syncing tool. It allows you to pull ev
 - Aggregating calendar events from remote sources
 - Event content agnostic syncing engine
 - Push aggregate events to one or more calendars
-- Open source under GPL-3.0
+- Open source under AGPL-3.0
 - Easy to self-host
 - Easy-to-purge remote events
 

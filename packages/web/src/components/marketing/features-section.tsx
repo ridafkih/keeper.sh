@@ -27,7 +27,7 @@ const features: Feature[] = [
     title: "Push to Calendars",
   },
   {
-    description: "Run it on your own infrastructure. Fully open-source and GPL-3.0 licensed.",
+    description: "Run it on your own infrastructure. Fully open-source and AGPL-3.0 licensed.",
     icon: Server,
     title: "Self-Hostable",
   },

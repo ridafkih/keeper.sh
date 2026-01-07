@@ -4,7 +4,7 @@ import { MarketingPage } from "@/components/marketing/marketing-page";
 
 export const metadata: Metadata = {
   description:
-    "Terms and conditions for using Keeper calendar synchronization service. Open-source, GPL-3.0 licensed.",
+    "Terms and conditions for using Keeper calendar synchronization service. Open-source, AGPL-3.0 licensed.",
   title: "Terms & Conditions",
 };
 
@@ -94,7 +94,7 @@ const TermsPage = (): ReactNode => (
             laws.
           </p>
           <p>
-            Keeper is open-source software licensed under the GPL-3.0 license. The source code is
+            Keeper is open-source software licensed under the AGPL-3.0 license. The source code is
             available at{" "}
             <a
               href="https://github.com/ridafkih/keeper.sh"
