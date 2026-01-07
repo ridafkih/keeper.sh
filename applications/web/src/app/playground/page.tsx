@@ -1,5 +1,7 @@
 "use client";
 
+import KeeperSvg from "@/assets/keeper.svg"
+
 import { useState } from "react";
 import { ArrowRight, ArrowUpRight, BoltIcon, CalendarsIcon, CalendarSyncIcon, HomeIcon, ReceiptIcon } from "lucide-react";
 
@@ -16,9 +18,12 @@ export default function Playground() {
 
   return (
     <Scaffold>
-      <header className="flex gap-0.5 items-center justify-end">
-        <Button variant="ghost" size="small">Login</Button>
-        <Button variant="primary" size="small">Register</Button>
+      <header className="flex justify-between items-center">
+        <KeeperSvg className="size-4" />
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="small">Login</Button>
+          <Button variant="primary" size="small">Register</Button>
+        </div>
       </header>
       <div className="flex flex-col gap-8">
         <div className="flex flex-col gap-4">
@@ -63,6 +68,9 @@ export default function Playground() {
             </li>
           </ul>
         </div>
+        <footer>
+          <Copy>Made with ♥ by <Link href="https://rida.dev/" className="underline font-medium text-blue-500">Rida F&apos;kih</Link>.</Copy>
+        </footer>
         <Dock>
           <DockItem href="#home" hash="home" icon={HomeIcon} />
           <DockItem href="#calendars" hash="calendars" icon={CalendarsIcon} />
