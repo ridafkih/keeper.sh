@@ -1,43 +1,34 @@
 import type { CronOptions } from "cronbake";
-import { WideEvent, emitWideEvent, getWideEvent, runWithWideEvent } from "@keeper.sh/log";
-import type { WideEventFields } from "@keeper.sh/log";
-
-const extractCronContext = (options: CronOptions): Partial<WideEventFields> => ({
-  jobName: options.name,
-  operationName: options.name,
-  operationType: "job",
-});
-
-const executeWithWideEvent = async (
-  event: WideEvent,
-  callback: () => void | Promise<void>,
-): Promise<void> => {
-  await runWithWideEvent(event, async () => {
-    try {
-      await callback();
-    } catch (error) {
-      event.setError(error);
-      throw error;
-    } finally {
-      emitWideEvent(event.finalize());
-    }
-  });
-};
+import { WideEvent } from "@keeper.sh/log";
 
 const withCronWideEvent = (options: CronOptions): CronOptions => {
   const { callback, ...restOptions } = options;
   return {
     ...restOptions,
     callback: async () => {
-      const event = new WideEvent("cron");
-      event.set(extractCronContext(options));
-      await executeWithWideEvent(event, callback);
+      const event = new WideEvent();
+      event.set({
+        "operation.type": "job",
+        "operation.name": options.name,
+        "job.name": options.name,
+      });
+
+      await event.run(async () => {
+        try {
+          await callback();
+        } catch (error) {
+          event.addError(error);
+          throw error;
+        } finally {
+          event.emit();
+        }
+      });
     },
   };
 };
 
-const setCronEventFields = (fields: Partial<WideEventFields>): void => {
-  getWideEvent()?.set(fields);
+const setCronEventFields = (fields: Record<string, unknown>): void => {
+  WideEvent.grasp()?.set(fields);
 };
 
 export { withCronWideEvent, setCronEventFields };

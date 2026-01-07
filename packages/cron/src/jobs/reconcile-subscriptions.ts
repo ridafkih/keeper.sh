@@ -1,7 +1,7 @@
 import type { CronOptions } from "cronbake";
 import { userSubscriptionsTable } from "@keeper.sh/database/schema";
 import { user } from "@keeper.sh/database/auth-schema";
-import { getWideEvent } from "@keeper.sh/log";
+import { WideEvent } from "@keeper.sh/log";
 import { database, polarClient } from "../context";
 import { setCronEventFields, withCronWideEvent } from "../utils/with-wide-event";
 import { countSettledResults } from "../utils/count-settled-results";
@@ -48,7 +48,7 @@ const reconcileUserSubscription = async (userId: string): Promise<void> => {
         target: userSubscriptionsTable.userId,
       });
   } catch (error) {
-    getWideEvent()?.setError(error);
+    WideEvent.error(error);
   }
 };
 

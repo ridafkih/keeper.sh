@@ -16,7 +16,7 @@ import type {
   RemoteEvent,
   SyncableEvent,
 } from "@keeper.sh/provider-core";
-import { getWideEvent } from "@keeper.sh/log";
+import { WideEvent } from "@keeper.sh/log";
 import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
 import type { GoogleEvent } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
@@ -165,7 +165,7 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
       }
       return result;
     } catch (error) {
-      getWideEvent()?.setError(error);
+      WideEvent.error(error);
       return { error: getErrorMessage(error), success: false };
     }
   }
@@ -231,12 +231,15 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
 
       return { success: true };
     } catch (error) {
-      getWideEvent()?.setError(error);
+      WideEvent.error(error);
       return { error: getErrorMessage(error), success: false };
     }
   }
 
   private async findEventByUid(uid: string): Promise<GoogleEvent | null> {
+    const event = WideEvent.grasp();
+    event?.startTiming("findEventByUid");
+
     const url = new URL(
       `calendars/${encodeURIComponent(this.config.calendarId)}/events`,
       GOOGLE_CALENDAR_API,
@@ -249,7 +252,10 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
       method: "GET",
     });
 
+    event?.endTiming("findEventByUid");
+
     if (!response.ok) {
+      event?.set({ findEventByUidStatus: response.status });
       return null;
     }
 

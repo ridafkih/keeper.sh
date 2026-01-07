@@ -1,5 +1,4 @@
-import { WideEvent, emitWideEvent } from "@keeper.sh/log";
-import type { WideEventFields } from "@keeper.sh/log";
+import { WideEvent } from "@keeper.sh/log";
 import { broadcastMessageSchema } from "@keeper.sh/data-schemas";
 import type { BroadcastMessage } from "@keeper.sh/data-schemas";
 import { createSubscriber } from "@keeper.sh/redis";
@@ -23,27 +22,20 @@ interface BroadcastConfig {
 }
 
 interface BroadcastService {
-  emit: (userId: string, event: string, data: unknown) => void;
+  emit: (userId: string, eventName: string, data: unknown) => void;
   startSubscriber: () => Promise<void>;
 }
 
 const CHANNEL = "broadcast";
 
-const extractErrorDetails = (error: unknown): { message: string; type: string } => {
-  if (error instanceof Error) {
-    return { message: error.message, type: error.constructor.name };
-  }
-  return { message: String(error), type: "Unknown" };
-};
-
-const sendToUser = (userId: string, event: string, data: unknown): void => {
+const sendToUser = (userId: string, eventName: string, data: unknown): void => {
   const userConnections = connections.get(userId);
 
   if (!userConnections || userConnections.size === EMPTY_CONNECTIONS_COUNT) {
     return;
   }
 
-  const message = JSON.stringify({ data, event });
+  const message = JSON.stringify({ data, event: eventName });
   for (const socket of userConnections) {
     socket.send(message);
   }
@@ -52,8 +44,8 @@ const sendToUser = (userId: string, event: string, data: unknown): void => {
 const createBroadcastService = (config: BroadcastConfig): BroadcastService => {
   const { redis } = config;
 
-  const emit = (userId: string, event: string, data: unknown): void => {
-    const message: BroadcastMessage = { data, event, userId };
+  const emit = (userId: string, eventName: string, data: unknown): void => {
+    const message: BroadcastMessage = { data, event: eventName, userId };
     redis.publish(CHANNEL, JSON.stringify(message));
   };
 
@@ -68,12 +60,12 @@ const createBroadcastService = (config: BroadcastConfig): BroadcastService => {
       sendToUser(parsed.userId, parsed.event, parsed.data);
     });
 
-    const event = new WideEvent("api");
+    const event = new WideEvent();
     event.set({
-      operationType: "lifecycle",
-      operationName: "broadcast:subscriber:start",
+      "operation.type": "lifecycle",
+      "operation.name": "broadcast:subscriber:start",
     });
-    emitWideEvent(event.finalize());
+    event.emit();
   };
 
   return { emit, startSubscriber };
@@ -107,19 +99,17 @@ const sendPing = (socket: Socket): void => {
   socket.send(JSON.stringify({ event: "ping" }));
 };
 
-const emitWebSocketEvent = (
-  userId: string,
-  operationName: string,
-  additionalFields?: Partial<WideEventFields>,
-): void => {
-  const event = new WideEvent("websocket");
+const emitWebSocketEvent = (userId: string, operationName: string, error?: unknown): void => {
+  const event = new WideEvent();
   event.set({
-    userId,
-    operationType: "connection",
-    operationName,
-    ...additionalFields,
+    "user.id": userId,
+    "operation.type": "connection",
+    "operation.name": operationName,
   });
-  emitWideEvent(event.finalize());
+  if (error) {
+    event.addError(error);
+  }
+  event.emit();
 };
 
 const startPing = (socket: Socket): ReturnType<typeof setInterval> => {
@@ -167,12 +157,7 @@ const createWebsocketHandler = (
       await options?.onConnect?.(userId, socket);
       emitWebSocketEvent(userId, "websocket:open");
     } catch (error) {
-      const { message: errorMessage, type: errorType } = extractErrorDetails(error);
-      emitWebSocketEvent(userId, "websocket:open", {
-        error: true,
-        errorMessage,
-        errorType,
-      });
+      emitWebSocketEvent(userId, "websocket:open", error);
     }
   },
 });

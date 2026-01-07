@@ -1,6 +1,6 @@
 import type { SyncResult } from "../types";
 import type { SyncContext, SyncCoordinator } from "./coordinator";
-import { getWideEvent } from "@keeper.sh/log";
+import { WideEvent } from "@keeper.sh/log";
 
 const INITIAL_ADDED_COUNT = 0;
 const INITIAL_ADD_FAILED_COUNT = 0;
@@ -33,7 +33,7 @@ const syncDestinationsForUser = async (
 
   for (const settled of settledResults) {
     if (settled.status === "rejected") {
-      getWideEvent()?.setError(settled.reason);
+      WideEvent.error(settled.reason);
       continue;
     }
     if (settled.value === null) {

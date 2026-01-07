@@ -7,7 +7,7 @@ import { registerJobs } from "./utils/register-jobs";
 
 const jobsFolderPathname = join(import.meta.dirname, "jobs");
 
-entry("cron")
+entry()
   .env(schema)
   .run(async ({ context }) => {
     const jobs = await getAllJobs(jobsFolderPathname);

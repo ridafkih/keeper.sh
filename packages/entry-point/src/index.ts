@@ -1,6 +1,5 @@
 import arkenv, { type createEnv, type type } from "arkenv";
-import { WideEvent, emitWideEvent } from "@keeper.sh/log";
-import type { ServiceBoundary } from "@keeper.sh/log";
+import { WideEvent } from "@keeper.sh/log";
 import type { MaybePromise } from "bun";
 
 type ArkEnvSchemaDefinition = Parameters<typeof createEnv>[0];
@@ -50,14 +49,13 @@ const serializeFlags = (flags: Set<string>): string[] => [...flags];
 const EXIT_CODE_FAILURE = 1;
 
 const emitLifecycleEvent = (
-  serviceBoundary: ServiceBoundary,
   service: string,
   startedAt: number,
   context: Map<string, unknown>,
   flags: Set<string>,
   error?: unknown,
 ): void => {
-  const event = new WideEvent(serviceBoundary);
+  const event = new WideEvent();
   event.set({
     operationType: "lifecycle",
     operationName: `${service}:start`,
@@ -67,10 +65,10 @@ const emitLifecycleEvent = (
   });
 
   if (error) {
-    event.setError(error);
+    event.addError(error);
   }
 
-  emitWideEvent(event.finalize());
+  event.emit();
 };
 
 /**
@@ -78,13 +76,10 @@ const emitLifecycleEvent = (
  * Implements the wide events pattern - accumulates context throughout
  * the lifecycle and emits a single canonical log line on completion.
  *
- * @param serviceBoundary The service boundary type for wide events
  * @param timeout The number of milliseconds to wait before timing out
  */
-const entry = <const ServiceName extends ServiceBoundary>(
-  serviceBoundary: ServiceName,
-  timeout = 5000,
-) => {
+const entry = (timeout = 5000) => {
+  const serviceBoundary = "entry-point";
   const context = new Map<string, unknown>();
   const flags = new Set<string>();
   const startedAt = Date.now();
@@ -93,7 +88,7 @@ const entry = <const ServiceName extends ServiceBoundary>(
     flags.add("timed-out");
     context.set("error.type", "EntryPointTimeout");
     context.set("error.message", `Entry point did not complete within ${timeout}ms`);
-    emitLifecycleEvent(serviceBoundary, serviceBoundary, startedAt, context, flags);
+    emitLifecycleEvent(serviceBoundary, startedAt, context, flags);
     process.exit(EXIT_CODE_FAILURE);
   }, timeout);
 
@@ -126,11 +121,11 @@ const entry = <const ServiceName extends ServiceBoundary>(
 
           flags.add("completed");
           clearTimeout(timeoutId);
-          emitLifecycleEvent(serviceBoundary, serviceBoundary, startedAt, context, flags);
+          emitLifecycleEvent(serviceBoundary, startedAt, context, flags);
         } catch (error) {
           flags.add("failed");
           clearTimeout(timeoutId);
-          emitLifecycleEvent(serviceBoundary, serviceBoundary, startedAt, context, flags, error);
+          emitLifecycleEvent(serviceBoundary, startedAt, context, flags, error);
           process.exit(EXIT_CODE_FAILURE);
         }
       };
@@ -186,11 +181,11 @@ const entry = <const ServiceName extends ServiceBoundary>(
 
             flags.add("completed");
             clearTimeout(timeoutId);
-            emitLifecycleEvent(serviceBoundary, serviceBoundary, startedAt, context, flags);
+            emitLifecycleEvent(serviceBoundary, startedAt, context, flags);
           } catch (error) {
             flags.add("failed");
             clearTimeout(timeoutId);
-            emitLifecycleEvent(serviceBoundary, serviceBoundary, startedAt, context, flags, error);
+            emitLifecycleEvent(serviceBoundary, startedAt, context, flags, error);
             process.exit(EXIT_CODE_FAILURE);
           }
         };

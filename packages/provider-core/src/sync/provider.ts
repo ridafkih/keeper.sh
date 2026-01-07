@@ -17,7 +17,7 @@ import {
 } from "../events/mappings";
 import type { EventMapping } from "../events/mappings";
 import type { SyncContext, SyncStage } from "./coordinator";
-import { getWideEvent } from "@keeper.sh/log";
+import { WideEvent } from "@keeper.sh/log";
 
 const INITIAL_REMOTE_EVENT_COUNT = 0;
 const EMPTY_STALE_MAPPINGS_COUNT = 0;
@@ -105,7 +105,7 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
 
       return processed;
     } catch (error) {
-      getWideEvent()?.setError(error);
+      WideEvent.error(error);
 
       context.onSyncProgress?.({
         destinationId: this.config.destinationId,
@@ -290,7 +290,7 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
           added++;
           currentRemoteCount++;
         } else {
-          getWideEvent()?.set({
+          WideEvent.grasp()?.set({
             pushError: result?.error,
             pushRemoteId: result?.remoteId,
             pushSuccess: result?.success,

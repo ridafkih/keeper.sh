@@ -1,6 +1,5 @@
 import type { MaybePromise } from "bun";
-import { WideEvent, runWithWideEvent, emitWideEvent } from "@keeper.sh/log";
-import type { WideEventFields } from "@keeper.sh/log";
+import { WideEvent } from "@keeper.sh/log";
 import { auth } from "../context";
 
 const HTTP_INTERNAL_SERVER_ERROR = 500;
@@ -31,26 +30,26 @@ const clearSessionCookies = (response: Response): Response => {
   });
 };
 
-const extractAuthContext = (request: Request, pathname: string): Partial<WideEventFields> => {
+const extractAuthContext = (request: Request, pathname: string): Record<string, unknown> => {
   const origin = request.headers.get("origin");
   const userAgent = request.headers.get("user-agent");
   return {
-    httpMethod: request.method,
-    httpPath: pathname,
-    operationName: `${request.method} ${pathname}`,
-    operationType: "auth",
-    ...(origin && { httpOrigin: origin }),
-    ...(userAgent && { httpUserAgent: userAgent }),
+    "http.method": request.method,
+    "http.path": pathname,
+    "operation.name": `${request.method} ${pathname}`,
+    "operation.type": "auth",
+    ...(origin && { "http.origin": origin }),
+    ...(userAgent && { "http.user_agent": userAgent }),
   };
 };
 
 const handleAuthResponseStatus = (event: WideEvent, response: Response): void => {
-  event.set({ httpStatusCode: response.status });
+  event.set({ "http.status_code": response.status });
   if (response.status >= HTTP_ERROR_THRESHOLD) {
     event.set({
-      error: true,
-      errorMessage: `HTTP ${response.status}`,
-      errorType: "AuthError",
+      "error.occurred": true,
+      "error.message": `HTTP ${response.status}`,
+      "error.type": "AuthError",
     });
   }
 };
@@ -70,20 +69,20 @@ const processAuthResponse = async (pathname: string, response: Response): Promis
 };
 
 const handleAuthRequest = (pathname: string, request: Request): MaybePromise<Response> => {
-  const event = new WideEvent("api");
+  const event = new WideEvent();
   event.set(extractAuthContext(request, pathname));
 
-  return runWithWideEvent(event, async () => {
+  return event.run(async () => {
     try {
       const response = await auth.handler(request);
       handleAuthResponseStatus(event, response);
       return processAuthResponse(pathname, response);
     } catch (error) {
-      event.setError(error);
-      event.set({ httpStatusCode: HTTP_INTERNAL_SERVER_ERROR });
+      event.addError(error);
+      event.set({ "http.status_code": HTTP_INTERNAL_SERVER_ERROR });
       throw error;
     } finally {
-      emitWideEvent(event.finalize());
+      event.emit();
     }
   });
 };

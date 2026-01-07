@@ -1,117 +1,137 @@
-import type { ServiceBoundary, WideEventFields } from "./types";
+import type { BaseWideEventFields } from "./types";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
+import pino from "pino";
 
-const createInitialFields = (serviceBoundary: ServiceBoundary): Partial<WideEventFields> => ({
-  requestId: randomUUID(),
-  serviceBoundary,
-  startTime: Date.now(),
-  timings: {},
-});
+const INITIAL_COUNT = 0;
+const INCREMENT = 1;
 
-type ErrorFields = Pick<
-  WideEventFields,
-  "error" | "errorType" | "errorMessage" | "errorCode" | "errorStack" | "errorCause"
->;
+const log = pino({ level: process.env.LOG_LEVEL ?? "info" });
 
-const formatCause = (cause: Error): string => `${cause.name}: ${cause.message}`;
+const getErrorType = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.constructor.name;
+  };
 
-const extractErrorFields = (error: unknown): ErrorFields => {
-  if (!(error instanceof Error)) {
-    return {
-      error: true,
-      errorMessage: String(error),
-      errorType: "Unknown",
+  return "Keeper__HardcodedUnknownError";
+};
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+};
+
+const getErrorStack = (error: unknown): string | null => {
+  if (error instanceof Error) {
+    return error.stack ?? null;
+  }
+
+  return null;
+};
+
+const storage = new AsyncLocalStorage<WideEvent>();
+
+class WideEvent {
+  protected fields: BaseWideEventFields;
+  private timingStarts = new Map<string, number>();
+
+  constructor() {
+    this.fields = {
+      "request.id": randomUUID(),
+      "request.timing.start": Date.now(),
+      timings: {},
     };
   }
 
-  const fields: ErrorFields = {
-    error: true,
-    errorMessage: error.message,
-    errorStack: error.stack,
-    errorType: error.constructor.name,
-  };
-
-  if ("code" in error) {
-    fields.errorCode = String(error.code);
+  static grasp(): WideEvent | undefined {
+    return storage.getStore();
   }
 
-  if (error.cause instanceof Error) {
-    fields.errorCause = formatCause(error.cause);
+  static require(): WideEvent {
+    const event = storage.getStore();
+    if (!event) {throw new Error("No WideEvent in current context");}
+    return event;
   }
 
-  return fields;
-};
-
-const calculateDuration = (startTime: number, endTime: number): number => endTime - startTime;
-
-export class WideEvent {
-  private fields: Partial<WideEventFields>;
-  private timingStarts = new Map<string, number>();
-
-  constructor(serviceBoundary: ServiceBoundary) {
-    this.fields = createInitialFields(serviceBoundary);
+  static error(error: unknown): void {
+    storage.getStore()?.addError(error);
   }
 
-  set = (fields: Partial<WideEventFields>): this => {
+  run<Result>(callback: () => Result | Promise<Result>): Result | Promise<Result> {
+    return storage.run(this, callback);
+  }
+
+  set(fields: Partial<BaseWideEventFields>): this {
     Object.assign(this.fields, fields);
     return this;
-  };
+  }
 
-  get = <Key extends keyof WideEventFields>(key: Key): WideEventFields[Key] | undefined =>
-    this.fields[key];
+  get(key: string): unknown {
+    return this.fields[key];
+  }
 
-  startTiming = (timingName: string): void => {
-    this.timingStarts.set(timingName, performance.now());
-  };
+  startTiming(name: string): void {
+    this.timingStarts.set(name, performance.now());
+  }
 
-  endTiming = (timingName: string): number | null => {
-    const timingStart = this.timingStarts.get(timingName) ?? null;
+  endTiming(name: string): number | null {
+    const start = this.timingStarts.get(name);
 
-    if (timingStart === null) {
+    if (!start) {
       return null;
     }
 
-    const duration = Math.round(performance.now() - timingStart);
-    this.timingStarts.delete(timingName);
-    this.fields.timings = { ...this.fields.timings, [timingName]: duration };
+    const duration = Math.round(performance.now() - start);
+    this.timingStarts.delete(name);
+    this.fields.timings = { ...this.fields.timings, [name]: duration };
     return duration;
-  };
+  }
 
-  setError = (error: unknown): this => {
-    const errorFields = extractErrorFields(error);
-    Object.assign(this.fields, errorFields);
+  setTiming(name: string, durationMs: number): this {
+    this.fields.timings = { ...this.fields.timings, [name]: durationMs };
     return this;
-  };
+  }
 
-  finalize = (): WideEventFields => {
-    const { requestId, startTime = null, serviceBoundary } = this.fields;
+  addError(error: unknown): this {
+    const errorType = getErrorType(error);
+    const countKey = `error.${errorType}.count`;
+    const messageKey = `error.${errorType}.lastMessage`;
+    const stackKey = `error.${errorType}.lastStack`;
 
-    if (!requestId) {
-      throw new Error("WideEvent requestId was not initialized");
-    }
-    if (startTime === null) {
-      throw new Error("WideEvent startTime was not initialized");
-    }
-    if (!serviceBoundary) {
-      throw new Error("WideEvent serviceBoundary was not initialized");
+    const currentCount = Number(this.fields?.[countKey] ?? INITIAL_COUNT);
+
+    this.fields[countKey] = currentCount + INCREMENT;
+    this.fields[messageKey] = getErrorMessage(error);
+
+    const stack = getErrorStack(error);
+    if (stack) {
+      this.fields[stackKey] = stack;
     }
 
+    this.fields["error.occurred"] = true;
+    const errorCount = this.fields?.["error.count"] ?? INITIAL_COUNT;
+    this.fields["error.count"] = errorCount + INCREMENT;
+
+    return this;
+  }
+
+  emit(): void {
     const endTime = Date.now();
-    return {
-      ...this.fields,
-      durationMs: calculateDuration(startTime, endTime),
-      endTime,
-      requestId,
-      serviceBoundary,
-      startTime,
-    };
-  };
+    const startTime = this.fields["request.timing.start"];
 
-  getRequestId = (): string => {
-    const { requestId } = this.fields;
-    if (!requestId) {
-      throw new Error("WideEvent requestId was not initialized");
-    }
-    return requestId;
-  };
+    this.fields["request.timing.end"] = endTime;
+    this.fields["request.duration.ms"] = endTime - startTime;
+
+    const operationName = this.fields["operation.name"] ?? "Keeper__HardcodedUnknownOperationName";
+    log.info(this.fields, operationName);
+  }
+
+  getRequestId(): string {
+    return this.fields["request.id"];
+  }
 }
+
+export { WideEvent, log };

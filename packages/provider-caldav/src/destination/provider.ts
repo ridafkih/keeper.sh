@@ -17,7 +17,7 @@ import type {
   SyncableEvent,
 } from "@keeper.sh/provider-core";
 import { getStartOfToday } from "@keeper.sh/date-utils";
-import { getWideEvent } from "@keeper.sh/log";
+import { WideEvent } from "@keeper.sh/log";
 import { CalDAVClient } from "../shared/client";
 import { eventToICalString, parseICalToRemoteEvent } from "../shared/ics";
 import { createCalDAVService } from "./sync";
@@ -129,7 +129,7 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
 
             return { remoteId: uid, success: true };
           } catch (error) {
-            getWideEvent()?.setError(error);
+            WideEvent.error(error);
             return { error: getErrorMessage(error), success: false };
           }
         }),
@@ -156,6 +156,7 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
               return { success: true };
             }
 
+            WideEvent.error(error);
             return { error: getErrorMessage(error), success: false };
           }
         }),

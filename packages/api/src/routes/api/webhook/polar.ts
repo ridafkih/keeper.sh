@@ -1,6 +1,6 @@
 import type { MaybePromise } from "bun";
 import { WebhookVerificationError, validateEvent } from "@polar-sh/sdk/webhooks";
-import { WideEvent, emitWideEvent, runWithWideEvent } from "@keeper.sh/log";
+import { WideEvent } from "@keeper.sh/log";
 import { ErrorResponse } from "../../../utils/responses";
 import { database } from "../../../context";
 import env from "@keeper.sh/env/api";
@@ -87,13 +87,13 @@ const POST = (request: Request): MaybePromise<Response> => {
     return ErrorResponse.notImplemented().toResponse();
   }
 
-  const wideEvent = new WideEvent("api");
+  const wideEvent = new WideEvent();
   wideEvent.set({
-    operationName: "polar",
-    operationType: "webhook",
+    "operation.name": "polar",
+    "operation.type": "webhook",
   });
 
-  return runWithWideEvent(wideEvent, async () => {
+  return wideEvent.run(async () => {
     try {
       const body = await request.text();
       const headers: Record<string, string> = {};
@@ -102,7 +102,7 @@ const POST = (request: Request): MaybePromise<Response> => {
       }
 
       const event = validateEvent(body, headers, webhookSecret);
-      wideEvent.set({ operationName: `polar:${event.type}` });
+      wideEvent.set({ "operation.name": `polar:${event.type}` });
 
       if (event.type === "subscription.created") {
         return handleSubscriptionCreated(
@@ -132,13 +132,13 @@ const POST = (request: Request): MaybePromise<Response> => {
       return new Response(null, { status: HTTP_OK });
     } catch (error) {
       if (error instanceof WebhookVerificationError) {
-        wideEvent.set({ error: true, errorType: "WebhookVerificationError" });
+        wideEvent.set({ "error.occurred": true, "error.type": "WebhookVerificationError" });
         return ErrorResponse.unauthorized().toResponse();
       }
-      wideEvent.setError(error);
+      wideEvent.addError(error);
       throw error;
     } finally {
-      emitWideEvent(wideEvent.finalize());
+      wideEvent.emit();
     }
   });
 };

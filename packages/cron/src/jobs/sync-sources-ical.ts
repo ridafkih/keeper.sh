@@ -2,7 +2,7 @@ import type { CronOptions } from "cronbake";
 import { calendarSnapshotsTable, calendarSourcesTable } from "@keeper.sh/database/schema";
 import { MS_PER_HOUR } from "@keeper.sh/constants";
 import { pullRemoteCalendar } from "@keeper.sh/calendar";
-import { WideEvent, emitWideEvent, runWithWideEvent } from "@keeper.sh/log";
+import { WideEvent } from "@keeper.sh/log";
 import { and, desc, eq, lte } from "drizzle-orm";
 import { database } from "../context";
 import { setCronEventFields, withCronWideEvent } from "../utils/with-wide-event";
@@ -62,38 +62,36 @@ const getLatestSnapshotHash = async (sourceId: string): Promise<string | null> =
 
 const computeContentHash = (content: string): string => Bun.hash(content).toString();
 
-const processSnapshot = async (sourceId: string, ical: string): Promise<void> => {
-  const event = new WideEvent("cron");
-  event.set({
-    operationName: "snapshot-insertion",
-    operationType: "snapshot",
-    sourceId,
-  });
+interface SnapshotResult {
+  skipped: boolean;
+  error: boolean;
+}
 
-  await runWithWideEvent(event, async () => {
-    try {
-      const contentHash = computeContentHash(ical);
-      const latestHash = await getLatestSnapshotHash(sourceId);
+const processSnapshot = async (sourceId: string, ical: string): Promise<SnapshotResult> => {
+  try {
+    const contentHash = computeContentHash(ical);
+    const latestHash = await getLatestSnapshotHash(sourceId);
 
-      if (latestHash === contentHash) {
-        event.set({ skipped: true, skipReason: "content-unchanged" });
-        return;
-      }
-
-      const record = await insertSnapshot({ contentHash, ical, sourceId });
-      if (record) {
-        await deleteStaleCalendarSnapshots(sourceId, record.createdAt);
-      }
-    } catch (error) {
-      event.setError(error);
-    } finally {
-      emitWideEvent(event.finalize());
+    if (latestHash === contentHash) {
+      return { error: false, skipped: true };
     }
-  });
+
+    const record = await insertSnapshot({ contentHash, ical, sourceId });
+    if (record) {
+      await deleteStaleCalendarSnapshots(sourceId, record.createdAt);
+    }
+    return { error: false, skipped: false };
+  } catch (error) {
+    WideEvent.error(error);
+    return { error: true, skipped: false };
+  }
 };
 
 export default withCronWideEvent({
   async callback() {
+    const event = WideEvent.grasp();
+    event?.startTiming("fetchSources");
+
     const remoteSources = await database
       .select()
       .from(calendarSourcesTable)
@@ -108,29 +106,31 @@ export default withCronWideEvent({
     });
 
     const settlements = await Promise.allSettled(fetches);
-    const { succeeded, failed } = countSettledResults(settlements);
-    setCronEventFields({ failedCount: failed, processedCount: succeeded });
+    event?.endTiming("fetchSources");
 
-    const insertions: Promise<void>[] = [];
-    for (const [index, settlement] of settlements.entries()) {
+    const { succeeded: fetchSucceeded, failed: fetchFailed } = countSettledResults(settlements);
+    setCronEventFields({ fetchFailedCount: fetchFailed, fetchSucceededCount: fetchSucceeded });
+
+    event?.startTiming("processSnapshots");
+    const insertions: Promise<SnapshotResult>[] = [];
+    for (const settlement of settlements) {
       if (settlement.status === "fulfilled") {
         insertions.push(processSnapshot(settlement.value.sourceId, settlement.value.ical));
-      } else {
-        const source = remoteSources[index];
-        if (source) {
-          const event = new WideEvent("cron");
-          event.set({
-            operationName: "snapshot-fetch",
-            operationType: "snapshot",
-            sourceId: source.id,
-          });
-          event.setError(settlement.reason);
-          emitWideEvent(event.finalize());
-        }
       }
     }
 
-    await Promise.allSettled(insertions);
+    const insertionResults = await Promise.all(insertions);
+    event?.endTiming("processSnapshots");
+
+    const skippedCount = insertionResults.filter(({ skipped }) => skipped).length;
+    const insertErrorCount = insertionResults.filter(({ error }) => error).length;
+    const insertedCount = insertionResults.length - skippedCount - insertErrorCount;
+
+    setCronEventFields({
+      insertErrorCount,
+      insertedCount,
+      skippedCount,
+    });
   },
   cron: "@every_1_minutes",
   immediate: true,

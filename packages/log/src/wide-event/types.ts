@@ -1,61 +1,69 @@
-type ServiceBoundary = "api" | "cron" | "sync" | "websocket" | "web";
+interface BaseWideEventFields {
+  "request.id": string;
+  "request.timing.start": number;
+  "request.timing.end"?: number;
+  "request.duration.ms"?: number;
 
-interface WideEventFields {
-  requestId: string;
-  startTime: number;
-  endTime?: number;
-  durationMs?: number;
-  serviceBoundary: ServiceBoundary;
+  "operation.type"?: string;
+  "operation.name"?: string;
 
-  operationType?: string;
-  operationName?: string;
-
-  httpMethod?: string;
-  httpPath?: string;
-  httpStatusCode?: number;
-  httpUserAgent?: string;
-  httpOrigin?: string;
-
-  userId?: string;
-  userEmail?: string;
-  sessionId?: string;
-
-  subscriptionPlan?: "free" | "pro";
-  sourceCount?: number;
-  destinationCount?: number;
-
-  sourceId?: string;
-  destinationId?: string;
-  provider?: string;
-  parentRequestId?: string;
-
-  syncGeneration?: number;
-  eventsAdded?: number;
-  eventsRemoved?: number;
-  localEventCount?: number;
-  remoteEventCount?: number;
-
-  jobName?: string;
-  processedCount?: number;
-  failedCount?: number;
-
-  error?: boolean;
-  errorType?: string;
-  errorMessage?: string;
-  errorCode?: string;
-  errorStack?: string;
-  errorCause?: string;
+  "error.occurred"?: boolean;
+  "error.count"?: number;
 
   timings?: Record<string, number>;
-
-  service?: string;
-  timeout?: number;
-  timedOut?: boolean;
-  flags?: string[];
 
   [key: string]: unknown;
 }
 
-type WideEventEmitFunction = (event: WideEventFields) => void;
+interface HttpFields {
+  "http.method"?: string;
+  "http.path"?: string;
+  "http.statusCode"?: number;
+  "http.userAgent"?: string;
+  "http.origin"?: string;
+}
 
-export type { ServiceBoundary, WideEventFields, WideEventEmitFunction };
+interface UserFields {
+  "user.id"?: string;
+  "user.email"?: string;
+  "user.sessionId"?: string;
+  "user.subscriptionPlan"?: "free" | "pro";
+  "user.sourceCount"?: number;
+  "user.destinationCount"?: number;
+  "user.accountAgeDays"?: number;
+}
+
+interface SyncFields {
+  "sync.sourceId"?: string;
+  "sync.destinationId"?: string;
+  "sync.provider"?: string;
+  "sync.parentRequestId"?: string;
+  "sync.generation"?: number;
+  "sync.eventsAdded"?: number;
+  "sync.eventsRemoved"?: number;
+  "sync.localEventCount"?: number;
+  "sync.remoteEventCount"?: number;
+}
+
+interface JobFields {
+  "job.name"?: string;
+  "job.type"?: string;
+  "job.processedCount"?: number;
+  "job.failedCount"?: number;
+}
+
+interface ApiWideEventFields extends BaseWideEventFields, HttpFields, UserFields, SyncFields {}
+
+interface CronWideEventFields extends BaseWideEventFields, JobFields, SyncFields {}
+
+interface WebSocketWideEventFields extends BaseWideEventFields, UserFields {}
+
+interface SyncWideEventFields extends BaseWideEventFields, SyncFields, UserFields {}
+
+export type {
+  ApiWideEventFields,
+  BaseWideEventFields,
+  CronWideEventFields,
+  SyncWideEventFields,
+  WebSocketWideEventFields,
+};

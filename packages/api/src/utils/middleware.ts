@@ -1,14 +1,15 @@
 import type { MaybePromise } from "bun";
-import { WideEvent, emitWideEvent, getWideEvent, runWithWideEvent, log } from "@keeper.sh/log";
-import type { WideEventFields } from "@keeper.sh/log";
+import { WideEvent } from "@keeper.sh/log";
 import { ErrorResponse } from "./responses";
 import { calendarDestinationsTable, calendarSourcesTable } from "@keeper.sh/database/schema";
+import { user as userTable } from "@keeper.sh/database/auth-schema";
 import { count, eq } from "drizzle-orm";
 import { auth, database, premiumService } from "../context";
 
 const HTTP_ERROR_THRESHOLD = 400;
 const HTTP_INTERNAL_SERVER_ERROR = 500;
 const DEFAULT_COUNT = 0;
+const MS_PER_DAY = 86_400_000;
 
 interface RouteContext {
   request: Request;
@@ -24,27 +25,27 @@ type RouteHandler = (request: Request, params: Record<string, string>) => MaybeP
 type RouteCallback = (ctx: RouteContext) => MaybePromise<Response>;
 type AuthenticatedRouteCallback = (ctx: AuthenticatedRouteContext) => MaybePromise<Response>;
 
-const extractHttpContext = (request: Request): Partial<WideEventFields> => {
+const extractHttpContext = (request: Request): Record<string, unknown> => {
   const url = new URL(request.url);
   const origin = request.headers.get("origin");
   const userAgent = request.headers.get("user-agent");
   return {
-    httpMethod: request.method,
-    httpPath: url.pathname,
-    operationName: `${request.method} ${url.pathname}`,
-    operationType: "http",
-    ...(origin && { httpOrigin: origin }),
-    ...(userAgent && { httpUserAgent: userAgent }),
+    "http.method": request.method,
+    "http.path": url.pathname,
+    "operation.name": `${request.method} ${url.pathname}`,
+    "operation.type": "http",
+    ...(origin && { "http.origin": origin }),
+    ...(userAgent && { "http.user_agent": userAgent }),
   };
 };
 
 const handleResponseStatus = (event: WideEvent, status: number): void => {
-  event.set({ httpStatusCode: status });
+  event.set({ "http.status_code": status });
   if (status >= HTTP_ERROR_THRESHOLD) {
     event.set({
-      error: true,
-      errorMessage: `HTTP ${status}`,
-      errorType: "HttpError",
+      "error.occurred": true,
+      "error.message": `HTTP ${status}`,
+      "error.type": "HttpError",
     });
   }
 };
@@ -53,15 +54,14 @@ const fetchUserPlan = async (userId: string): Promise<"free" | "pro" | null> => 
   try {
     return await premiumService.getUserPlan(userId);
   } catch (error) {
-    const requestId = getWideEvent()?.getRequestId();
-    log.error({ userId, requestId, error }, "Failed to fetch user plan for enrichment");
+    WideEvent.error(error);
     return null;
   }
 };
 
 const fetchUserCounts = async (
   userId: string,
-): Promise<{ sourceCount: number; destinationCount: number } | null> => {
+): Promise<{ "source.count": number; "destination.count": number } | null> => {
   try {
     const [sources] = await database
       .select({ count: count() })
@@ -72,31 +72,54 @@ const fetchUserCounts = async (
       .from(calendarDestinationsTable)
       .where(eq(calendarDestinationsTable.userId, userId));
     return {
-      destinationCount: destinations?.count ?? DEFAULT_COUNT,
-      sourceCount: sources?.count ?? DEFAULT_COUNT,
+      "destination.count": destinations?.count ?? DEFAULT_COUNT,
+      "source.count": sources?.count ?? DEFAULT_COUNT,
     };
   } catch (error) {
-    const requestId = getWideEvent()?.getRequestId();
-    log.error({ userId, requestId, error }, "Failed to fetch user counts for enrichment");
+    WideEvent.error(error);
+    return null;
+  }
+};
+
+const fetchAccountAgeDays = async (userId: string): Promise<number | null> => {
+  try {
+    const [result] = await database
+      .select({ createdAt: userTable.createdAt })
+      .from(userTable)
+      .where(eq(userTable.id, userId))
+      .limit(1);
+    if (!result?.createdAt) {
+      return null;
+    }
+    return Math.floor((Date.now() - result.createdAt.getTime()) / MS_PER_DAY);
+  } catch (error) {
+    WideEvent.error(error);
     return null;
   }
 };
 
 const enrichWithUserContext = async (userId: string): Promise<void> => {
-  const event = getWideEvent();
+  const event = WideEvent.grasp();
   if (!event) {
     return;
   }
 
-  event.set({ userId });
+  event.set({ "user.id": userId });
 
-  const [plan, counts] = await Promise.all([fetchUserPlan(userId), fetchUserCounts(userId)]);
+  const [plan, counts, accountAgeDays] = await Promise.all([
+    fetchUserPlan(userId),
+    fetchUserCounts(userId),
+    fetchAccountAgeDays(userId),
+  ]);
 
   if (plan) {
-    event.set({ subscriptionPlan: plan });
+    event.set({ "subscription.plan": plan });
   }
   if (counts) {
     event.set(counts);
+  }
+  if (accountAgeDays !== null) {
+    event.set({ "account.age_days": accountAgeDays });
   }
 };
 
@@ -114,20 +137,20 @@ const getSession = async (request: Request): Promise<Session | null> => {
 const withWideEvent =
   (handler: RouteCallback): RouteHandler =>
   (request, params) => {
-    const event = new WideEvent("api");
+    const event = new WideEvent();
     event.set(extractHttpContext(request));
 
-    return runWithWideEvent(event, async () => {
+    return event.run(async () => {
       try {
         const response = await handler({ params, request });
         handleResponseStatus(event, response.status);
         return response;
       } catch (error) {
-        event.setError(error);
+        event.addError(error);
         event.set({ httpStatusCode: HTTP_INTERNAL_SERVER_ERROR });
         throw error;
       } finally {
-        emitWideEvent(event.finalize());
+        event.emit();
       }
     });
   };
@@ -135,7 +158,7 @@ const withWideEvent =
 const withAuth =
   (handler: AuthenticatedRouteCallback): RouteCallback =>
   async ({ request, params }) => {
-    const event = getWideEvent();
+    const event = WideEvent.grasp();
     event?.startTiming("auth");
     const session = await getSession(request);
     event?.endTiming("auth");

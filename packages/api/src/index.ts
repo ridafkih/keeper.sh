@@ -19,7 +19,7 @@ const router = new Bun.FileSystemRouter({
   style: "nextjs",
 });
 
-entry("api")
+entry()
   .env(schema)
   .run(async ({ env, context }) => {
     const server = Bun.serve<BroadcastData>({

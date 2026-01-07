@@ -1,4 +1,5 @@
 import { HTTP_STATUS, KEEPER_CATEGORY } from "@keeper.sh/constants";
+import { WideEvent } from "@keeper.sh/log";
 import type { OutlookEvent } from "@keeper.sh/data-schemas";
 import {
   microsoftApiErrorSchema,
@@ -156,6 +157,7 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     try {
       return await this.createEvent(resource);
     } catch (error) {
+      WideEvent.error(error);
       return {
         error: getErrorMessage(error),
         success: false,
@@ -212,6 +214,7 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
 
       return { success: true };
     } catch (error) {
+      WideEvent.error(error);
       return {
         error: getErrorMessage(error),
         success: false,

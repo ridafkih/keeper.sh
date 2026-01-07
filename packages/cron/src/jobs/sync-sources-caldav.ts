@@ -4,7 +4,7 @@ import type { CalDAVSourceProvider } from "@keeper.sh/provider-caldav";
 import { createFastMailSourceProvider } from "@keeper.sh/provider-fastmail";
 import { createICloudSourceProvider } from "@keeper.sh/provider-icloud";
 import { getCalDAVProviders } from "@keeper.sh/provider-registry";
-import { WideEvent, emitWideEvent, runWithWideEvent } from "@keeper.sh/log";
+import { WideEvent } from "@keeper.sh/log";
 import env from "@keeper.sh/env/cron";
 import { database } from "../context";
 import { setCronEventFields, withCronWideEvent } from "../utils/with-wide-event";
@@ -22,17 +22,23 @@ const SOURCE_PROVIDER_FACTORIES: Record<string, SourceProviderFactory> = {
   icloud: createICloudSourceProvider,
 };
 
+interface ProviderSyncResult {
+  providerId: string;
+  eventsAdded: number;
+  eventsRemoved: number;
+}
+
 const syncCalDAVSourcesForProvider = async (
   providerName: string,
   providerId: string,
-): Promise<void> => {
+): Promise<ProviderSyncResult | null> => {
   if (!env.ENCRYPTION_KEY) {
-    return;
+    return null;
   }
 
   const factory = SOURCE_PROVIDER_FACTORIES[providerId];
   if (!factory) {
-    return;
+    return null;
   }
 
   const provider = factory({
@@ -40,33 +46,40 @@ const syncCalDAVSourcesForProvider = async (
     encryptionKey: env.ENCRYPTION_KEY,
   });
 
-  const event = new WideEvent("cron");
-  event.set({
-    operationName: "sync-caldav-sources",
-    operationType: "caldav-source-sync",
-    provider: providerName,
-  });
+  const event = WideEvent.grasp();
+  const timingKey = `sync_${providerId}`;
+  event?.startTiming(timingKey);
 
-  await runWithWideEvent(event, async () => {
-    try {
-      const result = await provider.syncAllSources();
-      event.set({
-        eventsAdded: result.eventsAdded,
-        eventsRemoved: result.eventsRemoved,
-      });
-    } catch (error) {
-      event.setError(error);
-    } finally {
-      emitWideEvent(event.finalize());
-    }
-  });
+  try {
+    const result = await provider.syncAllSources();
+    return {
+      eventsAdded: result.eventsAdded,
+      eventsRemoved: result.eventsRemoved,
+      providerId,
+    };
+  } catch (error) {
+    event?.addError(error);
+    return null;
+  } finally {
+    event?.endTiming(timingKey);
+  }
 };
 
 const syncAllCalDAVSources = async (): Promise<void> => {
   const caldavProviders = getCalDAVProviders();
-  await Promise.all(
+  const results = await Promise.all(
     caldavProviders.map((provider) => syncCalDAVSourcesForProvider(provider.name, provider.id)),
   );
+
+  const event = WideEvent.grasp();
+  for (const result of results) {
+    if (result) {
+      event?.set({
+        [`${result.providerId}EventsAdded`]: result.eventsAdded,
+        [`${result.providerId}EventsRemoved`]: result.eventsRemoved,
+      });
+    }
+  }
 };
 
 export default withCronWideEvent({

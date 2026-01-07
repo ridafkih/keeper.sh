@@ -1,5 +1,5 @@
 import { updateSourceDestinationsSchema } from "@keeper.sh/data-schemas";
-import { getWideEvent } from "@keeper.sh/log";
+import { WideEvent } from "@keeper.sh/log";
 import { withAuth, withWideEvent } from "../../../../../utils/middleware";
 import { ErrorResponse } from "../../../../../utils/responses";
 import {
@@ -49,7 +49,7 @@ const PUT = withWideEvent(
 
       return Response.json({ success: true });
     } catch (error) {
-      getWideEvent()?.setError(error);
+      WideEvent.error(error);
       return ErrorResponse.badRequest("Invalid request body").toResponse();
     }
   }),
