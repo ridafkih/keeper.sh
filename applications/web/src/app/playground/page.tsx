@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ArrowRight, ArrowUpRight, BoltIcon, CalendarsIcon, CalendarSyncIcon, HomeIcon, ReceiptIcon } from "lucide-react";
 
 import { CalendarStack } from "./compositions/calendar-illustration/calendar-illustration";
-import { Heading1 } from "./components/heading";
+import { Heading1, Heading2, Heading3 } from "./components/heading";
 import { Copy } from "./components/copy";
 import { Button, ButtonText, ButtonIcon } from "./components/button";
 import { Scaffold } from "./components/scaffold";
@@ -23,7 +23,7 @@ export default function Playground() {
               Keeper connects to all of your calendar accounts, and syncs the events between them. Released open-source under AGPL-3.0.
             </Copy>
           </div>
-          <div className="flex gap-1">
+          <div className="flex flex-wrap gap-1">
             <Button
               variant="primary"
               onMouseEnter={() => setIsSyncHovered(true)}
@@ -36,12 +36,28 @@ export default function Playground() {
               <ButtonText>View GitHub</ButtonText>
               <ButtonIcon icon={ArrowUpRight} />
             </Button>
-            <Button variant="ghost">
-              <ButtonText>Get Started</ButtonText>
-            </Button>
           </div>
         </div>
-        <CalendarStack emphasized={isSyncHovered} />
+        <div className="py-8">
+          <CalendarStack emphasized={isSyncHovered} />
+        </div>
+        <div className="flex flex-col gap-4">
+          <Heading2>How does it work?</Heading2>
+          <Copy>Keeper connects to your calendar accounts. It supports Google, iCloud, Outlook &amp; Microsoft 365, FastMail, iCloud, CalDAV and more.</Copy>
+          <Copy>Once connected, events will begin transferring from the sources you select to their respective destinations.</Copy>
+          <Heading2>Pricing</Heading2>
+          <Copy>Keeper has a free offering, or a premium offering for power-users.</Copy>
+          <ul className="grid grid-cols-2">
+            <li className="flex flex-col gap-2">
+              <Heading3>Free</Heading3>
+              <Copy>No cost. Two sources. One destination. Sync every half hour.</Copy>
+            </li>
+            <li className="flex flex-col gap-2">
+              <Heading3>Pro</Heading3>
+              <Copy>$3.50/mo., Unlimited sources &amp; destinations. Sync every minute.</Copy>
+            </li>
+          </ul>
+        </div>
         <Dock>
           <DockItem href="#home" hash="home" icon={HomeIcon} />
           <DockItem href="#calendars" hash="calendars" icon={CalendarsIcon} />

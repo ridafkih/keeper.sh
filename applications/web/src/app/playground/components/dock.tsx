@@ -61,7 +61,10 @@ type DockProps = {
 };
 
 export const Dock: FC<DockProps> = ({ children }) => (
-  <nav className="fixed left-0 right-0 mx-auto bottom-8 p-1.5 rounded-full bg-neutral-950 w-fit text-neutral-300">
-    <ul className="flex items-center">{children}</ul>
-  </nav>
+  <>
+    <div className="h-12" />
+    <nav className="fixed left-0 right-0 mx-auto bottom-8 p-1.5 rounded-full bg-neutral-950 w-fit text-neutral-300">
+      <ul className="flex items-center">{children}</ul>
+    </nav>
+  </>
 );

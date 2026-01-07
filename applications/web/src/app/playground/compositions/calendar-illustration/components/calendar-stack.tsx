@@ -8,7 +8,7 @@ type CalendarStackProps = {
 };
 
 export const CalendarStack: FC<CalendarStackProps> = ({ emphasized }) => (
-  <div className="py-4 relative grid grid-cols-1 grid-rows-1 *:row-start-1 *:col-start-1">
+  <div className="relative grid grid-cols-1 grid-rows-1 *:row-start-1 *:col-start-1">
     <Calendar
       skew={createBackLeftSkew(1)}
       events={{

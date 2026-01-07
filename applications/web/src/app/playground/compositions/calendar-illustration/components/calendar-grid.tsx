@@ -4,7 +4,7 @@ import { type EventRecord, getEventColorsForDayIfVisible } from "../utils/events
 import { createGridIndices, indexToDayNumber } from "../utils/calendar-grid";
 import { CalendarDay } from "./calendar-day";
 
-type CalendarGridProps = {
+export type CalendarGridProps = {
   events: EventRecord;
   columns?: number;
   rows?: number;

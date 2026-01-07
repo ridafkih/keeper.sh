@@ -42,7 +42,7 @@ type ButtonTextProps = {
 };
 
 export const ButtonText: FC<ButtonTextProps> = ({ children }) => (
-  <span>{children}</span>
+  <span className="text-nowrap">{children}</span>
 );
 
 type ButtonIconProps = {
