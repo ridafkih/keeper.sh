@@ -34,12 +34,6 @@ const getTransitionConfig = (duration: number) => ({
   ease: getStandardEasing(),
 });
 
-export {
-  createSkew,
-  createIdentitySkew,
-  getInitialSkew,
-  selectSkewByState,
-  getTransitionConfig,
-};
+export { createSkew, createIdentitySkew, getInitialSkew, selectSkewByState, getTransitionConfig };
 
 export type { SkewTuple };

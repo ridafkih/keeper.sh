@@ -1,5 +1,4 @@
-const indexToDayNumber = (index: number, daysInMonth: number): number =>
-  (index % daysInMonth) + 1;
+const indexToDayNumber = (index: number, daysInMonth: number): number => (index % daysInMonth) + 1;
 
 const createGridIndices = (columns: number, rows: number): number[] => {
   const totalCells = columns * rows;
@@ -10,7 +9,4 @@ const createGridIndices = (columns: number, rows: number): number[] => {
   return indices;
 };
 
-export {
-  indexToDayNumber,
-  createGridIndices,
-}
+export { indexToDayNumber, createGridIndices };

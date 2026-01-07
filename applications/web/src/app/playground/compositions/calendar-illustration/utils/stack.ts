@@ -18,4 +18,4 @@ const createFrontSkew = (intensity: number): SkewTuple => [
   createIdentitySkew(),
 ];
 
-export { createBackLeftSkew, createBackRightSkew, createFrontSkew }
+export { createBackLeftSkew, createBackRightSkew, createFrontSkew };

@@ -54,7 +54,11 @@ export default function Playground() {
                 <ButtonText>Sync Calendars</ButtonText>
                 <ButtonIcon icon={ArrowRight} />
               </SyncCalendarsButton>
-              <Button href="https://github.com/ridafkih/keeper.sh" target="_blank" variant="outline">
+              <Button
+                href="https://github.com/ridafkih/keeper.sh"
+                target="_blank"
+                variant="outline"
+              >
                 <ButtonText>View GitHub</ButtonText>
                 <ButtonIcon icon={ArrowUpRight} />
               </Button>

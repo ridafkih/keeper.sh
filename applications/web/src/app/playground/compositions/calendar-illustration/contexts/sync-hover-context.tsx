@@ -8,8 +8,6 @@ const syncHoverAtom = atom(false);
 const useSyncHoverState = () => useAtomValue(syncHoverAtom);
 const useSyncHoverSetter = () => useSetAtom(syncHoverAtom);
 
-const SyncHoverProvider: FC<PropsWithChildren> = ({ children }) => (
-  <Provider>{children}</Provider>
-);
+const SyncHoverProvider: FC<PropsWithChildren> = ({ children }) => <Provider>{children}</Provider>;
 
 export { useSyncHoverState, useSyncHoverSetter, SyncHoverProvider };

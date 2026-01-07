@@ -17,12 +17,12 @@ const buttonVariants = tv({
 });
 
 const getClassNameAsString = (candidateClassName: unknown): string | null => {
-  if (typeof candidateClassName !== 'string') {
+  if (typeof candidateClassName !== "string") {
     return null;
   }
 
   return candidateClassName;
-}
+};
 
 type ButtonVariantProps = VariantProps<typeof buttonVariants>;
 
@@ -65,4 +65,4 @@ const Button: FC<PropsWithChildren<ButtonProps>> = ({
   );
 };
 
-export { Button }
+export { Button };

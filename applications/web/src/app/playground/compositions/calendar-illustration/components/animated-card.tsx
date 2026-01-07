@@ -17,11 +17,7 @@ interface AnimatedCardProps {
   className?: string;
 }
 
-const AnimatedCard: FC<PropsWithChildren<AnimatedCardProps>> = ({
-  skew,
-  className,
-  children,
-}) => {
+const AnimatedCard: FC<PropsWithChildren<AnimatedCardProps>> = ({ skew, className, children }) => {
   const emphasized = useSyncHoverState();
 
   return (

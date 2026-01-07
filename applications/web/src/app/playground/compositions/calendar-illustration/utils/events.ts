@@ -26,7 +26,4 @@ const getEventColorsForDayIfVisible = (
 
 const hasEvents = (colors: string[]): boolean => colors.length > 0;
 
-export {
-  getEventColorsForDayIfVisible,
-  hasEvents,
-}
+export { getEventColorsForDayIfVisible, hasEvents };
