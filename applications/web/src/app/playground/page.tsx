@@ -84,7 +84,7 @@ export default function Playground() {
                 <PricingFeature>One destination</PricingFeature>
                 <PricingFeature>Sync every half hour</PricingFeature>
               </PricingFeatureList>
-              <LinkOut href="/register">Continue for free</LinkOut>
+              <LinkOut href="/register">Continue free</LinkOut>
             </PricingTier>
             <PricingTier title="Pro">
               <PricingFeatureList>
@@ -92,7 +92,7 @@ export default function Playground() {
                 <PricingFeature>Unlimited destinations</PricingFeature>
                 <PricingFeature>Sync every minute</PricingFeature>
               </PricingFeatureList>
-              <LinkOut href="/register?plan=pro">Upgrade for $3.50/mo.</LinkOut>
+              <LinkOut href="/register?plan=pro">Upgrade to Pro</LinkOut>
             </PricingTier>
           </PricingGrid>
         </div>
