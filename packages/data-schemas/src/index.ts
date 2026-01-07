@@ -200,6 +200,9 @@ const createOAuthSourceSchema = type({
   externalCalendarId: "string",
   name: "string",
   "oauthSourceCredentialId?": "string",
+  "syncFocusTime?": "boolean",
+  "syncOutOfOffice?": "boolean",
+  "syncWorkingLocation?": "boolean",
 });
 type CreateOAuthSource = typeof createOAuthSourceSchema.infer;
 

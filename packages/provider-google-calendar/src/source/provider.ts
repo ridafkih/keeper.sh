@@ -17,7 +17,7 @@ import {
 import { getStartOfToday } from "@keeper.sh/date-utils";
 import { and, eq, inArray, lt, or, gt } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { fetchCalendarEvents, parseGoogleEvents } from "./utils/fetch-events";
+import { fetchCalendarEvents, parseGoogleEvents, type EventTypeFilters } from "./utils/fetch-events";
 
 const GOOGLE_PROVIDER_ID = "google";
 const EMPTY_COUNT = 0;
@@ -25,6 +25,9 @@ const YEARS_UNTIL_FUTURE = 2;
 
 interface GoogleSourceConfig extends OAuthSourceConfig {
   sourceName: string;
+  excludeFocusTime: boolean;
+  excludeOutOfOffice: boolean;
+  excludeWorkingLocation: boolean;
 }
 
 class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfig> {
@@ -60,7 +63,13 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
       return { events: [], fullSyncRequired: true };
     }
 
-    const events = parseGoogleEvents(result.events);
+    const filters: EventTypeFilters = {
+      excludeFocusTime: this.config.excludeFocusTime,
+      excludeOutOfOffice: this.config.excludeOutOfOffice,
+      excludeWorkingLocation: this.config.excludeWorkingLocation,
+    };
+
+    const events = parseGoogleEvents(result.events, filters);
     const fetchResult: BaseFetchEventsResult = {
       events,
       fullSyncRequired: false,
@@ -225,6 +234,9 @@ interface GoogleSourceAccount {
   oauthSourceCredentialId?: string;
   provider: string;
   sourceName: string;
+  excludeFocusTime: boolean;
+  excludeOutOfOffice: boolean;
+  excludeWorkingLocation: boolean;
 }
 
 interface CreateGoogleSourceProviderConfig {
@@ -242,6 +254,9 @@ const createGoogleCalendarSourceProvider = (
       accessToken: account.accessToken,
       accessTokenExpiresAt: account.accessTokenExpiresAt,
       database: db,
+      excludeFocusTime: account.excludeFocusTime,
+      excludeOutOfOffice: account.excludeOutOfOffice,
+      excludeWorkingLocation: account.excludeWorkingLocation,
       externalCalendarId: account.externalCalendarId,
       oauthCredentialId: account.oauthCredentialId,
       oauthSourceCredentialId: account.oauthSourceCredentialId,
@@ -267,6 +282,9 @@ const getGoogleSourcesWithCredentials = async (
       accessToken: oauthSourceCredentialsTable.accessToken,
       accessTokenExpiresAt: oauthSourceCredentialsTable.expiresAt,
       credentialId: oauthSourceCredentialsTable.id,
+      excludeFocusTime: calendarSourcesTable.excludeFocusTime,
+      excludeOutOfOffice: calendarSourcesTable.excludeOutOfOffice,
+      excludeWorkingLocation: calendarSourcesTable.excludeWorkingLocation,
       externalCalendarId: calendarSourcesTable.externalCalendarId,
       oauthSourceCredentialId: oauthSourceCredentialsTable.id,
       provider: calendarSourcesTable.provider,

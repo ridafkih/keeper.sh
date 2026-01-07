@@ -5,6 +5,33 @@ const googleCalendarDefinition = {
   icon: "/integrations/icon-google.svg",
   id: "google",
   name: "Google Calendar",
+  sourcePreferences: {
+    description: "Uncheck events of the following types to prevent them from syncing to destinations.",
+    label: "Event Sync Types",
+    options: [
+      {
+        defaultValue: true,
+        disabled: true,
+        id: "syncEvents",
+        label: "Events",
+      },
+      {
+        defaultValue: true,
+        id: "syncFocusTime",
+        label: "Focus Time",
+      },
+      {
+        defaultValue: true,
+        id: "syncWorkingLocation",
+        label: "Working Location",
+      },
+      {
+        defaultValue: true,
+        id: "syncOutOfOffice",
+        label: "Out of Office",
+      },
+    ],
+  },
 } as const satisfies ProviderDefinition;
 
 const outlookDefinition = {

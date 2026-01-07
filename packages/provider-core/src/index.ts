@@ -60,6 +60,8 @@ export type {
   AuthType,
   CalDAVProviderConfig,
   ProviderDefinition,
+  SourcePreferenceOption,
+  SourcePreferencesConfig,
   SyncableEvent,
   PushResult,
   DeleteResult,

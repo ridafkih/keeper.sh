@@ -162,7 +162,32 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
   return fetchResult;
 };
 
-const parseGoogleEvents = (events: GoogleCalendarEvent[]): EventTimeSlot[] => {
+interface EventTypeFilters {
+  excludeFocusTime: boolean;
+  excludeOutOfOffice: boolean;
+  excludeWorkingLocation: boolean;
+}
+
+const shouldExcludeEvent = (
+  eventType: GoogleCalendarEvent["eventType"],
+  filters: EventTypeFilters,
+): boolean => {
+  if (filters.excludeFocusTime && eventType === "focusTime") {
+    return true;
+  }
+  if (filters.excludeOutOfOffice && eventType === "outOfOffice") {
+    return true;
+  }
+  if (filters.excludeWorkingLocation && eventType === "workingLocation") {
+    return true;
+  }
+  return false;
+};
+
+const parseGoogleEvents = (
+  events: GoogleCalendarEvent[],
+  filters?: EventTypeFilters,
+): EventTimeSlot[] => {
   const result: EventTimeSlot[] = [];
 
   for (const event of events) {
@@ -170,6 +195,9 @@ const parseGoogleEvents = (events: GoogleCalendarEvent[]): EventTimeSlot[] => {
       continue;
     }
     if (isKeeperEvent(event.iCalUID)) {
+      continue;
+    }
+    if (filters && shouldExcludeEvent(event.eventType, filters)) {
       continue;
     }
     result.push({
@@ -183,3 +211,4 @@ const parseGoogleEvents = (events: GoogleCalendarEvent[]): EventTimeSlot[] => {
 };
 
 export { fetchCalendarEvents, parseGoogleEvents, EventsFetchError };
+export type { EventTypeFilters };

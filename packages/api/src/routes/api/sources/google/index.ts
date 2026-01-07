@@ -25,15 +25,26 @@ const POST = withWideEvent(
     const body = await request.json();
 
     try {
-      const { externalCalendarId, name, oauthSourceCredentialId } =
-        createOAuthSourceSchema.assert(body);
+      const {
+        externalCalendarId,
+        name,
+        oauthSourceCredentialId,
+        syncFocusTime,
+        syncOutOfOffice,
+        syncWorkingLocation,
+      } = createOAuthSourceSchema.assert(body);
+
       const source = await createOAuthSource({
+        ...!syncFocusTime && { excludeFocusTime: true },
+        ...!syncOutOfOffice && { excludeOutOfOffice: true },
+        ...!syncWorkingLocation && { excludeWorkingLocation: true },
         externalCalendarId,
         name,
         oauthCredentialId: oauthSourceCredentialId ?? "",
         provider: GOOGLE_PROVIDER,
         userId,
       });
+
       return Response.json(source, { status: HTTP_STATUS.CREATED });
     } catch (error) {
       if (error instanceof OAuthSourceLimitError) {

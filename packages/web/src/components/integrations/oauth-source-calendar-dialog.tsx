@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { FC, ReactNode } from "react";
+import type { FC, FormEvent, ReactNode } from "react";
 import { Dialog } from "@base-ui/react/dialog";
 import { Button } from "@/components/button";
-import { button, dialogPopup, input } from "@/styles";
+import { button, checkbox, dialogPopup, input } from "@/styles";
 import { CardTitle, DangerText, TextBody, TextCaption } from "@/components/typography";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { getProvider } from "@keeper.sh/provider-registry";
-import type { OAuthProviderId } from "@keeper.sh/provider-registry";
+import type { OAuthProviderId, SourcePreferenceOption } from "@keeper.sh/provider-registry";
 
 interface CalendarOption {
   id: string;
@@ -31,7 +31,19 @@ export const OAuthSourceCalendarDialog: FC<OAuthSourceCalendarDialogProps> = ({
   credentialId,
   onSuccess,
 }) => {
-  const providerName = getProvider(provider)?.name ?? provider;
+  const providerDefinition = getProvider(provider);
+  const providerName = providerDefinition?.name ?? provider;
+  const sourcePreferences = providerDefinition?.sourcePreferences;
+
+  const buildDefaultPreferences = (): Record<string, boolean> => {
+    if (!sourcePreferences) {
+      return {};
+    };
+
+    return Object.fromEntries(
+      sourcePreferences.options.map(({ id, defaultValue }) => [id, defaultValue]),
+    );
+  };
 
   const [calendars, setCalendars] = useState<CalendarOption[]>([]);
   const [selectedCalendar, setSelectedCalendar] = useState("");
@@ -39,6 +51,30 @@ export const OAuthSourceCalendarDialog: FC<OAuthSourceCalendarDialogProps> = ({
   const [isLoadingCalendars, setIsLoadingCalendars] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [preferences, setPreferences] = useState<Record<string, boolean>>(buildDefaultPreferences);
+
+  const getOptionChecked = (option: SourcePreferenceOption): boolean => {
+    if (option.disabled) {
+      return option.defaultValue;
+    }
+    return preferences[option.id] ?? option.defaultValue;
+  };
+
+  const getSubmittablePreferences = (): Record<string, boolean> => {
+    if (!sourcePreferences) {
+      return {}
+    };
+
+    const submittable: Record<string, boolean> = {};
+    for (const option of sourcePreferences.options) {
+      if (option.disabled) {
+        continue;
+      };
+
+      submittable[option.id] = preferences[option.id] ?? option.defaultValue;
+    }
+    return submittable;
+  };
 
   useEffect(() => {
     if (!open || !credentialId) {
@@ -87,6 +123,7 @@ export const OAuthSourceCalendarDialog: FC<OAuthSourceCalendarDialogProps> = ({
     setSourceName("");
     setIsLoadingCalendars(true);
     setError(null);
+    setPreferences(buildDefaultPreferences());
   };
 
   const handleOpenChange = (nextOpen: boolean): void => {
@@ -104,18 +141,21 @@ export const OAuthSourceCalendarDialog: FC<OAuthSourceCalendarDialogProps> = ({
     }
   };
 
-  const handleSubmit = async (event: React.FormEvent): Promise<void> => {
+  const handleSubmit = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
     setIsSubmitting(true);
     setError(null);
 
     try {
+      const payload: Record<string, unknown> = {
+        externalCalendarId: selectedCalendar,
+        name: sourceName,
+        oauthSourceCredentialId: credentialId,
+        ...getSubmittablePreferences(),
+      };
+
       const response = await fetch(`/api/sources/${provider}`, {
-        body: JSON.stringify({
-          externalCalendarId: selectedCalendar,
-          name: sourceName,
-          oauthSourceCredentialId: credentialId,
-        }),
+        body: JSON.stringify(payload),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
@@ -208,6 +248,37 @@ export const OAuthSourceCalendarDialog: FC<OAuthSourceCalendarDialogProps> = ({
             A friendly name for this source
           </TextCaption>
         </div>
+        {sourcePreferences && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-foreground">
+              {sourcePreferences.label}
+            </span>
+            {sourcePreferences.description && (
+              <TextCaption as="span" className="text-foreground-muted">
+                {sourcePreferences.description}
+              </TextCaption>
+            )}
+            <div className="flex flex-col gap-2 mt-1">
+              {sourcePreferences.options.map((option) => (
+                <label key={option.id} className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={getOptionChecked(option)}
+                    disabled={option.disabled}
+                    onChange={(event) =>
+                      setPreferences((prev) => ({
+                        ...prev,
+                        [option.id]: event.target.checked,
+                      }))
+                    }
+                    className={checkbox()}
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
         {error && (
           <DangerText as="p" className="text-xs">
             {error}
