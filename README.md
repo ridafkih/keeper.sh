@@ -428,17 +428,14 @@ docker compose up -d
 
 # Modules
 
-## Services
-
-1. [@keeper.sh/api](./packages/api)
-2. [@keeper.sh/cron](./packages/cron)
-
 ## Applications
 
-1. @keeper.sh/cli _(Coming Soon)_
-1. @keeper.sh/mobile _(Coming Soon)_
-1. @keeper.sh/ssh _(Coming Soon)_
-1. [@keeper.sh/web](./packages/web)
+1. [@keeper.sh/api](./applications/api)
+2. [@keeper.sh/cron](./applications/cron)
+3. [@keeper.sh/web](./applications/web)
+4. @keeper.sh/cli _(Coming Soon)_
+5. @keeper.sh/mobile _(Coming Soon)_
+6. @keeper.sh/ssh _(Coming Soon)_
 
 ## Modules
 

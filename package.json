@@ -4,7 +4,8 @@
   "license": "AGPL-3.0-only",
   "workspaces": {
     "packages": [
-      "packages/*"
+      "packages/*",
+      "applications/*"
     ]
   },
   "type": "module",

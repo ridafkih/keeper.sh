@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "ignore": ["**/*.css", "packages/cron/src/jobs/**/*"],
+  "ignore": ["**/*.css", "applications/cron/src/jobs/**/*"],
   "ignoreBinaries": [],
   "ignoreDependencies": ["@svgr/webpack"],
   "ignoreWorkspaces": ["packages/typescript-config"],
@@ -8,11 +8,14 @@
     "packages/*": {
       "project": "src/**/*.{ts,tsx}"
     },
-    "packages/api": {
+    "applications/*": {
+      "project": "src/**/*.{ts,tsx}"
+    },
+    "applications/api": {
       "entry": ["src/routes/**/*.ts"],
       "project": "src/**/*.{ts,tsx}"
     },
-    "packages/cron": {
+    "applications/cron": {
       "entry": ["src/jobs/*.ts"],
       "project": "src/**/*.{ts,tsx}"
     }
