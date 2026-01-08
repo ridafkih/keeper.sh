@@ -10,6 +10,7 @@ const linkOutVariants = tv({
     variant: {
       default: "flex items-center gap-1 hover:underline",
       inline: "underline text-blue-500",
+      "inline-subtle": "underline text-neutral-500",
     },
     size: {
       default: "text-sm",
@@ -49,7 +50,7 @@ interface LinkOutContentProps {
 }
 
 const LinkOutContent: FC<LinkOutContentProps> = ({ variant, size, children }) => {
-  if (variant === "inline") {
+  if (variant === "inline" || variant === "inline-subtle") {
     return children;
   }
 

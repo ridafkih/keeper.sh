@@ -10,6 +10,7 @@ import {
   CalendarSyncIcon,
   HomeIcon,
   ReceiptIcon,
+  HeartIcon,
 } from "lucide-react";
 
 import {
@@ -99,13 +100,20 @@ export default function Playground() {
             </PricingTier>
           </PricingGrid>
         </div>
-        <footer>
-          <Copy>
-            Made with ♥ by{" "}
-            <LinkOut variant="inline" href="https://rida.dev/">
+        <footer className="flex flex-col gap-1">
+          <div className="flex gap-2">
+            <LinkOut variant="inline-subtle" size="small" href="/playground/privacy">
+              Privacy Policy
+            </LinkOut>
+            <LinkOut variant="inline-subtle" size="small" href="/playground/terms">
+              Terms &amp; Conditions
+            </LinkOut>
+          </div>
+          <Copy className="text-xs text-neutral-400">
+            Keeper is a Canadian project made with <HeartIcon className="size-3 -mt-1 inline fill-neutral-500 text-neutral-500" /> by{" "}
+            <LinkOut variant="inline-subtle" size="small" href="https://rida.dev/" target="_blank">
               Rida F&apos;kih
             </LinkOut>
-            .
           </Copy>
         </footer>
         <Dock>
