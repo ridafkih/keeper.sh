@@ -12,11 +12,14 @@ import {
 } from "../contexts/auth-form-context";
 import { EmailField } from "./email-field";
 import { PasswordField } from "./password-field";
+import { UsernameField } from "./username-field";
 
 type AuthFormVariant = "login" | "register";
+type AuthFormStrategy = "commercial" | "non-commercial";
 
 interface AuthFormProps {
   variant: AuthFormVariant;
+  strategy: AuthFormStrategy;
 }
 
 const buttonText = {
@@ -33,7 +36,7 @@ const getPasswordAutoCompleteType = (variant: AuthFormVariant): HTMLInputAutoCom
   }
 }
 
-const AuthFormInternal: FC<AuthFormProps> = ({ variant }) => {
+const AuthFormInternal: FC<AuthFormProps> = ({ variant, strategy }) => {
   const store = useStore();
   const setShowPasswordField = useSetShowPasswordField();
   const formRef = useRef<HTMLFormElement>(null);
@@ -45,16 +48,22 @@ const AuthFormInternal: FC<AuthFormProps> = ({ variant }) => {
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const showPasswordField = store.get(showPasswordFieldAtom);
-    if (!showPasswordField) {
-      setShowPasswordField(true);
-      return;
-    }
+    if (strategy === "non-commercial") {
+      const showPasswordField = store.get(showPasswordFieldAtom);
+      if (!showPasswordField) {
+        setShowPasswordField(true);
+        return;
+      }
 
-    const formData = new FormData(event.currentTarget);
-    const email = formData.get("email");
-    const password = formData.get("password");
-    // TODO: auth logic based on variant
+      const formData = new FormData(event.currentTarget);
+      const username = formData.get("username");
+      const password = formData.get("password");
+      // TODO: non-commercial auth logic
+    } else {
+      const formData = new FormData(event.currentTarget);
+      const email = formData.get("email");
+      // TODO: commercial auth logic (email verification)
+    }
   };
 
   useEffect(() => {
@@ -63,6 +72,18 @@ const AuthFormInternal: FC<AuthFormProps> = ({ variant }) => {
       setShowPasswordField(false);
     };
   }, [setShowPasswordField]);
+
+  if (strategy === "non-commercial") {
+    return (
+      <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-2">
+        <UsernameField />
+        <PasswordField type="password" autoComplete={getPasswordAutoCompleteType(variant)} />
+        <Button size="large" type="submit" className="w-full text-center">
+          <ButtonText className="w-full text-center">{buttonText[variant]}</ButtonText>
+        </Button>
+      </form>
+    );
+  }
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-2">
@@ -74,7 +95,6 @@ const AuthFormInternal: FC<AuthFormProps> = ({ variant }) => {
       </SocialButton>
       <FormDivider />
       <EmailField />
-      <PasswordField type="password" autoComplete={getPasswordAutoCompleteType(variant)} />
       <Button size="large" type="submit" className="w-full text-center">
         <ButtonText className="w-full text-center">{buttonText[variant]}</ButtonText>
       </Button>
