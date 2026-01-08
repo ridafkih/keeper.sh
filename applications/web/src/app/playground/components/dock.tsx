@@ -1,7 +1,6 @@
 import type { FC, PropsWithChildren } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
-import { Provider } from "jotai";
 import {
   HomeIcon,
   CalendarsIcon,
@@ -9,7 +8,7 @@ import {
   ReceiptIcon,
   BoltIcon,
 } from "lucide-react";
-import { DockIndicator, HashSync } from "./dock-indicator";
+import { DockIndicator } from "./dock-indicator";
 
 /**
  * We name a map of icons so we can get the benefit
@@ -28,11 +27,11 @@ type IconName = keyof typeof iconMap;
 
 interface DockItemProps {
   href: string;
-  hash: string;
+  segment: string | null;
   icon: IconName;
 }
 
-const DockItem: FC<DockItemProps> = ({ href, hash, icon }) => {
+const DockItem: FC<DockItemProps> = ({ href, segment, icon }) => {
   const Icon = iconMap[icon];
 
   return (
@@ -43,7 +42,7 @@ const DockItem: FC<DockItemProps> = ({ href, hash, icon }) => {
         href={href}
       >
         <Icon className="z-20" size={20} strokeWidth={1.5} />
-        <DockIndicator attributedHash={hash} />
+        <DockIndicator segment={segment} />
       </Link>
     </li>
   );
@@ -62,17 +61,14 @@ interface DockProps {
 
 const Dock: FC<PropsWithChildren<DockProps>> = ({ position = "bottom", children }) => (
   <>
-    <Provider>
-      <HashSync />
-      <nav
-        className={clsx(
-          "left-0 right-0 mx-auto p-1.5 rounded-full bg-neutral-950 w-fit text-neutral-300 z-100",
-          getDockPositionClassName(position).className,
-        )}
-      >
-        <ul className="flex items-center">{children}</ul>
-      </nav>
-    </Provider>
+    <nav
+      className={clsx(
+        "left-0 right-0 mx-auto p-1.5 rounded-full bg-neutral-950 w-fit text-neutral-300 z-100",
+        getDockPositionClassName(position).className,
+      )}
+    >
+      <ul className="flex items-center">{children}</ul>
+    </nav>
     <div className="h-12" />
   </>
 );

@@ -3,7 +3,6 @@ import KeeperSvg from "@/assets/keeper.svg";
 import { ButtonLink } from "../components/button-link";
 import Link from "next/link";
 import { HeartIcon } from "lucide-react";
-import { Dock, DockItem } from "../components/dock";
 import { LinkOut } from "../components/link-out";
 import { Copy } from "../components/copy";
 
@@ -40,13 +39,6 @@ const LandingLayout: FC<PropsWithChildren> = ({ children }) => (
         </LinkOut>
       </Copy>
     </footer>
-    <Dock>
-      <DockItem href="#home" hash="home" icon="HomeIcon" />
-      <DockItem href="#calendars" hash="calendars" icon="CalendarsIcon" />
-      <DockItem href="#sync" hash="sync" icon="CalendarSyncIcon" />
-      <DockItem href="#billing" hash="billing" icon="ReceiptIcon" />
-      <DockItem href="#settings" hash="settings" icon="BoltIcon" />
-    </Dock>
   </>
 );
 

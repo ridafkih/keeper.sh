@@ -68,6 +68,7 @@ const AuthBackButton = () => {
 
 const AuthFormInternal: FC<AuthFormProps> = ({ variant, strategy }) => {
   const store = useStore();
+  const router = useRouter();
   const setShowPasswordField = useSetShowPasswordField();
   const setIsLoading = useSetIsLoading();
   const formRef = useRef<HTMLFormElement>(null);
@@ -95,7 +96,7 @@ const AuthFormInternal: FC<AuthFormProps> = ({ variant, strategy }) => {
       setIsLoading(true);
       const formData = new FormData(event.currentTarget);
       const email = formData.get("email");
-      // TODO: commercial auth logic (email verification)
+      setTimeout(() => router.push("/playground/dashboard"), 1000);
     }
   };
 

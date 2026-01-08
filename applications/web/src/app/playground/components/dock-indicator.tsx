@@ -1,32 +1,19 @@
 "use client";
 
-import { atom, useSetAtom, useAtomValue } from "jotai";
 import { motion } from "motion/react";
-import { useParams } from "next/navigation";
+import { useSelectedLayoutSegment } from "next/navigation";
 import type { FC } from "react";
-import { useEffect } from "react";
-
-const hashAtom = atom("");
-
-const HashSync: FC = () => {
-  const setHash = useSetAtom(hashAtom);
-  const params = useParams();
-
-  useEffect(() => {
-    setHash(decodeURIComponent(window.location.hash.replace("#", "")));
-  }, [params, setHash]);
-
-  return null;
-};
 
 interface DockIndicatorProps {
-  attributedHash: string;
+  segment: string | null;
 }
 
-const DockIndicator: FC<DockIndicatorProps> = ({ attributedHash }) => {
-  const hash = useAtomValue(hashAtom);
+const DockIndicator: FC<DockIndicatorProps> = ({ segment }) => {
+  const selectedSegment = useSelectedLayoutSegment();
 
-  if (hash !== attributedHash) {
+  console.log({ selectedSegment })
+
+  if (selectedSegment !== segment) {
     return null;
   }
 
@@ -41,4 +28,4 @@ const DockIndicator: FC<DockIndicatorProps> = ({ attributedHash }) => {
   );
 };
 
-export { DockIndicator, HashSync };
+export { DockIndicator };
