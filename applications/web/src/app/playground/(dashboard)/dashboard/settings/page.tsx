@@ -1,7 +1,10 @@
+import { Scaffold } from "../../../components/scaffold";
+import { Heading1 } from "../../../components/heading";
+
 const SettingsPage = () => (
-  <div>
-    <h1>Settings</h1>
-  </div>
+  <Scaffold className="py-8">
+    <Heading1>Settings</Heading1>
+  </Scaffold>
 );
 
 export default SettingsPage;

@@ -8,7 +8,7 @@ interface ScaffoldProps {
 export const Scaffold: FC<PropsWithChildren<ScaffoldProps>> = ({ children, className }) => (
   <div
     className={clsx(
-      "w-full grow grid grid-cols-[minmax(1rem,1fr)_minmax(auto,28rem)_minmax(1rem,1fr)] *:col-start-2 bg-neutral-50 dark:bg-neutral-950 gap-y-8",
+      "w-full grow grid grid-cols-[minmax(1rem,1fr)_minmax(auto,28rem)_minmax(1rem,1fr)] *:col-start-2 bg-neutral-50 dark:bg-neutral-950",
       className,
     )}
   >

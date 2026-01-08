@@ -1,10 +1,10 @@
 import { Scaffold } from "../../../components/scaffold";
 import { Heading1 } from "../../../components/heading";
 
-const CalendarsPage = () => (
+const AgendaPage = () => (
   <Scaffold className="py-8">
-    <Heading1>Calendars</Heading1>
+    <Heading1>Agenda</Heading1>
   </Scaffold>
 );
 
-export default CalendarsPage;
+export default AgendaPage;

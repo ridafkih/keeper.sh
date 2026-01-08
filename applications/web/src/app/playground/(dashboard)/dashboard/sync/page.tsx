@@ -1,7 +1,10 @@
+import { Scaffold } from "../../../components/scaffold";
+import { Heading1 } from "../../../components/heading";
+
 const SyncPage = () => (
-  <div>
-    <h1>Sync</h1>
-  </div>
+  <Scaffold className="py-8">
+    <Heading1>Sync</Heading1>
+  </Scaffold>
 );
 
 export default SyncPage;

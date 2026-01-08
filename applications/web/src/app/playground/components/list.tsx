@@ -1,13 +1,22 @@
 import type { FC, PropsWithChildren } from "react";
-import { Plus } from "lucide-react";
+import { ArrowRight, Plus } from "lucide-react";
 
 const List: FC<PropsWithChildren> = ({ children }) => (
   <ul className="flex flex-col">{children}</ul>
 );
 
-const ListItem: FC<PropsWithChildren> = ({ children }) => (
-  <li className="flex items-center justify-between py-2 px-3 -mx-3 rounded-lg hover:bg-neutral-100 transition-colors">
-    {children}
+interface ListItemProps {
+  color?: string;
+  title?: string;
+}
+
+const ListItem: FC<PropsWithChildren<ListItemProps>> = ({ children, color, title }) => (
+  <li title={title} className="group flex items-center gap-2 py-1.5 px-3 -mx-3 rounded-lg hover:bg-neutral-100 transition-colors">
+    {color && <span className="size-1 shrink-0 rounded-full" style={{ backgroundColor: color }} />}
+    <div className="flex items-center justify-between flex-1">
+      {children}
+    </div>
+    <ArrowRight size={14} className="text-neutral-400" />
   </li>
 );
 
@@ -25,16 +34,17 @@ interface ListItemAddProps {
 }
 
 const ListItemAdd: FC<ListItemAddProps> = ({ children, onClick }) => (
-  <li>
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex items-center gap-1.5 w-full py-2 px-3 -mx-3 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 transition-colors"
-    >
+  <button
+    type="button"
+    onClick={onClick}
+    className="flex items-center gap-2 py-1.5 px-3 -mx-3 rounded-lg hover:bg-neutral-100 transition-colors text-neutral-400 hover:text-neutral-500"
+  >
+    <span className="w-3.5 flex items-center justify-center shrink-0">
       <Plus size={14} />
-      <span className="text-sm">{children}</span>
-    </button>
-  </li>
+    </span>
+    <span className="text-sm flex-1 text-left">{children}</span>
+    <ArrowRight size={14} />
+  </button>
 );
 
 export { List, ListItem, ListItemLabel, ListItemValue, ListItemAdd };

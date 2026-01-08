@@ -1,9 +1,10 @@
-import { InfiniteCalendarGrid } from "../../compositions/infinite-calendar-grid/infinite-calendar-grid";
+import { Scaffold } from "../../components/scaffold";
+import { Heading1 } from "../../components/heading";
 
 const DashboardPage = () => (
-  <div className="col-[1/span_3]! max-w-6xl mx-auto h-screen w-full">
-    <InfiniteCalendarGrid />
-  </div>
+  <Scaffold className="py-8">
+    <Heading1>Home</Heading1>
+  </Scaffold>
 );
 
 export default DashboardPage;

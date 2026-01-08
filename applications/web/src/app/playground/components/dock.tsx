@@ -5,6 +5,7 @@ import {
   HomeIcon,
   CalendarsIcon,
   CalendarSyncIcon,
+  ListIcon,
   ReceiptIcon,
   BoltIcon,
 } from "lucide-react";
@@ -19,6 +20,7 @@ const iconMap = {
   HomeIcon,
   CalendarsIcon,
   CalendarSyncIcon,
+  ListIcon,
   ReceiptIcon,
   BoltIcon,
 } as const;

@@ -20,9 +20,10 @@ const CalendarDayCell: FC<CalendarDayCellProps> = ({ date, size, centeredYearMon
   const today = isToday(date);
   const dayNumber = formatDayNumber(date);
   const monthNumber = date.getMonth();
+  const year = date.getFullYear();
 
   const isInCenteredMonth =
-    date.getFullYear() === centeredYearMonth.year &&
+    year === centeredYearMonth.year &&
     monthNumber === centeredYearMonth.month;
 
   const weekday = date.getDay()
@@ -43,7 +44,8 @@ const CalendarDayCell: FC<CalendarDayCellProps> = ({ date, size, centeredYearMon
           today && "text-blue-600 font-semibold"
         )}
       >
-        {WEEKDAYS[weekday]} {MONTHS[monthNumber]} {dayNumber.padStart(2, "0")}
+        {MONTHS[monthNumber]} {dayNumber.padStart(2, "0")} '{year.toString().slice(-2)}<br />
+        {WEEKDAYS[weekday]}
       </span>
     </div>
   );
