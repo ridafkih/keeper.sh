@@ -4,9 +4,20 @@ import { Input } from "../../../components/input";
 import { Dropdown } from "../../../components/dropdown";
 import { Checkbox } from "../../../components/checkbox";
 import { Radio } from "../../../components/radio";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "../../../components/dropdown-menu";
+import { User, Settings, LogOut, Pencil, Copy, Trash2 } from "lucide-react";
+import { ModalDemo } from "./modal-demo";
+import { ConnectionPreambleDemo } from "./connection-preamble-demo";
 
 const DemoPage = () => (
-  <Scaffold className="py-8">
+  <Scaffold className="py-8 flex flex-col gap-8">
     <Heading1>Demo</Heading1>
 
     <div className="flex flex-col gap-2">
@@ -17,7 +28,7 @@ const DemoPage = () => (
     </div>
 
     <div className="flex flex-col gap-2">
-      <Heading3>Dropdown</Heading3>
+      <Heading3>Select</Heading3>
       <Dropdown>
         <option>Default size</option>
         <option>Option 2</option>
@@ -31,6 +42,29 @@ const DemoPage = () => (
       <Dropdown disabled>
         <option>Disabled</option>
       </Dropdown>
+    </div>
+
+    <div className="flex flex-col gap-2 items-start">
+      <Heading3>Dropdown Menu</Heading3>
+      <DropdownMenu>
+        <DropdownMenuTrigger>Actions</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuLabel>Account</DropdownMenuLabel>
+          <DropdownMenuItem><User size={16} />Profile</DropdownMenuItem>
+          <DropdownMenuItem><Settings size={16} />Settings</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem><LogOut size={16} />Log out</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <DropdownMenu>
+        <DropdownMenuTrigger dropdownSize="small">Small Trigger</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem><Pencil size={14} />Edit</DropdownMenuItem>
+          <DropdownMenuItem><Copy size={14} />Duplicate</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem><Trash2 size={14} />Delete</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
 
     <div className="flex flex-col gap-2">
@@ -47,6 +81,16 @@ const DemoPage = () => (
       <Radio id="radio-2" name="demo" radioSize="small" label="Small size" />
       <Radio id="radio-3" name="demo-2" label="Selected" defaultChecked />
       <Radio id="radio-4" name="demo-3" label="Disabled" disabled />
+    </div>
+
+    <div className="flex flex-col gap-2 items-start">
+      <Heading3>Modal</Heading3>
+      <ModalDemo />
+    </div>
+
+    <div className="flex flex-col gap-2 items-start">
+      <Heading3>Connection Preamble Modal</Heading3>
+      <ConnectionPreambleDemo />
     </div>
   </Scaffold>
 );
