@@ -1,6 +1,6 @@
 "use client";
 
-import type { FC, PropsWithChildren } from "react";
+import type { ComponentProps, FC, PropsWithChildren } from "react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import type { LucideIcon } from "lucide-react";
 import { clsx } from "clsx";
 import { atom, useAtomValue, useSetAtom } from "jotai";
+import { DynamicIcon } from "lucide-react/dynamic";
 
 const hashAtom = atom("");
 
@@ -47,19 +48,19 @@ const DockIndicator: FC<DockIndicatorProps> = ({ attributedHash }) => {
 interface DockItemProps {
   href: string;
   hash: string;
-  icon: LucideIcon;
+  iconName: ComponentProps<typeof DynamicIcon>["name"];
 }
 
-const DockItem: FC<DockItemProps> = ({ href, hash, icon: Icon }) => (
-  <li>
-    <Link
-      draggable={false}
-      className="relative hover:text-neutral-50 p-2 flex rounded-full"
-      href={href}
-    >
-      <Icon className="z-20" size={20} strokeWidth={1.5} />
-      <DockIndicator attributedHash={hash} />
-    </Link>
+const DockItem: FC<DockItemProps> = ({ href, hash, iconName }) => (
+    <li>
+      <Link
+        draggable={false}
+        className="relative hover:text-neutral-50 p-2 flex rounded-full"
+        href={href}
+      >
+        <DynamicIcon name={iconName} className="z-20" size={20} strokeWidth={1.5} />
+        <DockIndicator attributedHash={hash} />
+      </Link>
   </li>
 );
 

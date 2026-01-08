@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 
-import { Scaffold } from "../components/scaffold";
 import { Heading1, Heading2, Heading3 } from "../components/heading";
 import { Copy } from "../components/copy";
 import { LinkOut } from "../components/link-out";
@@ -15,7 +14,7 @@ import {
   InlineTableList,
   InlineTableListItem,
 } from "../components/inline-table";
-import { PrivacySection } from "../components/privacy-section";
+import { LegalSection } from "../components/legal-section";
 
 export const metadata: Metadata = {
   description:
@@ -24,14 +23,14 @@ export const metadata: Metadata = {
 };
 
 const PrivacyPage = () => (
-  <Scaffold>
+  <>
     <div className="flex flex-col gap-2">
       <Heading1>Privacy Policy</Heading1>
       <Copy>This privacy policy was last updated on January 7th, 2025.</Copy>
     </div>
 
     <div className="flex flex-col gap-8">
-      <PrivacySection>
+      <LegalSection>
         <Heading2>Overview</Heading2>
         <Copy>
           Keeper (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;) is committed to protecting your
@@ -42,9 +41,9 @@ const PrivacyPage = () => (
           By using Keeper, you consent to the data practices described in this policy. If you do not
           agree with the terms of this policy, please do not access or use our service.
         </Copy>
-      </PrivacySection>
+      </LegalSection>
 
-      <PrivacySection>
+      <LegalSection>
         <Heading2>Information We Collect</Heading2>
         <Heading3>Account Information</Heading3>
         <Copy>
@@ -64,9 +63,9 @@ const PrivacyPage = () => (
           IP address, browser type, operating system, access times, and pages viewed. This data
           helps us improve our service and diagnose technical issues.
         </Copy>
-      </PrivacySection>
+      </LegalSection>
 
-      <PrivacySection>
+      <LegalSection>
         <Heading2>How We Use Your Information</Heading2>
         <Copy>We use the information we collect to:</Copy>
         <ul className="list-disc list-inside flex flex-col gap-1 ml-2">
@@ -76,9 +75,9 @@ const PrivacyPage = () => (
           <Copy as="li">Monitor and analyze usage patterns to improve user experience</Copy>
           <Copy as="li">Detect, prevent, and address technical issues or abuse</Copy>
         </ul>
-      </PrivacySection>
+      </LegalSection>
 
-      <PrivacySection>
+      <LegalSection>
         <Heading2>Third-Party Data Providers</Heading2>
         <Copy>
           We integrate with the following third-party services. This table details exactly what data
@@ -179,18 +178,18 @@ const PrivacyPage = () => (
           We do not sell, trade, or otherwise transfer your personal information to third parties
           for marketing purposes.
         </Copy>
-      </PrivacySection>
+      </LegalSection>
 
-      <PrivacySection>
+      <LegalSection>
         <Heading2>Data Retention</Heading2>
         <Copy>
           We retain your account information and calendar data for as long as your account is
           active. When you delete your account, we immediately delete all associated data, except
           where retention is required by law.
         </Copy>
-      </PrivacySection>
+      </LegalSection>
 
-      <PrivacySection>
+      <LegalSection>
         <Heading2>Your Rights and Choices</Heading2>
         <Copy>You have the right to:</Copy>
         <ul className="list-disc list-inside flex flex-col gap-1 ml-2">
@@ -208,27 +207,27 @@ const PrivacyPage = () => (
           </LinkOut>
           .
         </Copy>
-      </PrivacySection>
+      </LegalSection>
 
-      <PrivacySection>
+      <LegalSection>
         <Heading2>International Data Transfers</Heading2>
         <Copy>
           Your information may be transferred to and processed in countries other than your own. We
           ensure appropriate safeguards are in place to protect your data in compliance with
           applicable laws.
         </Copy>
-      </PrivacySection>
+      </LegalSection>
 
-      <PrivacySection>
+      <LegalSection>
         <Heading2>Children&apos;s Privacy</Heading2>
         <Copy>
           Keeper is not intended for use by individuals under the age of 13. We do not knowingly
           collect personal information from children. If we become aware that we have collected data
           from a child, we will take steps to delete it promptly.
         </Copy>
-      </PrivacySection>
+      </LegalSection>
 
-      <PrivacySection>
+      <LegalSection>
         <Heading2>Changes to This Policy</Heading2>
         <Copy>
           We may update this Privacy Policy from time to time. We will notify you of significant
@@ -236,9 +235,9 @@ const PrivacyPage = () => (
           date. Your continued use of the service after changes constitutes acceptance of the
           updated policy.
         </Copy>
-      </PrivacySection>
+      </LegalSection>
 
-      <PrivacySection>
+      <LegalSection>
         <Heading2>Contact Us</Heading2>
         <Copy>
           If you have questions or concerns about this Privacy Policy or our data practices, please
@@ -248,9 +247,9 @@ const PrivacyPage = () => (
           </LinkOut>
           .
         </Copy>
-      </PrivacySection>
+      </LegalSection>
     </div>
-  </Scaffold>
+  </>
 );
 
 export default PrivacyPage;
