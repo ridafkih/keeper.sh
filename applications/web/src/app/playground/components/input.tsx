@@ -1,28 +1,34 @@
-import type { InputHTMLAttributes } from "react";
-import { forwardRef } from "react";
+import type { InputHTMLAttributes, Ref } from "react";
 import { clsx } from "clsx";
+
+type InputSize = "default" | "small";
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   className?: string;
+  inputSize?: InputSize;
+  ref?: Ref<HTMLInputElement>;
 }
 
-const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ className, disabled, ...props }, ref) => (
-    <input
-      ref={ref}
-      disabled={disabled}
-      className={clsx(
-        "w-full py-2 px-4 border border-neutral-300 rounded-full transition-colors tracking-tight",
-        "focus:outline-none focus:border-neutral-400 focus:ring-2 focus:ring-neutral-200",
-        "placeholder:text-neutral-400",
-        disabled && "bg-neutral-100 text-neutral-400 cursor-not-allowed",
-        className,
-      )}
-      {...props}
-    />
-  ),
+const sizeStyles: Record<InputSize, string> = {
+  default: "py-2 px-4 text-base",
+  small: "py-1.5 px-3 text-sm",
+};
+
+const Input = ({ className, disabled, inputSize = "default", ref, ...props }: InputProps) => (
+  <input
+    ref={ref}
+    disabled={disabled}
+    className={clsx(
+      "w-full border border-neutral-300 rounded-full transition-colors tracking-tight",
+      "focus:outline-none focus:border-neutral-400 focus:ring-2 focus:ring-neutral-200",
+      "placeholder:text-neutral-400",
+      sizeStyles[inputSize],
+      disabled && "bg-neutral-100 text-neutral-400 cursor-not-allowed",
+      className,
+    )}
+    {...props}
+  />
 );
 
-Input.displayName = "Input";
-
 export { Input };
+export type { InputSize };
