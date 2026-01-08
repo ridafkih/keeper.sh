@@ -1,6 +1,6 @@
 "use client";
 
-import type { FC, HTMLInputAutoCompleteAttribute} from "react";
+import type { FC, FormEvent, HTMLInputAutoCompleteAttribute} from "react";
 import { useEffect, useRef } from "react";
 import { Provider, useStore } from "jotai";
 import { FormDivider } from "../../../components/form-divider";
@@ -50,7 +50,7 @@ const AuthFormInternal: FC<AuthFormProps> = ({ variant, strategy }) => {
     // TODO: Google OAuth
   };
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (strategy === "non-commercial") {

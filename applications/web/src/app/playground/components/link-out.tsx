@@ -46,10 +46,9 @@ const getArrowSize = (size: LinkOutVariantProps["size"]) => {
 interface LinkOutContentProps {
   variant: LinkOutVariantProps["variant"];
   size: LinkOutVariantProps["size"];
-  children: React.ReactNode;
 }
 
-const LinkOutContent: FC<LinkOutContentProps> = ({ variant, size, children }) => {
+const LinkOutContent: FC<PropsWithChildren<LinkOutContentProps>> = ({ variant, size, children }) => {
   if (variant === "inline" || variant === "inline-subtle") {
     return children;
   }
