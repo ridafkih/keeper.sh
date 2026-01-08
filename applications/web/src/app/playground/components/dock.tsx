@@ -69,7 +69,6 @@ const Dock: FC<PropsWithChildren<DockProps>> = ({ position = "bottom", children 
     >
       <ul className="flex items-center">{children}</ul>
     </nav>
-    <div className="h-12" />
   </>
 );
 
