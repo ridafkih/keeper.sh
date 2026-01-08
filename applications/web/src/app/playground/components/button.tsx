@@ -1,9 +1,26 @@
 import type { FC, PropsWithChildren, ButtonHTMLAttributes, HTMLProps } from "react";
 import type { VariantProps } from "tailwind-variants";
 import type { LucideIcon } from "lucide-react";
+import { tv } from "tailwind-variants";
 import clsx from "clsx";
 import { Spinner } from "./spinner";
-import { buttonVariants } from "../styles/buttons";
+import { buttonVariantStyles } from "../styles/buttons";
+
+const buttonVariants = tv({
+  base: "tracking-tighter font-medium rounded-full w-fit enabled:hover:cursor-pointer flex items-center gap-1.5 disabled:cursor-not-allowed",
+  variants: {
+    variant: buttonVariantStyles,
+    size: {
+      large: "py-2 px-4",
+      default: "py-1.5 px-4 text-sm",
+      small: "py-1.25 px-3.5 text-sm",
+    },
+  },
+  defaultVariants: {
+    variant: "primary",
+    size: "default",
+  },
+});
 
 type ButtonVariantProps = VariantProps<typeof buttonVariants>;
 
