@@ -10,7 +10,8 @@ import {
 } from "../compositions/calendar-illustration/calendar-illustration";
 import { Heading1, Heading2 } from "../components/heading";
 import { Copy } from "../components/copy";
-import { Button, ButtonText, ButtonIcon } from "../components/button";
+import { ButtonText, ButtonIcon } from "../components/button";
+import { ButtonLink } from "../components/button-link";
 import { LinkOut } from "../components/link-out";
 import { PricingGrid, PricingTier, PricingFeatureList, PricingFeature } from "../components/pricing";
 
@@ -32,14 +33,14 @@ export default function Playground() {
                   <ButtonText>Sync Calendars</ButtonText>
                   <ButtonIcon icon={ArrowRight} />
                 </SyncCalendarsButton>
-                <Button
+                <ButtonLink
                   href="https://github.com/ridafkih/keeper.sh"
                   target="_blank"
                   variant="outline"
                 >
                   <ButtonText>View GitHub</ButtonText>
                   <ButtonIcon icon={ArrowUpRight} />
-                </Button>
+                </ButtonLink>
               </div>
           </div>
         </div>
