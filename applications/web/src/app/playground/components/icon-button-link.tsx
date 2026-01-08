@@ -2,9 +2,9 @@ import type { FC, AnchorHTMLAttributes } from "react";
 import type { VariantProps } from "tailwind-variants";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { iconButtonVariants, iconSizes } from "../styles/buttons";
+import { iconButtonLinkVariants, iconSizes } from "../styles/buttons";
 
-type IconButtonLinkVariantProps = VariantProps<typeof iconButtonVariants>;
+type IconButtonLinkVariantProps = VariantProps<typeof iconButtonLinkVariants>;
 
 interface IconButtonLinkProps
   extends IconButtonLinkVariantProps,
@@ -22,7 +22,7 @@ const IconButtonLink: FC<IconButtonLinkProps> = ({
   href,
   ...linkProps
 }) => {
-  const resolvedClassName = iconButtonVariants({ variant, size, className });
+  const resolvedClassName = iconButtonLinkVariants({ variant, size, className });
   const iconSize = iconSizes[size ?? "default"];
 
   return (
