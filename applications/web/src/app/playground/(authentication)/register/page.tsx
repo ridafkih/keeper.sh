@@ -1,13 +1,13 @@
 import { ArrowLeft } from "lucide-react";
 import { Heading1 } from "../../components/heading";
 import { Copy } from "../../components/copy";
-import { IconButton } from "../../components/button";
+import { IconButtonLink } from "../../components/icon-button-link";
 import { LinkOut } from "../../components/link-out";
 import { AuthForm } from "../../compositions/auth-form/auth-form";
 
 const RegisterPage = () => (
     <div className="flex flex-col gap-8 max-w-xs mx-auto w-full">
-      <IconButton icon={ArrowLeft} variant="outline" href="/playground" />
+      <IconButtonLink icon={ArrowLeft} variant="outline" href="/playground" />
       <div className="flex flex-col gap-8">
         <div className="flex flex-col items-center text-center">
           <Heading1>Create an account</Heading1>
