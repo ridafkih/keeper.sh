@@ -5,8 +5,7 @@ import { IconButton } from "../../components/button";
 import { LinkOut } from "../../components/link-out";
 import { AuthForm } from "../../compositions/auth-form/auth-form";
 
-const RegisterPage = () => {
-  return (
+const RegisterPage = () => (
     <div className="flex flex-col gap-8 max-w-xs mx-auto w-full">
       <IconButton icon={ArrowLeft} variant="outline" href="/playground" />
       <div className="flex flex-col gap-8">
@@ -24,6 +23,5 @@ const RegisterPage = () => {
       </div>
     </div>
   );
-};
 
 export default RegisterPage;

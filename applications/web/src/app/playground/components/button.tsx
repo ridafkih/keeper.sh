@@ -7,13 +7,13 @@ import clsx from "clsx";
 import { Spinner } from "./spinner";
 
 const sharedVariants = {
-  primary: "bg-neutral-800 border-y border-y-neutral-500 text-white hover:brightness-90",
-  outline: "border border-neutral-300 hover:backdrop-brightness-95",
-  ghost: "border border-transparent hover:backdrop-brightness-95",
+  primary: "bg-neutral-800 border-y border-y-neutral-500 text-white enabled:hover:brightness-90",
+  outline: "border border-neutral-300 enabled:hover:backdrop-brightness-95",
+  ghost: "border border-transparent enabled:hover:backdrop-brightness-95",
 };
 
 const buttonVariants = tv({
-  base: "tracking-tighter font-medium rounded-full w-fit hover:cursor-pointer flex items-center gap-1.5",
+  base: "tracking-tighter font-medium rounded-full w-fit enabled:hover:cursor-pointer flex items-center gap-1.5 disabled:cursor-not-allowed",
   variants: {
     variant: sharedVariants,
     size: {
@@ -29,7 +29,7 @@ const buttonVariants = tv({
 });
 
 const iconButtonVariants = tv({
-  base: "rounded-full hover:cursor-pointer flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed",
+  base: "rounded-full enabled:hover:cursor-pointer flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed",
   variants: {
     variant: sharedVariants,
     size: {
@@ -84,23 +84,24 @@ const Button: FC<PropsWithChildren<ButtonProps>> = (props) => {
 
   if (href !== undefined) {
     return (
-      <Link href={href} target={props.target} className={resolvedClassName}>
+      <Link draggable={false} href={href} target={props.target} className={resolvedClassName}>
         {children}
       </Link>
     );
   }
 
   const buttonProps = extractButtonProps(props);
+  const isDisabledNotLoading = buttonProps.disabled && !isLoading;
 
   return (
     <button
-      className={resolvedClassName}
+      className={clsx(resolvedClassName, isDisabledNotLoading && "opacity-50")}
       disabled={isLoading || buttonProps.disabled}
       {...buttonProps}
     >
       <div className="w-full grid grid-cols-[1fr_max-content_1fr] items-center">
         {isLoading && <Spinner className="col-start-1 size-4" />}
-        <div className="col-start-2 flex items-center gap-1">
+        <div className={clsx("col-start-2 flex items-center gap-1", isLoading && "opacity-50")}>
           {children}
         </div>
       </div>
@@ -158,7 +159,7 @@ const IconButton: FC<IconButtonProps> = ({
 
   if (href !== undefined) {
     return (
-      <Link href={href} className={resolvedClassName}>
+      <Link draggable={false} href={href} className={resolvedClassName}>
         <Icon size={iconSize} />
       </Link>
     );

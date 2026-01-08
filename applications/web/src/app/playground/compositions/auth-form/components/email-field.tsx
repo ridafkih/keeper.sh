@@ -1,10 +1,11 @@
 "use client";
 
 import { FormField } from "../../../components/form-field";
-import { useShowPasswordField } from "../contexts/auth-form-context";
+import { useShowPasswordField, useIsLoading } from "../contexts/auth-form-context";
 
 export const EmailField = () => {
   const showPasswordField = useShowPasswordField();
+  const isLoading = useIsLoading();
 
   return (
     <FormField
@@ -13,7 +14,7 @@ export const EmailField = () => {
       placeholder="Email"
       required
       autoComplete="email"
-      disabled={showPasswordField}
+      disabled={showPasswordField || isLoading}
     />
   );
 };

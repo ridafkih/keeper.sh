@@ -1,12 +1,13 @@
 "use client";
 
-import { FC, HTMLProps } from "react";
+import type { FC, HTMLProps } from "react";
 import { FormField } from "../../../components/form-field";
-import { useShowPasswordField } from "../contexts/auth-form-context";
+import { useShowPasswordField, useIsLoading } from "../contexts/auth-form-context";
 import { AnimatePresence, motion } from "motion/react";
 
 export const PasswordField: FC<HTMLProps<HTMLInputElement>> = ({ ...props }) => {
   const showPasswordField = useShowPasswordField();
+  const isLoading = useIsLoading();
 
   return (
     <AnimatePresence>
@@ -20,11 +21,12 @@ export const PasswordField: FC<HTMLProps<HTMLInputElement>> = ({ ...props }) => 
           <FormField
             name="password"
             required
-            autoFocus
+            
             minLength={8}
             type={props.type}
             autoComplete={props.autoComplete}
             placeholder="Password"
+            disabled={isLoading}
           />
         </motion.div>
       )}

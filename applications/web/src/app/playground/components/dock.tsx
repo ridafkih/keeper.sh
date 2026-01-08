@@ -66,7 +66,7 @@ const Dock: FC<PropsWithChildren<DockProps>> = ({ position = "bottom", children 
       <HashSync />
       <nav
         className={clsx(
-          "left-0 right-0 mx-auto p-1.5 rounded-full bg-neutral-950 w-fit text-neutral-300",
+          "left-0 right-0 mx-auto p-1.5 rounded-full bg-neutral-950 w-fit text-neutral-300 z-100",
           getDockPositionClassName(position).className,
         )}
       >

@@ -1,13 +1,15 @@
 import { AuthFormProvider } from "./contexts/auth-form-context";
-import { AuthForm as AuthFormInner } from "./components/auth-form";
+import { AuthForm as AuthFormSansProvider } from "./components/auth-form";
 
 interface AuthFormProps {
   variant: "login" | "register";
   strategy: "commercial" | "non-commercial";
 }
 
-export const AuthForm = ({ variant, strategy }: AuthFormProps) => (
+const AuthForm = ({ variant, strategy }: AuthFormProps) => (
   <AuthFormProvider>
-    <AuthFormInner variant={variant} strategy={strategy} />
+    <AuthFormSansProvider variant={variant} strategy={strategy} />
   </AuthFormProvider>
 );
+
+export { AuthForm }

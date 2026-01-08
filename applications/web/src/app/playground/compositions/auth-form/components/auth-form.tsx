@@ -1,18 +1,20 @@
 "use client";
 
-import { FC, HTMLInputAutoCompleteAttribute, useEffect, useRef } from "react";
+import type { FC, HTMLInputAutoCompleteAttribute} from "react";
+import { useEffect, useRef } from "react";
 import { Provider, useStore } from "jotai";
-import { Button, ButtonText } from "../../../components/button";
 import { FormDivider } from "../../../components/form-divider";
-import { SocialButton } from "../../../components/social-button";
 import { GoogleIcon } from "@/components/icons/google";
 import {
   showPasswordFieldAtom,
   useSetShowPasswordField,
+  useSetIsLoading,
 } from "../contexts/auth-form-context";
 import { EmailField } from "./email-field";
 import { PasswordField } from "./password-field";
 import { UsernameField } from "./username-field";
+import { SubmitButton } from "./submit-button";
+import { OAuthButton } from "./oauth-button";
 
 type AuthFormVariant = "login" | "register";
 type AuthFormStrategy = "commercial" | "non-commercial";
@@ -29,16 +31,19 @@ const buttonText = {
 
 const getPasswordAutoCompleteType = (variant: AuthFormVariant): HTMLInputAutoCompleteAttribute => {
   switch (variant) {
-      case "login":
+      case "login": {
         return "current-password"
-      case "register":
+      }
+      case "register": {
         return "password"
+      }
   }
 }
 
 const AuthFormInternal: FC<AuthFormProps> = ({ variant, strategy }) => {
   const store = useStore();
   const setShowPasswordField = useSetShowPasswordField();
+  const setIsLoading = useSetIsLoading();
   const formRef = useRef<HTMLFormElement>(null);
 
   const handleGoogleSignIn = () => {
@@ -55,11 +60,13 @@ const AuthFormInternal: FC<AuthFormProps> = ({ variant, strategy }) => {
         return;
       }
 
+      setIsLoading(true);
       const formData = new FormData(event.currentTarget);
       const username = formData.get("username");
       const password = formData.get("password");
       // TODO: non-commercial auth logic
     } else {
+      setIsLoading(true);
       const formData = new FormData(event.currentTarget);
       const email = formData.get("email");
       // TODO: commercial auth logic (email verification)
@@ -67,47 +74,40 @@ const AuthFormInternal: FC<AuthFormProps> = ({ variant, strategy }) => {
   };
 
   useEffect(() => {
-    return () => {
-      formRef.current?.reset();
-      setShowPasswordField(false);
-    };
-  }, [setShowPasswordField]);
+    formRef.current?.reset();
+    setShowPasswordField(false);
+    setIsLoading(false);
+  }, [setShowPasswordField, setIsLoading]);
 
   if (strategy === "non-commercial") {
     return (
       <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-2">
         <UsernameField />
         <PasswordField type="password" autoComplete={getPasswordAutoCompleteType(variant)} />
-        <Button size="large" type="submit" className="w-full text-center">
-          <ButtonText className="w-full text-center">{buttonText[variant]}</ButtonText>
-        </Button>
+        <SubmitButton>{buttonText[variant]}</SubmitButton>
       </form>
     );
   }
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-2">
-      <SocialButton
-        onClick={handleGoogleSignIn}
+      <OAuthButton
+        onSignIn={handleGoogleSignIn}
         icon={<GoogleIcon className="size-4" />}
       >
         Continue with Google
-      </SocialButton>
+      </OAuthButton>
       <FormDivider />
       <EmailField />
-      <Button size="large" type="submit" className="w-full text-center">
-        <ButtonText className="w-full text-center">{buttonText[variant]}</ButtonText>
-      </Button>
+      <SubmitButton>{buttonText[variant]}</SubmitButton>
     </form>
   );
 };
 
-const AuthForm: FC<AuthFormProps> = ({ ...props }) => {
-  return (
+const AuthForm: FC<AuthFormProps> = ({ ...props }) => (
     <Provider>
       <AuthFormInternal {...props} />
     </Provider>
   )
-}
 
 export { AuthForm }

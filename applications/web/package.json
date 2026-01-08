@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --bun next dev --turbopack",
+    "dev": "bun next dev --turbopack",
     "build": "bun --bun next build",
     "start": "bun --bun next start",
     "types": "tsc --noEmit",
