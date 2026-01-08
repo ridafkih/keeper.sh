@@ -51,7 +51,7 @@ const AuthBackButton = () => {
     <AnimatePresence>
       {!isLoading && (
         <motion.div
-          transition={{ duration: 0.16, width: { delay: 0.02 } }}
+          transition={{ duration: 0.12, width: { delay: 0.06 } }}
           initial={false}
           animate={{ width: "auto", opacity: 1 }}
           exit={{ width: 0, opacity: 0 }}

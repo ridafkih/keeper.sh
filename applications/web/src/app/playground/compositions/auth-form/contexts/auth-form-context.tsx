@@ -1,5 +1,3 @@
-"use client";
-
 import type { FC, PropsWithChildren } from "react";
 import { Provider, atom, useAtomValue, useSetAtom } from "jotai";
 

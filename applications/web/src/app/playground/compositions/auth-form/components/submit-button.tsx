@@ -16,7 +16,7 @@ export const SubmitButton: FC<SubmitButtonProps> = ({ children }) => {
       size="large"
       type="submit"
       className="w-full text-center"
-      isLoading={isLoading}
+      disabled={isLoading}
     >
       <ButtonText className="w-full text-center">{children}</ButtonText>
     </Button>

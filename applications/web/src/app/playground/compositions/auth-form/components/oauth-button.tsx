@@ -8,9 +8,10 @@ interface OAuthButtonProps {
   icon: ReactNode;
   children: string;
   onSignIn: () => void;
+  hideLoadingIndicator?: boolean;
 }
 
-export const OAuthButton: FC<OAuthButtonProps> = ({ icon, children, onSignIn }) => {
+export const OAuthButton: FC<OAuthButtonProps> = ({ icon, children, onSignIn, hideLoadingIndicator }) => {
   const isLoading = useIsLoading();
   const setIsLoading = useSetIsLoading();
 
@@ -24,6 +25,7 @@ export const OAuthButton: FC<OAuthButtonProps> = ({ icon, children, onSignIn }) 
       onClick={handleClick}
       icon={icon}
       disabled={isLoading}
+      hideLoadingIndicator={hideLoadingIndicator}
     >
       {children}
     </SocialButton>
