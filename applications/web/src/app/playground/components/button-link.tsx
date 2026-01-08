@@ -1,9 +1,9 @@
 import type { FC, PropsWithChildren, AnchorHTMLAttributes } from "react";
 import type { VariantProps } from "tailwind-variants";
 import Link from "next/link";
-import { buttonVariants } from "../styles/buttons";
+import { buttonLinkVariants } from "../styles/buttons";
 
-type ButtonLinkVariantProps = VariantProps<typeof buttonVariants>;
+type ButtonLinkVariantProps = VariantProps<typeof buttonLinkVariants>;
 
 interface ButtonLinkProps
   extends ButtonLinkVariantProps,
@@ -20,7 +20,7 @@ const ButtonLink: FC<PropsWithChildren<ButtonLinkProps>> = ({
   href,
   ...linkProps
 }) => {
-  const resolvedClassName = buttonVariants({ variant, size, className });
+  const resolvedClassName = buttonLinkVariants({ variant, size, className });
 
   return (
     <Link draggable={false} href={href} className={resolvedClassName} {...linkProps}>

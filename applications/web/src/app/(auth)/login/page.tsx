@@ -124,7 +124,6 @@ const EmailLoginForm: FC = () => {
     <AuthForm onSubmit={handleSubmit}>
       <AuthFormTitle>Login</AuthFormTitle>
       <AuthFormError message={error} />
-
       <AuthSocialButton
         onClick={handleGoogleSignIn}
         isLoading={isRedirecting}
@@ -132,9 +131,7 @@ const EmailLoginForm: FC = () => {
       >
         Continue with Google
       </AuthSocialButton>
-
       <AuthFormDivider />
-
       <AuthFormField
         name="email"
         placeholder="Email"
@@ -157,9 +154,7 @@ const EmailLoginForm: FC = () => {
           </Link>
         }
       />
-
       <AuthFormSubmit isLoading={isSubmitting}>Sign in</AuthFormSubmit>
-
       <AuthFormFooter>
         Don&apos;t have an account?{" "}
         <Link href="/register" className="text-foreground font-medium no-underline hover:underline">
@@ -174,6 +169,7 @@ const getLoginFormComponent = (): ReactNode => {
   if (isCommercialMode) {
     return <EmailLoginForm />;
   }
+
   return <UsernameLoginForm />;
 };
 

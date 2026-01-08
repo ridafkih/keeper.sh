@@ -15,6 +15,8 @@ import { PasswordField } from "./password-field";
 import { UsernameField } from "./username-field";
 import { SubmitButton } from "./submit-button";
 import { OAuthButton } from "./oauth-button";
+import { IconButtonLink } from "@/app/playground/components/icon-button-link";
+import { ArrowLeft } from "lucide-react";
 
 type AuthFormVariant = "login" | "register";
 type AuthFormStrategy = "commercial" | "non-commercial";
@@ -99,7 +101,10 @@ const AuthFormInternal: FC<AuthFormProps> = ({ variant, strategy }) => {
       </OAuthButton>
       <FormDivider />
       <EmailField />
-      <SubmitButton>{buttonText[variant]}</SubmitButton>
+      <div className="flex items-center gap-2">
+        <IconButtonLink size="large" icon={ArrowLeft} variant="outline" href="/playground" />
+        <SubmitButton>{buttonText[variant]}</SubmitButton>
+      </div>
     </form>
   );
 };
