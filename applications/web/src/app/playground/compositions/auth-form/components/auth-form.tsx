@@ -9,6 +9,7 @@ import {
   showPasswordFieldAtom,
   useSetShowPasswordField,
   useSetIsLoading,
+  useIsLoading,
 } from "../contexts/auth-form-context";
 import { EmailField } from "./email-field";
 import { PasswordField } from "./password-field";
@@ -17,6 +18,7 @@ import { SubmitButton } from "./submit-button";
 import { OAuthButton } from "./oauth-button";
 import { IconButtonLink } from "@/app/playground/components/icon-button-link";
 import { ArrowLeft } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 
 type AuthFormVariant = "login" | "register";
 type AuthFormStrategy = "commercial" | "non-commercial";
@@ -40,6 +42,27 @@ const getPasswordAutoCompleteType = (variant: AuthFormVariant): HTMLInputAutoCom
         return "password"
       }
   }
+}
+
+const AuthBackButton = () => {
+  const isLoading = useIsLoading();
+
+  return (
+    <AnimatePresence>
+      {!isLoading && (
+        <motion.div
+          transition={{ duration: 0.16, width: { delay: 0.02 } }}
+          initial={false}
+          animate={{ width: "auto", opacity: 1 }}
+          exit={{ width: 0, opacity: 0 }}
+        >
+          <div className="size-fit mr-2">
+            <IconButtonLink size="large" icon={ArrowLeft} variant="outline" href="/playground" />
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
 }
 
 const AuthFormInternal: FC<AuthFormProps> = ({ variant, strategy }) => {
@@ -101,8 +124,8 @@ const AuthFormInternal: FC<AuthFormProps> = ({ variant, strategy }) => {
       </OAuthButton>
       <FormDivider />
       <EmailField />
-      <div className="flex items-center gap-2">
-        <IconButtonLink size="large" icon={ArrowLeft} variant="outline" href="/playground" />
+      <div className="flex items-center">
+        <AuthBackButton />
         <SubmitButton>{buttonText[variant]}</SubmitButton>
       </div>
     </form>
