@@ -14,7 +14,7 @@ const RegisterPage = () => {
           <Heading1>Create an account</Heading1>
           <Copy>Get started with Keeper to sync your calendars.</Copy>
         </div>
-        <AuthForm variant="register" />
+        <AuthForm variant="register" strategy="commercial" />
         <Copy className="text-center">
           Already have an account?{" "}
           <LinkOut variant="inline" href="/playground/login">

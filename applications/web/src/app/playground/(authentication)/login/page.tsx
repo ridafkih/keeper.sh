@@ -14,7 +14,7 @@ const LoginPage = () => {
           <Heading1>Welcome back</Heading1>
           <Copy>Sign in to your Keeper account to continue.</Copy>
         </div>
-        <AuthForm variant="login" />
+        <AuthForm variant="login" strategy="commercial" />
         <Copy className="text-center">
           No account yet?{" "}
           <LinkOut variant="inline" href="/playground/register">
