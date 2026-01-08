@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
-import { Heading1, Heading2, Heading3 } from "../components/heading";
-import { Copy } from "../components/copy";
-import { LinkOut } from "../components/link-out";
-import { SuperscriptLink } from "../components/superscript-link";
+import { Heading1, Heading2, Heading3 } from "../../components/heading";
+import { Copy } from "../../components/copy";
+import { LinkOut } from "../../components/link-out";
+import { SuperscriptLink } from "../../components/superscript-link";
 import {
   InlineTable,
   InlineTableHeader,
@@ -13,8 +13,8 @@ import {
   InlineTableCell,
   InlineTableList,
   InlineTableListItem,
-} from "../components/inline-table";
-import { LegalSection } from "../components/legal-section";
+} from "../../components/inline-table";
+import { LegalSection } from "../../components/legal-section";
 
 export const metadata: Metadata = {
   description:

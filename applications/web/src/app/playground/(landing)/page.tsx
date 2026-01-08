@@ -7,12 +7,12 @@ import {
   CalendarStack,
   SyncCalendarsButton,
   SyncHoverProvider,
-} from "./compositions/calendar-illustration/calendar-illustration";
-import { Heading1, Heading2 } from "./components/heading";
-import { Copy } from "./components/copy";
-import { Button, ButtonText, ButtonIcon } from "./components/button";
-import { LinkOut } from "./components/link-out";
-import { PricingGrid, PricingTier, PricingFeatureList, PricingFeature } from "./components/pricing";
+} from "../compositions/calendar-illustration/calendar-illustration";
+import { Heading1, Heading2 } from "../components/heading";
+import { Copy } from "../components/copy";
+import { Button, ButtonText, ButtonIcon } from "../components/button";
+import { LinkOut } from "../components/link-out";
+import { PricingGrid, PricingTier, PricingFeatureList, PricingFeature } from "../components/pricing";
 
 export default function Playground() {
   return (
@@ -43,7 +43,7 @@ export default function Playground() {
               </div>
           </div>
         </div>
-        <div className="col-[1/span_3]! py-4 max-w-md mx-auto w-full">
+        <div className="col-[1/span_3]! px-8 md:px-0 py-4 max-w-[min(28rem,100vw)] mx-auto w-full">
           <CalendarStack />
         </div>
       </SyncHoverProvider>
