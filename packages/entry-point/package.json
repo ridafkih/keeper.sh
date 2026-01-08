@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@keeper.sh/log": "workspace:*",
-    "arkenv": "0.8.1"
+    "arkenv": "0.8.3"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",

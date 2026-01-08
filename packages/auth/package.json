@@ -9,13 +9,13 @@
     "lint": "oxlint ."
   },
   "dependencies": {
-    "@better-auth/passkey": "^1.4.9",
+    "@better-auth/passkey": "^1.4.10",
     "@keeper.sh/auth-plugin-username-only": "workspace:*",
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/database": "workspace:*",
     "@polar-sh/better-auth": "^1.6.3",
     "@polar-sh/sdk": "^0.42.1",
-    "better-auth": "1.4.9",
+    "better-auth": "1.4.10",
     "drizzle-orm": "^0.45.1",
     "resend": "^6.6.0"
   },

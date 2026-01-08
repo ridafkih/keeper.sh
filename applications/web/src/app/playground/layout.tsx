@@ -1,4 +1,4 @@
-import { FC, PropsWithChildren } from "react";
+import type { FC, PropsWithChildren } from "react";
 import KeeperSvg from "@/assets/keeper.svg";
 import { Scaffold } from "./components/scaffold";
 import { Button } from "./components/button";
@@ -8,8 +8,7 @@ import { Dock, DockItem } from "./components/dock";
 import { LinkOut } from "./components/link-out";
 import { Copy } from "./components/copy";
 
-const Layout: FC<PropsWithChildren> = ({ children }) => {
-  return (
+const Layout: FC<PropsWithChildren> = ({ children }) => (
     <Scaffold>
       <header className="flex justify-between items-center">
         <Link href="/playground">
@@ -42,14 +41,13 @@ const Layout: FC<PropsWithChildren> = ({ children }) => {
         </Copy>
       </footer>
       <Dock>
-        <DockItem href="#home" hash="home" iconName="home" />
-        <DockItem href="#calendars" hash="calendars" iconName="calendars" />
-        <DockItem href="#sync" hash="sync" iconName="calendar-sync" />
-        <DockItem href="#billing" hash="billing" iconName="receipt" />
-        <DockItem href="#settings" hash="settings" iconName="bolt" />
+        <DockItem href="#home" hash="home" icon="HomeIcon" />
+        <DockItem href="#calendars" hash="calendars" icon="CalendarsIcon" />
+        <DockItem href="#sync" hash="sync" icon="CalendarSyncIcon" />
+        <DockItem href="#billing" hash="billing" icon="ReceiptIcon" />
+        <DockItem href="#settings" hash="settings" icon="BoltIcon" />
       </Dock>
     </Scaffold>
   )
-}
 
 export default Layout;

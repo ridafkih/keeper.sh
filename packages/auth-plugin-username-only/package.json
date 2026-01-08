@@ -9,9 +9,9 @@
     "lint": "oxlint ."
   },
   "dependencies": {
-    "better-auth": "1.4.9",
-    "better-call": "^1.1.7",
-    "zod": "^4.2.1"
+    "better-auth": "1.4.10",
+    "better-call": "^1.1.8",
+    "zod": "^4.3.5"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",
