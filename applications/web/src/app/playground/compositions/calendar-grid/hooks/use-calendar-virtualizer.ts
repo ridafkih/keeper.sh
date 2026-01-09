@@ -1,23 +1,21 @@
 "use client";
 
 import type { RefObject } from "react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useRowHeight } from "../contexts/calendar-grid-context";
-import { GAP } from "./use-row-height-sync";
-
-const ROW_COUNT = 10000;
+import { useRowHeight, useSetScrollOffset, useSetScrollDirection } from "../contexts/calendar-grid-context";
+import { ROW_COUNT, GAP } from "../utils/constants";
 
 interface UseCalendarVirtualizerOptions {
   scrollRef: RefObject<HTMLDivElement | null>;
-  monthColumnRef: RefObject<HTMLDivElement | null>;
+  weekColumnRef: RefObject<HTMLDivElement | null>;
 }
 
-const useCreateCalendarVirtualizer = ({
-  scrollRef,
-  monthColumnRef,
-}: UseCalendarVirtualizerOptions) => {
+const useCreateCalendarVirtualizer = ({ scrollRef, weekColumnRef }: UseCalendarVirtualizerOptions) => {
   const rowHeight = useRowHeight();
+  const setScrollOffset = useSetScrollOffset();
+  const setScrollDirection = useSetScrollDirection();
+  const prevScrollTop = useRef(0);
 
   const virtualizer = useVirtualizer({
     count: ROW_COUNT,
@@ -28,9 +26,15 @@ const useCreateCalendarVirtualizer = ({
       const element = instance.scrollElement;
       if (!element) return;
       const onScroll = () => {
-        callback(element.scrollTop, false);
-        if (monthColumnRef.current) {
-          monthColumnRef.current.style.transform = `translateY(${-element.scrollTop}px)`;
+        const scrollTop = element.scrollTop;
+        callback(scrollTop, false);
+        setScrollOffset(scrollTop);
+        if (scrollTop !== prevScrollTop.current) {
+          setScrollDirection(scrollTop > prevScrollTop.current ? "down" : "up");
+          prevScrollTop.current = scrollTop;
+        }
+        if (weekColumnRef.current) {
+          weekColumnRef.current.style.transform = `translateY(${-scrollTop}px)`;
         }
       };
       element.addEventListener("scroll", onScroll, { passive: true });

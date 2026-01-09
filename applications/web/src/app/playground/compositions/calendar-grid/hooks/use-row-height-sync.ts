@@ -3,9 +3,7 @@
 import type { RefObject } from "react";
 import { useLayoutEffect } from "react";
 import { useSetRowHeight } from "../contexts/calendar-grid-context";
-
-const GAP = 1;
-const VISIBLE_ROWS = 4;
+import { GAP, VISIBLE_ROWS } from "../utils/constants";
 
 const useRowHeightSync = (containerRef: RefObject<HTMLDivElement | null>) => {
   const setRowHeight = useSetRowHeight();
@@ -24,4 +22,4 @@ const useRowHeightSync = (containerRef: RefObject<HTMLDivElement | null>) => {
   }, [containerRef, setRowHeight]);
 };
 
-export { useRowHeightSync, GAP };
+export { useRowHeightSync };

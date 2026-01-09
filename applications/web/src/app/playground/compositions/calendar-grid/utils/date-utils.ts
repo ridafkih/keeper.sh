@@ -1,7 +1,13 @@
-const MONTH_LETTERS = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
-const COLUMN_COUNT = 7;
+import { COLUMN_COUNT } from "./constants";
 
-const getSundayBeforeMonthStart = () => {
+interface MonthSpan {
+  month: number;
+  year: number;
+  startCol: number;
+  endCol: number;
+}
+
+const getStartDate = () => {
   const today = new Date();
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const day = firstOfMonth.getDay();
@@ -15,28 +21,30 @@ const getDateForCell = (startDate: Date, rowIndex: number, colIndex: number) => 
   return date;
 };
 
-const getDayForCell = (startTimestamp: number, rowIndex: number, colIndex: number) => {
-  const daysFromStart = rowIndex * COLUMN_COUNT + colIndex;
-  const date = new Date(startTimestamp);
-  date.setDate(date.getDate() + daysFromStart);
-  return date.getDate();
+const getRowDates = (startDate: Date, rowIndex: number) =>
+  Array.from({ length: COLUMN_COUNT }, (_, colIndex) =>
+    getDateForCell(startDate, rowIndex, colIndex)
+  );
+
+const groupDatesByMonth = (dates: Date[]): MonthSpan[] => {
+  const spans: MonthSpan[] = [];
+  let currentSpan: MonthSpan | null = null;
+
+  dates.forEach((date, colIndex) => {
+    const month = date.getMonth();
+    const year = date.getFullYear();
+
+    if (!currentSpan || currentSpan.month !== month || currentSpan.year !== year) {
+      if (currentSpan) spans.push(currentSpan);
+      currentSpan = { month, year, startCol: colIndex, endCol: colIndex };
+    } else {
+      currentSpan.endCol = colIndex;
+    }
+  });
+
+  if (currentSpan) spans.push(currentSpan);
+  return spans;
 };
 
-const getMonthLetter = (month: number) => MONTH_LETTERS[month];
-
-const shouldShowMonthIndicator = (startDate: Date, rowIndex: number) => {
-  if (rowIndex === 0) return true;
-  const currentMonth = getDateForCell(startDate, rowIndex, 0).getMonth();
-  const prevMonth = getDateForCell(startDate, rowIndex - 1, 0).getMonth();
-  return currentMonth !== prevMonth;
-};
-
-export {
-  MONTH_LETTERS,
-  COLUMN_COUNT,
-  getSundayBeforeMonthStart,
-  getDateForCell,
-  getDayForCell,
-  getMonthLetter,
-  shouldShowMonthIndicator,
-};
+export type { MonthSpan };
+export { getStartDate, getRowDates, groupDatesByMonth };

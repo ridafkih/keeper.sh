@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 @theme {
+  --font-family-mono: var(--font-mono);
+
   --color-background: var(--color-white);
   --color-surface: var(--color-white);
   --color-surface-elevated: var(--color-white);

@@ -3,7 +3,7 @@
 import type { FC } from "react";
 import { memo } from "react";
 import { CalendarCell } from "./calendar-cell";
-import { COLUMN_COUNT } from "../utils/date-utils";
+import { COLUMN_COUNT } from "../utils/constants";
 
 interface CalendarRowProps {
   rowIndex: number;
@@ -32,7 +32,8 @@ const CalendarRow: FC<CalendarRowProps> = memo(
   (prev, next) =>
     prev.rowIndex === next.rowIndex &&
     prev.rowHeight === next.rowHeight &&
-    prev.startY === next.startY
+    prev.startY === next.startY &&
+    prev.startDate.getTime() === next.startDate.getTime()
 );
 
 CalendarRow.displayName = "CalendarRow";

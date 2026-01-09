@@ -5,7 +5,7 @@ import { Suspense, cache, use } from "react";
 import type { ReactNode } from "react";
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
-import { Geist as googleFont } from "next/font/google";
+import { Geist as googleFont, Geist_Mono as googleMonoFont } from "next/font/google";
 import { headers } from "next/headers";
 import { clsx } from "clsx";
 import { AuthProvider } from "@/components/auth-provider";
@@ -17,6 +17,11 @@ import { JsonLd } from "@/components/json-ld";
 
 const font = googleFont({
   subsets: ["latin"],
+});
+
+const monoFont = googleMonoFont({
+  subsets: ["latin"],
+  variable: "--font-mono",
 });
 
 const metadata: Metadata = {
@@ -86,7 +91,7 @@ const RootLayout = ({
     <head>
       <JsonLd />
     </head>
-    <body className={clsx(font.className, "bg-background antialiased")}>
+    <body className={clsx(font.className, monoFont.variable, "bg-background antialiased")}>
       <Suspense>
         <Providers>{children}</Providers>
       </Suspense>

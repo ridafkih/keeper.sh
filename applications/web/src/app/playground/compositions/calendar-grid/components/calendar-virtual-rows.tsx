@@ -4,9 +4,9 @@ import type { FC } from "react";
 import type { VirtualItem } from "@tanstack/react-virtual";
 import { CalendarRow } from "./calendar-row";
 import { useCalendarVirtualizer, useRowHeight } from "../contexts/calendar-grid-context";
-import { getSundayBeforeMonthStart } from "../utils/date-utils";
+import { getStartDate } from "../utils/date-utils";
 
-const startDate = getSundayBeforeMonthStart();
+const startDate = getStartDate();
 
 interface CalendarVirtualRowsProps {
   virtualRows: VirtualItem[];
