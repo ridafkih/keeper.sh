@@ -54,7 +54,7 @@ const getDockPositionClassName = (position: DockProps["position"]) => {
   if (position === "top") {
     return { className: "absolute top-8" };
   }
-  return { className: "fixed bottom-8" };
+  return { className: "sticky bottom-8 mt-8 h-fit" };
 };
 
 interface DockProps {
