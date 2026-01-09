@@ -23,7 +23,7 @@ const MonthRow: FC = () => {
         {monthSpans.map((span) => {
           const centerCol = (span.startCol + span.endCol) / 2;
           const leftPercent = ((centerCol + 0.5) / COLUMN_COUNT) * 100;
-          const label = `${MONTH_NAMES[span.month]!.toUpperCase()}'${span.year.toString().slice(-2)}`;
+          const label = `${MONTH_NAMES[span.month]!.toUpperCase()}${span.year.toString().slice(-2)}`;
 
           return (
             <motion.span

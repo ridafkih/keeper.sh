@@ -13,7 +13,7 @@ const WeekColumn: FC<WeekColumnProps> = ({ weekColumnRef, virtualRows }) => {
   const rowHeight = useRowHeight();
 
   return (
-    <div className="absolute -left-6 top-0 bottom-0 w-4 overflow-hidden">
+    <div className="absolute -left-7 top-0 bottom-0 min-w-6 overflow-hidden">
       <div ref={weekColumnRef} className="absolute inset-x-0">
         {virtualRows.map((virtualRow) => {
           const weekNumber = (virtualRow.index + 1).toString().padStart(2, "0");
