@@ -3,6 +3,7 @@
 import type { FC } from "react";
 import type { VirtualItem } from "@tanstack/react-virtual";
 import { CalendarRow } from "./calendar-row";
+import { CurrentTimeIndicator } from "./current-time-indicator";
 import { useCalendarVirtualizer, useRowHeight } from "../contexts/calendar-grid-context";
 import { getStartDate } from "../utils/date-utils";
 
@@ -30,6 +31,7 @@ const CalendarVirtualRows: FC<CalendarVirtualRowsProps> = ({ virtualRows }) => {
           startDate={startDate}
         />
       ))}
+      <CurrentTimeIndicator />
     </div>
   );
 };
