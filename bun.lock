@@ -321,6 +321,7 @@
         "@keeper.sh/oauth-google": "workspace:*",
         "@keeper.sh/oauth-microsoft": "workspace:*",
         "@keeper.sh/premium": "workspace:*",
+        "@keeper.sh/redis": "workspace:*",
         "drizzle-orm": "^0.45.1",
       },
       "devDependencies": {
