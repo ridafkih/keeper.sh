@@ -21,7 +21,7 @@ import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-sch
 import type { GoogleEvent } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { getStartOfToday } from "@keeper.sh/date-utils";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS } from "../shared/api";
 import { hasRateLimitMessage, isAuthError } from "../shared/errors";
 import { parseEventTime } from "../shared/date-time";
@@ -29,7 +29,7 @@ import { getGoogleAccountsForUser } from "./sync";
 import type { GoogleAccount } from "./sync";
 
 interface GoogleCalendarProviderConfig {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   oauthProvider: OAuthTokenProvider;
   broadcastSyncStatus?: BroadcastSyncStatus;
 }

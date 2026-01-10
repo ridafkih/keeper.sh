@@ -1,6 +1,6 @@
 import { userSubscriptionsTable } from "@keeper.sh/database/schema";
 import { eq } from "drizzle-orm";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import {
   FREE_DESTINATION_LIMIT,
   FREE_SOURCE_LIMIT,
@@ -13,7 +13,7 @@ import type { Plan } from "./constants";
 const FIRST_RESULT_LIMIT = 1;
 
 interface PremiumConfig {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   commercialMode: boolean;
 }
 

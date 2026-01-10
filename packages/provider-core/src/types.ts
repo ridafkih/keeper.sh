@@ -1,4 +1,4 @@
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 type AuthType = "oauth" | "caldav";
 
@@ -90,7 +90,7 @@ type BroadcastSyncStatus = (
 ) => void;
 
 interface ProviderConfig {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   userId: string;
   destinationId: string;
   broadcastSyncStatus?: BroadcastSyncStatus;
@@ -130,7 +130,7 @@ interface SourceSyncResult {
 }
 
 interface OAuthSourceConfig {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   userId: string;
   sourceId: string;
   externalCalendarId: string;

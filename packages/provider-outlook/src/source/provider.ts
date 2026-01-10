@@ -16,7 +16,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { getStartOfToday } from "@keeper.sh/date-utils";
 import { and, eq, inArray, lt, or, gt } from "drizzle-orm";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { fetchCalendarEvents, parseOutlookEvents } from "./utils/fetch-events";
 
 const OUTLOOK_PROVIDER_ID = "outlook";
@@ -149,7 +149,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
   }
 
   private static async hasOutOfRangeEvents(
-    database: BunSQLDatabase,
+    database: PostgresJsDatabase,
     sourceId: string,
   ): Promise<boolean> {
     const today = getStartOfToday();
@@ -174,7 +174,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
   }
 
   private static async clearSourceAndResetToken(
-    database: BunSQLDatabase,
+    database: PostgresJsDatabase,
     sourceId: string,
   ): Promise<void> {
     await database
@@ -229,7 +229,7 @@ interface OutlookSourceAccount {
 }
 
 interface CreateOutlookSourceProviderConfig {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   oauthProvider: OAuthTokenProvider;
 }
 
@@ -262,7 +262,7 @@ const createOutlookSourceProvider = (
 };
 
 const getOutlookSourcesWithCredentials = async (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
 ): Promise<OutlookSourceAccount[]> => {
   const sources = await database
     .select({

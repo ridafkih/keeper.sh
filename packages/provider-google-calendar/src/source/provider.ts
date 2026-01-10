@@ -16,7 +16,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { getStartOfToday } from "@keeper.sh/date-utils";
 import { and, eq, inArray, lt, or, gt } from "drizzle-orm";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { fetchCalendarEvents, parseGoogleEvents, type EventTypeFilters } from "./utils/fetch-events";
 
 const GOOGLE_PROVIDER_ID = "google";
@@ -157,7 +157,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
   }
 
   private static async hasOutOfRangeEvents(
-    database: BunSQLDatabase,
+    database: PostgresJsDatabase,
     sourceId: string,
   ): Promise<boolean> {
     const today = getStartOfToday();
@@ -182,7 +182,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
   }
 
   private static async clearSourceAndResetToken(
-    database: BunSQLDatabase,
+    database: PostgresJsDatabase,
     sourceId: string,
   ): Promise<void> {
     await database
@@ -240,7 +240,7 @@ interface GoogleSourceAccount {
 }
 
 interface CreateGoogleSourceProviderConfig {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   oauthProvider: OAuthTokenProvider;
 }
 
@@ -275,7 +275,7 @@ const createGoogleCalendarSourceProvider = (
 };
 
 const getGoogleSourcesWithCredentials = async (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
 ): Promise<GoogleSourceAccount[]> => {
   const sources = await database
     .select({

@@ -1,4 +1,4 @@
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { OAuthTokenProvider } from "./provider";
 import type { OAuthSourceProvider } from "./source-provider";
 import type { OAuthSourceConfig, SourceSyncResult } from "../types";
@@ -36,14 +36,14 @@ interface CreateOAuthSourceProviderOptions<
   TAccount extends OAuthSourceAccount,
   TConfig extends OAuthSourceConfig,
 > {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   oauthProvider: OAuthTokenProvider;
-  getAllSources: (database: BunSQLDatabase) => Promise<TAccount[]>;
+  getAllSources: (database: PostgresJsDatabase) => Promise<TAccount[]>;
   createProviderInstance: (
     config: TConfig,
     oauthProvider: OAuthTokenProvider,
   ) => OAuthSourceProvider<TConfig>;
-  buildConfig: (database: BunSQLDatabase, account: TAccount) => TConfig;
+  buildConfig: (database: PostgresJsDatabase, account: TAccount) => TConfig;
 }
 
 const createOAuthSourceProvider = <

@@ -5,13 +5,13 @@ import {
 } from "@keeper.sh/database/schema";
 import { getStartOfToday } from "@keeper.sh/date-utils";
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { SyncableEvent } from "../types";
 
 const EMPTY_SOURCES_COUNT = 0;
 
 const getMappedSourceIds = async (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
   destinationId: string,
 ): Promise<string[]> => {
   const mappings = await database
@@ -23,7 +23,7 @@ const getMappedSourceIds = async (
 };
 
 const fetchEventsForSources = async (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
   sourceIds: string[],
 ): Promise<SyncableEvent[]> => {
   if (sourceIds.length === EMPTY_SOURCES_COUNT) {
@@ -76,7 +76,7 @@ const fetchEventsForSources = async (
 };
 
 const getEventsForDestination = async (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
   destinationId: string,
 ): Promise<SyncableEvent[]> => {
   const sourceIds = await getMappedSourceIds(database, destinationId);

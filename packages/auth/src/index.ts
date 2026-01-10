@@ -14,7 +14,7 @@ import {
   passkey as passkeyTable,
 } from "@keeper.sh/database/auth-schema";
 import { signUpBodySchema } from "@keeper.sh/data-schemas";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { BetterAuthPlugin, User } from "better-auth";
 
 interface EmailUser {
@@ -28,7 +28,7 @@ interface SendEmailParams {
 }
 
 interface AuthConfig {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   secret: string;
   baseUrl: string;
   webBaseUrl?: string;

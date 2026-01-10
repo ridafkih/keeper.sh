@@ -9,7 +9,7 @@ import { getStartOfToday } from "@keeper.sh/date-utils";
 import { and, asc, eq, gte } from "drizzle-orm";
 import type { Plan } from "@keeper.sh/premium";
 import type { SyncableEvent } from "../types";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 interface OAuthAccount {
   destinationId: string;
@@ -21,7 +21,7 @@ interface OAuthAccount {
 }
 
 const getOAuthAccountsByPlan = async (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
   provider: string,
   targetPlan: Plan,
 ): Promise<OAuthAccount[]> => {
@@ -75,7 +75,7 @@ const getOAuthAccountsByPlan = async (
 };
 
 const getOAuthAccountsForUser = async (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
   provider: string,
   userId: string,
 ): Promise<OAuthAccount[]> => {
@@ -112,7 +112,7 @@ const getOAuthAccountsForUser = async (
 };
 
 const getUserEventsForSync = async (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
   userId: string,
 ): Promise<SyncableEvent[]> => {
   const today = getStartOfToday();

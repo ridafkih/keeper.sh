@@ -4,7 +4,7 @@ import { pullRemoteCalendar } from "@keeper.sh/pull-calendar";
 import { diffEvents, parseIcsEvents } from "@keeper.sh/sync-events";
 import { parseIcsCalendar } from "@keeper.sh/calendar";
 import { desc, eq, inArray } from "drizzle-orm";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 const FIRST_RESULT_LIMIT = 1;
 const EMPTY_EVENTS_COUNT = 0;
@@ -39,7 +39,7 @@ const toStoredEvent = (row: {
   uid: row.sourceEventUid,
 });
 
-const createSyncCalendarService = (database: BunSQLDatabase): SyncCalendarService => {
+const createSyncCalendarService = (database: PostgresJsDatabase): SyncCalendarService => {
   const getLatestSnapshot = async (
     sourceId: string,
   ): Promise<ReturnType<typeof parseIcsCalendar> | null> => {

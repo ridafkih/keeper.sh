@@ -1,9 +1,9 @@
 import { calendarSnapshotsTable, calendarSourcesTable } from "@keeper.sh/database/schema";
 import { eq } from "drizzle-orm";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 const createSnapshot = async (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
   sourceId: string,
   ical: string,
 ): Promise<void> => {

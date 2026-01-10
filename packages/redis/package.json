@@ -9,7 +9,9 @@
     "types": "tsc --noEmit",
     "lint": "oxlint ."
   },
-  "dependencies": {},
+  "dependencies": {
+    "ioredis": "5.4.2"
+  },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",
     "@types/bun": "latest",

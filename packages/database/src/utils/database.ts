@@ -1,4 +1,5 @@
-import { drizzle } from "drizzle-orm/bun-sql";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { drizzle } from "drizzle-orm/postgres-js";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 
-export const createDatabase = (url: string): BunSQLDatabase => drizzle(url);
+export const createDatabase = (url: string): PostgresJsDatabase => drizzle(postgres(url));

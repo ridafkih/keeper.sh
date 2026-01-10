@@ -5,23 +5,23 @@ import { createFastMailProvider } from "@keeper.sh/provider-fastmail";
 import { createICloudProvider } from "@keeper.sh/provider-icloud";
 import { createOutlookCalendarProvider, createOutlookSourceProvider } from "@keeper.sh/provider-outlook";
 import { getOAuthProviders, getCalDAVProviders } from "./registry";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 interface DestinationProvidersConfig {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   oauthProviders: OAuthProviders;
   encryptionKey?: string;
   broadcastSyncStatus?: BroadcastSyncStatus;
 }
 
 interface OAuthFactoryConfig {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   oauthProvider: OAuthProvider;
   broadcastSyncStatus?: BroadcastSyncStatus;
 }
 
 interface CalDAVFactoryConfig {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   encryptionKey: string;
 }
 
@@ -40,7 +40,7 @@ const CALDAV_FACTORIES: Record<string, CalDAVFactory> = {
 };
 
 interface SourceFactoryConfig {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   oauthProvider: OAuthProvider;
 }
 
@@ -52,7 +52,7 @@ const SOURCE_OAUTH_FACTORIES: Record<string, SourceFactory> = {
 };
 
 interface SourceProvidersConfig {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   oauthProviders: OAuthProviders;
 }
 

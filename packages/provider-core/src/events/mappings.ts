@@ -1,6 +1,6 @@
 import { eventMappingsTable } from "@keeper.sh/database/schema";
 import { and, count, eq } from "drizzle-orm";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 const DEFAULT_COUNT = 0;
 
@@ -15,7 +15,7 @@ interface EventMapping {
 }
 
 const getEventMappingsForDestination = async (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
   destinationId: string,
 ): Promise<EventMapping[]> => {
   const mappings = await database
@@ -38,7 +38,7 @@ const getEventMappingsForDestination = async (
 };
 
 const createEventMapping = async (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
   params: {
     eventStateId: string;
     destinationId: string;
@@ -62,14 +62,14 @@ const createEventMapping = async (
 };
 
 const deleteEventMapping = async (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
   mappingId: string,
 ): Promise<void> => {
   await database.delete(eventMappingsTable).where(eq(eventMappingsTable.id, mappingId));
 };
 
 const deleteEventMappingByDestinationUid = async (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
   destinationId: string,
   destinationEventUid: string,
 ): Promise<void> => {
@@ -84,7 +84,7 @@ const deleteEventMappingByDestinationUid = async (
 };
 
 const countMappingsForDestination = async (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
   destinationId: string,
 ): Promise<number> => {
   const [result] = await database

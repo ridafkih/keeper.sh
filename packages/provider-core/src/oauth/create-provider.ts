@@ -1,4 +1,4 @@
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { OAuthTokenProvider } from "./provider";
 import type { DestinationProvider } from "../sync/destinations";
 import type { BroadcastSyncStatus, OAuthProviderConfig, SyncResult, SyncableEvent } from "../types";
@@ -17,16 +17,16 @@ interface CreateOAuthProviderOptions<
   TAccount extends OAuthAccount,
   TConfig extends OAuthProviderConfig,
 > {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   oauthProvider: OAuthTokenProvider;
   broadcastSyncStatus?: BroadcastSyncStatus;
-  getAccountsForUser: (database: BunSQLDatabase, userId: string) => Promise<TAccount[]>;
+  getAccountsForUser: (database: PostgresJsDatabase, userId: string) => Promise<TAccount[]>;
   createProviderInstance: (
     config: TConfig,
     oauthProvider: OAuthTokenProvider,
   ) => OAuthCalendarProvider<TConfig>;
   buildConfig: (
-    database: BunSQLDatabase,
+    database: PostgresJsDatabase,
     account: TAccount,
     broadcastSyncStatus?: BroadcastSyncStatus,
   ) => TConfig;

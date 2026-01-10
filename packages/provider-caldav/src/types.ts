@@ -1,4 +1,4 @@
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { SyncableEvent } from "@keeper.sh/provider-core";
 
 interface CalDAVProviderOptions {
@@ -7,7 +7,7 @@ interface CalDAVProviderOptions {
 }
 
 interface CalDAVProviderConfig {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   encryptionKey: string;
 }
 
@@ -36,7 +36,7 @@ interface CalDAVSourceAccount {
 }
 
 interface CalDAVSourceConfig {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   sourceId: string;
   userId: string;
   calendarUrl: string;
@@ -45,7 +45,7 @@ interface CalDAVSourceConfig {
 }
 
 interface CalDAVSourceProviderConfig {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   encryptionKey: string;
 }
 
@@ -56,7 +56,7 @@ interface CalDAVSourceSyncResult {
 }
 
 interface CalDAVServiceConfig {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   encryptionKey: string;
 }
 

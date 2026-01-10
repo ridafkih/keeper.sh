@@ -1,10 +1,10 @@
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { pullRemoteCalendar } from "./pull-remote-calendar";
 import { createSnapshot } from "./create-snapshot";
 import { syncSourceFromSnapshot } from "./sync-source-from-snapshot";
 import type { Source } from "./sync-source-from-snapshot";
 
-const fetchAndSyncSource = async (database: BunSQLDatabase, source: Source): Promise<void> => {
+const fetchAndSyncSource = async (database: PostgresJsDatabase, source: Source): Promise<void> => {
   if (!source.url) {
     throw new Error(`Source ${source.id} is missing url`);
   }

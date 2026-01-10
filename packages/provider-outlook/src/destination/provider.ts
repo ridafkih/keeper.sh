@@ -23,7 +23,7 @@ import {
   createOAuthDestinationProvider,
   getErrorMessage,
 } from "@keeper.sh/provider-core";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { MICROSOFT_GRAPH_API, OUTLOOK_PAGE_SIZE } from "../shared/api";
 import { hasRateLimitMessage, isAuthError } from "../shared/errors";
 import { parseEventTime } from "../shared/date-time";
@@ -31,7 +31,7 @@ import type { OutlookAccount } from "./sync";
 import { getOutlookAccountsForUser } from "./sync";
 
 interface OutlookCalendarProviderConfig {
-  database: BunSQLDatabase;
+  database: PostgresJsDatabase;
   oauthProvider: OAuthTokenProvider;
   broadcastSyncStatus?: BroadcastSyncStatus;
 }

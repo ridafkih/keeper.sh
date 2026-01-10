@@ -9,7 +9,7 @@ import { parseIcsCalendar } from "./parse-ics-calendar";
 import { desc, eq, inArray } from "drizzle-orm";
 import { parseIcsEvents } from "./parse-ics-events";
 import { diffEvents } from "./diff-events";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 const FIRST_SNAPSHOT_INDEX = 1;
 const MINIMUM_EVENTS_TO_PROCESS = 0;
@@ -17,7 +17,7 @@ const MINIMUM_EVENTS_TO_PROCESS = 0;
 type Source = typeof calendarSourcesTable.$inferSelect;
 
 const getLatestSnapshot = async (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
   sourceId: string,
 ): Promise<ReturnType<typeof parseIcsCalendar> | null> => {
   const [snapshot] = await database
@@ -34,7 +34,7 @@ const getLatestSnapshot = async (
 };
 
 const getStoredEvents = (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
   sourceId: string,
 ): Promise<
   {
@@ -55,7 +55,7 @@ const getStoredEvents = (
     .where(eq(eventStatesTable.sourceId, sourceId));
 
 const getUserMappedDestinationUids = async (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
   userId: string,
 ): Promise<Set<string>> => {
   const results = await database
@@ -71,7 +71,7 @@ const getUserMappedDestinationUids = async (
 };
 
 const removeEvents = async (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
   _sourceId: string,
   events: { id: string; startTime: Date; endTime: Date }[],
 ): Promise<void> => {
@@ -81,7 +81,7 @@ const removeEvents = async (
 };
 
 const addEvents = async (
-  database: BunSQLDatabase,
+  database: PostgresJsDatabase,
   sourceId: string,
   events: { uid: string; startTime: Date; endTime: Date }[],
 ): Promise<void> => {
@@ -117,7 +117,7 @@ const partitionStoredEvents = (
   return { eventsWithUid, legacyEvents };
 };
 
-const syncSourceFromSnapshot = async (database: BunSQLDatabase, source: Source): Promise<void> => {
+const syncSourceFromSnapshot = async (database: PostgresJsDatabase, source: Source): Promise<void> => {
   const icsCalendar = await getLatestSnapshot(database, source.id);
   if (!icsCalendar) {
     return;

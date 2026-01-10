@@ -1,7 +1,7 @@
-import { RedisClient } from "bun";
+import Redis from "ioredis";
 
-const createRedis = (url: string): RedisClient => new RedisClient(url);
+const createRedis = (url: string): Redis => new Redis(url);
 
-const createSubscriber = (redis: RedisClient): Promise<RedisClient> => redis.duplicate();
+const createSubscriber = (redis: Redis): Redis => redis.duplicate();
 
 export { createRedis, createSubscriber };
