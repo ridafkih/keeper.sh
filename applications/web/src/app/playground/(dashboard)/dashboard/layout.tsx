@@ -9,10 +9,8 @@ const DashboardLayout: FC<PropsWithChildren> = ({ children }) => (
     </Scaffold>
     <Dock>
       <DockItem href="/playground/dashboard" segment={null} icon="HomeIcon" />
-      <DockItem href="/playground/dashboard/calendars" segment="calendars" icon="CalendarsIcon" />
       <DockItem href="/playground/dashboard/agenda" segment="agenda" icon="ListIcon" />
-      <DockItem href="/playground/dashboard/sync" segment="sync" icon="CalendarSyncIcon" />
-      <DockItem href="/playground/dashboard/billing" segment="billing" icon="ReceiptIcon" />
+      <DockItem href="/playground/dashboard/calendars" segment="calendars" icon="CalendarsIcon" />
       <DockItem href="/playground/dashboard/settings" segment="settings" icon="BoltIcon" />
     </Dock>
   </>
