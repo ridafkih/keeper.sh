@@ -16,10 +16,12 @@ const connection = new Client({
 const database = drizzle(connection);
 await connection.connect();
 
-await connection.query(`
-  DELETE FROM drizzle.__drizzle_migrations
-  WHERE created_at = 1767760000000
-`);
+try {
+  await connection.query(`
+    DELETE FROM drizzle.__drizzle_migrations
+    WHERE created_at = 1767760000000
+  `);
+} catch (error) {}
 
 await migrate(database, {
   migrationsFolder: join(import.meta.dirname, "..", "drizzle"),
