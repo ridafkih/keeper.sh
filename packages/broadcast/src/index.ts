@@ -1,10 +1,9 @@
 import { WideEvent } from "@keeper.sh/log";
 import { broadcastMessageSchema } from "@keeper.sh/data-schemas";
 import type { BroadcastMessage } from "@keeper.sh/data-schemas";
-import { createSubscriber } from "@keeper.sh/redis";
+import { createSubscriber, type Redis } from "@keeper.sh/redis";
 import { connections, pingIntervals } from "./state";
 import type { Socket } from "./types";
-import type { RedisClient } from "bun";
 
 const EMPTY_CONNECTIONS_COUNT = 0;
 const WEBSOCKET_READY_STATE_OPEN = 1;
@@ -18,7 +17,7 @@ interface WebsocketHandlerOptions {
 }
 
 interface BroadcastConfig {
-  redis: RedisClient;
+  redis: Redis;
 }
 
 interface BroadcastService {
@@ -50,15 +49,17 @@ const createBroadcastService = (config: BroadcastConfig): BroadcastService => {
   };
 
   const startSubscriber = async (): Promise<void> => {
-    const subscriber = await createSubscriber(redis);
+    const subscriber = createSubscriber(redis);
 
-    await subscriber.subscribe(CHANNEL, (message) => {
+    subscriber.on("message", (_channel, message) => {
       const parsed = JSON.parse(message);
       if (!broadcastMessageSchema.allows(parsed)) {
         return;
       }
       sendToUser(parsed.userId, parsed.event, parsed.data);
     });
+
+    await subscriber.subscribe(CHANNEL);
 
     const event = new WideEvent();
     event.set({
