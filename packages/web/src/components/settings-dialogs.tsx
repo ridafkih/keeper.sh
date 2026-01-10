@@ -11,6 +11,16 @@ const MIN_PASSWORD_LENGTH = 8;
 const getStringFromFormData = (formData: FormData, key: string): string =>
   stringSchema.assert(formData.get(key));
 
+
+const getPasswordFromFormData = (requiresPassword: boolean, formData: FormData): string | undefined => {
+  if (!requiresPassword) {
+    return undefined;
+  }
+
+  return getStringFromFormData(formData, "password")
+}
+
+
 interface DialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -113,7 +123,7 @@ const DeleteAccountDialog = ({
     event.preventDefault();
 
     const formData = new FormData(event.currentTarget);
-    const password = requiresPassword ? getStringFromFormData(formData, "password") : undefined;
+    const password = getPasswordFromFormData(requiresPassword, formData);;
 
     await submit(async () => {
       await onDelete(password);

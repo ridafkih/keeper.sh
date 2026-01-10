@@ -123,7 +123,7 @@ const changePassword = async (
 };
 
 const deleteAccount = async (password?: string): Promise<AuthResponse> => {
-  const body = password ? { password } : {};
+  const body = { ...password && { password } };
   const response = await fetch("/api/auth/delete-user", {
     body: JSON.stringify(body),
     headers: { "Content-Type": "application/json" },
