@@ -4,30 +4,21 @@ import type { FC } from "react";
 import { clsx } from "clsx";
 import type { PlaygroundEvent } from "../utils/mock-events";
 import { formatTimeUntil, isEventPast } from "../utils/time-utils";
-import { EventIndicator } from "./event-indicator";
+import { ListItem } from "../../../components/list";
 
 interface EventItemProps {
   event: PlaygroundEvent;
-  isActive: boolean;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
-  indicatorLayoutId: string;
 }
 
-const EventItem: FC<EventItemProps> = ({ event, isActive, onMouseEnter, onMouseLeave, indicatorLayoutId }) => {
+const EventItem: FC<EventItemProps> = ({ event }) => {
   const isPast = isEventPast(event.endTime);
   const timeUntil = formatTimeUntil(event.startTime);
 
   return (
-    <div
-      className="relative -mx-4 px-4 py-2 cursor-default"
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-    >
-      <EventIndicator isActive={isActive} layoutId={indicatorLayoutId} />
+    <ListItem id={event.id}>
       <div
         className={clsx(
-          "relative z-10 flex items-center justify-between gap-4 text-xs",
+          "flex items-center justify-between gap-4 text-xs w-full",
           isPast ? "text-neutral-400" : "text-neutral-700"
         )}
       >
@@ -37,7 +28,7 @@ const EventItem: FC<EventItemProps> = ({ event, isActive, onMouseEnter, onMouseL
         </div>
         <span className="shrink-0 tabular-nums">{timeUntil}</span>
       </div>
-    </div>
+    </ListItem>
   );
 };
 
