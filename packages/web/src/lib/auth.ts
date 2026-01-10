@@ -122,9 +122,10 @@ const changePassword = async (
   return response.json();
 };
 
-const deleteAccount = async (password: string): Promise<AuthResponse> => {
+const deleteAccount = async (password?: string): Promise<AuthResponse> => {
+  const body = password ? { password } : {};
   const response = await fetch("/api/auth/delete-user", {
-    body: JSON.stringify({ password }),
+    body: JSON.stringify(body),
     headers: { "Content-Type": "application/json" },
     method: "POST",
   });

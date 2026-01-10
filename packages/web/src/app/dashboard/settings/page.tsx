@@ -32,8 +32,21 @@ import { track } from "@/lib/analytics";
 type PasskeyData = Awaited<ReturnType<typeof authClient.passkey.listUserPasskeys>>["data"];
 type Passkey = NonNullable<PasskeyData>[number];
 
+type AccountData = Awaited<ReturnType<typeof authClient.listAccounts>>["data"];
+type Account = NonNullable<AccountData>[number];
+
+const CREDENTIAL_PROVIDER_ID = "credential";
+
 const fetchPasskeys = async (): Promise<Passkey[]> => {
   const { data, error } = await authClient.passkey.listUserPasskeys();
+  if (error) {
+    throw error;
+  }
+  return data ?? [];
+};
+
+const fetchAccounts = async (): Promise<Account[]> => {
+  const { data, error } = await authClient.listAccounts();
   if (error) {
     throw error;
   }
@@ -124,6 +137,12 @@ export default (): ReactNode => {
     mutate: mutatePasskeys,
   } = useSWR(passkeysKey, fetchPasskeys);
 
+  const { data: accounts } = useSWR(isCommercialMode ? "accounts" : null, fetchAccounts);
+
+  const hasPasswordAccount = accounts?.some(
+    (account) => account.providerId === CREDENTIAL_PROVIDER_ID,
+  );
+
   const handleChangePassword = async (
     currentPassword: string,
     newPassword: string,
@@ -133,7 +152,7 @@ export default (): ReactNode => {
     toastManager.add({ title: "Password changed" });
   };
 
-  const handleDeleteAccount = async (password: string): Promise<void> => {
+  const handleDeleteAccount = async (password?: string): Promise<void> => {
     await deleteAccount(password);
     await signOut();
     router.push("/");
@@ -253,6 +272,7 @@ export default (): ReactNode => {
         open={isDeletingAccount}
         onOpenChange={setIsDeletingAccount}
         onDelete={handleDeleteAccount}
+        requiresPassword={hasPasswordAccount ?? !isCommercialMode}
       />
     </PageContent>
   );
