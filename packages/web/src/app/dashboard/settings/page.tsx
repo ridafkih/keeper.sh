@@ -137,7 +137,7 @@ export default (): ReactNode => {
     mutate: mutatePasskeys,
   } = useSWR(passkeysKey, fetchPasskeys);
 
-  const { data: accounts } = useSWR(isCommercialMode ? "accounts" : null, fetchAccounts);
+  const { data: accounts } = useSWR("accounts", fetchAccounts);
 
   const hasPasswordAccount = accounts?.some(
     (account) => account.providerId === CREDENTIAL_PROVIDER_ID,
