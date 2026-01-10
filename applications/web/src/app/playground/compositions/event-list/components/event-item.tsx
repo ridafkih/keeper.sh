@@ -11,9 +11,10 @@ interface EventItemProps {
   isActive: boolean;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
+  indicatorLayoutId: string;
 }
 
-const EventItem: FC<EventItemProps> = ({ event, isActive, onMouseEnter, onMouseLeave }) => {
+const EventItem: FC<EventItemProps> = ({ event, isActive, onMouseEnter, onMouseLeave, indicatorLayoutId }) => {
   const isPast = isEventPast(event.endTime);
   const timeUntil = formatTimeUntil(event.startTime);
 
@@ -23,7 +24,7 @@ const EventItem: FC<EventItemProps> = ({ event, isActive, onMouseEnter, onMouseL
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <EventIndicator isActive={isActive} />
+      <EventIndicator isActive={isActive} layoutId={indicatorLayoutId} />
       <div
         className={clsx(
           "relative z-10 flex items-center justify-between gap-4 text-xs",

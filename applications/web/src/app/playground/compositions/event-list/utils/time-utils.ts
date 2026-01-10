@@ -1,3 +1,7 @@
+const MINS_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;
+const MINS_PER_DAY = MINS_PER_HOUR * HOURS_PER_DAY;
+
 const formatTimeUntil = (date: Date): string => {
   const now = new Date();
   const diffMs = date.getTime() - now.getTime();
@@ -9,10 +13,13 @@ const formatTimeUntil = (date: Date): string => {
   const suffix = diffMins < 0 ? " ago" : "";
   const prefix = diffMins > 0 ? "in " : "";
 
-  if (absMins < 60) return `${prefix}${absMins}m${suffix}`;
+  if (absMins < MINS_PER_HOUR) return `${prefix}${absMins}m${suffix}`;
 
-  const hours = Math.floor(absMins / 60);
-  return `${prefix}${hours}h${suffix}`;
+  const hours = Math.floor(absMins / MINS_PER_HOUR);
+  if (hours < 48) return `${prefix}${hours}h${suffix}`;
+
+  const days = Math.floor(absMins / MINS_PER_DAY);
+  return `${prefix}${days}d${suffix}`;
 };
 
 const isEventPast = (endTime: Date): boolean => {

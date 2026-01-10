@@ -1,4 +1,3 @@
-import { Scaffold } from "../../../components/scaffold";
 import { Heading1, Heading3 } from "../../../components/heading";
 import { Input } from "../../../components/input";
 import { Dropdown } from "../../../components/dropdown";
@@ -17,7 +16,7 @@ import { ModalDemo } from "./modal-demo";
 import { ConnectionPreambleDemo } from "./connection-preamble-demo";
 
 const DemoPage = () => (
-  <Scaffold className="py-8 flex flex-col gap-8">
+  <div className="flex flex-col gap-8 pt-16 pb-8">
     <Heading1>Demo</Heading1>
 
     <div className="flex flex-col gap-2">
@@ -92,7 +91,7 @@ const DemoPage = () => (
       <Heading3>Connection Preamble Modal</Heading3>
       <ConnectionPreambleDemo />
     </div>
-  </Scaffold>
+  </div>
 );
 
 export default DemoPage;

@@ -1,7 +1,10 @@
 import { Heading1, Heading2 } from "../../components/heading";
 import { Copy } from "../../components/copy";
 import { CalendarGrid } from "../../compositions/calendar-grid/calendar-grid";
-import { TodayEvents } from "../../compositions/today-events/today-events";
+import { EventList } from "../../compositions/event-list/event-list";
+import { TODAY_EVENTS, TOMORROW_EVENTS } from "../../compositions/event-list/utils/mock-events";
+
+const ALL_EVENTS = [...TODAY_EVENTS, ...TOMORROW_EVENTS];
 
 const DashboardPage = () => (
   <div className="flex flex-col gap-4 pt-16 pb-8">
@@ -11,7 +14,7 @@ const DashboardPage = () => (
     </div>
     <div className="flex flex-col gap-4">
       <CalendarGrid />
-      <TodayEvents />
+      <EventList events={ALL_EVENTS} />
     </div>
   </div>
 );
