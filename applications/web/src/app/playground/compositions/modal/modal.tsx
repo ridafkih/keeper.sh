@@ -2,6 +2,7 @@
 
 import type { FC, PropsWithChildren } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { X } from "lucide-react";
 import { useIsMobile } from "../../hooks/use-is-mobile";
 import { DesktopModal } from "./desktop-modal";
 import { MobileSheet } from "./mobile-sheet";
@@ -32,7 +33,9 @@ const Modal: FC<PropsWithChildren<ModalProps>> = ({ open, onClose, children }) =
             className="fixed inset-0 bg-black/50 z-150"
           />
           <ModalComponent onClose={onClose}>
-            {children}
+            <div className="flex flex-col gap-2">
+              {children}
+            </div>
           </ModalComponent>
         </>
       )}
@@ -43,17 +46,29 @@ const Modal: FC<PropsWithChildren<ModalProps>> = ({ open, onClose, children }) =
 interface ModalHeaderProps {
   title: string;
   description?: string;
+  onClose?: () => void;
 }
 
-const ModalHeader: FC<ModalHeaderProps> = ({ title, description }) => (
-  <div className="flex flex-col gap-1 mb-4 pr-6">
-    <Heading3>{title}</Heading3>
-    {description && <Copy className="text-xs">{description}</Copy>}
+const ModalHeader: FC<ModalHeaderProps> = ({ title, description, onClose }) => (
+  <div className="flex gap-2">
+    <div className="flex flex-col gap-1 flex-1">
+      <Heading3>{title}</Heading3>
+      {description && <Copy className="text-xs">{description}</Copy>}
+    </div>
+    {onClose && (
+      <button
+        type="button"
+        onClick={onClose}
+        className="self-start p-1 rounded-xl hover:bg-neutral-100 transition-colors text-neutral-400 hover:text-neutral-600"
+      >
+        <X size={16} />
+      </button>
+    )}
   </div>
 );
 
 const ModalContent: FC<PropsWithChildren> = ({ children }) => (
-  <div className="flex flex-col gap-3">{children}</div>
+  <div className="flex flex-col gap-2">{children}</div>
 );
 
 interface ModalFooterProps {
@@ -71,7 +86,7 @@ const ModalFooter: FC<ModalFooterProps> = ({
   confirmText = "Confirm",
   variant = "default",
 }) => (
-  <div className="flex gap-2 mt-4">
+  <div className="flex gap-2">
     <Button variant="outline" onClick={onCancel} className="flex-1">
       <ButtonText>{cancelText}</ButtonText>
     </Button>

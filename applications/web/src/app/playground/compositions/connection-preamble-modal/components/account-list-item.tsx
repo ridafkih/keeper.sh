@@ -21,7 +21,7 @@ const AccountListItem: FC<AccountListItemProps> = ({
     type="button"
     onClick={onSelect}
     className={clsx(
-      "w-full flex items-center gap-2 py-1.5 px-2 rounded-lg text-left transition-colors",
+      "w-full flex items-center gap-2 py-1.5 px-2 rounded-xl text-left transition-colors",
       "hover:bg-neutral-50",
       selected && "bg-neutral-100"
     )}

@@ -1,7 +1,5 @@
-import { ArrowLeft } from "lucide-react";
 import { Heading1 } from "../../components/heading";
 import { Copy } from "../../components/copy";
-import { IconButtonLink } from "../../components/icon-button-link";
 import { LinkOut } from "../../components/link-out";
 import { AuthForm } from "../../compositions/auth-form/auth-form";
 

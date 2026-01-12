@@ -96,7 +96,7 @@ interface SubCalendarItemProps {
 const SubCalendarItem: FC<SubCalendarItemProps> = ({ calendar }) => (
   <ListItemCheckbox id={calendar.id} defaultChecked={calendar.enabled}>
     <div className="flex items-center gap-2">
-      <div className="size-1 rounded-full" style={{ backgroundColor: calendar.color }} />
+      <div className="size-1 rounded-xl" style={{ backgroundColor: calendar.color }} />
       <ListItemLabel>{calendar.name}</ListItemLabel>
     </div>
   </ListItemCheckbox>
@@ -193,16 +193,13 @@ const CalendarDetailPage: FC<CalendarDetailPageProps> = ({ params }) => {
             checked={syncSummaries}
             onChange={(e) => setSyncSummaries(e.target.checked)}
           />
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-neutral-500">Event name</label>
-            <Input
-              inputSize="small"
-              value={customSummary}
-              onChange={(e) => setCustomSummary(e.target.value)}
-              placeholder="Busy"
-              disabled={syncSummaries}
-            />
-          </div>
+          <Input
+            inputSize="small"
+            value={customSummary}
+            onChange={(e) => setCustomSummary(e.target.value)}
+            placeholder="Event name"
+            disabled={syncSummaries}
+          />
         </div>
 
         <div className="flex flex-col gap-2">
@@ -212,16 +209,13 @@ const CalendarDetailPage: FC<CalendarDetailPageProps> = ({ params }) => {
             checked={syncDescriptions}
             onChange={(e) => setSyncDescriptions(e.target.checked)}
           />
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-neutral-500">Event description</label>
-            <Input
-              inputSize="small"
-              value={customDescription}
-              onChange={(e) => setCustomDescription(e.target.value)}
-              placeholder="No description"
-              disabled={syncDescriptions}
-            />
-          </div>
+          <Input
+            inputSize="small"
+            value={customDescription}
+            onChange={(e) => setCustomDescription(e.target.value)}
+            placeholder="Event description"
+            disabled={syncDescriptions}
+          />
         </div>
 
       </div>
@@ -243,6 +237,7 @@ const CalendarDetailPage: FC<CalendarDetailPageProps> = ({ params }) => {
         <ModalHeader
           title="Delete source"
           description={`Are you sure you want to delete "${source.name}"? All synced events from this source will be removed from your destinations.`}
+          onClose={() => setDeleteSourceOpen(false)}
         />
         <ModalFooter
           onCancel={() => setDeleteSourceOpen(false)}

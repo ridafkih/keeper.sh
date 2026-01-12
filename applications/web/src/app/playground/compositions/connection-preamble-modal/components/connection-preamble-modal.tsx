@@ -36,8 +36,8 @@ const ConnectionPreambleModal: FC<ConnectionPreambleModalProps> = ({
 
   return (
     <Modal open={open} onClose={onClose}>
-      <div className="flex flex-col justify-between h-full gap-3">
-        <div className="flex flex-col gap-3">
+      <div className="flex flex-col justify-between h-full gap-2">
+        <div className="flex flex-col gap-2">
           <Heading3>Connect Account</Heading3>
           <Copy>Select which account you would like to link to Keeper.</Copy>
           <AccountList />

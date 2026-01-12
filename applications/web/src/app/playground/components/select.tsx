@@ -2,33 +2,33 @@ import type { SelectHTMLAttributes, Ref } from "react";
 import { clsx } from "clsx";
 import { ChevronDown } from "lucide-react";
 
-type DropdownSize = "default" | "small";
+type SelectSize = "default" | "small";
 
-interface DropdownProps extends SelectHTMLAttributes<HTMLSelectElement> {
+interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   className?: string;
-  dropdownSize?: DropdownSize;
+  selectSize?: SelectSize;
   ref?: Ref<HTMLSelectElement>;
 }
 
-const sizeStyles: Record<DropdownSize, string> = {
+const sizeStyles: Record<SelectSize, string> = {
   default: "py-2 pl-4 pr-10 text-base",
   small: "py-1.5 pl-3 pr-8 text-sm",
 };
 
-const iconSizeStyles: Record<DropdownSize, string> = {
+const iconSizeStyles: Record<SelectSize, string> = {
   default: "right-4",
   small: "right-3",
 };
 
-const Dropdown = ({ className, disabled, dropdownSize = "default", children, ref, ...props }: DropdownProps) => (
+const Select = ({ className, disabled, selectSize = "default", children, ref, ...props }: SelectProps) => (
   <div className="relative w-full">
     <select
       ref={ref}
       disabled={disabled}
       className={clsx(
-        "w-full appearance-none border border-neutral-300 rounded-full transition-colors tracking-tight bg-white",
+        "w-full appearance-none border border-neutral-300 rounded-xl transition-colors tracking-tight bg-white",
         "focus:outline-none focus:border-neutral-400 focus:ring-2 focus:ring-neutral-200",
-        sizeStyles[dropdownSize],
+        sizeStyles[selectSize],
         disabled && "bg-neutral-100 text-neutral-400 cursor-not-allowed",
         className,
       )}
@@ -37,14 +37,14 @@ const Dropdown = ({ className, disabled, dropdownSize = "default", children, ref
       {children}
     </select>
     <ChevronDown
-      size={dropdownSize === "small" ? 14 : 16}
+      size={selectSize === "small" ? 14 : 16}
       className={clsx(
         "absolute top-1/2 -translate-y-1/2 pointer-events-none text-neutral-400",
-        iconSizeStyles[dropdownSize],
+        iconSizeStyles[selectSize],
       )}
     />
   </div>
 );
 
-export { Dropdown };
-export type { DropdownSize };
+export { Select };
+export type { SelectSize };

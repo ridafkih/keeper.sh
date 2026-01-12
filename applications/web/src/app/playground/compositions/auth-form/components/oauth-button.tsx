@@ -1,7 +1,7 @@
 "use client";
 
 import type { FC, ReactNode } from "react";
-import { SocialButton } from "../../../components/social-button";
+import { Button, ButtonText } from "../../../components/button";
 import { useIsLoading, useSetIsLoading } from "../contexts/auth-form-context";
 
 interface OAuthButtonProps {
@@ -20,12 +20,18 @@ export const OAuthButton: FC<OAuthButtonProps> = ({ icon, children, onSignIn }) 
   };
 
   return (
-    <SocialButton
+    <Button
+      type="button"
+      variant="outline"
+      size="large"
       onClick={handleClick}
-      icon={icon}
       disabled={isLoading}
+      className="w-full justify-center"
     >
-      {children}
-    </SocialButton>
+      <div className="flex items-center gap-2">
+        {icon}
+        <ButtonText>{children}</ButtonText>
+      </div>
+    </Button>
   );
 };

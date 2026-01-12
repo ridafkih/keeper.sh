@@ -12,7 +12,8 @@
       "persistent": true
     },
     "types": {
-      "dependsOn": ["^types"]
+      "dependsOn": ["^types"],
+      "inputs": ["src/**", "scripts/**", "tsconfig.json"]
     },
     "build": {
       "dependsOn": ["^build"],

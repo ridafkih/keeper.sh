@@ -1,6 +1,6 @@
 import { Heading1, Heading3 } from "../../../components/heading";
 import { Input } from "../../../components/input";
-import { Dropdown } from "../../../components/dropdown";
+import { Select } from "../../../components/select";
 import { Checkbox } from "../../../components/checkbox";
 import { Radio } from "../../../components/radio";
 import {
@@ -28,19 +28,19 @@ const DemoPage = () => (
 
     <div className="flex flex-col gap-2">
       <Heading3>Select</Heading3>
-      <Dropdown>
+      <Select>
         <option>Default size</option>
         <option>Option 2</option>
         <option>Option 3</option>
-      </Dropdown>
-      <Dropdown dropdownSize="small">
+      </Select>
+      <Select selectSize="small">
         <option>Small size</option>
         <option>Option 2</option>
         <option>Option 3</option>
-      </Dropdown>
-      <Dropdown disabled>
+      </Select>
+      <Select disabled>
         <option>Disabled</option>
-      </Dropdown>
+      </Select>
     </div>
 
     <div className="flex flex-col gap-2 items-start">

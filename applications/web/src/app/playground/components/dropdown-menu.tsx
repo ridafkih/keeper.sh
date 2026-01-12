@@ -26,7 +26,7 @@ const DropdownMenuTrigger: FC<PropsWithChildren<DropdownMenuTriggerProps>> = ({
   <DropdownMenuPrimitive.Trigger
     className={clsx(
       "bg-linear-to-b from-white to-neutral-50 border-y border-t-neutral-100 border-b-neutral-200 text-neutral-800 shadow-xs",
-      "tracking-tighter font-medium rounded-full w-fit cursor-pointer",
+      "tracking-tighter font-medium rounded-xl w-fit cursor-pointer",
       "flex items-center gap-1 hover:brightness-95 transition-all",
       triggerSizeStyles[dropdownSize],
       className,
@@ -70,7 +70,7 @@ const DropdownMenuItem: FC<
 > = ({ children, className, ...props }) => (
   <DropdownMenuPrimitive.Item
     className={clsx(
-      "relative flex cursor-pointer select-none items-center gap-2 rounded-lg outline-none transition-colors",
+      "relative flex cursor-pointer select-none items-center gap-2 rounded-xl outline-none transition-colors",
       "text-neutral-700 text-sm p-2",
       "focus:bg-neutral-100",
       "data-disabled:pointer-events-none data-disabled:opacity-50",
@@ -110,7 +110,7 @@ const DropdownMenuRadioItem: FC<
 > = ({ children, className, ...props }) => (
   <DropdownMenuPrimitive.RadioItem
     className={clsx(
-      "relative flex cursor-pointer select-none items-center rounded-lg outline-none transition-colors",
+      "relative flex cursor-pointer select-none items-center rounded-xl outline-none transition-colors",
       "text-neutral-700 text-sm py-1.5 pl-7 pr-2",
       "focus:bg-neutral-100",
       "data-disabled:pointer-events-none data-disabled:opacity-50",
@@ -120,7 +120,7 @@ const DropdownMenuRadioItem: FC<
   >
     <span className="absolute left-2 flex items-center justify-center">
       <DropdownMenuPrimitive.ItemIndicator>
-        <span className="size-1.5 rounded-full bg-neutral-800" />
+        <span className="size-1.5 rounded-xl bg-neutral-800" />
       </DropdownMenuPrimitive.ItemIndicator>
     </span>
     {children}
@@ -155,7 +155,7 @@ const DropdownMenuSubTrigger: FC<
 > = ({ children, className, ...props }) => (
   <DropdownMenuPrimitive.SubTrigger
     className={clsx(
-      "relative flex cursor-pointer select-none items-center gap-2 rounded-lg outline-none transition-colors",
+      "relative flex cursor-pointer select-none items-center gap-2 rounded-xl outline-none transition-colors",
       "text-neutral-700 text-sm py-1.5 px-2",
       "focus:bg-neutral-100 data-[state=open]:bg-neutral-100",
       className,

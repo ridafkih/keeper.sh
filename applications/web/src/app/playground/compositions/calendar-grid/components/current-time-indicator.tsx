@@ -60,7 +60,7 @@ const CurrentTimeIndicator: FC = () => {
       }}
     >
       <div className="relative flex items-center">
-        <div className="absolute -left-1 size-2 rounded-full bg-red-400" />
+        <div className="absolute -left-1 size-2 rounded-xl bg-red-400" />
         <div className="w-full h-px bg-red-400" />
       </div>
     </div>

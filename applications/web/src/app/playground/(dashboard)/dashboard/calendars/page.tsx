@@ -126,7 +126,7 @@ const StatusIcon: FC<StatusIconProps> = ({ status }) => {
   if (status === "reauth") {
     return <AlertTriangle size={14} className="text-amber-500" />;
   }
-  return <div className="size-1 rounded-full bg-red-500" />;
+  return <div className="size-1 rounded-xl bg-red-500" />;
 };
 
 interface SourceItemProps {

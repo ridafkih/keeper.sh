@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import { Heading1, Heading2, Heading3 } from "../../components/heading";
 import { Copy } from "../../components/copy";
 import { LinkOut } from "../../components/link-out";
-import { SuperscriptLink } from "../../components/superscript-link";
 import {
   InlineTable,
   InlineTableHeader,
@@ -93,7 +92,7 @@ const PrivacyPage = () => (
             <InlineTableRow>
               <InlineTableCell>
                 Vercel
-                <SuperscriptLink href="https://vercel.com/legal/privacy-policy" />
+                <LinkOut variant="superscript" target="_blank" rel="noopener noreferrer" href="https://vercel.com/legal/privacy-policy" />
               </InlineTableCell>
               <InlineTableList>
                 <InlineTableListItem>IP-derived country</InlineTableListItem>
@@ -105,7 +104,7 @@ const PrivacyPage = () => (
             <InlineTableRow>
               <InlineTableCell>
                 Railway
-                <SuperscriptLink href="https://railway.app/legal/privacy" />
+                <LinkOut variant="superscript" target="_blank" rel="noopener noreferrer" href="https://railway.app/legal/privacy" />
               </InlineTableCell>
               <InlineTableList>
                 <InlineTableListItem>User ID</InlineTableListItem>
@@ -117,7 +116,7 @@ const PrivacyPage = () => (
             <InlineTableRow>
               <InlineTableCell>
                 visitors.now
-                <SuperscriptLink href="https://visitors.now" />
+                <LinkOut variant="superscript" target="_blank" rel="noopener noreferrer" href="https://visitors.now" />
               </InlineTableCell>
               <InlineTableList>
                 <InlineTableListItem>Page views</InlineTableListItem>
@@ -129,7 +128,7 @@ const PrivacyPage = () => (
             <InlineTableRow>
               <InlineTableCell>
                 Google
-                <SuperscriptLink href="https://policies.google.com/privacy" />
+                <LinkOut variant="superscript" target="_blank" rel="noopener noreferrer" href="https://policies.google.com/privacy" />
               </InlineTableCell>
               <InlineTableList>
                 <InlineTableListItem>Email</InlineTableListItem>
@@ -142,7 +141,7 @@ const PrivacyPage = () => (
             <InlineTableRow>
               <InlineTableCell>
                 Microsoft
-                <SuperscriptLink href="https://privacy.microsoft.com" />
+                <LinkOut variant="superscript" target="_blank" rel="noopener noreferrer" href="https://privacy.microsoft.com" />
               </InlineTableCell>
               <InlineTableList>
                 <InlineTableListItem>Email</InlineTableListItem>
@@ -154,7 +153,7 @@ const PrivacyPage = () => (
             <InlineTableRow>
               <InlineTableCell>
                 Polar
-                <SuperscriptLink href="https://polar.sh/legal/privacy" />
+                <LinkOut variant="superscript" target="_blank" rel="noopener noreferrer" href="https://polar.sh/legal/privacy" />
               </InlineTableCell>
               <InlineTableList>
                 <InlineTableListItem>Payment info</InlineTableListItem>
@@ -165,7 +164,7 @@ const PrivacyPage = () => (
             <InlineTableRow last>
               <InlineTableCell>
                 Resend
-                <SuperscriptLink href="https://resend.com/legal/privacy-policy" />
+                <LinkOut variant="superscript" target="_blank" rel="noopener noreferrer" href="https://resend.com/legal/privacy-policy" />
               </InlineTableCell>
               <InlineTableList>
                 <InlineTableListItem>Email address</InlineTableListItem>

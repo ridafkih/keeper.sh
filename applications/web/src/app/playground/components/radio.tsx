@@ -11,8 +11,8 @@ interface RadioProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "type" 
 }
 
 const sizeStyles: Record<RadioSize, { outer: string; inner: string; label: string }> = {
-  default: { outer: "size-5", inner: "size-2.5", label: "text-base" },
-  small: { outer: "size-4", inner: "size-2", label: "text-sm" },
+  default: { outer: "size-4", inner: "size-2", label: "text-xs" },
+  small: { outer: "size-3.5", inner: "size-1.5", label: "text-xs" },
 };
 
 const Radio = ({ className, disabled, radioSize = "default", label, id, ref, ...props }: RadioProps) => {
@@ -38,7 +38,7 @@ const Radio = ({ className, disabled, radioSize = "default", label, id, ref, ...
         />
         <div
           className={clsx(
-            "border border-neutral-300 rounded-full transition-colors bg-white",
+            "border border-neutral-300 rounded-xl transition-colors bg-white",
             "peer-focus:ring-2 peer-focus:ring-neutral-200 peer-focus:border-neutral-400",
             "peer-checked:border-neutral-800",
             styles.outer,
@@ -46,7 +46,7 @@ const Radio = ({ className, disabled, radioSize = "default", label, id, ref, ...
         />
         <div
           className={clsx(
-            "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-neutral-800",
+            "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-xl bg-neutral-800",
             "scale-0 peer-checked:scale-100 transition-transform",
             styles.inner,
           )}
