@@ -11,11 +11,13 @@
   "type": "module",
   "scripts": {
     "clean": "rimraf --glob **/{.turbo,node_modules,.next/}/",
-    "dev": "turbo run dev",
+    "dev": "turbo run dev dev:root",
+    "dev:root": "docker compose -f packages/database/compose.yaml -f packages/redis/compose.yaml up",
     "types": "turbo run types --parallel",
     "build": "turbo run build",
     "start": "turbo run start",
     "lint": "turbo run lint",
+    "up": "docker compose -f ./packages/database/compose.yaml -f ./packages/redis/compose.yaml up -d",
     "unused": "knip"
   },
   "dependencies": {
