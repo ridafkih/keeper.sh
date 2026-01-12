@@ -11,6 +11,7 @@ import { Button, ButtonText } from "../../../../components/button";
 import { Input } from "../../../../components/input";
 import { Modal, ModalHeader, ModalFooter } from "../../../../compositions/modal/modal";
 import { List, ListItemCheckbox, ListItemLabel, ListItemValue } from "../../../../components/list";
+import { Notice } from "../../../../components/notice";
 
 interface SubCalendar {
   id: string;
@@ -36,6 +37,8 @@ interface SyncSettings {
   locations: boolean;
 }
 
+type SourceStatus = "synced" | "syncing" | "error" | "reauthenticate";
+
 interface SourceDetail {
   id: string;
   name: string;
@@ -45,6 +48,7 @@ interface SourceDetail {
     name: string;
     icon: string;
   };
+  status: SourceStatus;
   subCalendars: SubCalendar[];
   destinations: DestinationOption[];
   syncSettings: SyncSettings;
@@ -59,6 +63,7 @@ const MOCK_SOURCE: SourceDetail = {
     name: "Google",
     icon: "/integrations/icon-google.svg",
   },
+  status: "reauthenticate",
   subCalendars: [
     { id: "cal-1", name: "Personal", color: "#4285F4", enabled: true },
     { id: "cal-2", name: "Work", color: "#34A853", enabled: true },
@@ -161,6 +166,20 @@ const CalendarDetailPage: FC<CalendarDetailPageProps> = ({ params }) => {
           </div>
         </div>
       </div>
+
+      {source.status === "reauthenticate" && (
+        <Notice
+          variant="warning"
+          title="Reauthentication required"
+          description="Your session has expired. Please reauthenticate to continue syncing events from this calendar."
+          action={{
+            label: "Reauthenticate",
+            onAction: () => {
+              // TODO: Handle reauthentication
+            },
+          }}
+        />
+      )}
 
       <div className="flex flex-col gap-2">
         <Heading2>Calendars</Heading2>

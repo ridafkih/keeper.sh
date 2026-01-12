@@ -17,7 +17,7 @@ interface Source {
     icon: string;
   };
   eventCount: number;
-  status: "synced" | "syncing" | "error" | "reauth";
+  status: "synced" | "syncing" | "error" | "reauthenticate";
 }
 
 interface Destination {
@@ -31,7 +31,7 @@ interface Destination {
   };
   eventsSynced: number;
   eventsTotal: number;
-  status: "synced" | "syncing" | "error" | "reauth";
+  status: "synced" | "syncing" | "error" | "reauthenticate";
 }
 
 const MOCK_SOURCES: Source[] = [
@@ -57,7 +57,7 @@ const MOCK_SOURCES: Source[] = [
       icon: "/integrations/icon-google.svg",
     },
     eventCount: 89,
-    status: "reauth",
+    status: "reauthenticate",
   },
   {
     id: "source-3",
@@ -115,7 +115,7 @@ const formatSyncProgress = (synced: number, total: number): string => {
 };
 
 interface StatusIconProps {
-  status: "synced" | "syncing" | "error" | "reauth";
+  status: "synced" | "syncing" | "error" | "reauthenticate";
 }
 
 const StatusIcon: FC<StatusIconProps> = ({ status }) => {
@@ -125,8 +125,8 @@ const StatusIcon: FC<StatusIconProps> = ({ status }) => {
   if (status === "synced") {
     return <Check size={14} className="text-neutral-400" />;
   }
-  if (status === "reauth") {
-    return <AlertTriangle size={14} className="text-amber-500" />;
+  if (status === "reauthenticate") {
+    return <AlertTriangle size={14} className="text-amber-400" />;
   }
   return <div className="size-1 rounded-xl bg-red-500" />;
 };
