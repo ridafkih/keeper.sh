@@ -84,20 +84,12 @@ const SettingsPage = () => {
         <ModalHeader
           title="Change password"
           description="Enter your current password and a new password."
+          onClose={() => setChangePasswordOpen(false)}
         />
         <ModalContent>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-neutral-500">Current password</label>
-            <Input inputSize="small" type="password" placeholder="••••••••" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-neutral-500">New password</label>
-            <Input inputSize="small" type="password" placeholder="••••••••" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-neutral-500">Confirm new password</label>
-            <Input inputSize="small" type="password" placeholder="••••••••" />
-          </div>
+          <Input inputSize="small" type="password" placeholder="Current password" />
+          <Input inputSize="small" type="password" placeholder="New password" />
+          <Input inputSize="small" type="password" placeholder="Confirm new password" />
         </ModalContent>
         <ModalFooter
           onCancel={() => setChangePasswordOpen(false)}
@@ -110,12 +102,10 @@ const SettingsPage = () => {
         <ModalHeader
           title="Delete account"
           description="Are you sure you want to delete your account? This action cannot be undone."
+          onClose={() => setDeleteAccountOpen(false)}
         />
         <ModalContent>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-neutral-500">Enter your password to confirm</label>
-            <Input inputSize="small" type="password" placeholder="••••••••" />
-          </div>
+          <Input inputSize="small" type="password" placeholder="Enter your password to confirm" />
         </ModalContent>
         <ModalFooter
           onCancel={() => setDeleteAccountOpen(false)}
@@ -129,6 +119,7 @@ const SettingsPage = () => {
         <ModalHeader
           title="Delete passkey"
           description={`Are you sure you want to delete "${deletePasskeyOpen?.name}"? You will no longer be able to sign in with this passkey.`}
+          onClose={() => setDeletePasskeyOpen(null)}
         />
         <ModalFooter
           onCancel={() => setDeletePasskeyOpen(null)}

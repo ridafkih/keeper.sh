@@ -2,7 +2,6 @@
 
 import type { FC, PropsWithChildren } from "react";
 import { motion } from "motion/react";
-import { X } from "lucide-react";
 
 const EASING = [0.16, 0.85, 0.2, 1] as const;
 
@@ -18,15 +17,8 @@ const MobileSheet: FC<PropsWithChildren<MobileSheetProps>> = ({ children, onClos
     transition={{ duration: 0.3, ease: EASING }}
     className="fixed inset-x-0 bottom-0 z-200"
   >
-    <div className="w-full max-w-12 h-1 rounded-full bg-white mx-auto mb-1" />
-    <div className="relative flex flex-col bg-white rounded-t-2xl shadow-lg overflow-auto max-h-[calc(90vh-0.75rem)] p-4">
-      <button
-        type="button"
-        onClick={onClose}
-        className="absolute top-3 right-3 p-1 rounded-lg hover:bg-neutral-100 transition-colors text-neutral-400 hover:text-neutral-600"
-      >
-        <X size={16} />
-      </button>
+    <div className="w-full max-w-12 h-1 rounded-xl bg-white mx-auto mb-1" />
+    <div className="flex flex-col bg-white rounded-t-xl shadow-lg overflow-auto max-h-[calc(90vh-0.75rem)] p-4">
       <div className="flex-1 flex flex-col">{children}</div>
     </div>
   </motion.div>

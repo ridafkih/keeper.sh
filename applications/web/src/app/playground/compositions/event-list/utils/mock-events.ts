@@ -1,3 +1,5 @@
+import { createDate } from "../../../utils/date-helpers";
+
 interface PlaygroundEvent {
   id: string;
   name: string;
@@ -5,13 +7,6 @@ interface PlaygroundEvent {
   startTime: Date;
   endTime: Date;
 }
-
-const createDate = (daysFromToday: number, hours: number, minutes: number = 0): Date => {
-  const date = new Date();
-  date.setDate(date.getDate() + daysFromToday);
-  date.setHours(hours, minutes, 0, 0);
-  return date;
-};
 
 const TODAY_EVENTS: PlaygroundEvent[] = [
   {

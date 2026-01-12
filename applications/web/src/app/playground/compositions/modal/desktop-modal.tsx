@@ -2,7 +2,6 @@
 
 import type { FC, PropsWithChildren } from "react";
 import { motion } from "motion/react";
-import { X } from "lucide-react";
 
 const EASING = [0.16, 0.85, 0.2, 1] as const;
 
@@ -20,16 +19,9 @@ const DesktopModal: FC<PropsWithChildren<DesktopModalProps>> = ({ children, onCl
     onClick={onClose}
   >
     <div
-      className="relative bg-white rounded-xl shadow-lg w-full max-w-md p-4"
+      className="bg-white rounded-xl shadow-lg w-full max-w-md p-4"
       onClick={(event) => event.stopPropagation()}
     >
-      <button
-        type="button"
-        onClick={onClose}
-        className="absolute top-3 right-3 p-1 rounded-lg hover:bg-neutral-100 transition-colors text-neutral-400 hover:text-neutral-600"
-      >
-        <X size={16} />
-      </button>
       {children}
     </div>
   </motion.div>

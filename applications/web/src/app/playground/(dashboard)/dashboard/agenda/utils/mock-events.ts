@@ -1,11 +1,5 @@
 import type { PlaygroundEvent } from "../../../../compositions/event-list/utils/mock-events";
-
-const createDate = (daysFromToday: number, hours: number, minutes: number = 0): Date => {
-  const date = new Date();
-  date.setDate(date.getDate() + daysFromToday);
-  date.setHours(hours, minutes, 0, 0);
-  return date;
-};
+import { createDate } from "../../../../utils/date-helpers";
 
 const EVENT_TEMPLATES = [
   { name: "Team Standup", sourceCalendar: "Work", duration: 30 },

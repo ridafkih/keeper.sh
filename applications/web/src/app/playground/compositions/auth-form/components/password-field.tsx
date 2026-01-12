@@ -15,13 +15,12 @@ export const PasswordField: FC<HTMLProps<HTMLInputElement>> = ({ ...props }) => 
         <motion.div
           transition={{ duration: 0.16, opacity: { delay: 0.16 } }}
           initial={{ height: 0, opacity: 0 }}
-          animate={{ height: "auto", opacity: 1}}
+          animate={{ height: "auto", opacity: 1 }}
           className="flex flex-col justify-end"
         >
           <FormField
             name="password"
             required
-            
             minLength={8}
             type={props.type}
             autoComplete={props.autoComplete}

@@ -51,7 +51,7 @@ const ListItem: FC<ListItemProps> = ({ id, children }) => {
       {isActive && (
         <motion.div
           layoutId={indicatorLayoutId}
-          className="absolute inset-0 bg-neutral-100 rounded-lg"
+          className="absolute inset-0 bg-neutral-100 rounded-xl"
           transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
         />
       )}
@@ -89,7 +89,7 @@ const ListItemLink: FC<ListItemLinkProps> = ({ id, href, children }) => {
       {isActive && (
         <motion.div
           layoutId={indicatorLayoutId}
-          className="absolute inset-0 bg-neutral-100 rounded-lg"
+          className="absolute inset-0 bg-neutral-100 rounded-xl"
           transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
         />
       )}
@@ -135,7 +135,7 @@ const ListItemCheckbox: FC<ListItemCheckboxProps> = ({
       {isActive && (
         <motion.div
           layoutId={indicatorLayoutId}
-          className="absolute inset-0 bg-neutral-100 rounded-lg"
+          className="absolute inset-0 bg-neutral-100 rounded-xl"
           transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
         />
       )}
@@ -146,13 +146,13 @@ const ListItemCheckbox: FC<ListItemCheckboxProps> = ({
       >
         {children}
         <div
-          className={`size-4 rounded border flex items-center justify-center transition-colors ${
+          className={`size-4 rounded-md border flex items-center justify-center transition-colors ${
             isChecked
               ? "bg-neutral-800 border-neutral-800"
               : "bg-white border-neutral-300"
           }`}
         >
-          {isChecked && <Check size={12} strokeWidth={2.5} className="text-white" />}
+          {isChecked && <Check size={10} strokeWidth={2.5} className="text-white" />}
         </div>
       </button>
     </li>
@@ -177,7 +177,7 @@ const ListItemButton: FC<PropsWithChildren<ListItemButtonProps>> = ({ id, childr
       {isActive && (
         <motion.div
           layoutId={indicatorLayoutId}
-          className="absolute inset-0 bg-neutral-100 rounded-lg"
+          className="absolute inset-0 bg-neutral-100 rounded-xl"
           transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
         />
       )}
@@ -213,7 +213,7 @@ const ListItemAdd: FC<ListItemAddProps> = ({ children, onClick }) => {
       {isActive && (
         <motion.div
           layoutId={indicatorLayoutId}
-          className="absolute inset-0 bg-neutral-100 rounded-lg"
+          className="absolute inset-0 bg-neutral-100 rounded-xl"
           transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
         />
       )}

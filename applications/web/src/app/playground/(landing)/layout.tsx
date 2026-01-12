@@ -1,6 +1,6 @@
 import type { FC, PropsWithChildren } from "react";
 import KeeperSvg from "@/assets/keeper.svg";
-import { ButtonLink } from "../components/button-link";
+import { Button } from "../components/button";
 import Link from "next/link";
 import { HeartIcon } from "lucide-react";
 import { LinkOut } from "../components/link-out";
@@ -15,12 +15,12 @@ const LandingLayout: FC<PropsWithChildren> = ({ children }) => (
           <KeeperSvg className="size-4" />
         </Link>
         <div className="flex items-center gap-1">
-          <ButtonLink href="/playground/login" variant="ghost" size="small">
+          <Button href="/playground/login" variant="ghost" size="small">
             Sign in
-          </ButtonLink>
-          <ButtonLink href="/playground/register" variant="primary" size="small">
+          </Button>
+          <Button href="/playground/register" variant="primary" size="small">
             Register
-          </ButtonLink>
+          </Button>
         </div>
       </header>
       {children}

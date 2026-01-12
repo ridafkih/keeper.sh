@@ -17,7 +17,7 @@ import { PasswordField } from "./password-field";
 import { UsernameField } from "./username-field";
 import { SubmitButton } from "./submit-button";
 import { OAuthButton } from "./oauth-button";
-import { IconButtonLink } from "@/app/playground/components/icon-button-link";
+import { IconButton } from "@/app/playground/components/button";
 import { ArrowLeft } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 
@@ -58,7 +58,7 @@ const AuthBackButton = () => {
           exit={{ width: 0, opacity: 0 }}
         >
           <div className="size-fit mr-2">
-            <IconButtonLink size="large" icon={ArrowLeft} variant="outline" href="/playground" />
+            <IconButton size="large" icon={ArrowLeft} variant="outline" href="/playground" />
           </div>
         </motion.div>
       )}

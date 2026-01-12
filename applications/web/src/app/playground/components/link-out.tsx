@@ -1,7 +1,7 @@
 import type { FC, PropsWithChildren, AnchorHTMLAttributes } from "react";
 import type { VariantProps } from "tailwind-variants";
 import { tv } from "tailwind-variants";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 
 const linkOutVariants = tv({
@@ -11,6 +11,7 @@ const linkOutVariants = tv({
       default: "flex items-center gap-1 hover:underline",
       inline: "underline text-blue-500",
       "inline-subtle": "underline text-neutral-500",
+      superscript: "inline-flex text-blue-500 hover:text-blue-600 align-super ml-0.5",
     },
     size: {
       default: "text-sm",
@@ -51,6 +52,10 @@ interface LinkOutContentProps {
 const LinkOutContent: FC<PropsWithChildren<LinkOutContentProps>> = ({ variant, size, children }) => {
   if (variant === "inline" || variant === "inline-subtle") {
     return children;
+  }
+
+  if (variant === "superscript") {
+    return <ArrowUpRight size={10} />;
   }
 
   return (

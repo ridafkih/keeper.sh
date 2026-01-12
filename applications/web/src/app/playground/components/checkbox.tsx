@@ -12,8 +12,8 @@ interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "typ
 }
 
 const sizeStyles: Record<CheckboxSize, { box: string; icon: number; label: string }> = {
-  default: { box: "size-5", icon: 14, label: "text-base" },
-  small: { box: "size-4", icon: 12, label: "text-sm" },
+  default: { box: "size-4", icon: 10, label: "text-xs" },
+  small: { box: "size-3.5", icon: 8, label: "text-xs" },
 };
 
 const Checkbox = ({ className, disabled, checkboxSize = "default", label, id, ref, ...props }: CheckboxProps) => {
@@ -39,7 +39,7 @@ const Checkbox = ({ className, disabled, checkboxSize = "default", label, id, re
         />
         <div
           className={clsx(
-            "border border-neutral-300 rounded transition-colors bg-white",
+            "border border-neutral-300 rounded-md transition-colors bg-white",
             "peer-focus:ring-2 peer-focus:ring-neutral-200 peer-focus:border-neutral-400",
             "peer-checked:bg-neutral-800 peer-checked:border-neutral-800",
             styles.box,

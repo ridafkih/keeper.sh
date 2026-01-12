@@ -19,9 +19,9 @@ const Input = ({ className, disabled, inputSize = "default", ref, ...props }: In
     ref={ref}
     disabled={disabled}
     className={clsx(
-      "w-full border border-neutral-300 rounded-full transition-colors tracking-tight bg-white",
+      "w-full border border-neutral-300 rounded-xl transition-colors bg-white",
       "focus:outline-none focus:border-neutral-400 focus:ring-2 focus:ring-neutral-200",
-      "placeholder:text-neutral-400",
+      "placeholder:text-neutral-400 tracking-normal",
       sizeStyles[inputSize],
       disabled && "bg-neutral-100 text-neutral-400 cursor-not-allowed opacity-75",
       className,
