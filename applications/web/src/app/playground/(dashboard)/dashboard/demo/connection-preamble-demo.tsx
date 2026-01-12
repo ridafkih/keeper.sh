@@ -1,9 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { Button, ButtonText } from "../../../components/button";
 import {
   ConnectionPreambleModalProvider,
-  useSetModalOpen,
   type Account,
 } from "../../../compositions/connection-preamble-modal/connection-preamble-modal";
 
@@ -30,25 +30,26 @@ const DEMO_ACCOUNTS: Account[] = [
   },
 ];
 
-const OpenConnectionPreambleButton = () => {
-  const setModalOpen = useSetModalOpen();
-
-  return (
-    <Button variant="outline" onClick={() => setModalOpen(true)}>
-      <ButtonText>Connect Account</ButtonText>
-    </Button>
-  );
-};
-
 const ConnectionPreambleDemo = () => {
+  const [open, setOpen] = useState(false);
+
   const handleConnect = (accountId: string) => {
     console.log("Connecting to account:", accountId);
+    setOpen(false);
   };
 
   return (
-    <ConnectionPreambleModalProvider accounts={DEMO_ACCOUNTS} onConnect={handleConnect}>
-      <OpenConnectionPreambleButton />
-    </ConnectionPreambleModalProvider>
+    <>
+      <Button variant="outline" onClick={() => setOpen(true)}>
+        <ButtonText>Connect Account</ButtonText>
+      </Button>
+      <ConnectionPreambleModalProvider
+        open={open}
+        onClose={() => setOpen(false)}
+        accounts={DEMO_ACCOUNTS}
+        onConnect={handleConnect}
+      />
+    </>
   );
 };
 

@@ -1,9 +1,10 @@
 import type { FC, PropsWithChildren } from "react";
-import { ModalProvider, useSetModalOpen } from "../modal/modal-context";
 import { ConnectionPreambleProvider, type Account } from "./contexts/connection-preamble-context";
 import { ConnectionPreambleModal as ConnectionPreambleModalSansProviders } from "./components/connection-preamble-modal";
 
 interface ConnectionPreambleModalProps {
+  open: boolean;
+  onClose: () => void;
   accounts: Account[];
   onConnect?: (accountId: string) => void;
 }
@@ -12,13 +13,11 @@ const ConnectionPreambleModalProvider: FC<PropsWithChildren<ConnectionPreambleMo
   children,
   ...props
 }) => (
-  <ModalProvider>
-    <ConnectionPreambleProvider>
-      {children}
-      <ConnectionPreambleModalSansProviders {...props} />
-    </ConnectionPreambleProvider>
-  </ModalProvider>
+  <ConnectionPreambleProvider>
+    {children}
+    <ConnectionPreambleModalSansProviders {...props} />
+  </ConnectionPreambleProvider>
 );
 
-export { ConnectionPreambleModalProvider, useSetModalOpen };
+export { ConnectionPreambleModalProvider };
 export type { Account };

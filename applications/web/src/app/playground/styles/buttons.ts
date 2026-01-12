@@ -2,6 +2,7 @@ const buttonVariantStyles = {
   primary: "bg-neutral-800 border-y border-y-neutral-500 text-white enabled:hover:brightness-90",
   outline: "border border-neutral-300 enabled:hover:backdrop-brightness-95",
   ghost: "border border-transparent enabled:hover:backdrop-brightness-95",
+  "ghost-hitslop": "border border-transparent enabled:hover:backdrop-brightness-95 -m-4 p-4",
 };
 
 const linkVariantStyles = {
@@ -14,6 +15,7 @@ const iconSizes = {
   large: 20,
   default: 16,
   small: 12,
+  none: 16,
 } as const;
 
 export { buttonVariantStyles, linkVariantStyles, iconSizes };

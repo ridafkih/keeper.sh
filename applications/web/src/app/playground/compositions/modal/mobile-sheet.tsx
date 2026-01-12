@@ -19,7 +19,7 @@ const MobileSheet: FC<PropsWithChildren<MobileSheetProps>> = ({ children, onClos
     className="fixed inset-x-0 bottom-0 z-200"
   >
     <div className="w-full max-w-12 h-1 rounded-full bg-white mx-auto mb-1" />
-    <div className="relative flex flex-col bg-white rounded-t-2xl shadow-lg overflow-auto max-h-[calc(90vh-12px)] min-h-[50vh] p-4">
+    <div className="relative flex flex-col bg-white rounded-t-2xl shadow-lg overflow-auto max-h-[calc(90vh-0.75rem)] p-4">
       <button
         type="button"
         onClick={onClose}

@@ -14,11 +14,15 @@ import {
 } from "../contexts/connection-preamble-context";
 
 interface ConnectionPreambleModalProps {
+  open: boolean;
+  onClose: () => void;
   accounts: Account[];
   onConnect?: (accountId: string) => void;
 }
 
 const ConnectionPreambleModal: FC<ConnectionPreambleModalProps> = ({
+  open,
+  onClose,
   accounts,
   onConnect,
 }) => {
@@ -31,7 +35,7 @@ const ConnectionPreambleModal: FC<ConnectionPreambleModalProps> = ({
   }, [accounts, setAccounts, setSelectedAccountId]);
 
   return (
-    <Modal>
+    <Modal open={open} onClose={onClose}>
       <div className="flex flex-col justify-between h-full gap-3">
         <div className="flex flex-col gap-3">
           <Heading3>Connect Account</Heading3>

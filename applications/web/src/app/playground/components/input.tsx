@@ -23,7 +23,7 @@ const Input = ({ className, disabled, inputSize = "default", ref, ...props }: In
       "focus:outline-none focus:border-neutral-400 focus:ring-2 focus:ring-neutral-200",
       "placeholder:text-neutral-400",
       sizeStyles[inputSize],
-      disabled && "bg-neutral-100 text-neutral-400 cursor-not-allowed",
+      disabled && "bg-neutral-100 text-neutral-400 cursor-not-allowed opacity-75",
       className,
     )}
     {...props}

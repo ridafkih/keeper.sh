@@ -181,7 +181,7 @@ const CalendarsPage = () => (
 
     <div className="flex flex-col gap-2">
       <Heading2>Sources</Heading2>
-      <Copy className="text-xs">Sources are calendars that for which events may be sourced, these events are pooled and can be used to push events to destinations.</Copy>
+      <Copy className="text-xs">Calendars for which events may be sourced, these events are pooled and can be used to push events to destinations.</Copy>
       <List>
         {MOCK_SOURCES.map((source) => (
           <SourceItem key={source.id} source={source} />

@@ -1,7 +1,7 @@
 "use client";
 
 import type { FC } from "react";
-import { use } from "react";
+import { use, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Trash2 } from "lucide-react";
@@ -9,6 +9,8 @@ import { Heading1, Heading2 } from "../../../../components/heading";
 import { Copy } from "../../../../components/copy";
 import { Button, ButtonText } from "../../../../components/button";
 import { Checkbox } from "../../../../components/checkbox";
+import { Input } from "../../../../components/input";
+import { Modal, ModalHeader, ModalFooter } from "../../../../compositions/modal/modal";
 import { List, ListItemCheckbox, ListItemLabel, ListItemValue } from "../../../../components/list";
 
 interface SubCalendar {
@@ -127,6 +129,14 @@ const CalendarDetailPage: FC<CalendarDetailPageProps> = ({ params }) => {
   const { calendarId } = use(params);
   const source = MOCK_SOURCE;
 
+  const [syncSummaries, setSyncSummaries] = useState(source.syncSettings.summaries);
+  const [customSummary, setCustomSummary] = useState(source.name);
+
+  const [syncDescriptions, setSyncDescriptions] = useState(source.syncSettings.descriptions);
+  const [customDescription, setCustomDescription] = useState("");
+
+  const [deleteSourceOpen, setDeleteSourceOpen] = useState(false);
+
   return (
     <div className="flex flex-col gap-8 pt-16 pb-8">
       <div className="flex flex-col gap-4">
@@ -173,36 +183,74 @@ const CalendarDetailPage: FC<CalendarDetailPageProps> = ({ params }) => {
         </List>
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-6">
         <Heading2>Sync Settings</Heading2>
-        <Copy className="text-xs">Choose what event data to sync.</Copy>
-        <div className="flex flex-col gap-3 mt-2">
+
+        <div className="flex flex-col gap-2">
           <Checkbox
             checkboxSize="small"
-            label="Event summaries"
-            defaultChecked={source.syncSettings.summaries}
+            label="Sync event summaries"
+            checked={syncSummaries}
+            onChange={(e) => setSyncSummaries(e.target.checked)}
           />
-          <Checkbox
-            checkboxSize="small"
-            label="Event descriptions"
-            defaultChecked={source.syncSettings.descriptions}
-          />
-          <Checkbox
-            checkboxSize="small"
-            label="Event locations"
-            defaultChecked={source.syncSettings.locations}
-          />
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-neutral-500">Event name</label>
+            <Input
+              inputSize="small"
+              value={customSummary}
+              onChange={(e) => setCustomSummary(e.target.value)}
+              placeholder="Busy"
+              disabled={syncSummaries}
+            />
+          </div>
         </div>
+
+        <div className="flex flex-col gap-2">
+          <Checkbox
+            checkboxSize="small"
+            label="Sync event descriptions"
+            checked={syncDescriptions}
+            onChange={(e) => setSyncDescriptions(e.target.checked)}
+          />
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-neutral-500">Event description</label>
+            <Input
+              inputSize="small"
+              value={customDescription}
+              onChange={(e) => setCustomDescription(e.target.value)}
+              placeholder="No description"
+              disabled={syncDescriptions}
+            />
+          </div>
+        </div>
+
       </div>
 
       <div className="flex flex-col gap-2">
         <Heading2>Danger Zone</Heading2>
         <Copy className="text-xs">Permanently remove this source and all synced events.</Copy>
-        <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50">
+        <Button
+          variant="outline"
+          className="text-red-600 border-red-200 hover:bg-red-50"
+          onClick={() => setDeleteSourceOpen(true)}
+        >
           <Trash2 size={14} />
           <ButtonText>Delete Source</ButtonText>
         </Button>
       </div>
+
+      <Modal open={deleteSourceOpen} onClose={() => setDeleteSourceOpen(false)}>
+        <ModalHeader
+          title="Delete source"
+          description={`Are you sure you want to delete "${source.name}"? All synced events from this source will be removed from your destinations.`}
+        />
+        <ModalFooter
+          onCancel={() => setDeleteSourceOpen(false)}
+          onConfirm={() => setDeleteSourceOpen(false)}
+          confirmText="Delete source"
+          variant="danger"
+        />
+      </Modal>
     </div>
   );
 };

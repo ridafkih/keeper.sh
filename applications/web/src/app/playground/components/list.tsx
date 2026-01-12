@@ -4,7 +4,7 @@ import type { FC, PropsWithChildren, ReactNode } from "react";
 import { createContext, useContext, useId, useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
-import { Check, Plus } from "lucide-react";
+import { ArrowRight, Check, Plus } from "lucide-react";
 
 interface ListContextValue {
   activeId: string | null;
@@ -159,6 +159,40 @@ const ListItemCheckbox: FC<ListItemCheckboxProps> = ({
   );
 };
 
+interface ListItemButtonProps {
+  id: string;
+  onClick?: () => void;
+}
+
+const ListItemButton: FC<PropsWithChildren<ListItemButtonProps>> = ({ id, children, onClick }) => {
+  const { activeId, setActiveId, indicatorLayoutId } = useListContext();
+  const isActive = activeId === id;
+
+  return (
+    <li
+      className="relative -mx-4 cursor-pointer"
+      onMouseEnter={() => setActiveId(id)}
+      onMouseLeave={() => setActiveId(null)}
+    >
+      {isActive && (
+        <motion.div
+          layoutId={indicatorLayoutId}
+          className="absolute inset-0 bg-neutral-100 rounded-lg"
+          transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
+        />
+      )}
+      <button
+        type="button"
+        onClick={onClick}
+        className="relative z-10 flex items-center gap-2 w-full px-4 py-2"
+      >
+        <div className="flex items-center justify-between flex-1">{children}</div>
+        <ArrowRight size={14} className="text-neutral-400" />
+      </button>
+    </li>
+  );
+};
+
 interface ListItemAddProps {
   children: string;
   onClick?: () => void;
@@ -189,4 +223,4 @@ const ListItemAdd: FC<ListItemAddProps> = ({ children, onClick }) => {
   );
 };
 
-export { List, ListItem, ListItemLink, ListItemCheckbox, ListItemLabel, ListItemValue, ListItemAdd };
+export { List, ListItem, ListItemLink, ListItemCheckbox, ListItemButton, ListItemLabel, ListItemValue, ListItemAdd };

@@ -1,8 +1,7 @@
 import type { FC, PropsWithChildren } from "react";
-import { Scaffold } from "./components/scaffold";
 
 const Layout: FC<PropsWithChildren> = ({ children }) => (
-  <Scaffold>{children}</Scaffold>
+  <div className="bg-neutral-50 flex flex-col min-h-screen">{children}</div>
 );
 
 export default Layout;
