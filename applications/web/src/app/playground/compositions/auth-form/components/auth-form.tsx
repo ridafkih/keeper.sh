@@ -66,16 +66,16 @@ const AuthBackButton = () => {
   )
 }
 
+const handleGoogleSignIn = () => {
+  // TODO: Google OAuth
+};
+
 const AuthFormInternal: FC<AuthFormProps> = ({ variant, strategy }) => {
   const store = useStore();
   const router = useRouter();
   const setShowPasswordField = useSetShowPasswordField();
   const setIsLoading = useSetIsLoading();
   const formRef = useRef<HTMLFormElement>(null);
-
-  const handleGoogleSignIn = () => {
-    // TODO: Google OAuth
-  };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -89,13 +89,13 @@ const AuthFormInternal: FC<AuthFormProps> = ({ variant, strategy }) => {
 
       setIsLoading(true);
       const formData = new FormData(event.currentTarget);
-      const username = formData.get("username");
-      const password = formData.get("password");
+      const _username = formData.get("username");
+      const _password = formData.get("password");
       // TODO: non-commercial auth logic
     } else {
       setIsLoading(true);
       const formData = new FormData(event.currentTarget);
-      const email = formData.get("email");
+      const _email = formData.get("email");
       setTimeout(() => router.push("/playground/dashboard"), 1000);
     }
   };

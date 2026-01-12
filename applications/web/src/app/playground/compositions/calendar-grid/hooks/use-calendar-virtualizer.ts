@@ -24,13 +24,19 @@ const useCreateCalendarVirtualizer = ({ scrollRef, weekColumnRef }: UseCalendarV
     overscan: 5,
     observeElementOffset: (instance, callback) => {
       const element = instance.scrollElement;
-      if (!element) return;
+      if (!element) {
+        return;
+      }
       const onScroll = () => {
-        const scrollTop = element.scrollTop;
+        const { scrollTop } = element;
         callback(scrollTop, false);
         setScrollOffset(scrollTop);
         if (scrollTop !== prevScrollTop.current) {
-          setScrollDirection(scrollTop > prevScrollTop.current ? "down" : "up");
+          if (scrollTop > prevScrollTop.current) {
+            setScrollDirection("down");
+          } else {
+            setScrollDirection("up");
+          }
           prevScrollTop.current = scrollTop;
         }
         if (weekColumnRef.current) {

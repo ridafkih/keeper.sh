@@ -2,7 +2,7 @@ import type { FC, PropsWithChildren, ButtonHTMLAttributes, AnchorHTMLAttributes,
 import type { VariantProps } from "tailwind-variants";
 import type { LucideIcon } from "lucide-react";
 import { tv } from "tailwind-variants";
-import clsx from "clsx";
+import { clsx } from "clsx";
 import Link from "next/link";
 import { Spinner } from "./spinner";
 
@@ -109,7 +109,7 @@ const Button: FC<PropsWithChildren<ButtonProps>> = (props) => {
   const { children, variant, size, className } = props;
 
   if ("href" in props && props.href !== undefined) {
-    const { href, variant: _, size: __, className: ___, ...linkProps } = props;
+    const { href, variant: _variant, size: _size, className: _className, ...linkProps } = props;
     const resolvedClassName = buttonVariants({ variant, size, asLink: true, className });
 
     return (
@@ -119,7 +119,7 @@ const Button: FC<PropsWithChildren<ButtonProps>> = (props) => {
     );
   }
 
-  const { isLoading, disabled, variant: _, size: __, className: ___, ...buttonProps } = props as ButtonAsButtonProps;
+  const { isLoading, disabled, variant: _variant, size: _size, className: _className, ...buttonProps } = props as ButtonAsButtonProps;
   const resolvedClassName = buttonVariants({ variant, size, asLink: false, className });
   const isDisabledNotLoading = disabled && !isLoading;
 
@@ -165,7 +165,7 @@ const IconButton: FC<IconButtonProps> = (props) => {
   const iconSize = iconSizes[size ?? "default"];
 
   if ("href" in props && props.href !== undefined) {
-    const { href, icon: _, variant: __, size: ___, className: ____, ...linkProps } = props;
+    const { href, icon: _icon, variant: _variant, size: _size, className: _className, ...linkProps } = props;
     const resolvedClassName = iconButtonVariants({ variant, size, asLink: true, className });
 
     return (
@@ -175,7 +175,7 @@ const IconButton: FC<IconButtonProps> = (props) => {
     );
   }
 
-  const { icon: _, variant: __, size: ___, className: ____, ...buttonProps } = props as IconButtonAsButtonProps;
+  const { icon: _icon, variant: _variant, size: _size, className: _className, ...buttonProps } = props as IconButtonAsButtonProps;
   const resolvedClassName = iconButtonVariants({ variant, size, asLink: false, className });
 
   return (

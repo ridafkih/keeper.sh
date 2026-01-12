@@ -16,15 +16,22 @@ const EVENT_TEMPLATES = [
   { name: "Team Lunch", sourceCalendar: "Work", duration: 90 },
 ];
 
+const getStartMinute = (random: number): number => {
+  if (random > 0.5) {
+    return 0;
+  }
+  return 30;
+};
+
 const generateEventsForDay = (dayOffset: number, baseId: number): PlaygroundEvent[] => {
   const eventsPerDay = 3 + Math.floor(Math.random() * 3);
   const events: PlaygroundEvent[] = [];
   const usedHours = new Set<number>();
 
-  for (let i = 0; i < eventsPerDay; i++) {
+  for (let index = 0; index < eventsPerDay; index++) {
     const templateIndex = Math.floor(Math.random() * EVENT_TEMPLATES.length);
     const template = EVENT_TEMPLATES[templateIndex]!;
-    let startHour: number;
+    let startHour = 0;
 
     do {
       startHour = 8 + Math.floor(Math.random() * 10);
@@ -32,10 +39,10 @@ const generateEventsForDay = (dayOffset: number, baseId: number): PlaygroundEven
 
     usedHours.add(startHour);
 
-    const startMinute = Math.random() > 0.5 ? 0 : 30;
+    const startMinute = getStartMinute(Math.random());
 
     events.push({
-      id: `${baseId + i}`,
+      id: `${baseId + index}`,
       name: template.name,
       sourceCalendar: template.sourceCalendar,
       startTime: createDate(dayOffset, startHour, startMinute),
@@ -43,7 +50,7 @@ const generateEventsForDay = (dayOffset: number, baseId: number): PlaygroundEven
     });
   }
 
-  return events.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+  return events.toSorted((eventA, eventB) => eventA.startTime.getTime() - eventB.startTime.getTime());
 };
 
 const generateWeekEvents = (): PlaygroundEvent[] => {

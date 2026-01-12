@@ -13,22 +13,28 @@ interface CalendarRowProps {
 }
 
 const CalendarRow: FC<CalendarRowProps> = memo(
-  ({ rowIndex, rowHeight, startY, startDate }) => (
-    <div
-      className="absolute left-0 right-0 grid grid-cols-7 gap-px"
-      style={{
-        height: `${rowHeight}px`,
-        transform: `translateY(${startY}px)`,
-      }}
-    >
-      {[...Array(COLUMN_COUNT)].map((_, colIndex) => {
-        const daysFromStart = rowIndex * COLUMN_COUNT + colIndex;
-        const date = new Date(startDate);
-        date.setDate(startDate.getDate() + daysFromStart);
-        return <CalendarCell key={colIndex} day={date.getDate()} />;
-      })}
-    </div>
-  ),
+  ({ rowIndex, rowHeight, startY, startDate }) => {
+    const cells = Array.from({ length: COLUMN_COUNT }, (_unused, colIndex) => {
+      const daysFromStart = rowIndex * COLUMN_COUNT + colIndex;
+      const date = new Date(startDate);
+      date.setDate(startDate.getDate() + daysFromStart);
+      return { day: date.getDate(), key: `${rowIndex}-${colIndex}` };
+    });
+
+    return (
+      <div
+        className="absolute left-0 right-0 grid grid-cols-7 gap-px"
+        style={{
+          height: `${rowHeight}px`,
+          transform: `translateY(${startY}px)`,
+        }}
+      >
+        {cells.map((cell) => (
+          <CalendarCell key={cell.key} day={cell.day} />
+        ))}
+      </div>
+    );
+  },
   (prev, next) =>
     prev.rowIndex === next.rowIndex &&
     prev.rowHeight === next.rowHeight &&

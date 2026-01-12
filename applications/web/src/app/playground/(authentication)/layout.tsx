@@ -1,6 +1,4 @@
 import type { FC, PropsWithChildren } from "react";
-import KeeperSvg from "@/assets/keeper.svg";
-import Link from "next/link";
 import { Scaffold } from "../components/scaffold";
 
 const AuthenticationLayout: FC<PropsWithChildren> = ({ children }) => (

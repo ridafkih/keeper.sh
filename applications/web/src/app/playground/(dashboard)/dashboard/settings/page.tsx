@@ -1,6 +1,5 @@
 "use client";
 
-import type { FC } from "react";
 import { useState } from "react";
 import { Fingerprint } from "lucide-react";
 import { Heading1, Heading2 } from "../../../components/heading";
@@ -28,13 +27,12 @@ const MOCK_PASSKEYS: Passkey[] = [
   },
 ];
 
-const formatDate = (date: Date): string => {
-  return date.toLocaleDateString("en-US", {
+const formatDate = (date: Date): string =>
+  date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
   });
-};
 
 const SettingsPage = () => {
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);

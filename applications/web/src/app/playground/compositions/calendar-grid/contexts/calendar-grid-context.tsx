@@ -21,7 +21,6 @@ const useRowHeight = () => useAtomValue(rowHeightAtom);
 const useSetRowHeight = () => useSetAtom(rowHeightAtom);
 
 // Hooks for scroll offset
-const useScrollOffset = () => useAtomValue(scrollOffsetAtom);
 const useSetScrollOffset = () => useSetAtom(scrollOffsetAtom);
 
 // Hooks for scroll direction
@@ -37,7 +36,9 @@ const VirtualizerContext = createContext<VirtualizerInstance | null>(null);
 
 const useCalendarVirtualizer = () => {
   const virtualizer = useContext(VirtualizerContext);
-  if (!virtualizer) throw new Error("useCalendarVirtualizer must be used within VirtualizerProvider");
+  if (!virtualizer) {
+    throw new Error("useCalendarVirtualizer must be used within VirtualizerProvider");
+  }
   return virtualizer;
 };
 
@@ -59,7 +60,6 @@ export {
   VirtualizerProvider,
   useRowHeight,
   useSetRowHeight,
-  useScrollOffset,
   useSetScrollOffset,
   useScrollDirection,
   useSetScrollDirection,

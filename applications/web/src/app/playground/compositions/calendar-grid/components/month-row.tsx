@@ -14,7 +14,13 @@ const MonthRow: FC = () => {
   const rowDates = getRowDates(startDate, firstVisibleRowIndex);
   const monthSpans = groupDatesByMonth(rowDates);
 
-  const yOffset = scrollDirection === "down" ? 16 : -16;
+  const getYOffset = () => {
+    if (scrollDirection === "down") {
+      return 16;
+    }
+    return -16;
+  };
+  const yOffset = getYOffset();
 
   return (
     <div className="relative h-4 overflow-hidden">

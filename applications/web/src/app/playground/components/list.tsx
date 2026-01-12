@@ -5,6 +5,20 @@ import { createContext, useContext, useId, useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { ArrowRight, Check, Plus } from "lucide-react";
+import { tv } from "tailwind-variants";
+
+const checkboxIndicatorVariants = tv({
+  base: "size-4 rounded-md border flex items-center justify-center transition-colors",
+  variants: {
+    checked: {
+      true: "bg-neutral-800 border-neutral-800",
+      false: "bg-white border-neutral-300",
+    },
+  },
+  defaultVariants: {
+    checked: false,
+  },
+});
 
 interface ListContextValue {
   activeId: string | null;
@@ -145,13 +159,7 @@ const ListItemCheckbox: FC<ListItemCheckboxProps> = ({
         className="relative z-10 flex items-center justify-between px-4 py-2 w-full text-left"
       >
         {children}
-        <div
-          className={`size-4 rounded-md border flex items-center justify-center transition-colors ${
-            isChecked
-              ? "bg-neutral-800 border-neutral-800"
-              : "bg-white border-neutral-300"
-          }`}
-        >
+        <div className={checkboxIndicatorVariants({ checked: isChecked })}>
           {isChecked && <Check size={10} strokeWidth={2.5} className="text-white" />}
         </div>
       </button>

@@ -10,7 +10,9 @@ const useRowHeightSync = (containerRef: RefObject<HTMLDivElement | null>) => {
 
   useLayoutEffect(() => {
     const updateRowHeight = () => {
-      if (!containerRef.current) return;
+      if (!containerRef.current) {
+        return;
+      }
       const containerHeight = containerRef.current.clientHeight;
       const totalGaps = (VISIBLE_ROWS - 1) * GAP;
       setRowHeight((containerHeight - totalGaps) / VISIBLE_ROWS);

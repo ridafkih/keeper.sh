@@ -11,11 +11,6 @@ import {
 } from "lucide-react";
 import { DockIndicator } from "./dock-indicator";
 
-/**
- * We name a map of icons so we can get the benefit
- * of not having to load icons over the network, yet
- * still being able to SSR.
- */
 const iconMap = {
   HomeIcon,
   CalendarsIcon,
@@ -62,16 +57,14 @@ interface DockProps {
 }
 
 const Dock: FC<PropsWithChildren<DockProps>> = ({ position = "bottom", children }) => (
-  <>
-    <nav
-      className={clsx(
-        "left-0 right-0 mx-auto p-1.5 rounded-full bg-neutral-950 w-fit text-neutral-300 z-100",
-        getDockPositionClassName(position).className,
-      )}
-    >
-      <ul className="flex items-center">{children}</ul>
-    </nav>
-  </>
+  <nav
+    className={clsx(
+      "left-0 right-0 mx-auto p-1.5 rounded-full bg-neutral-950 w-fit text-neutral-300 z-100",
+      getDockPositionClassName(position).className,
+    )}
+  >
+    <ul className="flex items-center">{children}</ul>
+  </nav>
 );
 
 export { Dock, DockItem };

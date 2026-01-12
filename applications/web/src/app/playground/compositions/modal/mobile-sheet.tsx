@@ -9,7 +9,7 @@ interface MobileSheetProps {
   onClose: () => void;
 }
 
-const MobileSheet: FC<PropsWithChildren<MobileSheetProps>> = ({ children, onClose }) => (
+const MobileSheet: FC<PropsWithChildren<MobileSheetProps>> = ({ children, onClose: _onClose }) => (
   <motion.div
     initial={{ y: "100%" }}
     animate={{ y: 0 }}

@@ -20,6 +20,11 @@ const iconSizeStyles: Record<SelectSize, string> = {
   small: "right-3",
 };
 
+const iconSizes: Record<SelectSize, number> = {
+  default: 16,
+  small: 14,
+};
+
 const Select = ({ className, disabled, selectSize = "default", children, ref, ...props }: SelectProps) => (
   <div className="relative w-full">
     <select
@@ -37,7 +42,7 @@ const Select = ({ className, disabled, selectSize = "default", children, ref, ..
       {children}
     </select>
     <ChevronDown
-      size={selectSize === "small" ? 14 : 16}
+      size={iconSizes[selectSize]}
       className={clsx(
         "absolute top-1/2 -translate-y-1/2 pointer-events-none text-neutral-400",
         iconSizeStyles[selectSize],

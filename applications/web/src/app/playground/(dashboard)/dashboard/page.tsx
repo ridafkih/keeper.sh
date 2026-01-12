@@ -1,4 +1,4 @@
-import { Heading1, Heading2 } from "../../components/heading";
+import { Heading1 } from "../../components/heading";
 import { Copy } from "../../components/copy";
 import { CalendarGrid } from "../../compositions/calendar-grid/calendar-grid";
 import { EventList } from "../../compositions/event-list/event-list";

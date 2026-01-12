@@ -18,9 +18,15 @@ const DesktopModal: FC<PropsWithChildren<DesktopModalProps>> = ({ children, onCl
     className="fixed inset-0 z-200 flex items-center justify-center p-4"
     onClick={onClose}
   >
+    {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Modal dialog"
+      tabIndex={-1}
       className="bg-white rounded-xl shadow-lg w-full max-w-md p-4"
       onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
     >
       {children}
     </div>

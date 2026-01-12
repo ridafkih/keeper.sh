@@ -8,7 +8,6 @@ import { ArrowLeft, Trash2 } from "lucide-react";
 import { Heading1, Heading2 } from "../../../../components/heading";
 import { Copy } from "../../../../components/copy";
 import { Button, ButtonText } from "../../../../components/button";
-import { Checkbox } from "../../../../components/checkbox";
 import { Input } from "../../../../components/input";
 import { Modal, ModalHeader, ModalFooter } from "../../../../compositions/modal/modal";
 import { List, ListItemCheckbox, ListItemLabel, ListItemValue } from "../../../../components/list";
@@ -126,7 +125,7 @@ interface CalendarDetailPageProps {
 }
 
 const CalendarDetailPage: FC<CalendarDetailPageProps> = ({ params }) => {
-  const { calendarId } = use(params);
+  const { calendarId: _calendarId } = use(params);
   const source = MOCK_SOURCE;
 
   const [syncSummaries, setSyncSummaries] = useState(source.syncSettings.summaries);
@@ -183,41 +182,41 @@ const CalendarDetailPage: FC<CalendarDetailPageProps> = ({ params }) => {
         </List>
       </div>
 
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-2">
         <Heading2>Sync Settings</Heading2>
+        <Copy className="text-xs">Choose what event data to sync, or set custom values.</Copy>
+        <List>
+          <ListItemCheckbox id="sync-summaries" checked={syncSummaries} onChange={setSyncSummaries}>
+            <ListItemLabel>Sync event summaries</ListItemLabel>
+          </ListItemCheckbox>
+          <ListItemCheckbox id="sync-descriptions" checked={syncDescriptions} onChange={setSyncDescriptions}>
+            <ListItemLabel>Sync event descriptions</ListItemLabel>
+          </ListItemCheckbox>
+        </List>
+      </div>
 
+      <div className="flex flex-col gap-4">
+        <Heading2>Custom Values</Heading2>
         <div className="flex flex-col gap-2">
-          <Checkbox
-            checkboxSize="small"
-            label="Sync event summaries"
-            checked={syncSummaries}
-            onChange={(e) => setSyncSummaries(e.target.checked)}
-          />
+          <Copy className="text-xs">Replace event titles with a custom name.</Copy>
           <Input
             inputSize="small"
             value={customSummary}
-            onChange={(e) => setCustomSummary(e.target.value)}
-            placeholder="Event name"
+            onChange={({ target }) => setCustomSummary(target.value)}
+            placeholder="Custom event name"
             disabled={syncSummaries}
           />
         </div>
-
         <div className="flex flex-col gap-2">
-          <Checkbox
-            checkboxSize="small"
-            label="Sync event descriptions"
-            checked={syncDescriptions}
-            onChange={(e) => setSyncDescriptions(e.target.checked)}
-          />
+          <Copy className="text-xs">Replace event descriptions with custom text.</Copy>
           <Input
             inputSize="small"
             value={customDescription}
-            onChange={(e) => setCustomDescription(e.target.value)}
-            placeholder="Event description"
+            onChange={({ target }) => setCustomDescription(target.value)}
+            placeholder="Custom event description"
             disabled={syncDescriptions}
           />
         </div>
-
       </div>
 
       <div className="flex flex-col gap-2">

@@ -22,7 +22,7 @@ const getDateForCell = (startDate: Date, rowIndex: number, colIndex: number) => 
 };
 
 const getRowDates = (startDate: Date, rowIndex: number) =>
-  Array.from({ length: COLUMN_COUNT }, (_, colIndex) =>
+  Array.from({ length: COLUMN_COUNT }, (_unused, colIndex) =>
     getDateForCell(startDate, rowIndex, colIndex)
   );
 
@@ -35,14 +35,18 @@ const groupDatesByMonth = (dates: Date[]): MonthSpan[] => {
     const year = date.getFullYear();
 
     if (!currentSpan || currentSpan.month !== month || currentSpan.year !== year) {
-      if (currentSpan) spans.push(currentSpan);
+      if (currentSpan) {
+        spans.push(currentSpan);
+      }
       currentSpan = { month, year, startCol: colIndex, endCol: colIndex };
     } else {
       currentSpan.endCol = colIndex;
     }
   });
 
-  if (currentSpan) spans.push(currentSpan);
+  if (currentSpan) {
+    spans.push(currentSpan);
+  }
   return spans;
 };
 

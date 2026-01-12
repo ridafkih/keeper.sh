@@ -103,7 +103,9 @@ const MOCK_DESTINATIONS: Destination[] = [
 ];
 
 const formatEventCount = (count: number): string => {
-  if (count === 1) return "1 event";
+  if (count === 1) {
+    return "1 event";
+  }
   return `${count} events`;
 };
 

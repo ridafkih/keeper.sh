@@ -14,7 +14,9 @@ const getTodayPosition = () => {
   const diffTime = todayStart.getTime() - startDate.getTime();
   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
-  if (diffDays < 0) return null;
+  if (diffDays < 0) {
+    return null;
+  }
 
   const row = Math.floor(diffDays / COLUMN_COUNT);
   const col = diffDays % COLUMN_COUNT;
@@ -42,7 +44,9 @@ const CurrentTimeIndicator: FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  if (!position) return null;
+  if (!position) {
+    return null;
+  }
 
   const { row, col } = position;
   const cellWidth = 100 / COLUMN_COUNT;
