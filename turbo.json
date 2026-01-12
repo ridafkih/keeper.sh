@@ -7,6 +7,10 @@
       "cache": false,
       "persistent": true
     },
+    "//#dev:root": {
+      "cache": false,
+      "persistent": true
+    },
     "types": {
       "dependsOn": ["^types"]
     },
