@@ -1,11 +1,12 @@
 "use client";
 
 import type { FC, PropsWithChildren, ReactNode } from "react";
-import { createContext, useContext, useId, useState } from "react";
+import { createContext, useContext, useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { ArrowRight, Check, Plus } from "lucide-react";
 import { tv } from "tailwind-variants";
+import { cn } from "../utils/cn";
 
 const checkboxIndicatorVariants = tv({
   base: "size-4 rounded-md border flex items-center justify-center transition-colors",
@@ -23,6 +24,8 @@ const checkboxIndicatorVariants = tv({
 interface ListContextValue {
   activeId: string | null;
   setActiveId: (id: string | null) => void;
+  selectedId: string | null;
+  setSelectedId: (id: string | null) => void;
   indicatorLayoutId: string;
 }
 
@@ -36,13 +39,18 @@ const useListContext = (): ListContextValue => {
   return context;
 };
 
-const List: FC<PropsWithChildren> = ({ children }) => {
+interface ListProps {
+  className?: string;
+}
+
+const List: FC<PropsWithChildren<ListProps>> = ({ children, className }) => {
   const indicatorLayoutId = useId();
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   return (
-    <ListContext.Provider value={{ activeId, setActiveId, indicatorLayoutId }}>
-      <ul className="flex flex-col">{children}</ul>
+    <ListContext.Provider value={{ activeId, setActiveId, selectedId, setSelectedId, indicatorLayoutId }}>
+      <ul className={cn("flex flex-col", className)}>{children}</ul>
     </ListContext.Provider>
   );
 };
@@ -65,7 +73,7 @@ const ListItem: FC<ListItemProps> = ({ id, children }) => {
       {isActive && (
         <motion.div
           layoutId={indicatorLayoutId}
-          className="absolute inset-0 bg-neutral-100 rounded-xl"
+          className="absolute inset-0 bg-neutral-100 rounded-lg"
           transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
         />
       )}
@@ -103,7 +111,7 @@ const ListItemLink: FC<ListItemLinkProps> = ({ id, href, children }) => {
       {isActive && (
         <motion.div
           layoutId={indicatorLayoutId}
-          className="absolute inset-0 bg-neutral-100 rounded-xl"
+          className="absolute inset-0 bg-neutral-100 rounded-lg"
           transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
         />
       )}
@@ -149,7 +157,7 @@ const ListItemCheckbox: FC<ListItemCheckboxProps> = ({
       {isActive && (
         <motion.div
           layoutId={indicatorLayoutId}
-          className="absolute inset-0 bg-neutral-100 rounded-xl"
+          className="absolute inset-0 bg-neutral-100 rounded-lg"
           transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
         />
       )}
@@ -170,11 +178,26 @@ const ListItemCheckbox: FC<ListItemCheckboxProps> = ({
 interface ListItemButtonProps {
   id: string;
   onClick?: () => void;
+  selected?: boolean;
 }
 
-const ListItemButton: FC<PropsWithChildren<ListItemButtonProps>> = ({ id, children, onClick }) => {
-  const { activeId, setActiveId, indicatorLayoutId } = useListContext();
+const ListItemButton: FC<PropsWithChildren<ListItemButtonProps>> = ({ id, children, onClick, selected }) => {
+  const { activeId, setActiveId, selectedId, setSelectedId, indicatorLayoutId } = useListContext();
   const isActive = activeId === id;
+  const isSelected = selectedId === id;
+  // Show indicator if: hovering this item, OR (this item is selected AND nothing is being hovered)
+  const showIndicator = isActive || (isSelected && activeId === null);
+
+  useEffect(() => {
+    if (selected) {
+      setSelectedId(id);
+    }
+  }, [selected, id, setSelectedId]);
+
+  const handleClick = () => {
+    setSelectedId(id);
+    onClick?.();
+  };
 
   return (
     <li
@@ -182,16 +205,16 @@ const ListItemButton: FC<PropsWithChildren<ListItemButtonProps>> = ({ id, childr
       onMouseEnter={() => setActiveId(id)}
       onMouseLeave={() => setActiveId(null)}
     >
-      {isActive && (
+      {showIndicator && (
         <motion.div
           layoutId={indicatorLayoutId}
-          className="absolute inset-0 bg-neutral-100 rounded-xl"
+          className="absolute inset-0 bg-neutral-100 rounded-lg"
           transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
         />
       )}
       <button
         type="button"
-        onClick={onClick}
+        onClick={handleClick}
         className="relative z-10 flex items-center gap-2 w-full px-4 py-2"
       >
         <div className="flex items-center justify-between flex-1">{children}</div>
@@ -221,7 +244,7 @@ const ListItemAdd: FC<ListItemAddProps> = ({ children, onClick }) => {
       {isActive && (
         <motion.div
           layoutId={indicatorLayoutId}
-          className="absolute inset-0 bg-neutral-100 rounded-xl"
+          className="absolute inset-0 bg-neutral-100 rounded-lg"
           transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
         />
       )}

@@ -1,11 +1,13 @@
 "use client";
 
 import type { FC } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import { AlertTriangle, ArrowDown, Check, RefreshCw } from "lucide-react";
 import { Heading1, Heading2 } from "../../../components/heading";
 import { List, ListItemLink, ListItemLabel, ListItemValue, ListItemAdd } from "../../../components/list";
 import { Copy } from "@/app/playground/components/copy";
+import { AddSourceModal } from "../../../compositions/add-source-modal/add-source-modal";
 
 interface Source {
   id: string;
@@ -177,20 +179,23 @@ const DestinationItem: FC<DestinationItemProps> = ({ destination }) => (
   </ListItemLink>
 );
 
-const CalendarsPage = () => (
-  <div className="flex flex-col gap-8 pt-16 pb-8">
-    <Heading1>Calendars</Heading1>
+const CalendarsPage = () => {
+  const [addSourceOpen, setAddSourceOpen] = useState(false);
 
-    <div className="flex flex-col gap-2">
-      <Heading2>Sources</Heading2>
-      <Copy className="text-xs">Calendars for which events may be sourced, these events are pooled and can be used to push events to destinations.</Copy>
-      <List>
-        {MOCK_SOURCES.map((source) => (
-          <SourceItem key={source.id} source={source} />
-        ))}
-        <ListItemAdd>Add source</ListItemAdd>
-      </List>
-    </div>
+  return (
+    <div className="flex flex-col gap-8 pt-16 pb-8">
+      <Heading1>Calendars</Heading1>
+
+      <div className="flex flex-col gap-2">
+        <Heading2>Sources</Heading2>
+        <Copy className="text-xs">Calendars for which events may be sourced, these events are pooled and can be used to push events to destinations.</Copy>
+        <List>
+          {MOCK_SOURCES.map((source) => (
+            <SourceItem key={source.id} source={source} />
+          ))}
+          <ListItemAdd onClick={() => setAddSourceOpen(true)}>Add source</ListItemAdd>
+        </List>
+      </div>
 
     <ArrowDown size={20} className="text-neutral-300 mx-auto" />
 
@@ -204,7 +209,10 @@ const CalendarsPage = () => (
         <ListItemAdd>Add destination</ListItemAdd>
       </List>
     </div>
-  </div>
-);
+
+      <AddSourceModal open={addSourceOpen} onClose={() => setAddSourceOpen(false)} />
+    </div>
+  );
+};
 
 export default CalendarsPage;

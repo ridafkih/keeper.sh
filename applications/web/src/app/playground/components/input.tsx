@@ -1,5 +1,5 @@
 import type { InputHTMLAttributes, Ref } from "react";
-import { clsx } from "clsx";
+import { cn } from "../utils/cn";
 
 type InputSize = "default" | "small";
 
@@ -18,7 +18,7 @@ const Input = ({ className, disabled, inputSize = "default", ref, ...props }: In
   <input
     ref={ref}
     disabled={disabled}
-    className={clsx(
+    className={cn(
       "w-full border border-neutral-300 rounded-xl transition-colors bg-white",
       "focus:outline-none focus:border-neutral-400 focus:ring-2 focus:ring-neutral-200",
       "placeholder:text-neutral-400 tracking-normal",

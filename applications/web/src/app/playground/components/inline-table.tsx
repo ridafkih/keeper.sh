@@ -1,7 +1,7 @@
 import type { FC, PropsWithChildren } from "react";
 
 import { Copy } from "./copy";
-import { clsx } from "clsx";
+import { cn } from "../utils/cn";
 
 const InlineTable: FC<PropsWithChildren> = ({ children }) => (
   <div className="overflow-x-auto">
@@ -24,7 +24,7 @@ interface InlineTableRowProps {
 }
 
 const InlineTableRow: FC<PropsWithChildren<InlineTableRowProps>> = ({ last, children }) => (
-  <tr className={clsx({"border-b border-neutral-200": last})}>{children}</tr>
+  <tr className={cn({"border-b border-neutral-200": last})}>{children}</tr>
 );
 
 const InlineTableHead: FC<PropsWithChildren> = ({ children }) => (

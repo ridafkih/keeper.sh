@@ -18,7 +18,7 @@ import {
   SubContent,
   ItemIndicator,
 } from "@radix-ui/react-dropdown-menu";
-import { clsx } from "clsx";
+import { cn } from "../utils/cn";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 
 type DropdownMenuSize = "default" | "small";
@@ -48,7 +48,7 @@ const DropdownMenuTrigger: FC<PropsWithChildren<DropdownMenuTriggerProps>> = ({
   ...props
 }) => (
   <Trigger
-    className={clsx(
+    className={cn(
       "bg-linear-to-b from-white to-neutral-50 border-y border-t-neutral-100 border-b-neutral-200 text-neutral-800 shadow-xs",
       "tracking-tighter font-medium rounded-xl w-fit cursor-pointer",
       "flex items-center gap-1 hover:brightness-95 transition-all",
@@ -73,7 +73,7 @@ const DropdownMenuContent: FC<
     <Content
       sideOffset={sideOffset}
       align={align}
-      className={clsx(
+      className={cn(
         "min-w-48 overflow-hidden rounded-xl bg-white p-1 shadow-lg",
         "data-[state=open]:animate-in data-[state=closed]:animate-out",
         "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
@@ -93,7 +93,7 @@ const DropdownMenuItem: FC<
   PropsWithChildren<ComponentPropsWithoutRef<typeof Item>>
 > = ({ children, className, ...props }) => (
   <Item
-    className={clsx(
+    className={cn(
       "relative flex cursor-pointer select-none items-center gap-2 rounded-xl outline-none transition-colors",
       "text-neutral-700 text-sm p-2",
       "focus:bg-neutral-100",
@@ -110,7 +110,7 @@ const DropdownMenuCheckboxItem: FC<
   PropsWithChildren<ComponentPropsWithoutRef<typeof CheckboxItem>>
 > = ({ children, className, checked, ...props }) => (
   <CheckboxItem
-    className={clsx(
+    className={cn(
       "relative flex cursor-pointer select-none items-center rounded-xl outline-none transition-colors",
       "text-neutral-700 text-sm py-1.5 pl-7 pr-2",
       "focus:bg-neutral-100",
@@ -133,7 +133,7 @@ const DropdownMenuRadioItem: FC<
   PropsWithChildren<ComponentPropsWithoutRef<typeof RadioItem>>
 > = ({ children, className, ...props }) => (
   <RadioItem
-    className={clsx(
+    className={cn(
       "relative flex cursor-pointer select-none items-center rounded-xl outline-none transition-colors",
       "text-neutral-700 text-sm py-1.5 pl-7 pr-2",
       "focus:bg-neutral-100",
@@ -155,7 +155,7 @@ const DropdownMenuLabel: FC<
   PropsWithChildren<ComponentPropsWithoutRef<typeof Label>>
 > = ({ children, className, ...props }) => (
   <Label
-    className={clsx("px-2 py-1.5 text-xs text-neutral-400 font-medium", className)}
+    className={cn("px-2 py-1.5 text-xs text-neutral-400 font-medium", className)}
     {...props}
   >
     {children}
@@ -167,7 +167,7 @@ const DropdownMenuSeparator: FC<ComponentPropsWithoutRef<typeof Separator>> = ({
   ...props
 }) => (
   <Separator
-    className={clsx(
+    className={cn(
       "mx-1 my-1 h-px bg-[repeating-linear-gradient(to_right,var(--color-neutral-300),var(--color-neutral-300)_0.25rem,transparent_0.25rem,transparent_0.5rem)]",
       className,
     )}
@@ -179,7 +179,7 @@ const DropdownMenuSubTrigger: FC<
   PropsWithChildren<ComponentPropsWithoutRef<typeof SubTrigger>>
 > = ({ children, className, ...props }) => (
   <SubTrigger
-    className={clsx(
+    className={cn(
       "relative flex cursor-pointer select-none items-center gap-2 rounded-xl outline-none transition-colors",
       "text-neutral-700 text-sm py-1.5 px-2",
       "focus:bg-neutral-100 data-[state=open]:bg-neutral-100",
@@ -197,7 +197,7 @@ const DropdownMenuSubContent: FC<ComponentPropsWithoutRef<typeof SubContent>> = 
   ...props
 }) => (
   <SubContent
-    className={clsx(
+    className={cn(
       "min-w-48 overflow-hidden rounded-xl bg-white p-1 shadow-lg",
       "data-[state=open]:animate-in data-[state=closed]:animate-out",
       "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",

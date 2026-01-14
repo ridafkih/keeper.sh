@@ -1,5 +1,5 @@
 import type { ElementType, ComponentPropsWithoutRef } from "react";
-import { clsx } from "clsx";
+import { cn } from "../utils/cn";
 
 type CopyProps<AsComponent extends ElementType = "p"> = {
   as?: AsComponent;
@@ -16,7 +16,7 @@ const Copy = <AsComponent extends ElementType = "p">({
 
   return (
     <Component
-      className={clsx("text-neutral-600 text-sm leading-relaxed", className)}
+      className={cn("text-neutral-600 text-sm leading-relaxed", className)}
       {...props}
     >
       {children}

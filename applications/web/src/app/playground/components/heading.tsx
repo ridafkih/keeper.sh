@@ -1,6 +1,6 @@
 import type { FC, PropsWithChildren } from "react";
 import { Lora as googleFont } from "next/font/google";
-import { clsx } from "clsx";
+import { cn } from "../utils/cn";
 
 const lora = googleFont();
 
@@ -10,7 +10,7 @@ interface HeadingProps {
 
 const Heading1: FC<PropsWithChildren<HeadingProps>> = ({ children, className }) => (
   <h1
-    className={clsx(
+    className={cn(
       lora.className,
       "text-4xl font-medium leading-tight -tracking-[0.075em]",
       className,
@@ -22,7 +22,7 @@ const Heading1: FC<PropsWithChildren<HeadingProps>> = ({ children, className }) 
 
 const Heading2: FC<PropsWithChildren<HeadingProps>> = ({ children, className }) => (
   <h2
-    className={clsx(
+    className={cn(
       lora.className,
       "text-2xl font-medium leading-tight -tracking-[0.075em]",
       className,
@@ -34,7 +34,7 @@ const Heading2: FC<PropsWithChildren<HeadingProps>> = ({ children, className }) 
 
 const Heading3: FC<PropsWithChildren<HeadingProps>> = ({ children, className }) => (
   <h2
-    className={clsx(
+    className={cn(
       lora.className,
       "text-xl font-medium leading-tight -tracking-[0.075em]",
       className,

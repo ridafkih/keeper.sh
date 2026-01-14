@@ -13,6 +13,7 @@ import { Button, ButtonText } from "../../components/button";
 interface ModalProps {
   open: boolean;
   onClose: () => void;
+  className?: string;
 }
 
 const getModalComponent = (isMobile: boolean) => {
@@ -22,7 +23,7 @@ const getModalComponent = (isMobile: boolean) => {
   return DesktopModal;
 };
 
-const Modal: FC<PropsWithChildren<ModalProps>> = ({ open, onClose, children }) => {
+const Modal: FC<PropsWithChildren<ModalProps>> = ({ open, onClose, className, children }) => {
   const isMobile = useIsMobile();
   const ModalComponent = getModalComponent(isMobile);
 
@@ -38,8 +39,8 @@ const Modal: FC<PropsWithChildren<ModalProps>> = ({ open, onClose, children }) =
             onClick={onClose}
             className="fixed inset-0 bg-black/50 z-150"
           />
-          <ModalComponent onClose={onClose}>
-            <div className="flex flex-col gap-2">
+          <ModalComponent onClose={onClose} className={className}>
+            <div className="flex flex-col">
               {children}
             </div>
           </ModalComponent>
@@ -99,7 +100,7 @@ const ModalFooter: FC<ModalFooterProps> = ({
   confirmText = "Confirm",
   variant = "default",
 }) => (
-  <div className="flex gap-2">
+  <div className="flex gap-2 mt-2">
     <Button variant="outline" onClick={onCancel} className="flex-1">
       <ButtonText>{cancelText}</ButtonText>
     </Button>

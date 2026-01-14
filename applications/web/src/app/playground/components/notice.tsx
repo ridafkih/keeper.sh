@@ -11,7 +11,7 @@ const noticeVariants = tv({
     container: "flex items-start gap-3 p-4 rounded-xl border",
     iconWrapper: "shrink-0 mt-0.5",
     content: "flex-1 min-w-0",
-    title: "text-sm font-medium",
+    title: "text-xs font-medium",
     description: "text-xs mt-0.5",
   },
   variants: {

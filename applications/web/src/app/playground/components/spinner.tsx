@@ -1,5 +1,5 @@
 import type { FC } from "react";
-import { clsx } from "clsx";
+import { cn } from "../utils/cn";
 
 interface SpinnerProps {
   className?: string;
@@ -7,7 +7,7 @@ interface SpinnerProps {
 
 const Spinner: FC<SpinnerProps> = ({ className }) => (
   <svg
-    className={clsx("animate-spin", className)}
+    className={cn("animate-spin", className)}
     xmlns="http://www.w3.org/2000/svg"
     fill="none"
     viewBox="0 0 24 24"

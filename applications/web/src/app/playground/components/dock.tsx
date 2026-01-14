@@ -1,6 +1,6 @@
 import type { FC, PropsWithChildren } from "react";
 import Link from "next/link";
-import { clsx } from "clsx";
+import { cn } from "../utils/cn";
 import {
   HomeIcon,
   CalendarsIcon,
@@ -58,7 +58,7 @@ interface DockProps {
 
 const Dock: FC<PropsWithChildren<DockProps>> = ({ position = "bottom", children }) => (
   <nav
-    className={clsx(
+    className={cn(
       "left-0 right-0 mx-auto p-1.5 rounded-full bg-neutral-950 w-fit text-neutral-300 z-100",
       getDockPositionClassName(position).className,
     )}

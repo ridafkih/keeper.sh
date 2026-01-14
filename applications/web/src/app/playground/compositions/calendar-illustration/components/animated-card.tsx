@@ -2,7 +2,7 @@
 
 import type { FC, PropsWithChildren } from "react";
 import { motion } from "motion/react";
-import { clsx } from "clsx";
+import { cn } from "../../../utils/cn";
 
 import {
   type SkewTuple,
@@ -25,7 +25,7 @@ const AnimatedCard: FC<PropsWithChildren<AnimatedCardProps>> = ({ skew, classNam
       initial={getInitialSkew(skew)}
       animate={selectSkewByState(skew, emphasized)}
       transition={getTransitionConfig(1.2)}
-      className={clsx(
+      className={cn(
         "shadow-[0_2px_1px_1px_rgba(0,0,0,0.025)] rounded-[0.875rem] overflow-hidden",
         className,
       )}

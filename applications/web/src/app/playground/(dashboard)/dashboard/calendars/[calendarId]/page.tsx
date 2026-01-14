@@ -203,7 +203,7 @@ const CalendarDetailPage: FC<CalendarDetailPageProps> = ({ params }) => {
 
       <div className="flex flex-col gap-2">
         <Heading2>Sync Settings</Heading2>
-        <Copy className="text-xs">Choose what event data to sync, or set custom values.</Copy>
+        <Copy className="text-xs">Choose what event data to sync.</Copy>
         <List>
           <ListItemCheckbox id="sync-summaries" checked={syncSummaries} onChange={setSyncSummaries}>
             <ListItemLabel>Sync event summaries</ListItemLabel>

@@ -1,5 +1,5 @@
 import type { InputHTMLAttributes, Ref } from "react";
-import { clsx } from "clsx";
+import { cn } from "../utils/cn";
 
 type RadioSize = "default" | "small";
 
@@ -21,7 +21,7 @@ const Radio = ({ className, disabled, radioSize = "default", label, id, ref, ...
   return (
     <label
       htmlFor={id}
-      className={clsx(
+      className={cn(
         "flex items-center gap-2 cursor-pointer",
         disabled && "cursor-not-allowed opacity-50",
         className,
@@ -37,7 +37,7 @@ const Radio = ({ className, disabled, radioSize = "default", label, id, ref, ...
           {...props}
         />
         <div
-          className={clsx(
+          className={cn(
             "border border-neutral-300 rounded-xl transition-colors bg-white",
             "peer-focus:ring-2 peer-focus:ring-neutral-200 peer-focus:border-neutral-400",
             "peer-checked:border-neutral-800",
@@ -45,14 +45,14 @@ const Radio = ({ className, disabled, radioSize = "default", label, id, ref, ...
           )}
         />
         <div
-          className={clsx(
+          className={cn(
             "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-xl bg-neutral-800",
             "scale-0 peer-checked:scale-100 transition-transform",
             styles.inner,
           )}
         />
       </div>
-      {label && <span className={clsx("text-neutral-700", styles.label)}>{label}</span>}
+      {label && <span className={cn("text-neutral-700", styles.label)}>{label}</span>}
     </label>
   );
 };

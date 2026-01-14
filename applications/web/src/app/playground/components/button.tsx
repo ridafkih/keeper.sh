@@ -2,7 +2,7 @@ import type { FC, PropsWithChildren, ButtonHTMLAttributes, AnchorHTMLAttributes,
 import type { VariantProps } from "tailwind-variants";
 import type { LucideIcon } from "lucide-react";
 import { tv } from "tailwind-variants";
-import { clsx } from "clsx";
+import { cn } from "../utils/cn";
 import Link from "next/link";
 import { Spinner } from "./spinner";
 
@@ -125,13 +125,13 @@ const Button: FC<PropsWithChildren<ButtonProps>> = (props) => {
 
   return (
     <button
-      className={clsx(resolvedClassName, isDisabledNotLoading && "opacity-50")}
+      className={cn(resolvedClassName, isDisabledNotLoading && "opacity-50")}
       disabled={isLoading || disabled}
       {...buttonProps}
     >
       <div className="w-full grid grid-cols-[1fr_max-content_1fr] items-center">
         {isLoading && <Spinner className="col-start-1 size-4" />}
-        <div className={clsx("col-start-2 flex items-center gap-1", isLoading && "opacity-50")}>
+        <div className={cn("col-start-2 flex items-center gap-1", isLoading && "opacity-50")}>
           {children}
         </div>
       </div>
@@ -186,7 +186,7 @@ const IconButton: FC<IconButtonProps> = (props) => {
 };
 
 const ButtonText: FC<PropsWithChildren & HTMLProps<HTMLSpanElement>> = ({ children, ...props }) => (
-  <span {...props} className={clsx("text-nowrap", props.className)}>{children}</span>
+  <span {...props} className={cn("text-nowrap", props.className)}>{children}</span>
 );
 
 interface ButtonIconProps {

@@ -1,5 +1,5 @@
 import type { SelectHTMLAttributes, Ref } from "react";
-import { clsx } from "clsx";
+import { cn } from "../utils/cn";
 import { ChevronDown } from "lucide-react";
 
 type SelectSize = "default" | "small";
@@ -30,7 +30,7 @@ const Select = ({ className, disabled, selectSize = "default", children, ref, ..
     <select
       ref={ref}
       disabled={disabled}
-      className={clsx(
+      className={cn(
         "w-full appearance-none border border-neutral-300 rounded-xl transition-colors tracking-tight bg-white",
         "focus:outline-none focus:border-neutral-400 focus:ring-2 focus:ring-neutral-200",
         sizeStyles[selectSize],
@@ -43,7 +43,7 @@ const Select = ({ className, disabled, selectSize = "default", children, ref, ..
     </select>
     <ChevronDown
       size={iconSizes[selectSize]}
-      className={clsx(
+      className={cn(
         "absolute top-1/2 -translate-y-1/2 pointer-events-none text-neutral-400",
         iconSizeStyles[selectSize],
       )}
