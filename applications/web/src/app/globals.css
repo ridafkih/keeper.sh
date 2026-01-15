@@ -20,7 +20,7 @@
 
   --color-border: var(--color-zinc-200);
   --color-border-emphasis: var(--color-blue-500);
-  --color-border-input: var(--color-zinc-300);
+  --color-input: var(--color-zinc-300);
 
   --color-primary: var(--color-zinc-900);
   --color-primary-hover: var(--color-zinc-700);
@@ -74,7 +74,7 @@ input:-webkit-autofill:disabled {
 
     --color-border: var(--color-zinc-800);
     --color-border-emphasis: var(--color-zinc-500);
-    --color-border-input: var(--color-zinc-800);
+    --color-input: var(--color-zinc-700);
 
     --color-primary: var(--color-zinc-50);
     --color-primary-hover: var(--color-zinc-200);

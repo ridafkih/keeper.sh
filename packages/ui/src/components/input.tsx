@@ -20,7 +20,7 @@ const Input = ({ className, disabled, size = "default", label, ref, ...props }: 
       ref={ref}
       disabled={disabled}
       className={cn(
-        "w-full shadow-xs border border rounded-xl transition-colors bg-surface",
+        "w-full shadow-xs border border-input rounded-xl transition-colors bg-surface",
         "focus:outline-none focus:border-input focus:ring-2 focus:ring-border",
         "focus-visible:ring-border-input focus-visible:ring-offset-1",
         "placeholder:text-foreground-subtle tracking-normal",
