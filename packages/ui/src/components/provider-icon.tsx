@@ -23,10 +23,10 @@ const ProviderIcon: FC<ProviderIconProps> = ({ provider, className }) => {
   }
 
   if (provider.id === "ical") {
-    return <Link2 size={16} className={cn("text-neutral-400", className)} />;
+    return <Link2 size={16} className={cn("text-foreground-subtle", className)} />;
   }
 
-  return <Calendar size={16} className={cn("text-neutral-400", className)} />;
+  return <Calendar size={16} className={cn("text-foreground-subtle", className)} />;
 };
 
 ProviderIcon.displayName = "ProviderIcon";

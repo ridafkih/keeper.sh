@@ -11,12 +11,12 @@ const InlineTable: FC<PropsWithChildren> = ({ children }) => (
 
 const InlineTableHeader: FC<PropsWithChildren> = ({ children }) => (
   <thead>
-    <tr className="border-b border-neutral-300">{children}</tr>
+    <tr className="border-b border-input">{children}</tr>
   </thead>
 );
 
 const InlineTableBody: FC<PropsWithChildren> = ({ children }) => (
-  <tbody className="text-neutral-500 align-top">{children}</tbody>
+  <tbody className="text-foreground-muted align-top">{children}</tbody>
 );
 
 interface InlineTableRowProps {
@@ -24,11 +24,11 @@ interface InlineTableRowProps {
 }
 
 const InlineTableRow: FC<PropsWithChildren<InlineTableRowProps>> = ({ last, children }) => (
-  <tr className={cn({"border-b border-neutral-200": last})}>{children}</tr>
+  <tr className={cn({"border-b border-border": last})}>{children}</tr>
 );
 
 const InlineTableHead: FC<PropsWithChildren> = ({ children }) => (
-  <th className="py-2 pr-4 font-medium text-neutral-800 whitespace-nowrap">{children}</th>
+  <th className="py-2 pr-4 font-medium text-foreground whitespace-nowrap">{children}</th>
 );
 
 const InlineTableCell: FC<PropsWithChildren> = ({ children }) => (

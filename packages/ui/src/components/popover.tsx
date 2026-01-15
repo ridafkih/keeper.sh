@@ -24,7 +24,7 @@ const PopoverContent: FC<
       sideOffset={sideOffset}
       align={align}
       className={cn(
-        "w-80 rounded-xl bg-white p-4 shadow-lg border border-neutral-200",
+        "w-80 rounded-xl bg-surface p-4 shadow-lg border border-border",
         "data-[state=open]:animate-in data-[state=closed]:animate-out",
         "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
         "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",

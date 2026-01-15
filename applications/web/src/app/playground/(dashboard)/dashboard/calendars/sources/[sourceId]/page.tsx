@@ -149,14 +149,14 @@ const CalendarDetailPage: FC<CalendarDetailPageProps> = ({ params }) => {
         <div className="flex items-center gap-2">
           <Link
             href="/playground/dashboard/calendars"
-            className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-700"
+            className="flex items-center gap-1 text-xs text-foreground-muted hover:text-foreground"
           >
             <ArrowLeft size={12} />
             Back
           </Link>
-          <span className="text-xs text-neutral-400">·</span>
-          <span className="text-xs text-neutral-500">Source</span>
-          <span className="text-xs text-neutral-400">·</span>
+          <span className="text-xs text-foreground-subtle">·</span>
+          <span className="text-xs text-foreground-muted">Source</span>
+          <span className="text-xs text-foreground-subtle">·</span>
           <div className="flex items-center gap-1">
             <Image
               src={source.provider.icon}
@@ -164,7 +164,7 @@ const CalendarDetailPage: FC<CalendarDetailPageProps> = ({ params }) => {
               width={12}
               height={12}
             />
-            <Copy as="span" className="text-xs text-neutral-500">{source.email}</Copy>
+            <Copy as="span" className="text-xs text-foreground-muted">{source.email}</Copy>
           </div>
         </div>
       </div>

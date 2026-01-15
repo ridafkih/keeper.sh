@@ -16,7 +16,7 @@ const CalendarScrollArea: FC<PropsWithChildren<CalendarScrollAreaProps>> = ({
   return (
     <div
       ref={scrollRef}
-      className="size-full overflow-auto bg-neutral-300 rounded-[0.9375rem]"
+      className="size-full overflow-auto bg-surface-skeleton rounded-[0.9375rem]"
     >
       {children}
     </div>

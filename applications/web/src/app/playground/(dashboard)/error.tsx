@@ -21,7 +21,7 @@ const DashboardErrorPage = ({ error, reset }: ErrorPageProps) => {
         displaying it.
       </Copy>
       {error.digest && (
-        <Copy className="text-xs text-neutral-400">Error ID: {error.digest}</Copy>
+        <Copy className="text-xs text-foreground-subtle">Error ID: {error.digest}</Copy>
       )}
       <Button variant="primary" onClick={reset}>
         <ButtonText>Reload Dashboard</ButtonText>

@@ -28,10 +28,10 @@ interface CalendarPreviewCardProps {
 
 const StatusIcon: FC<{ status: "synced" | "syncing" | "error" | "reauthenticate" }> = ({ status }) => {
   if (status === "syncing") {
-    return <RefreshCw size={14} className="text-neutral-400 animate-spin" />;
+    return <RefreshCw size={14} className="text-foreground-subtle animate-spin" />;
   }
   if (status === "synced") {
-    return <Check size={14} className="text-neutral-400" />;
+    return <Check size={14} className="text-foreground-subtle" />;
   }
   if (status === "reauthenticate") {
     return <AlertTriangle size={14} className="text-amber-400" />;
@@ -59,10 +59,10 @@ interface MicroEventItemProps {
 }
 
 const MicroEventItem: FC<MicroEventItemProps> = ({ event }) => (
-  <div className="flex items-center gap-2 py-1.5 px-2 hover:bg-neutral-50 rounded-lg transition-colors">
+  <div className="flex items-center gap-2 py-1.5 px-2 hover:bg-surface-subtle rounded-lg transition-colors">
     <div className="flex flex-col flex-1 min-w-0">
-      <span className="text-xs text-neutral-900 truncate">{event.name}</span>
-      <span className="text-[10px] text-neutral-400 tabular-nums">
+      <span className="text-xs text-foreground truncate">{event.name}</span>
+      <span className="text-[10px] text-foreground-subtle tabular-nums">
         {formatTime(event.startTime)} - {formatTime(event.endTime)}
       </span>
     </div>
@@ -77,16 +77,16 @@ const CalendarPreviewCard: FC<CalendarPreviewCardProps> = ({
   status,
   events,
 }) => (
-  <div className="flex flex-col border border-neutral-200 rounded-xl bg-white overflow-hidden">
+  <div className="flex flex-col border border-border rounded-xl bg-surface overflow-hidden">
     {/* Header */}
-    <div className="flex items-center gap-2 px-4 py-3 border-b border-neutral-200">
+    <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
       <Image
         src={provider.icon}
         alt={provider.name}
         width={16}
         height={16}
       />
-      <span className="text-sm font-medium text-neutral-900 flex-1">{name}</span>
+      <span className="text-sm font-medium text-foreground flex-1">{name}</span>
       <StatusIcon status={status} />
     </div>
 
@@ -97,16 +97,16 @@ const CalendarPreviewCard: FC<CalendarPreviewCardProps> = ({
           <MicroEventItem key={event.id} event={event} />
         ))
       ) : (
-        <div className="flex items-center justify-center py-8 text-xs text-neutral-400">
+        <div className="flex items-center justify-center py-8 text-xs text-foreground-subtle">
           No upcoming events
         </div>
       )}
     </div>
 
     {/* Footer */}
-    <div className="flex items-center justify-between px-4 py-2.5 border-t border-neutral-200 bg-neutral-50">
-      <span className="text-xs text-neutral-600">{email}</span>
-      <span className="text-xs text-neutral-400">{formatEventCount(eventCount)}</span>
+    <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-surface-subtle">
+      <span className="text-xs text-foreground-secondary">{email}</span>
+      <span className="text-xs text-foreground-subtle">{formatEventCount(eventCount)}</span>
     </div>
   </div>
 );

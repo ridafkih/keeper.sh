@@ -22,8 +22,8 @@ const AccountListItem: FC<AccountListItemProps> = ({
     onClick={onSelect}
     className={cn(
       "w-full flex items-center gap-2 py-1.5 px-2 rounded-xl text-left transition-colors",
-      "hover:bg-neutral-50",
-      selected && "bg-neutral-100"
+      "hover:bg-surface-subtle",
+      selected && "bg-surface-muted"
     )}
   >
     <div className="size-5 shrink-0 flex items-center justify-center">

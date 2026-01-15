@@ -16,13 +16,13 @@ const checkboxVariants = tv({
   slots: {
     box: [
       "flex items-center justify-center",
-      "border border-neutral-300 rounded-md transition-colors bg-white",
-      "peer-focus:ring-2 peer-focus:ring-neutral-200 peer-focus:border-neutral-400",
-      "peer-focus-visible:ring-neutral-300",
-      "peer-checked:bg-neutral-800 peer-checked:border-neutral-800",
+      "border border-input rounded-md transition-colors bg-surface",
+      "peer-focus:ring-2 peer-focus:ring-border peer-focus:border-input",
+      "peer-focus-visible:ring-border-input",
+      "peer-checked:bg-primary peer-checked:border-primary",
     ],
     icon: "text-white opacity-0 peer-checked:opacity-100 transition-opacity",
-    label: "text-neutral-700 text-xs",
+    label: "text-foreground-secondary text-xs",
   },
   variants: {
     size: {

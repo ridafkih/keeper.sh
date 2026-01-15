@@ -12,8 +12,8 @@ const checkboxIndicatorVariants = tv({
   base: "size-4 rounded-md border flex items-center justify-center transition-colors",
   variants: {
     checked: {
-      true: "bg-neutral-800 border-neutral-800",
-      false: "bg-white border-neutral-300",
+      true: "bg-primary border-primary",
+      false: "bg-surface border-input",
     },
   },
   defaultVariants: {
@@ -72,7 +72,7 @@ const ListItem: FC<PropsWithChildren<ListItemProps>> = ({ id, children }) => {
       {isActive && (
         <motion.div
           layoutId={indicatorLayoutId}
-          className="absolute inset-0 bg-neutral-100 rounded-lg"
+          className="absolute inset-0 bg-surface-muted rounded-lg"
           transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
         />
       )}
@@ -84,11 +84,11 @@ const ListItem: FC<PropsWithChildren<ListItemProps>> = ({ id, children }) => {
 };
 
 const ListItemLabel: FC<PropsWithChildren> = ({ children }) => (
-  <span className="text-xs text-neutral-900">{children}</span>
+  <span className="text-xs text-foreground">{children}</span>
 );
 
 const ListItemValue: FC<PropsWithChildren> = ({ children }) => (
-  <span className="text-xs text-neutral-400">{children}</span>
+  <span className="text-xs text-foreground-subtle">{children}</span>
 );
 
 interface ListItemLinkProps {
@@ -109,7 +109,7 @@ const ListItemLink: FC<PropsWithChildren<ListItemLinkProps>> = ({ id, href, chil
       {isActive && (
         <motion.div
           layoutId={indicatorLayoutId}
-          className="absolute inset-0 bg-neutral-100 rounded-lg"
+          className="absolute inset-0 bg-surface-muted rounded-lg"
           transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
         />
       )}
@@ -154,7 +154,7 @@ const ListItemCheckbox: FC<PropsWithChildren<ListItemCheckboxProps>> = ({
       {isActive && (
         <motion.div
           layoutId={indicatorLayoutId}
-          className="absolute inset-0 bg-neutral-100 rounded-lg"
+          className="absolute inset-0 bg-surface-muted rounded-lg"
           transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
         />
       )}
@@ -204,7 +204,7 @@ const ListItemButton: FC<PropsWithChildren<ListItemButtonProps>> = ({ id, childr
       {showIndicator && (
         <motion.div
           layoutId={indicatorLayoutId}
-          className="absolute inset-0 bg-neutral-100 rounded-lg"
+          className="absolute inset-0 bg-surface-muted rounded-lg"
           transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
         />
       )}
@@ -214,7 +214,7 @@ const ListItemButton: FC<PropsWithChildren<ListItemButtonProps>> = ({ id, childr
         className="relative z-10 flex items-center gap-2 w-full px-4 py-2"
       >
         <div className="flex items-center justify-between flex-1">{children}</div>
-        <ArrowRight size={14} className="text-neutral-400" />
+        <ArrowRight size={14} className="text-foreground-subtle" />
       </button>
     </li>
   );
@@ -235,12 +235,12 @@ const ListItemAdd: FC<ListItemAddProps> = ({ children, onClick }) => {
       onClick={onClick}
       onMouseEnter={() => setActiveId("add")}
       onMouseLeave={() => setActiveId(null)}
-      className="relative -mx-4 px-4 py-2 flex items-center gap-2 text-neutral-400 hover:text-neutral-500"
+      className="relative -mx-4 px-4 py-2 flex items-center gap-2 text-foreground-subtle hover:text-foreground-muted"
     >
       {isActive && (
         <motion.div
           layoutId={indicatorLayoutId}
-          className="absolute inset-0 bg-neutral-100 rounded-lg"
+          className="absolute inset-0 bg-surface-muted rounded-lg"
           transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
         />
       )}
@@ -288,7 +288,7 @@ const ListItemCheckboxLink: FC<PropsWithChildren<ListItemCheckboxLinkProps>> = (
       {isActive && (
         <motion.div
           layoutId={indicatorLayoutId}
-          className="absolute inset-0 bg-neutral-100 rounded-lg"
+          className="absolute inset-0 bg-surface-muted rounded-lg"
           transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
         />
       )}

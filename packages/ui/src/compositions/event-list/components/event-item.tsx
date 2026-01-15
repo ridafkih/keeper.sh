@@ -18,11 +18,11 @@ const eventItemVariants = tv({
   variants: {
     isPast: {
       true: {
-        container: "text-neutral-400",
+        container: "text-foreground-subtle",
         name: "line-through",
       },
       false: {
-        container: "text-neutral-700",
+        container: "text-foreground",
       },
     },
   },
@@ -41,7 +41,7 @@ const EventItem: FC<EventItemProps> = ({ event }) => {
       <div className={container()}>
         <div className="flex items-center gap-2 max-w-[50%] whitespace-nowrap">
           <span className={name()}>{event.name}</span>
-          <span className="shrink-0 text-neutral-400">{event.sourceCalendar}</span>
+          <span className="shrink-0 text-foreground-subtle">{event.sourceCalendar}</span>
         </div>
         <span className="shrink-0 tabular-nums">{timeUntil}</span>
       </div>

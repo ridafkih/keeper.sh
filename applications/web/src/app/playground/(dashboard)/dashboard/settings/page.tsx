@@ -83,7 +83,7 @@ const SettingsPage = () => {
         {MOCK_PASSKEYS.map((passkey) => (
           <ListItemButton key={passkey.id} id={passkey.id} onClick={() => setDeletePasskeyOpen(passkey)}>
             <div className="flex items-center gap-2">
-              <Fingerprint size={14} className="text-neutral-400" />
+              <Fingerprint size={14} className="text-foreground-subtle" />
               <ListItemLabel>{passkey.name}</ListItemLabel>
             </div>
             <ListItemValue>Added {formatDate(passkey.createdAt)}</ListItemValue>

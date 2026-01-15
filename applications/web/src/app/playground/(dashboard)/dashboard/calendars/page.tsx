@@ -70,7 +70,7 @@ const CalendarsPage = () => {
         <ListItemAdd onClick={actions.openAddSource}>Add source</ListItemAdd>
       </List>
 
-      <Filter size={20} className="text-neutral-300 mx-auto" />
+      <Filter size={20} className="text-foreground-disabled mx-auto" />
 
       <SectionHeader
         title="Filters"
@@ -88,7 +88,7 @@ const CalendarsPage = () => {
         <ListItemAdd onClick={actions.addFilter}>Add filter</ListItemAdd>
       </List>
 
-      <ArrowDown size={20} className="text-neutral-300 mx-auto" />
+      <ArrowDown size={20} className="text-foreground-disabled mx-auto" />
 
       <SectionHeader
         title="Destinations"
@@ -101,7 +101,7 @@ const CalendarsPage = () => {
         <ListItemAdd>Add destination</ListItemAdd>
       </List>
 
-      <Ampersand size={20} className="text-neutral-300 mx-auto" />
+      <Ampersand size={20} className="text-foreground-disabled mx-auto" />
 
       <SectionHeader
         title="Aggregate iCal Link"
@@ -134,7 +134,7 @@ const CalendarsPage = () => {
         />
         <ModalContent>
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-neutral-700">Filter Type</label>
+            <label className="text-sm font-medium text-foreground">Filter Type</label>
             <Select
               value={state.filterType}
               onChange={(event) => actions.setFilterType(event.target.value as FilterType)}
@@ -163,7 +163,7 @@ const CalendarsPage = () => {
               ) : (
                 <>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-medium text-neutral-700">Time</label>
+                    <label className="text-sm font-medium text-foreground">Time</label>
                     <div className="flex gap-2">
                       <Input
                         type="time"
@@ -182,7 +182,7 @@ const CalendarsPage = () => {
                     </div>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-medium text-neutral-700">Timezone</label>
+                    <label className="text-sm font-medium text-foreground">Timezone</label>
                     <Select
                       value={state.timezone}
                       onChange={(event) => actions.setTimezone(event.target.value)}

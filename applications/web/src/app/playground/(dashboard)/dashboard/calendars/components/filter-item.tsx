@@ -16,69 +16,69 @@ export const FilterItem: FC<FilterItemProps> = memo(({ filter, onEdit, onRemove 
       case "is_on_weekends":
         return (
           <>
-            <span className="text-neutral-400">event is </span>
-            <span className="text-neutral-900">on weekends</span>
+            <span className="text-foreground-subtle">event is </span>
+            <span className="text-foreground">on weekends</span>
           </>
         );
       case "is_on_weekdays":
         return (
           <>
-            <span className="text-neutral-400">event is </span>
-            <span className="text-neutral-900">on weekdays</span>
+            <span className="text-foreground-subtle">event is </span>
+            <span className="text-foreground">on weekdays</span>
           </>
         );
       case "contains":
         return (
           <>
-            <span className="text-neutral-400">event summary </span>
-            <span className="text-neutral-900">contains</span>
-            <span className="text-neutral-400"> </span>
-            <span className="text-neutral-900">"{filter.value}"</span>
+            <span className="text-foreground-subtle">event summary </span>
+            <span className="text-foreground">contains</span>
+            <span className="text-foreground-subtle"> </span>
+            <span className="text-foreground">"{filter.value}"</span>
           </>
         );
       case "does_not_contain":
         return (
           <>
-            <span className="text-neutral-400">event summary </span>
-            <span className="text-neutral-900">does not contain</span>
-            <span className="text-neutral-400"> </span>
-            <span className="text-neutral-900">"{filter.value}"</span>
+            <span className="text-foreground-subtle">event summary </span>
+            <span className="text-foreground">does not contain</span>
+            <span className="text-foreground-subtle"> </span>
+            <span className="text-foreground">"{filter.value}"</span>
           </>
         );
       case "starts_before":
         return (
           <>
-            <span className="text-neutral-400">event starts </span>
-            <span className="text-neutral-900">before</span>
-            <span className="text-neutral-400"> </span>
-            <span className="text-neutral-900">{filter.value}</span>
+            <span className="text-foreground-subtle">event starts </span>
+            <span className="text-foreground">before</span>
+            <span className="text-foreground-subtle"> </span>
+            <span className="text-foreground">{filter.value}</span>
           </>
         );
       case "starts_after":
         return (
           <>
-            <span className="text-neutral-400">event starts </span>
-            <span className="text-neutral-900">after</span>
-            <span className="text-neutral-400"> </span>
-            <span className="text-neutral-900">{filter.value}</span>
+            <span className="text-foreground-subtle">event starts </span>
+            <span className="text-foreground">after</span>
+            <span className="text-foreground-subtle"> </span>
+            <span className="text-foreground">{filter.value}</span>
           </>
         );
       case "ends_before":
         return (
           <>
-            <span className="text-neutral-400">event ends </span>
-            <span className="text-neutral-900">before</span>
-            <span className="text-neutral-400"> </span>
-            <span className="text-neutral-900">{filter.value}</span>
+            <span className="text-foreground-subtle">event ends </span>
+            <span className="text-foreground">before</span>
+            <span className="text-foreground-subtle"> </span>
+            <span className="text-foreground">{filter.value}</span>
           </>
         );
       case "ends_after":
         return (
           <>
-            <span className="text-neutral-400">event ends </span>
-            <span className="text-neutral-900">after</span>
-            <span className="text-neutral-400"> </span>
-            <span className="text-neutral-900">{filter.value}</span>
+            <span className="text-foreground-subtle">event ends </span>
+            <span className="text-foreground">after</span>
+            <span className="text-foreground-subtle"> </span>
+            <span className="text-foreground">{filter.value}</span>
           </>
         );
     }
@@ -98,7 +98,7 @@ export const FilterItem: FC<FilterItemProps> = memo(({ filter, onEdit, onRemove 
       <button
         type="button"
         onClick={() => onRemove(filter.id)}
-        className="text-neutral-400 hover:text-neutral-600 transition-colors"
+        className="text-foreground-subtle hover:text-foreground-secondary transition-colors"
       >
         <X size={14} />
       </button>

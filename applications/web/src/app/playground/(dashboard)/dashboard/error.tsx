@@ -21,7 +21,7 @@ const DashboardPageError = ({ error, reset }: ErrorPageProps) => {
           We encountered an error while loading your calendar data. Please try refreshing the page.
         </Copy>
         {error.digest && (
-          <Copy className="text-xs text-neutral-400">Error ID: {error.digest}</Copy>
+          <Copy className="text-xs text-foreground-subtle">Error ID: {error.digest}</Copy>
         )}
       </div>
       <Button variant="primary" size="default" onClick={reset} className="w-fit">

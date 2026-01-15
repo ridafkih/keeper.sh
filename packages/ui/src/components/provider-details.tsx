@@ -27,12 +27,12 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider, onConnect, classN
       <div className="flex flex-col gap-3">
         {provider.steps.map((step, index) => (
           <div key={step.title} className="flex gap-3">
-            <div className="flex items-center justify-center size-5 shrink-0 rounded-full bg-neutral-100 text-xs font-medium text-neutral-600">
+            <div className="flex items-center justify-center size-5 shrink-0 rounded-full bg-surface-muted text-xs font-medium text-foreground-secondary">
               {index + 1}
             </div>
             <div className="flex flex-col gap-0.5">
-              <span className="text-sm font-medium text-neutral-900">{step.title}</span>
-              <span className="text-xs text-neutral-500">{step.description}</span>
+              <span className="text-sm font-medium text-foreground">{step.title}</span>
+              <span className="text-xs text-foreground-muted">{step.description}</span>
             </div>
           </div>
         ))}

@@ -8,11 +8,11 @@ import Link from "next/link";
 import { Spinner } from "./spinner";
 
 const buttonVariants = tv({
-  base: "tracking-tighter font-medium rounded-xl w-fit flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 focus-visible:ring-offset-2",
+  base: "tracking-tighter font-medium rounded-xl w-fit flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-input focus-visible:ring-offset-2",
   variants: {
     variant: {
-      primary: "bg-neutral-800 border-y border-y-neutral-500 text-white",
-      outline: "border border-neutral-300",
+      primary: "bg-primary border-y border-y-primary text-white",
+      outline: "border border-input",
       ghost: "border border-transparent",
       "ghost-hitslop": "border border-transparent -m-4 p-4",
     },
@@ -40,11 +40,11 @@ const buttonVariants = tv({
 });
 
 const iconButtonVariants = tv({
-  base: "rounded-xl flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 focus-visible:ring-offset-2",
+  base: "rounded-xl flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-input focus-visible:ring-offset-2",
   variants: {
     variant: {
-      primary: "bg-neutral-800 border-y border-y-neutral-500 text-white",
-      outline: "border border-neutral-300",
+      primary: "bg-primary border-y border-y-primary text-white",
+      outline: "border border-input",
       ghost: "border border-transparent",
       "ghost-hitslop": "border border-transparent -m-4 p-4",
     },

@@ -74,7 +74,7 @@ const ModalHeader: FC<ModalHeaderProps> = ({ title, description, onClose }) => (
         type="button"
         onClick={onClose}
         aria-label="Close modal"
-        className="self-start p-1 rounded-xl hover:bg-neutral-100 transition-colors text-neutral-400 hover:text-neutral-600"
+        className="self-start p-1 rounded-xl hover:bg-surface-muted transition-colors text-foreground-subtle hover:text-foreground-secondary"
       >
         <X size={16} />
       </button>

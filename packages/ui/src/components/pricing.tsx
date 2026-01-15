@@ -29,7 +29,7 @@ interface PricingFeatureProps {
 
 const PricingFeature: FC<PricingFeatureProps> = ({ children }) => (
   <li className="flex items-center gap-1">
-    <Check size={14} className="text-neutral-400" />
+    <Check size={14} className="text-foreground-subtle" />
     <Copy>{children}</Copy>
   </li>
 );

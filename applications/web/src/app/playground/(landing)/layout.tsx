@@ -30,9 +30,9 @@ const LandingLayout: FC<PropsWithChildren> = ({ children }) => (
             Terms &amp; Conditions
           </LinkOut>
         </div>
-        <Copy className="text-xs text-neutral-400">
+        <Copy className="text-xs text-foreground-subtle">
           Keeper is a Canadian project made with{" "}
-          <HeartIcon className="size-3 -mt-1 inline fill-neutral-500 text-neutral-500" /> by{" "}
+          <HeartIcon className="size-3 -mt-1 inline fill-foreground-muted text-foreground-muted" /> by{" "}
           <LinkOut variant="inline-subtle" size="small" href="https://rida.dev/" target="_blank">
             Rida F&apos;kih
           </LinkOut>

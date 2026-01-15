@@ -7,10 +7,10 @@ interface StatusIconProps {
 
 export const StatusIcon: FC<StatusIconProps> = ({ status }) => {
   if (status === "syncing") {
-    return <RefreshCw size={14} className="text-neutral-400 animate-spin" />;
+    return <RefreshCw size={14} className="text-foreground-subtle animate-spin" />;
   }
   if (status === "synced") {
-    return <Check size={14} className="text-neutral-400" />;
+    return <Check size={14} className="text-foreground-subtle" />;
   }
   if (status === "reauthenticate") {
     return <AlertTriangle size={14} className="text-amber-400" />;

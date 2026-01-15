@@ -66,13 +66,13 @@ function DefaultErrorFallback({ error, reset }: DefaultErrorFallbackProps) {
           {error.message || "An unexpected error occurred"}
         </Copy>
         {process.env.NODE_ENV === "development" && (
-          <pre className="text-left text-xs bg-neutral-100 p-4 rounded-lg overflow-auto max-h-40">
+          <pre className="text-left text-xs bg-surface-muted p-4 rounded-lg overflow-auto max-h-40">
             {error.stack}
           </pre>
         )}
         <button
           onClick={reset}
-          className="mt-4 px-4 py-2 bg-neutral-800 text-white rounded-lg hover:bg-neutral-700 transition-colors"
+          className="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:brightness-90 transition-colors"
         >
           Try again
         </button>

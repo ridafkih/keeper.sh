@@ -183,7 +183,7 @@ const DestinationDetailPage: FC<DestinationDetailPageProps> = ({ params }) => {
         <Copy className="text-xs">The destination you're looking for doesn't exist.</Copy>
         <Link
           href="/playground/dashboard/calendars"
-          className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-700"
+          className="flex items-center gap-1 text-xs text-foreground-muted hover:text-foreground"
         >
           <ArrowLeft size={12} />
           Back
@@ -199,17 +199,17 @@ const DestinationDetailPage: FC<DestinationDetailPageProps> = ({ params }) => {
         <div className="flex items-center gap-2">
           <Link
             href="/playground/dashboard/calendars"
-            className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-700"
+            className="flex items-center gap-1 text-xs text-foreground-muted hover:text-foreground"
           >
             <ArrowLeft size={12} />
             Back
           </Link>
-          <span className="text-xs text-neutral-400">·</span>
-          <span className="text-xs text-neutral-500">Destination</span>
-          <span className="text-xs text-neutral-400">·</span>
+          <span className="text-xs text-foreground-subtle">·</span>
+          <span className="text-xs text-foreground-muted">Destination</span>
+          <span className="text-xs text-foreground-subtle">·</span>
           <div className="flex items-center gap-1">
             <Image src={destination.provider.icon} alt={destination.provider.name} width={12} height={12} />
-            <Copy as="span" className="text-xs text-neutral-500">{destination.email}</Copy>
+            <Copy as="span" className="text-xs text-foreground-muted">{destination.email}</Copy>
           </div>
         </div>
       </div>

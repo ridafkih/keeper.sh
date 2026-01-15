@@ -15,16 +15,16 @@ const radioVariants = tv({
   slots: {
     outer: [
       "flex items-center justify-center",
-      "border border-neutral-300 rounded-full transition-colors bg-white",
-      "peer-focus:ring-2 peer-focus:ring-neutral-200 peer-focus:border-neutral-400",
-      "peer-focus-visible:ring-neutral-300",
-      "peer-checked:border-neutral-800",
+      "border border-input rounded-full transition-colors bg-surface",
+      "peer-focus:ring-2 peer-focus:ring-border peer-focus:border-input",
+      "peer-focus-visible:ring-border-input",
+      "peer-checked:border-primary",
     ],
     inner: [
-      "rounded-full bg-neutral-800",
+      "rounded-full bg-primary",
       "scale-0 peer-checked:scale-100 transition-transform",
     ],
-    label: "text-neutral-700 text-xs",
+    label: "text-foreground-secondary text-xs",
   },
   variants: {
     size: {

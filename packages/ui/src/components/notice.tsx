@@ -8,7 +8,7 @@ type NoticeVariant = "warning" | "error" | "info";
 const noticeVariants = tv({
   slots: {
     wrapper: "flex flex-col gap-2",
-    container: "flex items-start gap-3 p-4 rounded-xl border",
+    container: "flex items-start gap-3 p-4 rounded-xl border border-border",
     iconWrapper: "shrink-0 mt-0.5",
     content: "flex-1 min-w-0",
     title: "text-xs font-medium",
@@ -29,10 +29,10 @@ const noticeVariants = tv({
         description: "text-red-950",
       },
       info: {
-        container: "bg-neutral-100/25 border-neutral-400/50",
-        iconWrapper: "text-neutral-400",
-        title: "text-neutral-950",
-        description: "text-neutral-950",
+        container: "bg-surface-muted/25 border-input/50",
+        iconWrapper: "text-foreground-subtle",
+        title: "text-foreground",
+        description: "text-foreground",
       },
     },
   },

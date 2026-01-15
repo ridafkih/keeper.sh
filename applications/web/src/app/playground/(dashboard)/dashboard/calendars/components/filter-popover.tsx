@@ -69,7 +69,7 @@ const FilterPopoverContent: FC<FilterPopoverContentProps> = ({
   return (
     <div className="flex flex-col gap-3" onKeyDown={handleKeyDown}>
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-medium text-neutral-700">Filter Type</label>
+        <label className="text-xs font-medium text-foreground">Filter Type</label>
         <Select
           ref={selectRef}
           value={filterType}
@@ -104,7 +104,7 @@ const FilterPopoverContent: FC<FilterPopoverContentProps> = ({
           {isTimeFilter && (
             <>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-neutral-700">Time</label>
+                <label className="text-xs font-medium text-foreground">Time</label>
                 <div className="flex gap-2">
                   <Input
                     ref={timeInputRef}
@@ -126,7 +126,7 @@ const FilterPopoverContent: FC<FilterPopoverContentProps> = ({
                 </div>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-neutral-700">Timezone</label>
+                <label className="text-xs font-medium text-foreground">Timezone</label>
                 <Select
                   value={timezone}
                   onChange={(event) => onTimezoneChange(event.target.value)}

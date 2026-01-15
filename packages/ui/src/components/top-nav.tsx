@@ -24,8 +24,8 @@ const TopNavItem: FC<TopNavItemProps> = ({ href, segment, icon, children }) => {
       className={cn(
         "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs",
         isActive
-          ? "text-neutral-900 bg-neutral-100"
-          : "text-neutral-500 hover:text-neutral-800"
+          ? "text-foreground bg-surface-muted"
+          : "text-foreground-muted hover:text-foreground"
       )}
     >
       {icon}

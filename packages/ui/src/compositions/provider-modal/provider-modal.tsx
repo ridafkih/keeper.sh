@@ -13,7 +13,7 @@ import { tv } from "tailwind-variants";
 const layoutVariants = tv({
   slots: {
     content: "flex flex-col md:grid md:grid-cols-[2fr_3fr] md:grid-rows-[minmax(0,1fr)] overflow-auto md:overflow-hidden max-h-[60vh]",
-    sidebar: "px-4 py-2 border-b md:border-b-0 md:border-r border-neutral-100 md:overflow-auto",
+    sidebar: "px-4 py-2 border-b md:border-b-0 md:border-r border-border md:overflow-auto",
     details: "grid grid-cols-1 grid-rows-1 md:overflow-auto",
   },
 });
@@ -52,7 +52,7 @@ const ProviderSelectionModal: FC<ProviderSelectionModalProps> = ({
 
   return (
     <Modal open={open} onClose={onClose} className="max-w-xl overflow-hidden p-0">
-      <div className="p-4 border-b border-neutral-100">
+      <div className="p-4 border-b border-border">
         <ModalHeader title={title} onClose={onClose} />
       </div>
       <div className={content()}>

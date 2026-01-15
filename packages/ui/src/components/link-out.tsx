@@ -10,7 +10,7 @@ const linkOutVariants = tv({
     variant: {
       default: "flex items-center gap-1 hover:underline",
       inline: "underline text-blue-500",
-      "inline-subtle": "underline text-neutral-500",
+      "inline-subtle": "underline text-foreground-muted",
       superscript: "inline-flex text-blue-500 hover:text-blue-600 align-super ml-0.5",
     },
     size: {

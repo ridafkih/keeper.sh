@@ -46,7 +46,7 @@ const MobileSheet: FC<PropsWithChildren<MobileSheetProps>> = ({ children, onClos
       transition={MODAL_ANIMATION.mobile}
       className="md:hidden fixed inset-x-0 bottom-0 z-200"
     >
-      <div className="w-full max-w-12 h-1 rounded-xl bg-neutral-50 mx-auto mb-1" />
+      <div className="w-full max-w-12 h-1 rounded-xl bg-surface-subtle mx-auto mb-1" />
       <div
         ref={sheetRef}
         role="dialog"
@@ -54,7 +54,7 @@ const MobileSheet: FC<PropsWithChildren<MobileSheetProps>> = ({ children, onClos
         aria-labelledby="modal-title"
         aria-describedby="modal-description"
         tabIndex={-1}
-        className={cn("flex flex-col bg-neutral-50 rounded-t-xl shadow-lg overflow-auto max-h-[calc(90vh-0.75rem)] p-4 outline-none", className)}
+        className={cn("flex flex-col bg-surface-subtle rounded-t-xl shadow-lg overflow-auto max-h-[calc(90vh-0.75rem)] p-4 outline-none", className)}
       >
         <div className="flex-1 flex flex-col">{children}</div>
       </div>

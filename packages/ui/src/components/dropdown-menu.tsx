@@ -50,7 +50,7 @@ const DropdownMenuTrigger: FC<PropsWithChildren<DropdownMenuTriggerProps>> = ({
 }) => (
   <Trigger
     className={cn(
-      "bg-gradient-to-b from-white to-neutral-50 border-y border-t-neutral-100 border-b-neutral-200 text-neutral-800 shadow-xs",
+      "bg-gradient-to-b from-surface to-surface-subtle border-y border-t-surface-subtle border-b-surface-skeleton text-foreground shadow-xs",
       "tracking-tighter font-medium rounded-xl w-fit cursor-pointer",
       "flex items-center gap-1 hover:brightness-95 transition-all",
       triggerSizeStyles[size],
@@ -75,7 +75,7 @@ const DropdownMenuContent: FC<
       sideOffset={sideOffset}
       align={align}
       className={cn(
-        "min-w-48 overflow-hidden rounded-xl bg-white p-1 shadow-lg",
+        "min-w-48 overflow-hidden rounded-xl bg-surface p-1 shadow-lg",
         "data-[state=open]:animate-in data-[state=closed]:animate-out",
         "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
         "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
@@ -96,8 +96,8 @@ const DropdownMenuItem: FC<
   <Item
     className={cn(
       "relative flex cursor-pointer select-none items-center gap-2 rounded-xl outline-none transition-colors",
-      "text-neutral-700 text-sm p-2",
-      "focus:bg-neutral-100",
+      "text-foreground-secondary text-sm p-2",
+      "focus:bg-surface-muted",
       "data-disabled:pointer-events-none data-disabled:opacity-50",
       className,
     )}
@@ -113,8 +113,8 @@ const DropdownMenuCheckboxItem: FC<
   <CheckboxItem
     className={cn(
       "relative flex cursor-pointer select-none items-center rounded-xl outline-none transition-colors",
-      "text-neutral-700 text-sm py-1.5 pl-7 pr-2",
-      "focus:bg-neutral-100",
+      "text-foreground-secondary text-sm py-1.5 pl-7 pr-2",
+      "focus:bg-surface-muted",
       "data-disabled:pointer-events-none data-disabled:opacity-50",
       className,
     )}
@@ -136,8 +136,8 @@ const DropdownMenuRadioItem: FC<
   <RadioItem
     className={cn(
       "relative flex cursor-pointer select-none items-center rounded-xl outline-none transition-colors",
-      "text-neutral-700 text-sm py-1.5 pl-7 pr-2",
-      "focus:bg-neutral-100",
+      "text-foreground-secondary text-sm py-1.5 pl-7 pr-2",
+      "focus:bg-surface-muted",
       "data-disabled:pointer-events-none data-disabled:opacity-50",
       className,
     )}
@@ -145,7 +145,7 @@ const DropdownMenuRadioItem: FC<
   >
     <span className="absolute left-2 flex items-center justify-center">
       <ItemIndicator>
-        <span className="size-1.5 rounded-xl bg-neutral-800" />
+        <span className="size-1.5 rounded-xl bg-primary" />
       </ItemIndicator>
     </span>
     {children}
@@ -156,7 +156,7 @@ const DropdownMenuLabel: FC<
   PropsWithChildren<ComponentPropsWithoutRef<typeof Label>>
 > = ({ children, className, ...props }) => (
   <Label
-    className={cn("px-2 py-1.5 text-xs text-neutral-400 font-medium", className)}
+    className={cn("px-2 py-1.5 text-xs text-foreground-subtle font-medium", className)}
     {...props}
   >
     {children}
@@ -182,14 +182,14 @@ const DropdownMenuSubTrigger: FC<
   <SubTrigger
     className={cn(
       "relative flex cursor-pointer select-none items-center gap-2 rounded-xl outline-none transition-colors",
-      "text-neutral-700 text-sm py-1.5 px-2",
-      "focus:bg-neutral-100 data-[state=open]:bg-neutral-100",
+      "text-foreground-secondary text-sm py-1.5 px-2",
+      "focus:bg-surface-muted data-[state=open]:bg-surface-muted",
       className,
     )}
     {...props}
   >
     {children}
-    <ChevronRight size={14} className="ml-auto text-neutral-400" />
+    <ChevronRight size={14} className="ml-auto text-foreground-subtle" />
   </SubTrigger>
 );
 
@@ -199,7 +199,7 @@ const DropdownMenuSubContent: FC<ComponentPropsWithoutRef<typeof SubContent>> = 
 }) => (
   <SubContent
     className={cn(
-      "min-w-48 overflow-hidden rounded-xl bg-white p-1 shadow-lg",
+      "min-w-48 overflow-hidden rounded-xl bg-surface p-1 shadow-lg",
       "data-[state=open]:animate-in data-[state=closed]:animate-out",
       "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",

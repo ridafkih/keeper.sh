@@ -20,7 +20,7 @@ const CalendarGridContainer: FC<CalendarGridContainerProps> = ({ weekColumnRef }
   return (
     <VirtualizerProvider virtualizer={virtualizer}>
       <WeekColumn weekColumnRef={weekColumnRef} virtualRows={virtualRows} />
-      <div className="absolute inset-0 bg-neutral-300 rounded-2xl p-px overflow-hidden">
+      <div className="absolute inset-0 bg-surface-skeleton rounded-2xl p-px overflow-hidden">
         <CalendarScrollArea scrollRef={scrollRef}>
           <CalendarVirtualRows virtualRows={virtualRows} />
         </CalendarScrollArea>
