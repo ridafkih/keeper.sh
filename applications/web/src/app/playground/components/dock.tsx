@@ -8,6 +8,7 @@ import {
   ListIcon,
   ReceiptIcon,
   BoltIcon,
+  LogOut,
 } from "lucide-react";
 import { DockIndicator } from "./dock-indicator";
 
@@ -18,6 +19,7 @@ const iconMap = {
   ListIcon,
   ReceiptIcon,
   BoltIcon,
+  LogOut,
 } as const;
 
 type IconName = keyof typeof iconMap;

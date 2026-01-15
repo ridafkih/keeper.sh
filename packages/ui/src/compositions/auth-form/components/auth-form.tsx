@@ -5,7 +5,6 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Provider, useStore } from "jotai";
 import { FormDivider } from "../../../components/form-divider";
-import { GoogleIcon } from "../../../components/icons/google";
 import { IconButton } from "../../../components/button";
 import {
   showPasswordFieldAtom,
@@ -120,7 +119,7 @@ const AuthFormInternal: FC<AuthFormProps> = ({ variant, strategy }) => {
     <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-2">
       <OAuthButton
         onSignIn={handleGoogleSignIn}
-        icon={<GoogleIcon className="size-4" />}
+        icon={<img src="/integrations/icon-google.svg" alt="" width={16} height={16} />}
       >
         Continue with Google
       </OAuthButton>

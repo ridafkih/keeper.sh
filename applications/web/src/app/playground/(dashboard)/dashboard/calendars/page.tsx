@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown } from "lucide-react";
+import { ArrowDown, Ampersand, Filter, Copy as CopyIcon } from "lucide-react";
 import {
   Heading1,
   Heading2,
@@ -14,7 +14,8 @@ import {
   ModalHeader,
   ModalContent,
   ModalFooter,
-  FormField
+  FormField,
+  IconButton
 } from "@keeper.sh/ui";
 import type { FilterType } from "./types";
 import { MOCK_SOURCES, MOCK_DESTINATIONS } from "./utils/mock-data";
@@ -22,6 +23,8 @@ import { SourceItem } from "./components/source-item";
 import { DestinationItem } from "./components/destination-item";
 import { FilterItem } from "./components/filter-item";
 import { useCalendarsState } from "./hooks/use-calendars-state";
+
+const ICAL_LINK = "https://keeper.sh/ical/u/abc123def456/filtered";
 
 const CalendarsPage = () => {
   const { state, actions } = useCalendarsState();
@@ -34,6 +37,14 @@ const CalendarsPage = () => {
     const filter = state.filters.find((f) => f.id === id);
     if (filter) {
       actions.editFilter(id, filter);
+    }
+  };
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(ICAL_LINK);
+    } catch (err) {
+      console.error("Failed to copy:", err);
     }
   };
 
@@ -53,7 +64,7 @@ const CalendarsPage = () => {
         </List>
       </div>
 
-      <ArrowDown size={20} className="text-neutral-300 mx-auto" />
+      <Filter size={20} className="text-neutral-300 mx-auto" />
 
       <div className="flex flex-col gap-2">
         <Heading2>Filters</Heading2>
@@ -82,6 +93,29 @@ const CalendarsPage = () => {
           ))}
           <ListItemAdd>Add destination</ListItemAdd>
         </List>
+      </div>
+
+      <Ampersand size={20} className="text-neutral-300 mx-auto" />
+
+      <div className="flex flex-col gap-2">
+        <Heading2>Aggregate iCal Link</Heading2>
+        <Copy className="text-xs">A single iCal link that aggregates all filtered events from your sources.</Copy>
+        <div className="flex gap-2 items-start">
+          <div className="flex-1">
+            <Input
+              type="text"
+              value={ICAL_LINK}
+              readOnly
+              className="font-mono text-xs"
+            />
+          </div>
+          <IconButton
+            icon={CopyIcon}
+            onClick={handleCopyLink}
+            variant="outline"
+            aria-label="Copy iCal link"
+          />
+        </div>
       </div>
 
       <AddSourceModal open={state.addSourceOpen} onClose={actions.closeAddSource} />

@@ -1,6 +1,6 @@
 "use client";
 
-import type { FC, ReactNode } from "react";
+import type { FC, PropsWithChildren, ReactNode } from "react";
 import Link from "next/link";
 import { useSelectedLayoutSegment } from "next/navigation";
 import { Home, Calendar, List, Settings } from "lucide-react";
@@ -34,21 +34,10 @@ const TopNavItem: FC<TopNavItemProps> = ({ href, segment, icon, children }) => {
   );
 };
 
-const TopNav: FC = () => {
+const TopNav: FC<PropsWithChildren> = ({ children }) => {
   return (
-    <nav className="flex items-center gap-px mb-8 -mx-2.5">
-      <TopNavItem href="/playground/dashboard" segment={null} icon={<Home size={14} />}>
-        Home
-      </TopNavItem>
-      <TopNavItem href="/playground/dashboard/agenda" segment="agenda" icon={<List size={14} />}>
-        Agenda
-      </TopNavItem>
-      <TopNavItem href="/playground/dashboard/calendars" segment="calendars" icon={<Calendar size={14} />}>
-        Calendars
-      </TopNavItem>
-      <TopNavItem href="/playground/dashboard/settings" segment="settings" icon={<Settings size={14} />}>
-        Settings
-      </TopNavItem>
+    <nav className="flex items-center justify-between gap-px mb-8 -mx-2.5">
+      {children}
     </nav>
   );
 };

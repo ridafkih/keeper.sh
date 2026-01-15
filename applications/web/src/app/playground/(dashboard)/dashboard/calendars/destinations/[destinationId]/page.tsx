@@ -180,6 +180,7 @@ const DestinationDetailPage: FC<DestinationDetailPageProps> = ({ params }) => {
   if (!destination) {
     return (
       <div className="flex flex-col gap-8">
+        <Copy className="text-xs">The destination you're looking for doesn't exist.</Copy>
         <Link
           href="/playground/dashboard/calendars"
           className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-700"
@@ -187,7 +188,6 @@ const DestinationDetailPage: FC<DestinationDetailPageProps> = ({ params }) => {
           <ArrowLeft size={12} />
           Back
         </Link>
-        <Copy className="text-xs">The destination you're looking for doesn't exist.</Copy>
       </div>
     );
   }
@@ -195,19 +195,22 @@ const DestinationDetailPage: FC<DestinationDetailPageProps> = ({ params }) => {
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-4">
-        <Link
-          href="/playground/dashboard/calendars"
-          className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-700"
-        >
-          <ArrowLeft size={12} />
-          Back
-        </Link>
         <Heading1>{destination.name}</Heading1>
         <div className="flex items-center gap-2">
-          <Image src={destination.provider.icon} alt={destination.provider.name} width={14} height={14} />
-          <Copy as="span" className="text-xs">{destination.email}</Copy>
+          <Link
+            href="/playground/dashboard/calendars"
+            className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-700"
+          >
+            <ArrowLeft size={12} />
+            Back
+          </Link>
           <span className="text-xs text-neutral-400">·</span>
           <span className="text-xs text-neutral-500">Destination</span>
+          <span className="text-xs text-neutral-400">·</span>
+          <div className="flex items-center gap-1">
+            <Image src={destination.provider.icon} alt={destination.provider.name} width={12} height={12} />
+            <Copy as="span" className="text-xs text-neutral-500">{destination.email}</Copy>
+          </div>
         </div>
       </div>
 
