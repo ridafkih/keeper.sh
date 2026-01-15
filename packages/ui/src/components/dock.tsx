@@ -54,13 +54,15 @@ const getDockPositionClassName = (position: DockProps["position"]) => {
 
 interface DockProps {
   position?: "top" | "bottom";
+  className?: string;
 }
 
-const Dock: FC<PropsWithChildren<DockProps>> = ({ position = "bottom", children }) => (
+const Dock: FC<PropsWithChildren<DockProps>> = ({ position = "bottom", className, children }) => (
   <nav
     className={cn(
       "left-0 right-0 mx-auto p-1.5 rounded-full bg-neutral-950 w-fit text-neutral-300 z-100",
       getDockPositionClassName(position).className,
+      className,
     )}
   >
     <ul className="flex items-center">{children}</ul>

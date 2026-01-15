@@ -6,11 +6,13 @@ const DashboardLayout: FC<PropsWithChildren> = ({ children }) => (
   <>
     <Scaffold>
       <div className="flex flex-col pt-8 pb-8">
-        <TopNav />
+        <div className="hidden md:block">
+          <TopNav />
+        </div>
         {children}
       </div>
     </Scaffold>
-    <Dock>
+    <Dock className="md:hidden">
       <DockItem href="/playground/dashboard" segment={null} icon="HomeIcon" />
       <DockItem href="/playground/dashboard/agenda" segment="agenda" icon="ListIcon" />
       <DockItem href="/playground/dashboard/calendars" segment="calendars" icon="CalendarsIcon" />

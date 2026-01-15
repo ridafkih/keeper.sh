@@ -5,6 +5,7 @@ import { Fingerprint } from "lucide-react";
 import {
   Copy,
   Input,
+  Heading1,
   Heading2,
   Divider,
   Modal,
@@ -52,6 +53,9 @@ const SettingsPage = () => {
 
   return (
     <div className="flex flex-col gap-8">
+      <div className="md:hidden">
+        <Heading1>Settings</Heading1>
+      </div>
       <div className="flex flex-col gap-2">
         <Heading2>Account</Heading2>
         <Copy className="text-xs">Manage your account settings.</Copy>

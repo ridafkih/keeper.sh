@@ -2,6 +2,7 @@
 
 import { ArrowDown } from "lucide-react";
 import {
+  Heading1,
   Heading2,
   List,
   ListItemAdd,
@@ -38,6 +39,9 @@ const CalendarsPage = () => {
 
   return (
     <div className="flex flex-col gap-8">
+      <div className="md:hidden">
+        <Heading1>Calendars</Heading1>
+      </div>
       <div className="flex flex-col gap-2">
         <Heading2>Sources</Heading2>
         <Copy className="text-xs">Calendars for which events may be sourced, these events are pooled and can be used to push events to destinations.</Copy>
