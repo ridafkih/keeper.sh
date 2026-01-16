@@ -151,84 +151,87 @@ const CalendarsPage = () => {
       <AddSourceModal open={state.addSourceOpen} onClose={actions.closeAddSource} />
 
       <Modal open={state.filterModalOpen} onClose={actions.closeFilterModal}>
-        <ModalHeader
-          title={state.editingFilterId ? "Edit Filter" : "Add Filter"}
-          description="Configure the filter criteria for your events"
-          onClose={actions.closeFilterModal}
-        />
-        <ModalContent>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-foreground">Filter Type</label>
-            <Select
-              value={state.filterType}
-              onChange={(event) => actions.setFilterType(event.target.value as FilterType)}
-            >
-              <option value="contains">Event summary contains</option>
-              <option value="does_not_contain">Event summary does not contain</option>
-              <option value="starts_before">Event starts before</option>
-              <option value="starts_after">Event starts after</option>
-              <option value="ends_before">Event ends before</option>
-              <option value="ends_after">Event ends after</option>
-              <option value="is_on_weekends">Event is on weekends</option>
-              <option value="is_on_weekdays">Event is on weekdays</option>
-            </Select>
-          </div>
+        <form onSubmit={(e) => { e.preventDefault(); actions.saveFilter(); }}>
+          <ModalHeader
+            title={state.editingFilterId ? "Edit Filter" : "Add Filter"}
+            description="Configure the filter criteria for your events"
+            onClose={actions.closeFilterModal}
+          />
+          <ModalContent>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-foreground">Filter Type</label>
+              <Select
+                value={state.filterType}
+                onChange={(event) => actions.setFilterType(event.target.value as FilterType)}
+              >
+                <option value="contains">Event summary contains</option>
+                <option value="does_not_contain">Event summary does not contain</option>
+                <option value="starts_before">Event starts before</option>
+                <option value="starts_after">Event starts after</option>
+                <option value="ends_before">Event ends before</option>
+                <option value="ends_after">Event ends after</option>
+                <option value="is_on_weekends">Event is on weekends</option>
+                <option value="is_on_weekdays">Event is on weekdays</option>
+              </Select>
+            </div>
 
-          {state.filterType !== "is_on_weekends" && state.filterType !== "is_on_weekdays" && (
-            <>
-              {(state.filterType === "contains" || state.filterType === "does_not_contain") ? (
-                <FormField
-                  label="Value"
-                  type="text"
-                  value={state.filterValue}
-                  onChange={(event) => actions.setFilterValue(event.target.value)}
-                  placeholder="Enter text..."
-                />
-              ) : (
-                <>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-medium text-foreground">Time</label>
-                    <div className="flex gap-2">
-                      <Input
-                        type="time"
-                        value={state.timeValue}
-                        onChange={(event) => actions.setTimeValue(event.target.value)}
-                        className="flex-1"
-                      />
+            {state.filterType !== "is_on_weekends" && state.filterType !== "is_on_weekdays" && (
+              <>
+                {(state.filterType === "contains" || state.filterType === "does_not_contain") ? (
+                  <FormField
+                    label="Value"
+                    type="text"
+                    value={state.filterValue}
+                    onChange={(event) => actions.setFilterValue(event.target.value)}
+                    placeholder="Enter text..."
+                  />
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-sm font-medium text-foreground">Time</label>
+                      <div className="flex gap-2">
+                        <Input
+                          type="time"
+                          value={state.timeValue}
+                          onChange={(event) => actions.setTimeValue(event.target.value)}
+                          className="flex-1"
+                        />
+                        <Select
+                          value={state.timePeriod}
+                          onChange={(event) => actions.setTimePeriod(event.target.value as "AM" | "PM")}
+                          className="w-24"
+                        >
+                          <option value="AM">AM</option>
+                          <option value="PM">PM</option>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-sm font-medium text-foreground">Timezone</label>
                       <Select
-                        value={state.timePeriod}
-                        onChange={(event) => actions.setTimePeriod(event.target.value as "AM" | "PM")}
-                        className="w-24"
+                        value={state.timezone}
+                        onChange={(event) => actions.setTimezone(event.target.value)}
                       >
-                        <option value="AM">AM</option>
-                        <option value="PM">PM</option>
+                        <option value="EST">EST</option>
+                        <option value="CST">CST</option>
+                        <option value="MST">MST</option>
+                        <option value="PST">PST</option>
+                        <option value="UTC">UTC</option>
                       </Select>
                     </div>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-medium text-foreground">Timezone</label>
-                    <Select
-                      value={state.timezone}
-                      onChange={(event) => actions.setTimezone(event.target.value)}
-                    >
-                      <option value="EST">EST</option>
-                      <option value="CST">CST</option>
-                      <option value="MST">MST</option>
-                      <option value="PST">PST</option>
-                      <option value="UTC">UTC</option>
-                    </Select>
-                  </div>
-                </>
-              )}
-            </>
-          )}
-        </ModalContent>
-        <ModalFooter
-          onCancel={actions.closeFilterModal}
-          onConfirm={actions.saveFilter}
-          cancelText="Cancel"
-          confirmText={state.editingFilterId ? "Save" : "Add"}
-        />
+                  </>
+                )}
+              </>
+            )}
+          </ModalContent>
+          <ModalFooter
+            onCancel={actions.closeFilterModal}
+            onConfirm={actions.saveFilter}
+            cancelText="Cancel"
+            confirmText={state.editingFilterId ? "Save" : "Add"}
+            isForm
+          />
+        </form>
       </Modal>
     </div>
   );

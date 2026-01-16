@@ -93,6 +93,7 @@ interface ModalFooterProps {
   cancelText?: string;
   confirmText?: string;
   variant?: "default" | "danger";
+  isForm?: boolean;
 }
 
 const ModalFooter: FC<ModalFooterProps> = ({
@@ -101,14 +102,20 @@ const ModalFooter: FC<ModalFooterProps> = ({
   cancelText = "Cancel",
   confirmText = "Confirm",
   variant = "default",
+  isForm = false,
 }) => (
   <div className="flex flex-col gap-4">
     <Divider />
     <div className="flex gap-2">
-      <Button variant="outline" onClick={onCancel} className="flex-1">
+      <Button variant="outline" onClick={onCancel} type="button" className="flex-1">
         <ButtonText>{cancelText}</ButtonText>
       </Button>
-      <Button variant={variant === "danger" ? "destructive" : "primary"} onClick={onConfirm} className="flex-1">
+      <Button
+        variant={variant === "danger" ? "destructive" : "primary"}
+        onClick={isForm ? undefined : onConfirm}
+        type={isForm ? "submit" : "button"}
+        className="flex-1"
+      >
         <ButtonText>{confirmText}</ButtonText>
       </Button>
     </div>

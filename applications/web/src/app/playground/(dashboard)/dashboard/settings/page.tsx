@@ -99,39 +99,45 @@ const SettingsPage = () => {
       </div>
 
       <Modal open={changePasswordOpen} onClose={() => setChangePasswordOpen(false)}>
-        <ModalHeader
-          title="Change password"
-          description="Enter your current password and a new password."
-          onClose={() => setChangePasswordOpen(false)}
-        />
-        <ModalContent>
-          <Input size="small" type="password" placeholder="Current password" />
-          <Divider />
-          <Input size="small" type="password" placeholder="New password" />
-          <Input size="small" type="password" placeholder="Confirm new password" />
-        </ModalContent>
-        <ModalFooter
-          onCancel={() => setChangePasswordOpen(false)}
-          onConfirm={() => setChangePasswordOpen(false)}
-          confirmText="Change password"
-        />
+        <form onSubmit={(e) => { e.preventDefault(); setChangePasswordOpen(false); }}>
+          <ModalHeader
+            title="Change password"
+            description="Enter your current password and a new password."
+            onClose={() => setChangePasswordOpen(false)}
+          />
+          <ModalContent>
+            <Input size="small" type="password" placeholder="Current password" name="current-password" />
+            <Divider />
+            <Input size="small" type="password" placeholder="New password" name="new-password" />
+            <Input size="small" type="password" placeholder="Confirm new password" name="confirm-password" />
+          </ModalContent>
+          <ModalFooter
+            onCancel={() => setChangePasswordOpen(false)}
+            onConfirm={() => setChangePasswordOpen(false)}
+            confirmText="Change password"
+            isForm
+          />
+        </form>
       </Modal>
 
       <Modal open={deleteAccountOpen} onClose={() => setDeleteAccountOpen(false)}>
-        <ModalHeader
-          title="Delete account"
-          description="Are you sure you want to delete your account? This action cannot be undone."
-          onClose={() => setDeleteAccountOpen(false)}
-        />
-        <ModalContent>
-          <Input size="small" type="password" placeholder="Enter your password to confirm" />
-        </ModalContent>
-        <ModalFooter
-          onCancel={() => setDeleteAccountOpen(false)}
-          onConfirm={() => setDeleteAccountOpen(false)}
-          confirmText="Delete account"
-          variant="danger"
-        />
+        <form onSubmit={(e) => { e.preventDefault(); setDeleteAccountOpen(false); }}>
+          <ModalHeader
+            title="Delete account"
+            description="Are you sure you want to delete your account? This action cannot be undone."
+            onClose={() => setDeleteAccountOpen(false)}
+          />
+          <ModalContent>
+            <Input size="small" type="password" placeholder="Enter your password to confirm" name="password" />
+          </ModalContent>
+          <ModalFooter
+            onCancel={() => setDeleteAccountOpen(false)}
+            onConfirm={() => setDeleteAccountOpen(false)}
+            confirmText="Delete account"
+            variant="danger"
+            isForm
+          />
+        </form>
       </Modal>
 
       <Modal open={deletePasskeyOpen !== null} onClose={() => setDeletePasskeyOpen(null)}>
