@@ -20,9 +20,7 @@ export const EmailFormError: FC = () => {
       }}
       transition={{ duration: 0.2 }}
     >
-      <div className="pb-0.5 pl-0.5 flex">
-        <MicroCopy className="text-red-500 dark:text-red-400 text-left w-full">{error?.message}</MicroCopy>
-      </div>
+      <MicroCopy className="text-red-500 dark:text-red-400 text-left w-full">{error?.message}</MicroCopy>
     </motion.div>
   )
 }

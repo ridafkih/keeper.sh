@@ -1,7 +1,7 @@
 "use client"
 
 import type { FC, PropsWithChildren } from "react"
-import { motion, Variants } from "motion/react"
+import { motion, Variants, AnimatePresence } from "motion/react"
 import { LoaderCircle } from "lucide-react"
 import { Button } from "@/components/button"
 import { formStateAtom, FormStateAtomValue } from "../atoms/form-state"
@@ -22,21 +22,6 @@ const submitTextVariants: Record<FormStateAtomValue, Variants[string]> = {
   }
 }
 
-const loaderVariants: Record<FormStateAtomValue, Variants[string]> = {
-  idle: {
-    opacity: 0,
-    filter: 'blur(0.125rem)',
-    y: 2,
-    scale: 0.75
-  },
-  loading: {
-    opacity: 1,
-    filter: 'none',
-    y: 0,
-    scale: 1
-  }
-}
-
 export const EmailFormSubmitButton: FC<PropsWithChildren> = ({ children }) => {
   const formState = useAtomValue(formStateAtom);
 
@@ -51,15 +36,19 @@ export const EmailFormSubmitButton: FC<PropsWithChildren> = ({ children }) => {
         >
           {children}
         </motion.span>
-        <motion.span
-          className="absolute inset-0 m-auto size-fit origin-bottom"
-          variants={loaderVariants}
-          initial="idle"
-          animate={formState}
-          transition={{ delay: 0.08, duration: 0.16 }}
-        >
-          <LoaderCircle className="animate-spin" size={17} />
-        </motion.span>
+        <AnimatePresence>
+          {formState === 'loading' && (
+            <motion.span
+              className="absolute inset-0 m-auto size-fit origin-bottom"
+              initial={{ opacity: 0, filter: 'blur(0.125rem)', y: 2, scale: 0.25 }}
+              animate={{ opacity: 1, filter: 'none', y: 0, scale: 1 }}
+              exit={{ opacity: 0, filter: 'blur(0.125rem)', y: 2, scale: 0.25 }}
+              transition={{ duration: 0.16 }}
+            >
+              <LoaderCircle className="animate-spin" size={17} />
+            </motion.span>
+          )}
+        </AnimatePresence>
       </Button>
     </motion.div>
   )
