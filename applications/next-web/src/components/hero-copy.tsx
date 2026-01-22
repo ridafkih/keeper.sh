@@ -4,6 +4,6 @@ import { Copy } from "./copy"
 
 export const HeroCopy: FC<HTMLProps<HTMLParagraphElement>> = ({ className, children, ...props }) => {
   return (
-    <Copy {...props} className={cn("text-md max-w-[42ch]", className)}>{children}</Copy>
+    <Copy {...props} className={cn("sm:text-md text-sm sm:max-w-[42ch]", className)}>{children}</Copy>
   )
 }
