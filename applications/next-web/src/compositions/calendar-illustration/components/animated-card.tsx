@@ -1,10 +1,11 @@
 "use client"
 
 import type { FC, PropsWithChildren } from "react"
+import { useAtomValue } from "jotai"
 import { motion } from "motion/react"
 import { cn } from "@/utils/cn"
 import { type SkewTuple, getTransitionConfig, selectSkewByState, getInitialSkew } from "../utils/transforms"
-import { useCalendarHoverState } from "./calendar-illustration-provider"
+import { calendarHoverAtom } from "../state/calendar-hover"
 
 type AnimatedCardProps = PropsWithChildren<{
   skew: SkewTuple
@@ -12,7 +13,7 @@ type AnimatedCardProps = PropsWithChildren<{
 }>
 
 export const AnimatedCard: FC<AnimatedCardProps> = ({ skew, className, children }) => {
-  const emphasized = useCalendarHoverState()
+  const emphasized = useAtomValue(calendarHoverAtom)
 
   return (
     <motion.div

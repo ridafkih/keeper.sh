@@ -1,23 +1,17 @@
 import type { FC } from "react"
-import { Copy } from "@/components/copy"
+import { HeroTitle } from "@/components/hero-title"
+import { HeroCopy } from "@/components/hero-copy"
 import { FlexColumnGroup } from "@/components/flex-column-group"
 import { FlexRowGroup } from "@/components/flex-row-group"
-import { Heading1, Heading2, Heading3 } from "@/components/heading"
 import { LinkButton } from "@/components/button"
-import { ArrowDown, ArrowRight, ArrowUpRight } from "lucide-react"
-import { CalendarIllustration } from "@/compositions/calendar-illustration/calendar-illustration"
+import { ArrowRight, ArrowUpRight } from "lucide-react"
+import { HeroSection } from "@/compositions/hero-section/hero-section"
 import { CalendarStack } from "@/compositions/calendar-illustration/components/calendar-stack"
 import { Calendar } from "@/compositions/calendar-illustration/components/calendar"
 import { CalendarIllustrationButton } from "@/compositions/calendar-illustration/components/calendar-illustration-button"
 import { createBackLeftSkew, createBackRightSkew, createFrontSkew } from "@/compositions/calendar-illustration/utils/stack"
-import Image from "next/image"
 import type { EventRecord } from "@/compositions/calendar-illustration/utils/events"
 import { MarketingConnectCalendars } from "@/compositions/marketing-connect-calendars/marketing-connect-calendars"
-import { MarketingSyncCalendars } from "@/compositions/marketing-sync-calendars/marketing-sync-calendars"
-import { MarketingAnonymization } from "@/compositions/marketing-anonymization/marketing-anonymization"
-import { Header } from "@/components/header"
-import { PricingCard } from "@/components/pricing-card"
-import { MarketingSection } from "@/components/marketing-section"
 import { MarketingHowItWorks } from "@/compositions/marketing-how-it-works/marketing-how-it-works"
 
 const BACK_LEFT_EVENTS: EventRecord = {
@@ -43,30 +37,30 @@ const LandingPage: FC = () => {
   return (
     <>
       <main>
-        <FlexColumnGroup className="py-16">
-          <FlexColumnGroup className="gap-2 items-center">
-            <Heading1 className="text-center">All of your calendars in-sync.</Heading1>
-            <Copy className="text-center">Synchronize events between your personal, work, business and school calendars. Open-source under AGPL-3.0.</Copy>
-          </FlexColumnGroup>
-          <CalendarIllustration>
-            <FlexRowGroup className="gap-1 my-4 justify-center">
-              <CalendarIllustrationButton href="/register">
-                <span>Sync Calendars</span>
-                <ArrowRight size={15} />
-              </CalendarIllustrationButton>
-              <LinkButton href="https://github.com" variant="border" size="compact">
-                <span>View GitHub</span>
-                <ArrowUpRight size={15} />
-              </LinkButton>
-            </FlexRowGroup>
-            <div className="py-8">
+        <FlexColumnGroup>
+          <HeroSection>
+            <FlexColumnGroup className="pt-32 pb-4 gap-2">
+              <HeroTitle className="text-center">All of your calendars in-sync.</HeroTitle>
+              <HeroCopy className="text-center">Synchronize events between your personal, work, business and school calendars. Open-source under AGPL-3.0.</HeroCopy>
+              <FlexRowGroup className="gap-1 my-2 justify-center">
+                <CalendarIllustrationButton href="/register">
+                  <span>Sync Calendars</span>
+                  <ArrowRight size={15} />
+                </CalendarIllustrationButton>
+                <LinkButton href="https://github.com" variant="border" size="compact">
+                  <span>View GitHub</span>
+                  <ArrowUpRight size={15} />
+                </LinkButton>
+              </FlexRowGroup>
+            </FlexColumnGroup>
+            <div className="py-4 px-8 w-full">
               <CalendarStack>
                 <Calendar skew={createBackLeftSkew(1)} events={BACK_LEFT_EVENTS} />
                 <Calendar skew={createBackRightSkew(1)} events={BACK_RIGHT_EVENTS} />
                 <Calendar skew={createFrontSkew(1)} events={FRONT_EVENTS} className="z-10" />
               </CalendarStack>
             </div>
-          </CalendarIllustration>
+          </HeroSection>
           <FlexColumnGroup className="py-6 gap-6">
             <MarketingConnectCalendars />
             <MarketingHowItWorks />

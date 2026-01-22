@@ -1,15 +1,16 @@
 "use client"
 
 import type { FC, PropsWithChildren } from "react"
+import { useSetAtom } from "jotai"
 import { LinkButton } from "@/components/button"
-import { useCalendarHoverSetter } from "./calendar-illustration-provider"
+import { calendarHoverAtom } from "../state/calendar-hover"
 
 type CalendarIllustrationButtonProps = PropsWithChildren<{
   href: string
 }>
 
 export const CalendarIllustrationButton: FC<CalendarIllustrationButtonProps> = ({ href, children }) => {
-  const setIsHovered = useCalendarHoverSetter()
+  const setIsHovered = useSetAtom(calendarHoverAtom)
 
   return (
     <LinkButton
