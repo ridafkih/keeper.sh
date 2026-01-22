@@ -3,11 +3,19 @@ import { MicroCopy } from "@/components/micro-copy"
 import { Copy } from "@/components/copy"
 import { LinkButton } from "@/components/button"
 import { FlexColumnGroup } from "@/components/flex-column-group"
-import { Lora } from "next/font/google"
+import { PricingCardPrice } from "@/compositions/pricing/components/pricing-card-price"
+import { tv } from "tailwind-variants"
 import type { FC } from "react"
 import type { PricingPlan } from "@/compositions/pricing/constants/plans"
 
-const lora = Lora()
+const pricingCard = tv({
+  base: "border border-border rounded-2xl p-3 pt-5 flex flex-col shadow-xs",
+  variants: {
+    highlighted: {
+      true: "bg-background invert"
+    }
+  }
+})
 
 type PricingCardProps = {
   plan: PricingPlan
@@ -15,15 +23,12 @@ type PricingCardProps = {
 
 export const PricingCard: FC<PricingCardProps> = ({ plan }) => {
   return (
-    <div className="border border-border rounded-2xl p-3 pt-5 flex flex-col">
+    <div className={pricingCard({ highlighted: plan.highlighted })}>
       <FlexColumnGroup className="px-2">
         <FlexColumnGroup>
           <Heading3>{plan.name}</Heading3>
           <FlexColumnGroup className="gap-1">
-            <div className="flex items-baseline gap-1">
-              <span className={`${lora.className} text-3xl font-medium tracking-tighter text-foreground`}>{plan.price}</span>
-              <MicroCopy className="text-foreground-subtle">per month</MicroCopy>
-            </div>
+            <PricingCardPrice price={plan.price} />
             {plan.priceNote && <MicroCopy className="text-foreground-subtle">{plan.priceNote}</MicroCopy>}
           </FlexColumnGroup>
         </FlexColumnGroup>
