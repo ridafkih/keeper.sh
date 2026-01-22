@@ -1,9 +1,9 @@
 import Link from "next/link"
 import { LinkButton } from "@/components/button"
 import { StaggeredBackdropBlur } from "@/compositions/header/components/staggered-backdrop-blur"
+import { GithubStarButton } from "@/compositions/header/components/github-star-button"
 import KeeperLogo from "@/assets/keeper.svg"
 import KeeperLogoDark from "@/assets/keeper-dark-mode.svg"
-import { Star } from "lucide-react"
 
 export const Header = () => {
   return (
@@ -16,10 +16,7 @@ export const Header = () => {
             <KeeperLogoDark className="w-6 h-6 text-foreground hidden dark:block" />
           </Link>
           <nav className="flex items-center gap-2">
-            <LinkButton href="https://github.com" variant="ghost" size="compact">
-              <Star size={14} />
-              <span>367</span>
-            </LinkButton>
+            <GithubStarButton />
             <LinkButton href="/login" variant="border" size="compact">
               Login
             </LinkButton>

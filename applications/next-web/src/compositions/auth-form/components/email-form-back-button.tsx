@@ -4,7 +4,7 @@ import { motion, Variants } from "motion/react"
 import { ArrowLeft } from "lucide-react"
 import { AnimatePresence } from "motion/react"
 import { LinkButton } from "@/components/button"
-import { formStateAtom } from "../atoms/form-state"
+import { formStateAtom, formErrorAtom } from "../atoms/form-state"
 import { useAtomValue } from "jotai"
 
 const backButtonVariants: Record<'exit', Variants[string]> = {
@@ -16,11 +16,12 @@ const backButtonVariants: Record<'exit', Variants[string]> = {
 }
 
 export const EmailFormBackButton = () => {
-  const formState = useAtomValue(formStateAtom);
+  const formState = useAtomValue(formStateAtom)
+  const error = useAtomValue(formErrorAtom)
 
   return (
     <AnimatePresence>
-      {formState === 'idle' && (
+      {(formState === 'idle' || error) && (
         <motion.div
           className="flex flex-col items-end"
           variants={backButtonVariants}
