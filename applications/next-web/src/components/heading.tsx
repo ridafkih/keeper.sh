@@ -15,7 +15,6 @@ const heading = tv({
       "3xl": "text-3xl",
       "2xl": "text-2xl",
       xl: "text-xl",
-      md: "text-md",
     }
   }
 })

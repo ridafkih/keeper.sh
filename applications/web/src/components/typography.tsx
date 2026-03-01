@@ -14,7 +14,7 @@ const cardTitle = tv({
   base: "text-sm font-semibold text-foreground tracking-tight",
 });
 const subsectionTitle = tv({
-  base: "text-md font-semibold text-foreground tracking-tighter",
+  base: "font-semibold text-foreground tracking-tighter",
 });
 const textBody = tv({ base: "text-sm text-foreground-muted" });
 const textLabel = tv({ base: "text-sm font-medium text-foreground" });

@@ -1,6 +1,5 @@
 import { CalendarDays, CalendarSync, Filter, Settings, LogOut, CalendarPlus } from "lucide-react";
-import { FC, Suspense } from "react";
-import Image from "next/image";
+import { FC } from "react";
 import KeeperLogo from "@/assets/keeper.svg";
 import {
   NavigationMenu,
@@ -9,7 +8,6 @@ import {
   NavigationItemLabel,
   NavigationItemRightContent,
 } from "@/components/navigation-menu";
-import { DashboardCalendar } from "@/compositions/dashboard-calendar/dashboard-calendar";
 import { AccountsPopover } from "@/components/accounts-popover";
 import { PageOverlay } from "@/components/page-overlay";
 
@@ -19,12 +17,6 @@ const DashboardPage: FC = () => {
       <PageOverlay />
       <div className="flex flex-col gap-12 items-stretch">
       <div className="flex flex-col gap-2 items-stretch">
-        <Suspense fallback={<DashboardCalendar.Skeleton />}>
-          <DashboardCalendar.Provider>
-            <DashboardCalendar />
-          </DashboardCalendar.Provider>
-        </Suspense>
-
         <NavigationMenu className="bg-surface-elevated rounded-2xl shadow-xs border border-border overflow-hidden p-0.5">
           <NavigationItem href="/dashboard/accounts/connect">
             <NavigationItemIcon>

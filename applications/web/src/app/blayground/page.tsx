@@ -26,7 +26,7 @@ const button = tv({
       ghost: "hover:backdrop-brightness-95 active:backdrop-brightness-90 shadow-none"
     },
     size: {
-      normal: "text-md px-4 py-2.5",
+      normal: "px-4 py-2.5",
       compact: "px-3 py-1.5"
     },
   },

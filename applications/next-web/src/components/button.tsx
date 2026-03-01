@@ -5,7 +5,7 @@ import type { ButtonHTMLAttributes, ComponentProps, DetailedHTMLProps, FC } from
 
 const button = tv({
   base: `
-    flex gap-1.5 items-center justify-center rounded-xl w-fit text-sm font-medium text-nowrap select-none
+    flex gap-1.5 items-center justify-center rounded-xl w-fit font-medium text-nowrap select-none
     tracking-tighter border border-transparent shadow-xs
     hover:enabled:cursor-pointer
     focus-visible:outline-2 outline-offset-1 outline-border-emphasis
@@ -18,8 +18,8 @@ const button = tv({
       ghost: "text-foreground hover:backdrop-brightness-95 active:backdrop-brightness-90 disabled:backdrop-brightness-90 dark:hover:backdrop-brightness-150 dark:active:backdrop-brightness-175 dark:disabled:backdrop-brightness-175 shadow-none"
     },
     size: {
-      normal: "text-md px-4 py-2.5",
-      compact: "px-3 py-1.5"
+      normal: "px-4 py-2.5",
+      compact: "px-3 py-1.5 text-sm"
     },
   },
   defaultVariants: {
