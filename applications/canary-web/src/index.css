@@ -3,14 +3,21 @@
 html,
 body,
 #root {
-  @apply w-full h-full bg-background;
+  @apply w-full h-full bg-background overflow-x-hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 @font-face {
   font-family: "Geist Sans";
-  src:
-    local("Geist Sans"),
-    url("./assets/fonts/Geist[wght].ttf") format("ttf");
+  src: url("./assets/fonts/Geist[wght].ttf") format("truetype");
+  font-weight: 100 900;
+}
+
+@font-face {
+  font-family: "Lora";
+  src: url("./assets/fonts/Lora[wght].ttf") format("truetype");
+  font-weight: 100 900;
 }
 
 @theme {
@@ -38,4 +45,5 @@ body,
   );
 
   --font-sans: "Geist Sans", system-ui, sans-serif;
+  --font-serif: "Lora", Georgia, serif;
 }

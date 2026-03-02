@@ -19,16 +19,16 @@ function RouteComponent() {
             <KeeperLogo className="max-w-6" />
           </MarketingHeaderBranding>
           <MarketingHeaderActions>
-            <Button size="compact" type="ghost">
+            <Button size="compact" variant="ghost">
               <ButtonIcon>
-                <StarIcon size={16} />
+                <StarIcon size={14} />
               </ButtonIcon>
               <ButtonText>403</ButtonText>
             </Button>
-            <Button size="compact" type="border">
+            <Button size="compact" variant="border">
               <ButtonText>Login</ButtonText>
             </Button>
-            <Button size="compact" type="highlight">
+            <Button size="compact" variant="highlight">
               <ButtonText>Register</ButtonText>
             </Button>
           </MarketingHeaderActions>

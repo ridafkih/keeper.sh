@@ -2,7 +2,7 @@ import type { PropsWithChildren } from "react";
 
 export function MarketingFooter({ children }: PropsWithChildren) {
   return (
-    <footer className="flex justify-between items-start gap-4 py-12 tracking-tight font-light text-sm">
+    <footer className="flex justify-between items-start gap-4 py-12 tracking-tight font-light text-sm z-20 bg-background">
       {children}
     </footer>
   );
