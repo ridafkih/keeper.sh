@@ -2,12 +2,12 @@ import type { PropsWithChildren } from "react";
 import { tv } from "tailwind-variants/lite";
 
 const heading = tv({
-  base: "font-serif font-normal leading-tight -tracking-[0.075em] text-foreground",
+  base: "font-serif font-medium leading-tight -tracking-[0.075em] text-foreground",
   variants: {
     level: {
       1: "text-4xl",
-      2: "text-2xl",
-      3: "text-xl",
+      2: "text-xl",
+      3: "text-lg",
     },
   },
 });

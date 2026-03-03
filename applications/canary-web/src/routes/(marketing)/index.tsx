@@ -1,11 +1,18 @@
 import { useSetAtom } from 'jotai'
 import { createFileRoute } from '@tanstack/react-router'
-import { Heading1 } from '../../components/ui/heading'
+import { Heading1, Heading2 } from '../../components/ui/heading'
 import { Text } from '../../components/ui/text'
 import { Button, ButtonIcon, ButtonText } from '../../components/ui/button'
 import { MarketingIllustrationCalendar, MarketingIllustrationCalendarCard, Skew, SkewTuple } from '../../components/marketing/marketing-illustration-calendar'
+import {
+  MarketingFeatureBentoBody,
+  MarketingFeatureBentoCard,
+  MarketingFeatureBentoGrid,
+  MarketingFeatureBentoIllustration,
+  MarketingFeatureBentoSection,
+} from '../../components/marketing/marketing-feature-bento'
 import { calendarEmphasizedAtom } from '../../state/calendar-emphasized'
-import { ArrowRightIcon } from 'lucide-react'
+import { ArrowRightIcon, ArrowUpRightIcon } from 'lucide-react'
 
 const createSkew = (rotate: number, x: number, y: number): Skew => ({ rotate, x, y });
 
@@ -25,6 +32,44 @@ const SKEW_FRONT: SkewTuple = [
   createSkew(-4, 4, -6),
   createSkew(-2, 2, -2),
   createSkew(0, 0, 0),
+]
+
+type MarketingFeature = {
+  id: number
+  title: string
+  description: string
+  gridClassName: string
+}
+
+const MARKETING_FEATURES: MarketingFeature[] = [
+  {
+    id: 1,
+    title: 'Privacy-First & Open Source',
+    description:
+      'Open-source, released under an AGPL-3.0 license. Secure and community driven.',
+    gridClassName: 'lg:col-start-1 lg:col-span-4 lg:row-start-1',
+  },
+  {
+    id: 2,
+    title: 'Universal Calendar Sync',
+    description:
+      'Google Calendar, Outlook, Apple Calendar, and more. Automatically sync events between your all your calendars no matter the provider.',
+    gridClassName: 'lg:col-start-5 lg:col-span-6 lg:row-start-1',
+  },
+  {
+    id: 3,
+    title: 'Simple Synchronization Engine',
+    description:
+      'Your events are aggregated, and computed against the destination. Discrepencies are reconciled. Built to prevent orphan events.',
+    gridClassName: 'lg:col-start-1 lg:col-span-6 lg:row-start-2',
+  },
+  {
+    id: 4,
+    title: 'Quick Setup',
+    description:
+      'Source from OAuth connections, ICS links or CalDAV. Quick and simple to set up.',
+    gridClassName: 'lg:col-start-7 lg:col-span-4 lg:row-start-2',
+  },
 ]
 
 export const Route = createFileRoute('/(marketing)/')({
@@ -55,17 +100,34 @@ function RouteComponent() {
           <Button size="compact" variant="border">
             <ButtonText>View GitHub</ButtonText>
             <ButtonIcon>
-              <ArrowRightIcon size={16} />
+              <ArrowUpRightIcon size={16} />
             </ButtonIcon>
           </Button>
         </div>
       </div>
       <div className="contents *:z-10">
-        <MarketingIllustrationCalendar>
-          <MarketingIllustrationCalendarCard skew={SKEW_BACK_LEFT} />
-          <MarketingIllustrationCalendarCard skew={SKEW_BACK_RIGHT} />
-          <MarketingIllustrationCalendarCard skew={SKEW_FRONT} />
-        </MarketingIllustrationCalendar>
+        <div className="flex flex-col">
+          <MarketingIllustrationCalendar>
+            <MarketingIllustrationCalendarCard skew={SKEW_BACK_LEFT} />
+            <MarketingIllustrationCalendarCard skew={SKEW_BACK_RIGHT} />
+            <MarketingIllustrationCalendarCard skew={SKEW_FRONT} />
+          </MarketingIllustrationCalendar>
+          <MarketingFeatureBentoSection>
+            <MarketingFeatureBentoGrid>
+              {MARKETING_FEATURES.map((feature) => (
+                <MarketingFeatureBentoCard key={feature.id} className={feature.gridClassName}>
+                  <MarketingFeatureBentoIllustration />
+                  <MarketingFeatureBentoBody>
+                    <Heading2>{feature.title}</Heading2>
+                    <Text size="sm" className="text-left">
+                      {feature.description}
+                    </Text>
+                  </MarketingFeatureBentoBody>
+                </MarketingFeatureBentoCard>
+              ))}
+            </MarketingFeatureBentoGrid>
+          </MarketingFeatureBentoSection>
+        </div>
       </div>
     </div>
   )

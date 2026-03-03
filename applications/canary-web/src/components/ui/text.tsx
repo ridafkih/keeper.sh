@@ -1,8 +1,21 @@
 import type { PropsWithChildren } from "react";
-import { cn } from "tailwind-variants/lite";
+import { tv } from "tailwind-variants/lite";
 
-type TextProps = PropsWithChildren<{ className?: string }>;
+const text = tv({
+  base: "tracking-tight text-foreground-muted text-center",
+  variants: {
+    size: {
+      base: "text-base",
+      sm: "text-sm",
+    },
+  },
+  defaultVariants: {
+    size: "base",
+  },
+});
 
-export function Text({ children, className }: TextProps) {
-  return <p className={cn("tracking-tight text-foreground-muted text-center", className)()}>{children}</p>;
+type TextProps = PropsWithChildren<{ size?: "base" | "sm"; className?: string }>;
+
+export function Text({ children, size, className }: TextProps) {
+  return <p className={text({ size, className })}>{children}</p>;
 }

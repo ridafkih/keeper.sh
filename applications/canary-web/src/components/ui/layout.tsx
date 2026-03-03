@@ -2,7 +2,7 @@ import type { PropsWithChildren } from "react";
 
 export function Layout({ children }: PropsWithChildren) {
   return (
-    <div className="grid grid-cols-[minmax(1rem,1fr)_minmax(auto,40rem)_minmax(1rem,1fr)] auto-rows-min size-full">
+    <div className="grid grid-cols-[minmax(1rem,1fr)_minmax(auto,48rem)_minmax(1rem,1fr)] auto-rows-min size-full">
       {children}
     </div>
   )

@@ -1,7 +1,7 @@
 import { useAtomValue } from "jotai";
 import { motion } from "motion/react";
 import type { TargetAndTransition } from "motion/react";
-import type { PropsWithChildren } from "react";
+import { memo, type PropsWithChildren } from "react";
 import { calendarEmphasizedAtom } from "../../state/calendar-emphasized";
 
 export interface Skew extends TargetAndTransition {
@@ -12,18 +12,79 @@ export interface Skew extends TargetAndTransition {
 
 export type SkewTuple = [Skew, Skew, Skew];
 
-const MAGIC_CALENDAR_COLUMNS = 7;
-const MAGIC_CALENDAR_ROWS = 6;
-const MAGIC_CALENDAR_DAYS_IN_MONTH = 31;
-const MAGIC_CALENDAR_CELLS = MAGIC_CALENDAR_COLUMNS * MAGIC_CALENDAR_ROWS;
-const MAGIC_ANIMATION_DURATION = 1.2;
-const MAGIC_ANIMATION_EASING = [0.16, 0.85, 0.2, 1] as const;
+const CALENDAR_COLUMNS = 7;
+const CALENDAR_ROWS = 6;
+const CALENDAR_DAYS_IN_MONTH = 31;
+const CALENDAR_CELLS = CALENDAR_COLUMNS * CALENDAR_ROWS;
+const CALENDAR_ANIMATION_EASE = [0.16, 0.85, 0.2, 1] as const;
 
-const getInitialSkew = (skew: SkewTuple) => skew[0];
-const selectSkewByState = (skew: SkewTuple, emphasized: boolean) =>
-  emphasized ? skew[2] : skew[1];
+const CALENDAR_DAY_NUMBERS = Array.from(
+  { length: CALENDAR_CELLS },
+  (_, index) => (index % CALENDAR_DAYS_IN_MONTH) + 1,
+);
 
-const transition = { duration: MAGIC_ANIMATION_DURATION, ease: MAGIC_ANIMATION_EASING };
+interface MarketingIllustrationCalendarCardProps {
+  skew: SkewTuple;
+}
+
+const toMotionTarget = ({ rotate, x, y }: Skew) => ({ rotate, x, y });
+const getAnimatedSkew = (skew: SkewTuple, emphasized: boolean) =>
+  toMotionTarget(emphasized ? skew[2] : skew[1]);
+const transformTemplate = ({
+  x,
+  y,
+  rotate,
+}: {
+  x?: unknown;
+  y?: unknown;
+  rotate?: unknown;
+}) =>
+  `translateX(${String(x ?? 0)}) translateY(${String(y ?? 0)}) rotate(${String(rotate ?? 0)})`;
+
+interface CalendarDayProps {
+  day: number;
+}
+
+const CalendarDay = memo(function CalendarDay({ day }: CalendarDayProps) {
+  return (
+    <div className="bg-background aspect-square flex justify-center py-2 text-[0.625rem] text-foreground-muted">
+      {day}
+    </div>
+  );
+});
+
+const CalendarGrid = memo(function CalendarGrid() {
+  return (
+    <div
+      className="grid grid-cols-7 rounded-[0.875rem] gap-0.5 overflow-hidden"
+      style={{ gridTemplateColumns: `repeat(${CALENDAR_COLUMNS}, minmax(0, 1fr))` }}
+    >
+      {CALENDAR_DAY_NUMBERS.map((day, index) => (
+        <CalendarDay key={index} day={day} />
+      ))}
+    </div>
+  );
+});
+
+export function MarketingIllustrationCalendarCard({
+  skew,
+}: MarketingIllustrationCalendarCardProps) {
+  const emphasized = useAtomValue(calendarEmphasizedAtom);
+
+  return (
+    <motion.div
+      initial={toMotionTarget(skew[0])}
+      animate={getAnimatedSkew(skew, emphasized)}
+      transition={{ type: "tween", duration: 1.2, ease: CALENDAR_ANIMATION_EASE }}
+      transformTemplate={transformTemplate}
+      layout={false}
+      style={{ transformOrigin: "center center" }}
+      className="bg-interactive-border p-0.5 rounded-2xl select-none shadow-xs"
+    >
+      <CalendarGrid />
+    </motion.div>
+  );
+}
 
 export function MarketingIllustrationCalendar({ children }: PropsWithChildren) {
   return (
@@ -34,41 +95,5 @@ export function MarketingIllustrationCalendar({ children }: PropsWithChildren) {
         </div>
       </div>
     </div>
-  );
-}
-
-function CalendarGrid() {
-  return (
-    <div
-      className="grid grid-cols-7 rounded-[0.875rem] gap-0.5 overflow-hidden"
-      style={{ gridTemplateColumns: `repeat(${MAGIC_CALENDAR_COLUMNS}, minmax(0, 1fr))` }}
-    >
-      {[...Array(MAGIC_CALENDAR_CELLS)].map((_, index) => (
-        <CalendarDay key={index} day={(index % MAGIC_CALENDAR_DAYS_IN_MONTH) + 1} />
-      ))}
-    </div>
-  );
-}
-
-function CalendarDay({ day }: { day: number }) {
-  return (
-    <div className="bg-background aspect-square flex justify-center py-2 text-[0.625rem] text-foreground-muted">
-      {day}
-    </div>
-  );
-}
-
-export function MarketingIllustrationCalendarCard({ skew }: { skew: SkewTuple }) {
-  const emphasized = useAtomValue(calendarEmphasizedAtom);
-
-  return (
-    <motion.div
-      initial={getInitialSkew(skew)}
-      animate={selectSkewByState(skew, emphasized)}
-      transition={transition}
-      className="bg-interactive-border p-0.5 rounded-2xl select-none shadow-xs"
-    >
-      <CalendarGrid />
-    </motion.div>
   );
 }
