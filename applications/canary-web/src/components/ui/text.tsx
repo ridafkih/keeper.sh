@@ -10,6 +10,7 @@ const text = tv({
     },
     tone: {
       muted: "text-foreground-muted",
+      inverse: "text-foreground-inverse",
       inverseMuted: "text-foreground-inverse-muted",
       default: "text-foreground",
     },
@@ -27,7 +28,7 @@ const text = tv({
 
 type TextProps = PropsWithChildren<{
   size?: "base" | "sm";
-  tone?: "muted" | "inverseMuted" | "default";
+  tone?: "muted" | "inverse" | "inverseMuted" | "default";
   align?: "center" | "left";
   className?: string;
 }>;

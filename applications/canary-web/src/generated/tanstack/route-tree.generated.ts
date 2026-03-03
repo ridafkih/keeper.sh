@@ -11,10 +11,12 @@
 import { Route as rootRouteImport } from './../../routes/__root'
 import { Route as oauthRouteRouteImport } from './../../routes/(oauth)/route'
 import { Route as marketingRouteRouteImport } from './../../routes/(marketing)/route'
+import { Route as dashboardRouteRouteImport } from './../../routes/(dashboard)/route'
 import { Route as authRouteRouteImport } from './../../routes/(auth)/route'
 import { Route as marketingIndexRouteImport } from './../../routes/(marketing)/index'
 import { Route as authRegisterRouteImport } from './../../routes/(auth)/register'
 import { Route as authLoginRouteImport } from './../../routes/(auth)/login'
+import { Route as dashboardDashboardIndexRouteImport } from './../../routes/(dashboard)/dashboard/index'
 import { Route as oauthAuthOutlookRouteImport } from './../../routes/(oauth)/auth.outlook'
 import { Route as oauthAuthGoogleRouteImport } from './../../routes/(oauth)/auth.google'
 
@@ -24,6 +26,10 @@ const oauthRouteRoute = oauthRouteRouteImport.update({
 } as any)
 const marketingRouteRoute = marketingRouteRouteImport.update({
   id: '/(marketing)',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const dashboardRouteRoute = dashboardRouteRouteImport.update({
+  id: '/(dashboard)',
   getParentRoute: () => rootRouteImport,
 } as any)
 const authRouteRoute = authRouteRouteImport.update({
@@ -45,6 +51,11 @@ const authLoginRoute = authLoginRouteImport.update({
   path: '/login',
   getParentRoute: () => authRouteRoute,
 } as any)
+const dashboardDashboardIndexRoute = dashboardDashboardIndexRouteImport.update({
+  id: '/dashboard/',
+  path: '/dashboard/',
+  getParentRoute: () => dashboardRouteRoute,
+} as any)
 const oauthAuthOutlookRoute = oauthAuthOutlookRouteImport.update({
   id: '/auth/outlook',
   path: '/auth/outlook',
@@ -62,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/': typeof marketingIndexRoute
   '/auth/google': typeof oauthAuthGoogleRoute
   '/auth/outlook': typeof oauthAuthOutlookRoute
+  '/dashboard/': typeof dashboardDashboardIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof authLoginRoute
@@ -69,10 +81,12 @@ export interface FileRoutesByTo {
   '/': typeof marketingIndexRoute
   '/auth/google': typeof oauthAuthGoogleRoute
   '/auth/outlook': typeof oauthAuthOutlookRoute
+  '/dashboard': typeof dashboardDashboardIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/(auth)': typeof authRouteRouteWithChildren
+  '/(dashboard)': typeof dashboardRouteRouteWithChildren
   '/(marketing)': typeof marketingRouteRouteWithChildren
   '/(oauth)': typeof oauthRouteRouteWithChildren
   '/(auth)/login': typeof authLoginRoute
@@ -80,15 +94,29 @@ export interface FileRoutesById {
   '/(marketing)/': typeof marketingIndexRoute
   '/(oauth)/auth/google': typeof oauthAuthGoogleRoute
   '/(oauth)/auth/outlook': typeof oauthAuthOutlookRoute
+  '/(dashboard)/dashboard/': typeof dashboardDashboardIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/login' | '/register' | '/' | '/auth/google' | '/auth/outlook'
+  fullPaths:
+    | '/login'
+    | '/register'
+    | '/'
+    | '/auth/google'
+    | '/auth/outlook'
+    | '/dashboard/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/register' | '/' | '/auth/google' | '/auth/outlook'
+  to:
+    | '/login'
+    | '/register'
+    | '/'
+    | '/auth/google'
+    | '/auth/outlook'
+    | '/dashboard'
   id:
     | '__root__'
     | '/(auth)'
+    | '/(dashboard)'
     | '/(marketing)'
     | '/(oauth)'
     | '/(auth)/login'
@@ -96,10 +124,12 @@ export interface FileRouteTypes {
     | '/(marketing)/'
     | '/(oauth)/auth/google'
     | '/(oauth)/auth/outlook'
+    | '/(dashboard)/dashboard/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   authRouteRoute: typeof authRouteRouteWithChildren
+  dashboardRouteRoute: typeof dashboardRouteRouteWithChildren
   marketingRouteRoute: typeof marketingRouteRouteWithChildren
   oauthRouteRoute: typeof oauthRouteRouteWithChildren
 }
@@ -118,6 +148,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: ''
       preLoaderRoute: typeof marketingRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(dashboard)': {
+      id: '/(dashboard)'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof dashboardRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/(auth)': {
@@ -147,6 +184,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/login'
       preLoaderRoute: typeof authLoginRouteImport
       parentRoute: typeof authRouteRoute
+    }
+    '/(dashboard)/dashboard/': {
+      id: '/(dashboard)/dashboard/'
+      path: '/dashboard'
+      fullPath: '/dashboard/'
+      preLoaderRoute: typeof dashboardDashboardIndexRouteImport
+      parentRoute: typeof dashboardRouteRoute
     }
     '/(oauth)/auth/outlook': {
       id: '/(oauth)/auth/outlook'
@@ -179,6 +223,18 @@ const authRouteRouteWithChildren = authRouteRoute._addFileChildren(
   authRouteRouteChildren,
 )
 
+interface dashboardRouteRouteChildren {
+  dashboardDashboardIndexRoute: typeof dashboardDashboardIndexRoute
+}
+
+const dashboardRouteRouteChildren: dashboardRouteRouteChildren = {
+  dashboardDashboardIndexRoute: dashboardDashboardIndexRoute,
+}
+
+const dashboardRouteRouteWithChildren = dashboardRouteRoute._addFileChildren(
+  dashboardRouteRouteChildren,
+)
+
 interface marketingRouteRouteChildren {
   marketingIndexRoute: typeof marketingIndexRoute
 }
@@ -207,6 +263,7 @@ const oauthRouteRouteWithChildren = oauthRouteRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   authRouteRoute: authRouteRouteWithChildren,
+  dashboardRouteRoute: dashboardRouteRouteWithChildren,
   marketingRouteRoute: marketingRouteRouteWithChildren,
   oauthRouteRoute: oauthRouteRouteWithChildren,
 }

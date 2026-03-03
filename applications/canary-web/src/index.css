@@ -18,11 +18,7 @@ html {
   --ui-background-inverse: var(--ui-foreground);
   --ui-foreground-inverse: var(--ui-background);
   --ui-interactive-border: var(--color-neutral-300);
-  --ui-foreground-muted: color-mix(
-    in srgb,
-    var(--ui-foreground),
-    transparent 40%
-  );
+  --ui-foreground-muted: var(--color-neutral-500);
   --ui-foreground-hover: color-mix(
     in srgb,
     var(--ui-foreground),
@@ -38,6 +34,9 @@ html {
     var(--ui-foreground-inverse),
     transparent 40%
   );
+  --ui-background-elevated: var(--color-white);
+  --ui-border-elevated: var(--color-neutral-200);
+  --ui-background-inverse-hover: var(--color-neutral-800);
   --ui-background-hover: color-mix(
     in srgb,
     var(--ui-foreground),
@@ -67,6 +66,9 @@ html {
   --color-foreground-hover: var(--ui-foreground-hover);
   --color-illustration-stripe: var(--ui-illustration-stripe);
   --color-foreground-inverse-muted: var(--ui-foreground-inverse-muted);
+  --color-background-elevated: var(--ui-background-elevated);
+  --color-border-elevated: var(--ui-border-elevated);
+  --color-background-inverse-hover: var(--ui-background-inverse-hover);
   --color-background-hover: var(--ui-background-hover);
 
   --font-sans: "Geist Sans", system-ui, sans-serif;
@@ -96,11 +98,7 @@ html {
     --ui-background-inverse: var(--ui-foreground);
     --ui-foreground-inverse: var(--ui-background);
     --ui-interactive-border: var(--color-neutral-800);
-    --ui-foreground-muted: color-mix(
-      in srgb,
-      var(--ui-foreground),
-      transparent 40%
-    );
+    --ui-foreground-muted: var(--color-neutral-400);
     --ui-foreground-hover: color-mix(
       in srgb,
       var(--ui-foreground),
@@ -116,6 +114,9 @@ html {
       var(--ui-foreground-inverse),
       transparent 40%
     );
+    --ui-background-elevated: var(--color-neutral-900);
+    --ui-border-elevated: var(--color-neutral-800);
+    --ui-background-inverse-hover: var(--color-neutral-300);
     --ui-background-hover: color-mix(
       in srgb,
       var(--ui-foreground),
