@@ -45,7 +45,7 @@ export function MarketingPricingIntro({ children }: PropsWithChildren) {
 
 export function MarketingPricingComparisonGrid({ children }: PropsWithChildren) {
   return (
-    <div className="mt-8 grid grid-cols-1 xs:grid-cols-2 md:grid-cols-[min-content_repeat(2,auto)] gap-2">{children}</div>
+    <div className="mt-8 grid grid-cols-1 xs:grid-cols-2 md:grid-cols-[min-content_repeat(2,auto)] gap-x-2">{children}</div>
   );
 }
 
