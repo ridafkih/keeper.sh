@@ -61,7 +61,7 @@ function RouteComponent() {
 
   const handleAdd = async () => {
     await authClient.passkey.addPasskey();
-    mutate();
+    await mutate();
   };
 
   const formatDate = (date: Date) =>

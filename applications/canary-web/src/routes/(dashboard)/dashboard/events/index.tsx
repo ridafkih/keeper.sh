@@ -2,6 +2,7 @@ import { useEffect, useRef, memo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { LoaderCircle } from "lucide-react";
 import { BackButton } from "../../../../components/ui/back-button";
+import { ErrorState } from "../../../../components/ui/error-state";
 import { Heading3 } from "../../../../components/ui/heading";
 import { Text } from "../../../../components/ui/text";
 import { formatTime, formatTimeUntil, isEventPast, formatDayHeader } from "../../../../lib/time";
@@ -60,10 +61,11 @@ function RouteComponent() {
 }
 
 function EventsContent() {
-  const { events, isLoading, isValidating, hasMore, loadMore } = useEvents();
+  const { events, error, isLoading, isValidating, hasMore, loadMore } = useEvents();
   const dayGroups = groupEventsByDay(events);
 
   if (isLoading) return <LoadingIndicator />;
+  if (error) return <ErrorState message="Failed to load events." />;
 
   return (
     <div className="flex flex-col gap-3">

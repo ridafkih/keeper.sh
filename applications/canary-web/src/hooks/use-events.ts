@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import useSWRInfinite from "swr/infinite";
+import { fetcher } from "../lib/fetcher";
 
 interface ApiEvent {
   id: string;
@@ -37,10 +38,7 @@ const buildEventsUrl = (from: Date, to: Date): string => {
 };
 
 const fetchEvents = async (url: string): Promise<CalendarEvent[]> => {
-  const response = await fetch(url, { credentials: "include" });
-  if (!response.ok) throw new Error("Failed to fetch events");
-
-  const data: ApiEvent[] = await response.json();
+  const data = await fetcher<ApiEvent[]>(url);
   return data.map((event) => ({
     id: event.id,
     startTime: new Date(event.startTime),
@@ -66,7 +64,7 @@ export function useEvents() {
     return buildEventsUrl(from, to);
   };
 
-  const { data, setSize, isLoading, isValidating } = useSWRInfinite(
+  const { data, error, setSize, isLoading, isValidating } = useSWRInfinite(
     getKey,
     fetchEvents,
     { revalidateFirstPage: false },
@@ -79,7 +77,7 @@ export function useEvents() {
     void setSize((prev) => prev + 1);
   };
 
-  return { events, isLoading, isValidating, hasMore, loadMore };
+  return { events, error, isLoading, isValidating, hasMore, loadMore };
 }
 
 const deduplicateEvents = (events: CalendarEvent[]): CalendarEvent[] => [

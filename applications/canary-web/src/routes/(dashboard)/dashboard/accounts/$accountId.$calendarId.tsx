@@ -21,7 +21,7 @@ export const Route = createFileRoute(
 
 function RouteComponent() {
   const { accountId, calendarId } = Route.useParams();
-  const { data: account, isLoading: accountLoading, error: accountError } = useSWR<CalendarAccount>(`/api/accounts/${accountId}`);
+  const { data: account, isLoading: accountLoading, error: accountError, mutate: mutateAccount } = useSWR<CalendarAccount>(`/api/accounts/${accountId}`);
   const {
     data: calendar,
     isLoading: calendarLoading,
@@ -36,7 +36,7 @@ function RouteComponent() {
     return (
       <div className="flex flex-col gap-1.5">
         <BackButton fallback={`/dashboard/accounts/${accountId}`} />
-        <ErrorState onRetry={() => mutateCalendar()} />
+        <ErrorState onRetry={async () => { await Promise.all([mutateAccount(), mutateCalendar()]); }} />
       </div>
     );
   }

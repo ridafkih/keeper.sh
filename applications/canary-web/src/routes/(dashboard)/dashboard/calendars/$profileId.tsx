@@ -39,11 +39,11 @@ function RouteComponent() {
   const { data: profile, isLoading, error, mutate: mutateProfile } = useSWR<SyncProfile>(
     `/api/profiles/${profileId}`,
   );
-  const { data: calendars } = useSWR<CalendarEntry[]>("/api/sources");
+  const { data: calendars, error: calendarsError } = useSWR<CalendarEntry[]>("/api/sources");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  if (error) {
+  if (error || calendarsError) {
     return (
       <div className="flex flex-col gap-1.5">
         <BackButton fallback="/dashboard/calendars" />
@@ -192,7 +192,10 @@ function RouteComponent() {
           setDeleting(true);
           try {
             await apiFetch(`/api/profiles/${profileId}`, { method: "DELETE" });
-            await globalMutate("/api/profiles");
+            await Promise.all([
+              globalMutate("/api/profiles"),
+              globalMutate(`/api/profiles/${profileId}`),
+            ]);
             navigate({ to: "/dashboard/calendars" });
           } finally {
             setDeleting(false);

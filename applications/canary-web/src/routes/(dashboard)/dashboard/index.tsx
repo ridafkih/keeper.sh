@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR, { preload } from "swr";
-import { CalendarPlus, CalendarSync, CalendarDays, Settings, Sparkles, LogOut, Bell, Eye } from "lucide-react";
+import { CalendarPlus, CalendarSync, CalendarDays, Settings, Sparkles, LogOut, Bell, Eye, LoaderCircle } from "lucide-react";
 import { ErrorState } from "../../../components/ui/error-state";
 import { signOut } from "../../../lib/auth";
 import { fetcher } from "../../../lib/fetcher";
@@ -33,7 +33,7 @@ function RouteComponent() {
   };
   const [notifications, setNotifications] = useState(true);
   const [publicProfile, setPublicProfile] = useState(false);
-  const { data: calendarsData, error, mutate: mutateCalendars } = useSWR<CalendarSource[]>("/api/sources");
+  const { data: calendarsData, isLoading: calendarsLoading, error, mutate: mutateCalendars } = useSWR<CalendarSource[]>("/api/sources");
   const calendars = calendarsData ?? [];
 
   return (
@@ -52,6 +52,11 @@ function RouteComponent() {
         <NavigationMenu>
           {error && (
             <ErrorState message="Failed to load calendars." onRetry={() => mutateCalendars()} />
+          )}
+          {calendarsLoading && (
+            <div className="flex justify-center py-4">
+              <LoaderCircle size={16} className="animate-spin text-foreground-muted" />
+            </div>
           )}
           {calendars.map((calendar) => (
             <NavigationMenuItem

@@ -34,13 +34,13 @@ function RouteComponent() {
   const { data: profiles, isLoading, error, mutate: mutateProfiles } = useSWR<SyncProfile[]>(
     "/api/profiles",
   );
-  const { data: calendars } = useSWR<CalendarEntry[]>("/api/sources");
+  const { data: calendars, error: calendarsError } = useSWR<CalendarEntry[]>("/api/sources");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [newProfileName, setNewProfileName] = useState("New Profile");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  if (error) {
+  if (error || calendarsError) {
     return (
       <div className="flex flex-col gap-1.5">
         <BackButton />
@@ -72,12 +72,16 @@ function RouteComponent() {
   const handleNameCommit = async (name: string) => {
     if (isNewSlot) {
       setNewProfileName(name);
-      await apiFetch("/api/profiles", {
+      const response = await apiFetch("/api/profiles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
       });
-      await mutateProfiles();
+      const created = await response.json();
+      await mutateProfiles(
+        [...(profiles ?? []), created],
+        { revalidate: false },
+      );
       setNewProfileName("New Profile");
       return;
     }

@@ -55,7 +55,7 @@ function RouteComponent() {
     return (
       <div className="flex flex-col gap-1.5">
         <BackButton />
-        <ErrorState onRetry={() => { globalMutate(`/api/accounts/${accountId}`); globalMutate("/api/sources"); }} />
+        <ErrorState onRetry={async () => { await Promise.all([globalMutate(`/api/accounts/${accountId}`), globalMutate("/api/sources")]); }} />
       </div>
     );
   }
@@ -154,6 +154,7 @@ function RouteComponent() {
                   await Promise.all([
                     globalMutate("/api/accounts"),
                     globalMutate("/api/sources"),
+                    globalMutate(`/api/accounts/${accountId}`),
                   ]);
                   navigate({ to: "/dashboard" });
                 } finally {

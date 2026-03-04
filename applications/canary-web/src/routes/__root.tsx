@@ -17,11 +17,7 @@ function RootComponent() {
     <SWRConfig
       value={{
         fetcher,
-        revalidateOnFocus: true,
-        revalidateOnReconnect: true,
-        shouldRetryOnError: true,
         errorRetryCount: 3,
-        dedupingInterval: 2000,
         onError: (error, key) => {
           console.error(`[SWR] ${key}:`, error);
         },
