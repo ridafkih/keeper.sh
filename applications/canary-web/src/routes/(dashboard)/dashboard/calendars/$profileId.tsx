@@ -45,23 +45,25 @@ interface CalendarEntry {
   provider?: string;
 }
 
-const fetcher = async <T,>(url: string): Promise<T> => {
-  const response = await fetch(url, { credentials: "include" });
-  if (!response.ok) throw new Error("Failed to fetch");
-  return response.json();
-};
-
 function RouteComponent() {
   const { profileId } = Route.useParams();
   const navigate = useNavigate();
   const { mutate: globalMutate } = useSWRConfig();
-  const { data: profile, isLoading, mutate: mutateProfile } = useSWR<SyncProfile>(
+  const { data: profile, isLoading, error, mutate: mutateProfile } = useSWR<SyncProfile>(
     `/api/profiles/${profileId}`,
-    fetcher,
   );
-  const { data: calendars } = useSWR<CalendarEntry[]>("/api/sources", fetcher);
+  const { data: calendars } = useSWR<CalendarEntry[]>("/api/sources");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  if (error) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <BackButton fallback="/dashboard/calendars" />
+        <Text size="sm" tone="danger">Something went wrong. Please try again.</Text>
+      </div>
+    );
+  }
 
   if (isLoading || !profile) {
     return (
@@ -210,7 +212,7 @@ function RouteComponent() {
           });
           setDeleting(false);
           if (response.ok) {
-            globalMutate("/api/profiles");
+            await globalMutate("/api/profiles");
             navigate({ to: "/dashboard/calendars" });
           }
         }}

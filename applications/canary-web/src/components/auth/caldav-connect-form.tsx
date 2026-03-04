@@ -92,8 +92,8 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
     }
 
     setLoading(false);
-    globalMutate("/api/accounts");
-    globalMutate("/api/sources");
+    await globalMutate("/api/accounts");
+    await globalMutate("/api/sources");
     navigate({ to: "/dashboard" });
   };
 

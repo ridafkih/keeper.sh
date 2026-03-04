@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR from "swr";
 import { LoaderCircle, ArrowDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { BackButton } from "../../../../components/ui/back-button";
 import { Button, ButtonText } from "../../../../components/ui/button";
@@ -43,23 +43,24 @@ interface CalendarEntry {
   provider?: string;
 }
 
-const fetcher = async <T,>(url: string): Promise<T> => {
-  const response = await fetch(url, { credentials: "include" });
-  if (!response.ok) throw new Error("Failed to fetch");
-  return response.json();
-};
-
 function RouteComponent() {
-  const { mutate: globalMutate } = useSWRConfig();
-  const { data: profiles, isLoading, mutate: mutateProfiles } = useSWR<SyncProfile[]>(
+  const { data: profiles, isLoading, error, mutate: mutateProfiles } = useSWR<SyncProfile[]>(
     "/api/profiles",
-    fetcher,
   );
-  const { data: calendars } = useSWR<CalendarEntry[]>("/api/sources", fetcher);
+  const { data: calendars } = useSWR<CalendarEntry[]>("/api/sources");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [newProfileName, setNewProfileName] = useState("New Profile");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  if (error) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <BackButton />
+        <Text size="sm" tone="danger">Something went wrong. Please try again.</Text>
+      </div>
+    );
+  }
 
   if (isLoading || !profiles) {
     return (
@@ -175,7 +176,6 @@ function RouteComponent() {
             setDeleting(false);
             if (response.ok) {
               await mutateProfiles();
-              globalMutate("/api/profiles");
               const newLength = profiles.length - 1;
               if (currentIndex >= newLength) {
                 setCurrentIndex(Math.max(0, newLength - 1));

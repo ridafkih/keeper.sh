@@ -38,7 +38,7 @@ const fetchPasskeys = async (): Promise<Passkey[]> => {
 };
 
 function RouteComponent() {
-  const { data: passkeys = [], mutate } = useSWR("passkeys", fetchPasskeys);
+  const { data: passkeys = [], error, mutate } = useSWR("passkeys", fetchPasskeys);
   const [deleteTarget, setDeleteTarget] = useState<Passkey | null>(null);
 
   const handleDelete = async () => {
@@ -73,6 +73,7 @@ function RouteComponent() {
           <ArrowLeft size={16} />
         </ButtonIcon>
       </LinkButton>
+      {error && <Text size="sm" tone="danger">Failed to load passkeys.</Text>}
       <NavigationMenu>
         {passkeys.map((passkey) => (
           <NavigationMenuItem key={passkey.id} onClick={() => setDeleteTarget(passkey)}>

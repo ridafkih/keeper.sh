@@ -33,12 +33,6 @@ interface CalendarSource {
   email: string | null;
 }
 
-const fetcher = async <T,>(url: string): Promise<T> => {
-  const response = await fetch(url, { credentials: "include" });
-  if (!response.ok) throw new Error("Failed to fetch");
-  return response.json();
-};
-
 function RouteComponent() {
   const navigate = useNavigate();
   const handleLogout = async () => {
@@ -47,7 +41,7 @@ function RouteComponent() {
   };
   const [notifications, setNotifications] = useState(true);
   const [publicProfile, setPublicProfile] = useState(false);
-  const { data: calendarsData } = useSWR<CalendarSource[]>("/api/sources", fetcher);
+  const { data: calendarsData, error } = useSWR<CalendarSource[]>("/api/sources");
   const calendars = calendarsData ?? [];
 
   return (
@@ -64,6 +58,9 @@ function RouteComponent() {
           </NavigationMenuItem>
         </NavigationMenu>
         <NavigationMenu>
+          {error && (
+            <Text size="sm" tone="danger">Failed to load calendars.</Text>
+          )}
           {calendars.map((calendar) => (
             <NavigationMenuItem key={calendar.id} to={`/dashboard/accounts/${calendar.accountId}/${calendar.id}`}>
               <div className="flex items-center gap-2 shrink-0">

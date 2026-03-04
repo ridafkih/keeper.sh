@@ -38,20 +38,27 @@ interface CalendarDetail {
   updatedAt: string;
 }
 
-const fetcher = async <T,>(url: string): Promise<T> => {
-  const response = await fetch(url, { credentials: "include" });
-  if (!response.ok) throw new Error("Failed to fetch");
-  return response.json();
-};
-
 function RouteComponent() {
   const { accountId, calendarId } = Route.useParams();
-  const { data: account } = useSWR<CalendarAccount>(`/api/accounts/${accountId}`, fetcher);
+  const { data: account, isLoading: accountLoading, error: accountError } = useSWR<CalendarAccount>(`/api/accounts/${accountId}`);
   const {
     data: calendar,
-    isLoading,
+    isLoading: calendarLoading,
+    error: calendarError,
     mutate: mutateCalendar,
-  } = useSWR<CalendarDetail>(`/api/sources/${calendarId}`, fetcher);
+  } = useSWR<CalendarDetail>(`/api/sources/${calendarId}`);
+
+  const isLoading = accountLoading || calendarLoading;
+  const error = accountError || calendarError;
+
+  if (error) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <BackButton fallback={`/dashboard/accounts/${accountId}`} />
+        <Text size="sm" tone="danger">Something went wrong. Please try again.</Text>
+      </div>
+    );
+  }
 
   if (isLoading || !calendar || !account) {
     return (

@@ -1,8 +1,10 @@
 import { Outlet, createRootRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
+import { SWRConfig } from "swr";
 import { Heading2 } from "../components/ui/heading";
 import { Text } from "../components/ui/text";
 import { LinkButton, ButtonText } from "../components/ui/button";
+import { fetcher } from "../lib/fetcher";
 
 export const Route = createRootRoute({
   component: RootComponent,
@@ -11,7 +13,19 @@ export const Route = createRootRoute({
 });
 
 function RootComponent() {
-  return <Outlet />;
+  return (
+    <SWRConfig
+      value={{
+        fetcher,
+        revalidateOnFocus: true,
+        revalidateOnReconnect: true,
+        shouldRetryOnError: true,
+        dedupingInterval: 2000,
+      }}
+    >
+      <Outlet />
+    </SWRConfig>
+  );
 }
 
 function NotFound() {

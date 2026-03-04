@@ -115,9 +115,16 @@ function EventGraphSummary({ days }: { days: ReturnType<typeof buildDays> }) {
   const activeDay = hoverIndex !== null ? days[hoverIndex] : today;
 
   return (
-    <Text size="sm" tone="muted" className="tabular-nums text-right">
-      {formatSummary(activeDay.count, activeDay.fullLabel)}
-    </Text>
+    <>
+      <div className="flex items-center justify-between">
+        <Text size="sm" tone="muted" className="tabular-nums text-right">
+          {pluralize(activeDay.count, "event")}
+        </Text>
+        <Text size="sm" tone="muted" className="tabular-nums text-right">
+          {activeDay.fullLabel}
+        </Text>
+      </div>
+    </>
   );
 }
 

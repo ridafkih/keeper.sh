@@ -50,32 +50,34 @@ interface CalendarSource {
   needsReauthentication: boolean;
 }
 
-const fetcher = async <T,>(url: string): Promise<T> => {
-  const response = await fetch(url, { credentials: "include" });
-  if (!response.ok) throw new Error("Failed to fetch");
-  return response.json();
-};
-
 function RouteComponent() {
   const { accountId } = Route.useParams();
   const navigate = useNavigate();
   const { mutate: globalMutate } = useSWRConfig();
-  const { data: account, isLoading: accountLoading } = useSWR<CalendarAccount>(
+  const { data: account, isLoading: accountLoading, error: accountError } = useSWR<CalendarAccount>(
     `/api/accounts/${accountId}`,
-    fetcher,
   );
-  const { data: allCalendars, isLoading: calendarsLoading } = useSWR<CalendarSource[]>(
+  const { data: allCalendars, isLoading: calendarsLoading, error: calendarsError } = useSWR<CalendarSource[]>(
     "/api/sources",
-    fetcher,
   );
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const isLoading = accountLoading || calendarsLoading;
+  const error = accountError || calendarsError;
   const calendars = (allCalendars ?? []).filter(
     (calendar) => calendar.accountId === accountId,
   );
+
+  if (error) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <BackButton />
+        <Text size="sm" tone="danger">Something went wrong. Please try again.</Text>
+      </div>
+    );
+  }
 
   if (isLoading || !account) {
     return (
@@ -168,8 +170,8 @@ function RouteComponent() {
                 });
                 setDeleting(false);
                 if (response.ok) {
-                  globalMutate("/api/accounts");
-                  globalMutate("/api/sources");
+                  await globalMutate("/api/accounts");
+                  await globalMutate("/api/sources");
                   navigate({ to: "/dashboard" });
                 }
               }}
