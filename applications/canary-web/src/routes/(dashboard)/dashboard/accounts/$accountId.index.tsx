@@ -7,6 +7,7 @@ import { BackButton } from "../../../../components/ui/back-button";
 import { Button, ButtonText } from "../../../../components/ui/button";
 import { Text } from "../../../../components/ui/text";
 import { fetcher, apiFetch } from "../../../../lib/fetcher";
+import { invalidateAccountsAndSources } from "../../../../lib/swr";
 import { getAccountLabel } from "../../../../utils/accounts";
 import type { CalendarAccount, CalendarSource } from "../../../../types/api";
 import {
@@ -55,7 +56,7 @@ function RouteComponent() {
     return (
       <div className="flex flex-col gap-1.5">
         <BackButton />
-        <ErrorState onRetry={async () => { await Promise.all([globalMutate(`/api/accounts/${accountId}`), globalMutate("/api/sources")]); }} />
+        <ErrorState onRetry={async () => { await invalidateAccountsAndSources(globalMutate, `/api/accounts/${accountId}`); }} />
       </div>
     );
   }
@@ -151,11 +152,7 @@ function RouteComponent() {
                 setDeleting(true);
                 try {
                   await apiFetch(`/api/accounts/${accountId}`, { method: "DELETE" });
-                  await Promise.all([
-                    globalMutate("/api/accounts"),
-                    globalMutate("/api/sources"),
-                    globalMutate(`/api/accounts/${accountId}`),
-                  ]);
+                  await invalidateAccountsAndSources(globalMutate, `/api/accounts/${accountId}`);
                   navigate({ to: "/dashboard" });
                 } finally {
                   setDeleting(false);

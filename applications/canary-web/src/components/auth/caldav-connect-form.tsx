@@ -8,6 +8,7 @@ import { Divider } from "../ui/divider";
 import { Input } from "../ui/input";
 import { Text } from "../ui/text";
 import { apiFetch } from "../../lib/fetcher";
+import { invalidateAccountsAndSources } from "../../lib/swr";
 
 type CalDAVProvider = "fastmail" | "icloud" | "caldav";
 
@@ -89,10 +90,7 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
     }
 
     setLoading(false);
-    await Promise.all([
-      globalMutate("/api/accounts"),
-      globalMutate("/api/sources"),
-    ]);
+    await invalidateAccountsAndSources(globalMutate);
     navigate({ to: "/dashboard" });
   };
 

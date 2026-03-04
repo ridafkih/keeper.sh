@@ -8,6 +8,7 @@ import { Button, ButtonText } from "../../../../components/ui/button";
 import { ProviderIcon } from "../../../../components/ui/provider-icon";
 import { Text } from "../../../../components/ui/text";
 import { apiFetch } from "../../../../lib/fetcher";
+import { invalidateAccountsAndSources } from "../../../../lib/swr";
 import type { SyncProfile, CalendarEntry } from "../../../../types/api";
 import {
   NavigationMenu,
@@ -192,10 +193,7 @@ function RouteComponent() {
           setDeleting(true);
           try {
             await apiFetch(`/api/profiles/${profileId}`, { method: "DELETE" });
-            await Promise.all([
-              globalMutate("/api/profiles"),
-              globalMutate(`/api/profiles/${profileId}`),
-            ]);
+            await invalidateAccountsAndSources(globalMutate, "/api/profiles", `/api/profiles/${profileId}`);
             navigate({ to: "/dashboard/calendars" });
           } finally {
             setDeleting(false);

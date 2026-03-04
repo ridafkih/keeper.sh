@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useSWRConfig } from "swr";
 import { getFormData } from "../../lib/forms";
 import { apiFetch } from "../../lib/fetcher";
+import { invalidateAccountsAndSources } from "../../lib/swr";
 import { BackButton } from "../ui/back-button";
 import { Button, ButtonText } from "../ui/button";
 import { Divider } from "../ui/divider";
@@ -39,10 +40,7 @@ export function ICSFeedForm() {
       return;
     }
 
-    await Promise.all([
-      globalMutate("/api/accounts"),
-      globalMutate("/api/sources"),
-    ]);
+    await invalidateAccountsAndSources(globalMutate);
     navigate({ to: "/dashboard/calendars" });
   };
 
