@@ -1,8 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import useSWR from "swr";
-import { LoaderCircle } from "lucide-react";
-import { ErrorState } from "../../../../components/ui/error-state";
 import { BackButton } from "../../../../components/ui/back-button";
+import { RouteShell } from "../../../../components/ui/route-shell";
 import { Text } from "../../../../components/ui/text";
 import { apiFetch } from "../../../../lib/fetcher";
 import { getAccountLabel } from "../../../../utils/accounts";
@@ -32,27 +31,8 @@ function RouteComponent() {
   const isLoading = accountLoading || calendarLoading;
   const error = accountError || calendarError;
 
-  if (error) {
-    return (
-      <div className="flex flex-col gap-1.5">
-        <BackButton fallback={`/dashboard/accounts/${accountId}`} />
-        <ErrorState onRetry={async () => { await Promise.all([mutateAccount(), mutateCalendar()]); }} />
-      </div>
-    );
-  }
-
-  if (isLoading || !calendar || !account) {
-    return (
-      <div className="flex flex-col gap-1.5">
-        <BackButton fallback={`/dashboard/accounts/${accountId}`} />
-        <div className="flex justify-center py-6">
-          <LoaderCircle
-            size={20}
-            className="animate-spin text-foreground-muted"
-          />
-        </div>
-      </div>
-    );
+  if (error || isLoading || !calendar || !account) {
+    return <RouteShell backFallback={`/dashboard/accounts/${accountId}`} isLoading={isLoading || !calendar || !account} error={error} onRetry={async () => { await Promise.all([mutateAccount(), mutateCalendar()]); }}>{null}</RouteShell>;
   }
 
   return (

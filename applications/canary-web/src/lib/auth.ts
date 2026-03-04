@@ -1,5 +1,18 @@
 import { authClient } from "./auth-client";
 
+async function authPost(url: string, body: Record<string, unknown> = {}): Promise<void> {
+  const response = await fetch(url, {
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.message ?? "Request failed");
+  }
+}
+
 export const signInWithEmail = async (email: string, password: string): Promise<void> => {
   const { error } = await authClient.signIn.email({ email, password });
   if (error) throw new Error(error.message ?? "Sign in failed");
@@ -23,35 +36,10 @@ export const signInWithGoogle = async (): Promise<void> => {
   await authClient.signIn.social({ callbackURL: "/dashboard", provider: "google" });
 };
 
-export const signOut = async (): Promise<void> => {
-  const response = await fetch("/api/auth/sign-out", {
-    body: JSON.stringify({}),
-    headers: { "Content-Type": "application/json" },
-    method: "POST",
-  });
-  if (!response.ok) throw new Error("Sign out failed");
-};
+export const signOut = () => authPost("/api/auth/sign-out");
 
-export const changePassword = async (currentPassword: string, newPassword: string): Promise<void> => {
-  const response = await fetch("/api/auth/change-password", {
-    body: JSON.stringify({ currentPassword, newPassword }),
-    headers: { "Content-Type": "application/json" },
-    method: "POST",
-  });
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message ?? "Failed to change password");
-  }
-};
+export const changePassword = (currentPassword: string, newPassword: string) =>
+  authPost("/api/auth/change-password", { currentPassword, newPassword });
 
-export const deleteAccount = async (password: string): Promise<void> => {
-  const response = await fetch("/api/auth/delete-user", {
-    body: JSON.stringify({ password }),
-    headers: { "Content-Type": "application/json" },
-    method: "POST",
-  });
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message ?? "Failed to delete account");
-  }
-};
+export const deleteAccount = (password: string) =>
+  authPost("/api/auth/delete-user", { password });

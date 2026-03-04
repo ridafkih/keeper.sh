@@ -2,153 +2,32 @@ import type { ComponentPropsWithoutRef, KeyboardEvent, PropsWithChildren } from 
 import { createContext, use, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, Check, Pencil } from "lucide-react";
-import { tv, type VariantProps } from "tailwind-variants";
+import type { VariantProps } from "tailwind-variants";
 import { cn } from "tailwind-variants/lite";
 import { Text } from "./text";
-
-const navigationMenu = tv({
-  base: "flex flex-col rounded-2xl overflow-hidden p-0.5",
-  variants: {
-    variant: {
-      default: "bg-background-elevated border border-border-elevated shadow-xs",
-      highlight: "bg-foreground",
-    },
-  },
-  defaultVariants: {
-    variant: "default",
-  },
-});
-
-type MenuVariant = VariantProps<typeof navigationMenu>["variant"];
+import {
+  navigationMenu as navigationMenuStyle,
+  navigationMenuItem as navigationMenuItemStyle,
+  navigationMenuItemIcon as navigationMenuItemIconStyle,
+  navigationMenuCheckbox,
+  navigationMenuCheckboxIcon,
+  navigationMenuToggleTrack,
+  navigationMenuToggleThumb,
+  LABEL_TONE,
+  type MenuVariant,
+} from "./navigation-menu.styles";
 
 const MenuVariantContext = createContext<MenuVariant>("default");
 const ItemIsLinkContext = createContext(false);
 
-const navigationMenuItem = tv({
-  base: "rounded-xl flex items-center justify-between gap-3 p-3 w-full",
-  variants: {
-    variant: {
-      default: "",
-      highlight: "bg-foreground",
-    },
-    interactive: {
-      true: "hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-      false: "",
-    },
-  },
-  compoundVariants: [
-    { variant: "default", interactive: true, className: "hover:bg-background-hover" },
-    { variant: "highlight", interactive: true, className: "hover:bg-background-inverse-hover" },
-  ],
-  defaultVariants: {
-    variant: "default",
-    interactive: true,
-  },
-});
-
-const navigationMenuItemIcon = tv({
-  base: "min-w-0",
-  variants: {
-    variant: {
-      default: "text-foreground-muted",
-      highlight: "text-foreground-inverse",
-    },
-  },
-  defaultVariants: {
-    variant: "default",
-  },
-});
-
-const navigationMenuCheckbox = tv({
-  base: "size-4 rounded shrink-0 flex items-center justify-center border",
-  variants: {
-    variant: {
-      default: "border-interactive-border",
-      highlight: "border-foreground-inverse-muted",
-    },
-    checked: {
-      true: "",
-      false: "",
-    },
-  },
-  compoundVariants: [
-    { variant: "default", checked: true, className: "bg-foreground border-foreground" },
-    { variant: "highlight", checked: true, className: "bg-foreground-inverse border-foreground-inverse" },
-  ],
-  defaultVariants: {
-    variant: "default",
-    checked: false,
-  },
-});
-
-const navigationMenuCheckboxIcon = tv({
-  base: "shrink-0",
-  variants: {
-    variant: {
-      default: "text-foreground-inverse",
-      highlight: "text-foreground",
-    },
-  },
-  defaultVariants: {
-    variant: "default",
-  },
-});
-
-const navigationMenuToggleTrack = tv({
-  base: "w-8 h-5 rounded-full shrink-0 flex items-center p-0.5",
-  variants: {
-    variant: {
-      default: "",
-      highlight: "",
-    },
-    checked: {
-      true: "",
-      false: "",
-    },
-  },
-  compoundVariants: [
-    { variant: "default", checked: false, className: "bg-interactive-border" },
-    { variant: "default", checked: true, className: "bg-foreground" },
-    { variant: "highlight", checked: false, className: "bg-foreground-inverse-muted" },
-    { variant: "highlight", checked: true, className: "bg-foreground-inverse" },
-  ],
-  defaultVariants: {
-    variant: "default",
-    checked: false,
-  },
-});
-
-const navigationMenuToggleThumb = tv({
-  base: "size-4 rounded-full",
-  variants: {
-    variant: {
-      default: "bg-background-elevated",
-      highlight: "bg-foreground",
-    },
-    checked: {
-      true: "ml-auto",
-      false: "",
-    },
-  },
-  defaultVariants: {
-    variant: "default",
-    checked: false,
-  },
-});
-
-const LABEL_TONE: Record<NonNullable<MenuVariant>, "muted" | "inverse"> = {
-  default: "muted",
-  highlight: "inverse",
-};
-
 type NavigationMenuProps = PropsWithChildren<
-  VariantProps<typeof navigationMenu> & { className?: string }
+  VariantProps<typeof navigationMenuStyle> & { className?: string }
 >;
 
 export function NavigationMenu({ children, variant, className }: NavigationMenuProps) {
   return (
     <MenuVariantContext value={variant ?? "default"}>
-      <ul className={navigationMenu({ variant, className })}>
+      <ul className={navigationMenuStyle({ variant, className })}>
         {children}
       </ul>
     </MenuVariantContext>
@@ -165,7 +44,7 @@ type NavigationMenuItemProps = PropsWithChildren<{
 export function NavigationMenuItem({ to, onClick, onMouseEnter, className, children }: NavigationMenuItemProps) {
   const variant = use(MenuVariantContext);
   const interactive = !!(to || onClick);
-  const itemClass = navigationMenuItem({ variant, interactive, className });
+  const itemClass = navigationMenuItemStyle({ variant, interactive, className });
 
   const content = (
     <ItemIsLinkContext value={!!to}>
@@ -206,7 +85,7 @@ export function NavigationMenuItemIcon({ children }: PropsWithChildren) {
   const variant = use(MenuVariantContext);
 
   return (
-    <div className={cn("flex items-center gap-2 min-w-0 [&>:not(p)]:shrink-0", navigationMenuItemIcon({ variant }))()}>
+    <div className={cn("flex items-center gap-2 min-w-0 [&>:not(p)]:shrink-0", navigationMenuItemIconStyle({ variant }))()}>
       {children}
     </div>
   );
@@ -223,7 +102,7 @@ export function NavigationMenuEmptyItem({ children }: PropsWithChildren) {
 
   return (
     <li>
-      <div className={navigationMenuItem({ variant, interactive: false })}>
+      <div className={navigationMenuItemStyle({ variant, interactive: false })}>
         <Text size="sm" tone={LABEL_TONE[variant ?? "default"]} align="center" className="w-full">{children}</Text>
       </div>
     </li>
@@ -237,7 +116,7 @@ export function NavigationMenuItemTrailing({ children }: PropsWithChildren) {
   return (
     <div className="flex items-center gap-2 shrink-0">
       {children}
-      {isLink && <ArrowRight className={cn("shrink-0", navigationMenuItemIcon({ variant }))()} size={15} />}
+      {isLink && <ArrowRight className={cn("shrink-0", navigationMenuItemIconStyle({ variant }))()} size={15} />}
     </div>
   );
 }
@@ -263,7 +142,7 @@ export function NavigationMenuCheckboxItem({
         role="checkbox"
         aria-checked={checked}
         onClick={() => onCheckedChange(!checked)}
-        className={navigationMenuItem({ variant, className })}
+        className={navigationMenuItemStyle({ variant, className })}
       >
         {children}
         <div className={navigationMenuCheckbox({ variant, checked })}>
@@ -289,7 +168,7 @@ export function NavigationMenuToggleItem({
         role="switch"
         aria-checked={checked}
         onClick={() => onCheckedChange(!checked)}
-        className={navigationMenuItem({ variant, className })}
+        className={navigationMenuItemStyle({ variant, className })}
       >
         {children}
         <div className={navigationMenuToggleTrack({ variant, checked })}>
@@ -342,7 +221,7 @@ export function NavigationMenuEditableItem({
   if (editing) {
     return (
       <li className="rounded-xl has-[:focus]:ring-2 has-[:focus]:ring-ring">
-        <div className={navigationMenuItem({ variant, interactive: false, className })}>
+        <div className={navigationMenuItemStyle({ variant, interactive: false, className })}>
           <input
             ref={inputRef}
             type="text"
@@ -363,12 +242,12 @@ export function NavigationMenuEditableItem({
       <button
         type="button"
         onClick={() => setEditing(true)}
-        className={navigationMenuItem({ variant, interactive: true, className })}
+        className={navigationMenuItemStyle({ variant, interactive: true, className })}
       >
         <NavigationMenuItemIcon>
           <NavigationMenuItemLabel>{value}</NavigationMenuItemLabel>
         </NavigationMenuItemIcon>
-        <Pencil size={14} className={navigationMenuItemIcon({ variant })} />
+        <Pencil size={14} className={navigationMenuItemIconStyle({ variant })} />
       </button>
     </li>
   );

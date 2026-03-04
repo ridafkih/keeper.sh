@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR, { preload, useSWRConfig } from "swr";
-import { Calendar, LoaderCircle } from "lucide-react";
-import { ErrorState } from "../../../../components/ui/error-state";
+import { Calendar } from "lucide-react";
 import { BackButton } from "../../../../components/ui/back-button";
-import { Button, ButtonText } from "../../../../components/ui/button";
+import { RouteShell } from "../../../../components/ui/route-shell";
 import { Text } from "../../../../components/ui/text";
 import { fetcher, apiFetch } from "../../../../lib/fetcher";
 import { invalidateAccountsAndSources } from "../../../../lib/swr";
@@ -18,13 +17,7 @@ import {
   NavigationMenuItemLabel,
   NavigationMenuItemTrailing,
 } from "../../../../components/ui/navigation-menu";
-import {
-  Modal,
-  ModalContent,
-  ModalDescription,
-  ModalFooter,
-  ModalTitle,
-} from "../../../../components/ui/modal";
+import { DeleteConfirmation } from "../../../../components/ui/delete-confirmation";
 
 export const Route = createFileRoute(
   "/(dashboard)/dashboard/accounts/$accountId/",
@@ -48,32 +41,14 @@ function RouteComponent() {
 
   const isLoading = accountLoading || calendarsLoading;
   const error = accountError || calendarsError;
+
+  if (error || isLoading || !account) {
+    return <RouteShell isLoading={isLoading || !account} error={error} onRetry={async () => { await invalidateAccountsAndSources(globalMutate, `/api/accounts/${accountId}`); }}>{null}</RouteShell>;
+  }
+
   const calendars = (allCalendars ?? []).filter(
     (calendar) => calendar.accountId === accountId,
   );
-
-  if (error) {
-    return (
-      <div className="flex flex-col gap-1.5">
-        <BackButton />
-        <ErrorState onRetry={async () => { await invalidateAccountsAndSources(globalMutate, `/api/accounts/${accountId}`); }} />
-      </div>
-    );
-  }
-
-  if (isLoading || !account) {
-    return (
-      <div className="flex flex-col gap-1.5">
-        <BackButton />
-        <div className="flex justify-center py-6">
-          <LoaderCircle
-            size={20}
-            className="animate-spin text-foreground-muted"
-          />
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -138,37 +113,23 @@ function RouteComponent() {
           </NavigationMenuItemIcon>
         </NavigationMenuItem>
       </NavigationMenu>
-      <Modal open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <ModalContent>
-          <ModalTitle>Delete calendar account?</ModalTitle>
-          <ModalDescription>
-            This will remove the account and all its calendars. Any sync profiles using these calendars will be affected.
-          </ModalDescription>
-          <ModalFooter>
-            <Button
-              variant="destructive"
-              className="w-full justify-center"
-              onClick={async () => {
-                setDeleting(true);
-                try {
-                  await apiFetch(`/api/accounts/${accountId}`, { method: "DELETE" });
-                  await invalidateAccountsAndSources(globalMutate, `/api/accounts/${accountId}`);
-                  navigate({ to: "/dashboard" });
-                } finally {
-                  setDeleting(false);
-                }
-              }}
-              disabled={deleting}
-            >
-              {deleting && <LoaderCircle size={16} className="animate-spin" />}
-              <ButtonText>{deleting ? "Deleting..." : "Delete"}</ButtonText>
-            </Button>
-            <Button variant="elevated" className="w-full justify-center" onClick={() => setDeleteOpen(false)}>
-              <ButtonText>Cancel</ButtonText>
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+      <DeleteConfirmation
+        title="Delete calendar account?"
+        description="This will remove the account and all its calendars. Any sync profiles using these calendars will be affected."
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        deleting={deleting}
+        onConfirm={async () => {
+          setDeleting(true);
+          try {
+            await apiFetch(`/api/accounts/${accountId}`, { method: "DELETE" });
+            await invalidateAccountsAndSources(globalMutate, `/api/accounts/${accountId}`);
+            navigate({ to: "/dashboard" });
+          } finally {
+            setDeleting(false);
+          }
+        }}
+      />
     </div>
   );
 }

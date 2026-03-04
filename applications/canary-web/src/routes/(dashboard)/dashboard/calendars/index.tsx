@@ -1,9 +1,9 @@
 import { useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import useSWR from "swr";
-import { LoaderCircle, ArrowDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { ErrorState } from "../../../../components/ui/error-state";
+import { ArrowDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { BackButton } from "../../../../components/ui/back-button";
+import { RouteShell } from "../../../../components/ui/route-shell";
 import { Button, ButtonText } from "../../../../components/ui/button";
 import { ProviderIcon } from "../../../../components/ui/provider-icon";
 import { Text } from "../../../../components/ui/text";
@@ -18,13 +18,7 @@ import {
   NavigationMenuItemLabel,
   NavigationMenuItem,
 } from "../../../../components/ui/navigation-menu";
-import {
-  Modal,
-  ModalContent,
-  ModalDescription,
-  ModalFooter,
-  ModalTitle,
-} from "../../../../components/ui/modal";
+import { DeleteConfirmation } from "../../../../components/ui/delete-confirmation";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/calendars/")({
   component: RouteComponent,
@@ -40,24 +34,8 @@ function RouteComponent() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  if (error || calendarsError) {
-    return (
-      <div className="flex flex-col gap-1.5">
-        <BackButton />
-        <ErrorState onRetry={() => mutateProfiles()} />
-      </div>
-    );
-  }
-
-  if (isLoading || !profiles) {
-    return (
-      <div className="flex flex-col gap-1.5">
-        <BackButton />
-        <div className="flex justify-center py-6">
-          <LoaderCircle size={20} className="animate-spin text-foreground-muted" />
-        </div>
-      </div>
-    );
+  if (error || calendarsError || isLoading || !profiles) {
+    return <RouteShell isLoading={isLoading || !profiles} error={error || calendarsError} onRetry={() => mutateProfiles()}>{null}</RouteShell>;
   }
 
   const isNewSlot = currentIndex >= profiles.length;
@@ -153,6 +131,8 @@ function RouteComponent() {
       ) : null}
       {profile && (
         <DeleteConfirmation
+          title="Delete sync profile?"
+          description="This will remove the profile and all its sync mappings. Your calendars will not be deleted."
           open={deleteOpen}
           onOpenChange={setDeleteOpen}
           deleting={deleting}
@@ -425,31 +405,3 @@ function ProfileDetail({ profile, profiles, calendars, mutateProfiles, onDelete 
   );
 }
 
-interface DeleteConfirmationProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  deleting: boolean;
-  onConfirm: () => void;
-}
-
-function DeleteConfirmation({ open, onOpenChange, deleting, onConfirm }: DeleteConfirmationProps) {
-  return (
-    <Modal open={open} onOpenChange={onOpenChange}>
-      <ModalContent>
-        <ModalTitle>Delete sync profile?</ModalTitle>
-        <ModalDescription>
-          This will remove the profile and all its sync mappings. Your calendars will not be deleted.
-        </ModalDescription>
-        <ModalFooter>
-          <Button variant="destructive" className="w-full justify-center" onClick={onConfirm} disabled={deleting}>
-            {deleting && <LoaderCircle size={16} className="animate-spin" />}
-            <ButtonText>{deleting ? "Deleting..." : "Delete"}</ButtonText>
-          </Button>
-          <Button variant="elevated" className="w-full justify-center" onClick={() => onOpenChange(false)}>
-            <ButtonText>Cancel</ButtonText>
-          </Button>
-        </ModalFooter>
-      </ModalContent>
-    </Modal>
-  );
-}

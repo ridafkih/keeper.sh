@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR, { useSWRConfig } from "swr";
-import { LoaderCircle, ArrowDown } from "lucide-react";
-import { ErrorState } from "../../../../components/ui/error-state";
+import { ArrowDown } from "lucide-react";
 import { BackButton } from "../../../../components/ui/back-button";
+import { RouteShell } from "../../../../components/ui/route-shell";
 import { Button, ButtonText } from "../../../../components/ui/button";
 import { ProviderIcon } from "../../../../components/ui/provider-icon";
 import { Text } from "../../../../components/ui/text";
 import { apiFetch } from "../../../../lib/fetcher";
 import { invalidateAccountsAndSources } from "../../../../lib/swr";
+import { createProfileCalendarActions } from "../../../../hooks/use-profile-calendars";
 import type { SyncProfile, CalendarEntry } from "../../../../types/api";
 import {
   NavigationMenu,
@@ -19,13 +20,7 @@ import {
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
 } from "../../../../components/ui/navigation-menu";
-import {
-  Modal,
-  ModalContent,
-  ModalDescription,
-  ModalFooter,
-  ModalTitle,
-} from "../../../../components/ui/modal";
+import { DeleteConfirmation } from "../../../../components/ui/delete-confirmation";
 
 export const Route = createFileRoute(
   "/(dashboard)/dashboard/calendars/$profileId",
@@ -44,25 +39,11 @@ function RouteComponent() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  if (error || calendarsError) {
-    return (
-      <div className="flex flex-col gap-1.5">
-        <BackButton fallback="/dashboard/calendars" />
-        <ErrorState onRetry={() => mutateProfile()} />
-      </div>
-    );
+  if (error || calendarsError || isLoading || !profile) {
+    return <RouteShell backFallback="/dashboard/calendars" isLoading={isLoading || !profile} error={error || calendarsError} onRetry={() => mutateProfile()}>{null}</RouteShell>;
   }
 
-  if (isLoading || !profile) {
-    return (
-      <div className="flex flex-col gap-1.5">
-        <BackButton fallback="/dashboard/calendars" />
-        <div className="flex justify-center py-6">
-          <LoaderCircle size={20} className="animate-spin text-foreground-muted" />
-        </div>
-      </div>
-    );
-  }
+  const { toggleSource, toggleDestination, updateName } = createProfileCalendarActions(profileId, profile, mutateProfile);
 
   const pullCalendars = (calendars ?? []).filter((calendar) => calendar.capabilities.includes("pull"));
   const pushCalendars = (calendars ?? []).filter((calendar) => calendar.capabilities.includes("push"));
@@ -70,73 +51,13 @@ function RouteComponent() {
   const sourceSet = new Set(profile.sources);
   const destinationSet = new Set(profile.destinations);
 
-  const toggleSource = async (calendarId: string, checked: boolean) => {
-    const updatedSources = checked
-      ? [...profile.sources, calendarId]
-      : profile.sources.filter((id) => id !== calendarId);
-
-    await mutateProfile(
-      async (current) => {
-        await apiFetch(`/api/profiles/${profileId}/sources`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ calendarIds: updatedSources }),
-        });
-        return current ? { ...current, sources: updatedSources } : current;
-      },
-      {
-        optimisticData: { ...profile, sources: updatedSources },
-        rollbackOnError: true,
-        revalidate: false,
-      },
-    );
-  };
-
-  const toggleDestination = async (calendarId: string, checked: boolean) => {
-    const updatedDestinations = checked
-      ? [...profile.destinations, calendarId]
-      : profile.destinations.filter((id) => id !== calendarId);
-
-    await mutateProfile(
-      async (current) => {
-        await apiFetch(`/api/profiles/${profileId}/destinations`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ calendarIds: updatedDestinations }),
-        });
-        return current ? { ...current, destinations: updatedDestinations } : current;
-      },
-      {
-        optimisticData: { ...profile, destinations: updatedDestinations },
-        rollbackOnError: true,
-        revalidate: false,
-      },
-    );
-  };
-
   return (
     <div className="flex flex-col gap-1.5">
       <BackButton fallback="/dashboard/calendars" />
       <NavigationMenu>
         <NavigationMenuEditableItem
           value={profile.name}
-          onCommit={async (name) => {
-            await mutateProfile(
-              async (current) => {
-                await apiFetch(`/api/profiles/${profileId}`, {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ name }),
-                });
-                return current ? { ...current, name } : current;
-              },
-              {
-                optimisticData: { ...profile, name },
-                rollbackOnError: true,
-                revalidate: false,
-              },
-            );
-          }}
+          onCommit={updateName}
         />
       </NavigationMenu>
       <NavigationMenu>
@@ -186,6 +107,8 @@ function RouteComponent() {
         </NavigationMenuItem>
       </NavigationMenu>
       <DeleteConfirmation
+        title="Delete sync profile?"
+        description="This will remove the profile and all its sync mappings. Your calendars will not be deleted."
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         deleting={deleting}
@@ -204,31 +127,3 @@ function RouteComponent() {
   );
 }
 
-interface DeleteConfirmationProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  deleting: boolean;
-  onConfirm: () => void;
-}
-
-function DeleteConfirmation({ open, onOpenChange, deleting, onConfirm }: DeleteConfirmationProps) {
-  return (
-    <Modal open={open} onOpenChange={onOpenChange}>
-      <ModalContent>
-        <ModalTitle>Delete sync profile?</ModalTitle>
-        <ModalDescription>
-          This will remove the profile and all its sync mappings. Your calendars will not be deleted.
-        </ModalDescription>
-        <ModalFooter>
-          <Button variant="destructive" className="w-full justify-center" onClick={onConfirm} disabled={deleting}>
-            {deleting && <LoaderCircle size={16} className="animate-spin" />}
-            <ButtonText>{deleting ? "Deleting..." : "Delete"}</ButtonText>
-          </Button>
-          <Button variant="elevated" className="w-full justify-center" onClick={() => onOpenChange(false)}>
-            <ButtonText>Cancel</ButtonText>
-          </Button>
-        </ModalFooter>
-      </ModalContent>
-    </Modal>
-  );
-}
