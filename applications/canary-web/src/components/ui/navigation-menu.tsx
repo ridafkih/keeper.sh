@@ -1,7 +1,7 @@
-import type { ComponentPropsWithoutRef, PropsWithChildren } from "react";
-import { createContext, use } from "react";
+import type { ComponentPropsWithoutRef, KeyboardEvent, PropsWithChildren } from "react";
+import { createContext, use, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Check } from "lucide-react";
+import { ArrowRight, Check, Pencil } from "lucide-react";
 import { tv, type VariantProps } from "tailwind-variants";
 import { cn } from "tailwind-variants/lite";
 import { Text } from "./text";
@@ -32,7 +32,7 @@ const navigationMenuItem = tv({
       highlight: "bg-foreground",
     },
     interactive: {
-      true: "hover:cursor-pointer",
+      true: "hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       false: "",
     },
   },
@@ -282,6 +282,80 @@ export function NavigationMenuToggleItem({
         <div className={navigationMenuToggleTrack({ variant, checked })}>
           <div className={navigationMenuToggleThumb({ variant, checked })} />
         </div>
+      </button>
+    </li>
+  );
+}
+
+type NavigationMenuEditableItemProps = {
+  value: string;
+  onCommit: (value: string) => Promise<void> | void;
+  className?: string;
+};
+
+export function NavigationMenuEditableItem({
+  value,
+  onCommit,
+  className,
+}: NavigationMenuEditableItemProps) {
+  const variant = use(MenuVariantContext);
+  const [editing, setEditing] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const committingRef = useRef(false);
+
+  const commit = async () => {
+    if (committingRef.current) return;
+    const trimmed = inputRef.current?.value.trim();
+    if (!trimmed || trimmed === value) {
+      setEditing(false);
+      return;
+    }
+    committingRef.current = true;
+    await onCommit(trimmed);
+    committingRef.current = false;
+    setEditing(false);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commit();
+    }
+    if (event.key === "Escape") {
+      setEditing(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <li className="rounded-xl has-[:focus]:ring-2 has-[:focus]:ring-ring">
+        <div className={navigationMenuItem({ variant, interactive: false, className })}>
+          <input
+            ref={inputRef}
+            type="text"
+            defaultValue={value}
+            autoComplete="off"
+            onBlur={commit}
+            onKeyDown={handleKeyDown}
+            autoFocus
+            className="text-sm tracking-tight text-foreground-muted bg-transparent w-full cursor-text outline-none"
+          />
+        </div>
+      </li>
+    );
+  }
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className={navigationMenuItem({ variant, interactive: true, className })}
+      >
+        <NavigationMenuItemIcon>
+          <NavigationMenuItemLabel>{value}</NavigationMenuItemLabel>
+        </NavigationMenuItemIcon>
+        <Pencil size={14} className={navigationMenuItemIcon({ variant })} />
       </button>
     </li>
   );

@@ -1,15 +1,14 @@
-import { useState, type SubmitEvent } from "react";
+import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { getFormData } from "../../../../lib/forms";
 import useSWR from "swr";
 import { LoaderCircle } from "lucide-react";
 import { BackButton } from "../../../../components/ui/back-button";
 import { Button, ButtonText } from "../../../../components/ui/button";
 import { Divider } from "../../../../components/ui/divider";
-import { Input } from "../../../../components/ui/input";
 import { Text } from "../../../../components/ui/text";
 import {
   NavigationMenu,
+  NavigationMenuEditableItem,
   NavigationMenuItem,
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
@@ -24,15 +23,15 @@ import {
 } from "../../../../components/ui/modal";
 
 export const Route = createFileRoute(
-  "/(dashboard)/dashboard/calendars/$sourceId",
+  "/(dashboard)/dashboard/calendars/$calendarId",
 )({
   component: RouteComponent,
 });
 
-interface SourceDetail {
+interface CalendarDetail {
   id: string;
   name: string;
-  sourceType: string;
+  calendarType: string;
   provider: string | null;
   url: string | null;
   calendarUrl: string | null;
@@ -43,13 +42,13 @@ interface SourceDetail {
   updatedAt: string;
 }
 
-const fetcher = async (url: string): Promise<SourceDetail> => {
+const fetcher = async (url: string): Promise<CalendarDetail> => {
   const response = await fetch(url, { credentials: "include" });
   if (!response.ok) throw new Error("Failed to fetch");
   return response.json();
 };
 
-const sourceTypeLabels: Record<string, string> = {
+const calendarTypeLabels: Record<string, string> = {
   ical: "iCal Feed",
   oauth: "OAuth",
   caldav: "CalDAV",
@@ -71,13 +70,13 @@ const formatDate = (iso: string): string =>
   });
 
 function RouteComponent() {
-  const { sourceId } = Route.useParams();
+  const { calendarId } = Route.useParams();
   const navigate = useNavigate();
-  const { data: source, isLoading, mutate } = useSWR(`/api/sources/${sourceId}`, fetcher);
+  const { data: calendar, isLoading, mutate } = useSWR(`/api/sources/${calendarId}`, fetcher);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  if (isLoading || !source) {
+  if (isLoading || !calendar) {
     return (
       <div className="flex flex-col gap-1.5">
         <BackButton fallback="/dashboard/calendars" />
@@ -88,27 +87,48 @@ function RouteComponent() {
     );
   }
 
-  const displayUrl = source.url ?? source.calendarUrl;
-  const displayType = sourceTypeLabels[source.sourceType] ?? source.sourceType;
-  const displayProvider = source.provider
-    ? (providerLabels[source.provider] ?? source.provider)
+  const displayUrl = calendar.url ?? calendar.calendarUrl;
+  const displayType = calendarTypeLabels[calendar.calendarType] ?? calendar.calendarType;
+  const displayProvider = calendar.provider
+    ? (providerLabels[calendar.provider] ?? calendar.provider)
     : null;
-
   return (
     <div className="flex flex-col gap-1.5">
       <BackButton fallback="/dashboard/calendars" />
-      <SourceName source={source} onUpdate={mutate} />
-      <SourceInfo
+      <NavigationMenu>
+        <NavigationMenuEditableItem
+          value={calendar.name}
+          onCommit={async (name) => {
+            await mutate(
+              async (current) => {
+                await fetch(`/api/sources/${calendar.id}`, {
+                  body: JSON.stringify({ name }),
+                  credentials: "include",
+                  headers: { "Content-Type": "application/json" },
+                  method: "PATCH",
+                });
+                return current ? { ...current, name } : current;
+              },
+              {
+                optimisticData: { ...calendar, name },
+                rollbackOnError: true,
+                revalidate: false,
+              },
+            );
+          }}
+        />
+      </NavigationMenu>
+      <CalendarInfo
         type={displayType}
         provider={displayProvider}
         url={displayUrl}
-        createdAt={source.createdAt}
+        createdAt={calendar.createdAt}
       />
       <Divider />
       <NavigationMenu>
         <NavigationMenuItem onClick={() => setDeleteOpen(true)}>
           <NavigationMenuItemIcon>
-            <Text size="sm" tone="danger">Delete Source</Text>
+            <Text size="sm" tone="danger">Delete Calendar</Text>
           </NavigationMenuItemIcon>
         </NavigationMenuItem>
       </NavigationMenu>
@@ -118,7 +138,7 @@ function RouteComponent() {
         deleting={deleting}
         onConfirm={async () => {
           setDeleting(true);
-          const response = await fetch(`/api/sources/${sourceId}`, {
+          const response = await fetch(`/api/sources/${calendarId}`, {
             credentials: "include",
             method: "DELETE",
           });
@@ -132,79 +152,15 @@ function RouteComponent() {
   );
 }
 
-interface SourceNameProps {
-  source: SourceDetail;
-  onUpdate: () => void;
-}
 
-function SourceName({ source, onUpdate }: SourceNameProps) {
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const formData = getFormData(event);
-    const name = (formData.get("name") as string)?.trim();
-    if (!name || name === source.name) {
-      setEditing(false);
-      return;
-    }
-
-    setSaving(true);
-    const response = await fetch(`/api/sources/${source.id}`, {
-      body: JSON.stringify({ name }),
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      method: "PATCH",
-    });
-
-    setSaving(false);
-
-    if (response.ok) {
-      onUpdate();
-      setEditing(false);
-    }
-  };
-
-  if (editing) {
-    return (
-      <form onSubmit={handleSubmit} className="flex flex-col gap-1.5">
-        <Input name="name" defaultValue={source.name} placeholder="Calendar name" autoFocus />
-        <div className="flex items-stretch gap-2">
-          <Button variant="elevated" className="grow justify-center" onClick={() => setEditing(false)}>
-            <ButtonText>Cancel</ButtonText>
-          </Button>
-          <Button type="submit" className="grow justify-center" disabled={saving}>
-            {saving && <LoaderCircle size={16} className="animate-spin" />}
-            <ButtonText>{saving ? "Saving..." : "Save"}</ButtonText>
-          </Button>
-        </div>
-      </form>
-    );
-  }
-
-  return (
-    <NavigationMenu>
-      <NavigationMenuItem onClick={() => setEditing(true)}>
-        <NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>{source.name}</NavigationMenuItemLabel>
-        </NavigationMenuItemIcon>
-        <NavigationMenuItemTrailing>
-          <Text size="sm" tone="muted">Edit</Text>
-        </NavigationMenuItemTrailing>
-      </NavigationMenuItem>
-    </NavigationMenu>
-  );
-}
-
-interface SourceInfoProps {
+interface CalendarInfoProps {
   type: string;
   provider: string | null;
   url: string | null;
   createdAt: string;
 }
 
-function SourceInfo({ type, provider, url, createdAt }: SourceInfoProps) {
+function CalendarInfo({ type, provider, url, createdAt }: CalendarInfoProps) {
   return (
     <NavigationMenu>
       <NavigationMenuItem>
@@ -260,9 +216,9 @@ function DeleteConfirmation({ open, onOpenChange, deleting, onConfirm }: DeleteC
   return (
     <Modal open={open} onOpenChange={onOpenChange}>
       <ModalContent>
-        <ModalTitle>Delete source?</ModalTitle>
+        <ModalTitle>Delete calendar?</ModalTitle>
         <ModalDescription>
-          This will permanently remove this source and all its events.
+          This will permanently remove this calendar and all its synced events.
         </ModalDescription>
         <ModalFooter>
           <Button variant="destructive" className="w-full justify-center" onClick={onConfirm} disabled={deleting}>

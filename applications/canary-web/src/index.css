@@ -49,6 +49,7 @@ html {
   --ui-destructive-background: var(--color-red-50);
   --ui-destructive-border: var(--color-red-200);
   --ui-destructive-background-hover: var(--color-red-100);
+  --ui-ring: var(--color-blue-500);
 }
 
 @font-face {
@@ -87,6 +88,7 @@ html {
   --color-destructive-background: var(--ui-destructive-background);
   --color-destructive-border: var(--ui-destructive-border);
   --color-destructive-background-hover: var(--ui-destructive-background-hover);
+  --color-ring: var(--ui-ring);
 
   --font-sans: "Geist Sans", system-ui, sans-serif;
   --font-serif: "Lora", Georgia, serif;
@@ -156,5 +158,6 @@ html {
       var(--color-red-500),
       transparent 80%
     );
+    --ui-ring: var(--color-blue-400);
   }
 }

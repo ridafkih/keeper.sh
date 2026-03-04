@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR from "swr";
-import { CalendarPlus, CalendarArrowDown, Calendar, CalendarDays, Settings, Sparkles, LogOut, Bell, Eye } from "lucide-react";
+import { CalendarPlus, Calendar, CalendarDays, Settings, Sparkles, LogOut, Bell, Eye } from "lucide-react";
 import { signOut } from "../../../lib/auth";
 import KeeperLogo from "../../../assets/keeper.svg?react";
 import { EventGraph } from "../../../components/dashboard/event-graph";
@@ -33,26 +33,18 @@ function RouteComponent() {
   };
   const [notifications, setNotifications] = useState(true);
   const [publicProfile, setPublicProfile] = useState(false);
-  const { data: sources = [] } = useSWR<unknown[]>("/api/sources", fetcher);
-  const { data: destinations = [] } = useSWR<unknown[]>("/api/destinations", fetcher);
-  const hasCalendars = sources.length > 0 || destinations.length > 0;
+  const { data: calendars = [] } = useSWR<unknown[]>("/api/sources", fetcher);
+  const hasCalendars = calendars.length > 0;
 
   return (
     <div className="flex flex-col gap-4">
       <EventGraph />
       <div className="flex flex-col gap-1.5">
         <NavigationMenu>
-          <NavigationMenuItem to="/dashboard/connect/source">
+          <NavigationMenuItem to="/dashboard/connect">
             <NavigationMenuItemIcon>
               <CalendarPlus size={15} />
-              <NavigationMenuItemLabel>Add Source Calendar</NavigationMenuItemLabel>
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemTrailing />
-          </NavigationMenuItem>
-          <NavigationMenuItem to="/dashboard/connect/destination">
-            <NavigationMenuItemIcon>
-              <CalendarArrowDown size={15} />
-              <NavigationMenuItemLabel>Add Destination Calendar</NavigationMenuItemLabel>
+              <NavigationMenuItemLabel>Link Calendar Account</NavigationMenuItemLabel>
             </NavigationMenuItemIcon>
             <NavigationMenuItemTrailing />
           </NavigationMenuItem>

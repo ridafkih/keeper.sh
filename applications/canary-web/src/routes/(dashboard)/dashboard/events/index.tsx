@@ -172,7 +172,7 @@ const EventRow = memo(function EventRow({ event }: EventRowProps) {
     <div className={`flex items-center justify-between gap-2 py-1.5 ${past ? "line-through" : ""}`}>
       <div className="flex items-center gap-1 min-w-0">
         <Text size="sm" tone="muted" className="truncate">
-          {event.sourceName}
+          {event.calendarName}
         </Text>
         <Text size="sm" tone="muted" className="shrink-0">
           from

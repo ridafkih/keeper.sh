@@ -41,9 +41,7 @@ import { Route as oauthDashboardConnectCaldavRouteImport } from './../../routes/
 import { Route as oauthDashboardConnectAppleRouteImport } from './../../routes/(oauth)/dashboard/connect/apple'
 import { Route as dashboardDashboardSettingsPasskeysRouteImport } from './../../routes/(dashboard)/dashboard/settings/passkeys'
 import { Route as dashboardDashboardSettingsChangePasswordRouteImport } from './../../routes/(dashboard)/dashboard/settings/change-password'
-import { Route as dashboardDashboardConnectSourceRouteImport } from './../../routes/(dashboard)/dashboard/connect/source'
-import { Route as dashboardDashboardConnectDestinationRouteImport } from './../../routes/(dashboard)/dashboard/connect/destination'
-import { Route as dashboardDashboardCalendarsSourceIdRouteImport } from './../../routes/(dashboard)/dashboard/calendars/$sourceId'
+import { Route as dashboardDashboardCalendarsCalendarIdRouteImport } from './../../routes/(dashboard)/dashboard/calendars/$calendarId'
 
 const oauthRouteRoute = oauthRouteRouteImport.update({
   id: '/(oauth)',
@@ -220,22 +218,10 @@ const dashboardDashboardSettingsChangePasswordRoute =
     path: '/change-password',
     getParentRoute: () => dashboardDashboardSettingsRouteRoute,
   } as any)
-const dashboardDashboardConnectSourceRoute =
-  dashboardDashboardConnectSourceRouteImport.update({
-    id: '/source',
-    path: '/source',
-    getParentRoute: () => dashboardDashboardConnectRouteRoute,
-  } as any)
-const dashboardDashboardConnectDestinationRoute =
-  dashboardDashboardConnectDestinationRouteImport.update({
-    id: '/destination',
-    path: '/destination',
-    getParentRoute: () => dashboardDashboardConnectRouteRoute,
-  } as any)
-const dashboardDashboardCalendarsSourceIdRoute =
-  dashboardDashboardCalendarsSourceIdRouteImport.update({
-    id: '/$sourceId',
-    path: '/$sourceId',
+const dashboardDashboardCalendarsCalendarIdRoute =
+  dashboardDashboardCalendarsCalendarIdRouteImport.update({
+    id: '/$calendarId',
+    path: '/$calendarId',
     getParentRoute: () => dashboardDashboardCalendarsRouteRoute,
   } as any)
 
@@ -252,9 +238,7 @@ export interface FileRoutesByFullPath {
   '/auth/google': typeof oauthAuthGoogleRoute
   '/auth/outlook': typeof oauthAuthOutlookRoute
   '/dashboard/': typeof dashboardDashboardIndexRoute
-  '/dashboard/calendars/$sourceId': typeof dashboardDashboardCalendarsSourceIdRoute
-  '/dashboard/connect/destination': typeof dashboardDashboardConnectDestinationRoute
-  '/dashboard/connect/source': typeof dashboardDashboardConnectSourceRoute
+  '/dashboard/calendars/$calendarId': typeof dashboardDashboardCalendarsCalendarIdRoute
   '/dashboard/settings/change-password': typeof dashboardDashboardSettingsChangePasswordRoute
   '/dashboard/settings/passkeys': typeof dashboardDashboardSettingsPasskeysRoute
   '/dashboard/connect/apple': typeof oauthDashboardConnectAppleRoute
@@ -281,9 +265,7 @@ export interface FileRoutesByTo {
   '/dashboard/connect': typeof dashboardDashboardConnectIndexRoute
   '/auth/google': typeof oauthAuthGoogleRoute
   '/auth/outlook': typeof oauthAuthOutlookRoute
-  '/dashboard/calendars/$sourceId': typeof dashboardDashboardCalendarsSourceIdRoute
-  '/dashboard/connect/destination': typeof dashboardDashboardConnectDestinationRoute
-  '/dashboard/connect/source': typeof dashboardDashboardConnectSourceRoute
+  '/dashboard/calendars/$calendarId': typeof dashboardDashboardCalendarsCalendarIdRoute
   '/dashboard/settings/change-password': typeof dashboardDashboardSettingsChangePasswordRoute
   '/dashboard/settings/passkeys': typeof dashboardDashboardSettingsPasskeysRoute
   '/dashboard/connect/apple': typeof oauthDashboardConnectAppleRoute
@@ -318,9 +300,7 @@ export interface FileRoutesById {
   '/(oauth)/auth/google': typeof oauthAuthGoogleRoute
   '/(oauth)/auth/outlook': typeof oauthAuthOutlookRoute
   '/(dashboard)/dashboard/': typeof dashboardDashboardIndexRoute
-  '/(dashboard)/dashboard/calendars/$sourceId': typeof dashboardDashboardCalendarsSourceIdRoute
-  '/(dashboard)/dashboard/connect/destination': typeof dashboardDashboardConnectDestinationRoute
-  '/(dashboard)/dashboard/connect/source': typeof dashboardDashboardConnectSourceRoute
+  '/(dashboard)/dashboard/calendars/$calendarId': typeof dashboardDashboardCalendarsCalendarIdRoute
   '/(dashboard)/dashboard/settings/change-password': typeof dashboardDashboardSettingsChangePasswordRoute
   '/(dashboard)/dashboard/settings/passkeys': typeof dashboardDashboardSettingsPasskeysRoute
   '/(oauth)/dashboard/connect/apple': typeof oauthDashboardConnectAppleRoute
@@ -352,9 +332,7 @@ export interface FileRouteTypes {
     | '/auth/google'
     | '/auth/outlook'
     | '/dashboard/'
-    | '/dashboard/calendars/$sourceId'
-    | '/dashboard/connect/destination'
-    | '/dashboard/connect/source'
+    | '/dashboard/calendars/$calendarId'
     | '/dashboard/settings/change-password'
     | '/dashboard/settings/passkeys'
     | '/dashboard/connect/apple'
@@ -381,9 +359,7 @@ export interface FileRouteTypes {
     | '/dashboard/connect'
     | '/auth/google'
     | '/auth/outlook'
-    | '/dashboard/calendars/$sourceId'
-    | '/dashboard/connect/destination'
-    | '/dashboard/connect/source'
+    | '/dashboard/calendars/$calendarId'
     | '/dashboard/settings/change-password'
     | '/dashboard/settings/passkeys'
     | '/dashboard/connect/apple'
@@ -417,9 +393,7 @@ export interface FileRouteTypes {
     | '/(oauth)/auth/google'
     | '/(oauth)/auth/outlook'
     | '/(dashboard)/dashboard/'
-    | '/(dashboard)/dashboard/calendars/$sourceId'
-    | '/(dashboard)/dashboard/connect/destination'
-    | '/(dashboard)/dashboard/connect/source'
+    | '/(dashboard)/dashboard/calendars/$calendarId'
     | '/(dashboard)/dashboard/settings/change-password'
     | '/(dashboard)/dashboard/settings/passkeys'
     | '/(oauth)/dashboard/connect/apple'
@@ -670,25 +644,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof dashboardDashboardSettingsChangePasswordRouteImport
       parentRoute: typeof dashboardDashboardSettingsRouteRoute
     }
-    '/(dashboard)/dashboard/connect/source': {
-      id: '/(dashboard)/dashboard/connect/source'
-      path: '/source'
-      fullPath: '/dashboard/connect/source'
-      preLoaderRoute: typeof dashboardDashboardConnectSourceRouteImport
-      parentRoute: typeof dashboardDashboardConnectRouteRoute
-    }
-    '/(dashboard)/dashboard/connect/destination': {
-      id: '/(dashboard)/dashboard/connect/destination'
-      path: '/destination'
-      fullPath: '/dashboard/connect/destination'
-      preLoaderRoute: typeof dashboardDashboardConnectDestinationRouteImport
-      parentRoute: typeof dashboardDashboardConnectRouteRoute
-    }
-    '/(dashboard)/dashboard/calendars/$sourceId': {
-      id: '/(dashboard)/dashboard/calendars/$sourceId'
-      path: '/$sourceId'
-      fullPath: '/dashboard/calendars/$sourceId'
-      preLoaderRoute: typeof dashboardDashboardCalendarsSourceIdRouteImport
+    '/(dashboard)/dashboard/calendars/$calendarId': {
+      id: '/(dashboard)/dashboard/calendars/$calendarId'
+      path: '/$calendarId'
+      fullPath: '/dashboard/calendars/$calendarId'
+      preLoaderRoute: typeof dashboardDashboardCalendarsCalendarIdRouteImport
       parentRoute: typeof dashboardDashboardCalendarsRouteRoute
     }
   }
@@ -711,14 +671,14 @@ const authRouteRouteWithChildren = authRouteRoute._addFileChildren(
 )
 
 interface dashboardDashboardCalendarsRouteRouteChildren {
-  dashboardDashboardCalendarsSourceIdRoute: typeof dashboardDashboardCalendarsSourceIdRoute
+  dashboardDashboardCalendarsCalendarIdRoute: typeof dashboardDashboardCalendarsCalendarIdRoute
   dashboardDashboardCalendarsIndexRoute: typeof dashboardDashboardCalendarsIndexRoute
 }
 
 const dashboardDashboardCalendarsRouteRouteChildren: dashboardDashboardCalendarsRouteRouteChildren =
   {
-    dashboardDashboardCalendarsSourceIdRoute:
-      dashboardDashboardCalendarsSourceIdRoute,
+    dashboardDashboardCalendarsCalendarIdRoute:
+      dashboardDashboardCalendarsCalendarIdRoute,
     dashboardDashboardCalendarsIndexRoute:
       dashboardDashboardCalendarsIndexRoute,
   }
@@ -729,16 +689,11 @@ const dashboardDashboardCalendarsRouteRouteWithChildren =
   )
 
 interface dashboardDashboardConnectRouteRouteChildren {
-  dashboardDashboardConnectDestinationRoute: typeof dashboardDashboardConnectDestinationRoute
-  dashboardDashboardConnectSourceRoute: typeof dashboardDashboardConnectSourceRoute
   dashboardDashboardConnectIndexRoute: typeof dashboardDashboardConnectIndexRoute
 }
 
 const dashboardDashboardConnectRouteRouteChildren: dashboardDashboardConnectRouteRouteChildren =
   {
-    dashboardDashboardConnectDestinationRoute:
-      dashboardDashboardConnectDestinationRoute,
-    dashboardDashboardConnectSourceRoute: dashboardDashboardConnectSourceRoute,
     dashboardDashboardConnectIndexRoute: dashboardDashboardConnectIndexRoute,
   }
 

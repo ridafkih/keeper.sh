@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { atom, useAtomValue, useSetAtom } from "jotai";
 import { tv } from "tailwind-variants/lite";
 import { Text } from "../ui/text";
 
@@ -107,26 +107,36 @@ const buildDays = (events: EventBlock[]) => {
   });
 };
 
-export function EventGraph() {
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const days = buildDays(MOCK_EVENTS);
+const hoverIndexAtom = atom<number | null>(null);
 
+function EventGraphSummary({ days }: { days: ReturnType<typeof buildDays> }) {
+  const hoverIndex = useAtomValue(hoverIndexAtom);
   const today = days[DAYS_BEFORE];
   const activeDay = hoverIndex !== null ? days[hoverIndex] : today;
-  const summary = formatSummary(activeDay.count, activeDay.fullLabel);
 
   return (
-    <div className="flex flex-col gap-4">
-      <Text size="sm" tone="muted" className="tabular-nums text-right">{summary}</Text>
+    <Text size="sm" tone="muted" className="tabular-nums text-right">
+      {formatSummary(activeDay.count, activeDay.fullLabel)}
+    </Text>
+  );
+}
+
+export function EventGraph() {
+  const days = buildDays(MOCK_EVENTS);
+  const setHoverIndex = useSetAtom(hoverIndexAtom);
+
+  return (
+    <div className="flex flex-col gap-6">
+      <EventGraphSummary days={days} />
 
       <div
-        className="flex gap-1 [&:hover>*]:opacity-50 [&>*:hover]:opacity-100"
+        className="flex gap-0.5 [&:hover>*]:opacity-50 [&>*:hover]:opacity-100"
         onPointerLeave={() => setHoverIndex(null)}
       >
         {days.map((day, index) => (
           <div
             key={day.dayOffset}
-            className="flex-1 flex flex-col gap-3"
+            className="flex-1 flex flex-col gap-2"
             onPointerEnter={() => setHoverIndex(index)}
           >
             <div

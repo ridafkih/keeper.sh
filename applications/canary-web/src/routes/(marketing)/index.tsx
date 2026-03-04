@@ -73,14 +73,14 @@ const MARKETING_FEATURES: MarketingFeature[] = [
     id: 3,
     title: 'Simple Synchronization Engine',
     description:
-      'Your events are aggregated, and computed against the destination. Discrepencies are reconciled. Built to prevent orphan events.',
+      'Your events are aggregated and synced across all linked calendars. Discrepancies are reconciled. Built to prevent orphan events.',
     gridClassName: 'lg:col-start-1 lg:col-span-6 lg:row-start-2',
   },
   {
     id: 4,
     title: 'Quick Setup',
     description:
-      'Source from OAuth connections, ICS links or CalDAV. Quick and simple to set up.',
+      'Link OAuth, ICS or CalDAV accounts in seconds. Quick and simple to set up.',
     gridClassName: 'lg:col-start-7 lg:col-span-4 lg:row-start-2',
   },
 ]
@@ -125,8 +125,8 @@ const PRICING_PLANS: PricingPlan[] = [
 
 const PRICING_FEATURES: PricingFeature[] = [
   { label: 'Sync Interval', free: 'Every 30 minutes', pro: 'Every 1 minute' },
-  { label: 'Number of Source Calendars', free: '0-2', pro: 'infinity' },
-  { label: 'Number of Destination Calendars', free: '0-1', pro: 'infinity' },
+  { label: 'Linked Calendar Accounts', free: '0-2', pro: 'infinity' },
+  { label: 'Calendars per Account', free: '0-2', pro: 'infinity' },
   { label: 'Aggregated iCal Link', free: 'check', pro: 'check' },
   { label: 'Priority Support', free: 'minus', pro: 'check' },
 ]

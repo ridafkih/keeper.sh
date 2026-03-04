@@ -6,9 +6,9 @@ interface ApiEvent {
   startTime: string;
   endTime: string;
   calendarId: string;
-  sourceName: string;
-  sourceProvider: string;
-  sourceUrl: string;
+  calendarName: string;
+  calendarProvider: string;
+  calendarUrl: string;
 }
 
 export interface CalendarEvent {
@@ -16,9 +16,9 @@ export interface CalendarEvent {
   startTime: Date;
   endTime: Date;
   calendarId: string;
-  sourceName: string;
-  sourceProvider: string;
-  sourceUrl: string;
+  calendarName: string;
+  calendarProvider: string;
+  calendarUrl: string;
 }
 
 const DAYS_PER_PAGE = 7;
@@ -46,9 +46,9 @@ const fetchEvents = async (url: string): Promise<CalendarEvent[]> => {
     startTime: new Date(event.startTime),
     endTime: new Date(event.endTime),
     calendarId: event.calendarId,
-    sourceName: event.sourceName,
-    sourceProvider: event.sourceProvider,
-    sourceUrl: event.sourceUrl,
+    calendarName: event.calendarName,
+    calendarProvider: event.calendarProvider,
+    calendarUrl: event.calendarUrl,
   }));
 };
 

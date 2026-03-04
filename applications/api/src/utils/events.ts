@@ -16,9 +16,9 @@ interface EnrichedEvent {
   startTime: Date;
   endTime: Date;
   calendarId: string;
-  sourceName: string | undefined;
-  sourceProvider: string | null | undefined;
-  sourceUrl: string | null | undefined;
+  calendarName: string | undefined;
+  calendarProvider: string | null | undefined;
+  calendarUrl: string | null | undefined;
 }
 
 /**
@@ -91,9 +91,9 @@ const enrichEventsWithSources = (
       calendarId: event.calendarId,
       endTime: event.endTime,
       id: event.id,
-      sourceName: source?.name,
-      sourceProvider: source?.provider,
-      sourceUrl: source?.url,
+      calendarName: source?.name,
+      calendarProvider: source?.provider,
+      calendarUrl: source?.url,
       startTime: event.startTime,
     };
   });

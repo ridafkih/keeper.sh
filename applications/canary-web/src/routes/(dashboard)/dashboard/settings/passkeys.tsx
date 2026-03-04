@@ -43,9 +43,19 @@ function RouteComponent() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    await authClient.passkey.deletePasskey({ id: deleteTarget.id });
+    const targetId = deleteTarget.id;
     setDeleteTarget(null);
-    mutate();
+    await mutate(
+      async (current) => {
+        await authClient.passkey.deletePasskey({ id: targetId });
+        return current?.filter((p) => p.id !== targetId) ?? [];
+      },
+      {
+        optimisticData: passkeys.filter((p) => p.id !== targetId),
+        rollbackOnError: true,
+        revalidate: false,
+      },
+    );
   };
 
   const handleAdd = async () => {

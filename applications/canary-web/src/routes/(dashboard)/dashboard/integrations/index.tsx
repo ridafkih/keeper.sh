@@ -16,7 +16,7 @@ import { Text } from "../../../../components/ui/text";
 
 interface SearchParams {
   token?: string;
-  destination?: string;
+  connected?: string;
   error?: string;
 }
 
@@ -43,11 +43,11 @@ export const Route = createFileRoute("/(dashboard)/dashboard/integrations/")({
   component: RouteComponent,
   validateSearch: (search: Record<string, unknown>): SearchParams => ({
     token: search.token as string | undefined,
-    destination: search.destination as string | undefined,
+    connected: search.connected as string | undefined,
     error: search.error as string | undefined,
   }),
   beforeLoad: ({ search }) => {
-    if (search.destination === "connected") {
+    if (search.connected === "true") {
       throw redirect({ to: "/dashboard/calendars" });
     }
     if (search.token) {
@@ -149,7 +149,7 @@ function CalendarPicker({ provider, credentialId }: CalendarPickerProps) {
       body: JSON.stringify({
         externalCalendarId: selectedId,
         name: calendar.summary,
-        oauthSourceCredentialId: credentialId,
+        oauthCredentialId: credentialId,
       }),
       credentials: "include",
       headers: { "Content-Type": "application/json" },

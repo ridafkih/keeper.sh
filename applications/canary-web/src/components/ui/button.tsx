@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { tv, type VariantProps } from "tailwind-variants";
 
 const button = tv({
-  base: "flex items-center gap-1 rounded-xl tracking-tighter border hover:cursor-pointer w-fit font-light",
+  base: "flex items-center gap-1 rounded-xl tracking-tighter border hover:cursor-pointer w-fit font-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
   variants: {
     size: {
       compact: "px-3 py-1.5 text-sm",
