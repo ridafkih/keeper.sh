@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@better-auth/passkey": "^1.5.2",
+    "@polar-sh/better-auth": "^1.8.2",
+    "@polar-sh/checkout": "^0.2.0",
     "@tanstack/react-router": "^1.163.3",
     "@tanstack/react-router-devtools": "^1.163.3",
     "better-auth": "^1.5.2",
