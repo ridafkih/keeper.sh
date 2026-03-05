@@ -1,7 +1,6 @@
-import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR, { preload } from "swr";
-import { CalendarPlus, CalendarSync, CalendarDays, Settings, Sparkles, LogOut, Bell, Eye, LoaderCircle } from "lucide-react";
+import { CalendarPlus, CalendarSync, CalendarDays, Settings, Sparkles, LogOut, LoaderCircle } from "lucide-react";
 import { ErrorState } from "../../../components/ui/error-state";
 import { signOut } from "../../../lib/auth";
 import { fetcher } from "../../../lib/fetcher";
@@ -15,8 +14,6 @@ import {
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
   NavigationMenuItemTrailing,
-  NavigationMenuCheckboxItem,
-  NavigationMenuToggleItem,
 } from "../../../components/ui/navigation-menu";
 import { Text } from "../../../components/ui/text";
 import { getAccountLabel } from "../../../utils/accounts";
@@ -31,8 +28,7 @@ function DashboardPage() {
     await signOut();
     navigate({ to: "/login" });
   };
-  const [notifications, setNotifications] = useState(true);
-  const [publicProfile, setPublicProfile] = useState(false);
+
   const { data: calendarsData, isLoading: calendarsLoading, error, mutate: mutateCalendars } = useSWR<CalendarSource[]>("/api/sources");
   const calendars = calendarsData ?? [];
 
@@ -50,9 +46,7 @@ function DashboardPage() {
           </NavigationMenuItem>
         </NavigationMenu>
         <NavigationMenu>
-          {error ? (
-            <ErrorState message="Failed to load calendars." onRetry={() => mutateCalendars()} />
-          ) : null}
+          {error && <ErrorState message="Failed to load calendars." onRetry={() => mutateCalendars()} />}
           {calendarsLoading && (
             <div className="flex justify-center py-4">
               <LoaderCircle size={16} className="animate-spin text-foreground-muted" />
@@ -98,20 +92,6 @@ function DashboardPage() {
             </NavigationMenuItemIcon>
             <NavigationMenuItemTrailing />
           </NavigationMenuItem>
-        </NavigationMenu>
-        <NavigationMenu>
-          <NavigationMenuToggleItem checked={notifications} onCheckedChange={setNotifications}>
-            <NavigationMenuItemIcon>
-              <Bell size={15} />
-              <NavigationMenuItemLabel>Notifications</NavigationMenuItemLabel>
-            </NavigationMenuItemIcon>
-          </NavigationMenuToggleItem>
-          <NavigationMenuCheckboxItem checked={publicProfile} onCheckedChange={setPublicProfile}>
-            <NavigationMenuItemIcon>
-              <Eye size={15} />
-              <NavigationMenuItemLabel>Public Profile</NavigationMenuItemLabel>
-            </NavigationMenuItemIcon>
-          </NavigationMenuCheckboxItem>
         </NavigationMenu>
         <NavigationMenu variant="highlight">
           <NavigationMenuItem to="/dashboard/upgrade">
