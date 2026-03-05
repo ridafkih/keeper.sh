@@ -362,7 +362,7 @@ export function NavigationMenuPopover({ trigger, children }: { trigger: ReactNod
 
   return (
     <PopoverContext value={{ expanded, toggle: () => setExpanded((prev) => !prev), triggerContent: trigger }}>
-      <li ref={containerRef} className="relative grid grid-cols-1 grid-rows-1 *:row-start-1 *:col-start-1">
+      <li ref={containerRef} className={cn("relative grid grid-cols-1 grid-rows-1 *:row-start-1 *:col-start-1", expanded ? "z-20" : "z-0")()}>
         <button
           type="button"
           onClick={() => setExpanded((prev) => !prev)}
