@@ -19,15 +19,17 @@ function ProviderIconStack({ providers, max = 4 }: ProviderIconStackProps) {
   const overflow = providers.length - max;
 
   return (
-    <div className="flex items-center *:not-last:-mr-2.5">
-      {visible.map((entry, index) => (
-        <ProviderIconStackItem key={index} provider={entry.provider} calendarType={entry.calendarType} />
-      ))}
-      {overflow > 0 && (
-        <div className="size-6 rounded-full bg-background-elevated border border-border-elevated flex items-center justify-center">
-          <Text size="xs" tone="muted" className="tabular-nums text-[0.625rem]">+{overflow}</Text>
-        </div>
-      )}
+    <div className="relative">
+      <div className="absolute right-0 inset-y-0 flex items-center *:not-last:-mr-2.5">
+        {visible.map((entry, index) => (
+          <ProviderIconStackItem key={index} provider={entry.provider} calendarType={entry.calendarType} />
+        ))}
+        {overflow > 0 && (
+          <div className="size-6 rounded-full bg-background-elevated border border-border-elevated flex items-center justify-center">
+            <Text size="xs" tone="muted" className="tabular-nums text-[0.625rem]">+{overflow}</Text>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
