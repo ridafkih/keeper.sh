@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR, { preload } from "swr";
 import { AnimatePresence, motion } from "motion/react";
@@ -22,7 +21,16 @@ import { Text } from "../../../components/ui/text";
 import { ProviderIconStack } from "../../../components/ui/provider-icon-stack";
 import { getAccountLabel } from "../../../utils/accounts";
 import { pluralize } from "../../../lib/pluralize";
+import { useAnimatedSWR } from "../../../hooks/use-animated-swr";
 import { User } from "lucide-react";
+
+const SECTION_HIDDEN = { height: 0, opacity: 0, filter: "blur(4px)" };
+const SECTION_VISIBLE = { height: "fit-content", opacity: 1, filter: "blur(0)" };
+
+function resolveAnimateInitial(shouldAnimate: boolean) {
+  if (shouldAnimate) return SECTION_HIDDEN;
+  return false as const;
+}
 
 export const Route = createFileRoute("/(dashboard)/dashboard/")({
   component: DashboardPage,
@@ -35,13 +43,11 @@ function DashboardPage() {
     navigate({ to: "/login" });
   };
 
-  const { data: accountsData, isLoading: accountsLoading } = useSWR<CalendarAccount[]>("/api/accounts");
+  const { data: accountsData, shouldAnimate: animateAccounts } = useAnimatedSWR<CalendarAccount[]>("/api/accounts");
   const accounts = accountsData ?? [];
-  const [accountsWasLoading] = useState(accountsLoading);
 
-  const { data: calendarsData, isLoading: calendarsLoading, error, mutate: mutateCalendars } = useSWR<CalendarSource[]>("/api/sources");
+  const { data: calendarsData, shouldAnimate: animateCalendars, isLoading: calendarsLoading, error, mutate: mutateCalendars } = useAnimatedSWR<CalendarSource[]>("/api/sources");
   const calendars = calendarsData ?? [];
-  const [calendarsWasLoading] = useState(calendarsLoading);
 
   const { data: eventCountData } = useSWR<{ count: number }>("/api/events/count");
   const eventCount = eventCountData?.count;
@@ -59,7 +65,7 @@ function DashboardPage() {
                 </NavigationMenuItemIcon>
                 <NavigationMenuItemLabel>Calendar Accounts</NavigationMenuItemLabel>
                 <NavigationMenuItemTrailing>
-                  <ProviderIconStack providers={accounts} animate={accountsWasLoading} />
+                  <ProviderIconStack providers={accounts} animate={animateAccounts} />
                 </NavigationMenuItemTrailing>
               </>
             }
@@ -94,7 +100,7 @@ function DashboardPage() {
                 </NavigationMenuItemIcon>
                 <NavigationMenuItemLabel>Calendars</NavigationMenuItemLabel>
                 <NavigationMenuItemTrailing>
-                  <ProviderIconStack providers={calendars} animate={calendarsWasLoading} />
+                  <ProviderIconStack providers={calendars} animate={animateCalendars} />
                 </NavigationMenuItemTrailing>
               </>
             }
@@ -130,9 +136,9 @@ function DashboardPage() {
             {calendars.length > 0 && (
               <motion.div
                 className="overflow-hidden"
-                initial={calendarsWasLoading ? { height: 0, opacity: 0, filter: "blur(4px)" } : false}
-                animate={{ height: "fit-content", opacity: 1, filter: "blur(0)" }}
-                exit={{ height: 0, opacity: 0, filter: "blur(4px)" }}
+                initial={resolveAnimateInitial(animateCalendars)}
+                animate={SECTION_VISIBLE}
+                exit={SECTION_HIDDEN}
               >
                 <NavigationMenuItem to="/dashboard/events">
                   <NavigationMenuItemIcon>

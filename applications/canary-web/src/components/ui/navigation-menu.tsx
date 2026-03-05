@@ -1,6 +1,6 @@
 import type { ComponentPropsWithoutRef, KeyboardEvent as ReactKeyboardEvent, PropsWithChildren, ReactNode } from "react";
 import { createContext, use, useEffect, useRef, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useLocation } from "@tanstack/react-router";
 import { useSetAtom } from "jotai";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, Check, Pencil } from "lucide-react";
@@ -332,25 +332,45 @@ function usePopover() {
 
 export function NavigationMenuPopover({ trigger, children }: { trigger: ReactNode; children: ReactNode }) {
   const [expanded, setExpanded] = useState(false);
+  const [present, setPresent] = useState(false);
+  const [openedAt, setOpenedAt] = useState("");
+  const { pathname } = useLocation();
   const containerRef = useRef<HTMLLIElement>(null);
   const setOverlay = useSetAtom(popoverOverlayAtom);
   const variant = use(MenuVariantContext);
 
-  useEffect(() => {
-    setOverlay(expanded);
-    return () => setOverlay(false);
-  }, [expanded, setOverlay]);
+  if (expanded && openedAt !== pathname) {
+    setExpanded(false);
+    setOverlay(false);
+  }
+
+  const open = () => {
+    setExpanded(true);
+    setPresent(true);
+    setOpenedAt(pathname);
+    setOverlay(true);
+  };
+
+  const toggle = () => {
+    if (expanded) close();
+    else open();
+  };
 
   useEffect(() => {
     if (!expanded) return;
 
+    const close = () => {
+      setExpanded(false);
+      setOverlay(false);
+    };
+
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setExpanded(false);
+      if (event.key === "Escape") close();
     };
 
     const onPointerDown = (event: PointerEvent) => {
       if (containerRef.current && event.target instanceof Node && !containerRef.current.contains(event.target)) {
-        setExpanded(false);
+        close();
       }
     };
 
@@ -361,19 +381,19 @@ export function NavigationMenuPopover({ trigger, children }: { trigger: ReactNod
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [expanded]);
+  }, [expanded, setOverlay]);
 
   return (
-    <PopoverContext value={{ expanded, toggle: () => setExpanded((prev) => !prev), triggerContent: trigger }}>
-      <li ref={containerRef} className={cn("relative grid grid-cols-1 grid-rows-1 *:row-start-1 *:col-start-1", expanded ? "z-20" : "z-0")()}>
+    <PopoverContext value={{ expanded, toggle, triggerContent: trigger }}>
+      <li ref={containerRef} className={cn("relative grid grid-cols-1 grid-rows-1 *:row-start-1 *:col-start-1", present ? "z-20" : "z-0")()}>
         <button
           type="button"
-          onClick={() => setExpanded((prev) => !prev)}
+          onClick={toggle}
           className={navigationMenuItemStyle({ variant, interactive: true, className: "relative z-10" })}
         >
           {trigger}
         </button>
-        <AnimatePresence>
+        <AnimatePresence onExitComplete={() => setPresent(false)}>
           {expanded && (
             <NavigationMenuPopoverPanel>
               {children}

@@ -1,10 +1,9 @@
-import { useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
-import useSWR from "swr";
 import { motion } from "motion/react";
 import { tv } from "tailwind-variants/lite";
 import { eventGraphHoverIndexAtom } from "../../state/event-graph-hover";
 import { fetcher } from "../../lib/fetcher";
+import { useAnimatedSWR } from "../../hooks/use-animated-swr";
 import { pluralize } from "../../lib/pluralize";
 import { Text } from "../ui/text";
 
@@ -151,8 +150,7 @@ function resolveBarTransition(shouldAnimate: boolean, dayIndex: number) {
 }
 
 export function EventGraph() {
-  const { data: events, isLoading } = useSWR<ApiEvent[]>(GRAPH_URL, fetcher);
-  const [wasLoading] = useState(isLoading);
+  const { data: events, shouldAnimate } = useAnimatedSWR<ApiEvent[]>(GRAPH_URL, { fetcher });
   const days = buildDays(events ?? []);
   const setHoverIndex = useSetAtom(eventGraphHoverIndexAtom);
 
@@ -181,7 +179,7 @@ export function EventGraph() {
                 })}
                 initial={{ height: MIN_BAR_HEIGHT }}
                 animate={{ height: day.height }}
-                transition={resolveBarTransition(wasLoading, dayIndex)}
+                transition={resolveBarTransition(shouldAnimate, dayIndex)}
               />
             </div>
             <Text
