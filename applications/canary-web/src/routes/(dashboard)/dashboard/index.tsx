@@ -63,9 +63,9 @@ function DashboardPage() {
                 <NavigationMenuItemIcon>
                   <User size={15} />
                 </NavigationMenuItemIcon>
-                <NavigationMenuItemLabel>Calendar Accounts</NavigationMenuItemLabel>
+                <NavigationMenuItemLabel>Calendar Sources</NavigationMenuItemLabel>
                 <NavigationMenuItemTrailing>
-                  <ProviderIconStack providers={accounts} animate={animateAccounts} />
+                  <ProviderIconStack providers={accounts} />
                 </NavigationMenuItemTrailing>
               </>
             }
@@ -87,7 +87,7 @@ function DashboardPage() {
             <NavigationMenuItemIcon>
               <CalendarPlus size={15} />
             </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>Link Calendar Account</NavigationMenuItemLabel>
+            <NavigationMenuItemLabel>Add Calendar Source</NavigationMenuItemLabel>
             <NavigationMenuItemTrailing />
           </NavigationMenuItem>
         </NavigationMenu>
@@ -100,7 +100,7 @@ function DashboardPage() {
                 </NavigationMenuItemIcon>
                 <NavigationMenuItemLabel>Calendars</NavigationMenuItemLabel>
                 <NavigationMenuItemTrailing>
-                  <ProviderIconStack providers={calendars} animate={animateCalendars} />
+                  <ProviderIconStack providers={calendars} />
                 </NavigationMenuItemTrailing>
               </>
             }

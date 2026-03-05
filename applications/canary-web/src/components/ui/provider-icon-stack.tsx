@@ -16,8 +16,8 @@ function ProviderIconStackItem({ provider, calendarType }: { provider?: string; 
   );
 }
 
-const HIDDEN = { opacity: 0, filter: "blur(4px)" };
-const VISIBLE = { opacity: 1, filter: "blur(0)" };
+const HIDDEN = { opacity: 0, filter: "blur(4px)", width: 0 };
+const VISIBLE = { opacity: 1, filter: "blur(0)", width: "auto" };
 
 function resolveInitial(animate: boolean) {
   if (animate) return HIDDEN;
@@ -30,30 +30,35 @@ function ProviderIconStack({ providers, max = 4, animate = false }: ProviderIcon
   const initial = resolveInitial(animate);
 
   return (
-    <div className="relative">
-      <div className="absolute right-0 inset-y-0 flex items-center *:not-last:-mr-2.5">
-        <AnimatePresence>
-          {visible.map((entry, index) => (
-            <motion.div
-              key={`${entry.provider}-${index}`}
-              initial={initial}
-              animate={VISIBLE}
-              exit={HIDDEN}
+    <div className="absolute flex items-center justify-end overflow-visible">
+      <div className="flex items-center">
+        <AnimatePresence mode="sync">
+            {visible.map((entry, index) => (
+              <motion.div
+                key={`${entry.provider}-${index}`}
+                initial={initial}
+                animate={VISIBLE}
+                exit={HIDDEN}
+                className="max-w-3 flex justify-end"
+              >
+                <div className="size-6">
+                  <ProviderIconStackItem provider={entry.provider} calendarType={entry.calendarType} />
+                </div>
+              </motion.div>
+            ))}
+            {overflow > 0 && (
+              <motion.div
+                key="overflow"
+                initial={initial}
+                animate={VISIBLE}
+                exit={HIDDEN}
+                className="max-w-3 flex justify-end"
             >
-              <ProviderIconStackItem provider={entry.provider} calendarType={entry.calendarType} />
-            </motion.div>
-          ))}
-          {overflow > 0 && (
-            <motion.div
-              key="overflow"
-              initial={initial}
-              animate={VISIBLE}
-              exit={HIDDEN}
-              className="size-6 rounded-full bg-background-elevated border border-border-elevated flex items-center justify-center"
-            >
-              <Text size="xs" tone="muted" className="tabular-nums text-[0.625rem]">+{overflow}</Text>
-            </motion.div>
-          )}
+              <div className="size-6 min-w-6 grid place-items-center bg-background-elevated border border-border-elevated rounded-full">
+                  <Text size="xs" tone="muted" className="tabular-nums text-[0.625rem]">+{overflow}</Text>
+                </div>
+              </motion.div>
+            )}
         </AnimatePresence>
       </div>
     </div>
