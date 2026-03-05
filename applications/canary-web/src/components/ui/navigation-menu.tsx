@@ -247,7 +247,7 @@ export function NavigationMenuItemTrailing({ children, className }: NavigationMe
 
   return (
     <>
-      <div className={cn("flex grow items-center gap-1 justify-end", className)()}>
+      <div className={cn("flex grow min-w-0 items-center gap-1 justify-end", className)()}>
         {children}
         {isLink && <ArrowRight className={cn("shrink-0", navigationMenuItemIconStyle({ variant }))()} size={15} />}
       </div>

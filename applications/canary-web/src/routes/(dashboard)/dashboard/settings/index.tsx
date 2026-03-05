@@ -69,7 +69,7 @@ function SettingsPage() {
           </NavigationMenuItemIcon>
           <NavigationMenuItemLabel>Email</NavigationMenuItemLabel>
           <NavigationMenuItemTrailing>
-            <Text size="sm" tone="muted">{email}</Text>
+            <Text size="sm" tone="muted" className="truncate">{email}</Text>
           </NavigationMenuItemTrailing>
         </NavigationMenuItem>
       </NavigationMenu>
