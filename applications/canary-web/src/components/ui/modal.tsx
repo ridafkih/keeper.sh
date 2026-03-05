@@ -1,8 +1,10 @@
 import type { PropsWithChildren } from "react";
 import { createContext, use, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useSetAtom } from "jotai";
 import { Heading3 } from "./heading";
 import { Text } from "./text";
+import { popoverOverlayAtom } from "../../state/popover-overlay";
 
 interface ModalContextValue {
   open: boolean;
@@ -47,21 +49,26 @@ export function ModalTrigger({ children, ...props }: PropsWithChildren<{ classNa
 export function ModalContent({ children }: PropsWithChildren) {
   const { open, setOpen } = use(ModalContext);
   const contentRef = useRef<HTMLDivElement>(null);
+  const setOverlay = useSetAtom(popoverOverlayAtom);
 
   useEffect(() => {
     if (!open) return;
+    setOverlay(true);
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, setOpen]);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      setOverlay(false);
+    };
+  }, [open, setOpen, setOverlay]);
 
   if (!open) return null;
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 px-6"
+      className="fixed inset-0 z-50 flex items-center justify-center px-6"
       onClick={(event) => {
         if (contentRef.current && !contentRef.current.contains(event.target as Node)) {
           setOpen(false);
