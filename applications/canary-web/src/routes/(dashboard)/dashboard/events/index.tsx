@@ -128,7 +128,7 @@ const areDaySectionPropsEqual = (prev: DaySectionProps, next: DaySectionProps): 
 
 const DaySection = memo(function DaySection({ label, events }: DaySectionProps) {
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col px-0.5">
       <DashboardHeading2>{label}</DashboardHeading2>
       <div className="flex flex-col">
         {events.map((event) => (

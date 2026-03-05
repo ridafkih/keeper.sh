@@ -2,7 +2,7 @@ import { useState, useTransition } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import useSWR from "swr";
 import type { KeyedMutator } from "swr";
-import { ArrowDown, CalendarSync, Plus } from "lucide-react";
+import { CalendarSync, Check, Plus } from "lucide-react";
 import { BackButton } from "../../../../components/ui/back-button";
 import { RouteShell } from "../../../../components/ui/route-shell";
 import { Text } from "../../../../components/ui/text";
@@ -21,7 +21,7 @@ import {
   usePopover,
 } from "../../../../components/ui/navigation-menu";
 import { DeleteConfirmation } from "../../../../components/ui/delete-confirmation";
-import { DashboardHeading1, DashboardHeading2 } from "../../../../components/ui/dashboard-heading";
+import { DashboardHeading2 } from "../../../../components/ui/dashboard-heading";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/sync-profiles/")({
   component: SyncProfilesPage,
@@ -40,6 +40,7 @@ function SyncProfilesPage() {
   );
   const { data: calendars, error: calendarsError } = useSWR<CalendarEntry[]>("/api/sources");
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [autoEdit, setAutoEdit] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isDeleting, startDeleteTransition] = useTransition();
   const [isCreating, startCreateTransition] = useTransition();
@@ -50,17 +51,19 @@ function SyncProfilesPage() {
 
   const profile = profiles[currentIndex] ?? profiles[0] ?? null;
 
-  const handleCreateProfile = () => {
+  const handleCreateProfile = (close: () => void) => {
     startCreateTransition(async () => {
       const response = await apiFetch("/api/profiles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "New Profile" }),
       });
-      const created = await response.json();
+      const created: SyncProfile = { name: "New Profile", sources: [], destinations: [], ...await response.json() };
       const updated = [...profiles, created];
       await mutateProfiles(updated, { revalidate: false });
       setCurrentIndex(updated.length - 1);
+      setAutoEdit(true);
+      close();
     });
   };
 
@@ -110,9 +113,10 @@ function SyncProfilesPage() {
 
   return (
     <div className="flex flex-col gap-1.5">
-      <BackButton />
-      <NavigationMenu>
-        <NavigationMenuPopover
+      <div className="flex gap-1.5">
+        <BackButton />
+        <NavigationMenu className="flex-1 min-w-0">
+          <NavigationMenuPopover
           trigger={
             <>
               <NavigationMenuItemIcon>
@@ -132,27 +136,28 @@ function SyncProfilesPage() {
               onSelect={() => setCurrentIndex(index)}
             />
           ))}
-          <NavigationMenuItem onClick={handleCreateProfile}>
-            <NavigationMenuItemIcon>
-              <Plus size={15} />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>
-              {isCreating ? "Creating..." : "New Profile"}
-            </NavigationMenuItemLabel>
-          </NavigationMenuItem>
-        </NavigationMenuPopover>
-      </NavigationMenu>
+          <CreateProfilePopoverItem
+            isCreating={isCreating}
+            onCreate={handleCreateProfile}
+          />
+          </NavigationMenuPopover>
+        </NavigationMenu>
+      </div>
       {profile && (
         <>
-          <div className="flex flex-col">
+          <div className="flex flex-col px-0.5 pt-4">
             <DashboardHeading2>Profile Name</DashboardHeading2>
-            <Text size="sm">Click below to rename this sync profile. This only affects how it appears within Keeper.</Text>
+            <Text size="sm">Click below to rename this sync profile.</Text>
           </div>
           <NavigationMenu className="flex-1 min-w-0">
             <NavigationMenuEditableItem
               key={profile.id}
               value={profile.name}
-              onCommit={handleNameCommit}
+              autoEdit={autoEdit}
+              onCommit={(name) => {
+                setAutoEdit(false);
+                return handleNameCommit(name);
+              }}
             />
           </NavigationMenu>
           <ProfileDetail
@@ -198,6 +203,27 @@ function ProfilePopoverItem({ profile, active, onSelect }: ProfilePopoverItemPro
       <NavigationMenuItemLabel className={active ? "font-medium" : ""}>
         {profile.name}
       </NavigationMenuItemLabel>
+      {active && <Check size={15} className="ml-auto shrink-0 text-foreground-muted" />}
+    </NavigationMenuItem>
+  );
+}
+
+interface CreateProfilePopoverItemProps {
+  isCreating: boolean;
+  onCreate: (close: () => void) => void;
+}
+
+function CreateProfilePopoverItem({ isCreating, onCreate }: CreateProfilePopoverItemProps) {
+  const { close } = usePopover();
+
+  return (
+    <NavigationMenuItem onClick={() => onCreate(close)}>
+      <NavigationMenuItemIcon>
+        <Plus size={15} />
+      </NavigationMenuItemIcon>
+      <NavigationMenuItemLabel>
+        {isCreating ? "Creating..." : "New Profile"}
+      </NavigationMenuItemLabel>
     </NavigationMenuItem>
   );
 }
@@ -221,7 +247,7 @@ function ProfileDetail({ profile, profiles, calendars, mutateProfiles, onDelete 
 
   return (
     <>
-      <div className="flex flex-col">
+      <div className="flex flex-col px-0.5 pt-4">
         <DashboardHeading2>Event Sources</DashboardHeading2>
         <Text size="sm">Events from the marked calendars will be pooled, and pushed to the calendars marked as destinations below.</Text>
       </div>
@@ -231,10 +257,7 @@ function ProfileDetail({ profile, profiles, calendars, mutateProfiles, onDelete 
         onToggle={toggleSource}
         emptyLabel="No source calendars"
       />
-      <div className="self-center py-2">
-        <ArrowDown size={16} className="text-foreground-muted" />
-      </div>
-      <div className="flex flex-col">
+      <div className="flex flex-col px-0.5 pt-4">
         <DashboardHeading2>Event Destinations</DashboardHeading2>
         <Text size="sm">When you mark a calendar below, events from the sources will be pushed to that calendar.</Text>
       </div>

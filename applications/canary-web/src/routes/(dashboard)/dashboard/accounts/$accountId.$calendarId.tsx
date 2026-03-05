@@ -63,7 +63,7 @@ function CalendarDetailPage() {
   return (
     <div className="flex flex-col gap-1.5">
       <BackButton fallback={`/dashboard/accounts/${accountId}`} />
-      <div className="flex flex-col">
+      <div className="flex flex-col px-0.5 pt-4">
         <DashboardHeading2>Calendar Name</DashboardHeading2>
         <Text size="sm">Click below to rename the calendar within Keeper. This does not affect the calendar outside of the Keeper ecosystem.</Text>
       </div>
@@ -73,7 +73,7 @@ function CalendarDetailPage() {
           onCommit={handleRenameCalendar}
         />
       </NavigationMenu>
-      <div className="flex flex-col">
+      <div className="flex flex-col px-0.5 pt-4">
         <DashboardHeading2>Calendar Information</DashboardHeading2>
         <Text size="sm">View details about the calendar.</Text>
       </div>

@@ -97,7 +97,7 @@ function AccountDetailPage() {
   return (
     <div className="flex flex-col gap-1.5">
       <BackButton />
-      <div className="flex flex-col">
+      <div className="flex flex-col px-0.5 pt-4">
         <DashboardHeading2>Account Information</DashboardHeading2>
         <Text size="sm">View details about the account and its calendars.</Text>
       </div>
@@ -114,7 +114,7 @@ function AccountDetailPage() {
           <Text size="sm" tone="danger">Delete Account</Text>
         </NavigationMenuItem>
       </NavigationMenu>
-      <div className="flex flex-col">
+      <div className="flex flex-col px-0.5 pt-4">
         <DashboardHeading2>Account Calendars</DashboardHeading2>
         <Text size="sm">This account has {calendars.length} accounts connected, click them below to view more details.</Text>
       </div>

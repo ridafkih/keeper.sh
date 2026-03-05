@@ -471,16 +471,18 @@ function NavigationMenuPopoverPanel({ children }: PropsWithChildren) {
 type NavigationMenuEditableItemProps = {
   value: string;
   onCommit: (value: string) => Promise<void> | void;
+  autoEdit?: boolean;
   className?: string;
 };
 
 export function NavigationMenuEditableItem({
   value,
   onCommit,
+  autoEdit,
   className,
 }: NavigationMenuEditableItemProps) {
   const variant = use(MenuVariantContext);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(autoEdit ?? false);
   const inputRef = useRef<HTMLInputElement>(null);
   const committingRef = useRef(false);
 
