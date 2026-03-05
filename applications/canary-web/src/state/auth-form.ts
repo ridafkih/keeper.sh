@@ -9,9 +9,6 @@ authFormStatusAtom.onMount = (set) => () => set("idle");
 export const authFormStepAtom = atom<AuthFormStep>("email");
 authFormStepAtom.onMount = (set) => () => set("email");
 
-export const authFormEmailAtom = atom("");
-authFormEmailAtom.onMount = (set) => () => set("");
-
 type AuthFormError = {
   message: string;
   active: boolean;

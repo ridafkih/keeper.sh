@@ -1,4 +1,4 @@
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { LoaderCircle } from "lucide-react";
 import { useSWRConfig } from "swr";
@@ -56,16 +56,19 @@ interface CalDAVConnectFormProps {
 export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
   const navigate = useNavigate();
   const { mutate: globalMutate } = useSWRConfig();
+  const formRef = useRef<HTMLFormElement>(null);
 
-  const [serverUrl, setServerUrl] = useState(SERVER_URLS[provider]);
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+
+    const formData = new FormData(event.currentTarget);
+    const serverUrl = formData.get("serverUrl") as string;
+    const username = formData.get("username") as string;
+    const password = formData.get("password") as string;
 
     startTransition(async () => {
       let discoverResponse: Response;
@@ -115,27 +118,28 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+    <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-3">
       <div className="flex flex-col gap-1.5">
         {provider === "caldav" && (
           <Input
-            value={serverUrl}
-            onChange={(event) => setServerUrl(event.target.value)}
+            name="serverUrl"
+            defaultValue={SERVER_URLS[provider]}
             type="url"
             placeholder="CalDAV Server URL"
             required
           />
         )}
+        {provider !== "caldav" && (
+          <Input type="hidden" name="serverUrl" defaultValue={SERVER_URLS[provider]} />
+        )}
         <Input
-          value={username}
-          onChange={(event) => setUsername(event.target.value)}
+          name="username"
           type={resolveUsernameInputType(provider)}
           placeholder={EMAIL_PLACEHOLDERS[provider]}
           required
         />
         <Input
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          name="password"
           type="password"
           placeholder={resolvePasswordPlaceholder(provider)}
           required

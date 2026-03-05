@@ -1,13 +1,12 @@
-import { useRef, type ChangeEvent, type Ref, type SubmitEvent } from "react";
+import { useRef, type Ref, type SubmitEvent } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { motion, AnimatePresence, type Variants } from "motion/react";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 import {
   authFormStatusAtom,
   authFormErrorAtom,
   authFormStepAtom,
-  authFormEmailAtom,
   type AuthFormStatus,
 } from "../../state/auth-form";
 import { signInWithEmail, signUpWithEmail } from "../../lib/auth";
@@ -110,7 +109,6 @@ function renderBackButton(step: "email" | "password", onBack: () => void) {
 
 function EmailForm({ submitLabel, action }: { submitLabel: string; action: "signIn" | "signUp" }) {
   const navigate = useNavigate();
-  const store = useStore();
   const step = useAtomValue(authFormStepAtom);
   const setStep = useSetAtom(authFormStepAtom);
   const setStatus = useSetAtom(authFormStatusAtom);
@@ -119,7 +117,8 @@ function EmailForm({ submitLabel, action }: { submitLabel: string; action: "sign
 
   const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const email = store.get(authFormEmailAtom);
+    const formData = new FormData(event.currentTarget);
+    const email = formData.get("email") as string;
 
     if (step === "email") {
       if (!email) return;
@@ -128,9 +127,8 @@ function EmailForm({ submitLabel, action }: { submitLabel: string; action: "sign
       return;
     }
 
-    const formData = new FormData(event.currentTarget);
-    const password = formData.get("password");
-    if (!password || typeof password !== "string") return;
+    const password = formData.get("password") as string;
+    if (!password) return;
 
     setStatus("loading");
 
@@ -166,7 +164,7 @@ function EmailForm({ submitLabel, action }: { submitLabel: string; action: "sign
   return (
     <form onSubmit={handleSubmit} className="contents">
       <div className="flex flex-col gap-1.5">
-        <EmailInput disabled={step === "password"} />
+        <EmailInput readOnly={step === "password"} />
         <AnimatePresence>
           {step === "password" && (
             <motion.div
@@ -212,30 +210,24 @@ function AuthError() {
   );
 }
 
-function EmailInput({ disabled }: { disabled?: boolean }) {
+function EmailInput({ readOnly }: { readOnly?: boolean }) {
   const status = useAtomValue(authFormStatusAtom);
-  const email = useAtomValue(authFormEmailAtom);
-  const setEmail = useSetAtom(authFormEmailAtom);
   const error = useAtomValue(authFormErrorAtom);
   const setError = useSetAtom(authFormErrorAtom);
 
-  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setEmail(event.target.value);
-    if (error?.active) {
-      setError({ ...error, active: false });
-    }
+  const clearError = () => {
+    if (error?.active) setError({ ...error, active: false });
   };
 
   return (
     <Input
-      id="email"
       name="email"
-      value={email}
-      disabled={disabled || status === "loading"}
+      readOnly={readOnly}
+      disabled={status === "loading"}
       type="email"
       placeholder="johndoe+keeper@example.com"
       tone={resolveInputTone(error?.active)}
-      onChange={handleChange}
+      onChange={clearError}
     />
   );
 }
@@ -245,22 +237,19 @@ function PasswordInput({ ref }: { ref?: Ref<HTMLInputElement> }) {
   const error = useAtomValue(authFormErrorAtom);
   const setError = useSetAtom(authFormErrorAtom);
 
-  const handleChange = () => {
-    if (error?.active) {
-      setError({ ...error, active: false });
-    }
+  const clearError = () => {
+    if (error?.active) setError({ ...error, active: false });
   };
 
   return (
     <Input
       ref={ref}
-      id="password"
       name="password"
       disabled={status === "loading"}
       type="password"
       placeholder="Password"
       tone={resolveInputTone(error?.active)}
-      onChange={handleChange}
+      onChange={clearError}
     />
   );
 }
