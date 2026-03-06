@@ -127,9 +127,61 @@ const setDestinationsForSource = async (
   }
 };
 
+const setSourcesForDestination = async (
+  userId: string,
+  destinationCalendarId: string,
+  sourceCalendarIds: string[],
+): Promise<void> => {
+  const [destination] = await database
+    .select({ id: calendarsTable.id })
+    .from(calendarsTable)
+    .where(and(eq(calendarsTable.id, destinationCalendarId), eq(calendarsTable.userId, userId)))
+    .limit(1);
+
+  if (!destination) throw new Error("Destination calendar not found");
+
+  if (sourceCalendarIds.length > 0) {
+    const validSources = await database
+      .select({ id: calendarsTable.id })
+      .from(calendarsTable)
+      .where(
+        and(
+          eq(calendarsTable.userId, userId),
+          inArray(calendarsTable.id, sourceCalendarIds),
+        ),
+      );
+
+    const validIds = new Set(validSources.map((s) => s.id));
+    const invalid = sourceCalendarIds.filter((id) => !validIds.has(id));
+    if (invalid.length > 0) throw new Error("Some source calendars not found");
+  }
+
+  await database
+    .delete(sourceDestinationMappingsTable)
+    .where(eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId));
+
+  if (sourceCalendarIds.length > 0) {
+    await database
+      .insert(sourceDestinationMappingsTable)
+      .values(
+        sourceCalendarIds.map((sourceCalendarId) => ({
+          sourceCalendarId,
+          destinationCalendarId,
+        })),
+      )
+      .onConflictDoNothing();
+
+    await database
+      .insert(syncStatusTable)
+      .values({ calendarId: destinationCalendarId })
+      .onConflictDoNothing();
+  }
+};
+
 export {
   getUserMappings,
   getDestinationsForSource,
   getSourcesForDestination,
   setDestinationsForSource,
+  setSourcesForDestination,
 };

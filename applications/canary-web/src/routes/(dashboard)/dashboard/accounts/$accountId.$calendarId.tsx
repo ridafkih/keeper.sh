@@ -43,10 +43,13 @@ interface SyncSetting {
 const SYNC_SETTINGS: SyncSetting[] = [
   { field: "excludeEventDescription", label: "Sync Event Description", matchesField: false },
   { field: "excludeEventLocation", label: "Sync Event Location", matchesField: false },
+];
+
+const EXCLUSION_SETTINGS: SyncSetting[] = [
   { field: "excludeAllDayEvents", label: "Exclude All Day Events", matchesField: true },
 ];
 
-const PROVIDER_SYNC_SETTINGS: SyncSetting[] = [
+const PROVIDER_EXCLUSION_SETTINGS: SyncSetting[] = [
   { field: "excludeFocusTime", label: "Exclude Focus Time Events", matchesField: true },
   { field: "excludeWorkingLocation", label: "Exclude Working Location Events", matchesField: true },
   { field: "excludeOutOfOffice", label: "Exclude Out of Office Events", matchesField: true },
@@ -139,9 +142,9 @@ function CalendarDetailPage() {
 
   const isPullCapable = canPull(calendar);
   const hasExtraSettings = PROVIDERS_WITH_EXTRA_SETTINGS.has(calendar.provider);
-  const syncSettings = hasExtraSettings
-    ? [...SYNC_SETTINGS, ...PROVIDER_SYNC_SETTINGS]
-    : SYNC_SETTINGS;
+  const exclusionSettings = hasExtraSettings
+    ? [...EXCLUSION_SETTINGS, ...PROVIDER_EXCLUSION_SETTINGS]
+    : EXCLUSION_SETTINGS;
 
   const pushCalendars = (allCalendars ?? [])
     .filter((c) => canPush(c) && c.id !== calendarId);
@@ -189,7 +192,7 @@ function CalendarDetailPage() {
         <>
           <div className="flex flex-col px-0.5 pt-4">
             <DashboardHeading2>Sync Settings</DashboardHeading2>
-            <Text size="sm">Choose which event details and types are synced to destination calendars. Use <Text size="sm" className="text-template inline">{"{{calendar_name}}"}</Text> or <Text size="sm" className="text-template inline">{"{{event_name}}"}</Text> in text fields for dynamic values.</Text>
+            <Text size="sm">Choose which event details are synced to destination calendars. Use <Text size="sm" className="text-template inline">{"{{calendar_name}}"}</Text> or <Text size="sm" className="text-template inline">{"{{event_name}}"}</Text> in text fields for dynamic values.</Text>
           </div>
           <NavigationMenu>
             <NavigationMenuEditableItem
@@ -223,10 +226,26 @@ function CalendarDetailPage() {
             >
               <NavigationMenuItemLabel>Sync Event Name</NavigationMenuItemLabel>
             </NavigationMenuToggleItem>
-            {syncSettings.map((pref) => (
+            {SYNC_SETTINGS.map((pref) => (
               <NavigationMenuToggleItem
                 key={pref.field}
-                checked={pref.matchesField ? calendar[pref.field] : !calendar[pref.field]}
+                checked={!calendar[pref.field]}
+                onCheckedChange={(checked) => handleTogglePreference(pref.field, checked, pref.matchesField)}
+              >
+                <NavigationMenuItemLabel>{pref.label}</NavigationMenuItemLabel>
+              </NavigationMenuToggleItem>
+            ))}
+          </NavigationMenu>
+
+          <div className="flex flex-col px-0.5 pt-4">
+            <DashboardHeading2>Exclusions</DashboardHeading2>
+            <Text size="sm">Choose which event types to exclude from syncing.</Text>
+          </div>
+          <NavigationMenu>
+            {exclusionSettings.map((pref) => (
+              <NavigationMenuToggleItem
+                key={pref.field}
+                checked={calendar[pref.field]}
                 onCheckedChange={(checked) => handleTogglePreference(pref.field, checked, pref.matchesField)}
               >
                 <NavigationMenuItemLabel>{pref.label}</NavigationMenuItemLabel>

@@ -21,6 +21,7 @@ import {
 } from "../../../../components/ui/navigation-menu";
 import { DeleteConfirmation } from "../../../../components/ui/delete-confirmation";
 import { DashboardHeading2 } from "../../../../components/ui/dashboard-heading";
+import { pluralize } from "../../../../lib/pluralize";
 
 export const Route = createFileRoute(
   "/(dashboard)/dashboard/accounts/$accountId/",
@@ -116,7 +117,7 @@ function AccountDetailPage() {
       </NavigationMenu>
       <div className="flex flex-col px-0.5 pt-4">
         <DashboardHeading2>Account Calendars</DashboardHeading2>
-        <Text size="sm">This account has {calendars.length} accounts connected, click them below to view more details.</Text>
+        <Text size="sm">This account has {pluralize(calendars.length, "calendar")} attached to it, choose a calendar below to view more details and configure it.</Text>
       </div>
       <NavigationMenu>
         {renderCalendarList(calendars, accountId)}
