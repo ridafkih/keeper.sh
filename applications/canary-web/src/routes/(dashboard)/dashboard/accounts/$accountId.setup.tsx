@@ -19,23 +19,45 @@ import { ProviderIcon } from "../../../../components/ui/provider-icon";
 import { RouteShell } from "../../../../components/ui/route-shell";
 import { canPull, canPush, getCalendarProvider } from "../../../../utils/calendars";
 
+const VALID_STEPS = ["select", "rename", "destinations", "sources"] as const;
+type SetupStep = (typeof VALID_STEPS)[number];
+
+interface SetupSearch {
+  step?: SetupStep;
+  id?: string;
+  index?: number;
+}
+
+function isValidStep(value: unknown): value is SetupStep {
+  return typeof value === "string" && VALID_STEPS.includes(value as SetupStep);
+}
+
 export const Route = createFileRoute(
   "/(dashboard)/dashboard/accounts/$accountId/setup",
 )({
   component: AccountSetupPage,
+  validateSearch: (search: Record<string, unknown>): SetupSearch => {
+    return {
+      step: isValidStep(search.step) ? search.step : undefined,
+      id: typeof search.id === "string" ? search.id : undefined,
+      index: typeof search.index === "number" ? search.index : undefined,
+    };
+  },
 });
 
-type Step =
-  | { type: "select" }
-  | { type: "rename" }
-  | { type: "destinations"; calendarIndex: number }
-  | { type: "sources"; calendarIndex: number };
+function parseSelectedIds(commaIds: string | undefined): Set<string> {
+  if (!commaIds) return new Set();
+  return new Set(commaIds.split(",").filter(Boolean));
+}
 
 function AccountSetupPage() {
   const { accountId } = Route.useParams();
+  const search = Route.useSearch();
   const navigate = useNavigate();
-  const [step, setStep] = useState<Step>({ type: "select" });
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const step = search.step ?? "select";
+  const selectedIds = parseSelectedIds(search.id);
+  const calendarIndex = search.index ?? 0;
 
   const { data: allCalendars, isLoading, error, mutate: mutateCalendars } = useSWR<CalendarSource[]>(
     "/api/sources",
@@ -45,51 +67,54 @@ function AccountSetupPage() {
     (calendar) => calendar.accountId === accountId,
   );
 
-  const selectedCalendars = accountCalendars.filter((c) => selectedIds.has(c.id));
+  const selectedCalendars = accountCalendars.filter((calendar) => selectedIds.has(calendar.id));
   const pullCapableSelected = selectedCalendars.filter(canPull);
   const pushCapableSelected = selectedCalendars.filter(canPush);
 
-  const handleToggleSelect = (calendarId: string, checked: boolean) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(calendarId);
-      else next.delete(calendarId);
-      return next;
+  const navigateToStep = (nextStep: SetupStep, nextIndex?: number) => {
+    navigate({
+      to: "/dashboard/accounts/$accountId/setup",
+      params: { accountId },
+      search: { step: nextStep, id: search.id, index: nextIndex },
     });
   };
 
   const advanceToSources = () => {
     if (pushCapableSelected.length > 0) {
-      setStep({ type: "sources", calendarIndex: 0 });
-    } else {
-      navigate({ to: "/dashboard" });
+      navigateToStep("sources", 0);
+      return;
     }
+
+    navigate({ to: "/dashboard" });
   };
 
   const advanceFromRename = () => {
     if (pullCapableSelected.length > 0) {
-      setStep({ type: "destinations", calendarIndex: 0 });
-    } else {
-      advanceToSources();
+      navigateToStep("destinations", 0);
+      return;
     }
+
+    advanceToSources();
   };
 
   const advanceFromDestinations = (currentIndex: number) => {
     const nextIndex = currentIndex + 1;
     if (nextIndex < pullCapableSelected.length) {
-      setStep({ type: "destinations", calendarIndex: nextIndex });
-    } else {
-      advanceToSources();
+      navigateToStep("destinations", nextIndex);
+      return;
     }
+
+    advanceToSources();
   };
 
   const advanceFromSources = (currentIndex: number) => {
     const nextIndex = currentIndex + 1;
     if (nextIndex < pushCapableSelected.length) {
-      setStep({ type: "sources", calendarIndex: nextIndex });
-    } else {
-      navigate({ to: "/dashboard" });
+      navigateToStep("sources", nextIndex);
+      return;
     }
+
+    navigate({ to: "/dashboard" });
   };
 
   if (error || isLoading) {
@@ -99,33 +124,31 @@ function AccountSetupPage() {
   return (
     <div className="flex flex-col gap-1.5">
       <BackButton fallback="/dashboard" />
-      {step.type === "select" && (
+      {step === "select" && (
         <SelectSection
+          accountId={accountId}
           calendars={accountCalendars}
-          selectedIds={selectedIds}
-          onToggle={handleToggleSelect}
-          onNext={() => setStep({ type: "rename" })}
         />
       )}
-      {step.type === "rename" && (
+      {step === "rename" && (
         <RenameSection
           calendars={selectedCalendars}
           mutateCalendars={mutateCalendars}
           onNext={advanceFromRename}
         />
       )}
-      {step.type === "destinations" && (
+      {step === "destinations" && (
         <DestinationsSection
-          calendar={pullCapableSelected[step.calendarIndex]}
+          calendar={pullCapableSelected[calendarIndex]}
           allCalendars={allCalendars ?? []}
-          onNext={() => advanceFromDestinations(step.calendarIndex)}
+          onNext={() => advanceFromDestinations(calendarIndex)}
         />
       )}
-      {step.type === "sources" && (
+      {step === "sources" && (
         <SourcesSection
-          calendar={pushCapableSelected[step.calendarIndex]}
+          calendar={pushCapableSelected[calendarIndex]}
           allCalendars={allCalendars ?? []}
-          onNext={() => advanceFromSources(step.calendarIndex)}
+          onNext={() => advanceFromSources(calendarIndex)}
         />
       )}
     </div>
@@ -133,16 +156,35 @@ function AccountSetupPage() {
 }
 
 function SelectSection({
+  accountId,
   calendars,
-  selectedIds,
-  onToggle,
-  onNext,
 }: {
+  accountId: string;
   calendars: CalendarSource[];
-  selectedIds: Set<string>;
-  onToggle: (calendarId: string, checked: boolean) => void;
-  onNext: () => void;
 }) {
+  const navigate = useNavigate();
+  const [localSelectedIds, setLocalSelectedIds] = useState<Set<string>>(new Set());
+
+  const handleToggle = (calendarId: string, checked: boolean) => {
+    setLocalSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(calendarId);
+      } else {
+        next.delete(calendarId);
+      }
+      return next;
+    });
+  };
+
+  const handleNext = () => {
+    navigate({
+      to: "/dashboard/accounts/$accountId/setup",
+      params: { accountId },
+      search: { step: "rename", id: [...localSelectedIds].join(",") },
+    });
+  };
+
   return (
     <>
       <div className="flex flex-col px-0.5 pt-4">
@@ -153,8 +195,8 @@ function SelectSection({
         {calendars.map((calendar) => (
           <NavigationMenuCheckboxItem
             key={calendar.id}
-            checked={selectedIds.has(calendar.id)}
-            onCheckedChange={(checked) => onToggle(calendar.id, checked)}
+            checked={localSelectedIds.has(calendar.id)}
+            onCheckedChange={(checked) => handleToggle(calendar.id, checked)}
           >
             <NavigationMenuItemIcon>
               <ProviderIcon
@@ -169,8 +211,8 @@ function SelectSection({
       <div className="flex flex-col gap-1.5">
         <Button
           className="w-full justify-center"
-          disabled={selectedIds.size === 0}
-          onClick={onNext}
+          disabled={localSelectedIds.size === 0}
+          onClick={handleNext}
         >
           <ButtonText>Next</ButtonText>
         </Button>
@@ -203,9 +245,12 @@ function RenameSection({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name }),
         });
-        return current?.map((c) =>
-          c.id === calendarId ? { ...c, name } : c,
-        );
+        return current?.map((calendar) => {
+          if (calendar.id === calendarId) {
+            return { ...calendar, name };
+          }
+          return calendar;
+        });
       },
       { revalidate: false },
     );
@@ -220,15 +265,16 @@ function RenameSection({
           meaningful name.
         </Text>
       </div>
-      {calendars.map((calendar, index) => (
-        <NavigationMenu key={calendar.id}>
+      <NavigationMenu>
+        {calendars.map((calendar, index) => (
           <NavigationMenuEditableItem
+            key={calendar.id}
             value={calendar.name}
             autoEdit={index === 0}
             onCommit={(name) => handleRename(calendar.id, name)}
           />
-        </NavigationMenu>
-      ))}
+        ))}
+      </NavigationMenu>
       <Button
         className="w-full justify-center"
         onClick={onNext}
@@ -253,7 +299,7 @@ function DestinationsSection({
   );
 
   const pushCalendars = allCalendars.filter(
-    (c) => canPush(c) && c.id !== calendar.id,
+    (candidate) => canPush(candidate) && candidate.id !== calendar.id,
   );
 
   const selectedDestinationIds = new Set(destinationsData?.destinationIds ?? []);
@@ -262,7 +308,7 @@ function DestinationsSection({
     const currentIds = destinationsData?.destinationIds ?? [];
     const updatedIds = checked
       ? [...currentIds, destinationId]
-      : currentIds.filter((id) => id !== destinationId);
+      : currentIds.filter((existingId) => existingId !== destinationId);
 
     await mutateDestinations(
       async () => {
@@ -284,29 +330,28 @@ function DestinationsSection({
   return (
     <>
       <div className="flex flex-col px-0.5 pt-4">
-        <DashboardHeading2 className="overflow-visible text-wrap whitespace-normal">Where should '{calendar.name}' send events?</DashboardHeading2>
+        <DashboardHeading2 className="overflow-visible text-wrap whitespace-normal">Where should &apos;{calendar.name}&apos; send events?</DashboardHeading2>
         <Text size="sm">Select which calendars should receive events from this calendar.</Text>
       </div>
       <NavigationMenu>
-        {pushCalendars.length === 0 ? (
+        {pushCalendars.length === 0 && (
           <NavigationMenuEmptyItem>No destination calendars available</NavigationMenuEmptyItem>
-        ) : (
-          pushCalendars.map((dest) => (
-            <NavigationMenuCheckboxItem
-              key={dest.id}
-              checked={selectedDestinationIds.has(dest.id)}
-              onCheckedChange={(checked) => handleToggle(dest.id, checked)}
-            >
-              <NavigationMenuItemIcon>
-                <ProviderIcon
-                  provider={getCalendarProvider(dest)}
-                  calendarType={dest.calendarType}
-                />
-              </NavigationMenuItemIcon>
-              <NavigationMenuItemLabel>{dest.name}</NavigationMenuItemLabel>
-            </NavigationMenuCheckboxItem>
-          ))
         )}
+        {pushCalendars.map((destination) => (
+          <NavigationMenuCheckboxItem
+            key={destination.id}
+            checked={selectedDestinationIds.has(destination.id)}
+            onCheckedChange={(checked) => handleToggle(destination.id, checked)}
+          >
+            <NavigationMenuItemIcon>
+              <ProviderIcon
+                provider={getCalendarProvider(destination)}
+                calendarType={destination.calendarType}
+              />
+            </NavigationMenuItemIcon>
+            <NavigationMenuItemLabel>{destination.name}</NavigationMenuItemLabel>
+          </NavigationMenuCheckboxItem>
+        ))}
       </NavigationMenu>
       <Button
         className="w-full justify-center"
@@ -332,7 +377,7 @@ function SourcesSection({
   );
 
   const pullCalendars = allCalendars.filter(
-    (c) => canPull(c) && c.id !== calendar.id,
+    (candidate) => canPull(candidate) && candidate.id !== calendar.id,
   );
 
   const selectedSourceIds = new Set(sourcesData?.sourceIds ?? []);
@@ -341,7 +386,7 @@ function SourcesSection({
     const currentIds = sourcesData?.sourceIds ?? [];
     const updatedIds = checked
       ? [...currentIds, sourceId]
-      : currentIds.filter((id) => id !== sourceId);
+      : currentIds.filter((existingId) => existingId !== sourceId);
 
     await mutateSources(
       async () => {
@@ -363,29 +408,28 @@ function SourcesSection({
   return (
     <>
       <div className="flex flex-col px-0.5 pt-4">
-        <DashboardHeading2 className="overflow-visible text-wrap whitespace-normal">Where should '{calendar.name}' pull events from?</DashboardHeading2>
+        <DashboardHeading2 className="overflow-visible text-wrap whitespace-normal">Where should &apos;{calendar.name}&apos; pull events from?</DashboardHeading2>
         <Text size="sm">Select which calendars should send events to this calendar.</Text>
       </div>
       <NavigationMenu>
-        {pullCalendars.length === 0 ? (
+        {pullCalendars.length === 0 && (
           <NavigationMenuEmptyItem>No source calendars available</NavigationMenuEmptyItem>
-        ) : (
-          pullCalendars.map((source) => (
-            <NavigationMenuCheckboxItem
-              key={source.id}
-              checked={selectedSourceIds.has(source.id)}
-              onCheckedChange={(checked) => handleToggle(source.id, checked)}
-            >
-              <NavigationMenuItemIcon>
-                <ProviderIcon
-                  provider={getCalendarProvider(source)}
-                  calendarType={source.calendarType}
-                />
-              </NavigationMenuItemIcon>
-              <NavigationMenuItemLabel>{source.name}</NavigationMenuItemLabel>
-            </NavigationMenuCheckboxItem>
-          ))
         )}
+        {pullCalendars.map((source) => (
+          <NavigationMenuCheckboxItem
+            key={source.id}
+            checked={selectedSourceIds.has(source.id)}
+            onCheckedChange={(checked) => handleToggle(source.id, checked)}
+          >
+            <NavigationMenuItemIcon>
+              <ProviderIcon
+                provider={getCalendarProvider(source)}
+                calendarType={source.calendarType}
+              />
+            </NavigationMenuItemIcon>
+            <NavigationMenuItemLabel>{source.name}</NavigationMenuItemLabel>
+          </NavigationMenuCheckboxItem>
+        ))}
       </NavigationMenu>
       <Button
         className="w-full justify-center"

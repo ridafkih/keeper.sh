@@ -83,13 +83,16 @@ const removeEvents = async (
 const addEvents = async (
   database: BunSQLDatabase,
   calendarId: string,
-  events: { uid: string; startTime: Date; endTime: Date }[],
+  events: { uid: string; startTime: Date; endTime: Date; title?: string; description?: string; location?: string }[],
 ): Promise<void> => {
   const rows = events.map((event) => ({
-    endTime: event.endTime,
-    sourceEventUid: event.uid,
     calendarId,
+    description: event.description,
+    endTime: event.endTime,
+    location: event.location,
+    sourceEventUid: event.uid,
     startTime: event.startTime,
+    title: event.title,
   }));
 
   await database.insert(eventStatesTable).values(rows);

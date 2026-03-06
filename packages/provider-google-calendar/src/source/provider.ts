@@ -118,9 +118,10 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
       .from(eventStatesTable)
       .where(eq(eventStatesTable.calendarId, calendarId));
 
-    const existingUids = new Set(existingEvents.map((event) => event.sourceEventUid));
+    const existingUidSet = new Set(existingEvents.map((event) => event.sourceEventUid));
 
-    const toAdd = events.filter((event) => !existingUids.has(event.uid));
+    const toAdd = events.filter((event) => !existingUidSet.has(event.uid));
+    const toUpdate = events.filter((event) => existingUidSet.has(event.uid));
 
     const toRemoveUids = GoogleCalendarSourceProvider.calculateEventsToRemove(
       existingEvents,
@@ -144,9 +145,12 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
       await database.insert(eventStatesTable).values(
         toAdd.map((event) => ({
           calendarId,
+          description: event.description,
           endTime: event.endTime,
+          location: event.location,
           sourceEventUid: event.uid,
           startTime: event.startTime,
+          title: event.title,
         })),
       );
     }

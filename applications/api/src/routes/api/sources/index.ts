@@ -1,5 +1,5 @@
 import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "../../../utils/middleware";
 import { database } from "../../../context";
 
@@ -19,7 +19,8 @@ const GET = withWideEvent(
       })
       .from(calendarsTable)
       .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
-      .where(eq(calendarsTable.userId, userId));
+      .where(eq(calendarsTable.userId, userId))
+      .orderBy(asc(calendarsTable.createdAt));
 
     return Response.json(calendars);
   }),

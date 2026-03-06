@@ -125,6 +125,9 @@ interface SourceEvent {
   uid: string;
   startTime: Date;
   endTime: Date;
+  title?: string;
+  description?: string;
+  location?: string;
 }
 
 interface SourceSyncResult {

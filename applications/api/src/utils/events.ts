@@ -15,6 +15,9 @@ interface EnrichedEvent {
   id: string;
   startTime: Date;
   endTime: Date;
+  title: string | null;
+  description: string | null;
+  location: string | null;
   calendarId: string;
   calendarName: string | undefined;
   calendarProvider: string | null | undefined;
@@ -56,9 +59,12 @@ const getEventsInRange = async (userId: string, url: URL): Promise<EnrichedEvent
   const events = await database
     .select({
       calendarId: eventStatesTable.calendarId,
+      description: eventStatesTable.description,
       endTime: eventStatesTable.endTime,
       id: eventStatesTable.id,
+      location: eventStatesTable.location,
       startTime: eventStatesTable.startTime,
+      title: eventStatesTable.title,
     })
     .from(eventStatesTable)
     .where(
@@ -82,6 +88,9 @@ const enrichEventsWithSources = (
     calendarId: string;
     startTime: Date;
     endTime: Date;
+    title: string | null;
+    description: string | null;
+    location: string | null;
   }[],
   sourceMap: Map<string, SourceMetadata>,
 ): EnrichedEvent[] =>
@@ -89,12 +98,15 @@ const enrichEventsWithSources = (
     const source = sourceMap.get(event.calendarId);
     return {
       calendarId: event.calendarId,
+      description: event.description,
       endTime: event.endTime,
       id: event.id,
+      location: event.location,
       calendarName: source?.name,
       calendarProvider: source?.provider,
       calendarUrl: source?.url,
       startTime: event.startTime,
+      title: event.title,
     };
   });
 

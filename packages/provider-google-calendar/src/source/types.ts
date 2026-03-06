@@ -25,6 +25,8 @@ interface GoogleCalendarEvent {
   iCalUID?: string;
   status: "confirmed" | "tentative" | "cancelled";
   summary?: string;
+  description?: string;
+  location?: string;
   start: GoogleEventDateTime;
   end: GoogleEventDateTime;
   created?: string;
@@ -60,6 +62,9 @@ interface EventTimeSlot {
   uid: string;
   startTime: Date;
   endTime: Date;
+  title?: string;
+  description?: string;
+  location?: string;
 }
 
 export type {

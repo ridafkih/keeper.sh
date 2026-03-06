@@ -47,7 +47,7 @@ const buildInitialUrl = (calendarId: string, timeMin: Date, timeMax: Date): URL 
 
   url.searchParams.set("startDateTime", timeMin.toISOString());
   url.searchParams.set("endDateTime", timeMax.toISOString());
-  url.searchParams.set("$select", "id,iCalUId,subject,start,end");
+  url.searchParams.set("$select", "id,iCalUId,subject,body,location,start,end");
 
   return url;
 };
@@ -183,8 +183,11 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
       continue;
     }
     result.push({
+      description: event.body?.content,
       endTime: parseEventDateTime(event.end),
+      location: event.location?.displayName,
       startTime: parseEventDateTime(event.start),
+      title: event.subject,
       uid: event.iCalUId,
     });
   }

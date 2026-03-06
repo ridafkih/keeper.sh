@@ -537,7 +537,7 @@ export function NavigationMenuEditableItem({
     };
 
     return (
-      <li className="rounded-xl has-focus:ring-2 has-focus:ring-ring">
+      <li className="relative z-10 rounded-xl has-focus:ring-2 has-focus:ring-ring">
         <div className={navigationMenuItemStyle({ variant, interactive: false, className })}>
           {label && <NavigationMenuItemLabel className="shrink-0">{label}</NavigationMenuItemLabel>}
           {renderInput ? (

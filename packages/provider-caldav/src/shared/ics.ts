@@ -23,7 +23,18 @@ const eventToICalString = (event: SyncableEvent, uid: string): string => {
   return generateIcsCalendar(calendar);
 };
 
-const parseICalToRemoteEvent = (icsString: string): RemoteEvent | null => {
+interface ParsedCalendarEvent {
+  deleteId: string;
+  endTime: Date;
+  isKeeperEvent: boolean;
+  startTime: Date;
+  uid: string;
+  title?: string;
+  description?: string;
+  location?: string;
+}
+
+const parseICalToRemoteEvent = (icsString: string): ParsedCalendarEvent | null => {
   const calendar = parseIcsCalendar({ icsString });
   const [event] = calendar.events ?? [];
 
@@ -33,9 +44,12 @@ const parseICalToRemoteEvent = (icsString: string): RemoteEvent | null => {
 
   return {
     deleteId: event.uid,
+    description: event.description,
     endTime: new Date(event.end.date),
     isKeeperEvent: isKeeperEvent(event.uid),
+    location: event.location,
     startTime: new Date(event.start.date),
+    title: event.summary,
     uid: event.uid,
   };
 };

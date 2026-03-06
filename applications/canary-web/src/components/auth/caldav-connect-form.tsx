@@ -93,22 +93,22 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
       let accountId: string | undefined;
 
       try {
-        const responses = await Promise.all(
-          calendars.map((calendar) =>
-            apiFetch("/api/sources/caldav", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                calendarUrl: calendar.url,
-                name: calendar.displayName,
-                password,
-                provider,
-                serverUrl,
-                username,
-              }),
+        const responses: Response[] = [];
+        for (const calendar of calendars) {
+          const response = await apiFetch("/api/sources/caldav", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              calendarUrl: calendar.url,
+              name: calendar.displayName,
+              password,
+              provider,
+              serverUrl,
+              username,
             }),
-          ),
-        );
+          });
+          responses.push(response);
+        }
 
         const first = await responses[0]?.json();
         accountId = first?.accountId;

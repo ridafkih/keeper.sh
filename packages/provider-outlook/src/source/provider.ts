@@ -129,9 +129,12 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       await database.insert(eventStatesTable).values(
         toAdd.map((event) => ({
           calendarId,
+          description: event.description,
           endTime: event.endTime,
+          location: event.location,
           sourceEventUid: event.uid,
           startTime: event.startTime,
+          title: event.title,
         })),
       );
     }

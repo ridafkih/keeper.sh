@@ -81,8 +81,11 @@ const createCalDAVSourceProvider = (
       }
 
       events.push({
+        description: parsed.description,
         endTime: parsed.endTime,
+        location: parsed.location,
         startTime: parsed.startTime,
+        title: parsed.title,
         uid: parsed.uid,
       });
     }
@@ -125,10 +128,13 @@ const createCalDAVSourceProvider = (
     if (toAdd.length > EMPTY_COUNT) {
       await database.insert(eventStatesTable).values(
         toAdd.map((event) => ({
-          endTime: event.endTime,
-          sourceEventUid: event.uid,
           calendarId,
+          description: event.description,
+          endTime: event.endTime,
+          location: event.location,
+          sourceEventUid: event.uid,
           startTime: event.startTime,
+          title: event.title,
         })),
       );
     }

@@ -56,8 +56,11 @@ const parseIcsEvents = (calendar: IcsCalendar): EventTimeSlot[] => {
 
     const startTime = event.start.date;
     result.push({
+      description: event.description,
       endTime: getEventEndTime(event, startTime),
+      location: event.location,
       startTime,
+      title: event.summary,
       uid: event.uid,
     });
   }

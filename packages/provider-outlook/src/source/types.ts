@@ -28,6 +28,8 @@ interface OutlookCalendarEvent {
   id: string;
   iCalUId?: string;
   subject?: string;
+  body?: { contentType: string; content: string };
+  location?: { displayName?: string };
   start: OutlookEventDateTime;
   end: OutlookEventDateTime;
   createdDateTime?: string;
@@ -61,6 +63,9 @@ interface EventTimeSlot {
   uid: string;
   startTime: Date;
   endTime: Date;
+  title?: string;
+  description?: string;
+  location?: string;
 }
 
 export type {

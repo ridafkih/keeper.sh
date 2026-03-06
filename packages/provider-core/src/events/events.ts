@@ -38,10 +38,13 @@ const fetchEventsForCalendars = async (
       calendarName: calendarsTable.name,
       calendarType: calendarsTable.calendarType,
       calendarUrl: calendarsTable.url,
+      description: eventStatesTable.description,
       endTime: eventStatesTable.endTime,
       id: eventStatesTable.id,
+      location: eventStatesTable.location,
       sourceEventUid: eventStatesTable.sourceEventUid,
       startTime: eventStatesTable.startTime,
+      title: eventStatesTable.title,
     })
     .from(eventStatesTable)
     .innerJoin(calendarsTable, eq(eventStatesTable.calendarId, calendarsTable.id))
@@ -64,11 +67,12 @@ const fetchEventsForCalendars = async (
       calendarId: result.calendarId,
       calendarName: result.calendarName,
       calendarUrl: result.calendarUrl ?? result.calendarType,
+      description: result.description ?? undefined,
       endTime: result.endTime,
       id: result.id,
       sourceEventUid: result.sourceEventUid,
       startTime: result.startTime,
-      summary: result.calendarName ?? "Busy",
+      summary: result.title ?? result.calendarName ?? "Busy",
     });
   }
 

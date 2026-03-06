@@ -212,8 +212,11 @@ const parseGoogleEvents = (
       continue;
     }
     result.push({
+      description: event.description,
       endTime: parseEventDateTime(event.end),
+      location: event.location,
       startTime: parseEventDateTime(event.start),
+      title: event.summary,
       uid: event.iCalUID,
     });
   }

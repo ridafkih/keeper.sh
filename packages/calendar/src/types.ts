@@ -2,6 +2,9 @@ interface EventTimeSlot {
   uid: string;
   startTime: Date;
   endTime: Date;
+  title?: string;
+  description?: string;
+  location?: string;
 }
 
 type StoredEventTimeSlot = EventTimeSlot & {
