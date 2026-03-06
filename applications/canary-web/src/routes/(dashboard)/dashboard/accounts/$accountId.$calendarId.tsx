@@ -192,7 +192,7 @@ function CalendarDetailPage() {
         <>
           <div className="flex flex-col px-0.5 pt-4">
             <DashboardHeading2>Sync Settings</DashboardHeading2>
-            <Text size="sm">Choose which event details are synced to destination calendars. Use <Text size="sm" className="text-template inline">{"{{calendar_name}}"}</Text> or <Text size="sm" className="text-template inline">{"{{event_name}}"}</Text> in text fields for dynamic values.</Text>
+            <Text size="sm">Choose which event details are synced to destination calendars. Use <Text as="span" size="sm" className="text-template inline">{"{{calendar_name}}"}</Text> or <Text as="span" size="sm" className="text-template inline">{"{{event_name}}"}</Text> in text fields for dynamic values.</Text>
           </div>
           <NavigationMenu>
             <NavigationMenuEditableItem

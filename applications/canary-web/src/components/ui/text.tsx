@@ -30,6 +30,7 @@ const text = tv({
 });
 
 type TextProps = PropsWithChildren<{
+  as?: "p" | "span";
   size?: "base" | "sm" | "xs";
   tone?: "muted" | "disabled" | "inverse" | "inverseMuted" | "default" | "danger";
   align?: "center" | "left";
@@ -37,6 +38,7 @@ type TextProps = PropsWithChildren<{
   style?: CSSProperties;
 }>;
 
-export function Text({ children, size, tone, align, className, style }: TextProps) {
-  return <p className={text({ size, tone, align, className })} style={style}>{children}</p>;
+export function Text({ as = "p", children, size, tone, align, className, style }: TextProps) {
+  const Element = as;
+  return <Element className={text({ size, tone, align, className })} style={style}>{children}</Element>;
 }
