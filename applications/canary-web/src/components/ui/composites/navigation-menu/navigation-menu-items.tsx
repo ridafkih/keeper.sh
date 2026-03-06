@@ -2,7 +2,7 @@ import type { ComponentPropsWithoutRef, PropsWithChildren } from "react";
 import { use } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, Check } from "lucide-react";
-import { cn } from "tailwind-variants/lite";
+import { cn } from "../../../../utils/cn";
 import {
   InsidePopoverContext,
   ItemDisabledContext,
@@ -122,7 +122,7 @@ export function NavigationMenuItemLabel({
       size="sm"
       tone={toneMap[variant ?? "default"]}
       align="left"
-      className={cn("min-w-0 truncate", className)()}
+      className={cn("min-w-0 truncate", className)}
     >
       {children}
     </Text>
@@ -156,11 +156,11 @@ export function NavigationMenuItemTrailing({
   const variant = use(MenuVariantContext);
 
   return (
-    <div className={cn("flex grow min-w-0 items-center gap-1 justify-end", className)()}>
+    <div className={cn("flex grow min-w-0 items-center gap-1 justify-end", className)}>
       {children}
       {isLink && (
         <ArrowRight
-          className={cn("shrink-0", navigationMenuItemIconStyle({ variant }))()}
+          className={cn("shrink-0", navigationMenuItemIconStyle({ variant }))}
           size={15}
         />
       )}

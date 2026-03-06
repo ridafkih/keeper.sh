@@ -7,6 +7,7 @@ import { DashboardHeading1, DashboardHeading2 } from "../../../../components/ui/
 import { Text } from "../../../../components/ui/primitives/text";
 import { formatTime, formatTimeUntil, isEventPast, formatDayHeader } from "../../../../lib/time";
 import { useEvents, type CalendarEvent } from "../../../../hooks/use-events";
+import { cn } from "../../../../utils/cn";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/events/")({
   component: EventsPage,
@@ -140,8 +141,7 @@ const DaySection = memo(function DaySection({ label, events }: DaySectionProps) 
 }, areDaySectionPropsEqual);
 
 function resolveEventRowClassName(past: boolean): string {
-  if (past) return "flex items-center justify-between gap-2 py-1.5 line-through";
-  return "flex items-center justify-between gap-2 py-1.5";
+  return cn("flex items-center justify-between gap-2 py-1.5", past && "line-through");
 }
 
 const EventRow = memo(function EventRow({ event }: EventRowProps) {

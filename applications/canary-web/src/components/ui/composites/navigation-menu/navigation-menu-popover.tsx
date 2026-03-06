@@ -2,7 +2,7 @@ import { use, useCallback, useEffect, useRef, useState, type PropsWithChildren, 
 import { useSetAtom } from "jotai";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronsUpDown } from "lucide-react";
-import { cn } from "tailwind-variants/lite";
+import { cn } from "../../../../utils/cn";
 import { popoverOverlayAtom } from "../../../../state/popover-overlay";
 import {
   InsidePopoverContext,
@@ -103,7 +103,7 @@ export function NavigationMenuPopover({
         className={cn(
           "relative grid grid-cols-1 grid-rows-1 *:row-start-1 *:col-start-1",
           present ? "z-20" : "z-0",
-        )()}
+        )}
       >
         <ItemDisabledContext value={Boolean(disabled)}>
           <button

@@ -5,6 +5,7 @@ import {
   NavigationMenuItemIcon,
 } from "../../../components/ui/composites/navigation-menu/navigation-menu-items";
 import { Text } from "../../../components/ui/primitives/text";
+import { cn } from "../../../utils/cn";
 
 interface MetadataRowProps {
   label: string;
@@ -19,8 +20,8 @@ export function MetadataRow({ label, value, icon, truncate = false, to }: Metada
     <NavigationMenuItem to={to}>
       <Text size="sm" tone="muted" className="shrink-0">{label}</Text>
       {value && (
-        <div className={truncate ? "ml-auto min-w-0 overflow-hidden" : "ml-auto overflow-hidden"}>
-          <Text size="sm" tone="muted" className={truncate ? "truncate" : undefined}>{value}</Text>
+        <div className={cn("ml-auto overflow-hidden", truncate && "min-w-0")}>
+          <Text size="sm" tone="muted" className={cn(truncate && "truncate")}>{value}</Text>
         </div>
       )}
       {icon && <div className="ml-auto shrink-0"><NavigationMenuItemIcon>{icon}</NavigationMenuItemIcon></div>}

@@ -1,5 +1,5 @@
 import type { PropsWithChildren } from "react";
-import { cn } from "tailwind-variants/lite";
+import { cn } from "../../../utils/cn";
 
 type MarketingFeatureBentoCardProps = PropsWithChildren<{ className?: string }>;
 
@@ -20,7 +20,7 @@ export function MarketingFeatureBentoCard({
   className,
 }: MarketingFeatureBentoCardProps) {
   return (
-    <article className={cn("flex flex-col h-full bg-background", className)()}>
+    <article className={cn("flex flex-col h-full bg-background", className)}>
       {children}
     </article>
   );

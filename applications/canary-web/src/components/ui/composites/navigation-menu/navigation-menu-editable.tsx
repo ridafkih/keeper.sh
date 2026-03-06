@@ -1,6 +1,6 @@
 import { use, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Pencil } from "lucide-react";
-import { cn } from "tailwind-variants/lite";
+import { cn } from "../../../../utils/cn";
 import { ItemDisabledContext, MenuVariantContext } from "./navigation-menu.contexts";
 import {
   DISABLED_LABEL_TONE,
@@ -182,7 +182,7 @@ function EditableItemInput({
     <li className="relative z-10 rounded-xl has-focus:ring-2 has-focus:ring-ring">
       <div className={navigationMenuItemStyle({ variant, interactive: false, className })}>
         {label && <NavigationMenuItemLabel className="shrink-0">{label}</NavigationMenuItemLabel>}
-        <input {...inputProps} className={cn(inputClass(), "text-foreground-muted")()} />
+        <input {...inputProps} className={cn(inputClass, "text-foreground-muted")} />
       </div>
     </li>
   );
@@ -215,20 +215,20 @@ function EditableTemplateItemInput({
     <li className="relative z-10 rounded-xl has-focus:ring-2 has-focus:ring-ring">
       <div className={navigationMenuItemStyle({ variant, interactive: false, className })}>
         {label && <NavigationMenuItemLabel className="shrink-0">{label}</NavigationMenuItemLabel>}
-        <div className={cn(inputClass(), "grid items-center")()}>
+        <div className={cn(inputClass, "grid items-center")}>
           <input
             {...inputProps}
             onChange={(event) => setLiveValue(event.target.value)}
             className={cn(
               "col-start-1 row-start-1 w-full text-sm tracking-tight bg-transparent text-transparent caret-foreground-muted cursor-text outline-none",
               label && "text-right",
-            )()}
+            )}
           />
           <span
             className={cn(
               "col-start-1 row-start-1 pointer-events-none text-sm tracking-tight truncate whitespace-pre",
               label && "text-right",
-            )()}
+            )}
           >
             {renderInput(liveValue)}
           </span>
@@ -268,7 +268,7 @@ function EditableItemDisplay({
           <Text
             size="sm"
             tone={(disabled ? DISABLED_LABEL_TONE : LABEL_TONE)[variant ?? "default"]}
-            className={cn("min-w-0 truncate", label && "flex-1 text-right")()}
+            className={cn("min-w-0 truncate", label && "flex-1 text-right")}
           >
             {valueContent ?? value}
           </Text>
