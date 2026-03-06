@@ -1,9 +1,9 @@
-import { lazy, Suspense } from 'react'
 import { useSetAtom } from 'jotai'
 import { createFileRoute } from '@tanstack/react-router'
 import { Heading1, Heading2, Heading3 } from '../../components/ui/heading'
 import { Text } from '../../components/ui/text'
 import { ButtonIcon, ButtonText, ExternalLinkButton, LinkButton } from '../../components/ui/button'
+import { MarketingIllustrationCalendar, MarketingIllustrationCalendarCard, type Skew, type SkewTuple } from '../../components/marketing/marketing-illustration-calendar'
 import {
   MarketingFeatureBentoBody,
   MarketingFeatureBentoCard,
@@ -26,11 +26,6 @@ import {
 } from '../../components/marketing/marketing-pricing-section'
 import { calendarEmphasizedAtom } from '../../state/calendar-emphasized'
 import { ArrowRightIcon, ArrowUpRightIcon } from 'lucide-react'
-import type { Skew, SkewTuple } from '../../components/marketing/marketing-illustration-calendar'
-
-const illustrationModule = import('../../components/marketing/marketing-illustration-calendar')
-const LazyIllustrationCalendar = lazy(() => illustrationModule.then(mod => ({ default: mod.MarketingIllustrationCalendar })))
-const LazyIllustrationCalendarCard = lazy(() => illustrationModule.then(mod => ({ default: mod.MarketingIllustrationCalendarCard })))
 
 const createSkew = (rotate: number, x: number, y: number): Skew => ({ rotate, x, y });
 
@@ -178,13 +173,11 @@ function MarketingPage() {
       </div>
       <div className="contents *:z-10">
         <div className="flex flex-col">
-          <Suspense>
-            <LazyIllustrationCalendar>
-              <LazyIllustrationCalendarCard skew={SKEW_BACK_LEFT} />
-              <LazyIllustrationCalendarCard skew={SKEW_BACK_RIGHT} />
-              <LazyIllustrationCalendarCard skew={SKEW_FRONT} />
-            </LazyIllustrationCalendar>
-          </Suspense>
+          <MarketingIllustrationCalendar>
+            <MarketingIllustrationCalendarCard skew={SKEW_BACK_LEFT} />
+            <MarketingIllustrationCalendarCard skew={SKEW_BACK_RIGHT} />
+            <MarketingIllustrationCalendarCard skew={SKEW_FRONT} />
+          </MarketingIllustrationCalendar>
           <MarketingFeatureBentoSection>
             <MarketingFeatureBentoGrid>
               {MARKETING_FEATURES.map((feature) => (
