@@ -1,14 +1,15 @@
 import { use, useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR, { preload, useSWRConfig } from "swr";
 import CheckIcon from "lucide-react/dist/esm/icons/check";
 import { useAtomValue, useStore } from "jotai";
 import { BackButton } from "../../../../components/ui/primitives/back-button";
+import { Pagination, PaginationPrevious, PaginationNext } from "../../../../components/ui/primitives/pagination";
 import { RouteShell } from "../../../../components/ui/shells/route-shell";
 import { MetadataRow } from "../../../../features/dashboard/components/metadata-row";
 import { ProviderIcon } from "../../../../components/ui/primitives/provider-icon";
 import { DashboardHeading1, DashboardSection } from "../../../../components/ui/primitives/dashboard-heading";
-import { apiFetch } from "../../../../lib/fetcher";
+import { apiFetch, fetcher } from "../../../../lib/fetcher";
 import { formatDate } from "../../../../lib/time";
 import { getAccountLabel } from "../../../../utils/accounts";
 import { canPull, canPush } from "../../../../utils/calendars";
@@ -109,9 +110,10 @@ function CalendarDetailSeed({ calendarId }: { calendarId: string }) {
   const { data, error } = useSWR<CalendarDetail>(`/api/sources/${calendarId}`);
   const store = useStore();
 
-  if (data && !store.get(calendarDetailLoadedAtom)) {
+  if (data && store.get(calendarDetailLoadedAtom) !== calendarId) {
     store.set(calendarDetailAtom, data);
-    store.set(calendarDetailLoadedAtom, true);
+    store.set(calendarDetailLoadedAtom, calendarId);
+    store.set(destinationIdsAtom, new Set<string>());
   }
 
   if (error && !store.get(calendarDetailErrorAtom)) {
@@ -129,7 +131,7 @@ function CalendarDetailPage() {
   const calendarError = useAtomValue(calendarDetailErrorAtom);
   const store = useStore();
 
-  const isLoading = accountLoading || !calendarLoaded;
+  const isLoading = accountLoading || calendarLoaded !== calendarId;
   const error = accountError || calendarError;
 
   if (error || isLoading || !account) {
@@ -148,7 +150,10 @@ function CalendarDetailPage() {
   return (
     <div className="flex flex-col gap-1.5">
       <CalendarDetailSeed calendarId={calendarId} />
-      <BackButton fallback={`/dashboard/accounts/${accountId}`} />
+      <div className="flex items-center justify-between">
+        <BackButton fallback={`/dashboard/accounts/${accountId}`} />
+        <CalendarPrevNext calendarId={calendarId} />
+      </div>
       <CalendarHeader account={account} />
       <RenameSection calendarId={calendarId} />
       {isPullCapable && (
@@ -164,6 +169,30 @@ function CalendarDetailPage() {
       {isPullCapable && <ExclusionsSection calendarId={calendarId} provider={calendar.provider} />}
       <CalendarInfoSection account={account} accountId={accountId} />
     </div>
+  );
+}
+
+function CalendarPrevNext({ calendarId }: { calendarId: string }) {
+  const { data: allCalendars } = useSWR<CalendarSource[]>("/api/sources");
+  const calendars = allCalendars ?? [];
+
+  const currentIndex = calendars.findIndex((c) => c.id === calendarId);
+  const prev = currentIndex > 0 ? calendars[currentIndex - 1] : null;
+  const next = currentIndex < calendars.length - 1 ? calendars[currentIndex + 1] : null;
+
+  const toCalendar = (c: CalendarSource) => `/dashboard/accounts/${c.accountId}/${c.id}`;
+
+  return (
+    <Pagination>
+      <PaginationPrevious
+        to={prev ? toCalendar(prev) : undefined}
+        onMouseEnter={prev ? () => preload(`/api/sources/${prev.id}`, fetcher) : undefined}
+      />
+      <PaginationNext
+        to={next ? toCalendar(next) : undefined}
+        onMouseEnter={next ? () => preload(`/api/sources/${next.id}`, fetcher) : undefined}
+      />
+    </Pagination>
   );
 }
 

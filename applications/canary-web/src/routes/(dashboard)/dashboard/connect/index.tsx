@@ -73,13 +73,6 @@ function ConnectPage() {
           <NavigationMenuItemLabel>Subscribe to ICS Calendar Feed</NavigationMenuItemLabel>
           <NavigationMenuItemTrailing />
         </NavigationMenuLinkItem>
-        <NavigationMenuLinkItem to="/dashboard/connect/ics-file">
-          <NavigationMenuItemIcon>
-            <Upload size={15} />
-          </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>ICS Snapshot Upload (Coming Soon)</NavigationMenuItemLabel>
-          <NavigationMenuItemTrailing />
-        </NavigationMenuLinkItem>
       </NavigationMenu>
     </div>
   );

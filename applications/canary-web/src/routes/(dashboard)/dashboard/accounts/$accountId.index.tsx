@@ -1,8 +1,9 @@
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR, { preload, useSWRConfig } from "swr";
 import Calendar from "lucide-react/dist/esm/icons/calendar";
 import { BackButton } from "../../../../components/ui/primitives/back-button";
+import { Pagination, PaginationPrevious, PaginationNext } from "../../../../components/ui/primitives/pagination";
 import { RouteShell } from "../../../../components/ui/shells/route-shell";
 import { Text } from "../../../../components/ui/primitives/text";
 import { MetadataRow } from "../../../../features/dashboard/components/metadata-row";
@@ -95,7 +96,10 @@ function AccountDetailPage() {
 
   return (
     <div className="flex flex-col gap-1.5">
-      <BackButton />
+      <div className="flex items-center justify-between">
+        <BackButton />
+        <AccountPrevNext accountId={accountId} />
+      </div>
       <DashboardSection
         title="Account Information"
         description="View details about the account and its calendars."
@@ -130,5 +134,26 @@ function AccountDetailPage() {
         onConfirm={handleConfirmDelete}
       />
     </div>
+  );
+}
+
+function AccountPrevNext({ accountId }: { accountId: string }) {
+  const { data: accounts } = useSWR<CalendarAccount[]>("/api/accounts");
+
+  const currentIndex = useMemo(
+    () => (accounts ?? []).findIndex((a) => a.id === accountId),
+    [accounts, accountId],
+  );
+
+  if (!accounts || accounts.length <= 1) return null;
+
+  const prev = currentIndex > 0 ? accounts[currentIndex - 1] : null;
+  const next = currentIndex < accounts.length - 1 ? accounts[currentIndex + 1] : null;
+
+  return (
+    <Pagination>
+      <PaginationPrevious to={prev ? `/dashboard/accounts/${prev.id}` : undefined} />
+      <PaginationNext to={next ? `/dashboard/accounts/${next.id}` : undefined} />
+    </Pagination>
   );
 }
