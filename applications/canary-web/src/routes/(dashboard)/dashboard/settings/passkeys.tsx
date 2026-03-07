@@ -35,14 +35,12 @@ function PasskeysPage() {
   const { data: passkeys = [], error, mutate } = usePasskeys();
   const [deleteTarget, setDeleteTarget] = useState<Passkey | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
-  const [isMutating, setIsMutating] = useState(false);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
     const targetId = deleteTarget.id;
     setDeleteTarget(null);
     setMutationError(null);
-    setIsMutating(true);
     try {
       await mutate(
         async (current) => {
@@ -57,21 +55,6 @@ function PasskeysPage() {
       );
     } catch (err) {
       setMutationError(resolveErrorMessage(err, "Failed to delete passkey."));
-    } finally {
-      setIsMutating(false);
-    }
-  };
-
-  const handleAdd = async () => {
-    setMutationError(null);
-    setIsMutating(true);
-    try {
-      await addPasskey();
-      await mutate();
-    } catch (err) {
-      setMutationError(resolveErrorMessage(err, "Failed to add passkey."));
-    } finally {
-      setIsMutating(false);
     }
   };
 
@@ -92,12 +75,7 @@ function PasskeysPage() {
             </NavigationMenuItemTrailing>
           </NavigationMenuButtonItem>
         ))}
-        <NavigationMenuButtonItem onClick={isMutating ? undefined : handleAdd} disabled={isMutating}>
-          <NavigationMenuItemIcon>
-            <Plus size={15} />
-          </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>{isMutating ? "Working..." : "Add Passkey"}</NavigationMenuItemLabel>
-        </NavigationMenuButtonItem>
+        <AddPasskeyButton mutate={mutate} onError={setMutationError} />
       </NavigationMenu>
       <Modal open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <ModalContent>
@@ -116,5 +94,37 @@ function PasskeysPage() {
         </ModalContent>
       </Modal>
     </div>
+  );
+}
+
+function AddPasskeyButton({
+  mutate,
+  onError,
+}: {
+  mutate: ReturnType<typeof usePasskeys>["mutate"];
+  onError: (error: string | null) => void;
+}) {
+  const [isMutating, setIsMutating] = useState(false);
+
+  const handleAdd = async () => {
+    onError(null);
+    setIsMutating(true);
+    try {
+      await addPasskey();
+      await mutate();
+    } catch (err) {
+      onError(resolveErrorMessage(err, "Failed to add passkey."));
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  return (
+    <NavigationMenuButtonItem onClick={isMutating ? undefined : handleAdd} disabled={isMutating}>
+      <NavigationMenuItemIcon>
+        <Plus size={15} />
+      </NavigationMenuItemIcon>
+      <NavigationMenuItemLabel>{isMutating ? "Working..." : "Add Passkey"}</NavigationMenuItemLabel>
+    </NavigationMenuButtonItem>
   );
 }

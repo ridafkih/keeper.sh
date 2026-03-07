@@ -32,7 +32,8 @@ type MappingRoute = "destinations" | "sources";
 type MappingResponseKey = "destinationIds" | "sourceIds";
 
 function isValidStep(value: unknown): value is SetupStep {
-  return typeof value === "string" && VALID_STEPS.includes(value as SetupStep);
+  const validSteps: readonly string[] = VALID_STEPS;
+  return typeof value === "string" && validSteps.includes(value);
 }
 
 function parseSearchIndex(value: unknown): number | undefined {

@@ -12,8 +12,6 @@ import { user } from "./auth-schema";
 
 const DEFAULT_EVENT_COUNT = 0;
 
-// --- Unified credential tables ---
-
 const oauthCredentialsTable = pgTable(
   "oauth_credentials",
   {
@@ -51,8 +49,6 @@ const caldavCredentialsTable = pgTable("caldav_credentials", {
   username: text().notNull(),
 });
 
-// --- Calendar accounts (linked account concept) ---
-
 const calendarAccountsTable = pgTable(
   "calendar_accounts",
   {
@@ -83,8 +79,6 @@ const calendarAccountsTable = pgTable(
     index("calendar_accounts_provider_idx").on(table.provider),
   ],
 );
-
-// --- Unified calendars table (replaces calendar_sources + calendar_destinations) ---
 
 const calendarsTable = pgTable(
   "calendars",
@@ -126,8 +120,6 @@ const calendarsTable = pgTable(
   ],
 );
 
-// --- Snapshots ---
-
 const calendarSnapshotsTable = pgTable("calendar_snapshots", {
   calendarId: uuid()
     .notNull()
@@ -138,8 +130,6 @@ const calendarSnapshotsTable = pgTable("calendar_snapshots", {
   id: uuid().notNull().primaryKey().defaultRandom(),
   public: boolean().notNull().default(false),
 });
-
-// --- Event states ---
 
 const eventStatesTable = pgTable(
   "event_states",
@@ -168,8 +158,6 @@ const eventStatesTable = pgTable(
   ],
 );
 
-// --- User subscriptions ---
-
 const userSubscriptionsTable = pgTable("user_subscriptions", {
   plan: text().notNull().default("free"),
   polarSubscriptionId: text(),
@@ -182,8 +170,6 @@ const userSubscriptionsTable = pgTable("user_subscriptions", {
     .primaryKey()
     .references(() => user.id, { onDelete: "cascade" }),
 });
-
-// --- Sync status ---
 
 const syncStatusTable = pgTable(
   "sync_status",
@@ -202,8 +188,6 @@ const syncStatusTable = pgTable(
   },
   (table) => [uniqueIndex("sync_status_calendar_idx").on(table.calendarId)],
 );
-
-// --- Event mappings ---
 
 const eventMappingsTable = pgTable(
   "event_mappings",
@@ -227,8 +211,6 @@ const eventMappingsTable = pgTable(
   ],
 );
 
-// --- Source-destination calendar mappings ---
-
 const sourceDestinationMappingsTable = pgTable(
   "source_destination_mappings",
   {
@@ -250,8 +232,6 @@ const sourceDestinationMappingsTable = pgTable(
     index("source_destination_mappings_destination_idx").on(table.destinationCalendarId),
   ],
 );
-
-// --- iCal feed settings ---
 
 const icalFeedSettingsTable = pgTable("ical_feed_settings", {
   userId: text()

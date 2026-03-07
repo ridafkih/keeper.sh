@@ -1,4 +1,4 @@
-import { use, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { use, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PropsWithChildren, type ReactNode } from "react";
 import Pencil from "lucide-react/dist/esm/icons/pencil";
 import { cn } from "../../../../utils/cn";
 import { ItemDisabledContext, MenuVariantContext } from "./navigation-menu.contexts";
@@ -12,22 +12,26 @@ import { NavigationMenuItemLabel } from "./navigation-menu-items";
 import { Text } from "../../primitives/text";
 
 type NavigationMenuEditableItemProps = {
-  value: string;
   onCommit: (value: string) => Promise<void> | void;
   label?: string;
+  children?: ReactNode;
   defaultEditing?: boolean;
   disabled?: boolean;
   className?: string;
-};
+} & ({ value: string } | { getValue: () => string });
 
-export function NavigationMenuEditableItem({
-  value,
-  onCommit,
-  label,
-  defaultEditing,
-  disabled,
-  className,
-}: NavigationMenuEditableItemProps) {
+export function NavigationMenuEditableItem(props: NavigationMenuEditableItemProps) {
+  const {
+    onCommit,
+    label,
+    children,
+    defaultEditing,
+    disabled,
+    className,
+  } = props;
+
+  const resolveValue = () => "getValue" in props ? props.getValue() : props.value;
+
   const [editing, setEditing] = useState(defaultEditing ?? false);
 
   const startEditing = () => setEditing(true);
@@ -36,7 +40,7 @@ export function NavigationMenuEditableItem({
   if (editing) {
     return (
       <EditableItemInput
-        value={value}
+        value={resolveValue()}
         label={label}
         className={className}
         onCommit={async (trimmed) => {
@@ -50,18 +54,26 @@ export function NavigationMenuEditableItem({
 
   return (
     <EditableItemDisplay
-      value={value}
       label={label}
       disabled={disabled}
       className={className}
       onStartEditing={startEditing}
-    />
+    >
+      {children ?? <EditableItemDefaultValue value={resolveValue()} label={label} />}
+    </EditableItemDisplay>
   );
 }
 
-type NavigationMenuEditableTemplateItemProps = NavigationMenuEditableItemProps & {
-  valueContent: ReactNode;
+type NavigationMenuEditableTemplateItemProps = {
+  value: string;
+  onCommit: (value: string) => Promise<void> | void;
+  label?: string;
+  valueContent?: ReactNode;
+  children?: ReactNode;
   renderInput: (value: string) => ReactNode;
+  defaultEditing?: boolean;
+  disabled?: boolean;
+  className?: string;
 };
 
 export function NavigationMenuEditableTemplateItem({
@@ -69,6 +81,7 @@ export function NavigationMenuEditableTemplateItem({
   onCommit,
   label,
   valueContent,
+  children,
   renderInput,
   defaultEditing,
   disabled,
@@ -97,14 +110,18 @@ export function NavigationMenuEditableTemplateItem({
 
   return (
     <EditableItemDisplay
-      value={value}
       label={label}
-      valueContent={valueContent}
       disabled={disabled}
       className={className}
       onStartEditing={startEditing}
-    />
+    >
+      {children ?? <EditableItemDefaultValue value={valueContent ?? value} label={label} />}
+    </EditableItemDisplay>
   );
+}
+
+export function NavigationMenuEditableDisabledProvider({ disabled, children }: PropsWithChildren<{ disabled: boolean }>) {
+  return <ItemDisabledContext value={disabled}>{children}</ItemDisabledContext>;
 }
 
 function useEditableCommit(
@@ -238,26 +255,41 @@ function EditableTemplateItemInput({
   );
 }
 
+function EditableItemDefaultValue({ value, label }: { value: ReactNode; label?: string }) {
+  const variant = use(MenuVariantContext);
+  const disabled = use(ItemDisabledContext);
+
+  return (
+    <Text
+      size="sm"
+      tone={(disabled ? DISABLED_LABEL_TONE : LABEL_TONE)[variant ?? "default"]}
+      className={cn("min-w-0 truncate", label && "flex-1 text-right")}
+    >
+      {value}
+    </Text>
+  );
+}
+
 function EditableItemDisplay({
-  value,
   label,
-  valueContent,
-  disabled,
+  children,
+  disabled: disabledProp,
   className,
   onStartEditing,
 }: {
-  value: string;
   label?: string;
-  valueContent?: ReactNode;
+  children?: ReactNode;
   disabled?: boolean;
   className?: string;
   onStartEditing: () => void;
 }) {
   const variant = use(MenuVariantContext);
+  const disabledFromContext = use(ItemDisabledContext);
+  const disabled = disabledProp ?? disabledFromContext;
 
   return (
     <li>
-      <ItemDisabledContext value={Boolean(disabled)}>
+      <ItemDisabledContext value={disabled}>
         <button
           type="button"
           onClick={() => !disabled && onStartEditing()}
@@ -265,13 +297,7 @@ function EditableItemDisplay({
           className={navigationMenuItemStyle({ variant, interactive: !disabled, className })}
         >
           {label && <NavigationMenuItemLabel className="shrink-0">{label}</NavigationMenuItemLabel>}
-          <Text
-            size="sm"
-            tone={(disabled ? DISABLED_LABEL_TONE : LABEL_TONE)[variant ?? "default"]}
-            className={cn("min-w-0 truncate", label && "flex-1 text-right")}
-          >
-            {valueContent ?? value}
-          </Text>
+          {children}
           <Pencil
             size={14}
             className={navigationMenuItemIconStyle({
