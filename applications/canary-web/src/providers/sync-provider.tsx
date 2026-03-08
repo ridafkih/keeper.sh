@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useSetAtom } from "jotai";
 import { socketMessageSchema, syncAggregateSchema } from "@keeper.sh/data-schemas";
-import { syncStateAtom, type CompositeSyncState } from "../state/sync";
+import { syncStateAtom, type CompositeSyncState, type SyncAggregateData } from "../state/sync";
 
 interface ConnectionState {
   socket: WebSocket | null;
@@ -25,6 +25,7 @@ const INITIAL_SYNC_STATE: CompositeSyncState = {
   syncEventsRemaining: 0,
   syncEventsTotal: 0,
   state: "idle",
+  hasReceivedAggregate: false,
 };
 
 const getWebSocketProtocol = (): string =>
@@ -69,6 +70,48 @@ const setConnected = (
   });
 };
 
+const parseTimestampMs = (value: string | null | undefined): number | null => {
+  if (!value) {
+    return null;
+  }
+
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+};
+
+const isForwardProgress = (
+  current: CompositeSyncState,
+  next: SyncAggregateData,
+): boolean => {
+  const currentLastSyncedAtMs = parseTimestampMs(current.lastSyncedAt);
+  const nextLastSyncedAtMs = parseTimestampMs(next.lastSyncedAt);
+
+  if (
+    nextLastSyncedAtMs !== null &&
+    (currentLastSyncedAtMs === null || nextLastSyncedAtMs > currentLastSyncedAtMs)
+  ) {
+    return true;
+  }
+
+  if (next.syncEventsProcessed > current.syncEventsProcessed) {
+    return true;
+  }
+
+  if (next.syncEventsRemaining < current.syncEventsRemaining) {
+    return true;
+  }
+
+  if (next.progressPercent > current.progressPercent) {
+    return true;
+  }
+
+  if (current.state === "syncing" && !next.syncing && next.syncEventsRemaining === 0) {
+    return true;
+  }
+
+  return false;
+};
+
 const handleMessage = (
   connectionState: ConnectionState,
   setSyncState: (state: CompositeSyncState) => void,
@@ -96,14 +139,16 @@ const handleMessage = (
     return;
   }
 
-  if (parsed.data.seq <= connectionState.lastSeq) {
+  const isNewerSequence = parsed.data.seq > connectionState.lastSeq;
+  if (!isNewerSequence && !isForwardProgress(connectionState.currentState, parsed.data)) {
     return;
   }
 
-  connectionState.lastSeq = parsed.data.seq;
+  connectionState.lastSeq = Math.max(connectionState.lastSeq, parsed.data.seq);
 
   applyState(connectionState, setSyncState, {
     connected: true,
+    hasReceivedAggregate: true,
     lastSyncedAt: parsed.data.lastSyncedAt ?? null,
     progressPercent: parsed.data.progressPercent,
     seq: parsed.data.seq,

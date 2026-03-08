@@ -22,6 +22,7 @@ export interface CompositeSyncState {
   syncEventsTotal: number;
   lastSyncedAt: string | null;
   connected: boolean;
+  hasReceivedAggregate: boolean;
 }
 
 export const syncStateAtom = atom<CompositeSyncState>({
@@ -33,10 +34,15 @@ export const syncStateAtom = atom<CompositeSyncState>({
   syncEventsTotal: 0,
   lastSyncedAt: null,
   connected: false,
+  hasReceivedAggregate: false,
 });
 
 export const syncStatusLabelAtom = selectAtom(syncStateAtom, (composite) => {
   if (!composite.connected) {
+    return "Connecting";
+  }
+
+  if (!composite.hasReceivedAggregate) {
     return "Connecting";
   }
 
@@ -53,5 +59,6 @@ export const syncStatusLabelAtom = selectAtom(syncStateAtom, (composite) => {
 
 export const syncStatusShimmerAtom = selectAtom(
   syncStateAtom,
-  (composite) => !composite.connected || composite.state === "syncing",
+  (composite) =>
+    !composite.connected || !composite.hasReceivedAggregate || composite.state === "syncing",
 );

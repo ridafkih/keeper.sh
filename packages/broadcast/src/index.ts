@@ -158,6 +158,9 @@ const createWebsocketHandler = (
       emitWebSocketEvent(userId, "websocket:open");
     } catch (error) {
       emitWebSocketEvent(userId, "websocket:open", error);
+      try {
+        socket.close();
+      } catch {}
     }
   },
 });
