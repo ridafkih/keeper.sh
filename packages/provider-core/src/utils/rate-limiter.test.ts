@@ -1,7 +1,30 @@
-import { describe, expect, it } from "bun:test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from "bun:test";
 import { RateLimiter } from "./rate-limiter";
 
 const sleep = (milliseconds: number): Promise<void> => Bun.sleep(milliseconds);
+const resolveValue = <TValue>(value: TValue): Promise<TValue> => {
+  const { promise, resolve } = Promise.withResolvers<TValue>();
+  resolve(value);
+  return promise;
+};
+const flushMicrotasks = async (): Promise<void> => {
+  await Promise.resolve();
+  await Promise.resolve();
+};
+const readNumericField = (target: object, fieldName: string): number => {
+  const value = Reflect.get(target, fieldName);
+  if (typeof value !== "number") {
+    throw new TypeError(`Expected '${fieldName}' to be numeric`);
+  }
+  return value;
+};
 
 describe("RateLimiter", () => {
   describe("execute", () => {
@@ -73,6 +96,15 @@ describe("RateLimiter", () => {
   });
 
   describe("reportRateLimit", () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date("2025-01-01T00:00:00.000Z"));
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
     it("delays subsequent requests after a rate limit is reported", async () => {
       const limiter = new RateLimiter({ concurrency: 1 });
 
@@ -80,11 +112,23 @@ describe("RateLimiter", () => {
 
       limiter.reportRateLimit();
 
-      const start = Date.now();
-      await limiter.execute(() => Promise.resolve("second"));
-      const elapsed = Date.now() - start;
+      let didComplete = false;
+      const secondOperation = limiter.execute(() => resolveValue("second"));
+      const trackedSecondOperation = secondOperation.then((result) => {
+        didComplete = true;
+        return result;
+      });
 
-      expect(elapsed).toBeGreaterThanOrEqual(900);
+      await flushMicrotasks();
+      expect(didComplete).toBe(false);
+
+      jest.advanceTimersByTime(999);
+      await flushMicrotasks();
+      expect(didComplete).toBe(false);
+
+      jest.advanceTimersByTime(1);
+      await trackedSecondOperation;
+      expect(didComplete).toBe(true);
     });
 
     it("resets backoff after a successful operation", async () => {
@@ -93,13 +137,20 @@ describe("RateLimiter", () => {
       await limiter.execute(() => Promise.resolve("warmup"));
       limiter.reportRateLimit();
 
-      await limiter.execute(() => Promise.resolve("after-backoff"));
+      const backoffOperation = limiter.execute(() => Promise.resolve("after-backoff"));
+      jest.advanceTimersByTime(1000);
+      await backoffOperation;
 
-      const start = Date.now();
-      await limiter.execute(() => Promise.resolve("should-be-fast"));
-      const elapsed = Date.now() - start;
+      let didComplete = false;
+      const fastOperation = limiter.execute(() => resolveValue("should-be-fast"));
+      const trackedFastOperation = fastOperation.then((result) => {
+        didComplete = true;
+        return result;
+      });
 
-      expect(elapsed).toBeLessThan(100);
+      await flushMicrotasks();
+      expect(didComplete).toBe(true);
+      await trackedFastOperation;
     });
 
     it("doubles backoff on consecutive rate limits up to the maximum", async () => {
@@ -107,14 +158,15 @@ describe("RateLimiter", () => {
 
       await limiter.execute(() => Promise.resolve("warmup"));
 
+      const firstTimestamp = Date.now();
       limiter.reportRateLimit();
+      expect(readNumericField(limiter, "backoffUntil") - firstTimestamp).toBe(1000);
+      expect(readNumericField(limiter, "backoffMs")).toBe(2000);
+
+      const secondTimestamp = Date.now();
       limiter.reportRateLimit();
-
-      const start = Date.now();
-      await limiter.execute(() => Promise.resolve("after-double-backoff"));
-      const elapsed = Date.now() - start;
-
-      expect(elapsed).toBeGreaterThanOrEqual(1900);
+      expect(readNumericField(limiter, "backoffUntil") - secondTimestamp).toBe(2000);
+      expect(readNumericField(limiter, "backoffMs")).toBe(4000);
     });
   });
 });

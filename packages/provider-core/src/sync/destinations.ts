@@ -19,7 +19,9 @@ const syncDestinationsForUser = async (
   const context = await syncCoordinator.startSync(userId);
 
   const settledResults = await Promise.allSettled(
-    providers.map((provider) => provider.syncForUser(userId, context)),
+    providers.map((provider) =>
+      Promise.resolve().then(() => provider.syncForUser(userId, context)),
+    ),
   );
 
   await syncCoordinator.isSyncCurrent(context);

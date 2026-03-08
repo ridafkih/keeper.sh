@@ -62,4 +62,34 @@ describe("getAllJobs", () => {
       "is missing a default cron export",
     );
   });
+
+  it("ignores test, spec, and declaration files during runtime discovery", async () => {
+    const workspaceRoot = await createTempWorkspace();
+
+    await writeFile(
+      join(workspaceRoot, "valid.ts"),
+      `export default { name: "valid-job", cron: "* * * * *", callback: async () => {} };`,
+      "utf8",
+    );
+    await writeFile(
+      join(workspaceRoot, "reconcile-subscriptions.test.ts"),
+      `import { describe } from "bun:test"; describe("ignored", () => {});`,
+      "utf8",
+    );
+    await writeFile(
+      join(workspaceRoot, "reconcile-subscriptions.spec.ts"),
+      `throw new Error("should not import spec files");`,
+      "utf8",
+    );
+    await writeFile(
+      join(workspaceRoot, "types.d.ts"),
+      `declare const value: string;`,
+      "utf8",
+    );
+
+    const jobs = await getAllJobs(workspaceRoot);
+    const names = jobs.map((job) => job.name).toSorted();
+
+    expect(names).toEqual(["valid-job"]);
+  });
 });

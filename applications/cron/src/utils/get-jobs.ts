@@ -1,6 +1,6 @@
 import type { CronOptions } from "cronbake";
 import { Glob } from "bun";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -41,10 +41,20 @@ const normalizeJobExport = (value: unknown, entrypoint: string): CronOptions[] =
   throw createInvalidCronExportError(entrypoint);
 };
 
+const isRuntimeJobEntrypoint = (entrypoint: string): boolean => {
+  const fileName = basename(entrypoint);
+  return !fileName.endsWith(".test.ts")
+    && !fileName.endsWith(".test.js")
+    && !fileName.endsWith(".spec.ts")
+    && !fileName.endsWith(".spec.js")
+    && !fileName.endsWith(".d.ts");
+};
+
 export const getAllJobs = async (rootDirectory: string): Promise<CronOptions[]> => {
   const globPattern = join(rootDirectory, "**/*.{ts,js}");
   const globScanner = new Glob(globPattern);
-  const entrypoints = await Array.fromAsync(globScanner.scan());
+  const allEntrypoints = await Array.fromAsync(globScanner.scan());
+  const entrypoints = allEntrypoints.filter((entrypoint) => isRuntimeJobEntrypoint(entrypoint));
 
   const imports = entrypoints.map(async (entrypoint): Promise<{ entrypoint: string; defaultExport: unknown }> => {
     const module = await import(entrypoint);
