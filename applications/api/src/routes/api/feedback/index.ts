@@ -6,10 +6,10 @@ import { withAuth, withWideEvent } from "../../../utils/middleware";
 import { ErrorResponse } from "../../../utils/responses";
 import { database, resend, feedbackEmail } from "../../../context";
 
-const FEEDBACK_LABEL: Record<string, string> = {
-  feedback: "Feedback",
-  report: "Problem Report",
-};
+const TEMPLATE_ID = {
+  feedback: "user-feedback",
+  report: "problem-report",
+} as const;
 
 const POST = withWideEvent(
   withAuth(async ({ request, userId }) => {
@@ -25,30 +25,34 @@ const POST = withWideEvent(
         wantsFollowUp: wantsFollowUp ?? false,
       });
 
-      if (resend && feedbackEmail) {
-        const [user] = await database
-          .select({ email: userTable.email })
-          .from(userTable)
-          .where(eq(userTable.id, userId))
-          .limit(1);
-
-        const label = FEEDBACK_LABEL[type] ?? "Feedback";
-        const replyTo = user?.email ?? undefined;
-
-        await resend.emails.send({
-          from: "Keeper <noreply@keeper.sh>",
-          to: feedbackEmail,
-          subject: `[${label}] from ${replyTo ?? "unknown user"}`,
-          text: [
-            `Type: ${label}`,
-            `User: ${replyTo ?? userId}`,
-            `Wants follow-up: ${wantsFollowUp ? "Yes" : "No"}`,
-            "",
-            message,
-          ].join("\n"),
-          ...(replyTo && { replyTo }),
-        });
+      if (!resend || !feedbackEmail) {
+        return ErrorResponse.internal("Feedback service is not configured.").toResponse();
       }
+
+      const [user] = await database
+        .select({ email: userTable.email })
+        .from(userTable)
+        .where(eq(userTable.id, userId))
+        .limit(1);
+
+      if (!user?.email) {
+        return ErrorResponse.badRequest("User email not found.").toResponse();
+      }
+
+      const templateId = TEMPLATE_ID[type];
+
+      await resend.emails.send({
+        template: {
+          id: templateId,
+          variables: {
+            message,
+            userEmail: user.email,
+            wantsFollowUp: wantsFollowUp ? "Yes" : "No",
+          },
+        },
+        to: feedbackEmail,
+        replyTo: user.email,
+      });
 
       return Response.json({ success: true });
     } catch {

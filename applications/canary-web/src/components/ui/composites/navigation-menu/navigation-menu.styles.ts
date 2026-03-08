@@ -96,6 +96,41 @@ export const navigationMenuToggleThumb = tv({
   },
 });
 
+export const navigationMenuCheckbox = tv({
+  base: "size-4 rounded shrink-0 flex items-center justify-center border",
+  variants: {
+    variant: {
+      default: "border-interactive-border",
+      highlight: "border-foreground-inverse-muted",
+    },
+    checked: {
+      true: "",
+      false: "",
+    },
+  },
+  compoundVariants: [
+    { variant: "default", checked: true, className: "bg-foreground border-foreground" },
+    { variant: "highlight", checked: true, className: "bg-foreground-inverse border-foreground-inverse" },
+  ],
+  defaultVariants: {
+    variant: "default",
+    checked: false,
+  },
+});
+
+export const navigationMenuCheckboxIcon = tv({
+  base: "shrink-0",
+  variants: {
+    variant: {
+      default: "text-foreground-inverse",
+      highlight: "text-foreground",
+    },
+  },
+  defaultVariants: {
+    variant: "default",
+  },
+});
+
 export const LABEL_TONE: Record<NonNullable<MenuVariant>, "muted" | "inverse"> = {
   default: "muted",
   highlight: "inverse",
