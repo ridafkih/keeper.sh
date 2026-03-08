@@ -1,5 +1,4 @@
 import {
-  calendarAccountsTable,
   calendarsTable,
   calendarSnapshotsTable,
   eventMappingsTable,
@@ -15,6 +14,24 @@ const FIRST_SNAPSHOT_INDEX = 1;
 const MINIMUM_EVENTS_TO_PROCESS = 0;
 
 type Source = typeof calendarsTable.$inferSelect;
+type StoredEventRow = {
+  endTime: Date;
+  exceptionDates: string | null;
+  id: string;
+  recurrenceRule: string | null;
+  startTime: Date;
+  startTimeZone: string | null;
+  uid: string | null;
+};
+type StoredEvent = Omit<
+  StoredEventRow,
+  "exceptionDates" | "recurrenceRule" | "startTimeZone"
+> & {
+  exceptionDates?: object;
+  recurrenceRule?: object;
+  startTimeZone?: string;
+};
+type StoredEventWithUid = StoredEvent & { uid: string };
 
 const getLatestSnapshot = async (
   database: BunSQLDatabase,
@@ -33,26 +50,66 @@ const getLatestSnapshot = async (
   return parseIcsCalendar({ icsString: snapshot.ical });
 };
 
-const getStoredEvents = (
+const parseOptionalJson = (value: string | null): object | undefined => {
+  if (value === null) {
+    return undefined;
+  }
+
+  try {
+    const parsedValue = JSON.parse(value);
+    if (parsedValue !== null && typeof parsedValue === "object") {
+      return parsedValue;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const toStoredEvent = (row: StoredEventRow): StoredEvent => {
+  const storedEvent: StoredEvent = {
+    endTime: row.endTime,
+    id: row.id,
+    startTime: row.startTime,
+    uid: row.uid,
+  };
+
+  if (row.startTimeZone !== null) {
+    storedEvent.startTimeZone = row.startTimeZone;
+  }
+
+  const recurrenceRule = parseOptionalJson(row.recurrenceRule);
+  if (recurrenceRule !== undefined) {
+    storedEvent.recurrenceRule = recurrenceRule;
+  }
+
+  const exceptionDates = parseOptionalJson(row.exceptionDates);
+  if (exceptionDates !== undefined) {
+    storedEvent.exceptionDates = exceptionDates;
+  }
+
+  return storedEvent;
+};
+
+const getStoredEvents = async (
   database: BunSQLDatabase,
   calendarId: string,
-): Promise<
-  {
-    endTime: Date;
-    id: string;
-    startTime: Date;
-    uid: string | null;
-  }[]
-> =>
-  database
+): Promise<StoredEvent[]> => {
+  const rows = await database
     .select({
       endTime: eventStatesTable.endTime,
+      exceptionDates: eventStatesTable.exceptionDates,
       id: eventStatesTable.id,
+      recurrenceRule: eventStatesTable.recurrenceRule,
       startTime: eventStatesTable.startTime,
+      startTimeZone: eventStatesTable.startTimeZone,
       uid: eventStatesTable.sourceEventUid,
     })
     .from(eventStatesTable)
     .where(eq(eventStatesTable.calendarId, calendarId));
+
+  return rows.map(toStoredEvent);
+};
 
 const getUserMappedDestinationUids = async (
   database: BunSQLDatabase,
@@ -72,7 +129,6 @@ const getUserMappedDestinationUids = async (
 
 const removeEvents = async (
   database: BunSQLDatabase,
-  _calendarId: string,
   events: { id: string; startTime: Date; endTime: Date }[],
 ): Promise<void> => {
   const eventIds = events.map(({ id }) => id);
@@ -83,23 +139,33 @@ const removeEvents = async (
 const addEvents = async (
   database: BunSQLDatabase,
   calendarId: string,
-  events: { uid: string; startTime: Date; endTime: Date; title?: string; description?: string; location?: string }[],
+  events: {
+    uid: string;
+    startTime: Date;
+    endTime: Date;
+    startTimeZone?: string;
+    title?: string;
+    description?: string;
+    location?: string;
+    recurrenceRule?: object;
+    exceptionDates?: object;
+  }[],
 ): Promise<void> => {
   const rows = events.map((event) => ({
     calendarId,
     description: event.description,
     endTime: event.endTime,
+    exceptionDates: event.exceptionDates ? JSON.stringify(event.exceptionDates) : undefined,
     location: event.location,
+    recurrenceRule: event.recurrenceRule ? JSON.stringify(event.recurrenceRule) : undefined,
     sourceEventUid: event.uid,
     startTime: event.startTime,
+    startTimeZone: event.startTimeZone,
     title: event.title,
   }));
 
   await database.insert(eventStatesTable).values(rows);
 };
-
-type StoredEvent = Awaited<ReturnType<typeof getStoredEvents>>[number];
-type StoredEventWithUid = StoredEvent & { uid: string };
 
 const hasUid = (event: StoredEvent): event is StoredEventWithUid => event.uid !== null;
 
@@ -140,7 +206,7 @@ const syncSourceFromSnapshot = async (database: BunSQLDatabase, source: Source):
   const eventsToRemove = [...legacyEvents, ...toRemove];
 
   if (eventsToRemove.length > MINIMUM_EVENTS_TO_PROCESS) {
-    await removeEvents(database, source.id, eventsToRemove);
+    await removeEvents(database, eventsToRemove);
   }
 
   if (toAdd.length > MINIMUM_EVENTS_TO_PROCESS) {

@@ -455,6 +455,7 @@
         "@keeper.sh/oauth-microsoft": "workspace:*",
         "@keeper.sh/premium": "workspace:*",
         "drizzle-orm": "^0.45.1",
+        "ts-ics": "^2.4.0",
       },
       "devDependencies": {
         "@keeper.sh/typescript-config": "workspace:*",

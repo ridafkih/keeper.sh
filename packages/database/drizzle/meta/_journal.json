@@ -358,6 +358,13 @@
       "when": 1772939018483,
       "tag": "0050_purple_patch",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1772954619121,
+      "tag": "0051_normal_mentallo",
+      "breakpoints": true
     }
   ]
 }

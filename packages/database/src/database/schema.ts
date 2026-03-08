@@ -142,8 +142,11 @@ const eventStatesTable = pgTable(
     endTime: timestamp().notNull(),
     id: uuid().notNull().primaryKey().defaultRandom(),
     location: text(),
+    recurrenceRule: text(),
+    exceptionDates: text(),
     sourceEventUid: text(),
     startTime: timestamp().notNull(),
+    startTimeZone: text(),
     title: text(),
   },
   (table) => [

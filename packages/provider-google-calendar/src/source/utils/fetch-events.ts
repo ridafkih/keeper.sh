@@ -12,6 +12,7 @@ import {
 } from "../../shared/api";
 import { isSimpleAuthError } from "../../shared/errors";
 import { parseEventDateTime } from "../../shared/date-time";
+import { googleEventListSchema } from "@keeper.sh/data-schemas";
 import { isKeeperEvent } from "@keeper.sh/provider-core";
 
 class EventsFetchError extends Error {
@@ -87,7 +88,8 @@ const fetchEventsPage = async (
     );
   }
 
-  const data = (await response.json()) as GoogleEventsListResponse;
+  const responseBody = await response.json();
+  const data = googleEventListSchema.assert(responseBody);
   return { data, fullSyncRequired: false };
 };
 
@@ -119,10 +121,12 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
     return { events: [], fullSyncRequired: true };
   }
 
-  for (const event of result.data.items) {
+  for (const event of result.data.items ?? []) {
     if (event.status === "cancelled") {
       const uid = event.iCalUID ?? event.id;
-      cancelledEventUids.push(uid);
+      if (uid) {
+        cancelledEventUids.push(uid);
+      }
     } else {
       events.push(event);
     }
@@ -145,10 +149,12 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
       return { events: [], fullSyncRequired: true };
     }
 
-    for (const event of result.data.items) {
+    for (const event of result.data.items ?? []) {
       if (event.status === "cancelled") {
         const uid = event.iCalUID ?? event.id;
-        cancelledEventUids.push(uid);
+        if (uid) {
+          cancelledEventUids.push(uid);
+        }
       } else {
         events.push(event);
       }
@@ -216,6 +222,7 @@ const parseGoogleEvents = (
       endTime: parseEventDateTime(event.end),
       location: event.location,
       startTime: parseEventDateTime(event.start),
+      startTimeZone: event.start.timeZone ?? event.end.timeZone,
       title: event.summary,
       uid: event.iCalUID,
     });

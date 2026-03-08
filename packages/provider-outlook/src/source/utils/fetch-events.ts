@@ -8,6 +8,7 @@ import type {
 import { MICROSOFT_GRAPH_API, GONE_STATUS } from "../../shared/api";
 import { isSimpleAuthError } from "../../shared/errors";
 import { parseEventDateTime } from "../../shared/date-time";
+import { outlookEventListSchema } from "@keeper.sh/data-schemas";
 import { isKeeperEvent } from "@keeper.sh/provider-core";
 
 class EventsFetchError extends Error {
@@ -95,7 +96,8 @@ const fetchEventsPage = async (
     );
   }
 
-  const data = (await response.json()) as OutlookEventsListResponse;
+  const responseBody = await response.json();
+  const data = outlookEventListSchema.assert(responseBody);
   return { data, fullSyncRequired: false };
 };
 
@@ -118,10 +120,12 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
     return { events: [], fullSyncRequired: true };
   }
 
-  for (const event of initialResult.data.value) {
+  for (const event of initialResult.data.value ?? []) {
     if (event["@removed"]) {
       const uid = event.iCalUId ?? event.id;
-      cancelledEventUids.push(uid);
+      if (uid) {
+        cancelledEventUids.push(uid);
+      }
     } else {
       events.push(event);
     }
@@ -143,10 +147,12 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
       return { events: [], fullSyncRequired: true };
     }
 
-    for (const event of pageResult.data.value) {
+    for (const event of pageResult.data.value ?? []) {
       if (event["@removed"]) {
         const uid = event.iCalUId ?? event.id;
-        cancelledEventUids.push(uid);
+        if (uid) {
+          cancelledEventUids.push(uid);
+        }
       } else {
         events.push(event);
       }
@@ -176,17 +182,35 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
   const result: EventTimeSlot[] = [];
 
   for (const event of events) {
-    if (!event.start || !event.end || !event.iCalUId) {
+    if (
+      !event.start?.dateTime
+      || !event.start.timeZone
+      || !event.end?.dateTime
+      || !event.end.timeZone
+      || !event.iCalUId
+    ) {
       continue;
     }
     if (isKeeperEvent(event.iCalUId)) {
       continue;
     }
+
+    const start = {
+      dateTime: event.start.dateTime,
+      timeZone: event.start.timeZone,
+    };
+
+    const end = {
+      dateTime: event.end.dateTime,
+      timeZone: event.end.timeZone,
+    };
+
     result.push({
       description: event.body?.content,
-      endTime: parseEventDateTime(event.end),
+      endTime: parseEventDateTime(end),
       location: event.location?.displayName,
-      startTime: parseEventDateTime(event.start),
+      startTime: parseEventDateTime(start),
+      startTimeZone: start.timeZone,
       title: event.subject,
       uid: event.iCalUId,
     });

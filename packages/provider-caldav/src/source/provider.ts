@@ -83,8 +83,11 @@ const createCalDAVSourceProvider = (
       events.push({
         description: parsed.description,
         endTime: parsed.endTime,
+        exceptionDates: parsed.exceptionDates,
         location: parsed.location,
+        recurrenceRule: parsed.recurrenceRule,
         startTime: parsed.startTime,
+        startTimeZone: parsed.startTimeZone,
         title: parsed.title,
         uid: parsed.uid,
       });
@@ -131,9 +134,12 @@ const createCalDAVSourceProvider = (
           calendarId,
           description: event.description,
           endTime: event.endTime,
+          exceptionDates: event.exceptionDates ? JSON.stringify(event.exceptionDates) : undefined,
           location: event.location,
+          recurrenceRule: event.recurrenceRule ? JSON.stringify(event.recurrenceRule) : undefined,
           sourceEventUid: event.uid,
           startTime: event.startTime,
+          startTimeZone: event.startTimeZone,
           title: event.title,
         })),
       );

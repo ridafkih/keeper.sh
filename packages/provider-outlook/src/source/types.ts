@@ -16,29 +16,29 @@ interface OutlookCalendarListResponse {
 }
 
 interface OutlookEventDateTime {
-  dateTime: string;
-  timeZone: string;
+  dateTime?: string;
+  timeZone?: string;
 }
 
 interface OutlookRemovedInfo {
-  reason: "deleted" | "changed";
+  reason?: "deleted" | "changed";
 }
 
 interface OutlookCalendarEvent {
-  id: string;
+  id?: string;
   iCalUId?: string;
   subject?: string;
-  body?: { contentType: string; content: string };
+  body?: { contentType?: string; content?: string } | null;
   location?: { displayName?: string };
-  start: OutlookEventDateTime;
-  end: OutlookEventDateTime;
+  start?: OutlookEventDateTime;
+  end?: OutlookEventDateTime;
   createdDateTime?: string;
   lastModifiedDateTime?: string;
   "@removed"?: OutlookRemovedInfo;
 }
 
 interface OutlookEventsListResponse {
-  value: OutlookCalendarEvent[];
+  value?: OutlookCalendarEvent[];
   "@odata.nextLink"?: string;
   "@odata.deltaLink"?: string;
 }
@@ -63,6 +63,7 @@ interface EventTimeSlot {
   uid: string;
   startTime: Date;
   endTime: Date;
+  startTimeZone?: string;
   title?: string;
   description?: string;
   location?: string;

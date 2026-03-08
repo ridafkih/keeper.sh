@@ -45,6 +45,9 @@ interface SyncableEvent {
   sourceEventUid: string;
   startTime: Date;
   endTime: Date;
+  startTimeZone?: string;
+  recurrenceRule?: object;
+  exceptionDates?: object;
   summary: string;
   description?: string;
   location?: string;
@@ -126,6 +129,9 @@ interface SourceEvent {
   uid: string;
   startTime: Date;
   endTime: Date;
+  startTimeZone?: string;
+  recurrenceRule?: object;
+  exceptionDates?: object;
   title?: string;
   description?: string;
   location?: string;

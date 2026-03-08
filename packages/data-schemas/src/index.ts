@@ -31,10 +31,13 @@ const stringSchema = type("string");
 const googleEventSchema = type({
   "description?": "string",
   "end?": { "dateTime?": "string", "timeZone?": "string" },
+  "eventType?": "'default' | 'focusTime' | 'workingLocation' | 'outOfOffice'",
   "iCalUID?": "string",
   "id?": "string",
   "location?": "string",
+  "recurrence?": "string[]",
   "start?": { "dateTime?": "string", "timeZone?": "string" },
+  "status?": "'confirmed' | 'tentative' | 'cancelled'",
   "summary?": "string",
 });
 type GoogleEvent = typeof googleEventSchema.infer;
@@ -42,6 +45,7 @@ type GoogleEvent = typeof googleEventSchema.infer;
 const googleEventListSchema = type({
   "items?": googleEventSchema.array(),
   "nextPageToken?": "string",
+  "nextSyncToken?": "string",
 });
 type GoogleEventList = typeof googleEventListSchema.infer;
 
@@ -88,6 +92,7 @@ const microsoftUserInfoSchema = type({
 type MicrosoftUserInfo = typeof microsoftUserInfoSchema.infer;
 
 const outlookEventSchema = type({
+  "@removed?": { "reason?": "'deleted' | 'changed'" },
   "body?": type({ "content?": "string", "contentType?": "string" }).or(type("null")),
   "categories?": "string[]",
   "end?": { "dateTime?": "string", "timeZone?": "string" },
@@ -100,6 +105,7 @@ const outlookEventSchema = type({
 type OutlookEvent = typeof outlookEventSchema.infer;
 
 const outlookEventListSchema = type({
+  "@odata.deltaLink?": "string",
   "@odata.nextLink?": "string",
   "value?": outlookEventSchema.array(),
 });

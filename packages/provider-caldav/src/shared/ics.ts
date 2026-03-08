@@ -33,6 +33,9 @@ interface ParsedCalendarEvent {
   title?: string;
   description?: string;
   location?: string;
+  startTimeZone?: string;
+  recurrenceRule?: object;
+  exceptionDates?: object;
 }
 
 const parseICalToRemoteEvent = (icsString: string): ParsedCalendarEvent | null => {
@@ -47,9 +50,12 @@ const parseICalToRemoteEvent = (icsString: string): ParsedCalendarEvent | null =
     deleteId: event.uid,
     description: event.description,
     endTime: new Date(event.end.date),
+    exceptionDates: event.exceptionDates,
     isKeeperEvent: isKeeperEvent(event.uid),
     location: event.location,
+    recurrenceRule: event.recurrenceRule,
     startTime: new Date(event.start.date),
+    startTimeZone: event.start.local?.timezone,
     title: event.summary,
     uid: event.uid,
   };

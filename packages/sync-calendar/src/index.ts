@@ -27,17 +27,70 @@ interface SyncCalendarService {
   fetchAndSyncSource: (source: Source) => Promise<void>;
 }
 
+const parseOptionalJson = (value: string | null): object | undefined => {
+  if (value === null) {
+    return undefined;
+  }
+
+  try {
+    const parsedValue = JSON.parse(value);
+    if (parsedValue !== null && typeof parsedValue === "object") {
+      return parsedValue;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const toStoredEvent = (row: {
   id: string;
   sourceEventUid: string;
   startTime: Date;
   endTime: Date;
-}): { endTime: Date; id: string; startTime: Date; uid: string } => ({
-  endTime: row.endTime,
-  id: row.id,
-  startTime: row.startTime,
-  uid: row.sourceEventUid,
-});
+  startTimeZone: string | null;
+  recurrenceRule: string | null;
+  exceptionDates: string | null;
+}): {
+  endTime: Date;
+  id: string;
+  startTime: Date;
+  startTimeZone?: string;
+  uid: string;
+  recurrenceRule?: object;
+  exceptionDates?: object;
+} => {
+  const storedEvent: {
+    endTime: Date;
+    id: string;
+    startTime: Date;
+    startTimeZone?: string;
+    uid: string;
+    recurrenceRule?: object;
+    exceptionDates?: object;
+  } = {
+    endTime: row.endTime,
+    id: row.id,
+    startTime: row.startTime,
+    uid: row.sourceEventUid,
+  };
+
+  if (row.startTimeZone !== null) {
+    storedEvent.startTimeZone = row.startTimeZone;
+  }
+
+  const recurrenceRule = parseOptionalJson(row.recurrenceRule);
+  if (recurrenceRule !== undefined) {
+    storedEvent.recurrenceRule = recurrenceRule;
+  }
+
+  const exceptionDates = parseOptionalJson(row.exceptionDates);
+  if (exceptionDates !== undefined) {
+    storedEvent.exceptionDates = exceptionDates;
+  }
+
+  return storedEvent;
+};
 
 const createSyncCalendarService = (database: BunSQLDatabase): SyncCalendarService => {
   const getLatestSnapshot = async (
@@ -58,13 +111,16 @@ const createSyncCalendarService = (database: BunSQLDatabase): SyncCalendarServic
 
   const getStoredEvents = async (
     calendarId: string,
-  ): Promise<{ endTime: Date; id: string; startTime: Date; uid: string }[]> => {
+  ): Promise<{ endTime: Date; id: string; startTime: Date; startTimeZone?: string; uid: string }[]> => {
     const results = await database
       .select({
         endTime: eventStatesTable.endTime,
+        exceptionDates: eventStatesTable.exceptionDates,
         id: eventStatesTable.id,
+        recurrenceRule: eventStatesTable.recurrenceRule,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
+        startTimeZone: eventStatesTable.startTimeZone,
       })
       .from(eventStatesTable)
       .where(eq(eventStatesTable.calendarId, calendarId));
@@ -86,13 +142,23 @@ const createSyncCalendarService = (database: BunSQLDatabase): SyncCalendarServic
 
   const addEvents = async (
     calendarId: string,
-    events: { uid: string; startTime: Date; endTime: Date }[],
+    events: {
+      uid: string;
+      startTime: Date;
+      endTime: Date;
+      startTimeZone?: string;
+      recurrenceRule?: object;
+      exceptionDates?: object;
+    }[],
   ): Promise<void> => {
     const rows = events.map((event) => ({
       endTime: event.endTime,
+      exceptionDates: event.exceptionDates ? JSON.stringify(event.exceptionDates) : undefined,
       sourceEventUid: event.uid,
       calendarId,
+      recurrenceRule: event.recurrenceRule ? JSON.stringify(event.recurrenceRule) : undefined,
       startTime: event.startTime,
+      startTimeZone: event.startTimeZone,
     }));
 
     await database.insert(eventStatesTable).values(rows);

@@ -2,6 +2,9 @@ interface EventTimeSlot {
   uid: string;
   startTime: Date;
   endTime: Date;
+  startTimeZone?: string;
+  recurrenceRule?: object;
+  exceptionDates?: object;
   title?: string;
   description?: string;
   location?: string;

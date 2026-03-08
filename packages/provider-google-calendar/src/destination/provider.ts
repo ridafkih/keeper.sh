@@ -267,15 +267,171 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
     return item ?? null;
   }
 
+  private static formatRecurrenceDate(value: Date | string): string {
+    const date = value instanceof Date ? value : new Date(value);
+    return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  }
+
+  private static isRecord(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === "object" && !Array.isArray(value);
+  }
+
+  private static parseNumberArray(value: unknown): number[] | undefined {
+    if (!Array.isArray(value)) {
+      return undefined;
+    }
+
+    if (value.some((entry) => typeof entry !== "number")) {
+      return undefined;
+    }
+
+    return value;
+  }
+
+  private static parseByDay(value: unknown): Array<{ day: string; occurrence?: number }> | undefined {
+    if (!Array.isArray(value)) {
+      return undefined;
+    }
+
+    const parsedByDay: Array<{ day: string; occurrence?: number }> = [];
+
+    for (const entry of value) {
+      if (!GoogleCalendarProviderInstance.isRecord(entry)) {
+        continue;
+      }
+
+      if (typeof entry.day !== "string") {
+        continue;
+      }
+
+      if (entry.occurrence !== undefined && typeof entry.occurrence !== "number") {
+        continue;
+      }
+
+      if (typeof entry.occurrence === "number") {
+        parsedByDay.push({ day: entry.day, occurrence: entry.occurrence });
+        continue;
+      }
+
+      parsedByDay.push({ day: entry.day });
+    }
+
+    return parsedByDay.length > 0 ? parsedByDay : undefined;
+  }
+
+  private static buildRecurrenceRule(event: SyncableEvent): string | null {
+    const { recurrenceRule } = event;
+    if (!GoogleCalendarProviderInstance.isRecord(recurrenceRule)) {
+      return null;
+    }
+
+    if (typeof recurrenceRule.frequency !== "string") {
+      return null;
+    }
+
+    const recurrenceParts: string[] = [`FREQ=${recurrenceRule.frequency}`];
+
+    if (typeof recurrenceRule.interval === "number") {
+      recurrenceParts.push(`INTERVAL=${recurrenceRule.interval}`);
+    }
+    if (typeof recurrenceRule.count === "number") {
+      recurrenceParts.push(`COUNT=${recurrenceRule.count}`);
+    }
+
+    if (GoogleCalendarProviderInstance.isRecord(recurrenceRule.until)) {
+      const untilDate = recurrenceRule.until.date;
+      if (untilDate instanceof Date || typeof untilDate === "string") {
+        recurrenceParts.push(
+          `UNTIL=${GoogleCalendarProviderInstance.formatRecurrenceDate(untilDate)}`,
+        );
+      }
+    }
+
+    const byDay = GoogleCalendarProviderInstance.parseByDay(recurrenceRule.byDay);
+    if (byDay?.length) {
+      const byDayValues = byDay.map((value) =>
+        value.occurrence ? `${value.occurrence}${value.day}` : value.day,
+      );
+      recurrenceParts.push(`BYDAY=${byDayValues.join(",")}`);
+    }
+
+    const byMonth = GoogleCalendarProviderInstance.parseNumberArray(recurrenceRule.byMonth);
+    if (byMonth?.length) {
+      recurrenceParts.push(`BYMONTH=${byMonth.join(",")}`);
+    }
+
+    const byMonthday = GoogleCalendarProviderInstance.parseNumberArray(
+      recurrenceRule.byMonthday,
+    );
+    if (byMonthday?.length) {
+      recurrenceParts.push(`BYMONTHDAY=${byMonthday.join(",")}`);
+    }
+
+    const bySetPos = GoogleCalendarProviderInstance.parseNumberArray(recurrenceRule.bySetPos);
+    if (bySetPos?.length) {
+      recurrenceParts.push(`BYSETPOS=${bySetPos.join(",")}`);
+    }
+
+    const byYearday = GoogleCalendarProviderInstance.parseNumberArray(
+      recurrenceRule.byYearday,
+    );
+    if (byYearday?.length) {
+      recurrenceParts.push(`BYYEARDAY=${byYearday.join(",")}`);
+    }
+
+    const byWeekNo = GoogleCalendarProviderInstance.parseNumberArray(recurrenceRule.byWeekNo);
+    if (byWeekNo?.length) {
+      recurrenceParts.push(`BYWEEKNO=${byWeekNo.join(",")}`);
+    }
+
+    const byHour = GoogleCalendarProviderInstance.parseNumberArray(recurrenceRule.byHour);
+    if (byHour?.length) {
+      recurrenceParts.push(`BYHOUR=${byHour.join(",")}`);
+    }
+
+    const byMinute = GoogleCalendarProviderInstance.parseNumberArray(recurrenceRule.byMinute);
+    if (byMinute?.length) {
+      recurrenceParts.push(`BYMINUTE=${byMinute.join(",")}`);
+    }
+
+    const bySecond = GoogleCalendarProviderInstance.parseNumberArray(recurrenceRule.bySecond);
+    if (bySecond?.length) {
+      recurrenceParts.push(`BYSECOND=${bySecond.join(",")}`);
+    }
+
+    if (typeof recurrenceRule.workweekStart === "string") {
+      recurrenceParts.push(
+        `WKST=${recurrenceRule.workweekStart}`,
+      );
+    }
+
+    return recurrenceParts.join(";");
+  }
+
   private static toGoogleEvent(event: SyncableEvent, uid: string): GoogleEvent {
-    return {
+    const recurrenceRule = GoogleCalendarProviderInstance.buildRecurrenceRule(event);
+    const recurrenceTimeZone = event.startTimeZone ?? "UTC";
+
+    const googleEvent: GoogleEvent = {
       description: event.description,
-      end: { dateTime: event.endTime.toISOString() },
+      end: {
+        dateTime: event.endTime.toISOString(),
+        ...(recurrenceRule && { timeZone: recurrenceTimeZone }),
+      },
       iCalUID: uid,
       location: event.location,
-      start: { dateTime: event.startTime.toISOString() },
+      start: {
+        dateTime: event.startTime.toISOString(),
+        ...(recurrenceRule && { timeZone: recurrenceTimeZone }),
+      },
       summary: event.summary,
     };
+
+    if (recurrenceRule) {
+      googleEvent.recurrence = [`RRULE:${recurrenceRule}`];
+    }
+
+    return googleEvent;
   }
 }
 
