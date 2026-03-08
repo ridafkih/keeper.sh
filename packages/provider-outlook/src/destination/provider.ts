@@ -216,7 +216,7 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
         return { error: errorMessage, success: false };
       }
 
-      await response.body?.cancel();
+      await response.body?.cancel?.();
       return { success: true };
     } catch (error) {
       WideEvent.error(error);

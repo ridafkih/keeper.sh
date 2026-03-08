@@ -229,7 +229,7 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
         return { error: errorMessage, success: false };
       }
 
-      await response.body?.cancel();
+      await response.body?.cancel?.();
       return { success: true };
     } catch (error) {
       WideEvent.error(error);
@@ -256,7 +256,7 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
     event?.endTiming("findEventByUid");
 
     if (!response.ok) {
-      await response.body?.cancel();
+      await response.body?.cancel?.();
       event?.set({ "find_event_by_uid.status": response.status });
       return null;
     }
