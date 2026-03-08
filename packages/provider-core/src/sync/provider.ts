@@ -19,6 +19,7 @@ import type { EventMapping } from "../events/mappings";
 import { createSyncEventContentHash } from "../events/content-hash";
 import type { SyncContext, SyncStage } from "./coordinator";
 import { WideEvent } from "@keeper.sh/log";
+import { getStartOfToday } from "@keeper.sh/date-utils";
 
 const INITIAL_REMOTE_EVENT_COUNT = 0;
 const EMPTY_STALE_MAPPINGS_COUNT = 0;
@@ -266,8 +267,13 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
   ): SyncOperation[] {
     const operations: SyncOperation[] = [];
     const now = new Date();
+    const startOfToday = getStartOfToday();
 
     for (const mapping of existingMappings) {
+      if (mapping.startTime < startOfToday) {
+        continue;
+      }
+
       if (!localEventIds.has(mapping.eventStateId)) {
         operations.push({
           deleteId: mapping.deleteIdentifier,
