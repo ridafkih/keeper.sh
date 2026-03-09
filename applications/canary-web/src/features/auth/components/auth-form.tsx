@@ -190,8 +190,6 @@ function EmailForm({ submitLabel, action }: { submitLabel: string; action: "sign
       return;
     }
 
-    setStatus("idle");
-
     if (action === "signUp") {
       sessionStorage.setItem("pendingVerificationEmail", email);
       navigate({ to: "/verify-email" });
