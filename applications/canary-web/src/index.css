@@ -6,11 +6,19 @@ html {
   @apply w-full min-h-full bg-background overflow-x-hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  overflow: hidden;
 }
 
 body,
 #root {
   @apply w-full min-h-full;
+  max-height: 100vh;
+}
+
+#root {
+  overflow-y: scroll;
+  overflow-x: hidden;
 }
 
 html {
