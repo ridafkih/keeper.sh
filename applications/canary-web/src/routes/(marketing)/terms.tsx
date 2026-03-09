@@ -2,14 +2,26 @@ import type { PropsWithChildren } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Heading1, Heading2 } from "../../components/ui/primitives/heading";
 import { Text } from "../../components/ui/primitives/text";
+import { CanonicalLink, JsonLd, seoMeta, webPageSchema, breadcrumbSchema } from "../../lib/seo";
 
 export const Route = createFileRoute("/(marketing)/terms")({
   component: TermsPage,
+  head: () => ({
+    meta: seoMeta({
+      title: "Terms & Conditions",
+      description:
+        "Terms and conditions for using Keeper.sh, the open-source calendar syncing service.",
+      path: "/terms",
+    }),
+  }),
 });
 
 function TermsPage() {
   return (
     <div className="flex flex-col gap-6 py-16">
+      <CanonicalLink path="/terms" />
+      <JsonLd data={webPageSchema("Terms & Conditions", "Terms and conditions for using Keeper.sh, the open-source calendar syncing service.", "/terms")} />
+      <JsonLd data={breadcrumbSchema([{ name: "Home", path: "/" }, { name: "Terms & Conditions", path: "/terms" }])} />
       <div className="flex flex-col gap-1">
         <Heading1>Terms &amp; Conditions</Heading1>
         <Text size="sm" tone="muted">Last updated: December 2025</Text>
@@ -167,7 +179,9 @@ function TermsPage() {
         <Section title="Governing Law">
           <Text size="sm">
             These Terms shall be governed by and construed in accordance with the laws of the
-            jurisdiction in which Keeper.sh operates, without regard to conflict of law principles.
+            Province of Alberta, Canada, and the federal laws of Canada applicable therein, without
+            regard to conflict of law principles. Any disputes arising under these Terms shall be
+            subject to the exclusive jurisdiction of the courts of the Province of Alberta.
           </Text>
         </Section>
 

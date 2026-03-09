@@ -2,6 +2,9 @@ import { createFileRoute, Outlet } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/(oauth)")({
   component: OAuthLayout,
+  head: () => ({
+    meta: [{ content: "noindex, nofollow", name: "robots" }],
+  }),
 });
 
 function OAuthLayout() {

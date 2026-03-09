@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /auth
+Disallow: /login
+Disallow: /register
+Disallow: /verify-email
+Disallow: /verify-authentication
+Disallow: /reset-password
+Disallow: /forgot-password
+
+Sitemap: https://keeper.sh/sitemap.xml

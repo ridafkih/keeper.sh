@@ -1,4 +1,5 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router'
+import { JsonLd, organizationSchema } from '../../lib/seo'
 import { Layout, LayoutItem } from '../../components/ui/shells/layout'
 import { MarketingHeader, MarketingHeaderActions, MarketingHeaderBranding } from '../../features/marketing/components/marketing-header'
 import { MarketingFooter, MarketingFooterTagline, MarketingFooterNav, MarketingFooterNavGroup, MarketingFooterNavGroupLabel, MarketingFooterNavItem } from '../../features/marketing/components/marketing-footer'
@@ -9,13 +10,31 @@ import { SessionSlot } from '../../components/ui/shells/session-slot';
 import HeartIcon from "lucide-react/dist/esm/icons/heart";
 import { ExternalTextLink } from "../../components/ui/primitives/text-link";
 
+interface GithubStarsLoaderData {
+  count: number | null;
+  fetchedAt: string | null;
+}
+
 export const Route = createFileRoute('/(marketing)')({
+  loader: async ({ context }) => {
+    try {
+      return await context.fetchWeb<GithubStarsLoaderData>("/internal/github-stars");
+    } catch {
+      return {
+        count: null,
+        fetchedAt: null,
+      } satisfies GithubStarsLoaderData;
+    }
+  },
   component: MarketingLayout,
 })
 
 function MarketingLayout() {
+  const githubStars = Route.useLoaderData();
+
   return (
     <>
+      <JsonLd data={organizationSchema} />
       <MarketingHeader>
         <MarketingHeaderBranding>
           <KeeperLogo className="w-full max-w-6" />
@@ -23,7 +42,7 @@ function MarketingLayout() {
         <SessionSlot
           authenticated={
             <MarketingHeaderActions>
-              <GithubStarButton />
+              <GithubStarButton initialStarCount={githubStars.count} />
               <LinkButton size="compact" variant="highlight" to="/dashboard">
                 <ButtonText>Dashboard</ButtonText>
               </LinkButton>
@@ -31,7 +50,7 @@ function MarketingLayout() {
           }
           unauthenticated={
             <MarketingHeaderActions>
-              <GithubStarButton />
+              <GithubStarButton initialStarCount={githubStars.count} />
               <LinkButton size="compact" variant="border" to="/login">
                 <ButtonText>Login</ButtonText>
               </LinkButton>

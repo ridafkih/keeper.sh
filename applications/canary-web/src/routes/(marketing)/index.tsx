@@ -1,5 +1,6 @@
 import { useSetAtom } from 'jotai'
 import { createFileRoute } from '@tanstack/react-router'
+import { CanonicalLink, JsonLd, seoMeta, softwareApplicationSchema } from '../../lib/seo'
 import { Heading1, Heading2, Heading3 } from '../../components/ui/primitives/heading'
 import { Text } from '../../components/ui/primitives/text'
 import { ButtonIcon, ButtonText, ExternalLinkButton, LinkButton } from '../../components/ui/primitives/button'
@@ -134,6 +135,14 @@ const PRICING_FEATURES: PricingFeature[] = [
 
 export const Route = createFileRoute('/(marketing)/')({
   component: MarketingPage,
+  head: () => ({
+    meta: seoMeta({
+      title: "Open-Source Calendar Event Syncing",
+      description:
+        "Synchronize events between your personal, work, business and school calendars. Open-source under AGPL-3.0. Supports Google Calendar, Outlook, iCloud, FastMail, and CalDAV.",
+      path: "/",
+    }),
+  }),
 })
 
 function MarketingPage() {
@@ -141,6 +150,8 @@ function MarketingPage() {
 
   return (
     <div className="flex flex-col gap-2 pt-8">
+      <CanonicalLink path="/" />
+      <JsonLd data={softwareApplicationSchema()} />
       <Heading1 className="text-center">All of your calendars in-sync.</Heading1>
       <Text align="center" className="max-w-[42ch] mx-auto">
         Synchronize events between your personal, work, business and school calendars. Open-source under AGPL-3.0.

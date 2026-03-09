@@ -13,7 +13,7 @@ html {
 body,
 #root {
   @apply w-full min-h-screen;
-  max-height: 100vh;
+  max-height: 100dvh;
 }
 
 #root {

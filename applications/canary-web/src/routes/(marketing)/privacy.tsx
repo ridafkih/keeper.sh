@@ -2,14 +2,26 @@ import type { PropsWithChildren } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Heading1, Heading2, Heading3 } from "../../components/ui/primitives/heading";
 import { Text } from "../../components/ui/primitives/text";
+import { CanonicalLink, JsonLd, seoMeta, webPageSchema, breadcrumbSchema } from "../../lib/seo";
 
 export const Route = createFileRoute("/(marketing)/privacy")({
   component: PrivacyPage,
+  head: () => ({
+    meta: seoMeta({
+      title: "Privacy Policy",
+      description:
+        "Privacy policy for Keeper.sh, the open-source calendar syncing service. Learn how we collect, use, and protect your data.",
+      path: "/privacy",
+    }),
+  }),
 });
 
 function PrivacyPage() {
   return (
     <div className="flex flex-col gap-6 py-16">
+      <CanonicalLink path="/privacy" />
+      <JsonLd data={webPageSchema("Privacy Policy", "Privacy policy for Keeper.sh, the open-source calendar syncing service.", "/privacy")} />
+      <JsonLd data={breadcrumbSchema([{ name: "Home", path: "/" }, { name: "Privacy Policy", path: "/privacy" }])} />
       <div className="flex flex-col gap-1">
         <Heading1>Privacy Policy</Heading1>
         <Text size="sm" tone="muted">Last updated: December 2025</Text>
@@ -129,9 +141,11 @@ function PrivacyPage() {
 
         <Section title="International Data Transfers">
           <Text size="sm">
-            Your information may be transferred to and processed in countries other than your own. We
-            ensure appropriate safeguards are in place to protect your data in compliance with
-            applicable laws.
+            Keeper.sh is operated from the Province of Alberta, Canada. Your information may be
+            transferred to and processed in countries other than your own. We ensure appropriate
+            safeguards are in place to protect your data in compliance with applicable Canadian
+            privacy laws, including the Personal Information Protection and Electronic Documents
+            Act (PIPEDA).
           </Text>
         </Section>
 

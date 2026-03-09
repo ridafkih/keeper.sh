@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Heading1, Heading3 } from "../../../components/ui/primitives/heading";
 import { Text } from "../../../components/ui/primitives/text";
 import { blogPosts, formatIsoDate } from "../../../lib/blog-posts";
+import { CanonicalLink, JsonLd, seoMeta, breadcrumbSchema } from "../../../lib/seo";
 
 const BLOG_ILLUSTRATION_STYLE = {
   backgroundImage:
@@ -11,19 +12,19 @@ const BLOG_ILLUSTRATION_STYLE = {
 export const Route = createFileRoute("/(marketing)/blog/")({
   component: BlogDirectoryPage,
   head: () => ({
-    meta: [
-      { title: "Blog · Keeper.sh" },
-      {
-        content: "Engineering and product updates from Keeper.sh.",
-        name: "description",
-      },
-    ],
+    meta: seoMeta({
+      title: "Blog",
+      description: "Engineering and product updates from Keeper.sh.",
+      path: "/blog",
+    }),
   }),
 });
 
 function BlogDirectoryPage() {
   return (
     <div className="flex flex-col gap-8 py-16">
+      <CanonicalLink path="/blog" />
+      <JsonLd data={breadcrumbSchema([{ name: "Home", path: "/" }, { name: "Blog", path: "/blog" }])} />
       <header className="flex flex-col gap-1.5">
         <Heading1>Blog</Heading1>
         <Text size="base" tone="muted" className="leading-6">

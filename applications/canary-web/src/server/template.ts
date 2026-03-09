@@ -63,12 +63,23 @@ function mergeHtmlStream(
   });
 }
 
+const securityHeaders: Record<string, string> = {
+  "strict-transport-security": "max-age=31536000; includeSubDomains",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY",
+  "referrer-policy": "strict-origin-when-cross-origin",
+};
+
 export function buildHtmlResponse(routerResponse: Response, template: string): Response {
   const templateSegments = extractTemplateSegments(template);
   const responseStream = mergeHtmlStream(routerResponse.body, templateSegments);
   const headers = new Headers(routerResponse.headers);
   headers.delete("content-length");
   headers.set("content-type", "text/html; charset=UTF-8");
+
+  for (const [key, value] of Object.entries(securityHeaders)) {
+    headers.set(key, value);
+  }
 
   return new Response(responseStream, {
     headers,
