@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import { atom } from "jotai";
 import { useAtomValue, useSetAtom } from "jotai";
 import * as m from "motion/react-m";
@@ -243,11 +243,21 @@ function EventGraphBars({ days, shouldAnimate }: EventGraphBarsProps) {
     setHoverIndex(resolveIndexFromTouch(touch));
   }, [resolveIndexFromTouch, setHoverIndex, setDragging]);
 
-  const handleTouchMove = useCallback(({ touches }: React.TouchEvent) => {
-    const touch = touches[0];
+  const handleTouchMove = useCallback((event: React.TouchEvent | TouchEvent) => {
+    event.preventDefault();
+    const touch = event.touches[0];
     if (!touch) return;
     setHoverIndex(resolveIndexFromTouch(touch));
   }, [resolveIndexFromTouch, setHoverIndex]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const listener = (event: TouchEvent) => handleTouchMove(event);
+    container.addEventListener("touchmove", listener, { passive: false });
+    return () => container.removeEventListener("touchmove", listener);
+  }, [handleTouchMove]);
 
   const handleTouchEnd = () => {
     setDragging(false);
@@ -261,7 +271,6 @@ function EventGraphBars({ days, shouldAnimate }: EventGraphBarsProps) {
       data-dragging={resolveDataAttr(isDragging)}
       onPointerLeave={() => setHoverIndex(null)}
       onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
       {days.map((day, dayIndex) => (
