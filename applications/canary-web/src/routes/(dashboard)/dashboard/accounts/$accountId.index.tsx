@@ -1,4 +1,4 @@
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR, { preload, useSWRConfig } from "swr";
 import Calendar from "lucide-react/dist/esm/icons/calendar";
@@ -149,6 +149,11 @@ function AccountPrevNext({ accountId }: { accountId: string }) {
 
   const prev = currentIndex > 0 ? accounts[currentIndex - 1] : null;
   const next = currentIndex < accounts.length - 1 ? accounts[currentIndex + 1] : null;
+
+  useEffect(() => {
+    if (prev) preload(`/api/accounts/${prev.id}`, fetcher);
+    if (next) preload(`/api/accounts/${next.id}`, fetcher);
+  }, [prev?.id, next?.id]);
 
   return (
     <Pagination>

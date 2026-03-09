@@ -106,63 +106,38 @@ function patchSource(
   );
 }
 
-function CalendarDetailSeed({ calendarId }: { calendarId: string }) {
-  const { data, error } = useSWR<CalendarDetail>(`/api/sources/${calendarId}`);
+function useSeedCalendarDetail(calendarId: string, calendar: CalendarDetail | undefined) {
   const store = useStore();
 
-  useEffect(() => {
-    if (!data) {
-      return;
-    }
-
-    if (store.get(calendarDetailLoadedAtom) === calendarId) {
-      return;
-    }
-
-    store.set(calendarDetailAtom, data);
+  if (calendar && store.get(calendarDetailLoadedAtom) !== calendarId) {
+    store.set(calendarDetailAtom, calendar);
     store.set(calendarDetailLoadedAtom, calendarId);
     store.set(calendarDetailErrorAtom, null);
     store.set(destinationIdsAtom, new Set<string>());
-  }, [calendarId, data, store]);
-
-  useEffect(() => {
-    if (!error) {
-      return;
-    }
-
-    store.set(calendarDetailErrorAtom, error);
-  }, [error, store]);
-
-  return null;
+  }
 }
 
 function CalendarDetailPage() {
   const { accountId, calendarId } = Route.useParams();
   const { data: account, isLoading: accountLoading, error: accountError, mutate: mutateAccount } = useSWR<CalendarAccount>(`/api/accounts/${accountId}`);
+  const { data: calendar, isLoading: calendarLoading, error: calendarError } = useSWR<CalendarDetail>(`/api/sources/${calendarId}`);
   const { mutate: mutateCalendar } = useSWRConfig();
-  const calendarLoaded = useAtomValue(calendarDetailLoadedAtom);
-  const calendarError = useAtomValue(calendarDetailErrorAtom);
   const store = useStore();
 
-  const isLoading = accountLoading || calendarLoaded !== calendarId;
+  useSeedCalendarDetail(calendarId, calendar);
+
+  const isLoading = accountLoading || calendarLoading;
   const error = accountError || calendarError;
 
-  if (error || isLoading || !account) {
+  if (error || isLoading || !account || !calendar) {
     if (error) return <RouteShell backFallback={`/dashboard/accounts/${accountId}`} status="error" onRetry={async () => { await Promise.all([mutateAccount(), mutateCalendar(`/api/sources/${calendarId}`)]); }} />;
-    return (
-      <>
-        <CalendarDetailSeed calendarId={calendarId} />
-        <RouteShell backFallback={`/dashboard/accounts/${accountId}`} status="loading" />
-      </>
-    );
+    return <RouteShell backFallback={`/dashboard/accounts/${accountId}`} status="loading" />;
   }
 
-  const calendar = store.get(calendarDetailAtom)!;
   const isPullCapable = canPull(calendar);
 
   return (
     <div className="flex flex-col gap-1.5">
-      <CalendarDetailSeed calendarId={calendarId} />
       <div className="flex items-center justify-between">
         <BackButton fallback={`/dashboard/accounts/${accountId}`} />
         <CalendarPrevNext calendarId={calendarId} />
@@ -193,18 +168,17 @@ function CalendarPrevNext({ calendarId }: { calendarId: string }) {
   const prev = currentIndex > 0 ? calendars[currentIndex - 1] : null;
   const next = currentIndex < calendars.length - 1 ? calendars[currentIndex + 1] : null;
 
+  useEffect(() => {
+    if (prev) preload(`/api/sources/${prev.id}`, fetcher);
+    if (next) preload(`/api/sources/${next.id}`, fetcher);
+  }, [prev?.id, next?.id]);
+
   const toCalendar = (c: CalendarSource) => `/dashboard/accounts/${c.accountId}/${c.id}`;
 
   return (
     <Pagination>
-      <PaginationPrevious
-        to={prev ? toCalendar(prev) : undefined}
-        onMouseEnter={prev ? () => preload(`/api/sources/${prev.id}`, fetcher) : undefined}
-      />
-      <PaginationNext
-        to={next ? toCalendar(next) : undefined}
-        onMouseEnter={next ? () => preload(`/api/sources/${next.id}`, fetcher) : undefined}
-      />
+      <PaginationPrevious to={prev ? toCalendar(prev) : undefined} />
+      <PaginationNext to={next ? toCalendar(next) : undefined} />
     </Pagination>
   );
 }
