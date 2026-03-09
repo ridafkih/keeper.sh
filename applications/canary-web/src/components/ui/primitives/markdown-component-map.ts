@@ -1,0 +1,37 @@
+import type { Components } from "streamdown";
+import {
+  MarkdownBlockquote,
+  MarkdownCodeBlock,
+  MarkdownHeadingOne,
+  MarkdownHeadingThree,
+  MarkdownHeadingTwo,
+  MarkdownInlineCode,
+  MarkdownLink,
+  MarkdownListItem,
+  MarkdownOrderedList,
+  MarkdownParagraph,
+  MarkdownRule,
+  MarkdownTable,
+  MarkdownTableCell,
+  MarkdownTableHeader,
+  MarkdownUnorderedList,
+} from "./markdown-components";
+
+export const markdownComponents: Components = {
+  a: MarkdownLink,
+  blockquote: MarkdownBlockquote,
+  code: MarkdownInlineCode,
+  h1: MarkdownHeadingOne,
+  h2: MarkdownHeadingTwo,
+  h3: MarkdownHeadingThree,
+  hr: MarkdownRule,
+  inlineCode: MarkdownInlineCode,
+  li: MarkdownListItem,
+  ol: MarkdownOrderedList,
+  p: MarkdownParagraph,
+  pre: MarkdownCodeBlock,
+  table: MarkdownTable,
+  td: MarkdownTableCell,
+  th: MarkdownTableHeader,
+  ul: MarkdownUnorderedList,
+};

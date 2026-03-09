@@ -56,6 +56,8 @@ export async function handleWithWideLogging(
     widelog.set("request.timing.start", requestStart);
     widelog.set("http.method", request.method);
     widelog.set("http.path", requestUrl.pathname);
+    widelog.set("server.port", config.serverPort);
+    widelog.set("server.environment", config.environment);
 
     const userAgent = request.headers.get("user-agent");
     if (userAgent) {

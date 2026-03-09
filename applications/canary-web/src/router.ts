@@ -70,7 +70,7 @@ export function createAppRouter(options: CreateAppRouterOptions = {}) {
     context: buildRouterContext(options.request),
     defaultPreload: "intent",
     routeTree,
-    scrollRestoration: true,
+    scrollRestoration: false,
   });
 
   return router;

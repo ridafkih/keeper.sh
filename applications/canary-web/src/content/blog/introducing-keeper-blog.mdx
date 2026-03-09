@@ -1,0 +1,51 @@
+---
+title: "Why I Built an Open-Source Calendar Syncing Tool"
+description: "Why I built an open-source calendar syncing tool to sync availability across Google Calendar, Outlook, FastMail, iCloud, Apple Calendar, and CalDAV."
+blurb: "I had four calendars across Google, FastMail, and iCloud, and built an open-source calendar syncing tool to keep time slots aligned without duplicates or heavy setup."
+createdAt: "2025-12-28"
+slug: "why-i-built-an-open-source-calendar-syncing-tool"
+updatedAt: "2026-03-09"
+tags:
+  - "calendar"
+  - "product"
+  - "sync"
+  - "self-hosting"
+---
+
+I have four calendars spread across providers:
+
+- A work calendar on Google Calendar
+- A business calendar on Google Calendar
+- A business-personal calendar on FastMail
+- A personal calendar on iCloud
+
+That setup gave different people in my life different and incomplete windows into my availability, whether they were my co-founder, investors, coworkers, or friends. The result was constant overlap and way too much scheduling back-and-forth, even though the problem I was trying to solve was simple: block off the same time slots everywhere.
+
+## Why Keeper exists
+
+I tried a few options and kept running into the same issues:
+
+- Too much manual setup
+- Finicky sync behavior and duplicate events
+- Pricing that felt heavy without a self-hosted path
+
+After repeating that cycle enough times, I built Keeper to do exactly what I wanted in the first place: reliable slot syncing without a bunch of ongoing babysitting.
+
+## What Keeper does
+
+With Keeper, you can use iCal/ICS links, Google Calendar, Outlook, FastMail, Apple Calendar/iCloud, and generic CalDAV calendars as **sources**. Keeper aggregates availability from those sources and syncs blocked slots to your configured **destinations** across the same provider set where supported. The goal is to keep calendars aligned while sharing only what was needed to be shared, not full event details.
+
+## Open source and self-hosting
+
+I open-sourced Keeper because I’ve gotten really into self-hosting and home servers, and I wanted this to be usable on your own infrastructure. If you want to try it, start with the [`compose.yaml` setup in the README](https://github.com/ridafkih/keeper.sh/blob/main/README.md); it’s the fastest way to get up and running.
+
+If you want Google or Outlook connected as sources or destinations, you’ll still need:
+
+- A Google OAuth client (Google Cloud)
+- A Microsoft OAuth app (Azure)
+
+## Built with user feedback
+
+Thanks to user feedback, Keeper has grown way beyond the original basic slot-syncing setup. Community input helped shape features like syncing event titles, descriptions, and locations when needed, along with controls to exclude specific event types from syncing.
+
+Those improvements made Keeper much more flexible for different workflows and privacy preferences, and there’s still more coming as people keep sharing real-world use cases.

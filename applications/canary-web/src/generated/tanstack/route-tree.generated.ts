@@ -24,9 +24,12 @@ import { Route as authLoginRouteImport } from './../../routes/(auth)/login'
 import { Route as authForgotPasswordRouteImport } from './../../routes/(auth)/forgot-password'
 import { Route as oauthDashboardRouteRouteImport } from './../../routes/(oauth)/dashboard/route'
 import { Route as oauthAuthRouteRouteImport } from './../../routes/(oauth)/auth/route'
+import { Route as marketingBlogRouteRouteImport } from './../../routes/(marketing)/blog/route'
+import { Route as marketingBlogIndexRouteImport } from './../../routes/(marketing)/blog/index'
 import { Route as dashboardDashboardIndexRouteImport } from './../../routes/(dashboard)/dashboard/index'
 import { Route as oauthAuthOutlookRouteImport } from './../../routes/(oauth)/auth/outlook'
 import { Route as oauthAuthGoogleRouteImport } from './../../routes/(oauth)/auth/google'
+import { Route as marketingBlogSlugRouteImport } from './../../routes/(marketing)/blog/$slug'
 import { Route as dashboardDashboardReportRouteImport } from './../../routes/(dashboard)/dashboard/report'
 import { Route as dashboardDashboardIcalRouteImport } from './../../routes/(dashboard)/dashboard/ical'
 import { Route as dashboardDashboardFeedbackRouteImport } from './../../routes/(dashboard)/dashboard/feedback'
@@ -125,6 +128,16 @@ const oauthAuthRouteRoute = oauthAuthRouteRouteImport.update({
   path: '/auth',
   getParentRoute: () => oauthRouteRoute,
 } as any)
+const marketingBlogRouteRoute = marketingBlogRouteRouteImport.update({
+  id: '/blog',
+  path: '/blog',
+  getParentRoute: () => marketingRouteRoute,
+} as any)
+const marketingBlogIndexRoute = marketingBlogIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => marketingBlogRouteRoute,
+} as any)
 const dashboardDashboardIndexRoute = dashboardDashboardIndexRouteImport.update({
   id: '/dashboard/',
   path: '/dashboard/',
@@ -139,6 +152,11 @@ const oauthAuthGoogleRoute = oauthAuthGoogleRouteImport.update({
   id: '/google',
   path: '/google',
   getParentRoute: () => oauthAuthRouteRoute,
+} as any)
+const marketingBlogSlugRoute = marketingBlogSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => marketingBlogRouteRoute,
 } as any)
 const dashboardDashboardReportRoute =
   dashboardDashboardReportRouteImport.update({
@@ -291,6 +309,7 @@ const dashboardDashboardAccountsAccountIdCalendarIdRoute =
   } as any)
 
 export interface FileRoutesByFullPath {
+  '/blog': typeof marketingBlogRouteRouteWithChildren
   '/auth': typeof oauthAuthRouteRouteWithChildren
   '/dashboard': typeof oauthDashboardRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
@@ -308,9 +327,11 @@ export interface FileRoutesByFullPath {
   '/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/dashboard/ical': typeof dashboardDashboardIcalRoute
   '/dashboard/report': typeof dashboardDashboardReportRoute
+  '/blog/$slug': typeof marketingBlogSlugRoute
   '/auth/google': typeof oauthAuthGoogleRoute
   '/auth/outlook': typeof oauthAuthOutlookRoute
   '/dashboard/': typeof dashboardDashboardIndexRoute
+  '/blog/': typeof marketingBlogIndexRoute
   '/dashboard/settings/change-password': typeof dashboardDashboardSettingsChangePasswordRoute
   '/dashboard/settings/passkeys': typeof dashboardDashboardSettingsPasskeysRoute
   '/dashboard/connect/apple': typeof oauthDashboardConnectAppleRoute
@@ -347,8 +368,10 @@ export interface FileRoutesByTo {
   '/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/dashboard/ical': typeof dashboardDashboardIcalRoute
   '/dashboard/report': typeof dashboardDashboardReportRoute
+  '/blog/$slug': typeof marketingBlogSlugRoute
   '/auth/google': typeof oauthAuthGoogleRoute
   '/auth/outlook': typeof oauthAuthOutlookRoute
+  '/blog': typeof marketingBlogIndexRoute
   '/dashboard/settings/change-password': typeof dashboardDashboardSettingsChangePasswordRoute
   '/dashboard/settings/passkeys': typeof dashboardDashboardSettingsPasskeysRoute
   '/dashboard/connect/apple': typeof oauthDashboardConnectAppleRoute
@@ -373,6 +396,7 @@ export interface FileRoutesById {
   '/(dashboard)': typeof dashboardRouteRouteWithChildren
   '/(marketing)': typeof marketingRouteRouteWithChildren
   '/(oauth)': typeof oauthRouteRouteWithChildren
+  '/(marketing)/blog': typeof marketingBlogRouteRouteWithChildren
   '/(oauth)/auth': typeof oauthAuthRouteRouteWithChildren
   '/(oauth)/dashboard': typeof oauthDashboardRouteRouteWithChildren
   '/(auth)/forgot-password': typeof authForgotPasswordRoute
@@ -391,9 +415,11 @@ export interface FileRoutesById {
   '/(dashboard)/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/(dashboard)/dashboard/ical': typeof dashboardDashboardIcalRoute
   '/(dashboard)/dashboard/report': typeof dashboardDashboardReportRoute
+  '/(marketing)/blog/$slug': typeof marketingBlogSlugRoute
   '/(oauth)/auth/google': typeof oauthAuthGoogleRoute
   '/(oauth)/auth/outlook': typeof oauthAuthOutlookRoute
   '/(dashboard)/dashboard/': typeof dashboardDashboardIndexRoute
+  '/(marketing)/blog/': typeof marketingBlogIndexRoute
   '/(dashboard)/dashboard/settings/change-password': typeof dashboardDashboardSettingsChangePasswordRoute
   '/(dashboard)/dashboard/settings/passkeys': typeof dashboardDashboardSettingsPasskeysRoute
   '/(oauth)/dashboard/connect/apple': typeof oauthDashboardConnectAppleRoute
@@ -416,6 +442,7 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/blog'
     | '/auth'
     | '/dashboard'
     | '/forgot-password'
@@ -433,9 +460,11 @@ export interface FileRouteTypes {
     | '/dashboard/feedback'
     | '/dashboard/ical'
     | '/dashboard/report'
+    | '/blog/$slug'
     | '/auth/google'
     | '/auth/outlook'
     | '/dashboard/'
+    | '/blog/'
     | '/dashboard/settings/change-password'
     | '/dashboard/settings/passkeys'
     | '/dashboard/connect/apple'
@@ -472,8 +501,10 @@ export interface FileRouteTypes {
     | '/dashboard/feedback'
     | '/dashboard/ical'
     | '/dashboard/report'
+    | '/blog/$slug'
     | '/auth/google'
     | '/auth/outlook'
+    | '/blog'
     | '/dashboard/settings/change-password'
     | '/dashboard/settings/passkeys'
     | '/dashboard/connect/apple'
@@ -497,6 +528,7 @@ export interface FileRouteTypes {
     | '/(dashboard)'
     | '/(marketing)'
     | '/(oauth)'
+    | '/(marketing)/blog'
     | '/(oauth)/auth'
     | '/(oauth)/dashboard'
     | '/(auth)/forgot-password'
@@ -515,9 +547,11 @@ export interface FileRouteTypes {
     | '/(dashboard)/dashboard/feedback'
     | '/(dashboard)/dashboard/ical'
     | '/(dashboard)/dashboard/report'
+    | '/(marketing)/blog/$slug'
     | '/(oauth)/auth/google'
     | '/(oauth)/auth/outlook'
     | '/(dashboard)/dashboard/'
+    | '/(marketing)/blog/'
     | '/(dashboard)/dashboard/settings/change-password'
     | '/(dashboard)/dashboard/settings/passkeys'
     | '/(oauth)/dashboard/connect/apple'
@@ -652,6 +686,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof oauthAuthRouteRouteImport
       parentRoute: typeof oauthRouteRoute
     }
+    '/(marketing)/blog': {
+      id: '/(marketing)/blog'
+      path: '/blog'
+      fullPath: '/blog'
+      preLoaderRoute: typeof marketingBlogRouteRouteImport
+      parentRoute: typeof marketingRouteRoute
+    }
+    '/(marketing)/blog/': {
+      id: '/(marketing)/blog/'
+      path: '/'
+      fullPath: '/blog/'
+      preLoaderRoute: typeof marketingBlogIndexRouteImport
+      parentRoute: typeof marketingBlogRouteRoute
+    }
     '/(dashboard)/dashboard/': {
       id: '/(dashboard)/dashboard/'
       path: '/dashboard'
@@ -672,6 +720,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/auth/google'
       preLoaderRoute: typeof oauthAuthGoogleRouteImport
       parentRoute: typeof oauthAuthRouteRoute
+    }
+    '/(marketing)/blog/$slug': {
+      id: '/(marketing)/blog/$slug'
+      path: '/$slug'
+      fullPath: '/blog/$slug'
+      preLoaderRoute: typeof marketingBlogSlugRouteImport
+      parentRoute: typeof marketingBlogRouteRoute
     }
     '/(dashboard)/dashboard/report': {
       id: '/(dashboard)/dashboard/report'
@@ -962,13 +1017,28 @@ const dashboardRouteRouteWithChildren = dashboardRouteRoute._addFileChildren(
   dashboardRouteRouteChildren,
 )
 
+interface marketingBlogRouteRouteChildren {
+  marketingBlogSlugRoute: typeof marketingBlogSlugRoute
+  marketingBlogIndexRoute: typeof marketingBlogIndexRoute
+}
+
+const marketingBlogRouteRouteChildren: marketingBlogRouteRouteChildren = {
+  marketingBlogSlugRoute: marketingBlogSlugRoute,
+  marketingBlogIndexRoute: marketingBlogIndexRoute,
+}
+
+const marketingBlogRouteRouteWithChildren =
+  marketingBlogRouteRoute._addFileChildren(marketingBlogRouteRouteChildren)
+
 interface marketingRouteRouteChildren {
+  marketingBlogRouteRoute: typeof marketingBlogRouteRouteWithChildren
   marketingPrivacyRoute: typeof marketingPrivacyRoute
   marketingTermsRoute: typeof marketingTermsRoute
   marketingIndexRoute: typeof marketingIndexRoute
 }
 
 const marketingRouteRouteChildren: marketingRouteRouteChildren = {
+  marketingBlogRouteRoute: marketingBlogRouteRouteWithChildren,
   marketingPrivacyRoute: marketingPrivacyRoute,
   marketingTermsRoute: marketingTermsRoute,
   marketingIndexRoute: marketingIndexRoute,
