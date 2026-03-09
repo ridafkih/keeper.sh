@@ -32,6 +32,7 @@ import { Text } from "../../../components/ui/primitives/text";
 import { ProviderIconStack } from "../../../components/ui/primitives/provider-icon-stack";
 import { pluralize } from "../../../lib/pluralize";
 import { useAnimatedSWR } from "../../../hooks/use-animated-swr";
+import { useSubscription } from "../../../hooks/use-subscription";
 import { SyncStatus } from "../../../features/dashboard/components/sync-status";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/")({
@@ -40,6 +41,9 @@ export const Route = createFileRoute("/(dashboard)/dashboard/")({
 
 function DashboardPage() {
   const navigate = useNavigate();
+  const { data: subscription } = useSubscription();
+  const showUpgradeAccount = subscription?.plan === "free";
+
   const handleLogout = async () => {
     await signOut();
     navigate({ to: "/" });
@@ -60,15 +64,17 @@ function DashboardPage() {
           </NavigationMenuLinkItem>
         </NavigationMenu>
         <CalendarsMenu />
-        <NavigationMenu variant="highlight">
-          <NavigationMenuLinkItem to="/dashboard/upgrade">
-            <NavigationMenuItemIcon>
-              <Sparkles size={15} />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>Upgrade Account</NavigationMenuItemLabel>
-            <NavigationMenuItemTrailing />
-          </NavigationMenuLinkItem>
-        </NavigationMenu>
+        {showUpgradeAccount && (
+          <NavigationMenu variant="highlight">
+            <NavigationMenuLinkItem to="/dashboard/upgrade">
+              <NavigationMenuItemIcon>
+                <Sparkles size={15} />
+              </NavigationMenuItemIcon>
+              <NavigationMenuItemLabel>Upgrade Account</NavigationMenuItemLabel>
+              <NavigationMenuItemTrailing />
+            </NavigationMenuLinkItem>
+          </NavigationMenu>
+        )}
         <NavigationMenu>
           <NavigationMenuLinkItem to="/dashboard/feedback">
             <NavigationMenuItemIcon>
