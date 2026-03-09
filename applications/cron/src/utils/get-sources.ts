@@ -1,5 +1,8 @@
-import { calendarsTable, sourceDestinationMappingsTable } from "@keeper.sh/database/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import {
+  calendarsTable,
+  sourceDestinationMappingsTable,
+} from "@keeper.sh/database/schema";
+import { and, arrayContains, eq, inArray } from "drizzle-orm";
 import type { Plan } from "@keeper.sh/premium";
 import { database, premiumService } from "../context";
 import { filterSourcesByPlan, filterUserIdsByPlan } from "./source-plan-selection";
@@ -28,6 +31,8 @@ const fetchCalendars = (calendarType?: string) => {
         ));
 };
 
+const getDestinationScopeFilter = () => arrayContains(calendarsTable.capabilities, ["push"]);
+
 const getSourcesByPlan = async (
   targetPlan: Plan,
   calendarType?: string,
@@ -40,10 +45,7 @@ const getUsersWithDestinationsByPlan = async (targetPlan: Plan): Promise<string[
   const destinations = await database
     .select({ userId: calendarsTable.userId })
     .from(calendarsTable)
-    .where(inArray(calendarsTable.id,
-      database.selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
-        .from(sourceDestinationMappingsTable)
-    ));
+    .where(getDestinationScopeFilter());
 
   return filterUserIdsByPlan(
     destinations.map(({ userId }) => userId),

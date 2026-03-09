@@ -3,13 +3,13 @@ import {
   caldavCredentialsTable,
   calendarsTable,
   eventStatesTable,
-  sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import { getStartOfToday } from "@keeper.sh/date-utils";
 import { decryptPassword } from "@keeper.sh/encryption";
-import { and, asc, eq, gte, inArray, or } from "drizzle-orm";
+import { and, arrayContains, asc, eq, gte, or } from "drizzle-orm";
 import type { SyncableEvent } from "@keeper.sh/provider-core";
 import type { CalDAVAccount, CalDAVService, CalDAVServiceConfig } from "../types";
+import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 const buildProviderCondition = (filter?: string): ReturnType<typeof eq> | ReturnType<typeof or> => {
   if (filter) {
@@ -21,6 +21,9 @@ const buildProviderCondition = (filter?: string): ReturnType<typeof eq> | Return
     eq(calendarAccountsTable.provider, "icloud"),
   );
 };
+
+const getDestinationScopeFilter = (_database: BunSQLDatabase) =>
+  arrayContains(calendarsTable.capabilities, ["push"]);
 
 const createCalDAVService = (config: CalDAVServiceConfig): CalDAVService => {
   const { database, encryptionKey } = config;
@@ -53,10 +56,7 @@ const createCalDAVService = (config: CalDAVServiceConfig): CalDAVService => {
         and(
           providerCondition,
           eq(calendarsTable.userId, userId),
-          inArray(calendarsTable.id,
-            database.selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
-              .from(sourceDestinationMappingsTable)
-          ),
+          getDestinationScopeFilter(database),
         ),
       );
 
@@ -88,10 +88,7 @@ const createCalDAVService = (config: CalDAVServiceConfig): CalDAVService => {
       .where(
         and(
           eq(calendarAccountsTable.provider, provider),
-          inArray(calendarsTable.id,
-            database.selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
-              .from(sourceDestinationMappingsTable)
-          ),
+          getDestinationScopeFilter(database),
         ),
       );
 

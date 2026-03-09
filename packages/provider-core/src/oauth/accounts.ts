@@ -1,14 +1,12 @@
 import {
   calendarAccountsTable,
   calendarsTable,
-  eventMappingsTable,
   eventStatesTable,
   oauthCredentialsTable,
-  sourceDestinationMappingsTable,
   userSubscriptionsTable,
 } from "@keeper.sh/database/schema";
 import { getStartOfToday } from "@keeper.sh/date-utils";
-import { and, asc, eq, gte, inArray, or } from "drizzle-orm";
+import { and, arrayContains, asc, eq, gte } from "drizzle-orm";
 import type { Plan } from "@keeper.sh/premium";
 import type { SyncableEvent } from "../types";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
@@ -22,17 +20,8 @@ interface OAuthAccount {
   accessTokenExpiresAt: Date;
 }
 
-const getDestinationScopeFilter = (database: BunSQLDatabase) =>
-  or(
-    inArray(calendarsTable.id,
-      database.selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
-        .from(sourceDestinationMappingsTable)
-    ),
-    inArray(calendarsTable.id,
-      database.selectDistinct({ id: eventMappingsTable.calendarId })
-        .from(eventMappingsTable)
-    ),
-  );
+const getDestinationScopeFilter = (_database: BunSQLDatabase) =>
+  arrayContains(calendarsTable.capabilities, ["push"]);
 
 const getOAuthAccountsByPlan = async (
   database: BunSQLDatabase,
