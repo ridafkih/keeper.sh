@@ -1,4 +1,4 @@
-import { Outlet, createRootRoute } from "@tanstack/react-router";
+import { Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import { SWRConfig } from "swr";
 import { Heading2 } from "../components/ui/primitives/heading";
@@ -6,6 +6,7 @@ import { Text } from "../components/ui/primitives/text";
 import { LinkButton, ButtonText } from "../components/ui/primitives/button";
 import { fetcher, HttpError } from "../lib/fetcher";
 import { resolveErrorMessage } from "../utils/errors";
+import type { AppRouterContext } from "../lib/router-context";
 
 const NON_RETRYABLE_STATUSES = new Set([401, 403, 404]);
 
@@ -28,9 +29,9 @@ const SWR_CONFIG = {
     if (retryCount >= 3) return;
     setTimeout(() => revalidate({ retryCount }), 5000 * (retryCount + 1));
   },
-} as const;
+};
 
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<AppRouterContext>()({
   component: RootComponent,
   notFoundComponent: NotFound,
   errorComponent: ErrorFallback,
@@ -40,6 +41,7 @@ function RootComponent() {
   return (
     <SWRConfig value={SWR_CONFIG}>
       <Outlet />
+      <Scripts />
     </SWRConfig>
   );
 }

@@ -1,5 +1,5 @@
 import { useState, useTransition } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { BackButton } from "../../../../components/ui/primitives/back-button";
 import { DashboardHeading1, DashboardHeading3 } from "../../../../components/ui/primitives/dashboard-heading";
 import { Text } from "../../../../components/ui/primitives/text";
@@ -13,30 +13,68 @@ import {
   UpgradeCardActions,
 } from "../../../../features/dashboard/components/upgrade-card";
 import Check from "lucide-react/dist/esm/icons/check";
-import { useSubscription } from "../../../../hooks/use-subscription";
+import { HttpError } from "../../../../lib/fetcher";
+import {
+  fetchSubscriptionStateWithApi,
+  useSubscription,
+} from "../../../../hooks/use-subscription";
 import { openCheckout, openCustomerPortal } from "../../../../utils/checkout";
 import { plans } from "../../../../config/plans";
+import { resolveUpgradeRedirect } from "../../../../lib/route-access-guards";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/upgrade/")({
+  loader: async ({ context }) => {
+    const sessionRedirect = resolveUpgradeRedirect(
+      context.auth.hasSession(),
+      null,
+    );
+    if (sessionRedirect) {
+      throw redirect({ to: sessionRedirect });
+    }
+
+    try {
+      const subscription = await fetchSubscriptionStateWithApi(context.fetchApi);
+      const redirectTarget = resolveUpgradeRedirect(
+        true,
+        subscription.plan,
+      );
+      if (redirectTarget) {
+        throw redirect({ to: redirectTarget });
+      }
+
+      return { subscription };
+    } catch (error) {
+      if (error instanceof HttpError && error.status === 401) {
+        const redirectTarget = resolveUpgradeRedirect(false, null);
+        throw redirect({ to: redirectTarget ?? "/login" });
+      }
+      throw error;
+    }
+  },
   component: UpgradePage,
 });
 
-const proPlan = plans.find((plan) => plan.id === "pro")!;
+function resolveProPlan() {
+  const plan = plans.find((candidatePlan) => candidatePlan.id === "pro");
+  if (!plan) {
+    throw new Error("Missing pro plan configuration.");
+  }
+  return plan;
+}
+
+const proPlan = resolveProPlan();
 
 function UpgradePage() {
-  const navigate = useNavigate();
-  const { data: subscription, isLoading, mutate } = useSubscription();
+  const { subscription: loaderSubscription } = Route.useLoaderData();
+  const { data: subscription, isLoading, mutate } = useSubscription({
+    fallbackData: loaderSubscription,
+  });
   const [yearly, setYearly] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const currentPlan = subscription?.plan ?? "free";
   const currentInterval = subscription?.interval;
   const isCurrent = currentPlan === "pro";
-
-  if (isCurrent && !isLoading) {
-    navigate({ to: "/dashboard" });
-    return null;
-  }
   const isCurrentInterval =
     (currentInterval === "year" && yearly) ||
     (currentInterval === "month" && !yearly);

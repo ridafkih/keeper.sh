@@ -1,10 +1,9 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { hasSessionCookie } from "../../../lib/session-cookie";
 import { resolveDashboardRedirect } from "../../../lib/route-access-guards";
 
 export const Route = createFileRoute("/(oauth)/dashboard")({
-  beforeLoad: () => {
-    const redirectTarget = resolveDashboardRedirect(hasSessionCookie());
+  beforeLoad: ({ context }) => {
+    const redirectTarget = resolveDashboardRedirect(context.auth.hasSession());
     if (redirectTarget) {
       throw redirect({ to: redirectTarget });
     }

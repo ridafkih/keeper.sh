@@ -4,13 +4,12 @@ import { AnimatePresence, LazyMotion } from "motion/react";
 import { loadMotionFeatures } from "../../lib/motion-features";
 import * as m from "motion/react-m";
 import { popoverOverlayAtom } from "../../state/popover-overlay";
-import { hasSessionCookie } from "../../lib/session-cookie";
 import { SyncProvider } from "../../providers/sync-provider";
 import { resolveDashboardRedirect } from "../../lib/route-access-guards";
 
 export const Route = createFileRoute("/(dashboard)")({
-  beforeLoad: () => {
-    const redirectTarget = resolveDashboardRedirect(hasSessionCookie());
+  beforeLoad: ({ context }) => {
+    const redirectTarget = resolveDashboardRedirect(context.auth.hasSession());
     if (redirectTarget) {
       throw redirect({ to: redirectTarget });
     }

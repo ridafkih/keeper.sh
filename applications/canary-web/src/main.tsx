@@ -1,34 +1,31 @@
 import { StrictMode } from "react";
-import "./index.css";
+import { createRoot, hydrateRoot } from "react-dom/client";
+import { RouterProvider } from "@tanstack/react-router";
+import { RouterClient } from "@tanstack/react-router/ssr/client";
+import { createAppRouter } from "./router";
 
 if (import.meta.env.DEV) {
   import("react-scan").then(({ scan }) => scan({ enabled: true }));
 }
-import { createRoot } from "react-dom/client";
-import { RouterProvider, createRouter } from "@tanstack/react-router";
-
-import { routeTree } from "./generated/tanstack/route-tree.generated"
-
-const router = createRouter({
-  routeTree,
-  defaultPreload: "intent",
-  scrollRestoration: true,
-})
-
-declare module '@tanstack/react-router' {
-  interface Register {
-    router: typeof router
-  }
-}
 
 const rootElement = document.getElementById("root");
+const router = createAppRouter();
 
-if (rootElement && !rootElement.innerHTML) {
-  const root = createRoot(rootElement);
+if (rootElement) {
+  if (rootElement.innerHTML.length > 0) {
+    hydrateRoot(
+      rootElement,
+      <StrictMode>
+        <RouterClient router={router} />
+      </StrictMode>,
+    );
+  } else {
+    const root = createRoot(rootElement);
 
-  root.render(
-    <StrictMode>
-      <RouterProvider router={router} />
-    </StrictMode>
-  )
+    root.render(
+      <StrictMode>
+        <RouterProvider router={router} />
+      </StrictMode>,
+    );
+  }
 }

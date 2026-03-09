@@ -16,11 +16,14 @@ interface CustomerStateResponse {
 
 const SUBSCRIPTION_STATE_CACHE_KEY = "customer-state";
 
-const fetchSubscriptionState = async (): Promise<SubscriptionState> => {
-  const data = await fetcher<CustomerStateResponse>("/api/auth/customer/state");
-  const [active] = data.activeSubscriptions ?? [];
+export const resolveSubscriptionState = (
+  customerState: CustomerStateResponse,
+): SubscriptionState => {
+  const [active] = customerState.activeSubscriptions ?? [];
 
-  if (!active) return { plan: "free", interval: null };
+  if (!active) {
+    return { plan: "free", interval: null };
+  }
 
   return {
     plan: "pro",
@@ -28,9 +31,31 @@ const fetchSubscriptionState = async (): Promise<SubscriptionState> => {
   };
 };
 
-export function useSubscription() {
-  const { data, error, isLoading, mutate } = useSWR(SUBSCRIPTION_STATE_CACHE_KEY, fetchSubscriptionState);
+const fetchSubscriptionState = async (): Promise<SubscriptionState> => {
+  const data = await fetcher<CustomerStateResponse>("/api/auth/customer/state");
+  return resolveSubscriptionState(data);
+};
+
+interface UseSubscriptionOptions {
+  fallbackData?: SubscriptionState;
+}
+
+export function useSubscription(options: UseSubscriptionOptions = {}) {
+  const { data, error, isLoading, mutate } = useSWR(
+    SUBSCRIPTION_STATE_CACHE_KEY,
+    fetchSubscriptionState,
+    {
+      fallbackData: options.fallbackData,
+    },
+  );
   return { data, error, isLoading, mutate };
+}
+
+export async function fetchSubscriptionStateWithApi(
+  fetchApi: <T>(path: string, init?: RequestInit) => Promise<T>,
+): Promise<SubscriptionState> {
+  const data = await fetchApi<CustomerStateResponse>("/api/auth/customer/state");
+  return resolveSubscriptionState(data);
 }
 
 export { fetchSubscriptionState };
