@@ -5,7 +5,7 @@ export const navigationMenuStyle = tv({
   variants: {
     variant: {
       default: "bg-background-elevated border border-border-elevated shadow-xs",
-      highlight: "bg-foreground",
+      highlight: "relative before:absolute before:top-0.5 before:inset-x-0 before:h-px before:bg-linear-to-r before:mx-4 before:z-10 before:from-transparent before:to-transparent dark:bg-blue-700 dark:before:via-blue-400 bg-blue-500 before:via-blue-300"
     },
   },
   defaultVariants: {
@@ -16,11 +16,11 @@ export const navigationMenuStyle = tv({
 export type MenuVariant = VariantProps<typeof navigationMenuStyle>["variant"];
 
 export const navigationMenuItemStyle = tv({
-  base: "rounded-xl flex items-center gap-3 p-3.5 sm:p-3 w-full",
+  base: "rounded-[0.875rem] flex items-center gap-3 p-3.5 sm:p-3 w-full",
   variants: {
     variant: {
       default: "",
-      highlight: "bg-foreground",
+      highlight: "bg-linear-to-t dark:to-blue-600 dark:from-blue-700 to-blue-500 from-blue-600",
     },
     interactive: {
       true: "hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -29,7 +29,7 @@ export const navigationMenuItemStyle = tv({
   },
   compoundVariants: [
     { variant: "default", interactive: true, className: "hover:bg-background-hover" },
-    { variant: "highlight", interactive: true, className: "hover:bg-background-inverse-hover" },
+    { variant: "highlight", interactive: true, className: "hover:brightness-110" },
   ],
   defaultVariants: {
     variant: "default",
@@ -42,7 +42,7 @@ export const navigationMenuItemIconStyle = tv({
   variants: {
     variant: {
       default: "text-foreground-muted",
-      highlight: "text-foreground-inverse",
+      highlight: "text-white",
     },
     disabled: {
       true: "text-foreground-disabled",
@@ -131,15 +131,15 @@ export const navigationMenuCheckboxIcon = tv({
   },
 });
 
-export const LABEL_TONE: Record<NonNullable<MenuVariant>, "muted" | "inverse"> = {
+export const LABEL_TONE: Record<NonNullable<MenuVariant>, "muted" | "inverse" | "highlight"> = {
   default: "muted",
-  highlight: "inverse",
+  highlight: "highlight",
 };
 
 export const DISABLED_LABEL_TONE: Record<
   NonNullable<MenuVariant>,
-  "disabled" | "inverseMuted"
+  "disabled" | "inverseMuted" | "highlight"
 > = {
   default: "disabled",
-  highlight: "inverseMuted",
+  highlight: "highlight",
 };

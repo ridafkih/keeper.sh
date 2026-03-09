@@ -12,6 +12,7 @@ const text = tv({
     tone: {
       muted: "text-foreground-muted",
       disabled: "text-foreground-disabled",
+      highlight: "text-white",
       inverse: "text-foreground-inverse",
       inverseMuted: "text-foreground-inverse-muted",
       default: "text-foreground",

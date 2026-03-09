@@ -198,7 +198,7 @@ function EditableItemInput({
   );
 
   return (
-    <li className="relative z-10 rounded-xl has-focus:ring-2 has-focus:ring-ring">
+    <li className="relative z-10 rounded-[0.875rem] has-focus:ring-2 has-focus:ring-ring">
       <div className={navigationMenuItemStyle({ variant, interactive: false, className })}>
         {label && <NavigationMenuItemLabel className="shrink-0">{label}</NavigationMenuItemLabel>}
         <input {...inputProps} className={cn(inputClass, "text-foreground-muted")} />
@@ -230,7 +230,7 @@ function EditableTemplateItemInput({
   );
 
   return (
-    <li className="relative z-10 rounded-xl has-focus:ring-2 has-focus:ring-ring">
+    <li className="relative z-10 rounded-[0.875rem] has-focus:ring-2 has-focus:ring-ring">
       <div className={navigationMenuItemStyle({ variant, interactive: false, className })}>
         {label && <NavigationMenuItemLabel className="shrink-0">{label}</NavigationMenuItemLabel>}
         <div className={cn(inputClass, "grid items-center")}>
