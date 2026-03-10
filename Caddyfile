@@ -3,5 +3,13 @@
 		dns cloudflare {$CLOUDFLARE_API_TOKEN}
 	}
 
+	redir https://www.{$DOMAIN}{uri} permanent
+}
+
+www.{$DOMAIN} {
+	tls {
+		dns cloudflare {$CLOUDFLARE_API_TOKEN}
+	}
+
 	reverse_proxy web:3000
 }
