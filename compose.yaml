@@ -36,6 +36,8 @@ services:
     environment:
       API_PORT: "3001"
       ENV: production
+    volumes:
+      - ./global-bundle.pem:/certs/global-bundle.pem:ro
     depends_on:
       - redis
     restart: unless-stopped
@@ -46,6 +48,9 @@ services:
     env_file: .env
     environment:
       ENV: production
+      NODE_EXTRA_CA_CERTS: /certs/global-bundle.pem
+    volumes:
+      - ./global-bundle.pem:/certs/global-bundle.pem:ro
     depends_on:
       - api
     restart: unless-stopped
