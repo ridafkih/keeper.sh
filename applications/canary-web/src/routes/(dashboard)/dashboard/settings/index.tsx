@@ -32,7 +32,7 @@ import {
 import { Text } from "../../../../components/ui/primitives/text";
 import { resolveErrorMessage } from "../../../../utils/errors";
 import { fetchAuthCapabilitiesWithApi } from "../../../../lib/auth-capabilities";
-import { commercialMode } from "../../../../config/commercial";
+import { getCommercialMode } from "../../../../config/commercial";
 import { useSubscription } from "../../../../hooks/use-subscription";
 import { openCustomerPortal } from "../../../../utils/checkout";
 
@@ -126,7 +126,7 @@ function SettingsPage() {
           </NavigationMenuLinkItem>
         )}
       </NavigationMenu>
-      {commercialMode && (
+      {getCommercialMode() && (
         <NavigationMenu variant={isPro ? "default" : "highlight"}>
           <NavigationMenuButtonItem onClick={handleManagePlan} disabled={isManaging || subscriptionLoading}>
             <NavigationMenuItemIcon>

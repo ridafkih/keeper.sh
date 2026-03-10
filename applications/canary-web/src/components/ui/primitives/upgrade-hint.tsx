@@ -1,10 +1,10 @@
 import type { PropsWithChildren, ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { commercialMode } from "../../../config/commercial";
+import { getCommercialMode } from "../../../config/commercial";
 import { Text } from "./text";
 
 function UpgradeHint({ children }: PropsWithChildren) {
-  if (!commercialMode) return null;
+  if (!getCommercialMode()) return null;
 
   return (
     <Text size="sm" tone="muted" className="px-0.5">
@@ -17,7 +17,7 @@ function UpgradeHint({ children }: PropsWithChildren) {
 }
 
 function PremiumFeatureGate({ locked, children, hint }: { locked: boolean; children: ReactNode; hint: string }) {
-  if (!locked || !commercialMode) return <>{children}</>;
+  if (!locked || !getCommercialMode()) return <>{children}</>;
 
   return (
     <div

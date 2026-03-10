@@ -21,11 +21,10 @@ import {
 import { openCheckout, openCustomerPortal } from "../../../../utils/checkout";
 import { plans } from "../../../../config/plans";
 import { resolveUpgradeRedirect } from "../../../../lib/route-access-guards";
-import { commercialMode } from "../../../../config/commercial";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/upgrade/")({
-  beforeLoad: () => {
-    if (!commercialMode) {
+  beforeLoad: ({ context }) => {
+    if (!context.runtimeConfig.commercialMode) {
       throw redirect({ to: "/dashboard" });
     }
   },

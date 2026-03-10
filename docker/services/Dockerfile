@@ -15,7 +15,6 @@ FROM base AS build
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile
 COPY --from=prune /app/out/full/ .
-ENV VITE_COMMERCIAL_MODE=false
 RUN bun run --cwd applications/api build && \
     bun run --cwd applications/cron build && \
     bun run --cwd applications/canary-web build

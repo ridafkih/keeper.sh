@@ -1,5 +1,4 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
-import { commercialMode } from '../../config/commercial'
 import { jsonLdMeta, organizationSchema } from '../../lib/seo'
 import { Layout, LayoutItem } from '../../components/ui/shells/layout'
 import { MarketingHeader, MarketingHeaderActions, MarketingHeaderBranding } from '../../features/marketing/components/marketing-header'
@@ -18,7 +17,7 @@ interface GithubStarsLoaderData {
 
 export const Route = createFileRoute('/(marketing)')({
   beforeLoad: ({ context }) => {
-    if (!commercialMode) {
+    if (!context.runtimeConfig.commercialMode) {
       const hasSession = context.auth.hasSession();
       throw redirect({ to: hasSession ? "/dashboard" : "/login" });
     }

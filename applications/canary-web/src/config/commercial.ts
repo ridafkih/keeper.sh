@@ -1,1 +1,3 @@
-export const commercialMode = import.meta.env.VITE_COMMERCIAL_MODE === "true";
+import { getPublicRuntimeConfig } from "../lib/runtime-config";
+
+export const getCommercialMode = () => getPublicRuntimeConfig().commercialMode;

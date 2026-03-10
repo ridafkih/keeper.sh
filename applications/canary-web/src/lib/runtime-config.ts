@@ -1,10 +1,12 @@
 interface PublicRuntimeConfig {
+  commercialMode: boolean;
   googleAdsConversionLabel: string | null;
   googleAdsId: string | null;
   visitorsNowToken: string | null;
 }
 
 interface RuntimeConfigSource {
+  commercialMode?: boolean | null;
   googleAdsConversionLabel?: string | null;
   googleAdsId?: string | null;
   visitorsNowToken?: string | null;
@@ -21,6 +23,7 @@ const normalizeOptionalValue = (value: string | null | undefined): string | null
 const getServerPublicRuntimeConfig = (
   environment: Record<string, string | undefined>,
 ): PublicRuntimeConfig => ({
+  commercialMode: environment.COMMERCIAL_MODE === "true",
   googleAdsConversionLabel: normalizeOptionalValue(
     environment.VITE_GOOGLE_ADS_CONVERSION_LABEL,
   ),
@@ -37,6 +40,7 @@ const getWindowPublicRuntimeConfig = (): RuntimeConfigSource => {
 };
 
 const resolvePublicRuntimeConfig = (source: RuntimeConfigSource): PublicRuntimeConfig => ({
+  commercialMode: source.commercialMode === true,
   googleAdsConversionLabel: normalizeOptionalValue(source.googleAdsConversionLabel),
   googleAdsId: normalizeOptionalValue(source.googleAdsId),
   visitorsNowToken: normalizeOptionalValue(source.visitorsNowToken),
