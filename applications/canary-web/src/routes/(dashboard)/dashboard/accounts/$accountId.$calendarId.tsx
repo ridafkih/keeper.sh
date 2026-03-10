@@ -112,11 +112,13 @@ function useSeedCalendarDetail(calendarId: string, calendar: CalendarDetail | un
   const store = useStore();
 
   useEffect(() => {
-    if (calendar && store.get(calendarDetailLoadedAtom) !== calendarId) {
-      store.set(calendarDetailAtom, calendar);
+    if (store.get(calendarDetailLoadedAtom) !== calendarId) {
+      store.set(calendarDetailAtom, calendar ?? null);
       store.set(calendarDetailLoadedAtom, calendarId);
       store.set(calendarDetailErrorAtom, null);
       store.set(destinationIdsAtom, new Set<string>());
+    } else if (calendar) {
+      store.set(calendarDetailAtom, calendar);
     }
   }, [calendarId, calendar, store]);
 }
@@ -632,8 +634,7 @@ function ExcludeFieldToggleIndicator({ field, matchesField, disabled }: { field:
 
 
 function CalendarInfoSection({ account, accountId }: { account: CalendarAccount; accountId: string }) {
-  const store = useStore();
-  const calendar = store.get(calendarDetailAtom);
+  const calendar = useAtomValue(calendarDetailAtom);
 
   if (!calendar) return null;
 
