@@ -36,7 +36,7 @@ const baseSecurityHeaders: Record<string, string> = {
 };
 
 const cspHeader =
-  "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+  "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://cdn.visitors.now; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://www.google-analytics.com https://cdn.visitors.now; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
 function withSecurityHeaders(response: Response, config: ServerConfig): Response {
   const headers = new Headers(response.headers);
