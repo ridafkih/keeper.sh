@@ -1,8 +1,8 @@
-import { type PropsWithChildren, type ReactNode, useRef } from "react";
+import { type PropsWithChildren, type ReactNode } from "react";
 import { tv } from "tailwind-variants/lite";
 
 const collapsible = tv({
-  base: "group cursor-pointer",
+  base: "group",
 });
 
 const collapsibleTrigger = tv({
@@ -23,21 +23,9 @@ type CollapsibleProps = PropsWithChildren<{
 }>;
 
 export function Collapsible({ trigger, children, className }: CollapsibleProps) {
-  const detailsRef = useRef<HTMLDetailsElement>(null);
-
   return (
     <details
-      ref={detailsRef}
       className={collapsible({ className })}
-      onClick={(event) => {
-        if (!(event.target instanceof HTMLElement)) return;
-        if (event.target.closest("summary")) return;
-        if (event.target.closest("a")) return;
-        event.preventDefault();
-        if (detailsRef.current) {
-          detailsRef.current.open = !detailsRef.current.open;
-        }
-      }}
     >
       <summary className={collapsibleTrigger()}>
         {trigger}
