@@ -26,6 +26,9 @@ import { MarketingIllustrationContributors } from '../../illustrations/marketing
 import { MarketingIllustrationProviders } from '../../illustrations/marketing-illustration-providers'
 import { MarketingIllustrationSync } from '../../illustrations/marketing-illustration-sync'
 import { MarketingIllustrationSetup } from '../../illustrations/marketing-illustration-setup'
+import { HowItWorksConnect } from '../../illustrations/how-it-works-connect'
+import { HowItWorksConfigure } from '../../illustrations/how-it-works-configure'
+import { HowItWorksSync } from '../../illustrations/how-it-works-sync'
 import {
   MarketingPricingComparisonGrid,
   MarketingPricingComparisonSpacer,
@@ -76,7 +79,7 @@ const MARKETING_FEATURES: MarketingFeature[] = [
     id: 1,
     title: 'Privacy-First & Open Source',
     description:
-      'Open-source, released under an AGPL-3.0 license. Secure and community driven.',
+      'Open-source, released under an AGPL-3.0 license. Secure and community driven. Here are some of the latest contributors.',
     gridClassName: 'lg:col-start-1 lg:col-span-4 lg:row-start-1',
     illustration: <MarketingIllustrationContributors />,
   },
@@ -352,15 +355,19 @@ function MarketingPage() {
                   <Heading3 as="h3">{HOW_IT_WORKS_STEPS[0].title}</Heading3>
                   <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[0].description}</Text>
                 </MarketingHowItWorksStepBody>
-                <MarketingHowItWorksStepIllustration />
+                <MarketingHowItWorksStepIllustration align="right">
+                  <HowItWorksConnect />
+                </MarketingHowItWorksStepIllustration>
               </MarketingHowItWorksRow>
 
-              <MarketingHowItWorksRow className="sm:flex-row-reverse">
+              <MarketingHowItWorksRow reverse>
                 <MarketingHowItWorksStepBody step={2}>
                   <Heading3 as="h3">{HOW_IT_WORKS_STEPS[1].title}</Heading3>
                   <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[1].description}</Text>
                 </MarketingHowItWorksStepBody>
-                <MarketingHowItWorksStepIllustration />
+                <MarketingHowItWorksStepIllustration align="left">
+                  <HowItWorksConfigure />
+                </MarketingHowItWorksStepIllustration>
               </MarketingHowItWorksRow>
 
               <MarketingHowItWorksRow>
@@ -368,7 +375,9 @@ function MarketingPage() {
                   <Heading3 as="h3">{HOW_IT_WORKS_STEPS[2].title}</Heading3>
                   <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[2].description}</Text>
                 </MarketingHowItWorksStepBody>
-                <MarketingHowItWorksStepIllustration />
+                <MarketingHowItWorksStepIllustration>
+                  <HowItWorksSync />
+                </MarketingHowItWorksStepIllustration>
               </MarketingHowItWorksRow>
             </MarketingHowItWorksCard>
           </MarketingHowItWorksSection>

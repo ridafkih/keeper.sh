@@ -139,6 +139,18 @@ html {
   }
 }
 
+@keyframes sync-progress {
+  0% {
+    stroke-dashoffset: 87.96;
+  }
+  50% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 87.96;
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   input:-webkit-autofill,
   input:-webkit-autofill:hover,
