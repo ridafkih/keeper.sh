@@ -1,4 +1,4 @@
-import { providerIcons } from "../../../lib/providers";
+import { providerIcons } from "../lib/providers";
 
 const ORBIT_ITEMS = Object.entries(providerIcons).reverse();
 const ORBIT_DURATION = 12;
@@ -7,7 +7,7 @@ const ICON_SIZE = 32;
 
 export function MarketingIllustrationProviders() {
   return (
-    <div className="relative w-full overflow-hidden" style={{ height: 120 }}>
+    <div className="relative w-full overflow-hidden px-4" style={{ height: 120 }}>
       <div
         className="absolute left-1/2 -translate-x-1/2"
         style={{ width: 220, height: 220, top: 40 }}

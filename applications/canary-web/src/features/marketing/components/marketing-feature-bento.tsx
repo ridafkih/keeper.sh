@@ -38,9 +38,10 @@ type MarketingFeatureBentoIllustrationProps = PropsWithChildren<{
 export function MarketingFeatureBentoIllustration({ children, plain }: MarketingFeatureBentoIllustrationProps) {
   return (
     <div
-      className="bg-background flex items-center justify-center p-4 pt-0 min-h-32"
+      className="bg-background flex items-center justify-center py-4 min-h-32 flex-1 select-none"
       style={plain ? undefined : ILLUSTRATION_STYLE}
       role="presentation"
+      aria-hidden="true"
     >
       {children}
     </div>

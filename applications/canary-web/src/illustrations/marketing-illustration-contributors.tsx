@@ -1,9 +1,9 @@
 import { AnimatePresence, LazyMotion } from "motion/react";
 import * as m from "motion/react-m";
-import { loadMotionFeatures } from "../../../lib/motion-features";
+import { loadMotionFeatures } from "../lib/motion-features";
 import { memo, useCallback, useEffect, useState } from "react";
-import { Text } from "../../../components/ui/primitives/text";
-import CONTRIBUTORS from "../contributors.json";
+import { Text } from "../components/ui/primitives/text";
+import CONTRIBUTORS from "../features/marketing/contributors.json";
 
 const VISIBLE_COUNT = 3;
 const ROTATE_INTERVAL_MS = 1800;
@@ -71,7 +71,7 @@ export function MarketingIllustrationContributors() {
 
   return (
     <LazyMotion features={loadMotionFeatures}>
-      <div className="relative w-full pt-3">
+      <div className="relative w-full pt-3 px-4">
         <div ref={measureRef} className="invisible absolute inset-x-0" aria-hidden="true">
           <ContributorRow contributor={CONTRIBUTORS[0]} />
         </div>

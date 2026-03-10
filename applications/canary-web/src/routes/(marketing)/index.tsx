@@ -22,8 +22,10 @@ import {
   MarketingFeatureBentoIllustration,
   MarketingFeatureBentoSection,
 } from '../../features/marketing/components/marketing-feature-bento'
-import { MarketingIllustrationContributors } from '../../features/marketing/components/marketing-illustration-contributors'
-import { MarketingIllustrationProviders } from '../../features/marketing/components/marketing-illustration-providers'
+import { MarketingIllustrationContributors } from '../../illustrations/marketing-illustration-contributors'
+import { MarketingIllustrationProviders } from '../../illustrations/marketing-illustration-providers'
+import { MarketingIllustrationSync } from '../../illustrations/marketing-illustration-sync'
+import { MarketingIllustrationSetup } from '../../illustrations/marketing-illustration-setup'
 import {
   MarketingPricingComparisonGrid,
   MarketingPricingComparisonSpacer,
@@ -92,13 +94,15 @@ const MARKETING_FEATURES: MarketingFeature[] = [
     description:
       'Your events are aggregated and synced across all linked calendars. Discrepancies are reconciled. Built to prevent orphan events.',
     gridClassName: 'lg:col-start-1 lg:col-span-6 lg:row-start-2',
+    illustration: <MarketingIllustrationSync />,
   },
   {
     id: 4,
     title: 'Quick Setup',
     description:
-      'Link OAuth, ICS or CalDAV accounts in seconds. Quick and simple to set up.',
+      'Link OAuth, ICS or CalDAV accounts in seconds. No complicated configuration or technical knowledge required. Connect and go.',
     gridClassName: 'lg:col-start-7 lg:col-span-4 lg:row-start-2',
+    illustration: <MarketingIllustrationSetup />,
   },
 ]
 

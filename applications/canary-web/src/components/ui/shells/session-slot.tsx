@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useSyncExternalStore } from "react";
 import { hasSessionCookie } from "../../../lib/session-cookie";
 
 interface SessionSlotProps {
@@ -6,6 +6,11 @@ interface SessionSlotProps {
   unauthenticated: ReactNode;
 }
 
+const subscribe = () => () => {};
+const getSnapshot = () => hasSessionCookie();
+const getServerSnapshot = () => false;
+
 export function SessionSlot({ authenticated, unauthenticated }: SessionSlotProps) {
-  return hasSessionCookie() ? authenticated : unauthenticated;
+  const isAuthenticated = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  return isAuthenticated ? authenticated : unauthenticated;
 }

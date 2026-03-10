@@ -1,5 +1,5 @@
 export const providerIcons: Record<string, string> = {
-  google: "/integrations/icon-google.svg",
+  google: "/integrations/icon-google-calendar.svg",
   outlook: "/integrations/icon-outlook.svg",
   icloud: "/integrations/icon-icloud.svg",
   fastmail: "/integrations/icon-fastmail.svg",
