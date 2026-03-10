@@ -1,6 +1,25 @@
 name: keeper
 
 services:
+  caddy:
+    build:
+      context: docker/caddy
+    container_name: keeper-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: "${DOMAIN:?DOMAIN is required}"
+      CLOUDFLARE_API_TOKEN: "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN is required}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web
+    restart: unless-stopped
+
   redis:
     image: redis:7-alpine
     container_name: keeper-redis
@@ -39,11 +58,11 @@ services:
       VITE_API_URL: http://api:3001
       PORT: "3000"
       ENV: production
-    ports:
-      - "3000:3000"
     depends_on:
       - api
     restart: unless-stopped
 
 volumes:
+  caddy-data:
+  caddy-config:
   redis-data:

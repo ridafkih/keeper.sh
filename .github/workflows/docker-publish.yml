@@ -182,7 +182,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: compose.yaml
+          source: "compose.yaml,Caddyfile,docker/caddy/Dockerfile"
           target: /home/ubuntu
 
       - uses: appleboy/ssh-action@v1.2.4
@@ -194,5 +194,6 @@ jobs:
             cd /home/ubuntu
 
             docker compose pull
+            docker compose build
             docker compose up -d --remove-orphans
             docker image prune -f
