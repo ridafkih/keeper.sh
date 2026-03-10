@@ -21,7 +21,7 @@ import {
   eventStatesTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
-import { and, eq, gt, inArray, lt, or } from "drizzle-orm";
+import { and, arrayContains, eq, gt, inArray, lt, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { fetchCalendarEvents, fetchCalendarName, parseOutlookEvents } from "./utils/fetch-events";
 
@@ -305,6 +305,7 @@ const getOutlookSourcesWithCredentials = async (
     .where(
       and(
         eq(calendarsTable.calendarType, "oauth"),
+        arrayContains(calendarsTable.capabilities, ["pull"]),
         eq(calendarAccountsTable.provider, OUTLOOK_PROVIDER_ID),
         eq(calendarAccountsTable.needsReauthentication, false),
       ),
