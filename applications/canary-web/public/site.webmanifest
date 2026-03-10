@@ -1,0 +1,19 @@
+{
+  "name": "Keeper.sh",
+  "short_name": "Keeper",
+  "icons": [
+    {
+      "src": "/180x180-light-on-dark.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/512x512-on-light.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#FAFAFA",
+  "background_color": "#FAFAFA",
+  "display": "standalone"
+}

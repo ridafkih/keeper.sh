@@ -46,9 +46,13 @@ export function seoMeta({
     { content: description, property: "og:description" },
     { content: canonicalUrl(path), property: "og:url" },
     { content: SITE_NAME, property: "og:site_name" },
-    { content: "summary", name: "twitter:card" },
+    { content: `${SITE_URL}/open-graph.png`, property: "og:image" },
+    { content: "1200", property: "og:image:width" },
+    { content: "630", property: "og:image:height" },
+    { content: "summary_large_image", name: "twitter:card" },
     { content: title, name: "twitter:title" },
     { content: description, name: "twitter:description" },
+    { content: `${SITE_URL}/open-graph.png`, name: "twitter:image" },
   ];
 }
 
@@ -60,7 +64,7 @@ export const organizationSchema = {
       "@id": `${SITE_URL}/#organization`,
       name: SITE_NAME,
       url: SITE_URL,
-      logo: `${SITE_URL}/keeper.svg`,
+      logo: `${SITE_URL}/512x512-on-light.png`,
       sameAs: ["https://github.com/ridafkih/keeper.sh"],
     },
     {

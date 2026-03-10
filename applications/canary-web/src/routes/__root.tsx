@@ -72,6 +72,8 @@ function RootComponent() {
         ))}
         <link rel="icon" type="image/svg+xml" href="/keeper.svg" media="(prefers-color-scheme: light)" />
         <link rel="icon" type="image/svg+xml" href="/keeper-dark.svg" media="(prefers-color-scheme: dark)" />
+        <link rel="apple-touch-icon" href="/180x180-light-on-dark.png" />
+        <link rel="manifest" href="/site.webmanifest" />
         <link rel="preload" href="/assets/fonts/Geist-variable.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <link rel="preload" href="/assets/fonts/Lora-variable.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
       </head>
