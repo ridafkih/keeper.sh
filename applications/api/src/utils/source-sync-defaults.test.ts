@@ -5,12 +5,13 @@ import {
 } from "./source-sync-defaults";
 
 describe("DEFAULT_SOURCE_SYNC_RULES", () => {
-  it("disables event title, description, and location sync by default", () => {
+  it("disables event title, description, and location sync and includes sources in iCal by default", () => {
     expect(DEFAULT_SOURCE_SYNC_RULES).toEqual({
       customEventName: "{{calendar_name}}",
       excludeEventDescription: true,
       excludeEventLocation: true,
       excludeEventName: true,
+      includeInIcalFeed: true,
     });
   });
 
@@ -27,6 +28,7 @@ describe("DEFAULT_SOURCE_SYNC_RULES", () => {
       excludeEventDescription: true,
       excludeEventLocation: true,
       excludeEventName: true,
+      includeInIcalFeed: true,
       name: "Team Calendar",
       userId: "user-1",
     });

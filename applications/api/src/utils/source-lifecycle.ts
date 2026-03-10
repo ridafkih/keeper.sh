@@ -11,8 +11,8 @@ interface CreateSourceInput {
 }
 
 interface CreateSourceDependencies<TSource extends SourceReference> {
-  countExistingMappedSources: (userId: string) => Promise<number>;
-  canAddSource: (userId: string, existingSourceCount: number) => Promise<boolean>;
+  countExistingAccounts: (userId: string) => Promise<number>;
+  canAddAccount: (userId: string, existingAccountCount: number) => Promise<boolean>;
   validateSourceUrl: (url: string) => Promise<void>;
   createCalendarAccount: (payload: {
     userId: string;
@@ -33,19 +33,9 @@ interface CreateSourceDependencies<TSource extends SourceReference> {
   triggerDestinationSync: (userId: string) => void;
 }
 
-interface DeleteSourceInput {
-  userId: string;
-  calendarId: string;
-}
-
-interface DeleteSourceDependencies {
-  deleteSourceCalendar: (payload: DeleteSourceInput) => Promise<boolean>;
-  triggerDestinationSync: (userId: string) => void;
-}
-
 class SourceLimitError extends Error {
   constructor() {
-    super("Source limit reached. Upgrade to Pro for unlimited sources.");
+    super("Account limit reached. Upgrade to Pro for unlimited accounts.");
   }
 }
 
@@ -68,8 +58,8 @@ const runCreateSource = async <TSource extends SourceReference>(
   input: CreateSourceInput,
   dependencies: CreateSourceDependencies<TSource>,
 ): Promise<TSource> => {
-  const existingSourceCount = await dependencies.countExistingMappedSources(input.userId);
-  const allowed = await dependencies.canAddSource(input.userId, existingSourceCount);
+  const existingAccountCount = await dependencies.countExistingAccounts(input.userId);
+  const allowed = await dependencies.canAddAccount(input.userId, existingAccountCount);
   if (!allowed) {
     throw new SourceLimitError();
   }
@@ -106,29 +96,13 @@ const runCreateSource = async <TSource extends SourceReference>(
   return source;
 };
 
-const runDeleteSource = async (
-  input: DeleteSourceInput,
-  dependencies: DeleteSourceDependencies,
-): Promise<boolean> => {
-  const deleted = await dependencies.deleteSourceCalendar(input);
-  if (deleted) {
-    dependencies.triggerDestinationSync(input.userId);
-    return true;
-  }
-
-  return false;
-};
-
 export {
   SourceLimitError,
   InvalidSourceUrlError,
   runCreateSource,
-  runDeleteSource,
 };
 export type {
   SourceReference,
   CreateSourceInput,
   CreateSourceDependencies,
-  DeleteSourceInput,
-  DeleteSourceDependencies,
 };

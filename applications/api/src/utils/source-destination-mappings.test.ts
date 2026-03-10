@@ -173,6 +173,36 @@ describe("runSetDestinationsForSource", () => {
 
     expect(errors).toHaveLength(1);
   });
+
+  it("throws when projected mappings exceed entitlement limit", async () => {
+    let replaceCalled = false;
+    let triggerCount = 0;
+
+    await expect(
+      runSetDestinationsForSource("user-1", "source-1", ["dest-1", "dest-2", "dest-3"], {
+        isMappingCountAllowed: () => Promise.resolve(false),
+        triggerDestinationSync: () => {
+          triggerCount += 1;
+        },
+        withTransaction: (transactionCallback) =>
+          transactionCallback({
+            acquireUserLock: () => Promise.resolve(),
+            countMappingsForSource: () => Promise.resolve(1),
+            countUserMappings: () => Promise.resolve(3),
+            ensureDestinationSyncStatuses: () => Promise.resolve(),
+            findOwnedDestinationIds: () => Promise.resolve(["dest-1", "dest-2", "dest-3"]),
+            replaceSourceMappings: () => {
+              replaceCalled = true;
+              return Promise.resolve();
+            },
+            sourceExists: () => Promise.resolve(true),
+          }),
+      }),
+    ).rejects.toThrow("Mapping limit reached");
+
+    expect(replaceCalled).toBe(false);
+    expect(triggerCount).toBe(0);
+  });
 });
 
 describe("mapping transaction adversarial behavior", () => {
@@ -563,5 +593,35 @@ describe("runSetSourcesForDestination", () => {
     ).resolves.toBeUndefined();
 
     expect(errors).toHaveLength(1);
+  });
+
+  it("throws when projected mappings exceed entitlement limit", async () => {
+    let replaceCalled = false;
+    let triggerCount = 0;
+
+    await expect(
+      runSetSourcesForDestination("user-1", "dest-1", ["source-1", "source-2"], {
+        isMappingCountAllowed: () => Promise.resolve(false),
+        triggerDestinationSync: () => {
+          triggerCount += 1;
+        },
+        withTransaction: (transactionCallback) =>
+          transactionCallback({
+            acquireUserLock: () => Promise.resolve(),
+            countMappingsForDestination: () => Promise.resolve(1),
+            countUserMappings: () => Promise.resolve(3),
+            destinationExists: () => Promise.resolve(true),
+            ensureDestinationSyncStatus: () => Promise.resolve(),
+            findOwnedSourceIds: () => Promise.resolve(["source-1", "source-2"]),
+            replaceDestinationMappings: () => {
+              replaceCalled = true;
+              return Promise.resolve();
+            },
+          }),
+      }),
+    ).rejects.toThrow("Mapping limit reached");
+
+    expect(replaceCalled).toBe(false);
+    expect(triggerCount).toBe(0);
   });
 });

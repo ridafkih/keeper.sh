@@ -2,10 +2,7 @@ import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schem
 import { and, eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "../../../utils/middleware";
 import { ErrorResponse } from "../../../utils/responses";
-import { database } from "../../../context";
-import { deleteSource as deleteIcsSource } from "../../../utils/sources";
-import { deleteOAuthSource } from "../../../utils/oauth-sources";
-import { deleteCalDAVSource } from "../../../utils/caldav-sources";
+import { database, premiumService } from "../../../context";
 import { triggerDestinationSync } from "../../../utils/sync";
 import { idParamSchema } from "../../../utils/request-query";
 import {
@@ -14,7 +11,7 @@ import {
 } from "../../../utils/source-destination-mappings";
 import { reportError } from "../../../utils/logging";
 import { withProviderMetadata } from "../../../utils/provider-display";
-import { handleDeleteSourceRoute, handlePatchSourceRoute } from "./[id]/source-item-routes";
+import { handlePatchSourceRoute } from "./[id]/source-item-routes";
 
 const GET = withWideEvent(
   withAuth(async ({ params, userId }) => {
@@ -77,6 +74,7 @@ const PATCH = withWideEvent(
     return handlePatchSourceRoute(
       { body: payload, params, userId },
       {
+        canUseEventFilters: (userId) => premiumService.canUseEventFilters(userId),
         reportError,
         triggerDestinationSync,
         updateSource: async (userIdToUpdate, sourceCalendarId, updates) => {
@@ -98,33 +96,4 @@ const PATCH = withWideEvent(
   }),
 );
 
-const calendarTypeDeleters: Record<string, (userId: string, calendarId: string) => Promise<boolean>> = {
-  ical: deleteIcsSource,
-  oauth: deleteOAuthSource,
-  caldav: deleteCalDAVSource,
-};
-
-const DELETE = withWideEvent(
-  withAuth(({ params, userId }) => handleDeleteSourceRoute(
-      { params, userId },
-      {
-        deleteSourceByType: calendarTypeDeleters,
-        getSourceCalendarType: async (userIdToFind, sourceCalendarId) => {
-          const [source] = await database
-            .select({ calendarType: calendarsTable.calendarType })
-            .from(calendarsTable)
-            .where(
-              and(
-                eq(calendarsTable.id, sourceCalendarId),
-                eq(calendarsTable.userId, userIdToFind),
-              ),
-            )
-            .limit(1);
-
-          return source?.calendarType ?? null;
-        },
-      },
-    )),
-);
-
-export { GET, PATCH, DELETE };
+export { GET, PATCH };

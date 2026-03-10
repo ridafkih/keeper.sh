@@ -3,7 +3,6 @@ import { CalendarFetchError } from "@keeper.sh/calendar";
 import {
   SourceLimitError,
   runCreateSource,
-  runDeleteSource,
 } from "./source-lifecycle";
 
 interface TestSource {
@@ -38,8 +37,8 @@ describe("runCreateSource", () => {
           userId: "user-1",
         },
         {
-          canAddSource: () => Promise.resolve(false),
-          countExistingMappedSources: () => Promise.resolve(3),
+          canAddAccount: () => Promise.resolve(false),
+          countExistingAccounts: () => Promise.resolve(3),
           createCalendarAccount: () => Promise.resolve("account-1"),
           createSourceCalendar: () => Promise.resolve(createSourceRecord()),
           fetchAndSyncSource: () => Promise.resolve(),
@@ -62,8 +61,8 @@ describe("runCreateSource", () => {
           userId: "user-1",
         },
         {
-          canAddSource: () => Promise.resolve(true),
-          countExistingMappedSources: () => Promise.resolve(0),
+          canAddAccount: () => Promise.resolve(true),
+          countExistingAccounts: () => Promise.resolve(0),
           createCalendarAccount: () => Promise.resolve("account-1"),
           createSourceCalendar: () => Promise.resolve(createSourceRecord()),
           fetchAndSyncSource: () => Promise.resolve(),
@@ -97,8 +96,8 @@ describe("runCreateSource", () => {
         userId: "user-42",
       },
       {
-        canAddSource: () => Promise.resolve(true),
-        countExistingMappedSources: () => Promise.resolve(2),
+        canAddAccount: () => Promise.resolve(true),
+        countExistingAccounts: () => Promise.resolve(2),
         createCalendarAccount: () => Promise.resolve("account-42"),
         createSourceCalendar: (payload) => Promise.resolve(createSourceRecord({
             accountId: payload.accountId,
@@ -141,8 +140,8 @@ describe("runCreateSource", () => {
           userId: "user-1",
         },
         {
-          canAddSource: () => Promise.resolve(true),
-          countExistingMappedSources: () => Promise.resolve(0),
+          canAddAccount: () => Promise.resolve(true),
+          countExistingAccounts: () => Promise.resolve(0),
           createCalendarAccount: () => Promise.resolve(""),
           createSourceCalendar: () => Promise.resolve(createSourceRecord()),
           fetchAndSyncSource: () => Promise.resolve(),
@@ -163,8 +162,8 @@ describe("runCreateSource", () => {
           userId: "user-1",
         },
         {
-          canAddSource: () => Promise.resolve(true),
-          countExistingMappedSources: () => Promise.resolve(0),
+          canAddAccount: () => Promise.resolve(true),
+          countExistingAccounts: () => Promise.resolve(0),
           createCalendarAccount: () => Promise.resolve("account-1"),
           createSourceCalendar: () =>
             Promise.resolve<TestSource | undefined>(globalThis.undefined),
@@ -175,47 +174,5 @@ describe("runCreateSource", () => {
         },
       ),
     ).rejects.toThrow("Failed to create source");
-  });
-});
-
-describe("runDeleteSource", () => {
-  it("triggers destination sync only when source deletion succeeds", async () => {
-    const syncedUserIds: string[] = [];
-
-    const deleted = await runDeleteSource(
-      {
-        calendarId: "source-1",
-        userId: "user-1",
-      },
-      {
-        deleteSourceCalendar: () => Promise.resolve(true),
-        triggerDestinationSync: (userId) => {
-          syncedUserIds.push(userId);
-        },
-      },
-    );
-
-    expect(deleted).toBe(true);
-    expect(syncedUserIds).toEqual(["user-1"]);
-  });
-
-  it("does not trigger destination sync when deletion does not occur", async () => {
-    const syncedUserIds: string[] = [];
-
-    const deleted = await runDeleteSource(
-      {
-        calendarId: "source-404",
-        userId: "user-1",
-      },
-      {
-        deleteSourceCalendar: () => Promise.resolve(false),
-        triggerDestinationSync: (userId) => {
-          syncedUserIds.push(userId);
-        },
-      },
-    );
-
-    expect(deleted).toBe(false);
-    expect(syncedUserIds).toEqual([]);
   });
 });

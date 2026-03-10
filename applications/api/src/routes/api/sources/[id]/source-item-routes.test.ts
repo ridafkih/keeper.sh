@@ -1,8 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import {
-  handleDeleteSourceRoute,
-  handlePatchSourceRoute,
-} from "./source-item-routes";
+import { handlePatchSourceRoute } from "./source-item-routes";
 
 const readJson = (response: Response): Promise<unknown> => response.json();
 
@@ -11,6 +8,7 @@ describe("handlePatchSourceRoute", () => {
     const response = await handlePatchSourceRoute(
       { body: {}, params: {}, userId: "user-1" },
       {
+        canUseEventFilters: () => Promise.resolve(true),
         reportError: Boolean,
         triggerDestinationSync: Boolean,
         updateSource: () => Promise.resolve(null),
@@ -24,6 +22,7 @@ describe("handlePatchSourceRoute", () => {
     const response = await handlePatchSourceRoute(
       { body: { unknown: true }, params: { id: "source-1" }, userId: "user-1" },
       {
+        canUseEventFilters: () => Promise.resolve(true),
         reportError: Boolean,
         triggerDestinationSync: Boolean,
         updateSource: () => Promise.resolve(null),
@@ -41,6 +40,7 @@ describe("handlePatchSourceRoute", () => {
         userId: "user-1",
       },
       {
+        canUseEventFilters: () => Promise.resolve(true),
         reportError: Boolean,
         triggerDestinationSync: Boolean,
         updateSource: () => Promise.resolve(null),
@@ -48,6 +48,27 @@ describe("handlePatchSourceRoute", () => {
     );
 
     expect(response.status).toBe(404);
+  });
+
+  it("returns 403 when free users update the event name template", async () => {
+    const response = await handlePatchSourceRoute(
+      {
+        body: { customEventName: "{{calendar_name}}" },
+        params: { id: "source-1" },
+        userId: "user-1",
+      },
+      {
+        canUseEventFilters: () => Promise.resolve(false),
+        reportError: Boolean,
+        triggerDestinationSync: Boolean,
+        updateSource: () => Promise.resolve(null),
+      },
+    );
+
+    expect(response.status).toBe(403);
+    expect(await readJson(response)).toEqual({
+      error: "Event filters require a Pro plan.",
+    });
   });
 
   it("does not fail when post-update destination sync trigger throws", async () => {
@@ -60,6 +81,7 @@ describe("handlePatchSourceRoute", () => {
         userId: "user-1",
       },
       {
+        canUseEventFilters: () => Promise.resolve(true),
         reportError: (error) => {
           errors.push(error);
         },
@@ -75,51 +97,5 @@ describe("handlePatchSourceRoute", () => {
 
     expect(response.status).toBe(200);
     expect(errors).toHaveLength(1);
-  });
-});
-
-describe("handleDeleteSourceRoute", () => {
-  it("returns 400 when source type is unknown", async () => {
-    const response = await handleDeleteSourceRoute(
-      { params: { id: "source-1" }, userId: "user-1" },
-      {
-        deleteSourceByType: {
-          ical: () => Promise.resolve(true),
-        },
-        getSourceCalendarType: () => Promise.resolve("oauth"),
-      },
-    );
-
-    expect(response.status).toBe(400);
-    expect(await readJson(response)).toEqual({ error: "Unknown source type" });
-  });
-
-  it("returns 404 when deleter reports no deletion", async () => {
-    const response = await handleDeleteSourceRoute(
-      { params: { id: "source-1" }, userId: "user-1" },
-      {
-        deleteSourceByType: {
-          oauth: () => Promise.resolve(false),
-        },
-        getSourceCalendarType: () => Promise.resolve("oauth"),
-      },
-    );
-
-    expect(response.status).toBe(404);
-  });
-
-  it("returns success when deleter reports deletion", async () => {
-    const response = await handleDeleteSourceRoute(
-      { params: { id: "source-1" }, userId: "user-1" },
-      {
-        deleteSourceByType: {
-          ical: () => Promise.resolve(true),
-        },
-        getSourceCalendarType: () => Promise.resolve("ical"),
-      },
-    );
-
-    expect(response.status).toBe(200);
-    expect(await readJson(response)).toEqual({ success: true });
   });
 });

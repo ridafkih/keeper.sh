@@ -132,7 +132,7 @@ const PRICING_PLANS: PricingPlan[] = [
     price: '$0',
     period: 'per month',
     description:
-      'For users that just want to get basic calendar syncing up and running.',
+      'For personal use and getting started with calendar sync.',
     ctaLabel: 'Get Started',
   },
   {
@@ -141,7 +141,7 @@ const PRICING_PLANS: PricingPlan[] = [
     price: '$5',
     period: 'per month',
     description:
-      'For power users who want minutely syncs and unlimited calendars.',
+      'For power users who need fast syncs, advanced feed controls, and unlimited syncing.',
     ctaLabel: 'Get Started',
     tone: "inverse" as const,
   },
@@ -149,9 +149,11 @@ const PRICING_PLANS: PricingPlan[] = [
 
 const PRICING_FEATURES: PricingFeature[] = [
   { label: 'Sync Interval', free: 'Every 30 minutes', pro: 'Every 1 minute' },
-  { label: 'Linked Calendar Accounts', free: '0-2', pro: 'infinity' },
-  { label: 'Calendars per Account', free: '0-2', pro: 'infinity' },
-  { label: 'Aggregated iCal Link', free: 'check', pro: 'check' },
+  { label: 'Linked Accounts', free: 'Up to 2', pro: 'infinity' },
+  { label: 'Sync Mappings', free: 'Up to 3', pro: 'infinity' },
+  { label: 'Aggregated iCal Feed', free: 'check', pro: 'check' },
+  { label: 'iCal Feed Customization', free: 'minus', pro: 'check' },
+  { label: 'Event Filters & Exclusions', free: 'minus', pro: 'check' },
   { label: 'Priority Support', free: 'minus', pro: 'check' },
 ]
 
@@ -204,7 +206,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'How often do calendars sync?',
     answer:
-      'On the free plan, calendars sync every 30 minutes. Users who upgrade to the Pro plan get syncs every 60 seconds.',
+      'On the free plan, calendars sync every 30 minutes. On the Pro plan, calendars sync every minute.',
   },
   {
     question: 'Are my event details visible to others?',
@@ -373,7 +375,7 @@ function MarketingPage() {
                   <Heading3 as="h3">{HOW_IT_WORKS_STEPS[2].title}</Heading3>
                   <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[2].description}</Text>
                 </MarketingHowItWorksStepBody>
-                <MarketingHowItWorksStepIllustration>
+                <MarketingHowItWorksStepIllustration align="right">
                   <HowItWorksSync />
                 </MarketingHowItWorksStepIllustration>
               </MarketingHowItWorksRow>

@@ -2,9 +2,11 @@ import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR from "swr";
 import { BackButton } from "../../../../components/ui/primitives/back-button";
+import { UpgradeHint } from "../../../../components/ui/primitives/upgrade-hint";
 import { DashboardSection } from "../../../../components/ui/primitives/dashboard-heading";
 import { Button, LinkButton, ButtonText } from "../../../../components/ui/primitives/button";
 import { apiFetch } from "../../../../lib/fetcher";
+import { useEntitlements, useMutateEntitlements, canAddMore } from "../../../../hooks/use-entitlements";
 import type { CalendarSource } from "../../../../types/api";
 import {
   NavigationMenu,
@@ -222,6 +224,7 @@ function useCalendarMapping({
 }) {
   const endpoint = calendarId ? `/api/sources/${calendarId}/${route}` : null;
   const { data, mutate } = useSWR<CalendarMappingData>(endpoint);
+  const { adjustMappingCount, revalidateEntitlements } = useMutateEntitlements();
 
   const selectedIds = new Set(data?.[responseKey] ?? []);
 
@@ -230,22 +233,31 @@ function useCalendarMapping({
     const currentIds = data?.[responseKey] ?? [];
     const updatedIds = resolveUpdatedIds(currentIds, targetCalendarId, checked);
     const mappingData = buildMappingData(responseKey, updatedIds);
+    const delta = checked ? 1 : -1;
 
-    await mutate(
-      async () => {
-        await apiFetch(endpoint, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ calendarIds: updatedIds }),
-        });
-        return mappingData;
-      },
-      {
-        optimisticData: mappingData,
-        rollbackOnError: true,
-        revalidate: false,
-      },
-    );
+    adjustMappingCount(delta);
+
+    try {
+      await mutate(
+        async () => {
+          await apiFetch(endpoint, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ calendarIds: updatedIds }),
+          });
+          return mappingData;
+        },
+        {
+          optimisticData: mappingData,
+          rollbackOnError: true,
+          revalidate: false,
+        },
+      );
+    } catch {
+      adjustMappingCount(-delta);
+    } finally {
+      void revalidateEntitlements();
+    }
   };
 
   return { selectedIds, handleToggle };
@@ -465,6 +477,8 @@ function DestinationsSection({
     route: "destinations",
     responseKey: "destinationIds",
   });
+  const { data: entitlements } = useEntitlements();
+  const atLimit = !canAddMore(entitlements?.mappings);
 
   const pushCalendars = allCalendars.filter(
     (candidate) => canPush(candidate) && candidate.id !== calendar.id,
@@ -481,22 +495,28 @@ function DestinationsSection({
         {pushCalendars.length === 0 && (
           <NavigationMenuEmptyItem>No destination calendars available</NavigationMenuEmptyItem>
         )}
-        {pushCalendars.map((destination) => (
-          <NavigationMenuCheckboxItem
-            key={destination.id}
-            checked={selectedIds.has(destination.id)}
-            onCheckedChange={(checked) => handleToggle(destination.id, checked)}
-          >
-            <NavigationMenuItemIcon>
-              <ProviderIcon
-                provider={getCalendarProvider(destination)}
-                calendarType={destination.calendarType}
-              />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>{destination.name}</NavigationMenuItemLabel>
-          </NavigationMenuCheckboxItem>
-        ))}
+        {pushCalendars.map((destination) => {
+          const checked = selectedIds.has(destination.id);
+          const disabled = atLimit && !checked;
+          return (
+            <NavigationMenuCheckboxItem
+              key={destination.id}
+              checked={checked}
+              disabled={disabled}
+              onCheckedChange={(next) => !disabled && handleToggle(destination.id, next)}
+            >
+              <NavigationMenuItemIcon>
+                <ProviderIcon
+                  provider={getCalendarProvider(destination)}
+                  calendarType={destination.calendarType}
+                />
+              </NavigationMenuItemIcon>
+              <NavigationMenuItemLabel>{destination.name}</NavigationMenuItemLabel>
+            </NavigationMenuCheckboxItem>
+          );
+        })}
       </NavigationMenu>
+      {atLimit && <UpgradeHint>Mapping limit reached.</UpgradeHint>}
       <Button
         className="w-full justify-center"
         onClick={onNext}
@@ -521,6 +541,8 @@ function SourcesSection({
     route: "sources",
     responseKey: "sourceIds",
   });
+  const { data: entitlements } = useEntitlements();
+  const atLimit = !canAddMore(entitlements?.mappings);
 
   const pullCalendars = allCalendars.filter(
     (candidate) => canPull(candidate) && candidate.id !== calendar.id,
@@ -537,22 +559,28 @@ function SourcesSection({
         {pullCalendars.length === 0 && (
           <NavigationMenuEmptyItem>No source calendars available</NavigationMenuEmptyItem>
         )}
-        {pullCalendars.map((source) => (
-          <NavigationMenuCheckboxItem
-            key={source.id}
-            checked={selectedIds.has(source.id)}
-            onCheckedChange={(checked) => handleToggle(source.id, checked)}
-          >
-            <NavigationMenuItemIcon>
-              <ProviderIcon
-                provider={getCalendarProvider(source)}
-                calendarType={source.calendarType}
-              />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>{source.name}</NavigationMenuItemLabel>
-          </NavigationMenuCheckboxItem>
-        ))}
+        {pullCalendars.map((source) => {
+          const checked = selectedIds.has(source.id);
+          const disabled = atLimit && !checked;
+          return (
+            <NavigationMenuCheckboxItem
+              key={source.id}
+              checked={checked}
+              disabled={disabled}
+              onCheckedChange={(next) => !disabled && handleToggle(source.id, next)}
+            >
+              <NavigationMenuItemIcon>
+                <ProviderIcon
+                  provider={getCalendarProvider(source)}
+                  calendarType={source.calendarType}
+                />
+              </NavigationMenuItemIcon>
+              <NavigationMenuItemLabel>{source.name}</NavigationMenuItemLabel>
+            </NavigationMenuCheckboxItem>
+          );
+        })}
       </NavigationMenu>
+      {atLimit && <UpgradeHint>Mapping limit reached.</UpgradeHint>}
       <Button
         className="w-full justify-center"
         onClick={onNext}

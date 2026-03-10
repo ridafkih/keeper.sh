@@ -3,7 +3,7 @@ import { sourcePatchBodySchema } from "../../../../utils/request-body";
 import { idParamSchema } from "../../../../utils/request-query";
 import { ErrorResponse } from "../../../../utils/responses";
 
-const SOURCE_BOOLEAN_UPDATE_FIELDS = [
+const EVENT_FILTER_FIELDS = [
   "excludeAllDayEvents",
   "excludeEventDescription",
   "excludeEventLocation",
@@ -11,6 +11,10 @@ const SOURCE_BOOLEAN_UPDATE_FIELDS = [
   "excludeFocusTime",
   "excludeOutOfOffice",
   "excludeWorkingLocation",
+] as const;
+
+const SOURCE_BOOLEAN_UPDATE_FIELDS = [
+  ...EVENT_FILTER_FIELDS,
   "includeInIcalFeed",
 ] as const;
 
@@ -29,16 +33,9 @@ interface PatchSourceDependencies {
     sourceCalendarId: string,
     updates: Record<string, string | boolean>,
   ) => Promise<Record<string, unknown> | null>;
+  canUseEventFilters: (userId: string) => Promise<boolean>;
   triggerDestinationSync: (userId: string) => void;
   reportError?: (error: unknown, fields?: Record<string, unknown>) => void;
-}
-
-interface DeleteSourceDependencies {
-  getSourceCalendarType: (userId: string, sourceCalendarId: string) => Promise<string | null>;
-  deleteSourceByType: Record<
-    string,
-    (userId: string, sourceCalendarId: string) => Promise<boolean>
-  >;
 }
 
 const buildSourceUpdates = (
@@ -84,6 +81,18 @@ const handlePatchSourceRoute = async (
   if (sourcePatchBodySchema.allows(context.body)) {
     parsedBody = context.body;
   }
+
+  const hasEventFilterUpdates = EVENT_FILTER_FIELDS.some(
+    (field) => typeof parsedBody[field] === "boolean",
+  );
+  const isUpdatingEventNameTemplate = typeof parsedBody.customEventName === "string";
+  if (hasEventFilterUpdates || isUpdatingEventNameTemplate) {
+    const allowed = await dependencies.canUseEventFilters(context.userId);
+    if (!allowed) {
+      return ErrorResponse.forbidden("Event filters require a Pro plan.").toResponse();
+    }
+  }
+
   const updates = buildSourceUpdates(parsedBody);
 
   if (Object.keys(updates).length === 0) {
@@ -108,34 +117,4 @@ const handlePatchSourceRoute = async (
   return Response.json(updated);
 };
 
-const handleDeleteSourceRoute = async (
-  context: SourceRouteContext,
-  dependencies: DeleteSourceDependencies,
-): Promise<Response> => {
-  const resolvedId = resolveId(context.params);
-  if (resolvedId instanceof Response) {
-    return resolvedId;
-  }
-
-  const sourceCalendarType = await dependencies.getSourceCalendarType(
-    context.userId,
-    resolvedId.id,
-  );
-  if (!sourceCalendarType) {
-    return ErrorResponse.notFound().toResponse();
-  }
-
-  const deleter = dependencies.deleteSourceByType[sourceCalendarType];
-  if (!deleter) {
-    return ErrorResponse.badRequest("Unknown source type").toResponse();
-  }
-
-  const deleted = await deleter(context.userId, resolvedId.id);
-  if (!deleted) {
-    return ErrorResponse.notFound().toResponse();
-  }
-
-  return Response.json({ success: true });
-};
-
-export { handlePatchSourceRoute, handleDeleteSourceRoute };
+export { handlePatchSourceRoute };

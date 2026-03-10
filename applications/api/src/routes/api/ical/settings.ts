@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { icalFeedSettingsTable } from "@keeper.sh/database/schema";
 import { withAuth, withWideEvent } from "../../../utils/middleware";
 import { ErrorResponse } from "../../../utils/responses";
-import { database } from "../../../context";
+import { database, premiumService } from "../../../context";
 import {
   icalSettingsPatchBodySchema,
   type IcalSettingsPatchBody,
@@ -40,6 +40,43 @@ const buildIcalSettingsUpdates = (
   return updates;
 };
 
+interface PatchIcalSettingsRouteContext {
+  body: unknown;
+  userId: string;
+}
+
+interface PatchIcalSettingsDependencies {
+  canCustomizeIcalFeed: (userId: string) => Promise<boolean>;
+  upsertSettings: (
+    userId: string,
+    updates: Record<string, string | boolean>,
+  ) => Promise<Record<string, unknown> | null>;
+}
+
+const handlePatchIcalSettingsRoute = async (
+  context: PatchIcalSettingsRouteContext,
+  dependencies: PatchIcalSettingsDependencies,
+): Promise<Response> => {
+  const { body: payload, userId } = context;
+  let body: IcalSettingsPatchBody = {};
+  if (icalSettingsPatchBodySchema.allows(payload)) {
+    body = payload;
+  }
+  const updates = buildIcalSettingsUpdates(body);
+
+  if (Object.keys(updates).length === 0) {
+    return ErrorResponse.badRequest("No valid fields to update").toResponse();
+  }
+
+  const allowed = await dependencies.canCustomizeIcalFeed(userId);
+  if (!allowed) {
+    return ErrorResponse.forbidden("iCal feed customization requires a Pro plan.").toResponse();
+  }
+
+  const updated = await dependencies.upsertSettings(userId, updates);
+  return Response.json(updated);
+};
+
 const GET = withWideEvent(
   withAuth(async ({ userId }) => {
     const [settings] = await database
@@ -55,27 +92,25 @@ const GET = withWideEvent(
 const PATCH = withWideEvent(
   withAuth(async ({ request, userId }) => {
     const payload = await request.json();
-    let body: IcalSettingsPatchBody = {};
-    if (icalSettingsPatchBodySchema.allows(payload)) {
-      body = payload;
-    }
-    const updates = buildIcalSettingsUpdates(body);
+    return handlePatchIcalSettingsRoute(
+      { body: payload, userId },
+      {
+        canCustomizeIcalFeed: (resolvedUserId) => premiumService.canCustomizeIcalFeed(resolvedUserId),
+        upsertSettings: async (resolvedUserId, updates) => {
+          const [updated] = await database
+            .insert(icalFeedSettingsTable)
+            .values({ userId: resolvedUserId, ...DEFAULT_SETTINGS, ...updates })
+            .onConflictDoUpdate({
+              target: icalFeedSettingsTable.userId,
+              set: updates,
+            })
+            .returning();
 
-    if (Object.keys(updates).length === 0) {
-      return ErrorResponse.badRequest("No valid fields to update").toResponse();
-    }
-
-    const [updated] = await database
-      .insert(icalFeedSettingsTable)
-      .values({ userId, ...DEFAULT_SETTINGS, ...updates })
-      .onConflictDoUpdate({
-        target: icalFeedSettingsTable.userId,
-        set: updates,
-      })
-      .returning();
-
-    return Response.json(updated);
+          return updated ?? null;
+        },
+      },
+    );
   }),
 );
 
-export { GET, PATCH };
+export { GET, PATCH, handlePatchIcalSettingsRoute };

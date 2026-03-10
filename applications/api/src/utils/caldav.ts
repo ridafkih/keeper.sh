@@ -1,16 +1,16 @@
-import { calendarsTable, sourceDestinationMappingsTable } from "@keeper.sh/database/schema";
+import { calendarAccountsTable } from "@keeper.sh/database/schema";
 import { createCalDAVClient } from "@keeper.sh/provider-caldav";
 import { encryptPassword } from "@keeper.sh/encryption";
 import { isCalDAVProvider } from "@keeper.sh/provider-registry";
 import type { CalDAVProviderId } from "@keeper.sh/provider-registry";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { saveCalDAVDestination } from "./destinations";
 import { triggerDestinationSync } from "./sync";
 import { database, encryptionKey, premiumService } from "../context";
 
 class DestinationLimitError extends Error {
   constructor() {
-    super("Destination limit reached. Upgrade to Pro.");
+    super("Account limit reached. Upgrade to Pro for unlimited accounts.");
   }
 }
 
@@ -74,24 +74,6 @@ const createCalDAVDestination = async (
   credentials: CalDAVCredentials,
   calendarUrl: string,
 ): Promise<void> => {
-  const existingDestinations = await database
-    .select({ id: calendarsTable.id })
-    .from(calendarsTable)
-    .where(
-      and(
-        eq(calendarsTable.userId, userId),
-        inArray(calendarsTable.id,
-          database.selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
-            .from(sourceDestinationMappingsTable)
-        ),
-      ),
-    );
-
-  const allowed = await premiumService.canAddDestination(userId, existingDestinations.length);
-  if (!allowed) {
-    throw new DestinationLimitError();
-  }
-
   try {
     await validateCredentials(serverUrl, credentials);
   } catch (error) {
@@ -105,6 +87,29 @@ const createCalDAVDestination = async (
   const encrypted = encryptPassword(credentials.password, encryptionKey);
   const serverHost = new URL(serverUrl).host;
   const accountId = `${credentials.username}@${serverHost}`;
+  const [existingAccount] = await database
+    .select({ id: calendarAccountsTable.id })
+    .from(calendarAccountsTable)
+    .where(
+      and(
+        eq(calendarAccountsTable.userId, userId),
+        eq(calendarAccountsTable.provider, provider),
+        eq(calendarAccountsTable.accountId, accountId),
+      ),
+    )
+    .limit(1);
+
+  if (!existingAccount) {
+    const existingAccounts = await database
+      .select({ id: calendarAccountsTable.id })
+      .from(calendarAccountsTable)
+      .where(eq(calendarAccountsTable.userId, userId));
+
+    const allowed = await premiumService.canAddAccount(userId, existingAccounts.length);
+    if (!allowed) {
+      throw new DestinationLimitError();
+    }
+  }
 
   await saveCalDAVDestination(
     userId,

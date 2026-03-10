@@ -2,6 +2,7 @@ import { ErrorResponse } from "../../../../utils/responses";
 import { respondWithLoggedError } from "../../../../utils/logging";
 import { calendarIdsBodySchema } from "../../../../utils/request-body";
 import { idParamSchema } from "../../../../utils/request-query";
+import { MAPPING_LIMIT_ERROR_MESSAGE } from "../../../../utils/source-destination-mappings";
 
 interface MappingRouteContext {
   params: Record<string, string>;
@@ -63,6 +64,10 @@ const mapMappingDomainError = (
 
   if (error.message === invalidLinkedCalendarsMessage) {
     return ErrorResponse.badRequest(error.message).toResponse();
+  }
+
+  if (error.message === MAPPING_LIMIT_ERROR_MESSAGE) {
+    return ErrorResponse.paymentRequired(error.message).toResponse();
   }
 
   return null;

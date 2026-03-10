@@ -44,8 +44,9 @@ type NavigationMenuItemProps = PropsWithChildren<{
 }>;
 
 type NavigationMenuLinkItemProps = PropsWithChildren<{
-  to: ComponentPropsWithoutRef<typeof Link>["to"];
+  to?: ComponentPropsWithoutRef<typeof Link>["to"];
   onMouseEnter?: () => void;
+  disabled?: boolean;
   className?: string;
 }>;
 
@@ -83,26 +84,35 @@ export function NavigationMenuItem({
 export function NavigationMenuLinkItem({
   to,
   onMouseEnter,
+  disabled,
   className,
   children,
 }: NavigationMenuLinkItemProps) {
   const variant = use(MenuVariantContext);
   const insidePopover = use(InsidePopoverContext);
-  const itemClass = navigationMenuItemStyle({ variant, interactive: true, className });
+  const interactive = Boolean(to) && !disabled;
+  const itemClass = navigationMenuItemStyle({ variant, interactive, className });
   const Wrapper = insidePopover ? "div" : "li";
-
-  const content = <ItemIsLinkContext value={Boolean(to)}>{children}</ItemIsLinkContext>;
+  const content = <ItemIsLinkContext value={interactive}>{children}</ItemIsLinkContext>;
 
   return (
     <Wrapper>
-      <Link
-        draggable="false"
-        to={to}
-        className={itemClass}
-        onMouseEnter={onMouseEnter}
-      >
-        {content}
-      </Link>
+      <ItemDisabledContext value={Boolean(disabled)}>
+        {interactive ? (
+          <Link
+            draggable="false"
+            to={to}
+            className={itemClass}
+            onMouseEnter={onMouseEnter}
+          >
+            {content}
+          </Link>
+        ) : (
+          <div className={itemClass} aria-disabled={disabled}>
+            {content}
+          </div>
+        )}
+      </ItemDisabledContext>
     </Wrapper>
   );
 }
@@ -200,12 +210,14 @@ export function NavigationMenuItemTrailing({
 type NavigationMenuToggleableItemProps = PropsWithChildren<{
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
   className?: string;
 }>;
 
 export function NavigationMenuCheckboxItem({
   checked,
   onCheckedChange,
+  disabled,
   className,
   children,
 }: NavigationMenuToggleableItemProps) {
@@ -213,16 +225,19 @@ export function NavigationMenuCheckboxItem({
 
   return (
     <li>
-      <button
-        type="button"
-        role="checkbox"
-        aria-checked={checked}
-        onClick={() => onCheckedChange(!checked)}
-        className={navigationMenuItemStyle({ variant, className })}
-      >
-        {children}
-        <CheckboxIndicator checked={checked} variant={variant} className="ml-auto" />
-      </button>
+      <ItemDisabledContext value={Boolean(disabled)}>
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={checked}
+          disabled={disabled}
+          onClick={() => !disabled && onCheckedChange(!checked)}
+          className={navigationMenuItemStyle({ variant, interactive: !disabled, className })}
+        >
+          {children}
+          <CheckboxIndicator checked={checked} variant={variant} className="ml-auto" />
+        </button>
+      </ItemDisabledContext>
     </li>
   );
 }
@@ -230,6 +245,7 @@ export function NavigationMenuCheckboxItem({
 export function NavigationMenuToggleItem({
   checked,
   onCheckedChange,
+  disabled,
   className,
   children,
 }: NavigationMenuToggleableItemProps) {
@@ -237,18 +253,28 @@ export function NavigationMenuToggleItem({
 
   return (
     <li>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onCheckedChange(!checked)}
-        className={navigationMenuItemStyle({ variant, className })}
-      >
-        {children}
-        <div className={navigationMenuToggleTrack({ variant, checked, className: "ml-auto" })}>
-          <div className={navigationMenuToggleThumb({ variant, checked })} />
-        </div>
-      </button>
+      <ItemDisabledContext value={Boolean(disabled)}>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          disabled={disabled}
+          onClick={() => !disabled && onCheckedChange(!checked)}
+          className={navigationMenuItemStyle({ variant, interactive: !disabled, className })}
+        >
+          {children}
+          <div
+            className={navigationMenuToggleTrack({
+              variant,
+              checked,
+              disabled,
+              className: "ml-auto",
+            })}
+          >
+            <div className={navigationMenuToggleThumb({ variant, checked })} />
+          </div>
+        </button>
+      </ItemDisabledContext>
     </li>
   );
 }

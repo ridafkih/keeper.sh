@@ -1,5 +1,5 @@
-import { calendarAccountsTable, calendarsTable, sourceDestinationMappingsTable } from "@keeper.sh/database/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { calendarAccountsTable } from "@keeper.sh/database/schema";
+import { and, eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "../../../utils/middleware";
 import { ErrorResponse } from "../../../utils/responses";
 import { getAuthorizationUrl, isOAuthProvider } from "../../../utils/destinations";
@@ -23,21 +23,13 @@ const userOwnsDestination = async (userId: string, accountId: string): Promise<b
   return Boolean(account);
 };
 
-const countUserDestinations = async (userId: string): Promise<number> => {
-  const destinations = await database
-    .select({ id: calendarsTable.id })
-    .from(calendarsTable)
-    .where(
-      and(
-        eq(calendarsTable.userId, userId),
-        inArray(calendarsTable.id,
-          database.selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
-            .from(sourceDestinationMappingsTable)
-        ),
-      ),
-    );
+const countUserAccounts = async (userId: string): Promise<number> => {
+  const accounts = await database
+    .select({ id: calendarAccountsTable.id })
+    .from(calendarAccountsTable)
+    .where(eq(calendarAccountsTable.userId, userId));
 
-  return destinations.length;
+  return accounts.length;
 };
 
 const GET = withWideEvent(
@@ -61,14 +53,14 @@ const GET = withWideEvent(
         return ErrorResponse.notFound("Destination not found").toResponse();
       }
     } else {
-      const destinationCount = await countUserDestinations(userId);
-      const allowed = await premiumService.canAddDestination(userId, destinationCount);
+      const accountCount = await countUserAccounts(userId);
+      const allowed = await premiumService.canAddAccount(userId, accountCount);
 
       if (!allowed) {
         const errorUrl = new URL("/dashboard/integrations", baseUrl);
         errorUrl.searchParams.set(
           "error",
-          "Destination limit reached. Upgrade to Pro for unlimited destinations.",
+          "Account limit reached. Upgrade to Pro for unlimited accounts.",
         );
         return Response.redirect(errorUrl.toString());
       }

@@ -6,7 +6,6 @@ import CalendarPlus from "lucide-react/dist/esm/icons/calendar-plus";
 import CalendarDays from "lucide-react/dist/esm/icons/calendar-days";
 import Link2 from "lucide-react/dist/esm/icons/link-2";
 import Settings from "lucide-react/dist/esm/icons/settings";
-import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import LogOut from "lucide-react/dist/esm/icons/log-out";
 import MessageSquare from "lucide-react/dist/esm/icons/message-square";
 import Bug from "lucide-react/dist/esm/icons/bug";
@@ -32,7 +31,6 @@ import { Text } from "../../../components/ui/primitives/text";
 import { ProviderIconStack } from "../../../components/ui/primitives/provider-icon-stack";
 import { pluralize } from "../../../lib/pluralize";
 import { useAnimatedSWR } from "../../../hooks/use-animated-swr";
-import { useSubscription } from "../../../hooks/use-subscription";
 import { SyncStatus } from "../../../features/dashboard/components/sync-status";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/")({
@@ -41,8 +39,6 @@ export const Route = createFileRoute("/(dashboard)/dashboard/")({
 
 function DashboardPage() {
   const navigate = useNavigate();
-  const { data: subscription } = useSubscription();
-  const showUpgradeAccount = subscription?.plan === "free";
 
   const handleLogout = async () => {
     await signOut();
@@ -64,17 +60,6 @@ function DashboardPage() {
           </NavigationMenuLinkItem>
         </NavigationMenu>
         <CalendarsMenu />
-        {showUpgradeAccount && (
-          <NavigationMenu variant="highlight">
-            <NavigationMenuLinkItem to="/dashboard/upgrade">
-              <NavigationMenuItemIcon>
-                <Sparkles size={15} />
-              </NavigationMenuItemIcon>
-              <NavigationMenuItemLabel>Upgrade Account</NavigationMenuItemLabel>
-              <NavigationMenuItemTrailing />
-            </NavigationMenuLinkItem>
-          </NavigationMenu>
-        )}
         <NavigationMenu>
           <NavigationMenuLinkItem to="/dashboard/feedback">
             <NavigationMenuItemIcon>
@@ -100,6 +85,8 @@ function DashboardPage() {
             <NavigationMenuItemLabel>Settings</NavigationMenuItemLabel>
             <NavigationMenuItemTrailing />
           </NavigationMenuLinkItem>
+        </NavigationMenu>
+        <NavigationMenu>
           <NavigationMenuButtonItem onClick={handleLogout}>
             <NavigationMenuItemIcon>
               <LogOut size={15} />

@@ -2,10 +2,10 @@ import { userSubscriptionsTable } from "@keeper.sh/database/schema";
 import { eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import {
-  FREE_DESTINATION_LIMIT,
-  FREE_SOURCE_LIMIT,
-  PRO_DESTINATION_LIMIT,
-  PRO_SOURCE_LIMIT,
+  FREE_ACCOUNT_LIMIT,
+  FREE_MAPPING_LIMIT,
+  PRO_ACCOUNT_LIMIT,
+  PRO_MAPPING_LIMIT,
   planSchema,
 } from "./constants";
 import type { Plan } from "./constants";
@@ -17,66 +17,95 @@ interface PremiumConfig {
   commercialMode: boolean;
 }
 
+interface UserSubscription {
+  plan: Plan;
+}
+
 interface PremiumService {
   getUserPlan: (userId: string) => Promise<Plan>;
-  getSourceLimit: (plan: Plan) => number;
-  getDestinationLimit: (plan: Plan) => number;
-  canAddSource: (userId: string, currentCount: number) => Promise<boolean>;
-  canAddDestination: (userId: string, currentCount: number) => Promise<boolean>;
+  getUserSubscription: (userId: string) => Promise<UserSubscription>;
+  getAccountLimit: (plan: Plan) => number;
+  getMappingLimit: (plan: Plan) => number;
+  canAddAccount: (userId: string, currentCount: number) => Promise<boolean>;
+  canAddMapping: (userId: string, currentCount: number) => Promise<boolean>;
+  canUseEventFilters: (userId: string) => Promise<boolean>;
+  canCustomizeIcalFeed: (userId: string) => Promise<boolean>;
 }
 
 const createPremiumService = (config: PremiumConfig): PremiumService => {
   const { database, commercialMode } = config;
 
-  const fetchUserSubscriptionPlan = async (userId: string): Promise<Plan> => {
+  const fetchUserSubscription = async (userId: string): Promise<UserSubscription> => {
     const [subscription] = await database
-      .select({ plan: userSubscriptionsTable.plan })
+      .select({
+        plan: userSubscriptionsTable.plan,
+      })
       .from(userSubscriptionsTable)
       .where(eq(userSubscriptionsTable.userId, userId))
       .limit(FIRST_RESULT_LIMIT);
 
-    return planSchema.assert(subscription?.plan ?? "free");
+    return {
+      plan: planSchema.assert(subscription?.plan ?? "free"),
+    };
   };
 
-  const getUserPlan = (userId: string): Promise<Plan> => {
+  const getUserSubscription = (userId: string): Promise<UserSubscription> => {
     if (!commercialMode) {
-      return Promise.resolve("pro");
+      return Promise.resolve({ plan: "pro" });
     }
-    return fetchUserSubscriptionPlan(userId);
+    return fetchUserSubscription(userId);
   };
 
-  const getSourceLimit = (plan: Plan): number => {
+  const getUserPlan = async (userId: string): Promise<Plan> => {
+    const subscription = await getUserSubscription(userId);
+    return subscription.plan;
+  };
+
+  const getAccountLimit = (plan: Plan): number => {
     if (plan === "pro") {
-      return PRO_SOURCE_LIMIT;
+      return PRO_ACCOUNT_LIMIT;
     }
-    return FREE_SOURCE_LIMIT;
+    return FREE_ACCOUNT_LIMIT;
   };
 
-  const getDestinationLimit = (plan: Plan): number => {
+  const getMappingLimit = (plan: Plan): number => {
     if (plan === "pro") {
-      return PRO_DESTINATION_LIMIT;
+      return PRO_MAPPING_LIMIT;
     }
-    return FREE_DESTINATION_LIMIT;
+    return FREE_MAPPING_LIMIT;
   };
 
-  const canAddSource = async (userId: string, currentCount: number): Promise<boolean> => {
-    const plan = await getUserPlan(userId);
-    const limit = getSourceLimit(plan);
+  const canAddAccount = async (userId: string, currentCount: number): Promise<boolean> => {
+    const subscription = await getUserSubscription(userId);
+    const limit = getAccountLimit(subscription.plan);
     return currentCount < limit;
   };
 
-  const canAddDestination = async (userId: string, currentCount: number): Promise<boolean> => {
-    const plan = await getUserPlan(userId);
-    const limit = getDestinationLimit(plan);
+  const canAddMapping = async (userId: string, currentCount: number): Promise<boolean> => {
+    const subscription = await getUserSubscription(userId);
+    const limit = getMappingLimit(subscription.plan);
     return currentCount < limit;
+  };
+
+  const canUseEventFilters = async (userId: string): Promise<boolean> => {
+    const subscription = await getUserSubscription(userId);
+    return subscription.plan === "pro";
+  };
+
+  const canCustomizeIcalFeed = async (userId: string): Promise<boolean> => {
+    const subscription = await getUserSubscription(userId);
+    return subscription.plan === "pro";
   };
 
   return {
-    canAddDestination,
-    canAddSource,
-    getDestinationLimit,
-    getSourceLimit,
+    canAddAccount,
+    canAddMapping,
+    canCustomizeIcalFeed,
+    canUseEventFilters,
+    getAccountLimit,
+    getMappingLimit,
     getUserPlan,
+    getUserSubscription,
   };
 };
 

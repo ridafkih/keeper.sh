@@ -4,6 +4,7 @@ import CreditCard from "lucide-react/dist/esm/icons/credit-card";
 import KeyRound from "lucide-react/dist/esm/icons/key-round";
 import Lock from "lucide-react/dist/esm/icons/lock";
 import Mail from "lucide-react/dist/esm/icons/mail";
+import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import { pluralize } from "../../../../lib/pluralize";
 import { Button, ButtonText } from "../../../../components/ui/primitives/button";
@@ -113,12 +114,12 @@ function SettingsPage() {
           </NavigationMenuItemTrailing>
         </NavigationMenuLinkItem>
       </NavigationMenu>
-      <NavigationMenu>
+      <NavigationMenu variant={isPro ? "default" : "highlight"}>
         <NavigationMenuButtonItem onClick={handleManagePlan} disabled={isManaging || subscriptionLoading}>
           <NavigationMenuItemIcon>
-            <CreditCard size={15} />
+            {isPro ? <CreditCard size={15} /> : <Sparkles size={15} />}
           </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>Manage Plan</NavigationMenuItemLabel>
+          <NavigationMenuItemLabel>{isPro ? "Manage Plan" : "Upgrade to Pro"}</NavigationMenuItemLabel>
           <NavigationMenuItemTrailing />
         </NavigationMenuButtonItem>
       </NavigationMenu>

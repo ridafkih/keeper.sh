@@ -8,19 +8,14 @@ import { and, eq, inArray } from "drizzle-orm";
 import { encryptPassword } from "@keeper.sh/encryption";
 import { database, premiumService, encryptionKey } from "../context";
 import { triggerDestinationSync } from "./sync";
+import { applySourceSyncDefaults } from "./source-sync-defaults";
 
 const FIRST_RESULT_LIMIT = 1;
 const CALDAV_CALENDAR_TYPE = "caldav";
 
 class CalDAVSourceLimitError extends Error {
   constructor() {
-    super("Source limit reached. Upgrade to Pro for unlimited sources.");
-  }
-}
-
-class CalDAVSourceNotFoundError extends Error {
-  constructor() {
-    super("CalDAV source not found or not owned by user");
+    super("Account limit reached. Upgrade to Pro for unlimited accounts.");
   }
 }
 
@@ -164,34 +159,19 @@ const getUserCalDAVSources = async (userId: string, provider?: string): Promise<
   });
 };
 
-const countUserSources = async (userId: string): Promise<number> => {
-  const sources = await database
-    .select({ id: calendarsTable.id })
-    .from(calendarsTable)
-    .where(
-      and(
-        eq(calendarsTable.userId, userId),
-        inArray(calendarsTable.id,
-      database.selectDistinct({ id: sourceDestinationMappingsTable.sourceCalendarId })
-        .from(sourceDestinationMappingsTable)
-    ),
-      ),
-    );
+const countUserAccounts = async (userId: string): Promise<number> => {
+  const accounts = await database
+    .select({ id: calendarAccountsTable.id })
+    .from(calendarAccountsTable)
+    .where(eq(calendarAccountsTable.userId, userId));
 
-  return sources.length;
+  return accounts.length;
 };
 
 const createCalDAVSource = async (
   userId: string,
   data: CreateCalDAVSourceData,
 ): Promise<CalDAVSource> => {
-  const existingSourceCount = await countUserSources(userId);
-  const allowed = await premiumService.canAddSource(userId, existingSourceCount);
-
-  if (!allowed) {
-    throw new CalDAVSourceLimitError();
-  }
-
   const [existingSource] = await database
     .select({ id: calendarsTable.id })
     .from(calendarsTable)
@@ -219,18 +199,27 @@ const createCalDAVSource = async (
     data.username,
   );
 
+  if (!existingAccount) {
+    const existingAccountCount = await countUserAccounts(userId);
+    const allowed = await premiumService.canAddAccount(userId, existingAccountCount);
+
+    if (!allowed) {
+      throw new CalDAVSourceLimitError();
+    }
+  }
+
   const accountId = existingAccount?.id ?? await createCalDAVAccount(userId, data, encryptionKey);
 
   const [source] = await database
     .insert(calendarsTable)
-    .values({
+    .values(applySourceSyncDefaults({
       accountId,
       calendarType: CALDAV_CALENDAR_TYPE,
       capabilities: ["pull", "push"],
       calendarUrl: data.calendarUrl,
       name: data.name,
       userId,
-    })
+    }))
     .returning();
 
   if (!source) {
@@ -252,28 +241,6 @@ const createCalDAVSource = async (
   };
 };
 
-const deleteCalDAVSource = async (userId: string, calendarId: string): Promise<boolean> => {
-  const [calendar] = await database
-    .select({ id: calendarsTable.id })
-    .from(calendarsTable)
-    .where(
-      and(
-        eq(calendarsTable.id, calendarId),
-        eq(calendarsTable.userId, userId),
-        eq(calendarsTable.calendarType, CALDAV_CALENDAR_TYPE),
-      ),
-    )
-    .limit(FIRST_RESULT_LIMIT);
-
-  if (!calendar) {
-    throw new CalDAVSourceNotFoundError();
-  }
-
-  await database.delete(calendarsTable).where(eq(calendarsTable.id, calendarId));
-
-  return true;
-};
-
 const verifyCalDAVSourceOwnership = async (userId: string, calendarId: string): Promise<boolean> => {
   const [source] = await database
     .select({ id: calendarsTable.id })
@@ -292,10 +259,8 @@ const verifyCalDAVSourceOwnership = async (userId: string, calendarId: string): 
 
 export {
   CalDAVSourceLimitError,
-  CalDAVSourceNotFoundError,
   DuplicateCalDAVSourceError,
   getUserCalDAVSources,
   createCalDAVSource,
-  deleteCalDAVSource,
   verifyCalDAVSourceOwnership,
 };

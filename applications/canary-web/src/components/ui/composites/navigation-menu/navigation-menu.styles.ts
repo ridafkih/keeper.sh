@@ -65,6 +65,10 @@ export const navigationMenuToggleTrack = tv({
       true: "",
       false: "",
     },
+    disabled: {
+      true: "opacity-30",
+      false: "",
+    },
   },
   compoundVariants: [
     { variant: "default", checked: false, className: "bg-interactive-border" },
@@ -75,6 +79,7 @@ export const navigationMenuToggleTrack = tv({
   defaultVariants: {
     variant: "default",
     checked: false,
+    disabled: false,
   },
 });
 

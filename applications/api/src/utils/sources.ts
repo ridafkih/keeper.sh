@@ -1,12 +1,11 @@
-import { calendarAccountsTable, calendarsTable, sourceDestinationMappingsTable } from "@keeper.sh/database/schema";
+import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
 import { fetchAndSyncSource, pullRemoteCalendar } from "@keeper.sh/calendar";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { triggerDestinationSync } from "./sync";
 import {
   SourceLimitError,
   InvalidSourceUrlError,
   runCreateSource,
-  runDeleteSource,
 } from "./source-lifecycle";
 import { applySourceSyncDefaults } from "./source-sync-defaults";
 
@@ -55,22 +54,14 @@ const createSource = (userId: string, name: string, url: string): Promise<Source
   runCreateSource(
     { userId, name, url },
     {
-      canAddSource: (userIdToCheck, existingSourceCount) =>
-        premiumService.canAddSource(userIdToCheck, existingSourceCount),
-      countExistingMappedSources: async (userIdToCount) => {
-        const existingSources = await database
-          .select({ id: calendarsTable.id })
-          .from(calendarsTable)
-          .where(
-            and(
-              eq(calendarsTable.userId, userIdToCount),
-              inArray(calendarsTable.id,
-                database.selectDistinct({ id: sourceDestinationMappingsTable.sourceCalendarId })
-                  .from(sourceDestinationMappingsTable)
-              ),
-            ),
-          );
-        return existingSources.length;
+      canAddAccount: (userIdToCheck, existingAccountCount) =>
+        premiumService.canAddAccount(userIdToCheck, existingAccountCount),
+      countExistingAccounts: async (userIdToCount) => {
+        const existingAccounts = await database
+          .select({ id: calendarAccountsTable.id })
+          .from(calendarAccountsTable)
+          .where(eq(calendarAccountsTable.userId, userIdToCount));
+        return existingAccounts.length;
       },
       createCalendarAccount: async ({ userId: accountUserId, displayName }) => {
         const [account] = await database
@@ -106,33 +97,11 @@ const createSource = (userId: string, name: string, url: string): Promise<Source
     },
   );
 
-const deleteSource = (userId: string, calendarId: string): Promise<boolean> =>
-  runDeleteSource(
-    { userId, calendarId },
-    {
-      deleteSourceCalendar: async ({ userId: deletionUserId, calendarId: deletionCalendarId }) => {
-        const [deleted] = await database
-          .delete(calendarsTable)
-          .where(
-            and(
-              eq(calendarsTable.id, deletionCalendarId),
-              eq(calendarsTable.userId, deletionUserId),
-              eq(calendarsTable.calendarType, ICAL_CALENDAR_TYPE),
-            ),
-          )
-          .returning();
-        return Boolean(deleted);
-      },
-      triggerDestinationSync,
-    },
-  );
-
 export {
   SourceLimitError,
   InvalidSourceUrlError,
   getUserSources,
   verifySourceOwnership,
   createSource,
-  deleteSource,
 };
 export type { Source };

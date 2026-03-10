@@ -3,7 +3,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import useSWR, { preload, useSWRConfig } from "swr";
 import CheckIcon from "lucide-react/dist/esm/icons/check";
 import { useAtomValue, useStore } from "jotai";
+import { useEntitlements, useMutateEntitlements, canAddMore } from "../../../../hooks/use-entitlements";
 import { BackButton } from "../../../../components/ui/primitives/back-button";
+import { UpgradeHint, PremiumFeatureGate } from "../../../../components/ui/primitives/upgrade-hint";
 import { Pagination, PaginationPrevious, PaginationNext } from "../../../../components/ui/primitives/pagination";
 import { RouteShell } from "../../../../components/ui/shells/route-shell";
 import { MetadataRow } from "../../../../features/dashboard/components/metadata-row";
@@ -51,6 +53,7 @@ import {
   destinationIdsAtom,
   selectDestinationInclusion,
 } from "../../../../state/destination-ids";
+
 
 export const Route = createFileRoute(
   "/(dashboard)/dashboard/accounts/$accountId/$calendarId",
@@ -108,12 +111,14 @@ function patchSource(
 function useSeedCalendarDetail(calendarId: string, calendar: CalendarDetail | undefined) {
   const store = useStore();
 
-  if (calendar && store.get(calendarDetailLoadedAtom) !== calendarId) {
-    store.set(calendarDetailAtom, calendar);
-    store.set(calendarDetailLoadedAtom, calendarId);
-    store.set(calendarDetailErrorAtom, null);
-    store.set(destinationIdsAtom, new Set<string>());
-  }
+  useEffect(() => {
+    if (calendar && store.get(calendarDetailLoadedAtom) !== calendarId) {
+      store.set(calendarDetailAtom, calendar);
+      store.set(calendarDetailLoadedAtom, calendarId);
+      store.set(calendarDetailErrorAtom, null);
+      store.set(destinationIdsAtom, new Set<string>());
+    }
+  }, [calendarId, calendar, store]);
 }
 
 function CalendarDetailPage() {
@@ -271,6 +276,8 @@ function DestinationsSeed({ calendarId }: { calendarId: string }) {
 
 function DestinationsSection({ calendarId }: { calendarId: string }) {
   const { data: allCalendars } = useSWR<CalendarSource[]>("/api/sources");
+  const { data: entitlements } = useEntitlements();
+  const atLimit = !canAddMore(entitlements?.mappings);
 
   const pushCalendars = useMemo(
     () => (allCalendars ?? []).filter((calendar) => canPush(calendar) && calendar.id !== calendarId),
@@ -296,6 +303,7 @@ function DestinationsSection({ calendarId }: { calendarId: string }) {
           ))
         )}
       </NavigationMenu>
+      {atLimit && <UpgradeHint>Mapping limit reached.</UpgradeHint>}
     </>
   );
 }
@@ -316,19 +324,31 @@ function DestinationCheckboxItem({
   const store = useStore();
   const variant = use(MenuVariantContext);
   const { mutate } = useSWRConfig();
+  const { data: entitlements } = useEntitlements();
+  const { adjustMappingCount, revalidateEntitlements } = useMutateEntitlements();
+
+  const checkedAtom = useMemo(() => selectDestinationInclusion(destinationId), [destinationId]);
+  const checked = useAtomValue(checkedAtom);
+  const atLimit = !canAddMore(entitlements?.mappings);
+  const disabled = atLimit && !checked;
 
   const handleClick = () => {
-    const currentIds = store.get(destinationIdsAtom);
-    const checked = !currentIds.has(destinationId);
-    const updatedSet = new Set(currentIds);
+    if (disabled) return;
 
-    if (checked) {
+    const currentIds = store.get(destinationIdsAtom);
+    const previousSet = new Set(currentIds);
+    const willCheck = !currentIds.has(destinationId);
+    const updatedSet = new Set(currentIds);
+    const delta = willCheck ? 1 : -1;
+
+    if (willCheck) {
       updatedSet.add(destinationId);
     } else {
       updatedSet.delete(destinationId);
     }
 
     store.set(destinationIdsAtom, updatedSet);
+    adjustMappingCount(delta);
 
     const updatedIds = Array.from(updatedSet);
     mutate(
@@ -346,23 +366,31 @@ function DestinationCheckboxItem({
         rollbackOnError: true,
         revalidate: false,
       },
-    );
+    ).catch(() => {
+      store.set(destinationIdsAtom, previousSet);
+      adjustMappingCount(-delta);
+    }).finally(() => {
+      void revalidateEntitlements();
+    });
   };
 
   return (
     <li>
-      <button
-        type="button"
-        role="checkbox"
-        onClick={handleClick}
-        className={navigationMenuItemStyle({ variant })}
-      >
-        <NavigationMenuItemIcon>
-          <ProviderIcon provider={provider} calendarType={calendarType} />
-        </NavigationMenuItemIcon>
-        <NavigationMenuItemLabel>{name}</NavigationMenuItemLabel>
-        <DestinationCheckboxIndicator destinationId={destinationId} />
-      </button>
+      <ItemDisabledContext value={disabled}>
+        <button
+          type="button"
+          role="checkbox"
+          disabled={disabled}
+          onClick={handleClick}
+          className={navigationMenuItemStyle({ variant, interactive: !disabled })}
+        >
+          <NavigationMenuItemIcon>
+            <ProviderIcon provider={provider} calendarType={calendarType} />
+          </NavigationMenuItemIcon>
+          <NavigationMenuItemLabel>{name}</NavigationMenuItemLabel>
+          <DestinationCheckboxIndicator destinationId={destinationId} />
+        </button>
+      </ItemDisabledContext>
     </li>
   );
 }
@@ -380,42 +408,49 @@ function DestinationCheckboxIndicator({ destinationId }: { destinationId: string
 }
 
 function SyncSettingsSection({ calendarId }: { calendarId: string }) {
+  const { data: entitlements } = useEntitlements();
+  const locked = entitlements ? !entitlements.canUseEventFilters : false;
+
   return (
     <>
       <DashboardSection
         title="Sync Settings"
         description={<>Choose which event details are synced to destination calendars. Use <Text as="span" size="sm" className="text-template inline">{"{{calendar_name}}"}</Text> or <Text as="span" size="sm" className="text-template inline">{"{{event_name}}"}</Text> in text fields for dynamic values.</>}
       />
-      <NavigationMenu>
-        <SyncEventNameTemplateItem calendarId={calendarId} />
-        <SyncEventNameToggle calendarId={calendarId} />
-        {SYNC_SETTINGS.map((setting) => (
-          <ExcludeFieldToggle
-            key={setting.field}
-            calendarId={calendarId}
-            field={setting.field}
-            label={setting.label}
-            matchesField={setting.matchesField}
-          />
-        ))}
-      </NavigationMenu>
+      <PremiumFeatureGate locked={locked} hint="Event filters are a Pro feature.">
+        <NavigationMenu>
+          <SyncEventNameTemplateItem calendarId={calendarId} locked={locked} />
+          <SyncEventNameToggle calendarId={calendarId} locked={locked} />
+          {SYNC_SETTINGS.map((setting) => (
+            <ExcludeFieldToggle
+              key={setting.field}
+              calendarId={calendarId}
+              field={setting.field}
+              label={setting.label}
+              matchesField={setting.matchesField}
+              locked={locked}
+            />
+          ))}
+        </NavigationMenu>
+      </PremiumFeatureGate>
     </>
   );
 }
 
-function SyncEventNameDisabledProvider({ children }: { children: React.ReactNode }) {
+function SyncEventNameDisabledProvider({ locked, children }: { locked: boolean; children: React.ReactNode }) {
   const excludeEventName = useAtomValue(excludeEventNameAtom);
-  return <ItemDisabledContext value={!excludeEventName}>{children}</ItemDisabledContext>;
+  return <ItemDisabledContext value={locked || !excludeEventName}>{children}</ItemDisabledContext>;
 }
 
-function SyncEventNameTemplateItem({ calendarId }: { calendarId: string }) {
+function SyncEventNameTemplateItem({ calendarId, locked }: { calendarId: string; locked: boolean }) {
   const store = useStore();
   const { mutate } = useSWRConfig();
 
   return (
-    <SyncEventNameDisabledProvider>
+    <SyncEventNameDisabledProvider locked={locked}>
       <NavigationMenuEditableTemplateItem
         label="Event Name"
+        disabled={locked}
         getValue={() => store.get(calendarDetailAtom)?.customEventName || "{{event_name}}"}
         renderInput={(live) => (
           <SyncEventNameTemplateInput template={live} />
@@ -458,12 +493,13 @@ function SyncEventNameTemplateValue() {
   );
 }
 
-function SyncEventNameToggle({ calendarId }: { calendarId: string }) {
+function SyncEventNameToggle({ calendarId, locked }: { calendarId: string; locked: boolean }) {
   const store = useStore();
   const variant = use(MenuVariantContext);
   const { mutate } = useSWRConfig();
 
   const handleClick = () => {
+    if (locked) return;
     const current = store.get(calendarDetailAtom);
     if (!current) return;
 
@@ -477,32 +513,37 @@ function SyncEventNameToggle({ calendarId }: { calendarId: string }) {
 
   return (
     <li>
-      <button
-        type="button"
-        role="switch"
-        onClick={handleClick}
-        className={navigationMenuItemStyle({ variant })}
-      >
-        <NavigationMenuItemLabel>Sync Event Name</NavigationMenuItemLabel>
-        <SyncEventNameToggleIndicator />
-      </button>
+      <ItemDisabledContext value={locked}>
+        <button
+          type="button"
+          role="switch"
+          disabled={locked}
+          onClick={handleClick}
+          className={navigationMenuItemStyle({ variant, interactive: !locked })}
+        >
+          <NavigationMenuItemLabel>Sync Event Name</NavigationMenuItemLabel>
+          <SyncEventNameToggleIndicator disabled={locked} />
+        </button>
+      </ItemDisabledContext>
     </li>
   );
 }
 
-function SyncEventNameToggleIndicator() {
+function SyncEventNameToggleIndicator({ disabled }: { disabled: boolean }) {
   const excludeEventName = useAtomValue(excludeEventNameAtom);
   const variant = use(MenuVariantContext);
   const checked = !excludeEventName;
 
   return (
-    <div className={navigationMenuToggleTrack({ variant, checked, className: "ml-auto" })}>
+    <div className={navigationMenuToggleTrack({ variant, checked, disabled, className: "ml-auto" })}>
       <div className={navigationMenuToggleThumb({ variant, checked })} />
     </div>
   );
 }
 
 function ExclusionsSection({ calendarId, provider }: { calendarId: string; provider: string }) {
+  const { data: entitlements } = useEntitlements();
+  const locked = entitlements ? !entitlements.canUseEventFilters : false;
   const hasExtraSettings = PROVIDERS_WITH_EXTRA_SETTINGS.has(provider);
   const exclusionSettings = hasExtraSettings
     ? [...EXCLUSION_SETTINGS, ...PROVIDER_EXCLUSION_SETTINGS]
@@ -514,17 +555,20 @@ function ExclusionsSection({ calendarId, provider }: { calendarId: string; provi
         title="Exclusions"
         description="Choose which event types to exclude from syncing."
       />
-      <NavigationMenu>
-        {exclusionSettings.map((setting) => (
-          <ExcludeFieldToggle
-            key={setting.field}
-            calendarId={calendarId}
-            field={setting.field}
-            label={setting.label}
-            matchesField={setting.matchesField}
-          />
-        ))}
-      </NavigationMenu>
+      <PremiumFeatureGate locked={locked} hint="Event exclusions are a Pro feature.">
+        <NavigationMenu>
+          {exclusionSettings.map((setting) => (
+            <ExcludeFieldToggle
+              key={setting.field}
+              calendarId={calendarId}
+              field={setting.field}
+              label={setting.label}
+              matchesField={setting.matchesField}
+              locked={locked}
+            />
+          ))}
+        </NavigationMenu>
+      </PremiumFeatureGate>
     </>
   );
 }
@@ -534,17 +578,20 @@ function ExcludeFieldToggle({
   field,
   label,
   matchesField,
+  locked = false,
 }: {
   calendarId: string;
   field: ExcludeField;
   label: string;
   matchesField: boolean;
+  locked?: boolean;
 }) {
   const store = useStore();
   const variant = use(MenuVariantContext);
   const { mutate } = useSWRConfig();
 
   const handleClick = () => {
+    if (locked) return;
     const current = store.get(calendarDetailAtom);
     if (!current) return;
 
@@ -555,30 +602,34 @@ function ExcludeFieldToggle({
 
   return (
     <li>
-      <button
-        type="button"
-        role="switch"
-        onClick={handleClick}
-        className={navigationMenuItemStyle({ variant })}
-      >
-        <NavigationMenuItemLabel>{label}</NavigationMenuItemLabel>
-        <ExcludeFieldToggleIndicator field={field} matchesField={matchesField} />
-      </button>
+      <ItemDisabledContext value={locked}>
+        <button
+          type="button"
+          role="switch"
+          disabled={locked}
+          onClick={handleClick}
+          className={navigationMenuItemStyle({ variant, interactive: !locked })}
+        >
+          <NavigationMenuItemLabel>{label}</NavigationMenuItemLabel>
+          <ExcludeFieldToggleIndicator field={field} matchesField={matchesField} disabled={locked} />
+        </button>
+      </ItemDisabledContext>
     </li>
   );
 }
 
-function ExcludeFieldToggleIndicator({ field, matchesField }: { field: ExcludeField; matchesField: boolean }) {
+function ExcludeFieldToggleIndicator({ field, matchesField, disabled }: { field: ExcludeField; matchesField: boolean; disabled: boolean }) {
   const raw = useAtomValue(excludeFieldAtoms[field]);
   const variant = use(MenuVariantContext);
   const checked = matchesField ? raw : !raw;
 
   return (
-    <div className={navigationMenuToggleTrack({ variant, checked, className: "ml-auto" })}>
+    <div className={navigationMenuToggleTrack({ variant, checked, disabled, className: "ml-auto" })}>
       <div className={navigationMenuToggleThumb({ variant, checked })} />
     </div>
   );
 }
+
 
 function CalendarInfoSection({ account, accountId }: { account: CalendarAccount; accountId: string }) {
   const store = useStore();

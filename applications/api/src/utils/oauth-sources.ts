@@ -19,7 +19,7 @@ const OAUTH_CALENDAR_TYPE = "oauth";
 
 class OAuthSourceLimitError extends Error {
   constructor() {
-    super("Source limit reached. Upgrade to Pro for unlimited sources.");
+    super("Account limit reached. Upgrade to Pro for unlimited accounts.");
   }
 }
 
@@ -231,6 +231,39 @@ interface CreateOAuthSourceOptions {
   excludeWorkingLocation?: boolean;
 }
 
+const countUserAccounts = async (userId: string): Promise<number> => {
+  const accounts = await database
+    .select({ id: calendarAccountsTable.id })
+    .from(calendarAccountsTable)
+    .where(eq(calendarAccountsTable.userId, userId));
+
+  return accounts.length;
+};
+
+const findOAuthAccountId = async (
+  options: {
+    userId: string;
+    provider: string;
+    oauthCredentialId: string;
+  },
+): Promise<string | null> => {
+  const { userId, provider, oauthCredentialId } = options;
+
+  const [existingAccount] = await database
+    .select({ id: calendarAccountsTable.id })
+    .from(calendarAccountsTable)
+    .where(
+      and(
+        eq(calendarAccountsTable.userId, userId),
+        eq(calendarAccountsTable.provider, provider),
+        eq(calendarAccountsTable.oauthCredentialId, oauthCredentialId),
+      ),
+    )
+    .limit(FIRST_RESULT_LIMIT);
+
+  return existingAccount?.id ?? null;
+};
+
 const syncOAuthSourcesByProvider = async (providerId: string): Promise<void> => {
   const sourceProvider = getSourceProvider(providerId, { database, oauthProviders });
   if (!sourceProvider) {
@@ -268,23 +301,11 @@ const createOAuthSource = async (
     throw new Error("Source credential not found");
   }
 
-  const existingSources = await database
-    .select({ id: calendarsTable.id })
-    .from(calendarsTable)
-    .where(
-      and(
-        eq(calendarsTable.userId, userId),
-        inArray(calendarsTable.id,
-          database.selectDistinct({ id: sourceDestinationMappingsTable.sourceCalendarId })
-            .from(sourceDestinationMappingsTable)
-        ),
-      ),
-    );
-
-  const allowed = await premiumService.canAddSource(userId, existingSources.length);
-  if (!allowed) {
-    throw new OAuthSourceLimitError();
-  }
+  const existingAccountId = await findOAuthAccountId({
+    oauthCredentialId,
+    provider,
+    userId,
+  });
 
   const [existingCalendar] = await database
     .select({ id: calendarsTable.id })
@@ -303,26 +324,38 @@ const createOAuthSource = async (
     throw new DuplicateSourceError();
   }
 
-  const [account] = await database
-    .insert(calendarAccountsTable)
-    .values({
-      authType: "oauth",
-      displayName: credential.email,
-      email: credential.email,
-      oauthCredentialId,
-      provider,
-      userId,
-    })
-    .returning({ id: calendarAccountsTable.id });
+  let accountId = existingAccountId;
 
-  if (!account) {
-    throw new Error("Failed to create calendar account");
+  if (!accountId) {
+    const existingAccountCount = await countUserAccounts(userId);
+    const allowed = await premiumService.canAddAccount(userId, existingAccountCount);
+    if (!allowed) {
+      throw new OAuthSourceLimitError();
+    }
+
+    const [account] = await database
+      .insert(calendarAccountsTable)
+      .values({
+        authType: "oauth",
+        displayName: credential.email,
+        email: credential.email,
+        oauthCredentialId,
+        provider,
+        userId,
+      })
+      .returning({ id: calendarAccountsTable.id });
+
+    if (!account) {
+      throw new Error("Failed to create calendar account");
+    }
+
+    accountId = account.id;
   }
 
   const [source] = await database
     .insert(calendarsTable)
     .values(applySourceSyncDefaults({
-      accountId: account.id,
+      accountId,
       calendarType: OAUTH_CALENDAR_TYPE,
       capabilities: ["pull", "push"],
       excludeFocusTime,
@@ -376,26 +409,10 @@ interface ImportOAuthAccountOptions {
   email: string | null;
 }
 
-const findOrCreateOAuthAccountId = async (
+const createOAuthAccountId = async (
   options: Pick<ImportOAuthAccountOptions, "userId" | "provider" | "oauthCredentialId" | "email">,
 ): Promise<string> => {
   const { userId, provider, oauthCredentialId, email } = options;
-
-  const [existingAccount] = await database
-    .select({ id: calendarAccountsTable.id })
-    .from(calendarAccountsTable)
-    .where(
-      and(
-        eq(calendarAccountsTable.userId, userId),
-        eq(calendarAccountsTable.provider, provider),
-        eq(calendarAccountsTable.oauthCredentialId, oauthCredentialId),
-      ),
-    )
-    .limit(FIRST_RESULT_LIMIT);
-
-  if (existingAccount?.id) {
-    return existingAccount.id;
-  }
 
   const [insertedAccount] = await database
     .insert(calendarAccountsTable)
@@ -479,12 +496,27 @@ const importOAuthAccountCalendars = async (options: ImportOAuthAccountOptions): 
     throw new Error(`No calendar listing support for provider: ${provider}`);
   }
 
-  const accountId = await findOrCreateOAuthAccountId({
-    email,
+  const existingAccountId = await findOAuthAccountId({
     oauthCredentialId,
     provider,
     userId,
   });
+  let accountId = existingAccountId;
+
+  if (!accountId) {
+    const existingAccountCount = await countUserAccounts(userId);
+    const allowed = await premiumService.canAddAccount(userId, existingAccountCount);
+    if (!allowed) {
+      throw new OAuthSourceLimitError();
+    }
+
+    accountId = await createOAuthAccountId({
+      email,
+      oauthCredentialId,
+      provider,
+      userId,
+    });
+  }
 
   const externalCalendars = await listCalendars(accessToken);
   const newCalendars = await getUnimportedExternalCalendars(userId, accountId, externalCalendars);
@@ -495,30 +527,6 @@ const importOAuthAccountCalendars = async (options: ImportOAuthAccountOptions): 
   triggerOAuthImportSync(userId, provider);
 
   return accountId;
-};
-
-const deleteOAuthSource = async (userId: string, calendarId: string): Promise<boolean> => {
-  const [deleted] = await database
-    .delete(calendarsTable)
-    .where(
-      and(
-        eq(calendarsTable.id, calendarId),
-        eq(calendarsTable.userId, userId),
-        eq(calendarsTable.calendarType, OAUTH_CALENDAR_TYPE),
-        inArray(calendarsTable.id,
-          database.selectDistinct({ id: sourceDestinationMappingsTable.sourceCalendarId })
-            .from(sourceDestinationMappingsTable)
-        ),
-      ),
-    )
-    .returning();
-
-  if (deleted) {
-    triggerDestinationSync(userId);
-    return true;
-  }
-
-  return false;
 };
 
 export {
@@ -534,5 +542,4 @@ export {
   getOAuthSourceCredentials,
   createOAuthSource,
   importOAuthAccountCalendars,
-  deleteOAuthSource,
 };

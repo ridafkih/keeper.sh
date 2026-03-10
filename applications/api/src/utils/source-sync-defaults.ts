@@ -3,6 +3,7 @@ const DEFAULT_SOURCE_SYNC_RULES = {
   excludeEventDescription: true,
   excludeEventLocation: true,
   excludeEventName: true,
+  includeInIcalFeed: true,
 } as const;
 
 const applySourceSyncDefaults = <TValues extends object>(

@@ -1,20 +1,23 @@
 import { use, useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import useSWR, { useSWRConfig } from "swr";
-import { atom, useAtomValue, useStore, type Atom } from "jotai";
+import { atom, useAtomValue, useStore } from "jotai";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import CheckIcon from "lucide-react/dist/esm/icons/check";
 import { fetcher, apiFetch } from "../../../lib/fetcher";
 import { BackButton } from "../../../components/ui/primitives/back-button";
 import { Input } from "../../../components/ui/primitives/input";
 import { Text } from "../../../components/ui/primitives/text";
+import { PremiumFeatureGate } from "../../../components/ui/primitives/upgrade-hint";
 import { DashboardSection } from "../../../components/ui/primitives/dashboard-heading";
 import { Button, ButtonIcon } from "../../../components/ui/primitives/button";
 import { ProviderIcon } from "../../../components/ui/primitives/provider-icon";
 import {
   NavigationMenu,
+  NavigationMenuCheckboxItem,
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
+  NavigationMenuToggleItem,
 } from "../../../components/ui/composites/navigation-menu/navigation-menu-items";
 import {
   NavigationMenuEditableTemplateItem,
@@ -24,11 +27,6 @@ import { ItemDisabledContext, MenuVariantContext } from "../../../components/ui/
 import {
   DISABLED_LABEL_TONE,
   LABEL_TONE,
-  navigationMenuItemStyle,
-  navigationMenuCheckbox,
-  navigationMenuCheckboxIcon,
-  navigationMenuToggleTrack,
-  navigationMenuToggleThumb,
 } from "../../../components/ui/composites/navigation-menu/navigation-menu.styles";
 import {
   icalSourceInclusionAtom,
@@ -43,6 +41,7 @@ import {
 } from "../../../state/ical-feed-settings";
 import type { FeedSettingToggleKey } from "../../../state/ical-feed-settings";
 import type { CalendarSource } from "../../../types/api";
+import { useEntitlements } from "../../../hooks/use-entitlements";
 
 type ICalTokenResponse = {
   token: string;
@@ -62,6 +61,9 @@ export const Route = createFileRoute("/(dashboard)/dashboard/ical")({
 });
 
 function ICalPage() {
+  const { data: entitlements } = useEntitlements();
+  const locked = entitlements ? !entitlements.canCustomizeIcalFeed : false;
+
   return (
     <div className="flex flex-col gap-1.5">
       <BackButton />
@@ -72,7 +74,7 @@ function ICalPage() {
         title="Feed Settings"
         description={<>Choose which event details are included in your iCal feed. Use <Text as="span" size="sm" className="text-template inline">{"{{calendar_name}}"}</Text> or <Text as="span" size="sm" className="text-template inline">{"{{event_name}}"}</Text> in text fields for dynamic values.</>}
       />
-      <FeedSettingsToggles />
+      <FeedSettingsToggles locked={locked} />
     </div>
   );
 }
@@ -142,36 +144,42 @@ function FeedSettingsSeed() {
   return null;
 }
 
-function FeedSettingsToggles() {
+function FeedSettingsToggles({ locked }: { locked: boolean }) {
   const loaded = useAtomValue(feedSettingsLoadedAtom);
   if (!loaded) return null;
 
   return (
-    <NavigationMenu>
-      <EventNameTemplateItem />
-      <EventNameToggle />
-      <FeedSettingToggle field="includeEventDescription" label="Include Event Description" />
-      <FeedSettingToggle field="includeEventLocation" label="Include Event Location" />
-      <FeedSettingToggle field="excludeAllDayEvents" label="Exclude All Day Events" />
-    </NavigationMenu>
+    <PremiumFeatureGate
+      locked={locked}
+      hint="Feed settings are Pro-only."
+    >
+      <NavigationMenu>
+        <EventNameTemplateItem locked={locked} />
+        <EventNameToggle locked={locked} />
+        <FeedSettingToggle locked={locked} field="includeEventDescription" label="Include Event Description" />
+        <FeedSettingToggle locked={locked} field="includeEventLocation" label="Include Event Location" />
+        <FeedSettingToggle locked={locked} field="excludeAllDayEvents" label="Exclude All Day Events" />
+      </NavigationMenu>
+    </PremiumFeatureGate>
   );
 }
 
 const TEMPLATE_VARIABLES = { event_name: "Event Name", calendar_name: "Calendar Name" };
 
-function EventNameDisabledProvider({ children }: { children: React.ReactNode }) {
+function EventNameDisabledProvider({ locked, children }: { locked: boolean; children: React.ReactNode }) {
   const includeEventName = useAtomValue(includeEventNameAtom);
-  return <ItemDisabledContext value={includeEventName}>{children}</ItemDisabledContext>;
+  return <ItemDisabledContext value={locked || includeEventName}>{children}</ItemDisabledContext>;
 }
 
-function EventNameTemplateItem() {
+function EventNameTemplateItem({ locked }: { locked: boolean }) {
   const store = useStore();
   const { mutate } = useSWRConfig();
 
   return (
-    <EventNameDisabledProvider>
+    <EventNameDisabledProvider locked={locked}>
       <NavigationMenuEditableTemplateItem
         label="Event Name"
+        disabled={locked}
         getValue={() => store.get(feedSettingsAtom).customEventName || "{{event_name}}"}
         renderInput={(live) => (
           <TemplateText template={live} variables={TEMPLATE_VARIABLES} />
@@ -205,30 +213,33 @@ function EventNameTemplateItem() {
 function EventNameTemplateValue() {
   const customEventName = useAtomValue(customEventNameAtom);
   const includeEventName = useAtomValue(includeEventNameAtom);
+  const disabled = use(ItemDisabledContext);
   const variant = use(MenuVariantContext);
   const template = customEventName || "{{event_name}}";
 
   return (
     <Text
       size="sm"
-      tone={(includeEventName ? DISABLED_LABEL_TONE : LABEL_TONE)[variant ?? "default"]}
+      tone={((disabled || includeEventName) ? DISABLED_LABEL_TONE : LABEL_TONE)[variant ?? "default"]}
       className="min-w-0 truncate flex-1 text-right"
     >
       <TemplateText
         template={template}
         variables={TEMPLATE_VARIABLES}
-        disabled={includeEventName}
+        disabled={disabled || includeEventName}
       />
     </Text>
   );
 }
 
-function EventNameToggle() {
+function EventNameToggle({ locked }: { locked: boolean }) {
   const store = useStore();
-  const variant = use(MenuVariantContext);
+  const checked = useAtomValue(includeEventNameAtom);
   const { mutate } = useSWRConfig();
 
   const handleClick = () => {
+    if (locked) return;
+
     const current = store.get(feedSettingsAtom).includeEventName;
     const patch = current
       ? { includeEventName: false, customEventName: "Busy" }
@@ -254,26 +265,32 @@ function EventNameToggle() {
   };
 
   return (
-    <li>
-      <button
-        type="button"
-        role="switch"
-        onClick={handleClick}
-        className={navigationMenuItemStyle({ variant })}
-      >
-        <NavigationMenuItemLabel>Include Event Name</NavigationMenuItemLabel>
-        <ToggleIndicator atom={includeEventNameAtom} />
-      </button>
-    </li>
+    <NavigationMenuToggleItem
+      checked={checked}
+      disabled={locked}
+      onCheckedChange={() => handleClick()}
+    >
+      <NavigationMenuItemLabel>Include Event Name</NavigationMenuItemLabel>
+    </NavigationMenuToggleItem>
   );
 }
 
-function FeedSettingToggle({ field, label }: { field: FeedSettingToggleKey; label: string }) {
+function FeedSettingToggle({
+  field,
+  label,
+  locked,
+}: {
+  field: FeedSettingToggleKey;
+  label: string;
+  locked: boolean;
+}) {
   const store = useStore();
-  const variant = use(MenuVariantContext);
+  const checked = useAtomValue(feedSettingAtoms[field]);
   const { mutate } = useSWRConfig();
 
   const handleClick = () => {
+    if (locked) return;
+
     const current = store.get(feedSettingsAtom)[field];
     const newValue = !current;
     store.set(feedSettingsAtom, (prev) => ({ ...prev, [field]: newValue }));
@@ -296,28 +313,13 @@ function FeedSettingToggle({ field, label }: { field: FeedSettingToggleKey; labe
   };
 
   return (
-    <li>
-      <button
-        type="button"
-        role="switch"
-        onClick={handleClick}
-        className={navigationMenuItemStyle({ variant })}
-      >
-        <NavigationMenuItemLabel>{label}</NavigationMenuItemLabel>
-        <ToggleIndicator atom={feedSettingAtoms[field]} />
-      </button>
-    </li>
-  );
-}
-
-function ToggleIndicator({ atom }: { atom: Atom<boolean> }) {
-  const checked = useAtomValue(atom);
-  const variant = use(MenuVariantContext);
-
-  return (
-    <div className={navigationMenuToggleTrack({ variant, checked, className: "ml-auto" })}>
-      <div className={navigationMenuToggleThumb({ variant, checked })} />
-    </div>
+    <NavigationMenuToggleItem
+      checked={checked}
+      disabled={locked}
+      onCheckedChange={() => handleClick()}
+    >
+      <NavigationMenuItemLabel>{label}</NavigationMenuItemLabel>
+    </NavigationMenuToggleItem>
   );
 }
 
@@ -380,44 +382,27 @@ function SourceCheckboxItem({
   calendarType: string;
 }) {
   const store = useStore();
-  const variant = use(MenuVariantContext);
+  const checkedAtom = useMemo(() => selectSourceInclusion(sourceId), [sourceId]);
+  const checked = useAtomValue(checkedAtom);
 
-  const handleClick = () => {
-    const current = store.get(icalSourceInclusionAtom)[sourceId] ?? false;
-    store.set(icalSourceInclusionAtom, (prev) => ({ ...prev, [sourceId]: !current }));
+  const handleCheckedChange = (nextChecked: boolean) => {
+    store.set(icalSourceInclusionAtom, (prev) => ({ ...prev, [sourceId]: nextChecked }));
     apiFetch(`/api/sources/${sourceId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ includeInIcalFeed: !current }),
+      body: JSON.stringify({ includeInIcalFeed: nextChecked }),
     });
   };
 
   return (
-    <li>
-      <button
-        type="button"
-        role="checkbox"
-        onClick={handleClick}
-        className={navigationMenuItemStyle({ variant })}
-      >
-        <NavigationMenuItemIcon>
-          <ProviderIcon provider={provider} calendarType={calendarType} />
-        </NavigationMenuItemIcon>
-        <NavigationMenuItemLabel>{name}</NavigationMenuItemLabel>
-        <CheckboxIndicator sourceId={sourceId} />
-      </button>
-    </li>
-  );
-}
-
-function CheckboxIndicator({ sourceId }: { sourceId: string }) {
-  const checkedAtom = useMemo(() => selectSourceInclusion(sourceId), [sourceId]);
-  const checked = useAtomValue(checkedAtom);
-  const variant = use(MenuVariantContext);
-
-  return (
-    <div className={navigationMenuCheckbox({ variant, checked, className: "ml-auto" })}>
-      {checked && <CheckIcon size={12} className={navigationMenuCheckboxIcon({ variant })} />}
-    </div>
+    <NavigationMenuCheckboxItem
+      checked={checked}
+      onCheckedChange={handleCheckedChange}
+    >
+      <NavigationMenuItemIcon>
+        <ProviderIcon provider={provider} calendarType={calendarType} />
+      </NavigationMenuItemIcon>
+      <NavigationMenuItemLabel>{name}</NavigationMenuItemLabel>
+    </NavigationMenuCheckboxItem>
   );
 }
