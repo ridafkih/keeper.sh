@@ -47,6 +47,17 @@ class CalDAVClient {
     }));
   }
 
+  async fetchCalendarDisplayName(calendarUrl: string): Promise<string | null> {
+    const calendars = await this.discoverCalendars();
+    const storedPath = new URL(calendarUrl).pathname;
+
+    const matchingCalendar = calendars.find(
+      (calendar) => new URL(calendar.url).pathname === storedPath,
+    );
+
+    return matchingCalendar?.displayName ?? null;
+  }
+
   async resolveCalendarUrl(storedUrl: string): Promise<string> {
     const calendars = await this.discoverCalendars();
     const storedPath = new URL(storedUrl).pathname;

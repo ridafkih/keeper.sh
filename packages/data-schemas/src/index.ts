@@ -31,7 +31,7 @@ const stringSchema = type("string");
 const googleEventSchema = type({
   "description?": "string",
   "end?": { "dateTime?": "string", "timeZone?": "string" },
-  "eventType?": "'default' | 'focusTime' | 'workingLocation' | 'outOfOffice'",
+  "eventType?": "string",
   "iCalUID?": "string",
   "id?": "string",
   "location?": "string",

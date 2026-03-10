@@ -237,6 +237,7 @@ const createCalDAVSource = async (
         capabilities: ["pull", "push"],
         calendarUrl: data.calendarUrl,
         name: data.name,
+        originalName: data.name,
         userId,
       }))
       .returning();

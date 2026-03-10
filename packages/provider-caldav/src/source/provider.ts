@@ -5,7 +5,7 @@ import {
   reportError,
 } from "@keeper.sh/provider-core";
 import type { SourceEvent } from "@keeper.sh/provider-core";
-import { eventStatesTable } from "@keeper.sh/database/schema";
+import { calendarsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { CalDAVClient } from "../shared/client";
 import { parseICalToRemoteEvent } from "../shared/ics";
@@ -157,10 +157,34 @@ const createCalDAVSourceProvider = (
     };
   };
 
+  const refreshOriginalName = async (account: CalDAVSourceAccount): Promise<void> => {
+    if (account.originalName !== null) {
+      return;
+    }
+
+    const password = sourceService.getDecryptedPassword(account.encryptedPassword);
+    const client = new CalDAVClient({
+      credentials: { password, username: account.username },
+      serverUrl: account.serverUrl,
+    });
+
+    const displayName = await client.fetchCalendarDisplayName(account.calendarUrl);
+
+    if (!displayName) {
+      return;
+    }
+
+    await database
+      .update(calendarsTable)
+      .set({ originalName: displayName })
+      .where(eq(calendarsTable.id, account.calendarId));
+  };
+
   const syncSingleSource = async (
     account: CalDAVSourceAccount,
   ): Promise<CalDAVSourceSyncResult> => {
     try {
+      await refreshOriginalName(account).catch(() => null);
       const events = await fetchEventsFromCalDAV(account);
       return processEvents(account.calendarId, events);
     } catch (error) {

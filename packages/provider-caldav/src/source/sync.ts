@@ -17,6 +17,7 @@ const mapSourceToAccount = (source: {
   calendarUrl: string | null;
   encryptedPassword: string;
   name: string;
+  originalName: string | null;
   provider: string;
   serverUrl: string;
   calendarId: string;
@@ -44,6 +45,7 @@ const createCalDAVSourceService = (config: CalDAVSourceProviderConfig): CalDAVSo
         calendarUrl: calendarsTable.calendarUrl,
         encryptedPassword: caldavCredentialsTable.encryptedPassword,
         name: calendarsTable.name,
+        originalName: calendarsTable.originalName,
         provider: calendarAccountsTable.provider,
         serverUrl: caldavCredentialsTable.serverUrl,
         syncToken: calendarsTable.syncToken,
@@ -68,6 +70,7 @@ const createCalDAVSourceService = (config: CalDAVSourceProviderConfig): CalDAVSo
         calendarUrl: calendarsTable.calendarUrl,
         encryptedPassword: caldavCredentialsTable.encryptedPassword,
         name: calendarsTable.name,
+        originalName: calendarsTable.originalName,
         provider: calendarAccountsTable.provider,
         serverUrl: caldavCredentialsTable.serverUrl,
         syncToken: calendarsTable.syncToken,
@@ -97,6 +100,7 @@ const createCalDAVSourceService = (config: CalDAVSourceProviderConfig): CalDAVSo
         calendarUrl: calendarsTable.calendarUrl,
         encryptedPassword: caldavCredentialsTable.encryptedPassword,
         name: calendarsTable.name,
+        originalName: calendarsTable.originalName,
         provider: calendarAccountsTable.provider,
         serverUrl: caldavCredentialsTable.serverUrl,
         syncToken: calendarsTable.syncToken,

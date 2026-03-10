@@ -30,6 +30,7 @@ interface CalDAVSourceAccount {
   serverUrl: string;
   calendarUrl: string;
   name: string;
+  originalName: string | null;
   username: string;
   encryptedPassword: string;
   syncToken: string | null;

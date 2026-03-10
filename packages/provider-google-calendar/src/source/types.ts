@@ -31,7 +31,7 @@ interface GoogleCalendarEvent {
   end?: GoogleEventDateTime;
   created?: string;
   updated?: string;
-  eventType?: "default" | "focusTime" | "workingLocation" | "outOfOffice";
+  eventType?: string;
 }
 
 interface GoogleEventsListResponse {
