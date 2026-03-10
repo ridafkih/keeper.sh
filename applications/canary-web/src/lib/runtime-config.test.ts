@@ -13,6 +13,7 @@ describe("resolvePublicRuntimeConfig", () => {
     });
 
     expect(config).toEqual({
+      commercialMode: false,
       googleAdsConversionLabel: "runtime-conversion",
       googleAdsId: "runtime-google",
       visitorsNowToken: "runtime-visitors",
@@ -27,6 +28,7 @@ describe("resolvePublicRuntimeConfig", () => {
     });
 
     expect(config).toEqual({
+      commercialMode: false,
       googleAdsConversionLabel: null,
       googleAdsId: null,
       visitorsNowToken: null,
