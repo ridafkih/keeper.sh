@@ -1,0 +1,102 @@
+# Keeper.sh — Full Context
+
+> Open-source calendar event syncing. Synchronize events between your personal, work, business and school calendars.
+
+Keeper.sh is an open-source (AGPL-3.0) calendar synchronization service built by Rida F'kih. It keeps time slots aligned across multiple calendar providers using a pull-compare-push sync engine. The project is self-hostable and offers a hosted version at keeper.sh.
+
+## Problem
+
+People with calendars across multiple providers (Google Calendar, Outlook, iCloud, FastMail) end up with fragmented availability. Different people see incomplete windows into their schedule, causing constant overlap and scheduling friction. Existing tools were too manual, had finicky sync behavior, lacked privacy controls, or didn't offer self-hosting.
+
+## How It Works
+
+### Sync Engine
+
+Keeper.sh uses a pull-compare-push architecture. On each sync cycle:
+
+1. **Pull**: Events are fetched from configured source calendars
+2. **Compare**: Events are compared against known state
+3. **Push**: Changes are pushed to destination calendars
+
+Core sync operations:
+- **Add**: Source event with no mapping on destination gets created
+- **Delete**: Mapping exists but source event is gone — destination event gets removed
+- **Cleanup**: Keeper-created events with no mapping are cleaned up
+
+Events created by Keeper are tagged with a `@keeper.sh` suffix on their remote UID. For Outlook (which doesn't support custom UIDs), a `"keeper.sh"` category is used instead.
+
+Race conditions are prevented using Redis-backed generation counters. If two syncs target the same calendar simultaneously, the later one backs off.
+
+For Google and Outlook, Keeper uses incremental sync tokens — only fetching what changed since the last sync, making cycles fast even for calendars with thousands of events.
+
+### Supported Providers
+
+**OAuth providers:**
+- **Google Calendar** — full read/write, supports filtering Focus Time, Working Location, and Out of Office events
+- **Microsoft Outlook** — full read/write via Microsoft Graph API
+
+**CalDAV-based providers:**
+- **FastMail** — pre-configured CalDAV
+- **iCloud** — pre-configured CalDAV with app-specific password support
+- **Generic CalDAV** — any CalDAV-compatible server
+- **iCal/ICS feeds** — read-only URL-based calendars
+
+Each calendar has capability flags: "pull" (read events from) and "push" (write events to). iCal feeds are pull-only. OAuth and CalDAV calendars support both.
+
+### Privacy Controls
+
+By default, only busy/free time blocks are shared. Event titles, descriptions, locations, and attendee lists are stripped before syncing.
+
+Per-source calendar settings:
+- Include or exclude event titles (replace with "Busy")
+- Include or exclude descriptions and locations
+- Custom event name templates using `{{event_name}}` or `{{calendar_name}}` placeholders
+- Skip all-day events
+- Skip Google-specific event types (Focus Time, Working Location, Out of Office)
+
+### iCal Feed
+
+Keeper generates a unique, token-authenticated URL combining events from selected source calendars. Subscribable from any calendar app supporting iCal (Apple Calendar, Thunderbird, etc.). Respects all privacy settings.
+
+### Source and Destination Mappings
+
+Connect calendar accounts, then configure which calendars are sources and which are destinations. A single source can push to multiple destinations. A single destination can receive from multiple sources.
+
+Setup flow:
+1. Connect an account (OAuth, CalDAV, or iCal URL)
+2. Select calendars
+3. Rename for clearer labels
+4. Map sources to destinations
+
+## Pricing
+
+- **Free**: 2 linked accounts, 2 calendars per account, 30-minute sync intervals, aggregated iCal feed
+- **Pro ($5/month)**: Unlimited accounts, unlimited calendars, 1-minute sync intervals, priority support
+
+Self-hosted instances get Pro-tier features by default.
+
+## Self-Hosting
+
+The entire stack runs on PostgreSQL, Redis, Bun, and Vite + React.
+
+Three deployment models:
+- **Standalone**: Single `compose.yaml` bundling Caddy, PostgreSQL, Redis, API, web, and cron
+- **Services-only**: Application containers only (bring your own PostgreSQL and Redis)
+- **Individual containers**: Separate `keeper-web`, `keeper-api`, and `keeper-cron` images
+
+Google Calendar and Outlook require OAuth app setup (Google Cloud / Azure). CalDAV providers and iCal feeds work without OAuth.
+
+## Technical Architecture
+
+- **CalDAV as universal protocol**: RFC 4791 as the common layer for FastMail, iCloud, and standards-compliant servers
+- **Encrypted credentials at rest**: CalDAV passwords and OAuth tokens encrypted with configurable key
+- **Content hashing for iCal feeds**: Skips processing if feed content unchanged, keeps snapshots for 6 hours
+- **Real-time sync status**: WebSocket endpoint broadcasts sync progress to dashboard
+
+## Links
+
+- Homepage: https://keeper.sh
+- Blog: https://keeper.sh/blog
+- Privacy Policy: https://keeper.sh/privacy
+- Terms & Conditions: https://keeper.sh/terms
+- GitHub: https://github.com/ridafkih/keeper.sh

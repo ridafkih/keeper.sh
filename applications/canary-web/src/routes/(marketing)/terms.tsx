@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Heading1, Heading2 } from "../../components/ui/primitives/heading";
 import { Text } from "../../components/ui/primitives/text";
 import { CanonicalLink, JsonLd, seoMeta, webPageSchema, breadcrumbSchema } from "../../lib/seo";
+import { termsPageMetadata, formatMonthYear } from "../../lib/page-metadata";
 
 export const Route = createFileRoute("/(marketing)/terms")({
   component: TermsPage,
@@ -24,7 +25,7 @@ function TermsPage() {
       <JsonLd data={breadcrumbSchema([{ name: "Home", path: "/" }, { name: "Terms & Conditions", path: "/terms" }])} />
       <div className="flex flex-col gap-1">
         <Heading1>Terms &amp; Conditions</Heading1>
-        <Text size="sm" tone="muted">Last updated: December 2025</Text>
+        <Text size="sm" tone="muted">Last updated: {formatMonthYear(termsPageMetadata.updatedAt)}</Text>
       </div>
       <div className="flex flex-col gap-8">
         <Section title="Agreement to Terms">

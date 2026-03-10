@@ -9,4 +9,39 @@ Disallow: /verify-authentication
 Disallow: /reset-password
 Disallow: /forgot-password
 
+User-agent: GPTBot
+Allow: /
+Disallow: /dashboard
+Disallow: /auth
+Disallow: /login
+Disallow: /register
+Disallow: /verify-email
+Disallow: /verify-authentication
+Disallow: /reset-password
+Disallow: /forgot-password
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: Cohere-AI
+Allow: /
+
 Sitemap: https://keeper.sh/sitemap.xml

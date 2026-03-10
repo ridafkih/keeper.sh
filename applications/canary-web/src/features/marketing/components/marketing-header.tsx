@@ -16,8 +16,8 @@ export function MarketingHeader({ children }: PropsWithChildren) {
   );
 }
 
-export function MarketingHeaderBranding({ children }: PropsWithChildren) {
-  return <Link to="/" className="flex items-center text-foreground hover:text-foreground-hover">{children}</Link>;
+export function MarketingHeaderBranding({ children, label }: PropsWithChildren<{ label?: string }>) {
+  return <Link to="/" className="flex items-center text-foreground hover:text-foreground-hover" aria-label={label}>{children}</Link>;
 }
 
 export function MarketingHeaderActions({ children }: PropsWithChildren) {

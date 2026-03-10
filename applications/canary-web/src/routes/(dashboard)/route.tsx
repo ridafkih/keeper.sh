@@ -17,6 +17,15 @@ export const Route = createFileRoute("/(dashboard)")({
   component: DashboardLayout,
   head: () => ({
     meta: [{ content: "noindex, nofollow", name: "robots" }],
+    links: [
+      {
+        rel: "preload",
+        href: "/assets/fonts/GeistMono-variable.woff2",
+        as: "font",
+        type: "font/woff2",
+        crossOrigin: "anonymous",
+      },
+    ],
   }),
 });
 

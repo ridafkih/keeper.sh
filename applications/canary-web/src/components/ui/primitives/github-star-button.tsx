@@ -99,8 +99,9 @@ function GithubStarButtonShell({ countLabel }: GithubStarButtonShellProps) {
       href={GITHUB_REPOSITORY_URL}
       target="_blank"
       rel="noreferrer"
+      aria-label="Star Keeper.sh on GitHub"
     >
-      <Star size={14} />
+      <Star size={14} aria-hidden="true" />
       {typeof countLabel === "string" ? <ButtonText>{countLabel}</ButtonText> : null}
     </ExternalLinkButton>
   );

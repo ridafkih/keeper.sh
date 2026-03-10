@@ -4,8 +4,11 @@ import { HttpError } from "./lib/fetcher";
 import { hasSessionCookie } from "./lib/session-cookie";
 import type { AppRouterContext } from "./lib/router-context";
 
+import type { ViteAssets } from "./lib/router-context";
+
 interface CreateAppRouterOptions {
   request?: Request;
+  viteAssets?: ViteAssets;
 }
 
 function resolveApiOrigin(request: Request | undefined): string {
@@ -78,7 +81,10 @@ function createWebFetcher(
   return createJsonFetcher(requestCookie, webOrigin);
 }
 
-function buildRouterContext(request: Request | undefined): AppRouterContext {
+function buildRouterContext(
+  request: Request | undefined,
+  viteAssets: ViteAssets | undefined,
+): AppRouterContext {
   const cookieHeader = request?.headers.get("cookie") ?? undefined;
   const serverHasSession = hasSessionCookie(cookieHeader);
 
@@ -89,12 +95,13 @@ function buildRouterContext(request: Request | undefined): AppRouterContext {
     },
     fetchApi: createApiFetcher(request),
     fetchWeb: createWebFetcher(request),
+    viteAssets: viteAssets ?? null,
   };
 }
 
 export function createAppRouter(options: CreateAppRouterOptions = {}) {
   const router = createRouter({
-    context: buildRouterContext(options.request),
+    context: buildRouterContext(options.request, options.viteAssets),
     defaultPreload: "intent",
     routeTree,
     scrollRestoration: false,

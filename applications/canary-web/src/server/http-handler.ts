@@ -1,7 +1,26 @@
 import { isApiRequest, isDocumentRequest, proxyRequest } from "./proxy/http";
-import { buildHtmlResponse } from "./template";
 import { handleInternalRoute } from "./internal-routes";
 import type { Runtime, ServerConfig } from "./types";
+
+const securityHeaders: Record<string, string> = {
+  "strict-transport-security": "max-age=31536000; includeSubDomains",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY",
+  "referrer-policy": "strict-origin-when-cross-origin",
+};
+
+function withSecurityHeaders(response: Response): Response {
+  const headers = new Headers(response.headers);
+
+  for (const [key, value] of Object.entries(securityHeaders)) {
+    headers.set(key, value);
+  }
+
+  return new Response(response.body, {
+    headers,
+    status: response.status,
+  });
+}
 
 export async function handleApplicationRequest(
   request: Request,
@@ -22,12 +41,13 @@ export async function handleApplicationRequest(
     return runtime.handleAssetRequest(request);
   }
 
-  const routerResponse = await runtime.renderApp(request);
+  const viteAssets = await runtime.resolveViteAssets(requestUrl.pathname);
+  const routerResponse = await runtime.renderApp(request, viteAssets);
+
   const isRedirect = routerResponse.status >= 300 && routerResponse.status < 400;
   if (isRedirect) {
     return routerResponse;
   }
 
-  const template = await runtime.renderTemplate(requestUrl.pathname);
-  return buildHtmlResponse(routerResponse, template);
+  return withSecurityHeaders(routerResponse);
 }

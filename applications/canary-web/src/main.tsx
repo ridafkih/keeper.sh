@@ -11,21 +11,19 @@ if (import.meta.env.DEV) {
 const rootElement = document.getElementById("root");
 const router = createAppRouter();
 
-if (rootElement) {
-  if (rootElement.innerHTML.length > 0) {
-    hydrateRoot(
-      rootElement,
-      <StrictMode>
-        <RouterClient router={router} />
-      </StrictMode>,
-    );
-  } else {
-    const root = createRoot(rootElement);
+if (rootElement && rootElement.innerHTML.length > 0) {
+  hydrateRoot(
+    document,
+    <StrictMode>
+      <RouterClient router={router} />
+    </StrictMode>,
+  );
+} else if (rootElement) {
+  const root = createRoot(rootElement);
 
-    root.render(
-      <StrictMode>
-        <RouterProvider router={router} />
-      </StrictMode>,
-    );
-  }
+  root.render(
+    <StrictMode>
+      <RouterProvider router={router} />
+    </StrictMode>,
+  );
 }

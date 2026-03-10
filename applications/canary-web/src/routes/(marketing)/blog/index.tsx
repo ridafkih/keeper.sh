@@ -44,6 +44,7 @@ function BlogDirectoryPage() {
               <div
                 className="bg-background h-28 sm:col-span-1 sm:h-full"
                 style={BLOG_ILLUSTRATION_STYLE}
+                role="presentation"
               />
               <div className="flex flex-col gap-1 p-4 md:p-5 sm:col-span-2">
                 <Heading3 as="h2" className="group-hover:text-foreground-hover">

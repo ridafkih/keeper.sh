@@ -36,8 +36,8 @@ function MarketingLayout() {
     <>
       <JsonLd data={organizationSchema} />
       <MarketingHeader>
-        <MarketingHeaderBranding>
-          <KeeperLogo className="w-full max-w-6" />
+        <MarketingHeaderBranding label="Keeper.sh home">
+          <KeeperLogo className="w-full max-w-6" aria-hidden="true" />
         </MarketingHeaderBranding>
         <SessionSlot
           authenticated={
@@ -70,7 +70,7 @@ function MarketingLayout() {
       <LayoutItem>
         <MarketingFooter>
           <MarketingFooterTagline>
-            Made with <HeartIcon size={12} className="inline text-red-500 fill-red-500 relative -top-px" /> by{" "}
+            Made with <HeartIcon size={12} className="inline text-red-500 fill-red-500 relative -top-px" aria-hidden="true" /> by{" "}
             <ExternalTextLink
               align="left"
               href="https://rida.dev"

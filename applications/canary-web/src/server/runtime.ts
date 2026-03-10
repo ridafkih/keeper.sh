@@ -3,10 +3,12 @@ import { pathToFileURL } from "node:url";
 import { createServer as createViteServer, type ViteDevServer } from "vite";
 import { clientDistDirectory, serverDistEntry, sourceTemplatePath } from "./paths";
 import { proxyRequest, readStaticFile } from "./proxy/http";
+import { extractViteAssets } from "./vite-assets";
+import type { ViteAssets } from "../lib/router-context";
 import type { Runtime, ServerConfig } from "./types";
 
 interface EntryServerModule {
-  render: (request: Request) => Promise<Response>;
+  render: (request: Request, viteAssets: ViteAssets) => Promise<Response>;
 }
 
 function isEntryServerModule(value: unknown): value is EntryServerModule {
@@ -21,7 +23,7 @@ function isEntryServerModule(value: unknown): value is EntryServerModule {
 async function loadProductionRenderer(): Promise<EntryServerModule> {
   const moduleValue = await import(pathToFileURL(serverDistEntry).href);
   if (!isEntryServerModule(moduleValue)) {
-    throw new Error("SSR entry module must export render(request).");
+    throw new Error("SSR entry module must export render(request, viteAssets).");
   }
 
   return moduleValue;
@@ -29,6 +31,7 @@ async function loadProductionRenderer(): Promise<EntryServerModule> {
 
 async function createProductionRuntime(): Promise<Runtime> {
   const template = await fs.readFile(`${clientDistDirectory}/index.html`, "utf-8");
+  const viteAssets = extractViteAssets(template);
   const renderer = await loadProductionRenderer();
 
   return {
@@ -36,12 +39,12 @@ async function createProductionRuntime(): Promise<Runtime> {
       const requestUrl = new URL(request.url);
       return readStaticFile(requestUrl.pathname);
     },
-    renderApp: (request) => renderer.render(request),
-    renderTemplate: async () => template,
+    resolveViteAssets: async () => viteAssets,
+    renderApp: (request, assets) => renderer.render(request, assets),
   };
 }
 
-async function createViteDevServer(vitePort: number): Promise<ViteDevServer> {
+async function createViteDevServerInstance(vitePort: number): Promise<ViteDevServer> {
   const viteServer = await createViteServer({
     appType: "custom",
     server: {
@@ -62,25 +65,26 @@ async function createViteDevServer(vitePort: number): Promise<ViteDevServer> {
 async function loadDevelopmentRenderer(viteServer: ViteDevServer): Promise<EntryServerModule> {
   const moduleValue = await viteServer.ssrLoadModule("/src/server.tsx");
   if (!isEntryServerModule(moduleValue)) {
-    throw new Error("Development SSR entry must export render(request).");
+    throw new Error("Development SSR entry must export render(request, viteAssets).");
   }
 
   return moduleValue;
 }
 
 async function createDevelopmentRuntime(vitePort: number): Promise<Runtime> {
-  const viteServer = await createViteDevServer(vitePort);
+  const viteServer = await createViteDevServerInstance(vitePort);
   const viteOrigin = `http://localhost:${vitePort}`;
 
   return {
     handleAssetRequest: (request) => proxyRequest(request, viteOrigin),
-    renderApp: async (request) => {
-      const renderer = await loadDevelopmentRenderer(viteServer);
-      return renderer.render(request);
-    },
-    renderTemplate: async (requestPath) => {
+    resolveViteAssets: async (requestPath) => {
       const template = await fs.readFile(sourceTemplatePath, "utf-8");
-      return viteServer.transformIndexHtml(requestPath, template);
+      const transformed = await viteServer.transformIndexHtml(requestPath, template);
+      return extractViteAssets(transformed);
+    },
+    renderApp: async (request, viteAssets) => {
+      const renderer = await loadDevelopmentRenderer(viteServer);
+      return renderer.render(request, viteAssets);
     },
     shutdown: () => viteServer.close(),
   };

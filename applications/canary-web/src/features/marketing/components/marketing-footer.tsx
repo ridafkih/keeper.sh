@@ -19,7 +19,7 @@ export function MarketingFooterTagline({ children }: PropsWithChildren) {
 
 export function MarketingFooterNav({ children }: PropsWithChildren) {
   return (
-    <nav className="flex gap-6">
+    <nav className="flex gap-6" aria-label="Footer">
       {children}
     </nav>
   );

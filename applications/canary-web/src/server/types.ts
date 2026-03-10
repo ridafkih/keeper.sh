@@ -1,9 +1,10 @@
 import type { Server as BunServer, ServerWebSocket as BunServerWebSocket } from "bun";
+import type { ViteAssets } from "../lib/router-context";
 
 export interface Runtime {
   handleAssetRequest: (request: Request) => Promise<Response>;
-  renderApp: (request: Request) => Promise<Response>;
-  renderTemplate: (requestPath: string) => Promise<string>;
+  resolveViteAssets: (requestPath: string) => Promise<ViteAssets>;
+  renderApp: (request: Request, viteAssets: ViteAssets) => Promise<Response>;
   shutdown?: () => Promise<void>;
 }
 
@@ -13,11 +14,6 @@ export interface ServerConfig {
   isProduction: boolean;
   serverPort: number;
   vitePort: number;
-}
-
-export interface TemplateSegments {
-  prefix: string;
-  suffix: string;
 }
 
 export interface SocketProxyData {

@@ -22,6 +22,7 @@
     "better-auth": "^1.5.2",
     "clsx": "^2.1.1",
     "entrykit": "^0.1.3",
+    "fast-xml-parser": "^5.4.2",
     "jotai": "^2.18.0",
     "lucide-react": "^0.576.0",
     "motion": "^12.34.4",

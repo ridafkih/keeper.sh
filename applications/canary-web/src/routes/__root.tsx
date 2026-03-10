@@ -1,4 +1,4 @@
-import { Outlet, Scripts, createRootRouteWithContext, useLocation } from "@tanstack/react-router";
+import { HeadContent, Outlet, Scripts, createRootRouteWithContext, useLocation } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { SWRConfig } from "swr";
@@ -7,7 +7,7 @@ import { Text } from "../components/ui/primitives/text";
 import { LinkButton, ButtonText } from "../components/ui/primitives/button";
 import { fetcher, HttpError } from "../lib/fetcher";
 import { resolveErrorMessage } from "../utils/errors";
-import type { AppRouterContext } from "../lib/router-context";
+import type { AppRouterContext, ViteScript } from "../lib/router-context";
 
 const NON_RETRYABLE_STATUSES = new Set([401, 403, 404]);
 
@@ -36,15 +36,58 @@ export const Route = createRootRouteWithContext<AppRouterContext>()({
   component: RootComponent,
   notFoundComponent: NotFound,
   errorComponent: ErrorFallback,
+  head: () => ({
+    meta: [
+      { charSet: "utf-8" },
+      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { title: "Keeper.sh" },
+    ],
+  }),
 });
 
+function ViteScriptTag({ script }: { script: ViteScript }) {
+  if (script.src) {
+    return <script type="module" src={script.src} />;
+  }
+
+  if (script.content) {
+    return <script type="module" dangerouslySetInnerHTML={{ __html: script.content }} />;
+  }
+
+  return null;
+}
+
 function RootComponent() {
+  const { viteAssets } = Route.useRouteContext();
+
   return (
-    <SWRConfig value={SWR_CONFIG}>
-      <ScrollToTopOnNavigation />
-      <Outlet />
-      <Scripts />
-    </SWRConfig>
+    <html lang="en">
+      <head>
+        <HeadContent />
+        {viteAssets?.stylesheets.map((href) => (
+          <link key={href} rel="stylesheet" href={href} precedence="default" />
+        ))}
+        {viteAssets?.headScripts.map((script, index) => (
+          <ViteScriptTag key={script.src ?? index} script={script} />
+        ))}
+        <link rel="icon" type="image/svg+xml" href="/keeper.svg" media="(prefers-color-scheme: light)" />
+        <link rel="icon" type="image/svg+xml" href="/keeper-dark.svg" media="(prefers-color-scheme: dark)" />
+        <link rel="preload" href="/assets/fonts/Geist-variable.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+        <link rel="preload" href="/assets/fonts/Lora-variable.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+      </head>
+      <body>
+        <div id="root">
+          <SWRConfig value={SWR_CONFIG}>
+            <ScrollToTopOnNavigation />
+            <Outlet />
+          </SWRConfig>
+        </div>
+        <Scripts />
+        {viteAssets?.bodyScripts.map((script, index) => (
+          <ViteScriptTag key={script.src ?? index} script={script} />
+        ))}
+      </body>
+    </html>
   );
 }
 
@@ -65,6 +108,7 @@ function ScrollToTopOnNavigation() {
 function NotFound() {
   return (
     <div className="flex flex-col items-center justify-center min-h-dvh px-2 gap-3">
+      <meta name="robots" content="noindex" />
       <Heading2>Page not found</Heading2>
       <Text size="sm" tone="muted">
         The page you're looking for doesn't exist.
@@ -79,6 +123,7 @@ function NotFound() {
 function ErrorFallback({ error }: ErrorComponentProps) {
   return (
     <div className="flex flex-col items-center justify-center min-h-dvh px-2 gap-3">
+      <meta name="robots" content="noindex" />
       <Heading2>Something went wrong</Heading2>
       <Text size="sm" tone="muted">
         {resolveErrorMessage(error, "An unexpected error occurred.")}

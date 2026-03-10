@@ -93,7 +93,7 @@ export function MarketingIllustrationCalendarCard({
 
 export function MarketingIllustrationCalendar({ children }: PropsWithChildren) {
   return (
-    <div className="relative w-full after:absolute after:inset-x-0 after:bottom-0 after:h-1/2 after:bg-linear-to-b after:from-transparent after:to-background">
+    <div className="relative w-full after:absolute after:inset-x-0 after:bottom-0 after:h-1/2 after:bg-linear-to-b after:from-transparent after:to-background" role="presentation" aria-hidden="true">
       <div className="py-12 px-2 max-w-96 mx-auto w-full max-h-64 sm:max-h-72">
         <div className="grid grid-cols-1 grid-rows-1 *:row-start-1 *:col-start-1">
           {children}

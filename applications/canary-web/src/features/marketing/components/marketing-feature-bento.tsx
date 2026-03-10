@@ -36,6 +36,7 @@ export function MarketingFeatureBentoIllustration({ children }: PropsWithChildre
     <div
       className="bg-background flex items-center justify-center p-12 min-h-32"
       style={ILLUSTRATION_STYLE}
+      role="presentation"
     >
       {children}
     </div>
