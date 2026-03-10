@@ -1,4 +1,5 @@
-import { createFileRoute, Outlet } from '@tanstack/react-router'
+import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
+import { commercialMode } from '../../config/commercial'
 import { jsonLdMeta, organizationSchema } from '../../lib/seo'
 import { Layout, LayoutItem } from '../../components/ui/shells/layout'
 import { MarketingHeader, MarketingHeaderActions, MarketingHeaderBranding } from '../../features/marketing/components/marketing-header'
@@ -16,6 +17,12 @@ interface GithubStarsLoaderData {
 }
 
 export const Route = createFileRoute('/(marketing)')({
+  beforeLoad: ({ context }) => {
+    if (!commercialMode) {
+      const hasSession = context.auth.hasSession();
+      throw redirect({ to: hasSession ? "/dashboard" : "/login" });
+    }
+  },
   loader: async ({ context }) => {
     try {
       return await context.fetchWeb<GithubStarsLoaderData>("/internal/github-stars");

@@ -124,6 +124,7 @@ const authSocialProvidersSchema = type({
 type AuthSocialProviders = typeof authSocialProvidersSchema.infer;
 
 const authCapabilitiesSchema = type({
+  commercialMode: "boolean",
   credentialMode: "'email' | 'username'",
   requiresEmailVerification: "boolean",
   socialProviders: authSocialProvidersSchema,

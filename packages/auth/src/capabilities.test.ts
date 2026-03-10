@@ -14,13 +14,14 @@ describe("resolveAuthCapabilities", () => {
     });
 
     expect(capabilities).toEqual({
+      commercialMode: false,
       credentialMode: "username",
       requiresEmailVerification: false,
       socialProviders: {
         google: true,
         microsoft: true,
       },
-      supportsChangePassword: false,
+      supportsChangePassword: true,
       supportsPasskeys: false,
       supportsPasswordReset: false,
     });
@@ -38,6 +39,7 @@ describe("resolveAuthCapabilities", () => {
     });
 
     expect(capabilities).toEqual({
+      commercialMode: true,
       credentialMode: "email",
       requiresEmailVerification: true,
       socialProviders: {

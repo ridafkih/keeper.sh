@@ -32,6 +32,7 @@ import {
 import { Text } from "../../../../components/ui/primitives/text";
 import { resolveErrorMessage } from "../../../../utils/errors";
 import { fetchAuthCapabilitiesWithApi } from "../../../../lib/auth-capabilities";
+import { commercialMode } from "../../../../config/commercial";
 import { useSubscription } from "../../../../hooks/use-subscription";
 import { openCustomerPortal } from "../../../../utils/checkout";
 
@@ -125,15 +126,17 @@ function SettingsPage() {
           </NavigationMenuLinkItem>
         )}
       </NavigationMenu>
-      <NavigationMenu variant={isPro ? "default" : "highlight"}>
-        <NavigationMenuButtonItem onClick={handleManagePlan} disabled={isManaging || subscriptionLoading}>
-          <NavigationMenuItemIcon>
-            {isPro ? <CreditCard size={15} /> : <Sparkles size={15} />}
-          </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>{isPro ? "Manage Plan" : "Upgrade to Pro"}</NavigationMenuItemLabel>
-          <NavigationMenuItemTrailing />
-        </NavigationMenuButtonItem>
-      </NavigationMenu>
+      {commercialMode && (
+        <NavigationMenu variant={isPro ? "default" : "highlight"}>
+          <NavigationMenuButtonItem onClick={handleManagePlan} disabled={isManaging || subscriptionLoading}>
+            <NavigationMenuItemIcon>
+              {isPro ? <CreditCard size={15} /> : <Sparkles size={15} />}
+            </NavigationMenuItemIcon>
+            <NavigationMenuItemLabel>{isPro ? "Manage Plan" : "Upgrade to Pro"}</NavigationMenuItemLabel>
+            <NavigationMenuItemTrailing />
+          </NavigationMenuButtonItem>
+        </NavigationMenu>
+      )}
       <NavigationMenu>
         <NavigationMenuButtonItem onClick={() => setDeleteOpen(true)}>
           <NavigationMenuItemIcon>

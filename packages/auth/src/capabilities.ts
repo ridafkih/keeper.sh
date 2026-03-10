@@ -28,13 +28,14 @@ const resolveAuthCapabilities = (
   config: ResolveAuthCapabilitiesConfig,
 ): AuthCapabilities =>
   authCapabilitiesSchema.assert({
+    commercialMode: config.commercialMode ?? false,
     credentialMode: resolveCredentialMode(config.commercialMode),
     requiresEmailVerification: config.commercialMode ?? false,
     socialProviders: {
       google: hasOAuthCredentials(config.googleClientId, config.googleClientSecret),
       microsoft: hasOAuthCredentials(config.microsoftClientId, config.microsoftClientSecret),
     },
-    supportsChangePassword: config.commercialMode ?? false,
+    supportsChangePassword: true,
     supportsPasskeys: Boolean(
       config.commercialMode && config.passkeyOrigin && config.passkeyRpId,
     ),
