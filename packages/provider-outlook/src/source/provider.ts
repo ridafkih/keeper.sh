@@ -15,6 +15,7 @@ import {
   type SourceProvider,
   type SourceSyncResult,
 } from "@keeper.sh/provider-core";
+import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import {
   calendarAccountsTable,
   calendarsTable,
@@ -253,6 +254,31 @@ interface CreateOutlookSourceProviderConfig {
 }
 
 const OAUTH_CALENDAR_TYPE = "oauth";
+const MS_PER_SECOND = 1000;
+
+const ensureValidAccessToken = async (
+  database: BunSQLDatabase,
+  oauthProvider: OAuthTokenProvider,
+  source: { accessToken: string; accessTokenExpiresAt: Date; refreshToken: string; oauthCredentialId: string },
+): Promise<string> => {
+  if (source.accessTokenExpiresAt.getTime() > Date.now() + TOKEN_REFRESH_BUFFER_MS) {
+    return source.accessToken;
+  }
+
+  const tokenData = await oauthProvider.refreshAccessToken(source.refreshToken);
+  const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);
+
+  await database
+    .update(oauthCredentialsTable)
+    .set({
+      accessToken: tokenData.access_token,
+      expiresAt: newExpiresAt,
+      refreshToken: tokenData.refresh_token ?? source.refreshToken,
+    })
+    .where(eq(oauthCredentialsTable.id, source.oauthCredentialId));
+
+  return tokenData.access_token;
+};
 
 const importRemainingCalendars = async (
   database: BunSQLDatabase,
@@ -280,7 +306,7 @@ const importRemainingCalendars = async (
     (calendar) => !existingIds.has(calendar.id),
   );
 
-  if (newCalendars.length === 0) return;
+  if (newCalendars.length === 0) {return;}
 
   await database.insert(calendarsTable).values(
     newCalendars.map((calendar) => ({
@@ -329,6 +355,7 @@ const createOutlookSourceProvider = (config: CreateOutlookSourceProviderConfig):
 
 const getOutlookSourcesWithCredentials = async (
   database: BunSQLDatabase,
+  oauthProvider: OAuthTokenProvider,
 ): Promise<OutlookSourceAccount[]> => {
   const sources = await database
     .select({
@@ -373,8 +400,10 @@ const getOutlookSourcesWithCredentials = async (
       continue;
     }
 
-    const defaultCalendarId = await fetchDefaultCalendarId(source.accessToken);
-    if (!defaultCalendarId) continue;
+    const accessToken = await ensureValidAccessToken(database, oauthProvider, source);
+
+    const defaultCalendarId = await fetchDefaultCalendarId(accessToken);
+    if (!defaultCalendarId) {continue;}
 
     await database
       .update(calendarsTable)
@@ -383,7 +412,7 @@ const getOutlookSourcesWithCredentials = async (
 
     await importRemainingCalendars(
       database,
-      source.accessToken,
+      accessToken,
       source.calendarAccountId,
       source.userId,
     );

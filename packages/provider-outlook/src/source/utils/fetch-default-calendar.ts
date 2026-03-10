@@ -5,11 +5,11 @@ const fetchDefaultCalendarId = async (accessToken: string): Promise<string | nul
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
-  if (!response.ok) return null;
+  if (!response.ok) {return null;}
 
   const body: unknown = await response.json();
-  if (typeof body !== "object" || body === null || !("id" in body)) return null;
-  if (typeof body.id !== "string") return null;
+  if (typeof body !== "object" || body === null || !("id" in body)) {return null;}
+  if (typeof body.id !== "string") {return null;}
 
   return body.id;
 };

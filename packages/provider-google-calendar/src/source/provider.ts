@@ -325,7 +325,7 @@ const importRemainingCalendars = async (
     (calendar) => !existingIds.has(calendar.id),
   );
 
-  if (newCalendars.length === 0) return;
+  if (newCalendars.length === 0) {return;}
 
   await database.insert(calendarsTable).values(
     newCalendars.map((calendar) => ({
@@ -431,9 +431,11 @@ const getGoogleSourcesWithCredentials = async (
       .set({ externalCalendarId: GOOGLE_PRIMARY_CALENDAR_ID })
       .where(eq(calendarsTable.id, source.calendarId));
 
+    const accessToken = await ensureValidAccessToken(database, oauthProvider, source);
+
     await importRemainingCalendars(
       database,
-      source.accessToken,
+      accessToken,
       source.calendarAccountId,
       source.userId,
     );
