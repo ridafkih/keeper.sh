@@ -2,20 +2,25 @@ import { isApiRequest, isDocumentRequest, proxyRequest } from "./proxy/http";
 import { handleInternalRoute } from "./internal-routes";
 import type { Runtime, ServerConfig } from "./types";
 
-const securityHeaders: Record<string, string> = {
+const baseSecurityHeaders: Record<string, string> = {
   "strict-transport-security": "max-age=31536000; includeSubDomains",
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY",
   "referrer-policy": "strict-origin-when-cross-origin",
-  "content-security-policy":
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
 };
 
-function withSecurityHeaders(response: Response): Response {
+const cspHeader =
+  "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+
+function withSecurityHeaders(response: Response, config: ServerConfig): Response {
   const headers = new Headers(response.headers);
 
-  for (const [key, value] of Object.entries(securityHeaders)) {
+  for (const [key, value] of Object.entries(baseSecurityHeaders)) {
     headers.set(key, value);
+  }
+
+  if (config.isProduction) {
+    headers.set("content-security-policy", cspHeader);
   }
 
   return new Response(response.body, {
@@ -51,5 +56,5 @@ export async function handleApplicationRequest(
     return routerResponse;
   }
 
-  return withSecurityHeaders(routerResponse);
+  return withSecurityHeaders(routerResponse, config);
 }
