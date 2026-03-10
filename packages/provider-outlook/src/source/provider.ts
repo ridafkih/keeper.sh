@@ -299,7 +299,7 @@ const importRemainingCalendars = async (
     );
 
   const existingIds = new Set(
-    existingCalendars.map((c) => c.externalCalendarId),
+    existingCalendars.map(({ externalCalendarId }) => externalCalendarId),
   );
 
   const newCalendars = remoteCalendars.filter(
