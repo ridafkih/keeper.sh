@@ -142,7 +142,7 @@ const PRICING_PLANS: PricingPlan[] = [
     period: 'per month',
     description:
       'For power users who want minutely syncs and unlimited calendars.',
-    ctaLabel: 'Start Free Trial',
+    ctaLabel: 'Get Started',
     tone: "inverse" as const,
   },
 ]

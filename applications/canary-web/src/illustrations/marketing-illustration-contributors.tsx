@@ -1,14 +1,14 @@
 import { AnimatePresence, LazyMotion } from "motion/react";
 import * as m from "motion/react-m";
-import { loadMotionFeatures } from "../lib/motion-features";
-import { memo, useCallback, useEffect, useState } from "react";
+import { loadMotionFeaturesMax } from "../lib/motion-features";
+import { memo, useEffect, useState } from "react";
 import { Text } from "../components/ui/primitives/text";
 import CONTRIBUTORS from "../features/marketing/contributors.json";
 
 const VISIBLE_COUNT = 3;
 const ROTATE_INTERVAL_MS = 1800;
 
-const SLOT_ANIMATE = [
+const SLOT_STYLES = [
   { scale: 0.92, opacity: 0.35, filter: "blur(1px)" },
   { scale: 1, opacity: 1, filter: "blur(0px)" },
   { scale: 0.92, opacity: 0.35, filter: "blur(1px)" },
@@ -22,20 +22,21 @@ const TRANSITION = {
 
 type Contributor = (typeof CONTRIBUTORS)[number];
 
-interface ContributorRowProps {
+const ContributorRow = memo(function ContributorRow({
+  contributor,
+}: {
   contributor: Contributor;
-}
-
-const ContributorRow = memo(function ContributorRow({ contributor }: ContributorRowProps) {
+}) {
   return (
     <div className="flex items-center gap-3 px-4 py-1.5">
       <img
-        src={contributor.avatarUrl}
+        src={`${contributor.avatarUrl}?s=48`}
         alt=""
         width={24}
         height={24}
         className="size-6 rounded-full shrink-0 bg-interactive-border"
         loading="lazy"
+        style={{ aspectRatio: "1 / 1" }}
       />
       <Text as="span" size="xs" tone="muted" className="truncate shrink-0">
         {contributor.username}
@@ -49,12 +50,6 @@ const ContributorRow = memo(function ContributorRow({ contributor }: Contributor
 
 export function MarketingIllustrationContributors() {
   const [offset, setOffset] = useState(0);
-  const [rowHeight, setRowHeight] = useState(0);
-
-  const measureRef = useCallback((node: HTMLDivElement | null) => {
-    if (!node) return;
-    setRowHeight(node.getBoundingClientRect().height);
-  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -70,49 +65,26 @@ export function MarketingIllustrationContributors() {
   });
 
   return (
-    <LazyMotion features={loadMotionFeatures}>
-      <div className="relative w-full pt-3 px-4">
-        <div ref={measureRef} className="invisible absolute inset-x-0" aria-hidden="true">
-          <ContributorRow contributor={CONTRIBUTORS[0]} />
-        </div>
-
-        {rowHeight > 0 && (
-          <div className="relative w-full" style={{ height: rowHeight * VISIBLE_COUNT }}>
-            <AnimatePresence initial={false}>
-              {visibleContributors.map(({ contributor, slot, contributorIndex }) => (
-                <m.div
-                  key={contributorIndex}
-                  initial={{
-                    y: rowHeight * VISIBLE_COUNT,
-                    opacity: 0,
-                    scale: 0.7,
-                    filter: "blur(3px)",
-                    rotateX: -45,
-                  }}
-                  animate={{
-                    y: rowHeight * slot,
-                    opacity: SLOT_ANIMATE[slot].opacity,
-                    scale: SLOT_ANIMATE[slot].scale,
-                    filter: SLOT_ANIMATE[slot].filter,
-                    rotateX: 0,
-                  }}
-                  exit={{
-                    y: -rowHeight,
-                    opacity: 0,
-                    scale: 0.7,
-                    filter: "blur(3px)",
-                    rotateX: 45,
-                  }}
-                  transition={TRANSITION}
-                  className="absolute inset-x-0"
-                  style={{ perspective: 400, transformOrigin: "center center" }}
-                >
-                  <ContributorRow contributor={contributor} />
-                </m.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
+    <LazyMotion features={loadMotionFeaturesMax}>
+      <div className="flex flex-col w-full pt-3 px-4 overflow-hidden">
+        <AnimatePresence initial={false} mode="popLayout">
+          {visibleContributors.map(({ contributor, slot, contributorIndex }) => (
+            <m.div
+              key={contributorIndex}
+              layout
+              initial={{ opacity: 0, scale: 0.7, filter: "blur(3px)" }}
+              animate={{
+                opacity: SLOT_STYLES[slot].opacity,
+                scale: SLOT_STYLES[slot].scale,
+                filter: SLOT_STYLES[slot].filter,
+              }}
+              exit={{ opacity: 0, scale: 0.7, filter: "blur(3px)", transition: { ...TRANSITION, layout: { duration: 0 } } }}
+              transition={TRANSITION}
+            >
+              <ContributorRow contributor={contributor} />
+            </m.div>
+          ))}
+        </AnimatePresence>
       </div>
     </LazyMotion>
   );

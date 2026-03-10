@@ -1,7 +1,7 @@
 function MiniToggle({ checked }: { checked: boolean }) {
   return (
     <div
-      className={`w-8 h-[18px] rounded-full shrink-0 flex items-center p-0.5 ${
+      className={`w-8 h-4.5 rounded-full shrink-0 flex items-center p-0.5 ${
         checked ? "bg-foreground" : "bg-interactive-border"
       }`}
     >
@@ -35,7 +35,7 @@ function MiniSettingsRow({ label, checked }: { label: string; checked: boolean }
 
 export function HowItWorksConfigure() {
   return (
-    <div className="w-full max-w-xs sm:-translate-x-12">
+    <div className="w-full max-w-xs">
       <div className="rounded-2xl border border-border-elevated bg-background-elevated shadow-xs p-0.5">
         {SETTINGS.map(({ label, checked }) => (
           <MiniSettingsRow key={label} label={label} checked={checked} />

@@ -20,7 +20,7 @@ function MiniMenuRow({ icon, label }: { icon: string; label: string }) {
 
 export function HowItWorksConnect() {
   return (
-    <div className="w-full max-w-xs sm:translate-x-12">
+    <div className="w-full max-w-xs">
       <div className="rounded-2xl border border-border-elevated bg-background-elevated shadow-xs p-0.5">
         {PROVIDERS.map(({ icon, label }) => (
           <MiniMenuRow key={label} icon={icon} label={label} />
