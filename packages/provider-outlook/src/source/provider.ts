@@ -24,6 +24,8 @@ import {
 import { and, arrayContains, eq, gt, inArray, lt, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { fetchCalendarEvents, fetchCalendarName, parseOutlookEvents } from "./utils/fetch-events";
+import { fetchDefaultCalendarId } from "./utils/fetch-default-calendar";
+import { listUserCalendars } from "./utils/list-calendars";
 
 const OUTLOOK_PROVIDER_ID = "outlook";
 const EMPTY_COUNT = 0;
@@ -250,6 +252,54 @@ interface CreateOutlookSourceProviderConfig {
   oauthProvider: OAuthTokenProvider;
 }
 
+const OAUTH_CALENDAR_TYPE = "oauth";
+
+const importRemainingCalendars = async (
+  database: BunSQLDatabase,
+  accessToken: string,
+  accountId: string,
+  userId: string,
+): Promise<void> => {
+  const remoteCalendars = await listUserCalendars(accessToken);
+
+  const existingCalendars = await database
+    .select({ externalCalendarId: calendarsTable.externalCalendarId })
+    .from(calendarsTable)
+    .where(
+      and(
+        eq(calendarsTable.accountId, accountId),
+        eq(calendarsTable.userId, userId),
+      ),
+    );
+
+  const existingIds = new Set(
+    existingCalendars.map((c) => c.externalCalendarId),
+  );
+
+  const newCalendars = remoteCalendars.filter(
+    (calendar) => !existingIds.has(calendar.id),
+  );
+
+  if (newCalendars.length === 0) return;
+
+  await database.insert(calendarsTable).values(
+    newCalendars.map((calendar) => ({
+      accountId,
+      calendarType: OAUTH_CALENDAR_TYPE,
+      capabilities: ["pull", "push"],
+      customEventName: "{{calendar_name}}",
+      excludeEventDescription: true,
+      excludeEventLocation: true,
+      excludeEventName: true,
+      externalCalendarId: calendar.id,
+      includeInIcalFeed: true,
+      name: calendar.name,
+      originalName: calendar.name,
+      userId,
+    })),
+  );
+};
+
 const createOutlookSourceProvider = (config: CreateOutlookSourceProviderConfig): SourceProvider => {
   const { database, oauthProvider } = config;
 
@@ -311,16 +361,41 @@ const getOutlookSourcesWithCredentials = async (
       ),
     );
 
-  return sources.map((source) => {
-    if (!source.externalCalendarId) {
-      throw new Error(`Outlook source ${source.calendarId} is missing externalCalendarId`);
+  const results: OutlookSourceAccount[] = [];
+
+  for (const source of sources) {
+    if (source.externalCalendarId) {
+      results.push({
+        ...source,
+        externalCalendarId: source.externalCalendarId,
+        provider: source.provider,
+      });
+      continue;
     }
-    return {
+
+    const defaultCalendarId = await fetchDefaultCalendarId(source.accessToken);
+    if (!defaultCalendarId) continue;
+
+    await database
+      .update(calendarsTable)
+      .set({ externalCalendarId: defaultCalendarId })
+      .where(eq(calendarsTable.id, source.calendarId));
+
+    await importRemainingCalendars(
+      database,
+      source.accessToken,
+      source.calendarAccountId,
+      source.userId,
+    );
+
+    results.push({
       ...source,
-      externalCalendarId: source.externalCalendarId,
+      externalCalendarId: defaultCalendarId,
       provider: source.provider,
-    };
-  });
+    });
+  }
+
+  return results;
 };
 
 export { createOutlookSourceProvider, OutlookSourceProvider };
