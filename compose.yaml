@@ -36,6 +36,7 @@ services:
     environment:
       API_PORT: "3001"
       ENV: production
+      NODE_EXTRA_CA_CERTS: /certs/global-bundle.pem
     volumes:
       - ./global-bundle.pem:/certs/global-bundle.pem:ro
     depends_on:
