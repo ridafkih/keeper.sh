@@ -127,6 +127,18 @@ html {
   }
 }
 
+@keyframes spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@keyframes counter-spin {
+  to {
+    rotate: -360deg;
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   input:-webkit-autofill,
   input:-webkit-autofill:hover,

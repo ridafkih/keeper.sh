@@ -31,11 +31,15 @@ const ILLUSTRATION_STYLE = {
     "repeating-linear-gradient(-45deg, transparent 0 14px, var(--color-illustration-stripe) 14px 15px)",
 } as const;
 
-export function MarketingFeatureBentoIllustration({ children }: PropsWithChildren) {
+type MarketingFeatureBentoIllustrationProps = PropsWithChildren<{
+  plain?: boolean;
+}>;
+
+export function MarketingFeatureBentoIllustration({ children, plain }: MarketingFeatureBentoIllustrationProps) {
   return (
     <div
-      className="bg-background flex items-center justify-center p-12 min-h-32"
-      style={ILLUSTRATION_STYLE}
+      className="bg-background flex items-center justify-center p-4 pt-0 min-h-32"
+      style={plain ? undefined : ILLUSTRATION_STYLE}
       role="presentation"
     >
       {children}
@@ -44,5 +48,5 @@ export function MarketingFeatureBentoIllustration({ children }: PropsWithChildre
 }
 
 export function MarketingFeatureBentoBody({ children }: PropsWithChildren) {
-  return <div className="flex flex-col gap-2 p-4 md:p-6">{children}</div>;
+  return <div className="flex flex-col gap-2 p-4 pt-0 md:p-6 md:pt-0 mt-auto">{children}</div>;
 }

@@ -22,6 +22,8 @@ import {
   MarketingFeatureBentoIllustration,
   MarketingFeatureBentoSection,
 } from '../../features/marketing/components/marketing-feature-bento'
+import { MarketingIllustrationContributors } from '../../features/marketing/components/marketing-illustration-contributors'
+import { MarketingIllustrationProviders } from '../../features/marketing/components/marketing-illustration-providers'
 import {
   MarketingPricingComparisonGrid,
   MarketingPricingComparisonSpacer,
@@ -64,6 +66,7 @@ type MarketingFeature = {
   title: string
   description: string
   gridClassName: string
+  illustration?: React.ReactNode
 }
 
 const MARKETING_FEATURES: MarketingFeature[] = [
@@ -73,6 +76,7 @@ const MARKETING_FEATURES: MarketingFeature[] = [
     description:
       'Open-source, released under an AGPL-3.0 license. Secure and community driven.',
     gridClassName: 'lg:col-start-1 lg:col-span-4 lg:row-start-1',
+    illustration: <MarketingIllustrationContributors />,
   },
   {
     id: 2,
@@ -80,6 +84,7 @@ const MARKETING_FEATURES: MarketingFeature[] = [
     description:
       'Google Calendar, Outlook, Apple Calendar, and more. Automatically sync events between all your calendars no matter the provider.',
     gridClassName: 'lg:col-start-5 lg:col-span-6 lg:row-start-1',
+    illustration: <MarketingIllustrationProviders />,
   },
   {
     id: 3,
@@ -277,7 +282,9 @@ function MarketingPage() {
             <MarketingFeatureBentoGrid>
               {MARKETING_FEATURES.map((feature) => (
                 <MarketingFeatureBentoCard key={feature.id} className={feature.gridClassName}>
-                  <MarketingFeatureBentoIllustration />
+                  <MarketingFeatureBentoIllustration plain={!!feature.illustration}>
+                    {feature.illustration}
+                  </MarketingFeatureBentoIllustration>
                   <MarketingFeatureBentoBody>
                     <Heading3 as="h2">{feature.title}</Heading3>
                     <Text size="sm" className="text-left">
