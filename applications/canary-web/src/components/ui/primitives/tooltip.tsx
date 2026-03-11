@@ -15,9 +15,9 @@ export function Tooltip({ children, content }: TooltipProps) {
   const [position, setPosition] = useState({ x: 0, y: 0, above: true });
 
   const show = useCallback(() => {
-    const el = wrapperRef.current?.firstElementChild;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
+    const child = wrapperRef.current?.firstElementChild;
+    if (!child) return;
+    const rect = child.getBoundingClientRect();
     const above = rect.top >= ABOVE_CLEARANCE;
 
     setPosition({
@@ -40,7 +40,7 @@ export function Tooltip({ children, content }: TooltipProps) {
       {children}
       {visible && createPortal(
         <div
-          className="fixed z-50 pointer-events-none"
+          className="fixed z-50 pointer-events-none pointer-coarse:hidden"
           style={{
             left: position.x,
             top: position.y,
