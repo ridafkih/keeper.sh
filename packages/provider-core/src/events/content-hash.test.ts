@@ -52,4 +52,36 @@ describe("createSyncEventContentHash", () => {
     expect(hash).toHaveLength(64);
     expect(hash).toMatch(/^[0-9a-f]+$/);
   });
+
+  it("returns different hashes when availability changes", () => {
+    const hash1 = createSyncEventContentHash({
+      availability: "free",
+      endTime: new Date("2026-03-08T00:00:00.000Z"),
+      startTime: new Date("2026-03-07T00:00:00.000Z"),
+      summary: "Working elsewhere",
+    });
+    const hash2 = createSyncEventContentHash({
+      availability: "workingElsewhere",
+      endTime: new Date("2026-03-08T00:00:00.000Z"),
+      startTime: new Date("2026-03-07T00:00:00.000Z"),
+      summary: "Working elsewhere",
+    });
+
+    expect(hash1).not.toBe(hash2);
+  });
+
+  it("returns different hashes when all-day serialization would change", () => {
+    const hash1 = createSyncEventContentHash({
+      endTime: new Date("2026-03-08T00:00:00.000Z"),
+      startTime: new Date("2026-03-07T00:00:00.000Z"),
+      summary: "All day",
+    });
+    const hash2 = createSyncEventContentHash({
+      endTime: new Date("2026-03-07T12:00:00.000Z"),
+      startTime: new Date("2026-03-07T00:00:00.000Z"),
+      summary: "All day",
+    });
+
+    expect(hash1).not.toBe(hash2);
+  });
 });

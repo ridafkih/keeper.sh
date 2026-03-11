@@ -2,6 +2,7 @@ import type { EventDiff, EventTimeSlot, StoredEventTimeSlot } from "../types";
 
 const normalizeTimeZone = (timeZone: string | null | undefined): string => timeZone ?? "";
 const EMPTY_SERIALIZED_VALUE = "";
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -34,11 +35,32 @@ const serializeOptionalValue = (value: unknown): string => {
   return JSON.stringify(toStableComparableValue(value));
 };
 
+const isMidnightUtc = (value: Date): boolean =>
+  value.getUTCHours() === 0
+  && value.getUTCMinutes() === 0
+  && value.getUTCSeconds() === 0
+  && value.getUTCMilliseconds() === 0;
+
+const resolveIsAllDay = (event: Pick<EventTimeSlot, "startTime" | "endTime" | "isAllDay">): boolean => {
+  if (typeof event.isAllDay === "boolean") {
+    return event.isAllDay;
+  }
+
+  const durationMs = event.endTime.getTime() - event.startTime.getTime();
+  if (durationMs <= 0 || durationMs % MS_PER_DAY !== 0) {
+    return false;
+  }
+
+  return isMidnightUtc(event.startTime) && isMidnightUtc(event.endTime);
+};
+
 const eventIdentityKey = (event: EventTimeSlot): string =>
   [
     event.uid,
     String(event.startTime.getTime()),
     String(event.endTime.getTime()),
+    String(resolveIsAllDay(event)),
+    event.availability ?? "",
     normalizeTimeZone(event.startTimeZone),
     serializeOptionalValue(event.recurrenceRule),
     serializeOptionalValue(event.exceptionDates),

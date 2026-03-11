@@ -51,6 +51,9 @@ const createCalDAVProvider = (
     const results = await Promise.all(
       accounts.map(async (account) => {
         const localEvents = await getEventsForDestination(config.database, account.calendarId);
+        const supportedEvents = localEvents.filter(
+          (event) => event.availability !== "workingElsewhere",
+        );
 
         const password = caldavService.getDecryptedPassword(account.encryptedPassword);
         const provider = new CalDAVProviderInstance(
@@ -65,7 +68,7 @@ const createCalDAVProvider = (
           password,
           options,
         );
-        return provider.sync(localEvents, context);
+        return provider.sync(supportedEvents, context);
       }),
     );
 

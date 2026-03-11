@@ -30,15 +30,23 @@ const stringSchema = type("string");
 
 const googleEventSchema = type({
   "description?": "string",
-  "end?": { "dateTime?": "string", "timeZone?": "string" },
+  "end?": { "date?": "string", "dateTime?": "string", "timeZone?": "string" },
   "eventType?": "string",
   "iCalUID?": "string",
   "id?": "string",
   "location?": "string",
   "recurrence?": "string[]",
-  "start?": { "dateTime?": "string", "timeZone?": "string" },
+  "start?": { "date?": "string", "dateTime?": "string", "timeZone?": "string" },
   "status?": "'confirmed' | 'tentative' | 'cancelled'",
   "summary?": "string",
+  "transparency?": "string",
+  "visibility?": "string",
+  "workingLocationProperties?": {
+    "customLocation?": { "label?": "string" },
+    "homeOffice?": "unknown",
+    "officeLocation?": { "buildingId?": "string", "deskId?": "string", "floorId?": "string", "floorSectionId?": "string", "label?": "string" },
+    "type?": "string",
+  },
 });
 type GoogleEvent = typeof googleEventSchema.infer;
 
@@ -98,7 +106,9 @@ const outlookEventSchema = type({
   "end?": { "dateTime?": "string", "timeZone?": "string" },
   "iCalUId?": "string",
   "id?": "string",
+  "isAllDay?": "boolean",
   "location?": { "displayName?": "string" },
+  "showAs?": "string",
   "start?": { "dateTime?": "string", "timeZone?": "string" },
   "subject?": "string",
 });

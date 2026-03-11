@@ -7,6 +7,7 @@ interface GoogleDateTime {
 interface PartialGoogleDateTime {
   date?: string;
   dateTime?: string;
+  timeZone?: string;
 }
 
 interface GoogleApiError {

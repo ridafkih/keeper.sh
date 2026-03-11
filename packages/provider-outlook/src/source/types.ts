@@ -27,9 +27,11 @@ interface OutlookRemovedInfo {
 interface OutlookCalendarEvent {
   id?: string;
   iCalUId?: string;
+  isAllDay?: boolean;
   subject?: string;
   body?: { contentType?: string; content?: string } | null;
   location?: { displayName?: string };
+  showAs?: string;
   start?: OutlookEventDateTime;
   end?: OutlookEventDateTime;
   createdDateTime?: string;
@@ -63,6 +65,8 @@ interface EventTimeSlot {
   uid: string;
   startTime: Date;
   endTime: Date;
+  availability?: "busy" | "free" | "oof" | "workingElsewhere";
+  isAllDay?: boolean;
   startTimeZone?: string;
   title?: string;
   description?: string;

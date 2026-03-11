@@ -134,7 +134,9 @@ describe("fetchCalendarEvents", () => {
     );
     expect(parsedUrl.searchParams.get("startDateTime")).toBe("2026-06-01T00:00:00.000Z");
     expect(parsedUrl.searchParams.get("endDateTime")).toBe("2026-06-02T00:00:00.000Z");
-    expect(parsedUrl.searchParams.get("$select")).toBe("id,iCalUId,subject,body,location,start,end");
+    expect(parsedUrl.searchParams.get("$select")).toBe(
+      "id,iCalUId,subject,body,location,start,end,isAllDay,showAs",
+    );
   });
 
   it("returns full-sync-required when Microsoft responds with gone", async () => {
@@ -210,5 +212,29 @@ describe("parseOutlookEvents", () => {
 
     expect(parsedEvents).toHaveLength(1);
     expect(parsedEvents[0]?.uid).toBe("external-uid-2");
+  });
+
+  it("preserves working elsewhere availability", () => {
+    const parsedEvents = parseOutlookEvents([
+      createOutlookEvent({
+        iCalUId: "external-uid-4",
+        showAs: "workingElsewhere",
+      }),
+    ]);
+
+    expect(parsedEvents).toHaveLength(1);
+    expect(parsedEvents[0]?.availability).toBe("workingElsewhere");
+  });
+
+  it("preserves free availability", () => {
+    const parsedEvents = parseOutlookEvents([
+      createOutlookEvent({
+        iCalUId: "external-uid-5",
+        showAs: "free",
+      }),
+    ]);
+
+    expect(parsedEvents).toHaveLength(1);
+    expect(parsedEvents[0]?.availability).toBe("free");
   });
 });

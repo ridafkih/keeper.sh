@@ -213,4 +213,28 @@ describe("parseGoogleEvents", () => {
     expect(parsedEvents).toHaveLength(1);
     expect(parsedEvents[0]?.startTimeZone).toBe("America/Vancouver");
   });
+
+  it("marks working location events as working elsewhere", () => {
+    const googleEvent = createGoogleEvent({
+      eventType: "workingLocation",
+      iCalUID: "external-uid-5",
+    });
+
+    const parsedEvents = parseGoogleEvents([googleEvent], createDefaultFilters());
+
+    expect(parsedEvents).toHaveLength(1);
+    expect(parsedEvents[0]?.availability).toBe("workingElsewhere");
+  });
+
+  it("marks transparent events as free", () => {
+    const googleEvent = createGoogleEvent({
+      iCalUID: "external-uid-6",
+      transparency: "transparent",
+    });
+
+    const parsedEvents = parseGoogleEvents([googleEvent], createDefaultFilters());
+
+    expect(parsedEvents).toHaveLength(1);
+    expect(parsedEvents[0]?.availability).toBe("free");
+  });
 });

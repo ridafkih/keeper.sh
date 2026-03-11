@@ -36,7 +36,9 @@ interface SyncCalendarService {
 }
 
 const toStoredEvent = (row: {
+  availability: string | null;
   id: string;
+  isAllDay: boolean | null;
   sourceEventUid: string;
   startTime: Date;
   endTime: Date;
@@ -44,8 +46,10 @@ const toStoredEvent = (row: {
   recurrenceRule: string | null;
   exceptionDates: string | null;
 }): {
+  availability?: "busy" | "free" | "oof" | "workingElsewhere";
   endTime: Date;
   id: string;
+  isAllDay?: boolean;
   startTime: Date;
   startTimeZone?: string;
   uid: string;
@@ -53,8 +57,10 @@ const toStoredEvent = (row: {
   exceptionDates?: object;
 } => {
   const storedEvent: {
+    availability?: "busy" | "free" | "oof" | "workingElsewhere";
     endTime: Date;
     id: string;
+    isAllDay?: boolean;
     startTime: Date;
     startTimeZone?: string;
     uid: string;
@@ -66,6 +72,14 @@ const toStoredEvent = (row: {
     startTime: row.startTime,
     uid: row.sourceEventUid,
   };
+
+  if (row.availability !== null) {
+    storedEvent.availability = row.availability as typeof storedEvent.availability;
+  }
+
+  if (row.isAllDay !== null) {
+    storedEvent.isAllDay = row.isAllDay;
+  }
 
   if (row.startTimeZone !== null) {
     storedEvent.startTimeZone = row.startTimeZone;
@@ -106,9 +120,11 @@ const createSyncCalendarService = (database: BunSQLDatabase): SyncCalendarServic
   ): Promise<{ endTime: Date; id: string; startTime: Date; startTimeZone?: string; uid: string }[]> => {
     const results = await database
       .select({
+        availability: eventStatesTable.availability,
         endTime: eventStatesTable.endTime,
         exceptionDates: eventStatesTable.exceptionDates,
         id: eventStatesTable.id,
+        isAllDay: eventStatesTable.isAllDay,
         recurrenceRule: eventStatesTable.recurrenceRule,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
@@ -138,6 +154,8 @@ const createSyncCalendarService = (database: BunSQLDatabase): SyncCalendarServic
       uid: string;
       startTime: Date;
       endTime: Date;
+      availability?: "busy" | "free" | "oof" | "workingElsewhere";
+      isAllDay?: boolean;
       startTimeZone?: string;
       recurrenceRule?: object;
       exceptionDates?: object;
@@ -145,9 +163,11 @@ const createSyncCalendarService = (database: BunSQLDatabase): SyncCalendarServic
   ): Promise<void> => {
     const rows = events.map((event) => ({
       endTime: event.endTime,
+      availability: event.availability,
       exceptionDates: stringifyIfPresent(event.exceptionDates),
       sourceEventUid: event.uid,
       calendarId,
+      isAllDay: event.isAllDay,
       recurrenceRule: stringifyIfPresent(event.recurrenceRule),
       startTime: event.startTime,
       startTimeZone: event.startTimeZone,

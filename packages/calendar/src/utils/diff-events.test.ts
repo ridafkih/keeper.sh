@@ -92,4 +92,21 @@ describe("diffEvents", () => {
     expect(result.toAdd).toHaveLength(1);
     expect(result.toRemove).toHaveLength(1);
   });
+
+  it("adds and removes when availability changes", () => {
+    const remoteEvent: EventTimeSlot = {
+      ...createBaseEvent(),
+      availability: "free",
+    };
+
+    const storedEvent = createStoredEvent({
+      ...createBaseEvent(),
+      availability: "workingElsewhere",
+    });
+
+    const result = diffEvents([remoteEvent], [storedEvent]);
+
+    expect(result.toAdd).toHaveLength(1);
+    expect(result.toRemove).toHaveLength(1);
+  });
 });

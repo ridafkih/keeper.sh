@@ -15,9 +15,11 @@ const MINIMUM_EVENTS_TO_PROCESS = 0;
 
 type Source = typeof calendarsTable.$inferSelect;
 interface StoredEventRow {
+  availability: string | null;
   endTime: Date;
   exceptionDates: string | null;
   id: string;
+  isAllDay: boolean | null;
   recurrenceRule: string | null;
   startTime: Date;
   startTimeZone: string | null;
@@ -25,9 +27,11 @@ interface StoredEventRow {
 }
 type StoredEvent = Omit<
   StoredEventRow,
-  "exceptionDates" | "recurrenceRule" | "startTimeZone"
+  "exceptionDates" | "recurrenceRule" | "startTimeZone" | "availability" | "isAllDay"
 > & {
+  availability?: "busy" | "free" | "oof" | "workingElsewhere";
   exceptionDates?: object;
+  isAllDay?: boolean;
   recurrenceRule?: object;
   startTimeZone?: string;
 };
@@ -73,6 +77,14 @@ const toStoredEvent = (row: StoredEventRow): StoredEvent => {
     uid: row.uid,
   };
 
+  if (row.availability !== null) {
+    storedEvent.availability = row.availability as StoredEvent["availability"];
+  }
+
+  if (row.isAllDay !== null) {
+    storedEvent.isAllDay = row.isAllDay;
+  }
+
   if (row.startTimeZone !== null) {
     storedEvent.startTimeZone = row.startTimeZone;
   }
@@ -96,9 +108,11 @@ const getStoredEvents = async (
 ): Promise<StoredEvent[]> => {
   const rows = await database
     .select({
+      availability: eventStatesTable.availability,
       endTime: eventStatesTable.endTime,
       exceptionDates: eventStatesTable.exceptionDates,
       id: eventStatesTable.id,
+      isAllDay: eventStatesTable.isAllDay,
       recurrenceRule: eventStatesTable.recurrenceRule,
       startTime: eventStatesTable.startTime,
       startTimeZone: eventStatesTable.startTimeZone,
@@ -142,6 +156,8 @@ const addEvents = async (
     uid: string;
     startTime: Date;
     endTime: Date;
+    availability?: "busy" | "free" | "oof" | "workingElsewhere";
+    isAllDay?: boolean;
     startTimeZone?: string;
     title?: string;
     description?: string;
@@ -153,9 +169,11 @@ const addEvents = async (
   const rows = events.map((event) => {
     const row: {
       calendarId: string;
+      availability?: string;
       description?: string;
       endTime: Date;
       exceptionDates?: string;
+      isAllDay?: boolean;
       location?: string;
       recurrenceRule?: string;
       sourceEventUid: string;
@@ -164,8 +182,10 @@ const addEvents = async (
       title?: string;
     } = {
       calendarId,
+      availability: event.availability,
       description: event.description,
       endTime: event.endTime,
+      isAllDay: event.isAllDay,
       location: event.location,
       sourceEventUid: event.uid,
       startTime: event.startTime,

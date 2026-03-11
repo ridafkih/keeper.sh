@@ -96,9 +96,11 @@ const createCalDAVSourceProvider = (
       }
 
       events.push({
+        availability: parsed.availability,
         description: parsed.description,
         endTime: parsed.endTime,
         exceptionDates: parsed.exceptionDates,
+        isAllDay: parsed.isAllDay,
         location: parsed.location,
         recurrenceRule: parsed.recurrenceRule,
         startTime: parsed.startTime,
@@ -117,8 +119,10 @@ const createCalDAVSourceProvider = (
   ): Promise<CalDAVSourceSyncResult> => {
     const existingEvents = await database
       .select({
+        availability: eventStatesTable.availability,
         endTime: eventStatesTable.endTime,
         id: eventStatesTable.id,
+        isAllDay: eventStatesTable.isAllDay,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
       })
@@ -142,10 +146,12 @@ const createCalDAVSourceProvider = (
     if (eventsToAdd.length > EMPTY_COUNT) {
       await database.insert(eventStatesTable).values(
         eventsToAdd.map((event) => ({
+          availability: event.availability,
           calendarId,
           description: event.description,
           endTime: event.endTime,
           exceptionDates: stringifyIfPresent(event.exceptionDates),
+          isAllDay: event.isAllDay,
           location: event.location,
           recurrenceRule: stringifyIfPresent(event.recurrenceRule),
           sourceEventUid: event.uid,

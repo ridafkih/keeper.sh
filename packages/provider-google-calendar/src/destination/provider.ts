@@ -28,6 +28,7 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS } from "../shared/api";
 import { hasRateLimitMessage, isAuthError } from "../shared/errors";
 import { parseEventTime } from "../shared/date-time";
+import { canSerializeGoogleEvent, serializeGoogleEvent } from "./serialize-event";
 import { getGoogleAccountsForUser } from "./sync";
 import type { GoogleAccount } from "./sync";
 
@@ -67,6 +68,7 @@ const createGoogleCalendarProvider = (
     database,
     getAccountsForUser: getGoogleAccountsForUser,
     oauthProvider,
+    prepareLocalEvents: (events) => events.filter((event) => canSerializeGoogleEvent(event)),
   });
 };
 
@@ -166,7 +168,15 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
 
   protected async pushEvent(event: SyncableEvent): Promise<PushResult> {
     const uid = generateEventUid();
-    const resource = GoogleCalendarProviderInstance.toGoogleEvent(event, uid);
+    const resource = serializeGoogleEvent(
+      event,
+      uid,
+      GoogleCalendarProviderInstance.buildRecurrenceRule(event),
+    );
+
+    if (!resource) {
+      return { success: true };
+    }
 
     try {
       const result = await this.createEvent(resource);
@@ -399,32 +409,6 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
     }
 
     return parts.join(";");
-  }
-
-  private static toGoogleEvent(event: SyncableEvent, uid: string): GoogleEvent {
-    const recurrenceRule = GoogleCalendarProviderInstance.buildRecurrenceRule(event);
-    const recurrenceTimeZone = event.startTimeZone ?? "UTC";
-
-    const googleEvent: GoogleEvent = {
-      description: event.description,
-      end: {
-        dateTime: event.endTime.toISOString(),
-        ...(recurrenceRule && { timeZone: recurrenceTimeZone }),
-      },
-      iCalUID: uid,
-      location: event.location,
-      start: {
-        dateTime: event.startTime.toISOString(),
-        ...(recurrenceRule && { timeZone: recurrenceTimeZone }),
-      },
-      summary: event.summary,
-    };
-
-    if (recurrenceRule) {
-      googleEvent.recurrence = [`RRULE:${recurrenceRule}`];
-    }
-
-    return googleEvent;
   }
 }
 

@@ -69,7 +69,7 @@ const buildInitialUrl = (calendarId: string, timeMin: Date, timeMax: Date): URL 
 
   url.searchParams.set("startDateTime", timeMin.toISOString());
   url.searchParams.set("endDateTime", timeMax.toISOString());
-  url.searchParams.set("$select", "id,iCalUId,subject,body,location,start,end");
+  url.searchParams.set("$select", "id,iCalUId,subject,body,location,start,end,isAllDay,showAs");
 
   return url;
 };
@@ -221,6 +221,26 @@ const fetchCalendarName = async (options: FetchCalendarNameOptions): Promise<str
   return parseCalendarName(responseBody);
 };
 
+const parseAvailability = (value: string | undefined): EventTimeSlot["availability"] => {
+  if (value === "free") {
+    return "free";
+  }
+
+  if (value === "oof") {
+    return "oof";
+  }
+
+  if (value === "workingElsewhere") {
+    return "workingElsewhere";
+  }
+
+  if (value === "busy" || value === "tentative") {
+    return "busy";
+  }
+
+  return;
+};
+
 const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => {
   const result: EventTimeSlot[] = [];
 
@@ -249,8 +269,10 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
     };
 
     result.push({
+      availability: parseAvailability(event.showAs),
       description: event.body?.content,
       endTime: parseEventDateTime(end),
+      isAllDay: event.isAllDay ?? false,
       location: event.location?.displayName,
       startTime: parseEventDateTime(start),
       startTimeZone: start.timeZone,

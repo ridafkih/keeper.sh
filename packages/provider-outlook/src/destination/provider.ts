@@ -27,6 +27,7 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { MICROSOFT_GRAPH_API, OUTLOOK_PAGE_SIZE } from "../shared/api";
 import { hasRateLimitMessage, isAuthError } from "../shared/errors";
 import { parseEventTime } from "../shared/date-time";
+import { serializeOutlookEvent } from "./serialize-event";
 import type { OutlookAccount } from "./sync";
 import { getOutlookAccountsForUser } from "./sync";
 
@@ -160,7 +161,7 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
   }
 
   protected async pushEvent(event: SyncableEvent): Promise<PushResult> {
-    const resource = OutlookCalendarProviderInstance.toOutlookEvent(event);
+    const resource = serializeOutlookEvent(event);
 
     try {
       return await this.createEvent(resource);
@@ -239,42 +240,6 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
         success: false,
       };
     }
-  }
-
-  private static getBodyFromSyncableEvent(event: SyncableEvent): OutlookEvent["body"] {
-    if (!event.description) {
-      return null;
-    }
-
-    return {
-      content: event.description,
-      contentType: "text",
-    };
-  }
-
-  private static getLocationFromSyncableEvent(event: SyncableEvent): OutlookEvent["location"] {
-    if (!event.location) {
-      return;
-    }
-
-    return {
-      displayName: event.location,
-    };
-  }
-
-  private static toOutlookEvent(event: SyncableEvent): OutlookEvent {
-    const body = OutlookCalendarProviderInstance.getBodyFromSyncableEvent(event);
-    const location = OutlookCalendarProviderInstance.getLocationFromSyncableEvent(event);
-    const eventTimeZone = event.startTimeZone ?? "UTC";
-
-    return {
-      ...(body && { body }),
-      ...(location && { location }),
-      categories: [KEEPER_CATEGORY],
-      end: { dateTime: event.endTime.toISOString(), timeZone: eventTimeZone },
-      start: { dateTime: event.startTime.toISOString(), timeZone: eventTimeZone },
-      subject: event.summary,
-    };
   }
 }
 

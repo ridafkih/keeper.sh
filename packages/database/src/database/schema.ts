@@ -135,6 +135,7 @@ const calendarSnapshotsTable = pgTable("calendar_snapshots", {
 const eventStatesTable = pgTable(
   "event_states",
   {
+    availability: text(),
     calendarId: uuid()
       .notNull()
       .references(() => calendarsTable.id, { onDelete: "cascade" }),
@@ -145,6 +146,7 @@ const eventStatesTable = pgTable(
     location: text(),
     recurrenceRule: text(),
     exceptionDates: text(),
+    isAllDay: boolean(),
     sourceEventUid: text(),
     startTime: timestamp().notNull(),
     startTimeZone: text(),

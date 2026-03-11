@@ -231,6 +231,48 @@ interface EventTypeFilters {
   excludeWorkingLocation: boolean;
 }
 
+const resolveGoogleAvailability = (
+  event: Pick<GoogleCalendarEvent, "eventType" | "transparency">,
+): EventTimeSlot["availability"] => {
+  if (event.eventType === "workingLocation") {
+    return "workingElsewhere";
+  }
+
+  if (event.transparency === "transparent") {
+    return "free";
+  }
+
+  if (event.eventType === "outOfOffice") {
+    return "oof";
+  }
+
+  return;
+};
+
+const resolveGoogleLocation = (
+  event: Pick<GoogleCalendarEvent, "location" | "workingLocationProperties">,
+): string | undefined => {
+  if (event.location?.trim()) {
+    return event.location;
+  }
+
+  const customLocationLabel = event.workingLocationProperties?.customLocation?.label?.trim();
+  if (customLocationLabel) {
+    return customLocationLabel;
+  }
+
+  const officeLocationLabel = event.workingLocationProperties?.officeLocation?.label?.trim();
+  if (officeLocationLabel) {
+    return officeLocationLabel;
+  }
+
+  return;
+};
+
+const isAllDayGoogleEvent = (
+  event: Pick<GoogleCalendarEvent, "start" | "end">,
+): boolean => Boolean(event.start?.date || event.end?.date);
+
 const shouldExcludeEvent = (
   eventType: GoogleCalendarEvent["eventType"],
   filters: EventTypeFilters,
@@ -264,9 +306,11 @@ const parseGoogleEvents = (
       continue;
     }
     result.push({
+      availability: resolveGoogleAvailability(event),
       description: event.description,
       endTime: parseEventDateTime(event.end),
-      location: event.location,
+      isAllDay: isAllDayGoogleEvent(event),
+      location: resolveGoogleLocation(event),
       startTime: parseEventDateTime(event.start),
       startTimeZone: event.start.timeZone ?? event.end.timeZone,
       title: event.summary,

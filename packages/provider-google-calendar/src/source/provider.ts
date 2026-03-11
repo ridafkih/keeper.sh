@@ -134,8 +134,10 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
 
     const existingEvents = await database
       .select({
+        availability: eventStatesTable.availability,
         id: eventStatesTable.id,
         endTime: eventStatesTable.endTime,
+        isAllDay: eventStatesTable.isAllDay,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
       })
@@ -163,10 +165,12 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
     if (eventsToAdd.length > EMPTY_COUNT) {
       await database.insert(eventStatesTable).values(
         eventsToAdd.map((event) => ({
+          availability: event.availability,
           calendarId,
           description: event.description,
           endTime: event.endTime,
           exceptionDates: stringifyIfPresent(event.exceptionDates),
+          isAllDay: event.isAllDay,
           location: event.location,
           recurrenceRule: stringifyIfPresent(event.recurrenceRule),
           sourceEventUid: event.uid,

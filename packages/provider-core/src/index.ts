@@ -47,6 +47,7 @@ export {
   type SourceProvider,
 } from "./oauth/create-source-provider";
 export { generateEventUid, isKeeperEvent } from "./events/identity";
+export { inferAllDayEvent, resolveIsAllDayEvent } from "./events/all-day";
 export { RateLimiter, type RateLimiterConfig } from "./utils/rate-limiter";
 export { getErrorMessage } from "./utils/error";
 export {
@@ -114,6 +115,7 @@ export type {
   DeleteResult,
   SyncResult,
   RemoteEvent,
+  EventAvailability,
   ProviderConfig,
   OAuthProviderConfig,
   GoogleCalendarConfig,

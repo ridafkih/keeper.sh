@@ -5,7 +5,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, asc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type { SyncableEvent } from "../types";
+import type { EventAvailability, SyncableEvent } from "../types";
 import { getOAuthSyncWindowStart } from "../oauth/sync-window";
 import {
   hasActiveFutureOccurrence,
@@ -27,6 +27,19 @@ const excludeOrAbsent = <TValue>(exclude: boolean, value: TValue | null): TValue
     return;
   }
   return orAbsent(value);
+};
+const orAbsentBoolean = (value: boolean | null): boolean | undefined => {
+  if (value === null) {
+    return;
+  }
+  return value;
+};
+const parseAvailability = (value: string | null): EventAvailability | undefined => {
+  if (value === "busy" || value === "free" || value === "oof" || value === "workingElsewhere") {
+    return value;
+  }
+
+  return;
 };
 const TEMPLATE_TOKEN_PATTERN = /\{\{(\w+)\}\}/g;
 const DEFAULT_EVENT_NAME = "Busy";
@@ -63,10 +76,12 @@ const fetchEventsForCalendars = async (
       excludeEventDescription: calendarsTable.excludeEventDescription,
       excludeEventLocation: calendarsTable.excludeEventLocation,
       excludeEventName: calendarsTable.excludeEventName,
+      availability: eventStatesTable.availability,
       description: eventStatesTable.description,
       endTime: eventStatesTable.endTime,
       exceptionDates: eventStatesTable.exceptionDates,
       id: eventStatesTable.id,
+      isAllDay: eventStatesTable.isAllDay,
       location: eventStatesTable.location,
       recurrenceRule: eventStatesTable.recurrenceRule,
       sourceEventUid: eventStatesTable.sourceEventUid,
@@ -125,9 +140,11 @@ const fetchEventsForCalendars = async (
       calendarId: result.calendarId,
       calendarName: result.calendarName,
       calendarUrl: result.calendarUrl,
+      availability: parseAvailability(result.availability),
       description: excludeOrAbsent(result.excludeEventDescription, result.description),
       endTime: result.endTime,
       id: result.id,
+      isAllDay: orAbsentBoolean(result.isAllDay),
       location: excludeOrAbsent(result.excludeEventLocation, result.location),
       exceptionDates: parsedExceptionDates,
       recurrenceRule: orAbsent(parsedRecurrenceRule),

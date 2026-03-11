@@ -32,6 +32,12 @@ interface GoogleCalendarEvent {
   created?: string;
   updated?: string;
   eventType?: string;
+  transparency?: string;
+  workingLocationProperties?: {
+    type?: string;
+    customLocation?: { label?: string };
+    officeLocation?: { label?: string };
+  };
 }
 
 interface GoogleEventsListResponse {
@@ -62,6 +68,8 @@ interface EventTimeSlot {
   uid: string;
   startTime: Date;
   endTime: Date;
+  availability?: "busy" | "free" | "oof" | "workingElsewhere";
+  isAllDay?: boolean;
   startTimeZone?: string;
   title?: string;
   description?: string;
