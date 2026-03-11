@@ -190,7 +190,7 @@ const createCalDAVSourceProvider = (
     account: CalDAVSourceAccount,
   ): Promise<CalDAVSourceSyncResult> => {
     try {
-      await refreshOriginalName(account).catch(() => null);
+      await refreshOriginalName(account);
       const events = await fetchEventsFromCalDAV(account);
       return processEvents(account.calendarId, events);
     } catch (error) {

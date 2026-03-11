@@ -196,7 +196,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
     const remoteCalendarName = await fetchCalendarName({
       accessToken: this.currentAccessToken,
       calendarId: this.config.externalCalendarId,
-    }).catch(() => null);
+    });
 
     if (!remoteCalendarName || remoteCalendarName === this.config.originalName) {
       return;
