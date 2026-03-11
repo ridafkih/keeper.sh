@@ -1,7 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { getGithubStarsSnapshot } from "./github-stars";
-import { generateSitemap } from "./sitemap";
 
 const staticTextFiles: Record<string, string> = {
   "/llms.txt": "text/plain; charset=UTF-8",
@@ -47,16 +46,6 @@ export async function handleInternalRoute(request: Request): Promise<Response | 
         { status: 502 },
       );
     }
-  }
-
-  if (requestUrl.pathname === "/sitemap.xml") {
-    const sitemap = generateSitemap();
-    return new Response(sitemap, {
-      headers: {
-        "content-type": "application/xml; charset=UTF-8",
-        "cache-control": "public, max-age=3600",
-      },
-    });
   }
 
   const staticResponse = await serveStaticTextFile(requestUrl.pathname);

@@ -4,6 +4,7 @@ import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import tailwindcss from "@tailwindcss/vite";
 import svgr from "vite-plugin-svgr";
 import { blogPlugin } from "./plugins/blog";
+import { sitemapPlugin } from "./plugins/sitemap";
 
 export default defineConfig(({ isSsrBuild }) => ({
   plugins: [
@@ -16,6 +17,7 @@ export default defineConfig(({ isSsrBuild }) => ({
     }),
     react(),
     svgr(),
+    !isSsrBuild && sitemapPlugin(),
   ].filter(Boolean),
   build: {
     manifest: !isSsrBuild,

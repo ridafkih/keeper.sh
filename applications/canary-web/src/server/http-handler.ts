@@ -72,7 +72,9 @@ export async function handleApplicationRequest(
 
   if (!isDocumentRequest(request)) {
     const assetResponse = await runtime.handleAssetRequest(request);
-    return withCompression(request, assetResponse);
+    if (assetResponse.status !== 404) {
+      return withCompression(request, assetResponse);
+    }
   }
 
   const pathname = requestUrl.pathname;

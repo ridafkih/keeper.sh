@@ -13,16 +13,6 @@ export interface PageMetadata {
   updatedAt: string;
 }
 
-export const homePageMetadata: PageMetadata = {
-  path: "/",
-  updatedAt: "2026-03-09",
-};
-
-export const blogIndexMetadata: PageMetadata = {
-  path: "/blog",
-  updatedAt: "2026-03-09",
-};
-
 export const privacyPageMetadata: PageMetadata = {
   path: "/privacy",
   updatedAt: "2025-12-01",
@@ -33,9 +23,3 @@ export const termsPageMetadata: PageMetadata = {
   updatedAt: "2025-12-01",
 };
 
-export const staticPages: PageMetadata[] = [
-  homePageMetadata,
-  blogIndexMetadata,
-  privacyPageMetadata,
-  termsPageMetadata,
-];
