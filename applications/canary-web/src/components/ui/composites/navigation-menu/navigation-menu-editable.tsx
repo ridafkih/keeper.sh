@@ -323,7 +323,7 @@ function EditableItemDisplay({
 }) {
   const variant = use(MenuVariantContext);
   const disabledFromContext = use(ItemDisabledContext);
-  const disabled = disabledProp ?? disabledFromContext;
+  const disabled = disabledProp || disabledFromContext;
 
   return (
     <li>
