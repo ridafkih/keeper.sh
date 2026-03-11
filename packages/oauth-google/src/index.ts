@@ -10,6 +10,11 @@ const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 const GOOGLE_CALENDAR_LIST_SCOPE = "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
 const GOOGLE_EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
+const REQUEST_TIMEOUT_MS = 15_000;
+
+const isRequestTimeoutError = (error: unknown): boolean =>
+  error instanceof Error
+  && (error.name === "AbortError" || error.name === "TimeoutError");
 
 interface GoogleOAuthCredentials {
   clientId: string;
@@ -90,6 +95,13 @@ const createGoogleOAuthService = (credentials: GoogleOAuthCredentials): GoogleOA
       }),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       method: "POST",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    }).catch((error) => {
+      if (isRequestTimeoutError(error)) {
+        throw new Error(`Token refresh timed out after ${REQUEST_TIMEOUT_MS}ms`);
+      }
+
+      throw error;
     });
 
     if (!response.ok) {
