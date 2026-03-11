@@ -143,7 +143,6 @@ describe("AuthForm", () => {
     expect(markup).toContain('name="password"');
     expect(markup).toContain('autoComplete="current-password"');
   });
-
   it("starts passive passkey sign-in on render when conditional mediation is available", async () => {
     passkeySignInMock.mockClear();
 
