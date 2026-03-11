@@ -116,7 +116,6 @@ function useSeedCalendarDetail(calendarId: string, calendar: CalendarDetail | un
       store.set(calendarDetailAtom, calendar ?? null);
       store.set(calendarDetailLoadedAtom, calendarId);
       store.set(calendarDetailErrorAtom, null);
-      store.set(destinationIdsAtom, new Set<string>());
     } else if (calendar) {
       store.set(calendarDetailAtom, calendar);
     }
@@ -262,11 +261,7 @@ function DestinationsSeed({ calendarId }: { calendarId: string }) {
   const store = useStore();
 
   useEffect(() => {
-    if (!data) {
-      return;
-    }
-
-    store.set(destinationIdsAtom, new Set(data.destinationIds));
+    store.set(destinationIdsAtom, new Set(data?.destinationIds));
   }, [calendarId, data, store]);
 
   return null;

@@ -41,10 +41,6 @@ const POST = withWideEvent(
       }
 
       const templateId = TEMPLATE_ID[type];
-      let followUpResponse = "No";
-      if (wantsFollowUp) {
-        followUpResponse = "Yes";
-      }
 
       await resend.emails.send({
         template: {
@@ -52,7 +48,7 @@ const POST = withWideEvent(
           variables: {
             message,
             userEmail: user.email,
-            wantsFollowUp: followUpResponse,
+            wantsFollowUp: String(wantsFollowUp),
           },
         },
         to: feedbackEmail,
