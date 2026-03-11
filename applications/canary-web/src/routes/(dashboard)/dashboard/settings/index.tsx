@@ -33,16 +33,27 @@ import { Text } from "../../../../components/ui/primitives/text";
 import { resolveErrorMessage } from "../../../../utils/errors";
 import { fetchAuthCapabilitiesWithApi } from "../../../../lib/auth-capabilities";
 import { getCommercialMode } from "../../../../config/commercial";
-import { useSubscription } from "../../../../hooks/use-subscription";
+import { useSubscription, fetchSubscriptionStateWithApi } from "../../../../hooks/use-subscription";
 import { openCustomerPortal } from "../../../../utils/checkout";
 
+async function loadSubscription(context: { runtimeConfig: { commercialMode: boolean }; fetchApi: <T>(path: string, init?: RequestInit) => Promise<T> }) {
+  if (!context.runtimeConfig.commercialMode) return undefined;
+  return fetchSubscriptionStateWithApi(context.fetchApi);
+}
+
 export const Route = createFileRoute("/(dashboard)/dashboard/settings/")({
-  loader: ({ context }) => fetchAuthCapabilitiesWithApi(context.fetchApi),
+  loader: async ({ context }) => {
+    const [authCapabilities, subscription] = await Promise.all([
+      fetchAuthCapabilitiesWithApi(context.fetchApi),
+      loadSubscription(context),
+    ]);
+    return { authCapabilities, subscription };
+  },
   component: SettingsPage,
 });
 
 function SettingsPage() {
-  const authCapabilities = Route.useLoaderData();
+  const { authCapabilities, subscription: loaderSubscription } = Route.useLoaderData();
   const { user } = useSession();
   const navigate = useNavigate();
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -52,7 +63,9 @@ function SettingsPage() {
       ? (user?.username ?? user?.name ?? "")
       : (user?.email ?? "");
   const { data: passkeys = [] } = usePasskeys(authCapabilities.supportsPasskeys);
-  const { data: subscription, isLoading: subscriptionLoading } = useSubscription();
+  const { data: subscription, isLoading: subscriptionLoading } = useSubscription({
+    fallbackData: loaderSubscription,
+  });
   const isPro = subscription?.plan === "pro";
   const [isManaging, setIsManaging] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
