@@ -1,5 +1,5 @@
 import { withCompression } from "./compression";
-import { isApiRequest, isDocumentRequest, proxyRequest } from "./proxy/http";
+import { isApiRequest, proxyRequest } from "./proxy/http";
 import { handleInternalRoute } from "./internal-routes";
 import type { Runtime, ServerConfig } from "./types";
 
@@ -70,11 +70,9 @@ export async function handleApplicationRequest(
     return proxyRequest(request, config.apiProxyOrigin);
   }
 
-  if (!isDocumentRequest(request)) {
-    const assetResponse = await runtime.handleAssetRequest(request);
-    if (assetResponse.status !== 404) {
-      return withCompression(request, assetResponse);
-    }
+  const assetResponse = await runtime.handleAssetRequest(request);
+  if (assetResponse.status !== 404) {
+    return withCompression(request, assetResponse);
   }
 
   const pathname = requestUrl.pathname;

@@ -6,19 +6,6 @@ export function isApiRequest(url: URL): boolean {
   return url.pathname === "/api" || url.pathname.startsWith("/api/");
 }
 
-export function isDocumentRequest(request: Request): boolean {
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    return false;
-  }
-
-  const acceptHeader = request.headers.get("accept");
-  if (!acceptHeader) {
-    return false;
-  }
-
-  return acceptHeader.includes("text/html");
-}
-
 export function toProxiedUrl(requestUrl: URL, origin: string): URL {
   const upstreamUrl = new URL(origin);
   return new URL(requestUrl.pathname + requestUrl.search, upstreamUrl);
