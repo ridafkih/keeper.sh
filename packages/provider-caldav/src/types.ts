@@ -24,6 +24,7 @@ interface CalDAVAccount {
 }
 
 interface CalDAVSourceAccount {
+  calendarAccountId: string;
   calendarId: string;
   userId: string;
   provider: string;

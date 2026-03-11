@@ -5,7 +5,7 @@ import {
   reportError,
 } from "@keeper.sh/provider-core";
 import type { SourceEvent } from "@keeper.sh/provider-core";
-import { calendarsTable, eventStatesTable } from "@keeper.sh/database/schema";
+import { calendarAccountsTable, calendarsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { CalDAVClient } from "../shared/client";
 import { parseICalToRemoteEvent } from "../shared/ics";
@@ -27,6 +27,12 @@ const stringifyIfPresent = (value: unknown) => {
 
 const EMPTY_COUNT = 0;
 const YEARS_UNTIL_FUTURE = 2;
+
+const isAuthError = (error: unknown): boolean => {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes("401") || message.includes("invalid credentials") || message.includes("unauthorized");
+};
 
 const DEFAULT_CALDAV_OPTIONS: CalDAVProviderOptions = {
   providerId: "caldav",
@@ -188,6 +194,13 @@ const createCalDAVSourceProvider = (
       const events = await fetchEventsFromCalDAV(account);
       return processEvents(account.calendarId, events);
     } catch (error) {
+      if (isAuthError(error)) {
+        await database
+          .update(calendarAccountsTable)
+          .set({ needsReauthentication: true })
+          .where(eq(calendarAccountsTable.id, account.calendarAccountId));
+      }
+
       reportError(error, {
         "operation.name": "caldav-source:sync",
         "source.calendar_id": account.calendarId,
