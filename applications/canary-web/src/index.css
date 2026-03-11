@@ -6,8 +6,6 @@ html {
   @apply w-full min-h-full bg-background overflow-x-hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  overflow: hidden;
 }
 
 body,
