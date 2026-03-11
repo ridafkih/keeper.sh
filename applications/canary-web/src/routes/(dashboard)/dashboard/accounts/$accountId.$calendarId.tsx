@@ -266,12 +266,8 @@ function DestinationsSeed({ calendarId }: { calendarId: string }) {
       return;
     }
 
-    if (store.get(destinationIdsAtom).size !== 0) {
-      return;
-    }
-
     store.set(destinationIdsAtom, new Set(data.destinationIds));
-  }, [data, store]);
+  }, [calendarId, data, store]);
 
   return null;
 }
