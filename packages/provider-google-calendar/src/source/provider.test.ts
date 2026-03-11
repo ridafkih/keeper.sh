@@ -6,6 +6,18 @@ const originalFetch = globalThis.fetch;
 const createJsonResponse = (body: unknown, status = 200): Response =>
   Response.json(body, { status });
 
+const getUrlAsString = (input: Request | URL | string) => {
+  if (input instanceof Request) {
+    return input.url;
+  }
+
+  if (input instanceof URL) {
+    return input.toString();
+  }
+
+  return input;
+};
+
 describe("GoogleCalendarSourceProvider", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
@@ -15,7 +27,7 @@ describe("GoogleCalendarSourceProvider", () => {
     const requestedUrls: string[] = [];
 
     const queuedFetch = (input: Request | URL | string) => {
-      const url = input instanceof URL ? input.toString() : typeof input === "string" ? input : input.url;
+      const url = getUrlAsString(input);
       requestedUrls.push(url);
 
       return Promise.resolve(createJsonResponse({

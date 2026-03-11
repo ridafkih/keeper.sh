@@ -26,6 +26,12 @@ class EventsFetchError extends Error {
   }
 }
 
+const REQUEST_TIMEOUT_MS = 15_000;
+
+const isRequestTimeoutError = (error: unknown): boolean =>
+  error instanceof Error
+  && (error.name === "AbortError" || error.name === "TimeoutError");
+
 interface PageFetchOptions {
   accessToken: string;
   baseUrl: string;
@@ -44,9 +50,6 @@ interface PageFetchResult {
 interface FullSyncRequiredResult {
   fullSyncRequired: true;
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
 
 const fetchEventsPage = async (
   options: PageFetchOptions,
@@ -76,6 +79,17 @@ const fetchEventsPage = async (
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  }).catch((error) => {
+    if (isRequestTimeoutError(error)) {
+      throw new EventsFetchError(
+        `Failed to fetch events: timeout after ${REQUEST_TIMEOUT_MS}ms`,
+        408,
+        false,
+      );
+    }
+
+    throw error;
   });
 
   if (response.status === GONE_STATUS) {
