@@ -1,4 +1,4 @@
-import { useEffect, useRef, type Ref, type SubmitEvent } from "react";
+import { useEffect, useRef, useState, type Ref, type SubmitEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAtomValue, useSetAtom } from "jotai";
 import { AnimatePresence, LazyMotion, type TargetAndTransition, type Variants } from "motion/react";
@@ -79,10 +79,12 @@ export function AuthForm({
   copy: AuthScreenCopy;
 }) {
   const hasSocialProviders = getEnabledSocialProviders(capabilities).length > 0;
+  const supportsPasskeySignIn = copy.action === "signIn" && capabilities.supportsPasskeys;
+  const [passkeyAutoFillEnabled, setPasskeyAutoFillEnabled] = useState(false);
 
   return (
     <>
-      {copy.action === "signIn" && capabilities.supportsPasskeys && <PasskeyAutoFill />}
+      {supportsPasskeySignIn && passkeyAutoFillEnabled && <PasskeyAutoFill />}
       <div className="flex flex-col py-2">
         <Heading2 as="span" className="text-center">{copy.heading}</Heading2>
         <Text size="sm" tone="muted" align="center">{copy.subtitle}</Text>
@@ -93,7 +95,12 @@ export function AuthForm({
           <Divider>or</Divider>
         </>
       )}
-      <CredentialForm capabilities={capabilities} submitLabel={copy.submitLabel} action={copy.action} />
+      <CredentialForm
+        capabilities={capabilities}
+        submitLabel={copy.submitLabel}
+        action={copy.action}
+        onCredentialFocus={supportsPasskeySignIn ? () => setPasskeyAutoFillEnabled(true) : undefined}
+      />
       <div className="flex flex-col gap-1.5">
         <AuthError />
         <AuthSwitchPrompt>
@@ -215,10 +222,12 @@ function CredentialForm({
   capabilities,
   submitLabel,
   action,
+  onCredentialFocus,
 }: {
   capabilities: AuthCapabilities;
   submitLabel: string;
   action: "signIn" | "signUp";
+  onCredentialFocus?: () => void;
 }) {
   const navigate = useNavigate();
   const step = useAtomValue(authFormStepAtom);
@@ -279,6 +288,7 @@ function CredentialForm({
           readOnly={step === "password"}
           autoComplete={resolveAutoComplete(action, credentialField.autoComplete, capabilities)}
           label={credentialField.label}
+          onFocus={onCredentialFocus}
           placeholder={credentialField.placeholder}
           type={credentialField.type}
         />
@@ -338,12 +348,14 @@ function CredentialInput({
   readOnly,
   autoComplete,
   label,
+  onFocus,
   placeholder,
   type,
 }: {
   readOnly?: boolean;
   autoComplete?: string;
   label: string;
+  onFocus?: () => void;
   placeholder: string;
   type: "email" | "text";
 }) {
@@ -366,6 +378,7 @@ function CredentialInput({
       autoComplete={autoComplete}
       tone={resolveInputTone(error?.active)}
       onChange={clearError}
+      onFocus={onFocus}
     />
   );
 }

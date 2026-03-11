@@ -1,7 +1,12 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
+import { parseHTML } from "linkedom";
 import type { AuthCapabilities } from "../../../lib/auth-capabilities";
 import type { AuthScreenCopy } from "./auth-form";
+
+const passkeySignInMock = mock(() => Promise.resolve({ error: null }));
 
 const omitMotionProps = <T extends Record<string, unknown>>(props: T) => {
   const domProps = { ...props };
@@ -40,7 +45,7 @@ mock.module("../../../lib/motion-features", () => ({
 mock.module("../../../lib/auth-client", () => ({
   authClient: {
     signIn: {
-      passkey: mock(() => Promise.resolve({ error: null })),
+      passkey: passkeySignInMock,
     },
   },
 }));
@@ -129,5 +134,76 @@ describe("AuthForm", () => {
     );
 
     expect(markup).toContain('autoComplete="email"');
+  });
+
+  it("waits for credential focus before starting passkey autofill", async () => {
+    passkeySignInMock.mockClear();
+
+    const { document, window } = parseHTML("<html><body><div id='app'></div></body></html>");
+    const previousGlobals = {
+      Event: globalThis.Event,
+      FocusEvent: globalThis.FocusEvent,
+      HTMLElement: globalThis.HTMLElement,
+      Node: globalThis.Node,
+      PublicKeyCredential: globalThis.PublicKeyCredential,
+      document: globalThis.document,
+      navigator: globalThis.navigator,
+      requestAnimationFrame: globalThis.requestAnimationFrame,
+      window: globalThis.window,
+    };
+
+    class FakePublicKeyCredential {}
+    Object.assign(FakePublicKeyCredential, {
+      isConditionalMediationAvailable: mock(() => Promise.resolve(true)),
+    });
+
+    Object.assign(globalThis, {
+      Event: window.Event,
+      FocusEvent: window.FocusEvent ?? window.Event,
+      HTMLElement: window.HTMLElement,
+      IS_REACT_ACT_ENVIRONMENT: true,
+      Node: window.Node,
+      PublicKeyCredential: FakePublicKeyCredential,
+      document,
+      navigator: window.navigator,
+      requestAnimationFrame: (callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      },
+      window,
+    });
+
+    window.event = undefined;
+    window.HTMLElement.prototype.attachEvent = () => undefined;
+    window.HTMLElement.prototype.detachEvent = () => undefined;
+
+    const container = document.getElementById("app");
+    if (!container) throw new Error("Expected app container");
+
+    const root = createRoot(container as unknown as Element);
+
+    try {
+      await act(async () => {
+        root.render(<AuthForm capabilities={capabilities} copy={copy} />);
+      });
+
+      expect(passkeySignInMock).not.toHaveBeenCalled();
+
+      const credentialInput = container.querySelector("input[name='credential']");
+      if (!(credentialInput instanceof window.HTMLInputElement)) {
+        throw new Error("Expected credential input");
+      }
+
+      await act(async () => {
+        credentialInput.dispatchEvent(new window.Event("focusin", { bubbles: true }));
+      });
+
+      expect(passkeySignInMock).toHaveBeenCalledTimes(1);
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      Object.assign(globalThis, previousGlobals);
+    }
   });
 });
