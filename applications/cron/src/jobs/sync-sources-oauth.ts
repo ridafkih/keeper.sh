@@ -21,6 +21,8 @@ interface OAuthSyncJobDependencies {
   reportError?: (error: unknown, fields?: Record<string, unknown>) => void;
 }
 
+const deduplicateMessages = (messages: string[]): string[] => [...new Set(messages)];
+
 const publishProviderMetrics = (
   provider: "google" | "outlook",
   result: ProviderSyncResult,
@@ -32,14 +34,17 @@ const publishProviderMetrics = (
     [`${provider}.events.removed`]: result.eventsRemoved,
   };
 
-  if (result.errorMessages.length > 0) {
-    fields[`${provider}.error.messages`] = result.errorMessages;
+  const errorMessages = deduplicateMessages(result.errorMessages);
+
+  if (errorMessages.length > 0) {
+    fields[`${provider}.error.messages`] = errorMessages;
   }
 
   for (const [errorType, details] of Object.entries(result.errorDetails)) {
     fields[`${provider}.error.${errorType}.count`] = details.count;
-    if (details.messages.length > 0) {
-      fields[`${provider}.error.${errorType}.messages`] = details.messages;
+    const detailMessages = deduplicateMessages(details.messages);
+    if (detailMessages.length > 0) {
+      fields[`${provider}.error.${errorType}.messages`] = detailMessages;
     }
   }
 
@@ -51,6 +56,7 @@ const summarizeProviderErrors = (
 ): Pick<ProviderSyncResult, "errorCount" | "errorMessages" | "errorDetails"> => {
   const providerErrors = errors ?? [];
   const errorDetails: Record<string, { count: number; messages: string[] }> = {};
+  const errorMessages: string[] = [];
 
   for (const error of providerErrors) {
     let errorType = "Error";
@@ -61,14 +67,20 @@ const summarizeProviderErrors = (
 
     const existingDetails = errorDetails[errorType] ?? { count: 0, messages: [] };
     existingDetails.count += 1;
-    existingDetails.messages.push(error.message);
+    if (!existingDetails.messages.includes(error.message)) {
+      existingDetails.messages.push(error.message);
+    }
     errorDetails[errorType] = existingDetails;
+
+    if (!errorMessages.includes(error.message)) {
+      errorMessages.push(error.message);
+    }
   }
 
   return {
     errorCount: providerErrors.length,
     errorDetails,
-    errorMessages: providerErrors.map((error) => error.message),
+    errorMessages,
   };
 };
 

@@ -23,11 +23,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq, gt, inArray, lt, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import {
-  fetchCalendarName,
-  fetchCalendarEvents,
-  parseGoogleEvents,
-} from "./utils/fetch-events";
+import { fetchCalendarEvents, parseGoogleEvents } from "./utils/fetch-events";
 
 const GOOGLE_PROVIDER_ID = "google";
 const EMPTY_COUNT = 0;
@@ -60,8 +56,6 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
   }
 
   async fetchEvents(syncToken: string | null): Promise<BaseFetchEventsResult> {
-    await this.refreshOriginalName();
-
     const fetchOptions: Parameters<typeof fetchCalendarEvents>[0] = {
       accessToken: this.currentAccessToken,
       calendarId: this.config.externalCalendarId,
@@ -188,25 +182,6 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
       syncToken: nextSyncToken,
     };
   }
-
-  private async refreshOriginalName(): Promise<void> {
-    const remoteCalendarName = await fetchCalendarName({
-      accessToken: this.currentAccessToken,
-      calendarId: this.config.externalCalendarId,
-    });
-
-    if (!remoteCalendarName || remoteCalendarName === this.config.originalName) {
-      return;
-    }
-
-    await this.config.database
-      .update(calendarsTable)
-      .set({ originalName: remoteCalendarName })
-      .where(eq(calendarsTable.id, this.config.calendarId));
-
-    this.config.originalName = remoteCalendarName;
-  }
-
   private static async hasOutOfRangeEvents(
     database: BunSQLDatabase,
     calendarId: string,

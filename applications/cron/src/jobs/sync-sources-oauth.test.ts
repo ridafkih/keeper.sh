@@ -72,12 +72,9 @@ describe("runOAuthSourceSyncJob", () => {
     expect(cronEventFieldSets).toEqual([
       {
         "outlook.error.count": 2,
-        "outlook.error.messages": ["outlook source failed", "outlook source failed"],
+        "outlook.error.messages": ["outlook source failed"],
         "outlook.error.AuthError.count": 2,
-        "outlook.error.AuthError.messages": [
-          "outlook source failed",
-          "outlook source failed",
-        ],
+        "outlook.error.AuthError.messages": ["outlook source failed"],
         "outlook.events.added": 1,
         "outlook.events.removed": 5,
       },

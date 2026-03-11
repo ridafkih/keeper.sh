@@ -10,6 +10,7 @@ const DEFAULT_ERROR_TYPE = "UnknownError";
 interface WideLogContext {
   requestId: string;
   startedAtMs: number;
+  seenErrorMessagesByType: Map<string, Set<string>>;
   timingStartsByName: Map<string, number>;
 }
 
@@ -170,6 +171,27 @@ const toErrorTypeFieldSegment = (errorType: string): string => {
   return normalized;
 };
 
+const shouldAppendErrorMessage = (
+  errorTypeSegment: string,
+  errorMessage: string,
+): boolean => {
+  const context = contextStore.getStore();
+
+  if (!context) {
+    return true;
+  }
+
+  const seenMessages = context.seenErrorMessagesByType.get(errorTypeSegment) ?? new Set<string>();
+
+  if (seenMessages.has(errorMessage)) {
+    return false;
+  }
+
+  seenMessages.add(errorMessage);
+  context.seenErrorMessagesByType.set(errorTypeSegment, seenMessages);
+  return true;
+};
+
 const addErrorToCurrentContext = (error: unknown): void => {
   const runtime = getRuntime();
   const { errorMessage, errorType } = getErrorDetails(error);
@@ -177,7 +199,9 @@ const addErrorToCurrentContext = (error: unknown): void => {
 
   runtime.widelog.count("error.count", 1);
   runtime.widelog.count(`error.${errorTypeSegment}.count`, 1);
-  runtime.widelog.append(`error.${errorTypeSegment}.messages`, errorMessage);
+  if (shouldAppendErrorMessage(errorTypeSegment, errorMessage)) {
+    runtime.widelog.append(`error.${errorTypeSegment}.messages`, errorMessage);
+  }
   runtime.widelog.set("error.occurred", true);
   runtime.widelog.set("error.type", errorType);
   runtime.widelog.set("error.message", errorMessage);
@@ -200,6 +224,7 @@ const runWideEvent = <TResult>(
   const startedAtMs = Date.now();
   const context: WideLogContext = {
     requestId: randomUUID(),
+    seenErrorMessagesByType: new Map<string, Set<string>>(),
     startedAtMs,
     timingStartsByName: new Map<string, number>(),
   };
@@ -238,6 +263,7 @@ const reportError = (error: unknown, fields: Record<string, unknown> = {}): void
   const startedAtMs = Date.now();
   const context: WideLogContext = {
     requestId: randomUUID(),
+    seenErrorMessagesByType: new Map<string, Set<string>>(),
     startedAtMs,
     timingStartsByName: new Map<string, number>(),
   };
