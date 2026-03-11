@@ -71,6 +71,14 @@ const backButtonVariants: Variants = {
   visible: { width: "auto", opacity: 1, filter: "blur(0px)" },
 };
 
+function resolvePasswordFieldAnimation(step: "email" | "password"): TargetAndTransition {
+  if (step === "password") {
+    return { height: "auto", opacity: 1, overflow: "visible" };
+  }
+
+  return { height: 0, opacity: 0, overflow: "hidden" };
+}
+
 export function AuthForm({
   capabilities,
   copy,
@@ -281,7 +289,7 @@ function CredentialForm({
 
   return (
     <form onSubmit={handleSubmit} className="contents">
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-0">
         <CredentialInput
           readOnly={step === "password"}
           autoComplete={resolveAutoComplete(action, credentialField.autoComplete, capabilities)}
@@ -290,21 +298,20 @@ function CredentialForm({
           type={credentialField.type}
         />
         <LazyMotion features={loadMotionFeatures}>
-          <AnimatePresence>
-            {step === "password" && (
-              <m.div
-                initial={{ height: 0, opacity: 0, overflow: "hidden" }}
-                animate={{ height: "auto", opacity: 1, overflow: "visible" }}
-                exit={{ height: 0, opacity: 0, overflow: "hidden" }}
-                transition={{ duration: 0.2 }}
-              >
-                <PasswordInput
-                  ref={passwordRef}
-                  autoComplete={resolveAutoComplete(action, "current-password", capabilities)}
-                />
-              </m.div>
-            )}
-          </AnimatePresence>
+          <m.div
+            className={step === "password" ? "" : "pointer-events-none"}
+            initial={false}
+            animate={resolvePasswordFieldAnimation(step)}
+            transition={{ duration: 0.2 }}
+          >
+            <div className="pt-1.5">
+              <PasswordInput
+                ref={passwordRef}
+                autoComplete={resolveAutoComplete(action, "current-password", capabilities)}
+                tabIndex={step === "password" ? undefined : -1}
+              />
+            </div>
+          </m.div>
         </LazyMotion>
       </div>
       <div className="flex items-stretch">
@@ -380,7 +387,15 @@ function CredentialInput({
   );
 }
 
-function PasswordInput({ ref, autoComplete }: { ref?: Ref<HTMLInputElement>; autoComplete?: string }) {
+function PasswordInput({
+  ref,
+  autoComplete,
+  tabIndex,
+}: {
+  ref?: Ref<HTMLInputElement>;
+  autoComplete?: string;
+  tabIndex?: number;
+}) {
   const status = useAtomValue(authFormStatusAtom);
   const error = useAtomValue(authFormErrorAtom);
   const setError = useSetAtom(authFormErrorAtom);
@@ -397,6 +412,7 @@ function PasswordInput({ ref, autoComplete }: { ref?: Ref<HTMLInputElement>; aut
       type="password"
       placeholder="Password"
       autoComplete={autoComplete}
+      tabIndex={tabIndex}
       tone={resolveInputTone(error?.active)}
       onChange={clearError}
     />

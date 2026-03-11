@@ -137,6 +137,13 @@ describe("AuthForm", () => {
     expect(markup).toContain('autoComplete="email"');
   });
 
+  it("keeps the password field mounted for sign-in autofill heuristics", () => {
+    const markup = renderToStaticMarkup(<AuthForm capabilities={capabilities} copy={copy} />);
+
+    expect(markup).toContain('name="password"');
+    expect(markup).toContain('autoComplete="current-password"');
+  });
+
   it("starts passive passkey sign-in on render when conditional mediation is available", async () => {
     passkeySignInMock.mockClear();
 
