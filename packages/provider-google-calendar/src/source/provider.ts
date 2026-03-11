@@ -342,7 +342,7 @@ const getGoogleSourcesWithCredentials = async (
     );
 
   return sources.flatMap((source) => {
-    if (!source.externalCalendarId) return [];
+    if (!source.externalCalendarId) {return [];}
     return [{
       ...source,
       externalCalendarId: source.externalCalendarId,

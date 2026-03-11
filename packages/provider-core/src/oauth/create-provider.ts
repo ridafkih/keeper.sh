@@ -54,6 +54,11 @@ const createOAuthDestinationProvider = <
     prepareLocalEvents,
   } = options;
 
+  const getLocalEvents = (localEvents: SyncableEvent[], account: TAccount) => {
+    if (!prepareLocalEvents) {return localEvents}
+    return prepareLocalEvents(localEvents, account);
+  }
+
   const syncForUser = async (userId: string, context: SyncContext): Promise<SyncResult | null> => {
     const accounts = await getAccountsForUser(database, userId);
     if (accounts.length === EMPTY_ACCOUNTS_COUNT) {
@@ -63,9 +68,7 @@ const createOAuthDestinationProvider = <
     const results = await Promise.all(
       accounts.map(async (account) => {
         const localEvents = await getEventsForDestination(database, account.calendarId);
-        const preparedEvents = prepareLocalEvents
-          ? prepareLocalEvents(localEvents, account)
-          : localEvents;
+        const preparedEvents = getLocalEvents(localEvents, account);
 
         const config = buildConfig(database, account, broadcastSyncStatus);
         const provider = createProviderInstance(config, oauthProvider);

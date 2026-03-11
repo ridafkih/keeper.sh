@@ -68,7 +68,7 @@ interface EventTimeSlot {
   uid: string;
   startTime: Date;
   endTime: Date;
-  availability?: "busy" | "free" | "oof" | "workingElsewhere";
+  availability: "busy" | "free" | "oof" | "workingElsewhere" | null;
   isAllDay?: boolean;
   startTimeZone?: string;
   title?: string;

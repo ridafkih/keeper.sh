@@ -5,9 +5,7 @@ import { resolveIsAllDayEvent } from "@keeper.sh/provider-core";
 const formatDateOnly = (value: Date): string => value.toISOString().slice(0, 10);
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-const isSingleDayAllDayEvent = (event: SyncableEvent): boolean => {
-  return event.endTime.getTime() - event.startTime.getTime() === MS_PER_DAY;
-};
+const isSingleDayAllDayEvent = (event: SyncableEvent): boolean => event.endTime.getTime() - event.startTime.getTime() === MS_PER_DAY;
 
 const buildWorkingLocationProperties = (
   event: Pick<SyncableEvent, "location" | "summary">,

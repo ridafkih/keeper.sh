@@ -237,8 +237,6 @@ const parseAvailability = (value: string | undefined): EventTimeSlot["availabili
   if (value === "busy" || value === "tentative") {
     return "busy";
   }
-
-  return;
 };
 
 const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => {

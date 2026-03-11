@@ -28,18 +28,26 @@ const excludeOrAbsent = <TValue>(exclude: boolean, value: TValue | null): TValue
   }
   return orAbsent(value);
 };
+
 const orAbsentBoolean = (value: boolean | null): boolean | undefined => {
   if (value === null) {
     return;
   }
   return value;
 };
+
+const isEventAvailability = (value: string | null): value is EventAvailability =>
+  value === "busy"
+  || value === "free"
+  || value === "oof"
+  || value === "workingElsewhere";
+
 const parseAvailability = (value: string | null): EventAvailability | undefined => {
-  if (value === "busy" || value === "free" || value === "oof" || value === "workingElsewhere") {
-    return value;
+  if (!isEventAvailability(value)) {
+    return;
   }
 
-  return;
+  return value;
 };
 const TEMPLATE_TOKEN_PATTERN = /\{\{(\w+)\}\}/g;
 const DEFAULT_EVENT_NAME = "Busy";

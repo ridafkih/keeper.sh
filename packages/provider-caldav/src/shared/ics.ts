@@ -81,6 +81,13 @@ interface ParsedCalendarEvent {
   exceptionDates?: object;
 }
 
+const mapAvailability = (transparency: "TRANSPARENT" | "OPAQUE" | undefined) => {
+  if (transparency === "TRANSPARENT") {
+    return "free";
+  }
+  return "busy";
+};
+
 const parseICalToRemoteEvent = (icsString: string): ParsedCalendarEvent | null => {
   const calendar = parseIcsCalendar({ icsString });
   const [event] = calendar.events ?? [];
@@ -93,7 +100,7 @@ const parseICalToRemoteEvent = (icsString: string): ParsedCalendarEvent | null =
   const endTime = getEventEndTime(event, startTime);
 
   return {
-    availability: event.timeTransparent === "TRANSPARENT" ? "free" : "busy",
+    availability: mapAvailability(event.timeTransparent),
     deleteId: event.uid,
     description: event.description,
     endTime,

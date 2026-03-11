@@ -46,7 +46,7 @@ const isKeeperEvent = (uid: string | undefined): boolean =>
 const getEventStartTimeZone = (event: IcsEvent): string | undefined =>
   event.start.local?.timezone;
 
-const getEventAvailability = (event: IcsEvent): EventTimeSlot["availability"] => {
+const getEventAvailability = (event: IcsEvent) => {
   if (event.timeTransparent === "TRANSPARENT") {
     return "free";
   }
@@ -54,8 +54,6 @@ const getEventAvailability = (event: IcsEvent): EventTimeSlot["availability"] =>
   if (event.timeTransparent === "OPAQUE") {
     return "busy";
   }
-
-  return;
 };
 
 const parseIcsEvents = (calendar: IcsCalendar): EventTimeSlot[] => {
