@@ -30,17 +30,6 @@ const normalizeIdentityIsAllDay = (
   return String(isAllDay);
 };
 
-const normalizeIdentitySourceEventType = (
-  sourceEventType: string | null | undefined,
-  options: SourceEventIdentityOptions,
-): string => {
-  if (options.normalizeMissingMetadata) {
-    return sourceEventType ?? "default";
-  }
-
-  return sourceEventType ?? "";
-};
-
 const buildSourceEventIdentityKey = (
   sourceEventUid: string,
   startTime: Date,
@@ -52,7 +41,7 @@ const buildSourceEventIdentityKey = (
 ): string =>
   `${sourceEventUid}|${startTime.toISOString()}|${endTime.toISOString()}|${
     normalizeIdentityIsAllDay(isAllDay, options)
-  }|${availability ?? ""}|${normalizeIdentitySourceEventType(sourceEventType, options)}`;
+  }|${availability ?? ""}|${sourceEventType ?? "default"}`;
 
 const buildExistingEventIdentitySet = (
   existingEvents: ExistingSourceEventState[],
