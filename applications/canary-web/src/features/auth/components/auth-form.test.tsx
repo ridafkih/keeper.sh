@@ -119,10 +119,11 @@ const copy: AuthScreenCopy = {
 };
 
 describe("AuthForm", () => {
-  it("uses username autofill semantics for passkey sign-in", () => {
+  it("keeps email autofill semantics for credential sign-in", () => {
     const markup = renderToStaticMarkup(<AuthForm capabilities={capabilities} copy={copy} />);
 
-    expect(markup).toContain('autoComplete="username webauthn"');
+    expect(markup).toContain('autoComplete="email"');
+    expect(markup).not.toContain("webauthn");
   });
 
   it("keeps email autofill semantics for registration", () => {
@@ -136,7 +137,7 @@ describe("AuthForm", () => {
     expect(markup).toContain('autoComplete="email"');
   });
 
-  it("waits for credential focus before starting passkey autofill", async () => {
+  it("does not start passkey sign-in from credential focus", async () => {
     passkeySignInMock.mockClear();
 
     const { document, window } = parseHTML("<html><body><div id='app'></div></body></html>");
@@ -196,6 +197,74 @@ describe("AuthForm", () => {
 
       await act(async () => {
         credentialInput.dispatchEvent(new window.Event("focusin", { bubbles: true }));
+      });
+
+      expect(passkeySignInMock).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      Object.assign(globalThis, previousGlobals);
+    }
+  });
+
+  it("starts passkey sign-in from the dedicated button", async () => {
+    passkeySignInMock.mockClear();
+
+    const { document, window } = parseHTML("<html><body><div id='app'></div></body></html>");
+    const previousGlobals = {
+      Event: globalThis.Event,
+      FocusEvent: globalThis.FocusEvent,
+      HTMLElement: globalThis.HTMLElement,
+      Node: globalThis.Node,
+      PublicKeyCredential: globalThis.PublicKeyCredential,
+      document: globalThis.document,
+      navigator: globalThis.navigator,
+      requestAnimationFrame: globalThis.requestAnimationFrame,
+      window: globalThis.window,
+    };
+
+    class FakePublicKeyCredential {}
+
+    Object.assign(globalThis, {
+      Event: window.Event,
+      FocusEvent: window.FocusEvent ?? window.Event,
+      HTMLElement: window.HTMLElement,
+      IS_REACT_ACT_ENVIRONMENT: true,
+      Node: window.Node,
+      PublicKeyCredential: FakePublicKeyCredential,
+      document,
+      navigator: window.navigator,
+      requestAnimationFrame: (callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      },
+      window,
+    });
+
+    window.event = undefined;
+    window.HTMLElement.prototype.attachEvent = () => undefined;
+    window.HTMLElement.prototype.detachEvent = () => undefined;
+
+    const container = document.getElementById("app");
+    if (!container) throw new Error("Expected app container");
+
+    const root = createRoot(container as unknown as Element);
+
+    try {
+      await act(async () => {
+        root.render(<AuthForm capabilities={capabilities} copy={copy} />);
+      });
+
+      const passkeyButton = Array.from(container.querySelectorAll("button")).find((button) =>
+        button.textContent?.includes("Use passkey"));
+
+      if (!(passkeyButton instanceof window.HTMLButtonElement)) {
+        throw new Error("Expected passkey button");
+      }
+
+      await act(async () => {
+        passkeyButton.click();
       });
 
       expect(passkeySignInMock).toHaveBeenCalledTimes(1);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Ref, type SubmitEvent } from "react";
+import { useRef, type Ref, type SubmitEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAtomValue, useSetAtom } from "jotai";
 import { AnimatePresence, LazyMotion, type TargetAndTransition, type Variants } from "motion/react";
@@ -80,18 +80,18 @@ export function AuthForm({
 }) {
   const hasSocialProviders = getEnabledSocialProviders(capabilities).length > 0;
   const supportsPasskeySignIn = copy.action === "signIn" && capabilities.supportsPasskeys;
-  const [passkeyAutoFillEnabled, setPasskeyAutoFillEnabled] = useState(false);
+  const hasAlternateSignInOptions = hasSocialProviders || supportsPasskeySignIn;
 
   return (
     <>
-      {supportsPasskeySignIn && passkeyAutoFillEnabled && <PasskeyAutoFill />}
       <div className="flex flex-col py-2">
         <Heading2 as="span" className="text-center">{copy.heading}</Heading2>
         <Text size="sm" tone="muted" align="center">{copy.subtitle}</Text>
       </div>
-      {hasSocialProviders && (
+      {hasAlternateSignInOptions && (
         <>
           <SocialAuthButtons capabilities={capabilities} oauthActionLabel={copy.oauthActionLabel} />
+          {supportsPasskeySignIn && <PasskeySignInButton />}
           <Divider>or</Divider>
         </>
       )}
@@ -99,7 +99,6 @@ export function AuthForm({
         capabilities={capabilities}
         submitLabel={copy.submitLabel}
         action={copy.action}
-        onCredentialFocus={supportsPasskeySignIn ? () => setPasskeyAutoFillEnabled(true) : undefined}
       />
       <div className="flex flex-col gap-1.5">
         <AuthError />
@@ -111,43 +110,40 @@ export function AuthForm({
   );
 }
 
-function usePasskeyAutoFill() {
+function PasskeySignInButton() {
   const navigate = useNavigate();
+  const status = useAtomValue(authFormStatusAtom);
   const setError = useSetAtom(authFormErrorAtom);
+  const setStatus = useSetAtom(authFormStatusAtom);
 
-  useEffect(() => {
-    if (typeof PublicKeyCredential === "undefined") {
+  const handleClick = async () => {
+    setStatus("loading");
+    setError(null);
+
+    const { error } = await authClient.signIn.passkey();
+
+    if (error) {
+      setStatus("idle");
+      if ("code" in error && error.code === "AUTH_CANCELLED") {
+        return;
+      }
+      setError({ message: error.message ?? "Passkey sign-in failed.", active: true });
       return;
     }
 
-    const controller = new AbortController();
+    navigate({ to: "/dashboard" });
+  };
 
-    const attemptAutoFill = async () => {
-      const available = await PublicKeyCredential.isConditionalMediationAvailable?.();
-      if (!available) return;
-
-      const { error } = await authClient.signIn.passkey({
-        autoFill: true,
-        fetchOptions: { signal: controller.signal },
-      });
-
-      if (error) {
-        setError({ message: error.message ?? "Passkey sign-in failed.", active: true });
-        return;
-      }
-
-      navigate({ to: "/dashboard" });
-    };
-
-    void attemptAutoFill();
-
-    return () => controller.abort();
-  }, [navigate, setError]);
-}
-
-function PasskeyAutoFill() {
-  usePasskeyAutoFill();
-  return null;
+  return (
+    <Button
+      disabled={status === "loading"}
+      variant="border"
+      className="w-full justify-center"
+      onClick={() => void handleClick()}
+    >
+      <ButtonText>Use passkey</ButtonText>
+    </Button>
+  );
 }
 
 function SocialAuthButtons({
@@ -199,16 +195,7 @@ function ForgotPasswordLink({
   );
 }
 
-function resolveAutoComplete(
-  action: "signIn" | "signUp",
-  base: string,
-  capabilities: AuthCapabilities,
-): string {
-  if (action === "signIn" && capabilities.supportsPasskeys) {
-    if (base === "email" || base === "username") {
-      return "username webauthn";
-    }
-  }
+function resolveAutoComplete(base: string): string {
   return base;
 }
 
@@ -222,12 +209,10 @@ function CredentialForm({
   capabilities,
   submitLabel,
   action,
-  onCredentialFocus,
 }: {
   capabilities: AuthCapabilities;
   submitLabel: string;
   action: "signIn" | "signUp";
-  onCredentialFocus?: () => void;
 }) {
   const navigate = useNavigate();
   const step = useAtomValue(authFormStepAtom);
@@ -286,9 +271,8 @@ function CredentialForm({
       <div className="flex flex-col gap-1.5">
         <CredentialInput
           readOnly={step === "password"}
-          autoComplete={resolveAutoComplete(action, credentialField.autoComplete, capabilities)}
+          autoComplete={resolveAutoComplete(credentialField.autoComplete)}
           label={credentialField.label}
-          onFocus={onCredentialFocus}
           placeholder={credentialField.placeholder}
           type={credentialField.type}
         />
@@ -303,7 +287,7 @@ function CredentialForm({
               >
                 <PasswordInput
                   ref={passwordRef}
-                  autoComplete={resolveAutoComplete(action, "current-password", capabilities)}
+                  autoComplete={resolveAutoComplete("current-password")}
                 />
               </m.div>
             )}
