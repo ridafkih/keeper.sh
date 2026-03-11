@@ -12,8 +12,8 @@ html {
 
 body,
 #root {
-  @apply w-full min-h-screen;
-  max-height: 100dvh;
+  @apply w-full;
+  min-height: 100dvh;
 }
 
 #root {

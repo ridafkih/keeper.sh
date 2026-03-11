@@ -197,8 +197,10 @@ function resolveAutoComplete(
   base: string,
   capabilities: AuthCapabilities,
 ): string {
-  if (action === "signIn" && base === "email" && capabilities.supportsPasskeys) {
-    return `${base} webauthn`;
+  if (action === "signIn" && capabilities.supportsPasskeys) {
+    if (base === "email" || base === "username") {
+      return "username webauthn";
+    }
   }
   return base;
 }
