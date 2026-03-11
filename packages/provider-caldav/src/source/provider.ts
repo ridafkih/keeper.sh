@@ -29,7 +29,7 @@ const EMPTY_COUNT = 0;
 const YEARS_UNTIL_FUTURE = 2;
 
 const isAuthError = (error: unknown): boolean => {
-  if (!(error instanceof Error)) return false;
+  if (!(error instanceof Error)) {return false;}
   const message = error.message.toLowerCase();
   return message.includes("401") || message.includes("invalid credentials") || message.includes("unauthorized");
 };
