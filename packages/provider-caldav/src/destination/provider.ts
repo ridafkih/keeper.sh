@@ -17,9 +17,9 @@ import type {
   SyncResult,
   SyncableEvent,
 } from "@keeper.sh/provider-core";
-import { getStartOfToday } from "@keeper.sh/date-utils";
 import { CalDAVClient } from "../shared/client";
 import { eventToICalString, parseICalToRemoteEvent } from "../shared/ics";
+import { getCalDAVSyncWindow } from "../shared/sync-window";
 import { createCalDAVService } from "./sync";
 import type { CalDAVProviderConfig, CalDAVProviderOptions } from "../types";
 
@@ -177,18 +177,15 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
   }
 
   async listRemoteEvents(): Promise<RemoteEvent[]> {
-    const today = getStartOfToday();
-
-    const futureDate = new Date(today);
-    futureDate.setFullYear(futureDate.getFullYear() + YEARS_UNTIL_FUTURE);
+    const syncWindow = getCalDAVSyncWindow(YEARS_UNTIL_FUTURE);
 
     const calendarUrl = await this.client.resolveCalendarUrl(this.config.calendarUrl);
 
     const objects = await this.client.fetchCalendarObjects({
       calendarUrl,
       timeRange: {
-        end: futureDate.toISOString(),
-        start: today.toISOString(),
+        end: syncWindow.end.toISOString(),
+        start: syncWindow.start.toISOString(),
       },
     });
 
@@ -209,7 +206,7 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
         continue;
       }
 
-      if (parsed.endTime < today) {
+      if (parsed.endTime < syncWindow.start) {
         continue;
       }
 
