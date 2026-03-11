@@ -11,7 +11,9 @@ html {
 body,
 #root {
   @apply w-full;
-  min-height: 100dvh;
+  height: 100dvh;
+  overflow-y: scroll;
+  overflow-x: hidden;
 }
 
 #root {
