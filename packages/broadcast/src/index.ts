@@ -43,7 +43,15 @@ const createBroadcastService = (config: BroadcastConfig): BroadcastService => {
 
   const emit = (userId: string, eventName: string, data: unknown): void => {
     const message: BroadcastMessage = { data, event: eventName, userId };
-    redis.publish(CHANNEL, JSON.stringify(message));
+    try {
+      redis.publish(CHANNEL, JSON.stringify(message));
+    } catch (error) {
+      reportError(error, {
+        "operation.type": "broadcast",
+        "operation.name": "broadcast:publish",
+        "user.id": userId,
+      });
+    }
   };
 
   const startSubscriber = async (): Promise<void> => {
