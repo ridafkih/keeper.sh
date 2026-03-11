@@ -104,28 +104,42 @@ export function AuthForm({
   );
 }
 
-function PasskeyAutoFill() {
+function usePasskeyAutoFill() {
   const navigate = useNavigate();
+  const setError = useSetAtom(authFormErrorAtom);
 
   useEffect(() => {
-    if (
-      typeof PublicKeyCredential === "undefined" ||
-      !PublicKeyCredential.isConditionalMediationAvailable?.()
-    ) {
+    if (typeof PublicKeyCredential === "undefined") {
       return;
     }
 
     const controller = new AbortController();
 
-    void authClient.signIn
-      .passkey({ autoFill: true, fetchOptions: { signal: controller.signal } })
-      .then(({ error }) => {
-        if (!error) navigate({ to: "/dashboard" });
+    const attemptAutoFill = async () => {
+      const available = await PublicKeyCredential.isConditionalMediationAvailable?.();
+      if (!available) return;
+
+      const { error } = await authClient.signIn.passkey({
+        autoFill: true,
+        fetchOptions: { signal: controller.signal },
       });
 
-    return () => controller.abort();
-  }, [navigate]);
+      if (error) {
+        setError({ message: error.message ?? "Passkey sign-in failed.", active: true });
+        return;
+      }
 
+      navigate({ to: "/dashboard" });
+    };
+
+    void attemptAutoFill();
+
+    return () => controller.abort();
+  }, [navigate, setError]);
+}
+
+function PasskeyAutoFill() {
+  usePasskeyAutoFill();
   return null;
 }
 
