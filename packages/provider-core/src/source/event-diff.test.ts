@@ -130,4 +130,58 @@ describe("source event diff", () => {
     expect(eventsToAdd).toHaveLength(1);
     expect(idsToRemove).toEqual(["existing-focus"]);
   });
+
+  it("backfills missing source metadata during full sync", () => {
+    const existingEvents = [
+      createExistingEvent({
+        id: "existing-default-null",
+        isAllDay: null,
+        sourceEventType: null,
+        sourceEventUid: "default-uid",
+      }),
+    ];
+
+    const incomingEvents = [
+      createIncomingEvent({
+        isAllDay: false,
+        sourceEventType: "default",
+        uid: "default-uid",
+      }),
+    ];
+
+    const eventsToAdd = buildSourceEventsToAdd(existingEvents, incomingEvents);
+    const idsToRemove = buildSourceEventStateIdsToRemove(existingEvents, incomingEvents);
+
+    expect(eventsToAdd).toHaveLength(1);
+    expect(idsToRemove).toEqual(["existing-default-null"]);
+  });
+
+  it("does not duplicate missing source metadata during delta sync", () => {
+    const existingEvents = [
+      createExistingEvent({
+        id: "existing-default-null",
+        isAllDay: null,
+        sourceEventType: null,
+        sourceEventUid: "default-uid",
+      }),
+    ];
+
+    const incomingEvents = [
+      createIncomingEvent({
+        isAllDay: false,
+        sourceEventType: "default",
+        uid: "default-uid",
+      }),
+    ];
+
+    const eventsToAdd = buildSourceEventsToAdd(existingEvents, incomingEvents, {
+      isDeltaSync: true,
+    });
+    const idsToRemove = buildSourceEventStateIdsToRemove(existingEvents, incomingEvents, {
+      isDeltaSync: true,
+    });
+
+    expect(eventsToAdd).toHaveLength(0);
+    expect(idsToRemove).toEqual([]);
+  });
 });

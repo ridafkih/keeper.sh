@@ -130,7 +130,7 @@ const createCalDAVSourceProvider = (
       .from(eventStatesTable)
       .where(eq(eventStatesTable.calendarId, calendarId));
 
-    const eventsToAdd = buildSourceEventsToAdd(existingEvents, events);
+    const eventsToAdd = buildSourceEventsToAdd(existingEvents, events, { isDeltaSync: false });
     const eventStateIdsToRemove = buildSourceEventStateIdsToRemove(existingEvents, events);
 
     if (eventStateIdsToRemove.length > EMPTY_COUNT) {

@@ -15,6 +15,32 @@ interface SourceEventDiffOptions {
   cancelledEventUids?: string[];
 }
 
+interface SourceEventIdentityOptions {
+  normalizeMissingMetadata?: boolean;
+}
+
+const normalizeIdentityIsAllDay = (
+  isAllDay: boolean | null | undefined,
+  options: SourceEventIdentityOptions,
+): string => {
+  if (options.normalizeMissingMetadata) {
+    return String(isAllDay ?? false);
+  }
+
+  return String(isAllDay);
+};
+
+const normalizeIdentitySourceEventType = (
+  sourceEventType: string | null | undefined,
+  options: SourceEventIdentityOptions,
+): string => {
+  if (options.normalizeMissingMetadata) {
+    return sourceEventType ?? "default";
+  }
+
+  return sourceEventType ?? "";
+};
+
 const buildSourceEventIdentityKey = (
   sourceEventUid: string,
   startTime: Date,
@@ -22,11 +48,15 @@ const buildSourceEventIdentityKey = (
   isAllDay?: boolean | null,
   availability?: string | null,
   sourceEventType?: string | null,
+  options: SourceEventIdentityOptions = {},
 ): string =>
-  `${sourceEventUid}|${startTime.toISOString()}|${endTime.toISOString()}|${String(isAllDay ?? false)}|${availability ?? ""}|${sourceEventType ?? "default"}`;
+  `${sourceEventUid}|${startTime.toISOString()}|${endTime.toISOString()}|${
+    normalizeIdentityIsAllDay(isAllDay, options)
+  }|${availability ?? ""}|${normalizeIdentitySourceEventType(sourceEventType, options)}`;
 
 const buildExistingEventIdentitySet = (
   existingEvents: ExistingSourceEventState[],
+  options: SourceEventIdentityOptions = {},
 ): Set<string> => {
   const identities = new Set<string>();
 
@@ -43,6 +73,7 @@ const buildExistingEventIdentitySet = (
         existingEvent.isAllDay,
         existingEvent.availability,
         existingEvent.sourceEventType,
+        options,
       ),
     );
   }
@@ -53,8 +84,11 @@ const buildExistingEventIdentitySet = (
 const buildSourceEventsToAdd = (
   existingEvents: ExistingSourceEventState[],
   incomingEvents: SourceEvent[],
+  options: SourceEventDiffOptions = {},
 ): SourceEvent[] => {
-  const existingIdentities = buildExistingEventIdentitySet(existingEvents);
+  const existingIdentities = buildExistingEventIdentitySet(existingEvents, {
+    normalizeMissingMetadata: options.isDeltaSync ?? false,
+  });
 
   return incomingEvents.filter(
     (incomingEvent) =>
@@ -66,6 +100,7 @@ const buildSourceEventsToAdd = (
           incomingEvent.isAllDay,
           incomingEvent.availability,
           incomingEvent.sourceEventType,
+          { normalizeMissingMetadata: options.isDeltaSync ?? false },
         ),
       ),
   );
@@ -103,6 +138,7 @@ const buildSourceEventStateIdsToRemove = (
         incomingEvent.isAllDay,
         incomingEvent.availability,
         incomingEvent.sourceEventType,
+        { normalizeMissingMetadata: isDeltaSync },
       )),
   );
 
@@ -119,6 +155,7 @@ const buildSourceEventStateIdsToRemove = (
         existingEvent.isAllDay,
         existingEvent.availability,
         existingEvent.sourceEventType,
+        { normalizeMissingMetadata: isDeltaSync },
       );
 
       return !incomingIdentitySet.has(existingIdentityKey);

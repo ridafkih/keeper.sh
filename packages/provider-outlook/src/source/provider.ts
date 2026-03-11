@@ -129,7 +129,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       .from(eventStatesTable)
       .where(eq(eventStatesTable.calendarId, calendarId));
 
-    const eventsToAdd = buildSourceEventsToAdd(existingEvents, events);
+    const eventsToAdd = buildSourceEventsToAdd(existingEvents, events, { isDeltaSync });
     const eventStateIdsToRemove = buildSourceEventStateIdsToRemove(
       existingEvents,
       events,
