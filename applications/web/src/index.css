@@ -21,6 +21,13 @@ body,
   overflow-x: hidden;
 }
 
+input,
+textarea,
+select,
+button {
+  font-size: 1rem;
+}
+
 html {
   color-scheme: light;
 }

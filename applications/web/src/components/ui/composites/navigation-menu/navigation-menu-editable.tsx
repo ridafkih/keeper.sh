@@ -189,7 +189,7 @@ function EditableItemInput({
   const variant = use(MenuVariantContext);
   const { inputProps } = useEditableCommit(value, onCommit, onCancel);
   const inputClass = cn(
-    "min-w-0 text-sm tracking-tight bg-transparent cursor-text outline-none",
+    "min-w-0 text-base tracking-tight bg-transparent cursor-text outline-none",
     label ? "flex-1 text-right" : "flex-1",
   );
 
@@ -221,7 +221,7 @@ function EditableTemplateItemInput({
   const variant = use(MenuVariantContext);
   const { inputProps } = useEditableCommit(value, onCommit, onCancel);
   const inputClass = cn(
-    "min-w-0 text-sm tracking-tight bg-transparent cursor-text outline-none",
+    "min-w-0 text-base tracking-tight bg-transparent cursor-text outline-none",
     label ? "flex-1 text-right" : "flex-1",
   );
 
@@ -233,7 +233,7 @@ function EditableTemplateItemInput({
           <input
             {...inputProps}
             className={cn(
-              "col-start-1 row-start-1 w-full text-sm tracking-tight bg-transparent text-transparent caret-foreground-muted cursor-text outline-none",
+              "col-start-1 row-start-1 w-full text-base tracking-tight bg-transparent text-transparent caret-foreground-muted cursor-text outline-none",
               label && "text-right",
             )}
           />
@@ -284,7 +284,7 @@ function TemplateInputOverlay({
     <div
       ref={overlayRef}
       className={cn(
-        "col-start-1 row-start-1 pointer-events-none text-sm tracking-tight whitespace-pre overflow-hidden",
+        "col-start-1 row-start-1 pointer-events-none text-base tracking-tight whitespace-pre overflow-hidden",
         label && "text-right",
       )}
     >
