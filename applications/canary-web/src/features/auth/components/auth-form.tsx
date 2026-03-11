@@ -246,7 +246,7 @@ function CredentialForm({
   const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    const credential = readFormFieldValue(formData, "credential");
+    const credential = readFormFieldValue(formData, credentialField.name);
 
     if (step === "email") {
       if (!credential) return;
@@ -291,6 +291,8 @@ function CredentialForm({
     <form onSubmit={handleSubmit} className="contents">
       <div className="flex flex-col gap-0">
         <CredentialInput
+          id={credentialField.id}
+          name={credentialField.name}
           readOnly={step === "password"}
           autoComplete={resolveAutoComplete(action, credentialField.autoComplete, capabilities)}
           label={credentialField.label}
@@ -349,6 +351,8 @@ function AuthError() {
 }
 
 function CredentialInput({
+  id,
+  name,
   readOnly,
   autoComplete,
   label,
@@ -356,6 +360,8 @@ function CredentialInput({
   placeholder,
   type,
 }: {
+  id: string;
+  name: string;
   readOnly?: boolean;
   autoComplete?: string;
   label: string;
@@ -372,18 +378,22 @@ function CredentialInput({
   };
 
   return (
-    <Input
-      aria-label={label}
-      name="credential"
-      readOnly={readOnly}
-      disabled={status === "loading"}
-      type={type}
-      placeholder={placeholder}
-      autoComplete={autoComplete}
-      tone={resolveInputTone(error?.active)}
-      onChange={clearError}
-      onFocus={onFocus}
-    />
+    <>
+      <label htmlFor={id} className="sr-only">{label}</label>
+      <Input
+        aria-label={label}
+        id={id}
+        name={name}
+        readOnly={readOnly}
+        disabled={status === "loading"}
+        type={type}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        tone={resolveInputTone(error?.active)}
+        onChange={clearError}
+        onFocus={onFocus}
+      />
+    </>
   );
 }
 
@@ -405,17 +415,21 @@ function PasswordInput({
   };
 
   return (
-    <Input
-      ref={ref}
-      name="password"
-      disabled={status === "loading"}
-      type="password"
-      placeholder="Password"
-      autoComplete={autoComplete}
-      tabIndex={tabIndex}
-      tone={resolveInputTone(error?.active)}
-      onChange={clearError}
-    />
+    <>
+      <label htmlFor="current-password" className="sr-only">Password</label>
+      <Input
+        ref={ref}
+        id="current-password"
+        name="password"
+        disabled={status === "loading"}
+        type="password"
+        placeholder="Password"
+        autoComplete={autoComplete}
+        tabIndex={tabIndex}
+        tone={resolveInputTone(error?.active)}
+        onChange={clearError}
+      />
+    </>
   );
 }
 

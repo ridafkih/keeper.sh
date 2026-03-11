@@ -6,7 +6,9 @@ type SocialProviderId = keyof AuthCapabilities["socialProviders"];
 
 interface CredentialField {
   autoComplete: string;
+  id: string;
   label: string;
+  name: string;
   placeholder: string;
   type: "email" | "text";
 }
@@ -17,7 +19,9 @@ const resolveCredentialField = (
   if (capabilities.credentialMode === "username") {
     return {
       autoComplete: "username",
+      id: "username",
       label: "Username",
+      name: "username",
       placeholder: "johndoe",
       type: "text",
     };
@@ -25,7 +29,9 @@ const resolveCredentialField = (
 
   return {
     autoComplete: "email",
+    id: "email",
     label: "Email",
+    name: "email",
     placeholder: "johndoe+keeper@example.com",
     type: "email",
   };
