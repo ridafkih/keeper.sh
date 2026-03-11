@@ -22,7 +22,9 @@ describe("resolveCredentialField", () => {
   it("returns email field metadata for commercial auth", () => {
     expect(resolveCredentialField(emailCapabilities)).toEqual({
       autoComplete: "email",
+      id: "email",
       label: "Email",
+      name: "email",
       placeholder: "johndoe+keeper@example.com",
       type: "email",
     });
@@ -34,7 +36,9 @@ describe("resolveCredentialField", () => {
       credentialMode: "username",
     })).toEqual({
       autoComplete: "username",
+      id: "username",
       label: "Username",
+      name: "username",
       placeholder: "johndoe",
       type: "text",
     });
