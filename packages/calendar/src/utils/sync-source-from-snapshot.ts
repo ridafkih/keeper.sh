@@ -21,18 +21,20 @@ interface StoredEventRow {
   id: string;
   isAllDay: boolean | null;
   recurrenceRule: string | null;
+  sourceEventType: string | null;
   startTime: Date;
   startTimeZone: string | null;
   uid: string | null;
 }
 type StoredEvent = Omit<
   StoredEventRow,
-  "exceptionDates" | "recurrenceRule" | "startTimeZone" | "availability" | "isAllDay"
+  "exceptionDates" | "recurrenceRule" | "startTimeZone" | "availability" | "isAllDay" | "sourceEventType"
 > & {
   availability?: "busy" | "free" | "oof" | "workingElsewhere";
   exceptionDates?: object;
   isAllDay?: boolean;
   recurrenceRule?: object;
+  sourceEventType?: string;
   startTimeZone?: string;
 };
 
@@ -85,6 +87,10 @@ const toStoredEvent = (row: StoredEventRow): StoredEvent => {
     storedEvent.isAllDay = row.isAllDay;
   }
 
+  if (row.sourceEventType !== null) {
+    storedEvent.sourceEventType = row.sourceEventType;
+  }
+
   if (row.startTimeZone !== null) {
     storedEvent.startTimeZone = row.startTimeZone;
   }
@@ -114,6 +120,7 @@ const getStoredEvents = async (
       id: eventStatesTable.id,
       isAllDay: eventStatesTable.isAllDay,
       recurrenceRule: eventStatesTable.recurrenceRule,
+      sourceEventType: eventStatesTable.sourceEventType,
       startTime: eventStatesTable.startTime,
       startTimeZone: eventStatesTable.startTimeZone,
       uid: eventStatesTable.sourceEventUid,
@@ -164,6 +171,7 @@ const addEvents = async (
     location?: string;
     recurrenceRule?: object;
     exceptionDates?: object;
+    sourceEventType?: string;
   }[],
 ): Promise<void> => {
   const rows = events.map((event) => {
@@ -176,6 +184,7 @@ const addEvents = async (
       isAllDay?: boolean;
       location?: string;
       recurrenceRule?: string;
+      sourceEventType?: string;
       sourceEventUid: string;
       startTime: Date;
       startTimeZone?: string;
@@ -187,6 +196,7 @@ const addEvents = async (
       endTime: event.endTime,
       isAllDay: event.isAllDay,
       location: event.location,
+      sourceEventType: event.sourceEventType ?? "default",
       sourceEventUid: event.uid,
       startTime: event.startTime,
       startTimeZone: event.startTimeZone,

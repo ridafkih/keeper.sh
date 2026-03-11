@@ -123,6 +123,7 @@ const createCalDAVSourceProvider = (
         endTime: eventStatesTable.endTime,
         id: eventStatesTable.id,
         isAllDay: eventStatesTable.isAllDay,
+        sourceEventType: eventStatesTable.sourceEventType,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
       })
@@ -154,6 +155,7 @@ const createCalDAVSourceProvider = (
           isAllDay: event.isAllDay,
           location: event.location,
           recurrenceRule: stringifyIfPresent(event.recurrenceRule),
+          sourceEventType: event.sourceEventType ?? "default",
           sourceEventUid: event.uid,
           startTime: event.startTime,
           startTimeZone: event.startTimeZone,

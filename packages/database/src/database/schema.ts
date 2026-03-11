@@ -147,6 +147,7 @@ const eventStatesTable = pgTable(
     recurrenceRule: text(),
     exceptionDates: text(),
     isAllDay: boolean(),
+    sourceEventType: text(),
     sourceEventUid: text(),
     startTime: timestamp().notNull(),
     startTimeZone: text(),

@@ -4,6 +4,7 @@ interface ExistingSourceEventState {
   availability?: string | null;
   id: string;
   isAllDay?: boolean | null;
+  sourceEventType?: string | null;
   sourceEventUid: string | null;
   startTime: Date;
   endTime: Date;
@@ -20,8 +21,9 @@ const buildSourceEventIdentityKey = (
   endTime: Date,
   isAllDay?: boolean | null,
   availability?: string | null,
+  sourceEventType?: string | null,
 ): string =>
-  `${sourceEventUid}|${startTime.toISOString()}|${endTime.toISOString()}|${String(isAllDay ?? false)}|${availability ?? ""}`;
+  `${sourceEventUid}|${startTime.toISOString()}|${endTime.toISOString()}|${String(isAllDay ?? false)}|${availability ?? ""}|${sourceEventType ?? "default"}`;
 
 const buildExistingEventIdentitySet = (
   existingEvents: ExistingSourceEventState[],
@@ -40,6 +42,7 @@ const buildExistingEventIdentitySet = (
         existingEvent.endTime,
         existingEvent.isAllDay,
         existingEvent.availability,
+        existingEvent.sourceEventType,
       ),
     );
   }
@@ -62,6 +65,7 @@ const buildSourceEventsToAdd = (
           incomingEvent.endTime,
           incomingEvent.isAllDay,
           incomingEvent.availability,
+          incomingEvent.sourceEventType,
         ),
       ),
   );
@@ -98,6 +102,7 @@ const buildSourceEventStateIdsToRemove = (
         incomingEvent.endTime,
         incomingEvent.isAllDay,
         incomingEvent.availability,
+        incomingEvent.sourceEventType,
       )),
   );
 
@@ -113,6 +118,7 @@ const buildSourceEventStateIdsToRemove = (
         existingEvent.endTime,
         existingEvent.isAllDay,
         existingEvent.availability,
+        existingEvent.sourceEventType,
       );
 
       return !incomingIdentitySet.has(existingIdentityKey);

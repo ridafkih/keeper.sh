@@ -2,6 +2,7 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 type AuthType = "oauth" | "caldav" | "none";
 type EventAvailability = "busy" | "free" | "oof" | "workingElsewhere";
+type SourceEventType = "default" | "focusTime" | "outOfOffice" | "workingLocation";
 
 interface SourcePreferenceOption {
   id: string;
@@ -132,6 +133,7 @@ interface SourceEvent {
   uid: string;
   startTime: Date;
   endTime: Date;
+  sourceEventType?: SourceEventType;
   availability?: EventAvailability;
   isAllDay?: boolean;
   startTimeZone?: string;
@@ -166,6 +168,7 @@ interface OAuthSourceConfig {
 export type {
   AuthType,
   EventAvailability,
+  SourceEventType,
   CalDAVProviderConfig,
   ProviderCapabilities,
   ProviderDefinition,

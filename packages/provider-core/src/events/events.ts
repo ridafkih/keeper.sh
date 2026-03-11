@@ -5,7 +5,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, asc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type { EventAvailability, SyncableEvent } from "../types";
+import type { EventAvailability, SourceEventType, SyncableEvent } from "../types";
 import { getOAuthSyncWindowStart } from "../oauth/sync-window";
 import {
   hasActiveFutureOccurrence,
@@ -49,6 +49,51 @@ const parseAvailability = (value: string | null): EventAvailability | undefined 
 
   return value;
 };
+const parseSourceEventType = (
+  value: string | null,
+  availability: string | null,
+): SourceEventType => {
+  if (value === "focusTime" || value === "outOfOffice" || value === "workingLocation") {
+    return value;
+  }
+
+  if (availability === "workingElsewhere") {
+    return "workingLocation";
+  }
+
+  if (availability === "oof") {
+    return "outOfOffice";
+  }
+
+  return "default";
+};
+
+const shouldExcludeSyncEvent = (event: {
+  excludeAllDayEvents: boolean;
+  excludeFocusTime: boolean;
+  excludeOutOfOffice: boolean;
+  excludeWorkingLocation: boolean;
+  availability: string | null;
+  isAllDay: boolean | null;
+  sourceEventType: string | null;
+}): boolean => {
+  const sourceEventType = parseSourceEventType(event.sourceEventType, event.availability);
+
+  if (event.excludeAllDayEvents && event.isAllDay) {
+    return true;
+  }
+  if (event.excludeFocusTime && sourceEventType === "focusTime") {
+    return true;
+  }
+  if (event.excludeOutOfOffice && sourceEventType === "outOfOffice") {
+    return true;
+  }
+  if (event.excludeWorkingLocation && sourceEventType === "workingLocation") {
+    return true;
+  }
+
+  return false;
+};
 const TEMPLATE_TOKEN_PATTERN = /\{\{(\w+)\}\}/g;
 const DEFAULT_EVENT_NAME = "Busy";
 const DEFAULT_EVENT_NAME_TEMPLATE = "{{calendar_name}}";
@@ -81,9 +126,13 @@ const fetchEventsForCalendars = async (
       calendarName: calendarsTable.name,
       calendarUrl: calendarsTable.url,
       customEventName: calendarsTable.customEventName,
+      excludeAllDayEvents: calendarsTable.excludeAllDayEvents,
       excludeEventDescription: calendarsTable.excludeEventDescription,
       excludeEventLocation: calendarsTable.excludeEventLocation,
       excludeEventName: calendarsTable.excludeEventName,
+      excludeFocusTime: calendarsTable.excludeFocusTime,
+      excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
+      excludeWorkingLocation: calendarsTable.excludeWorkingLocation,
       availability: eventStatesTable.availability,
       description: eventStatesTable.description,
       endTime: eventStatesTable.endTime,
@@ -92,6 +141,7 @@ const fetchEventsForCalendars = async (
       isAllDay: eventStatesTable.isAllDay,
       location: eventStatesTable.location,
       recurrenceRule: eventStatesTable.recurrenceRule,
+      sourceEventType: eventStatesTable.sourceEventType,
       sourceEventUid: eventStatesTable.sourceEventUid,
       startTime: eventStatesTable.startTime,
       startTimeZone: eventStatesTable.startTimeZone,
@@ -114,6 +164,9 @@ const fetchEventsForCalendars = async (
 
   for (const result of results) {
     if (result.sourceEventUid === null) {
+      continue;
+    }
+    if (shouldExcludeSyncEvent(result)) {
       continue;
     }
 
@@ -191,4 +244,4 @@ const getEventsForDestination = async (
   return fetchEventsForCalendars(database, sourceCalendarIds);
 };
 
-export { getEventsForDestination };
+export { getEventsForDestination, shouldExcludeSyncEvent };

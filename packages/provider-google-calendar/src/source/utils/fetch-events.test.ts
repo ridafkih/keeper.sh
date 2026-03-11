@@ -1,13 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { EventsFetchError, fetchCalendarEvents, parseGoogleEvents } from "./fetch-events";
-import type { EventTypeFilters } from "./fetch-events";
 import type { GoogleCalendarEvent } from "../types";
-
-const createDefaultFilters = (): EventTypeFilters => ({
-  excludeFocusTime: false,
-  excludeOutOfOffice: false,
-  excludeWorkingLocation: false,
-});
 
 const createGoogleEvent = (overrides: Partial<GoogleCalendarEvent>): GoogleCalendarEvent => ({
   end: {
@@ -169,7 +162,7 @@ describe("fetchCalendarEvents", () => {
 });
 
 describe("parseGoogleEvents", () => {
-  it("filters keeper events and excluded Google event types", () => {
+  it("filters keeper events and keeps typed Google events for later reconciliation", () => {
     const externalEvent = createGoogleEvent({ iCalUID: "external-uid-1" });
     const keeperEvent = createGoogleEvent({
       iCalUID: "generated-event@keeper.sh",
@@ -181,19 +174,11 @@ describe("parseGoogleEvents", () => {
       id: "google-event-id-3",
     });
 
-    const filters: EventTypeFilters = {
-      excludeFocusTime: true,
-      excludeOutOfOffice: false,
-      excludeWorkingLocation: false,
-    };
+    const parsedEvents = parseGoogleEvents([externalEvent, keeperEvent, focusTimeEvent]);
 
-    const parsedEvents = parseGoogleEvents(
-      [externalEvent, keeperEvent, focusTimeEvent],
-      filters,
-    );
-
-    expect(parsedEvents).toHaveLength(1);
+    expect(parsedEvents).toHaveLength(2);
     expect(parsedEvents[0]?.uid).toBe("external-uid-1");
+    expect(parsedEvents[1]?.sourceEventType).toBe("focusTime");
   });
 
   it("uses end timezone when start timezone is absent", () => {
@@ -208,7 +193,7 @@ describe("parseGoogleEvents", () => {
       },
     });
 
-    const parsedEvents = parseGoogleEvents([googleEvent], createDefaultFilters());
+    const parsedEvents = parseGoogleEvents([googleEvent]);
 
     expect(parsedEvents).toHaveLength(1);
     expect(parsedEvents[0]?.startTimeZone).toBe("America/Vancouver");
@@ -220,10 +205,11 @@ describe("parseGoogleEvents", () => {
       iCalUID: "external-uid-5",
     });
 
-    const parsedEvents = parseGoogleEvents([googleEvent], createDefaultFilters());
+    const parsedEvents = parseGoogleEvents([googleEvent]);
 
     expect(parsedEvents).toHaveLength(1);
     expect(parsedEvents[0]?.availability).toBe("workingElsewhere");
+    expect(parsedEvents[0]?.sourceEventType).toBe("workingLocation");
   });
 
   it("marks transparent events as free", () => {
@@ -232,7 +218,7 @@ describe("parseGoogleEvents", () => {
       transparency: "transparent",
     });
 
-    const parsedEvents = parseGoogleEvents([googleEvent], createDefaultFilters());
+    const parsedEvents = parseGoogleEvents([googleEvent]);
 
     expect(parsedEvents).toHaveLength(1);
     expect(parsedEvents[0]?.availability).toBe("free");
@@ -243,7 +229,7 @@ describe("parseGoogleEvents", () => {
       iCalUID: "external-uid-7",
     });
 
-    const parsedEvents = parseGoogleEvents([googleEvent], createDefaultFilters());
+    const parsedEvents = parseGoogleEvents([googleEvent]);
 
     expect(parsedEvents).toHaveLength(1);
     expect(parsedEvents[0]?.availability).toBe("busy");

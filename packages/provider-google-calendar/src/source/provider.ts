@@ -27,7 +27,6 @@ import {
   fetchCalendarName,
   fetchCalendarEvents,
   parseGoogleEvents,
-  type EventTypeFilters,
 } from "./utils/fetch-events";
 
 const GOOGLE_PROVIDER_ID = "google";
@@ -90,13 +89,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
       return { events: [], fullSyncRequired: true };
     }
 
-    const filters: EventTypeFilters = {
-      excludeFocusTime: this.config.excludeFocusTime,
-      excludeOutOfOffice: this.config.excludeOutOfOffice,
-      excludeWorkingLocation: this.config.excludeWorkingLocation,
-    };
-
-    const events = parseGoogleEvents(result.events, filters);
+    const events = parseGoogleEvents(result.events);
     const fetchResult: BaseFetchEventsResult = {
       events,
       fullSyncRequired: false,
@@ -138,6 +131,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
         id: eventStatesTable.id,
         endTime: eventStatesTable.endTime,
         isAllDay: eventStatesTable.isAllDay,
+        sourceEventType: eventStatesTable.sourceEventType,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
       })
@@ -173,6 +167,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
           isAllDay: event.isAllDay,
           location: event.location,
           recurrenceRule: stringifyIfPresent(event.recurrenceRule),
+          sourceEventType: event.sourceEventType,
           sourceEventUid: event.uid,
           startTime: event.startTime,
           startTimeZone: event.startTimeZone,

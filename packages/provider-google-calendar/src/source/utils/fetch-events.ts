@@ -225,12 +225,6 @@ const fetchCalendarName = async (options: FetchCalendarNameOptions): Promise<str
   return parseCalendarName(responseBody);
 };
 
-interface EventTypeFilters {
-  excludeFocusTime: boolean;
-  excludeOutOfOffice: boolean;
-  excludeWorkingLocation: boolean;
-}
-
 const resolveGoogleAvailability = (
   event: Pick<GoogleCalendarEvent, "eventType" | "transparency">,
 ): EventTimeSlot["availability"] => {
@@ -268,26 +262,22 @@ const isAllDayGoogleEvent = (
   event: Pick<GoogleCalendarEvent, "start" | "end">,
 ): boolean => Boolean(event.start?.date || event.end?.date);
 
-const shouldExcludeEvent = (
+const resolveSourceEventType = (
   eventType: GoogleCalendarEvent["eventType"],
-  filters: EventTypeFilters,
-): boolean => {
-  if (filters.excludeFocusTime && eventType === "focusTime") {
-    return true;
+): EventTimeSlot["sourceEventType"] => {
+  if (eventType === "focusTime") {
+    return "focusTime";
   }
-  if (filters.excludeOutOfOffice && eventType === "outOfOffice") {
-    return true;
+  if (eventType === "outOfOffice") {
+    return "outOfOffice";
   }
-  if (filters.excludeWorkingLocation && eventType === "workingLocation") {
-    return true;
+  if (eventType === "workingLocation") {
+    return "workingLocation";
   }
-  return false;
+  return "default";
 };
 
-const parseGoogleEvents = (
-  events: GoogleCalendarEvent[],
-  filters?: EventTypeFilters,
-): EventTimeSlot[] => {
+const parseGoogleEvents = (events: GoogleCalendarEvent[]): EventTimeSlot[] => {
   const result: EventTimeSlot[] = [];
 
   for (const event of events) {
@@ -297,15 +287,13 @@ const parseGoogleEvents = (
     if (isKeeperEvent(event.iCalUID)) {
       continue;
     }
-    if (filters && shouldExcludeEvent(event.eventType, filters)) {
-      continue;
-    }
     result.push({
       availability: resolveGoogleAvailability(event),
       description: event.description,
       endTime: parseEventDateTime(event.end),
       isAllDay: isAllDayGoogleEvent(event),
       location: resolveGoogleLocation(event),
+      sourceEventType: resolveSourceEventType(event.eventType),
       startTime: parseEventDateTime(event.start),
       startTimeZone: event.start.timeZone ?? event.end.timeZone,
       title: event.summary,
@@ -317,4 +305,3 @@ const parseGoogleEvents = (
 };
 
 export { fetchCalendarEvents, fetchCalendarName, parseGoogleEvents, EventsFetchError };
-export type { EventTypeFilters };

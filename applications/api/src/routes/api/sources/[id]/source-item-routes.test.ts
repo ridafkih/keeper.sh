@@ -98,4 +98,56 @@ describe("handlePatchSourceRoute", () => {
     expect(response.status).toBe(200);
     expect(errors).toHaveLength(1);
   });
+
+  it("triggers destination sync for non-filter updates", async () => {
+    const destinationSyncCalls: string[] = [];
+
+    const response = await handlePatchSourceRoute(
+      {
+        body: { name: "Updated Name" },
+        params: { id: "source-1" },
+        userId: "user-1",
+      },
+      {
+        canUseEventFilters: () => Promise.resolve(true),
+        reportError: Boolean,
+        triggerDestinationSync: (userId) => {
+          destinationSyncCalls.push(userId);
+        },
+        updateSource: (_userId, _sourceId, updates) => Promise.resolve({
+          id: "source-1",
+          ...updates,
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(destinationSyncCalls).toEqual(["user-1"]);
+  });
+
+  it("keeps destination-only exclusion updates on destination sync", async () => {
+    const destinationSyncCalls: string[] = [];
+
+    const response = await handlePatchSourceRoute(
+      {
+        body: { excludeEventDescription: true },
+        params: { id: "source-1" },
+        userId: "user-1",
+      },
+      {
+        canUseEventFilters: () => Promise.resolve(true),
+        reportError: Boolean,
+        triggerDestinationSync: (userId) => {
+          destinationSyncCalls.push(userId);
+        },
+        updateSource: (_userId, _sourceId, updates) => Promise.resolve({
+          id: "source-1",
+          ...updates,
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(destinationSyncCalls).toEqual(["user-1"]);
+  });
 });

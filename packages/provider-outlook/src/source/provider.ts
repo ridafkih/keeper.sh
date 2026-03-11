@@ -122,6 +122,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
         id: eventStatesTable.id,
         endTime: eventStatesTable.endTime,
         isAllDay: eventStatesTable.isAllDay,
+        sourceEventType: eventStatesTable.sourceEventType,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
       })
@@ -157,6 +158,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
           isAllDay: event.isAllDay,
           location: event.location,
           recurrenceRule: stringifyIfPresent(event.recurrenceRule),
+          sourceEventType: event.sourceEventType ?? "default",
           sourceEventUid: event.uid,
           startTime: event.startTime,
           startTimeZone: event.startTimeZone,

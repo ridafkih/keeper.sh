@@ -12,12 +12,14 @@ const createExistingEvent = (
   endTime: new Date("2026-03-11T20:00:00.000Z"),
   id: "existing-id-1",
   sourceEventUid: "event-uid-1",
+  sourceEventType: "default",
   startTime: new Date("2026-03-11T19:00:00.000Z"),
   ...overrides,
 });
 
 const createIncomingEvent = (overrides: Partial<SourceEvent>): SourceEvent => ({
   endTime: new Date("2026-03-11T20:00:00.000Z"),
+  sourceEventType: "default",
   startTime: new Date("2026-03-11T19:00:00.000Z"),
   uid: "event-uid-1",
   ...overrides,
@@ -104,5 +106,28 @@ describe("source event diff", () => {
     });
 
     expect(idsToRemove).toEqual(["instance-1", "instance-2"]);
+  });
+
+  it("updates stored events when the source event type changes", () => {
+    const existingEvents = [
+      createExistingEvent({
+        id: "existing-focus",
+        sourceEventType: "default",
+        sourceEventUid: "typed-uid",
+      }),
+    ];
+
+    const incomingEvents = [
+      createIncomingEvent({
+        sourceEventType: "focusTime",
+        uid: "typed-uid",
+      }),
+    ];
+
+    const eventsToAdd = buildSourceEventsToAdd(existingEvents, incomingEvents);
+    const idsToRemove = buildSourceEventStateIdsToRemove(existingEvents, incomingEvents);
+
+    expect(eventsToAdd).toHaveLength(1);
+    expect(idsToRemove).toEqual(["existing-focus"]);
   });
 });

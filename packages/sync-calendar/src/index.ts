@@ -39,6 +39,7 @@ const toStoredEvent = (row: {
   availability: string | null;
   id: string;
   isAllDay: boolean | null;
+  sourceEventType: string | null;
   sourceEventUid: string;
   startTime: Date;
   endTime: Date;
@@ -126,6 +127,7 @@ const createSyncCalendarService = (database: BunSQLDatabase): SyncCalendarServic
         id: eventStatesTable.id,
         isAllDay: eventStatesTable.isAllDay,
         recurrenceRule: eventStatesTable.recurrenceRule,
+        sourceEventType: eventStatesTable.sourceEventType,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
         startTimeZone: eventStatesTable.startTimeZone,
@@ -166,6 +168,7 @@ const createSyncCalendarService = (database: BunSQLDatabase): SyncCalendarServic
       availability: event.availability,
       exceptionDates: stringifyIfPresent(event.exceptionDates),
       sourceEventUid: event.uid,
+      sourceEventType: "default",
       calendarId,
       isAllDay: event.isAllDay,
       recurrenceRule: stringifyIfPresent(event.recurrenceRule),
