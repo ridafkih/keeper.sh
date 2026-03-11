@@ -233,7 +233,7 @@ interface EventTypeFilters {
 
 const resolveGoogleAvailability = (
   event: Pick<GoogleCalendarEvent, "eventType" | "transparency">,
-): EventTimeSlot["availability"] | undefined => {
+): EventTimeSlot["availability"] => {
   if (event.eventType === "workingLocation") {
     return "workingElsewhere";
   }
@@ -246,7 +246,7 @@ const resolveGoogleAvailability = (
     return "oof";
   }
 
-  return null;
+  return "busy";
 };
 
 const resolveGoogleLocation = (
@@ -261,10 +261,7 @@ const resolveGoogleLocation = (
     return customLocationLabel;
   }
 
-  const officeLocationLabel = event.workingLocationProperties?.officeLocation?.label?.trim();
-  if (officeLocationLabel) {
-    return officeLocationLabel;
-  }
+  return event.workingLocationProperties?.officeLocation?.label?.trim();
 };
 
 const isAllDayGoogleEvent = (

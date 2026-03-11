@@ -237,4 +237,15 @@ describe("parseGoogleEvents", () => {
     expect(parsedEvents).toHaveLength(1);
     expect(parsedEvents[0]?.availability).toBe("free");
   });
+
+  it("defaults regular events to busy availability", () => {
+    const googleEvent = createGoogleEvent({
+      iCalUID: "external-uid-7",
+    });
+
+    const parsedEvents = parseGoogleEvents([googleEvent], createDefaultFilters());
+
+    expect(parsedEvents).toHaveLength(1);
+    expect(parsedEvents[0]?.availability).toBe("busy");
+  });
 });

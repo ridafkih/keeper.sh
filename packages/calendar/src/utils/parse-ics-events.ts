@@ -54,6 +54,8 @@ const getEventAvailability = (event: IcsEvent) => {
   if (event.timeTransparent === "OPAQUE") {
     return "busy";
   }
+
+  return null;
 };
 
 const parseIcsEvents = (calendar: IcsCalendar): EventTimeSlot[] => {
@@ -68,8 +70,10 @@ const parseIcsEvents = (calendar: IcsCalendar): EventTimeSlot[] => {
     }
 
     const startTime = event.start.date;
+    const availability = getEventAvailability(event);
+
     result.push({
-      availability: getEventAvailability(event),
+      ...availability && { availability },
       description: event.description,
       endTime: getEventEndTime(event, startTime),
       exceptionDates: event.exceptionDates,

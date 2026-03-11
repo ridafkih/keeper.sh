@@ -221,7 +221,7 @@ const fetchCalendarName = async (options: FetchCalendarNameOptions): Promise<str
   return parseCalendarName(responseBody);
 };
 
-const parseAvailability = (value: string | undefined): EventTimeSlot["availability"] => {
+const parseAvailability = (value: string | undefined): EventTimeSlot["availability"] | null => {
   if (value === "free") {
     return "free";
   }
@@ -237,6 +237,8 @@ const parseAvailability = (value: string | undefined): EventTimeSlot["availabili
   if (value === "busy" || value === "tentative") {
     return "busy";
   }
+
+  return null;
 };
 
 const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => {
@@ -266,8 +268,10 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
       timeZone: event.end.timeZone,
     };
 
+    const availability = parseAvailability(event.showAs);
+
     result.push({
-      availability: parseAvailability(event.showAs),
+      ...availability && { availability },
       description: event.body?.content,
       endTime: parseEventDateTime(end),
       isAllDay: event.isAllDay ?? false,
