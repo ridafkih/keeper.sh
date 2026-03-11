@@ -37,7 +37,7 @@ interface CreateOAuthSourceProviderOptions<
 > {
   database: BunSQLDatabase;
   oauthProvider: OAuthTokenProvider;
-  getAllSources: (database: BunSQLDatabase, oauthProvider: OAuthTokenProvider) => Promise<TAccount[]>;
+  getAllSources: (database: BunSQLDatabase) => Promise<TAccount[]>;
   createProviderInstance: (
     config: TConfig,
     oauthProvider: OAuthTokenProvider,
@@ -54,7 +54,7 @@ const createOAuthSourceProvider = <
   const { database, oauthProvider, getAllSources, createProviderInstance, buildConfig } = options;
 
   const syncAllSources = async (): Promise<SourceSyncResult> => {
-    const sources = await getAllSources(database, oauthProvider);
+    const sources = await getAllSources(database);
 
     if (sources.length === EMPTY_SOURCES_COUNT) {
       return { eventsAdded: INITIAL_ADDED_COUNT, eventsRemoved: INITIAL_REMOVED_COUNT };
