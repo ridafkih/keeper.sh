@@ -11,6 +11,8 @@ interface SourceOwner {
   userId: string;
 }
 
+const ICAL_CALENDAR_TYPE = "ical";
+
 interface SyncUserSourcesDependencies<TSource> {
   fetchAndSyncSourceForCalendar: (source: TSource) => Promise<void>;
   reportError?: (error: unknown, fields?: Record<string, unknown>) => void;
@@ -187,7 +189,7 @@ const createSyncJob = (plan: Plan, cron: string): CronOptions =>
       try {
         const { getSourcesByPlan, getUsersWithDestinationsByPlan } = await import("./get-sources");
         await runSyncJob(plan, {
-          getSourcesByPlan,
+          getSourcesByPlan: (planToSync) => getSourcesByPlan(planToSync, ICAL_CALENDAR_TYPE),
           getUsersWithDestinationsByPlan,
           reportError,
           setCronEventFields,

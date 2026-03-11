@@ -10,6 +10,8 @@ interface ProviderSyncResult {
   eventsAdded: number;
   eventsRemoved: number;
   errorCount: number;
+  errorMessages: string[];
+  errorDetails: Record<string, { count: number; messages: string[] }>;
 }
 
 interface OAuthSyncJobDependencies {
@@ -24,11 +26,50 @@ const publishProviderMetrics = (
   result: ProviderSyncResult,
   dependencies: OAuthSyncJobDependencies,
 ): void => {
-  dependencies.setCronEventFields({
+  const fields: Record<string, unknown> = {
     [`${provider}.error.count`]: result.errorCount,
     [`${provider}.events.added`]: result.eventsAdded,
     [`${provider}.events.removed`]: result.eventsRemoved,
-  });
+  };
+
+  if (result.errorMessages.length > 0) {
+    fields[`${provider}.error.messages`] = result.errorMessages;
+  }
+
+  for (const [errorType, details] of Object.entries(result.errorDetails)) {
+    fields[`${provider}.error.${errorType}.count`] = details.count;
+    if (details.messages.length > 0) {
+      fields[`${provider}.error.${errorType}.messages`] = details.messages;
+    }
+  }
+
+  dependencies.setCronEventFields(fields);
+};
+
+const summarizeProviderErrors = (
+  errors: Error[] | undefined,
+): Pick<ProviderSyncResult, "errorCount" | "errorMessages" | "errorDetails"> => {
+  const providerErrors = errors ?? [];
+  const errorDetails: Record<string, { count: number; messages: string[] }> = {};
+
+  for (const error of providerErrors) {
+    let errorType = "Error";
+
+    if (typeof error.constructor?.name === "string" && error.constructor.name.length > 0) {
+      errorType = error.constructor.name;
+    }
+
+    const existingDetails = errorDetails[errorType] ?? { count: 0, messages: [] };
+    existingDetails.count += 1;
+    existingDetails.messages.push(error.message);
+    errorDetails[errorType] = existingDetails;
+  }
+
+  return {
+    errorCount: providerErrors.length,
+    errorDetails,
+    errorMessages: providerErrors.map((error) => error.message),
+  };
 };
 
 const runOAuthSourceSyncJob = async (dependencies: OAuthSyncJobDependencies): Promise<void> => {
@@ -83,8 +124,10 @@ const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies>
 
     try {
       const result = await googleSourceProvider.syncAllSources();
+      const errorSummary = summarizeProviderErrors(result.errors);
+
       return {
-        errorCount: result.errors?.length ?? 0,
+        ...errorSummary,
         eventsAdded: result.eventsAdded,
         eventsRemoved: result.eventsRemoved,
       };
@@ -118,8 +161,10 @@ const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies>
 
     try {
       const result = await outlookSourceProvider.syncAllSources();
+      const errorSummary = summarizeProviderErrors(result.errors);
+
       return {
-        errorCount: result.errors?.length ?? 0,
+        ...errorSummary,
         eventsAdded: result.eventsAdded,
         eventsRemoved: result.eventsRemoved,
       };

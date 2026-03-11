@@ -11,11 +11,15 @@ describe("runOAuthSourceSyncJob", () => {
       },
       syncGoogleSources: () => Promise.resolve({
         errorCount: 1,
+        errorDetails: { Error: { count: 1, messages: ["calendar timeout"] } },
+        errorMessages: ["calendar timeout"],
         eventsAdded: 7,
         eventsRemoved: 2,
       }),
       syncOutlookSources: () => Promise.resolve({
         errorCount: 0,
+        errorDetails: {},
+        errorMessages: [],
         eventsAdded: 4,
         eventsRemoved: 3,
       }),
@@ -24,6 +28,9 @@ describe("runOAuthSourceSyncJob", () => {
     expect(cronEventFieldSets).toEqual([
       {
         "google.error.count": 1,
+        "google.error.messages": ["calendar timeout"],
+        "google.error.Error.count": 1,
+        "google.error.Error.messages": ["calendar timeout"],
         "google.events.added": 7,
         "google.events.removed": 2,
       },
@@ -49,6 +56,13 @@ describe("runOAuthSourceSyncJob", () => {
       syncGoogleSources: () => Promise.reject(new Error("google failed")),
       syncOutlookSources: () => Promise.resolve({
         errorCount: 2,
+        errorDetails: {
+          AuthError: {
+            count: 2,
+            messages: ["outlook source failed", "outlook source failed"],
+          },
+        },
+        errorMessages: ["outlook source failed", "outlook source failed"],
         eventsAdded: 1,
         eventsRemoved: 5,
       }),
@@ -58,6 +72,12 @@ describe("runOAuthSourceSyncJob", () => {
     expect(cronEventFieldSets).toEqual([
       {
         "outlook.error.count": 2,
+        "outlook.error.messages": ["outlook source failed", "outlook source failed"],
+        "outlook.error.AuthError.count": 2,
+        "outlook.error.AuthError.messages": [
+          "outlook source failed",
+          "outlook source failed",
+        ],
         "outlook.events.added": 1,
         "outlook.events.removed": 5,
       },
@@ -80,6 +100,8 @@ describe("runOAuthSourceSyncJob", () => {
       },
       syncOutlookSources: () => Promise.resolve({
         errorCount: 0,
+        errorDetails: {},
+        errorMessages: [],
         eventsAdded: 9,
         eventsRemoved: 4,
       }),
@@ -105,6 +127,8 @@ describe("runOAuthSourceSyncJob", () => {
       syncGoogleSources: () => Promise.resolve(null),
       syncOutlookSources: () => Promise.resolve({
         errorCount: 0,
+        errorDetails: {},
+        errorMessages: [],
         eventsAdded: 2,
         eventsRemoved: 2,
       }),
@@ -132,5 +156,31 @@ describe("runOAuthSourceSyncJob", () => {
     });
 
     expect(errors).toHaveLength(2);
+  });
+
+  it("omits provider error detail fields when there are no embedded provider errors", async () => {
+    const cronEventFieldSets: Record<string, unknown>[] = [];
+
+    await runOAuthSourceSyncJob({
+      setCronEventFields: (fields) => {
+        cronEventFieldSets.push(fields);
+      },
+      syncGoogleSources: () => Promise.resolve({
+        errorCount: 0,
+        errorDetails: {},
+        errorMessages: [],
+        eventsAdded: 3,
+        eventsRemoved: 1,
+      }),
+      syncOutlookSources: () => Promise.resolve(null),
+    });
+
+    expect(cronEventFieldSets).toEqual([
+      {
+        "google.error.count": 0,
+        "google.events.added": 3,
+        "google.events.removed": 1,
+      },
+    ]);
   });
 });
