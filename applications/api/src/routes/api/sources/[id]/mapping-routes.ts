@@ -15,7 +15,7 @@ interface MappingPutRouteContext extends MappingRouteContext {
 
 interface GetSourceDestinationsDependencies {
   sourceExists: (userId: string, sourceCalendarId: string) => Promise<boolean>;
-  getDestinationsForSource: (sourceCalendarId: string) => Promise<string[]>;
+  getDestinationsForSource: (userId: string, sourceCalendarId: string) => Promise<string[]>;
 }
 
 interface PutSourceDestinationsDependencies {
@@ -28,7 +28,7 @@ interface PutSourceDestinationsDependencies {
 
 interface GetSourcesForDestinationDependencies {
   destinationExists: (userId: string, destinationCalendarId: string) => Promise<boolean>;
-  getSourcesForDestination: (destinationCalendarId: string) => Promise<string[]>;
+  getSourcesForDestination: (userId: string, destinationCalendarId: string) => Promise<string[]>;
 }
 
 interface PutSourcesForDestinationDependencies {
@@ -87,7 +87,7 @@ const handleGetSourceDestinationsRoute = async (
     return ErrorResponse.notFound().toResponse();
   }
 
-  const destinationIds = await dependencies.getDestinationsForSource(resolved.id);
+  const destinationIds = await dependencies.getDestinationsForSource(context.userId, resolved.id);
   return Response.json({ destinationIds });
 };
 
@@ -139,7 +139,7 @@ const handleGetSourcesForDestinationRoute = async (
     return ErrorResponse.notFound().toResponse();
   }
 
-  const sourceIds = await dependencies.getSourcesForDestination(resolved.id);
+  const sourceIds = await dependencies.getSourcesForDestination(context.userId, resolved.id);
   return Response.json({ sourceIds });
 };
 

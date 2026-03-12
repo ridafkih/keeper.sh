@@ -45,7 +45,7 @@ const GET = withWideEvent(async ({ request, params }) => {
       throw new OAuthError("Missing code or state", errorUrl);
     }
 
-    const validatedState = validateState(state);
+    const validatedState = await validateState(state);
     if (!validatedState) {
       throw new OAuthError("Invalid or expired state", errorUrl);
     }

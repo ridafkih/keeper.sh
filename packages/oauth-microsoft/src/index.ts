@@ -29,7 +29,7 @@ interface AuthorizationUrlOptions {
 }
 
 interface MicrosoftOAuthService {
-  getAuthorizationUrl: (userId: string, options: AuthorizationUrlOptions) => string;
+  getAuthorizationUrl: (userId: string, options: AuthorizationUrlOptions) => Promise<string>;
   exchangeCodeForTokens: (code: string, callbackUrl: string) => Promise<MicrosoftTokenResponse>;
   refreshAccessToken: (refreshToken: string) => Promise<MicrosoftTokenResponse>;
 }
@@ -39,8 +39,8 @@ const createMicrosoftOAuthService = (
 ): MicrosoftOAuthService => {
   const { clientId, clientSecret } = credentials;
 
-  const getAuthorizationUrl = (userId: string, options: AuthorizationUrlOptions): string => {
-    const state = generateState(userId, {
+  const getAuthorizationUrl = async (userId: string, options: AuthorizationUrlOptions): Promise<string> => {
+    const state = await generateState(userId, {
       destinationId: options.destinationId,
       sourceCredentialId: options.sourceCredentialId,
     });

@@ -9,7 +9,9 @@ import {
   createOAuthProviders,
   buildOAuthConfigs,
   createSyncAggregateRuntime,
+  configureRefreshLockStore,
 } from "@keeper.sh/provider-core";
+import type { RefreshLockStore } from "@keeper.sh/provider-core";
 import { createDestinationProviders } from "@keeper.sh/provider-registry/server";
 import type { DestinationSyncResult, SyncCoordinator } from "@keeper.sh/provider-core";
 import { Polar } from "@polar-sh/sdk";
@@ -57,8 +59,20 @@ interface SyncContext {
   close: () => void;
 }
 
+const createRedisRefreshLockStore = (redisClient: RedisClient): RefreshLockStore => ({
+  async tryAcquire(key, ttlSeconds) {
+    const result = await redisClient.send("SET", [key, "1", "EX", String(ttlSeconds), "NX"]);
+    return result !== null;
+  },
+  async release(key) {
+    await redisClient.del(key);
+  },
+});
+
 const createSyncContext = (): SyncContext => {
   const redis = new RedisClient(env.REDIS_URL);
+
+  configureRefreshLockStore(createRedisRefreshLockStore(redis));
   const broadcastService = createBroadcastService({ redis });
 
   const syncAggregateRuntime = createSyncAggregateRuntime({

@@ -1,6 +1,8 @@
 import { MS_PER_MINUTE } from "@keeper.sh/constants";
 
 const STATE_EXPIRY_MINUTES = 10;
+const STATE_PREFIX = "oauth:state:";
+const MS_PER_SECOND = 1000;
 
 interface PendingState {
   userId: string;
@@ -15,32 +17,73 @@ interface ValidatedState {
   sourceCredentialId: string | null;
 }
 
-const pendingStates = new Map<string, PendingState>();
-
 interface GenerateStateOptions {
   destinationId?: string;
   sourceCredentialId?: string;
 }
 
-const generateState = (userId: string, options?: GenerateStateOptions): string => {
+interface OAuthStateStore {
+  set(key: string, value: string, ttlSeconds: number): Promise<void>;
+  consume(key: string): Promise<string | null>;
+}
+
+const createInMemoryStateStore = (): OAuthStateStore => {
+  const pendingStates = new Map<string, { value: string; expiresAt: number }>();
+
+  return {
+    async set(key, value, ttlSeconds) {
+      pendingStates.set(key, {
+        expiresAt: Date.now() + ttlSeconds * MS_PER_SECOND,
+        value,
+      });
+    },
+    async consume(key) {
+      const entry = pendingStates.get(key);
+      if (!entry) {
+        return null;
+      }
+
+      pendingStates.delete(key);
+
+      if (Date.now() > entry.expiresAt) {
+        return null;
+      }
+
+      return entry.value;
+    },
+  };
+};
+
+let stateStore: OAuthStateStore = createInMemoryStateStore();
+
+const configureStateStore = (store: OAuthStateStore): void => {
+  stateStore = store;
+};
+
+const getStateKey = (state: string): string => `${STATE_PREFIX}${state}`;
+
+const STATE_EXPIRY_SECONDS = STATE_EXPIRY_MINUTES * MS_PER_MINUTE / MS_PER_SECOND;
+
+const generateState = async (userId: string, options?: GenerateStateOptions): Promise<string> => {
   const state = crypto.randomUUID();
-  const expiresAt = Date.now() + STATE_EXPIRY_MINUTES * MS_PER_MINUTE;
-  pendingStates.set(state, {
+  const pendingState: PendingState = {
     destinationId: options?.destinationId ?? null,
-    expiresAt,
+    expiresAt: Date.now() + STATE_EXPIRY_MINUTES * MS_PER_MINUTE,
     sourceCredentialId: options?.sourceCredentialId ?? null,
     userId,
-  });
+  };
+
+  await stateStore.set(getStateKey(state), JSON.stringify(pendingState), STATE_EXPIRY_SECONDS);
   return state;
 };
 
-const validateState = (state: string): ValidatedState | null => {
-  const entry = pendingStates.get(state);
-  if (!entry) {
+const validateState = async (state: string): Promise<ValidatedState | null> => {
+  const raw = await stateStore.consume(getStateKey(state));
+  if (!raw) {
     return null;
   }
 
-  pendingStates.delete(state);
+  const entry: PendingState = JSON.parse(raw);
 
   if (Date.now() > entry.expiresAt) {
     return null;
@@ -53,5 +96,5 @@ const validateState = (state: string): ValidatedState | null => {
   };
 };
 
-export { generateState, validateState };
-export type { ValidatedState, GenerateStateOptions };
+export { generateState, validateState, configureStateStore, createInMemoryStateStore };
+export type { ValidatedState, GenerateStateOptions, OAuthStateStore };

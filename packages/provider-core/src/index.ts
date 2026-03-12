@@ -1,6 +1,7 @@
 export { CalendarProvider } from "./sync/provider";
 export {
   createOAuthProviders,
+  configureStateStore,
   type ValidatedState,
   type AuthorizationUrlOptions,
   type NormalizedUserInfo,
@@ -8,6 +9,7 @@ export {
   type OAuthProvider,
   type OAuthProvidersConfig,
   type OAuthProviders,
+  type OAuthStateStore,
 } from "./oauth/providers";
 export {
   buildOAuthConfigs,
@@ -21,6 +23,10 @@ export {
   type OAuthTokenProvider,
   type AuthErrorResult,
 } from "./oauth/provider";
+export {
+  configureRefreshLockStore,
+  type RefreshLockStore,
+} from "./oauth/refresh-coordinator";
 export {
   createOAuthDestinationProvider,
   type CreateOAuthProviderOptions,

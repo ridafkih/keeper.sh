@@ -1,7 +1,7 @@
 import { googleTokenResponseSchema, googleUserInfoSchema } from "@keeper.sh/data-schemas";
 import type { GoogleTokenResponse, GoogleUserInfo } from "@keeper.sh/data-schemas";
-import { generateState, validateState } from "@keeper.sh/oauth";
-import type { ValidatedState } from "@keeper.sh/oauth";
+import { generateState, validateState, configureStateStore } from "@keeper.sh/oauth";
+import type { ValidatedState, OAuthStateStore } from "@keeper.sh/oauth";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -30,7 +30,7 @@ interface AuthorizationUrlOptions {
 }
 
 interface GoogleOAuthService {
-  getAuthorizationUrl: (userId: string, options: AuthorizationUrlOptions) => string;
+  getAuthorizationUrl: (userId: string, options: AuthorizationUrlOptions) => Promise<string>;
   exchangeCodeForTokens: (code: string, callbackUrl: string) => Promise<GoogleTokenResponse>;
   refreshAccessToken: (refreshToken: string) => Promise<GoogleTokenResponse>;
 }
@@ -112,8 +112,8 @@ const getRefreshErrorCode = (
 const createGoogleOAuthService = (credentials: GoogleOAuthCredentials): GoogleOAuthService => {
   const { clientId, clientSecret } = credentials;
 
-  const getAuthorizationUrl = (userId: string, options: AuthorizationUrlOptions): string => {
-    const state = generateState(userId, {
+  const getAuthorizationUrl = async (userId: string, options: AuthorizationUrlOptions): Promise<string> => {
+    const state = await generateState(userId, {
       destinationId: options.destinationId,
       sourceCredentialId: options.sourceCredentialId,
     });
@@ -276,6 +276,7 @@ const hasRequiredScopes = (grantedScopes: string): boolean => {
 export {
   generateState,
   validateState,
+  configureStateStore,
   GOOGLE_CALENDAR_SCOPE,
   GOOGLE_CALENDAR_LIST_SCOPE,
   GOOGLE_EMAIL_SCOPE,
@@ -285,6 +286,7 @@ export {
 };
 export type {
   ValidatedState,
+  OAuthStateStore,
   GoogleOAuthCredentials,
   AuthorizationUrlOptions,
   GoogleOAuthService,
