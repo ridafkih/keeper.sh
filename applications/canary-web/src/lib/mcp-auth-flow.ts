@@ -1,17 +1,20 @@
+import { type } from "arktype";
+
 type SearchParams = Record<string, unknown>;
 type StringSearchParams = Record<string, string>;
 
 const DEFAULT_POST_AUTH_PATH = "/dashboard";
 
-const MCP_AUTH_REQUIRED_KEYS = [
-  "client_id",
-  "code_challenge",
-  "code_challenge_method",
-  "redirect_uri",
-  "response_type",
-  "scope",
-  "state",
-] as const;
+const mcpAuthorizationSearchSchema = type({
+  client_id: "string > 0",
+  code_challenge: "string > 0",
+  code_challenge_method: "string > 0",
+  redirect_uri: "string > 0",
+  response_type: "string > 0",
+  scope: "string > 0",
+  state: "string > 0",
+  "+": "delete",
+});
 
 const resolvePathWithSearch = (
   pathname: string,
@@ -26,6 +29,8 @@ const resolvePathWithSearch = (
   return `${url.pathname}${url.search}`;
 };
 
+// SearchParams values may be non-string (e.g. from route search parsing),
+// so we filter to only string entries before forwarding as query params.
 const toStringSearchParams = (search: SearchParams): StringSearchParams =>
   Object.fromEntries(
     Object.entries(search).filter(
@@ -33,27 +38,20 @@ const toStringSearchParams = (search: SearchParams): StringSearchParams =>
     ),
   );
 
-const isNonEmptyString = (value: unknown): value is string =>
-  typeof value === "string" && value.length > 0;
-
 const getMcpAuthorizationSearch = (
   search: SearchParams,
 ): StringSearchParams | null => {
   const stringParams = toStringSearchParams(search);
+  const result = mcpAuthorizationSearchSchema(stringParams);
 
-  const hasAllRequiredKeys = MCP_AUTH_REQUIRED_KEYS.every(
-    (key) => isNonEmptyString(stringParams[key]),
-  );
-
-  if (!hasAllRequiredKeys) {
+  if (result instanceof type.errors) {
     return null;
   }
 
+  // Return the full string params (including optional OAuth keys like
+  // prompt, resource) rather than just the validated required subset.
   return stringParams;
 };
-
-const isMcpAuthorizationContinuation = (search: SearchParams): boolean =>
-  getMcpAuthorizationSearch(search) !== null;
 
 const resolveClientApiOrigin = (): string => {
   const configuredApiOrigin = import.meta.env.VITE_API_URL;
@@ -111,7 +109,6 @@ const resolveClientPostAuthRedirect = (
 
 export {
   getMcpAuthorizationSearch,
-  isMcpAuthorizationContinuation,
   resolvePathWithSearch,
   resolveClientPostAuthRedirect,
   resolvePostAuthRedirect,

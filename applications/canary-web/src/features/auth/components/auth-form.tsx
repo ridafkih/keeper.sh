@@ -319,12 +319,13 @@ function CredentialForm({
     setStatus("loading");
     const redirectTarget = resolveClientPostAuthRedirect(authorizationSearch);
 
+    const authActions: Record<string, () => Promise<void>> = {
+      signIn: () => signInWithCredential(credential, password, capabilities),
+      signUp: () => signUpWithCredential(credential, password, capabilities, redirectTarget),
+    };
+
     try {
-      if (action === "signIn") {
-        await signInWithCredential(credential, password, capabilities);
-      } else {
-        await signUpWithCredential(credential, password, capabilities, redirectTarget);
-      }
+      await authActions[action]();
     } catch (error) {
       setStatus("idle");
       setError({

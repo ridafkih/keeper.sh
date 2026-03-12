@@ -1,31 +1,30 @@
 import { describe, expect, it } from "bun:test";
 import {
   getMcpAuthorizationSearch,
-  isMcpAuthorizationContinuation,
   resolvePostAuthRedirect,
 } from "./mcp-auth-flow";
 
-describe("isMcpAuthorizationContinuation", () => {
+describe("getMcpAuthorizationSearch", () => {
   it("recognizes MCP authorization search params copied from Better Auth", () => {
-    expect(
-      isMcpAuthorizationContinuation({
-        client_id: "keeper-client",
-        code_challenge: "challenge",
-        code_challenge_method: "S256",
-        redirect_uri: "https://claude.ai/callback",
-        response_type: "code",
-        scope: "openid profile email offline_access keeper.read",
-        state: "opaque-state",
-      }),
-    ).toBe(true);
+    const result = getMcpAuthorizationSearch({
+      client_id: "keeper-client",
+      code_challenge: "challenge",
+      code_challenge_method: "S256",
+      redirect_uri: "https://claude.ai/callback",
+      response_type: "code",
+      scope: "openid profile email offline_access keeper.read",
+      state: "opaque-state",
+    });
+
+    expect(result).not.toBeNull();
   });
 
-  it("ignores regular login query params", () => {
+  it("returns null for regular login query params", () => {
     expect(
-      isMcpAuthorizationContinuation({
+      getMcpAuthorizationSearch({
         next: "/dashboard",
       }),
-    ).toBe(false);
+    ).toBeNull();
   });
 });
 

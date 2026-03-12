@@ -27,9 +27,17 @@ const SCOPE_LABELS: Record<string, string> = {
   "offline_access": "Stay connected when you're away",
 };
 
-const resolveScopeLabel = (scope: string): string =>
-  SCOPE_LABELS[scope] ?? scope;
+const resolveScopeLabel = (scope: string): string => {
+  const label = SCOPE_LABELS[scope];
+  if (label) {
+    return label;
+  }
+  return scope;
+};
 
+// This route lives under (oauth)/mcp rather than (oauth)/auth/mcp because
+// the (oauth)/auth layout redirects logged-in users away, but the consent
+// page requires an active session.
 export const Route = createFileRoute("/(oauth)/mcp/consent")({
   beforeLoad: ({ search }) => {
     if (!getMcpAuthorizationSearch(search)) {
@@ -39,6 +47,29 @@ export const Route = createFileRoute("/(oauth)/mcp/consent")({
   component: McpConsentPage,
   validateSearch: (search: Record<string, unknown>): SearchParams => toStringSearchParams(search),
 });
+
+function extractConsentErrorMessage(payload: unknown): string {
+  if (typeof payload !== "object" || payload === null) {
+    return "Failed to complete consent";
+  }
+  if (!("message" in payload)) {
+    return "Failed to complete consent";
+  }
+  if (typeof payload.message !== "string") {
+    return "Failed to complete consent";
+  }
+  return payload.message;
+}
+
+function extractConsentRedirectUrl(payload: unknown): string {
+  if (typeof payload !== "object" || payload === null) {
+    throw new TypeError("Expected consent response to contain a redirect URL");
+  }
+  if (!("url" in payload) || typeof payload.url !== "string") {
+    throw new TypeError("Expected consent response to contain a redirect URL");
+  }
+  return payload.url;
+}
 
 function McpConsentPage() {
   const search = Route.useSearch();
@@ -52,10 +83,9 @@ function McpConsentPage() {
 
   const { client_id: clientId, scope } = authorizationSearch;
   const scopes = scope
-    ?.split(" ")
+    .split(" ")
     .filter((value) => value.length > 0)
-    .map(resolveScopeLabel)
-    ?? [];
+    .map(resolveScopeLabel);
 
   const handleDecision = async (accept: boolean) => {
     setStatus("loading");
@@ -78,18 +108,11 @@ function McpConsentPage() {
 
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
-        throw new Error(
-          typeof payload === "object"
-          && payload !== null
-          && "message" in payload
-          && typeof payload.message === "string"
-            ? payload.message
-            : "Failed to complete consent",
-        );
+        throw new Error(extractConsentErrorMessage(payload));
       }
 
-      const payload = await response.json() as { url: string };
-      window.location.assign(payload.url);
+      const payload = await response.json();
+      window.location.assign(extractConsentRedirectUrl(payload));
     } catch (requestError) {
       setError(resolveErrorMessage(requestError, "Failed to complete consent"));
       setStatus("idle");
