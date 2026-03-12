@@ -1,6 +1,7 @@
 import { KEEPER_API_READ_SCOPE } from "@keeper.sh/auth";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { reportError, runWideEvent, setLogFields } from "./utils/logging";
 import type { KeeperMcpToolDefinition, KeeperMcpToolset } from "./toolset";
 
 const JSON_RPC_VERSION = "2.0";
@@ -87,8 +88,25 @@ const registerToolset = (
         title: tool.title,
       },
       async (input: Record<string, unknown>) => {
-        const result = await tool.execute({ userId }, input);
-        return createToolResponse(result);
+        return runWideEvent(
+          {
+            "operation.name": `mcp:tool:${name}`,
+            "operation.type": "mcp",
+            "mcp.tool": name,
+            "user.id": userId,
+          },
+          async () => {
+            try {
+              const result = await tool.execute({ userId }, input);
+              setLogFields({ outcome: "success" });
+              return createToolResponse(result);
+            } catch (error) {
+              setLogFields({ outcome: "error" });
+              reportError(error);
+              throw error;
+            }
+          },
+        );
       },
     );
   }

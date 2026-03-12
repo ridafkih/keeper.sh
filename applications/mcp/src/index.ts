@@ -2,6 +2,7 @@ import { entry } from "entrykit";
 import { join } from "node:path";
 import { tryLoadMcpEnv } from "@keeper.sh/env/mcp";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
+import { emitWideEvent, reportError, shutdownLogging } from "./utils/logging";
 
 const env = tryLoadMcpEnv();
 
@@ -38,50 +39,71 @@ const router = new Bun.FileSystemRouter({
 });
 
 await entry({
-  main: () => {
-    const server = Bun.serve({
-      port: env.MCP_PORT,
-      fetch: async (request) => {
-        if (request.method === "OPTIONS") {
-          return withCorsHeaders(new Response(null, { status: 204 }));
-        }
+  main: async () => {
+    try {
+      const server = Bun.serve({
+        port: env.MCP_PORT,
+        fetch: async (request) => {
+          if (request.method === "OPTIONS") {
+            return withCorsHeaders(new Response(null, { status: 204 }));
+          }
 
-        const match = router.match(request);
+          const match = router.match(request);
 
-        if (!match) {
-          return withCorsHeaders(new Response("Not found", { status: HTTP_NOT_FOUND }));
-        }
+          if (!match) {
+            return withCorsHeaders(new Response("Not found", { status: HTTP_NOT_FOUND }));
+          }
 
-        const module: unknown = await import(match.filePath);
+          const module: unknown = await import(match.filePath);
 
-        if (!isRouteModule(module)) {
-          return withCorsHeaders(
-            new Response("Internal server error", { status: HTTP_INTERNAL_SERVER_ERROR }),
-          );
-        }
+          if (!isRouteModule(module)) {
+            return withCorsHeaders(
+              new Response("Internal server error", { status: HTTP_INTERNAL_SERVER_ERROR }),
+            );
+          }
 
-        if (!isHttpMethod(request.method)) {
-          return withCorsHeaders(
-            new Response("Method not allowed", { status: HTTP_METHOD_NOT_ALLOWED }),
-          );
-        }
+          if (!isHttpMethod(request.method)) {
+            return withCorsHeaders(
+              new Response("Method not allowed", { status: HTTP_METHOD_NOT_ALLOWED }),
+            );
+          }
 
-        const handler = module[request.method];
+          const handler = module[request.method];
 
-        if (!handler) {
-          return withCorsHeaders(
-            new Response("Method not allowed", { status: HTTP_METHOD_NOT_ALLOWED }),
-          );
-        }
+          if (!handler) {
+            return withCorsHeaders(
+              new Response("Method not allowed", { status: HTTP_METHOD_NOT_ALLOWED }),
+            );
+          }
 
-        const response = await handler(request);
-        return withCorsHeaders(response);
-      },
-    });
+          const response = await handler(request);
+          return withCorsHeaders(response);
+        },
+      });
 
-    return () => {
-      server.stop();
-    };
+      await emitWideEvent({
+        "operation.name": "mcp:start",
+        "operation.type": "lifecycle",
+        "service.name": "mcp",
+        port: env.MCP_PORT,
+      });
+
+      return () => {
+        server.stop();
+        shutdownLogging().catch((error) => {
+          reportError(error, {
+            "operation.name": "mcp:shutdown",
+            "operation.type": "lifecycle",
+          });
+        });
+      };
+    } catch (error) {
+      reportError(error, {
+        "operation.name": "mcp:start",
+        "operation.type": "lifecycle",
+      });
+      throw error;
+    }
   },
   name: "mcp",
 });

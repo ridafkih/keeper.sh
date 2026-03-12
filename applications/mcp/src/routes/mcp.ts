@@ -1,7 +1,9 @@
-import { handleMcpRequest } from "../context";
+import { handleMcpRequest, withWideEvent } from "../context";
 
-const GET = (request: Request) => handleMcpRequest(request);
-const POST = (request: Request) => handleMcpRequest(request);
-const DELETE = (request: Request) => handleMcpRequest(request);
+const wrappedHandler = withWideEvent((request: Request) => handleMcpRequest(request));
+
+const GET = (request: Request) => wrappedHandler(request);
+const POST = (request: Request) => wrappedHandler(request);
+const DELETE = (request: Request) => wrappedHandler(request);
 
 export { DELETE, GET, POST };

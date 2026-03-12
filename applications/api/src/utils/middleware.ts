@@ -1,4 +1,5 @@
 import type { MaybePromise } from "bun";
+import { isKeeperMcpEnabledAuth } from "@keeper.sh/auth";
 import { ErrorResponse } from "./responses";
 import { calendarsTable, sourceDestinationMappingsTable } from "@keeper.sh/database/schema";
 import { user as userTable } from "@keeper.sh/database/auth-schema";
@@ -189,5 +190,35 @@ const withAuth =
     return handler({ params, request, userId: session.user.id });
   };
 
-export { withAuth, withWideEvent };
+const withV1Auth =
+  (handler: AuthenticatedRouteCallback): RouteCallback =>
+  async ({ request, params }) => {
+    startTiming("auth");
+
+    const authHeader = request.headers.get("authorization");
+
+    if (authHeader?.startsWith("Bearer ") && isKeeperMcpEnabledAuth(auth)) {
+      const mcpSession = await auth.api.getMcpSession({ headers: request.headers });
+      endTiming("auth");
+
+      if (!mcpSession?.userId) {
+        return ErrorResponse.unauthorized().toResponse();
+      }
+
+      await enrichWithUserContext(mcpSession.userId);
+      return handler({ params, request, userId: mcpSession.userId });
+    }
+
+    const session = await getSession(request);
+    endTiming("auth");
+
+    if (!session?.user?.id) {
+      return ErrorResponse.unauthorized().toResponse();
+    }
+
+    await enrichWithUserContext(session.user.id);
+    return handler({ params, request, userId: session.user.id });
+  };
+
+export { withAuth, withV1Auth, withWideEvent };
 export type { RouteHandler };

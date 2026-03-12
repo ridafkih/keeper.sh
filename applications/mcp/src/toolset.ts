@@ -16,9 +16,16 @@ interface KeeperMcpToolDefinition<TResult> {
   execute: (context: KeeperToolContext, input?: Record<string, unknown>) => Promise<TResult>;
 }
 
+interface KeeperCalendar {
+  id: string;
+  name: string;
+  provider: string;
+  account: string;
+}
+
 interface KeeperMcpToolset {
-  list_calendars: KeeperMcpToolDefinition<KeeperSource[]>;
-  get_event_count: KeeperMcpToolDefinition<number>;
+  list_calendars: KeeperMcpToolDefinition<KeeperCalendar[]>;
+  get_event_count: KeeperMcpToolDefinition<{ count: number }>;
   get_events: KeeperMcpToolDefinition<KeeperEvent[]>;
 }
 
@@ -27,44 +34,49 @@ const eventRangeSchema = {
   to: z.string().datetime(),
 } satisfies Record<string, z.ZodTypeAny>;
 
-const isEventRangeInput = (input: Record<string, unknown>): input is Record<string, unknown> & { from: string; to: string } => {
-  if (typeof input.from !== "string") {
-    return false;
-  }
-  if (typeof input.to !== "string") {
-    return false;
-  }
-  return true;
-};
+const isEventRangeInput = (
+  input: Record<string, unknown>,
+): input is Record<string, unknown> & { from: string; to: string } =>
+  typeof input.from === "string" && typeof input.to === "string";
+
+const toCalendar = (source: KeeperSource): KeeperCalendar => ({
+  id: source.id,
+  name: source.name,
+  provider: source.providerName,
+  account: source.accountLabel,
+});
 
 const createKeeperMcpToolset = (readModels: KeeperApi): KeeperMcpToolset => ({
   list_calendars: {
     title: "List calendars",
-    description: "List all calendars connected to your Keeper account, including provider and account details.",
-    execute: ({ userId }) => readModels.listSources(userId),
+    description:
+      "List all calendars the user has connected to Keeper, including provider name and account.",
+    execute: async ({ userId }) => {
+      const sources = await readModels.listSources(userId);
+      return sources.map(toCalendar);
+    },
   },
   get_event_count: {
     title: "Get event count",
-    description: "Get the total number of synced calendar events available in your Keeper account.",
-    execute: ({ userId }) => readModels.getEventCount(userId),
+    description: "Get the total number of calendar events synced to Keeper.",
+    execute: async ({ userId }) => {
+      const count = await readModels.getEventCount(userId);
+      return { count };
+    },
   },
   get_events: {
     title: "Get events",
-    description: "List synced calendar events within an ISO 8601 datetime range (e.g. 2025-01-01T00:00:00Z to 2025-01-02T00:00:00Z).",
+    description:
+      "Get calendar events within a date range. Provide ISO 8601 datetimes for 'from' and 'to' (e.g. 2025-06-01T00:00:00Z).",
     inputSchema: eventRangeSchema,
     execute: ({ userId }, input) => {
       if (!input || !isEventRangeInput(input)) {
-        throw new Error("Event range with 'from' and 'to' ISO datetime strings is required");
+        throw new Error("'from' and 'to' ISO datetime strings are required");
       }
-
       return readModels.getEventsInRange(userId, input);
     },
   },
 });
 
 export { createKeeperMcpToolset };
-export type {
-  KeeperMcpToolDefinition,
-  KeeperMcpToolset,
-  KeeperToolContext,
-};
+export type { KeeperCalendar, KeeperMcpToolDefinition, KeeperMcpToolset, KeeperToolContext };

@@ -1,0 +1,19 @@
+import { normalizeDateRange, parseDateRangeParams } from "@keeper.sh/date-utils";
+import { createKeeperApi } from "@keeper.sh/keeper-api";
+import { withV1Auth, withWideEvent } from "../../../utils/middleware";
+import { database } from "../../../context";
+
+const keeperApi = createKeeperApi(database);
+
+export const GET = withWideEvent(
+  withV1Auth(async ({ request, userId }) => {
+    const url = new URL(request.url);
+    const { from, to } = parseDateRangeParams(url);
+    const { end, start } = normalizeDateRange(from, to);
+    const events = await keeperApi.getEventsInRange(userId, {
+      from: start,
+      to: end,
+    });
+    return Response.json(events);
+  }),
+);

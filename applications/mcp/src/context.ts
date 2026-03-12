@@ -4,6 +4,7 @@ import env from "@keeper.sh/env/mcp";
 import { createKeeperApi } from "@keeper.sh/keeper-api";
 import { createKeeperMcpHandler } from "./mcp-handler";
 import { createKeeperMcpToolset } from "./toolset";
+import { withWideEvent } from "./utils/middleware";
 
 const database = createDatabase(env.DATABASE_URL);
 
@@ -28,4 +29,4 @@ const handleMcpRequest = createKeeperMcpHandler({
   toolset: keeperMcpToolset,
 });
 
-export { auth, database, env, handleMcpRequest, keeperApi, keeperMcpToolset };
+export { auth, database, env, handleMcpRequest, keeperApi, keeperMcpToolset, withWideEvent };
