@@ -69,8 +69,7 @@ const createOAuthSourceProvider = <
       return { eventsAdded: INITIAL_ADDED_COUNT, eventsRemoved: INITIAL_REMOVED_COUNT };
     }
 
-    const tasks = sources.map((source) => {
-      return async (): Promise<SourceSyncResult> => {
+    const tasks = sources.map((source) => async (): Promise<SourceSyncResult> => {
         const config = buildConfig(database, source);
         config.refreshLockStore = refreshLockStore ?? null;
         const provider = createProviderInstance(config, oauthProvider);
@@ -83,8 +82,7 @@ const createOAuthSourceProvider = <
             }, SOURCE_SYNC_TIMEOUT_MS);
           }),
         ]);
-      };
-    });
+      });
 
     const results = await allSettledWithConcurrency(tasks, {
       concurrency: SOURCE_SYNC_CONCURRENCY,

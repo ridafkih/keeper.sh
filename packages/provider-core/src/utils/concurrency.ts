@@ -29,8 +29,8 @@ const allSettledWithConcurrency = async <TResult>(
       try {
         const value = await task();
         results[index] = { status: "fulfilled", value };
-      } catch (reason) {
-        results[index] = { status: "rejected", reason };
+      } catch (error) {
+        results[index] = { status: "rejected", reason: error };
       }
     }
   };
