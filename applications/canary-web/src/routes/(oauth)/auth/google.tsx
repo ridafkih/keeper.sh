@@ -24,7 +24,7 @@ function GoogleAuthPage() {
   return (
     <AuthOAuthPreamble
       provider="google"
-      continuationSearch={getMcpAuthorizationSearch(search) ?? undefined}
+      authorizationSearch={getMcpAuthorizationSearch(search) ?? undefined}
     />
   );
 }

@@ -20,19 +20,49 @@ const toNonEmptyValue = (value: string | null | undefined): string | null => {
   return null;
 };
 
-const getProviderName = (providerId: string): string =>
-  toNonEmptyValue(getProvider(providerId)?.name) ?? providerId;
+const resolveProvider = (providerId: string) => {
+  const provider = getProvider(providerId);
+  if (!provider) {
+    throw new Error(`Unknown provider: ${providerId}`);
+  }
+  return provider;
+};
 
-const getProviderIcon = (providerId: string): string | null =>
-  toNonEmptyValue(getProvider(providerId)?.icon);
+const getProviderName = (providerId: string): string => {
+  const provider = resolveProvider(providerId);
+  const name = toNonEmptyValue(provider.name);
+  if (!name) {
+    throw new Error(`Provider "${providerId}" has no name configured`);
+  }
+  return name;
+};
 
-const getAccountIdentifier = (input: AccountDisplayInput): string | null =>
-  toNonEmptyValue(input.email)
-  ?? toNonEmptyValue(input.accountIdentifier)
-  ?? toNonEmptyValue(input.displayName);
+const getProviderIcon = (providerId: string): string | null => {
+  const provider = resolveProvider(providerId);
+  return toNonEmptyValue(provider.icon);
+};
+
+const getAccountIdentifier = (input: AccountDisplayInput): string => {
+  const email = toNonEmptyValue(input.email);
+  if (email) {
+    return email;
+  }
+
+  const accountId = toNonEmptyValue(input.accountIdentifier);
+  if (accountId) {
+    return accountId;
+  }
+
+  const displayName = toNonEmptyValue(input.displayName);
+  if (displayName) {
+    return displayName;
+  }
+
+  throw new Error(`No identifier found for account with provider "${input.provider}"`);
+};
 
 const getAccountLabel = (input: AccountDisplayInput): string =>
-  getAccountIdentifier(input) ?? getProviderName(input.provider);
+  getAccountIdentifier(input);
 
 const withProviderMetadata = <DisplayValue extends { provider: string }>(
   value: DisplayValue,
@@ -49,7 +79,7 @@ const withAccountDisplay = <DisplayValue extends AccountDisplayInput>(
   value: DisplayValue,
 ): DisplayValue & {
   accountLabel: string;
-  accountIdentifier: string | null;
+  accountIdentifier: string;
   providerName: string;
   providerIcon: string | null;
 } => ({

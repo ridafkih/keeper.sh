@@ -24,7 +24,7 @@ function OutlookAuthPage() {
   return (
     <AuthOAuthPreamble
       provider="outlook"
-      continuationSearch={getMcpAuthorizationSearch(search) ?? undefined}
+      authorizationSearch={getMcpAuthorizationSearch(search) ?? undefined}
     />
   );
 }

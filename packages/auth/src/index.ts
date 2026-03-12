@@ -1,3 +1,4 @@
+import { type } from "arktype";
 import { betterAuth } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -70,6 +71,40 @@ interface KeeperMcpAuthApi {
   getMCPProtectedResource: () => Promise<unknown>;
   getMcpOAuthConfig: () => Promise<unknown>;
 }
+
+/**
+ * Better Auth's oauthProvider plugin adds API methods at runtime.
+ * This type predicate verifies the methods exist so we can call them
+ * without type assertions.
+ */
+interface OAuthProviderAuthApi {
+  getOAuthServerConfig: (input: { headers: Headers }) => Promise<unknown>;
+  getOpenIdConfig: (input: { headers: Headers }) => Promise<unknown>;
+}
+
+const hasOAuthProviderApi = (
+  api: object,
+): api is OAuthProviderAuthApi => {
+  if (!("getOAuthServerConfig" in api)) {
+    return false;
+  }
+  if (!("getOpenIdConfig" in api)) {
+    return false;
+  }
+  if (typeof api.getOAuthServerConfig !== "function") {
+    return false;
+  }
+  if (typeof api.getOpenIdConfig !== "function") {
+    return false;
+  }
+  return true;
+};
+
+const mcpJwtClaimsSchema = type({
+  scope: "string",
+  sub: "string",
+  "+": "delete",
+});
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -318,16 +353,23 @@ const createAuth = (config: AuthConfig) => {
   });
 
   if (mcpOptions) {
-    const resourceActions = oauthProviderResourceClient(auth as any).getActions() as any;
-    const authApi = auth.api as any;
+    const resourceClient = oauthProviderResourceClient();
+    const resourceActions = resourceClient.getActions();
+    const jwksUrl = `${baseUrl}/api/auth/jwks`;
 
-    Object.assign(authApi, {
-      getMCPProtectedResource: async () =>
+    if (!hasOAuthProviderApi(auth.api)) {
+      throw new Error("OAuth provider plugin did not register expected API methods");
+    }
+
+    const oauthApi = auth.api;
+
+    Object.assign(auth.api, {
+      getMCPProtectedResource: () =>
         resourceActions.getProtectedResourceMetadata(
           mcpOptions.protectedResourceMetadata,
         ),
-      getMcpOAuthConfig: async () =>
-        authApi.getOAuthServerConfig({
+      getMcpOAuthConfig: () =>
+        oauthApi.getOAuthServerConfig({
           headers: new Headers(),
         }),
       getMcpSession: async ({ headers }: { headers: Headers }) => {
@@ -344,16 +386,23 @@ const createAuth = (config: AuthConfig) => {
         }
 
         const jwt = await resourceActions.verifyAccessToken(accessToken, {
-            verifyOptions: {
-              audience: mcpOptions.oauthProvider.validAudiences,
-              issuer: `${baseUrl}/api/auth`,
-            },
-          });
+          jwksUrl,
+          verifyOptions: {
+            audience: mcpOptions.oauthProvider.validAudiences,
+            issuer: `${baseUrl}/api/auth`,
+          },
+        });
 
-          return {
-            scopes: typeof jwt.scope === "string" ? jwt.scope : "",
-            userId: typeof jwt.sub === "string" ? jwt.sub : null,
-          };
+        const claims = mcpJwtClaimsSchema(jwt);
+
+        if (claims instanceof type.errors) {
+          throw new TypeError(`Invalid JWT claims: ${claims.summary}`);
+        }
+
+        return {
+          scopes: claims.scope,
+          userId: claims.sub,
+        };
       },
     } satisfies KeeperMcpAuthApi);
   }
@@ -365,11 +414,24 @@ type KeeperMcpEnabledAuth<TAuth = ReturnType<typeof betterAuth>> = TAuth & {
   api: KeeperMcpAuthApi;
 };
 
-const asKeeperMcpEnabledAuth = <TAuth>(auth: TAuth): KeeperMcpEnabledAuth<TAuth> =>
-  auth as KeeperMcpEnabledAuth<TAuth>;
+const isKeeperMcpEnabledAuth = <TAuth extends { api: object }>(
+  auth: TAuth,
+): auth is TAuth & { api: KeeperMcpAuthApi } => {
+  if (!("getMcpSession" in auth.api)) {
+    return false;
+  }
+  if (!("getMCPProtectedResource" in auth.api)) {
+    return false;
+  }
+  if (!("getMcpOAuthConfig" in auth.api)) {
+    return false;
+  }
+  return true;
+};
 
-export { createAuth };
-export { asKeeperMcpEnabledAuth };
+type AuthResult = ReturnType<typeof createAuth>;
+
+export { createAuth, hasOAuthProviderApi, isKeeperMcpEnabledAuth };
 export { resolveAuthCapabilities } from "./capabilities";
 export {
   KEEPER_API_DEFAULT_SCOPE,
@@ -382,7 +444,6 @@ export {
   KEEPER_API_SOURCE_SCOPE,
   KEEPER_API_SYNC_SCOPE,
 } from "./mcp-config";
-type AuthResult = ReturnType<typeof createAuth>;
 export type {
   AuthConfig,
   AuthResult,

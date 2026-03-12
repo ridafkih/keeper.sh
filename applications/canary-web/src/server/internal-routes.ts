@@ -8,13 +8,23 @@ const staticTextFiles: Record<string, string> = {
   "/llms-full.txt": "text/plain; charset=UTF-8",
 };
 
+// OAuth clients discover the authorization server via /.well-known/* at
+// the resource origin. The auth server lives under /api/auth, so these
+// mappings proxy the well-known paths to the correct internal routes.
 const internalProxyPaths = {
   "/.well-known/oauth-authorization-server": "/api/auth/.well-known/oauth-authorization-server",
   "/.well-known/openid-configuration": "/api/auth/.well-known/openid-configuration",
 } as const;
 
-const resolveInternalProxyPath = (pathname: string): string | null =>
-  internalProxyPaths[pathname as keyof typeof internalProxyPaths] ?? null;
+const isInternalProxyPath = (
+  pathname: string,
+): pathname is keyof typeof internalProxyPaths =>
+  pathname in internalProxyPaths;
+
+const resolveInternalProxyPath = (pathname: string): string | null => {
+  if (isInternalProxyPath(pathname)) return internalProxyPaths[pathname];
+  return null;
+};
 
 async function serveStaticTextFile(pathname: string): Promise<Response | null> {
   const contentType = staticTextFiles[pathname];

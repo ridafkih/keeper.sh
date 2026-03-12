@@ -35,6 +35,19 @@ const PROVIDER_SOCIAL_MAP: Partial<Record<Provider, string>> = {
   outlook: "microsoft",
 };
 
+export function PermissionsList({ items }: { items: readonly string[] }) {
+  return (
+    <ul className="flex flex-col gap-1">
+      {items.map((item) => (
+        <li key={item} className="flex flex-row-reverse justify-between items-center gap-2">
+          <Check className="shrink-0 text-foreground-muted" size={16} />
+          <Text size="sm" tone="muted" align="left">{item}</Text>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 interface PreambleLayoutProps {
   provider: Provider;
   onSubmit: (event: SubmitEvent<HTMLFormElement>) => void;
@@ -57,14 +70,7 @@ function PreambleLayout({ provider, onSubmit, children }: PreambleLayoutProps) {
       <Text size="sm" tone="muted" align="left">
         Start importing your events and sync them across all your calendars.
       </Text>
-      <ul className="flex flex-col gap-1">
-        {PERMISSIONS.map((permission) => (
-          <li key={permission} className="flex flex-row-reverse justify-between items-center gap-2">
-            <Check className="shrink-0 text-foreground-muted" size={16} />
-            <Text size="sm" tone="muted" align="left">{permission}</Text>
-          </li>
-        ))}
-      </ul>
+      <PermissionsList items={PERMISSIONS} />
       <Divider />
       <form onSubmit={onSubmit} className="contents">
         <div className="flex items-stretch gap-2">
@@ -81,12 +87,12 @@ function PreambleLayout({ provider, onSubmit, children }: PreambleLayoutProps) {
 
 interface AuthOAuthPreambleProps {
   provider: Provider;
-  continuationSearch?: StringSearchParams;
+  authorizationSearch?: StringSearchParams;
 }
 
 export function AuthOAuthPreamble({
   provider,
-  continuationSearch,
+  authorizationSearch,
 }: AuthOAuthPreambleProps) {
   const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -94,14 +100,14 @@ export function AuthOAuthPreamble({
     if (!socialProvider) return;
 
     await authClient.signIn.social({
-      callbackURL: resolveClientPostAuthRedirect(continuationSearch ?? {}),
+      callbackURL: resolveClientPostAuthRedirect(authorizationSearch),
       provider: socialProvider,
     });
   };
 
   return (
     <PreambleLayout provider={provider} onSubmit={handleSubmit}>
-      <ExternalTextLink href={resolvePathWithSearch("/login", continuationSearch)}>
+      <ExternalTextLink href={resolvePathWithSearch("/login", authorizationSearch)}>
         Don&apos;t import my calendars yet, just log me in.
       </ExternalTextLink>
     </PreambleLayout>

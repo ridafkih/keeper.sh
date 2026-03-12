@@ -26,6 +26,10 @@
       "entry": ["src/jobs/*.ts", "src/**/*.test.ts"],
       "project": "src/**/*.{ts,tsx}"
     },
+    "applications/mcp": {
+      "entry": ["src/routes/**/*.ts", "src/**/*.test.ts"],
+      "project": "src/**/*.{ts,tsx}"
+    },
     "applications/canary-web": {
       "entry": ["src/main.tsx", "src/server.tsx", "plugins/**/*.ts", "scripts/**/*.ts", "src/**/*.test.ts", "src/**/*.test.tsx"],
       "project": ["src/**/*.{ts,tsx}", "plugins/**/*.ts", "scripts/**/*.ts"]

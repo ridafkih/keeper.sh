@@ -43,18 +43,13 @@ interface ResolvedMcpAuthOptions {
 const resolveAbsoluteUrl = (pathname: string, baseUrl: string): string =>
   new URL(pathname, baseUrl).toString();
 
-const resolveResourceUrl = (baseUrl: string): string => {
-  const url = new URL(baseUrl);
-  if (url.pathname === "/" || url.pathname === "") {
-    url.pathname = "/mcp";
-  }
-  return url.toString().replace(/\/$/, "");
-};
+const normalizeUrl = (url: string): string =>
+  url.replace(/\/$/, "");
 
 const resolveValidAudiences = (resourceBaseUrl: string): string[] => {
-  const origin = new URL(resourceBaseUrl).origin;
-  const resourceUrl = resolveResourceUrl(resourceBaseUrl);
-  const audiences = new Set([origin, resourceUrl, resourceBaseUrl.replace(/\/$/, "")]);
+  const normalized = normalizeUrl(resourceBaseUrl);
+  const { origin } = new URL(resourceBaseUrl);
+  const audiences = new Set([origin, normalized]);
   return [...audiences];
 };
 
@@ -65,7 +60,7 @@ const resolveMcpAuthOptions = (
     return null;
   }
 
-  const resourceUrl = resolveResourceUrl(input.resourceBaseUrl);
+  const resourceUrl = normalizeUrl(input.resourceBaseUrl);
 
   return {
     oauthProvider: {

@@ -1,14 +1,19 @@
 import { entry } from "entrykit";
-import { auth, env, handleMcpRequest } from "./context";
+import { join } from "node:path";
+import { tryLoadMcpEnv } from "@keeper.sh/env/mcp";
+import { isHttpMethod, isRouteModule } from "./utils/route-handler";
 
-const CORS_ALLOW_HEADERS = [
-  "Authorization",
-  "Content-Type",
-  "Accept",
-  "MCP-Protocol-Version",
-  "Last-Event-ID",
-].join(", ");
+const env = tryLoadMcpEnv();
 
+if (!env) {
+  process.exit(0);
+}
+
+const HTTP_NOT_FOUND = 404;
+const HTTP_METHOD_NOT_ALLOWED = 405;
+const HTTP_INTERNAL_SERVER_ERROR = 500;
+
+const CORS_ALLOW_HEADERS = "Authorization, Content-Type, Accept, MCP-Protocol-Version, Last-Event-ID";
 const CORS_ALLOW_METHODS = "GET, POST, DELETE, OPTIONS";
 const CORS_EXPOSE_HEADERS = "WWW-Authenticate, MCP-Session-Id";
 
@@ -27,47 +32,50 @@ const withCorsHeaders = (response: Response): Response => {
   });
 };
 
-const createOptionsResponse = (): Response =>
-  withCorsHeaders(new Response(null, { status: 204 }));
-
-const createJsonResponse = (body: unknown, status = 200): Response =>
-  withCorsHeaders(
-    Response.json(body, {
-      status,
-    }),
-  );
+const router = new Bun.FileSystemRouter({
+  dir: join(import.meta.dirname, "routes"),
+  style: "nextjs",
+});
 
 await entry({
-  main: async () => {
+  main: () => {
     const server = Bun.serve({
       port: env.MCP_PORT,
       fetch: async (request) => {
-        const url = new URL(request.url);
-
         if (request.method === "OPTIONS") {
-          return createOptionsResponse();
+          return withCorsHeaders(new Response(null, { status: 204 }));
         }
 
-        if (url.pathname === "/health") {
-          return createJsonResponse({ service: "mcp", status: "ok" });
+        const match = router.match(request);
+
+        if (!match) {
+          return withCorsHeaders(new Response("Not found", { status: HTTP_NOT_FOUND }));
         }
 
-        if (url.pathname === "/.well-known/oauth-protected-resource") {
-          const metadata = await auth.api.getMCPProtectedResource();
-          return createJsonResponse(metadata);
+        const module: unknown = await import(match.filePath);
+
+        if (!isRouteModule(module)) {
+          return withCorsHeaders(
+            new Response("Internal server error", { status: HTTP_INTERNAL_SERVER_ERROR }),
+          );
         }
 
-        if (url.pathname === "/.well-known/oauth-authorization-server") {
-          const metadata = await auth.api.getMcpOAuthConfig();
-          return createJsonResponse(metadata);
+        if (!isHttpMethod(request.method)) {
+          return withCorsHeaders(
+            new Response("Method not allowed", { status: HTTP_METHOD_NOT_ALLOWED }),
+          );
         }
 
-        if (url.pathname === "/mcp") {
-          const response = await handleMcpRequest(request);
-          return withCorsHeaders(response);
+        const handler = module[request.method];
+
+        if (!handler) {
+          return withCorsHeaders(
+            new Response("Method not allowed", { status: HTTP_METHOD_NOT_ALLOWED }),
+          );
         }
 
-        return withCorsHeaders(new Response("Not found", { status: 404 }));
+        const response = await handler(request);
+        return withCorsHeaders(response);
       },
     });
 

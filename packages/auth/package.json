@@ -9,6 +9,7 @@
     "lint": "oxlint ."
   },
   "dependencies": {
+    "arktype": "^2.2.0",
     "@better-auth/oauth-provider": "1.5.5",
     "@better-auth/passkey": "^1.5.5",
     "@keeper.sh/auth-plugin-username-only": "workspace:*",

@@ -10,5 +10,18 @@ const schema = {
   WEB_BASE_URL: "string.url",
 } as const;
 
-export { schema };
-export default arkenv(schema);
+const loadMcpEnv = () => arkenv(schema);
+
+type McpEnv = ReturnType<typeof loadMcpEnv>;
+
+const tryLoadMcpEnv = (): McpEnv | null => {
+  try {
+    return loadMcpEnv();
+  } catch {
+    return null;
+  }
+};
+
+export { schema, tryLoadMcpEnv };
+export type { McpEnv };
+export default loadMcpEnv();

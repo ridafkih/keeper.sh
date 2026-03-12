@@ -1,14 +1,14 @@
 import { describe, expect, it } from "bun:test";
-import { createKeeperMcpHandler } from "./server";
+import { createKeeperMcpHandler } from "./mcp-handler";
 import { createKeeperMcpToolset } from "./toolset";
 
 const toolset = createKeeperMcpToolset({
-  getEventCount: async () => 0,
-  getEventsInRange: async () => [],
-  getSyncStatuses: async () => [],
-  listDestinations: async () => [],
-  listMappings: async () => [],
-  listSources: async () => [],
+  getEventCount: () => Promise.resolve(0),
+  getEventsInRange: () => Promise.resolve([]),
+  getSyncStatuses: () => Promise.resolve([]),
+  listDestinations: () => Promise.resolve([]),
+  listMappings: () => Promise.resolve([]),
+  listSources: () => Promise.resolve([]),
 });
 
 describe("createKeeperMcpHandler", () => {
@@ -16,7 +16,7 @@ describe("createKeeperMcpHandler", () => {
     const handler = createKeeperMcpHandler({
       auth: {
         api: {
-          getMcpSession: async () => null,
+          getMcpSession: () => Promise.resolve(null),
         },
       },
       mcpPublicUrl: "https://mcp.keeper.sh",
@@ -47,7 +47,7 @@ describe("createKeeperMcpHandler", () => {
     const handler = createKeeperMcpHandler({
       auth: {
         api: {
-          getMcpSession: async () => null,
+          getMcpSession: () => Promise.resolve(null),
         },
       },
       mcpPublicUrl: "https://mcp.keeper.sh",
@@ -70,7 +70,7 @@ describe("createKeeperMcpHandler", () => {
     const handler = createKeeperMcpHandler({
       auth: {
         api: {
-          getMcpSession: async () => ({
+          getMcpSession: () => Promise.resolve({
             scopes: "openid profile",
             userId: "user-123",
           }),

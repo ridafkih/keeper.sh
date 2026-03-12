@@ -45,6 +45,13 @@ function resolveInputTone(active: boolean | undefined): "error" | "neutral" {
   return "neutral";
 }
 
+function resolveSwitchSearch(search?: StringSearchParams): StringSearchParams | undefined {
+  if (!search) return undefined;
+  const result = getMcpAuthorizationSearch(search);
+  if (!result) return undefined;
+  return result;
+}
+
 export type AuthScreenCopy = {
   heading: string;
   subtitle: string;
@@ -89,22 +96,20 @@ function resolvePasswordFieldAnimation(step: "email" | "password"): TargetAndTra
 export function AuthForm({
   capabilities,
   copy,
-  continuationSearch,
+  authorizationSearch,
 }: {
   capabilities: AuthCapabilities;
   copy: AuthScreenCopy;
-  continuationSearch?: StringSearchParams;
+  authorizationSearch?: StringSearchParams;
 }) {
   const hasSocialProviders = getEnabledSocialProviders(capabilities).length > 0;
-  const switchSearch = continuationSearch
-    ? getMcpAuthorizationSearch(continuationSearch) ?? undefined
-    : undefined;
+  const switchSearch = resolveSwitchSearch(authorizationSearch);
   const switchHref = resolvePathWithSearch(copy.switchTo, switchSearch);
 
   return (
     <>
       {copy.action === "signIn" && capabilities.supportsPasskeys && (
-        <PasskeyAutoFill continuationSearch={continuationSearch} />
+        <PasskeyAutoFill authorizationSearch={authorizationSearch} />
       )}
       <div className="flex flex-col py-2">
         <Heading2 as="span" className="text-center">{copy.heading}</Heading2>
@@ -115,7 +120,7 @@ export function AuthForm({
           <SocialAuthButtons
             capabilities={capabilities}
             oauthActionLabel={copy.oauthActionLabel}
-            continuationSearch={continuationSearch}
+            authorizationSearch={authorizationSearch}
           />
           <Divider>or</Divider>
         </>
@@ -124,7 +129,7 @@ export function AuthForm({
         capabilities={capabilities}
         submitLabel={copy.submitLabel}
         action={copy.action}
-        continuationSearch={continuationSearch}
+        authorizationSearch={authorizationSearch}
       />
       <div className="flex flex-col gap-1.5">
         <AuthError />
@@ -139,17 +144,17 @@ export function AuthForm({
   );
 }
 
-function redirectAfterAuth(continuationSearch?: StringSearchParams) {
-  if (typeof window === "undefined") {
+function redirectAfterAuth(authorizationSearch?: StringSearchParams) {
+  if (typeof window === "undefined" || !window.location) {
     return;
   }
 
-  const redirectTarget = resolveClientPostAuthRedirect(continuationSearch ?? {});
+  const redirectTarget = resolveClientPostAuthRedirect(authorizationSearch);
   const nextUrl = new URL(redirectTarget, window.location.origin).toString();
   window.location.assign(nextUrl);
 }
 
-function usePasskeyAutoFill(continuationSearch?: StringSearchParams) {
+function usePasskeyAutoFill(authorizationSearch?: StringSearchParams) {
   const setError = useSetAtom(authFormErrorAtom);
 
   useEffect(() => {
@@ -176,28 +181,32 @@ function usePasskeyAutoFill(continuationSearch?: StringSearchParams) {
         return;
       }
 
-      redirectAfterAuth(continuationSearch);
+      redirectAfterAuth(authorizationSearch);
     };
 
     void attemptAutoFill();
 
     return () => controller.abort();
-  }, [continuationSearch, setError]);
+  }, [authorizationSearch, setError]);
 }
 
-function PasskeyAutoFill({ continuationSearch }: { continuationSearch?: StringSearchParams }) {
-  usePasskeyAutoFill(continuationSearch);
+interface PasskeyAutoFillProps {
+  authorizationSearch?: StringSearchParams;
+}
+
+function PasskeyAutoFill({ authorizationSearch }: PasskeyAutoFillProps) {
+  usePasskeyAutoFill(authorizationSearch);
   return null;
 }
 
 function SocialAuthButtons({
   capabilities,
   oauthActionLabel,
-  continuationSearch,
+  authorizationSearch,
 }: {
   capabilities: AuthCapabilities;
   oauthActionLabel: string;
-  continuationSearch?: StringSearchParams;
+  authorizationSearch?: StringSearchParams;
 }) {
   const enabledSocialProviders = new Set(getEnabledSocialProviders(capabilities));
   const visibleProviders = SOCIAL_AUTH_PROVIDERS.filter((provider) =>
@@ -212,7 +221,7 @@ function SocialAuthButtons({
       {visibleProviders.map((provider) => (
         <ExternalLinkButton
           key={provider.id}
-          href={resolvePathWithSearch(provider.to, continuationSearch)}
+          href={resolvePathWithSearch(provider.to, authorizationSearch)}
           className="w-full justify-center"
           variant="border"
         >
@@ -269,12 +278,12 @@ function CredentialForm({
   capabilities,
   submitLabel,
   action,
-  continuationSearch,
+  authorizationSearch,
 }: {
   capabilities: AuthCapabilities;
   submitLabel: string;
   action: "signIn" | "signUp";
-  continuationSearch?: StringSearchParams;
+  authorizationSearch?: StringSearchParams;
 }) {
   const navigate = useNavigate();
   const step = useAtomValue(authFormStepAtom);
@@ -283,6 +292,14 @@ function CredentialForm({
   const setError = useSetAtom(authFormErrorAtom);
   const passwordRef = useRef<HTMLInputElement>(null);
   const credentialField = resolveCredentialField(capabilities);
+
+  useEffect(() => {
+    if (typeof sessionStorage === "undefined") {
+      return;
+    }
+    sessionStorage.removeItem("pendingVerificationEmail");
+    sessionStorage.removeItem("pendingVerificationCallbackUrl");
+  }, []);
 
   const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -300,7 +317,7 @@ function CredentialForm({
     if (!password) return;
 
     setStatus("loading");
-    const redirectTarget = resolveClientPostAuthRedirect(continuationSearch ?? {});
+    const redirectTarget = resolveClientPostAuthRedirect(authorizationSearch);
 
     try {
       if (action === "signIn") {
@@ -324,7 +341,7 @@ function CredentialForm({
       return;
     }
 
-    redirectAfterAuth(continuationSearch);
+    redirectAfterAuth(authorizationSearch);
   };
 
   const handleBack = () => {

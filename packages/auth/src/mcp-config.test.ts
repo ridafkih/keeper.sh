@@ -24,10 +24,10 @@ describe("resolveMcpAuthOptions", () => {
         consentPage: "https://app.keeper.sh/mcp/consent",
         loginPage: "https://app.keeper.sh/login",
         scopes: KEEPER_MCP_OAUTH_SCOPES,
-        validAudiences: ["https://mcp.keeper.sh", "https://mcp.keeper.sh/mcp"],
+        validAudiences: ["https://mcp.keeper.sh"],
       },
       protectedResourceMetadata: {
-        resource: "https://mcp.keeper.sh/mcp",
+        resource: "https://mcp.keeper.sh",
         scopes_supported: KEEPER_API_RESOURCE_SCOPES,
       },
     });
@@ -37,13 +37,11 @@ describe("resolveMcpAuthOptions", () => {
     expect(
       resolveMcpAuthOptions({
         resourceBaseUrl: "https://mcp.keeper.sh",
-        webBaseUrl: undefined,
       }),
     ).toBeNull();
 
     expect(
       resolveMcpAuthOptions({
-        resourceBaseUrl: undefined,
         webBaseUrl: "https://app.keeper.sh",
       }),
     ).toBeNull();

@@ -31,7 +31,7 @@ function LoginPage() {
     <AuthForm
       capabilities={capabilities}
       copy={copy}
-      continuationSearch={getMcpAuthorizationSearch(search) ?? undefined}
+      authorizationSearch={getMcpAuthorizationSearch(search) ?? undefined}
     />
   );
 }

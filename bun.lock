@@ -124,8 +124,9 @@
         "@keeper.sh/database": "workspace:*",
         "@keeper.sh/env": "workspace:*",
         "@keeper.sh/keeper-api": "workspace:*",
-        "@keeper.sh/mcp-server": "workspace:*",
+        "@modelcontextprotocol/sdk": "1.27.1",
         "entrykit": "^0.1.3",
+        "zod": "^4.3.5",
       },
       "devDependencies": {
         "@keeper.sh/typescript-config": "workspace:*",
@@ -144,6 +145,7 @@
         "@keeper.sh/keeper-api": "workspace:*",
         "@polar-sh/better-auth": "^1.6.3",
         "@polar-sh/sdk": "^0.42.1",
+        "arktype": "^2.2.0",
         "better-auth": "1.5.5",
         "drizzle-orm": "^0.45.1",
         "resend": "^6.6.0",
@@ -290,21 +292,6 @@
         "@keeper.sh/date-utils": "workspace:*",
         "@keeper.sh/provider-registry": "workspace:*",
         "drizzle-orm": "0.45.1",
-      },
-      "devDependencies": {
-        "@keeper.sh/typescript-config": "workspace:*",
-        "@types/bun": "latest",
-        "typescript": "5.9.3",
-      },
-    },
-    "packages/mcp-server": {
-      "name": "@keeper.sh/mcp-server",
-      "dependencies": {
-        "@keeper.sh/auth": "workspace:*",
-        "@keeper.sh/keeper-api": "workspace:*",
-        "@modelcontextprotocol/sdk": "1.27.1",
-        "drizzle-orm": "0.45.1",
-        "zod": "^4.3.5",
       },
       "devDependencies": {
         "@keeper.sh/typescript-config": "workspace:*",
@@ -760,8 +747,6 @@
     "@keeper.sh/keeper-api": ["@keeper.sh/keeper-api@workspace:packages/keeper-api"],
 
     "@keeper.sh/mcp": ["@keeper.sh/mcp@workspace:applications/mcp"],
-
-    "@keeper.sh/mcp-server": ["@keeper.sh/mcp-server@workspace:packages/mcp-server"],
 
     "@keeper.sh/oauth": ["@keeper.sh/oauth@workspace:packages/oauth"],
 

@@ -1,16 +1,12 @@
 import { KEEPER_API_READ_SCOPE } from "@keeper.sh/auth";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import type {
-  KeeperMcpEventRangeInput,
-  KeeperMcpToolDefinition,
-  KeeperMcpToolset,
-} from "./toolset";
+import type { KeeperMcpToolDefinition, KeeperMcpToolset } from "./toolset";
 
 const JSON_RPC_VERSION = "2.0";
-const JSON_RPC_ERROR_UNAUTHORIZED = -32001;
-const JSON_RPC_ERROR_FORBIDDEN = -32003;
-const JSON_RPC_ERROR_METHOD_NOT_ALLOWED = -32005;
+const JSON_RPC_ERROR_UNAUTHORIZED = -32_001;
+const JSON_RPC_ERROR_FORBIDDEN = -32_003;
+const JSON_RPC_ERROR_METHOD_NOT_ALLOWED = -32_005;
 const ALLOWED_HTTP_METHODS = new Set(["DELETE", "GET", "POST"]);
 const ALLOW_HEADER_VALUE = "GET, POST, DELETE, OPTIONS";
 type ResponseHeaders = Headers | Record<string, string>;
@@ -77,25 +73,25 @@ const createToolResponse = (result: unknown) => ({
   ],
 });
 
-const registerZeroInputTool = <TResult>(
+const registerToolset = (
   server: McpServer,
-  toolName: string,
-  tool: KeeperMcpToolDefinition<TResult>,
+  toolset: Record<string, KeeperMcpToolDefinition<unknown>>,
   userId: string,
 ): void => {
-  server.registerTool(
-    toolName,
-    {
-      description: tool.description,
-      inputSchema: tool.inputSchema,
-      title: tool.title,
-    },
-    async () => {
-      const result = await tool.execute({ userId });
-
-      return createToolResponse(result);
-    },
-  );
+  for (const [name, tool] of Object.entries(toolset)) {
+    server.registerTool(
+      name,
+      {
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        title: tool.title,
+      },
+      async (input: Record<string, unknown>) => {
+        const result = await tool.execute({ userId }, input);
+        return createToolResponse(result);
+      },
+    );
+  }
 };
 
 const createAuthenticatedMcpServer = (
@@ -109,27 +105,8 @@ const createAuthenticatedMcpServer = (
     },
   });
 
-  registerZeroInputTool(server, "list_sources", toolset.list_sources, userId);
-  registerZeroInputTool(server, "list_destinations", toolset.list_destinations, userId);
-  registerZeroInputTool(server, "list_mappings", toolset.list_mappings, userId);
-  registerZeroInputTool(server, "get_sync_status", toolset.get_sync_status, userId);
-  registerZeroInputTool(server, "get_event_count", toolset.get_event_count, userId);
-  server.registerTool(
-    "get_events_range",
-    {
-      description: toolset.get_events_range.description,
-      inputSchema: toolset.get_events_range.inputSchema,
-      title: toolset.get_events_range.title,
-    },
-    async (input) => {
-      const result = await toolset.get_events_range.execute(
-        { userId },
-        input as unknown as KeeperMcpEventRangeInput,
-      );
-
-      return createToolResponse(result);
-    },
-  );
+  const tools: Record<string, KeeperMcpToolDefinition<unknown>> = { ...toolset };
+  registerToolset(server, tools, userId);
 
   return server;
 };
@@ -205,7 +182,6 @@ const createKeeperMcpHandler = ({
     const server = createAuthenticatedMcpServer(toolset, session.userId, serverInfo);
     const transport = new WebStandardStreamableHTTPServerTransport({
       enableJsonResponse,
-      sessionIdGenerator: undefined,
     });
 
     try {

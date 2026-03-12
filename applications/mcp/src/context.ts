@@ -1,11 +1,9 @@
-import { asKeeperMcpEnabledAuth, createAuth } from "@keeper.sh/auth";
+import { isKeeperMcpEnabledAuth, createAuth } from "@keeper.sh/auth";
 import { createDatabase } from "@keeper.sh/database";
 import env from "@keeper.sh/env/mcp";
 import { createKeeperApi } from "@keeper.sh/keeper-api";
-import {
-  createKeeperMcpHandler,
-  createKeeperMcpToolset,
-} from "@keeper.sh/mcp-server";
+import { createKeeperMcpHandler } from "./mcp-handler";
+import { createKeeperMcpToolset } from "./toolset";
 
 const database = createDatabase(env.DATABASE_URL);
 
@@ -18,7 +16,11 @@ const { auth: baseAuth } = createAuth({
   webBaseUrl: env.WEB_BASE_URL,
 });
 
-const auth = asKeeperMcpEnabledAuth(baseAuth);
+if (!isKeeperMcpEnabledAuth(baseAuth)) {
+  throw new Error("MCP auth is not configured — ensure mcpResourceUrl and webBaseUrl are set");
+}
+
+const auth = baseAuth;
 
 const keeperApi = createKeeperApi(database);
 const keeperMcpToolset = createKeeperMcpToolset(keeperApi);

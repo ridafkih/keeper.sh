@@ -1,6 +1,8 @@
 type SearchParams = Record<string, unknown>;
 type StringSearchParams = Record<string, string>;
 
+const DEFAULT_POST_AUTH_PATH = "/dashboard";
+
 const MCP_AUTH_REQUIRED_KEYS = [
   "client_id",
   "code_challenge",
@@ -11,8 +13,6 @@ const MCP_AUTH_REQUIRED_KEYS = [
   "state",
 ] as const;
 
-const DEFAULT_POST_AUTH_PATH = "/dashboard";
-
 const resolvePathWithSearch = (
   pathname: string,
   search?: StringSearchParams,
@@ -21,14 +21,20 @@ const resolvePathWithSearch = (
     return pathname;
   }
 
-  return `${pathname}?${new URLSearchParams(search).toString()}`;
+  const url = new URL(pathname, "http://placeholder");
+  url.search = new URLSearchParams(search).toString();
+  return `${url.pathname}${url.search}`;
 };
 
 const toStringSearchParams = (search: SearchParams): StringSearchParams =>
   Object.fromEntries(
-    Object.entries(search).flatMap(([key, value]) =>
-      typeof value === "string" ? [[key, value]] : []),
+    Object.entries(search).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
   );
+
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0;
 
 const getMcpAuthorizationSearch = (
   search: SearchParams,
@@ -36,7 +42,7 @@ const getMcpAuthorizationSearch = (
   const stringParams = toStringSearchParams(search);
 
   const hasAllRequiredKeys = MCP_AUTH_REQUIRED_KEYS.every(
-    (key) => typeof stringParams[key] === "string" && stringParams[key].length > 0,
+    (key) => isNonEmptyString(stringParams[key]),
   );
 
   if (!hasAllRequiredKeys) {
@@ -48,6 +54,22 @@ const getMcpAuthorizationSearch = (
 
 const isMcpAuthorizationContinuation = (search: SearchParams): boolean =>
   getMcpAuthorizationSearch(search) !== null;
+
+const resolveClientApiOrigin = (): string => {
+  const configuredApiOrigin = import.meta.env.VITE_API_URL;
+
+  if (typeof configuredApiOrigin === "string" && configuredApiOrigin.length > 0) {
+    return configuredApiOrigin;
+  }
+
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+
+  throw new Error(
+    "Unable to resolve API origin: VITE_API_URL is not configured and window is undefined",
+  );
+};
 
 const resolvePostAuthRedirect = ({
   apiOrigin,
@@ -70,29 +92,15 @@ const resolvePostAuthRedirect = ({
   return authorizeUrl.toString();
 };
 
-const resolveClientApiOrigin = (): string => {
-  const configuredApiOrigin = import.meta.env.VITE_API_URL;
-
-  if (typeof configuredApiOrigin === "string" && configuredApiOrigin.length > 0) {
-    return configuredApiOrigin;
-  }
-
-  if (typeof window !== "undefined") {
-    return window.location.origin;
-  }
-
-  return "";
-};
-
 const resolveClientPostAuthRedirect = (
-  search: SearchParams,
+  search?: SearchParams | null,
   defaultPath = DEFAULT_POST_AUTH_PATH,
 ): string => {
-  const apiOrigin = resolveClientApiOrigin();
-
-  if (apiOrigin.length === 0) {
+  if (!search) {
     return defaultPath;
   }
+
+  const apiOrigin = resolveClientApiOrigin();
 
   return resolvePostAuthRedirect({
     apiOrigin,

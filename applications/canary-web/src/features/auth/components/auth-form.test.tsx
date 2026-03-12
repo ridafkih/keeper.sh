@@ -53,6 +53,7 @@ mock.module("../../../lib/auth-client", () => ({
 mock.module("../../../components/ui/primitives/button", () => ({
   Button: ({ children, ...props }: React.ComponentPropsWithoutRef<"button">) => <button {...props}>{children}</button>,
   LinkButton: ({ children, ...props }: React.ComponentPropsWithoutRef<"a">) => <a {...props}>{children}</a>,
+  ExternalLinkButton: ({ children, ...props }: React.ComponentPropsWithoutRef<"a">) => <a {...props}>{children}</a>,
   ButtonText: ({ children }: React.PropsWithChildren) => <span>{children}</span>,
   ButtonIcon: ({ children }: React.PropsWithChildren) => <>{children}</>,
 }));
@@ -63,6 +64,7 @@ mock.module("../../../components/ui/primitives/divider", () => ({
 
 mock.module("../../../components/ui/primitives/text-link", () => ({
   TextLink: ({ children, ...props }: React.ComponentPropsWithoutRef<"a">) => <a {...props}>{children}</a>,
+  ExternalTextLink: ({ children, ...props }: React.ComponentPropsWithoutRef<"a">) => <a {...props}>{children}</a>,
 }));
 
 mock.module("../../../components/ui/primitives/heading", () => ({

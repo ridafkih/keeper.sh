@@ -5,9 +5,8 @@ import { createKeeperApi } from "@keeper.sh/keeper-api";
 const keeperApi = createKeeperApi(database);
 
 const GET = withWideEvent(
-  withAuth(async ({ userId }) => {
-    return Response.json(await keeperApi.listSources(userId));
-  }),
+  withAuth(async ({ userId }) =>
+    Response.json(await keeperApi.listSources(userId))),
 );
 
 export { GET };

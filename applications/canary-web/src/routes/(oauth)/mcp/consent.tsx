@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import ArrowLeftRight from "lucide-react/dist/esm/icons/arrow-left-right";
-import Check from "lucide-react/dist/esm/icons/check";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
-import KeeperLogo from "../../../assets/keeper.svg?react";
 import { Button, ButtonText } from "../../../components/ui/primitives/button";
 import { Divider } from "../../../components/ui/primitives/divider";
 import { Heading2 } from "../../../components/ui/primitives/heading";
 import { Text } from "../../../components/ui/primitives/text";
+import {
+  PermissionsList,
+  ProviderIconPair,
+} from "../../../features/auth/components/oauth-preamble";
 import {
   getMcpAuthorizationSearch,
   toStringSearchParams,
@@ -43,16 +44,17 @@ function McpConsentPage() {
   const search = Route.useSearch();
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "loading">("idle");
-  const continuationSearch = getMcpAuthorizationSearch(search);
+  const authorizationSearch = getMcpAuthorizationSearch(search);
 
-  if (!continuationSearch) {
+  if (!authorizationSearch) {
     return null;
   }
 
-  const { client_id: clientId, scope } = continuationSearch;
+  const { client_id: clientId, scope } = authorizationSearch;
   const scopes = scope
     ?.split(" ")
     .filter((value) => value.length > 0)
+    .map(resolveScopeLabel)
     ?? [];
 
   const handleDecision = async (accept: boolean) => {
@@ -96,29 +98,14 @@ function McpConsentPage() {
 
   return (
     <>
-      <div className="flex items-center justify-center gap-4 pb-4">
-        <div className="size-14 rounded-xl border border-interactive-border shadow-xs p-3 flex items-center justify-center bg-background-inverse">
-          <KeeperLogo className="size-full rounded-lg text-foreground-inverse p-1" />
-        </div>
-        <ArrowLeftRight size={20} className="text-foreground-muted" />
-        <div className="size-14 rounded-xl border border-interactive-border shadow-xs p-3 flex items-center justify-center">
-          <Terminal className="size-full text-foreground-muted" />
-        </div>
-      </div>
+      <ProviderIconPair>
+        <Terminal className="size-full text-foreground-muted" />
+      </ProviderIconPair>
       <Heading2 as="h1">Authorize MCP access</Heading2>
       <Text size="sm" tone="muted" align="left">
         {clientId} is requesting permission to access your Keeper data.
       </Text>
-      {scopes.length > 0 && (
-        <ul className="flex flex-col gap-1">
-          {scopes.map((requestedScope) => (
-            <li key={requestedScope} className="flex flex-row-reverse justify-between items-center gap-2">
-              <Check className="shrink-0 text-foreground-muted" size={16} />
-              <Text size="sm" tone="muted" align="left">{resolveScopeLabel(requestedScope)}</Text>
-            </li>
-          ))}
-        </ul>
-      )}
+      {scopes.length > 0 && <PermissionsList items={scopes} />}
       {error && (
         <Text size="sm" tone="danger" align="center">{error}</Text>
       )}
