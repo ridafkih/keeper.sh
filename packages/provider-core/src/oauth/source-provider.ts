@@ -8,6 +8,7 @@ import { eq } from "drizzle-orm";
 import type { OAuthSourceConfig, SourceEvent, SourceSyncResult } from "../types";
 import type { OAuthTokenProvider } from "./provider";
 import { isOAuthReauthRequiredError } from "./error-classification";
+import { runWithCredentialRefreshLock } from "./refresh-coordinator";
 
 const MS_PER_SECOND = 1000;
 
@@ -115,14 +116,16 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
       return;
     }
 
-    const tokenData = await this.oauthProvider
-      .refreshAccessToken(refreshToken)
-      .catch(async (error) => {
+    const tokenData = await runWithCredentialRefreshLock(oauthCredentialId, async () => {
+      try {
+        return await this.oauthProvider.refreshAccessToken(refreshToken);
+      } catch (error) {
         if (isOAuthReauthRequiredError(error)) {
           await this.markNeedsReauthentication();
         }
         throw error;
-      });
+      }
+    });
 
     const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);
 

@@ -5,6 +5,7 @@ import { CalendarProvider } from "../sync/provider";
 import { RateLimiter } from "../utils/rate-limiter";
 import type { DeleteResult, OAuthProviderConfig, PushResult, SyncableEvent } from "../types";
 import { isOAuthReauthRequiredError } from "./error-classification";
+import { runWithCredentialRefreshLock } from "./refresh-coordinator";
 
 const DEFAULT_CONCURRENCY = 10;
 const DEFAULT_REQUESTS_PER_MINUTE = 600;
@@ -140,18 +141,22 @@ abstract class OAuthCalendarProvider<
       return;
     }
 
-    const tokenData = await this.oauthProvider
-      .refreshAccessToken(refreshToken)
-      .catch(async (error) => {
+    const oauthCredentialId = await this.getOAuthCredentialIdForCalendar(calendarId);
+    const lockKey = oauthCredentialId ?? `calendar:${calendarId}`;
+
+    const tokenData = await runWithCredentialRefreshLock(lockKey, async () => {
+      try {
+        return await this.oauthProvider.refreshAccessToken(refreshToken);
+      } catch (error) {
         if (isOAuthReauthRequiredError(error)) {
           await this.markNeedsReauthentication();
         }
         throw error;
-      });
+      }
+    });
 
     const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);
 
-    const oauthCredentialId = await this.getOAuthCredentialIdForCalendar(calendarId);
     if (oauthCredentialId) {
       await database
         .update(oauthCredentialsTable)

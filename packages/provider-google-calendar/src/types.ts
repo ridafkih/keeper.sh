@@ -14,6 +14,8 @@ interface GoogleApiError {
   code?: number;
   message?: string;
   status?: string;
+  errors?: { reason?: string }[];
+  details?: { reason?: string }[];
 }
 
 export type { GoogleDateTime, PartialGoogleDateTime, GoogleApiError };

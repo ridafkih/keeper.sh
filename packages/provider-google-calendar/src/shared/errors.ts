@@ -1,6 +1,17 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import type { GoogleApiError } from "../types";
 
+const GOOGLE_PERMISSION_REAUTH_REASONS = new Set([
+  "access_token_scope_insufficient",
+  "insufficientpermissions",
+]);
+
+const GOOGLE_FORBIDDEN_AUTH_REASONS = new Set([
+  "autherror",
+  "invalidcredentials",
+  "loginrequired",
+]);
+
 const hasRateLimitMessage = (message: string | undefined): boolean => {
   if (!message) {
     return false;
@@ -8,24 +19,43 @@ const hasRateLimitMessage = (message: string | undefined): boolean => {
   return message.includes("429") || message.includes("rateLimitExceeded");
 };
 
-const hasReauthPermissionMessage = (message: string | undefined): boolean => {
-  if (!message) {
-    return false;
+const normalizeReason = (reason: string): string => reason.toLowerCase();
+
+const getErrorReasons = (error: GoogleApiError | undefined): string[] => {
+  if (!error) {
+    return [];
   }
 
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes("insufficient authentication scopes")
-    || normalized.includes("invalid credentials")
-    || normalized.includes("login required")
-  );
+  const reasons: string[] = [];
+
+  for (const entry of error.errors ?? []) {
+    if (entry.reason) {
+      reasons.push(normalizeReason(entry.reason));
+    }
+  }
+
+  for (const entry of error.details ?? []) {
+    if (entry.reason) {
+      reasons.push(normalizeReason(entry.reason));
+    }
+  }
+
+  return reasons;
+};
+
+const hasReason = (error: GoogleApiError | undefined, reasonSet: Set<string>): boolean => {
+  const reasons = getErrorReasons(error);
+  return reasons.some((reason) => reasonSet.has(reason));
 };
 
 const isAuthError = (status: number, error: GoogleApiError | undefined): boolean => {
   if (
     status === HTTP_STATUS.FORBIDDEN
     && error?.status === "PERMISSION_DENIED"
-    && hasReauthPermissionMessage(error?.message)
+    && (
+      hasReason(error, GOOGLE_PERMISSION_REAUTH_REASONS)
+      || hasReason(error, GOOGLE_FORBIDDEN_AUTH_REASONS)
+    )
   ) {
     return true;
   }

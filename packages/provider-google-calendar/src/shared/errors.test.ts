@@ -15,11 +15,20 @@ describe("isAuthError", () => {
     ).toBe(false);
   });
 
-  it("returns true for insufficient authentication scopes", () => {
+  it("returns true for legacy insufficientPermissions reasons", () => {
     expect(
       isAuthError(403, {
-        message: "Request had insufficient authentication scopes.",
         status: "PERMISSION_DENIED",
+        errors: [{ reason: "insufficientPermissions" }],
+      }),
+    ).toBe(true);
+  });
+
+  it("returns true for google rpc ACCESS_TOKEN_SCOPE_INSUFFICIENT reasons", () => {
+    expect(
+      isAuthError(403, {
+        status: "PERMISSION_DENIED",
+        details: [{ reason: "ACCESS_TOKEN_SCOPE_INSUFFICIENT" }],
       }),
     ).toBe(true);
   });
