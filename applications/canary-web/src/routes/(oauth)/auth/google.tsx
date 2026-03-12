@@ -1,6 +1,10 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { AuthOAuthPreamble } from "../../../features/auth/components/oauth-preamble";
 import { fetchAuthCapabilitiesWithApi } from "../../../lib/auth-capabilities";
+import {
+  getMcpAuthorizationSearch,
+  toStringSearchParams,
+} from "../../../lib/mcp-auth-flow";
 
 export const Route = createFileRoute("/(oauth)/auth/google")({
   loader: async ({ context }) => {
@@ -11,8 +15,16 @@ export const Route = createFileRoute("/(oauth)/auth/google")({
     return capabilities;
   },
   component: GoogleAuthPage,
+  validateSearch: toStringSearchParams,
 });
 
 function GoogleAuthPage() {
-  return <AuthOAuthPreamble provider="google" />;
+  const search = Route.useSearch();
+
+  return (
+    <AuthOAuthPreamble
+      provider="google"
+      continuationSearch={getMcpAuthorizationSearch(search) ?? undefined}
+    />
+  );
 }

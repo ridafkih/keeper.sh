@@ -61,7 +61,7 @@ export async function handleApplicationRequest(
   config: ServerConfig,
 ): Promise<Response> {
   const requestUrl = new URL(request.url);
-  const internalRouteResponse = await handleInternalRoute(request);
+  const internalRouteResponse = await handleInternalRoute(request, config.apiProxyOrigin);
   if (internalRouteResponse) {
     return internalRouteResponse;
   }

@@ -108,6 +108,22 @@ const handleAuthRequest = (pathname: string, request: Request): MaybePromise<Res
         return Response.json(authCapabilities);
       }
 
+      if (pathname === "/api/auth/.well-known/oauth-authorization-server") {
+        return Response.json(
+          await (auth.api as any).getOAuthServerConfig({
+            headers: request.headers,
+          }),
+        );
+      }
+
+      if (pathname === "/api/auth/.well-known/openid-configuration") {
+        return Response.json(
+          await (auth.api as any).getOpenIdConfig({
+            headers: request.headers,
+          }),
+        );
+      }
+
       const response = await auth.handler(request);
       handleAuthResponseStatus(response);
       return processAuthResponse(pathname, response);

@@ -1,6 +1,9 @@
 import { betterAuth } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { jwt as jwtPlugin } from "better-auth/plugins";
+import { oauthProvider } from "@better-auth/oauth-provider";
+import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resource-client";
 import { passkey as passkeyPlugin } from "@better-auth/passkey";
 import { checkout, polar, portal } from "@polar-sh/better-auth";
 import { Polar } from "@polar-sh/sdk";
@@ -10,11 +13,19 @@ import { deletePolarCustomerByExternalId } from "./polar-customer-delete";
 import { writeAuthStderr } from "./runtime-environment";
 import { resolveAuthCapabilities } from "./capabilities";
 import {
-  user as userTable,
-  session as sessionTable,
+  resolveMcpAuthOptions,
+} from "./mcp-config";
+import {
   account as accountTable,
-  verification as verificationTable,
+  jwks as jwksTable,
+  oauthAccessToken as oauthAccessTokenTable,
+  oauthClient as oauthClientTable,
+  oauthConsent as oauthConsentTable,
+  oauthRefreshToken as oauthRefreshTokenTable,
   passkey as passkeyTable,
+  session as sessionTable,
+  user as userTable,
+  verification as verificationTable,
 } from "@keeper.sh/database/auth-schema";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { BetterAuthPlugin, User } from "better-auth";
@@ -46,12 +57,18 @@ interface AuthConfig {
   passkeyRpName?: string;
   passkeyOrigin?: string;
   trustedOrigins?: string[];
+  mcpResourceUrl?: string;
 }
 
-interface AuthResult {
-  auth: ReturnType<typeof betterAuth>;
-  capabilities: ReturnType<typeof resolveAuthCapabilities>;
-  polarClient: Polar | null;
+interface KeeperMcpAuthSession {
+  scopes: string;
+  userId: string | null;
+}
+
+interface KeeperMcpAuthApi {
+  getMcpSession: (input: { headers: Headers }) => Promise<KeeperMcpAuthSession | null>;
+  getMCPProtectedResource: () => Promise<unknown>;
+  getMcpOAuthConfig: () => Promise<unknown>;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -65,7 +82,7 @@ const extractSignUpEmail = (value: unknown): string | null => {
   return value.email;
 };
 
-const createAuth = (config: AuthConfig): AuthResult => {
+const createAuth = (config: AuthConfig) => {
   const {
     database,
     secret,
@@ -83,6 +100,7 @@ const createAuth = (config: AuthConfig): AuthResult => {
     passkeyRpName,
     passkeyOrigin,
     trustedOrigins,
+    mcpResourceUrl,
   } = config;
 
   const buildResendClient = (): Resend | null => {
@@ -155,6 +173,16 @@ const createAuth = (config: AuthConfig): AuthResult => {
     );
   }
 
+  const mcpOptions = resolveMcpAuthOptions({
+    resourceBaseUrl: mcpResourceUrl,
+    webBaseUrl,
+  });
+
+  if (mcpOptions) {
+    plugins.push(jwtPlugin());
+    plugins.push(oauthProvider(mcpOptions.oauthProvider));
+  }
+
   const socialProviders: Parameters<typeof betterAuth>[0]["socialProviders"] = {};
 
   if (googleClientId && googleClientSecret) {
@@ -182,11 +210,17 @@ const createAuth = (config: AuthConfig): AuthResult => {
         allowDifferentEmails: true,
       },
     },
+    basePath: "/api/auth",
     baseURL: baseUrl,
     database: drizzleAdapter(database, {
       provider: "pg",
       schema: {
         account: accountTable,
+        jwks: jwksTable,
+        oauthAccessToken: oauthAccessTokenTable,
+        oauthClient: oauthClientTable,
+        oauthConsent: oauthConsentTable,
+        oauthRefreshToken: oauthRefreshTokenTable,
         passkey: passkeyTable,
         session: sessionTable,
         user: userTable,
@@ -283,9 +317,76 @@ const createAuth = (config: AuthConfig): AuthResult => {
     },
   });
 
+  if (mcpOptions) {
+    const resourceActions = oauthProviderResourceClient(auth as any).getActions() as any;
+    const authApi = auth.api as any;
+
+    Object.assign(authApi, {
+      getMCPProtectedResource: async () =>
+        resourceActions.getProtectedResourceMetadata(
+          mcpOptions.protectedResourceMetadata,
+        ),
+      getMcpOAuthConfig: async () =>
+        authApi.getOAuthServerConfig({
+          headers: new Headers(),
+        }),
+      getMcpSession: async ({ headers }: { headers: Headers }) => {
+        const authorization = headers.get("authorization");
+
+        if (!authorization?.startsWith("Bearer ")) {
+          return null;
+        }
+
+        const accessToken = authorization.slice("Bearer ".length).trim();
+
+        if (accessToken.length === 0) {
+          return null;
+        }
+
+        const jwt = await resourceActions.verifyAccessToken(accessToken, {
+            verifyOptions: {
+              audience: mcpOptions.oauthProvider.validAudiences,
+              issuer: `${baseUrl}/api/auth`,
+            },
+          });
+
+          return {
+            scopes: typeof jwt.scope === "string" ? jwt.scope : "",
+            userId: typeof jwt.sub === "string" ? jwt.sub : null,
+          };
+      },
+    } satisfies KeeperMcpAuthApi);
+  }
+
   return { auth, capabilities, polarClient: polarClient ?? null };
 };
 
+type KeeperMcpEnabledAuth<TAuth = ReturnType<typeof betterAuth>> = TAuth & {
+  api: KeeperMcpAuthApi;
+};
+
+const asKeeperMcpEnabledAuth = <TAuth>(auth: TAuth): KeeperMcpEnabledAuth<TAuth> =>
+  auth as KeeperMcpEnabledAuth<TAuth>;
+
 export { createAuth };
+export { asKeeperMcpEnabledAuth };
 export { resolveAuthCapabilities } from "./capabilities";
-export type { AuthConfig, AuthResult };
+export {
+  KEEPER_MCP_DEFAULT_SCOPE,
+  KEEPER_MCP_DESTINATION_SCOPE,
+  KEEPER_MCP_EVENT_SCOPE,
+  KEEPER_MCP_MAPPING_SCOPE,
+  KEEPER_MCP_READ_SCOPE,
+  KEEPER_MCP_RESOURCE_SCOPES,
+  KEEPER_MCP_SCOPES,
+  KEEPER_MCP_SOURCE_SCOPE,
+  KEEPER_MCP_SYNC_SCOPE,
+} from "./mcp-config";
+type AuthResult = ReturnType<typeof createAuth>;
+export type {
+  AuthConfig,
+  AuthResult,
+  KeeperMcpAuthApi,
+  KeeperMcpAuthSession,
+  KeeperMcpEnabledAuth,
+};

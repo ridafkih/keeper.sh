@@ -1,9 +1,12 @@
+import { createKeeperReadModels } from "@keeper.sh/mcp-server";
 import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { getEventCount } from "../../../utils/events";
+import { database } from "../../../context";
+
+const keeperReadModels = createKeeperReadModels(database);
 
 export const GET = withWideEvent(
   withAuth(async ({ userId }) => {
-    const count = await getEventCount(userId);
+    const count = await keeperReadModels.getEventCount(userId);
     return Response.json({ count });
   }),
 );

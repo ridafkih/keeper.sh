@@ -3,10 +3,15 @@ import ArrowLeftRight from "lucide-react/dist/esm/icons/arrow-left-right";
 import Check from "lucide-react/dist/esm/icons/check";
 import KeeperLogo from "../../../assets/keeper.svg?react";
 import { authClient } from "../../../lib/auth-client";
+import {
+  resolvePathWithSearch,
+  resolveClientPostAuthRedirect,
+  type StringSearchParams,
+} from "../../../lib/mcp-auth-flow";
 import { BackButton } from "../../../components/ui/primitives/back-button";
 import { Heading2 } from "../../../components/ui/primitives/heading";
 import { Text } from "../../../components/ui/primitives/text";
-import { TextLink } from "../../../components/ui/primitives/text-link";
+import { ExternalTextLink } from "../../../components/ui/primitives/text-link";
 import { Divider } from "../../../components/ui/primitives/divider";
 import { Button, ButtonText } from "../../../components/ui/primitives/button";
 
@@ -76,21 +81,29 @@ function PreambleLayout({ provider, onSubmit, children }: PreambleLayoutProps) {
 
 interface AuthOAuthPreambleProps {
   provider: Provider;
+  continuationSearch?: StringSearchParams;
 }
 
-export function AuthOAuthPreamble({ provider }: AuthOAuthPreambleProps) {
+export function AuthOAuthPreamble({
+  provider,
+  continuationSearch,
+}: AuthOAuthPreambleProps) {
   const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const socialProvider = PROVIDER_SOCIAL_MAP[provider];
     if (!socialProvider) return;
-    await authClient.signIn.social({ callbackURL: "/dashboard", provider: socialProvider });
+
+    await authClient.signIn.social({
+      callbackURL: resolveClientPostAuthRedirect(continuationSearch ?? {}),
+      provider: socialProvider,
+    });
   };
 
   return (
     <PreambleLayout provider={provider} onSubmit={handleSubmit}>
-      <TextLink to="/login">
+      <ExternalTextLink href={resolvePathWithSearch("/login", continuationSearch)}>
         Don&apos;t import my calendars yet, just log me in.
-      </TextLink>
+      </ExternalTextLink>
     </PreambleLayout>
   );
 }

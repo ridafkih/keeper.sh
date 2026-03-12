@@ -1,8 +1,13 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { isMcpAuthorizationContinuation } from "../../lib/mcp-auth-flow";
 import { resolveAuthRedirect } from "../../lib/route-access-guards";
 
 export const Route = createFileRoute("/(auth)")({
-  beforeLoad: ({ context }) => {
+  beforeLoad: ({ context, search }) => {
+    if (isMcpAuthorizationContinuation(search)) {
+      return;
+    }
+
     const redirectTarget = resolveAuthRedirect(context.auth.hasSession());
     if (redirectTarget) {
       throw redirect({ to: redirectTarget });

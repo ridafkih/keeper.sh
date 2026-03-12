@@ -1,0 +1,25 @@
+{
+  "name": "@keeper.sh/mcp-server",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "types": "tsc --noEmit",
+    "lint": "oxlint ."
+  },
+  "dependencies": {
+    "@keeper.sh/auth": "workspace:*",
+    "@keeper.sh/database": "workspace:*",
+    "@keeper.sh/date-utils": "workspace:*",
+    "@keeper.sh/provider-registry": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.27.1",
+    "drizzle-orm": "0.45.1",
+    "zod": "^4.3.5"
+  },
+  "devDependencies": {
+    "@keeper.sh/typescript-config": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "5.9.3"
+  }
+}

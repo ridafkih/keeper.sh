@@ -6,6 +6,7 @@
     "./api": "./src/api.ts",
     "./cron": "./src/cron.ts",
     "./database/seed": "./src/database/seed.ts",
+    "./mcp": "./src/mcp.ts",
     "./next/backend": "./src/next/backend.ts"
   },
   "scripts": {
