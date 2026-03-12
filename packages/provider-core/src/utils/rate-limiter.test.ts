@@ -34,11 +34,11 @@ describe("RateLimiter", () => {
       expect(result).toBe("hello");
     });
 
-    it("rejects when the operation throws", async () => {
+    it("rejects when the operation throws", () => {
       const limiter = new RateLimiter();
       const error = new Error("boom");
 
-      await expect(limiter.execute(() => Promise.reject(error))).rejects.toThrow("boom");
+      expect(limiter.execute(() => Promise.reject(error))).rejects.toThrow("boom");
     });
 
     it("runs operations concurrently up to the concurrency limit", async () => {

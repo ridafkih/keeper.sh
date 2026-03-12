@@ -199,36 +199,37 @@ const createCalDAVSourceProvider = (
       .where(eq(calendarsTable.id, account.calendarId));
   };
 
-  const syncSingleSource = async (
+  const syncSingleSource = (
     account: CalDAVSourceAccount,
-  ): Promise<CalDAVSourceSyncResult> => {
-    try {
-      await refreshOriginalName(account);
-      const events = await fetchEventsFromCalDAV(account);
-      return processEvents(account.calendarId, events);
-    } catch (error) {
-      if (isCalDAVAuthenticationError(error)) {
-        await database
-          .update(calendarAccountsTable)
-          .set({ needsReauthentication: true })
-          .where(eq(calendarAccountsTable.id, account.calendarAccountId));
-      }
+  ): Promise<CalDAVSourceSyncResult> =>
+    widelog.context(async () => {
+      widelog.set("operation.name", "caldav-source:sync");
+      widelog.set("source.calendar_id", account.calendarId);
+      widelog.set("source.provider", options.providerId);
+      widelog.set("user.id", account.userId);
 
-      widelog.context(() => {
-        widelog.set("operation.name", "caldav-source:sync");
-        widelog.set("source.calendar_id", account.calendarId);
-        widelog.set("source.provider", options.providerId);
-        widelog.set("user.id", account.userId);
+      try {
+        await refreshOriginalName(account);
+        const events = await fetchEventsFromCalDAV(account);
+        return processEvents(account.calendarId, events);
+      } catch (error) {
+        if (isCalDAVAuthenticationError(error)) {
+          await database
+            .update(calendarAccountsTable)
+            .set({ needsReauthentication: true })
+            .where(eq(calendarAccountsTable.id, account.calendarAccountId));
+        }
+
         widelog.errorFields(error);
+        return {
+          eventsAdded: EMPTY_COUNT,
+          eventsRemoved: EMPTY_COUNT,
+          syncToken: null,
+        };
+      } finally {
         widelog.flush();
-      });
-      return {
-        eventsAdded: EMPTY_COUNT,
-        eventsRemoved: EMPTY_COUNT,
-        syncToken: null,
-      };
-    }
-  };
+      }
+    });
 
   const getSourcesToSync = (): Promise<CalDAVSourceAccount[]> => {
     if (options.providerId === "caldav") {

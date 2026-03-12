@@ -23,10 +23,10 @@ beforeEach(() => {
 });
 
 describe("importOAuthAccountCalendarsWithDependencies", () => {
-  it("rejects creating a new OAuth account when the user is at the account limit", async () => {
+  it("rejects creating a new OAuth account when the user is at the account limit", () => {
     canAddAccountResult = false;
 
-    await expect(
+    expect(
       importOAuthAccountCalendarsWithDependencies(
         {
           accessToken: "token",
@@ -192,10 +192,10 @@ describe("createOAuthSourceWithDependencies", () => {
     expect(triggerSyncCalls).toEqual([{ provider: "google", userId: "user-1" }]);
   });
 
-  it("checks the account limit before creating a new OAuth account", async () => {
+  it("checks the account limit before creating a new OAuth account", () => {
     canAddAccountResult = false;
 
-    await expect(
+    expect(
       createOAuthSourceWithDependencies(
         {
           externalCalendarId: "external-1",

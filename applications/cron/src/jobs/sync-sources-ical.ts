@@ -99,7 +99,6 @@ interface IcalSnapshotJobDependencies {
   fetchRemoteCalendar: (calendarId: string, url: string) => Promise<FetchResult>;
   processSnapshot: (calendarId: string, ical: string) => Promise<SnapshotResult>;
   setCronEventFields: (fields: Record<string, unknown>) => void;
-  reportError?: (error: unknown, fields?: Record<string, unknown>) => void;
 }
 
 interface IcalSnapshotJobHooks {
@@ -122,16 +121,6 @@ const createDefaultJobDependencies = (): IcalSnapshotJobDependencies => ({
   processSnapshot: async (calendarId, ical) => {
     const { database } = await import("../context");
     return processSnapshot(database, calendarId, ical);
-  },
-  reportError: (error: unknown, fields?: Record<string, unknown>) => {
-    if (fields) {
-      for (const [key, value] of Object.entries(fields)) {
-        if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-          widelog.set(key, value);
-        }
-      }
-    }
-    widelog.errorFields(error);
   },
   setCronEventFields,
 });
@@ -164,16 +153,6 @@ const runIcalSnapshotSyncJob = async (
     "fetch.succeeded.count": fetchSucceeded,
   });
 
-  for (const [index, settlement] of settlements.entries()) {
-    if (settlement.status === "rejected") {
-      const source = remoteSources[index];
-      dependencies.reportError?.(settlement.reason, {
-        "operation.name": "ical-snapshot:fetch",
-        ...(source && { "source.calendar_id": source.id }),
-      });
-    }
-  }
-
   hooks.startTiming?.("processSnapshots");
   const insertionTasks: { calendarId: string; run: Promise<SnapshotResult> }[] = [];
   for (const settlement of settlements) {
@@ -195,14 +174,9 @@ const runIcalSnapshotSyncJob = async (
   let insertErrorCount = 0;
   let insertedCount = 0;
 
-  for (const [index, insertionSettlement] of insertionSettlements.entries()) {
+  for (const [, insertionSettlement] of insertionSettlements.entries()) {
     if (insertionSettlement.status === "rejected") {
       insertErrorCount += 1;
-      const insertionTask = insertionTasks[index];
-      dependencies.reportError?.(insertionSettlement.reason, {
-        ...(insertionTask && { "source.calendar_id": insertionTask.calendarId }),
-        "operation.name": "ical-snapshot:process",
-      });
       continue;
     }
 

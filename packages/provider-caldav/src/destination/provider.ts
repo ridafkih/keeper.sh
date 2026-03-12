@@ -124,71 +124,71 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
     this.rateLimiter = new RateLimiter({ concurrency: CALDAV_RATE_LIMIT_CONCURRENCY });
   }
 
-  async pushEvents(events: SyncableEvent[]): Promise<PushResult[]> {
-    const results = await Promise.all(
+  pushEvents(events: SyncableEvent[]): Promise<PushResult[]> {
+    return Promise.all(
       events.map((event) =>
-        this.rateLimiter.execute(async (): Promise<PushResult> => {
-          try {
-            const uid = generateEventUid();
-            const iCalString = eventToICalString(event, uid);
+        this.rateLimiter.execute((): Promise<PushResult> =>
+          widelog.context(async () => {
+            widelog.set("destination.calendar_id", this.config.calendarId);
+            widelog.set("operation.name", "caldav:push");
+            widelog.set("source.provider", this.id);
+            widelog.set("user.id", this.config.userId);
 
-            await this.client.createCalendarObject({
-              calendarUrl: this.config.calendarUrl,
-              filename: `${uid}.ics`,
-              iCalString,
-            });
+            try {
+              const uid = generateEventUid();
+              const iCalString = eventToICalString(event, uid);
 
-            return { remoteId: uid, success: true };
-          } catch (error) {
-            widelog.context(() => {
-              widelog.set("destination.calendar_id", this.config.calendarId);
-              widelog.set("operation.name", "caldav:push");
-              widelog.set("source.provider", this.id);
-              widelog.set("user.id", this.config.userId);
+              await this.client.createCalendarObject({
+                calendarUrl: this.config.calendarUrl,
+                filename: `${uid}.ics`,
+                iCalString,
+              });
+
+              return { remoteId: uid, success: true };
+            } catch (error) {
               widelog.errorFields(error);
+              return { error: getErrorMessage(error), success: false };
+            } finally {
               widelog.flush();
-            });
-            return { error: getErrorMessage(error), success: false };
-          }
-        }),
+            }
+          }),
+        ),
       ),
     );
-
-    return results;
   }
 
-  async deleteEvents(eventIds: string[]): Promise<DeleteResult[]> {
-    const results = await Promise.all(
+  deleteEvents(eventIds: string[]): Promise<DeleteResult[]> {
+    return Promise.all(
       eventIds.map((uid) =>
-        this.rateLimiter.execute(async (): Promise<DeleteResult> => {
-          try {
-            await this.client.deleteCalendarObject({
-              calendarUrl: this.config.calendarUrl,
-              filename: `${uid}.ics`,
-            });
-            return { success: true };
-          } catch (error) {
-            const notFound = error instanceof Error && error.message.includes("404");
+        this.rateLimiter.execute((): Promise<DeleteResult> =>
+          widelog.context(async () => {
+            widelog.set("destination.calendar_id", this.config.calendarId);
+            widelog.set("operation.name", "caldav:delete");
+            widelog.set("source.provider", this.id);
+            widelog.set("user.id", this.config.userId);
 
-            if (notFound) {
+            try {
+              await this.client.deleteCalendarObject({
+                calendarUrl: this.config.calendarUrl,
+                filename: `${uid}.ics`,
+              });
               return { success: true };
-            }
+            } catch (error) {
+              const notFound = error instanceof Error && error.message.includes("404");
 
-            widelog.context(() => {
-              widelog.set("destination.calendar_id", this.config.calendarId);
-              widelog.set("operation.name", "caldav:delete");
-              widelog.set("source.provider", this.id);
-              widelog.set("user.id", this.config.userId);
+              if (notFound) {
+                return { success: true };
+              }
+
               widelog.errorFields(error);
+              return { error: getErrorMessage(error), success: false };
+            } finally {
               widelog.flush();
-            });
-            return { error: getErrorMessage(error), success: false };
-          }
-        }),
+            }
+          }),
+        ),
       ),
     );
-
-    return results;
   }
 
   async listRemoteEvents(): Promise<RemoteEvent[]> {

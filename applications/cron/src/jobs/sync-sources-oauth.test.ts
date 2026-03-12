@@ -44,12 +44,8 @@ describe("runOAuthSourceSyncJob", () => {
 
   it("continues when one provider fails unexpectedly", async () => {
     const cronEventFieldSets: Record<string, unknown>[] = [];
-    const errors: unknown[] = [];
 
     await runOAuthSourceSyncJob({
-      reportError: (error) => {
-        errors.push(error);
-      },
       setCronEventFields: (fields) => {
         cronEventFieldSets.push(fields);
       },
@@ -68,7 +64,6 @@ describe("runOAuthSourceSyncJob", () => {
       }),
     });
 
-    expect(errors).toHaveLength(1);
     expect(cronEventFieldSets).toEqual([
       {
         "outlook.error.count": 2,
@@ -83,12 +78,8 @@ describe("runOAuthSourceSyncJob", () => {
 
   it("continues when one provider throws synchronously", async () => {
     const cronEventFieldSets: Record<string, unknown>[] = [];
-    const errors: unknown[] = [];
 
     await runOAuthSourceSyncJob({
-      reportError: (error) => {
-        errors.push(error);
-      },
       setCronEventFields: (fields) => {
         cronEventFieldSets.push(fields);
       },
@@ -104,7 +95,6 @@ describe("runOAuthSourceSyncJob", () => {
       }),
     });
 
-    expect(errors).toHaveLength(1);
     expect(cronEventFieldSets).toEqual([
       {
         "outlook.error.count": 0,
@@ -140,19 +130,12 @@ describe("runOAuthSourceSyncJob", () => {
     ]);
   });
 
-  it("reports each provider rejection when both providers throw", async () => {
-    const errors: unknown[] = [];
-
+  it("completes without throwing when both providers reject", async () => {
     await runOAuthSourceSyncJob({
-      reportError: (error) => {
-        errors.push(error);
-      },
       setCronEventFields: Boolean,
       syncGoogleSources: () => Promise.reject(new Error("google crashed")),
       syncOutlookSources: () => Promise.reject(new Error("outlook crashed")),
     });
-
-    expect(errors).toHaveLength(2);
   });
 
   it("omits provider error detail fields when there are no embedded provider errors", async () => {

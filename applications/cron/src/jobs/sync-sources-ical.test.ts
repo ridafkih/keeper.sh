@@ -39,7 +39,6 @@ describe("runIcalSnapshotSyncJob", () => {
   });
 
   it("continues processing when one remote fetch rejects", async () => {
-    const errors: unknown[] = [];
     const processedSnapshots: { calendarId: string; ical: string }[] = [];
 
     await runIcalSnapshotSyncJob({
@@ -57,20 +56,15 @@ describe("runIcalSnapshotSyncJob", () => {
         processedSnapshots.push({ calendarId, ical });
         return Promise.resolve({ error: false, skipped: false });
       },
-      reportError: (error) => {
-        errors.push(error);
-      },
       setCronEventFields: Boolean,
     });
 
-    expect(errors).toHaveLength(1);
     expect(processedSnapshots).toEqual([
       { calendarId: "source-success", ical: "ICAL:source-success" },
     ]);
   });
 
   it("continues processing when one remote fetch throws synchronously", async () => {
-    const errors: unknown[] = [];
     const processedSnapshots: { calendarId: string; ical: string }[] = [];
     const cronEventFieldSets: Record<string, unknown>[] = [];
 
@@ -90,9 +84,6 @@ describe("runIcalSnapshotSyncJob", () => {
         processedSnapshots.push({ calendarId, ical });
         return Promise.resolve({ error: false, skipped: false });
       },
-      reportError: (error) => {
-        errors.push(error);
-      },
       setCronEventFields: (fields) => {
         cronEventFieldSets.push(fields);
       },
@@ -105,7 +96,6 @@ describe("runIcalSnapshotSyncJob", () => {
       "fetch.failed.count": 1,
       "fetch.succeeded.count": 1,
     });
-    expect(errors).toHaveLength(1);
   });
 
   it("reports insert, skipped, and insert-error counts from snapshot processing", async () => {
@@ -140,7 +130,6 @@ describe("runIcalSnapshotSyncJob", () => {
   });
 
   it("continues when one snapshot processing task throws unexpectedly", async () => {
-    const errors: unknown[] = [];
     const cronEventFieldSets: Record<string, unknown>[] = [];
     const processedSnapshotIds: string[] = [];
 
@@ -157,16 +146,12 @@ describe("runIcalSnapshotSyncJob", () => {
         }
         return Promise.resolve({ error: false, skipped: false });
       },
-      reportError: (error) => {
-        errors.push(error);
-      },
       setCronEventFields: (fields) => {
         cronEventFieldSets.push(fields);
       },
     });
 
     expect(processedSnapshotIds).toEqual(["source-throwing", "source-stable"]);
-    expect(errors).toHaveLength(1);
     expect(cronEventFieldSets[2]).toEqual({
       "insert.count": 1,
       "insert.error.count": 1,
@@ -175,7 +160,6 @@ describe("runIcalSnapshotSyncJob", () => {
   });
 
   it("continues when one snapshot processor throws synchronously", async () => {
-    const errors: unknown[] = [];
     const cronEventFieldSets: Record<string, unknown>[] = [];
 
     await runIcalSnapshotSyncJob({
@@ -192,9 +176,6 @@ describe("runIcalSnapshotSyncJob", () => {
 
         return Promise.resolve({ error: false, skipped: false });
       },
-      reportError: (error) => {
-        errors.push(error);
-      },
       setCronEventFields: (fields) => {
         cronEventFieldSets.push(fields);
       },
@@ -205,7 +186,6 @@ describe("runIcalSnapshotSyncJob", () => {
       "insert.error.count": 1,
       "skipped.count": 0,
     });
-    expect(errors).toHaveLength(1);
   });
 
   it("aggregates high-volume mixed outcomes correctly", async () => {
@@ -226,15 +206,12 @@ describe("runIcalSnapshotSyncJob", () => {
     let expectedInsertedCount = 0;
     let expectedSkippedCount = 0;
     let expectedInsertErrorCount = 0;
-    let expectedReportedErrorCount = 0;
-
     for (const source of remoteSources) {
       const index = Number(source.id.replace("source-", ""));
       const hasMissingUrl = source.url === null;
       const fetchThrows = !hasMissingUrl && index % 15 === 0;
       if (hasMissingUrl || fetchThrows) {
         fetchFailedCount += 1;
-        expectedReportedErrorCount += 1;
         continue;
       }
 
@@ -242,7 +219,6 @@ describe("runIcalSnapshotSyncJob", () => {
 
       if (index % 7 === 0) {
         expectedInsertErrorCount += 1;
-        expectedReportedErrorCount += 1;
       } else if (index % 5 === 0) {
         expectedInsertErrorCount += 1;
       } else if (index % 3 === 0) {
@@ -252,7 +228,6 @@ describe("runIcalSnapshotSyncJob", () => {
       }
     }
 
-    const errors: unknown[] = [];
     const cronEventFieldSets: Record<string, unknown>[] = [];
 
     await runIcalSnapshotSyncJob({
@@ -277,9 +252,6 @@ describe("runIcalSnapshotSyncJob", () => {
         }
         return Promise.resolve({ error: false, skipped: false });
       },
-      reportError: (error) => {
-        errors.push(error);
-      },
       setCronEventFields: (fields) => {
         cronEventFieldSets.push(fields);
       },
@@ -295,6 +267,5 @@ describe("runIcalSnapshotSyncJob", () => {
       "insert.error.count": expectedInsertErrorCount,
       "skipped.count": expectedSkippedCount,
     });
-    expect(errors).toHaveLength(expectedReportedErrorCount);
   });
 });

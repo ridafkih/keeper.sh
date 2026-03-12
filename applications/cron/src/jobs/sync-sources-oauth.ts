@@ -22,7 +22,6 @@ interface OAuthSyncJobDependencies {
   syncGoogleSources: () => Promise<ProviderSyncResult | null>;
   syncOutlookSources: () => Promise<ProviderSyncResult | null>;
   setCronEventFields: (fields: Record<string, unknown>) => void;
-  reportError?: (error: unknown, fields?: Record<string, unknown>) => void;
 }
 
 const deduplicateMessages = (messages: string[]): string[] => [...new Set(messages)];
@@ -110,20 +109,10 @@ const runOAuthSourceSyncJob = async (dependencies: OAuthSyncJobDependencies): Pr
 
   if (googleSettlement?.status === "fulfilled" && googleSettlement.value) {
     publishProviderMetrics("google", googleSettlement.value, dependencies);
-  } else if (googleSettlement?.status === "rejected") {
-    dependencies.reportError?.(googleSettlement.reason, {
-      "operation.name": "oauth-source-sync:google",
-      "source.provider": "google",
-    });
   }
 
   if (outlookSettlement?.status === "fulfilled" && outlookSettlement.value) {
     publishProviderMetrics("outlook", outlookSettlement.value, dependencies);
-  } else if (outlookSettlement?.status === "rejected") {
-    dependencies.reportError?.(outlookSettlement.reason, {
-      "operation.name": "oauth-source-sync:outlook",
-      "source.provider": "outlook",
-    });
   }
 };
 
@@ -214,16 +203,6 @@ const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies>
   };
 
   return {
-    reportError: (error: unknown, fields?: Record<string, unknown>) => {
-      if (fields) {
-        for (const [key, value] of Object.entries(fields)) {
-          if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-            widelog.set(key, value);
-          }
-        }
-      }
-      widelog.errorFields(error);
-    },
     setCronEventFields,
     syncGoogleSources,
     syncOutlookSources,

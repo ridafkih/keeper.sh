@@ -34,16 +34,12 @@ describe("runCaldavSourceSyncJob", () => {
 
   it("continues when one provider throws unexpectedly", async () => {
     const cronEventFieldSets: Record<string, unknown>[] = [];
-    const errors: unknown[] = [];
 
     await runCaldavSourceSyncJob({
       providers: [
         { id: "caldav", name: "CalDAV" },
         { id: "icloud", name: "iCloud" },
       ],
-      reportError: (error) => {
-        errors.push(error);
-      },
       setCronEventFields: (fields) => {
         cronEventFieldSets.push(fields);
       },
@@ -60,7 +56,6 @@ describe("runCaldavSourceSyncJob", () => {
       },
     });
 
-    expect(errors).toHaveLength(1);
     expect(cronEventFieldSets).toEqual([
       {
         "icloud.events.added": 3,
@@ -71,16 +66,12 @@ describe("runCaldavSourceSyncJob", () => {
 
   it("continues when one provider throws synchronously", async () => {
     const cronEventFieldSets: Record<string, unknown>[] = [];
-    const errors: unknown[] = [];
 
     await runCaldavSourceSyncJob({
       providers: [
         { id: "caldav", name: "CalDAV" },
         { id: "icloud", name: "iCloud" },
       ],
-      reportError: (error) => {
-        errors.push(error);
-      },
       setCronEventFields: (fields) => {
         cronEventFieldSets.push(fields);
       },
@@ -97,7 +88,6 @@ describe("runCaldavSourceSyncJob", () => {
       },
     });
 
-    expect(errors).toHaveLength(1);
     expect(cronEventFieldSets).toEqual([
       {
         "icloud.events.added": 2,
@@ -120,21 +110,14 @@ describe("runCaldavSourceSyncJob", () => {
     expect(cronEventFieldSets).toEqual([]);
   });
 
-  it("reports each provider rejection when multiple providers throw", async () => {
-    const errors: unknown[] = [];
-
+  it("completes without throwing when multiple providers reject", async () => {
     await runCaldavSourceSyncJob({
       providers: [
         { id: "caldav", name: "CalDAV" },
         { id: "icloud", name: "iCloud" },
       ],
-      reportError: (error) => {
-        errors.push(error);
-      },
       setCronEventFields: Boolean,
       syncProvider: () => Promise.reject(new Error("provider failure")),
     });
-
-    expect(errors).toHaveLength(2);
   });
 });

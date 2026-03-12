@@ -9,7 +9,6 @@ import {
   getDestinationsForSource,
   getSourcesForDestination,
 } from "../../../utils/source-destination-mappings";
-import { widelog } from "../../../utils/logging";
 import { withProviderMetadata } from "../../../utils/provider-display";
 import { handlePatchSourceRoute } from "./[id]/source-item-routes";
 
@@ -75,16 +74,6 @@ const PATCH = withWideEvent(
       { body: payload, params, userId },
       {
         canUseEventFilters: (userId) => premiumService.canUseEventFilters(userId),
-        reportError: (error, fields) => {
-          if (fields) {
-            for (const [key, value] of Object.entries(fields)) {
-              if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-                widelog.set(key, value);
-              }
-            }
-          }
-          widelog.errorFields(error);
-        },
         triggerDestinationSync,
         updateSource: async (userIdToUpdate, sourceCalendarId, updates) => {
           const [updated] = await database

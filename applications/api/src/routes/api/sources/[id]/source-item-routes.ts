@@ -2,6 +2,7 @@ import type { SourcePatchBody } from "../../../../utils/request-body";
 import { sourcePatchBodySchema } from "../../../../utils/request-body";
 import { idParamSchema } from "../../../../utils/request-query";
 import { ErrorResponse } from "../../../../utils/responses";
+import { widelog } from "../../../../utils/logging";
 
 const EVENT_FILTER_FIELDS = [
   "excludeAllDayEvents",
@@ -35,7 +36,6 @@ interface PatchSourceDependencies {
   ) => Promise<Record<string, unknown> | null>;
   canUseEventFilters: (userId: string) => Promise<boolean>;
   triggerDestinationSync: (userId: string) => void;
-  reportError?: (error: unknown, fields?: Record<string, unknown>) => void;
 }
 
 const buildSourceUpdates = (
@@ -107,11 +107,7 @@ const handlePatchSourceRoute = async (
   try {
     dependencies.triggerDestinationSync(context.userId);
   } catch (error) {
-    dependencies.reportError?.(error, {
-      "operation.name": "source:patch:trigger-sync",
-      "source.calendar_id": resolvedId.id,
-      "user.id": context.userId,
-    });
+    widelog.errorFields(error);
   }
 
   return Response.json(updated);

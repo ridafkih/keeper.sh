@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { runWithCredentialRefreshLock } from "./refresh-coordinator";
 
 describe("runWithCredentialRefreshLock", () => {
-  it("coalesces concurrent refreshes for the same credential", async () => {
+  it("coalesces concurrent refreshes for the same credential", () => {
     let refreshCalls = 0;
     const deferredRefresh = Promise.withResolvers<{
       access_token: string;
@@ -26,11 +26,11 @@ describe("runWithCredentialRefreshLock", () => {
       refresh_token: "refresh-token",
     });
 
-    await expect(first).resolves.toMatchObject({ access_token: "access-token" });
-    await expect(second).resolves.toMatchObject({ access_token: "access-token" });
+    expect(first).resolves.toMatchObject({ access_token: "access-token" });
+    expect(second).resolves.toMatchObject({ access_token: "access-token" });
   });
 
-  it("releases the lock after failures", async () => {
+  it("releases the lock after failures", () => {
     let calls = 0;
 
     const failingOperation = () => {
@@ -38,10 +38,10 @@ describe("runWithCredentialRefreshLock", () => {
       return Promise.reject(new Error("refresh failed"));
     };
 
-    await expect(
+    expect(
       runWithCredentialRefreshLock("credential-2", failingOperation),
     ).rejects.toThrow("refresh failed");
-    await expect(
+    expect(
       runWithCredentialRefreshLock("credential-2", failingOperation),
     ).rejects.toThrow("refresh failed");
 

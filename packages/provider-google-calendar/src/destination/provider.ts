@@ -174,35 +174,37 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
     };
   }
 
-  protected async pushEvent(event: SyncableEvent): Promise<PushResult> {
-    const uid = generateEventUid();
-    const resource = serializeGoogleEvent(
-      event,
-      uid,
-      GoogleCalendarProviderInstance.buildRecurrenceRule(event),
-    );
+  protected pushEvent(event: SyncableEvent): Promise<PushResult> {
+    return widelog.context(async () => {
+      widelog.set("destination.calendar_id", this.config.calendarId);
+      widelog.set("operation.name", "google-calendar:push");
+      widelog.set("source.provider", this.id);
+      widelog.set("user.id", this.config.userId);
 
-    if (!resource) {
-      return { success: true };
-    }
+      try {
+        const uid = generateEventUid();
+        const resource = serializeGoogleEvent(
+          event,
+          uid,
+          GoogleCalendarProviderInstance.buildRecurrenceRule(event),
+        );
 
-    try {
-      const result = await this.createEvent(resource);
-      if (result.success) {
-        return { remoteId: uid, success: true };
-      }
-      return result;
-    } catch (error) {
-      widelog.context(() => {
-        widelog.set("destination.calendar_id", this.config.calendarId);
-        widelog.set("operation.name", "google-calendar:push");
-        widelog.set("source.provider", this.id);
-        widelog.set("user.id", this.config.userId);
+        if (!resource) {
+          return { success: true };
+        }
+
+        const result = await this.createEvent(resource);
+        if (result.success) {
+          return { remoteId: uid, success: true };
+        }
+        return result;
+      } catch (error) {
         widelog.errorFields(error);
+        return { error: getErrorMessage(error), success: false };
+      } finally {
         widelog.flush();
-      });
-      return { error: getErrorMessage(error), success: false };
-    }
+      }
+    });
   }
 
   private async createEvent(resource: GoogleEvent): Promise<PushResult> {
@@ -234,49 +236,51 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
     return { success: true };
   }
 
-  protected async deleteEvent(uid: string): Promise<DeleteResult> {
-    try {
-      const existing = await this.findEventByUid(uid);
+  protected deleteEvent(uid: string): Promise<DeleteResult> {
+    return widelog.context(async () => {
+      widelog.set("destination.calendar_id", this.config.calendarId);
+      widelog.set("operation.name", "google-calendar:delete");
+      widelog.set("source.provider", this.id);
+      widelog.set("user.id", this.config.userId);
 
-      if (!existing?.id) {
-        return { success: true };
-      }
+      try {
+        const existing = await this.findEventByUid(uid);
 
-      const url = new URL(
-        `calendars/${encodeURIComponent(this.config.externalCalendarId)}/events/${encodeURIComponent(existing.id)}`,
-        GOOGLE_CALENDAR_API,
-      );
-
-      const response = await fetch(url, {
-        headers: this.headers,
-        method: "DELETE",
-      });
-
-      if (!response.ok && response.status !== HTTP_STATUS.NOT_FOUND) {
-        const body = await response.json();
-        const { error } = googleApiErrorSchema.assert(body);
-        const errorMessage = error?.message ?? response.statusText;
-
-        if (isAuthError(response.status, error)) {
-          return this.handleAuthErrorResponse(errorMessage);
+        if (!existing?.id) {
+          return { success: true };
         }
 
-        return { error: errorMessage, success: false };
-      }
+        const url = new URL(
+          `calendars/${encodeURIComponent(this.config.externalCalendarId)}/events/${encodeURIComponent(existing.id)}`,
+          GOOGLE_CALENDAR_API,
+        );
 
-      await response.body?.cancel?.();
-      return { success: true };
-    } catch (error) {
-      widelog.context(() => {
-        widelog.set("destination.calendar_id", this.config.calendarId);
-        widelog.set("operation.name", "google-calendar:delete");
-        widelog.set("source.provider", this.id);
-        widelog.set("user.id", this.config.userId);
+        const response = await fetch(url, {
+          headers: this.headers,
+          method: "DELETE",
+        });
+
+        if (!response.ok && response.status !== HTTP_STATUS.NOT_FOUND) {
+          const body = await response.json();
+          const { error } = googleApiErrorSchema.assert(body);
+          const errorMessage = error?.message ?? response.statusText;
+
+          if (isAuthError(response.status, error)) {
+            return this.handleAuthErrorResponse(errorMessage);
+          }
+
+          return { error: errorMessage, success: false };
+        }
+
+        await response.body?.cancel?.();
+        return { success: true };
+      } catch (error) {
         widelog.errorFields(error);
+        return { error: getErrorMessage(error), success: false };
+      } finally {
         widelog.flush();
-      });
-      return { error: getErrorMessage(error), success: false };
-    }
+      }
+    });
   }
 
   private async findEventByUid(uid: string): Promise<GoogleEvent | null> {

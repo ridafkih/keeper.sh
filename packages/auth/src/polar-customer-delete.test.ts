@@ -2,14 +2,14 @@ import { describe, expect, it, mock } from "bun:test";
 import { deletePolarCustomerByExternalId } from "./polar-customer-delete";
 
 describe("deletePolarCustomerByExternalId", () => {
-  it("ignores ResourceNotFound responses from Polar", async () => {
+  it("ignores ResourceNotFound responses from Polar", () => {
     const resourceNotFoundError = Object.assign(new Error("Not found"), {
       detail: "Not found",
       error: "ResourceNotFound",
     });
     const deleteExternal = mock(() => Promise.reject(resourceNotFoundError));
 
-    await expect(
+    expect(
       deletePolarCustomerByExternalId(
         { customers: { deleteExternal } },
         "user-1",
@@ -20,10 +20,10 @@ describe("deletePolarCustomerByExternalId", () => {
     expect(deleteExternal).toHaveBeenCalledWith({ externalId: "user-1" });
   });
 
-  it("does not throw when Polar deletion fails unexpectedly", async () => {
+  it("does not throw when Polar deletion fails unexpectedly", () => {
     const deleteExternal = mock(() => Promise.reject(new Error("polar unavailable")));
 
-    await expect(
+    expect(
       deletePolarCustomerByExternalId(
         { customers: { deleteExternal } },
         "user-1",
@@ -31,7 +31,7 @@ describe("deletePolarCustomerByExternalId", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("does not write to stderr during tests when deletion fails unexpectedly", async () => {
+  it("does not write to stderr during tests when deletion fails unexpectedly", () => {
     const deleteExternal = mock(() => Promise.reject(new Error("polar unavailable")));
     const stderrWrite = mock(() => true as never);
     const originalNodeEnv = process.env.NODE_ENV;
@@ -41,7 +41,7 @@ describe("deletePolarCustomerByExternalId", () => {
     process.stderr.write = stderrWrite as typeof process.stderr.write;
 
     try {
-      await expect(
+      expect(
         deletePolarCustomerByExternalId(
           { customers: { deleteExternal } },
           "user-1",

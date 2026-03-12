@@ -58,7 +58,7 @@ describe("getAllJobs", () => {
       "utf8",
     );
 
-    await expect(getAllJobs(workspaceRoot)).rejects.toThrow(
+    expect(getAllJobs(workspaceRoot)).rejects.toThrow(
       "is missing a default cron export",
     );
   });

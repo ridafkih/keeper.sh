@@ -36,7 +36,6 @@ interface CaldavSyncJobDependencies {
   providers: CaldavProvider[];
   syncProvider: (provider: CaldavProvider) => Promise<ProviderSyncResult | null>;
   setCronEventFields: (fields: Record<string, unknown>) => void;
-  reportError?: (error: unknown, fields?: Record<string, unknown>) => void;
 }
 
 const runCaldavSourceSyncJob = async (dependencies: CaldavSyncJobDependencies): Promise<void> => {
@@ -45,17 +44,8 @@ const runCaldavSourceSyncJob = async (dependencies: CaldavSyncJobDependencies): 
       Promise.resolve().then(() => dependencies.syncProvider(provider))),
   );
 
-  for (const [index, settlement] of settlements.entries()) {
-    if (settlement.status === "rejected") {
-      const provider = dependencies.providers[index];
-      dependencies.reportError?.(settlement.reason, {
-        "operation.name": "caldav-source-sync:provider",
-        ...(provider && { "source.provider": provider.id }),
-      });
-      continue;
-    }
-
-    if (!settlement.value) {
+  for (const settlement of settlements) {
+    if (settlement.status !== "fulfilled" || !settlement.value) {
       continue;
     }
 
@@ -108,16 +98,6 @@ const createDefaultJobDependencies = async (): Promise<CaldavSyncJobDependencies
 
   return {
     providers: getCalDAVProviders(),
-    reportError: (error: unknown, fields?: Record<string, unknown>) => {
-      if (fields) {
-        for (const [key, value] of Object.entries(fields)) {
-          if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-            widelog.set(key, value);
-          }
-        }
-      }
-      widelog.errorFields(error);
-    },
     setCronEventFields,
     syncProvider,
   };

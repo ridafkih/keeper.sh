@@ -158,8 +158,8 @@ describe("handleOAuthCallbackWithDependencies", () => {
     expect(triggerDestinationSyncCalls).toEqual(["user-1"]);
   });
 
-  it("rejects reauthentication with a different external account", async () => {
-    await expect(
+  it("rejects reauthentication with a different external account", () => {
+    expect(
       handleOAuthCallbackWithDependencies(
         {
           code: "oauth-code",

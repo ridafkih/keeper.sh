@@ -9,7 +9,6 @@ describe("handlePatchSourceRoute", () => {
       { body: {}, params: {}, userId: "user-1" },
       {
         canUseEventFilters: () => Promise.resolve(true),
-        reportError: Boolean,
         triggerDestinationSync: Boolean,
         updateSource: () => Promise.resolve(null),
       },
@@ -23,7 +22,6 @@ describe("handlePatchSourceRoute", () => {
       { body: { unknown: true }, params: { id: "source-1" }, userId: "user-1" },
       {
         canUseEventFilters: () => Promise.resolve(true),
-        reportError: Boolean,
         triggerDestinationSync: Boolean,
         updateSource: () => Promise.resolve(null),
       },
@@ -41,7 +39,6 @@ describe("handlePatchSourceRoute", () => {
       },
       {
         canUseEventFilters: () => Promise.resolve(true),
-        reportError: Boolean,
         triggerDestinationSync: Boolean,
         updateSource: () => Promise.resolve(null),
       },
@@ -59,7 +56,6 @@ describe("handlePatchSourceRoute", () => {
       },
       {
         canUseEventFilters: () => Promise.resolve(false),
-        reportError: Boolean,
         triggerDestinationSync: Boolean,
         updateSource: () => Promise.resolve(null),
       },
@@ -72,8 +68,6 @@ describe("handlePatchSourceRoute", () => {
   });
 
   it("does not fail when post-update destination sync trigger throws", async () => {
-    const errors: unknown[] = [];
-
     const response = await handlePatchSourceRoute(
       {
         body: { name: "Updated Name" },
@@ -82,9 +76,6 @@ describe("handlePatchSourceRoute", () => {
       },
       {
         canUseEventFilters: () => Promise.resolve(true),
-        reportError: (error) => {
-          errors.push(error);
-        },
         triggerDestinationSync: () => {
           throw new Error("trigger failed");
         },
@@ -96,7 +87,6 @@ describe("handlePatchSourceRoute", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(errors).toHaveLength(1);
   });
 
   it("triggers destination sync for non-filter updates", async () => {
@@ -110,7 +100,6 @@ describe("handlePatchSourceRoute", () => {
       },
       {
         canUseEventFilters: () => Promise.resolve(true),
-        reportError: Boolean,
         triggerDestinationSync: (userId) => {
           destinationSyncCalls.push(userId);
         },
@@ -136,7 +125,6 @@ describe("handlePatchSourceRoute", () => {
       },
       {
         canUseEventFilters: () => Promise.resolve(true),
-        reportError: Boolean,
         triggerDestinationSync: (userId) => {
           destinationSyncCalls.push(userId);
         },

@@ -46,7 +46,6 @@ interface SetDestinationsDependencies {
   ) => Promise<TResult>;
   isMappingCountAllowed?: (userId: string, nextMappingCount: number) => Promise<boolean>;
   triggerDestinationSync: (userId: string) => void;
-  reportError?: (error: unknown, fields?: Record<string, unknown>) => void;
 }
 
 interface SetSourcesTransaction {
@@ -68,7 +67,6 @@ interface SetSourcesDependencies {
   ) => Promise<TResult>;
   isMappingCountAllowed?: (userId: string, nextMappingCount: number) => Promise<boolean>;
   triggerDestinationSync: (userId: string) => void;
-  reportError?: (error: unknown, fields?: Record<string, unknown>) => void;
 }
 
 const assertAllIdsOwned = (
@@ -270,16 +268,6 @@ const createSetDestinationsDependencies = async (): Promise<SetDestinationsDepen
       const mappingLimit = premiumService.getMappingLimit(userPlan);
       return nextMappingCount <= mappingLimit;
     },
-    reportError: (error, fields) => {
-      if (fields) {
-        for (const [key, value] of Object.entries(fields)) {
-          if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-            widelog.set(key, value);
-          }
-        }
-      }
-      widelog.errorFields(error);
-    },
     triggerDestinationSync,
     withTransaction: (callback) =>
       database.transaction((transactionClient) =>
@@ -295,16 +283,6 @@ const createSetSourcesDependencies = async (): Promise<SetSourcesDependencies> =
       const userPlan = await premiumService.getUserPlan(userId);
       const mappingLimit = premiumService.getMappingLimit(userPlan);
       return nextMappingCount <= mappingLimit;
-    },
-    reportError: (error, fields) => {
-      if (fields) {
-        for (const [key, value] of Object.entries(fields)) {
-          if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-            widelog.set(key, value);
-          }
-        }
-      }
-      widelog.errorFields(error);
     },
     triggerDestinationSync,
     withTransaction: (callback) =>
@@ -370,11 +348,7 @@ const runSetDestinationsForSource = async (
   try {
     dependencies.triggerDestinationSync(userId);
   } catch (error) {
-    dependencies.reportError?.(error, {
-      "operation.name": "mappings:set-destinations:trigger-sync",
-      "source.calendar_id": sourceCalendarId,
-      "user.id": userId,
-    });
+    widelog.errorFields(error);
   }
 };
 
@@ -431,11 +405,7 @@ const runSetSourcesForDestination = async (
   try {
     dependencies.triggerDestinationSync(userId);
   } catch (error) {
-    dependencies.reportError?.(error, {
-      "destination.calendar_id": destinationCalendarId,
-      "operation.name": "mappings:set-sources:trigger-sync",
-      "user.id": userId,
-    });
+    widelog.errorFields(error);
   }
 };
 

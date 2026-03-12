@@ -44,22 +44,17 @@ describe("runReconcileSubscriptionsJob", () => {
   });
 
   it("reports each reconciliation rejection when multiple users fail", async () => {
-    const errors: unknown[] = [];
     const cronEventFieldSets: Record<string, unknown>[] = [];
 
     await runReconcileSubscriptionsJob({
       hasBillingClient: true,
       reconcileUserSubscription: () => Promise.reject(new Error("reconcile failed")),
-      reportError: (error) => {
-        errors.push(error);
-      },
       selectUserIds: () => Promise.resolve(["user-1", "user-2"]),
       setCronEventFields: (fields) => {
         cronEventFieldSets.push(fields);
       },
     });
 
-    expect(errors).toHaveLength(2);
     expect(cronEventFieldSets).toEqual([
       { "processed.count": 2 },
       { "failed.count": 2 },

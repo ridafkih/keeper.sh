@@ -3,7 +3,6 @@ import { userSubscriptionsTable } from "@keeper.sh/database/schema";
 import { user } from "@keeper.sh/database/auth-schema";
 import { setCronEventFields, withCronWideEvent } from "../utils/with-wide-event";
 import { countSettledResults } from "../utils/count-settled-results";
-import { widelog } from "../utils/logging";
 
 const EMPTY_SUBSCRIPTIONS_COUNT = 0;
 const INITIAL_PROCESSED_COUNT = 0;
@@ -20,7 +19,6 @@ interface ReconcileSubscriptionsDependencies {
   selectUserIds: () => Promise<string[]>;
   reconcileUserSubscription: (userId: string) => Promise<void>;
   setCronEventFields: (fields: Record<string, unknown>) => void;
-  reportError?: (error: unknown, fields?: Record<string, unknown>) => void;
 }
 
 const runReconcileSubscriptionsJob = async (
@@ -37,16 +35,6 @@ const runReconcileSubscriptionsJob = async (
   const settlements = await Promise.allSettled(
     userIds.map((userId) => dependencies.reconcileUserSubscription(userId)),
   );
-
-  for (const [index, settlement] of settlements.entries()) {
-    if (settlement.status === "rejected") {
-      const userId = userIds[index];
-      dependencies.reportError?.(settlement.reason, {
-        "operation.name": "reconcile-subscriptions:user",
-        ...(userId && { "user.id": userId }),
-      });
-    }
-  }
 
   const { failed } = countSettledResults(settlements);
   dependencies.setCronEventFields({ "failed.count": failed });
@@ -87,16 +75,6 @@ const createDefaultDependencies = async (): Promise<ReconcileSubscriptionsDepend
           },
           target: userSubscriptionsTable.userId,
         });
-    },
-    reportError: (error: unknown, fields?: Record<string, unknown>) => {
-      if (fields) {
-        for (const [key, value] of Object.entries(fields)) {
-          if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-            widelog.set(key, value);
-          }
-        }
-      }
-      widelog.errorFields(error);
     },
     selectUserIds: async () => {
       const users = await database.select({ id: user.id }).from(user);

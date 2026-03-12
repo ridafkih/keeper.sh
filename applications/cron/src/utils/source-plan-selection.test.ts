@@ -40,8 +40,8 @@ describe("filterSourcesByPlan", () => {
     expect(lookupCalls).toEqual(["u-pro", "u-free", "u-other-pro"]);
   });
 
-  it("propagates lookup failures", async () => {
-    await expect(
+  it("propagates lookup failures", () => {
+    expect(
       filterSourcesByPlan(
         [{ calendarType: "ical", id: "s-1", userId: "u-1" }],
         "pro",

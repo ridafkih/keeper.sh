@@ -60,10 +60,10 @@ describe("runSendInitialSyncStatus", () => {
     expect(sent.data).toEqual(expectedPayload);
   });
 
-  it("throws when resolver fails and sends nothing", async () => {
+  it("throws when resolver fails and sends nothing", () => {
     const sentMessages: string[] = [];
 
-    await expect(
+    expect(
       runSendInitialSyncStatus(
         "user-1",
         {
@@ -84,10 +84,10 @@ describe("runSendInitialSyncStatus", () => {
     expect(sentMessages).toHaveLength(0);
   });
 
-  it("throws when resolved payload is invalid and sends nothing", async () => {
+  it("throws when resolved payload is invalid and sends nothing", () => {
     const sentMessages: string[] = [];
 
-    await expect(
+    expect(
       runSendInitialSyncStatus(
         "user-1",
         {
@@ -111,10 +111,10 @@ describe("runSendInitialSyncStatus", () => {
     expect(sentMessages).toHaveLength(0);
   });
 
-  it("throws when synced-at query fails and sends nothing", async () => {
+  it("throws when synced-at query fails and sends nothing", () => {
     const sentMessages: string[] = [];
 
-    await expect(
+    expect(
       runSendInitialSyncStatus(
         "user-1",
         {

@@ -34,7 +34,7 @@ describe("runDestinationSyncTrigger", () => {
     });
   });
 
-  it("surfaces sync failures through the background callback", async () => {
+  it("surfaces sync failures through the background callback", () => {
     let capturedCallback: () => Promise<Record<string, number>> = missingSyncCallback;
     const expectedError = new Error("sync failed");
 
@@ -46,7 +46,7 @@ describe("runDestinationSyncTrigger", () => {
     });
 
     expect(capturedCallback).not.toBe(missingSyncCallback);
-    await expect(capturedCallback()).rejects.toBe(expectedError);
+    expect(capturedCallback()).rejects.toBe(expectedError);
   });
 
   it("passes the same userId through to destination sync execution", async () => {

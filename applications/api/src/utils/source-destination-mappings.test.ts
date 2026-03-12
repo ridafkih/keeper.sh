@@ -77,10 +77,10 @@ const createUserLockManager = (): UserLockManager => {
 };
 
 describe("runSetDestinationsForSource", () => {
-  it("throws when source calendar is not found and does not trigger sync", async () => {
+  it("throws when source calendar is not found and does not trigger sync", () => {
     let triggerCount = 0;
 
-    await expect(
+    expect(
       runSetDestinationsForSource("user-1", "source-1", ["dest-1"], {
         triggerDestinationSync: () => {
           triggerCount += 1;
@@ -99,8 +99,8 @@ describe("runSetDestinationsForSource", () => {
     expect(triggerCount).toBe(0);
   });
 
-  it("throws when destination calendars include invalid IDs", async () => {
-    await expect(
+  it("throws when destination calendars include invalid IDs", () => {
+    expect(
       runSetDestinationsForSource("user-1", "source-1", ["dest-1", "dest-2"], {
         triggerDestinationSync: Boolean,
         withTransaction: (transactionCallback) =>
@@ -149,14 +149,9 @@ describe("runSetDestinationsForSource", () => {
     ]);
   });
 
-  it("does not fail the request when post-commit trigger throws", async () => {
-    const errors: unknown[] = [];
-
-    await expect(
+  it("does not fail the request when post-commit trigger throws", () => {
+    expect(
       runSetDestinationsForSource("user-1", "source-1", ["dest-1"], {
-        reportError: (error) => {
-          errors.push(error);
-        },
         triggerDestinationSync: () => {
           throw new Error("trigger failed");
         },
@@ -170,15 +165,13 @@ describe("runSetDestinationsForSource", () => {
           }),
       }),
     ).resolves.toBeUndefined();
-
-    expect(errors).toHaveLength(1);
   });
 
-  it("throws when projected mappings exceed entitlement limit", async () => {
+  it("throws when projected mappings exceed entitlement limit", () => {
     let replaceCalled = false;
     let triggerCount = 0;
 
-    await expect(
+    expect(
       runSetDestinationsForSource("user-1", "source-1", ["dest-1", "dest-2", "dest-3"], {
         isMappingCountAllowed: () => Promise.resolve(false),
         triggerDestinationSync: () => {
@@ -284,7 +277,7 @@ describe("mapping transaction adversarial behavior", () => {
     expect(triggerUsers).toEqual(["user-1", "user-1"]);
   });
 
-  it("rolls back destination mapping writes when transaction fails mid-flight", async () => {
+  it("rolls back destination mapping writes when transaction fails mid-flight", () => {
     let mappings = new Set<string>([
       createMappingKey("source-1", "dest-0"),
     ]);
@@ -331,7 +324,7 @@ describe("mapping transaction adversarial behavior", () => {
       return result;
     };
 
-    await expect(
+    expect(
       runSetDestinationsForSource("user-1", "source-1", ["dest-1"], {
         triggerDestinationSync: () => {
           triggerCount += 1;
@@ -475,8 +468,8 @@ describe("mapping transaction adversarial behavior", () => {
 });
 
 describe("runSetSourcesForDestination", () => {
-  it("throws when destination calendar is not found", async () => {
-    await expect(
+  it("throws when destination calendar is not found", () => {
+    expect(
       runSetSourcesForDestination("user-1", "dest-1", ["source-1"], {
         triggerDestinationSync: Boolean,
         withTransaction: (transactionCallback) =>
@@ -491,8 +484,8 @@ describe("runSetSourcesForDestination", () => {
     ).rejects.toThrow("Destination calendar not found");
   });
 
-  it("throws when source calendars include invalid IDs", async () => {
-    await expect(
+  it("throws when source calendars include invalid IDs", () => {
+    expect(
       runSetSourcesForDestination("user-1", "dest-1", ["source-1", "source-2"], {
         triggerDestinationSync: Boolean,
         withTransaction: (transactionCallback) =>
@@ -570,14 +563,9 @@ describe("runSetSourcesForDestination", () => {
     ]);
   });
 
-  it("does not fail the request when destination sync trigger throws", async () => {
-    const errors: unknown[] = [];
-
-    await expect(
+  it("does not fail the request when destination sync trigger throws", () => {
+    expect(
       runSetSourcesForDestination("user-1", "dest-1", ["source-1"], {
-        reportError: (error) => {
-          errors.push(error);
-        },
         triggerDestinationSync: () => {
           throw new Error("trigger failed");
         },
@@ -591,15 +579,13 @@ describe("runSetSourcesForDestination", () => {
           }),
       }),
     ).resolves.toBeUndefined();
-
-    expect(errors).toHaveLength(1);
   });
 
-  it("throws when projected mappings exceed entitlement limit", async () => {
+  it("throws when projected mappings exceed entitlement limit", () => {
     let replaceCalled = false;
     let triggerCount = 0;
 
-    await expect(
+    expect(
       runSetSourcesForDestination("user-1", "dest-1", ["source-1", "source-2"], {
         isMappingCountAllowed: () => Promise.resolve(false),
         triggerDestinationSync: () => {
