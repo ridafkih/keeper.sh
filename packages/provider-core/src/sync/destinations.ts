@@ -19,19 +19,33 @@ interface DestinationProvider {
   syncForUser(userId: string, context: SyncContext): Promise<SyncResult | null>;
 }
 
+interface SyncDestinationsOptions {
+  jobName?: string;
+  jobType?: string;
+}
+
 const syncDestinationsForUser = (
   userId: string,
   providers: DestinationProvider[],
   syncCoordinator: SyncCoordinator,
+  options: SyncDestinationsOptions = {},
 ): Promise<SyncResult> =>
   widelog.context(async () => {
     widelog.set("operation.name", "sync:destinations");
     widelog.set("operation.type", "sync");
     widelog.set("user.id", userId);
     widelog.set("provider.count", providers.length);
+    if (options.jobName) {
+      widelog.set("job.name", options.jobName);
+    }
+    if (options.jobType) {
+      widelog.set("job.type", options.jobType);
+    }
     widelog.time.start("duration_ms");
 
     const context = await syncCoordinator.startSync(userId);
+    context.jobName = options.jobName;
+    context.jobType = options.jobType;
 
     const settledResults = await Promise.allSettled(
       providers.map((provider) =>

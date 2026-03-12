@@ -2,6 +2,11 @@ import { widelogger } from "widelogger";
 import type { ServerConfig } from "./types";
 
 const loggerServiceName = "@keeper.sh/canary-web";
+const UUID_SEGMENT_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const NUMERIC_ID_SEGMENT_PATTERN = /^\d{2,}$/;
+const NORMALIZED_PATH_CACHE_MAX_SIZE = 1024;
+const normalizedPathCache = new Map<string, string>();
 
 const { destroy: destroyWideLogger, widelog } = widelogger({
   defaultEventName: "wide_event",
@@ -20,6 +25,61 @@ function isAbortError(error: unknown): boolean {
 
   const name = Reflect.get(error, "name");
   return name === "AbortError";
+}
+
+function normalizeOperationPath(pathname: string): string {
+  const cachedPath = normalizedPathCache.get(pathname);
+  if (cachedPath !== undefined) {
+    normalizedPathCache.delete(pathname);
+    normalizedPathCache.set(pathname, cachedPath);
+    return cachedPath;
+  }
+
+  const segments = pathname.split("/").filter((segment) => segment.length > 0);
+  const isAssetsPath = segments[0] === "assets";
+
+  if (isAssetsPath) {
+    const normalizedAssetsPath = "/assets/:asset";
+    setNormalizedPathCache(pathname, normalizedAssetsPath);
+    return normalizedAssetsPath;
+  }
+
+  const normalizedSegments: string[] = [];
+
+  for (const [index, segment] of segments.entries()) {
+    const previousSegments = normalizedSegments.slice(Math.max(0, index - 2), index);
+    const [firstPreviousSegment, secondPreviousSegment] = previousSegments;
+    const isApiCalIdentifierSegment =
+      previousSegments.length === 2 &&
+      firstPreviousSegment === "api" &&
+      secondPreviousSegment === "cal";
+
+    if (
+      isApiCalIdentifierSegment ||
+      UUID_SEGMENT_PATTERN.test(segment) ||
+      NUMERIC_ID_SEGMENT_PATTERN.test(segment)
+    ) {
+      normalizedSegments.push(":id");
+      continue;
+    }
+
+    normalizedSegments.push(segment);
+  }
+
+  const normalizedPath = `/${normalizedSegments.join("/")}`;
+  setNormalizedPathCache(pathname, normalizedPath);
+  return normalizedPath;
+}
+
+function setNormalizedPathCache(pathname: string, normalizedPath: string): void {
+  if (normalizedPathCache.size >= NORMALIZED_PATH_CACHE_MAX_SIZE) {
+    const oldestPath = normalizedPathCache.keys().next().value;
+    if (oldestPath !== undefined) {
+      normalizedPathCache.delete(oldestPath);
+    }
+  }
+
+  normalizedPathCache.set(pathname, normalizedPath);
 }
 
 export async function emitLifecycleWideEvent(
@@ -51,7 +111,9 @@ export async function handleWithWideLogging(
     const requestStart = Date.now();
     const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
 
-    widelog.set("operation.name", `${request.method} ${requestUrl.pathname}`);
+    const normalizedOperationPath = normalizeOperationPath(requestUrl.pathname);
+
+    widelog.set("operation.name", `${request.method} ${normalizedOperationPath}`);
     widelog.set("operation.type", "http");
     widelog.set("request.id", requestId);
     widelog.set("request.timing.start", requestStart);
@@ -94,4 +156,4 @@ export async function handleWithWideLogging(
   });
 }
 
-export { destroyWideLogger };
+export { destroyWideLogger, normalizeOperationPath };

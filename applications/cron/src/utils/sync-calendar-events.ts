@@ -17,7 +17,9 @@ interface SyncUserSourcesDependencies<TSource> {
   syncDestinationsForUser: (userId: string) => Promise<SyncResult>;
 }
 
-const createSyncUserSourcesDependencies = async (): Promise<{
+const createSyncUserSourcesDependencies = async (
+  jobName: string,
+): Promise<{
   dependencies: SyncUserSourcesDependencies<Source>;
   close: () => void;
 }> => {
@@ -34,6 +36,7 @@ const createSyncUserSourcesDependencies = async (): Promise<{
           userId,
           syncContext.destinationProviders,
           syncContext.syncCoordinator,
+          { jobName, jobType: "sync-calendar-events" },
         ),
     },
     close: syncContext.close,
@@ -141,8 +144,9 @@ const runSyncJob = async <TSource extends SourceOwner>(
 const createSyncJob = (plan: Plan, cron: string): CronOptions =>
   withCronWideEvent({
     async callback(): Promise<void> {
+      const jobName = `sync-calendar-events-${plan}`;
       const { dependencies: syncUserSourcesDependencies, close } =
-        await createSyncUserSourcesDependencies();
+        await createSyncUserSourcesDependencies(jobName);
       try {
         const { getSourcesByPlan, getUsersWithDestinationsByPlan } = await import("./get-sources");
         await runSyncJob(plan, {
