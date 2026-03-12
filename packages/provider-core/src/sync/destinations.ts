@@ -6,7 +6,7 @@ const { widelog } = widelogger({
   service: "keeper",
   defaultEventName: "wide_event",
   commitHash: process.env.COMMIT_SHA,
-  environment: process.env.ENV ?? process.env.NODE_ENV,
+  environment: process.env.NODE_ENV,
   version: process.env.npm_package_version,
 });
 
@@ -19,12 +19,12 @@ interface DestinationProvider {
   syncForUser(userId: string, context: SyncContext): Promise<SyncResult | null>;
 }
 
-const syncDestinationsForUser = async (
+const syncDestinationsForUser = (
   userId: string,
   providers: DestinationProvider[],
   syncCoordinator: SyncCoordinator,
-): Promise<SyncResult> => {
-  return widelog.context(async () => {
+): Promise<SyncResult> =>
+  widelog.context(async () => {
     widelog.set("operation.name", "sync:destinations");
     widelog.set("operation.type", "sync");
     widelog.set("user.id", userId);
@@ -75,7 +75,6 @@ const syncDestinationsForUser = async (
 
     return combined;
   });
-};
 
 export { syncDestinationsForUser };
 export type { DestinationProvider };

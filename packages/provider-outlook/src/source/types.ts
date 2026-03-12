@@ -27,6 +27,7 @@ interface OutlookRemovedInfo {
 interface OutlookCalendarEvent {
   id?: string;
   iCalUId?: string;
+  categories?: string[];
   isAllDay?: boolean;
   subject?: string;
   body?: { contentType?: string; content?: string } | null;

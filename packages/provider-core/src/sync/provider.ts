@@ -25,7 +25,7 @@ const { widelog } = widelogger({
   service: "keeper",
   defaultEventName: "wide_event",
   commitHash: process.env.COMMIT_SHA,
-  environment: process.env.ENV ?? process.env.NODE_ENV,
+  environment: process.env.NODE_ENV,
   version: process.env.npm_package_version,
 });
 
@@ -50,7 +50,7 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
   abstract deleteEvents(eventIds: string[]): Promise<DeleteResult[]>;
   abstract listRemoteEvents(options: ListRemoteEventsOptions): Promise<RemoteEvent[]>;
 
-  async sync(localEvents: SyncableEvent[], context: SyncContext): Promise<SyncResult> {
+  sync(localEvents: SyncableEvent[], context: SyncContext): Promise<SyncResult> {
     return widelog.context(async () => {
       const { database, userId, calendarId } = this.config;
 
@@ -323,6 +323,104 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
     });
   }
 
+  private processPushOperation(
+    operation: Extract<SyncOperation, { type: "add" }>,
+    progress: { current: number; total: number },
+  ): Promise<PushResult | undefined> {
+    const { database, calendarId } = this.config;
+
+    return widelog.context(async () => {
+      widelog.set("operation.name", "sync:push-event");
+      widelog.set("operation.type", "sync");
+      widelog.set("destination.calendar_id", calendarId);
+      widelog.set("destination.provider", this.id);
+      widelog.set("user.id", this.config.userId);
+      widelog.set("event.start_time", operation.event.startTime.toISOString());
+      widelog.set("event.end_time", operation.event.endTime.toISOString());
+      widelog.set("event.summary", operation.event.summary);
+      widelog.set("event.source_uid", operation.event.sourceEventUid);
+      widelog.set("event.state_id", operation.event.id);
+      widelog.set("progress.current", progress.current);
+      widelog.set("progress.total", progress.total);
+      widelog.time.start("duration_ms");
+
+      const [result] = await this.pushEvents([operation.event]);
+
+      widelog.set("push.success", result?.success ?? false);
+
+      if (result?.remoteId) {
+        widelog.set("push.remote_id", result.remoteId);
+      }
+
+      if (result?.error) {
+        widelog.set("push.error", result.error);
+      }
+
+      if (result?.shouldContinue !== globalThis.undefined) {
+        widelog.set("push.should_continue", result.shouldContinue);
+      }
+
+      if (result?.success && result.remoteId) {
+        await createEventMapping(database, {
+          calendarId,
+          deleteIdentifier: result.deleteId,
+          destinationEventUid: result.remoteId,
+          endTime: operation.event.endTime,
+          eventStateId: operation.event.id,
+          syncEventHash: createSyncEventContentHash(operation.event),
+          startTime: operation.event.startTime,
+        });
+        widelog.set("mapping.created", true);
+      }
+
+      widelog.time.stop("duration_ms");
+      widelog.flush();
+
+      return result;
+    });
+  }
+
+  private processDeleteOperation(
+    operation: Extract<SyncOperation, { type: "remove" }>,
+    progress: { current: number; total: number },
+  ): Promise<DeleteResult | undefined> {
+    const { database, calendarId } = this.config;
+
+    return widelog.context(async () => {
+      widelog.set("operation.name", "sync:delete-event");
+      widelog.set("operation.type", "sync");
+      widelog.set("destination.calendar_id", calendarId);
+      widelog.set("destination.provider", this.id);
+      widelog.set("user.id", this.config.userId);
+      widelog.set("event.uid", operation.uid);
+      widelog.set("event.start_time", operation.startTime.toISOString());
+      widelog.set("event.delete_id", operation.deleteId);
+      widelog.set("progress.current", progress.current);
+      widelog.set("progress.total", progress.total);
+      widelog.time.start("duration_ms");
+
+      const [result] = await this.deleteEvents([operation.deleteId]);
+
+      widelog.set("delete.success", result?.success ?? false);
+      if (result?.error) {
+        widelog.set("delete.error", result.error);
+      }
+      if (result?.shouldContinue !== globalThis.undefined) {
+        widelog.set("delete.should_continue", result.shouldContinue);
+      }
+
+      if (result?.success) {
+        await deleteEventMappingByDestinationUid(database, calendarId, operation.uid);
+        widelog.set("mapping.deleted", true);
+      }
+
+      widelog.time.stop("duration_ms");
+      widelog.flush();
+
+      return result;
+    });
+  }
+
   private async processOperations(
     operations: SyncOperation[],
     params: {
@@ -331,7 +429,6 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
       remoteEventCount: number;
     },
   ): Promise<SyncResult> {
-    const { database, calendarId } = this.config;
     const total = operations.length;
     let current = INITIAL_CURRENT_COUNT;
     let added = INITIAL_ADDED_COUNT;
@@ -346,54 +443,10 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
       }
 
       const eventTime = CalendarProvider.getOperationEventTime(operation);
+      const progress = { current: current + 1, total };
 
       if (operation.type === "add") {
-        const pushResult = await widelog.context(async () => {
-          widelog.set("operation.name", "sync:push-event");
-          widelog.set("operation.type", "sync");
-          widelog.set("destination.calendar_id", calendarId);
-          widelog.set("destination.provider", this.id);
-          widelog.set("user.id", this.config.userId);
-          widelog.set("event.start_time", operation.event.startTime.toISOString());
-          widelog.set("event.end_time", operation.event.endTime.toISOString());
-          widelog.set("event.summary", operation.event.summary);
-          widelog.set("event.source_uid", operation.event.sourceEventUid);
-          widelog.set("event.state_id", operation.event.id);
-          widelog.set("progress.current", current + 1);
-          widelog.set("progress.total", total);
-          widelog.time.start("duration_ms");
-
-          const [result] = await this.pushEvents([operation.event]);
-
-          widelog.set("push.success", result?.success ?? false);
-          if (result?.remoteId) {
-            widelog.set("push.remote_id", result.remoteId);
-          }
-          if (result?.error) {
-            widelog.set("push.error", result.error);
-          }
-          if (result?.shouldContinue !== undefined) {
-            widelog.set("push.should_continue", result.shouldContinue);
-          }
-
-          if (result?.success && result.remoteId) {
-            await createEventMapping(database, {
-              calendarId,
-              deleteIdentifier: result.deleteId,
-              destinationEventUid: result.remoteId,
-              endTime: operation.event.endTime,
-              eventStateId: operation.event.id,
-              syncEventHash: createSyncEventContentHash(operation.event),
-              startTime: operation.event.startTime,
-            });
-            widelog.set("mapping.created", true);
-          }
-
-          widelog.time.stop("duration_ms");
-          widelog.flush();
-
-          return result;
-        });
+        const pushResult = await this.processPushOperation(operation, progress);
 
         if (pushResult?.shouldContinue === false) {
           break;
@@ -405,39 +458,7 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
           addFailed++;
         }
       } else {
-        const deleteResult = await widelog.context(async () => {
-          widelog.set("operation.name", "sync:delete-event");
-          widelog.set("operation.type", "sync");
-          widelog.set("destination.calendar_id", calendarId);
-          widelog.set("destination.provider", this.id);
-          widelog.set("user.id", this.config.userId);
-          widelog.set("event.uid", operation.uid);
-          widelog.set("event.start_time", operation.startTime.toISOString());
-          widelog.set("event.delete_id", operation.deleteId);
-          widelog.set("progress.current", current + 1);
-          widelog.set("progress.total", total);
-          widelog.time.start("duration_ms");
-
-          const [result] = await this.deleteEvents([operation.deleteId]);
-
-          widelog.set("delete.success", result?.success ?? false);
-          if (result?.error) {
-            widelog.set("delete.error", result.error);
-          }
-          if (result?.shouldContinue !== undefined) {
-            widelog.set("delete.should_continue", result.shouldContinue);
-          }
-
-          if (result?.success) {
-            await deleteEventMappingByDestinationUid(database, calendarId, operation.uid);
-            widelog.set("mapping.deleted", true);
-          }
-
-          widelog.time.stop("duration_ms");
-          widelog.flush();
-
-          return result;
-        });
+        const deleteResult = await this.processDeleteOperation(operation, progress);
 
         if (deleteResult?.shouldContinue === false) {
           break;

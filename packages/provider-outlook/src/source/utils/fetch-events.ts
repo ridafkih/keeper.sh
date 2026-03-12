@@ -9,6 +9,7 @@ import { MICROSOFT_GRAPH_API, GONE_STATUS } from "../../shared/api";
 import { isSimpleAuthError } from "../../shared/errors";
 import { parseEventDateTime } from "../../shared/date-time";
 import { outlookEventListSchema } from "@keeper.sh/data-schemas";
+import { KEEPER_CATEGORY } from "@keeper.sh/constants";
 import { isKeeperEvent } from "@keeper.sh/provider-core";
 
 class EventsFetchError extends Error {
@@ -75,7 +76,10 @@ const buildInitialUrl = (calendarId: string, timeMin: Date, timeMax: Date): URL 
 
   url.searchParams.set("startDateTime", timeMin.toISOString());
   url.searchParams.set("endDateTime", timeMax.toISOString());
-  url.searchParams.set("$select", "id,iCalUId,subject,body,location,start,end,isAllDay,showAs");
+  url.searchParams.set(
+    "$select",
+    "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
+  );
 
   return url;
 };
@@ -283,6 +287,9 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
       continue;
     }
     if (isKeeperEvent(event.iCalUId)) {
+      continue;
+    }
+    if (event.categories?.includes(KEEPER_CATEGORY)) {
       continue;
     }
 

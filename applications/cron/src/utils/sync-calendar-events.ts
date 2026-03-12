@@ -146,9 +146,9 @@ const runSyncJob = async <TSource extends SourceOwner>(
   ensureUsersWithDestinationsIncluded(sourcesByUser, usersWithDestinations);
   const sourceEntries = [...sourcesByUser.entries()];
 
-  const userSyncs = sourceEntries.map(([userId, userSources]) => {
-    return dependencies.syncUserSourcesForUser(userId, userSources)
-  });
+  const userSyncs = sourceEntries.map(([userId, userSources]) =>
+    Promise.resolve().then(() => dependencies.syncUserSourcesForUser(userId, userSources)),
+  );
 
   const settledResults = await Promise.allSettled(userSyncs);
   const userFailedCount = settledResults.filter(

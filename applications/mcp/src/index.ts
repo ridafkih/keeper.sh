@@ -20,8 +20,7 @@ const router = new Bun.FileSystemRouter({
 });
 
 await entry({
-  main: async () => {
-    return widelog.context(async () => {
+  main: () => widelog.context(() => {
       widelog.set("operation.name", "mcp:start");
       widelog.set("operation.type", "lifecycle");
       widelog.set("service.name", "mcp");
@@ -70,7 +69,6 @@ await entry({
       } finally {
         widelog.flush();
       }
-    });
-  },
+    }),
   name: "mcp",
 });

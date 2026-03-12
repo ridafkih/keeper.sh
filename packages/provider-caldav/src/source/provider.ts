@@ -4,18 +4,10 @@ import {
   insertEventStatesWithConflictResolution,
   isKeeperEvent,
 } from "@keeper.sh/provider-core";
-import { widelogger } from "widelogger";
-
-const { widelog } = widelogger({
-  service: "keeper",
-  defaultEventName: "wide_event",
-  commitHash: process.env.COMMIT_SHA,
-  environment: process.env.ENV ?? process.env.NODE_ENV,
-  version: process.env.npm_package_version,
-});
 import type { SourceEvent } from "@keeper.sh/provider-core";
 import { calendarAccountsTable, calendarsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { and, eq, inArray } from "drizzle-orm";
+import { widelogger } from "widelogger";
 import { CalDAVClient } from "../shared/client";
 import { parseICalToRemoteEvent } from "../shared/ics";
 import { isCalDAVAuthenticationError } from "./auth-error-classification";
@@ -27,6 +19,14 @@ import type {
   CalDAVSourceProviderConfig,
   CalDAVSourceSyncResult,
 } from "../types";
+
+const { widelog } = widelogger({
+  service: "keeper",
+  defaultEventName: "wide_event",
+  commitHash: process.env.COMMIT_SHA,
+  environment: process.env.NODE_ENV,
+  version: process.env.npm_package_version,
+});
 
 const stringifyIfPresent = (value: unknown) => {
   if (!value) {

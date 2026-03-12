@@ -135,7 +135,7 @@ describe("fetchCalendarEvents", () => {
     expect(parsedUrl.searchParams.get("startDateTime")).toBe("2026-06-01T00:00:00.000Z");
     expect(parsedUrl.searchParams.get("endDateTime")).toBe("2026-06-02T00:00:00.000Z");
     expect(parsedUrl.searchParams.get("$select")).toBe(
-      "id,iCalUId,subject,body,location,start,end,isAllDay,showAs",
+      "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
     );
   });
 
@@ -212,6 +212,24 @@ describe("parseOutlookEvents", () => {
 
     expect(parsedEvents).toHaveLength(1);
     expect(parsedEvents[0]?.uid).toBe("external-uid-2");
+  });
+
+  it("skips events marked with the keeper category", () => {
+    const validEvent = createOutlookEvent({
+      iCalUId: "external-uid-6",
+      id: "outlook-event-id-6",
+    });
+
+    const keeperCategoryEvent = createOutlookEvent({
+      categories: ["keeper.sh"],
+      iCalUId: "external-uid-7",
+      id: "outlook-event-id-7",
+    });
+
+    const parsedEvents = parseOutlookEvents([validEvent, keeperCategoryEvent]);
+
+    expect(parsedEvents).toHaveLength(1);
+    expect(parsedEvents[0]?.uid).toBe("external-uid-6");
   });
 
   it("preserves working elsewhere availability", () => {

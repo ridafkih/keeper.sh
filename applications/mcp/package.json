@@ -15,7 +15,6 @@
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/env": "workspace:*",
     "@keeper.sh/keeper-api": "workspace:*",
-    "@keeper.sh/provider-core": "workspace:*",
     "@modelcontextprotocol/sdk": "1.27.1",
     "widelogger": "^0.2.1",
     "entrykit": "^0.1.3",

@@ -11,16 +11,16 @@ import type { RefreshLockStore } from "./refresh-coordinator";
 import type { SyncContext } from "../sync/coordinator";
 import { getEventsForDestination } from "../events/events";
 import { widelogger } from "widelogger";
+import type { OAuthCalendarProvider } from "./provider";
+import type { OAuthAccount } from "./accounts";
 
 const { widelog } = widelogger({
   service: "keeper",
   defaultEventName: "wide_event",
   commitHash: process.env.COMMIT_SHA,
-  environment: process.env.ENV ?? process.env.NODE_ENV,
+  environment: process.env.NODE_ENV,
   version: process.env.npm_package_version,
 });
-import type { OAuthCalendarProvider } from "./provider";
-import type { OAuthAccount } from "./accounts";
 
 const EMPTY_ACCOUNTS_COUNT = 0;
 const INITIAL_ADDED_COUNT = 0;
@@ -78,7 +78,7 @@ const createOAuthDestinationProvider = <
     }
 
     const results = await Promise.all(
-      accounts.map(async (account) =>
+      accounts.map((account) =>
         widelog.context(async () => {
           widelog.set("operation.name", "sync:destination-account");
           widelog.set("operation.type", "sync");

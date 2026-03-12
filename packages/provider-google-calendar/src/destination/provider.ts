@@ -6,15 +6,6 @@ import {
   getOAuthSyncWindowStart,
   isKeeperEvent,
 } from "@keeper.sh/provider-core";
-import { widelogger } from "widelogger";
-
-const { widelog } = widelogger({
-  service: "keeper",
-  defaultEventName: "wide_event",
-  commitHash: process.env.COMMIT_SHA,
-  environment: process.env.ENV ?? process.env.NODE_ENV,
-  version: process.env.npm_package_version,
-});
 import type {
   BroadcastSyncStatus,
   DeleteResult,
@@ -31,12 +22,21 @@ import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-sch
 import type { GoogleEvent } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { widelogger } from "widelogger";
 import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS } from "../shared/api";
 import { hasRateLimitMessage, isAuthError } from "../shared/errors";
 import { parseEventTime } from "../shared/date-time";
 import { canSerializeGoogleEvent, serializeGoogleEvent } from "./serialize-event";
 import { getGoogleAccountsForUser } from "./sync";
 import type { GoogleAccount } from "./sync";
+
+const { widelog } = widelogger({
+  service: "keeper",
+  defaultEventName: "wide_event",
+  commitHash: process.env.COMMIT_SHA,
+  environment: process.env.NODE_ENV,
+  version: process.env.npm_package_version,
+});
 
 const formatByDayValue = (value: { day: string; occurrence?: number }): string => {
   if (value.occurrence) {

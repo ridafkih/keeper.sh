@@ -24,14 +24,6 @@ import {
   getOAuthSyncWindowStart,
 } from "@keeper.sh/provider-core";
 import { widelogger } from "widelogger";
-
-const { widelog } = widelogger({
-  service: "keeper",
-  defaultEventName: "wide_event",
-  commitHash: process.env.COMMIT_SHA,
-  environment: process.env.ENV ?? process.env.NODE_ENV,
-  version: process.env.npm_package_version,
-});
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { MICROSOFT_GRAPH_API, OUTLOOK_PAGE_SIZE } from "../shared/api";
 import { hasRateLimitMessage, isAuthError } from "../shared/errors";
@@ -39,6 +31,14 @@ import { parseEventTime } from "../shared/date-time";
 import { serializeOutlookEvent } from "./serialize-event";
 import type { OutlookAccount } from "./sync";
 import { getOutlookAccountsForUser } from "./sync";
+
+const { widelog } = widelogger({
+  service: "keeper",
+  defaultEventName: "wide_event",
+  commitHash: process.env.COMMIT_SHA,
+  environment: process.env.NODE_ENV,
+  version: process.env.npm_package_version,
+});
 
 interface OutlookCalendarProviderConfig {
   database: BunSQLDatabase;
