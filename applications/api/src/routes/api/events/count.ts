@@ -1,12 +1,12 @@
-import { createKeeperReadModels } from "@keeper.sh/mcp-server";
+import { createKeeperApi } from "@keeper.sh/keeper-api";
 import { withAuth, withWideEvent } from "../../../utils/middleware";
 import { database } from "../../../context";
 
-const keeperReadModels = createKeeperReadModels(database);
+const keeperApi = createKeeperApi(database);
 
 export const GET = withWideEvent(
   withAuth(async ({ userId }) => {
-    const count = await keeperReadModels.getEventCount(userId);
+    const count = await keeperApi.getEventCount(userId);
     return Response.json({ count });
   }),
 );

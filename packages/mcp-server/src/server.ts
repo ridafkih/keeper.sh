@@ -1,4 +1,4 @@
-import { KEEPER_MCP_READ_SCOPE } from "@keeper.sh/auth";
+import { KEEPER_API_READ_SCOPE } from "@keeper.sh/auth";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type {
@@ -183,9 +183,9 @@ const createKeeperMcpHandler = ({
       );
     }
 
-    if (!hasScope(session.scopes, KEEPER_MCP_READ_SCOPE)) {
+    if (!hasScope(session.scopes, KEEPER_API_READ_SCOPE)) {
       const insufficientScopeHeader =
-        `${wwwAuthenticateHeader}, error="insufficient_scope", scope="${KEEPER_MCP_READ_SCOPE}"`;
+        `${wwwAuthenticateHeader}, error="insufficient_scope", scope="${KEEPER_API_READ_SCOPE}"`;
 
       return createJsonRpcErrorResponse(
         403,

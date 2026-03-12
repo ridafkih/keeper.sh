@@ -72,7 +72,7 @@ interface KeeperSyncStatus {
   remoteEventCount: number;
 }
 
-interface KeeperReadModels {
+interface KeeperApi {
   listSources: (userId: string) => Promise<KeeperSource[]>;
   listDestinations: (userId: string) => Promise<KeeperDestination[]>;
   listMappings: (userId: string) => Promise<KeeperMapping[]>;
@@ -109,7 +109,7 @@ const normalizeEventRange = (
   toRequiredDate(range.to, "to"),
 );
 
-const createKeeperReadModels = (database: KeeperDatabase): KeeperReadModels => ({
+const createKeeperApi = (database: KeeperDatabase): KeeperApi => ({
   listSources: async (userId) => {
     const calendars = await database
       .select({
@@ -323,13 +323,13 @@ const createKeeperReadModels = (database: KeeperDatabase): KeeperReadModels => (
   },
 });
 
-export { createKeeperReadModels, normalizeEventRange };
+export { createKeeperApi, normalizeEventRange };
 export type {
+  KeeperApi,
   KeeperDestination,
   KeeperEvent,
   KeeperEventRangeInput,
   KeeperMapping,
-  KeeperReadModels,
   KeeperSource,
   KeeperSyncStatus,
 };

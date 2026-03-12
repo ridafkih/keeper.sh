@@ -10,9 +10,7 @@
   },
   "dependencies": {
     "@keeper.sh/auth": "workspace:*",
-    "@keeper.sh/database": "workspace:*",
-    "@keeper.sh/date-utils": "workspace:*",
-    "@keeper.sh/provider-registry": "workspace:*",
+    "@keeper.sh/keeper-api": "workspace:*",
     "@modelcontextprotocol/sdk": "1.27.1",
     "drizzle-orm": "0.45.1",
     "zod": "^4.3.5"

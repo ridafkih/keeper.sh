@@ -12,6 +12,7 @@
     "@better-auth/oauth-provider": "1.5.5",
     "@better-auth/passkey": "^1.5.5",
     "@keeper.sh/auth-plugin-username-only": "workspace:*",
+    "@keeper.sh/keeper-api": "workspace:*",
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/database": "workspace:*",
     "@polar-sh/better-auth": "^1.6.3",

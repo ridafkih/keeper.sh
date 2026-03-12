@@ -1,15 +1,15 @@
-export { createKeeperReadModels, normalizeEventRange } from "./read-models";
+export { createKeeperApi, normalizeEventRange } from "@keeper.sh/keeper-api";
 export { createKeeperMcpHandler } from "./server";
 export { createKeeperMcpToolset } from "./toolset";
 export type {
+  KeeperApi,
   KeeperDestination,
   KeeperEvent,
   KeeperEventRangeInput,
   KeeperMapping,
-  KeeperReadModels,
   KeeperSource,
   KeeperSyncStatus,
-} from "./read-models";
+} from "@keeper.sh/keeper-api";
 export type {
   CreateKeeperMcpHandlerOptions,
   KeeperMcpAuth,

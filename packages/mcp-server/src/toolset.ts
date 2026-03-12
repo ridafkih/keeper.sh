@@ -1,12 +1,12 @@
 import { z } from "zod";
 import type {
+  KeeperApi,
   KeeperDestination,
   KeeperEvent,
   KeeperMapping,
-  KeeperReadModels,
   KeeperSource,
   KeeperSyncStatus,
-} from "./read-models";
+} from "@keeper.sh/keeper-api";
 
 interface KeeperToolContext {
   userId: string;
@@ -38,7 +38,7 @@ const eventRangeSchema = {
   to: z.string().datetime(),
 } satisfies Record<string, z.ZodTypeAny>;
 
-const createKeeperMcpToolset = (readModels: KeeperReadModels): KeeperMcpToolset => ({
+const createKeeperMcpToolset = (readModels: KeeperApi): KeeperMcpToolset => ({
   list_sources: {
     title: "List sources",
     description: "List the signed-in Keeper user's connected source calendars.",

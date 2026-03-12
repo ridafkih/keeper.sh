@@ -1,30 +1,22 @@
-const KEEPER_MCP_READ_SCOPE = "keeper.read";
-const KEEPER_MCP_SOURCE_SCOPE = "keeper.sources.read";
-const KEEPER_MCP_DESTINATION_SCOPE = "keeper.destinations.read";
-const KEEPER_MCP_MAPPING_SCOPE = "keeper.mappings.read";
-const KEEPER_MCP_EVENT_SCOPE = "keeper.events.read";
-const KEEPER_MCP_SYNC_SCOPE = "keeper.sync-status.read";
-
-const KEEPER_MCP_SCOPES = [
-  KEEPER_MCP_READ_SCOPE,
-  KEEPER_MCP_SOURCE_SCOPE,
-  KEEPER_MCP_DESTINATION_SCOPE,
-  KEEPER_MCP_MAPPING_SCOPE,
-  KEEPER_MCP_EVENT_SCOPE,
-  KEEPER_MCP_SYNC_SCOPE,
-];
-
-const KEEPER_MCP_RESOURCE_SCOPES = [...KEEPER_MCP_SCOPES];
+import {
+  KEEPER_API_DEFAULT_SCOPE,
+  KEEPER_API_DESTINATION_SCOPE,
+  KEEPER_API_EVENT_SCOPE,
+  KEEPER_API_MAPPING_SCOPE,
+  KEEPER_API_READ_SCOPE,
+  KEEPER_API_RESOURCE_SCOPES,
+  KEEPER_API_SCOPES,
+  KEEPER_API_SOURCE_SCOPE,
+  KEEPER_API_SYNC_SCOPE,
+} from "@keeper.sh/keeper-api/scopes";
 
 const KEEPER_MCP_OAUTH_SCOPES = [
   "openid",
   "profile",
   "email",
   "offline_access",
-  ...KEEPER_MCP_RESOURCE_SCOPES,
+  ...KEEPER_API_RESOURCE_SCOPES,
 ];
-
-const KEEPER_MCP_DEFAULT_SCOPE = ["offline_access", ...KEEPER_MCP_RESOURCE_SCOPES].join(" ");
 
 interface ResolveMcpAuthOptionsInput {
   resourceBaseUrl?: string;
@@ -79,8 +71,8 @@ const resolveMcpAuthOptions = (
     oauthProvider: {
       allowDynamicClientRegistration: true,
       allowUnauthenticatedClientRegistration: true,
-      clientRegistrationAllowedScopes: ["offline_access", ...KEEPER_MCP_RESOURCE_SCOPES],
-      clientRegistrationDefaultScopes: ["offline_access", ...KEEPER_MCP_RESOURCE_SCOPES],
+      clientRegistrationAllowedScopes: ["offline_access", ...KEEPER_API_RESOURCE_SCOPES],
+      clientRegistrationDefaultScopes: ["offline_access", ...KEEPER_API_RESOURCE_SCOPES],
       consentPage: resolveAbsoluteUrl("/mcp/consent", input.webBaseUrl),
       loginPage: resolveAbsoluteUrl("/login", input.webBaseUrl),
       scopes: KEEPER_MCP_OAUTH_SCOPES,
@@ -88,22 +80,22 @@ const resolveMcpAuthOptions = (
     },
     protectedResourceMetadata: {
       resource: resourceUrl,
-      scopes_supported: KEEPER_MCP_RESOURCE_SCOPES,
+      scopes_supported: KEEPER_API_RESOURCE_SCOPES,
     },
   };
 };
 
 export {
-  KEEPER_MCP_DEFAULT_SCOPE,
-  KEEPER_MCP_DESTINATION_SCOPE,
-  KEEPER_MCP_EVENT_SCOPE,
-  KEEPER_MCP_MAPPING_SCOPE,
+  KEEPER_API_DEFAULT_SCOPE,
+  KEEPER_API_DESTINATION_SCOPE,
+  KEEPER_API_EVENT_SCOPE,
+  KEEPER_API_MAPPING_SCOPE,
+  KEEPER_API_READ_SCOPE,
+  KEEPER_API_RESOURCE_SCOPES,
+  KEEPER_API_SCOPES,
+  KEEPER_API_SOURCE_SCOPE,
+  KEEPER_API_SYNC_SCOPE,
   KEEPER_MCP_OAUTH_SCOPES,
-  KEEPER_MCP_READ_SCOPE,
-  KEEPER_MCP_RESOURCE_SCOPES,
-  KEEPER_MCP_SCOPES,
-  KEEPER_MCP_SOURCE_SCOPE,
-  KEEPER_MCP_SYNC_SCOPE,
   resolveMcpAuthOptions,
 };
 export type { ResolvedMcpAuthOptions, ResolveMcpAuthOptionsInput };

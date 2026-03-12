@@ -1,12 +1,12 @@
 import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { createKeeperReadModels } from "@keeper.sh/mcp-server";
+import { createKeeperApi } from "@keeper.sh/keeper-api";
 import { database } from "../../../context";
 
-const keeperReadModels = createKeeperReadModels(database);
+const keeperApi = createKeeperApi(database);
 
 export const GET = withWideEvent(
   withAuth(async ({ userId }) => {
-    const destinations = await keeperReadModels.listDestinations(userId);
+    const destinations = await keeperApi.listDestinations(userId);
     return Response.json(destinations);
   }),
 );
