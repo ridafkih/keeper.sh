@@ -7,7 +7,7 @@ import { createKeeperMcpToolset } from "./toolset";
 
 const database = createDatabase(env.DATABASE_URL);
 
-const { auth: baseAuth } = createAuth({
+const { auth } = createAuth({
   database,
   secret: env.BETTER_AUTH_SECRET,
   baseUrl: env.BETTER_AUTH_URL,
@@ -16,11 +16,9 @@ const { auth: baseAuth } = createAuth({
   webBaseUrl: env.WEB_BASE_URL,
 });
 
-if (!isKeeperMcpEnabledAuth(baseAuth)) {
+if (!isKeeperMcpEnabledAuth(auth)) {
   throw new Error("MCP auth is not configured — ensure mcpResourceUrl and webBaseUrl are set");
 }
-
-const auth = baseAuth;
 
 const keeperApi = createKeeperApi(database);
 const keeperMcpToolset = createKeeperMcpToolset(keeperApi);
