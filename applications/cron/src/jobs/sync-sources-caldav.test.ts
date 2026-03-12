@@ -14,20 +14,21 @@ describe("runCaldavSourceSyncJob", () => {
         cronEventFieldSets.push(fields);
       },
       syncProvider: (provider) => Promise.resolve({
+        durationMs: 5,
         eventsAdded: provider.id.length,
         eventsRemoved: provider.id.length + 1,
+        outcome: "success",
         providerId: provider.id,
       }),
     });
 
     expect(cronEventFieldSets).toEqual([
       {
-        "caldav.events.added": 6,
-        "caldav.events.removed": 7,
-      },
-      {
-        "fastmail.events.added": 8,
-        "fastmail.events.removed": 9,
+        "events.added": 14,
+        "events.removed": 16,
+        "provider.count": 2,
+        "provider.failed_count": 0,
+        "provider.succeeded_count": 2,
       },
     ]);
   });
@@ -49,8 +50,10 @@ describe("runCaldavSourceSyncJob", () => {
         }
 
         return Promise.resolve({
+          durationMs: 5,
           eventsAdded: 3,
           eventsRemoved: 1,
+          outcome: "success",
           providerId: provider.id,
         });
       },
@@ -58,8 +61,11 @@ describe("runCaldavSourceSyncJob", () => {
 
     expect(cronEventFieldSets).toEqual([
       {
-        "icloud.events.added": 3,
-        "icloud.events.removed": 1,
+        "events.added": 3,
+        "events.removed": 1,
+        "provider.count": 2,
+        "provider.failed_count": 1,
+        "provider.succeeded_count": 1,
       },
     ]);
   });
@@ -81,8 +87,10 @@ describe("runCaldavSourceSyncJob", () => {
         }
 
         return Promise.resolve({
+          durationMs: 4,
           eventsAdded: 2,
           eventsRemoved: 1,
+          outcome: "success",
           providerId: provider.id,
         });
       },
@@ -90,8 +98,11 @@ describe("runCaldavSourceSyncJob", () => {
 
     expect(cronEventFieldSets).toEqual([
       {
-        "icloud.events.added": 2,
-        "icloud.events.removed": 1,
+        "events.added": 2,
+        "events.removed": 1,
+        "provider.count": 2,
+        "provider.failed_count": 1,
+        "provider.succeeded_count": 1,
       },
     ]);
   });
@@ -107,7 +118,15 @@ describe("runCaldavSourceSyncJob", () => {
       syncProvider: () => Promise.resolve(null),
     });
 
-    expect(cronEventFieldSets).toEqual([]);
+    expect(cronEventFieldSets).toEqual([
+      {
+        "events.added": 0,
+        "events.removed": 0,
+        "provider.count": 1,
+        "provider.failed_count": 1,
+        "provider.succeeded_count": 0,
+      },
+    ]);
   });
 
   it("completes without throwing when multiple providers reject", async () => {

@@ -27,17 +27,16 @@ describe("runOAuthSourceSyncJob", () => {
 
     expect(cronEventFieldSets).toEqual([
       {
-        "google.error.count": 1,
-        "google.error.messages": ["calendar timeout"],
-        "google.error.Error.count": 1,
-        "google.error.Error.messages": ["calendar timeout"],
-        "google.events.added": 7,
-        "google.events.removed": 2,
-      },
-      {
-        "outlook.error.count": 0,
-        "outlook.events.added": 4,
-        "outlook.events.removed": 3,
+        "events.added": 11,
+        "events.filtered_out_of_window": 0,
+        "events.inserted": 0,
+        "events.removed": 5,
+        "events.updated": 0,
+        "provider.count": 2,
+        "provider.error_count": 1,
+        "provider.failed_count": 0,
+        "provider.succeeded_count": 2,
+        "sync_token.reset_count": 0,
       },
     ]);
   });
@@ -66,12 +65,16 @@ describe("runOAuthSourceSyncJob", () => {
 
     expect(cronEventFieldSets).toEqual([
       {
-        "outlook.error.count": 2,
-        "outlook.error.messages": ["outlook source failed"],
-        "outlook.error.AuthError.count": 2,
-        "outlook.error.AuthError.messages": ["outlook source failed"],
-        "outlook.events.added": 1,
-        "outlook.events.removed": 5,
+        "events.added": 1,
+        "events.filtered_out_of_window": 0,
+        "events.inserted": 0,
+        "events.removed": 5,
+        "events.updated": 0,
+        "provider.count": 2,
+        "provider.error_count": 2,
+        "provider.failed_count": 1,
+        "provider.succeeded_count": 1,
+        "sync_token.reset_count": 0,
       },
     ]);
   });
@@ -97,9 +100,16 @@ describe("runOAuthSourceSyncJob", () => {
 
     expect(cronEventFieldSets).toEqual([
       {
-        "outlook.error.count": 0,
-        "outlook.events.added": 9,
-        "outlook.events.removed": 4,
+        "events.added": 9,
+        "events.filtered_out_of_window": 0,
+        "events.inserted": 0,
+        "events.removed": 4,
+        "events.updated": 0,
+        "provider.count": 2,
+        "provider.error_count": 0,
+        "provider.failed_count": 1,
+        "provider.succeeded_count": 1,
+        "sync_token.reset_count": 0,
       },
     ]);
   });
@@ -123,9 +133,16 @@ describe("runOAuthSourceSyncJob", () => {
 
     expect(cronEventFieldSets).toEqual([
       {
-        "outlook.error.count": 0,
-        "outlook.events.added": 2,
-        "outlook.events.removed": 2,
+        "events.added": 2,
+        "events.filtered_out_of_window": 0,
+        "events.inserted": 0,
+        "events.removed": 2,
+        "events.updated": 0,
+        "provider.count": 2,
+        "provider.error_count": 0,
+        "provider.failed_count": 1,
+        "provider.succeeded_count": 1,
+        "sync_token.reset_count": 0,
       },
     ]);
   });
@@ -157,9 +174,16 @@ describe("runOAuthSourceSyncJob", () => {
 
     expect(cronEventFieldSets).toEqual([
       {
-        "google.error.count": 0,
-        "google.events.added": 3,
-        "google.events.removed": 1,
+        "events.added": 3,
+        "events.filtered_out_of_window": 0,
+        "events.inserted": 0,
+        "events.removed": 1,
+        "events.updated": 0,
+        "provider.count": 2,
+        "provider.error_count": 0,
+        "provider.failed_count": 1,
+        "provider.succeeded_count": 1,
+        "sync_token.reset_count": 0,
       },
     ]);
   });

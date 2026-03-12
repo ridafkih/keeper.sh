@@ -1,7 +1,7 @@
 import type { MaybePromise } from "bun";
 import { hasOAuthProviderApi } from "@keeper.sh/auth";
 import { auth, authCapabilities } from "../context";
-import { widelog, trackStatusError } from "../utils/logging";
+import { runApiWideEventContext, setWideEventFields, trackStatusError, widelog } from "../utils/logging";
 
 const HTTP_INTERNAL_SERVER_ERROR = 500;
 const HTTP_ERROR_THRESHOLD = 400;
@@ -40,17 +40,25 @@ const extractAuthContext = (request: Request, pathname: string): Record<string, 
   const origin = request.headers.get("origin");
   const userAgent = request.headers.get("user-agent");
   return {
-    "http.method": request.method,
-    "http.path": pathname,
-    "operation.name": `${request.method} ${pathname}`,
-    "operation.type": "auth",
-    ...(origin && { "http.origin": origin }),
-    ...(userAgent && { "http.user_agent": userAgent }),
+    http: {
+      method: request.method,
+      path: pathname,
+      ...(origin && { origin }),
+      ...(userAgent && { user_agent: userAgent }),
+    },
+    operation: {
+      name: `${request.method} ${pathname}`,
+      type: "auth",
+    },
+    request: {
+      id: request.headers.get("x-request-id") ?? crypto.randomUUID(),
+    },
   };
 };
 
 const handleAuthResponseStatus = (response: Response): void => {
-  widelog.set("http.status_code", response.status);
+  widelog.set("status_code", response.status);
+  widelog.set("outcome", response.status >= HTTP_ERROR_THRESHOLD ? "error" : "success");
   if (response.status >= HTTP_ERROR_THRESHOLD) {
     trackStatusError(response.status, "AuthError");
   }
@@ -103,45 +111,50 @@ const processAuthResponse = async (pathname: string, response: Response): Promis
 };
 
 const handleAuthRequest = (pathname: string, request: Request): MaybePromise<Response> =>
-  widelog.context(async () => {
-    const authContext = extractAuthContext(request, pathname);
-    for (const [key, value] of Object.entries(authContext)) {
-      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-        widelog.set(key, value);
-      }
-    }
-    widelog.time.start("duration_ms");
+  runApiWideEventContext(async () => {
+    setWideEventFields(extractAuthContext(request, pathname));
     try {
-      if (pathname === "/api/auth/capabilities") {
-        return Response.json(authCapabilities);
-      }
-
-      if (hasOAuthProviderApi(auth.api)) {
-        if (pathname === "/api/auth/.well-known/oauth-authorization-server") {
-          return Response.json(
-            await auth.api.getOAuthServerConfig({
-              headers: request.headers,
-            }),
-          );
+      return await widelog.time.measure("duration_ms", async () => {
+        if (pathname === "/api/auth/capabilities") {
+          const response = Response.json(authCapabilities);
+          handleAuthResponseStatus(response);
+          return response;
         }
 
-        if (pathname === "/api/auth/.well-known/openid-configuration") {
-          return Response.json(
-            await auth.api.getOpenIdConfig({
-              headers: request.headers,
-            }),
-          );
-        }
-      }
+        if (hasOAuthProviderApi(auth.api)) {
+          if (pathname === "/api/auth/.well-known/oauth-authorization-server") {
+            const response = Response.json(
+              await auth.api.getOAuthServerConfig({
+                headers: request.headers,
+              }),
+            );
+            handleAuthResponseStatus(response);
+            return response;
+          }
 
-      const response = await auth.handler(request);
-      handleAuthResponseStatus(response);
-      return await processAuthResponse(pathname, response);
-    } catch (error) {
-      widelog.set("http.status_code", HTTP_INTERNAL_SERVER_ERROR);
-      throw error;
+          if (pathname === "/api/auth/.well-known/openid-configuration") {
+            const response = Response.json(
+              await auth.api.getOpenIdConfig({
+                headers: request.headers,
+              }),
+            );
+            handleAuthResponseStatus(response);
+            return response;
+          }
+        }
+
+        try {
+          const response = await auth.handler(request);
+          handleAuthResponseStatus(response);
+          return await processAuthResponse(pathname, response);
+        } catch (error) {
+          widelog.set("status_code", HTTP_INTERNAL_SERVER_ERROR);
+          widelog.set("outcome", "error");
+          widelog.errorFields(error);
+          throw error;
+        }
+      });
     } finally {
-      widelog.time.stop("duration_ms");
       widelog.flush();
     }
   });

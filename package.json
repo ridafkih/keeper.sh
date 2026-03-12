@@ -2,8 +2,8 @@
   "name": "keeper.sh",
   "devDependencies": {
     "knip": "5.80.0",
-    "oxlint": "^1.38.0",
-    "rimraf": "^6.1.2",
+    "oxlint": "^1.55.0",
+    "rimraf": "^6.1.3",
     "turbo": "2.7.3"
   },
   "license": "AGPL-3.0-only",

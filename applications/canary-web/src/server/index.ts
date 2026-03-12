@@ -11,7 +11,7 @@ checkMigrationStatus();
 
 await entry({
   env: envSchema,
-  name: "canary-web",
+  name: "web",
   main: async ({ env }) => {
     const config = createServerConfig(env);
     const runtime = await createRuntime(config);

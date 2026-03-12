@@ -17,7 +17,7 @@ function hasStargazersCount(value: unknown): value is { stargazers_count: number
 
 const githubRepositoryApiUrl = "https://api.github.com/repos/ridafkih/keeper.sh";
 const githubApiVersion = "2022-11-28";
-const githubUserAgent = "@keeper.sh/canary-web";
+const githubUserAgent = "@keeper.sh/web";
 
 async function fetchGithubStarsCount(): Promise<number> {
   const response = await fetch(githubRepositoryApiUrl, {

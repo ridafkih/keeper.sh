@@ -19,7 +19,7 @@
     "@keeper.sh/premium": "workspace:*",
     "@keeper.sh/provider-core": "workspace:*",
     "drizzle-orm": "^0.45.1",
-    "widelogger": "^0.2.1"
+    "widelogger": "^0.4.0"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",

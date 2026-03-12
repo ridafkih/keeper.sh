@@ -30,6 +30,15 @@ interface ProviderSyncResult {
   providerId: string;
   eventsAdded: number;
   eventsRemoved: number;
+  outcome: "success" | "error";
+  durationMs: number;
+}
+
+interface JobAggregation {
+  eventsAdded: number;
+  eventsRemoved: number;
+  providersFailed: number;
+  providersSucceeded: number;
 }
 
 interface CaldavSyncJobDependencies {
@@ -38,22 +47,53 @@ interface CaldavSyncJobDependencies {
   setCronEventFields: (fields: Record<string, unknown>) => void;
 }
 
+const invokeProviderSync = async (
+  dependencies: CaldavSyncJobDependencies,
+  provider: CaldavProvider,
+): Promise<ProviderSyncResult | null> => dependencies.syncProvider(provider);
+
 const runCaldavSourceSyncJob = async (dependencies: CaldavSyncJobDependencies): Promise<void> => {
+  const totals: JobAggregation = {
+    eventsAdded: 0,
+    eventsRemoved: 0,
+    providersFailed: 0,
+    providersSucceeded: 0,
+  };
+
   const settlements = await Promise.allSettled(
-    dependencies.providers.map((provider) =>
-      Promise.resolve().then(() => dependencies.syncProvider(provider))),
+    dependencies.providers.map((provider) => invokeProviderSync(dependencies, provider)),
   );
 
   for (const settlement of settlements) {
     if (settlement.status !== "fulfilled" || !settlement.value) {
+      totals.providersFailed++;
       continue;
     }
 
-    dependencies.setCronEventFields({
-      [`${settlement.value.providerId}.events.added`]: settlement.value.eventsAdded,
-      [`${settlement.value.providerId}.events.removed`]: settlement.value.eventsRemoved,
-    });
+    const providerResult = settlement.value;
+
+    if (providerResult.outcome === "error") {
+      totals.providersFailed++;
+    } else {
+      totals.providersSucceeded++;
+      totals.eventsAdded += providerResult.eventsAdded;
+      totals.eventsRemoved += providerResult.eventsRemoved;
+    }
+
+    widelog.append("provider.id", providerResult.providerId);
+    widelog.append("provider.outcome", providerResult.outcome);
+    widelog.append("provider.duration_ms", providerResult.durationMs);
+    widelog.append("provider.events.added", providerResult.eventsAdded);
+    widelog.append("provider.events.removed", providerResult.eventsRemoved);
   }
+
+  dependencies.setCronEventFields({
+    "events.added": totals.eventsAdded,
+    "events.removed": totals.eventsRemoved,
+    "provider.count": dependencies.providers.length,
+    "provider.failed_count": totals.providersFailed,
+    "provider.succeeded_count": totals.providersSucceeded,
+  });
 };
 
 const createDefaultJobDependencies = async (): Promise<CaldavSyncJobDependencies> => {
@@ -77,22 +117,27 @@ const createDefaultJobDependencies = async (): Promise<CaldavSyncJobDependencies
       encryptionKey: env.ENCRYPTION_KEY,
     });
 
-    const timingKey = `sync_${provider.id}`;
-    widelog.time.start(timingKey);
+    const startedAt = performance.now();
 
     try {
       const result = await sourceProvider.syncAllSources();
       return {
+        durationMs: Math.round(performance.now() - startedAt),
         eventsAdded: result.eventsAdded,
         eventsRemoved: result.eventsRemoved,
+        outcome: "success",
         providerId: provider.id,
       };
     } catch (error) {
-      widelog.set(`${provider.id}.error`, true);
-      widelog.errorFields(error, { prefix: provider.id });
-      return null;
-    } finally {
-      widelog.time.stop(timingKey);
+      widelog.count("provider.error_count");
+      widelog.errorFields(error, { prefix: "provider.error" });
+      return {
+        durationMs: Math.round(performance.now() - startedAt),
+        eventsAdded: 0,
+        eventsRemoved: 0,
+        outcome: "error",
+        providerId: provider.id,
+      };
     }
   };
 

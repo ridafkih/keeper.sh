@@ -478,7 +478,7 @@ To enable MCP on a self-hosted instance:
 1. [@keeper.sh/api](./applications/api)
 2. [@keeper.sh/cron](./applications/cron)
 3. [@keeper.sh/mcp](./applications/mcp)
-4. [canary-web](./applications/canary-web)
+4. [@keeper.sh/web](./applications/canary-web)
 5. @keeper.sh/cli _(Coming Soon)_
 6. @keeper.sh/mobile _(Coming Soon)_
 7. @keeper.sh/ssh _(Coming Soon)_

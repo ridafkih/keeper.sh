@@ -1,4 +1,4 @@
-import { widelog } from "./logging";
+import { runApiWideEventContext, setWideEventFields, widelog } from "./logging";
 
 type BackgroundJobCallback<TResult> = () => Promise<TResult>;
 
@@ -10,32 +10,37 @@ const spawnBackgroundJob = <TResult>(
   fields: Record<string, unknown>,
   callback: BackgroundJobCallback<TResult>,
 ): void => {
-  widelog.context(async () => {
-    widelog.set("operation.name", jobName);
-    widelog.set("operation.type", "background-job");
-    widelog.set("job.name", jobName);
-    for (const [key, value] of Object.entries(fields)) {
-      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-        widelog.set(key, value);
-      }
-    }
-    widelog.time.start("duration_ms");
+  runApiWideEventContext(async () => {
+    setWideEventFields({
+      ...fields,
+      job: {
+        name: jobName,
+      },
+      operation: {
+        name: jobName,
+        type: "background-job",
+      },
+      request: {
+        id: crypto.randomUUID(),
+      },
+    });
 
     try {
-      const result = await callback();
-      if (isRecord(result)) {
-        for (const [key, value] of Object.entries(result)) {
-          if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-            widelog.set(key, value);
+      await widelog.time.measure("duration_ms", async () => {
+        try {
+          const result = await callback();
+          if (isRecord(result)) {
+            setWideEventFields(result);
           }
+          widelog.set("outcome", "success");
+          widelog.set("status_code", 200);
+        } catch (error) {
+          widelog.set("outcome", "error");
+          widelog.set("status_code", 500);
+          widelog.errorFields(error);
         }
-      }
-      widelog.set("outcome", "success");
-    } catch (error) {
-      widelog.set("outcome", "error");
-      widelog.errorFields(error);
+      });
     } finally {
-      widelog.time.stop("duration_ms");
       widelog.flush();
     }
   });

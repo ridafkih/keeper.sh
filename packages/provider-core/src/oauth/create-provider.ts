@@ -10,17 +10,9 @@ import type {
 import type { RefreshLockStore } from "./refresh-coordinator";
 import type { SyncContext } from "../sync/coordinator";
 import { getEventsForDestination } from "../events/events";
-import { widelogger } from "widelogger";
+import { widelog } from "widelogger";
 import type { OAuthCalendarProvider } from "./provider";
 import type { OAuthAccount } from "./accounts";
-
-const { widelog } = widelogger({
-  service: "keeper",
-  defaultEventName: "wide_event",
-  commitHash: process.env.COMMIT_SHA,
-  environment: process.env.ENV ?? process.env.NODE_ENV,
-  version: process.env.npm_package_version,
-});
 
 const EMPTY_ACCOUNTS_COUNT = 0;
 const INITIAL_ADDED_COUNT = 0;
@@ -67,9 +59,11 @@ const createOAuthDestinationProvider = <
   } = options;
 
   const getLocalEvents = (localEvents: SyncableEvent[], account: TAccount) => {
-    if (!prepareLocalEvents) {return localEvents}
+    if (!prepareLocalEvents) {
+      return localEvents;
+    }
     return prepareLocalEvents(localEvents, account);
-  }
+  };
 
   const syncForUser = async (userId: string, context: SyncContext): Promise<SyncResult | null> => {
     const accounts = await getAccountsForUser(database, userId);
@@ -78,20 +72,19 @@ const createOAuthDestinationProvider = <
     }
 
     const results = await Promise.all(
-      accounts.map((account) =>
-        widelog.context(async () => {
-          widelog.set("operation.name", "sync:destination-account");
-          widelog.set("operation.type", "sync");
-          widelog.set("destination.calendar_id", account.calendarId);
-          widelog.set("user.id", userId);
-          if (context.jobName) {
-            widelog.set("job.name", context.jobName);
-          }
-          if (context.jobType) {
-            widelog.set("job.type", context.jobType);
-          }
-          widelog.time.start("duration_ms");
+      accounts.map(async (account) => {
+        widelog.set("operation.name", "sync:destination-account");
+        widelog.set("operation.type", "sync");
+        widelog.set("destination.calendar_id", account.calendarId);
+        widelog.set("user.id", userId);
+        if (context.jobName) {
+          widelog.set("job.name", context.jobName);
+        }
+        if (context.jobType) {
+          widelog.set("job.type", context.jobType);
+        }
 
+        return widelog.time.measure("sync.destination_account.duration_ms", async () => {
           const localEvents = await getEventsForDestination(database, account.calendarId);
           const preparedEvents = getLocalEvents(localEvents, account);
           widelog.set("local_events.count", preparedEvents.length);
@@ -106,12 +99,9 @@ const createOAuthDestinationProvider = <
           widelog.set("events.removed", result.removed);
           widelog.set("events.remove_failed", result.removeFailed);
 
-          widelog.time.stop("duration_ms");
-          widelog.flush();
-
           return result;
-        }),
-      ),
+        });
+      }),
     );
 
     const combined: SyncResult = {

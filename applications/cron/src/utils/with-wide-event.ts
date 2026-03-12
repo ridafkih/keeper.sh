@@ -1,20 +1,38 @@
 import type { CronOptions } from "cronbake";
-import { widelog } from "./logging";
+import { runCronWideEventContext, widelog } from "./logging";
 
 const withCronWideEvent = (options: CronOptions): CronOptions => {
   const { callback, ...restOptions } = options;
   return {
     ...restOptions,
     callback: async () => {
-      await widelog.context(async () => {
-        widelog.set("operation.type", "job");
-        widelog.set("operation.name", options.name);
-        widelog.set("job.name", options.name);
-        widelog.time.start("duration_ms");
+      await runCronWideEventContext(async () => {
+        widelog.setFields({
+          job: {
+            name: options.name,
+          },
+          operation: {
+            name: options.name,
+            type: "job",
+          },
+          request: {
+            id: crypto.randomUUID(),
+          },
+        });
         try {
-          await callback();
+          await widelog.time.measure("duration_ms", async () => {
+            try {
+              await callback();
+              widelog.set("status_code", 200);
+              widelog.set("outcome", "success");
+            } catch (error) {
+              widelog.set("status_code", 500);
+              widelog.set("outcome", "error");
+              widelog.errorFields(error);
+              throw error;
+            }
+          });
         } finally {
-          widelog.time.stop("duration_ms");
           widelog.flush();
         }
       });
@@ -23,11 +41,7 @@ const withCronWideEvent = (options: CronOptions): CronOptions => {
 };
 
 const setCronEventFields = (fields: Record<string, unknown>): void => {
-  for (const [key, value] of Object.entries(fields)) {
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-      widelog.set(key, value);
-    }
-  }
+  widelog.setFields(fields);
 };
 
 export { withCronWideEvent, setCronEventFields };

@@ -1,5 +1,5 @@
 {
-  "name": "canary-web",
+  "name": "@keeper.sh/web",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -30,7 +30,7 @@
     "streamdown": "^2.4.0",
     "swr": "^2.4.1",
     "tailwind-variants": "^3.2.2",
-    "widelogger": "^0.2.1",
+    "widelogger": "^0.4.0",
     "yaml": "^2.8.2"
   },
   "devDependencies": {

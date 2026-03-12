@@ -101,13 +101,12 @@ interface IcalSnapshotJobDependencies {
   setCronEventFields: (fields: Record<string, unknown>) => void;
 }
 
-interface IcalSnapshotJobHooks {
-  startTiming?: (name: string) => void;
-  endTiming?: (name: string) => void;
-}
-
 const createMissingUrlError = (calendarId: string): Error =>
   new Error(`Source ${calendarId} is missing url`);
+
+const invokeOperation = async <TResult>(
+  operation: () => Promise<TResult>,
+): Promise<TResult> => operation();
 
 const createDefaultJobDependencies = (): IcalSnapshotJobDependencies => ({
   fetchRemoteCalendar,
@@ -133,19 +132,24 @@ const buildFetchPromises = (
     if (!url) {
       return Promise.reject(createMissingUrlError(id));
     }
-    return Promise.resolve().then(() => dependencies.fetchRemoteCalendar(id, url));
+    return invokeOperation(() => dependencies.fetchRemoteCalendar(id, url));
   });
 
 const runIcalSnapshotSyncJob = async (
   dependencies: IcalSnapshotJobDependencies,
-  hooks: IcalSnapshotJobHooks = {},
 ): Promise<void> => {
-  hooks.startTiming?.("fetchSources");
-  const remoteSources = await dependencies.getRemoteSources();
-  dependencies.setCronEventFields({ "source.count": remoteSources.length });
+  const { remoteSources, settlements } = await widelog.time.measure(
+    "sync.fetch_sources.duration_ms",
+    async () => {
+      const remoteSources = await dependencies.getRemoteSources();
 
-  const settlements = await Promise.allSettled(buildFetchPromises(remoteSources, dependencies));
-  hooks.endTiming?.("fetchSources");
+      const settlements = await Promise.allSettled(buildFetchPromises(remoteSources, dependencies));
+
+      return { remoteSources, settlements };
+    },
+  );
+
+  dependencies.setCronEventFields({ "source.count": remoteSources.length });
 
   const { succeeded: fetchSucceeded, failed: fetchFailed } = countSettledResults(settlements);
   dependencies.setCronEventFields({
@@ -153,22 +157,22 @@ const runIcalSnapshotSyncJob = async (
     "fetch.succeeded.count": fetchSucceeded,
   });
 
-  hooks.startTiming?.("processSnapshots");
-  const insertionTasks: { calendarId: string; run: Promise<SnapshotResult> }[] = [];
-  for (const settlement of settlements) {
-    if (settlement.status === "fulfilled") {
-      insertionTasks.push({
-        calendarId: settlement.value.calendarId,
-        run: Promise.resolve().then(() =>
-          dependencies.processSnapshot(settlement.value.calendarId, settlement.value.ical)),
-      });
-    }
-  }
+  const insertionSettlements = await widelog.time.measure(
+    "sync.process_snapshots.duration_ms",
+    async () => {
+      const insertionTasks: Promise<SnapshotResult>[] = [];
+      for (const settlement of settlements) {
+        if (settlement.status === "fulfilled") {
+          insertionTasks.push(
+            invokeOperation(() =>
+              dependencies.processSnapshot(settlement.value.calendarId, settlement.value.ical)),
+          );
+        }
+      }
 
-  const insertionSettlements = await Promise.allSettled(
-    insertionTasks.map((insertionTask) => insertionTask.run),
+      return Promise.allSettled(insertionTasks);
+    },
   );
-  hooks.endTiming?.("processSnapshots");
 
   let skippedCount = 0;
   let insertErrorCount = 0;
@@ -203,14 +207,7 @@ const runIcalSnapshotSyncJob = async (
 export default withCronWideEvent({
   async callback() {
     const dependencies = createDefaultJobDependencies();
-    await runIcalSnapshotSyncJob(dependencies, {
-      endTiming: (name) => {
-        widelog.time.stop(name);
-      },
-      startTiming: (name) => {
-        widelog.time.start(name);
-      },
-    });
+    await runIcalSnapshotSyncJob(dependencies);
   },
   cron: "@every_1_minutes",
   immediate: true,

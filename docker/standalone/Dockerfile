@@ -9,7 +9,7 @@ COPY . .
 FROM base AS prune
 RUN bun install --global turbo
 COPY --from=source /app .
-RUN turbo prune @keeper.sh/api @keeper.sh/cron canary-web --docker
+RUN turbo prune @keeper.sh/api @keeper.sh/cron @keeper.sh/web --docker
 
 FROM base AS build
 COPY --from=prune /app/out/json/ .

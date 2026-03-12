@@ -6,6 +6,7 @@ import { and, eq, inArray, max } from "drizzle-orm";
 import { database, getCachedSyncAggregate, getCurrentSyncAggregate } from "../context";
 import { resolveSyncAggregatePayload } from "./websocket-payload";
 import { runSendInitialSyncStatus } from "./websocket-initial-status";
+import { runApiWideEventContext, setWideEventFields, widelog } from "../utils/logging";
 
 const selectLatestDestinationSyncedAt = async (userId: string): Promise<Date | null> => {
   const [aggregate] = await database
@@ -42,8 +43,62 @@ const sendInitialSyncStatus = (userId: string, socket: Socket): Promise<void> =>
     selectLatestDestinationSyncedAt,
   });
 
-const websocketHandler = createWebsocketHandler({
+const baseWebsocketHandler = createWebsocketHandler({
   onConnect: sendInitialSyncStatus,
 });
+
+const runWebsocketBoundary = async (
+  socket: Socket,
+  operationName: "websocket:open" | "websocket:close",
+  callback: () => void | Promise<void>,
+): Promise<void> =>
+  runApiWideEventContext(async () => {
+    setWideEventFields({
+      operation: {
+        name: operationName,
+        type: "connection",
+      },
+      request: {
+        id: crypto.randomUUID(),
+      },
+      user: {
+        id: socket.data.userId,
+      },
+    });
+
+    try {
+      await widelog.time.measure("duration_ms", async () => {
+        try {
+          await callback();
+          widelog.set("status_code", 200);
+          widelog.set("outcome", "success");
+        } catch (error) {
+          widelog.set("status_code", 500);
+          widelog.set("outcome", "error");
+          widelog.errorFields(error);
+          throw error;
+        }
+      });
+    } finally {
+      widelog.flush();
+    }
+  });
+
+const websocketHandler = {
+  close(socket: Socket): void {
+    runWebsocketBoundary(socket, "websocket:close", () => {
+      baseWebsocketHandler.close(socket);
+    }).catch(() => {
+      return;
+    });
+  },
+  idleTimeout: baseWebsocketHandler.idleTimeout,
+  message: baseWebsocketHandler.message,
+  open(socket: Socket): Promise<void> {
+    return runWebsocketBoundary(socket, "websocket:open", () =>
+      baseWebsocketHandler.open(socket),
+    );
+  },
+};
 
 export { websocketHandler };

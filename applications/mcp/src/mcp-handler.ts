@@ -1,7 +1,7 @@
 import { KEEPER_API_READ_SCOPE } from "@keeper.sh/auth";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { widelog } from "./utils/logging";
+import { runMcpWideEventContext, setWideEventFields, widelog } from "./utils/logging";
 import type { KeeperMcpToolDefinition, KeeperMcpToolset } from "./toolset";
 
 const JSON_RPC_VERSION = "2.0";
@@ -88,23 +88,38 @@ const registerToolset = (
         title: tool.title,
       },
       (input: Record<string, unknown>) =>
-        widelog.context(async () => {
-          widelog.set("operation.name", `mcp:tool:${name}`);
-          widelog.set("operation.type", "mcp");
-          widelog.set("mcp.tool", name);
-          widelog.set("user.id", userId);
-          widelog.time.start("duration_ms");
+        runMcpWideEventContext(async () => {
+          setWideEventFields({
+            mcp: {
+              tool: name,
+            },
+            operation: {
+              name: `mcp:tool:${name}`,
+              type: "mcp",
+            },
+            request: {
+              id: crypto.randomUUID(),
+            },
+            user: {
+              id: userId,
+            },
+          });
 
           try {
-            const result = await tool.execute({ userId }, input);
-            widelog.set("outcome", "success");
-            return createToolResponse(result);
-          } catch (error) {
-            widelog.set("outcome", "error");
-            widelog.errorFields(error);
-            throw error;
+            return await widelog.time.measure("duration_ms", async () => {
+              try {
+                const result = await tool.execute({ userId }, input);
+                widelog.set("outcome", "success");
+                widelog.set("status_code", 200);
+                return createToolResponse(result);
+              } catch (error) {
+                widelog.set("outcome", "error");
+                widelog.set("status_code", 500);
+                widelog.errorFields(error);
+                throw error;
+              }
+            });
           } finally {
-            widelog.time.stop("duration_ms");
             widelog.flush();
           }
         }),

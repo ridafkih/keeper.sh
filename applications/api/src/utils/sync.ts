@@ -1,6 +1,6 @@
 import { syncDestinationsForUser } from "@keeper.sh/provider-core";
 import { spawnBackgroundJob } from "./background-task";
-import { widelog } from "./logging";
+import { runApiWideEventContext, setWideEventFields, widelog } from "./logging";
 
 type DestinationSyncResult = Awaited<ReturnType<typeof syncDestinationsForUser>>;
 
@@ -46,10 +46,25 @@ const triggerDestinationSync = (userId: string): void => {
   };
 
   startSync().catch((error) => {
-    widelog.set("operation.name", "destination-sync:trigger");
-    widelog.set("operation.type", "background-job");
-    widelog.set("user.id", userId);
-    widelog.errorFields(error);
+    runApiWideEventContext(() => {
+      setWideEventFields({
+        duration_ms: 0,
+        operation: {
+          name: "destination-sync:trigger",
+          type: "background-job",
+        },
+        request: {
+          id: crypto.randomUUID(),
+        },
+        user: {
+          id: userId,
+        },
+      });
+      widelog.set("outcome", "error");
+      widelog.set("status_code", 500);
+      widelog.errorFields(error);
+      widelog.flush();
+    });
   });
 };
 

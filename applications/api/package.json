@@ -34,7 +34,7 @@
     "drizzle-orm": "0.45.1",
     "entrykit": "^0.1.3",
     "resend": "^6.9.3",
-    "widelogger": "^0.2.1",
+    "widelogger": "^0.4.0",
     "ts-ics": "2.4.0"
   },
   "devDependencies": {

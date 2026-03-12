@@ -4,7 +4,7 @@ import { ErrorResponse } from "../../../utils/responses";
 import { database } from "../../../context";
 import env from "@keeper.sh/env/api";
 import { userSubscriptionsTable } from "@keeper.sh/database/schema";
-import { respondWithLoggedError, widelog } from "../../../utils/logging";
+import { respondWithLoggedError, runApiWideEventContext, setWideEventFields, widelog } from "../../../utils/logging";
 
 const HTTP_OK = 200;
 
@@ -86,51 +86,73 @@ const POST = (request: Request): MaybePromise<Response> => {
     return ErrorResponse.notImplemented().toResponse();
   }
 
-  return widelog.context(async () => {
-    widelog.set("operation.name", "polar");
-    widelog.set("operation.type", "webhook");
-    widelog.time.start("duration_ms");
+  return runApiWideEventContext(async () => {
+    setWideEventFields({
+      operation: {
+        name: "polar",
+        type: "webhook",
+      },
+      request: {
+        id: request.headers.get("x-request-id") ?? crypto.randomUUID(),
+      },
+    });
+    let response: Response | null = null;
     try {
-      const body = await request.text();
-      const headers: Record<string, string> = {};
-      for (const [key, value] of request.headers.entries()) {
-        headers[key] = value;
-      }
+      return await widelog.time.measure("duration_ms", async () => {
+        try {
+          const body = await request.text();
+          const headers: Record<string, string> = {};
+          for (const [key, value] of request.headers.entries()) {
+            headers[key] = value;
+          }
 
-      const event = validateEvent(body, headers, webhookSecret);
-      widelog.set("operation.name", `polar:${event.type}`);
+          const event = validateEvent(body, headers, webhookSecret);
+          widelog.set("operation.name", `polar:${event.type}`);
 
-      if (event.type === "subscription.created") {
-        return handleSubscriptionCreated(
-          event.data.customer.externalId ?? null,
-          event.data.id,
-        );
-      }
+          if (event.type === "subscription.created") {
+            response = await handleSubscriptionCreated(
+              event.data.customer.externalId ?? null,
+              event.data.id,
+            );
+            return response;
+          }
 
-      if (event.type === "subscription.updated") {
-        return handleSubscriptionUpdated(
-          event.data.customer.externalId ?? null,
-          event.data.id,
-          event.data.status === "active",
-        );
-      }
+          if (event.type === "subscription.updated") {
+            response = await handleSubscriptionUpdated(
+              event.data.customer.externalId ?? null,
+              event.data.id,
+              event.data.status === "active",
+            );
+            return response;
+          }
 
-      if (event.type === "subscription.canceled") {
-        return handleSubscriptionCanceled(
-          event.data.customer.externalId ?? null,
-          event.data.id,
-        );
-      }
+          if (event.type === "subscription.canceled") {
+            response = await handleSubscriptionCanceled(
+              event.data.customer.externalId ?? null,
+              event.data.id,
+            );
+            return response;
+          }
 
-      return new Response(null, { status: HTTP_OK });
-    } catch (error) {
-      if (error instanceof WebhookVerificationError) {
-        return respondWithLoggedError(error, ErrorResponse.unauthorized().toResponse());
-      }
-      widelog.set("http.status_code", 500);
-      throw error;
+          response = new Response(null, { status: HTTP_OK });
+          return response;
+        } catch (error) {
+          if (error instanceof WebhookVerificationError) {
+            response = respondWithLoggedError(error, ErrorResponse.unauthorized().toResponse());
+            return response;
+          }
+          widelog.set("status_code", 500);
+          widelog.set("outcome", "error");
+          widelog.errorFields(error);
+          throw error;
+        }
+      });
     } finally {
-      widelog.time.stop("duration_ms");
+      if (response) {
+        const { status } = response;
+        widelog.set("status_code", status);
+        widelog.set("outcome", status >= 400 ? "error" : "success");
+      }
       widelog.flush();
     }
   });

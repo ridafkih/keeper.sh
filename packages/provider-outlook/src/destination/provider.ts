@@ -23,7 +23,7 @@ import {
   getErrorMessage,
   getOAuthSyncWindowStart,
 } from "@keeper.sh/provider-core";
-import { widelogger } from "widelogger";
+import { widelog } from "widelogger";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { MICROSOFT_GRAPH_API, OUTLOOK_PAGE_SIZE } from "../shared/api";
 import { hasRateLimitMessage, isAuthError } from "../shared/errors";
@@ -31,14 +31,6 @@ import { parseEventTime } from "../shared/date-time";
 import { serializeOutlookEvent } from "./serialize-event";
 import type { OutlookAccount } from "./sync";
 import { getOutlookAccountsForUser } from "./sync";
-
-const { widelog } = widelogger({
-  service: "keeper",
-  defaultEventName: "wide_event",
-  commitHash: process.env.COMMIT_SHA,
-  environment: process.env.ENV ?? process.env.NODE_ENV,
-  version: process.env.npm_package_version,
-});
 
 interface OutlookCalendarProviderConfig {
   database: BunSQLDatabase;
@@ -173,8 +165,7 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     };
   }
 
-  protected pushEvent(event: SyncableEvent): Promise<PushResult> {
-    return widelog.context(async () => {
+  protected async pushEvent(event: SyncableEvent): Promise<PushResult> {
       widelog.set("destination.calendar_id", this.config.calendarId);
       widelog.set("operation.name", "outlook-calendar:push");
       widelog.set("source.provider", this.id);
@@ -189,10 +180,7 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
           error: getErrorMessage(error),
           success: false,
         };
-      } finally {
-        widelog.flush();
       }
-    });
   }
 
   private async createEvent(resource: OutlookEvent): Promise<PushResult> {
@@ -221,45 +209,41 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     return { deleteId: event.id, remoteId: event.iCalUId, success: true };
   }
 
-  protected deleteEvent(eventId: string): Promise<DeleteResult> {
-    return widelog.context(async () => {
-      widelog.set("destination.calendar_id", this.config.calendarId);
-      widelog.set("operation.name", "outlook-calendar:delete");
-      widelog.set("source.provider", this.id);
-      widelog.set("user.id", this.config.userId);
+  protected async deleteEvent(eventId: string): Promise<DeleteResult> {
+    widelog.set("destination.calendar_id", this.config.calendarId);
+    widelog.set("operation.name", "outlook-calendar:delete");
+    widelog.set("source.provider", this.id);
+    widelog.set("user.id", this.config.userId);
 
-      try {
-        const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${eventId}`);
+    try {
+      const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${eventId}`);
 
-        const response = await fetch(url, {
-          headers: this.headers,
-          method: "DELETE",
-        });
+      const response = await fetch(url, {
+        headers: this.headers,
+        method: "DELETE",
+      });
 
-        if (!response.ok && response.status !== HTTP_STATUS.NOT_FOUND) {
-          const body = await response.json();
-          const { error } = microsoftApiErrorSchema.assert(body);
-          const errorMessage = error?.message ?? response.statusText;
+      if (!response.ok && response.status !== HTTP_STATUS.NOT_FOUND) {
+        const body = await response.json();
+        const { error } = microsoftApiErrorSchema.assert(body);
+        const errorMessage = error?.message ?? response.statusText;
 
-          if (isAuthError(response.status, error)) {
-            return this.handleAuthErrorResponse(errorMessage);
-          }
-
-          return { error: errorMessage, success: false };
+        if (isAuthError(response.status, error)) {
+          return this.handleAuthErrorResponse(errorMessage);
         }
 
-        await response.body?.cancel?.();
-        return { success: true };
-      } catch (error) {
-        widelog.errorFields(error);
-        return {
-          error: getErrorMessage(error),
-          success: false,
-        };
-      } finally {
-        widelog.flush();
+        return { error: errorMessage, success: false };
       }
-    });
+
+      await response.body?.cancel?.();
+      return { success: true };
+    } catch (error) {
+      widelog.errorFields(error);
+      return {
+        error: getErrorMessage(error),
+        success: false,
+      };
+    }
   }
 }
 

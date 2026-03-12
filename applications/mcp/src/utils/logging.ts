@@ -1,6 +1,6 @@
-import { widelogger } from "widelogger";
+import { widelog, widelogger } from "widelogger";
 
-const { widelog, destroy: destroyWideLogger } = widelogger({
+const { context: runMcpWideEventContext, destroy: destroyWideLogger } = widelogger({
   service: "keeper-mcp",
   defaultEventName: "wide_event",
   commitHash: process.env.COMMIT_SHA,
@@ -8,10 +8,21 @@ const { widelog, destroy: destroyWideLogger } = widelogger({
   version: process.env.npm_package_version,
 });
 
+const setWideEventFields = (fields: Record<string, unknown>): void => {
+  widelog.setFields(fields);
+};
+
 const trackStatusError = (status: number, errorType: string): void => {
   const statusMessage = `HTTP ${status}`;
   widelog.count("error.count");
-  widelog.count(`error.${errorType}.count`);
+  if (errorType === "AuthError") {
+    widelog.count("error.auth.count");
+  } else if (errorType === "HttpError") {
+    widelog.count("error.http.count");
+  } else {
+    widelog.count("error.unknown.count");
+  }
+  widelog.append("error.types", errorType);
   widelog.set("error.message", statusMessage);
   widelog.set("error.occurred", true);
   widelog.set("error.type", errorType);
@@ -19,6 +30,8 @@ const trackStatusError = (status: number, errorType: string): void => {
 
 export {
   destroyWideLogger,
+  runMcpWideEventContext,
+  setWideEventFields,
   trackStatusError,
   widelog,
 };

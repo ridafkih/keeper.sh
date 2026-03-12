@@ -26,44 +26,37 @@ interface OAuthSyncJobDependencies {
 
 const deduplicateMessages = (messages: string[]): string[] => [...new Set(messages)];
 
+const invokeProviderSync = async (
+  operation: () => Promise<ProviderSyncResult | null>,
+): Promise<ProviderSyncResult | null> => operation();
+
 const publishProviderMetrics = (
   provider: "google" | "outlook",
   result: ProviderSyncResult,
-  dependencies: OAuthSyncJobDependencies,
 ): void => {
-  const fields: Record<string, unknown> = {
-    [`${provider}.error.count`]: result.errorCount,
-    [`${provider}.events.added`]: result.eventsAdded,
-    [`${provider}.events.removed`]: result.eventsRemoved,
-  };
-  if (typeof result.eventsInserted === "number") {
-    fields[`${provider}.events.inserted`] = result.eventsInserted;
-  }
-  if (typeof result.eventsUpdated === "number") {
-    fields[`${provider}.events.updated`] = result.eventsUpdated;
-  }
-  if (typeof result.eventsFilteredOutOfWindow === "number") {
-    fields[`${provider}.events.filtered_out_of_window`] = result.eventsFilteredOutOfWindow;
-  }
-  if (typeof result.syncTokenResetCount === "number") {
-    fields[`${provider}.sync_token.reset_count`] = result.syncTokenResetCount;
-  }
-
   const errorMessages = deduplicateMessages(result.errorMessages);
 
-  if (errorMessages.length > 0) {
-    fields[`${provider}.error.messages`] = errorMessages;
+  widelog.append("provider.id", provider);
+  widelog.append("provider.error.count", result.errorCount);
+  widelog.append("provider.events.added", result.eventsAdded);
+  widelog.append("provider.events.filtered_out_of_window", result.eventsFilteredOutOfWindow ?? 0);
+  widelog.append("provider.events.inserted", result.eventsInserted ?? 0);
+  widelog.append("provider.events.removed", result.eventsRemoved);
+  widelog.append("provider.events.updated", result.eventsUpdated ?? 0);
+  widelog.append("provider.sync_token.reset_count", result.syncTokenResetCount ?? 0);
+
+  for (const message of errorMessages) {
+    widelog.append("provider.error.message", message);
   }
 
-  for (const [errorType, details] of Object.entries(result.errorDetails)) {
-    fields[`${provider}.error.${errorType}.count`] = details.count;
-    const detailMessages = deduplicateMessages(details.messages);
-    if (detailMessages.length > 0) {
-      fields[`${provider}.error.${errorType}.messages`] = detailMessages;
+  for (const [type, details] of Object.entries(result.errorDetails)) {
+    widelog.append("provider.error.type", type);
+    widelog.append("provider.error.type_count", details.count);
+    const deduplicatedTypeMessages = deduplicateMessages(details.messages);
+    for (const message of deduplicatedTypeMessages) {
+      widelog.append("provider.error.type_message", `${type}: ${message}`);
     }
   }
-
-  dependencies.setCronEventFields(fields);
 };
 
 const summarizeProviderErrors = (
@@ -100,20 +93,63 @@ const summarizeProviderErrors = (
 };
 
 const runOAuthSourceSyncJob = async (dependencies: OAuthSyncJobDependencies): Promise<void> => {
+  let eventsAdded = 0;
+  let eventsRemoved = 0;
+  let eventsInserted = 0;
+  let eventsUpdated = 0;
+  let eventsFilteredOutOfWindow = 0;
+  let syncTokenResetCount = 0;
+  let providerErrorCount = 0;
+  let providersSucceeded = 0;
+  let providersFailed = 0;
+
   const settlements = await Promise.allSettled([
-    Promise.resolve().then(() => dependencies.syncGoogleSources()),
-    Promise.resolve().then(() => dependencies.syncOutlookSources()),
+    invokeProviderSync(() => dependencies.syncGoogleSources()),
+    invokeProviderSync(() => dependencies.syncOutlookSources()),
   ]);
 
   const [googleSettlement, outlookSettlement] = settlements;
 
   if (googleSettlement?.status === "fulfilled" && googleSettlement.value) {
-    publishProviderMetrics("google", googleSettlement.value, dependencies);
+    publishProviderMetrics("google", googleSettlement.value);
+    eventsAdded += googleSettlement.value.eventsAdded;
+    eventsRemoved += googleSettlement.value.eventsRemoved;
+    eventsInserted += googleSettlement.value.eventsInserted ?? 0;
+    eventsUpdated += googleSettlement.value.eventsUpdated ?? 0;
+    eventsFilteredOutOfWindow += googleSettlement.value.eventsFilteredOutOfWindow ?? 0;
+    syncTokenResetCount += googleSettlement.value.syncTokenResetCount ?? 0;
+    providerErrorCount += googleSettlement.value.errorCount;
+    providersSucceeded += 1;
+  } else {
+    providersFailed += 1;
   }
 
   if (outlookSettlement?.status === "fulfilled" && outlookSettlement.value) {
-    publishProviderMetrics("outlook", outlookSettlement.value, dependencies);
+    publishProviderMetrics("outlook", outlookSettlement.value);
+    eventsAdded += outlookSettlement.value.eventsAdded;
+    eventsRemoved += outlookSettlement.value.eventsRemoved;
+    eventsInserted += outlookSettlement.value.eventsInserted ?? 0;
+    eventsUpdated += outlookSettlement.value.eventsUpdated ?? 0;
+    eventsFilteredOutOfWindow += outlookSettlement.value.eventsFilteredOutOfWindow ?? 0;
+    syncTokenResetCount += outlookSettlement.value.syncTokenResetCount ?? 0;
+    providerErrorCount += outlookSettlement.value.errorCount;
+    providersSucceeded += 1;
+  } else {
+    providersFailed += 1;
   }
+
+  dependencies.setCronEventFields({
+    "events.added": eventsAdded,
+    "events.filtered_out_of_window": eventsFilteredOutOfWindow,
+    "events.inserted": eventsInserted,
+    "events.removed": eventsRemoved,
+    "events.updated": eventsUpdated,
+    "provider.count": 2,
+    "provider.error_count": providerErrorCount,
+    "provider.failed_count": providersFailed,
+    "provider.succeeded_count": providersSucceeded,
+    "sync_token.reset_count": syncTokenResetCount,
+  });
 };
 
 const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies> => {
@@ -138,10 +174,10 @@ const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies>
       refreshLockStore,
     });
 
-    widelog.time.start("syncGoogleSources");
-
     try {
-      const result = await googleSourceProvider.syncAllSources();
+      const result = await widelog.time.measure("sync.google.duration_ms", () =>
+        googleSourceProvider.syncAllSources(),
+      );
       const errorSummary = summarizeProviderErrors(result.errors);
 
       return {
@@ -154,11 +190,9 @@ const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies>
         syncTokenResetCount: result.syncTokenResetCount,
       };
     } catch (error) {
-      widelog.set("google.error", true);
-      widelog.errorFields(error, { prefix: "google" });
+      widelog.count("provider.error_count");
+      widelog.errorFields(error, { prefix: "provider.error" });
       return null;
-    } finally {
-      widelog.time.stop("syncGoogleSources");
     }
   };
 
@@ -178,10 +212,10 @@ const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies>
       refreshLockStore,
     });
 
-    widelog.time.start("syncOutlookSources");
-
     try {
-      const result = await outlookSourceProvider.syncAllSources();
+      const result = await widelog.time.measure("sync.outlook.duration_ms", () =>
+        outlookSourceProvider.syncAllSources(),
+      );
       const errorSummary = summarizeProviderErrors(result.errors);
 
       return {
@@ -194,11 +228,9 @@ const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies>
         syncTokenResetCount: result.syncTokenResetCount,
       };
     } catch (error) {
-      widelog.set("outlook.error", true);
-      widelog.errorFields(error, { prefix: "outlook" });
+      widelog.count("provider.error_count");
+      widelog.errorFields(error, { prefix: "provider.error" });
       return null;
-    } finally {
-      widelog.time.stop("syncOutlookSources");
     }
   };
 

@@ -1,17 +1,19 @@
-import { widelogger } from "widelogger";
+import { widelog, widelogger } from "widelogger";
 import type { ServerConfig } from "./types";
 
-const loggerServiceName = "@keeper.sh/canary-web";
+const loggerServiceName = "keeper-web";
 const UUID_SEGMENT_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NUMERIC_ID_SEGMENT_PATTERN = /^\d{2,}$/;
 const NORMALIZED_PATH_CACHE_MAX_SIZE = 1024;
 const normalizedPathCache = new Map<string, string>();
 
-const { destroy: destroyWideLogger, widelog } = widelogger({
+const { context: runWebWideEventContext, destroy: destroyWideLogger } = widelogger({
   defaultEventName: "wide_event",
   environment: process.env.ENV ?? process.env.NODE_ENV,
   service: loggerServiceName,
+  version: process.env.npm_package_version,
+  commitHash: process.env.COMMIT_SHA,
 });
 
 function isAbortError(error: unknown): boolean {
@@ -87,16 +89,23 @@ export async function emitLifecycleWideEvent(
   outcome: "success" | "error",
   config: ServerConfig,
 ): Promise<void> {
-  await widelog.context(async () => {
-    const now = Date.now();
-    widelog.set("operation.name", operationName);
-    widelog.set("operation.type", "lifecycle");
-    widelog.set("request.timing.start", now);
-    widelog.set("request.timing.end", now);
-    widelog.set("request.duration.ms", 0);
-    widelog.set("server.port", config.serverPort);
-    widelog.set("server.environment", config.environment);
-    widelog.set("outcome", outcome);
+  await runWebWideEventContext(async () => {
+    widelog.setFields({
+      duration_ms: 0,
+      operation: {
+        name: operationName,
+        type: "lifecycle",
+      },
+      outcome,
+      request: {
+        id: crypto.randomUUID(),
+      },
+      server: {
+        environment: config.environment,
+        port: config.serverPort,
+      },
+      status_code: outcome === "success" ? 200 : 500,
+    });
     widelog.flush();
   });
 }
@@ -106,21 +115,29 @@ export async function handleWithWideLogging(
   config: ServerConfig,
   handleRequest: (request: Request) => Promise<Response>,
 ): Promise<Response> {
-  return widelog.context(async () => {
+  return runWebWideEventContext(async () => {
     const requestUrl = new URL(request.url);
-    const requestStart = Date.now();
     const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
 
     const normalizedOperationPath = normalizeOperationPath(requestUrl.pathname);
 
-    widelog.set("operation.name", `${request.method} ${normalizedOperationPath}`);
-    widelog.set("operation.type", "http");
-    widelog.set("request.id", requestId);
-    widelog.set("request.timing.start", requestStart);
-    widelog.set("http.method", request.method);
-    widelog.set("http.path", requestUrl.pathname);
-    widelog.set("server.port", config.serverPort);
-    widelog.set("server.environment", config.environment);
+    widelog.setFields({
+      http: {
+        method: request.method,
+        path: requestUrl.pathname,
+      },
+      operation: {
+        name: `${request.method} ${normalizedOperationPath}`,
+        type: "http",
+      },
+      request: {
+        id: requestId,
+      },
+      server: {
+        environment: config.environment,
+        port: config.serverPort,
+      },
+    });
 
     const userAgent = request.headers.get("user-agent");
     if (userAgent) {
@@ -128,29 +145,30 @@ export async function handleWithWideLogging(
     }
 
     try {
-      const response = await handleRequest(request);
-      widelog.set("http.status_code", response.status);
-      if (response.status >= 500) {
-        widelog.set("outcome", "error");
-      } else {
-        widelog.set("outcome", "success");
-      }
-      return response;
-    } catch (error) {
-      if (isAbortError(error)) {
-        widelog.set("http.status_code", 499);
-        widelog.set("outcome", "cancelled");
-        return new Response(null, { status: 499, statusText: "Client Closed Request" });
-      }
+      return await widelog.time.measure("duration_ms", async () => {
+        try {
+          const response = await handleRequest(request);
+          widelog.set("status_code", response.status);
+          if (response.status >= 500) {
+            widelog.set("outcome", "error");
+          } else {
+            widelog.set("outcome", "success");
+          }
+          return response;
+        } catch (error) {
+          if (isAbortError(error)) {
+            widelog.set("status_code", 499);
+            widelog.set("outcome", "cancelled");
+            return new Response(null, { status: 499, statusText: "Client Closed Request" });
+          }
 
-      widelog.set("http.status_code", 500);
-      widelog.set("outcome", "error");
-      widelog.errorFields(error, { includeStack: false });
-      return new Response("Internal Server Error", { status: 500 });
+          widelog.set("status_code", 500);
+          widelog.set("outcome", "error");
+          widelog.errorFields(error, { includeStack: false });
+          return new Response("Internal Server Error", { status: 500 });
+        }
+      });
     } finally {
-      const requestEnd = Date.now();
-      widelog.set("request.timing.end", requestEnd);
-      widelog.set("request.duration.ms", requestEnd - requestStart);
       widelog.flush();
     }
   });

@@ -2,7 +2,7 @@ import { entry } from "entrykit";
 import { join } from "node:path";
 import { tryLoadMcpEnv } from "@keeper.sh/env/mcp";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
-import { destroyWideLogger, widelog } from "./utils/logging";
+import { destroyWideLogger, runMcpWideEventContext, setWideEventFields, widelog } from "./utils/logging";
 
 const env = tryLoadMcpEnv();
 
@@ -20,50 +20,63 @@ const router = new Bun.FileSystemRouter({
 });
 
 await entry({
-  main: () => widelog.context(() => {
-      widelog.set("operation.name", "mcp:start");
-      widelog.set("operation.type", "lifecycle");
-      widelog.set("service.name", "mcp");
-      widelog.set("port", env.MCP_PORT);
+  main: () =>
+    runMcpWideEventContext(async () => {
+      setWideEventFields({
+        operation: {
+          name: "mcp:start",
+          type: "lifecycle",
+        },
+        port: env.MCP_PORT,
+        request: {
+          id: crypto.randomUUID(),
+        },
+      });
 
       try {
-        const server = Bun.serve({
-          port: env.MCP_PORT,
-          fetch: async (request) => {
-            const match = router.match(request);
+        return await widelog.time.measure("duration_ms", async () => {
+          const server = Bun.serve({
+            port: env.MCP_PORT,
+            fetch: async (request) => {
+              const match = router.match(request);
 
-            if (!match) {
-              return new Response("Not found", { status: HTTP_NOT_FOUND });
-            }
+              if (!match) {
+                return new Response("Not found", { status: HTTP_NOT_FOUND });
+              }
 
-            const module: unknown = await import(match.filePath);
+              const module: unknown = await import(match.filePath);
 
-            if (!isRouteModule(module)) {
-              return new Response("Internal server error", { status: HTTP_INTERNAL_SERVER_ERROR });
-            }
+              if (!isRouteModule(module)) {
+                return new Response("Internal server error", {
+                  status: HTTP_INTERNAL_SERVER_ERROR,
+                });
+              }
 
-            if (!isHttpMethod(request.method)) {
-              return new Response("Method not allowed", { status: HTTP_METHOD_NOT_ALLOWED });
-            }
+              if (!isHttpMethod(request.method)) {
+                return new Response("Method not allowed", { status: HTTP_METHOD_NOT_ALLOWED });
+              }
 
-            const handler = module[request.method];
+              const handler = module[request.method];
 
-            if (!handler) {
-              return new Response("Method not allowed", { status: HTTP_METHOD_NOT_ALLOWED });
-            }
+              if (!handler) {
+                return new Response("Method not allowed", { status: HTTP_METHOD_NOT_ALLOWED });
+              }
 
-            return handler(request);
-          },
+              return handler(request);
+            },
+          });
+
+          widelog.set("outcome", "success");
+          widelog.set("status_code", 200);
+
+          return () => {
+            server.stop();
+            destroyWideLogger();
+          };
         });
-
-        widelog.set("outcome", "success");
-
-        return () => {
-          server.stop();
-          destroyWideLogger();
-        };
       } catch (error) {
         widelog.set("outcome", "error");
+        widelog.set("status_code", 500);
         widelog.errorFields(error);
         throw error;
       } finally {
