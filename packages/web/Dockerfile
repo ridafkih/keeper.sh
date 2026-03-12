@@ -19,6 +19,7 @@ FROM base AS runtime
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile --production
 COPY --from=build /app/applications/canary-web/dist ./applications/canary-web/dist
+COPY --from=build /app/applications/canary-web/public ./applications/canary-web/public
 
 WORKDIR /app/applications/canary-web
 
