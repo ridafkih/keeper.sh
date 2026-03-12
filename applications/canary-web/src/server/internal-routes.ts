@@ -60,6 +60,22 @@ async function serveStaticTextFile(pathname: string): Promise<Response | null> {
   }
 }
 
+const resolvePublicOrigin = (request: Request): string => {
+  const url = new URL(request.url);
+  const proto = request.headers.get("x-forwarded-proto");
+  const host = request.headers.get("x-forwarded-host");
+
+  if (proto) {
+    url.protocol = proto;
+  }
+
+  if (host) {
+    url.host = host;
+  }
+
+  return url.origin;
+};
+
 export async function handleInternalRoute(
   request: Request,
   config: ServerConfig,
@@ -71,7 +87,7 @@ export async function handleInternalRoute(
   const requestUrl = new URL(request.url);
 
   if (requestUrl.pathname === "/.well-known/oauth-protected-resource") {
-    return Response.json(buildProtectedResourceMetadata(requestUrl.origin));
+    return Response.json(buildProtectedResourceMetadata(resolvePublicOrigin(request)));
   }
 
   const internalProxyPath = resolveInternalProxyPath(requestUrl.pathname);
