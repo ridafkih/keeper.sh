@@ -19,7 +19,22 @@ interface ReconcileSubscriptionsDependencies {
   selectUserIds: () => Promise<string[]>;
   reconcileUserSubscription: (userId: string) => Promise<void>;
   setCronEventFields: (fields: Record<string, unknown>) => void;
+  reconcileUserTimeoutMs?: number;
 }
+
+const RECONCILE_USER_TIMEOUT_MS = 60_000;
+
+const withOperationTimeout = async <TResult>(
+  operation: () => Promise<TResult>,
+  timeoutMs: number,
+  operationName: string,
+): Promise<TResult> =>
+  Promise.race([
+    operation(),
+    Bun.sleep(timeoutMs).then((): never => {
+      throw new Error(`${operationName} timed out after ${timeoutMs}ms`);
+    }),
+  ]);
 
 const runReconcileSubscriptionsJob = async (
   dependencies: ReconcileSubscriptionsDependencies,
@@ -31,9 +46,15 @@ const runReconcileSubscriptionsJob = async (
 
   const userIds = await dependencies.selectUserIds();
   dependencies.setCronEventFields({ "processed.count": userIds.length });
+  const reconcileUserTimeoutMs = dependencies.reconcileUserTimeoutMs ?? RECONCILE_USER_TIMEOUT_MS;
 
   const settlements = await Promise.allSettled(
-    userIds.map((userId) => dependencies.reconcileUserSubscription(userId)),
+    userIds.map((userId) =>
+      withOperationTimeout(
+        () => dependencies.reconcileUserSubscription(userId),
+        reconcileUserTimeoutMs,
+        `reconcile:subscription:${userId}`,
+      )),
   );
 
   const { failed } = countSettledResults(settlements);

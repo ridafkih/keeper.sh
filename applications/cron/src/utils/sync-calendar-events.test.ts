@@ -65,6 +65,34 @@ describe("syncUserSources", () => {
     expect(destinationSyncRequests).toEqual(["user-1"]);
     expect(result).toEqual(createSyncResult({ added: 8, removed: 2 }));
   });
+
+  it("continues to destination sync when a source sync operation times out", async () => {
+    const destinationSyncRequests: string[] = [];
+
+    const result = await syncUserSources(
+      "user-1",
+      [{ id: "source-1" }, { id: "source-2" }],
+      {
+        destinationOperationTimeoutMs: 50,
+        fetchAndSyncSourceForCalendar: (source) => {
+          if (source.id === "source-2") {
+            return new Promise<void>(() => {
+              // intentionally unresolved
+            });
+          }
+          return Promise.resolve();
+        },
+        sourceOperationTimeoutMs: 1,
+        syncDestinationsForUser: (userId) => {
+          destinationSyncRequests.push(userId);
+          return Promise.resolve(createSyncResult({ added: 2, removed: 1 }));
+        },
+      },
+    );
+
+    expect(destinationSyncRequests).toEqual(["user-1"]);
+    expect(result).toEqual(createSyncResult({ added: 2, removed: 1 }));
+  });
 });
 
 describe("runSyncJob", () => {
@@ -260,6 +288,41 @@ describe("runSyncJob", () => {
       "events.add_failed": 2,
       "events.removed": 6,
       "events.remove_failed": 2,
+      "user.failed.count": 1,
+    });
+  });
+
+  it("treats timed out user sync operations as rejected and continues aggregation", async () => {
+    const cronEventFieldSets: Record<string, unknown>[] = [];
+
+    await runSyncJob("free", {
+      getSourcesByPlan: () => Promise.resolve([{ id: "source-1", userId: "user-1" }]),
+      getUsersWithDestinationsByPlan: () => Promise.resolve(["user-1", "user-2"]),
+      setCronEventFields: (fields) => {
+        cronEventFieldSets.push(fields);
+      },
+      syncUserSourcesForUser: (userId) => {
+        if (userId === "user-2") {
+          return new Promise<SyncResult>(() => {
+            // intentionally unresolved
+          });
+        }
+
+        return Promise.resolve(createSyncResult({
+          addFailed: 1,
+          added: 3,
+          removeFailed: 0,
+          removed: 2,
+        }));
+      },
+      userOperationTimeoutMs: 1,
+    });
+
+    expect(cronEventFieldSets[1]).toEqual({
+      "events.added": 3,
+      "events.add_failed": 1,
+      "events.removed": 2,
+      "events.remove_failed": 0,
       "user.failed.count": 1,
     });
   });
