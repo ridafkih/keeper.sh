@@ -15,6 +15,6 @@ const toCalendar = (source: KeeperSource) => ({
 export const GET = withWideEvent(
   withV1Auth(async ({ userId }) => {
     const sources = await keeperApi.listSources(userId);
-    return Response.json(sources.map(toCalendar));
+    return Response.json(sources.map((source) => toCalendar(source)));
   }),
 );

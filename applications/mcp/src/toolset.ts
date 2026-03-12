@@ -40,6 +40,16 @@ const isEventRangeInput = (
 ): input is Record<string, unknown> & { from: string; to: string; timezone: string } =>
   typeof input.from === "string" && typeof input.to === "string" && typeof input.timezone === "string";
 
+const normalizeTimezoneOffset = (raw: string): string => {
+  if (raw === "") {
+    return "+00:00";
+  }
+  if (raw.includes(":")) {
+    return raw.padStart(6, "+0");
+  }
+  return `${raw.padStart(3, "+0")}:00`;
+};
+
 const toLocalizedTime = (utcIso: string, timeZone: string): string => {
   const date = new Date(utcIso);
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -54,16 +64,16 @@ const toLocalizedTime = (utcIso: string, timeZone: string): string => {
     timeZoneName: "shortOffset",
   }).formatToParts(date);
 
-  const getPartValue = (type: Intl.DateTimeFormatPartTypes): string =>
-    parts.find((part) => part.type === type)?.value ?? "";
+  const getPartValue = (type: Intl.DateTimeFormatPartTypes): string => {
+    const part = parts.find((part) => part.type === type);
+    if (!part) {
+      return "";
+    }
+    return part.value;
+  };
 
   const offset = getPartValue("timeZoneName").replace("GMT", "");
-  let normalizedOffset = "+00:00";
-  if (offset !== "") {
-    normalizedOffset = offset.includes(":")
-      ? offset.padStart(6, "+0")
-      : `${offset.padStart(3, "+0")}:00`;
-  }
+  const normalizedOffset = normalizeTimezoneOffset(offset);
 
   const year = getPartValue("year");
   const month = getPartValue("month");
