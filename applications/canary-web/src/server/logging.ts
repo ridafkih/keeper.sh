@@ -5,6 +5,7 @@ const loggerServiceName = "@keeper.sh/canary-web";
 
 const { destroy: destroyWideLogger, widelog } = widelogger({
   defaultEventName: "wide_event",
+  environment: process.env.ENV ?? process.env.NODE_ENV,
   service: loggerServiceName,
 });
 
