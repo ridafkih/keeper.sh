@@ -115,20 +115,11 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
       filteredCount: eventsFilteredOutOfWindow,
     } = filterSourceEventsToSyncWindow(events, syncWindow);
 
-    const needsFullResync = await GoogleCalendarSourceProvider.hasOutOfRangeEvents(
+    await GoogleCalendarSourceProvider.removeOutOfRangeEvents(
       database,
       calendarId,
+      syncWindow,
     );
-
-    if (isDeltaSync && needsFullResync) {
-      await this.clearSyncToken();
-      return {
-        eventsAdded: EMPTY_COUNT,
-        eventsRemoved: EMPTY_COUNT,
-        fullSyncRequired: true,
-        syncTokenResetCount: 1,
-      };
-    }
 
     const existingEvents = await database
       .select({
@@ -211,15 +202,13 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
       syncToken: nextSyncToken,
     };
   }
-  private static async hasOutOfRangeEvents(
+  private static async removeOutOfRangeEvents(
     database: BunSQLDatabase,
     calendarId: string,
-  ): Promise<boolean> {
-    const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
-
-    const outOfRange = await database
-      .select({ id: eventStatesTable.id })
-      .from(eventStatesTable)
+    syncWindow: { timeMin: Date; timeMax: Date },
+  ): Promise<void> {
+    await database
+      .delete(eventStatesTable)
       .where(
         and(
           eq(eventStatesTable.calendarId, calendarId),
@@ -228,10 +217,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
             gt(eventStatesTable.startTime, syncWindow.timeMax),
           ),
         ),
-      )
-      .limit(1);
-
-    return outOfRange.length > EMPTY_COUNT;
+      );
   }
 
 }

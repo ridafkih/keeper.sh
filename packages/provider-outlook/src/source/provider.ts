@@ -116,17 +116,11 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       filteredCount: eventsFilteredOutOfWindow,
     } = filterSourceEventsToSyncWindow(events, syncWindow);
 
-    const needsFullResync = await OutlookSourceProvider.hasOutOfRangeEvents(database, calendarId);
-
-    if (isDeltaSync && needsFullResync) {
-      await this.clearSyncToken();
-      return {
-        eventsAdded: EMPTY_COUNT,
-        eventsRemoved: EMPTY_COUNT,
-        fullSyncRequired: true,
-        syncTokenResetCount: 1,
-      };
-    }
+    await OutlookSourceProvider.removeOutOfRangeEvents(
+      database,
+      calendarId,
+      syncWindow,
+    );
 
     const existingEvents = await database
       .select({
@@ -231,15 +225,13 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
     this.config.originalName = remoteCalendarName;
   }
 
-  private static async hasOutOfRangeEvents(
+  private static async removeOutOfRangeEvents(
     database: BunSQLDatabase,
     calendarId: string,
-  ): Promise<boolean> {
-    const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
-
-    const outOfRange = await database
-      .select({ id: eventStatesTable.id })
-      .from(eventStatesTable)
+    syncWindow: { timeMin: Date; timeMax: Date },
+  ): Promise<void> {
+    await database
+      .delete(eventStatesTable)
       .where(
         and(
           eq(eventStatesTable.calendarId, calendarId),
@@ -248,10 +240,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
             gt(eventStatesTable.startTime, syncWindow.timeMax),
           ),
         ),
-      )
-      .limit(1);
-
-    return outOfRange.length > EMPTY_COUNT;
+      );
   }
 
 }

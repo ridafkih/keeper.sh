@@ -31,29 +31,23 @@ describe("GoogleCalendarSourceProvider", () => {
     globalThis.fetch = originalFetch;
   });
 
-  it("does not clear stored source events before forcing full resync", async () => {
-    let deleteCalled = false;
-    let syncTokenResetCalls = 0;
+  it("removes out-of-range events directly without triggering full resync", async () => {
+    let outOfRangeDeleteCalled = false;
     const mockDatabase = {
       delete: () => {
-        deleteCalled = true;
+        outOfRangeDeleteCalled = true;
         return {
           where: () => Promise.resolve(),
         };
       },
       select: () => ({
         from: () => ({
-          where: () => ({
-            limit: () => Promise.resolve([{ id: "out-of-range-state" }]),
-          }),
+          where: () => Promise.resolve([]),
         }),
       }),
       update: () => ({
         set: () => ({
-          where: () => {
-            syncTokenResetCalls += 1;
-            return Promise.resolve();
-          },
+          where: () => Promise.resolve(),
         }),
       }),
     };
@@ -83,16 +77,14 @@ describe("GoogleCalendarSourceProvider", () => {
 
     const result = await provider.runProcessEvents([], { isDeltaSync: true });
 
-    expect(result.fullSyncRequired).toBe(true);
-    expect(deleteCalled).toBe(false);
-    expect(syncTokenResetCalls).toBe(1);
+    expect(result.fullSyncRequired).toBeUndefined();
+    expect(outOfRangeDeleteCalled).toBe(true);
   });
 
   it("applies source-state removals inside a transaction during full sync", async () => {
-    let rootDeleteCalls = 0;
+    let outOfRangeDeleteCalls = 0;
     let transactionCalls = 0;
     let transactionDeleteCalls = 0;
-    let selectCalls = 0;
 
     const transactionDatabase = {
       delete: () => {
@@ -110,37 +102,24 @@ describe("GoogleCalendarSourceProvider", () => {
 
     const mockDatabase = {
       delete: () => {
-        rootDeleteCalls += 1;
+        outOfRangeDeleteCalls += 1;
         return {
           where: () => Promise.resolve(),
         };
       },
-      select: () => {
-        selectCalls += 1;
-        if (selectCalls === 1) {
-          return {
-            from: () => ({
-              where: () => ({
-                limit: () => Promise.resolve([]),
-              }),
-            }),
-          };
-        }
-
-        return {
-          from: () => ({
-            where: () => Promise.resolve([{
-              availability: "busy",
-              endTime: new Date("2026-03-12T15:00:00.000Z"),
-              id: "event-state-1",
-              isAllDay: false,
-              sourceEventType: "default",
-              sourceEventUid: "source-uid-1",
-              startTime: new Date("2026-03-12T14:00:00.000Z"),
-            }]),
-          }),
-        };
-      },
+      select: () => ({
+        from: () => ({
+          where: () => Promise.resolve([{
+            availability: "busy",
+            endTime: new Date("2026-03-12T15:00:00.000Z"),
+            id: "event-state-1",
+            isAllDay: false,
+            sourceEventType: "default",
+            sourceEventUid: "source-uid-1",
+            startTime: new Date("2026-03-12T14:00:00.000Z"),
+          }]),
+        }),
+      }),
       transaction: async (
         callback: (database: typeof transactionDatabase) => Promise<void>,
       ) => {
@@ -181,7 +160,7 @@ describe("GoogleCalendarSourceProvider", () => {
 
     expect(result.eventsRemoved).toBe(1);
     expect(transactionCalls).toBe(1);
-    expect(rootDeleteCalls).toBe(0);
+    expect(outOfRangeDeleteCalls).toBe(1);
     expect(transactionDeleteCalls).toBe(1);
   });
 
