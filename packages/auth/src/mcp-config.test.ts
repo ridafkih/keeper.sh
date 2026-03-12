@@ -21,7 +21,7 @@ describe("resolveMcpAuthOptions", () => {
         allowUnauthenticatedClientRegistration: true,
         clientRegistrationAllowedScopes: ["offline_access", ...KEEPER_API_RESOURCE_SCOPES],
         clientRegistrationDefaultScopes: ["offline_access", ...KEEPER_API_RESOURCE_SCOPES],
-        consentPage: "https://app.keeper.sh/mcp/consent",
+        consentPage: "https://app.keeper.sh/oauth/consent",
         loginPage: "https://app.keeper.sh/login",
         scopes: KEEPER_MCP_OAUTH_SCOPES,
         validAudiences: ["https://mcp.keeper.sh"],

@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { getGithubStarsSnapshot } from "./github-stars";
 import { proxyRequest } from "./proxy/http";
+import type { ServerConfig } from "./types";
 
 const staticTextFiles: Record<string, string> = {
   "/llms.txt": "text/plain; charset=UTF-8",
@@ -26,6 +27,21 @@ const resolveInternalProxyPath = (pathname: string): string | null => {
   return null;
 };
 
+const RESOURCE_SCOPES = [
+  "keeper.read",
+  "keeper.sources.read",
+  "keeper.destinations.read",
+  "keeper.mappings.read",
+  "keeper.events.read",
+  "keeper.sync-status.read",
+];
+
+const buildProtectedResourceMetadata = (requestOrigin: string) => ({
+  resource: `${requestOrigin}/mcp`,
+  authorization_servers: [`${requestOrigin}/api/auth`],
+  scopes_supported: RESOURCE_SCOPES,
+});
+
 async function serveStaticTextFile(pathname: string): Promise<Response | null> {
   const contentType = staticTextFiles[pathname];
   if (!contentType) return null;
@@ -46,20 +62,25 @@ async function serveStaticTextFile(pathname: string): Promise<Response | null> {
 
 export async function handleInternalRoute(
   request: Request,
-  apiProxyOrigin: string,
+  config: ServerConfig,
 ): Promise<Response | null> {
   if (request.method !== "GET") {
     return null;
   }
 
   const requestUrl = new URL(request.url);
+
+  if (requestUrl.pathname === "/.well-known/oauth-protected-resource") {
+    return Response.json(buildProtectedResourceMetadata(requestUrl.origin));
+  }
+
   const internalProxyPath = resolveInternalProxyPath(requestUrl.pathname);
 
   if (internalProxyPath) {
     const proxyUrl = new URL(request.url);
     proxyUrl.pathname = internalProxyPath;
 
-    return proxyRequest(new Request(proxyUrl, request), apiProxyOrigin);
+    return proxyRequest(new Request(proxyUrl, request), config.apiProxyOrigin);
   }
 
   if (requestUrl.pathname === "/internal/github-stars") {

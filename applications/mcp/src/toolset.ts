@@ -53,7 +53,7 @@ const createKeeperMcpToolset = (readModels: KeeperApi): KeeperMcpToolset => ({
       "List all calendars the user has connected to Keeper, including provider name and account.",
     execute: async ({ userId }) => {
       const sources = await readModels.listSources(userId);
-      return sources.map(toCalendar);
+      return sources.map((source) => toCalendar(source));
     },
   },
   get_event_count: {

@@ -2,6 +2,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { clientDistDirectory } from "../paths";
 
+export function isMcpRequest(url: URL): boolean {
+  return url.pathname === "/mcp";
+}
+
 export function isApiRequest(url: URL): boolean {
   return url.pathname === "/api" || url.pathname.startsWith("/api/");
 }

@@ -8,7 +8,7 @@ import { withWideEvent } from "./utils/middleware";
 
 const database = createDatabase(env.DATABASE_URL);
 
-const { auth } = createAuth({
+const { auth: baseAuth } = createAuth({
   database,
   secret: env.BETTER_AUTH_SECRET,
   baseUrl: env.BETTER_AUTH_URL,
@@ -17,10 +17,11 @@ const { auth } = createAuth({
   webBaseUrl: env.WEB_BASE_URL,
 });
 
-if (!isKeeperMcpEnabledAuth(auth)) {
+if (!isKeeperMcpEnabledAuth(baseAuth)) {
   throw new Error("MCP auth is not configured — ensure mcpResourceUrl and webBaseUrl are set");
 }
 
+const auth = baseAuth;
 const keeperApi = createKeeperApi(database);
 const keeperMcpToolset = createKeeperMcpToolset(keeperApi);
 const handleMcpRequest = createKeeperMcpHandler({

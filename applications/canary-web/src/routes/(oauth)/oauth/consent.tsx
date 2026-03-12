@@ -38,7 +38,7 @@ const resolveScopeLabel = (scope: string): string => {
 // This route lives under (oauth)/mcp rather than (oauth)/auth/mcp because
 // the (oauth)/auth layout redirects logged-in users away, but the consent
 // page requires an active session.
-export const Route = createFileRoute("/(oauth)/mcp/consent")({
+export const Route = createFileRoute("/(oauth)/oauth/consent")({
   beforeLoad: ({ search }) => {
     if (!getMcpAuthorizationSearch(search)) {
       throw redirect({ to: "/login", search });

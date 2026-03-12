@@ -10,6 +10,7 @@ export interface Runtime {
 
 export interface ServerConfig {
   apiProxyOrigin: string;
+  mcpProxyOrigin: string;
   environment: "development" | "production" | "test";
   isProduction: boolean;
   serverPort: number;

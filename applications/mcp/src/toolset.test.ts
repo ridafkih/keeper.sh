@@ -6,7 +6,7 @@ const createMockApi = (calls?: string[]) => ({
     calls?.push(`count:${userId}`);
     return Promise.resolve(0);
   },
-  getEventsInRange: (userId: string, range: { from: string | Date; to: string | Date }) => {
+  getEventsInRange: (userId: string) => {
     calls?.push(`events:${userId}`);
     return Promise.resolve([]);
   },

@@ -87,8 +87,8 @@ const registerToolset = (
         inputSchema: tool.inputSchema,
         title: tool.title,
       },
-      async (input: Record<string, unknown>) => {
-        return runWideEvent(
+      (input: Record<string, unknown>) =>
+        runWideEvent(
           {
             "operation.name": `mcp:tool:${name}`,
             "operation.type": "mcp",
@@ -106,8 +106,7 @@ const registerToolset = (
               throw error;
             }
           },
-        );
-      },
+        ),
     );
   }
 };
