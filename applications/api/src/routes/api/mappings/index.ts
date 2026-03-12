@@ -1,9 +1,12 @@
 import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { getUserMappings } from "../../../utils/source-destination-mappings";
+import { createKeeperApi } from "@keeper.sh/keeper-api";
+import { database } from "../../../context";
+
+const keeperApi = createKeeperApi(database);
 
 export const GET = withWideEvent(
   withAuth(async ({ userId }) => {
-    const mappings = await getUserMappings(userId);
+    const mappings = await keeperApi.listMappings(userId);
     return Response.json(mappings);
   }),
 );

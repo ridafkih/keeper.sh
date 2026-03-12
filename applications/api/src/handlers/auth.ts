@@ -1,4 +1,5 @@
 import type { MaybePromise } from "bun";
+import { hasOAuthProviderApi } from "@keeper.sh/auth";
 import { auth, authCapabilities } from "../context";
 import { runWideEvent, setLogFields, trackStatusError } from "../utils/logging";
 
@@ -106,6 +107,24 @@ const handleAuthRequest = (pathname: string, request: Request): MaybePromise<Res
     try {
       if (pathname === "/api/auth/capabilities") {
         return Response.json(authCapabilities);
+      }
+
+      if (hasOAuthProviderApi(auth.api)) {
+        if (pathname === "/api/auth/.well-known/oauth-authorization-server") {
+          return Response.json(
+            await auth.api.getOAuthServerConfig({
+              headers: request.headers,
+            }),
+          );
+        }
+
+        if (pathname === "/api/auth/.well-known/openid-configuration") {
+          return Response.json(
+            await auth.api.getOpenIdConfig({
+              headers: request.headers,
+            }),
+          );
+        }
       }
 
       const response = await auth.handler(request);

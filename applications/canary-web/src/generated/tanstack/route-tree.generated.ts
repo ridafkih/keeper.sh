@@ -27,6 +27,7 @@ import { Route as oauthAuthRouteRouteImport } from './../../routes/(oauth)/auth/
 import { Route as marketingBlogRouteRouteImport } from './../../routes/(marketing)/blog/route'
 import { Route as marketingBlogIndexRouteImport } from './../../routes/(marketing)/blog/index'
 import { Route as dashboardDashboardIndexRouteImport } from './../../routes/(dashboard)/dashboard/index'
+import { Route as oauthOauthConsentRouteImport } from './../../routes/(oauth)/oauth/consent'
 import { Route as oauthAuthOutlookRouteImport } from './../../routes/(oauth)/auth/outlook'
 import { Route as oauthAuthGoogleRouteImport } from './../../routes/(oauth)/auth/google'
 import { Route as marketingBlogSlugRouteImport } from './../../routes/(marketing)/blog/$slug'
@@ -142,6 +143,11 @@ const dashboardDashboardIndexRoute = dashboardDashboardIndexRouteImport.update({
   id: '/dashboard/',
   path: '/dashboard/',
   getParentRoute: () => dashboardRouteRoute,
+} as any)
+const oauthOauthConsentRoute = oauthOauthConsentRouteImport.update({
+  id: '/oauth/consent',
+  path: '/oauth/consent',
+  getParentRoute: () => oauthRouteRoute,
 } as any)
 const oauthAuthOutlookRoute = oauthAuthOutlookRouteImport.update({
   id: '/outlook',
@@ -330,6 +336,7 @@ export interface FileRoutesByFullPath {
   '/blog/$slug': typeof marketingBlogSlugRoute
   '/auth/google': typeof oauthAuthGoogleRoute
   '/auth/outlook': typeof oauthAuthOutlookRoute
+  '/oauth/consent': typeof oauthOauthConsentRoute
   '/dashboard/': typeof dashboardDashboardIndexRoute
   '/blog/': typeof marketingBlogIndexRoute
   '/dashboard/settings/change-password': typeof dashboardDashboardSettingsChangePasswordRoute
@@ -371,6 +378,7 @@ export interface FileRoutesByTo {
   '/blog/$slug': typeof marketingBlogSlugRoute
   '/auth/google': typeof oauthAuthGoogleRoute
   '/auth/outlook': typeof oauthAuthOutlookRoute
+  '/oauth/consent': typeof oauthOauthConsentRoute
   '/blog': typeof marketingBlogIndexRoute
   '/dashboard/settings/change-password': typeof dashboardDashboardSettingsChangePasswordRoute
   '/dashboard/settings/passkeys': typeof dashboardDashboardSettingsPasskeysRoute
@@ -418,6 +426,7 @@ export interface FileRoutesById {
   '/(marketing)/blog/$slug': typeof marketingBlogSlugRoute
   '/(oauth)/auth/google': typeof oauthAuthGoogleRoute
   '/(oauth)/auth/outlook': typeof oauthAuthOutlookRoute
+  '/(oauth)/oauth/consent': typeof oauthOauthConsentRoute
   '/(dashboard)/dashboard/': typeof dashboardDashboardIndexRoute
   '/(marketing)/blog/': typeof marketingBlogIndexRoute
   '/(dashboard)/dashboard/settings/change-password': typeof dashboardDashboardSettingsChangePasswordRoute
@@ -463,6 +472,7 @@ export interface FileRouteTypes {
     | '/blog/$slug'
     | '/auth/google'
     | '/auth/outlook'
+    | '/oauth/consent'
     | '/dashboard/'
     | '/blog/'
     | '/dashboard/settings/change-password'
@@ -504,6 +514,7 @@ export interface FileRouteTypes {
     | '/blog/$slug'
     | '/auth/google'
     | '/auth/outlook'
+    | '/oauth/consent'
     | '/blog'
     | '/dashboard/settings/change-password'
     | '/dashboard/settings/passkeys'
@@ -550,6 +561,7 @@ export interface FileRouteTypes {
     | '/(marketing)/blog/$slug'
     | '/(oauth)/auth/google'
     | '/(oauth)/auth/outlook'
+    | '/(oauth)/oauth/consent'
     | '/(dashboard)/dashboard/'
     | '/(marketing)/blog/'
     | '/(dashboard)/dashboard/settings/change-password'
@@ -706,6 +718,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/'
       preLoaderRoute: typeof dashboardDashboardIndexRouteImport
       parentRoute: typeof dashboardRouteRoute
+    }
+    '/(oauth)/oauth/consent': {
+      id: '/(oauth)/oauth/consent'
+      path: '/oauth/consent'
+      fullPath: '/oauth/consent'
+      preLoaderRoute: typeof oauthOauthConsentRouteImport
+      parentRoute: typeof oauthRouteRoute
     }
     '/(oauth)/auth/outlook': {
       id: '/(oauth)/auth/outlook'
@@ -1104,11 +1123,13 @@ const oauthDashboardRouteRouteWithChildren =
 interface oauthRouteRouteChildren {
   oauthAuthRouteRoute: typeof oauthAuthRouteRouteWithChildren
   oauthDashboardRouteRoute: typeof oauthDashboardRouteRouteWithChildren
+  oauthOauthConsentRoute: typeof oauthOauthConsentRoute
 }
 
 const oauthRouteRouteChildren: oauthRouteRouteChildren = {
   oauthAuthRouteRoute: oauthAuthRouteRouteWithChildren,
   oauthDashboardRouteRoute: oauthDashboardRouteRouteWithChildren,
+  oauthOauthConsentRoute: oauthOauthConsentRoute,
 }
 
 const oauthRouteRouteWithChildren = oauthRouteRoute._addFileChildren(

@@ -68,7 +68,7 @@ const createSignUpEndpoint = (config: UsernameOnlyConfig) =>
         context.context.authCookies.sessionToken.name,
         session.token,
         context.context.secret,
-        context.context.authCookies.sessionToken.options,
+        context.context.authCookies.sessionToken.attributes,
       );
 
       return context.json({ session, user });

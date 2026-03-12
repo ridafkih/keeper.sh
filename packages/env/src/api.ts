@@ -12,6 +12,7 @@ const schema = {
   GOOGLE_CLIENT_SECRET: "string?",
   MICROSOFT_CLIENT_ID: "string?",
   MICROSOFT_CLIENT_SECRET: "string?",
+  MCP_PUBLIC_URL: "string.url?",
   PASSKEY_ORIGIN: "string?",
   PASSKEY_RP_ID: "string?",
   PASSKEY_RP_NAME: "string?",

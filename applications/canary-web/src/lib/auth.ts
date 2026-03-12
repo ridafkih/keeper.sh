@@ -54,6 +54,7 @@ export const signUpWithCredential = async (
   credential: string,
   password: string,
   capabilities: AuthCapabilities,
+  callbackURL = "/dashboard",
 ): Promise<void> => {
   if (capabilities.credentialMode === "username") {
     await authJsonPost("/api/auth/username-only/sign-up", {
@@ -64,7 +65,7 @@ export const signUpWithCredential = async (
   }
 
   const { error } = await authClient.signUp.email({
-    callbackURL: "/dashboard",
+    callbackURL,
     email: credential,
     name: credential.split("@")[0] ?? credential,
     password,

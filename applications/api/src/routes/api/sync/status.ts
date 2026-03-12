@@ -1,40 +1,12 @@
-import { calendarsTable, sourceDestinationMappingsTable, syncStatusTable } from "@keeper.sh/database/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { createKeeperApi } from "@keeper.sh/keeper-api";
 import { withAuth, withWideEvent } from "../../../utils/middleware";
 import { database } from "../../../context";
 
+const keeperApi = createKeeperApi(database);
+
 const GET = withWideEvent(
   withAuth(async ({ userId }) => {
-    const statuses = await database
-      .select({
-        calendarId: syncStatusTable.calendarId,
-        lastSyncedAt: syncStatusTable.lastSyncedAt,
-        localEventCount: syncStatusTable.localEventCount,
-        remoteEventCount: syncStatusTable.remoteEventCount,
-      })
-      .from(syncStatusTable)
-      .innerJoin(
-        calendarsTable,
-        eq(syncStatusTable.calendarId, calendarsTable.id),
-      )
-      .where(
-        and(
-          eq(calendarsTable.userId, userId),
-          inArray(calendarsTable.id,
-            database.selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
-              .from(sourceDestinationMappingsTable)
-          ),
-        ),
-      );
-
-    const destinations = statuses.map((status) => ({
-      calendarId: status.calendarId,
-      inSync: status.localEventCount === status.remoteEventCount,
-      lastSyncedAt: status.lastSyncedAt,
-      localEventCount: status.localEventCount,
-      remoteEventCount: status.remoteEventCount,
-    }));
-
+    const destinations = await keeperApi.getSyncStatuses(userId);
     return Response.json({ destinations });
   }),
 );

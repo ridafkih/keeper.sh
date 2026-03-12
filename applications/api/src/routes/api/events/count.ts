@@ -1,9 +1,12 @@
+import { createKeeperApi } from "@keeper.sh/keeper-api";
 import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { getEventCount } from "../../../utils/events";
+import { database } from "../../../context";
+
+const keeperApi = createKeeperApi(database);
 
 export const GET = withWideEvent(
   withAuth(async ({ userId }) => {
-    const count = await getEventCount(userId);
+    const count = await keeperApi.getEventCount(userId);
     return Response.json({ count });
   }),
 );

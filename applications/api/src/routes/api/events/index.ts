@@ -1,10 +1,19 @@
+import { normalizeDateRange, parseDateRangeParams } from "@keeper.sh/date-utils";
+import { createKeeperApi } from "@keeper.sh/keeper-api";
 import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { getEventsInRange } from "../../../utils/events";
+import { database } from "../../../context";
+
+const keeperApi = createKeeperApi(database);
 
 export const GET = withWideEvent(
   withAuth(async ({ request, userId }) => {
     const url = new URL(request.url);
-    const events = await getEventsInRange(userId, url);
+    const { from, to } = parseDateRangeParams(url);
+    const { end, start } = normalizeDateRange(from, to);
+    const events = await keeperApi.getEventsInRange(userId, {
+      from: start,
+      to: end,
+    });
     return Response.json(events);
   }),
 );

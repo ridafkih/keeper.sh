@@ -9,7 +9,7 @@
     "lint": "oxlint ."
   },
   "dependencies": {
-    "better-auth": "1.4.10",
+    "better-auth": "1.5.5",
     "better-call": "^1.1.8",
     "zod": "^4.3.5"
   },

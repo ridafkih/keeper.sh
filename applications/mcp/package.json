@@ -1,0 +1,28 @@
+{
+  "name": "@keeper.sh/mcp",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "build": "bun scripts/build.ts",
+    "start": "bun run dist/index.js",
+    "types": "tsc --noEmit",
+    "lint": "oxlint ."
+  },
+  "dependencies": {
+    "@keeper.sh/auth": "workspace:*",
+    "@keeper.sh/database": "workspace:*",
+    "@keeper.sh/env": "workspace:*",
+    "@keeper.sh/keeper-api": "workspace:*",
+    "@keeper.sh/provider-core": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.27.1",
+    "entrykit": "^0.1.3",
+    "zod": "^4.3.5"
+  },
+  "devDependencies": {
+    "@keeper.sh/typescript-config": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "5.9.3"
+  }
+}

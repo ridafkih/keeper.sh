@@ -9,6 +9,7 @@ Keeper is a simple & open-source calendar syncing tool. It allows you to pull ev
 - Aggregating calendar events from remote sources
 - Event content agnostic syncing engine
 - Push aggregate events to one or more calendars
+- MCP (Model Context Protocol) server for AI agent calendar access
 - Open source under AGPL-3.0
 - Easy to self-host
 - Easy-to-purge remote events
@@ -45,6 +46,7 @@ Events are flagged as having been created by Keeper either using a `@keeper.sh` 
 
 1. **Keeper tracks timeslots, not event details**, summaries, descriptions, etc., for now. If you need that I would recommend [OneCal](https://onecal.io/).
 2. **Keeper only sources from remote and publicly available iCal/ICS URLs** at the moment, so that means that if your security policy does not permit these, another solution may suit you better.
+3. **The MCP server provides read-only access** to calendar data. AI agents can list calendars and query events but cannot create, modify, or delete them.
 
 # Cloud Hosted
 
@@ -64,7 +66,7 @@ Head to [keeper.sh](https://keeper.sh) to get started with the cloud-hosted vers
 
 By hosting Keeper yourself, you get all premium features for free, can guarantee data governance and autonomy, and it's fun. If you'll be self-hosting, please consider supporting me and development of the project by sponsoring me on GitHub.
 
-There are five images currently available, two of them are designed for convenience, while the three are designed to serve the granular underlying services.
+There are six images currently available, two of them are designed for convenience, while the four are designed to serve the granular underlying services.
 
 > [!NOTE]
 >
@@ -74,10 +76,10 @@ There are five images currently available, two of them are designed for convenie
 
 | Name                           | Service(s)    | Description                                                                                                                                                         |
 | ------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| DATABASE_URL                   | `api`, `cron` | PostgreSQL connection URL.<br><br>e.g. `postgres://user:pass@postgres:5432/keeper`                                                                                  |
+| DATABASE_URL                   | `api`, `cron`, `mcp` | PostgreSQL connection URL.<br><br>e.g. `postgres://user:pass@postgres:5432/keeper`                                                                                  |
 | REDIS_URL                      | `api`, `cron` | Redis connection URL.<br><br>e.g. `redis://redis:6379`                                                                                                              |
-| BETTER_AUTH_URL                | `api`         | The base URL used for auth redirects.<br><br>e.g. `http://localhost:3000`                                                                                           |
-| BETTER_AUTH_SECRET             | `api`         | Secret key for session signing.<br><br>e.g. `openssl rand -base64 32`                                                                                               |
+| BETTER_AUTH_URL                | `api`, `mcp`  | The base URL used for auth redirects.<br><br>e.g. `http://localhost:3000`                                                                                           |
+| BETTER_AUTH_SECRET             | `api`, `mcp`  | Secret key for session signing.<br><br>e.g. `openssl rand -base64 32`                                                                                               |
 | API_PORT                       | `api`         | Port the Bun API listens on. Defaults to `3001` in container images.                                                                                                |
 | VITE_API_URL                   | `web`         | The URL the web server uses to proxy requests to the Bun API.<br><br>e.g. `http://api:3001`                                                                         |
 | COMMERCIAL_MODE                | `api`, `cron` | Enable Polar billing flow. Set to `true` if using Polar for subscriptions.                                                                                          |
@@ -94,6 +96,9 @@ There are five images currently available, two of them are designed for convenie
 | MICROSOFT_CLIENT_ID            | `api`, `cron` | Optional. Required for Microsoft Outlook integration.                                                                                                               |
 | MICROSOFT_CLIENT_SECRET        | `api`, `cron` | Optional. Required for Microsoft Outlook integration.                                                                                                               |
 | TRUSTED_ORIGINS                | `api`         | Optional. Comma-separated list of additional trusted origins for CSRF protection.<br><br>e.g. `http://192.168.1.100,http://keeper.local,https://keeper.example.com` |
+| MCP_PUBLIC_URL                 | `api`, `mcp`  | Optional. Public URL of the MCP resource. Enables OAuth on the API and identifies the MCP server to clients.<br><br>e.g. `https://keeper.example.com/mcp`           |
+| VITE_MCP_URL                   | `web`         | Optional. Internal URL the web server uses to proxy `/mcp` requests to the MCP service.<br><br>e.g. `http://mcp:3002`                                              |
+| MCP_PORT                       | `mcp`         | Optional. Port the MCP server listens on.<br><br>e.g. `3002`                                                                                                       |
 
 The following environment variables are baked into the web image at **build time**. They are pre-configured in the official Docker images and only need to be set if you are building from source.
 
@@ -121,6 +126,7 @@ The following environment variables are baked into the web image at **build time
 | `keeper-web:latest`        | An image containing the Vite SSR web interface.                                                                                                          | `keeper-web`                                                              |
 | `keeper-api:latest`        | An image containing the Bun API service.                                                                                                                 | `keeper-api`                                                              |
 | `keeper-cron:latest`       | An image containing the Bun cron service.                                                                                                                | `keeper-cron`                                                             |
+| `keeper-mcp:latest`        | An image containing the MCP server for AI agent calendar access. Optional — only needed if using MCP clients.                                            | `keeper-mcp`                                                              |
 
 ## Prerequisites
 
@@ -422,16 +428,60 @@ Once that's configured, you can launch Keeper using the following command.
 docker compose up -d
 ```
 
+# MCP (Model Context Protocol)
+
+Keeper includes an optional MCP server that lets AI agents (such as Claude) access your calendar data through a standardized protocol. The MCP server authenticates via OAuth 2.1 with a consent flow hosted by the web application.
+
+## Available Tools
+
+| Tool              | Description                                                                                          |
+| ----------------- | ---------------------------------------------------------------------------------------------------- |
+| `list_calendars`  | List all calendars connected to Keeper, including provider name and account.                          |
+| `get_events`      | Get calendar events within a date range. Accepts ISO 8601 datetimes and an IANA timezone identifier. |
+| `get_event_count` | Get the total number of calendar events synced to Keeper.                                            |
+
+## Connecting an MCP Client
+
+To connect an MCP-compatible client (e.g. Claude Code, Claude Desktop), point it at your MCP server URL. The client will be guided through the OAuth consent flow to authorize read access to your calendar data.
+
+Example Claude Code MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "keeper": {
+      "type": "url",
+      "url": "https://keeper.example.com/mcp"
+    }
+  }
+}
+```
+
+## Self-Hosted MCP Setup
+
+> [!NOTE]
+>
+> MCP is fully optional. All MCP-related environment variables are optional across every service and image. If they are not set, Keeper starts normally without MCP functionality. Existing self-hosted deployments are unaffected.
+
+The MCP server is proxied through the web service at `/mcp`, the same way the API is proxied at `/api`. MCP is **not** bundled in the `keeper-standalone` or `keeper-services` convenience images — run the `keeper-mcp` image as a separate container alongside them.
+
+To enable MCP on a self-hosted instance:
+
+1. Run the `keeper-mcp` container with `MCP_PORT`, `MCP_PUBLIC_URL`, `DATABASE_URL`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL`.
+2. Set `MCP_PUBLIC_URL` on the `api` service to the same value (e.g. `https://keeper.example.com/mcp`).
+3. Set `VITE_MCP_URL` on the `web` service to the internal URL of the MCP container (e.g. `http://mcp:3002`).
+
 # Modules
 
 ## Applications
 
 1. [@keeper.sh/api](./applications/api)
 2. [@keeper.sh/cron](./applications/cron)
-3. [canary-web](./applications/canary-web)
-4. @keeper.sh/cli _(Coming Soon)_
-5. @keeper.sh/mobile _(Coming Soon)_
-6. @keeper.sh/ssh _(Coming Soon)_
+3. [@keeper.sh/mcp](./applications/mcp)
+4. [canary-web](./applications/canary-web)
+5. @keeper.sh/cli _(Coming Soon)_
+6. @keeper.sh/mobile _(Coming Soon)_
+7. @keeper.sh/ssh _(Coming Soon)_
 
 ## Modules
 
@@ -447,6 +497,7 @@ docker compose up -d
 1. [@keeper.sh/encryption](./packages/encryption)
 1. [@keeper.sh/env](./packages/env)
 1. [@keeper.sh/fixtures](./packages/fixtures)
+1. [@keeper.sh/keeper-api](./packages/keeper-api)
 1. [@keeper.sh/oauth](./packages/oauth)
 1. [@keeper.sh/oauth-google](./packages/oauth-google)
 1. [@keeper.sh/oauth-microsoft](./packages/oauth-microsoft)

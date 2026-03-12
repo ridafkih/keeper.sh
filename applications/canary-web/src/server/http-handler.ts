@@ -1,5 +1,5 @@
 import { withCompression } from "./compression";
-import { isApiRequest, proxyRequest } from "./proxy/http";
+import { isApiRequest, isMcpRequest, proxyRequest } from "./proxy/http";
 import { handleInternalRoute } from "./internal-routes";
 import type { Runtime, ServerConfig } from "./types";
 
@@ -61,9 +61,13 @@ export async function handleApplicationRequest(
   config: ServerConfig,
 ): Promise<Response> {
   const requestUrl = new URL(request.url);
-  const internalRouteResponse = await handleInternalRoute(request);
+  const internalRouteResponse = await handleInternalRoute(request, config);
   if (internalRouteResponse) {
     return internalRouteResponse;
+  }
+
+  if (isMcpRequest(requestUrl) && config.mcpProxyOrigin) {
+    return proxyRequest(request, config.mcpProxyOrigin);
   }
 
   if (isApiRequest(requestUrl)) {

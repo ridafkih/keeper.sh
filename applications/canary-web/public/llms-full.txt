@@ -82,9 +82,25 @@ The entire stack runs on PostgreSQL, Redis, Bun, and Vite + React.
 Three deployment models:
 - **Standalone**: Single `compose.yaml` bundling Caddy, PostgreSQL, Redis, API, web, and cron
 - **Services-only**: Application containers only (bring your own PostgreSQL and Redis)
-- **Individual containers**: Separate `keeper-web`, `keeper-api`, and `keeper-cron` images
+- **Individual containers**: Separate `keeper-web`, `keeper-api`, `keeper-cron`, and `keeper-mcp` images
 
 Google Calendar and Outlook require OAuth app setup (Google Cloud / Azure). CalDAV providers and iCal feeds work without OAuth.
+
+## MCP (Model Context Protocol)
+
+Keeper includes an optional MCP server that gives AI agents (such as Claude) read-only access to calendar data. The server authenticates via OAuth 2.1 with a user consent flow and is proxied through the web service at `/mcp`.
+
+### Available Tools
+
+- **list_calendars** — List all calendars connected to Keeper, including provider name and account
+- **get_events** — Get calendar events within a date range (ISO 8601 datetimes + IANA timezone)
+- **get_event_count** — Get the total number of synced calendar events
+
+### Connecting
+
+Point any MCP-compatible client at the `/mcp` endpoint of a Keeper instance. The client will be guided through the OAuth consent flow to authorize read access.
+
+MCP is fully optional — all related environment variables are optional across every service. Existing deployments are unaffected when upgrading.
 
 ## Technical Architecture
 
@@ -92,6 +108,7 @@ Google Calendar and Outlook require OAuth app setup (Google Cloud / Azure). CalD
 - **Encrypted credentials at rest**: CalDAV passwords and OAuth tokens encrypted with configurable key
 - **Content hashing for iCal feeds**: Skips processing if feed content unchanged, keeps snapshots for 6 hours
 - **Real-time sync status**: WebSocket endpoint broadcasts sync progress to dashboard
+- **MCP via OAuth 2.1**: Separate MCP server with JWT-based session resolution, proxied through the web service at `/mcp`
 
 ## Links
 

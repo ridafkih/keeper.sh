@@ -27,6 +27,11 @@ function VerifyEmailPage() {
     if (stored) sessionStorage.removeItem("pendingVerificationEmail");
     return stored;
   });
+  const [callbackURL] = useState(() => {
+    const stored = sessionStorage.getItem("pendingVerificationCallbackUrl");
+    if (stored) sessionStorage.removeItem("pendingVerificationCallbackUrl");
+    return stored ?? "/dashboard";
+  });
 
   const handleResend = async () => {
     if (!email) return;
@@ -35,7 +40,7 @@ function VerifyEmailPage() {
     setError(null);
 
     const { error } = await authClient.sendVerificationEmail({
-      callbackURL: "/dashboard",
+      callbackURL,
       email,
     });
 
