@@ -16,7 +16,7 @@ const GET = withWideEvent(
       return ErrorResponse.notFound().toResponse();
     }
 
-    const destinationIds = await getDestinationsForSource(sourceId);
+    const destinationIds = await getDestinationsForSource(userId, sourceId);
     return Response.json({ destinationIds });
   }),
 );

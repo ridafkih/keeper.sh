@@ -462,24 +462,36 @@ const getUserMappings = async (userId: string): Promise<SourceDestinationMapping
   }));
 };
 
-const getDestinationsForSource = async (sourceCalendarId: string): Promise<string[]> => {
+const getDestinationsForSource = async (userId: string, sourceCalendarId: string): Promise<string[]> => {
   const { database } = await import("../context");
 
   const mappings = await database
     .select({ destinationCalendarId: sourceDestinationMappingsTable.destinationCalendarId })
     .from(sourceDestinationMappingsTable)
-    .where(eq(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarId));
+    .innerJoin(calendarsTable, eq(sourceDestinationMappingsTable.sourceCalendarId, calendarsTable.id))
+    .where(
+      and(
+        eq(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarId),
+        eq(calendarsTable.userId, userId),
+      ),
+    );
 
   return mappings.map((mapping) => mapping.destinationCalendarId);
 };
 
-const getSourcesForDestination = async (destinationCalendarId: string): Promise<string[]> => {
+const getSourcesForDestination = async (userId: string, destinationCalendarId: string): Promise<string[]> => {
   const { database } = await import("../context");
 
   const mappings = await database
     .select({ sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId })
     .from(sourceDestinationMappingsTable)
-    .where(eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId));
+    .innerJoin(calendarsTable, eq(sourceDestinationMappingsTable.destinationCalendarId, calendarsTable.id))
+    .where(
+      and(
+        eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
+        eq(calendarsTable.userId, userId),
+      ),
+    );
 
   return mappings.map((mapping) => mapping.sourceCalendarId);
 };

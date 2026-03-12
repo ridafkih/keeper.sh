@@ -9,6 +9,10 @@ import { endTiming, reportError, startTiming } from "../utils/logging";
 interface ProviderSyncResult {
   eventsAdded: number;
   eventsRemoved: number;
+  eventsInserted?: number;
+  eventsUpdated?: number;
+  eventsFilteredOutOfWindow?: number;
+  syncTokenResetCount?: number;
   errorCount: number;
   errorMessages: string[];
   errorDetails: Record<string, { count: number; messages: string[] }>;
@@ -33,6 +37,18 @@ const publishProviderMetrics = (
     [`${provider}.events.added`]: result.eventsAdded,
     [`${provider}.events.removed`]: result.eventsRemoved,
   };
+  if (typeof result.eventsInserted === "number") {
+    fields[`${provider}.events.inserted`] = result.eventsInserted;
+  }
+  if (typeof result.eventsUpdated === "number") {
+    fields[`${provider}.events.updated`] = result.eventsUpdated;
+  }
+  if (typeof result.eventsFilteredOutOfWindow === "number") {
+    fields[`${provider}.events.filtered_out_of_window`] = result.eventsFilteredOutOfWindow;
+  }
+  if (typeof result.syncTokenResetCount === "number") {
+    fields[`${provider}.sync_token.reset_count`] = result.syncTokenResetCount;
+  }
 
   const errorMessages = deduplicateMessages(result.errorMessages);
 
@@ -112,7 +128,7 @@ const runOAuthSourceSyncJob = async (dependencies: OAuthSyncJobDependencies): Pr
 };
 
 const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies> => {
-  const [{ default: env }, { database }] = await Promise.all([
+  const [{ default: env }, { database, refreshLockStore }] = await Promise.all([
     import("@keeper.sh/env/cron"),
     import("../context"),
   ]);
@@ -130,6 +146,7 @@ const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies>
     const googleSourceProvider = createGoogleCalendarSourceProvider({
       database,
       oauthProvider: googleOAuth,
+      refreshLockStore,
     });
 
     startTiming("syncGoogleSources");
@@ -141,7 +158,11 @@ const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies>
       return {
         ...errorSummary,
         eventsAdded: result.eventsAdded,
+        eventsFilteredOutOfWindow: result.eventsFilteredOutOfWindow,
+        eventsInserted: result.eventsInserted,
         eventsRemoved: result.eventsRemoved,
+        eventsUpdated: result.eventsUpdated,
+        syncTokenResetCount: result.syncTokenResetCount,
       };
     } catch (error) {
       reportError(error, {
@@ -167,6 +188,7 @@ const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies>
     const outlookSourceProvider = createOutlookSourceProvider({
       database,
       oauthProvider: microsoftOAuth,
+      refreshLockStore,
     });
 
     startTiming("syncOutlookSources");
@@ -178,7 +200,11 @@ const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies>
       return {
         ...errorSummary,
         eventsAdded: result.eventsAdded,
+        eventsFilteredOutOfWindow: result.eventsFilteredOutOfWindow,
+        eventsInserted: result.eventsInserted,
         eventsRemoved: result.eventsRemoved,
+        eventsUpdated: result.eventsUpdated,
+        syncTokenResetCount: result.syncTokenResetCount,
       };
     } catch (error) {
       reportError(error, {

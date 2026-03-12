@@ -36,7 +36,7 @@ const getAuthorizationUrl = (
   provider: string,
   userId: string,
   options: AuthorizationUrlOptions,
-): string => getOAuthProviderOrThrow(provider).getAuthorizationUrl(userId, options);
+): Promise<string> => getOAuthProviderOrThrow(provider).getAuthorizationUrl(userId, options);
 
 const exchangeCodeForTokens = (
   provider: string,
@@ -47,7 +47,7 @@ const exchangeCodeForTokens = (
 const fetchUserInfo = (provider: string, accessToken: string): Promise<OAuthUserInfo> =>
   getOAuthProviderOrThrow(provider).fetchUserInfo(accessToken);
 
-const validateState = (state: string): ValidatedState | null => oauthProviders.validateState(state);
+const validateState = (state: string): Promise<ValidatedState | null> => oauthProviders.validateState(state);
 
 interface CalendarDestination {
   id: string;
@@ -325,11 +325,16 @@ const deleteCalendarDestination = async (
   return result.length > EMPTY_RESULT_COUNT;
 };
 
-const getAccountExternalId = async (accountId: string): Promise<string | null> => {
+const getAccountExternalId = async (userId: string, accountId: string): Promise<string | null> => {
   const [account] = await database
     .select({ accountId: calendarAccountsTable.accountId })
     .from(calendarAccountsTable)
-    .where(eq(calendarAccountsTable.id, accountId))
+    .where(
+      and(
+        eq(calendarAccountsTable.id, accountId),
+        eq(calendarAccountsTable.userId, userId),
+      ),
+    )
     .limit(FIRST_RESULT_LIMIT);
 
   if (account?.accountId) {

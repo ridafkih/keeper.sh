@@ -184,4 +184,24 @@ describe("source event diff", () => {
     expect(eventsToAdd).toHaveLength(0);
     expect(idsToRemove).toEqual([]);
   });
+
+  it("deduplicates incoming events that share the same storage identity", () => {
+    const incomingEvents = [
+      createIncomingEvent({
+        sourceEventType: "default",
+        title: "Old title",
+        uid: "dup-uid",
+      }),
+      createIncomingEvent({
+        sourceEventType: "default",
+        title: "New title",
+        uid: "dup-uid",
+      }),
+    ];
+
+    const eventsToAdd = buildSourceEventsToAdd([], incomingEvents);
+
+    expect(eventsToAdd).toHaveLength(1);
+    expect(eventsToAdd[0]?.title).toBe("New title");
+  });
 });

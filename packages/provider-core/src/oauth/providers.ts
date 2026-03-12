@@ -3,8 +3,9 @@ import {
   fetchUserInfo as fetchGoogleUserInfo,
   hasRequiredScopes as hasRequiredGoogleScopes,
   validateState as validateGoogleState,
+  configureStateStore,
 } from "@keeper.sh/oauth-google";
-import type { GoogleOAuthCredentials, ValidatedState } from "@keeper.sh/oauth-google";
+import type { GoogleOAuthCredentials, ValidatedState, OAuthStateStore } from "@keeper.sh/oauth-google";
 import {
   createMicrosoftOAuthService,
   fetchUserInfo as fetchMicrosoftUserInfo,
@@ -33,7 +34,7 @@ interface OAuthTokens {
 }
 
 interface OAuthProvider {
-  getAuthorizationUrl: (userId: string, options: AuthorizationUrlOptions) => string;
+  getAuthorizationUrl: (userId: string, options: AuthorizationUrlOptions) => Promise<string>;
   exchangeCodeForTokens: (code: string, callbackUrl: string) => Promise<OAuthTokens>;
   fetchUserInfo: (accessToken: string) => Promise<NormalizedUserInfo>;
   refreshAccessToken: (refreshToken: string) => Promise<OAuthTokens>;
@@ -48,7 +49,7 @@ interface OAuthProvidersConfig {
 interface OAuthProviders {
   getProvider: (providerId: string) => OAuthProvider | undefined;
   isOAuthProvider: (providerId: string) => boolean;
-  validateState: (state: string) => ValidatedState | null;
+  validateState: (state: string) => Promise<ValidatedState | null>;
   hasRequiredScopes: (providerId: string, grantedScopes: string) => boolean;
 }
 
@@ -87,13 +88,13 @@ const createOAuthProviders = (config: OAuthProvidersConfig): OAuthProviders => {
 
   const isOAuthProvider = (providerId: string): boolean => providerId in providers;
 
-  const validateState = (state: string): ValidatedState | null => {
-    const googleResult = validateGoogleState(state);
+  const validateState = async (state: string): Promise<ValidatedState | null> => {
+    const googleResult = await validateGoogleState(state);
     if (googleResult) {
       return googleResult;
     }
 
-    const microsoftResult = validateMicrosoftState(state);
+    const microsoftResult = await validateMicrosoftState(state);
     if (microsoftResult) {
       return microsoftResult;
     }
@@ -112,7 +113,7 @@ const createOAuthProviders = (config: OAuthProvidersConfig): OAuthProviders => {
   return { getProvider, hasRequiredScopes, isOAuthProvider, validateState };
 };
 
-export { createOAuthProviders };
+export { createOAuthProviders, configureStateStore };
 export type {
   ValidatedState,
   AuthorizationUrlOptions,
@@ -121,4 +122,5 @@ export type {
   OAuthProvider,
   OAuthProvidersConfig,
   OAuthProviders,
+  OAuthStateStore,
 };

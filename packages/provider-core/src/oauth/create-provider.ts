@@ -7,6 +7,7 @@ import type {
   SyncResult,
   SyncableEvent,
 } from "../types";
+import type { RefreshLockStore } from "./refresh-coordinator";
 import type { SyncContext } from "../sync/coordinator";
 import { getEventsForDestination } from "../events/events";
 import type { OAuthCalendarProvider } from "./provider";
@@ -25,6 +26,7 @@ interface CreateOAuthProviderOptions<
   database: BunSQLDatabase;
   oauthProvider: OAuthTokenProvider;
   broadcastSyncStatus?: BroadcastSyncStatus;
+  refreshLockStore?: RefreshLockStore | null;
   getAccountsForUser: (database: BunSQLDatabase, userId: string) => Promise<TAccount[]>;
   createProviderInstance: (
     config: TConfig,
@@ -48,6 +50,7 @@ const createOAuthDestinationProvider = <
     database,
     oauthProvider,
     broadcastSyncStatus,
+    refreshLockStore,
     getAccountsForUser,
     createProviderInstance,
     buildConfig,
@@ -71,6 +74,7 @@ const createOAuthDestinationProvider = <
         const preparedEvents = getLocalEvents(localEvents, account);
 
         const config = buildConfig(database, account, broadcastSyncStatus);
+        config.refreshLockStore = refreshLockStore ?? null;
         const provider = createProviderInstance(config, oauthProvider);
         return provider.sync(preparedEvents, context);
       }),

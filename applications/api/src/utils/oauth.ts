@@ -78,7 +78,7 @@ interface HandleOAuthCallbackDependencies {
     callbackUrl: string,
   ) => Promise<OAuthTokenResponse>;
   fetchUserInfo: (provider: string, accessToken: string) => Promise<OAuthUserInfo>;
-  getDestinationAccountId: (destinationId: string) => Promise<string | null>;
+  getDestinationAccountId: (userId: string, destinationId: string) => Promise<string | null>;
   hasRequiredScopes: (provider: string, scope: string) => boolean | Promise<boolean>;
   persistCalendarDestination: (payload: {
     accountId: string;
@@ -92,7 +92,7 @@ interface HandleOAuthCallbackDependencies {
     userId: string;
   }) => Promise<void>;
   triggerDestinationSync: (userId: string) => void;
-  validateState: (state: string) => ValidatedState | null;
+  validateState: (state: string) => Promise<ValidatedState | null>;
 }
 
 const getExistingDestinationAccount = async (
@@ -135,7 +135,7 @@ const handleOAuthCallbackWithDependencies = async (
     throw new OAuthError("Missing code or state", errorUrl);
   }
 
-  const validatedState = dependencies.validateState(params.state);
+  const validatedState = await dependencies.validateState(params.state);
   if (!validatedState) {
     throw new OAuthError("Invalid or expired state", errorUrl);
   }
@@ -157,7 +157,7 @@ const handleOAuthCallbackWithDependencies = async (
   const expiresAt = new Date(Date.now() + tokens.expires_in * MS_PER_SECOND);
 
   if (destinationId) {
-    const existingAccountId = await dependencies.getDestinationAccountId(destinationId);
+    const existingAccountId = await dependencies.getDestinationAccountId(userId, destinationId);
     if (existingAccountId && existingAccountId !== userInfo.id) {
       const reauthUrl = new URL("/dashboard/integrations", dependencies.baseUrl);
       reauthUrl.searchParams.set(

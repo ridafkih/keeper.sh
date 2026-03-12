@@ -155,14 +155,10 @@ const createKeeperMcpHandler = ({
       );
     }
 
-    const session = await auth.api.getMcpSession({
-      headers: request.headers,
-    });
-
     const wwwAuthenticateHeader = `Bearer resource_metadata="${protectedResourceMetadataUrl}"`;
 
-    if (!session?.userId) {
-      return createJsonRpcErrorResponse(
+    const unauthorizedResponse = () =>
+      createJsonRpcErrorResponse(
         401,
         JSON_RPC_ERROR_UNAUTHORIZED,
         "Unauthorized: Authentication required",
@@ -175,9 +171,16 @@ const createKeeperMcpHandler = ({
           "www-authenticate": wwwAuthenticateHeader,
         },
       );
+
+    const sessionResult = await auth.api
+      .getMcpSession({ headers: request.headers });
+
+    const userId = sessionResult?.userId;
+    if (!userId) {
+      return unauthorizedResponse();
     }
 
-    if (!hasScope(session.scopes, KEEPER_API_READ_SCOPE)) {
+    if (!hasScope(sessionResult.scopes, KEEPER_API_READ_SCOPE)) {
       const insufficientScopeHeader =
         `${wwwAuthenticateHeader}, error="insufficient_scope", scope="${KEEPER_API_READ_SCOPE}"`;
 
@@ -196,7 +199,7 @@ const createKeeperMcpHandler = ({
       );
     }
 
-    const server = createAuthenticatedMcpServer(toolset, session.userId, serverInfo);
+    const server = createAuthenticatedMcpServer(toolset, userId, serverInfo);
     const transport = new WebStandardStreamableHTTPServerTransport({
       enableJsonResponse,
     });

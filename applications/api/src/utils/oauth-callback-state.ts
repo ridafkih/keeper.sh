@@ -21,8 +21,13 @@ const storeCallbackState = async (state: OAuthCallbackState): Promise<string> =>
 const consumeCallbackState = async (token: string): Promise<OAuthCallbackState | null> => {
   const key = getKey(token);
   const value = await redis.get(key);
-  if (!value) {return null;}
-  await redis.del(key);
+  if (!value) {
+    return null;
+  }
+  const deleted = await redis.del(key);
+  if (!deleted) {
+    return null;
+  }
   return JSON.parse(value);
 };
 

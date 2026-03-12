@@ -43,6 +43,27 @@ const buildSourceEventIdentityKey = (
     normalizeIdentityIsAllDay(isAllDay, options)
   }|${availability ?? ""}|${sourceEventType ?? "default"}`;
 
+const buildSourceEventStorageIdentityKey = (
+  sourceEventUid: string,
+  startTime: Date,
+  endTime: Date,
+): string => `${sourceEventUid}|${startTime.toISOString()}|${endTime.toISOString()}`;
+
+const deduplicateIncomingEvents = (incomingEvents: SourceEvent[]): SourceEvent[] => {
+  const dedupedByStorageIdentity = new Map<string, SourceEvent>();
+
+  for (const incomingEvent of incomingEvents) {
+    const storageIdentity = buildSourceEventStorageIdentityKey(
+      incomingEvent.uid,
+      incomingEvent.startTime,
+      incomingEvent.endTime,
+    );
+    dedupedByStorageIdentity.set(storageIdentity, incomingEvent);
+  }
+
+  return [...dedupedByStorageIdentity.values()];
+};
+
 const buildExistingEventIdentitySet = (
   existingEvents: ExistingSourceEventState[],
   options: SourceEventIdentityOptions = {},
@@ -75,11 +96,12 @@ const buildSourceEventsToAdd = (
   incomingEvents: SourceEvent[],
   options: SourceEventDiffOptions = {},
 ): SourceEvent[] => {
+  const normalizedIncomingEvents = deduplicateIncomingEvents(incomingEvents);
   const existingIdentities = buildExistingEventIdentitySet(existingEvents, {
     normalizeMissingMetadata: options.isDeltaSync ?? false,
   });
 
-  return incomingEvents.filter(
+  return normalizedIncomingEvents.filter(
     (incomingEvent) =>
       !existingIdentities.has(
         buildSourceEventIdentityKey(
@@ -100,6 +122,7 @@ const buildSourceEventStateIdsToRemove = (
   incomingEvents: SourceEvent[],
   options: SourceEventDiffOptions = {},
 ): string[] => {
+  const normalizedIncomingEvents = deduplicateIncomingEvents(incomingEvents);
   const { isDeltaSync = false, cancelledEventUids } = options;
 
   if (isDeltaSync) {
@@ -119,7 +142,7 @@ const buildSourceEventStateIdsToRemove = (
   }
 
   const incomingIdentitySet = new Set(
-    incomingEvents.map((incomingEvent) =>
+    normalizedIncomingEvents.map((incomingEvent) =>
       buildSourceEventIdentityKey(
         incomingEvent.uid,
         incomingEvent.startTime,

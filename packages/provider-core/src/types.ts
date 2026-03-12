@@ -1,4 +1,5 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { RefreshLockStore } from "./oauth/refresh-coordinator";
 
 type AuthType = "oauth" | "caldav" | "none";
 type EventAvailability = "busy" | "free" | "oof" | "workingElsewhere";
@@ -115,6 +116,7 @@ interface OAuthProviderConfig extends ProviderConfig {
   accessToken: string;
   refreshToken: string;
   accessTokenExpiresAt: Date;
+  refreshLockStore?: RefreshLockStore | null;
 }
 
 interface GoogleCalendarConfig extends OAuthProviderConfig {
@@ -147,6 +149,10 @@ interface SourceEvent {
 interface SourceSyncResult {
   eventsAdded: number;
   eventsRemoved: number;
+  eventsInserted?: number;
+  eventsUpdated?: number;
+  eventsFilteredOutOfWindow?: number;
+  syncTokenResetCount?: number;
   syncToken?: string;
   fullSyncRequired?: boolean;
   errors?: Error[];
@@ -163,6 +169,7 @@ interface OAuthSourceConfig {
   syncToken: string | null;
   calendarAccountId: string;
   oauthCredentialId: string;
+  refreshLockStore?: RefreshLockStore | null;
 }
 
 export type {

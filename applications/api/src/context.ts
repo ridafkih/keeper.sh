@@ -11,7 +11,9 @@ import {
   createOAuthProviders,
   buildOAuthConfigs,
   createSyncAggregateRuntime,
+  configureStateStore,
 } from "@keeper.sh/provider-core";
+import type { OAuthStateStore, RefreshLockStore } from "@keeper.sh/provider-core";
 import { createDestinationProviders } from "@keeper.sh/provider-registry/server";
 import type { DestinationSyncResult } from "@keeper.sh/provider-core";
 
@@ -20,6 +22,37 @@ const MIN_TRUSTED_ORIGINS_COUNT = 0;
 
 const database = createDatabase(env.DATABASE_URL);
 const redis = new RedisClient(env.REDIS_URL);
+
+const createRedisStateStore = (redisClient: RedisClient): OAuthStateStore => ({
+  async set(key, value, ttlSeconds) {
+    await redisClient.set(key, value);
+    await redisClient.expire(key, ttlSeconds);
+  },
+  async consume(key) {
+    const value = await redisClient.get(key);
+    if (!value) {
+      return null;
+    }
+    const deleted = await redisClient.del(key);
+    if (!deleted) {
+      return null;
+    }
+    return value;
+  },
+});
+
+configureStateStore(createRedisStateStore(redis));
+
+const createRedisRefreshLockStore = (redisClient: RedisClient): RefreshLockStore => ({
+  async tryAcquire(key, ttlSeconds) {
+    const result = await redisClient.send("SET", [key, "1", "EX", String(ttlSeconds), "NX"]);
+    return result !== null;
+  },
+  async release(key) {
+    await redisClient.del(key);
+  },
+});
+const refreshLockStore = createRedisRefreshLockStore(redis);
 
 const parseTrustedOrigins = (origins?: string): string[] => {
   if (!origins) {
@@ -79,6 +112,7 @@ const destinationProviders = createDestinationProviders({
   database,
   encryptionKey: env.ENCRYPTION_KEY,
   oauthProviders,
+  refreshLockStore,
 });
 
 const persistSyncStatus = async (
@@ -155,6 +189,7 @@ export {
   broadcastService,
   premiumService,
   oauthProviders,
+  refreshLockStore,
   destinationProviders,
   syncCoordinator,
   resend,

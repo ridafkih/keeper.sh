@@ -54,7 +54,7 @@ describe("handleOAuthCallbackWithDependencies", () => {
         triggerDestinationSync: (userId) => {
           triggerDestinationSyncCalls.push(userId);
         },
-        validateState: () => ({ destinationId: null, sourceCredentialId: null, userId: "user-1" }),
+        validateState: () => Promise.resolve({ destinationId: null, sourceCredentialId: null, userId: "user-1" }),
       },
     );
 
@@ -94,7 +94,7 @@ describe("handleOAuthCallbackWithDependencies", () => {
         triggerDestinationSync: (userId) => {
           triggerDestinationSyncCalls.push(userId);
         },
-        validateState: () => ({ destinationId: null, sourceCredentialId: null, userId: "user-1" }),
+        validateState: () => Promise.resolve({ destinationId: null, sourceCredentialId: null, userId: "user-1" }),
       },
     );
 
@@ -142,7 +142,7 @@ describe("handleOAuthCallbackWithDependencies", () => {
         triggerDestinationSync: (userId) => {
           triggerDestinationSyncCalls.push(userId);
         },
-        validateState: () => ({ destinationId: "destination-1", sourceCredentialId: null, userId: "user-1" }),
+        validateState: () => Promise.resolve({ destinationId: "destination-1", sourceCredentialId: null, userId: "user-1" }),
       },
     );
 
@@ -185,7 +185,7 @@ describe("handleOAuthCallbackWithDependencies", () => {
           hasRequiredScopes: () => true,
           persistCalendarDestination: () => Promise.resolve(),
           triggerDestinationSync: () => null,
-          validateState: () => ({ destinationId: "destination-1", sourceCredentialId: null, userId: "user-1" }),
+          validateState: () => Promise.resolve({ destinationId: "destination-1", sourceCredentialId: null, userId: "user-1" }),
         },
       ),
     ).rejects.toBeInstanceOf(OAuthError);

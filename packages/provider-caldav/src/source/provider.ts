@@ -1,6 +1,7 @@
 import {
   buildSourceEventStateIdsToRemove,
   buildSourceEventsToAdd,
+  insertEventStatesWithConflictResolution,
   isKeeperEvent,
   reportError,
 } from "@keeper.sh/provider-core";
@@ -9,6 +10,7 @@ import { calendarAccountsTable, calendarsTable, eventStatesTable } from "@keeper
 import { and, eq, inArray } from "drizzle-orm";
 import { CalDAVClient } from "../shared/client";
 import { parseICalToRemoteEvent } from "../shared/ics";
+import { isCalDAVAuthenticationError } from "./auth-error-classification";
 import { createCalDAVSourceService } from "./sync";
 import { getCalDAVSyncWindow } from "./sync-window";
 import type {
@@ -27,12 +29,6 @@ const stringifyIfPresent = (value: unknown) => {
 
 const EMPTY_COUNT = 0;
 const YEARS_UNTIL_FUTURE = 2;
-
-const isAuthError = (error: unknown): boolean => {
-  if (!(error instanceof Error)) {return false;}
-  const message = error.message.toLowerCase();
-  return message.includes("401") || message.includes("invalid credentials") || message.includes("unauthorized");
-};
 
 const DEFAULT_CALDAV_OPTIONS: CalDAVProviderOptions = {
   providerId: "caldav",
@@ -145,7 +141,8 @@ const createCalDAVSourceProvider = (
     }
 
     if (eventsToAdd.length > EMPTY_COUNT) {
-      await database.insert(eventStatesTable).values(
+      await insertEventStatesWithConflictResolution(
+        database,
         eventsToAdd.map((event) => ({
           availability: event.availability,
           calendarId,
@@ -202,7 +199,7 @@ const createCalDAVSourceProvider = (
       const events = await fetchEventsFromCalDAV(account);
       return processEvents(account.calendarId, events);
     } catch (error) {
-      if (isAuthError(error)) {
+      if (isCalDAVAuthenticationError(error)) {
         await database
           .update(calendarAccountsTable)
           .set({ needsReauthentication: true })

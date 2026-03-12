@@ -56,8 +56,8 @@ const GET = withWideEvent(
     }
 
     const [destinationIds, sourceIds] = await Promise.all([
-      getDestinationsForSource(id),
-      getSourcesForDestination(id),
+      getDestinationsForSource(userId, id),
+      getSourcesForDestination(userId, id),
     ]);
 
     return Response.json({

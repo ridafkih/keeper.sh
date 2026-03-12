@@ -76,7 +76,7 @@ const GET = withWideEvent(
     if (destinationId) {
       authorizationOptions.destinationId = destinationId;
     }
-    const authUrl = getAuthorizationUrl(provider, userId, authorizationOptions);
+    const authUrl = await getAuthorizationUrl(provider, userId, authorizationOptions);
 
     return Response.redirect(authUrl);
   }),

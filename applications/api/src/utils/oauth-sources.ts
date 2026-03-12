@@ -366,8 +366,12 @@ const hasExistingOAuthCalendar = async (
 };
 
 const syncOAuthSourcesByProvider = async (providerId: string): Promise<void> => {
-  const { database, oauthProviders } = await import("../context");
-  const sourceProvider = getSourceProvider(providerId, { database, oauthProviders });
+  const { database, oauthProviders, refreshLockStore } = await import("../context");
+  const sourceProvider = getSourceProvider(providerId, {
+    database,
+    oauthProviders,
+    refreshLockStore,
+  });
   if (!sourceProvider) {
     return;
   }
