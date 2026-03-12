@@ -1,9 +1,17 @@
 import { broadcastMessageSchema } from "@keeper.sh/data-schemas";
 import type { BroadcastMessage } from "@keeper.sh/data-schemas";
-import { emitWideEvent, reportError, runWideEvent } from "@keeper.sh/provider-core";
+import { widelogger } from "widelogger";
 import { connections } from "./state";
 import type { Socket } from "./types";
 import type { RedisClient } from "bun";
+
+const { widelog } = widelogger({
+  service: "keeper-broadcast",
+  defaultEventName: "wide_event",
+  commitHash: process.env.COMMIT_SHA,
+  environment: process.env.ENV ?? process.env.NODE_ENV,
+  version: process.env.npm_package_version,
+});
 
 const EMPTY_CONNECTIONS_COUNT = 0;
 const IDLE_TIMEOUT_SECONDS = 60;
@@ -46,10 +54,12 @@ const createBroadcastService = (config: BroadcastConfig): BroadcastService => {
     try {
       redis.publish(CHANNEL, JSON.stringify(message));
     } catch (error) {
-      reportError(error, {
-        "operation.type": "broadcast",
-        "operation.name": "broadcast:publish",
-        "user.id": userId,
+      widelog.context(() => {
+        widelog.set("operation.type", "broadcast");
+        widelog.set("operation.name", "broadcast:publish");
+        widelog.set("user.id", userId);
+        widelog.errorFields(error);
+        widelog.flush();
       });
     }
   };
@@ -65,9 +75,10 @@ const createBroadcastService = (config: BroadcastConfig): BroadcastService => {
       sendToUser(parsed.userId, parsed.event, parsed.data);
     });
 
-    await emitWideEvent({
-      "operation.type": "lifecycle",
-      "operation.name": "broadcast:subscriber:start",
+    widelog.context(() => {
+      widelog.set("operation.type", "lifecycle");
+      widelog.set("operation.name", "broadcast:subscriber:start");
+      widelog.flush();
     });
   };
 
@@ -99,30 +110,16 @@ const getConnectionCount = (userId: string): number =>
   connections.get(userId)?.size ?? EMPTY_CONNECTIONS_COUNT;
 
 const emitWebSocketEvent = (userId: string, operationName: string, error?: unknown): void => {
-  const fields = {
-    "user.id": userId,
-    "operation.type": "connection",
-    "operation.name": operationName,
-  };
+  widelog.context(() => {
+    widelog.set("user.id", userId);
+    widelog.set("operation.type", "connection");
+    widelog.set("operation.name", operationName);
 
-  if (!error) {
-    emitWideEvent(fields).catch((error) => {
-      reportError(error, {
-        ...fields,
-        "operation.name": `${operationName}:emit`,
-      });
-    });
-    return;
-  }
+    if (error) {
+      widelog.errorFields(error);
+    }
 
-  runWideEvent(fields, () => {
-    reportError(error, fields);
-    return globalThis.undefined;
-  }).catch((error) => {
-    reportError(error, {
-      ...fields,
-      "operation.name": `${operationName}:run`,
-    });
+    widelog.flush();
   });
 };
 
@@ -152,11 +149,13 @@ const createWebsocketHandler = (
       emitWebSocketEvent(userId, "websocket:open", error);
       try {
         socket.close();
-      } catch (error) {
-        reportError(error, {
-          "operation.name": "websocket:close:failed",
-          "operation.type": "connection",
-          "user.id": userId,
+      } catch (closeError) {
+        widelog.context(() => {
+          widelog.set("operation.name", "websocket:close:failed");
+          widelog.set("operation.type", "connection");
+          widelog.set("user.id", userId);
+          widelog.errorFields(closeError);
+          widelog.flush();
         });
       }
     }

@@ -1,68 +1,43 @@
-import {
-  emitWideEvent,
-  getCurrentRequestId,
-  reportError,
-  runWideEvent,
-  setLogFields,
-} from "./logging";
+import { widelog } from "./logging";
 
 type BackgroundJobCallback<TResult> = () => Promise<TResult>;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-const getParentFields = (): Record<`parent.${string}`, string> => {
-  const parentRequestId = getCurrentRequestId() ?? "";
-
-  if (typeof parentRequestId !== "string") {
-    return {};
-  }
-
-  return {
-    "parent.request.id": parentRequestId,
-  };
-};
-
 const spawnBackgroundJob = <TResult>(
   jobName: string,
   fields: Record<string, unknown>,
   callback: BackgroundJobCallback<TResult>,
 ): void => {
-  const parentFields = getParentFields();
-  emitWideEvent({
-    "operation.name": `${jobName}:spawn`,
-    "operation.type": "job-spawn",
-    "job.name": jobName,
-    ...parentFields,
-    ...fields,
-  }).catch((error) => {
-    reportError(error, {
-      "job.name": jobName,
-      "operation.name": `${jobName}:spawn`,
-      "operation.type": "job-spawn",
-    });
-  });
+  widelog.context(async () => {
+    widelog.set("operation.name", jobName);
+    widelog.set("operation.type", "background-job");
+    widelog.set("job.name", jobName);
+    for (const [key, value] of Object.entries(fields)) {
+      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+        widelog.set(key, value);
+      }
+    }
+    widelog.time.start("duration_ms");
 
-  runWideEvent(
-    {
-      "operation.name": jobName,
-      "operation.type": "background-job",
-      "job.name": jobName,
-      ...parentFields,
-      ...fields,
-    },
-    async () => {
+    try {
       const result = await callback();
       if (isRecord(result)) {
-        setLogFields(result);
+        for (const [key, value] of Object.entries(result)) {
+          if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+            widelog.set(key, value);
+          }
+        }
       }
-    },
-  ).catch((error) => {
-    reportError(error, {
-      "job.name": jobName,
-      "operation.name": jobName,
-      "operation.type": "background-job",
-    });
+      widelog.set("outcome", "success");
+    } catch (error) {
+      widelog.set("outcome", "error");
+      widelog.errorFields(error);
+    } finally {
+      widelog.time.stop("duration_ms");
+      widelog.flush();
+    }
   });
 };
 

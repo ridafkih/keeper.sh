@@ -6,11 +6,7 @@ import { user as userTable } from "@keeper.sh/database/auth-schema";
 import { and, count, eq, inArray } from "drizzle-orm";
 import { auth, database, premiumService } from "../context";
 import {
-  endTiming,
-  reportError,
-  runWideEvent,
-  setLogFields,
-  startTiming,
+  widelog,
   trackStatusError,
 } from "./logging";
 
@@ -48,7 +44,7 @@ const extractHttpContext = (request: Request): Record<string, unknown> => {
 };
 
 const handleResponseStatus = (status: number): void => {
-  setLogFields({ "http.status_code": status });
+  widelog.set("http.status_code", status);
   if (status >= HTTP_ERROR_THRESHOLD) {
     trackStatusError(status, "HttpError");
   }
@@ -58,11 +54,10 @@ const fetchUserPlan = async (userId: string): Promise<"free" | "pro" | null> => 
   try {
     return await premiumService.getUserPlan(userId);
   } catch (error) {
-    reportError(error, {
-      "operation.name": "http:user-context:plan",
-      "operation.type": "http",
-      "user.id": userId,
-    });
+    widelog.set("operation.name", "http:user-context:plan");
+    widelog.set("operation.type", "http");
+    widelog.set("user.id", userId);
+    widelog.errorFields(error);
     return null;
   }
 };
@@ -100,11 +95,10 @@ const fetchUserCounts = async (
       "source.count": sources?.count ?? DEFAULT_COUNT,
     };
   } catch (error) {
-    reportError(error, {
-      "operation.name": "http:user-context:counts",
-      "operation.type": "http",
-      "user.id": userId,
-    });
+    widelog.set("operation.name", "http:user-context:counts");
+    widelog.set("operation.type", "http");
+    widelog.set("user.id", userId);
+    widelog.errorFields(error);
     return null;
   }
 };
@@ -121,17 +115,16 @@ const fetchAccountAgeDays = async (userId: string): Promise<number | null> => {
     }
     return Math.floor((Date.now() - result.createdAt.getTime()) / MS_PER_DAY);
   } catch (error) {
-    reportError(error, {
-      "operation.name": "http:user-context:account-age",
-      "operation.type": "http",
-      "user.id": userId,
-    });
+    widelog.set("operation.name", "http:user-context:account-age");
+    widelog.set("operation.type", "http");
+    widelog.set("user.id", userId);
+    widelog.errorFields(error);
     return null;
   }
 };
 
 const enrichWithUserContext = async (userId: string): Promise<void> => {
-  setLogFields({ "user.id": userId });
+  widelog.set("user.id", userId);
 
   const [plan, counts, accountAgeDays] = await Promise.all([
     fetchUserPlan(userId),
@@ -140,13 +133,15 @@ const enrichWithUserContext = async (userId: string): Promise<void> => {
   ]);
 
   if (plan) {
-    setLogFields({ "subscription.plan": plan });
+    widelog.set("subscription.plan", plan);
   }
   if (counts) {
-    setLogFields(counts);
+    for (const [key, value] of Object.entries(counts)) {
+      widelog.set(key, value);
+    }
   }
   if (accountAgeDays !== null) {
-    setLogFields({ "account.age_days": accountAgeDays });
+    widelog.set("account.age_days", accountAgeDays);
   }
 };
 
@@ -164,23 +159,33 @@ const getSession = async (request: Request): Promise<Session | null> => {
 const withWideEvent =
   (handler: RouteCallback): RouteHandler =>
   (request, params) =>
-    runWideEvent(extractHttpContext(request), async () => {
+    widelog.context(async () => {
+      const httpContext = extractHttpContext(request);
+      for (const [key, value] of Object.entries(httpContext)) {
+        if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+          widelog.set(key, value);
+        }
+      }
+      widelog.time.start("duration_ms");
       try {
         const response = await handler({ params, request });
         handleResponseStatus(response.status);
         return response;
       } catch (error) {
-        setLogFields({ "http.status_code": HTTP_INTERNAL_SERVER_ERROR });
+        widelog.set("http.status_code", HTTP_INTERNAL_SERVER_ERROR);
         throw error;
+      } finally {
+        widelog.time.stop("duration_ms");
+        widelog.flush();
       }
     });
 
 const withAuth =
   (handler: AuthenticatedRouteCallback): RouteCallback =>
   async ({ request, params }) => {
-    startTiming("auth");
+    widelog.time.start("auth");
     const session = await getSession(request);
-    endTiming("auth");
+    widelog.time.stop("auth");
 
     if (!session?.user?.id) {
       return ErrorResponse.unauthorized().toResponse();
@@ -193,13 +198,13 @@ const withAuth =
 const withV1Auth =
   (handler: AuthenticatedRouteCallback): RouteCallback =>
   async ({ request, params }) => {
-    startTiming("auth");
+    widelog.time.start("auth");
 
     const authHeader = request.headers.get("authorization");
 
     if (authHeader?.startsWith("Bearer ") && isKeeperMcpEnabledAuth(auth)) {
       const mcpSession = await auth.api.getMcpSession({ headers: request.headers });
-      endTiming("auth");
+      widelog.time.stop("auth");
 
       if (!mcpSession?.userId) {
         return ErrorResponse.unauthorized().toResponse();
@@ -210,7 +215,7 @@ const withV1Auth =
     }
 
     const session = await getSession(request);
-    endTiming("auth");
+    widelog.time.stop("auth");
 
     if (!session?.user?.id) {
       return ErrorResponse.unauthorized().toResponse();

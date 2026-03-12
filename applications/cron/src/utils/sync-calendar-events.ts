@@ -5,7 +5,21 @@ import type { SyncResult } from "@keeper.sh/provider-core";
 import { fetchAndSyncSource } from "@keeper.sh/calendar";
 import type { Source } from "@keeper.sh/calendar";
 import { setCronEventFields, withCronWideEvent } from "./with-wide-event";
-import { reportError } from "./logging";
+import { widelog } from "./logging";
+
+const reportError = (error: unknown, fields?: Record<string, unknown>): void => {
+  widelog.context(() => {
+    if (fields) {
+      for (const [key, value] of Object.entries(fields)) {
+        if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+          widelog.set(key, value);
+        }
+      }
+    }
+    widelog.errorFields(error);
+    widelog.flush();
+  });
+};
 
 interface SourceOwner {
   userId: string;
@@ -132,10 +146,9 @@ const runSyncJob = async <TSource extends SourceOwner>(
   ensureUsersWithDestinationsIncluded(sourcesByUser, usersWithDestinations);
   const sourceEntries = [...sourcesByUser.entries()];
 
-  const userSyncs = sourceEntries.map(([userId, userSources]) =>
-    Promise.resolve().then(() =>
-      dependencies.syncUserSourcesForUser(userId, userSources)),
-  );
+  const userSyncs = sourceEntries.map(([userId, userSources]) => {
+    return dependencies.syncUserSourcesForUser(userId, userSources)
+  });
 
   const settledResults = await Promise.allSettled(userSyncs);
   const userFailedCount = settledResults.filter(

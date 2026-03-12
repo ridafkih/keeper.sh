@@ -5,8 +5,16 @@ import {
   getErrorMessage,
   getEventsForDestination,
   isKeeperEvent,
-  reportError,
 } from "@keeper.sh/provider-core";
+import { widelogger } from "widelogger";
+
+const { widelog } = widelogger({
+  service: "keeper",
+  defaultEventName: "wide_event",
+  commitHash: process.env.COMMIT_SHA,
+  environment: process.env.ENV ?? process.env.NODE_ENV,
+  version: process.env.npm_package_version,
+});
 import type {
   CalDAVConfig,
   DeleteResult,
@@ -132,11 +140,13 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
 
             return { remoteId: uid, success: true };
           } catch (error) {
-            reportError(error, {
-              "destination.calendar_id": this.config.calendarId,
-              "operation.name": "caldav:push",
-              "source.provider": this.id,
-              "user.id": this.config.userId,
+            widelog.context(() => {
+              widelog.set("destination.calendar_id", this.config.calendarId);
+              widelog.set("operation.name", "caldav:push");
+              widelog.set("source.provider", this.id);
+              widelog.set("user.id", this.config.userId);
+              widelog.errorFields(error);
+              widelog.flush();
             });
             return { error: getErrorMessage(error), success: false };
           }
@@ -164,11 +174,13 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
               return { success: true };
             }
 
-            reportError(error, {
-              "destination.calendar_id": this.config.calendarId,
-              "operation.name": "caldav:delete",
-              "source.provider": this.id,
-              "user.id": this.config.userId,
+            widelog.context(() => {
+              widelog.set("destination.calendar_id", this.config.calendarId);
+              widelog.set("operation.name", "caldav:delete");
+              widelog.set("source.provider", this.id);
+              widelog.set("user.id", this.config.userId);
+              widelog.errorFields(error);
+              widelog.flush();
             });
             return { error: getErrorMessage(error), success: false };
           }

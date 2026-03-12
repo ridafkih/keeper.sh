@@ -6,7 +6,7 @@ import {
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { database as databaseInstance } from "../context";
 import { triggerDestinationSync } from "./sync";
-import { reportError } from "./logging";
+import { widelog } from "./logging";
 
 const EMPTY_LIST_COUNT = 0;
 const USER_MAPPING_LOCK_NAMESPACE = 9001;
@@ -270,7 +270,16 @@ const createSetDestinationsDependencies = async (): Promise<SetDestinationsDepen
       const mappingLimit = premiumService.getMappingLimit(userPlan);
       return nextMappingCount <= mappingLimit;
     },
-    reportError,
+    reportError: (error, fields) => {
+      if (fields) {
+        for (const [key, value] of Object.entries(fields)) {
+          if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+            widelog.set(key, value);
+          }
+        }
+      }
+      widelog.errorFields(error);
+    },
     triggerDestinationSync,
     withTransaction: (callback) =>
       database.transaction((transactionClient) =>
@@ -287,7 +296,16 @@ const createSetSourcesDependencies = async (): Promise<SetSourcesDependencies> =
       const mappingLimit = premiumService.getMappingLimit(userPlan);
       return nextMappingCount <= mappingLimit;
     },
-    reportError,
+    reportError: (error, fields) => {
+      if (fields) {
+        for (const [key, value] of Object.entries(fields)) {
+          if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+            widelog.set(key, value);
+          }
+        }
+      }
+      widelog.errorFields(error);
+    },
     triggerDestinationSync,
     withTransaction: (callback) =>
       database.transaction((transactionClient) =>

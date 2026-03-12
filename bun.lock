@@ -127,6 +127,7 @@
         "@keeper.sh/provider-core": "workspace:*",
         "@modelcontextprotocol/sdk": "1.27.1",
         "entrykit": "^0.1.3",
+        "widelogger": "^0.2.1",
         "zod": "^4.3.5",
       },
       "devDependencies": {
@@ -174,7 +175,7 @@
       "name": "@keeper.sh/broadcast",
       "dependencies": {
         "@keeper.sh/data-schemas": "workspace:*",
-        "@keeper.sh/provider-core": "workspace:*",
+        "widelogger": "^0.2.1",
       },
       "devDependencies": {
         "@keeper.sh/typescript-config": "workspace:*",
@@ -364,6 +365,7 @@
         "drizzle-orm": "0.45.1",
         "ts-ics": "2.4.0",
         "tsdav": "2.1.6",
+        "widelogger": "^0.2.1",
       },
       "devDependencies": {
         "@keeper.sh/fixtures": "workspace:*",
@@ -415,6 +417,7 @@
         "@keeper.sh/premium": "workspace:*",
         "@keeper.sh/provider-core": "workspace:*",
         "drizzle-orm": "^0.45.1",
+        "widelogger": "^0.2.1",
       },
       "devDependencies": {
         "@keeper.sh/typescript-config": "workspace:*",
@@ -445,6 +448,7 @@
         "@keeper.sh/premium": "workspace:*",
         "@keeper.sh/provider-core": "workspace:*",
         "drizzle-orm": "^0.45.1",
+        "widelogger": "^0.2.1",
       },
       "devDependencies": {
         "@keeper.sh/typescript-config": "workspace:*",

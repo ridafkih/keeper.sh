@@ -3,8 +3,16 @@ import {
   buildSourceEventsToAdd,
   insertEventStatesWithConflictResolution,
   isKeeperEvent,
-  reportError,
 } from "@keeper.sh/provider-core";
+import { widelogger } from "widelogger";
+
+const { widelog } = widelogger({
+  service: "keeper",
+  defaultEventName: "wide_event",
+  commitHash: process.env.COMMIT_SHA,
+  environment: process.env.ENV ?? process.env.NODE_ENV,
+  version: process.env.npm_package_version,
+});
 import type { SourceEvent } from "@keeper.sh/provider-core";
 import { calendarAccountsTable, calendarsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { and, eq, inArray } from "drizzle-orm";
@@ -206,11 +214,13 @@ const createCalDAVSourceProvider = (
           .where(eq(calendarAccountsTable.id, account.calendarAccountId));
       }
 
-      reportError(error, {
-        "operation.name": "caldav-source:sync",
-        "source.calendar_id": account.calendarId,
-        "source.provider": options.providerId,
-        "user.id": account.userId,
+      widelog.context(() => {
+        widelog.set("operation.name", "caldav-source:sync");
+        widelog.set("source.calendar_id", account.calendarId);
+        widelog.set("source.provider", options.providerId);
+        widelog.set("user.id", account.userId);
+        widelog.errorFields(error);
+        widelog.flush();
       });
       return {
         eventsAdded: EMPTY_COUNT,

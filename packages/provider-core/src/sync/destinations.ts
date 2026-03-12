@@ -1,6 +1,14 @@
 import type { SyncResult } from "../types";
 import type { SyncContext, SyncCoordinator } from "./coordinator";
-import { reportError } from "../utils/wide-logging";
+import { widelogger } from "widelogger";
+
+const { widelog } = widelogger({
+  service: "keeper",
+  defaultEventName: "wide_event",
+  commitHash: process.env.COMMIT_SHA,
+  environment: process.env.ENV ?? process.env.NODE_ENV,
+  version: process.env.npm_package_version,
+});
 
 const INITIAL_ADDED_COUNT = 0;
 const INITIAL_ADD_FAILED_COUNT = 0;
@@ -16,43 +24,57 @@ const syncDestinationsForUser = async (
   providers: DestinationProvider[],
   syncCoordinator: SyncCoordinator,
 ): Promise<SyncResult> => {
-  const context = await syncCoordinator.startSync(userId);
+  return widelog.context(async () => {
+    widelog.set("operation.name", "sync:destinations");
+    widelog.set("operation.type", "sync");
+    widelog.set("user.id", userId);
+    widelog.set("provider.count", providers.length);
+    widelog.time.start("duration_ms");
 
-  const settledResults = await Promise.allSettled(
-    providers.map((provider) =>
-      Promise.resolve().then(() => provider.syncForUser(userId, context)),
-    ),
-  );
+    const context = await syncCoordinator.startSync(userId);
 
-  await syncCoordinator.isSyncCurrent(context);
+    const settledResults = await Promise.allSettled(
+      providers.map((provider) =>
+        Promise.resolve().then(() => provider.syncForUser(userId, context)),
+      ),
+    );
 
-  const combined: SyncResult = {
-    addFailed: INITIAL_ADD_FAILED_COUNT,
-    added: INITIAL_ADDED_COUNT,
-    removeFailed: INITIAL_REMOVE_FAILED_COUNT,
-    removed: INITIAL_REMOVED_COUNT,
-  };
+    await syncCoordinator.isSyncCurrent(context);
 
-  for (const [providerIndex, settled] of settledResults.entries()) {
-    if (settled.status === "rejected") {
-      reportError(settled.reason, {
-        "operation.name": "sync:destination-provider",
-        "operation.type": "sync",
-        "provider.index": providerIndex,
-        "user.id": userId,
-      });
-      continue;
+    const combined: SyncResult = {
+      addFailed: INITIAL_ADD_FAILED_COUNT,
+      added: INITIAL_ADDED_COUNT,
+      removeFailed: INITIAL_REMOVE_FAILED_COUNT,
+      removed: INITIAL_REMOVED_COUNT,
+    };
+
+    let failedProviderCount = 0;
+
+    for (const [providerIndex, settled] of settledResults.entries()) {
+      if (settled.status === "rejected") {
+        failedProviderCount++;
+        widelog.set(`provider.${providerIndex}.error`, true);
+        continue;
+      }
+      if (settled.value === null) {
+        continue;
+      }
+      combined.added += settled.value.added;
+      combined.addFailed += settled.value.addFailed;
+      combined.removed += settled.value.removed;
+      combined.removeFailed += settled.value.removeFailed;
     }
-    if (settled.value === null) {
-      continue;
-    }
-    combined.added += settled.value.added;
-    combined.addFailed += settled.value.addFailed;
-    combined.removed += settled.value.removed;
-    combined.removeFailed += settled.value.removeFailed;
-  }
 
-  return combined;
+    widelog.set("events.added", combined.added);
+    widelog.set("events.add_failed", combined.addFailed);
+    widelog.set("events.removed", combined.removed);
+    widelog.set("events.remove_failed", combined.removeFailed);
+    widelog.set("provider.failed_count", failedProviderCount);
+    widelog.time.stop("duration_ms");
+    widelog.flush();
+
+    return combined;
+  });
 };
 
 export { syncDestinationsForUser };

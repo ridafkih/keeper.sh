@@ -2,7 +2,7 @@ import { entry } from "entrykit";
 import { join } from "node:path";
 import { tryLoadMcpEnv } from "@keeper.sh/env/mcp";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
-import { emitWideEvent, reportError, shutdownLogging } from "./utils/logging";
+import { destroyWideLogger, widelog } from "./utils/logging";
 
 const env = tryLoadMcpEnv();
 
@@ -21,59 +21,56 @@ const router = new Bun.FileSystemRouter({
 
 await entry({
   main: async () => {
-    try {
-      const server = Bun.serve({
-        port: env.MCP_PORT,
-        fetch: async (request) => {
-          const match = router.match(request);
+    return widelog.context(async () => {
+      widelog.set("operation.name", "mcp:start");
+      widelog.set("operation.type", "lifecycle");
+      widelog.set("service.name", "mcp");
+      widelog.set("port", env.MCP_PORT);
 
-          if (!match) {
-            return new Response("Not found", { status: HTTP_NOT_FOUND });
-          }
+      try {
+        const server = Bun.serve({
+          port: env.MCP_PORT,
+          fetch: async (request) => {
+            const match = router.match(request);
 
-          const module: unknown = await import(match.filePath);
+            if (!match) {
+              return new Response("Not found", { status: HTTP_NOT_FOUND });
+            }
 
-          if (!isRouteModule(module)) {
-            return new Response("Internal server error", { status: HTTP_INTERNAL_SERVER_ERROR });
-          }
+            const module: unknown = await import(match.filePath);
 
-          if (!isHttpMethod(request.method)) {
-            return new Response("Method not allowed", { status: HTTP_METHOD_NOT_ALLOWED });
-          }
+            if (!isRouteModule(module)) {
+              return new Response("Internal server error", { status: HTTP_INTERNAL_SERVER_ERROR });
+            }
 
-          const handler = module[request.method];
+            if (!isHttpMethod(request.method)) {
+              return new Response("Method not allowed", { status: HTTP_METHOD_NOT_ALLOWED });
+            }
 
-          if (!handler) {
-            return new Response("Method not allowed", { status: HTTP_METHOD_NOT_ALLOWED });
-          }
+            const handler = module[request.method];
 
-          return handler(request);
-        },
-      });
+            if (!handler) {
+              return new Response("Method not allowed", { status: HTTP_METHOD_NOT_ALLOWED });
+            }
 
-      await emitWideEvent({
-        "operation.name": "mcp:start",
-        "operation.type": "lifecycle",
-        "service.name": "mcp",
-        port: env.MCP_PORT,
-      });
-
-      return () => {
-        server.stop();
-        shutdownLogging().catch((error) => {
-          reportError(error, {
-            "operation.name": "mcp:shutdown",
-            "operation.type": "lifecycle",
-          });
+            return handler(request);
+          },
         });
-      };
-    } catch (error) {
-      reportError(error, {
-        "operation.name": "mcp:start",
-        "operation.type": "lifecycle",
-      });
-      throw error;
-    }
+
+        widelog.set("outcome", "success");
+
+        return () => {
+          server.stop();
+          destroyWideLogger();
+        };
+      } catch (error) {
+        widelog.set("outcome", "error");
+        widelog.errorFields(error);
+        throw error;
+      } finally {
+        widelog.flush();
+      }
+    });
   },
   name: "mcp",
 });

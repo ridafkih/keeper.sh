@@ -6,7 +6,7 @@ import { createICloudSourceProvider } from "@keeper.sh/provider-icloud";
 import { getCalDAVProviders } from "@keeper.sh/provider-registry";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { setCronEventFields, withCronWideEvent } from "../utils/with-wide-event";
-import { endTiming, reportError, startTiming } from "../utils/logging";
+import { widelog } from "../utils/logging";
 
 interface SourceProviderConfig {
   database: BunSQLDatabase;
@@ -88,7 +88,7 @@ const createDefaultJobDependencies = async (): Promise<CaldavSyncJobDependencies
     });
 
     const timingKey = `sync_${provider.id}`;
-    startTiming(timingKey);
+    widelog.time.start(timingKey);
 
     try {
       const result = await sourceProvider.syncAllSources();
@@ -98,19 +98,26 @@ const createDefaultJobDependencies = async (): Promise<CaldavSyncJobDependencies
         providerId: provider.id,
       };
     } catch (error) {
-      reportError(error, {
-        "operation.name": "caldav-source-sync:provider",
-        "source.provider": provider.id,
-      });
+      widelog.set(`${provider.id}.error`, true);
+      widelog.errorFields(error, { prefix: provider.id });
       return null;
     } finally {
-      endTiming(timingKey);
+      widelog.time.stop(timingKey);
     }
   };
 
   return {
     providers: getCalDAVProviders(),
-    reportError,
+    reportError: (error: unknown, fields?: Record<string, unknown>) => {
+      if (fields) {
+        for (const [key, value] of Object.entries(fields)) {
+          if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+            widelog.set(key, value);
+          }
+        }
+      }
+      widelog.errorFields(error);
+    },
     setCronEventFields,
     syncProvider,
   };

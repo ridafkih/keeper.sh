@@ -56,18 +56,8 @@ export { inferAllDayEvent, resolveIsAllDayEvent } from "./events/all-day";
 export { RateLimiter, type RateLimiterConfig } from "./utils/rate-limiter";
 export { allSettledWithConcurrency, type AllSettledWithConcurrencyOptions } from "./utils/concurrency";
 export { getErrorMessage } from "./utils/error";
-export {
-  emitWideEvent,
-  endTiming,
-  getCurrentRequestId,
-  incrementLogCount,
-  initializeWideLogger,
-  reportError,
-  runWideEvent,
-  setLogFields,
-  shutdownLogging,
-  startTiming,
-} from "./utils/wide-logging";
+export { widelogger } from "widelogger";
+export type { WideloggerOptions } from "widelogger";
 export { getEventsForDestination } from "./events/events";
 export {
   buildSourceEventIdentityKey,

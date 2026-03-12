@@ -1,14 +1,9 @@
-import { setLogFields } from "../utils/wide-logging";
 import { SYNC_TTL_SECONDS } from "@keeper.sh/constants";
 import type { RedisClient } from "bun";
 
 const SYNC_KEY_PREFIX = "sync:generation:";
 
 const getSyncKey = (userId: string): string => `${SYNC_KEY_PREFIX}${userId}`;
-
-const enrichWideEventWithSyncContext = (userId: string, generation: number): void => {
-  setLogFields({ "sync.generation": generation, "user.id": userId });
-};
 
 interface DestinationSyncResult {
   userId: string;
@@ -61,8 +56,6 @@ const createSyncCoordinator = (config: SyncCoordinatorConfig): SyncCoordinator =
     const key = getSyncKey(userId);
     const generation = await redis.incr(key);
     await redis.expire(key, SYNC_TTL_SECONDS);
-
-    enrichWideEventWithSyncContext(userId, generation);
 
     const isCurrent = async (): Promise<boolean> => {
       const currentGeneration = await redis.get(key);

@@ -6,7 +6,7 @@ import { and, desc, eq, lte } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { setCronEventFields, withCronWideEvent } from "../utils/with-wide-event";
 import { countSettledResults } from "../utils/count-settled-results";
-import { endTiming, reportError, startTiming } from "../utils/logging";
+import { widelog } from "../utils/logging";
 
 const ICAL_CALENDAR_TYPE = "ical";
 
@@ -88,10 +88,8 @@ const processSnapshot = async (
     }
     return { error: false, skipped: false };
   } catch (error) {
-    reportError(error, {
-      "operation.name": "ical-snapshot:process",
-      "source.calendar_id": calendarId,
-    });
+    widelog.set("ical.snapshot.error.calendar_id", calendarId);
+    widelog.errorFields(error, { prefix: "ical.snapshot" });
     return { error: true, skipped: false };
   }
 };
@@ -125,7 +123,16 @@ const createDefaultJobDependencies = (): IcalSnapshotJobDependencies => ({
     const { database } = await import("../context");
     return processSnapshot(database, calendarId, ical);
   },
-  reportError,
+  reportError: (error: unknown, fields?: Record<string, unknown>) => {
+    if (fields) {
+      for (const [key, value] of Object.entries(fields)) {
+        if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+          widelog.set(key, value);
+        }
+      }
+    }
+    widelog.errorFields(error);
+  },
   setCronEventFields,
 });
 
@@ -224,10 +231,10 @@ export default withCronWideEvent({
     const dependencies = createDefaultJobDependencies();
     await runIcalSnapshotSyncJob(dependencies, {
       endTiming: (name) => {
-        endTiming(name);
+        widelog.time.stop(name);
       },
       startTiming: (name) => {
-        startTiming(name);
+        widelog.time.start(name);
       },
     });
   },

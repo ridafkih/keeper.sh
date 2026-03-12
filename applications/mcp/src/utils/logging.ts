@@ -1,41 +1,24 @@
-import {
-  emitWideEvent,
-  endTiming,
-  getCurrentRequestId,
-  incrementLogCount,
-  initializeWideLogger,
-  reportError,
-  runWideEvent,
-  setLogFields,
-  shutdownLogging,
-  startTiming,
-} from "@keeper.sh/provider-core";
+import { widelogger } from "widelogger";
 
-initializeWideLogger({
-  service: process.env.SERVICE_NAME ?? process.env.npm_package_name ?? "keeper-mcp",
+const { widelog, destroy: destroyWideLogger } = widelogger({
+  service: "keeper-mcp",
+  defaultEventName: "wide_event",
+  commitHash: process.env.COMMIT_SHA,
+  environment: process.env.ENV ?? process.env.NODE_ENV,
+  version: process.env.npm_package_version,
 });
 
 const trackStatusError = (status: number, errorType: string): void => {
   const statusMessage = `HTTP ${status}`;
-  incrementLogCount("error.count");
-  incrementLogCount(`error.${errorType}.count`);
-  setLogFields({
-    [`error.${errorType}.messages`]: [statusMessage],
-    "error.message": statusMessage,
-    "error.occurred": true,
-    "error.type": errorType,
-  });
+  widelog.count("error.count");
+  widelog.count(`error.${errorType}.count`);
+  widelog.set("error.message", statusMessage);
+  widelog.set("error.occurred", true);
+  widelog.set("error.type", errorType);
 };
 
 export {
-  emitWideEvent,
-  endTiming,
-  getCurrentRequestId,
-  incrementLogCount,
-  reportError,
-  runWideEvent,
-  setLogFields,
-  shutdownLogging,
-  startTiming,
+  destroyWideLogger,
   trackStatusError,
+  widelog,
 };

@@ -1,15 +1,20 @@
 import {
   OAuthCalendarProvider,
   createOAuthDestinationProvider,
-  endTiming,
   generateEventUid,
   getErrorMessage,
   getOAuthSyncWindowStart,
   isKeeperEvent,
-  reportError,
-  setLogFields,
-  startTiming,
 } from "@keeper.sh/provider-core";
+import { widelogger } from "widelogger";
+
+const { widelog } = widelogger({
+  service: "keeper",
+  defaultEventName: "wide_event",
+  commitHash: process.env.COMMIT_SHA,
+  environment: process.env.ENV ?? process.env.NODE_ENV,
+  version: process.env.npm_package_version,
+});
 import type {
   BroadcastSyncStatus,
   DeleteResult,
@@ -188,11 +193,13 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
       }
       return result;
     } catch (error) {
-      reportError(error, {
-        "destination.calendar_id": this.config.calendarId,
-        "operation.name": "google-calendar:push",
-        "source.provider": this.id,
-        "user.id": this.config.userId,
+      widelog.context(() => {
+        widelog.set("destination.calendar_id", this.config.calendarId);
+        widelog.set("operation.name", "google-calendar:push");
+        widelog.set("source.provider", this.id);
+        widelog.set("user.id", this.config.userId);
+        widelog.errorFields(error);
+        widelog.flush();
       });
       return { error: getErrorMessage(error), success: false };
     }
@@ -260,18 +267,20 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
       await response.body?.cancel?.();
       return { success: true };
     } catch (error) {
-      reportError(error, {
-        "destination.calendar_id": this.config.calendarId,
-        "operation.name": "google-calendar:delete",
-        "source.provider": this.id,
-        "user.id": this.config.userId,
+      widelog.context(() => {
+        widelog.set("destination.calendar_id", this.config.calendarId);
+        widelog.set("operation.name", "google-calendar:delete");
+        widelog.set("source.provider", this.id);
+        widelog.set("user.id", this.config.userId);
+        widelog.errorFields(error);
+        widelog.flush();
       });
       return { error: getErrorMessage(error), success: false };
     }
   }
 
   private async findEventByUid(uid: string): Promise<GoogleEvent | null> {
-    startTiming("findEventByUid");
+    widelog.time.start("findEventByUid");
 
     const url = new URL(
       `calendars/${encodeURIComponent(this.config.externalCalendarId)}/events`,
@@ -285,11 +294,11 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
       method: "GET",
     });
 
-    endTiming("findEventByUid");
+    widelog.time.stop("findEventByUid");
 
     if (!response.ok) {
       await response.body?.cancel?.();
-      setLogFields({ "find_event_by_uid.status": response.status });
+      widelog.set("find_event_by_uid.status", response.status);
       return null;
     }
 

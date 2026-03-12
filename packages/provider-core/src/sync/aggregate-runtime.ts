@@ -3,7 +3,15 @@ import type { RedisClient } from "bun";
 import type { DestinationSyncResult, SyncProgressUpdate } from "./coordinator";
 import { SyncAggregateTracker } from "./aggregate-tracker";
 import type { SyncAggregateMessage, SyncAggregateSnapshot } from "./aggregate-tracker";
-import { reportError } from "../utils/wide-logging";
+import { widelogger } from "widelogger";
+
+const { widelog } = widelogger({
+  service: "keeper",
+  defaultEventName: "wide_event",
+  commitHash: process.env.COMMIT_SHA,
+  environment: process.env.ENV ?? process.env.NODE_ENV,
+  version: process.env.npm_package_version,
+});
 
 const SYNC_AGGREGATE_LATEST_KEY_PREFIX = "sync:aggregate:latest:";
 const SYNC_AGGREGATE_SEQUENCE_KEY_PREFIX = "sync:aggregate:seq:";
@@ -81,10 +89,12 @@ const createSyncAggregateRuntime = (config: SyncAggregateRuntimeConfig): SyncAgg
 
       config.broadcast(userId, "sync:aggregate", payload);
     } catch (error) {
-      reportError(error, {
-        "operation.name": "sync:aggregate:emit",
-        "operation.type": "sync-aggregate",
-        "user.id": userId,
+      widelog.context(() => {
+        widelog.set("operation.name", "sync:aggregate:emit");
+        widelog.set("operation.type", "sync-aggregate");
+        widelog.set("user.id", userId);
+        widelog.errorFields(error);
+        widelog.flush();
       });
       config.broadcast(userId, "sync:aggregate", aggregate);
     }
@@ -108,10 +118,12 @@ const createSyncAggregateRuntime = (config: SyncAggregateRuntimeConfig): SyncAgg
     const aggregate = tracker.trackProgress(update);
     if (aggregate) {
       emitSyncAggregate(update.userId, aggregate).catch((error) => {
-        reportError(error, {
-          "operation.name": "sync:aggregate:progress",
-          "operation.type": "sync-aggregate",
-          "user.id": update.userId,
+        widelog.context(() => {
+          widelog.set("operation.name", "sync:aggregate:progress");
+          widelog.set("operation.type", "sync-aggregate");
+          widelog.set("user.id", update.userId);
+          widelog.errorFields(error);
+          widelog.flush();
         });
       });
     }
@@ -137,10 +149,12 @@ const createSyncAggregateRuntime = (config: SyncAggregateRuntimeConfig): SyncAgg
       }
       return null;
     } catch (error) {
-      reportError(error, {
-        "operation.name": "sync:aggregate:cached:parse",
-        "operation.type": "sync-aggregate",
-        "user.id": userId,
+      widelog.context(() => {
+        widelog.set("operation.name", "sync:aggregate:cached:parse");
+        widelog.set("operation.type", "sync-aggregate");
+        widelog.set("user.id", userId);
+        widelog.errorFields(error);
+        widelog.flush();
       });
       return null;
     }

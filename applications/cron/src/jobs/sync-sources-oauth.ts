@@ -4,7 +4,7 @@ import { createOutlookSourceProvider } from "@keeper.sh/provider-outlook";
 import { createGoogleOAuthService } from "@keeper.sh/oauth-google";
 import { createMicrosoftOAuthService } from "@keeper.sh/oauth-microsoft";
 import { setCronEventFields, withCronWideEvent } from "../utils/with-wide-event";
-import { endTiming, reportError, startTiming } from "../utils/logging";
+import { widelog } from "../utils/logging";
 
 interface ProviderSyncResult {
   eventsAdded: number;
@@ -149,7 +149,7 @@ const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies>
       refreshLockStore,
     });
 
-    startTiming("syncGoogleSources");
+    widelog.time.start("syncGoogleSources");
 
     try {
       const result = await googleSourceProvider.syncAllSources();
@@ -165,13 +165,11 @@ const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies>
         syncTokenResetCount: result.syncTokenResetCount,
       };
     } catch (error) {
-      reportError(error, {
-        "operation.name": "oauth-source-sync:google",
-        "source.provider": "google",
-      });
+      widelog.set("google.error", true);
+      widelog.errorFields(error, { prefix: "google" });
       return null;
     } finally {
-      endTiming("syncGoogleSources");
+      widelog.time.stop("syncGoogleSources");
     }
   };
 
@@ -191,7 +189,7 @@ const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies>
       refreshLockStore,
     });
 
-    startTiming("syncOutlookSources");
+    widelog.time.start("syncOutlookSources");
 
     try {
       const result = await outlookSourceProvider.syncAllSources();
@@ -207,18 +205,25 @@ const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies>
         syncTokenResetCount: result.syncTokenResetCount,
       };
     } catch (error) {
-      reportError(error, {
-        "operation.name": "oauth-source-sync:outlook",
-        "source.provider": "outlook",
-      });
+      widelog.set("outlook.error", true);
+      widelog.errorFields(error, { prefix: "outlook" });
       return null;
     } finally {
-      endTiming("syncOutlookSources");
+      widelog.time.stop("syncOutlookSources");
     }
   };
 
   return {
-    reportError,
+    reportError: (error: unknown, fields?: Record<string, unknown>) => {
+      if (fields) {
+        for (const [key, value] of Object.entries(fields)) {
+          if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+            widelog.set(key, value);
+          }
+        }
+      }
+      widelog.errorFields(error);
+    },
     setCronEventFields,
     syncGoogleSources,
     syncOutlookSources,

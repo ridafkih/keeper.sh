@@ -1,24 +1,11 @@
-import {
-  emitWideEvent,
-  endTiming,
-  initializeWideLogger,
-  reportError,
-  runWideEvent,
-  setLogFields,
-  shutdownLogging,
-  startTiming,
-} from "@keeper.sh/provider-core";
+import { widelogger } from "widelogger";
 
-initializeWideLogger({
-  service: process.env.SERVICE_NAME ?? process.env.npm_package_name ?? "keeper-cron",
+const { widelog, destroy: destroyWideLogger } = widelogger({
+  service: "keeper-cron",
+  defaultEventName: "wide_event",
+  commitHash: process.env.COMMIT_SHA,
+  environment: process.env.ENV ?? process.env.NODE_ENV,
+  version: process.env.npm_package_version,
 });
 
-export {
-  emitWideEvent,
-  endTiming,
-  reportError,
-  runWideEvent,
-  setLogFields,
-  shutdownLogging,
-  startTiming,
-};
+export { widelog, destroyWideLogger };

@@ -22,8 +22,16 @@ import {
   createOAuthDestinationProvider,
   getErrorMessage,
   getOAuthSyncWindowStart,
-  reportError,
 } from "@keeper.sh/provider-core";
+import { widelogger } from "widelogger";
+
+const { widelog } = widelogger({
+  service: "keeper",
+  defaultEventName: "wide_event",
+  commitHash: process.env.COMMIT_SHA,
+  environment: process.env.ENV ?? process.env.NODE_ENV,
+  version: process.env.npm_package_version,
+});
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { MICROSOFT_GRAPH_API, OUTLOOK_PAGE_SIZE } from "../shared/api";
 import { hasRateLimitMessage, isAuthError } from "../shared/errors";
@@ -171,11 +179,13 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     try {
       return await this.createEvent(resource);
     } catch (error) {
-      reportError(error, {
-        "destination.calendar_id": this.config.calendarId,
-        "operation.name": "outlook-calendar:push",
-        "source.provider": this.id,
-        "user.id": this.config.userId,
+      widelog.context(() => {
+        widelog.set("destination.calendar_id", this.config.calendarId);
+        widelog.set("operation.name", "outlook-calendar:push");
+        widelog.set("source.provider", this.id);
+        widelog.set("user.id", this.config.userId);
+        widelog.errorFields(error);
+        widelog.flush();
       });
       return {
         error: getErrorMessage(error),
@@ -234,11 +244,13 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
       await response.body?.cancel?.();
       return { success: true };
     } catch (error) {
-      reportError(error, {
-        "destination.calendar_id": this.config.calendarId,
-        "operation.name": "outlook-calendar:delete",
-        "source.provider": this.id,
-        "user.id": this.config.userId,
+      widelog.context(() => {
+        widelog.set("destination.calendar_id", this.config.calendarId);
+        widelog.set("operation.name", "outlook-calendar:delete");
+        widelog.set("source.provider", this.id);
+        widelog.set("user.id", this.config.userId);
+        widelog.errorFields(error);
+        widelog.flush();
       });
       return {
         error: getErrorMessage(error),

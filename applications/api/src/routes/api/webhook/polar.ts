@@ -4,7 +4,7 @@ import { ErrorResponse } from "../../../utils/responses";
 import { database } from "../../../context";
 import env from "@keeper.sh/env/api";
 import { userSubscriptionsTable } from "@keeper.sh/database/schema";
-import { respondWithLoggedError, runWideEvent, setLogFields } from "../../../utils/logging";
+import { respondWithLoggedError, widelog } from "../../../utils/logging";
 
 const HTTP_OK = 200;
 
@@ -44,7 +44,7 @@ const handleSubscriptionCreated = async (
     return new Response(null, { status: HTTP_OK });
   }
 
-  setLogFields({ "user.id": userId });
+  widelog.set("user.id", userId);
   await upsertSubscription(userId, "pro", subscriptionId);
   return new Response(null, { status: HTTP_OK });
 };
@@ -59,7 +59,8 @@ const handleSubscriptionUpdated = async (
   }
 
   const plan = getPlanFromActiveStatus(isActive);
-  setLogFields({ "subscription.plan": plan, "user.id": userId });
+  widelog.set("subscription.plan", plan);
+  widelog.set("user.id", userId);
   await upsertSubscription(userId, plan, subscriptionId);
   return new Response(null, { status: HTTP_OK });
 };
@@ -72,7 +73,8 @@ const handleSubscriptionCanceled = async (
     return new Response(null, { status: HTTP_OK });
   }
 
-  setLogFields({ "subscription.plan": "free", "user.id": userId });
+  widelog.set("subscription.plan", "free");
+  widelog.set("user.id", userId);
   await upsertSubscription(userId, "free", subscriptionId);
   return new Response(null, { status: HTTP_OK });
 };
@@ -84,10 +86,10 @@ const POST = (request: Request): MaybePromise<Response> => {
     return ErrorResponse.notImplemented().toResponse();
   }
 
-  return runWideEvent({
-    "operation.name": "polar",
-    "operation.type": "webhook",
-  }, async () => {
+  return widelog.context(async () => {
+    widelog.set("operation.name", "polar");
+    widelog.set("operation.type", "webhook");
+    widelog.time.start("duration_ms");
     try {
       const body = await request.text();
       const headers: Record<string, string> = {};
@@ -96,7 +98,7 @@ const POST = (request: Request): MaybePromise<Response> => {
       }
 
       const event = validateEvent(body, headers, webhookSecret);
-      setLogFields({ "operation.name": `polar:${event.type}` });
+      widelog.set("operation.name", `polar:${event.type}`);
 
       if (event.type === "subscription.created") {
         return handleSubscriptionCreated(
@@ -125,8 +127,11 @@ const POST = (request: Request): MaybePromise<Response> => {
       if (error instanceof WebhookVerificationError) {
         return respondWithLoggedError(error, ErrorResponse.unauthorized().toResponse());
       }
-      setLogFields({ "http.status_code": 500 });
+      widelog.set("http.status_code", 500);
       throw error;
+    } finally {
+      widelog.time.stop("duration_ms");
+      widelog.flush();
     }
   });
 };

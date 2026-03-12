@@ -1,7 +1,7 @@
 import type { MaybePromise } from "bun";
 import { hasOAuthProviderApi } from "@keeper.sh/auth";
 import { auth, authCapabilities } from "../context";
-import { runWideEvent, setLogFields, trackStatusError } from "../utils/logging";
+import { widelog, trackStatusError } from "../utils/logging";
 
 const HTTP_INTERNAL_SERVER_ERROR = 500;
 const HTTP_ERROR_THRESHOLD = 400;
@@ -50,7 +50,7 @@ const extractAuthContext = (request: Request, pathname: string): Record<string, 
 };
 
 const handleAuthResponseStatus = (response: Response): void => {
-  setLogFields({ "http.status_code": response.status });
+  widelog.set("http.status_code", response.status);
   if (response.status >= HTTP_ERROR_THRESHOLD) {
     trackStatusError(response.status, "AuthError");
   }
@@ -103,7 +103,14 @@ const processAuthResponse = async (pathname: string, response: Response): Promis
 };
 
 const handleAuthRequest = (pathname: string, request: Request): MaybePromise<Response> =>
-  runWideEvent(extractAuthContext(request, pathname), async () => {
+  widelog.context(async () => {
+    const authContext = extractAuthContext(request, pathname);
+    for (const [key, value] of Object.entries(authContext)) {
+      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+        widelog.set(key, value);
+      }
+    }
+    widelog.time.start("duration_ms");
     try {
       if (pathname === "/api/auth/capabilities") {
         return Response.json(authCapabilities);
@@ -129,10 +136,13 @@ const handleAuthRequest = (pathname: string, request: Request): MaybePromise<Res
 
       const response = await auth.handler(request);
       handleAuthResponseStatus(response);
-      return processAuthResponse(pathname, response);
+      return await processAuthResponse(pathname, response);
     } catch (error) {
-      setLogFields({ "http.status_code": HTTP_INTERNAL_SERVER_ERROR });
+      widelog.set("http.status_code", HTTP_INTERNAL_SERVER_ERROR);
       throw error;
+    } finally {
+      widelog.time.stop("duration_ms");
+      widelog.flush();
     }
   });
 

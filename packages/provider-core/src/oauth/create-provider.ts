@@ -10,6 +10,15 @@ import type {
 import type { RefreshLockStore } from "./refresh-coordinator";
 import type { SyncContext } from "../sync/coordinator";
 import { getEventsForDestination } from "../events/events";
+import { widelogger } from "widelogger";
+
+const { widelog } = widelogger({
+  service: "keeper",
+  defaultEventName: "wide_event",
+  commitHash: process.env.COMMIT_SHA,
+  environment: process.env.ENV ?? process.env.NODE_ENV,
+  version: process.env.npm_package_version,
+});
 import type { OAuthCalendarProvider } from "./provider";
 import type { OAuthAccount } from "./accounts";
 
@@ -69,15 +78,34 @@ const createOAuthDestinationProvider = <
     }
 
     const results = await Promise.all(
-      accounts.map(async (account) => {
-        const localEvents = await getEventsForDestination(database, account.calendarId);
-        const preparedEvents = getLocalEvents(localEvents, account);
+      accounts.map(async (account) =>
+        widelog.context(async () => {
+          widelog.set("operation.name", "sync:destination-account");
+          widelog.set("operation.type", "sync");
+          widelog.set("destination.calendar_id", account.calendarId);
+          widelog.set("user.id", userId);
+          widelog.time.start("duration_ms");
 
-        const config = buildConfig(database, account, broadcastSyncStatus);
-        config.refreshLockStore = refreshLockStore ?? null;
-        const provider = createProviderInstance(config, oauthProvider);
-        return provider.sync(preparedEvents, context);
-      }),
+          const localEvents = await getEventsForDestination(database, account.calendarId);
+          const preparedEvents = getLocalEvents(localEvents, account);
+          widelog.set("local_events.count", preparedEvents.length);
+
+          const config = buildConfig(database, account, broadcastSyncStatus);
+          config.refreshLockStore = refreshLockStore ?? null;
+          const provider = createProviderInstance(config, oauthProvider);
+          const result = await provider.sync(preparedEvents, context);
+
+          widelog.set("events.added", result.added);
+          widelog.set("events.add_failed", result.addFailed);
+          widelog.set("events.removed", result.removed);
+          widelog.set("events.remove_failed", result.removeFailed);
+
+          widelog.time.stop("duration_ms");
+          widelog.flush();
+
+          return result;
+        }),
+      ),
     );
 
     const combined: SyncResult = {
