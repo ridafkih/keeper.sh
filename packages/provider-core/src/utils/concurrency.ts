@@ -13,7 +13,7 @@ const allSettledWithConcurrency = async <TResult>(
   options: AllSettledWithConcurrencyOptions = {},
 ): Promise<PromiseSettledResult<TResult>[]> => {
   const concurrency = options.concurrency ?? DEFAULT_CONCURRENCY;
-  const results: PromiseSettledResult<TResult>[] = new Array(tasks.length);
+  const results: PromiseSettledResult<TResult>[] = Array.from({ length: tasks.length });
   let nextIndex = 0;
 
   const runNext = async (): Promise<void> => {

@@ -69,17 +69,15 @@ const createOAuthSourceProvider = <
       return { eventsAdded: INITIAL_ADDED_COUNT, eventsRemoved: INITIAL_REMOVED_COUNT };
     }
 
-    const tasks = sources.map((source) => async (): Promise<SourceSyncResult> => {
+    const tasks = sources.map((source) => (): Promise<SourceSyncResult> => {
         const config = buildConfig(database, source);
         config.refreshLockStore = refreshLockStore ?? null;
         const provider = createProviderInstance(config, oauthProvider);
 
         return Promise.race([
           provider.sync(),
-          new Promise<never>((_resolve, reject) => {
-            setTimeout(() => {
-              reject(new Error(`Source sync timed out after ${SOURCE_SYNC_TIMEOUT_MS}ms`));
-            }, SOURCE_SYNC_TIMEOUT_MS);
+          Bun.sleep(SOURCE_SYNC_TIMEOUT_MS).then((): never => {
+            throw new Error(`Source sync timed out after ${SOURCE_SYNC_TIMEOUT_MS}ms`);
           }),
         ]);
       });

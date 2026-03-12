@@ -31,25 +31,26 @@ const createInMemoryStateStore = (): OAuthStateStore => {
   const pendingStates = new Map<string, { value: string; expiresAt: number }>();
 
   return {
-    async set(key, value, ttlSeconds) {
+    set(key, value, ttlSeconds) {
       pendingStates.set(key, {
         expiresAt: Date.now() + ttlSeconds * MS_PER_SECOND,
         value,
       });
+      return Promise.resolve();
     },
-    async consume(key) {
+    consume(key) {
       const entry = pendingStates.get(key);
       if (!entry) {
-        return null;
+        return Promise.resolve(null);
       }
 
       pendingStates.delete(key);
 
       if (Date.now() > entry.expiresAt) {
-        return null;
+        return Promise.resolve(null);
       }
 
-      return entry.value;
+      return Promise.resolve(entry.value);
     },
   };
 };
