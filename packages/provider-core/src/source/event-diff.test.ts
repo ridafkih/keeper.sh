@@ -128,10 +128,10 @@ describe("source event diff", () => {
     const idsToRemove = buildSourceEventStateIdsToRemove(existingEvents, incomingEvents);
 
     expect(eventsToAdd).toHaveLength(1);
-    expect(idsToRemove).toEqual(["existing-focus"]);
+    expect(idsToRemove).toEqual([]);
   });
 
-  it("backfills missing source metadata during full sync", () => {
+  it("backfills missing source metadata during full sync via upsert", () => {
     const existingEvents = [
       createExistingEvent({
         id: "existing-default-null",
@@ -153,7 +153,7 @@ describe("source event diff", () => {
     const idsToRemove = buildSourceEventStateIdsToRemove(existingEvents, incomingEvents);
 
     expect(eventsToAdd).toHaveLength(1);
-    expect(idsToRemove).toEqual(["existing-default-null"]);
+    expect(idsToRemove).toEqual([]);
   });
 
   it("does not duplicate missing source metadata during delta sync", () => {

@@ -141,16 +141,12 @@ const buildSourceEventStateIdsToRemove = (
       .map((existingEvent) => existingEvent.id);
   }
 
-  const incomingIdentitySet = new Set(
+  const incomingStorageIdentitySet = new Set(
     normalizedIncomingEvents.map((incomingEvent) =>
-      buildSourceEventIdentityKey(
+      buildSourceEventStorageIdentityKey(
         incomingEvent.uid,
         incomingEvent.startTime,
         incomingEvent.endTime,
-        incomingEvent.isAllDay,
-        incomingEvent.availability,
-        incomingEvent.sourceEventType,
-        { normalizeMissingMetadata: isDeltaSync },
       )),
   );
 
@@ -160,17 +156,13 @@ const buildSourceEventStateIdsToRemove = (
         return false;
       }
 
-      const existingIdentityKey = buildSourceEventIdentityKey(
+      const existingStorageIdentityKey = buildSourceEventStorageIdentityKey(
         existingEvent.sourceEventUid,
         existingEvent.startTime,
         existingEvent.endTime,
-        existingEvent.isAllDay,
-        existingEvent.availability,
-        existingEvent.sourceEventType,
-        { normalizeMissingMetadata: isDeltaSync },
       );
 
-      return !incomingIdentitySet.has(existingIdentityKey);
+      return !incomingStorageIdentitySet.has(existingStorageIdentityKey);
     })
     .map((existingEvent) => existingEvent.id);
 };
