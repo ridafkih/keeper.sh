@@ -56,16 +56,31 @@ services:
       - api
     restart: unless-stopped
 
+  mcp:
+    image: ghcr.io/ridafkih/keeper-mcp:latest
+    container_name: keeper-mcp
+    env_file: .env
+    environment:
+      ENV: production
+      NODE_EXTRA_CA_CERTS: /certs/global-bundle.pem
+    volumes:
+      - ./global-bundle.pem:/certs/global-bundle.pem:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+
   web:
     image: ghcr.io/ridafkih/keeper-web:latest
     container_name: keeper-web
     env_file: .env
     environment:
       VITE_API_URL: http://api:3001
+      VITE_MCP_URL: http://mcp:3002
       PORT: "3000"
       ENV: production
     depends_on:
       - api
+      - mcp
     restart: unless-stopped
 
 volumes:

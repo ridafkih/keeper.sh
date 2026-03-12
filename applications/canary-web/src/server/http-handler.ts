@@ -66,7 +66,7 @@ export async function handleApplicationRequest(
     return internalRouteResponse;
   }
 
-  if (isMcpRequest(requestUrl)) {
+  if (isMcpRequest(requestUrl) && config.mcpProxyOrigin) {
     return proxyRequest(request, config.mcpProxyOrigin);
   }
 

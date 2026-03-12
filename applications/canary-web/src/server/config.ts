@@ -3,7 +3,7 @@ import type { ServerConfig } from "./types";
 
 export const envSchema = type({
   VITE_API_URL: "string.url",
-  VITE_MCP_URL: "string.url",
+  VITE_MCP_URL: "string.url?",
   ENV: "'development'|'production'|'test'",
   PORT: "string",
 });
@@ -33,7 +33,7 @@ export function createServerConfig(environment: typeof envSchema.infer): ServerC
 
   return {
     apiProxyOrigin: environment.VITE_API_URL,
-    mcpProxyOrigin: environment.VITE_MCP_URL,
+    mcpProxyOrigin: environment.VITE_MCP_URL ?? null,
     environment: runtimeEnvironment,
     isProduction: runtimeEnvironment === "production",
     serverPort,
