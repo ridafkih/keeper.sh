@@ -13,6 +13,7 @@ import type {
   OAuthTokenProvider,
   OutlookCalendarConfig,
   PushResult,
+  RefreshLockStore,
   RemoteEvent,
   SyncableEvent,
 } from "@keeper.sh/provider-core";
@@ -35,12 +36,13 @@ interface OutlookCalendarProviderConfig {
   database: BunSQLDatabase;
   oauthProvider: OAuthTokenProvider;
   broadcastSyncStatus?: BroadcastSyncStatus;
+  refreshLockStore?: RefreshLockStore | null;
 }
 
 const createOutlookCalendarProvider = (
   config: OutlookCalendarProviderConfig,
 ): DestinationProvider => {
-  const { database, oauthProvider, broadcastSyncStatus } = config;
+  const { database, oauthProvider, broadcastSyncStatus, refreshLockStore } = config;
 
   return createOAuthDestinationProvider<OutlookAccount, OutlookCalendarConfig>({
     broadcastSyncStatus,
@@ -59,6 +61,9 @@ const createOutlookCalendarProvider = (
     database,
     getAccountsForUser: getOutlookAccountsForUser,
     oauthProvider,
+    prepareLocalEvents: (events) =>
+      events.filter((event) => event.availability !== "workingElsewhere"),
+    refreshLockStore,
   });
 };
 

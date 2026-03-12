@@ -37,7 +37,7 @@ const createSyncUserSourcesDependencies = async (): Promise<{
   dependencies: SyncUserSourcesDependencies<Source>;
   close: () => void;
 }> => {
-  const { createSyncContext, database, destinationProviders } = await import("../context");
+  const { createSyncContext, database } = await import("../context");
   const syncContext = createSyncContext();
 
   return {
@@ -49,7 +49,7 @@ const createSyncUserSourcesDependencies = async (): Promise<{
       syncDestinationsForUser: (userId) =>
         syncDestinationsForUserAcrossCalendars(
           userId,
-          destinationProviders,
+          syncContext.destinationProviders,
           syncContext.syncCoordinator,
         ),
     },

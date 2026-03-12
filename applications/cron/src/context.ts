@@ -9,9 +9,8 @@ import {
   createOAuthProviders,
   buildOAuthConfigs,
   createSyncAggregateRuntime,
-  configureRefreshLockStore,
 } from "@keeper.sh/provider-core";
-import type { RefreshLockStore } from "@keeper.sh/provider-core";
+import type { DestinationProvider, RefreshLockStore } from "@keeper.sh/provider-core";
 import { createDestinationProviders } from "@keeper.sh/provider-registry/server";
 import type { DestinationSyncResult, SyncCoordinator } from "@keeper.sh/provider-core";
 import { Polar } from "@polar-sh/sdk";
@@ -25,12 +24,6 @@ const premiumService = createPremiumService({
 
 const oauthConfigs = buildOAuthConfigs(env);
 const oauthProviders = createOAuthProviders(oauthConfigs);
-
-const destinationProviders = createDestinationProviders({
-  database,
-  encryptionKey: env.ENCRYPTION_KEY,
-  oauthProviders,
-});
 
 const persistSyncStatus = async (
   result: DestinationSyncResult,
@@ -55,6 +48,7 @@ const persistSyncStatus = async (
 };
 
 interface SyncContext {
+  destinationProviders: DestinationProvider[];
   syncCoordinator: SyncCoordinator;
   close: () => void;
 }
@@ -68,11 +62,19 @@ const createRedisRefreshLockStore = (redisClient: RedisClient): RefreshLockStore
     await redisClient.del(key);
   },
 });
+const refreshLockRedis = new RedisClient(env.REDIS_URL);
+const refreshLockStore = createRedisRefreshLockStore(refreshLockRedis);
 
 const createSyncContext = (): SyncContext => {
   const redis = new RedisClient(env.REDIS_URL);
 
-  configureRefreshLockStore(createRedisRefreshLockStore(redis));
+  const destinationProviders = createDestinationProviders({
+    database,
+    encryptionKey: env.ENCRYPTION_KEY,
+    oauthProviders,
+    refreshLockStore,
+  });
+
   const broadcastService = createBroadcastService({ redis });
 
   const syncAggregateRuntime = createSyncAggregateRuntime({
@@ -93,7 +95,7 @@ const createSyncContext = (): SyncContext => {
     redis.close();
   };
 
-  return { syncCoordinator, close };
+  return { destinationProviders, syncCoordinator, close };
 };
 
 const createPolarClient = (): Polar | null => {
@@ -108,4 +110,4 @@ const createPolarClient = (): Polar | null => {
 
 const polarClient = createPolarClient();
 
-export { database, premiumService, destinationProviders, createSyncContext, polarClient };
+export { database, premiumService, createSyncContext, polarClient, refreshLockStore };

@@ -153,7 +153,7 @@ abstract class OAuthCalendarProvider<
         }
         throw error;
       }
-    });
+    }, this.config.refreshLockStore ?? null);
 
     const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);
 

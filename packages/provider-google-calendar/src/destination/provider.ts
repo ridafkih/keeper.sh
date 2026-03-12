@@ -18,6 +18,7 @@ import type {
   ListRemoteEventsOptions,
   OAuthTokenProvider,
   PushResult,
+  RefreshLockStore,
   RemoteEvent,
   SyncableEvent,
 } from "@keeper.sh/provider-core";
@@ -43,12 +44,13 @@ interface GoogleCalendarProviderConfig {
   database: BunSQLDatabase;
   oauthProvider: OAuthTokenProvider;
   broadcastSyncStatus?: BroadcastSyncStatus;
+  refreshLockStore?: RefreshLockStore | null;
 }
 
 const createGoogleCalendarProvider = (
   config: GoogleCalendarProviderConfig,
 ): DestinationProvider => {
-  const { database, oauthProvider, broadcastSyncStatus } = config;
+  const { database, oauthProvider, broadcastSyncStatus, refreshLockStore } = config;
 
   return createOAuthDestinationProvider<GoogleAccount, GoogleCalendarConfig>({
     broadcastSyncStatus,
@@ -69,6 +71,7 @@ const createGoogleCalendarProvider = (
     getAccountsForUser: getGoogleAccountsForUser,
     oauthProvider,
     prepareLocalEvents: (events) => events.filter((event) => canSerializeGoogleEvent(event)),
+    refreshLockStore,
   });
 };
 

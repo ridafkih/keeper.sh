@@ -12,23 +12,18 @@ interface RefreshLockStore {
 const REFRESH_LOCK_PREFIX = "oauth:refresh-lock:";
 const REFRESH_LOCK_TTL_SECONDS = 30;
 
-let distributedLockStore: RefreshLockStore | null = null;
-
-const configureRefreshLockStore = (store: RefreshLockStore): void => {
-  distributedLockStore = store;
-};
-
 const inFlightRefreshByCredentialId = new Map<string, Promise<CredentialRefreshResult>>();
 
 const executeWithDistributedLock = async (
+  lockStore: RefreshLockStore | null,
   lockKey: string,
   runRefresh: () => Promise<CredentialRefreshResult>,
 ): Promise<CredentialRefreshResult> => {
-  if (!distributedLockStore) {
+  if (!lockStore) {
     return runRefresh();
   }
 
-  const acquired = await distributedLockStore
+  const acquired = await lockStore
     .tryAcquire(lockKey, REFRESH_LOCK_TTL_SECONDS)
     .catch(() => false);
 
@@ -39,7 +34,7 @@ const executeWithDistributedLock = async (
   try {
     return await runRefresh();
   } finally {
-    await distributedLockStore.release(lockKey).catch(() => {
+    await lockStore.release(lockKey).catch(() => {
       // Lock release is best-effort; TTL ensures cleanup
     });
   }
@@ -48,6 +43,7 @@ const executeWithDistributedLock = async (
 const runWithCredentialRefreshLock = (
   oauthCredentialId: string,
   runRefresh: () => Promise<CredentialRefreshResult>,
+  lockStore: RefreshLockStore | null = null,
 ): Promise<CredentialRefreshResult> => {
   const inFlight = inFlightRefreshByCredentialId.get(oauthCredentialId);
   if (inFlight) {
@@ -55,7 +51,7 @@ const runWithCredentialRefreshLock = (
   }
 
   const lockKey = `${REFRESH_LOCK_PREFIX}${oauthCredentialId}`;
-  const refreshTask = executeWithDistributedLock(lockKey, runRefresh).finally(() => {
+  const refreshTask = executeWithDistributedLock(lockStore, lockKey, runRefresh).finally(() => {
     if (inFlightRefreshByCredentialId.get(oauthCredentialId) === refreshTask) {
       inFlightRefreshByCredentialId.delete(oauthCredentialId);
     }
@@ -66,5 +62,5 @@ const runWithCredentialRefreshLock = (
   return refreshTask;
 };
 
-export { runWithCredentialRefreshLock, configureRefreshLockStore };
+export { runWithCredentialRefreshLock };
 export type { CredentialRefreshResult, RefreshLockStore };

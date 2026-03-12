@@ -24,7 +24,6 @@ export {
   type AuthErrorResult,
 } from "./oauth/provider";
 export {
-  configureRefreshLockStore,
   type RefreshLockStore,
 } from "./oauth/refresh-coordinator";
 export {
@@ -55,6 +54,7 @@ export {
 export { generateEventUid, isKeeperEvent } from "./events/identity";
 export { inferAllDayEvent, resolveIsAllDayEvent } from "./events/all-day";
 export { RateLimiter, type RateLimiterConfig } from "./utils/rate-limiter";
+export { allSettledWithConcurrency, type AllSettledWithConcurrencyOptions } from "./utils/concurrency";
 export { getErrorMessage } from "./utils/error";
 export {
   emitWideEvent,
@@ -76,6 +76,15 @@ export {
   type ExistingSourceEventState,
   type SourceEventDiffOptions,
 } from "./source/event-diff";
+export {
+  filterSourceEventsToSyncWindow,
+  resolveSourceSyncTokenAction,
+  splitSourceEventsByStorageIdentity,
+  type OAuthSyncWindow,
+  type SourceEventsInWindowResult,
+  type SourceEventStoragePartition,
+  type SourceSyncTokenAction,
+} from "./source/sync-diagnostics";
 export {
   insertEventStatesWithConflictResolution,
   type EventStateInsertRow,

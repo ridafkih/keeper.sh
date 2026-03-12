@@ -1,17 +1,21 @@
 import {
   buildSourceEventStateIdsToRemove,
   buildSourceEventsToAdd,
+  filterSourceEventsToSyncWindow,
   OAuthSourceProvider,
   createOAuthSourceProvider,
   encodeStoredSyncToken,
   getOAuthSyncWindow,
   insertEventStatesWithConflictResolution,
   OAUTH_SYNC_WINDOW_VERSION,
+  resolveSourceSyncTokenAction,
   resolveSyncTokenForWindow,
+  splitSourceEventsByStorageIdentity,
   type FetchEventsResult as BaseFetchEventsResult,
   type OAuthSourceConfig,
   type OAuthTokenProvider,
   type ProcessEventsOptions,
+  type RefreshLockStore,
   type SourceEvent,
   type SourceProvider,
   type SourceSyncResult,
@@ -105,6 +109,11 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
   ): Promise<SourceSyncResult> {
     const { database, calendarId } = this.config;
     const { nextSyncToken, isDeltaSync, cancelledEventUids } = options;
+    const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
+    const {
+      events: eventsInWindow,
+      filteredCount: eventsFilteredOutOfWindow,
+    } = filterSourceEventsToSyncWindow(events, syncWindow);
 
     const needsFullResync = await OutlookSourceProvider.hasOutOfRangeEvents(database, calendarId);
 
@@ -130,11 +139,15 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       .from(eventStatesTable)
       .where(eq(eventStatesTable.calendarId, calendarId));
 
-    const eventsToAdd = buildSourceEventsToAdd(existingEvents, events, { isDeltaSync });
+    const eventsToAdd = buildSourceEventsToAdd(existingEvents, eventsInWindow, { isDeltaSync });
     const eventStateIdsToRemove = buildSourceEventStateIdsToRemove(
       existingEvents,
-      events,
+      eventsInWindow,
       { cancelledEventUids, isDeltaSync },
+    );
+    const { eventsToInsert, eventsToUpdate } = splitSourceEventsByStorageIdentity(
+      existingEvents,
+      eventsToAdd,
     );
 
     if (eventStateIdsToRemove.length > EMPTY_COUNT) {
@@ -169,15 +182,24 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       );
     }
 
-    if (nextSyncToken) {
+    const syncTokenAction = resolveSourceSyncTokenAction(nextSyncToken, isDeltaSync);
+    if (syncTokenAction.shouldResetSyncToken) {
+      await this.clearSyncToken();
+    }
+
+    if (syncTokenAction.nextSyncTokenToPersist) {
       await this.updateSyncToken(
-        encodeStoredSyncToken(nextSyncToken, OAUTH_SYNC_WINDOW_VERSION),
+        encodeStoredSyncToken(syncTokenAction.nextSyncTokenToPersist, OAUTH_SYNC_WINDOW_VERSION),
       );
     }
 
     return {
-      eventsAdded: eventsToAdd.length,
+      eventsAdded: eventsToInsert.length,
+      eventsFilteredOutOfWindow,
+      eventsInserted: eventsToInsert.length,
       eventsRemoved: eventStateIdsToRemove.length,
+      eventsUpdated: eventsToUpdate.length,
+      syncTokenResetCount: Number(syncTokenAction.shouldResetSyncToken),
       syncToken: nextSyncToken,
     };
   }
@@ -256,10 +278,11 @@ interface OutlookSourceAccount {
 interface CreateOutlookSourceProviderConfig {
   database: BunSQLDatabase;
   oauthProvider: OAuthTokenProvider;
+  refreshLockStore?: RefreshLockStore | null;
 }
 
 const createOutlookSourceProvider = (config: CreateOutlookSourceProviderConfig): SourceProvider => {
-  const { database, oauthProvider } = config;
+  const { database, oauthProvider, refreshLockStore } = config;
 
   return createOAuthSourceProvider<OutlookSourceAccount, OutlookSourceConfig>({
     buildConfig: (db, account) => ({
@@ -282,6 +305,7 @@ const createOutlookSourceProvider = (config: CreateOutlookSourceProviderConfig):
     database,
     getAllSources: getOutlookSourcesWithCredentials,
     oauthProvider,
+    refreshLockStore,
   });
 };
 

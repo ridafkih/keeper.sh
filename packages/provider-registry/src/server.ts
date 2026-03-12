@@ -3,6 +3,7 @@ import type {
   DestinationProvider,
   OAuthProvider,
   OAuthProviders,
+  RefreshLockStore,
   SourceProvider,
 } from "@keeper.sh/provider-core";
 import {
@@ -24,12 +25,14 @@ interface DestinationProvidersConfig {
   oauthProviders: OAuthProviders;
   encryptionKey?: string;
   broadcastSyncStatus?: BroadcastSyncStatus;
+  refreshLockStore?: RefreshLockStore | null;
 }
 
 interface OAuthFactoryConfig {
   database: BunSQLDatabase;
   oauthProvider: OAuthProvider;
   broadcastSyncStatus?: BroadcastSyncStatus;
+  refreshLockStore?: RefreshLockStore | null;
 }
 
 interface CalDAVFactoryConfig {
@@ -54,6 +57,7 @@ const CALDAV_FACTORIES: Record<string, CalDAVFactory> = {
 interface SourceFactoryConfig {
   database: BunSQLDatabase;
   oauthProvider: OAuthProvider;
+  refreshLockStore?: RefreshLockStore | null;
 }
 
 type SourceFactory = (config: SourceFactoryConfig) => SourceProvider;
@@ -66,13 +70,14 @@ const SOURCE_OAUTH_FACTORIES: Record<string, SourceFactory> = {
 interface SourceProvidersConfig {
   database: BunSQLDatabase;
   oauthProviders: OAuthProviders;
+  refreshLockStore?: RefreshLockStore | null;
 }
 
 const getSourceProvider = (
   providerId: string,
   config: SourceProvidersConfig,
 ): SourceProvider | null => {
-  const { database, oauthProviders } = config;
+  const { database, oauthProviders, refreshLockStore } = config;
   const factory = SOURCE_OAUTH_FACTORIES[providerId];
   const oauth = oauthProviders.getProvider(providerId);
 
@@ -80,11 +85,11 @@ const getSourceProvider = (
     return null;
   }
 
-  return factory({ database, oauthProvider: oauth });
+  return factory({ database, oauthProvider: oauth, refreshLockStore });
 };
 
 const createDestinationProviders = (config: DestinationProvidersConfig): DestinationProvider[] => {
-  const { database, oauthProviders, encryptionKey, broadcastSyncStatus } = config;
+  const { database, oauthProviders, encryptionKey, broadcastSyncStatus, refreshLockStore } = config;
 
   const providers: DestinationProvider[] = [];
 
@@ -92,7 +97,7 @@ const createDestinationProviders = (config: DestinationProvidersConfig): Destina
     const factory = OAUTH_FACTORIES[provider.id];
     const oauth = oauthProviders.getProvider(provider.id);
     if (factory && oauth) {
-      providers.push(factory({ broadcastSyncStatus, database, oauthProvider: oauth }));
+      providers.push(factory({ broadcastSyncStatus, database, oauthProvider: oauth, refreshLockStore }));
     }
   }
 
