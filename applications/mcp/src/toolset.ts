@@ -32,12 +32,54 @@ interface KeeperMcpToolset {
 const eventRangeSchema = {
   from: z.string().datetime(),
   to: z.string().datetime(),
+  timezone: z.string().describe("IANA timezone identifier (e.g. America/New_York)"),
 } satisfies Record<string, z.ZodTypeAny>;
 
 const isEventRangeInput = (
   input: Record<string, unknown>,
-): input is Record<string, unknown> & { from: string; to: string } =>
-  typeof input.from === "string" && typeof input.to === "string";
+): input is Record<string, unknown> & { from: string; to: string; timezone: string } =>
+  typeof input.from === "string" && typeof input.to === "string" && typeof input.timezone === "string";
+
+const toLocalizedTime = (utcIso: string, timeZone: string): string => {
+  const date = new Date(utcIso);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZoneName: "shortOffset",
+  }).formatToParts(date);
+
+  const getPartValue = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  const offset = getPartValue("timeZoneName").replace("GMT", "");
+  let normalizedOffset = "+00:00";
+  if (offset !== "") {
+    normalizedOffset = offset.includes(":")
+      ? offset.padStart(6, "+0")
+      : `${offset.padStart(3, "+0")}:00`;
+  }
+
+  const year = getPartValue("year");
+  const month = getPartValue("month");
+  const day = getPartValue("day");
+  const hour = getPartValue("hour");
+  const minute = getPartValue("minute");
+  const second = getPartValue("second");
+
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}${normalizedOffset}`;
+};
+
+const localizeEvent = (event: KeeperEvent, timeZone: string) => ({
+  ...event,
+  startTime: toLocalizedTime(event.startTime, timeZone),
+  endTime: toLocalizedTime(event.endTime, timeZone),
+});
 
 const toCalendar = (source: KeeperSource): KeeperCalendar => ({
   id: source.id,
@@ -67,13 +109,14 @@ const createKeeperMcpToolset = (readModels: KeeperApi): KeeperMcpToolset => ({
   get_events: {
     title: "Get events",
     description:
-      "Get calendar events within a date range. Provide ISO 8601 datetimes for 'from' and 'to' (e.g. 2025-06-01T00:00:00Z).",
+      "Get calendar events within a date range. Provide ISO 8601 datetimes for 'from' and 'to', and an IANA timezone (e.g. America/New_York) to localize event times.",
     inputSchema: eventRangeSchema,
-    execute: ({ userId }, input) => {
+    execute: async ({ userId }, input) => {
       if (!input || !isEventRangeInput(input)) {
-        throw new Error("'from' and 'to' ISO datetime strings are required");
+        throw new Error("'from', 'to', and 'timezone' are required");
       }
-      return readModels.getEventsInRange(userId, input);
+      const events = await readModels.getEventsInRange(userId, input);
+      return events.map((event) => localizeEvent(event, input.timezone));
     },
   },
 });
