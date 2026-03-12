@@ -24,13 +24,13 @@ interface ReconcileSubscriptionsDependencies {
 
 const RECONCILE_USER_TIMEOUT_MS = 60_000;
 
-const withOperationTimeout = async <TResult>(
+const withOperationTimeout = <TResult>(
   operation: () => Promise<TResult>,
   timeoutMs: number,
   operationName: string,
 ): Promise<TResult> =>
   Promise.race([
-    operation(),
+    Promise.resolve().then(operation),
     Bun.sleep(timeoutMs).then((): never => {
       throw new Error(`${operationName} timed out after ${timeoutMs}ms`);
     }),

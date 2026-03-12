@@ -86,9 +86,7 @@ describe("runReconcileSubscriptionsJob", () => {
       hasBillingClient: true,
       reconcileUserSubscription: (userId) => {
         if (userId === "user-2") {
-          return new Promise<void>(() => {
-            // intentionally unresolved
-          });
+          return Bun.sleep(10_000);
         }
         return Promise.resolve();
       },

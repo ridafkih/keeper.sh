@@ -118,12 +118,13 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
 
     const needsFullResync = await OutlookSourceProvider.hasOutOfRangeEvents(database, calendarId);
 
-    if (needsFullResync) {
-      await OutlookSourceProvider.clearSourceAndResetToken(database, calendarId);
+    if (isDeltaSync && needsFullResync) {
+      await this.clearSyncToken();
       return {
         eventsAdded: EMPTY_COUNT,
         eventsRemoved: EMPTY_COUNT,
         fullSyncRequired: true,
+        syncTokenResetCount: 1,
       };
     }
 
@@ -247,18 +248,6 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       .limit(1);
 
     return outOfRange.length > EMPTY_COUNT;
-  }
-
-  private static async clearSourceAndResetToken(
-    database: BunSQLDatabase,
-    calendarId: string,
-  ): Promise<void> {
-    await database.delete(eventStatesTable).where(eq(eventStatesTable.calendarId, calendarId));
-
-    await database
-      .update(calendarsTable)
-      .set({ syncToken: null })
-      .where(eq(calendarsTable.id, calendarId));
   }
 
 }

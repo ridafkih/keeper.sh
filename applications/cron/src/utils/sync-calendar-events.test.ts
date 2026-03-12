@@ -76,9 +76,7 @@ describe("syncUserSources", () => {
         destinationOperationTimeoutMs: 50,
         fetchAndSyncSourceForCalendar: (source) => {
           if (source.id === "source-2") {
-            return new Promise<void>(() => {
-              // intentionally unresolved
-            });
+            return Bun.sleep(10_000);
           }
           return Promise.resolve();
         },
@@ -303,9 +301,7 @@ describe("runSyncJob", () => {
       },
       syncUserSourcesForUser: (userId) => {
         if (userId === "user-2") {
-          return new Promise<SyncResult>(() => {
-            // intentionally unresolved
-          });
+          return Bun.sleep(10_000).then(() => createSyncResult({}));
         }
 
         return Promise.resolve(createSyncResult({
