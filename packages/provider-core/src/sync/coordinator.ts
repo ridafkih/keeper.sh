@@ -31,6 +31,8 @@ interface SyncProgressUpdate {
 interface SyncContext {
   userId: string;
   generation: number;
+  jobName?: string;
+  jobType?: string;
   isCurrent: () => Promise<boolean>;
   onDestinationSync?: (result: DestinationSyncResult) => Promise<void>;
   onSyncProgress?: (update: SyncProgressUpdate) => void;

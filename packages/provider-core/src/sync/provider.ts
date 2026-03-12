@@ -60,6 +60,12 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
       widelog.set("destination.provider", this.id);
       widelog.set("user.id", userId);
       widelog.set("local_events.count", localEvents.length);
+      if (context.jobName) {
+        widelog.set("job.name", context.jobName);
+      }
+      if (context.jobType) {
+        widelog.set("job.type", context.jobType);
+      }
       widelog.time.start("duration_ms");
 
       try {

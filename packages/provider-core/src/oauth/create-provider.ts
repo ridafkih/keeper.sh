@@ -84,6 +84,12 @@ const createOAuthDestinationProvider = <
           widelog.set("operation.type", "sync");
           widelog.set("destination.calendar_id", account.calendarId);
           widelog.set("user.id", userId);
+          if (context.jobName) {
+            widelog.set("job.name", context.jobName);
+          }
+          if (context.jobType) {
+            widelog.set("job.type", context.jobType);
+          }
           widelog.time.start("duration_ms");
 
           const localEvents = await getEventsForDestination(database, account.calendarId);
