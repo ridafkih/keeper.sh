@@ -12,6 +12,7 @@ interface PartialGoogleDateTime {
 
 interface GoogleApiError {
   code?: number;
+  message?: string;
   status?: string;
 }
 

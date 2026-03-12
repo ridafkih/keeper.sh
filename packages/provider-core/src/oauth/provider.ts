@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { CalendarProvider } from "../sync/provider";
 import { RateLimiter } from "../utils/rate-limiter";
 import type { DeleteResult, OAuthProviderConfig, PushResult, SyncableEvent } from "../types";
+import { isOAuthReauthRequiredError } from "./error-classification";
 
 const DEFAULT_CONCURRENCY = 10;
 const DEFAULT_REQUESTS_PER_MINUTE = 600;
@@ -142,7 +143,9 @@ abstract class OAuthCalendarProvider<
     const tokenData = await this.oauthProvider
       .refreshAccessToken(refreshToken)
       .catch(async (error) => {
-        await this.markNeedsReauthentication();
+        if (isOAuthReauthRequiredError(error)) {
+          await this.markNeedsReauthentication();
+        }
         throw error;
       });
 

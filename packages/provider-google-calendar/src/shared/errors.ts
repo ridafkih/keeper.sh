@@ -8,8 +8,25 @@ const hasRateLimitMessage = (message: string | undefined): boolean => {
   return message.includes("429") || message.includes("rateLimitExceeded");
 };
 
+const hasReauthPermissionMessage = (message: string | undefined): boolean => {
+  if (!message) {
+    return false;
+  }
+
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("insufficient authentication scopes")
+    || normalized.includes("invalid credentials")
+    || normalized.includes("login required")
+  );
+};
+
 const isAuthError = (status: number, error: GoogleApiError | undefined): boolean => {
-  if (status === HTTP_STATUS.FORBIDDEN && error?.status === "PERMISSION_DENIED") {
+  if (
+    status === HTTP_STATUS.FORBIDDEN
+    && error?.status === "PERMISSION_DENIED"
+    && hasReauthPermissionMessage(error?.message)
+  ) {
     return true;
   }
   if (status === HTTP_STATUS.UNAUTHORIZED && error?.status === "UNAUTHENTICATED") {

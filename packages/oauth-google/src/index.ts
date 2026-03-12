@@ -11,6 +11,7 @@ const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 const GOOGLE_CALENDAR_LIST_SCOPE = "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
 const GOOGLE_EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
 const REQUEST_TIMEOUT_MS = 15_000;
+const REFRESH_MAX_ATTEMPTS = 2;
 
 const isRequestTimeoutError = (error: unknown): boolean =>
   error instanceof Error
@@ -33,6 +34,80 @@ interface GoogleOAuthService {
   exchangeCodeForTokens: (code: string, callbackUrl: string) => Promise<GoogleTokenResponse>;
   refreshAccessToken: (refreshToken: string) => Promise<GoogleTokenResponse>;
 }
+
+interface GoogleTokenErrorPayload {
+  error?: string;
+  error_description?: string;
+  error_subtype?: string;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const readOptionalString = (
+  value: Record<string, unknown>,
+  key: string,
+): string | undefined => {
+  const entry = value[key];
+  if (typeof entry !== "string") {
+    return;
+  }
+  return entry;
+};
+
+class GoogleOAuthRefreshError extends Error {
+  readonly status: number | null;
+  readonly oauthErrorCode?: string;
+  readonly oauthErrorSubtype?: string;
+  readonly oauthReauthRequired: boolean;
+  readonly oauthRetriable: boolean;
+
+  constructor(
+    message: string,
+    options: {
+      status: number | null;
+      oauthErrorCode?: string;
+      oauthErrorSubtype?: string;
+      oauthReauthRequired: boolean;
+      oauthRetriable: boolean;
+    },
+  ) {
+    super(message);
+    this.name = "GoogleOAuthRefreshError";
+    this.status = options.status;
+    this.oauthErrorCode = options.oauthErrorCode;
+    this.oauthErrorSubtype = options.oauthErrorSubtype;
+    this.oauthReauthRequired = options.oauthReauthRequired;
+    this.oauthRetriable = options.oauthRetriable;
+  }
+}
+
+const isRetriableStatusCode = (status: number): boolean => status === 429 || status >= 500;
+
+const parseGoogleTokenErrorPayload = (value: string): GoogleTokenErrorPayload | null => {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!isRecord(parsed)) {
+      return null;
+    }
+
+    const error = readOptionalString(parsed, "error");
+    const errorDescription = readOptionalString(parsed, "error_description");
+    const errorSubtype = readOptionalString(parsed, "error_subtype");
+
+    return {
+      ...(error && { error }),
+      ...(errorDescription && { error_description: errorDescription }),
+      ...(errorSubtype && { error_subtype: errorSubtype }),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const getRefreshErrorCode = (
+  payload: GoogleTokenErrorPayload | null,
+): string | undefined => payload?.error?.toLowerCase();
 
 const createGoogleOAuthService = (credentials: GoogleOAuthCredentials): GoogleOAuthService => {
   const { clientId, clientSecret } = credentials;
@@ -86,31 +161,87 @@ const createGoogleOAuthService = (credentials: GoogleOAuthCredentials): GoogleOA
   };
 
   const refreshAccessToken = async (refreshToken: string): Promise<GoogleTokenResponse> => {
-    const response = await fetch(GOOGLE_TOKEN_URL, {
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-      }),
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      method: "POST",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    }).catch((error) => {
-      if (isRequestTimeoutError(error)) {
-        throw new Error(`Token refresh timed out after ${REQUEST_TIMEOUT_MS}ms`);
+    for (let attempt = 1; attempt <= REFRESH_MAX_ATTEMPTS; attempt++) {
+      const response = await fetch(GOOGLE_TOKEN_URL, {
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          grant_type: "refresh_token",
+          refresh_token: refreshToken,
+        }),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        method: "POST",
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      }).catch((error) => {
+        if (isRequestTimeoutError(error)) {
+          const timeoutError = new GoogleOAuthRefreshError(
+            `Token refresh timed out after ${REQUEST_TIMEOUT_MS}ms`,
+            {
+              oauthReauthRequired: false,
+              oauthRetriable: true,
+              status: null,
+            },
+          );
+
+          if (attempt < REFRESH_MAX_ATTEMPTS) {
+            return timeoutError;
+          }
+
+          throw timeoutError;
+        }
+
+        if (attempt < REFRESH_MAX_ATTEMPTS) {
+          return error;
+        }
+
+        throw error;
+      });
+
+      if (response instanceof GoogleOAuthRefreshError) {
+        continue;
       }
 
-      throw error;
-    });
+      if (response instanceof Error) {
+        continue;
+      }
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Token refresh failed (${response.status}): ${error}`);
+      if (!response.ok) {
+        const rawError = await response.text();
+        const parsedError = parseGoogleTokenErrorPayload(rawError);
+        const oauthErrorCode = getRefreshErrorCode(parsedError);
+        const oauthErrorSubtype = parsedError?.error_subtype;
+        const oauthReauthRequired = response.status === 400 && oauthErrorCode === "invalid_grant";
+        const oauthRetriable = isRetriableStatusCode(response.status);
+        const refreshError = new GoogleOAuthRefreshError(
+          `Token refresh failed (${response.status}): ${rawError}`,
+          {
+            oauthErrorCode,
+            oauthErrorSubtype,
+            oauthReauthRequired,
+            oauthRetriable,
+            status: response.status,
+          },
+        );
+
+        if (refreshError.oauthRetriable && attempt < REFRESH_MAX_ATTEMPTS) {
+          continue;
+        }
+
+        throw refreshError;
+      }
+
+      const body = await response.json();
+      return googleTokenResponseSchema.assert(body);
     }
 
-    const body = await response.json();
-    return googleTokenResponseSchema.assert(body);
+    throw new GoogleOAuthRefreshError(
+      "Token refresh failed after retry attempts",
+      {
+        oauthReauthRequired: false,
+        oauthRetriable: false,
+        status: null,
+      },
+    );
   };
 
   return {

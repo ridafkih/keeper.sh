@@ -7,6 +7,7 @@ import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { eq } from "drizzle-orm";
 import type { OAuthSourceConfig, SourceEvent, SourceSyncResult } from "../types";
 import type { OAuthTokenProvider } from "./provider";
+import { isOAuthReauthRequiredError } from "./error-classification";
 
 const MS_PER_SECOND = 1000;
 
@@ -117,7 +118,9 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
     const tokenData = await this.oauthProvider
       .refreshAccessToken(refreshToken)
       .catch(async (error) => {
-        await this.markNeedsReauthentication();
+        if (isOAuthReauthRequiredError(error)) {
+          await this.markNeedsReauthentication();
+        }
         throw error;
       });
 
