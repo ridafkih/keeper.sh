@@ -5,6 +5,7 @@ import {
   createOAuthSourceProvider,
   encodeStoredSyncToken,
   getOAuthSyncWindow,
+  insertEventStatesWithConflictResolution,
   OAUTH_SYNC_WINDOW_VERSION,
   resolveSyncTokenForWindow,
   type FetchEventsResult as BaseFetchEventsResult,
@@ -151,7 +152,8 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
     }
 
     if (eventsToAdd.length > EMPTY_COUNT) {
-      await database.insert(eventStatesTable).values(
+      await insertEventStatesWithConflictResolution(
+        database,
         eventsToAdd.map((event) => ({
           availability: event.availability,
           calendarId,

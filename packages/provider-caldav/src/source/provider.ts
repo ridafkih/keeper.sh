@@ -1,6 +1,7 @@
 import {
   buildSourceEventStateIdsToRemove,
   buildSourceEventsToAdd,
+  insertEventStatesWithConflictResolution,
   isKeeperEvent,
   reportError,
 } from "@keeper.sh/provider-core";
@@ -145,7 +146,8 @@ const createCalDAVSourceProvider = (
     }
 
     if (eventsToAdd.length > EMPTY_COUNT) {
-      await database.insert(eventStatesTable).values(
+      await insertEventStatesWithConflictResolution(
+        database,
         eventsToAdd.map((event) => ({
           availability: event.availability,
           calendarId,

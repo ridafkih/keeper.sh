@@ -70,6 +70,11 @@ export {
   type ExistingSourceEventState,
   type SourceEventDiffOptions,
 } from "./source/event-diff";
+export {
+  insertEventStatesWithConflictResolution,
+  type EventStateInsertRow,
+  type EventStateInsertClient,
+} from "./source/write-event-states";
 export { syncDestinationsForUser, type DestinationProvider } from "./sync/destinations";
 export {
   createSyncCoordinator,

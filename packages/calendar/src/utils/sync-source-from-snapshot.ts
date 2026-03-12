@@ -9,6 +9,7 @@ import { desc, eq, inArray } from "drizzle-orm";
 import { parseIcsEvents } from "./parse-ics-events";
 import { buildSnapshotSyncPlan } from "./snapshot-sync-plan";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { insertEventStatesWithConflictResolution } from "./write-event-states";
 
 const FIRST_SNAPSHOT_INDEX = 1;
 const MINIMUM_EVENTS_TO_PROCESS = 0;
@@ -213,7 +214,7 @@ const addEvents = async (
     return row;
   });
 
-  await database.insert(eventStatesTable).values(rows);
+  await insertEventStatesWithConflictResolution(database, rows);
 };
 
 const syncSourceFromSnapshot = async (database: BunSQLDatabase, source: Source): Promise<void> => {

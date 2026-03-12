@@ -6,6 +6,7 @@ import { parseIcsCalendar } from "@keeper.sh/calendar";
 import { desc, eq, inArray } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { parseOptionalJsonObject } from "./optional-json";
+import { insertEventStatesWithConflictResolution } from "./write-event-states";
 
 const FIRST_RESULT_LIMIT = 1;
 const EMPTY_EVENTS_COUNT = 0;
@@ -176,7 +177,7 @@ const createSyncCalendarService = (database: BunSQLDatabase): SyncCalendarServic
       startTimeZone: event.startTimeZone,
     }));
 
-    await database.insert(eventStatesTable).values(rows);
+    await insertEventStatesWithConflictResolution(database, rows);
   };
 
   const createSnapshot = async (calendarId: string, ical: string): Promise<void> => {
