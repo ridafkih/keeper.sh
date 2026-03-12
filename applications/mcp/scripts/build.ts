@@ -1,9 +1,14 @@
-import { build } from "bun";
+import { Glob, build } from "bun";
+
+const entrypoints = [
+  ...new Glob("src/routes/**/!(*test).ts").scanSync(),
+  ...new Glob("src/index.ts").scanSync(),
+];
 
 await build({
-  entrypoints: ["src/index.ts"],
+  entrypoints,
   outdir: "./dist",
   root: "src",
-  splitting: false,
+  splitting: true,
   target: "bun",
 });

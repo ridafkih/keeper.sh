@@ -96,11 +96,9 @@ There are six images currently available, two of them are designed for convenien
 | MICROSOFT_CLIENT_ID            | `api`, `cron` | Optional. Required for Microsoft Outlook integration.                                                                                                               |
 | MICROSOFT_CLIENT_SECRET        | `api`, `cron` | Optional. Required for Microsoft Outlook integration.                                                                                                               |
 | TRUSTED_ORIGINS                | `api`         | Optional. Comma-separated list of additional trusted origins for CSRF protection.<br><br>e.g. `http://192.168.1.100,http://keeper.local,https://keeper.example.com` |
-| MCP_RESOURCE_URL               | `api`         | Optional. Public URL of the MCP resource. Enables OAuth resource metadata for MCP clients.<br><br>e.g. `https://keeper.example.com/mcp`                            |
+| MCP_PUBLIC_URL                 | `api`, `mcp`  | Optional. Public URL of the MCP resource. Enables OAuth on the API and identifies the MCP server to clients.<br><br>e.g. `https://keeper.example.com/mcp`           |
 | VITE_MCP_URL                   | `web`         | Optional. Internal URL the web server uses to proxy `/mcp` requests to the MCP service.<br><br>e.g. `http://mcp:3002`                                              |
 | MCP_PORT                       | `mcp`         | Optional. Port the MCP server listens on.<br><br>e.g. `3002`                                                                                                       |
-| MCP_PUBLIC_URL                 | `mcp`         | Optional. Public URL where the MCP server is reachable by clients.<br><br>e.g. `https://keeper.example.com/mcp`                                                    |
-| WEB_BASE_URL                   | `mcp`         | Optional. URL of the canary-web instance, used for OAuth consent redirects.<br><br>e.g. `http://localhost:3000`                                                     |
 
 The following environment variables are baked into the web image at **build time**. They are pre-configured in the official Docker images and only need to be set if you are building from source.
 
@@ -469,9 +467,9 @@ The MCP server is proxied through the web service at `/mcp`, the same way the AP
 
 To enable MCP on a self-hosted instance:
 
-1. Run the `keeper-mcp` container with `MCP_PORT`, `MCP_PUBLIC_URL`, `WEB_BASE_URL`, `DATABASE_URL`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL`.
-2. Set `VITE_MCP_URL` on the `web` service to the internal URL of the MCP container (e.g. `http://mcp:3002`).
-3. Set `MCP_RESOURCE_URL` on the `api` service to the public-facing MCP URL (e.g. `https://keeper.example.com/mcp`).
+1. Run the `keeper-mcp` container with `MCP_PORT`, `MCP_PUBLIC_URL`, `DATABASE_URL`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL`.
+2. Set `MCP_PUBLIC_URL` on the `api` service to the same value (e.g. `https://keeper.example.com/mcp`).
+3. Set `VITE_MCP_URL` on the `web` service to the internal URL of the MCP container (e.g. `http://mcp:3002`).
 
 # Modules
 

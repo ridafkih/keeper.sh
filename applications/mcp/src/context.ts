@@ -14,11 +14,10 @@ const { auth: baseAuth } = createAuth({
   baseUrl: env.BETTER_AUTH_URL,
   commercialMode: env.COMMERCIAL_MODE ?? false,
   mcpResourceUrl: env.MCP_PUBLIC_URL,
-  webBaseUrl: env.WEB_BASE_URL,
 });
 
 if (!isKeeperMcpEnabledAuth(baseAuth)) {
-  throw new Error("MCP auth is not configured — ensure mcpResourceUrl and webBaseUrl are set");
+  throw new Error("MCP auth is not configured — ensure mcpResourceUrl is set");
 }
 
 const auth = baseAuth;

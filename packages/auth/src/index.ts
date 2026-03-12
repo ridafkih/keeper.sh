@@ -45,7 +45,6 @@ interface AuthConfig {
   database: BunSQLDatabase;
   secret: string;
   baseUrl: string;
-  webBaseUrl?: string;
   commercialMode?: boolean;
   polarAccessToken?: string;
   polarMode?: "sandbox" | "production";
@@ -122,7 +121,6 @@ const createAuth = (config: AuthConfig) => {
     database,
     secret,
     baseUrl,
-    webBaseUrl,
     commercialMode = false,
     polarAccessToken,
     polarMode,
@@ -176,10 +174,10 @@ const createAuth = (config: AuthConfig) => {
 
   if (polarClient) {
     const buildCheckoutSuccessUrl = (): string => {
-      if (!webBaseUrl) {
+      if (!baseUrl) {
         return "/dashboard/billing?success=true";
       }
-      return new URL("/dashboard/billing?success=true", webBaseUrl).toString();
+      return new URL("/dashboard/billing?success=true", baseUrl).toString();
     };
 
     const checkoutSuccessUrl = buildCheckoutSuccessUrl();
@@ -210,7 +208,7 @@ const createAuth = (config: AuthConfig) => {
 
   const mcpOptions = resolveMcpAuthOptions({
     resourceBaseUrl: mcpResourceUrl,
-    webBaseUrl,
+    webBaseUrl: baseUrl,
   });
 
   if (mcpOptions) {

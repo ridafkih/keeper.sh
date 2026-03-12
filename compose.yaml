@@ -34,7 +34,6 @@ services:
     container_name: keeper-api
     env_file: .env
     environment:
-      API_PORT: "3001"
       ENV: production
       NODE_EXTRA_CA_CERTS: /certs/global-bundle.pem
     volumes:

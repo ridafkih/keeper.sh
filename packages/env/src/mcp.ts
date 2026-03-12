@@ -7,7 +7,6 @@ const schema = {
   DATABASE_URL: "string.url",
   MCP_PORT: "number",
   MCP_PUBLIC_URL: "string.url",
-  WEB_BASE_URL: "string.url",
 } as const;
 
 const loadMcpEnv = () => arkenv(schema);
