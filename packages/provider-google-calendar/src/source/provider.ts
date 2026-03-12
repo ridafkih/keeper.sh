@@ -154,36 +154,40 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
       eventsToAdd,
     );
 
-    if (eventStateIdsToRemove.length > EMPTY_COUNT) {
-      await database
-        .delete(eventStatesTable)
-        .where(
-          and(
-            eq(eventStatesTable.calendarId, calendarId),
-            inArray(eventStatesTable.id, eventStateIdsToRemove),
-          ),
-        );
-    }
+    if (eventStateIdsToRemove.length > EMPTY_COUNT || eventsToAdd.length > EMPTY_COUNT) {
+      await database.transaction(async (transactionDatabase) => {
+        if (eventStateIdsToRemove.length > EMPTY_COUNT) {
+          await transactionDatabase
+            .delete(eventStatesTable)
+            .where(
+              and(
+                eq(eventStatesTable.calendarId, calendarId),
+                inArray(eventStatesTable.id, eventStateIdsToRemove),
+              ),
+            );
+        }
 
-    if (eventsToAdd.length > EMPTY_COUNT) {
-      await insertEventStatesWithConflictResolution(
-        database,
-        eventsToAdd.map((event) => ({
-          availability: event.availability,
-          calendarId,
-          description: event.description,
-          endTime: event.endTime,
-          exceptionDates: stringifyIfPresent(event.exceptionDates),
-          isAllDay: event.isAllDay,
-          location: event.location,
-          recurrenceRule: stringifyIfPresent(event.recurrenceRule),
-          sourceEventType: event.sourceEventType,
-          sourceEventUid: event.uid,
-          startTime: event.startTime,
-          startTimeZone: event.startTimeZone,
-          title: event.title,
-        })),
-      );
+        if (eventsToAdd.length > EMPTY_COUNT) {
+          await insertEventStatesWithConflictResolution(
+            transactionDatabase,
+            eventsToAdd.map((event) => ({
+              availability: event.availability,
+              calendarId,
+              description: event.description,
+              endTime: event.endTime,
+              exceptionDates: stringifyIfPresent(event.exceptionDates),
+              isAllDay: event.isAllDay,
+              location: event.location,
+              recurrenceRule: stringifyIfPresent(event.recurrenceRule),
+              sourceEventType: event.sourceEventType,
+              sourceEventUid: event.uid,
+              startTime: event.startTime,
+              startTimeZone: event.startTimeZone,
+              title: event.title,
+            })),
+          );
+        }
+      });
     }
 
     const syncTokenAction = resolveSourceSyncTokenAction(nextSyncToken, isDeltaSync);
