@@ -18,7 +18,11 @@ export class BroadcastClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private shouldReconnect = true;
 
-  constructor(private url: string) {}
+  private url: string;
+
+  constructor(url: string) {
+    this.url = url;
+  }
 
   connect(): void {
     this.shouldReconnect = true;

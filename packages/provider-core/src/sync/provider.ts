@@ -18,7 +18,7 @@ import {
 import type { EventMapping } from "../events/mappings";
 import { createSyncEventContentHash } from "../events/content-hash";
 import type { SyncContext, SyncStage } from "./coordinator";
-import { buildRemoveOperations } from "./operations";
+import { computeSyncOperations } from "./operations";
 import { widelog } from "widelogger";
 
 const INITIAL_REMOTE_EVENT_COUNT = 0;
@@ -35,8 +35,11 @@ const MIN_REMOTE_COUNT = 0;
 abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig> {
   abstract readonly name: string;
   abstract readonly id: string;
+  protected config: TConfig;
 
-  constructor(protected config: TConfig) {}
+  constructor(config: TConfig) {
+    this.config = config;
+  }
 
   abstract pushEvents(events: SyncableEvent[]): Promise<PushResult[]>;
   abstract deleteEvents(eventIds: string[]): Promise<DeleteResult[]>;
@@ -85,7 +88,7 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
           return CalendarProvider.emptySyncResult();
         }
 
-        const { operations, staleMappingIds } = CalendarProvider.computeSyncOperations(
+        const { operations, staleMappingIds } = computeSyncOperations(
           localEvents,
           existingMappings,
           remoteEvents,

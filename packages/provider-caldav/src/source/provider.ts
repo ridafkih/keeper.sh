@@ -245,7 +245,7 @@ const createCalDAVSourceProvider = (
 
   const syncSource = async (calendarId: string): Promise<CalDAVSourceSyncResult> => {
     const sources = await sourceService.getAllCalDAVSources();
-    const source = sources.find((source) => source.calendarId === calendarId);
+    const source = sources.find(({ calendarId: sourceCalendarId }) => sourceCalendarId === calendarId);
 
     if (!source) {
       return { eventsAdded: EMPTY_COUNT, eventsRemoved: EMPTY_COUNT, syncToken: null };

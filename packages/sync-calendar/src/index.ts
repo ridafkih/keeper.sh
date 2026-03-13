@@ -19,11 +19,14 @@ const stringifyIfPresent = (value: unknown) => {
 };
 
 class RemoteCalendarSyncError extends Error {
+  public calendarId: string;
+
   constructor(
-    public calendarId: string,
+    calendarId: string,
     cause: unknown,
   ) {
     super(`Failed to sync remote calendar ${calendarId}`);
+    this.calendarId = calendarId;
     this.cause = cause;
   }
 }
