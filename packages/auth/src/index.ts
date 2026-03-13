@@ -152,10 +152,6 @@ const defaultUnauthenticatedOAuthClientRegistration = (
     return input.body;
   }
 
-  if ("token_endpoint_auth_method" in input.body) {
-    return input.body;
-  }
-
   if (hasAuthHeader(input.headers) || hasSessionCookie(input.headers)) {
     return input.body;
   }
