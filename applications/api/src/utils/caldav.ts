@@ -135,9 +135,18 @@ const createCalDAVDestination = async (
   triggerDestinationSync(userId);
 };
 
+const extractServerHost = (serverUrl: string): string | null => {
+  try {
+    return new URL(serverUrl).host;
+  } catch {
+    return null;
+  }
+};
+
 export {
   DestinationLimitError,
   CalDAVConnectionError,
+  extractServerHost,
   isValidProvider,
   discoverCalendars,
   createCalDAVDestination,

@@ -1,8 +1,9 @@
 import { caldavDiscoverSourceSchema } from "@keeper.sh/data-schemas";
 import { createCalDAVClient } from "@keeper.sh/provider-caldav";
 import { withAuth, withWideEvent } from "../../../../utils/middleware";
-import { respondWithLoggedError } from "../../../../utils/logging";
+import { respondWithLoggedError, widelog } from "../../../../utils/logging";
 import { ErrorResponse } from "../../../../utils/responses";
+import { extractServerHost } from "../../../../utils/caldav";
 
 const POST = withWideEvent(
   withAuth(async ({ request }) => {
@@ -10,6 +11,13 @@ const POST = withWideEvent(
 
     try {
       const { serverUrl, username, password } = caldavDiscoverSourceSchema.assert(body);
+
+      const serverHost = extractServerHost(serverUrl);
+
+      widelog.set("caldav.server_url", serverUrl);
+      if (serverHost) {
+        widelog.set("caldav.server_host", serverHost);
+      }
 
       const client = createCalDAVClient({
         credentials: {
@@ -19,7 +27,12 @@ const POST = withWideEvent(
         serverUrl,
       });
 
-      const calendars = await client.discoverCalendars();
+      const calendars = await widelog.time.measure(
+        "caldav.discover_ms",
+        () => client.discoverCalendars(),
+      );
+
+      widelog.set("caldav.calendars_found", calendars.length);
 
       return Response.json({ calendars });
     } catch (error) {

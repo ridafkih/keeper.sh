@@ -1,7 +1,7 @@
 import { createCalDAVSourceSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { withAuth, withWideEvent } from "../../../../utils/middleware";
-import { respondWithLoggedError } from "../../../../utils/logging";
+import { respondWithLoggedError, widelog } from "../../../../utils/logging";
 import { ErrorResponse } from "../../../../utils/responses";
 import { caldavSourcesQuerySchema } from "../../../../utils/request-query";
 import {
@@ -10,6 +10,7 @@ import {
   getUserCalDAVSources,
   createCalDAVSource,
 } from "../../../../utils/caldav-sources";
+import { extractServerHost } from "../../../../utils/caldav";
 
 const GET = withWideEvent(
   withAuth(async ({ request, userId }) => {
@@ -37,7 +38,21 @@ const POST = withWideEvent(
 
     try {
       const data = createCalDAVSourceSchema.assert(body);
+
+      const serverHost = extractServerHost(data.serverUrl);
+
+      widelog.set("caldav.provider", data.provider);
+      widelog.set("caldav.server_url", data.serverUrl);
+      widelog.set("caldav.calendar_url", data.calendarUrl);
+      if (serverHost) {
+        widelog.set("caldav.server_host", serverHost);
+      }
+
       const source = await createCalDAVSource(userId, data);
+
+      widelog.set("caldav.source_id", source.id);
+      widelog.set("caldav.account_id", source.accountId);
+
       return Response.json(source, { status: HTTP_STATUS.CREATED });
     } catch (error) {
       if (error instanceof CalDAVSourceLimitError) {
