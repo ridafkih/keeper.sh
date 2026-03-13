@@ -33,7 +33,12 @@ const extractHttpContext = (request: Request): Record<string, unknown> => {
 };
 
 const mapHttpStatusToOutcome = (status: number): "success" | "error" =>
-  status >= HTTP_ERROR_THRESHOLD ? "error" : "success";
+{
+  if (status >= HTTP_ERROR_THRESHOLD) {
+    return "error";
+  }
+  return "success";
+};
 
 const handleResponseStatus = (status: number): void => {
   widelog.set("status_code", status);

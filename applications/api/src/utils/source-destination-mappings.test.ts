@@ -57,20 +57,20 @@ const releaseLockNoop = (): void => {
 };
 
 const createUserLockManager = (): UserLockManager => {
-  const lockQueueByUserId = new Map<string, Promise<void>>();
+  const lockQueueByUserId = new Map<string, Promise<unknown>>();
 
   return {
     acquire: async (userId) => {
       const previousLock = lockQueueByUserId.get(userId) ?? Promise.resolve();
 
-      const lockResolver = Promise.withResolvers<void>();
+      const lockResolver = Promise.withResolvers<null>();
       const currentLock = lockResolver.promise;
 
       lockQueueByUserId.set(userId, previousLock.then(() => currentLock));
       await previousLock;
 
       return () => {
-        lockResolver.resolve();
+        lockResolver.resolve(null);
       };
     },
   };
@@ -338,7 +338,7 @@ describe("mapping transaction adversarial behavior", () => {
   });
 
   it("serializes cross-endpoint writes for the same user", async () => {
-    let mappings = new Set<string>([
+    const mappings = new Set<string>([
       createMappingKey("source-a", "dest-legacy"),
       createMappingKey("source-b", "dest-1"),
     ]);

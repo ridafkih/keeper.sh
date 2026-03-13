@@ -72,7 +72,7 @@ const createOAuthDestinationProvider = <
     }
 
     const results = await Promise.all(
-      accounts.map(async (account) => {
+      accounts.map((account) => {
         widelog.set("operation.name", "sync:destination-account");
         widelog.set("operation.type", "sync");
         widelog.set("destination.calendar_id", account.calendarId);

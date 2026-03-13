@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type { SyncableEvent } from "../types";
 import { resolveIsAllDayEvent } from "./all-day";
 
@@ -28,7 +27,7 @@ const createSyncEventContentHash = (event: SyncableEventContent): string => {
     resolveHashedAllDay(event),
   ]);
 
-  return createHash("sha256").update(payload).digest("hex");
+  return new Bun.CryptoHasher("sha256").update(payload).digest("hex");
 };
 
 export { createSyncEventContentHash };

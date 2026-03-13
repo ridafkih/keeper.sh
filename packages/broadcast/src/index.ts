@@ -105,10 +105,8 @@ const createWebsocketHandler = (
     try {
       await options?.onConnect?.(userId, socket);
     } catch {
-      try {
+      if (socket.readyState !== 3) {
         socket.close();
-      } catch {
-        return;
       }
     }
   },

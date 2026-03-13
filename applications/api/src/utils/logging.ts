@@ -30,7 +30,11 @@ const trackStatusError = (status: number, errorType: string): void => {
 
 const respondWithLoggedError = (error: unknown, response: Response): Response => {
   widelog.set("status_code", response.status);
-  widelog.set("outcome", response.status >= 400 ? "error" : "success");
+  if (response.status >= 400) {
+    widelog.set("outcome", "error");
+  } else {
+    widelog.set("outcome", "success");
+  }
   widelog.errorFields(error);
   return response;
 };

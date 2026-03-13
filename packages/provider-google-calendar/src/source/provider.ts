@@ -247,38 +247,6 @@ interface CreateGoogleSourceProviderConfig {
   refreshLockStore?: RefreshLockStore | null;
 }
 
-const createGoogleCalendarSourceProvider = (
-  config: CreateGoogleSourceProviderConfig,
-): SourceProvider => {
-  const { database, oauthProvider, refreshLockStore } = config;
-
-  return createOAuthSourceProvider<GoogleSourceAccount, GoogleSourceConfig>({
-    buildConfig: (db, account) => ({
-      accessToken: account.accessToken,
-      accessTokenExpiresAt: account.accessTokenExpiresAt,
-      calendarAccountId: account.calendarAccountId,
-      calendarId: account.calendarId,
-      database: db,
-      excludeFocusTime: account.excludeFocusTime,
-      excludeOutOfOffice: account.excludeOutOfOffice,
-      excludeWorkingLocation: account.excludeWorkingLocation,
-      externalCalendarId: account.externalCalendarId,
-      oauthCredentialId: account.oauthCredentialId,
-      originalName: account.originalName,
-      refreshToken: account.refreshToken,
-      sourceName: account.sourceName,
-      syncToken: account.syncToken,
-      userId: account.userId,
-    }),
-    createProviderInstance: (providerConfig, oauth) =>
-      new GoogleCalendarSourceProvider(providerConfig, oauth),
-    database,
-    getAllSources: getGoogleSourcesWithCredentials,
-    oauthProvider,
-    refreshLockStore,
-  });
-};
-
 const getGoogleSourcesWithCredentials = async (
   database: BunSQLDatabase,
 ): Promise<GoogleSourceAccount[]> => {
@@ -323,6 +291,38 @@ const getGoogleSourcesWithCredentials = async (
       externalCalendarId: source.externalCalendarId,
       provider: source.provider,
     }];
+  });
+};
+
+const createGoogleCalendarSourceProvider = (
+  config: CreateGoogleSourceProviderConfig,
+): SourceProvider => {
+  const { database, oauthProvider, refreshLockStore } = config;
+
+  return createOAuthSourceProvider<GoogleSourceAccount, GoogleSourceConfig>({
+    buildConfig: (db, account) => ({
+      accessToken: account.accessToken,
+      accessTokenExpiresAt: account.accessTokenExpiresAt,
+      calendarAccountId: account.calendarAccountId,
+      calendarId: account.calendarId,
+      database: db,
+      excludeFocusTime: account.excludeFocusTime,
+      excludeOutOfOffice: account.excludeOutOfOffice,
+      excludeWorkingLocation: account.excludeWorkingLocation,
+      externalCalendarId: account.externalCalendarId,
+      oauthCredentialId: account.oauthCredentialId,
+      originalName: account.originalName,
+      refreshToken: account.refreshToken,
+      sourceName: account.sourceName,
+      syncToken: account.syncToken,
+      userId: account.userId,
+    }),
+    createProviderInstance: (providerConfig, oauth) =>
+      new GoogleCalendarSourceProvider(providerConfig, oauth),
+    database,
+    getAllSources: getGoogleSourcesWithCredentials,
+    oauthProvider,
+    refreshLockStore,
   });
 };
 

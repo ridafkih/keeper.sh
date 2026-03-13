@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { buildSnapshotSyncPlan } from "./snapshot-sync-plan";
-import type { EventTimeSlot } from "../types";
+import type { EventTimeSlot } from "./types";
 import type { SnapshotStoredEvent } from "./snapshot-sync-plan";
 
 const createEventTimeSlot = (overrides: Partial<EventTimeSlot>): EventTimeSlot => ({

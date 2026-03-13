@@ -24,7 +24,7 @@ interface ReconcileSubscriptionsDependencies {
 
 const RECONCILE_USER_TIMEOUT_MS = 60_000;
 
-const invokeOperation = async <TResult>(
+const invokeOperation = <TResult>(
   operation: () => Promise<TResult>,
 ): Promise<TResult> => operation();
 

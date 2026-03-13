@@ -16,13 +16,14 @@ interface SyncDestinationsOptions {
   jobType?: string;
 }
 
-const invokeProviderSync = async (
+const invokeProviderSync = (
   provider: DestinationProvider,
   userId: string,
   context: SyncContext,
-): Promise<SyncResult | null> => provider.syncForUser(userId, context);
+): Promise<SyncResult | null> =>
+  Promise.resolve().then(() => provider.syncForUser(userId, context));
 
-const syncDestinationsForUser = async (
+const syncDestinationsForUser = (
   userId: string,
   providers: DestinationProvider[],
   syncCoordinator: SyncCoordinator,

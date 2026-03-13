@@ -32,6 +32,8 @@
     "import/no-anonymous-default-export": "off",
     "import/consistent-type-specifier-style": "off",
     "import/no-duplicates": "off",
+    "import/no-nodejs-modules": "off",
+    "import/no-relative-parent-imports": "off",
     "unicorn/no-null": "off",
     "unicorn/prefer-global-this": "off",
     "unicorn/prefer-top-level-await": "off",

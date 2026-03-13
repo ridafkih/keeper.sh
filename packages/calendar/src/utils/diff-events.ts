@@ -1,4 +1,4 @@
-import type { EventDiff, EventTimeSlot, StoredEventTimeSlot } from "../types";
+import type { EventDiff, EventTimeSlot, StoredEventTimeSlot } from "./types";
 
 const normalizeTimeZone = (timeZone: string | null | undefined): string => timeZone ?? "";
 const EMPTY_SERIALIZED_VALUE = "";

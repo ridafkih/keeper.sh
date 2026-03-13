@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "bun:test";
 import { fixtureManifest, getFixturePath } from "@keeper.sh/fixtures";
 import { parseICalToRemoteEvent } from "./ics";
@@ -9,7 +8,7 @@ describe("parseICalToRemoteEvent fixtures", () => {
   for (const fixtureSource of enabledFixtures) {
     it(`parses first event from ${fixtureSource.id}`, async () => {
       const fixturePath = getFixturePath(fixtureSource);
-      const icsString = await readFile(fixturePath, "utf8");
+      const icsString = await Bun.file(fixturePath).text();
 
       const parsedEvent = parseICalToRemoteEvent(icsString);
 

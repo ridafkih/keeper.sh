@@ -39,34 +39,6 @@ interface OutlookCalendarProviderConfig {
   refreshLockStore?: RefreshLockStore | null;
 }
 
-const createOutlookCalendarProvider = (
-  config: OutlookCalendarProviderConfig,
-): DestinationProvider => {
-  const { database, oauthProvider, broadcastSyncStatus, refreshLockStore } = config;
-
-  return createOAuthDestinationProvider<OutlookAccount, OutlookCalendarConfig>({
-    broadcastSyncStatus,
-    buildConfig: (db, account, broadcast) => ({
-      accessToken: account.accessToken,
-      accessTokenExpiresAt: account.accessTokenExpiresAt,
-      accountId: account.accountId,
-      broadcastSyncStatus: broadcast,
-      calendarId: account.calendarId,
-      database: db,
-      refreshToken: account.refreshToken,
-      userId: account.userId,
-    }),
-    createProviderInstance: (providerConfig, oauth) =>
-      new OutlookCalendarProviderInstance(providerConfig, oauth),
-    database,
-    getAccountsForUser: getOutlookAccountsForUser,
-    oauthProvider,
-    prepareLocalEvents: (events) =>
-      events.filter((event) => event.availability !== "workingElsewhere"),
-    refreshLockStore,
-  });
-};
-
 class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalendarConfig> {
   readonly name = "Outlook Calendar";
   readonly id = "outlook";
@@ -246,6 +218,34 @@ class OutlookCalendarProviderInstance extends OAuthCalendarProvider<OutlookCalen
     }
   }
 }
+
+const createOutlookCalendarProvider = (
+  config: OutlookCalendarProviderConfig,
+): DestinationProvider => {
+  const { database, oauthProvider, broadcastSyncStatus, refreshLockStore } = config;
+
+  return createOAuthDestinationProvider<OutlookAccount, OutlookCalendarConfig>({
+    broadcastSyncStatus,
+    buildConfig: (db, account, broadcast) => ({
+      accessToken: account.accessToken,
+      accessTokenExpiresAt: account.accessTokenExpiresAt,
+      accountId: account.accountId,
+      broadcastSyncStatus: broadcast,
+      calendarId: account.calendarId,
+      database: db,
+      refreshToken: account.refreshToken,
+      userId: account.userId,
+    }),
+    createProviderInstance: (providerConfig, oauth) =>
+      new OutlookCalendarProviderInstance(providerConfig, oauth),
+    database,
+    getAccountsForUser: getOutlookAccountsForUser,
+    oauthProvider,
+    prepareLocalEvents: (events) =>
+      events.filter((event) => event.availability !== "workingElsewhere"),
+    refreshLockStore,
+  });
+};
 
 export { createOutlookCalendarProvider };
 export type { OutlookCalendarProviderConfig };

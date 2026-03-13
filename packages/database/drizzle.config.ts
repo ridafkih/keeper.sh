@@ -1,5 +1,3 @@
-import { join } from "node:path";
-
 export default {
   dbCredentials: {
     url: process.env.DATABASE_URL,
@@ -7,7 +5,7 @@ export default {
   dialect: "postgresql",
   out: "./drizzle",
   schema: [
-    join(__dirname, "src", "database", "schema.ts"),
-    join(__dirname, "src", "database", "auth-schema.ts"),
+    "./src/database/schema.ts",
+    "./src/database/auth-schema.ts",
   ],
 };

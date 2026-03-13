@@ -58,7 +58,11 @@ const extractAuthContext = (request: Request, pathname: string): Record<string, 
 
 const handleAuthResponseStatus = (response: Response): void => {
   widelog.set("status_code", response.status);
-  widelog.set("outcome", response.status >= HTTP_ERROR_THRESHOLD ? "error" : "success");
+  if (response.status >= HTTP_ERROR_THRESHOLD) {
+    widelog.set("outcome", "error");
+  } else {
+    widelog.set("outcome", "success");
+  }
   if (response.status >= HTTP_ERROR_THRESHOLD) {
     trackStatusError(response.status, "AuthError");
   }

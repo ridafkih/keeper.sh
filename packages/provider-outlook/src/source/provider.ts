@@ -267,34 +267,6 @@ interface CreateOutlookSourceProviderConfig {
   refreshLockStore?: RefreshLockStore | null;
 }
 
-const createOutlookSourceProvider = (config: CreateOutlookSourceProviderConfig): SourceProvider => {
-  const { database, oauthProvider, refreshLockStore } = config;
-
-  return createOAuthSourceProvider<OutlookSourceAccount, OutlookSourceConfig>({
-    buildConfig: (db, account) => ({
-      accessToken: account.accessToken,
-      accessTokenExpiresAt: account.accessTokenExpiresAt,
-      calendarAccountId: account.calendarAccountId,
-      calendarId: account.calendarId,
-      database: db,
-      deltaLink: account.syncToken,
-      externalCalendarId: account.externalCalendarId,
-      oauthCredentialId: account.oauthCredentialId,
-      originalName: account.originalName,
-      refreshToken: account.refreshToken,
-      sourceName: account.sourceName,
-      syncToken: account.syncToken,
-      userId: account.userId,
-    }),
-    createProviderInstance: (providerConfig, oauth) =>
-      new OutlookSourceProvider(providerConfig, oauth),
-    database,
-    getAllSources: getOutlookSourcesWithCredentials,
-    oauthProvider,
-    refreshLockStore,
-  });
-};
-
 const getOutlookSourcesWithCredentials = async (
   database: BunSQLDatabase,
 ): Promise<OutlookSourceAccount[]> => {
@@ -336,6 +308,34 @@ const getOutlookSourcesWithCredentials = async (
       externalCalendarId: source.externalCalendarId,
       provider: source.provider,
     }];
+  });
+};
+
+const createOutlookSourceProvider = (config: CreateOutlookSourceProviderConfig): SourceProvider => {
+  const { database, oauthProvider, refreshLockStore } = config;
+
+  return createOAuthSourceProvider<OutlookSourceAccount, OutlookSourceConfig>({
+    buildConfig: (db, account) => ({
+      accessToken: account.accessToken,
+      accessTokenExpiresAt: account.accessTokenExpiresAt,
+      calendarAccountId: account.calendarAccountId,
+      calendarId: account.calendarId,
+      database: db,
+      deltaLink: account.syncToken,
+      externalCalendarId: account.externalCalendarId,
+      oauthCredentialId: account.oauthCredentialId,
+      originalName: account.originalName,
+      refreshToken: account.refreshToken,
+      sourceName: account.sourceName,
+      syncToken: account.syncToken,
+      userId: account.userId,
+    }),
+    createProviderInstance: (providerConfig, oauth) =>
+      new OutlookSourceProvider(providerConfig, oauth),
+    database,
+    getAllSources: getOutlookSourcesWithCredentials,
+    oauthProvider,
+    refreshLockStore,
   });
 };
 

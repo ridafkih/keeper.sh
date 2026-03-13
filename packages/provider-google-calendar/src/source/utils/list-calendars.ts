@@ -4,13 +4,18 @@ import { GOOGLE_CALENDAR_LIST_URL } from "../../shared/api";
 import { isSimpleAuthError } from "../../shared/errors";
 
 class CalendarListError extends Error {
+  public readonly status: number;
+  public readonly authRequired: boolean;
+
   constructor(
     message: string,
-    public readonly status: number,
-    public readonly authRequired = false,
+    status: number,
+    authRequired = false,
   ) {
     super(message);
     this.name = "CalendarListError";
+    this.status = status;
+    this.authRequired = authRequired;
   }
 }
 

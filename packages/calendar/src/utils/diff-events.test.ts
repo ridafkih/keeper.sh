@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { diffEvents } from "./diff-events";
-import type { EventTimeSlot, StoredEventTimeSlot } from "../types";
+import type { EventTimeSlot, StoredEventTimeSlot } from "./types";
 
 const createBaseEvent = (): EventTimeSlot => ({
   endTime: new Date("2026-03-08T14:30:00.000Z"),

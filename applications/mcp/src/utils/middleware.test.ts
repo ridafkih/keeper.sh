@@ -2,14 +2,14 @@ import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { RouteHandler } from "./middleware";
 
 const runMcpWideEventContext = mock((callback: () => unknown) => callback());
-const setWideEventFields = mock((_fields: Record<string, unknown>) => {});
-const trackStatusError = mock(() => {});
-const set = mock(() => {});
+const setWideEventFields = mock((_fields: Record<string, unknown>) => 0);
+const trackStatusError = mock(() => 0);
+const set = mock(() => 0);
 const timeMeasure = mock(
-  async (_key: string, callback: () => unknown | Promise<unknown>) => await callback(),
+  (_key: string, callback: () => unknown | Promise<unknown>) => Promise.resolve(callback()),
 );
-const errorFields = mock(() => {});
-const flush = mock(() => {});
+const errorFields = mock(() => 0);
+const flush = mock(() => 0);
 
 let withWideEvent: (handler: RouteHandler) => RouteHandler = (handler) => handler;
 

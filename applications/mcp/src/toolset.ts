@@ -65,7 +65,7 @@ const toLocalizedTime = (utcIso: string, timeZone: string): string => {
   }).formatToParts(date);
 
   const getPartValue = (type: Intl.DateTimeFormatPartTypes): string => {
-    const part = parts.find((part) => part.type === type);
+    const part = parts.find(({ type: expectedType }) => expectedType === type);
     if (!part) {
       return "";
     }

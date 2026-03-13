@@ -26,9 +26,9 @@ interface OAuthSyncJobDependencies {
 
 const deduplicateMessages = (messages: string[]): string[] => [...new Set(messages)];
 
-const invokeProviderSync = async (
+const invokeProviderSync = (
   operation: () => Promise<ProviderSyncResult | null>,
-): Promise<ProviderSyncResult | null> => operation();
+): Promise<ProviderSyncResult | null> => Promise.resolve().then(operation);
 
 const publishProviderMetrics = (
   provider: "google" | "outlook",

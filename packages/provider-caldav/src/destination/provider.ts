@@ -16,12 +16,12 @@ import type {
   SyncResult,
   SyncableEvent,
 } from "@keeper.sh/provider-core";
+import type { CalDAVProviderConfig, CalDAVProviderOptions } from "../types";
 import { widelog } from "widelogger";
 import { CalDAVClient } from "../shared/client";
 import { eventToICalString, parseICalToRemoteEvent } from "../shared/ics";
 import { getCalDAVSyncWindow } from "../shared/sync-window";
 import { createCalDAVService } from "./sync";
-import type { CalDAVProviderConfig, CalDAVProviderOptions } from "../types";
 
 const EMPTY_ACCOUNTS_COUNT = 0;
 const INITIAL_ADDED_COUNT = 0;
@@ -34,60 +34,6 @@ const YEARS_UNTIL_FUTURE = 2;
 const DEFAULT_CALDAV_OPTIONS: CalDAVProviderOptions = {
   providerId: "caldav",
   providerName: "CalDAV",
-};
-
-const createCalDAVProvider = (
-  config: CalDAVProviderConfig,
-  options: CalDAVProviderOptions = DEFAULT_CALDAV_OPTIONS,
-): DestinationProvider => {
-  const caldavService = createCalDAVService(config);
-
-  const syncForUser = async (userId: string, context: SyncContext): Promise<SyncResult | null> => {
-    const accounts = await caldavService.getCalDAVAccountsForUser(userId, options.providerId);
-    if (accounts.length === EMPTY_ACCOUNTS_COUNT) {
-      return null;
-    }
-
-    const results = await Promise.all(
-      accounts.map(async (account) => {
-        const localEvents = await getEventsForDestination(config.database, account.calendarId);
-        const supportedEvents = localEvents.filter(
-          (event) => event.availability !== "workingElsewhere",
-        );
-
-        const password = caldavService.getDecryptedPassword(account.encryptedPassword);
-        const provider = new CalDAVProviderInstance(
-          {
-            calendarId: account.calendarId,
-            calendarUrl: account.calendarUrl,
-            database: config.database,
-            serverUrl: account.serverUrl,
-            userId: account.userId,
-            username: account.username,
-          },
-          password,
-          options,
-        );
-        return provider.sync(supportedEvents, context);
-      }),
-    );
-
-    const combined: SyncResult = {
-      addFailed: INITIAL_ADD_FAILED_COUNT,
-      added: INITIAL_ADDED_COUNT,
-      removeFailed: INITIAL_REMOVE_FAILED_COUNT,
-      removed: INITIAL_REMOVED_COUNT,
-    };
-    for (const result of results) {
-      combined.added += result.added;
-      combined.addFailed += result.addFailed;
-      combined.removed += result.removed;
-      combined.removeFailed += result.removeFailed;
-    }
-    return combined;
-  };
-
-  return { syncForUser };
 };
 
 class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
@@ -215,5 +161,59 @@ class CalDAVProviderInstance extends CalendarProvider<CalDAVConfig> {
     return remoteEvents;
   }
 }
+
+const createCalDAVProvider = (
+  config: CalDAVProviderConfig,
+  options: CalDAVProviderOptions = DEFAULT_CALDAV_OPTIONS,
+): DestinationProvider => {
+  const caldavService = createCalDAVService(config);
+
+  const syncForUser = async (userId: string, context: SyncContext): Promise<SyncResult | null> => {
+    const accounts = await caldavService.getCalDAVAccountsForUser(userId, options.providerId);
+    if (accounts.length === EMPTY_ACCOUNTS_COUNT) {
+      return null;
+    }
+
+    const results = await Promise.all(
+      accounts.map(async (account) => {
+        const localEvents = await getEventsForDestination(config.database, account.calendarId);
+        const supportedEvents = localEvents.filter(
+          (event) => event.availability !== "workingElsewhere",
+        );
+
+        const password = caldavService.getDecryptedPassword(account.encryptedPassword);
+        const provider = new CalDAVProviderInstance(
+          {
+            calendarId: account.calendarId,
+            calendarUrl: account.calendarUrl,
+            database: config.database,
+            serverUrl: account.serverUrl,
+            userId: account.userId,
+            username: account.username,
+          },
+          password,
+          options,
+        );
+        return provider.sync(supportedEvents, context);
+      }),
+    );
+
+    const combined: SyncResult = {
+      addFailed: INITIAL_ADD_FAILED_COUNT,
+      added: INITIAL_ADDED_COUNT,
+      removeFailed: INITIAL_REMOVE_FAILED_COUNT,
+      removed: INITIAL_REMOVED_COUNT,
+    };
+    for (const result of results) {
+      combined.added += result.added;
+      combined.addFailed += result.addFailed;
+      combined.removed += result.removed;
+      combined.removeFailed += result.removeFailed;
+    }
+    return combined;
+  };
+
+  return { syncForUser };
+};
 
 export { createCalDAVProvider };

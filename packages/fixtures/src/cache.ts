@@ -1,6 +1,3 @@
-import { access, mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { FixtureManifest, FixtureSource } from "./schema";
 
 const DEFAULT_FIXTURE_DIRECTORY_SEGMENT = "ics";
@@ -27,10 +24,10 @@ interface MissingFixture {
 }
 
 const getFixturesPackageDirectory = (): string =>
-  fileURLToPath(new URL("..", import.meta.url));
+  decodeURIComponent(new URL("..", import.meta.url).pathname);
 
 const getDefaultFixtureDirectory = (): string =>
-  join(getFixturesPackageDirectory(), DEFAULT_FIXTURE_DIRECTORY_SEGMENT);
+  `${getFixturesPackageDirectory()}/${DEFAULT_FIXTURE_DIRECTORY_SEGMENT}`;
 
 const getFixtureDirectory = (options: FixtureDirectoryOptions = {}): string =>
   options.fixtureDirectory
@@ -43,16 +40,9 @@ const getFixtureFileName = (fixtureSource: FixtureSource): string =>
 const getFixturePath = (
   fixtureSource: FixtureSource,
   options: FixtureDirectoryOptions = {},
-): string => join(getFixtureDirectory(options), getFixtureFileName(fixtureSource));
+): string => `${getFixtureDirectory(options)}/${getFixtureFileName(fixtureSource)}`;
 
-const pathExists = async (path: string): Promise<boolean> => {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
-};
+const pathExists = (path: string): Promise<boolean> => Bun.file(path).exists();
 
 const getEnabledFixtures = (manifest: FixtureManifest, includeDisabled?: boolean): FixtureManifest => {
   if (includeDisabled) {
@@ -66,7 +56,7 @@ const syncFixtureFiles = async (
   options: SyncFixtureFilesOptions = {},
 ): Promise<SyncedFixture[]> => {
   const fixtureDirectory = getFixtureDirectory({ fixtureDirectory: options.fixtureDirectory });
-  await mkdir(fixtureDirectory, { recursive: true });
+  await Bun.$`mkdir -p ${fixtureDirectory}`;
 
   const fetchImplementation = options.fetchImplementation ?? fetch;
   const enabledFixtures = getEnabledFixtures(fixtureManifest, options.includeDisabled);
@@ -101,7 +91,7 @@ const syncFixtureFiles = async (
     }
 
     const fixtureContent = await response.text();
-    await writeFile(fixturePath, fixtureContent, "utf8");
+    await Bun.write(fixturePath, fixtureContent);
 
     syncedFixtures.push({
       downloaded: true,

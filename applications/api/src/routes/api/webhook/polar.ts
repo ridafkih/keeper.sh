@@ -151,7 +151,11 @@ const POST = (request: Request): MaybePromise<Response> => {
       if (response) {
         const { status } = response;
         widelog.set("status_code", status);
-        widelog.set("outcome", status >= 400 ? "error" : "success");
+        if (status >= 400) {
+          widelog.set("outcome", "error");
+        } else {
+          widelog.set("outcome", "success");
+        }
       }
       widelog.flush();
     }

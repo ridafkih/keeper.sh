@@ -1,8 +1,9 @@
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react-swc";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import tailwindcss from "@tailwindcss/vite";
 import svgr from "vite-plugin-svgr";
+import react, { reactCompilerPreset } from '@vitejs/plugin-react'
+import babel from '@rolldown/plugin-babel'
 import { blogPlugin } from "./plugins/blog";
 import { sitemapPlugin } from "./plugins/sitemap";
 
@@ -16,6 +17,12 @@ export default defineConfig(({ isSsrBuild }) => ({
       target: "react",
     }),
     react(),
+    babel({
+      presets: [
+        ["@babel/preset-typescript", { isTSX: true, allExtensions: true }],
+        reactCompilerPreset(),
+      ],
+    }),
     svgr(),
     !isSsrBuild && sitemapPlugin(),
   ].filter(Boolean),

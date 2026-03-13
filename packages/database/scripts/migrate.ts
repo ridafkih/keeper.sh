@@ -1,7 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client } from "pg";
-import { join } from "node:path";
 
 const connectionString = Bun.env.DATABASE_URL;
 
@@ -29,7 +28,7 @@ try {
 }
 
 await migrate(database, {
-  migrationsFolder: join(import.meta.dirname, "..", "drizzle"),
+  migrationsFolder: `${import.meta.dirname}/../drizzle`,
 });
 
 await connection.end();

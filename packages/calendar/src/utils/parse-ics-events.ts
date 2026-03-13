@@ -1,5 +1,5 @@
 import type { IcsCalendar, IcsDuration, IcsEvent } from "ts-ics";
-import type { EventTimeSlot } from "../types";
+import type { EventTimeSlot } from "./types";
 import {
   KEEPER_EVENT_SUFFIX,
   MS_PER_DAY,

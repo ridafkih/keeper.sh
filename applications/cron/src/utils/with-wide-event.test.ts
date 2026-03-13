@@ -2,19 +2,19 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun
 import type { CronOptions } from "cronbake";
 
 const runCronWideEventContext = mock((callback: () => unknown) => callback());
-const append = mock(() => {});
-const count = mock(() => {});
-const set = mock(() => {});
-const setFields = mock((_fields: Record<string, unknown>) => {});
-const max = mock(() => {});
-const min = mock(() => {});
+const append = mock(() => 0);
+const count = mock(() => 0);
+const set = mock(() => 0);
+const setFields = mock((_fields: Record<string, unknown>) => 0);
+const max = mock(() => 0);
+const min = mock(() => 0);
 const measure = mock(
-  async (_key: string, callback: () => unknown | Promise<unknown>) => await callback(),
+  (_key: string, callback: () => unknown | Promise<unknown>) => Promise.resolve(callback()),
 );
-const start = mock(() => {});
-const stop = mock(() => {});
-const errorFields = mock(() => {});
-const flush = mock(() => {});
+const start = mock(() => 0);
+const stop = mock(() => 0);
+const errorFields = mock(() => 0);
+const flush = mock(() => 0);
 
 let withCronWideEvent: (options: CronOptions) => CronOptions = (options) => options;
 
@@ -63,7 +63,7 @@ beforeEach(() => {
 describe("withCronWideEvent", () => {
   it("records canonical success fields and flushes once", async () => {
     const wrapped = withCronWideEvent({
-      callback: async () => {},
+      callback: () => Promise.resolve(),
       cron: "@every_1_minutes",
       name: "job:sync",
     });
@@ -92,7 +92,7 @@ describe("withCronWideEvent", () => {
 
   it("marks error outcome and rethrows callback errors", async () => {
     const wrapped = withCronWideEvent({
-      callback: async () => {
+      callback: () => {
         throw new Error("job failed");
       },
       cron: "@every_1_minutes",

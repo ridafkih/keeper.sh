@@ -23,7 +23,7 @@ const router = new Bun.FileSystemRouter({
 
 await entry({
   main: () =>
-    runApiWideEventContext(async () => {
+    runApiWideEventContext(() => {
       setWideEventFields({
         operation: {
           name: "api:start",
@@ -36,7 +36,7 @@ await entry({
       });
 
       try {
-        return await widelog.time.measure("duration_ms", async () => {
+        return widelog.time.measure("duration_ms", async () => {
           const server = Bun.serve<BroadcastData>({
             port: env.API_PORT,
             websocket: websocketHandler,

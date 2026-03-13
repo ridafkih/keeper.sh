@@ -47,10 +47,11 @@ interface CaldavSyncJobDependencies {
   setCronEventFields: (fields: Record<string, unknown>) => void;
 }
 
-const invokeProviderSync = async (
+const invokeProviderSync = (
   dependencies: CaldavSyncJobDependencies,
   provider: CaldavProvider,
-): Promise<ProviderSyncResult | null> => dependencies.syncProvider(provider);
+): Promise<ProviderSyncResult | null> =>
+  Promise.resolve().then(() => dependencies.syncProvider(provider));
 
 const runCaldavSourceSyncJob = async (dependencies: CaldavSyncJobDependencies): Promise<void> => {
   const totals: JobAggregation = {

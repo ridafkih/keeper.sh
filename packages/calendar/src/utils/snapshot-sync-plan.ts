@@ -1,5 +1,5 @@
 import { diffEvents } from "./diff-events";
-import type { EventTimeSlot, StoredEventTimeSlot } from "../types";
+import type { EventTimeSlot, StoredEventTimeSlot } from "./types";
 
 interface SnapshotStoredEvent extends Omit<StoredEventTimeSlot, "uid"> {
   uid: string | null;

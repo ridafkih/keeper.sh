@@ -11,14 +11,16 @@ const normalizeCalendarUrl = (url: string): string => {
 };
 
 class CalendarFetchError extends Error {
+  public readonly statusCode?: number;
   public readonly authRequired: boolean;
 
   constructor(
     message: string,
-    public statusCode?: number,
+    statusCode?: number,
   ) {
     super(message);
     this.name = "CalendarFetchError";
+    this.statusCode = statusCode;
     this.authRequired =
       statusCode === HTTP_STATUS.UNAUTHORIZED || statusCode === HTTP_STATUS.FORBIDDEN;
   }

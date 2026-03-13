@@ -104,9 +104,9 @@ interface IcalSnapshotJobDependencies {
 const createMissingUrlError = (calendarId: string): Error =>
   new Error(`Source ${calendarId} is missing url`);
 
-const invokeOperation = async <TResult>(
+const invokeOperation = <TResult>(
   operation: () => Promise<TResult>,
-): Promise<TResult> => operation();
+): Promise<TResult> => Promise.resolve().then(operation);
 
 const createDefaultJobDependencies = (): IcalSnapshotJobDependencies => ({
   fetchRemoteCalendar,
@@ -141,11 +141,13 @@ const runIcalSnapshotSyncJob = async (
   const { remoteSources, settlements } = await widelog.time.measure(
     "sync.fetch_sources.duration_ms",
     async () => {
-      const remoteSources = await dependencies.getRemoteSources();
+      const fetchedSources = await dependencies.getRemoteSources();
 
-      const settlements = await Promise.allSettled(buildFetchPromises(remoteSources, dependencies));
+      const fetchSettlements = await Promise.allSettled(
+        buildFetchPromises(fetchedSources, dependencies),
+      );
 
-      return { remoteSources, settlements };
+      return { remoteSources: fetchedSources, settlements: fetchSettlements };
     },
   );
 
@@ -159,7 +161,7 @@ const runIcalSnapshotSyncJob = async (
 
   const insertionSettlements = await widelog.time.measure(
     "sync.process_snapshots.duration_ms",
-    async () => {
+    () => {
       const insertionTasks: Promise<SnapshotResult>[] = [];
       for (const settlement of settlements) {
         if (settlement.status === "fulfilled") {

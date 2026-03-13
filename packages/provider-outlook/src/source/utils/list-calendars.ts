@@ -5,13 +5,18 @@ import { isSimpleAuthError } from "../../shared/errors";
 const INVALID_RESPONSE_STATUS = 502;
 
 class CalendarListError extends Error {
+  public readonly status: number;
+  public readonly authRequired: boolean;
+
   constructor(
     message: string,
-    public readonly status: number,
-    public readonly authRequired = false,
+    status: number,
+    authRequired = false,
   ) {
     super(message);
     this.name = "CalendarListError";
+    this.status = status;
+    this.authRequired = authRequired;
   }
 }
 

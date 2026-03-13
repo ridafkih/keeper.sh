@@ -21,7 +21,7 @@ const router = new Bun.FileSystemRouter({
 
 await entry({
   main: () =>
-    runMcpWideEventContext(async () => {
+    runMcpWideEventContext(() => {
       setWideEventFields({
         operation: {
           name: "mcp:start",
@@ -34,7 +34,7 @@ await entry({
       });
 
       try {
-        return await widelog.time.measure("duration_ms", async () => {
+        return widelog.time.measure("duration_ms", () => {
           const server = Bun.serve({
             port: env.MCP_PORT,
             fetch: async (request) => {

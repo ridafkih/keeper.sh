@@ -47,12 +47,15 @@ const buildRedirectUrl = (
 };
 
 class OAuthError extends Error {
+  redirectUrl: URL;
+
   constructor(
     message: string,
-    public redirectUrl: URL,
+    redirectUrl: URL,
   ) {
     super(message);
     this.name = "OAuthError";
+    this.redirectUrl = redirectUrl;
   }
 }
 

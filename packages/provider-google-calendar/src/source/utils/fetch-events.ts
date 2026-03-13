@@ -16,13 +16,18 @@ import { googleEventListSchema } from "@keeper.sh/data-schemas";
 import { isKeeperEvent } from "@keeper.sh/provider-core";
 
 class EventsFetchError extends Error {
+  public readonly status: number;
+  public readonly authRequired: boolean;
+
   constructor(
     message: string,
-    public readonly status: number,
-    public readonly authRequired = false,
+    status: number,
+    authRequired = false,
   ) {
     super(message);
     this.name = "EventsFetchError";
+    this.status = status;
+    this.authRequired = authRequired;
   }
 }
 

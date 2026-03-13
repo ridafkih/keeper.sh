@@ -73,7 +73,7 @@ const PATCH = withWideEvent(
     return handlePatchSourceRoute(
       { body: payload, params, userId },
       {
-        canUseEventFilters: (userId) => premiumService.canUseEventFilters(userId),
+        canUseEventFilters: (candidateUserId) => premiumService.canUseEventFilters(candidateUserId),
         triggerDestinationSync,
         updateSource: async (userIdToUpdate, sourceCalendarId, updates) => {
           const [updated] = await database

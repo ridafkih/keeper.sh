@@ -44,34 +44,6 @@ interface GoogleCalendarProviderConfig {
   refreshLockStore?: RefreshLockStore | null;
 }
 
-const createGoogleCalendarProvider = (
-  config: GoogleCalendarProviderConfig,
-): DestinationProvider => {
-  const { database, oauthProvider, broadcastSyncStatus, refreshLockStore } = config;
-
-  return createOAuthDestinationProvider<GoogleAccount, GoogleCalendarConfig>({
-    broadcastSyncStatus,
-    buildConfig: (db, account, broadcast) => ({
-      accessToken: account.accessToken,
-      accessTokenExpiresAt: account.accessTokenExpiresAt,
-      accountId: account.accountId,
-      broadcastSyncStatus: broadcast,
-      calendarId: account.calendarId,
-      database: db,
-      externalCalendarId: "primary",
-      refreshToken: account.refreshToken,
-      userId: account.userId,
-    }),
-    createProviderInstance: (providerConfig, oauth) =>
-      new GoogleCalendarProviderInstance(providerConfig, oauth),
-    database,
-    getAccountsForUser: getGoogleAccountsForUser,
-    oauthProvider,
-    prepareLocalEvents: (events) => events.filter((event) => canSerializeGoogleEvent(event)),
-    refreshLockStore,
-  });
-};
-
 class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalendarConfig> {
   readonly name = "Google Calendar";
   readonly id = "google";
@@ -305,7 +277,7 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
     return value !== null && typeof value === "object" && !Array.isArray(value);
   }
 
-  private static parseNumberArray(value: unknown): number[] | void {
+  private static parseNumberArray(value: unknown): number[] | undefined {
     if (!Array.isArray(value)) {
       return;
     }
@@ -317,7 +289,7 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
     return value;
   }
 
-  private static parseByDay(value: unknown): { day: string; occurrence?: number }[] | void {
+  private static parseByDay(value: unknown): { day: string; occurrence?: number }[] | undefined {
     if (!Array.isArray(value)) {
       return;
     }
@@ -409,6 +381,34 @@ class GoogleCalendarProviderInstance extends OAuthCalendarProvider<GoogleCalenda
     return parts.join(";");
   }
 }
+
+const createGoogleCalendarProvider = (
+  config: GoogleCalendarProviderConfig,
+): DestinationProvider => {
+  const { database, oauthProvider, broadcastSyncStatus, refreshLockStore } = config;
+
+  return createOAuthDestinationProvider<GoogleAccount, GoogleCalendarConfig>({
+    broadcastSyncStatus,
+    buildConfig: (db, account, broadcast) => ({
+      accessToken: account.accessToken,
+      accessTokenExpiresAt: account.accessTokenExpiresAt,
+      accountId: account.accountId,
+      broadcastSyncStatus: broadcast,
+      calendarId: account.calendarId,
+      database: db,
+      externalCalendarId: "primary",
+      refreshToken: account.refreshToken,
+      userId: account.userId,
+    }),
+    createProviderInstance: (providerConfig, oauth) =>
+      new GoogleCalendarProviderInstance(providerConfig, oauth),
+    database,
+    getAccountsForUser: getGoogleAccountsForUser,
+    oauthProvider,
+    prepareLocalEvents: (events) => events.filter((event) => canSerializeGoogleEvent(event)),
+    refreshLockStore,
+  });
+};
 
 export { createGoogleCalendarProvider };
 export type { GoogleCalendarProviderConfig };

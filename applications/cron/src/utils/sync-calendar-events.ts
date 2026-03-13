@@ -19,6 +19,26 @@ interface SyncUserSourcesDependencies<TSource> {
   destinationOperationTimeoutMs?: number;
 }
 
+const SOURCE_OPERATION_TIMEOUT_MS = 60_000;
+const DESTINATION_OPERATION_TIMEOUT_MS = 300_000;
+const USER_OPERATION_TIMEOUT_MS = 300_000;
+
+const invokeOperation = <TResult>(
+  operation: () => Promise<TResult>,
+): Promise<TResult> => Promise.resolve().then(operation);
+
+const withOperationTimeout = <TResult>(
+  operation: () => Promise<TResult>,
+  timeoutMs: number,
+  operationName: string,
+): Promise<TResult> =>
+  Promise.race([
+    invokeOperation(operation),
+    Bun.sleep(timeoutMs).then((): never => {
+      throw new Error(`${operationName} timed out after ${timeoutMs}ms`);
+    }),
+  ]);
+
 const createSyncUserSourcesDependencies = async (
   jobName: string,
 ): Promise<{
@@ -103,26 +123,6 @@ interface SyncJobDependencies<TSource extends SourceOwner> {
   syncUserSourcesForUser: (userId: string, sources: TSource[]) => Promise<SyncResult>;
   userOperationTimeoutMs?: number;
 }
-
-const SOURCE_OPERATION_TIMEOUT_MS = 60_000;
-const DESTINATION_OPERATION_TIMEOUT_MS = 300_000;
-const USER_OPERATION_TIMEOUT_MS = 300_000;
-
-const invokeOperation = async <TResult>(
-  operation: () => Promise<TResult>,
-): Promise<TResult> => operation();
-
-const withOperationTimeout = <TResult>(
-  operation: () => Promise<TResult>,
-  timeoutMs: number,
-  operationName: string,
-): Promise<TResult> =>
-  Promise.race([
-    invokeOperation(operation),
-    Bun.sleep(timeoutMs).then((): never => {
-      throw new Error(`${operationName} timed out after ${timeoutMs}ms`);
-    }),
-  ]);
 
 const runSyncJob = async <TSource extends SourceOwner>(
   plan: Plan,

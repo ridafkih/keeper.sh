@@ -47,7 +47,7 @@ const baseWebsocketHandler = createWebsocketHandler({
   onConnect: sendInitialSyncStatus,
 });
 
-const runWebsocketBoundary = async (
+const runWebsocketBoundary = (
   socket: Socket,
   operationName: "websocket:open" | "websocket:close",
   callback: () => void | Promise<void>,
@@ -88,9 +88,7 @@ const websocketHandler = {
   close(socket: Socket): void {
     runWebsocketBoundary(socket, "websocket:close", () => {
       baseWebsocketHandler.close(socket);
-    }).catch(() => {
-      return;
-    });
+    }).catch(() => null);
   },
   idleTimeout: baseWebsocketHandler.idleTimeout,
   message: baseWebsocketHandler.message,

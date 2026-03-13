@@ -97,6 +97,17 @@ const shouldExcludeSyncEvent = (event: {
 const TEMPLATE_TOKEN_PATTERN = /\{\{(\w+)\}\}/g;
 const DEFAULT_EVENT_NAME = "Busy";
 const DEFAULT_EVENT_NAME_TEMPLATE = "{{calendar_name}}";
+const resolveEventNameTemplate = (
+  template: string,
+  variables: Record<string, string>,
+): string => {
+  const resolved = template.replace(
+    TEMPLATE_TOKEN_PATTERN,
+    (token, variableName) => variables[variableName] ?? token,
+  ).trim();
+
+  return resolved || variables.calendar_name || DEFAULT_EVENT_NAME;
+};
 
 const getMappedSourceCalendarIds = async (
   database: BunSQLDatabase,
@@ -217,18 +228,6 @@ const fetchEventsForCalendars = async (
   }
 
   return syncableEvents;
-};
-
-const resolveEventNameTemplate = (
-  template: string,
-  variables: Record<string, string>,
-): string => {
-  const resolved = template.replace(
-    TEMPLATE_TOKEN_PATTERN,
-    (token, variableName) => variables[variableName] ?? token,
-  ).trim();
-
-  return resolved || variables.calendar_name || DEFAULT_EVENT_NAME;
 };
 
 const getEventsForDestination = async (

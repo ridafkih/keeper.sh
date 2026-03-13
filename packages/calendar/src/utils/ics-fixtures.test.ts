@@ -1,10 +1,9 @@
-import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "bun:test";
 import { fixtureManifest, getFixturePath } from "@keeper.sh/fixtures";
 import { diffEvents } from "./diff-events";
 import { parseIcsCalendar } from "./parse-ics-calendar";
 import { parseIcsEvents } from "./parse-ics-events";
-import type { StoredEventTimeSlot } from "../types";
+import type { StoredEventTimeSlot } from "./types";
 
 const enabledFixtures = fixtureManifest.filter((fixtureSource) => fixtureSource.enabled !== false);
 
@@ -14,7 +13,7 @@ describe("ics fixtures parsing", () => {
   for (const fixtureSource of enabledFixtures) {
     it(`parses ${fixtureSource.id}`, async () => {
       const fixturePath = getFixturePath(fixtureSource);
-      const icsString = await readFile(fixturePath, "utf8");
+      const icsString = await Bun.file(fixturePath).text();
 
       const parsedCalendar = parseIcsCalendar({ icsString });
       const parsedEvents = parseIcsEvents(parsedCalendar);
@@ -38,7 +37,7 @@ describe("ics fixtures diff stability", () => {
   for (const fixtureSource of enabledFixtures) {
     it(`produces no diff for equivalent stored events in ${fixtureSource.id}`, async () => {
       const fixturePath = getFixturePath(fixtureSource);
-      const icsString = await readFile(fixturePath, "utf8");
+      const icsString = await Bun.file(fixturePath).text();
 
       const parsedCalendar = parseIcsCalendar({ icsString });
       const parsedEvents = parseIcsEvents(parsedCalendar);

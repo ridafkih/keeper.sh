@@ -18,7 +18,7 @@ import {
 import type { EventMapping } from "../events/mappings";
 import { createSyncEventContentHash } from "../events/content-hash";
 import type { SyncContext, SyncStage } from "./coordinator";
-import { computeSyncOperations } from "./operations";
+import { buildRemoveOperations, computeSyncOperations } from "./operations";
 import { widelog } from "widelogger";
 
 const INITIAL_REMOTE_EVENT_COUNT = 0;
@@ -313,7 +313,7 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
     });
   }
 
-  private async processPushOperation(
+  private processPushOperation(
     operation: Extract<SyncOperation, { type: "add" }>,
     progress: { current: number; total: number },
   ): Promise<PushResult | undefined> {
@@ -366,7 +366,7 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
     });
   }
 
-  private async processDeleteOperation(
+  private processDeleteOperation(
     operation: Extract<SyncOperation, { type: "remove" }>,
     progress: { current: number; total: number },
   ): Promise<DeleteResult | undefined> {
