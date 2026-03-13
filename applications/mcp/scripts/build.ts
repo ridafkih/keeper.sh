@@ -1,7 +1,5 @@
 import { Glob, build } from "bun";
 
-await Bun.$`rm -rf dist`;
-
 const entrypoints = [
   ...new Glob("src/routes/**/*.ts")
     .scanSync()

@@ -32,7 +32,8 @@
     },
     "applications/canary-web": {
       "entry": ["src/main.tsx", "src/server.tsx", "plugins/**/*.ts", "scripts/**/*.ts", "src/**/*.test.ts", "src/**/*.test.tsx"],
-      "project": ["src/**/*.{ts,tsx}", "plugins/**/*.ts", "scripts/**/*.ts"]
+      "project": ["src/**/*.{ts,tsx}", "plugins/**/*.ts", "scripts/**/*.ts"],
+      "ignoreDependencies": ["@babel/preset-typescript"]
     }
   }
 }

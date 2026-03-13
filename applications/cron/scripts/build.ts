@@ -1,7 +1,5 @@
 import { Glob, build } from "bun";
 
-await Bun.$`rm -rf dist`;
-
 const ROUTES_GLOB = new Glob("src/jobs/**/*.ts");
 const ENTRY_POINT_GLOB = new Glob("src/index.ts");
 

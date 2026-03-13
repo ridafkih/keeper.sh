@@ -1,7 +1,6 @@
 {
   "name": "keeper.sh",
   "devDependencies": {
-    "@babel/preset-typescript": "^7.28.5",
     "knip": "5.80.0",
     "oxlint": "^1.55.0",
     "rimraf": "^6.1.3",

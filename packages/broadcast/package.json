@@ -9,8 +9,7 @@
     "lint": "oxlint ."
   },
   "dependencies": {
-    "@keeper.sh/data-schemas": "workspace:*",
-    "widelogger": "^0.4.0"
+    "@keeper.sh/data-schemas": "workspace:*"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",
