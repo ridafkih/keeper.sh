@@ -15,6 +15,10 @@ const staticTextFiles: Record<string, string> = {
 const internalProxyPaths = {
   "/.well-known/oauth-authorization-server": "/api/auth/.well-known/oauth-authorization-server",
   "/.well-known/openid-configuration": "/api/auth/.well-known/openid-configuration",
+  "/.well-known/oauth-authorization-server/api/auth":
+    "/api/auth/.well-known/oauth-authorization-server",
+  "/.well-known/openid-configuration/api/auth":
+    "/api/auth/.well-known/openid-configuration",
 } as const;
 
 const isInternalProxyPath = (
