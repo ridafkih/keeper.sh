@@ -17,11 +17,25 @@ interface KeeperMcpAuthSession {
   userId: string | null;
 }
 
+interface AuthenticatedKeeperMcpSession {
+  scopes: string;
+  userId: string;
+}
+
 interface KeeperMcpAuth {
   api: {
     getMcpSession: (input: { headers: Headers }) => Promise<KeeperMcpAuthSession | null>;
   };
 }
+
+type McpSessionResolution =
+  | {
+    authenticated: true;
+    session: AuthenticatedKeeperMcpSession;
+  }
+  | {
+    authenticated: false;
+  };
 
 interface CreateKeeperMcpHandlerOptions {
   auth: KeeperMcpAuth;
@@ -39,6 +53,38 @@ const hasScope = (scopes: string, requiredScope: string): boolean =>
     .split(/\s+/)
     .filter((scope) => scope.length > 0)
     .includes(requiredScope);
+
+const isAuthValidationError = (error: unknown): boolean =>
+  error instanceof Error && error.name === "APIError";
+
+const resolveMcpSession = async (
+  auth: KeeperMcpAuth,
+  headers: Headers,
+): Promise<McpSessionResolution> => {
+  try {
+    const session = await auth.api.getMcpSession({ headers });
+
+    if (!session?.userId) {
+      return { authenticated: false };
+    }
+
+    const authenticatedSession: AuthenticatedKeeperMcpSession = {
+      scopes: session.scopes,
+      userId: session.userId,
+    };
+
+    return {
+      authenticated: true,
+      session: authenticatedSession,
+    };
+  } catch (error) {
+    if (isAuthValidationError(error)) {
+      return { authenticated: false };
+    }
+
+    throw error;
+  }
+};
 
 const createJsonRpcErrorResponse = (
   status: number,
@@ -188,15 +234,15 @@ const createKeeperMcpHandler = ({
         },
       );
 
-    const sessionResult = await auth.api
-      .getMcpSession({ headers: request.headers });
+    const sessionResult = await resolveMcpSession(auth, request.headers);
 
-    const userId = sessionResult?.userId;
-    if (!userId) {
+    if (!sessionResult.authenticated) {
       return unauthorizedResponse();
     }
 
-    if (!hasScope(sessionResult.scopes, KEEPER_API_READ_SCOPE)) {
+    const { userId, scopes } = sessionResult.session;
+
+    if (!hasScope(scopes, KEEPER_API_READ_SCOPE)) {
       const insufficientScopeHeader =
         `${wwwAuthenticateHeader}, error="insufficient_scope", scope="${KEEPER_API_READ_SCOPE}"`;
 

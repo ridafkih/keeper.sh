@@ -1,7 +1,8 @@
 import type { MaybePromise } from "bun";
 import { hasOAuthProviderApi } from "@keeper.sh/auth";
-import { auth, authCapabilities } from "../context";
+import { auth, authCapabilities, env } from "../context";
 import { runApiWideEventContext, setWideEventFields, trackStatusError, widelog } from "../utils/logging";
+import { prepareOAuthTokenRequest } from "./auth-oauth-resource";
 
 const HTTP_INTERNAL_SERVER_ERROR = 500;
 const HTTP_ERROR_THRESHOLD = 400;
@@ -148,7 +149,18 @@ const handleAuthRequest = (pathname: string, request: Request): MaybePromise<Res
         }
 
         try {
-          const response = await auth.handler(request);
+          const preparedTokenRequest = await prepareOAuthTokenRequest({
+            mcpPublicUrl: env.MCP_PUBLIC_URL,
+            pathname,
+            request,
+          });
+
+          if (preparedTokenRequest.mcpResourceInjected) {
+            widelog.set("oauth.mcp_resource.injected", true);
+            widelog.set("oauth.mcp_resource.value", preparedTokenRequest.mcpResourceUrl);
+          }
+
+          const response = await auth.handler(preparedTokenRequest.request);
           handleAuthResponseStatus(response);
           return await processAuthResponse(pathname, response);
         } catch (error) {
