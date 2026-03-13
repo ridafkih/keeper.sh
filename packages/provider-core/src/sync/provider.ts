@@ -18,7 +18,7 @@ import {
 import type { EventMapping } from "../events/mappings";
 import { createSyncEventContentHash } from "../events/content-hash";
 import type { SyncContext, SyncStage } from "./coordinator";
-import { buildRemoveOperations, computeSyncOperations } from "./operations";
+import { computeSyncOperations } from "./operations";
 import { widelog } from "widelogger";
 
 const INITIAL_REMOTE_EVENT_COUNT = 0;
@@ -185,132 +185,6 @@ abstract class CalendarProvider<TConfig extends ProviderConfig = ProviderConfig>
       removeFailed: INITIAL_REMOVE_FAILED_COUNT,
       removed: INITIAL_REMOVED_COUNT,
     };
-  }
-
-  private static computeSyncOperations(
-    localEvents: SyncableEvent[],
-    existingMappings: EventMapping[],
-    remoteEvents: RemoteEvent[],
-  ): { operations: SyncOperation[]; staleMappingIds: string[] } {
-    const localEventIds = new Set(localEvents.map((event) => event.id));
-    const localEventHashes = new Map(
-      localEvents.map((event) => [event.id, createSyncEventContentHash(event)]),
-    );
-    const remoteEventUids = new Set(remoteEvents.map((event) => event.uid));
-    const mappedDestinationUids = new Set(
-      existingMappings.map(({ destinationEventUid }) => destinationEventUid),
-    );
-
-    const { staleMappingIds, staleMappedEventIds, staleRemoteMappings } =
-      CalendarProvider.identifyStaleMappings(
-        existingMappings,
-        localEventIds,
-        remoteEventUids,
-        localEventHashes,
-      );
-
-    const addOperations = CalendarProvider.buildAddOperations(
-      localEvents,
-      existingMappings,
-      staleMappedEventIds,
-    );
-
-    const removeOperations = buildRemoveOperations(
-      existingMappings,
-      remoteEvents,
-      localEventIds,
-      mappedDestinationUids,
-    );
-
-    const staleMappingRemoveOperations =
-      CalendarProvider.buildRemoveOperationsForMappings(staleRemoteMappings);
-
-    return {
-      operations: CalendarProvider.sortOperationsByTime([
-        ...addOperations,
-        ...removeOperations,
-        ...staleMappingRemoveOperations,
-      ]),
-      staleMappingIds,
-    };
-  }
-
-  private static identifyStaleMappings(
-    mappings: EventMapping[],
-    localEventIds: Set<string>,
-    remoteEventUids: Set<string>,
-    localEventHashes: Map<string, string>,
-  ): {
-    staleMappingIds: string[];
-    staleMappedEventIds: Set<string>;
-    staleRemoteMappings: EventMapping[];
-  } {
-    const staleMappingIds: string[] = [];
-    const staleMappedEventIds = new Set<string>();
-    const staleRemoteMappings: EventMapping[] = [];
-
-    for (const mapping of mappings) {
-      const localEventExists = localEventIds.has(mapping.eventStateId);
-      const remoteEventExists = remoteEventUids.has(mapping.destinationEventUid);
-
-      if (localEventExists && !remoteEventExists) {
-        staleMappingIds.push(mapping.id);
-        staleMappedEventIds.add(mapping.eventStateId);
-        continue;
-      }
-
-      if (!localEventExists || !remoteEventExists) {
-        continue;
-      }
-
-      const localEventHash = localEventHashes.get(mapping.eventStateId);
-      if (!localEventHash) {
-        continue;
-      }
-
-      if (mapping.syncEventHash !== localEventHash) {
-        staleMappingIds.push(mapping.id);
-        staleRemoteMappings.push(mapping);
-      }
-    }
-
-    return { staleMappedEventIds, staleMappingIds, staleRemoteMappings };
-  }
-
-  private static buildAddOperations(
-    localEvents: SyncableEvent[],
-    existingMappings: EventMapping[],
-    staleMappedEventIds: Set<string>,
-  ): SyncOperation[] {
-    const operations: SyncOperation[] = [];
-
-    for (const event of localEvents) {
-      const hasMapping = existingMappings.some((mapping) => mapping.eventStateId === event.id);
-      const hasStaleMapping = staleMappedEventIds.has(event.id);
-
-      if (!hasMapping || hasStaleMapping) {
-        operations.push({ event, type: "add" });
-      }
-    }
-
-    return operations;
-  }
-
-  private static buildRemoveOperationsForMappings(mappings: EventMapping[]): SyncOperation[] {
-    return mappings.map((mapping) => ({
-      deleteId: mapping.deleteIdentifier,
-      startTime: mapping.startTime,
-      type: "remove",
-      uid: mapping.destinationEventUid,
-    }));
-  }
-
-  private static sortOperationsByTime(operations: SyncOperation[]): SyncOperation[] {
-    return operations.toSorted((first, second) => {
-      const firstTime = CalendarProvider.getOperationEventTime(first).getTime();
-      const secondTime = CalendarProvider.getOperationEventTime(second).getTime();
-      return firstTime - secondTime;
-    });
   }
 
   private processPushOperation(
