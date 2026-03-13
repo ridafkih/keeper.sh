@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { getAllJobs } from "./utils/get-jobs";
 import { injectJobs } from "./utils/inject-jobs";
 import { registerJobs } from "./utils/register-jobs";
+import { closeDatabase } from "@keeper.sh/database";
 import { widelog, destroyWideLogger, runCronWideEventContext } from "./utils/logging";
+import { database } from "./context";
 import env from "@keeper.sh/env/cron";
 
 const jobsFolderPathname = join(import.meta.dirname, "jobs");
@@ -28,6 +30,7 @@ await entry({
           widelog.set("status_code", 200);
 
           return () => {
+            closeDatabase(database);
             destroyWideLogger();
           };
         });

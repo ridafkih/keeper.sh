@@ -428,6 +428,13 @@
       "when": 1773304717977,
       "tag": "0060_condemned_imperial_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1773428430422,
+      "tag": "0061_brief_toxin",
+      "breakpoints": true
     }
   ]
 }

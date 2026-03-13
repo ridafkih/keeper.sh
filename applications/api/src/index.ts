@@ -7,7 +7,8 @@ import { websocketHandler } from "./handlers/websocket";
 import { validateSocketToken } from "./utils/state";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
 import { socketQuerySchema } from "./utils/request-query";
-import { broadcastService } from "./context";
+import { closeDatabase } from "@keeper.sh/database";
+import { broadcastService, database, redis } from "./context";
 import env from "@keeper.sh/env/api";
 import { destroyWideLogger, runApiWideEventContext, setWideEventFields, widelog } from "./utils/logging";
 
@@ -108,6 +109,8 @@ await entry({
 
           return () => {
             server.stop();
+            closeDatabase(database);
+            redis.close();
             destroyWideLogger();
           };
         });

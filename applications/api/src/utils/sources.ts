@@ -1,6 +1,6 @@
 import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
 import { fetchAndSyncSource, pullRemoteCalendar } from "@keeper.sh/calendar";
-import { and, eq, sql } from "drizzle-orm";
+import { and, count, eq, sql } from "drizzle-orm";
 import { triggerDestinationSync } from "./sync";
 import {
   SourceLimitError,
@@ -65,11 +65,11 @@ const createSource = (userId: string, name: string, url: string): Promise<Source
         canAddAccount: (userIdToCheck, existingAccountCount) =>
           premiumService.canAddAccount(userIdToCheck, existingAccountCount),
         countExistingAccounts: async (userIdToCount) => {
-          const existingAccounts = await tx
-            .select({ id: calendarAccountsTable.id })
+          const [result] = await tx
+            .select({ value: count() })
             .from(calendarAccountsTable)
             .where(eq(calendarAccountsTable.userId, userIdToCount));
-          return existingAccounts.length;
+          return result?.value ?? 0;
         },
         createCalendarAccount: async ({ userId: accountUserId, displayName }) => {
           const [account] = await tx

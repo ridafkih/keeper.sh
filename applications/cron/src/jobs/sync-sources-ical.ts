@@ -4,9 +4,12 @@ import { MS_PER_HOUR } from "@keeper.sh/constants";
 import { pullRemoteCalendar } from "@keeper.sh/calendar";
 import { and, desc, eq, lte } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { allSettledWithConcurrency } from "@keeper.sh/provider-core";
 import { setCronEventFields, withCronWideEvent } from "../utils/with-wide-event";
 import { countSettledResults } from "../utils/count-settled-results";
 import { widelog } from "../utils/logging";
+
+const ICAL_FETCH_CONCURRENCY = 5;
 
 const ICAL_CALENDAR_TYPE = "ical";
 
@@ -124,15 +127,15 @@ const createDefaultJobDependencies = (): IcalSnapshotJobDependencies => ({
   setCronEventFields,
 });
 
-const buildFetchPromises = (
+const buildFetchTasks = (
   remoteSources: RemoteIcalSource[],
   dependencies: IcalSnapshotJobDependencies,
-): Promise<FetchResult>[] =>
-  remoteSources.map(({ id, url }) => {
+): (() => Promise<FetchResult>)[] =>
+  remoteSources.map(({ id, url }) => () => {
     if (!url) {
       return Promise.reject(createMissingUrlError(id));
     }
-    return invokeOperation(() => dependencies.fetchRemoteCalendar(id, url));
+    return dependencies.fetchRemoteCalendar(id, url);
   });
 
 const runIcalSnapshotSyncJob = async (
@@ -143,8 +146,9 @@ const runIcalSnapshotSyncJob = async (
     async () => {
       const fetchedSources = await dependencies.getRemoteSources();
 
-      const fetchSettlements = await Promise.allSettled(
-        buildFetchPromises(fetchedSources, dependencies),
+      const fetchSettlements = await allSettledWithConcurrency(
+        buildFetchTasks(fetchedSources, dependencies),
+        { concurrency: ICAL_FETCH_CONCURRENCY },
       );
 
       return { remoteSources: fetchedSources, settlements: fetchSettlements };

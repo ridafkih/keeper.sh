@@ -4,7 +4,7 @@ import {
   calendarsTable,
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { encryptPassword } from "@keeper.sh/encryption";
 import { database, premiumService, encryptionKey } from "../context";
 import { triggerDestinationSync } from "./sync";
@@ -170,12 +170,12 @@ const countUserAccountsWithDatabase = async (
   databaseClient: CaldavSourceDatabase,
   userId: string,
 ): Promise<number> => {
-  const accounts = await databaseClient
-    .select({ id: calendarAccountsTable.id })
+  const [result] = await databaseClient
+    .select({ value: count() })
     .from(calendarAccountsTable)
     .where(eq(calendarAccountsTable.userId, userId));
 
-  return accounts.length;
+  return result?.value ?? 0;
 };
 
 const createCalDAVSource = async (

@@ -34,6 +34,7 @@ const oauthCredentialsTable = pgTable(
   (table) => [
     index("oauth_credentials_user_idx").on(table.userId),
     index("oauth_credentials_provider_idx").on(table.provider),
+    index("oauth_credentials_expires_at_idx").on(table.expiresAt),
   ],
 );
 
@@ -77,6 +78,7 @@ const calendarAccountsTable = pgTable(
   (table) => [
     index("calendar_accounts_user_idx").on(table.userId),
     index("calendar_accounts_provider_idx").on(table.provider),
+    index("calendar_accounts_needs_reauth_idx").on(table.needsReauthentication),
   ],
 );
 
@@ -155,6 +157,7 @@ const eventStatesTable = pgTable(
   },
   (table) => [
     index("event_states_start_time_idx").on(table.startTime),
+    index("event_states_end_time_idx").on(table.endTime),
     index("event_states_calendar_idx").on(table.calendarId),
     uniqueIndex("event_states_identity_idx").on(
       table.calendarId,
@@ -216,6 +219,7 @@ const eventMappingsTable = pgTable(
   (table) => [
     uniqueIndex("event_mappings_event_cal_idx").on(table.eventStateId, table.calendarId),
     index("event_mappings_calendar_idx").on(table.calendarId),
+    index("event_mappings_sync_hash_idx").on(table.syncEventHash),
   ],
 );
 

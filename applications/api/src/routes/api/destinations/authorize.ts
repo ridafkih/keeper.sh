@@ -1,5 +1,5 @@
 import { calendarAccountsTable } from "@keeper.sh/database/schema";
-import { and, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "../../../utils/middleware";
 import { ErrorResponse } from "../../../utils/responses";
 import { getAuthorizationUrl, isOAuthProvider } from "../../../utils/destinations";
@@ -24,12 +24,12 @@ const userOwnsDestination = async (userId: string, accountId: string): Promise<b
 };
 
 const countUserAccounts = async (userId: string): Promise<number> => {
-  const accounts = await database
-    .select({ id: calendarAccountsTable.id })
+  const [result] = await database
+    .select({ value: count() })
     .from(calendarAccountsTable)
     .where(eq(calendarAccountsTable.userId, userId));
 
-  return accounts.length;
+  return result?.value ?? 0;
 };
 
 const GET = withWideEvent(

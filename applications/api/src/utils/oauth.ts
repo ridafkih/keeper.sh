@@ -2,7 +2,7 @@ import {
   calendarAccountsTable,
 } from "@keeper.sh/database/schema";
 import type { ValidatedState } from "@keeper.sh/provider-core";
-import { and, eq, sql } from "drizzle-orm";
+import { and, count, eq, sql } from "drizzle-orm";
 import type { database as contextDatabase } from "../context";
 import { oauthCallbackQuerySchema } from "./request-query";
 
@@ -222,12 +222,12 @@ const handleOAuthCallback = async (
       if (!payload.destinationId) {
         const existingAccount = await getExistingDestinationAccount(tx, payload.provider, payload.accountId);
         if (!existingAccount) {
-          const accounts = await tx
-            .select({ id: calendarAccountsTable.id })
+          const [accountCount] = await tx
+            .select({ value: count() })
             .from(calendarAccountsTable)
             .where(eq(calendarAccountsTable.userId, payload.userId));
 
-          const allowed = await premiumService.canAddAccount(payload.userId, accounts.length);
+          const allowed = await premiumService.canAddAccount(payload.userId, accountCount?.value ?? 0);
           if (!allowed) {
             throw new OAuthError(
               "Account limit reached",

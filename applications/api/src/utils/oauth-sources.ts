@@ -4,7 +4,7 @@ import {
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/provider-google-calendar";
 import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/provider-outlook";
 import type { database as contextDatabase } from "../context";
@@ -279,12 +279,12 @@ const countUserAccountsWithDatabase = async (
   databaseClient: OAuthSourceDatabase,
   userId: string,
 ): Promise<number> => {
-  const accounts = await databaseClient
-    .select({ id: calendarAccountsTable.id })
+  const [result] = await databaseClient
+    .select({ value: count() })
     .from(calendarAccountsTable)
     .where(eq(calendarAccountsTable.userId, userId));
 
-  return accounts.length;
+  return result?.value ?? 0;
 };
 
 const countUserAccounts = async (userId: string): Promise<number> => {
