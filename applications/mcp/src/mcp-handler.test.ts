@@ -4,11 +4,16 @@ import { createKeeperMcpToolset } from "./toolset";
 
 const toolset = createKeeperMcpToolset({
   getEventCount: () => Promise.resolve(0),
+  getEvent: () => Promise.resolve(null),
   getEventsInRange: () => Promise.resolve([]),
   getSyncStatuses: () => Promise.resolve([]),
   listDestinations: () => Promise.resolve([]),
   listMappings: () => Promise.resolve([]),
   listSources: () => Promise.resolve([]),
+  createEvent: () => Promise.resolve({ success: false, error: "not implemented" }),
+  updateEvent: () => Promise.resolve({ success: false, error: "not implemented" }),
+  deleteEvent: () => Promise.resolve({ success: false, error: "not implemented" }),
+  rsvpEvent: () => Promise.resolve({ success: false, error: "not implemented" }),
 });
 
 describe("createKeeperMcpHandler", () => {

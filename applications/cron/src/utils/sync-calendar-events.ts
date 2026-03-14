@@ -203,6 +203,7 @@ const createSyncJob = (plan: Plan, cron: string): CronOptions =>
     cron,
     immediate: process.env.ENV !== "production",
     name: `sync-calendar-events-${plan}`,
+    overrunProtection: false,
   });
 
 export { createSyncJob, runSyncJob, syncUserSources };

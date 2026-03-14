@@ -21,7 +21,11 @@ const INITIAL_EVENT_COUNT = 0;
 const MIN_TRUSTED_ORIGINS_COUNT = 0;
 
 const database = createDatabase(env.DATABASE_URL);
-const redis = new Redis(env.REDIS_URL);
+const redis = new Redis(env.REDIS_URL, {
+  commandTimeout: 10_000,
+  maxRetriesPerRequest: 3,
+  enableOfflineQueue: false,
+});
 
 const createRedisStateStore = (redisClient: Redis): OAuthStateStore => ({
   async set(key, value, ttlSeconds) {

@@ -1,11 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import { createKeeperMcpToolset } from "./toolset";
 
+const notImplemented = () => Promise.resolve({ success: false as const, error: "not implemented" });
+
 const createMockApi = (calls?: string[]) => ({
   getEventCount: (userId: string) => {
     calls?.push(`count:${userId}`);
     return Promise.resolve(0);
   },
+  getEvent: () => Promise.resolve(null),
   getEventsInRange: (userId: string) => {
     calls?.push(`events:${userId}`);
     return Promise.resolve([]);
@@ -17,6 +20,10 @@ const createMockApi = (calls?: string[]) => ({
     calls?.push(`sources:${userId}`);
     return Promise.resolve([]);
   },
+  createEvent: notImplemented,
+  updateEvent: notImplemented,
+  deleteEvent: notImplemented,
+  rsvpEvent: notImplemented,
 });
 
 describe("createKeeperMcpToolset", () => {
