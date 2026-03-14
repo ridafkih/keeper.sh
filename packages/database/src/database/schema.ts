@@ -168,6 +168,39 @@ const eventStatesTable = pgTable(
   ],
 );
 
+const userEventsTable = pgTable(
+  "user_events",
+  {
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    calendarId: uuid()
+      .notNull()
+      .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    sourceEventUid: text(),
+    title: text(),
+    description: text(),
+    location: text(),
+    availability: text(),
+    isAllDay: boolean(),
+    startTime: timestamp().notNull(),
+    endTime: timestamp().notNull(),
+    startTimeZone: text(),
+    createdAt: timestamp().notNull().defaultNow(),
+    updatedAt: timestamp()
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("user_events_user_idx").on(table.userId),
+    index("user_events_calendar_idx").on(table.calendarId),
+    index("user_events_start_time_idx").on(table.startTime),
+    index("user_events_end_time_idx").on(table.endTime),
+  ],
+);
+
 const userSubscriptionsTable = pgTable("user_subscriptions", {
   plan: text().notNull().default("free"),
   polarSubscriptionId: text(),
@@ -309,5 +342,6 @@ export {
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
   syncStatusTable,
+  userEventsTable,
   userSubscriptionsTable,
 };

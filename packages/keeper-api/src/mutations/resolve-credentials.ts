@@ -2,8 +2,8 @@ import {
   calendarAccountsTable,
   caldavCredentialsTable,
   calendarsTable,
-  eventStatesTable,
   oauthCredentialsTable,
+  userEventsTable,
 } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
 import type { KeeperDatabase } from "../types";
@@ -76,22 +76,21 @@ const resolveCredentialsByCalendarId = async (
   return credentials;
 };
 
-const resolveCredentialsByEventId = async (
+const resolveCredentialsByUserEventId = async (
   database: KeeperDatabase,
   userId: string,
   eventId: string,
 ): Promise<{ credentials: ProviderCredentials; sourceEventUid: string | null } | null> => {
   const [event] = await database
     .select({
-      calendarId: eventStatesTable.calendarId,
-      sourceEventUid: eventStatesTable.sourceEventUid,
+      calendarId: userEventsTable.calendarId,
+      sourceEventUid: userEventsTable.sourceEventUid,
     })
-    .from(eventStatesTable)
-    .innerJoin(calendarsTable, eq(eventStatesTable.calendarId, calendarsTable.id))
+    .from(userEventsTable)
     .where(
       and(
-        eq(eventStatesTable.id, eventId),
-        eq(calendarsTable.userId, userId),
+        eq(userEventsTable.id, eventId),
+        eq(userEventsTable.userId, userId),
       ),
     )
     .limit(1);
@@ -109,4 +108,4 @@ const resolveCredentialsByEventId = async (
   return { credentials, sourceEventUid: event.sourceEventUid };
 };
 
-export { resolveCredentialsByCalendarId, resolveCredentialsByEventId };
+export { resolveCredentialsByCalendarId, resolveCredentialsByUserEventId };

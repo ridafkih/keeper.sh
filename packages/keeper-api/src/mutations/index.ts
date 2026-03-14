@@ -1,5 +1,5 @@
-import { eventStatesTable } from "@keeper.sh/database/schema";
-import { and, eq } from "drizzle-orm";
+import { userEventsTable } from "@keeper.sh/database/schema";
+import { eq } from "drizzle-orm";
 import type { KeeperDatabase, KeeperEvent } from "../types";
 import type {
   EventInput,
@@ -8,7 +8,7 @@ import type {
   EventCreateResult,
   RsvpStatus,
 } from "../mutation-types";
-import { resolveCredentialsByCalendarId, resolveCredentialsByEventId } from "./resolve-credentials";
+import { resolveCredentialsByCalendarId, resolveCredentialsByUserEventId } from "./resolve-credentials";
 import { getEvent } from "../queries/get-event";
 import {
   createGoogleEvent,
@@ -120,9 +120,10 @@ const createEventMutation = async (
   }
 
   const [inserted] = await deps.database
-    .insert(eventStatesTable)
+    .insert(userEventsTable)
     .values({
       calendarId: input.calendarId,
+      userId,
       sourceEventUid: sourceEventUid ?? null,
       title: input.title,
       description: input.description ?? null,
@@ -132,7 +133,7 @@ const createEventMutation = async (
       isAllDay: input.isAllDay ?? false,
       availability: input.availability ?? "busy",
     })
-    .returning({ id: eventStatesTable.id });
+    .returning({ id: userEventsTable.id });
 
   if (!inserted) {
     return { success: true };
@@ -148,7 +149,7 @@ const updateEventMutation = async (
   eventId: string,
   updates: EventUpdateInput,
 ): Promise<EventActionResult> => {
-  const resolved = await resolveCredentialsByEventId(deps.database, userId, eventId);
+  const resolved = await resolveCredentialsByUserEventId(deps.database, userId, eventId);
 
   if (!resolved) {
     return { success: false, error: "Event not found." };
@@ -224,9 +225,9 @@ const updateEventMutation = async (
 
   if (Object.keys(dbUpdates).length > 0) {
     await deps.database
-      .update(eventStatesTable)
+      .update(userEventsTable)
       .set(dbUpdates)
-      .where(eq(eventStatesTable.id, eventId));
+      .where(eq(userEventsTable.id, eventId));
   }
 
   return { success: true };
@@ -237,7 +238,7 @@ const deleteEventMutation = async (
   userId: string,
   eventId: string,
 ): Promise<EventActionResult> => {
-  const resolved = await resolveCredentialsByEventId(deps.database, userId, eventId);
+  const resolved = await resolveCredentialsByUserEventId(deps.database, userId, eventId);
 
   if (!resolved) {
     return { success: false, error: "Event not found." };
@@ -282,12 +283,8 @@ const deleteEventMutation = async (
   }
 
   await deps.database
-    .delete(eventStatesTable)
-    .where(
-      and(
-        eq(eventStatesTable.id, eventId),
-      ),
-    );
+    .delete(userEventsTable)
+    .where(eq(userEventsTable.id, eventId));
 
   return { success: true };
 };
@@ -298,7 +295,7 @@ const rsvpEventMutation = async (
   eventId: string,
   status: RsvpStatus,
 ): Promise<EventActionResult> => {
-  const resolved = await resolveCredentialsByEventId(deps.database, userId, eventId);
+  const resolved = await resolveCredentialsByUserEventId(deps.database, userId, eventId);
 
   if (!resolved) {
     return { success: false, error: "Event not found." };

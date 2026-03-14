@@ -1,6 +1,6 @@
 import { convertIcsCalendar, generateIcsCalendar } from "ts-ics";
 import type { IcsCalendar, IcsEvent } from "ts-ics";
-import { HTTP_STATUS } from "@keeper.sh/constants";
+import { HTTP_STATUS, KEEPER_USER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { decryptPassword } from "@keeper.sh/encryption";
 import { createDAVClient } from "tsdav";
 import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "../../mutation-types";
@@ -23,7 +23,7 @@ const getClient = async (credentials: CalDAVCredentials) => {
   });
 };
 
-const generateUid = (): string => `${crypto.randomUUID()}@keeper.sh`;
+const generateUid = (): string => `${crypto.randomUUID()}${KEEPER_USER_EVENT_SUFFIX}`;
 
 const ensureTrailingSlash = (url: string): string => {
   if (url.endsWith("/")) {
