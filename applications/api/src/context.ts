@@ -2,7 +2,7 @@ import { Resend } from "resend";
 import env from "@keeper.sh/env/api";
 import { createDatabase } from "@keeper.sh/database";
 import { syncStatusTable } from "@keeper.sh/database/schema";
-import { RedisClient } from "bun";
+import Redis from "ioredis";
 import { createAuth } from "@keeper.sh/auth";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { createPremiumService } from "@keeper.sh/premium";
@@ -21,9 +21,9 @@ const INITIAL_EVENT_COUNT = 0;
 const MIN_TRUSTED_ORIGINS_COUNT = 0;
 
 const database = createDatabase(env.DATABASE_URL);
-const redis = new RedisClient(env.REDIS_URL);
+const redis = new Redis(env.REDIS_URL);
 
-const createRedisStateStore = (redisClient: RedisClient): OAuthStateStore => ({
+const createRedisStateStore = (redisClient: Redis): OAuthStateStore => ({
   async set(key, value, ttlSeconds) {
     await redisClient.set(key, value);
     await redisClient.expire(key, ttlSeconds);
@@ -43,9 +43,9 @@ const createRedisStateStore = (redisClient: RedisClient): OAuthStateStore => ({
 
 configureStateStore(createRedisStateStore(redis));
 
-const createRedisRefreshLockStore = (redisClient: RedisClient): RefreshLockStore => ({
+const createRedisRefreshLockStore = (redisClient: Redis): RefreshLockStore => ({
   async tryAcquire(key, ttlSeconds) {
-    const result = await redisClient.send("SET", [key, "1", "EX", String(ttlSeconds), "NX"]);
+    const result = await redisClient.set(key, "1", "EX", ttlSeconds, "NX");
     return result !== null;
   },
   async release(key) {

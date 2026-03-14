@@ -2,7 +2,7 @@ import { broadcastMessageSchema } from "@keeper.sh/data-schemas";
 import type { BroadcastMessage } from "@keeper.sh/data-schemas";
 import { connections } from "./state";
 import type { Socket } from "./types";
-import type { RedisClient } from "bun";
+import type Redis from "ioredis";
 
 const EMPTY_CONNECTIONS_COUNT = 0;
 const IDLE_TIMEOUT_SECONDS = 60;
@@ -14,7 +14,7 @@ interface WebsocketHandlerOptions {
 }
 
 interface BroadcastConfig {
-  redis: RedisClient;
+  redis: Redis;
 }
 
 interface BroadcastService {
@@ -46,15 +46,20 @@ const createBroadcastService = (config: BroadcastConfig): BroadcastService => {
   };
 
   const startSubscriber = async (): Promise<void> => {
-    const subscriber = await redis.duplicate();
+    const subscriber = redis.duplicate();
 
-    await subscriber.subscribe(CHANNEL, (message: string) => {
+    subscriber.on("message", (channel: string, message: string) => {
+      if (channel !== CHANNEL) {
+        return;
+      }
       const parsed = JSON.parse(message);
       if (!broadcastMessageSchema.allows(parsed)) {
         return;
       }
       sendToUser(parsed.userId, parsed.event, parsed.data);
     });
+
+    await subscriber.subscribe(CHANNEL);
   };
 
   return { emit, startSubscriber };

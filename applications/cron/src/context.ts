@@ -1,7 +1,7 @@
 import env from "@keeper.sh/env/cron";
 import { createDatabase } from "@keeper.sh/database";
 import { syncStatusTable } from "@keeper.sh/database/schema";
-import { RedisClient } from "bun";
+import Redis from "ioredis";
 import { createPremiumService } from "@keeper.sh/premium";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import {
@@ -53,20 +53,20 @@ interface SyncContext {
   close: () => void;
 }
 
-const createRedisRefreshLockStore = (redisClient: RedisClient): RefreshLockStore => ({
+const createRedisRefreshLockStore = (redisClient: Redis): RefreshLockStore => ({
   async tryAcquire(key, ttlSeconds) {
-    const result = await redisClient.send("SET", [key, "1", "EX", String(ttlSeconds), "NX"]);
+    const result = await redisClient.set(key, "1", "EX", ttlSeconds, "NX");
     return result !== null;
   },
   async release(key) {
     await redisClient.del(key);
   },
 });
-const refreshLockRedis = new RedisClient(env.REDIS_URL);
+const refreshLockRedis = new Redis(env.REDIS_URL);
 const refreshLockStore = createRedisRefreshLockStore(refreshLockRedis);
 
 const createSyncContext = (): SyncContext => {
-  const redis = new RedisClient(env.REDIS_URL);
+  const redis = new Redis(env.REDIS_URL);
 
   const destinationProviders = createDestinationProviders({
     database,
@@ -92,7 +92,7 @@ const createSyncContext = (): SyncContext => {
   });
 
   const close = (): void => {
-    redis.close();
+    redis.disconnect();
   };
 
   return { destinationProviders, syncCoordinator, close };

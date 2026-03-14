@@ -1,5 +1,5 @@
 import { SYNC_TTL_SECONDS } from "@keeper.sh/constants";
-import type { RedisClient } from "bun";
+import type Redis from "ioredis";
 
 const SYNC_KEY_PREFIX = "sync:generation:";
 
@@ -39,7 +39,7 @@ interface SyncContext {
 }
 
 interface SyncCoordinatorConfig {
-  redis: RedisClient;
+  redis: Redis;
   onDestinationSync?: (result: DestinationSyncResult) => Promise<void>;
   onSyncProgress?: (update: SyncProgressUpdate) => void;
 }

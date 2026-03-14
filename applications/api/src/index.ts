@@ -110,7 +110,7 @@ await entry({
           return () => {
             server.stop();
             closeDatabase(database);
-            redis.close();
+            redis.disconnect();
             destroyWideLogger();
           };
         });

@@ -1,5 +1,5 @@
 import { SYNC_TTL_SECONDS } from "@keeper.sh/constants";
-import type { RedisClient } from "bun";
+import type Redis from "ioredis";
 import type { DestinationSyncResult, SyncProgressUpdate } from "./coordinator";
 import { SyncAggregateTracker } from "./aggregate-tracker";
 import type { SyncAggregateMessage, SyncAggregateSnapshot } from "./aggregate-tracker";
@@ -9,7 +9,7 @@ const SYNC_AGGREGATE_LATEST_KEY_PREFIX = "sync:aggregate:latest:";
 const SYNC_AGGREGATE_SEQUENCE_KEY_PREFIX = "sync:aggregate:seq:";
 
 interface SyncAggregateRuntimeConfig {
-  redis: RedisClient;
+  redis: Redis;
   broadcast: (userId: string, eventName: string, data: unknown) => void;
   persistSyncStatus: (result: DestinationSyncResult, syncedAt: Date) => Promise<void>;
   tracker?: SyncAggregateTracker;
