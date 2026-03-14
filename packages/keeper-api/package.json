@@ -13,10 +13,15 @@
     "lint": "oxlint ."
   },
   "dependencies": {
+    "@keeper.sh/constants": "workspace:*",
     "@keeper.sh/database": "workspace:*",
+    "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/date-utils": "workspace:*",
+    "@keeper.sh/encryption": "workspace:*",
     "@keeper.sh/provider-registry": "workspace:*",
-    "drizzle-orm": "0.45.1"
+    "drizzle-orm": "0.45.1",
+    "ts-ics": "^2.4.3",
+    "tsdav": "2.1.6"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",

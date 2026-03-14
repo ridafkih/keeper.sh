@@ -1,7 +1,8 @@
 import type { MaybePromise } from "bun";
 import { isKeeperMcpEnabledAuth } from "@keeper.sh/auth";
 import { ErrorResponse } from "./responses";
-import { calendarsTable, sourceDestinationMappingsTable } from "@keeper.sh/database/schema";
+import { apiTokensTable, calendarsTable, sourceDestinationMappingsTable } from "@keeper.sh/database/schema";
+import { isApiToken, hashApiToken } from "./api-tokens";
 import { user as userTable } from "@keeper.sh/database/auth-schema";
 import { and, count, eq, inArray } from "drizzle-orm";
 import { auth, database, premiumService } from "../context";
@@ -202,23 +203,70 @@ const withAuth =
     return handler({ params, request, userId: session.user.id });
   };
 
+const resolveApiTokenUserId = async (bearerToken: string): Promise<string | null> => {
+  const tokenHash = hashApiToken(bearerToken);
+  const [match] = await database
+    .select({
+      userId: apiTokensTable.userId,
+      expiresAt: apiTokensTable.expiresAt,
+      id: apiTokensTable.id,
+    })
+    .from(apiTokensTable)
+    .where(eq(apiTokensTable.tokenHash, tokenHash))
+    .limit(1);
+
+  if (!match) {
+    return null;
+  }
+
+  if (match.expiresAt && match.expiresAt.getTime() < Date.now()) {
+    return null;
+  }
+
+  database
+    .update(apiTokensTable)
+    .set({ lastUsedAt: new Date() })
+    .where(eq(apiTokensTable.id, match.id))
+    .then(() => {}, () => {});
+
+  return match.userId;
+};
+
 const withV1Auth =
   (handler: AuthenticatedRouteCallback): RouteCallback =>
   async ({ request, params }) => {
     const authHeader = request.headers.get("authorization");
 
-    if (authHeader?.startsWith("Bearer ") && isKeeperMcpEnabledAuth(auth)) {
-      const mcpAuth = auth;
-      const mcpSession = await widelog.time.measure("auth.duration_ms", () =>
-        mcpAuth.api.getMcpSession({ headers: request.headers }),
-      );
+    if (authHeader?.startsWith("Bearer ")) {
+      const bearerToken = authHeader.slice("Bearer ".length);
 
-      if (!mcpSession?.userId) {
-        return ErrorResponse.unauthorized().toResponse();
+      if (isApiToken(bearerToken)) {
+        const userId = await widelog.time.measure("auth.duration_ms", () =>
+          resolveApiTokenUserId(bearerToken),
+        );
+
+        if (!userId) {
+          return ErrorResponse.unauthorized().toResponse();
+        }
+
+        widelog.set("auth.method", "api_token");
+        await enrichWithUserContext(userId);
+        return handler({ params, request, userId });
       }
 
-      await enrichWithUserContext(mcpSession.userId);
-      return handler({ params, request, userId: mcpSession.userId });
+      if (isKeeperMcpEnabledAuth(auth)) {
+        const mcpAuth = auth;
+        const mcpSession = await widelog.time.measure("auth.duration_ms", () =>
+          mcpAuth.api.getMcpSession({ headers: request.headers }),
+        );
+
+        if (!mcpSession?.userId) {
+          return ErrorResponse.unauthorized().toResponse();
+        }
+
+        await enrichWithUserContext(mcpSession.userId);
+        return handler({ params, request, userId: mcpSession.userId });
+      }
     }
 
     const session = await widelog.time.measure("auth.duration_ms", () => getSession(request));

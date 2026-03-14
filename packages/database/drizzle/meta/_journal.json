@@ -435,6 +435,13 @@
       "when": 1773428430422,
       "tag": "0061_brief_toxin",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1773466950385,
+      "tag": "0062_lame_white_tiger",
+      "breakpoints": true
     }
   ]
 }

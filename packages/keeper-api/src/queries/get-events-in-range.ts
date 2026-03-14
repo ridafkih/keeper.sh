@@ -5,7 +5,8 @@ import {
 } from "@keeper.sh/database/schema";
 import { normalizeDateRange } from "@keeper.sh/date-utils";
 import { and, arrayContains, asc, eq, gte, inArray, lte } from "drizzle-orm";
-import type { KeeperDatabase, KeeperEvent, KeeperEventRangeInput } from "../types";
+import type { SQL } from "drizzle-orm";
+import type { KeeperDatabase, KeeperEvent, KeeperEventFilters, KeeperEventRangeInput } from "../types";
 
 const EMPTY_RESULT_COUNT = 0;
 
@@ -33,8 +34,18 @@ const getEventsInRange = async (
   database: KeeperDatabase,
   userId: string,
   range: KeeperEventRangeInput,
+  filters?: KeeperEventFilters,
 ): Promise<KeeperEvent[]> => {
   const { start, end } = normalizeEventRange(range);
+
+  const sourceConditions: SQL[] = [
+    eq(calendarsTable.userId, userId),
+    arrayContains(calendarsTable.capabilities, ["pull"]),
+  ];
+
+  if (filters?.calendarId && filters.calendarId.length > 0) {
+    sourceConditions.push(inArray(calendarsTable.id, filters.calendarId));
+  }
 
   const sources = await database
     .select({
@@ -45,12 +56,7 @@ const getEventsInRange = async (
     })
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
-    .where(
-      and(
-        eq(calendarsTable.userId, userId),
-        arrayContains(calendarsTable.capabilities, ["pull"]),
-      ),
-    );
+    .where(and(...sourceConditions));
 
   if (sources.length === EMPTY_RESULT_COUNT) {
     return [];
@@ -68,6 +74,20 @@ const getEventsInRange = async (
     ]),
   );
 
+  const eventConditions: SQL[] = [
+    inArray(eventStatesTable.calendarId, calendarIds),
+    gte(eventStatesTable.startTime, start),
+    lte(eventStatesTable.startTime, end),
+  ];
+
+  if (filters?.availability && filters.availability.length > 0) {
+    eventConditions.push(inArray(eventStatesTable.availability, filters.availability));
+  }
+
+  if (filters?.isAllDay !== undefined) {
+    eventConditions.push(eq(eventStatesTable.isAllDay, filters.isAllDay));
+  }
+
   const events = await database
     .select({
       calendarId: eventStatesTable.calendarId,
@@ -79,13 +99,7 @@ const getEventsInRange = async (
       title: eventStatesTable.title,
     })
     .from(eventStatesTable)
-    .where(
-      and(
-        inArray(eventStatesTable.calendarId, calendarIds),
-        gte(eventStatesTable.startTime, start),
-        lte(eventStatesTable.startTime, end),
-      ),
-    )
+    .where(and(...eventConditions))
     .orderBy(asc(eventStatesTable.startTime));
 
   return events.map((event) => {

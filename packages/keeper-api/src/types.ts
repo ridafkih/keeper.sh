@@ -7,6 +7,12 @@ interface KeeperEventRangeInput {
   to: Date | string;
 }
 
+interface KeeperEventFilters {
+  calendarId?: string[];
+  availability?: string[];
+  isAllDay?: boolean;
+}
+
 interface KeeperSource {
   id: string;
   name: string;
@@ -64,9 +70,14 @@ interface KeeperApi {
   listSources: (userId: string) => Promise<KeeperSource[]>;
   listDestinations: (userId: string) => Promise<KeeperDestination[]>;
   listMappings: (userId: string) => Promise<KeeperMapping[]>;
-  getEventsInRange: (userId: string, range: KeeperEventRangeInput) => Promise<KeeperEvent[]>;
+  getEventsInRange: (userId: string, range: KeeperEventRangeInput, filters?: KeeperEventFilters) => Promise<KeeperEvent[]>;
+  getEvent: (userId: string, eventId: string) => Promise<KeeperEvent | null>;
   getEventCount: (userId: string) => Promise<number>;
   getSyncStatuses: (userId: string) => Promise<KeeperSyncStatus[]>;
+  createEvent: (userId: string, input: import("./mutation-types").EventInput) => Promise<import("./mutation-types").EventCreateResult>;
+  updateEvent: (userId: string, eventId: string, updates: import("./mutation-types").EventUpdateInput) => Promise<import("./mutation-types").EventActionResult>;
+  deleteEvent: (userId: string, eventId: string) => Promise<import("./mutation-types").EventActionResult>;
+  rsvpEvent: (userId: string, eventId: string, status: import("./mutation-types").RsvpStatus) => Promise<import("./mutation-types").EventActionResult>;
 }
 
 export type {
@@ -74,6 +85,7 @@ export type {
   KeeperDatabase,
   KeeperDestination,
   KeeperEvent,
+  KeeperEventFilters,
   KeeperEventRangeInput,
   KeeperMapping,
   KeeperSource,

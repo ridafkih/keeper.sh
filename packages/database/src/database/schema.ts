@@ -260,6 +260,26 @@ const feedbackTable = pgTable(
   (table) => [index("feedback_user_idx").on(table.userId)],
 );
 
+const apiTokensTable = pgTable(
+  "api_tokens",
+  {
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    tokenHash: text().notNull().unique(),
+    tokenPrefix: text().notNull(),
+    lastUsedAt: timestamp(),
+    expiresAt: timestamp(),
+    createdAt: timestamp().notNull().defaultNow(),
+  },
+  (table) => [
+    index("api_tokens_user_idx").on(table.userId),
+    uniqueIndex("api_tokens_hash_idx").on(table.tokenHash),
+  ],
+);
+
 const icalFeedSettingsTable = pgTable("ical_feed_settings", {
   userId: text()
     .notNull()
@@ -277,6 +297,7 @@ const icalFeedSettingsTable = pgTable("ical_feed_settings", {
 });
 
 export {
+  apiTokensTable,
   caldavCredentialsTable,
   calendarAccountsTable,
   calendarSnapshotsTable,

@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import CreditCard from "lucide-react/dist/esm/icons/credit-card";
 import KeyRound from "lucide-react/dist/esm/icons/key-round";
+import KeySquare from "lucide-react/dist/esm/icons/key-square";
 import Lock from "lucide-react/dist/esm/icons/lock";
 import Mail from "lucide-react/dist/esm/icons/mail";
 import Sparkles from "lucide-react/dist/esm/icons/sparkles";
@@ -10,6 +11,7 @@ import { pluralize } from "../../../../lib/pluralize";
 import { Button, ButtonText } from "../../../../components/ui/primitives/button";
 import { BackButton } from "../../../../components/ui/primitives/back-button";
 import { useSession } from "../../../../hooks/use-session";
+import { useApiTokens } from "../../../../hooks/use-api-tokens";
 import { usePasskeys } from "../../../../hooks/use-passkeys";
 import { Input } from "../../../../components/ui/primitives/input";
 import { deleteAccount } from "../../../../lib/auth";
@@ -62,6 +64,7 @@ function SettingsPage() {
     authCapabilities.credentialMode === "username"
       ? (user?.username ?? user?.name ?? "")
       : (user?.email ?? "");
+  const { data: apiTokens = [] } = useApiTokens();
   const { data: passkeys = [] } = usePasskeys(authCapabilities.supportsPasskeys);
   const { data: subscription, isLoading: subscriptionLoading } = useSubscription({
     fallbackData: loaderSubscription,
@@ -138,6 +141,17 @@ function SettingsPage() {
             </NavigationMenuItemTrailing>
           </NavigationMenuLinkItem>
         )}
+        <NavigationMenuLinkItem to="/dashboard/settings/api-tokens">
+          <NavigationMenuItemIcon>
+            <KeySquare size={15} />
+          </NavigationMenuItemIcon>
+          <NavigationMenuItemLabel>API Tokens</NavigationMenuItemLabel>
+          <NavigationMenuItemTrailing>
+            <Text size="sm" tone="muted">
+              {pluralize(apiTokens.length, "token", "tokens")}
+            </Text>
+          </NavigationMenuItemTrailing>
+        </NavigationMenuLinkItem>
       </NavigationMenu>
       {getCommercialMode() && (
         <NavigationMenu variant={isPro ? "default" : "highlight"}>

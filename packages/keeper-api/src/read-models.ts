@@ -1,18 +1,45 @@
 import { getEventCount } from "./queries/get-event-count";
+import { getEvent } from "./queries/get-event";
 import { getEventsInRange, normalizeEventRange } from "./queries/get-events-in-range";
 import { getSyncStatuses } from "./queries/get-sync-statuses";
 import { listDestinations } from "./queries/list-destinations";
 import { listMappings } from "./queries/list-mappings";
 import { listSources } from "./queries/list-sources";
+import {
+  createEventMutation,
+  updateEventMutation,
+  deleteEventMutation,
+  rsvpEventMutation,
+} from "./mutations";
+import type { OAuthTokenRefresher } from "./mutations";
 import type { KeeperApi, KeeperDatabase } from "./types";
 
-const createKeeperApi = (database: KeeperDatabase): KeeperApi => ({
-  listSources: (userId) => listSources(database, userId),
-  listDestinations: (userId) => listDestinations(database, userId),
-  listMappings: (userId) => listMappings(database, userId),
-  getEventsInRange: (userId, range) => getEventsInRange(database, userId, range),
-  getEventCount: (userId) => getEventCount(database, userId),
-  getSyncStatuses: (userId) => getSyncStatuses(database, userId),
-});
+interface KeeperApiOptions {
+  oauthTokenRefresher?: OAuthTokenRefresher;
+  encryptionKey?: string;
+}
+
+const createKeeperApi = (database: KeeperDatabase, options?: KeeperApiOptions): KeeperApi => {
+  const deps = {
+    database,
+    oauthTokenRefresher: options?.oauthTokenRefresher,
+    encryptionKey: options?.encryptionKey,
+  };
+
+  return {
+    listSources: (userId) => listSources(database, userId),
+    listDestinations: (userId) => listDestinations(database, userId),
+    listMappings: (userId) => listMappings(database, userId),
+    getEventsInRange: (userId, range, filters) => getEventsInRange(database, userId, range, filters),
+    getEvent: (userId, eventId) => getEvent(database, userId, eventId),
+    getEventCount: (userId) => getEventCount(database, userId),
+    getSyncStatuses: (userId) => getSyncStatuses(database, userId),
+    createEvent: (userId, input) => createEventMutation(deps, userId, input),
+    updateEvent: (userId, eventId, updates) => updateEventMutation(deps, userId, eventId, updates),
+    deleteEvent: (userId, eventId) => deleteEventMutation(deps, userId, eventId),
+    rsvpEvent: (userId, eventId, status) => rsvpEventMutation(deps, userId, eventId, status),
+  };
+};
 
 export { createKeeperApi, normalizeEventRange };
+export type { KeeperApiOptions };
