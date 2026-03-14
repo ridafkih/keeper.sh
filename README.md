@@ -143,6 +143,8 @@ There are six images currently available, two of them are designed for convenien
 | BETTER_AUTH_URL                | `api`, `mcp`  | The base URL used for auth redirects.<br><br>e.g. `http://localhost:3000`                                                                                           |
 | BETTER_AUTH_SECRET             | `api`, `mcp`  | Secret key for session signing.<br><br>e.g. `openssl rand -base64 32`                                                                                               |
 | API_PORT                       | `api`         | Port the Bun API listens on. Defaults to `3001` in container images.                                                                                                |
+| ENV                            | `web`         | Optional. Runtime environment. One of `development`, `production`, or `test`. Defaults to `production`.                                                             |
+| PORT                           | `web`         | Port the web server listens on. Defaults to `3000` in container images.                                                                                             |
 | VITE_API_URL                   | `web`         | The URL the web server uses to proxy requests to the Bun API.<br><br>e.g. `http://api:3001`                                                                         |
 | COMMERCIAL_MODE                | `api`, `cron` | Enable Polar billing flow. Set to `true` if using Polar for subscriptions.                                                                                          |
 | POLAR_ACCESS_TOKEN             | `api`, `cron` | Optional. Polar API token for subscription management.                                                                                                              |
@@ -445,7 +447,6 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
       MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
-      ENV: production
     depends_on:
       postgres:
         condition: service_healthy
@@ -472,7 +473,6 @@ services:
     image: ghcr.io/ridafkih/keeper-web:latest
     environment:
       VITE_API_URL: ${VITE_API_URL}
-      ENV: production
       PORT: 3000
     ports:
       - "3000:3000"

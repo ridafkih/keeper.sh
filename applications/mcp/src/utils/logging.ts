@@ -4,7 +4,7 @@ const { context: runMcpWideEventContext, destroy: destroyWideLogger } = widelogg
   service: "keeper-mcp",
   defaultEventName: "wide_event",
   commitHash: process.env.COMMIT_SHA,
-  environment: process.env.ENV ?? process.env.NODE_ENV,
+  environment: process.env.ENV ?? "production",
   version: process.env.npm_package_version,
 });
 

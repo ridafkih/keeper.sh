@@ -4,7 +4,7 @@ import type { ServerConfig } from "./types";
 export const envSchema = type({
   VITE_API_URL: "string.url",
   VITE_MCP_URL: "string.url?",
-  ENV: "'development'|'production'|'test'",
+  ENV: "'development'|'production'|'test' = 'production'",
   PORT: "string",
 });
 

@@ -10,7 +10,7 @@ const normalizedPathCache = new Map<string, string>();
 
 const { context: runWebWideEventContext, destroy: destroyWideLogger } = widelogger({
   defaultEventName: "wide_event",
-  environment: process.env.ENV ?? process.env.NODE_ENV,
+  environment: process.env.ENV ?? "production",
   service: loggerServiceName,
   version: process.env.npm_package_version,
   commitHash: process.env.COMMIT_SHA,
