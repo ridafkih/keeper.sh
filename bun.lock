@@ -156,6 +156,7 @@
         "arktype": "^2.2.0",
         "better-auth": "1.5.5",
         "drizzle-orm": "^0.45.1",
+        "ioredis": "^5.10.0",
         "resend": "^6.6.0",
       },
       "devDependencies": {
