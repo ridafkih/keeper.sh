@@ -115,6 +115,52 @@ const processAuthResponse = async (pathname: string, response: Response): Promis
   return clearSessionCookies(response);
 };
 
+const isUnauthenticatedRequest = (request: Request): boolean => {
+  const authorization = request.headers.get("authorization");
+  if (authorization && authorization.trim().length > 0) {
+    return false;
+  }
+
+  const cookie = request.headers.get("cookie");
+  if (cookie && cookie.includes("better-auth.session_token=")) {
+    return false;
+  }
+
+  return true;
+};
+
+const prepareUnauthenticatedRegisterRequest = async (
+  pathname: string,
+  request: Request,
+): Promise<Request> => {
+  if (pathname !== "/api/auth/oauth2/register") {
+    return request;
+  }
+
+  if (request.method !== "POST") {
+    return request;
+  }
+
+  if (!isUnauthenticatedRequest(request)) {
+    return request;
+  }
+
+  const body = await request.clone().json().catch(() => null);
+  if (!body || typeof body !== "object") {
+    return request;
+  }
+
+  const modified = { ...body, token_endpoint_auth_method: "none" };
+  const headers = new Headers(request.headers);
+  headers.delete("content-length");
+
+  return new Request(request.url, {
+    method: request.method,
+    headers,
+    body: JSON.stringify(modified),
+  });
+};
+
 const handleAuthRequest = (pathname: string, request: Request): MaybePromise<Response> =>
   runApiWideEventContext(async () => {
     setWideEventFields(extractAuthContext(request, pathname));
@@ -149,10 +195,11 @@ const handleAuthRequest = (pathname: string, request: Request): MaybePromise<Res
         }
 
         try {
+          const preparedRequest = await prepareUnauthenticatedRegisterRequest(pathname, request);
           const preparedTokenRequest = await prepareOAuthTokenRequest({
             mcpPublicUrl: env.MCP_PUBLIC_URL,
             pathname,
-            request,
+            request: preparedRequest,
           });
 
           if (preparedTokenRequest.mcpResourceInjected) {

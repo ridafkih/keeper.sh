@@ -22,6 +22,68 @@ If you encounter a bug or have an idea for a feature, you may [open an issue on 
 
 High-value and high-quality contributions are appreciated. Before working on large features you intend to see merged, please open an issue first to discuss beforehand.
 
+## Local Development
+
+The dev environment runs behind HTTPS at `https://keeper.localhost` using a [Caddy](https://caddyserver.com/) reverse proxy with automatic TLS. The `.localhost` TLD resolves to `127.0.0.1` automatically per [RFC 6761](https://datatracker.ietf.org/doc/html/rfc6761) — no `/etc/hosts` entry is needed.
+
+### Prerequisites
+
+- [Bun](https://bun.sh/) (v1.3.5+)
+- [Docker](https://docs.docker.com/get-started/) & Docker Compose
+
+### Getting Started
+
+```bash
+bun install
+```
+
+#### Generate and Trust a Root CA
+
+The dev environment runs behind HTTPS via Caddy. You need to generate a local root certificate authority and trust it so your browser accepts the certificate.
+
+```bash
+mkdir -p .pki
+openssl req -x509 -new -nodes \
+  -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+  -keyout .pki/root.key -out .pki/root.crt \
+  -days 3650 -subj "/CN=Keeper.sh CA"
+```
+
+Then trust it on your platform:
+
+**macOS**
+
+```bash
+sudo security add-trusted-cert -d -r trustRoot \
+  -k /Library/Keychains/System.keychain .pki/root.crt
+```
+
+**Linux**
+
+```bash
+sudo cp .pki/root.crt /usr/local/share/ca-certificates/keeper-dev-root.crt
+sudo update-ca-certificates
+```
+
+#### Start the Dev Environment
+
+```bash
+bun dev
+```
+
+This starts PostgreSQL, Redis, and a Caddy reverse proxy via Docker Compose, along with the API, web, MCP, and cron services locally. Once running, open `https://keeper.localhost`.
+
+### Architecture
+
+| Service  | Local Port | Accessed Via                         |
+| -------- | ---------- | ------------------------------------ |
+| Caddy    | 443        | `https://keeper.localhost`           |
+| Web      | 5173       | Proxied by Caddy                     |
+| API      | 3000       | Proxied by Web at `/api`             |
+| MCP      | 3001       | Proxied by Web at `/mcp`             |
+| Postgres | 5432       | `postgresql://postgres:postgres@localhost:5432/postgres` |
+| Redis    | 6379       | `redis://localhost:6379`             |
+
 # Qs
 
 ## Why does this exist?

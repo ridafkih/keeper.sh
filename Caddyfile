@@ -1,15 +1,9 @@
-{$DOMAIN} {
-	tls {
-		dns cloudflare {$CLOUDFLARE_API_TOKEN}
-	}
+keeper.localhost {
+	tls internal
 
-	redir https://www.{$DOMAIN}{uri} permanent
+	reverse_proxy host.docker.internal:5173
 }
 
-www.{$DOMAIN} {
-	tls {
-		dns cloudflare {$CLOUDFLARE_API_TOKEN}
-	}
-
-	reverse_proxy web:3000
+:80 {
+	reverse_proxy host.docker.internal:5173
 }

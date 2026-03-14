@@ -1,0 +1,88 @@
+name: keeper
+
+services:
+  caddy:
+    build:
+      context: ../docker/caddy
+    container_name: keeper-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: "${DOMAIN:?DOMAIN is required}"
+      CLOUDFLARE_API_TOKEN: "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN is required}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: keeper-redis
+    command: redis-server --requirepass "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"
+    env_file: .env
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  api:
+    image: ghcr.io/ridafkih/keeper-api:latest
+    container_name: keeper-api
+    env_file: .env
+    environment:
+      ENV: production
+      NODE_EXTRA_CA_CERTS: /certs/global-bundle.pem
+    volumes:
+      - ./global-bundle.pem:/certs/global-bundle.pem:ro
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  cron:
+    image: ghcr.io/ridafkih/keeper-cron:latest
+    container_name: keeper-cron
+    env_file: .env
+    environment:
+      ENV: production
+      NODE_EXTRA_CA_CERTS: /certs/global-bundle.pem
+    volumes:
+      - ./global-bundle.pem:/certs/global-bundle.pem:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  mcp:
+    image: ghcr.io/ridafkih/keeper-mcp:latest
+    container_name: keeper-mcp
+    env_file: .env
+    environment:
+      ENV: production
+      NODE_EXTRA_CA_CERTS: /certs/global-bundle.pem
+    volumes:
+      - ./global-bundle.pem:/certs/global-bundle.pem:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  web:
+    image: ghcr.io/ridafkih/keeper-web:latest
+    container_name: keeper-web
+    env_file: .env
+    environment:
+      VITE_API_URL: http://api:3001
+      VITE_MCP_URL: http://mcp:3002
+      PORT: "3000"
+      ENV: production
+    depends_on:
+      - api
+      - mcp
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:
+  redis-data:

@@ -66,7 +66,7 @@ const resolveMcpAuthOptions = (
     oauthProvider: {
       allowDynamicClientRegistration: true,
       allowUnauthenticatedClientRegistration: true,
-      clientRegistrationAllowedScopes: ["offline_access", ...KEEPER_API_RESOURCE_SCOPES],
+      clientRegistrationAllowedScopes: KEEPER_MCP_OAUTH_SCOPES,
       clientRegistrationDefaultScopes: ["offline_access", ...KEEPER_API_RESOURCE_SCOPES],
       consentPage: resolveAbsoluteUrl("/oauth/consent", input.webBaseUrl),
       loginPage: resolveAbsoluteUrl("/login", input.webBaseUrl),

@@ -7,3 +7,4 @@ dist/
 *.tsbuildinfo
 screenshots/
 applications/mobile/
+.pki/

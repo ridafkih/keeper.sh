@@ -116,52 +116,6 @@ const extractSignUpEmail = (value: unknown): string | null => {
   return value.email;
 };
 
-interface DefaultUnauthenticatedOAuthClientRegistrationInput {
-  body: unknown;
-  headers: Headers | undefined;
-  path: string;
-}
-
-const hasAuthHeader = (headers: Headers | undefined): boolean => {
-  if (!headers) {
-    return false;
-  }
-  const authorization = headers.get("authorization");
-  return typeof authorization === "string" && authorization.trim().length > 0;
-};
-
-const hasSessionCookie = (headers: Headers | undefined): boolean => {
-  if (!headers) {
-    return false;
-  }
-  const cookieHeader = headers.get("cookie");
-  if (!cookieHeader) {
-    return false;
-  }
-  return cookieHeader.includes("better-auth.session_token=");
-};
-
-const defaultUnauthenticatedOAuthClientRegistration = (
-  input: DefaultUnauthenticatedOAuthClientRegistrationInput,
-): unknown => {
-  if (input.path !== "/oauth2/register") {
-    return input.body;
-  }
-
-  if (!isRecord(input.body)) {
-    return input.body;
-  }
-
-  if (hasAuthHeader(input.headers) || hasSessionCookie(input.headers)) {
-    return input.body;
-  }
-
-  return {
-    ...input.body,
-    token_endpoint_auth_method: "none",
-  };
-};
-
 const createAuth = (config: AuthConfig) => {
   const {
     database,
@@ -339,12 +293,6 @@ const createAuth = (config: AuthConfig) => {
     },
     hooks: {
       before: createAuthMiddleware(async (context) => {
-        context.body = defaultUnauthenticatedOAuthClientRegistration({
-          body: context.body,
-          headers: context.headers,
-          path: context.path,
-        });
-
         if (context.path !== "/sign-up/email") {
           return;
         }
@@ -483,7 +431,6 @@ type AuthResult = ReturnType<typeof createAuth>;
 
 export {
   createAuth,
-  defaultUnauthenticatedOAuthClientRegistration,
   hasOAuthProviderApi,
   isKeeperMcpEnabledAuth,
 };
