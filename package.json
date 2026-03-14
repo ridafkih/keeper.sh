@@ -15,7 +15,7 @@
   "scripts": {
     "clean": "rimraf --glob **/{.turbo,node_modules,.next/}/",
     "dev": "turbo run dev dev:root",
-    "dev:root": "docker compose up",
+    "dev:root": "docker compose up --force-recreate",
     "types": "turbo run types --parallel",
     "build": "turbo run build",
     "start": "turbo run start",
