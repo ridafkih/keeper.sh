@@ -208,6 +208,6 @@ jobs:
 
             cd /home/ubuntu
 
-            docker compose -f deploy/compose.yaml pull
-            docker compose -f deploy/compose.yaml up -d --build --remove-orphans --wait
+            docker compose -f deploy/compose.yaml --env-file .env pull
+            docker compose -f deploy/compose.yaml --env-file .env up -d --build --remove-orphans --wait
             docker image prune -af --filter "until=24h"
