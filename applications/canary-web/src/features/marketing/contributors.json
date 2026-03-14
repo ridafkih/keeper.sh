@@ -28,5 +28,10 @@
     "username": "claude",
     "name": "Claude",
     "avatarUrl": "/contributors/claude.webp"
+  },
+  {
+    "username": "mbaroody",
+    "name": "Michael Baroody",
+    "avatarUrl": "/contributors/mbaroody.webp"
   }
 ]
