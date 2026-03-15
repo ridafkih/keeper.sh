@@ -1,14 +1,24 @@
 import type { CronOptions } from "cronbake";
 import type { Plan } from "@keeper.sh/data-schemas";
-import { allSettledWithConcurrency } from "@keeper.sh/calendar";
+import { allSettledWithConcurrency, createSyncAggregateRuntime } from "@keeper.sh/calendar";
+import type { DestinationSyncResult } from "@keeper.sh/calendar";
 import { syncDestinationsForUser } from "@keeper.sh/sync";
 import type { SyncConfig } from "@keeper.sh/sync";
+import { createBroadcastService } from "@keeper.sh/broadcast";
+import { syncStatusTable } from "@keeper.sh/database/schema";
 import Redis from "ioredis";
 import { setCronEventFields, withCronWideEvent } from "@/utils/with-wide-event";
 import { widelog } from "@/utils/logging";
 import { database } from "@/context";
 import { getUsersWithDestinationsByPlan } from "@/utils/get-sources";
 import env from "@/env";
+
+const resolveCount = (value: unknown): number => {
+  if (typeof value === "number") {
+    return value;
+  }
+  return 0;
+};
 
 const USER_TIMEOUT_MS = 300_000;
 const USER_CONCURRENCY = 5;
@@ -44,6 +54,35 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
     maxRetriesPerRequest: REDIS_MAX_RETRIES,
   });
 
+  const broadcastService = createBroadcastService({ redis });
+
+  const persistSyncStatus = async (result: DestinationSyncResult, syncedAt: Date): Promise<void> => {
+    await database
+      .insert(syncStatusTable)
+      .values({
+        calendarId: result.calendarId,
+        lastSyncedAt: syncedAt,
+        localEventCount: result.localEventCount,
+        remoteEventCount: result.remoteEventCount,
+      })
+      .onConflictDoUpdate({
+        set: {
+          lastSyncedAt: syncedAt,
+          localEventCount: result.localEventCount,
+          remoteEventCount: result.remoteEventCount,
+        },
+        target: [syncStatusTable.calendarId],
+      });
+  };
+
+  const syncAggregateRuntime = createSyncAggregateRuntime({
+    broadcast: (userId, eventName, payload) => {
+      broadcastService.emit(userId, eventName, payload);
+    },
+    persistSyncStatus,
+    redis,
+  });
+
   const syncConfig: SyncConfig = {
     database,
     redis,
@@ -67,7 +106,27 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
     const settlements = await allSettledWithConcurrency(
       usersWithDestinations.map((userId) => () =>
         withTimeout(
-          () => syncDestinationsForUser(userId, syncConfig),
+          () => syncDestinationsForUser(userId, syncConfig, {
+            onProgress: (update) => {
+              syncAggregateRuntime.onSyncProgress(update);
+            },
+            onSyncEvent: (syncEvent) => {
+              const calendarId = syncEvent["calendar.id"];
+              const localCount = syncEvent["local_events.count"];
+              const remoteCount = syncEvent["remote_events.count"];
+
+              if (typeof calendarId !== "string") {
+                return;
+              }
+
+              syncAggregateRuntime.onDestinationSync({
+                userId,
+                calendarId,
+                localEventCount: resolveCount(localCount),
+                remoteEventCount: resolveCount(remoteCount),
+              });
+            },
+          }),
           USER_TIMEOUT_MS,
           `push:user:${userId}`,
         ),
