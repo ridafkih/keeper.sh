@@ -1,6 +1,3 @@
-export * from "./keeper-api-types";
-export * from "./keeper-api-mutation-types";
-
 import { type } from "arktype";
 
 const proxyableMethods = type("'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD' | 'OPTIONS'");

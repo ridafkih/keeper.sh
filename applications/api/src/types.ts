@@ -2,9 +2,155 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 type KeeperDatabase = BunSQLDatabase;
 
-export type { KeeperDatabase };
+interface KeeperEventRangeInput {
+  from: Date | string;
+  to: Date | string;
+}
+
+interface KeeperEventFilters {
+  calendarId?: string[];
+  availability?: string[];
+  isAllDay?: boolean;
+}
+
+interface KeeperSource {
+  id: string;
+  name: string;
+  calendarType: string;
+  capabilities: string[];
+  accountId: string;
+  provider: string;
+  displayName: string | null;
+  email: string | null;
+  accountIdentifier: string;
+  needsReauthentication: boolean;
+  includeInIcalFeed: boolean;
+  providerName: string;
+  providerIcon: string | null;
+  accountLabel: string;
+}
+
+interface KeeperDestination {
+  id: string;
+  provider: string;
+  email: string | null;
+  needsReauthentication: boolean;
+}
+
+interface KeeperMapping {
+  id: string;
+  sourceCalendarId: string;
+  destinationCalendarId: string;
+  createdAt: string;
+  calendarType: string;
+}
+
+interface KeeperEvent {
+  id: string;
+  startTime: string;
+  endTime: string;
+  title: string | null;
+  description: string | null;
+  location: string | null;
+  calendarId: string;
+  calendarName: string;
+  calendarProvider: string;
+  calendarUrl: string | null;
+}
+
+interface KeeperSyncStatus {
+  calendarId: string;
+  inSync: boolean;
+  lastSyncedAt: string | null;
+  localEventCount: number;
+  remoteEventCount: number;
+}
+
+interface EventInput {
+  calendarId: string;
+  title: string;
+  description?: string;
+  location?: string;
+  startTime: string;
+  endTime: string;
+  isAllDay?: boolean;
+  availability?: "busy" | "free";
+}
+
+interface EventUpdateInput {
+  title?: string;
+  description?: string;
+  location?: string;
+  startTime?: string;
+  endTime?: string;
+  isAllDay?: boolean;
+  availability?: "busy" | "free";
+}
+
+type RsvpStatus = "accepted" | "declined" | "tentative";
+
+interface EventActionResult {
+  success: boolean;
+  error?: string;
+}
+
+interface EventCreateResult extends EventActionResult {
+  event?: KeeperEvent;
+}
+
+interface PendingInvite {
+  sourceEventUid: string;
+  title: string | null;
+  description: string | null;
+  location: string | null;
+  startTime: string;
+  endTime: string;
+  isAllDay: boolean;
+  organizer: string | null;
+  calendarId: string;
+  provider: string;
+}
+
+interface ProviderCredentials {
+  provider: string;
+  calendarId: string;
+  externalCalendarId: string | null;
+  calendarUrl: string | null;
+  email: string | null;
+  oauth?: {
+    accessToken: string;
+    refreshToken: string;
+    expiresAt: Date;
+  };
+  caldav?: {
+    serverUrl: string;
+    username: string;
+    encryptedPassword: string;
+  };
+}
+
+interface KeeperApi {
+  listSources: (userId: string) => Promise<KeeperSource[]>;
+  listDestinations: (userId: string) => Promise<KeeperDestination[]>;
+  listMappings: (userId: string) => Promise<KeeperMapping[]>;
+  getEventsInRange: (userId: string, range: KeeperEventRangeInput, filters?: KeeperEventFilters) => Promise<KeeperEvent[]>;
+  getEvent: (userId: string, eventId: string) => Promise<KeeperEvent | null>;
+  getEventCount: (userId: string, options?: { from?: Date; to?: Date }) => Promise<number>;
+  getSyncStatuses: (userId: string) => Promise<KeeperSyncStatus[]>;
+  createEvent: (userId: string, input: EventInput) => Promise<EventCreateResult>;
+  updateEvent: (userId: string, eventId: string, updates: EventUpdateInput) => Promise<EventActionResult>;
+  deleteEvent: (userId: string, eventId: string) => Promise<EventActionResult>;
+  rsvpEvent: (userId: string, eventId: string, status: RsvpStatus) => Promise<EventActionResult>;
+  getPendingInvites: (userId: string, calendarId: string, from: string, to: string) => Promise<PendingInvite[]>;
+}
+
 export type {
+  EventActionResult,
+  EventCreateResult,
+  EventInput,
+  EventUpdateInput,
   KeeperApi,
+  KeeperDatabase,
   KeeperDestination,
   KeeperEvent,
   KeeperEventFilters,
@@ -12,13 +158,7 @@ export type {
   KeeperMapping,
   KeeperSource,
   KeeperSyncStatus,
-} from "@keeper.sh/data-schemas";
-export type {
-  EventInput,
-  EventUpdateInput,
-  EventActionResult,
-  EventCreateResult,
   PendingInvite,
   ProviderCredentials,
   RsvpStatus,
-} from "@keeper.sh/data-schemas";
+};

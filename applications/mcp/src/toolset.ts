@@ -1,5 +1,17 @@
 import { z } from "zod";
-import type { KeeperEvent } from "@keeper.sh/data-schemas";
+
+interface KeeperEvent {
+  id: string;
+  startTime: string;
+  endTime: string;
+  title: string | null;
+  description: string | null;
+  location: string | null;
+  calendarId: string;
+  calendarName: string;
+  calendarProvider: string;
+  calendarUrl: string | null;
+}
 
 interface KeeperToolContext {
   bearerToken: string;

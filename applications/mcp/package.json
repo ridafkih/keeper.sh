@@ -12,8 +12,7 @@
   },
   "dependencies": {
     "@keeper.sh/auth": "workspace:*",
-    "@keeper.sh/data-schemas": "workspace:*",
-    "@keeper.sh/database": "workspace:*",
+"@keeper.sh/database": "workspace:*",
     "@modelcontextprotocol/sdk": "1.27.1",
     "arkenv": "^0.11.0",
     "entrykit": "^0.1.3",

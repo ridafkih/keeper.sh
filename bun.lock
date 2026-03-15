@@ -113,7 +113,6 @@
       "name": "@keeper.sh/mcp",
       "dependencies": {
         "@keeper.sh/auth": "workspace:*",
-        "@keeper.sh/data-schemas": "workspace:*",
         "@keeper.sh/database": "workspace:*",
         "@modelcontextprotocol/sdk": "1.27.1",
         "arkenv": "^0.11.0",
@@ -243,7 +242,6 @@
         "@keeper.sh/constants": "workspace:*",
         "@keeper.sh/data-schemas": "workspace:*",
         "@keeper.sh/database": "workspace:*",
-        "@keeper.sh/premium": "workspace:*",
         "drizzle-orm": "^0.45.1",
         "ioredis": "^5.10.0",
         "ts-ics": "^2.4.3",
