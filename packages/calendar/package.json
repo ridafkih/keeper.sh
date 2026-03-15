@@ -8,6 +8,7 @@
   },
   "scripts": {
     "types": "tsc --noEmit",
+    "test": "bun test",
     "lint": "oxlint ."
   },
   "dependencies": {
