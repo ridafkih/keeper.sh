@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import tailwindcss from "@tailwindcss/vite";
@@ -8,6 +9,11 @@ import { blogPlugin } from "./plugins/blog";
 import { sitemapPlugin } from "./plugins/sitemap";
 
 export default defineConfig(({ isSsrBuild }) => ({
+  resolve: {
+    alias: {
+      "@": resolve(import.meta.dirname, "src"),
+    },
+  },
   plugins: [
     blogPlugin(),
     tailwindcss(),
