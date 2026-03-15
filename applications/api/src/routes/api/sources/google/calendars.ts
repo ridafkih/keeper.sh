@@ -1,4 +1,4 @@
-import { listUserCalendars, CalendarListError } from "@keeper.sh/provider-google-calendar";
+import { listUserCalendars, CalendarListError } from "@keeper.sh/providers/google";
 import { withAuth, withWideEvent } from "../../../../utils/middleware";
 import { listOAuthCalendars } from "../../../../utils/oauth-calendar-listing";
 import {

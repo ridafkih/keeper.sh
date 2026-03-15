@@ -2,8 +2,8 @@ import {
   calendarAccountsTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
-import { createGoogleOAuthService } from "@keeper.sh/oauth-google";
-import { createMicrosoftOAuthService } from "@keeper.sh/oauth-microsoft";
+import { createGoogleOAuthService } from "@keeper.sh/providers";
+import { createMicrosoftOAuthService } from "@keeper.sh/providers";
 import { eq } from "drizzle-orm";
 import { database, env } from "../context";
 

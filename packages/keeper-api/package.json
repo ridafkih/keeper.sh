@@ -17,7 +17,7 @@
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/calendar": "workspace:*",
-    "@keeper.sh/provider-registry": "workspace:*",
+    "@keeper.sh/providers": "workspace:*",
     "drizzle-orm": "0.45.1",
     "ts-ics": "^2.4.3",
     "tsdav": "2.1.6"

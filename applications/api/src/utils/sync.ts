@@ -1,4 +1,4 @@
-import { syncDestinationsForUser } from "@keeper.sh/provider-core";
+import { syncDestinationsForUser } from "@keeper.sh/providers";
 import { spawnBackgroundJob } from "./background-task";
 import { runApiWideEventContext, setWideEventFields, widelog } from "./logging";
 

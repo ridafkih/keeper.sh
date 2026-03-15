@@ -1,7 +1,7 @@
 import type { CronOptions } from "cronbake";
 import type { Plan } from "@keeper.sh/premium";
-import { syncDestinationsForUser as syncDestinationsForUserAcrossCalendars } from "@keeper.sh/provider-core";
-import type { SyncResult } from "@keeper.sh/provider-core";
+import { syncDestinationsForUser as syncDestinationsForUserAcrossCalendars } from "@keeper.sh/providers";
+import type { SyncResult } from "@keeper.sh/providers";
 import { fetchAndSyncSource } from "@keeper.sh/calendar";
 import type { Source } from "@keeper.sh/calendar";
 import { setCronEventFields, withCronWideEvent } from "./with-wide-event";

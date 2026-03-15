@@ -12,10 +12,10 @@ import {
   buildOAuthConfigs,
   createSyncAggregateRuntime,
   configureStateStore,
-} from "@keeper.sh/provider-core";
-import type { OAuthStateStore, RefreshLockStore } from "@keeper.sh/provider-core";
-import { createDestinationProviders } from "@keeper.sh/provider-registry/server";
-import type { DestinationSyncResult } from "@keeper.sh/provider-core";
+} from "@keeper.sh/providers";
+import type { OAuthStateStore, RefreshLockStore } from "@keeper.sh/providers";
+import { createDestinationProviders } from "@keeper.sh/providers";
+import type { DestinationSyncResult } from "@keeper.sh/providers";
 
 const INITIAL_EVENT_COUNT = 0;
 const MIN_TRUSTED_ORIGINS_COUNT = 0;

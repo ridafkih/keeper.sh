@@ -1,9 +1,9 @@
 import type { CronOptions } from "cronbake";
-import { createCalDAVSourceProvider } from "@keeper.sh/provider-caldav";
-import type { CalDAVSourceProvider } from "@keeper.sh/provider-caldav";
-import { createFastMailSourceProvider } from "@keeper.sh/provider-fastmail";
-import { createICloudSourceProvider } from "@keeper.sh/provider-icloud";
-import { getCalDAVProviders } from "@keeper.sh/provider-registry";
+import { createCalDAVSourceProvider } from "@keeper.sh/providers/caldav";
+import type { CalDAVSourceProvider } from "@keeper.sh/providers/caldav";
+import { createFastMailSourceProvider } from "@keeper.sh/providers/fastmail";
+import { createICloudSourceProvider } from "@keeper.sh/providers/icloud";
+import { getCalDAVProviders } from "@keeper.sh/providers";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { setCronEventFields, withCronWideEvent } from "../utils/with-wide-event";
 import { widelog } from "../utils/logging";

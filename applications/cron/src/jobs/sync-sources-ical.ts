@@ -4,7 +4,7 @@ import { MS_PER_HOUR } from "@keeper.sh/constants";
 import { pullRemoteCalendar } from "@keeper.sh/calendar";
 import { and, desc, eq, lte } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { allSettledWithConcurrency } from "@keeper.sh/provider-core";
+import { allSettledWithConcurrency } from "@keeper.sh/providers";
 import { setCronEventFields, withCronWideEvent } from "../utils/with-wide-event";
 import { countSettledResults } from "../utils/count-settled-results";
 import { widelog } from "../utils/logging";

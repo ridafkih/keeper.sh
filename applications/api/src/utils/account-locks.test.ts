@@ -172,7 +172,7 @@ beforeAll(async () => {
     encryptPassword: () => "encrypted-password",
   }));
 
-  mock.module("@keeper.sh/provider-caldav", () => ({
+  mock.module("@keeper.sh/providers/caldav", () => ({
     createCalDAVClient: () => ({
       discoverCalendars: () => Promise.resolve([]),
     }),
@@ -184,7 +184,7 @@ beforeAll(async () => {
     }),
   }));
 
-  mock.module("@keeper.sh/provider-google-calendar", () => ({
+  mock.module("@keeper.sh/providers/google", () => ({
     createGoogleCalendarProvider: () => ({
       id: "google",
     }),
@@ -194,7 +194,7 @@ beforeAll(async () => {
     listUserCalendars: () => Promise.resolve(googleCalendars),
   }));
 
-  mock.module("@keeper.sh/provider-outlook", () => ({
+  mock.module("@keeper.sh/providers/outlook", () => ({
     createOutlookCalendarProvider: () => ({
       id: "outlook",
     }),
@@ -204,7 +204,7 @@ beforeAll(async () => {
     listUserCalendars: () => Promise.resolve([]),
   }));
 
-  mock.module("@keeper.sh/provider-registry", () => ({
+  mock.module("@keeper.sh/providers", () => ({
     PROVIDER_DEFINITIONS: [],
     getActiveProviders: () => [],
     getCalDAVProviders: () => [],

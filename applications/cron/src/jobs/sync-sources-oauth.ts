@@ -1,8 +1,8 @@
 import type { CronOptions } from "cronbake";
-import { createGoogleCalendarSourceProvider } from "@keeper.sh/provider-google-calendar";
-import { createOutlookSourceProvider } from "@keeper.sh/provider-outlook";
-import { createGoogleOAuthService } from "@keeper.sh/oauth-google";
-import { createMicrosoftOAuthService } from "@keeper.sh/oauth-microsoft";
+import { createGoogleCalendarSourceProvider } from "@keeper.sh/providers/google";
+import { createOutlookSourceProvider } from "@keeper.sh/providers/outlook";
+import { createGoogleOAuthService } from "@keeper.sh/providers";
+import { createMicrosoftOAuthService } from "@keeper.sh/providers";
 import { setCronEventFields, withCronWideEvent } from "../utils/with-wide-event";
 import { widelog } from "../utils/logging";
 

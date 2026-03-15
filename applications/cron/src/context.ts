@@ -9,10 +9,10 @@ import {
   createOAuthProviders,
   buildOAuthConfigs,
   createSyncAggregateRuntime,
-} from "@keeper.sh/provider-core";
-import type { DestinationProvider, RefreshLockStore } from "@keeper.sh/provider-core";
-import { createDestinationProviders } from "@keeper.sh/provider-registry/server";
-import type { DestinationSyncResult, SyncCoordinator } from "@keeper.sh/provider-core";
+} from "@keeper.sh/providers";
+import type { DestinationProvider, RefreshLockStore } from "@keeper.sh/providers";
+import { createDestinationProviders } from "@keeper.sh/providers";
+import type { DestinationSyncResult, SyncCoordinator } from "@keeper.sh/providers";
 import { Polar } from "@polar-sh/sdk";
 
 const database = createDatabase(env.DATABASE_URL);

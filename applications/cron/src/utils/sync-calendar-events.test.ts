@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { SyncResult } from "@keeper.sh/provider-core";
+import type { SyncResult } from "@keeper.sh/providers";
 import { runSyncJob, syncUserSources } from "./sync-calendar-events";
 
 const createSyncResult = (overrides: Partial<SyncResult>): SyncResult => ({

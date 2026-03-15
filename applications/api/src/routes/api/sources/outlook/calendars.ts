@@ -1,4 +1,4 @@
-import { listUserCalendars, CalendarListError } from "@keeper.sh/provider-outlook";
+import { listUserCalendars, CalendarListError } from "@keeper.sh/providers/outlook";
 import { withAuth, withWideEvent } from "../../../../utils/middleware";
 import { listOAuthCalendars } from "../../../../utils/oauth-calendar-listing";
 import {

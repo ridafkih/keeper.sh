@@ -1,4 +1,4 @@
-import { getProvider } from "@keeper.sh/provider-registry";
+import { getProvider } from "@keeper.sh/providers";
 
 interface AccountDisplayInput {
   displayName: string | null;

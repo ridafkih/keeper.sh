@@ -1,0 +1,35 @@
+{
+  "name": "@keeper.sh/providers",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+"./caldav": "./src/caldav/index.ts",
+    "./google": "./src/google/index.ts",
+    "./outlook": "./src/outlook/index.ts",
+    "./fastmail": "./src/fastmail/index.ts",
+    "./icloud": "./src/icloud/index.ts"
+  },
+  "scripts": {
+    "types": "tsc --noEmit",
+    "lint": "oxlint ."
+  },
+  "dependencies": {
+    "@keeper.sh/calendar": "workspace:*",
+    "@keeper.sh/constants": "workspace:*",
+    "@keeper.sh/data-schemas": "workspace:*",
+    "@keeper.sh/database": "workspace:*",
+    "@keeper.sh/premium": "workspace:*",
+    "drizzle-orm": "^0.45.1",
+    "ioredis": "^5.10.0",
+    "ts-ics": "^2.4.3",
+    "tsdav": "^2.1.8",
+    "widelogger": "^0.4.0"
+  },
+  "devDependencies": {
+    "@keeper.sh/fixtures": "workspace:*",
+    "@keeper.sh/typescript-config": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "5.9.3"
+  }
+}
