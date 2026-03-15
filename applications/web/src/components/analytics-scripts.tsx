@@ -29,6 +29,7 @@ function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfi
     <>
       {visitorsNowToken && (
         <script
+          defer
           src="https://cdn.visitors.now/v.js"
           data-token={visitorsNowToken}
           {...(hasConsent && { "data-persist": true })}
@@ -37,6 +38,7 @@ function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfi
       {googleAdsId && (
         <>
           <script
+            defer
             dangerouslySetInnerHTML={{
               __html: `
                 window.dataLayer = window.dataLayer || [];
