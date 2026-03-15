@@ -449,6 +449,13 @@
       "when": 1773474587817,
       "tag": "0063_friendly_black_panther",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1773599952851,
+      "tag": "0064_talented_black_knight",
+      "breakpoints": true
     }
   ]
 }

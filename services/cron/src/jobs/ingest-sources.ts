@@ -1,12 +1,11 @@
 import type { CronOptions } from "cronbake";
 import {
   ingestSource,
-  createRedisGenerationCheck,
   allSettledWithConcurrency,
   insertEventStatesWithConflictResolution,
 } from "@keeper.sh/calendar";
 import type { IngestionChanges, IngestionFetchEventsResult } from "@keeper.sh/calendar";
-import { fetchAndSyncSource } from "@keeper.sh/calendar/ics";
+import { createIcsSourceFetcher } from "@keeper.sh/calendar/ics";
 import { createGoogleSourceFetcher } from "@keeper.sh/calendar/google";
 import { createOutlookSourceFetcher } from "@keeper.sh/calendar/outlook";
 import { createCalDAVSourceFetcher } from "@keeper.sh/calendar/caldav";
@@ -19,7 +18,6 @@ import {
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq, inArray } from "drizzle-orm";
-import Redis from "ioredis";
 import { setCronEventFields, withCronWideEvent } from "@/utils/with-wide-event";
 import { widelog } from "@/utils/logging";
 import { database } from "@/context";
@@ -34,10 +32,8 @@ const serializeOptionalJson = (value: unknown): string | null => {
   }
   return JSON.stringify(value);
 };
-const REDIS_COMMAND_TIMEOUT_MS = 10_000;
-const REDIS_MAX_RETRIES = 3;
 
-const withTimeout = <TResult>(
+const withTimeout = async <TResult>(
   operation: () => Promise<TResult>,
   timeoutMs: number,
 ): Promise<TResult> => {
@@ -140,7 +136,7 @@ interface IngestionSourceResult {
   ingestEvents: Record<string, unknown>[];
 }
 
-const ingestOAuthSources = async (redis: Redis): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
+const ingestOAuthSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
   const oauthSources = await database
     .select({
       calendarId: calendarsTable.id,
@@ -181,13 +177,10 @@ const ingestOAuthSources = async (redis: Redis): Promise<{ added: number; remove
         const fetcher = resolvedFetcher;
         const ingestEvents: Record<string, unknown>[] = [];
 
-        const isCurrent = await createRedisGenerationCheck(redis, source.calendarId);
-
         const result = await ingestSource({
           calendarId: source.calendarId,
           fetchEvents: () => fetcher.fetchEvents(),
           readExistingEvents: () => readExistingEvents(source.calendarId),
-          isCurrent,
           flush: createIngestionFlush(source.calendarId),
           onIngestEvent: (event) => {
             ingestEvents.push({
@@ -217,7 +210,7 @@ const ingestOAuthSources = async (redis: Redis): Promise<{ added: number; remove
   return { added, removed, errors, ingestEvents: allIngestEvents };
 };
 
-const ingestCalDAVSources = async (redis: Redis): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
+const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
   if (!env.ENCRYPTION_KEY) {
     return { added: 0, removed: 0, errors: 0, ingestEvents: [] };
   }
@@ -256,13 +249,11 @@ const ingestCalDAVSources = async (redis: Redis): Promise<{ added: number; remov
         });
 
         const ingestEvents: Record<string, unknown>[] = [];
-        const isCurrent = await createRedisGenerationCheck(redis, source.calendarId);
 
         const result = await ingestSource({
           calendarId: source.calendarId,
           fetchEvents: () => fetcher.fetchEvents(),
           readExistingEvents: () => readExistingEvents(source.calendarId),
-          isCurrent,
           flush: createIngestionFlush(source.calendarId),
           onIngestEvent: (event) => {
             ingestEvents.push({
@@ -292,35 +283,66 @@ const ingestCalDAVSources = async (redis: Redis): Promise<{ added: number; remov
   return { added, removed, errors, ingestEvents: allIngestEvents };
 };
 
-const ingestIcsSources = async (): Promise<{ succeeded: number; failed: number }> => {
+const ingestIcsSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
   const icsSources = await database
-    .select()
+    .select({
+      calendarId: calendarsTable.id,
+      url: calendarsTable.url,
+    })
     .from(calendarsTable)
     .where(eq(calendarsTable.calendarType, "ical"));
 
-  const results = await allSettledWithConcurrency(
+  let added = 0;
+  let removed = 0;
+  let errors = 0;
+  const allIngestEvents: Record<string, unknown>[] = [];
+
+  const settlements = await allSettledWithConcurrency(
     icsSources.map((source) => () =>
-      withTimeout(
-        () => fetchAndSyncSource(database, source),
-        SOURCE_TIMEOUT_MS,
-      ),
+      withTimeout(async (): Promise<IngestionSourceResult> => {
+        if (!source.url) {
+          return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
+        }
+
+        const fetcher = createIcsSourceFetcher({
+          calendarId: source.calendarId,
+          url: source.url,
+          database,
+        });
+
+        const ingestEvents: Record<string, unknown>[] = [];
+
+        const result = await ingestSource({
+          calendarId: source.calendarId,
+          fetchEvents: () => fetcher.fetchEvents(),
+          readExistingEvents: () => readExistingEvents(source.calendarId),
+          flush: createIngestionFlush(source.calendarId),
+          onIngestEvent: (event) => {
+            ingestEvents.push({
+              ...event,
+              "source.provider": "ical",
+            });
+          },
+        });
+
+        return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
+      }, SOURCE_TIMEOUT_MS),
     ),
     { concurrency: SOURCE_CONCURRENCY },
   );
 
-  let succeeded = 0;
-  let failed = 0;
-
-  for (const result of results) {
-    if (result.status === "fulfilled") {
-      succeeded += 1;
+  for (const settlement of settlements) {
+    if (settlement.status === "fulfilled") {
+      added += settlement.value.eventsAdded;
+      removed += settlement.value.eventsRemoved;
+      allIngestEvents.push(...settlement.value.ingestEvents);
     } else {
-      failed += 1;
-      widelog.errorFields(result.reason, { prefix: "ingest.ics" });
+      errors += 1;
+      widelog.errorFields(settlement.reason, { prefix: "ingest.ics" });
     }
   }
 
-  return { succeeded, failed };
+  return { added, removed, errors, ingestEvents: allIngestEvents };
 };
 
 const extractSettledResult = <TResult>(
@@ -339,38 +361,31 @@ export default withCronWideEvent({
   async callback() {
     setCronEventFields({ "job.type": "ingest-sources" });
 
-    const redis = new Redis(env.REDIS_URL, {
-      commandTimeout: REDIS_COMMAND_TIMEOUT_MS,
-      maxRetriesPerRequest: REDIS_MAX_RETRIES,
+    const [oauthSettlement, caldavSettlement, icsSettlement] = await Promise.allSettled([
+      ingestOAuthSources(),
+      ingestCalDAVSources(),
+      ingestIcsSources(),
+    ]);
+
+    const defaultResult = { added: 0, removed: 0, errors: 1, ingestEvents: [] };
+    const oauth = extractSettledResult(oauthSettlement, defaultResult, "ingest.oauth");
+    const caldav = extractSettledResult(caldavSettlement, defaultResult, "ingest.caldav");
+    const ics = extractSettledResult(icsSettlement, defaultResult, "ingest.ics");
+
+    const allIngestEvents = [...oauth.ingestEvents, ...caldav.ingestEvents, ...ics.ingestEvents];
+
+    setCronEventFields({
+      "oauth.events.added": oauth.added,
+      "oauth.events.removed": oauth.removed,
+      "oauth.errors": oauth.errors,
+      "caldav.events.added": caldav.added,
+      "caldav.events.removed": caldav.removed,
+      "caldav.errors": caldav.errors,
+      "ics.events.added": ics.added,
+      "ics.events.removed": ics.removed,
+      "ics.errors": ics.errors,
+      "ingest_events": allIngestEvents,
     });
-
-    try {
-      const [oauthSettlement, caldavSettlement, icsSettlement] = await Promise.allSettled([
-        ingestOAuthSources(redis),
-        ingestCalDAVSources(redis),
-        ingestIcsSources(),
-      ]);
-
-      const oauth = extractSettledResult(oauthSettlement, { added: 0, removed: 0, errors: 1, ingestEvents: [] }, "ingest.oauth");
-      const caldav = extractSettledResult(caldavSettlement, { added: 0, removed: 0, errors: 1, ingestEvents: [] }, "ingest.caldav");
-      const ics = extractSettledResult(icsSettlement, { succeeded: 0, failed: 1 }, "ingest.ics");
-
-      const allIngestEvents = [...oauth.ingestEvents, ...caldav.ingestEvents];
-
-      setCronEventFields({
-        "oauth.events.added": oauth.added,
-        "oauth.events.removed": oauth.removed,
-        "oauth.errors": oauth.errors,
-        "caldav.events.added": caldav.added,
-        "caldav.events.removed": caldav.removed,
-        "caldav.errors": caldav.errors,
-        "ics.succeeded": ics.succeeded,
-        "ics.failed": ics.failed,
-        "ingest_events": allIngestEvents,
-      });
-    } finally {
-      redis.disconnect();
-    }
   },
   cron: "@every_1_minutes",
   immediate: true,

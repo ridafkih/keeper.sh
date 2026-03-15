@@ -537,7 +537,7 @@ describe("createDatabaseFlush", () => {
       },
     };
 
-    const deleteIds = Array.from({ length: FLUSH_BATCH_SIZE + 10 }, (_, idx) => `map-${idx}`);
+    const deleteIds = Array.from({ length: FLUSH_BATCH_SIZE + 10 }, (_entry, idx) => `map-${idx}`);
 
     const flush = createDatabaseFlush(fakeDatabase as never);
     await flush({ inserts: [], deletes: deleteIds });
@@ -562,7 +562,7 @@ describe("createDatabaseFlush", () => {
       },
     };
 
-    const inserts = Array.from({ length: FLUSH_BATCH_SIZE + 10 }, (_, idx) => ({
+    const inserts = Array.from({ length: FLUSH_BATCH_SIZE + 10 }, (_entry, idx) => ({
       eventStateId: `ev-${idx}`, calendarId: "cal-1", destinationEventUid: `remote-${idx}`,
       deleteIdentifier: `remote-${idx}`, syncEventHash: null,
       startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),

@@ -30,7 +30,6 @@ describe("ingestSource", () => {
       calendarId: "cal-1",
       fetchEvents: () => Promise.resolve({ events: [sourceEvent] }),
       readExistingEvents: () => Promise.resolve([]),
-      isCurrent: () => Promise.resolve(true),
       flush: (changes) => { flushCapture.push(changes); return Promise.resolve(); },
     });
 
@@ -59,7 +58,6 @@ describe("ingestSource", () => {
       calendarId: "cal-1",
       fetchEvents: () => Promise.resolve({ events: [] }),
       readExistingEvents: () => Promise.resolve([existingEvent]),
-      isCurrent: () => Promise.resolve(true),
       flush: (changes) => { flushCapture.push(changes); return Promise.resolve(); },
     });
 
@@ -79,31 +77,11 @@ describe("ingestSource", () => {
       calendarId: "cal-1",
       fetchEvents: () => Promise.resolve({ events: [] }),
       readExistingEvents: () => Promise.resolve([]),
-      isCurrent: () => Promise.resolve(true),
       flush: () => { flushCalled = true; return Promise.resolve(); },
     });
 
     expect(result.eventsAdded).toBe(0);
     expect(result.eventsRemoved).toBe(0);
-    expect(flushCalled).toBe(false);
-  });
-
-  it("does not flush when generation becomes stale", async () => {
-    const { ingestSource } = await import("./ingest");
-
-    const sourceEvent = makeSourceEvent("uid-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
-
-    let flushCalled = false;
-    let checkCount = 0;
-
-    await ingestSource({
-      calendarId: "cal-1",
-      fetchEvents: () => Promise.resolve({ events: [sourceEvent] }),
-      readExistingEvents: () => Promise.resolve([]),
-      isCurrent: () => { checkCount += 1; return Promise.resolve(checkCount <= 1); },
-      flush: () => { flushCalled = true; return Promise.resolve(); },
-    });
-
     expect(flushCalled).toBe(false);
   });
 
@@ -118,7 +96,6 @@ describe("ingestSource", () => {
       calendarId: "cal-1",
       fetchEvents: () => Promise.resolve({ events: [sourceEvent], nextSyncToken: "token-abc" }),
       readExistingEvents: () => Promise.resolve([]),
-      isCurrent: () => Promise.resolve(true),
       flush: (changes) => { flushCapture.push(changes); return Promise.resolve(); },
     });
 
@@ -135,7 +112,6 @@ describe("ingestSource", () => {
       calendarId: "cal-1",
       fetchEvents: () => Promise.resolve({ events: [sourceEvent] }),
       readExistingEvents: () => Promise.resolve([]),
-      isCurrent: () => Promise.resolve(true),
       flush: () => Promise.resolve(),
       onIngestEvent: (event) => { emittedEvents.push(event); },
     });
@@ -166,7 +142,6 @@ describe("ingestSource", () => {
       calendarId: "cal-1",
       fetchEvents: () => Promise.resolve({ events: [], fullSyncRequired: true }),
       readExistingEvents: () => Promise.resolve([existingEvent]),
-      isCurrent: () => Promise.resolve(true),
       flush: (changes) => { flushCapture.push(changes); return Promise.resolve(); },
     });
 
@@ -187,7 +162,6 @@ describe("ingestSource", () => {
       calendarId: "cal-1",
       fetchEvents: () => Promise.resolve({ events: [], isDeltaSync: true, nextSyncToken: "token-new" }),
       readExistingEvents: () => Promise.resolve([]),
-      isCurrent: () => Promise.resolve(true),
       flush: (changes) => { flushCapture.push(changes); return Promise.resolve(); },
     });
 
@@ -208,25 +182,6 @@ describe("ingestSource", () => {
       calendarId: "cal-1",
       fetchEvents: () => Promise.resolve({ events: [] }),
       readExistingEvents: () => Promise.resolve([]),
-      isCurrent: () => Promise.resolve(true),
-      flush: () => { flushCalled = true; return Promise.resolve(); },
-    });
-
-    expect(result.eventsAdded).toBe(0);
-    expect(result.eventsRemoved).toBe(0);
-    expect(flushCalled).toBe(false);
-  });
-
-  it("checks isCurrent before flushing when fullSyncRequired is true", async () => {
-    const { ingestSource } = await import("./ingest");
-
-    let flushCalled = false;
-
-    const result = await ingestSource({
-      calendarId: "cal-1",
-      fetchEvents: () => Promise.resolve({ events: [], fullSyncRequired: true }),
-      readExistingEvents: () => Promise.resolve([]),
-      isCurrent: () => Promise.resolve(false),
       flush: () => { flushCalled = true; return Promise.resolve(); },
     });
 
@@ -245,7 +200,6 @@ describe("ingestSource", () => {
         calendarId: "cal-1",
         fetchEvents: () => Promise.reject(new Error("fetch failed")),
         readExistingEvents: () => Promise.resolve([]),
-        isCurrent: () => Promise.resolve(true),
         flush: () => Promise.resolve(),
         onIngestEvent: (event) => { emittedEvents.push(event); },
       });

@@ -126,7 +126,8 @@ const calendarsTable = pgTable(
 const calendarSnapshotsTable = pgTable("calendar_snapshots", {
   calendarId: uuid()
     .notNull()
-    .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    .references(() => calendarsTable.id, { onDelete: "cascade" })
+    .unique(),
   contentHash: text(),
   createdAt: timestamp().notNull().defaultNow(),
   ical: text().notNull(),

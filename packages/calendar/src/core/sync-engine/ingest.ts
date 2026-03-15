@@ -29,7 +29,6 @@ interface IngestSourceOptions {
   calendarId: string;
   fetchEvents: () => Promise<FetchEventsResult>;
   readExistingEvents: () => Promise<ExistingEventState[]>;
-  isCurrent: () => Promise<boolean>;
   flush: (changes: IngestionChanges) => Promise<void>;
   onIngestEvent?: (event: Record<string, unknown>) => void;
 }
@@ -42,7 +41,7 @@ interface IngestionResult {
 const EMPTY_RESULT: IngestionResult = { eventsAdded: 0, eventsRemoved: 0 };
 
 const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResult> => {
-  const { calendarId, fetchEvents, readExistingEvents, isCurrent, flush, onIngestEvent } = options;
+  const { calendarId, fetchEvents, readExistingEvents, flush, onIngestEvent } = options;
 
   const wideEvent: Record<string, unknown> = {
     "calendar.id": calendarId,
@@ -63,24 +62,10 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     wideEvent["existing_events.count"] = existingEvents.length;
 
     if (fetchResult.fullSyncRequired) {
-      const canFlushReset = await isCurrent();
-      if (!canFlushReset) {
-        wideEvent["outcome"] = "superseded";
-        wideEvent["flushed"] = false;
-        return EMPTY_RESULT;
-      }
-
       wideEvent["outcome"] = "full-sync-required";
       wideEvent["flushed"] = true;
       await flush({ inserts: [], deletes: [], syncToken: null });
       flushed = true;
-      return EMPTY_RESULT;
-    }
-
-    const stillCurrent = await isCurrent();
-    if (!stillCurrent) {
-      wideEvent["outcome"] = "superseded";
-      wideEvent["flushed"] = false;
       return EMPTY_RESULT;
     }
 
@@ -102,24 +87,14 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
 
     if (eventsToAdd.length === 0 && eventStateIdsToRemove.length === 0) {
       if (fetchResult.nextSyncToken) {
-        const canFlushToken = await isCurrent();
-        if (canFlushToken) {
-          await flush({ inserts: [], deletes: [], syncToken: fetchResult.nextSyncToken });
-          flushed = true;
-          wideEvent["outcome"] = "in-sync";
-          wideEvent["flushed"] = true;
-          return EMPTY_RESULT;
-        }
+        await flush({ inserts: [], deletes: [], syncToken: fetchResult.nextSyncToken });
+        flushed = true;
+        wideEvent["outcome"] = "in-sync";
+        wideEvent["flushed"] = true;
+        return EMPTY_RESULT;
       }
 
       wideEvent["outcome"] = "in-sync";
-      wideEvent["flushed"] = false;
-      return EMPTY_RESULT;
-    }
-
-    const canFlush = await isCurrent();
-    if (!canFlush) {
-      wideEvent["outcome"] = "superseded";
       wideEvent["flushed"] = false;
       return EMPTY_RESULT;
     }
