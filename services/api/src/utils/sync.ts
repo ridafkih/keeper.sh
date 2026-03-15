@@ -42,15 +42,31 @@ const buildSyncContext = async (): Promise<SyncContext> => {
   };
 };
 
+const activeSyncAbortControllers = new Map<string, AbortController>();
+
 const triggerDestinationSync = (userId: string): void => {
   const correlationId = crypto.randomUUID();
 
   widelog.set("destination_sync.correlation_id", correlationId);
   widelog.set("destination_sync.triggered", true);
 
+  const previousController = activeSyncAbortControllers.get(userId);
+  if (previousController) {
+    previousController.abort();
+  }
+
+  const abortController = new AbortController();
+  activeSyncAbortControllers.set(userId, abortController);
+
   spawnBackgroundJob("destination-sync", { "user.id": userId, "correlation.id": correlationId }, async () => {
     const { syncConfig, syncAggregateRuntime } = await buildSyncContext();
-    const result = await syncDestinationsForUser(userId, syncConfig, {
+
+    const syncConfigWithDeadline: SyncConfig = {
+      ...syncConfig,
+      abortSignal: abortController.signal,
+    };
+
+    const result = await syncDestinationsForUser(userId, syncConfigWithDeadline, {
       onProgress: (update) => {
         syncAggregateRuntime.onSyncProgress(update);
       },
@@ -71,6 +87,12 @@ const triggerDestinationSync = (userId: string): void => {
         });
       },
     });
+
+    const currentController = activeSyncAbortControllers.get(userId);
+    if (currentController === abortController) {
+      activeSyncAbortControllers.delete(userId);
+    }
+
     return mapDestinationSyncResult(result);
   });
 };

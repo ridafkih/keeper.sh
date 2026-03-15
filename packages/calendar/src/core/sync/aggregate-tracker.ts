@@ -205,6 +205,11 @@ class SyncAggregateTracker {
 
   trackProgress(update: SyncProgressUpdate): SyncAggregateMessage | null {
     const progress = this.getUserProgress(update.userId);
+
+    if (update.stage === "fetching") {
+      progress.delete(update.calendarId);
+    }
+
     const current = progress.get(update.calendarId);
     const next = SyncAggregateTracker.mergeProgressEntry(current, update);
     progress.set(update.calendarId, next);

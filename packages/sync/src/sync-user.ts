@@ -25,6 +25,7 @@ interface SyncConfig {
   encryptionKey?: string;
   oauthConfig: OAuthConfig;
   deadlineMs?: number;
+  abortSignal?: AbortSignal;
 }
 
 interface SyncDestinationsResult {
@@ -91,6 +92,10 @@ const syncDestinationsForUser = async (
   );
 
   for (const destination of destinations) {
+    if (config.abortSignal?.aborted) {
+      break;
+    }
+
     const lockResult = await syncLock.acquire(destination.calendarId);
     if (!lockResult.acquired) {
       continue;
@@ -126,6 +131,9 @@ const syncDestinationsForUser = async (
           remoteEvents: await providerRef.listRemoteEvents(),
         }),
         isCurrent: () => {
+          if (config.abortSignal?.aborted) {
+            return Promise.resolve(false);
+          }
           if (config.deadlineMs && Date.now() >= config.deadlineMs) {
             return Promise.resolve(false);
           }
