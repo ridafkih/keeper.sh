@@ -68,7 +68,6 @@ const createRedisClient = (url: string): Redis =>
   new Redis(url, {
     commandTimeout: REDIS_COMMAND_TIMEOUT_MS,
     maxRetriesPerRequest: 3,
-    enableOfflineQueue: false,
   });
 
 const refreshLockRedis = createRedisClient(env.REDIS_URL);
