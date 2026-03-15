@@ -1,157 +1,159 @@
-# Reorganize providers into @keeper.sh/calendar
+# Sync Engine Overhaul
 
 ## Context
 
-The current `@keeper.sh/providers` package contains all calendar provider implementations (Google, Outlook, CalDAV, etc.), sync infrastructure, and a registry. The separate `@keeper.sh/calendar` package handles ICS parsing, snapshot management, and date utilities. ICS handling is treated as a special case separate from other providers, but it should be a provider like any other.
+The current sync engine has 4+ cron jobs that create enormous backpressure, causing syncs to take hours instead of the promised 30 min (free) / 1 min (pro). Root causes: redundant iCal fetching, individual event pushes, poor locking, mixed ingestion/egress in the same job. 127 users, 21,066 events, only 5,762 with active mappings.
 
-This reorganization:
-1. Absorbs `@keeper.sh/calendar` into `@keeper.sh/providers`
-2. Restructures providers into `providers/` (handlers) and `utils/` (registry, shared logic)
-3. Renames the package from `@keeper.sh/providers` to `@keeper.sh/calendar`
-4. Inlines date-utils into their consumers (they are not widely shared)
+## Design Principles
 
-## Step 1: Inline date-utils into consumers
+1. **Idempotent** — any job can be interrupted at any point with no side effects
+2. **Atomic writes** — no DB mutations until the very end of a job run
+3. **Cancellable** — if the same calendar's job is called again, the in-flight run is abandoned
+4. **Batch operations** — never push events individually
+5. **No redundant fetches** — each source fetched exactly once per cycle
 
-`date-utils` exports are only used in two places:
+## Architecture
 
-**`normalizeDateRange` + `parseDateRangeParams`** — only in `services/api/src/`:
-- `routes/api/events/index.ts`
-- `routes/api/v1/events/index.ts`
-- `routes/api/v1/calendars/[calendarId]/invites.ts`
-- `queries/get-events-in-range.ts`
+### Two phases, both cron-polled
 
-Move these two functions into `services/api/src/utils/date-range.ts` and update the 4 imports.
+**Phase 1: Ingestion** — pulls events from sources into `eventStatesTable`
+**Phase 2: Egress** — pushes events from `eventStatesTable` to destinations via `eventMappingsTable`
 
-**`getStartOfToday`** — only in `packages/providers/src/`:
-- `caldav/destination/sync.ts`
-- `core/oauth/sync-window.ts`
+Both run as cron jobs. Egress checks for "dirty" destinations (sources whose events changed since last egress).
 
-Inline `getStartOfToday` into each file (it's a 5-line function).
+### Existing schema kept as-is
+- `eventStatesTable` — source of truth for pulled events
+- `eventMappingsTable` — tracks what's been pushed to each destination
+- `calendarSnapshotsTable` — iCal snapshots (used by ingestion, not re-fetched by egress)
+- `syncStatusTable` — tracks last sync time per calendar
+- `sourceDestinationMappingsTable` — which sources feed which destinations
 
-Delete `packages/calendar/src/date-utils/` entirely (the remaining exports like `formatDate`, `formatWeekday`, etc. are unused — the web app has its own implementations).
+---
 
-## Step 2: Move calendar package contents into providers
+## Implementation Plan
 
-Move all remaining `packages/calendar/src/` files into `packages/providers/src/ics/`:
+### Step 1: New ingestion job
 
-```
-packages/providers/src/ics/
-  index.ts              # barrel (re-exports from calendar's current index.ts, minus date-utils)
-  types.ts              # from calendar/src/types.ts
-  utils/
-    diff-events.ts      # + test files
-    parse-ics-events.ts # + test files
-    parse-ics-calendar.ts # + test files
-    pull-remote-calendar.ts
-    create-snapshot.ts
-    snapshot-sync-plan.ts # + test file
-    sync-source-from-snapshot.ts
-    write-event-states.ts # + test file
-    fetch-and-sync-source.ts
-    ics-fixtures.test.ts
-    types.ts
-```
+**File:** `services/cron/src/jobs/ingest-sources.ts`
 
-Update internal imports within these files (they reference `@keeper.sh/constants`, `@keeper.sh/database` — those stay as-is since they are external deps).
+Single job that handles ALL source types (replaces `sync-sources-oauth.ts`, `sync-sources-caldav.ts`, `sync-sources-ical.ts`).
 
-Update all external consumers to import from `@keeper.sh/providers/ics` instead of `@keeper.sh/calendar`:
-- `services/cron/src/jobs/sync-sources-ical.ts` — `pullRemoteCalendar`
-- `services/cron/src/utils/sync-calendar-events.ts` — `fetchAndSyncSource`, `Source`
-- `services/api/src/utils/sources.ts` — `fetchAndSyncSource`, `pullRemoteCalendar`
-- `services/api/src/utils/source-lifecycle.ts` — `CalendarFetchError`
-- `services/api/src/utils/source-lifecycle.test.ts` — `CalendarFetchError`
-- `packages/providers/src/caldav/shared/ics.ts` — `parseIcsCalendar` (becomes relative `../../ics/...`)
-- `packages/providers/src/caldav/destination/sync.ts` — was `getStartOfToday` (already inlined in step 1)
-- `packages/providers/src/core/oauth/sync-window.ts` — was `getStartOfToday` (already inlined)
+**Logic:**
+1. Query all source calendars (pull-capable) grouped by type
+2. For each source, increment Redis generation counter: `sync:ingest:gen:{calendarId}`
+3. Fetch events from remote (dispatch to provider handler based on type):
+   - OAuth (Google/Outlook): use sync tokens, fetch delta
+   - CalDAV: use sync tokens, fetch delta
+   - ICS: fetch full iCal, compare content hash to skip if unchanged
+4. Compute diff in memory: compare fetched events against current `eventStatesTable`
+5. Before writing: check generation is still current (if not, discard)
+6. Single transaction: insert/update/delete in `eventStatesTable`, update `syncToken` on calendar, update `syncStatusTable`
 
-Add `@keeper.sh/providers/ics` subpath export to providers `package.json`.
+**Concurrency:** Process sources with `allSettledWithConcurrency(sources, 5)` — 5 concurrent source syncs max.
 
-Remove `@keeper.sh/calendar` from all `package.json` dependencies. Delete `packages/calendar/`.
+**Schedule:** `@every_1_minutes`, immediate on startup
 
-## Step 3: Restructure providers/src into providers/ and utils/
+**Key difference from current:** ICS sources are fetched here (not separately), and the snapshot is only used as an optimization (skip if content hash unchanged). No separate snapshot-then-sync flow.
 
-Current top-level structure in `packages/providers/src/`:
-```
-caldav/    google/    outlook/    fastmail/    icloud/    core/    registry/    index.ts
-```
+### Step 2: New egress job
 
-Move to:
-```
-packages/providers/src/
-  providers/        # provider implementations (was top-level)
-    caldav/
-    google/
-    outlook/
-    fastmail/
-    icloud/
-  utils/            # shared infrastructure
-    registry/       # was registry/
-  core/             # stays (sync infrastructure, oauth, events, source)
-  ics/              # added in step 2
-  index.ts          # updated barrel
-```
+**File:** `services/cron/src/jobs/push-destinations.ts`
 
-Update subpath exports in package.json:
-```json
-{
-  ".": "./src/index.ts",
-  "./caldav": "./src/providers/caldav/index.ts",
-  "./google": "./src/providers/google/index.ts",
-  "./outlook": "./src/providers/outlook/index.ts",
-  "./fastmail": "./src/providers/fastmail/index.ts",
-  "./icloud": "./src/providers/icloud/index.ts",
-  "./ics": "./src/ics/index.ts"
+Two instances: one for free (every 30 min), one for pro (every 1 min). Replaces `push-events.ts`.
+
+**Logic:**
+1. Query all users with active `sourceDestinationMappingsTable` entries for the target plan
+2. For each user's destinations:
+   a. Increment Redis generation counter: `sync:egress:gen:{destinationCalendarId}`
+   b. Read current `eventStatesTable` rows for all mapped sources
+   c. Read current `eventMappingsTable` rows for this destination
+   d. Compute operations in memory (add/remove/update) using existing `computeSyncOperations` from `core/sync/operations.ts`
+   e. **Batch** push operations to the provider (collect all adds, all removes)
+   f. Before writing: check generation is still current
+   g. Single transaction: insert/update/delete in `eventMappingsTable`, update `syncStatusTable`
+
+**Concurrency:** Process users with `allSettledWithConcurrency(users, 3)` — 3 concurrent user syncs max. Within each user, process destinations sequentially to avoid rate limit issues with provider APIs.
+
+**Key difference from current:**
+- Does NOT re-fetch iCal sources (reads from `eventStatesTable` populated by ingestion)
+- Batches push operations instead of individual event pushes
+- Atomic write at end
+
+### Step 3: Generation-based cancellation
+
+**Module:** `packages/calendar/src/core/sync/generation.ts`
+
+Simple Redis-backed generation counter:
+
+```typescript
+interface SyncGeneration {
+  increment(key: string): Promise<number>;
+  isCurrent(key: string, generation: number): Promise<boolean>;
 }
 ```
 
-Update all internal relative imports within providers package (caldav → `../providers/caldav`, registry → `../utils/registry`, etc.).
+Used by both ingestion and egress. Before any DB write, call `isCurrent()`. If false, silently discard all computed work.
 
-## Step 4: Rename package from @keeper.sh/providers to @keeper.sh/calendar
+This replaces the current `coordinator.ts` generation tracking which is more complex than needed.
 
-- Update `packages/providers/package.json`: change `name` to `@keeper.sh/calendar`
-- Rename directory: `packages/providers/` → `packages/calendar/`
-- Find-replace all imports across codebase:
-  - `@keeper.sh/providers/caldav` → `@keeper.sh/calendar/caldav`
-  - `@keeper.sh/providers/google` → `@keeper.sh/calendar/google`
-  - `@keeper.sh/providers/outlook` → `@keeper.sh/calendar/outlook`
-  - `@keeper.sh/providers/fastmail` → `@keeper.sh/calendar/fastmail`
-  - `@keeper.sh/providers/icloud` → `@keeper.sh/calendar/icloud`
-  - `@keeper.sh/providers/ics` → `@keeper.sh/calendar/ics`
-  - `@keeper.sh/providers` → `@keeper.sh/calendar`
-- Update all `package.json` dependency references
-- Update test mocks in `services/api/src/utils/account-locks.test.ts`
+### Step 4: Remove old jobs
+
+Delete:
+- `services/cron/src/jobs/sync-sources-oauth.ts` (+ test)
+- `services/cron/src/jobs/sync-sources-caldav.ts` (+ test)
+- `services/cron/src/jobs/sync-sources-ical.ts`
+- `services/cron/src/jobs/push-events.ts`
+
+Update:
+- `services/cron/src/index.ts` — register new jobs
+- `services/cron/src/utils/sync-calendar-events.ts` — likely delete or absorb into egress job
+
+### Step 5: Update cron support utilities
+
+- `services/cron/src/utils/get-sources.ts` — may need updates for unified source querying
+- `services/cron/src/utils/source-plan-selection.ts` — keep, used by egress for plan filtering
+- `services/cron/src/context.ts` — simplify if coordinator is replaced by generation counter
+
+---
+
+## Files to create
+
+- `services/cron/src/jobs/ingest-sources.ts` — new unified ingestion job
+- `services/cron/src/jobs/push-destinations.ts` — new egress job
+- `packages/calendar/src/core/sync/generation.ts` — generation counter
+
+## Files to delete
+
+- `services/cron/src/jobs/sync-sources-oauth.ts` (+ `.test.ts`)
+- `services/cron/src/jobs/sync-sources-caldav.ts` (+ `.test.ts`)
+- `services/cron/src/jobs/sync-sources-ical.ts`
+- `services/cron/src/jobs/push-events.ts`
+- `services/cron/src/utils/sync-calendar-events.ts` (+ `.test.ts`)
 
 ## Files to modify
 
-**Delete:**
-- `packages/calendar/` (entire directory, after contents moved)
+- `services/cron/src/index.ts` — register new jobs
+- `services/cron/src/context.ts` — simplify coordinator setup
+- `knip.json` — update cron job entry patterns if needed
 
-**New files:**
-- `services/api/src/utils/date-range.ts` (inlined date-utils for api)
-- `packages/providers/src/ics/index.ts` (barrel for absorbed calendar)
+## Existing code to reuse
 
-**Move (within providers):**
-- `caldav/` → `providers/caldav/`
-- `google/` → `providers/google/`
-- `outlook/` → `providers/outlook/`
-- `fastmail/` → `providers/fastmail/`
-- `icloud/` → `providers/icloud/`
-- `registry/` → `utils/registry/`
-
-**Rename:**
-- `packages/providers/` → `packages/calendar/`
-
-**Update imports (~30 files):**
-- All files importing from `@keeper.sh/calendar` (12 files)
-- All files importing from `@keeper.sh/providers` (15 files)
-- All internal relative imports within the providers package (~55 files)
-- Test mocks referencing old package names
+- `packages/calendar/src/core/sync/operations.ts` — `computeSyncOperations()` for egress diff
+- `packages/calendar/src/core/source/event-diff.ts` — `buildSourceEventsToAdd/Remove()` for ingestion diff
+- `packages/calendar/src/core/source/write-event-states.ts` — `insertEventStatesWithConflictResolution()`
+- `packages/calendar/src/core/oauth/source-provider.ts` — `OAuthSourceProvider` base class
+- `packages/calendar/src/core/oauth/create-source-provider.ts` — source provider factory
+- `packages/calendar/src/ics/utils/pull-remote-calendar.ts` — ICS fetching
+- `packages/calendar/src/providers/*/source/provider.ts` — per-provider source implementations
+- `packages/calendar/src/core/utils/concurrency.ts` — `allSettledWithConcurrency()`
+- `packages/calendar/src/core/sync/aggregate-tracker.ts` — progress tracking for WebSocket broadcast
+- `packages/calendar/src/core/sync/aggregate-runtime.ts` — Redis persistence of sync state
 
 ## Verification
 
-1. `bun install` — workspace resolution
-2. `bun run types` — TypeScript compilation
-3. `bun run test` — all tests pass
-4. `bun run lint` — oxlint passes
-5. `bun run unused` — knip passes
-6. `grep -r '@keeper.sh/providers\|@keeper.sh/calendar' --include='*.ts' | grep -v node_modules` — verify no stale refs to old names
+1. `bun run types` — TypeScript compiles
+2. `bun run test` — all tests pass (new tests for new jobs)
+3. `bun run lint` — oxlint passes
+4. `bun run unused` — knip passes
+5. Manual test: create source + destination mapping, verify ingestion pulls events and egress pushes them
+6. Verify generation cancellation: trigger two ingestions for same calendar, confirm only latest writes
