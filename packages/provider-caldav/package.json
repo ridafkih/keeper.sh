@@ -16,8 +16,6 @@
     "@keeper.sh/calendar": "workspace:*",
     "@keeper.sh/constants": "workspace:*",
     "@keeper.sh/database": "workspace:*",
-    "@keeper.sh/date-utils": "workspace:*",
-    "@keeper.sh/encryption": "workspace:*",
     "@keeper.sh/provider-core": "workspace:*",
     "drizzle-orm": "0.45.1",
     "widelogger": "^0.4.0",

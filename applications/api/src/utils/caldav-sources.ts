@@ -5,7 +5,7 @@ import {
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
-import { encryptPassword } from "@keeper.sh/encryption";
+import { encryptPassword } from "@keeper.sh/database";
 import { database, premiumService, encryptionKey } from "../context";
 import { triggerDestinationSync } from "./sync";
 import { applySourceSyncDefaults } from "./source-sync-defaults";

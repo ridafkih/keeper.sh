@@ -1,5 +1,5 @@
 import { MS_PER_DAY } from "@keeper.sh/constants";
-import { getStartOfToday } from "@keeper.sh/date-utils";
+import { getStartOfToday } from "@keeper.sh/calendar";
 
 const OAUTH_SYNC_LOOKBACK_DAYS = 7;
 const OAUTH_SYNC_WINDOW_VERSION = 3;

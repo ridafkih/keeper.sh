@@ -1,6 +1,6 @@
 import { calendarAccountsTable, caldavCredentialsTable, calendarsTable } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
-import { decryptPassword } from "@keeper.sh/encryption";
+import { decryptPassword } from "@keeper.sh/database";
 import type { CalDAVSourceAccount, CalDAVSourceProviderConfig } from "../types";
 
 const CALDAV_CALENDAR_TYPE = "caldav";

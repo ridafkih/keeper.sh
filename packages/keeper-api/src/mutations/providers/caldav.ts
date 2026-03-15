@@ -1,7 +1,7 @@
 import { convertIcsCalendar, generateIcsCalendar } from "ts-ics";
 import type { IcsCalendar, IcsEvent } from "ts-ics";
 import { HTTP_STATUS, KEEPER_USER_EVENT_SUFFIX } from "@keeper.sh/constants";
-import { decryptPassword } from "@keeper.sh/encryption";
+import { decryptPassword } from "@keeper.sh/database";
 import { createDAVClient } from "tsdav";
 import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "../../mutation-types";
 

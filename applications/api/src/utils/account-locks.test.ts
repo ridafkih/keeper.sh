@@ -168,7 +168,7 @@ beforeAll(async () => {
     },
   }));
 
-  mock.module("@keeper.sh/encryption", () => ({
+  mock.module("@keeper.sh/database", () => ({
     encryptPassword: () => "encrypted-password",
   }));
 

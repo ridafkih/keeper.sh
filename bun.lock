@@ -20,8 +20,6 @@
         "@keeper.sh/constants": "workspace:*",
         "@keeper.sh/data-schemas": "workspace:*",
         "@keeper.sh/database": "workspace:*",
-        "@keeper.sh/date-utils": "workspace:*",
-        "@keeper.sh/encryption": "workspace:*",
         "@keeper.sh/env": "workspace:*",
         "@keeper.sh/keeper-api": "workspace:*",
         "@keeper.sh/oauth-google": "workspace:*",
@@ -228,35 +226,14 @@
       "dependencies": {
         "drizzle-orm": "0.45.1",
         "pg": "8.16.3",
-      },
-      "devDependencies": {
-        "@keeper.sh/typescript-config": "workspace:*",
-        "@types/bun": "latest",
-        "@types/pg": "8.16.0",
-        "drizzle-kit": "0.31.8",
-        "typescript": "5.9.3",
-      },
-    },
-    "packages/date-utils": {
-      "name": "@keeper.sh/date-utils",
-      "dependencies": {
-        "@keeper.sh/constants": "workspace:*",
-      },
-      "devDependencies": {
-        "@keeper.sh/typescript-config": "workspace:*",
-        "@types/bun": "latest",
-        "typescript": "5.9.3",
-      },
-    },
-    "packages/encryption": {
-      "name": "@keeper.sh/encryption",
-      "dependencies": {
         "tweetnacl": "^1.0.3",
         "tweetnacl-util": "^0.15.1",
       },
       "devDependencies": {
         "@keeper.sh/typescript-config": "workspace:*",
         "@types/bun": "latest",
+        "@types/pg": "8.16.0",
+        "drizzle-kit": "0.31.8",
         "typescript": "5.9.3",
       },
     },
@@ -285,11 +262,10 @@
     "packages/keeper-api": {
       "name": "@keeper.sh/keeper-api",
       "dependencies": {
+        "@keeper.sh/calendar": "workspace:*",
         "@keeper.sh/constants": "workspace:*",
         "@keeper.sh/data-schemas": "workspace:*",
         "@keeper.sh/database": "workspace:*",
-        "@keeper.sh/date-utils": "workspace:*",
-        "@keeper.sh/encryption": "workspace:*",
         "@keeper.sh/provider-registry": "workspace:*",
         "drizzle-orm": "0.45.1",
         "ts-ics": "^2.4.3",
@@ -359,8 +335,6 @@
         "@keeper.sh/calendar": "workspace:*",
         "@keeper.sh/constants": "workspace:*",
         "@keeper.sh/database": "workspace:*",
-        "@keeper.sh/date-utils": "workspace:*",
-        "@keeper.sh/encryption": "workspace:*",
         "@keeper.sh/provider-core": "workspace:*",
         "drizzle-orm": "0.45.1",
         "ts-ics": "2.4.0",
@@ -378,9 +352,9 @@
       "name": "@keeper.sh/provider-core",
       "version": "0.0.1",
       "dependencies": {
+        "@keeper.sh/calendar": "workspace:*",
         "@keeper.sh/constants": "workspace:*",
         "@keeper.sh/database": "workspace:*",
-        "@keeper.sh/date-utils": "workspace:*",
         "@keeper.sh/oauth-google": "workspace:*",
         "@keeper.sh/oauth-microsoft": "workspace:*",
         "@keeper.sh/premium": "workspace:*",
@@ -718,10 +692,6 @@
     "@keeper.sh/data-schemas": ["@keeper.sh/data-schemas@workspace:packages/data-schemas"],
 
     "@keeper.sh/database": ["@keeper.sh/database@workspace:packages/database"],
-
-    "@keeper.sh/date-utils": ["@keeper.sh/date-utils@workspace:packages/date-utils"],
-
-    "@keeper.sh/encryption": ["@keeper.sh/encryption@workspace:packages/encryption"],
 
     "@keeper.sh/env": ["@keeper.sh/env@workspace:packages/env"],
 

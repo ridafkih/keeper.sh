@@ -4,8 +4,8 @@ import {
   calendarsTable,
   eventStatesTable,
 } from "@keeper.sh/database/schema";
-import { getStartOfToday } from "@keeper.sh/date-utils";
-import { decryptPassword } from "@keeper.sh/encryption";
+import { getStartOfToday } from "@keeper.sh/calendar";
+import { decryptPassword } from "@keeper.sh/database";
 import { and, arrayContains, asc, eq, gte, or } from "drizzle-orm";
 import type { SyncableEvent } from "@keeper.sh/provider-core";
 import type { CalDAVAccount, CalDAVService, CalDAVServiceConfig } from "../types";

@@ -1,4 +1,4 @@
-import { normalizeDateRange, parseDateRangeParams } from "@keeper.sh/date-utils";
+import { normalizeDateRange, parseDateRangeParams } from "@keeper.sh/calendar";
 import { createKeeperApi } from "@keeper.sh/keeper-api";
 import { withV1Auth, withWideEvent } from "../../../../../utils/middleware";
 import { ErrorResponse } from "../../../../../utils/responses";
