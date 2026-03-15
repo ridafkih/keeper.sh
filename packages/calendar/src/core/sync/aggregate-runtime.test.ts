@@ -320,7 +320,7 @@ describe("createSyncAggregateRuntime", () => {
       expect(stored).toBeDefined();
     });
 
-    it("does not store syncing aggregate in redis latest cache", async () => {
+    it("stores syncing aggregate in redis latest cache for fresh reconnects", async () => {
       const redis = createMockRedis();
       const broadcasts: { data: unknown; eventName: string; userId: string }[] = [];
 
@@ -342,7 +342,7 @@ describe("createSyncAggregateRuntime", () => {
       });
 
       expect(broadcasts).toHaveLength(1);
-      expect(redis.store.get("sync:aggregate:latest:user-1")).toBeUndefined();
+      expect(redis.store.get("sync:aggregate:latest:user-1")).toBeDefined();
       expect(redis.store.get("sync:aggregate:seq:user-1")).toBe("1");
     });
 
