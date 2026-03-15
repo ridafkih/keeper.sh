@@ -135,6 +135,8 @@ const getCurrentSyncAggregate = (
 const getCachedSyncAggregate = (userId: string) =>
   syncAggregateRuntime.getCachedSyncAggregate(userId);
 
+const getSyncAggregateRuntime = () => syncAggregateRuntime;
+
 const createResendClient = (): Resend | null => {
   if (!env.RESEND_API_KEY) {
     return null;
@@ -164,7 +166,7 @@ export {
   feedbackEmail,
   baseUrl,
   encryptionKey,
-  syncAggregateRuntime,
   getCurrentSyncAggregate,
   getCachedSyncAggregate,
+  getSyncAggregateRuntime,
 };

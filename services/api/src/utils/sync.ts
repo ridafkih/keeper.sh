@@ -1,6 +1,5 @@
 import { syncDestinationsForUser } from "@keeper.sh/sync";
 import type { SyncConfig, SyncDestinationsResult } from "@keeper.sh/sync";
-import type { SyncAggregateRuntime } from "@keeper.sh/calendar";
 import { spawnBackgroundJob } from "./background-task";
 import { widelog } from "./logging";
 
@@ -18,27 +17,19 @@ const mapDestinationSyncResult = (result: SyncDestinationsResult): Record<string
   eventsRemoveFailed: result.removeFailed,
 });
 
-interface SyncContext {
-  syncConfig: SyncConfig;
-  syncAggregateRuntime: SyncAggregateRuntime;
-}
-
-const buildSyncContext = async (): Promise<SyncContext> => {
-  const { database, redis, env, syncAggregateRuntime } = await import("@/context");
+const buildSyncConfig = async (): Promise<SyncConfig> => {
+  const { database, redis, env } = await import("@/context");
 
   return {
-    syncConfig: {
-      database,
-      redis,
-      encryptionKey: env.ENCRYPTION_KEY,
-      oauthConfig: {
-        googleClientId: env.GOOGLE_CLIENT_ID,
-        googleClientSecret: env.GOOGLE_CLIENT_SECRET,
-        microsoftClientId: env.MICROSOFT_CLIENT_ID,
-        microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
-      },
+    database,
+    redis,
+    encryptionKey: env.ENCRYPTION_KEY,
+    oauthConfig: {
+      googleClientId: env.GOOGLE_CLIENT_ID,
+      googleClientSecret: env.GOOGLE_CLIENT_SECRET,
+      microsoftClientId: env.MICROSOFT_CLIENT_ID,
+      microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
     },
-    syncAggregateRuntime,
   };
 };
 
@@ -59,14 +50,11 @@ const triggerDestinationSync = (userId: string): void => {
   activeSyncAbortControllers.set(userId, abortController);
 
   spawnBackgroundJob("destination-sync", { "user.id": userId, "correlation.id": correlationId }, async () => {
-    const { syncConfig, syncAggregateRuntime } = await buildSyncContext();
+    const syncConfig = await buildSyncConfig();
+    const { getSyncAggregateRuntime } = await import("@/context");
+    const syncAggregateRuntime = getSyncAggregateRuntime();
 
-    const syncConfigWithDeadline: SyncConfig = {
-      ...syncConfig,
-      abortSignal: abortController.signal,
-    };
-
-    const result = await syncDestinationsForUser(userId, syncConfigWithDeadline, {
+    const result = await syncDestinationsForUser(userId, { ...syncConfig, abortSignal: abortController.signal }, {
       onProgress: (update) => {
         syncAggregateRuntime.onSyncProgress(update);
       },
