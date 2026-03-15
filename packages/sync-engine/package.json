@@ -1,0 +1,24 @@
+{
+  "name": "@keeper.sh/sync-engine",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "scripts": {
+    "types": "tsc --noEmit",
+    "test": "bun test",
+    "lint": "oxlint ."
+  },
+  "dependencies": {
+    "@keeper.sh/database": "workspace:*",
+    "@keeper.sh/calendar": "workspace:*",
+    "drizzle-orm": "^0.45.1",
+    "ioredis": "^5.10.0"
+  },
+  "devDependencies": {
+    "@keeper.sh/typescript-config": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "5.9.3"
+  }
+}
