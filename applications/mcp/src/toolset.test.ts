@@ -1,11 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import { createKeeperMcpToolset } from "./toolset";
-import type { KeeperToolContext } from "./toolset";
-
-const createMockContext = (): KeeperToolContext => ({
-  bearerToken: "test-token",
-  apiBaseUrl: "http://localhost:3000",
-});
 
 describe("createKeeperMcpToolset", () => {
   it("exposes the full tool surface", () => {
@@ -29,7 +23,7 @@ describe("createKeeperMcpToolset", () => {
   it("each tool has a title and description", () => {
     const toolset = createKeeperMcpToolset();
 
-    for (const [name, tool] of Object.entries(toolset)) {
+    for (const [, tool] of Object.entries(toolset)) {
       expect(tool.title).toBeTruthy();
       expect(tool.description).toBeTruthy();
     }

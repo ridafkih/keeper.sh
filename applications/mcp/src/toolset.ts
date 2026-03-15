@@ -129,9 +129,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
     title: "List calendars",
     description:
       "List all calendars the user has connected to Keeper, including provider name and account.",
-    execute: async (context) => {
-      return apiFetch<KeeperCalendar[]>(context, "/api/v1/calendars");
-    },
+    execute: (context) => apiFetch<KeeperCalendar[]>(context, "/api/v1/calendars"),
   },
   get_event_count: {
     title: "Get event count",
@@ -141,7 +139,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
       from: z.string().datetime().optional().describe("Start of date range (ISO 8601)"),
       to: z.string().datetime().optional().describe("End of date range (ISO 8601)"),
     },
-    execute: async (context, input) => {
+    execute: (context, input) => {
       const params = new URLSearchParams({ count: "true" });
       if (input?.from && typeof input.from === "string") {
         params.set("from", input.from);
@@ -172,7 +170,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
     inputSchema: {
       eventId: z.string().uuid().describe("The event ID"),
     },
-    execute: async (context, input) => {
+    execute: (context, input) => {
       if (!input?.eventId || typeof input.eventId !== "string") {
         throw new Error("'eventId' is required");
       }
@@ -193,7 +191,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
       isAllDay: z.boolean().optional().describe("Whether the event is all-day"),
       availability: z.enum(["busy", "free"]).optional().describe("Availability status"),
     },
-    execute: async (context, input) => {
+    execute: (context, input) => {
       if (!input?.calendarId || !input?.title || !input?.startTime || !input?.endTime) {
         throw new Error("'calendarId', 'title', 'startTime', and 'endTime' are required");
       }
@@ -217,7 +215,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
       isAllDay: z.boolean().optional().describe("Whether the event is all-day"),
       availability: z.enum(["busy", "free"]).optional().describe("Updated availability"),
     },
-    execute: async (context, input) => {
+    execute: (context, input) => {
       if (!input?.eventId || typeof input.eventId !== "string") {
         throw new Error("'eventId' is required");
       }
@@ -252,7 +250,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
       eventId: z.string().uuid().describe("The event ID to respond to"),
       rsvpStatus: z.enum(["accepted", "declined", "tentative"]).describe("The RSVP response"),
     },
-    execute: async (context, input) => {
+    execute: (context, input) => {
       if (!input?.eventId || typeof input.eventId !== "string") {
         throw new Error("'eventId' is required");
       }
@@ -273,7 +271,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
       calendarId: z.string().uuid().describe("The calendar ID to check for pending invites"),
       ...eventRangeSchema,
     },
-    execute: async (context, input) => {
+    execute: (context, input) => {
       if (!input?.calendarId || typeof input.calendarId !== "string") {
         throw new Error("'calendarId' is required");
       }
@@ -287,16 +285,12 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
   list_accounts: {
     title: "List accounts",
     description: "List all connected calendar accounts with provider information.",
-    execute: async (context) => {
-      return apiFetch<unknown[]>(context, "/api/v1/accounts");
-    },
+    execute: (context) => apiFetch<unknown[]>(context, "/api/v1/accounts"),
   },
   get_ical_feed: {
     title: "Get iCal feed URL",
     description: "Get the user's iCal feed URL for subscribing in other calendar apps.",
-    execute: async (context) => {
-      return apiFetch<{ url: string }>(context, "/api/v1/ical");
-    },
+    execute: (context) => apiFetch<{ url: string }>(context, "/api/v1/ical"),
   },
 });
 

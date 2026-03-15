@@ -12,7 +12,7 @@ const toCalendar = (source: KeeperSource) => ({
   account: source.accountLabel,
 });
 
-export const GET = withWideEvent(
+const GET = withWideEvent(
   withV1Auth(async ({ request, userId }) => {
     const url = new URL(request.url);
     const providerFilter = url.searchParams.get("provider");
@@ -20,10 +20,12 @@ export const GET = withWideEvent(
     let sources = await keeperApi.listSources(userId);
 
     if (providerFilter) {
-      const providers = providerFilter.split(",").filter(Boolean);
-      sources = sources.filter((source) => providers.includes(source.provider));
+      const providers = new Set(providerFilter.split(",").filter(Boolean));
+      sources = sources.filter((source) => providers.has(source.provider));
     }
 
     return Response.json(sources.map((source) => toCalendar(source)));
   }),
 );
+
+export { GET };

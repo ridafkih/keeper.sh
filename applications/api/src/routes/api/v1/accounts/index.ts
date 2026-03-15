@@ -4,7 +4,7 @@ import { withV1Auth, withWideEvent } from "../../../../utils/middleware";
 import { database } from "../../../../context";
 import { withAccountDisplay } from "../../../../utils/provider-display";
 
-export const GET = withWideEvent(
+const GET = withWideEvent(
   withV1Auth(async ({ request, userId }) => {
     const url = new URL(request.url);
     const providerFilter = url.searchParams.get("provider");
@@ -37,3 +37,5 @@ export const GET = withWideEvent(
     return Response.json(accounts.map((account) => withAccountDisplay(account)));
   }),
 );
+
+export { GET };

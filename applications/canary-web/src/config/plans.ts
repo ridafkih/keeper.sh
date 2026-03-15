@@ -23,6 +23,7 @@ export const plans: PlanConfig[] = [
       "Up to 3 sync mappings",
       "Aggregated iCal feed",
       "Syncing every 30 minutes",
+      "API access (25 calls/day)",
     ],
   },
   {
@@ -38,6 +39,7 @@ export const plans: PlanConfig[] = [
       "Unlimited linked accounts",
       "Unlimited sync mappings",
       "Event filters, exclusions, and iCal feed customization",
+      "Unlimited API & MCP access",
       "Priority support",
     ],
   },

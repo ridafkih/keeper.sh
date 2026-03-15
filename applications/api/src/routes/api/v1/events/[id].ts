@@ -12,7 +12,7 @@ const keeperApi = createKeeperApi(database, {
   encryptionKey,
 });
 
-export const GET = withWideEvent(
+const GET = withWideEvent(
   withV1Auth(async ({ params, userId }) => {
     const eventId = params.id;
     if (!eventId) {
@@ -28,7 +28,7 @@ export const GET = withWideEvent(
   }),
 );
 
-export const PATCH = withWideEvent(
+const PATCH = withWideEvent(
   withV1Auth(async ({ request, params, userId }) => {
     const eventId = params.id;
     if (!eventId) {
@@ -50,8 +50,15 @@ export const PATCH = withWideEvent(
         return Response.json({ rsvpStatus: validated.rsvpStatus });
       }
 
-      const { rsvpStatus: _, ...updates } = validated;
-      const result = await keeperApi.updateEvent(userId, eventId, updates);
+      const result = await keeperApi.updateEvent(userId, eventId, {
+        title: validated.title,
+        description: validated.description,
+        location: validated.location,
+        startTime: validated.startTime,
+        endTime: validated.endTime,
+        isAllDay: validated.isAllDay,
+        availability: validated.availability,
+      });
 
       if (!result.success) {
         return ErrorResponse.badRequest(result.error ?? "Failed to update event.").toResponse();
@@ -68,7 +75,7 @@ export const PATCH = withWideEvent(
   }),
 );
 
-export const DELETE = withWideEvent(
+const DELETE = withWideEvent(
   withV1Auth(async ({ params, userId }) => {
     const eventId = params.id;
     if (!eventId) {
@@ -83,3 +90,5 @@ export const DELETE = withWideEvent(
     return new Response(null, { status: HTTP_STATUS.NO_CONTENT });
   }),
 );
+
+export { GET, PATCH, DELETE };

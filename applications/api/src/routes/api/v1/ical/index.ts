@@ -7,10 +7,12 @@ const getIcalUrl = (token: string): string => {
   return url.toString();
 };
 
-export const GET = withWideEvent(
+const GET = withWideEvent(
   withV1Auth(async ({ userId }) => {
     const token = await getUserIdentifierToken(userId);
     const icalUrl = getIcalUrl(token);
     return Response.json({ url: icalUrl });
   }),
 );
+
+export { GET };

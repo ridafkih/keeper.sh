@@ -9,9 +9,9 @@ const keeperApi = createKeeperApi(database, {
   encryptionKey,
 });
 
-export const GET = withWideEvent(
+const GET = withWideEvent(
   withV1Auth(async ({ request, params, userId }) => {
-    const calendarId = params.calendarId;
+    const { calendarId } = params;
     if (!calendarId) {
       return ErrorResponse.badRequest("Calendar ID is required.").toResponse();
     }
@@ -30,3 +30,5 @@ export const GET = withWideEvent(
     return Response.json(invites);
   }),
 );
+
+export { GET };

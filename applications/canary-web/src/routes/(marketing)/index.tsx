@@ -154,6 +154,7 @@ const PRICING_FEATURES: PricingFeature[] = [
   { label: 'Aggregated iCal Feed', free: 'check', pro: 'check' },
   { label: 'iCal Feed Customization', free: 'minus', pro: 'check' },
   { label: 'Event Filters & Exclusions', free: 'minus', pro: 'check' },
+  { label: 'API & MCP Access', free: '25 calls/day', pro: 'infinity' },
   { label: 'Priority Support', free: 'minus', pro: 'check' },
 ]
 

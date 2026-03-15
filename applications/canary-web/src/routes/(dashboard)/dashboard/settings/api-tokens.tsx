@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import Check from "lucide-react/dist/esm/icons/check";
 import Copy from "lucide-react/dist/esm/icons/copy";
+import Gauge from "lucide-react/dist/esm/icons/gauge";
 import KeySquare from "lucide-react/dist/esm/icons/key-square";
 import Plus from "lucide-react/dist/esm/icons/plus";
 import { Button, ButtonIcon, ButtonText } from "../../../../components/ui/primitives/button";
@@ -13,6 +14,7 @@ import {
   deleteApiToken,
 } from "../../../../hooks/use-api-tokens";
 import type { ApiToken } from "../../../../hooks/use-api-tokens";
+import { useEntitlements } from "../../../../hooks/use-entitlements";
 import {
   Modal,
   ModalContent,
@@ -23,6 +25,7 @@ import {
 import {
   NavigationMenu,
   NavigationMenuButtonItem,
+  NavigationMenuItem,
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
   NavigationMenuItemTrailing,
@@ -44,7 +47,15 @@ function CopyTokenIcon({ copied }: { copied: boolean }) {
   return <Copy size={16} />;
 }
 
+function resolveApiLimitLabel(plan: string | null): string {
+  if (plan === "pro") {
+    return "Unlimited";
+  }
+  return "25 calls/day";
+}
+
 function ApiTokensPage() {
+  const { data: entitlements } = useEntitlements();
   const { data: tokens = [], error, mutate } = useApiTokens();
   const [deleteTarget, setDeleteTarget] = useState<ApiToken | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -89,6 +100,19 @@ function ApiTokensPage() {
   return (
     <div className="flex flex-col gap-1.5">
       <BackButton fallback="/dashboard/settings" />
+      <NavigationMenu>
+        <NavigationMenuItem>
+          <NavigationMenuItemIcon>
+            <Gauge size={15} />
+          </NavigationMenuItemIcon>
+          <NavigationMenuItemLabel>Daily Limit</NavigationMenuItemLabel>
+          <NavigationMenuItemTrailing>
+            <Text size="sm" tone="muted">
+              {resolveApiLimitLabel(entitlements?.plan ?? null)}
+            </Text>
+          </NavigationMenuItemTrailing>
+        </NavigationMenuItem>
+      </NavigationMenu>
       {error && (
         <ErrorState message="Failed to load API tokens." onRetry={() => mutate()} />
       )}

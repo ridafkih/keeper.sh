@@ -35,7 +35,7 @@ import {
 } from "./providers/caldav";
 
 interface OAuthTokenRefresher {
-  getProvider: (providerId: string) => { refreshAccessToken: (refreshToken: string) => Promise<{ access_token: string; expires_in: number }> } | null;
+  getProvider: (providerId: string) => { refreshAccessToken: (refreshToken: string) => Promise<{ access_token: string; expires_in: number }> } | undefined;
 }
 
 interface MutationDependencies {

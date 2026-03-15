@@ -36,7 +36,7 @@ const parseEventFilters = (url: URL): KeeperEventFilters => {
   return filters;
 };
 
-export const GET = withWideEvent(
+const GET = withWideEvent(
   withV1Auth(async ({ request, userId }) => {
     const url = new URL(request.url);
     const { from, to } = parseDateRangeParams(url);
@@ -58,7 +58,7 @@ export const GET = withWideEvent(
   }),
 );
 
-export const POST = withWideEvent(
+const POST = withWideEvent(
   withV1Auth(async ({ request, userId }) => {
     const body = await request.json();
 
@@ -80,3 +80,5 @@ export const POST = withWideEvent(
     }
   }),
 );
+
+export { GET, POST };

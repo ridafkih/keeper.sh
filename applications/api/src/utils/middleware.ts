@@ -5,7 +5,8 @@ import { apiTokensTable, calendarsTable, sourceDestinationMappingsTable } from "
 import { isApiToken, hashApiToken } from "./api-tokens";
 import { user as userTable } from "@keeper.sh/database/auth-schema";
 import { and, count, eq, inArray } from "drizzle-orm";
-import { auth, database, premiumService } from "../context";
+import { auth, database, premiumService, redis } from "../context";
+import { checkAndIncrementApiUsage } from "./api-rate-limit";
 import {
   runApiWideEventContext,
   setWideEventFields,
@@ -136,7 +137,11 @@ const fetchAccountAgeDays = async (userId: string): Promise<number | null> => {
   }
 };
 
-const enrichWithUserContext = async (userId: string): Promise<void> => {
+interface UserContext {
+  plan: "free" | "pro" | null;
+}
+
+const enrichWithUserContext = async (userId: string): Promise<UserContext> => {
   widelog.set("user.id", userId);
 
   const [plan, counts, accountAgeDays] = await Promise.all([
@@ -154,6 +159,8 @@ const enrichWithUserContext = async (userId: string): Promise<void> => {
   if (accountAgeDays !== null) {
     widelog.set("account.age_days", accountAgeDays);
   }
+
+  return { plan };
 };
 
 interface Session {
@@ -223,13 +230,25 @@ const resolveApiTokenUserId = async (bearerToken: string): Promise<string | null
     return null;
   }
 
-  database
+  await database
     .update(apiTokensTable)
     .set({ lastUsedAt: new Date() })
-    .where(eq(apiTokensTable.id, match.id))
-    .then(() => {}, () => {});
+    .where(eq(apiTokensTable.id, match.id));
 
   return match.userId;
+};
+
+const enforceApiRateLimit = async (userId: string, plan: "free" | "pro" | null): Promise<Response | null> => {
+  const rateLimitResult = await checkAndIncrementApiUsage(redis, userId, plan);
+  widelog.set("rate_limit.remaining", rateLimitResult.remaining);
+  widelog.set("rate_limit.limit", rateLimitResult.limit);
+
+  if (!rateLimitResult.allowed) {
+    widelog.set("rate_limit.exceeded", true);
+    return ErrorResponse.tooManyRequests("Daily API limit exceeded. Upgrade to Pro for unlimited access.").toResponse();
+  }
+
+  return null;
 };
 
 const withV1Auth =
@@ -250,7 +269,11 @@ const withV1Auth =
         }
 
         widelog.set("auth.method", "api_token");
-        await enrichWithUserContext(userId);
+        const { plan } = await enrichWithUserContext(userId);
+        const rateLimitResponse = await enforceApiRateLimit(userId, plan);
+        if (rateLimitResponse) {
+          return rateLimitResponse;
+        }
         return handler({ params, request, userId });
       }
 
@@ -264,7 +287,11 @@ const withV1Auth =
           return ErrorResponse.unauthorized().toResponse();
         }
 
-        await enrichWithUserContext(mcpSession.userId);
+        const { plan } = await enrichWithUserContext(mcpSession.userId);
+        const rateLimitResponse = await enforceApiRateLimit(mcpSession.userId, plan);
+        if (rateLimitResponse) {
+          return rateLimitResponse;
+        }
         return handler({ params, request, userId: mcpSession.userId });
       }
     }
