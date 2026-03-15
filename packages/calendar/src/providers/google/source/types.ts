@@ -1,3 +1,5 @@
+import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
+
 interface GoogleCalendarListEntry {
   id: string;
   summary: string;
@@ -54,6 +56,7 @@ interface FetchEventsOptions {
   timeMin?: Date;
   timeMax?: Date;
   maxResults?: number;
+  rateLimiter?: RedisRateLimiter;
 }
 
 interface FetchEventsResult {

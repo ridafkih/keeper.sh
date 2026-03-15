@@ -3,6 +3,13 @@ import type { EventMapping } from "../events/mappings";
 import { computeSyncOperations } from "../sync/operations";
 import type { CalendarSyncProvider, PendingChanges } from "./types";
 
+const resolveOutcome = (superseded: boolean): string => {
+  if (superseded) {
+    return "superseded";
+  }
+  return "success";
+};
+
 const processAddResults = (
   addOperations: Extract<SyncOperation, { type: "add" }>[],
   pushResults: PushResult[],
@@ -68,70 +75,124 @@ const processDeleteResults = (
   return { deleteIds, removed, removeFailed };
 };
 
+interface ExecuteRemoteResult {
+  changes: PendingChanges;
+  result: SyncResult;
+  superseded: boolean;
+}
+
+interface OperationRun {
+  type: "add" | "remove";
+  adds: Extract<SyncOperation, { type: "add" }>[];
+  removes: Extract<SyncOperation, { type: "remove" }>[];
+}
+
+const groupOperationRuns = (operations: SyncOperation[]): OperationRun[] => {
+  const runs: OperationRun[] = [];
+  let currentRun: OperationRun | null = null;
+
+  for (const operation of operations) {
+    if (!currentRun || currentRun.type !== operation.type) {
+      currentRun = { type: operation.type, adds: [], removes: [] };
+      runs.push(currentRun);
+    }
+
+    if (operation.type === "add") {
+      currentRun.adds.push(operation);
+    } else {
+      currentRun.removes.push(operation);
+    }
+  }
+
+  return runs;
+};
+
+interface RunResult {
+  changes: PendingChanges;
+  result: SyncResult;
+}
+
+const executeAddRun = async (
+  adds: Extract<SyncOperation, { type: "add" }>[],
+  calendarId: string,
+  provider: CalendarSyncProvider,
+): Promise<RunResult> => {
+  const addEvents = adds.map((op) => op.event);
+  const pushResults = await provider.pushEvents(addEvents);
+  const { added, addFailed, changes } = processAddResults(adds, pushResults, calendarId);
+  return {
+    changes,
+    result: { added, addFailed, removed: 0, removeFailed: 0 },
+  };
+};
+
+const executeRemoveRun = async (
+  removes: Extract<SyncOperation, { type: "remove" }>[],
+  provider: CalendarSyncProvider,
+  mappingsByDestinationUid: Map<string, EventMapping>,
+): Promise<RunResult> => {
+  const idsToDelete = removes.map((op) => op.deleteId);
+  const deleteResults = await provider.deleteEvents(idsToDelete);
+  const { removed, removeFailed, deleteIds } = processDeleteResults(removes, deleteResults, mappingsByDestinationUid);
+  return {
+    changes: { inserts: [], deletes: deleteIds },
+    result: { added: 0, addFailed: 0, removed, removeFailed },
+  };
+};
+
+const mergeRunResult = (accumulated: PendingChanges, result: SyncResult, runResult: RunResult): SyncResult => {
+  accumulated.inserts.push(...runResult.changes.inserts);
+  accumulated.deletes.push(...runResult.changes.deletes);
+  return {
+    added: result.added + runResult.result.added,
+    addFailed: result.addFailed + runResult.result.addFailed,
+    removed: result.removed + runResult.result.removed,
+    removeFailed: result.removeFailed + runResult.result.removeFailed,
+  };
+};
+
 const executeRemoteOperations = async (
   operations: SyncOperation[],
   existingMappings: EventMapping[],
   calendarId: string,
   provider: CalendarSyncProvider,
   isCurrent?: () => Promise<boolean>,
-): Promise<{ changes: PendingChanges; result: SyncResult } | null> => {
-  if (isCurrent) {
-    const stillCurrent = await isCurrent();
-    if (!stillCurrent) {
-      return null;
-    }
-  }
-
+): Promise<ExecuteRemoteResult> => {
   const mappingsByDestinationUid = new Map<string, EventMapping>();
   for (const mapping of existingMappings) {
     mappingsByDestinationUid.set(mapping.destinationEventUid, mapping);
   }
 
-  const addOperations: Extract<SyncOperation, { type: "add" }>[] = [];
-  const removeOperations: Extract<SyncOperation, { type: "remove" }>[] = [];
-
-  for (const operation of operations) {
-    if (operation.type === "add") {
-      addOperations.push(operation);
-    } else if (operation.type === "remove") {
-      removeOperations.push(operation);
-    }
-  }
-
   const changes: PendingChanges = { inserts: [], deletes: [] };
-  let added = 0;
-  let addFailed = 0;
-  let removed = 0;
-  let removeFailed = 0;
+  const runs = groupOperationRuns(operations);
+  const emptyResult: SyncResult = { added: 0, addFailed: 0, removed: 0, removeFailed: 0 };
+  let result = emptyResult;
+  let superseded = false;
 
-  if (addOperations.length > 0) {
-    const addEvents = addOperations.map((op) => op.event);
-    const pushResults = await provider.pushEvents(addEvents);
-    const { added: addedCount, addFailed: addFailedCount, changes: addChanges } = processAddResults(addOperations, pushResults, calendarId);
+  for (const run of runs) {
+    if (superseded) {
+      break;
+    }
 
-    added = addedCount;
-    addFailed = addFailedCount;
-    changes.inserts.push(...addChanges.inserts);
-  }
+    if (run.type === "add" && run.adds.length > 0) {
+      const runResult = await executeAddRun(run.adds, calendarId, provider);
+      result = mergeRunResult(changes, result, runResult);
+    }
 
-  if (removeOperations.length > 0) {
+    if (run.type === "remove" && run.removes.length > 0) {
+      const runResult = await executeRemoveRun(run.removes, provider, mappingsByDestinationUid);
+      result = mergeRunResult(changes, result, runResult);
+    }
+
     if (isCurrent) {
       const stillCurrent = await isCurrent();
       if (!stillCurrent) {
-        return null;
+        superseded = true;
       }
     }
-
-    const idsToDelete = removeOperations.map((op) => op.deleteId);
-    const deleteResults = await provider.deleteEvents(idsToDelete);
-    const { removed: removedCount, removeFailed: removeFailedCount, deleteIds: deletedMappingIds } = processDeleteResults(removeOperations, deleteResults, mappingsByDestinationUid);
-
-    removed = removedCount;
-    removeFailed = removeFailedCount;
-    changes.deletes.push(...deletedMappingIds);
   }
 
-  return { changes, result: { added, addFailed, removed, removeFailed } };
+  return { changes, result, superseded };
 };
 
 interface SyncCalendarOptions {
@@ -207,30 +268,20 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncResult> =
       isCurrent,
     );
 
-    if (outcome === null) {
-      wideEvent["outcome"] = "superseded";
-      wideEvent["flushed"] = false;
-      return EMPTY_RESULT;
-    }
-
     wideEvent["events.added"] = outcome.result.added;
     wideEvent["events.add_failed"] = outcome.result.addFailed;
     wideEvent["events.removed"] = outcome.result.removed;
     wideEvent["events.remove_failed"] = outcome.result.removeFailed;
+    wideEvent["superseded"] = outcome.superseded;
 
-    outcome.changes.deletes.push(...staleMappingIds);
-
-    const canFlush = await isCurrent();
-    if (!canFlush) {
-      wideEvent["outcome"] = "superseded";
-      wideEvent["flushed"] = false;
-      return outcome.result;
+    if (!outcome.superseded) {
+      outcome.changes.deletes.push(...staleMappingIds);
     }
 
     await flush(outcome.changes);
     flushed = true;
 
-    wideEvent["outcome"] = "success";
+    wideEvent["outcome"] = resolveOutcome(outcome.superseded);
     wideEvent["flushed"] = true;
     wideEvent["flush.inserts"] = outcome.changes.inserts.length;
     wideEvent["flush.deletes"] = outcome.changes.deletes.length;

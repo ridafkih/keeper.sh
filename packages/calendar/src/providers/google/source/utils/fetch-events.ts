@@ -123,12 +123,17 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
     timeMin,
     timeMax,
     maxResults = GOOGLE_CALENDAR_MAX_RESULTS,
+    rateLimiter,
   } = options;
 
   const baseUrl = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events`;
   const events: GoogleCalendarEvent[] = [];
   const cancelledEventUids: string[] = [];
   const isDeltaSync = Boolean(syncToken);
+
+  if (rateLimiter) {
+    await rateLimiter.acquire(1);
+  }
 
   let result = await fetchEventsPage({
     accessToken,
@@ -157,6 +162,10 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
   let lastSyncToken = result.data.nextSyncToken;
 
   while (result.data.nextPageToken) {
+    if (rateLimiter) {
+      await rateLimiter.acquire(1);
+    }
+
     result = await fetchEventsPage({
       accessToken,
       baseUrl,

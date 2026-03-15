@@ -96,11 +96,20 @@ const getOperationEventTime = (operation: SyncOperation): Date => {
   return operation.startTime;
 };
 
+const getOperationTypePriority = (operation: SyncOperation): number => {
+  if (operation.type === "remove") {
+    return 0;
+  }
+  return 1;
+};
+
 const sortOperationsByTime = (operations: SyncOperation[]): SyncOperation[] =>
   operations.toSorted((first, second) => {
-    const firstTime = getOperationEventTime(first).getTime();
-    const secondTime = getOperationEventTime(second).getTime();
-    return firstTime - secondTime;
+    const timeDiff = getOperationEventTime(first).getTime() - getOperationEventTime(second).getTime();
+    if (timeDiff !== 0) {
+      return timeDiff;
+    }
+    return getOperationTypePriority(first) - getOperationTypePriority(second);
   });
 
 const buildRemoveOperations = (

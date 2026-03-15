@@ -1,4 +1,5 @@
 import type { CalendarSyncProvider } from "@keeper.sh/calendar";
+import type { RedisRateLimiter } from "@keeper.sh/calendar";
 import {
   createGoogleOAuthService,
   createMicrosoftOAuthService,
@@ -33,6 +34,7 @@ const resolveOAuthProvider = async (
   userId: string,
   accountId: string,
   oauthConfig: OAuthConfig,
+  rateLimiter?: RedisRateLimiter,
 ): Promise<CalendarSyncProvider | null> => {
   const [oauthCred] = await database
     .select({
@@ -62,6 +64,7 @@ const resolveOAuthProvider = async (
       calendarId,
       userId,
       refreshAccessToken: (refreshToken) => googleOAuth.refreshAccessToken(refreshToken),
+      rateLimiter,
     });
   }
 
@@ -123,6 +126,7 @@ interface ResolveProviderOptions {
   accountId: string;
   oauthConfig: OAuthConfig;
   encryptionKey?: string;
+  rateLimiter?: RedisRateLimiter;
 }
 
 const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarSyncProvider | null> => {
@@ -134,6 +138,7 @@ const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarS
       options.userId,
       options.accountId,
       options.oauthConfig,
+      options.rateLimiter,
     );
   }
 

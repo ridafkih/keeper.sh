@@ -5,9 +5,10 @@ import {
   insertEventStatesWithConflictResolution,
   createGoogleOAuthService,
   createMicrosoftOAuthService,
+  createRedisRateLimiter,
   ensureValidToken,
 } from "@keeper.sh/calendar";
-import type { IngestionChanges, IngestionFetchEventsResult, TokenState } from "@keeper.sh/calendar";
+import type { IngestionChanges, IngestionFetchEventsResult, RedisRateLimiter, TokenState } from "@keeper.sh/calendar";
 import { createIcsSourceFetcher } from "@keeper.sh/calendar/ics";
 import { createGoogleSourceFetcher } from "@keeper.sh/calendar/google";
 import { createOutlookSourceFetcher } from "@keeper.sh/calendar/outlook";
@@ -23,11 +24,12 @@ import {
 import { and, arrayContains, eq, inArray } from "drizzle-orm";
 import { setCronEventFields, withCronWideEvent } from "@/utils/with-wide-event";
 import { widelog } from "@/utils/logging";
-import { database } from "@/context";
+import { database, refreshLockRedis } from "@/context";
 import env from "@/env";
 
 const SOURCE_TIMEOUT_MS = 60_000;
 const SOURCE_CONCURRENCY = 5;
+const GOOGLE_REQUESTS_PER_MINUTE = 600;
 
 const serializeOptionalJson = (value: unknown): string | null => {
   if (!value) {
@@ -125,10 +127,23 @@ const resolveTokenRefresher = (provider: string) => {
   return null;
 };
 
+const resolveRateLimiter = (provider: string, userId: string): RedisRateLimiter | undefined => {
+  if (provider !== "google") {
+    return;
+  }
+
+  return createRedisRateLimiter(
+    refreshLockRedis,
+    `ratelimit:${userId}:google`,
+    { requestsPerMinute: GOOGLE_REQUESTS_PER_MINUTE },
+  );
+};
+
 interface OAuthFetcherParams {
   accessToken: string;
   externalCalendarId: string;
   syncToken: string | null;
+  rateLimiter?: RedisRateLimiter;
 }
 
 const resolveOAuthFetcher = (
@@ -160,6 +175,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
       accessToken: oauthCredentialsTable.accessToken,
       refreshToken: oauthCredentialsTable.refreshToken,
       expiresAt: oauthCredentialsTable.expiresAt,
+      userId: calendarsTable.userId,
     })
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
@@ -189,10 +205,13 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
           await ensureValidToken(tokenState, tokenRefresher);
         }
 
+        const rateLimiter = resolveRateLimiter(source.provider, source.userId);
+
         const resolvedFetcher = resolveOAuthFetcher(source.provider, {
           accessToken: tokenState.accessToken,
           externalCalendarId: source.externalCalendarId,
           syncToken: source.syncToken,
+          rateLimiter,
         });
 
         if (!resolvedFetcher) {

@@ -2,8 +2,8 @@ import {
   syncCalendar,
   getEventsForDestination,
   getEventMappingsForDestination,
-  createRedisGenerationCheck,
   createDatabaseFlush,
+  createRedisRateLimiter,
 } from "@keeper.sh/calendar";
 import {
   calendarAccountsTable,
@@ -14,6 +14,9 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
 import { resolveSyncProvider } from "./resolve-provider";
 import type { OAuthConfig } from "./resolve-provider";
+import { createSyncLock } from "./sync-lock";
+
+const GOOGLE_REQUESTS_PER_MINUTE = 600;
 
 interface SyncConfig {
   database: BunSQLDatabase;
@@ -66,6 +69,7 @@ const syncDestinationsForUser = async (
   }
 
   const flush = createDatabaseFlush(database);
+  const syncLock = createSyncLock(redis);
 
   let added = 0;
   let addFailed = 0;
@@ -73,51 +77,68 @@ const syncDestinationsForUser = async (
   let removeFailed = 0;
   const syncEvents: Record<string, unknown>[] = [];
 
-  for (const destination of destinations) {
-    const syncProvider = await resolveSyncProvider({
-      database,
-      provider: destination.provider,
-      calendarId: destination.calendarId,
-      userId: destination.userId,
-      accountId: destination.accountId,
-      oauthConfig: config.oauthConfig,
-      encryptionKey: config.encryptionKey,
-    });
+  const rateLimiter = createRedisRateLimiter(
+    redis,
+    `ratelimit:${userId}:google`,
+    { requestsPerMinute: GOOGLE_REQUESTS_PER_MINUTE },
+  );
 
-    if (!syncProvider) {
+  for (const destination of destinations) {
+    const lockResult = await syncLock.acquire(destination.calendarId);
+    if (!lockResult.acquired) {
       continue;
     }
 
-    const providerRef = syncProvider;
-    const isCurrent = await createRedisGenerationCheck(redis, destination.calendarId);
+    const { handle } = lockResult;
 
-    const result = await syncCalendar({
-      calendarId: destination.calendarId,
-      provider: providerRef,
-      readState: async () => ({
-        localEvents: await getEventsForDestination(database, destination.calendarId),
-        existingMappings: await getEventMappingsForDestination(database, destination.calendarId),
-        remoteEvents: await providerRef.listRemoteEvents(),
-      }),
-      isCurrent,
-      flush,
-      onSyncEvent: (event) => {
-        const enrichedEvent = {
-          ...event,
-          "destination.provider": destination.provider,
-          "user.id": destination.userId,
-        };
-        syncEvents.push(enrichedEvent);
-        if (onSyncEvent) {
-          onSyncEvent(enrichedEvent);
-        }
-      },
-    });
+    try {
+      const syncProvider = await resolveSyncProvider({
+        database,
+        provider: destination.provider,
+        calendarId: destination.calendarId,
+        userId: destination.userId,
+        accountId: destination.accountId,
+        oauthConfig: config.oauthConfig,
+        encryptionKey: config.encryptionKey,
+        rateLimiter,
+      });
 
-    added += result.added;
-    addFailed += result.addFailed;
-    removed += result.removed;
-    removeFailed += result.removeFailed;
+      if (!syncProvider) {
+        continue;
+      }
+
+      const providerRef = syncProvider;
+
+      const result = await syncCalendar({
+        calendarId: destination.calendarId,
+        provider: providerRef,
+        readState: async () => ({
+          localEvents: await getEventsForDestination(database, destination.calendarId),
+          existingMappings: await getEventMappingsForDestination(database, destination.calendarId),
+          remoteEvents: await providerRef.listRemoteEvents(),
+        }),
+        isCurrent: () => handle.isCurrent(),
+        flush,
+        onSyncEvent: (event) => {
+          const enrichedEvent = {
+            ...event,
+            "destination.provider": destination.provider,
+            "user.id": destination.userId,
+          };
+          syncEvents.push(enrichedEvent);
+          if (onSyncEvent) {
+            onSyncEvent(enrichedEvent);
+          }
+        },
+      });
+
+      added += result.added;
+      addFailed += result.addFailed;
+      removed += result.removed;
+      removeFailed += result.removeFailed;
+    } finally {
+      await handle.release();
+    }
   }
 
   return { added, addFailed, removed, removeFailed, syncEvents };

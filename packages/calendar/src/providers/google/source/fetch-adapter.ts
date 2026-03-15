@@ -1,4 +1,5 @@
 import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
+import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import { resolveSyncTokenForWindow } from "../../../core/oauth/sync-token";
 import { getOAuthSyncWindow, OAUTH_SYNC_WINDOW_VERSION } from "../../../core/oauth/sync-window";
 import { fetchCalendarEvents, parseGoogleEvents } from "./utils/fetch-events";
@@ -9,6 +10,7 @@ interface GoogleSourceFetcherConfig {
   accessToken: string;
   externalCalendarId: string;
   syncToken: string | null;
+  rateLimiter?: RedisRateLimiter;
 }
 
 interface GoogleSourceFetcher {
@@ -20,6 +22,7 @@ const createGoogleSourceFetcher = (config: GoogleSourceFetcherConfig): GoogleSou
     const fetchOptions: Parameters<typeof fetchCalendarEvents>[0] = {
       accessToken: config.accessToken,
       calendarId: config.externalCalendarId,
+      rateLimiter: config.rateLimiter,
     };
 
     const syncTokenResolution = resolveSyncTokenForWindow(

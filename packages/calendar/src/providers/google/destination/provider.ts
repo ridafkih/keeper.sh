@@ -2,6 +2,7 @@ import { generateEventUid, isKeeperEvent } from "../../../core/events/identity";
 import { getOAuthSyncWindowStart } from "../../../core/oauth/sync-window";
 import { ensureValidToken } from "../../../core/oauth/ensure-valid-token";
 import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-valid-token";
+import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import type { DeleteResult, PushResult, RemoteEvent, SyncableEvent } from "../../../core/types";
 import { googleEventListSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
@@ -20,7 +21,10 @@ interface GoogleSyncProviderConfig {
   calendarId: string;
   userId: string;
   refreshAccessToken?: TokenRefresher;
+  rateLimiter?: RedisRateLimiter;
 }
+
+const isDirectEventId = (identifier: string): boolean => !identifier.includes("@");
 
 const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   const tokenState: TokenState = {
@@ -72,7 +76,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       return results;
     }
 
-    const batchResponses = await executeBatchChunked(subRequests, tokenState.accessToken);
+    const batchResponses = await executeBatchChunked(subRequests, tokenState.accessToken, config.rateLimiter);
 
     for (const entry of batchEntries) {
       const response = batchResponses[entry.batchIndex];
@@ -96,29 +100,54 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     return results;
   };
 
-  const deleteEvents = async (eventIds: string[]): Promise<DeleteResult[]> => {
-    await refreshIfNeeded();
+  const resolveDeleteRequests = async (
+    eventIds: string[],
+    results: DeleteResult[],
+  ): Promise<{ subRequests: BatchSubRequest[]; indexMap: number[] }> => {
+    const directSubRequests: BatchSubRequest[] = [];
+    const directIndexMap: number[] = [];
+    const lookupIds: string[] = [];
+    const lookupOriginalIndices: number[] = [];
 
-    if (eventIds.length === 0) {
-      return [];
+    for (let index = 0; index < eventIds.length; index++) {
+      const identifier = eventIds[index];
+      if (!identifier) {
+        results[index] = { success: true };
+        continue;
+      }
+
+      if (isDirectEventId(identifier)) {
+        directIndexMap.push(index);
+        directSubRequests.push({
+          method: "DELETE",
+          path: `${eventsPath}/${encodeURIComponent(identifier)}`,
+        });
+      } else {
+        lookupIds.push(identifier);
+        lookupOriginalIndices.push(index);
+      }
     }
 
-    const findSubRequests: BatchSubRequest[] = eventIds.map((uid) => ({
+    if (lookupIds.length === 0) {
+      return { subRequests: directSubRequests, indexMap: directIndexMap };
+    }
+
+    const findSubRequests: BatchSubRequest[] = lookupIds.map((uid) => ({
       method: "GET",
       path: `${eventsPath}?iCalUID=${encodeURIComponent(uid)}`,
     }));
 
-    const findResponses = await executeBatchChunked(findSubRequests, tokenState.accessToken);
+    const findResponses = await executeBatchChunked(findSubRequests, tokenState.accessToken, config.rateLimiter);
 
-    const deleteSubRequests: BatchSubRequest[] = [];
-    const deleteIndexToOriginalIndex: number[] = [];
-    const results: DeleteResult[] = Array.from({ length: eventIds.length });
+    for (let findIndex = 0; findIndex < lookupIds.length; findIndex++) {
+      const originalIndex = lookupOriginalIndices[findIndex];
+      if (typeof originalIndex !== "number") {
+        continue;
+      }
 
-    for (let index = 0; index < eventIds.length; index++) {
-      const findResponse = findResponses[index];
-
+      const findResponse = findResponses[findIndex];
       if (!findResponse || findResponse.statusCode !== 200) {
-        results[index] = { success: true };
+        results[originalIndex] = { success: true };
         continue;
       }
 
@@ -128,25 +157,38 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       const eventId = existing?.id as string | undefined;
 
       if (!eventId) {
-        results[index] = { success: true };
+        results[originalIndex] = { success: true };
         continue;
       }
 
-      deleteIndexToOriginalIndex.push(index);
-      deleteSubRequests.push({
+      directIndexMap.push(originalIndex);
+      directSubRequests.push({
         method: "DELETE",
         path: `${eventsPath}/${encodeURIComponent(eventId)}`,
       });
     }
 
-    if (deleteSubRequests.length === 0) {
+    return { subRequests: directSubRequests, indexMap: directIndexMap };
+  };
+
+  const deleteEvents = async (eventIds: string[]): Promise<DeleteResult[]> => {
+    await refreshIfNeeded();
+
+    if (eventIds.length === 0) {
+      return [];
+    }
+
+    const results: DeleteResult[] = Array.from({ length: eventIds.length });
+    const { subRequests, indexMap } = await resolveDeleteRequests(eventIds, results);
+
+    if (subRequests.length === 0) {
       return results;
     }
 
-    const deleteResponses = await executeBatchChunked(deleteSubRequests, tokenState.accessToken);
+    const deleteResponses = await executeBatchChunked(subRequests, tokenState.accessToken, config.rateLimiter);
 
     for (let deleteIndex = 0; deleteIndex < deleteResponses.length; deleteIndex++) {
-      const originalIndex = deleteIndexToOriginalIndex[deleteIndex];
+      const originalIndex = indexMap[deleteIndex];
       if (typeof originalIndex !== "number") {
         continue;
       }
@@ -181,6 +223,10 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     futureDate.setFullYear(futureDate.getFullYear() + 2);
 
     do {
+      if (config.rateLimiter) {
+        await config.rateLimiter.acquire(1);
+      }
+
       const url = new URL(
         `calendars/${encodeURIComponent(config.externalCalendarId)}/events`,
         GOOGLE_CALENDAR_API,
@@ -215,7 +261,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
           continue;
         }
         remoteEvents.push({
-          deleteId: event.iCalUID,
+          deleteId: event.id ?? event.iCalUID,
           endTime,
           isKeeperEvent: true,
           startTime,

@@ -48,4 +48,4 @@ const createPolarClient = (): Polar | null => {
 
 const polarClient = createPolarClient();
 
-export { database, premiumService, polarClient, refreshLockStore, shutdownRefreshLockRedis };
+export { database, premiumService, polarClient, refreshLockRedis, refreshLockStore, shutdownRefreshLockRedis };

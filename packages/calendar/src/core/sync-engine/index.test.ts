@@ -4,9 +4,6 @@ import type { SyncOperation, PushResult, DeleteResult, SyncableEvent } from "../
 import type { EventMapping } from "../events/mappings";
 import type { PendingChanges } from "./types";
 
-const isDefined = <TValue>(value: TValue | null): value is TValue =>
-  value !== null;
-
 const makeEvent = (id: string, startTime: Date, endTime: Date): SyncableEvent => ({
   id,
   sourceEventUid: `uid-${id}`,
@@ -46,9 +43,7 @@ describe("executeRemoteOperations", () => {
     const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1" }]) });
 
     const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider);
-    if (!isDefined(outcome)) {
-      throw new Error("expected outcome");
-    }
+
 
     expect(outcome.result.added).toBe(1);
     expect(outcome.result.addFailed).toBe(0);
@@ -64,9 +59,7 @@ describe("executeRemoteOperations", () => {
     const provider = makeProvider({ deleteEvents: () => Promise.resolve([{ success: true }]) });
 
     const outcome = await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider);
-    if (!isDefined(outcome)) {
-      throw new Error("expected outcome");
-    }
+
 
     expect(outcome.result.removed).toBe(1);
     expect(outcome.result.removeFailed).toBe(0);
@@ -81,9 +74,7 @@ describe("executeRemoteOperations", () => {
     const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: false, error: "rate limited" }]) });
 
     const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider);
-    if (!isDefined(outcome)) {
-      throw new Error("expected outcome");
-    }
+
 
     expect(outcome.result.added).toBe(0);
     expect(outcome.result.addFailed).toBe(1);
@@ -96,9 +87,7 @@ describe("executeRemoteOperations", () => {
     const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true }]) });
 
     const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider);
-    if (!isDefined(outcome)) {
-      throw new Error("expected outcome");
-    }
+
 
     expect(outcome.result.added).toBe(0);
     expect(outcome.result.addFailed).toBe(0);
@@ -111,9 +100,7 @@ describe("executeRemoteOperations", () => {
     const provider = makeProvider({ deleteEvents: () => Promise.resolve([{ success: false, error: "server error" }]) });
 
     const outcome = await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider);
-    if (!isDefined(outcome)) {
-      throw new Error("expected outcome");
-    }
+
 
     expect(outcome.result.removed).toBe(0);
     expect(outcome.result.removeFailed).toBe(1);
@@ -133,9 +120,7 @@ describe("executeRemoteOperations", () => {
     });
 
     const outcome = await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider);
-    if (!isDefined(outcome)) {
-      throw new Error("expected outcome");
-    }
+
 
     expect(outcome.result.added).toBe(1);
     expect(outcome.result.removed).toBe(1);
@@ -149,9 +134,7 @@ describe("executeRemoteOperations", () => {
     const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1" }]) });
 
     const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider);
-    if (!isDefined(outcome)) {
-      throw new Error("expected outcome");
-    }
+
 
     expect(outcome.changes.inserts[0]?.deleteIdentifier).toBe("remote-1");
   });
@@ -162,9 +145,7 @@ describe("executeRemoteOperations", () => {
     const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1", deleteId: "delete-key-1" }]) });
 
     const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider);
-    if (!isDefined(outcome)) {
-      throw new Error("expected outcome");
-    }
+
 
     expect(outcome.changes.inserts[0]?.deleteIdentifier).toBe("delete-key-1");
   });
@@ -173,9 +154,7 @@ describe("executeRemoteOperations", () => {
     const provider = makeProvider();
 
     const outcome = await executeRemoteOperations([], [], "dest-cal-1", provider);
-    if (!isDefined(outcome)) {
-      throw new Error("expected outcome");
-    }
+
 
     expect(outcome.result.added).toBe(0);
     expect(outcome.result.removed).toBe(0);
@@ -183,7 +162,7 @@ describe("executeRemoteOperations", () => {
     expect(outcome.changes.deletes).toHaveLength(0);
   });
 
-  it("abandons work and returns null when generation becomes stale before adds", async () => {
+  it("still pushes adds but marks superseded when generation is stale", async () => {
     const event1 = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
     const operations: SyncOperation[] = [{ type: "add", event: event1 }];
 
@@ -197,11 +176,12 @@ describe("executeRemoteOperations", () => {
 
     const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider, () => Promise.resolve(false));
 
-    expect(outcome).toBeNull();
-    expect(pushCount).toBe(0);
+    expect(outcome.superseded).toBe(true);
+    expect(pushCount).toBe(1);
+    expect(outcome.changes.inserts).toHaveLength(1);
   });
 
-  it("abandons deletes when generation becomes stale between adds and deletes", async () => {
+  it("skips deletes but returns partial add changes when superseded between adds and deletes", async () => {
     const event1 = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
     const mapping = makeMapping("map-1", "ev-1", "remote-1");
     const operations: SyncOperation[] = [
@@ -218,15 +198,11 @@ describe("executeRemoteOperations", () => {
       },
     });
 
-    let checkCount = 0;
-    const isCurrent = (): Promise<boolean> => {
-      checkCount += 1;
-      return Promise.resolve(checkCount <= 1);
-    };
+    const outcome = await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider, () => Promise.resolve(false));
 
-    const outcome = await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider, isCurrent);
-
-    expect(outcome).toBeNull();
+    expect(outcome.superseded).toBe(true);
+    expect(outcome.changes.inserts).toHaveLength(1);
+    expect(outcome.changes.deletes).toHaveLength(0);
     expect(deleteCount).toBe(0);
   });
 
@@ -239,9 +215,7 @@ describe("executeRemoteOperations", () => {
     });
 
     const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider, () => Promise.resolve(true));
-    if (!isDefined(outcome)) {
-      throw new Error("expected outcome");
-    }
+
 
     expect(outcome.result.added).toBe(2);
     expect(outcome.changes.inserts).toHaveLength(2);
@@ -271,7 +245,7 @@ describe("syncCalendar", () => {
     expect(flushCapture[0]?.inserts[0]?.destinationEventUid).toBe("remote-1");
   });
 
-  it("returns accurate counts but skips flush when superseded after remote operations", async () => {
+  it("flushes partial changes even when superseded after remote operations", async () => {
     const { syncCalendar } = await import("./index");
     const localEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
     const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1" }]) });
@@ -283,12 +257,12 @@ describe("syncCalendar", () => {
       calendarId: "dest-cal-1",
       provider,
       readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
-      isCurrent: () => { checkCount += 1; return Promise.resolve(checkCount <= 2); },
+      isCurrent: () => { checkCount += 1; return Promise.resolve(checkCount <= 1); },
       flush: () => { flushCalled = true; return Promise.resolve(); },
     });
 
     expect(result.added).toBe(1);
-    expect(flushCalled).toBe(false);
+    expect(flushCalled).toBe(true);
   });
 
   it("returns empty result when there are no operations", async () => {
@@ -343,7 +317,7 @@ describe("syncCalendar", () => {
     expect(typeof event?.["duration_ms"]).toBe("number");
   });
 
-  it("emits a wide event with outcome superseded when generation becomes stale", async () => {
+  it("emits a wide event with outcome superseded but flushed when generation becomes stale", async () => {
     const { syncCalendar } = await import("./index");
     const localEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
     const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1" }]) });
@@ -362,7 +336,7 @@ describe("syncCalendar", () => {
 
     expect(emittedEvents).toHaveLength(1);
     expect(emittedEvents[0]?.["outcome"]).toBe("superseded");
-    expect(emittedEvents[0]?.["flushed"]).toBe(false);
+    expect(emittedEvents[0]?.["flushed"]).toBe(true);
   });
 
   it("emits a wide event with outcome in-sync when there are no operations", async () => {

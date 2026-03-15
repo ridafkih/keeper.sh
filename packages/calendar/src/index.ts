@@ -52,6 +52,7 @@ export {
 export { generateEventUid, isKeeperEvent } from "./core/events/identity";
 export { inferAllDayEvent, resolveIsAllDayEvent } from "./core/events/all-day";
 export { RateLimiter, type RateLimiterConfig } from "./core/utils/rate-limiter";
+export { createRedisRateLimiter, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
 export { allSettledWithConcurrency, type AllSettledWithConcurrencyOptions } from "./core/utils/concurrency";
 export { getErrorMessage } from "./core/utils/error";
 export { widelogger } from "widelogger";

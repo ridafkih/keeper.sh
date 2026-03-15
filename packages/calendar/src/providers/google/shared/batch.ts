@@ -1,3 +1,4 @@
+import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import { GOOGLE_BATCH_API, GOOGLE_BATCH_MAX_SIZE } from "./api";
 
 interface BatchSubRequest {
@@ -251,6 +252,7 @@ const chunkArray = <TItem>(items: TItem[], size: number): TItem[][] => {
 const executeBatchChunked = async (
   subRequests: BatchSubRequest[],
   accessToken: string,
+  rateLimiter?: RedisRateLimiter,
 ): Promise<BatchSubResponse[]> => {
   if (subRequests.length === 0) {
     return [];
@@ -260,6 +262,9 @@ const executeBatchChunked = async (
   const allResponses: BatchSubResponse[] = [];
 
   for (const chunk of chunks) {
+    if (rateLimiter) {
+      await rateLimiter.acquire(chunk.length);
+    }
     const responses = await executeBatch(chunk, accessToken);
     allResponses.push(...responses);
   }
