@@ -13,7 +13,7 @@
     },
     "types": {
       "dependsOn": ["^types"],
-      "inputs": ["src/**", "scripts/**", "tsconfig.json"]
+      "inputs": ["src/**", "scripts/**", "tsconfig.json", "package.json"]
     },
     "build": {
       "dependsOn": ["^build"],
