@@ -3,10 +3,10 @@ import { createWebsocketHandler } from "@keeper.sh/broadcast";
 import type { Socket } from "@keeper.sh/broadcast";
 import { syncAggregateSchema } from "@keeper.sh/data-schemas";
 import { and, eq, inArray, max } from "drizzle-orm";
-import { database, getCachedSyncAggregate, getCurrentSyncAggregate } from "../context";
+import { database, getCachedSyncAggregate, getCurrentSyncAggregate } from "@/context";
 import { resolveSyncAggregatePayload } from "./websocket-payload";
 import { runSendInitialSyncStatus } from "./websocket-initial-status";
-import { runApiWideEventContext, setWideEventFields, widelog } from "../utils/logging";
+import { runApiWideEventContext, setWideEventFields, widelog } from "@/utils/logging";
 
 const selectLatestDestinationSyncedAt = async (userId: string): Promise<Date | null> => {
   const [aggregate] = await database

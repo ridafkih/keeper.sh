@@ -1,7 +1,7 @@
-import { withAuth, withWideEvent } from "../../../../../utils/middleware";
-import { ErrorResponse } from "../../../../../utils/responses";
-import { getDestinationsForSource } from "../../../../../utils/source-destination-mappings";
-import { verifyOAuthSourceOwnership } from "../../../../../utils/oauth-sources";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { ErrorResponse } from "@/utils/responses";
+import { getDestinationsForSource } from "@/utils/source-destination-mappings";
+import { verifyOAuthSourceOwnership } from "@/utils/oauth-sources";
 
 const GET = withWideEvent(
   withAuth(async ({ params, userId }) => {

@@ -1,5 +1,5 @@
 import type { MaybePromise } from "bun";
-import { trustedOrigins, baseUrl } from "../context";
+import { trustedOrigins, baseUrl } from "@/context";
 
 const CORS_MAX_AGE_SECONDS = 86_400;
 const HTTP_NO_CONTENT = 204;

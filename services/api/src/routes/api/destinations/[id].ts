@@ -1,7 +1,7 @@
-import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { ErrorResponse } from "../../../utils/responses";
-import { deleteCalendarDestination } from "../../../utils/destinations";
-import { idParamSchema } from "../../../utils/request-query";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { ErrorResponse } from "@/utils/responses";
+import { deleteCalendarDestination } from "@/utils/destinations";
+import { idParamSchema } from "@/utils/request-query";
 
 export const DELETE = withWideEvent(
   withAuth(async ({ params, userId }) => {

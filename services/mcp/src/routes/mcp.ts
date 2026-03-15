@@ -1,4 +1,4 @@
-import { handleMcpRequest, withWideEvent } from "../context";
+import { handleMcpRequest, withWideEvent } from "@/context";
 
 const wrappedHandler = withWideEvent((request: Request) => handleMcpRequest(request));
 

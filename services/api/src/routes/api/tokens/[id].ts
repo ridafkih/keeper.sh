@@ -1,9 +1,9 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { apiTokensTable } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
-import { database } from "../../../context";
-import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { ErrorResponse } from "../../../utils/responses";
+import { database } from "@/context";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { ErrorResponse } from "@/utils/responses";
 
 const DELETE = withWideEvent(
   withAuth(async ({ userId, params }) => {

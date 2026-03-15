@@ -5,7 +5,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, count, eq, gte, inArray, lte } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import type { KeeperDatabase } from "../types";
+import type { KeeperDatabase } from "@/types";
 
 const EMPTY_RESULT_COUNT = 0;
 

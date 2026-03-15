@@ -1,7 +1,7 @@
-import { createKeeperApi } from "../../../../read-models";
-import type { KeeperSource } from "../../../../types";
-import { withV1Auth, withWideEvent } from "../../../../utils/middleware";
-import { database } from "../../../../context";
+import { createKeeperApi } from "@/read-models";
+import type { KeeperSource } from "@/types";
+import { withV1Auth, withWideEvent } from "@/utils/middleware";
+import { database } from "@/context";
 
 const keeperApi = createKeeperApi(database);
 

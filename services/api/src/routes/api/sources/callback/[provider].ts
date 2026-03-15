@@ -1,16 +1,16 @@
-import { withWideEvent } from "../../../../utils/middleware";
-import { respondWithLoggedError } from "../../../../utils/logging";
-import { ErrorResponse } from "../../../../utils/responses";
-import { buildRedirectUrl, OAuthError } from "../../../../utils/oauth";
-import { oauthCallbackQuerySchema, providerParamSchema } from "../../../../utils/request-query";
+import { withWideEvent } from "@/utils/middleware";
+import { respondWithLoggedError } from "@/utils/logging";
+import { ErrorResponse } from "@/utils/responses";
+import { buildRedirectUrl, OAuthError } from "@/utils/oauth";
+import { oauthCallbackQuerySchema, providerParamSchema } from "@/utils/request-query";
 import {
   exchangeCodeForTokens,
   fetchUserInfo,
   validateState,
-} from "../../../../utils/destinations";
-import { createOAuthSourceCredential } from "../../../../utils/oauth-source-credentials";
-import { importOAuthAccountCalendars } from "../../../../utils/oauth-sources";
-import { baseUrl } from "../../../../context";
+} from "@/utils/destinations";
+import { createOAuthSourceCredential } from "@/utils/oauth-source-credentials";
+import { importOAuthAccountCalendars } from "@/utils/oauth-sources";
+import { baseUrl } from "@/context";
 
 const MS_PER_SECOND = 1000;
 

@@ -1,8 +1,8 @@
 import { normalizeDateRange, parseDateRangeParams } from "@keeper.sh/calendar";
-import { createKeeperApi } from "../../../../../read-models";
-import { withV1Auth, withWideEvent } from "../../../../../utils/middleware";
-import { ErrorResponse } from "../../../../../utils/responses";
-import { database, oauthProviders, encryptionKey } from "../../../../../context";
+import { createKeeperApi } from "@/read-models";
+import { withV1Auth, withWideEvent } from "@/utils/middleware";
+import { ErrorResponse } from "@/utils/responses";
+import { database, oauthProviders, encryptionKey } from "@/context";
 
 const keeperApi = createKeeperApi(database, {
   oauthTokenRefresher: oauthProviders,

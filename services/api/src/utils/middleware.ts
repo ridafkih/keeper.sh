@@ -5,7 +5,7 @@ import { apiTokensTable, calendarsTable, sourceDestinationMappingsTable } from "
 import { isApiToken, hashApiToken } from "./api-tokens";
 import { user as userTable } from "@keeper.sh/database/auth-schema";
 import { and, count, eq, inArray } from "drizzle-orm";
-import { auth, database, premiumService, redis } from "../context";
+import { auth, database, premiumService, redis } from "@/context";
 import { checkAndIncrementApiUsage } from "./api-rate-limit";
 import {
   runApiWideEventContext,

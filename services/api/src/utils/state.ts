@@ -1,5 +1,5 @@
 import { TOKEN_TTL_MS } from "@keeper.sh/constants";
-import { redis } from "../context";
+import { redis } from "@/context";
 
 const SOCKET_TOKEN_PREFIX = "socket:token:";
 const TOKEN_TTL_SECONDS = Math.ceil(TOKEN_TTL_MS / 1000);

@@ -1,4 +1,4 @@
-import { redis } from "../context";
+import { redis } from "@/context";
 
 const CALLBACK_STATE_PREFIX = "oauth:callback:";
 const CALLBACK_STATE_TTL_SECONDS = 300;

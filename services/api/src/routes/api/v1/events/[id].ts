@@ -1,11 +1,11 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import { createKeeperApi } from "../../../../read-models";
-import type { RsvpStatus } from "../../../../types";
-import { withV1Auth, withWideEvent } from "../../../../utils/middleware";
-import { ErrorResponse } from "../../../../utils/responses";
-import { respondWithLoggedError } from "../../../../utils/logging";
-import { eventPatchBodySchema } from "../../../../utils/request-body";
-import { database, oauthProviders, encryptionKey } from "../../../../context";
+import { createKeeperApi } from "@/read-models";
+import type { RsvpStatus } from "@/types";
+import { withV1Auth, withWideEvent } from "@/utils/middleware";
+import { ErrorResponse } from "@/utils/responses";
+import { respondWithLoggedError } from "@/utils/logging";
+import { eventPatchBodySchema } from "@/utils/request-body";
+import { database, oauthProviders, encryptionKey } from "@/context";
 
 const keeperApi = createKeeperApi(database, {
   oauthTokenRefresher: oauthProviders,

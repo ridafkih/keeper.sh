@@ -5,9 +5,9 @@ import { pullRemoteCalendar } from "@keeper.sh/calendar";
 import { and, desc, eq, lte } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { allSettledWithConcurrency } from "@keeper.sh/providers";
-import { setCronEventFields, withCronWideEvent } from "../utils/with-wide-event";
-import { countSettledResults } from "../utils/count-settled-results";
-import { widelog } from "../utils/logging";
+import { setCronEventFields, withCronWideEvent } from "@/utils/with-wide-event";
+import { countSettledResults } from "@/utils/count-settled-results";
+import { widelog } from "@/utils/logging";
 
 const ICAL_FETCH_CONCURRENCY = 5;
 
@@ -114,14 +114,14 @@ const invokeOperation = <TResult>(
 const createDefaultJobDependencies = (): IcalSnapshotJobDependencies => ({
   fetchRemoteCalendar,
   getRemoteSources: async () => {
-    const { database } = await import("../context");
+    const { database } = await import("@/context");
     return database
       .select({ id: calendarsTable.id, url: calendarsTable.url })
       .from(calendarsTable)
       .where(eq(calendarsTable.calendarType, ICAL_CALENDAR_TYPE));
   },
   processSnapshot: async (calendarId, ical) => {
-    const { database } = await import("../context");
+    const { database } = await import("@/context");
     return processSnapshot(database, calendarId, ical);
   },
   setCronEventFields,

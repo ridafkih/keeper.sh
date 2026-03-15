@@ -5,7 +5,7 @@ import {
   handlePutSourceDestinationsRoute,
   handlePutSourcesForDestinationRoute,
 } from "./mapping-routes";
-import { MAPPING_LIMIT_ERROR_MESSAGE } from "../../../../utils/source-destination-mappings";
+import { MAPPING_LIMIT_ERROR_MESSAGE } from "@/utils/source-destination-mappings";
 
 const readJson = (response: Response): Promise<unknown> => response.json();
 

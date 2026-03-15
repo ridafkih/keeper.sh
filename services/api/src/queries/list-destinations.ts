@@ -4,7 +4,7 @@ import {
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import { and, eq, inArray } from "drizzle-orm";
-import type { KeeperDatabase, KeeperDestination } from "../types";
+import type { KeeperDatabase, KeeperDestination } from "@/types";
 
 const listDestinations = async (database: KeeperDatabase, userId: string): Promise<KeeperDestination[]> => {
   const accounts = await database

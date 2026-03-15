@@ -1,6 +1,6 @@
 import { userEventsTable } from "@keeper.sh/database/schema";
 import { eq } from "drizzle-orm";
-import type { KeeperDatabase } from "../types";
+import type { KeeperDatabase } from "@/types";
 import type {
   EventInput,
   EventUpdateInput,
@@ -9,9 +9,9 @@ import type {
   PendingInvite,
   ProviderCredentials,
   RsvpStatus,
-} from "../types";
+} from "@/types";
 import { resolveCredentialsByCalendarId, resolveCredentialsByEventId } from "./resolve-credentials";
-import { getEvent } from "../queries/get-event";
+import { getEvent } from "@/queries/get-event";
 import {
   createGoogleEvent,
   updateGoogleEvent,

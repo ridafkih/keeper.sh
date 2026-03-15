@@ -1,6 +1,6 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import { respondWithLoggedError } from "../../../utils/logging";
-import { ErrorResponse } from "../../../utils/responses";
+import { respondWithLoggedError } from "@/utils/logging";
+import { ErrorResponse } from "@/utils/responses";
 
 interface IcsRouteContext {
   userId: string;

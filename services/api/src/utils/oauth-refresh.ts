@@ -5,7 +5,7 @@ import {
 import { createGoogleOAuthService } from "@keeper.sh/providers";
 import { createMicrosoftOAuthService } from "@keeper.sh/providers";
 import { eq } from "drizzle-orm";
-import { database, env } from "../context";
+import { database, env } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;
 const MS_PER_SECOND = 1000;

@@ -7,7 +7,7 @@ import {
 import { normalizeDateRange } from "@keeper.sh/calendar";
 import { and, arrayContains, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import type { KeeperDatabase, KeeperEvent, KeeperEventFilters, KeeperEventRangeInput } from "../types";
+import type { KeeperDatabase, KeeperEvent, KeeperEventFilters, KeeperEventRangeInput } from "@/types";
 
 const EMPTY_RESULT_COUNT = 0;
 

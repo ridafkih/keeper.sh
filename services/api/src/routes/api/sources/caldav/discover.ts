@@ -1,9 +1,9 @@
 import { caldavDiscoverSourceSchema } from "@keeper.sh/data-schemas";
 import { createCalDAVClient } from "@keeper.sh/providers/caldav";
-import { withAuth, withWideEvent } from "../../../../utils/middleware";
-import { respondWithLoggedError, widelog } from "../../../../utils/logging";
-import { ErrorResponse } from "../../../../utils/responses";
-import { extractServerHost } from "../../../../utils/caldav";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { respondWithLoggedError, widelog } from "@/utils/logging";
+import { ErrorResponse } from "@/utils/responses";
+import { extractServerHost } from "@/utils/caldav";
 
 const POST = withWideEvent(
   withAuth(async ({ request }) => {

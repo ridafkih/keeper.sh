@@ -1,8 +1,8 @@
-import type { SourcePatchBody } from "../../../../utils/request-body";
-import { sourcePatchBodySchema } from "../../../../utils/request-body";
-import { idParamSchema } from "../../../../utils/request-query";
-import { ErrorResponse } from "../../../../utils/responses";
-import { widelog } from "../../../../utils/logging";
+import type { SourcePatchBody } from "@/utils/request-body";
+import { sourcePatchBodySchema } from "@/utils/request-body";
+import { idParamSchema } from "@/utils/request-query";
+import { ErrorResponse } from "@/utils/responses";
+import { widelog } from "@/utils/logging";
 
 const EVENT_FILTER_FIELDS = [
   "excludeAllDayEvents",

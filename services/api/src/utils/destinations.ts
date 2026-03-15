@@ -13,7 +13,7 @@ import type {
   NormalizedUserInfo as OAuthUserInfo,
   ValidatedState,
 } from "@keeper.sh/providers";
-import { database, oauthProviders } from "../context";
+import { database, oauthProviders } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;
 const EMPTY_RESULT_COUNT = 0;

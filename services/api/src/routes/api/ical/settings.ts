@@ -1,12 +1,12 @@
 import { eq } from "drizzle-orm";
 import { icalFeedSettingsTable } from "@keeper.sh/database/schema";
-import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { ErrorResponse } from "../../../utils/responses";
-import { database, premiumService } from "../../../context";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { ErrorResponse } from "@/utils/responses";
+import { database, premiumService } from "@/context";
 import {
   icalSettingsPatchBodySchema,
   type IcalSettingsPatchBody,
-} from "../../../utils/request-body";
+} from "@/utils/request-body";
 
 const DEFAULT_SETTINGS = {
   includeEventName: false,

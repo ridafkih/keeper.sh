@@ -1,6 +1,6 @@
 import { oauthCredentialsTable } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
-import { database } from "../context";
+import { database } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;
 

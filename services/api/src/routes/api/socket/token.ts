@@ -1,5 +1,5 @@
-import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { generateSocketToken } from "../../../utils/state";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { generateSocketToken } from "@/utils/state";
 
 export const GET = withWideEvent(
   withAuth(async ({ userId }) => {

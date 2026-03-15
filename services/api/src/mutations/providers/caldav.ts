@@ -3,7 +3,7 @@ import type { IcsCalendar, IcsEvent } from "ts-ics";
 import { HTTP_STATUS, KEEPER_USER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { decryptPassword } from "@keeper.sh/database";
 import { createDAVClient } from "tsdav";
-import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "../../types";
+import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "@/types";
 
 interface CalDAVCredentials {
   serverUrl: string;

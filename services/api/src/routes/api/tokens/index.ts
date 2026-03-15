@@ -1,16 +1,16 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { apiTokensTable } from "@keeper.sh/database/schema";
 import { desc, eq } from "drizzle-orm";
-import { database } from "../../../context";
-import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { ErrorResponse } from "../../../utils/responses";
+import { database } from "@/context";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { ErrorResponse } from "@/utils/responses";
 import {
   generateApiToken,
   hashApiToken,
   extractTokenPrefix,
-} from "../../../utils/api-tokens";
-import { respondWithLoggedError } from "../../../utils/logging";
-import { tokenCreateBodySchema } from "../../../utils/request-body";
+} from "@/utils/api-tokens";
+import { respondWithLoggedError } from "@/utils/logging";
+import { tokenCreateBodySchema } from "@/utils/request-body";
 
 const GET = withWideEvent(
   withAuth(async ({ userId }) => {

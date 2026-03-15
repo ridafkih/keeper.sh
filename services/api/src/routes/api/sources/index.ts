@@ -1,6 +1,6 @@
-import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { database } from "../../../context";
-import { createKeeperApi } from "../../../read-models";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { database } from "@/context";
+import { createKeeperApi } from "@/read-models";
 
 const keeperApi = createKeeperApi(database);
 

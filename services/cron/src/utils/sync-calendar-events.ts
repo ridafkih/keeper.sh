@@ -45,7 +45,7 @@ const createSyncUserSourcesDependencies = async (
   dependencies: SyncUserSourcesDependencies<Source>;
   close: () => void;
 }> => {
-  const { createSyncContext, database } = await import("../context");
+  const { createSyncContext, database } = await import("@/context");
   const syncContext = createSyncContext();
 
   return {

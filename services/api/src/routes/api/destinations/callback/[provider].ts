@@ -1,14 +1,14 @@
-import { withWideEvent } from "../../../../utils/middleware";
-import { respondWithLoggedError } from "../../../../utils/logging";
-import { ErrorResponse } from "../../../../utils/responses";
+import { withWideEvent } from "@/utils/middleware";
+import { respondWithLoggedError } from "@/utils/logging";
+import { ErrorResponse } from "@/utils/responses";
 import {
   OAuthError,
   buildRedirectUrl,
   handleOAuthCallback,
   parseOAuthCallback,
-} from "../../../../utils/oauth";
-import { providerParamSchema } from "../../../../utils/request-query";
-import { baseUrl } from "../../../../context";
+} from "@/utils/oauth";
+import { providerParamSchema } from "@/utils/request-query";
+import { baseUrl } from "@/context";
 
 const GET = withWideEvent(async ({ request, params }) => {
   if (!params.provider || !providerParamSchema.allows(params)) {

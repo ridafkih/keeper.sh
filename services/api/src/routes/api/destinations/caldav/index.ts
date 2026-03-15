@@ -1,13 +1,13 @@
 import { caldavConnectRequestSchema } from "@keeper.sh/data-schemas";
-import { withAuth, withWideEvent } from "../../../../utils/middleware";
-import { respondWithLoggedError } from "../../../../utils/logging";
-import { ErrorResponse } from "../../../../utils/responses";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { respondWithLoggedError } from "@/utils/logging";
+import { ErrorResponse } from "@/utils/responses";
 import {
   CalDAVConnectionError,
   DestinationLimitError,
   createCalDAVDestination,
   isValidProvider,
-} from "../../../../utils/caldav";
+} from "@/utils/caldav";
 
 const POST = withWideEvent(
   withAuth(async ({ request, userId }) => {

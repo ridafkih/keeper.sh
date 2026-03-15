@@ -1,8 +1,8 @@
 import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
 import { asc, eq, count } from "drizzle-orm";
-import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { database } from "../../../context";
-import { withAccountDisplay } from "../../../utils/provider-display";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { database } from "@/context";
+import { withAccountDisplay } from "@/utils/provider-display";
 
 const GET = withWideEvent(
   withAuth(async ({ userId }) => {

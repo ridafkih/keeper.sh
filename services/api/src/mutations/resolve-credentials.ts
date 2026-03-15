@@ -7,8 +7,8 @@ import {
   userEventsTable,
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq } from "drizzle-orm";
-import type { KeeperDatabase } from "../types";
-import type { ProviderCredentials } from "../types";
+import type { KeeperDatabase } from "@/types";
+import type { ProviderCredentials } from "@/types";
 
 const credentialColumns = {
   calendarId: calendarsTable.id,

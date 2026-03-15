@@ -1,6 +1,6 @@
-import env from "../../../env";
-import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { generateSocketToken } from "../../../utils/state";
+import env from "@/env";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { generateSocketToken } from "@/utils/state";
 
 const GET = withWideEvent(
   withAuth(async ({ userId }) => {

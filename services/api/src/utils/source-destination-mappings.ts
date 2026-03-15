@@ -4,7 +4,7 @@ import {
   syncStatusTable,
 } from "@keeper.sh/database/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import type { database as databaseInstance } from "../context";
+import type { database as databaseInstance } from "@/context";
 import { triggerDestinationSync } from "./sync";
 import { widelog } from "./logging";
 
@@ -260,7 +260,7 @@ const createSetSourcesTransaction = (
 });
 
 const createSetDestinationsDependencies = async (): Promise<SetDestinationsDependencies> => {
-  const { database, premiumService } = await import("../context");
+  const { database, premiumService } = await import("@/context");
 
   return {
     isMappingCountAllowed: async (userId, nextMappingCount) => {
@@ -276,7 +276,7 @@ const createSetDestinationsDependencies = async (): Promise<SetDestinationsDepen
 };
 
 const createSetSourcesDependencies = async (): Promise<SetSourcesDependencies> => {
-  const { database, premiumService } = await import("../context");
+  const { database, premiumService } = await import("@/context");
 
   return {
     isMappingCountAllowed: async (userId, nextMappingCount) => {
@@ -410,7 +410,7 @@ const runSetSourcesForDestination = async (
 };
 
 const getUserMappings = async (userId: string): Promise<SourceDestinationMapping[]> => {
-  const { database } = await import("../context");
+  const { database } = await import("@/context");
 
   const userSourceCalendars = await database
     .select({
@@ -451,7 +451,7 @@ const getUserMappings = async (userId: string): Promise<SourceDestinationMapping
 };
 
 const getDestinationsForSource = async (userId: string, sourceCalendarId: string): Promise<string[]> => {
-  const { database } = await import("../context");
+  const { database } = await import("@/context");
 
   const mappings = await database
     .select({ destinationCalendarId: sourceDestinationMappingsTable.destinationCalendarId })
@@ -468,7 +468,7 @@ const getDestinationsForSource = async (userId: string, sourceCalendarId: string
 };
 
 const getSourcesForDestination = async (userId: string, destinationCalendarId: string): Promise<string[]> => {
-  const { database } = await import("../context");
+  const { database } = await import("@/context");
 
   const mappings = await database
     .select({ sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId })

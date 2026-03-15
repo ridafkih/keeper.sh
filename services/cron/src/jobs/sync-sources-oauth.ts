@@ -3,8 +3,8 @@ import { createGoogleCalendarSourceProvider } from "@keeper.sh/providers/google"
 import { createOutlookSourceProvider } from "@keeper.sh/providers/outlook";
 import { createGoogleOAuthService } from "@keeper.sh/providers";
 import { createMicrosoftOAuthService } from "@keeper.sh/providers";
-import { setCronEventFields, withCronWideEvent } from "../utils/with-wide-event";
-import { widelog } from "../utils/logging";
+import { setCronEventFields, withCronWideEvent } from "@/utils/with-wide-event";
+import { widelog } from "@/utils/logging";
 
 interface ProviderSyncResult {
   eventsAdded: number;
@@ -154,8 +154,8 @@ const runOAuthSourceSyncJob = async (dependencies: OAuthSyncJobDependencies): Pr
 
 const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies> => {
   const [{ default: env }, { database, refreshLockStore }] = await Promise.all([
-    import("../env"),
-    import("../context"),
+    import("@/env"),
+    import("@/context"),
   ]);
 
   const syncGoogleSources = async (): Promise<ProviderSyncResult | null> => {

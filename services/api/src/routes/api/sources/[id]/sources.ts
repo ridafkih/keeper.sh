@@ -1,11 +1,11 @@
 import { calendarsTable } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
-import { withAuth, withWideEvent } from "../../../../utils/middleware";
-import { database } from "../../../../context";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { database } from "@/context";
 import {
   getSourcesForDestination,
   setSourcesForDestination,
-} from "../../../../utils/source-destination-mappings";
+} from "@/utils/source-destination-mappings";
 import {
   handleGetSourcesForDestinationRoute,
   handlePutSourcesForDestinationRoute,

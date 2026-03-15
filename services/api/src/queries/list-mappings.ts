@@ -3,7 +3,7 @@ import {
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import { and, eq, inArray } from "drizzle-orm";
-import type { KeeperDatabase, KeeperMapping } from "../types";
+import type { KeeperDatabase, KeeperMapping } from "@/types";
 
 const EMPTY_RESULT_COUNT = 0;
 

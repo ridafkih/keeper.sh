@@ -1,10 +1,10 @@
 import { oauthCredentialsTable } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
-import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { ErrorResponse } from "../../../utils/responses";
-import { getAuthorizationUrl, isOAuthProvider } from "../../../utils/destinations";
-import { sourceAuthorizeQuerySchema } from "../../../utils/request-query";
-import { baseUrl, database } from "../../../context";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { ErrorResponse } from "@/utils/responses";
+import { getAuthorizationUrl, isOAuthProvider } from "@/utils/destinations";
+import { sourceAuthorizeQuerySchema } from "@/utils/request-query";
+import { baseUrl, database } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;
 

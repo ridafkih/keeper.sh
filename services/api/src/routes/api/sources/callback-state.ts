@@ -1,7 +1,7 @@
-import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { ErrorResponse } from "../../../utils/responses";
-import { consumeCallbackState } from "../../../utils/oauth-callback-state";
-import { callbackStateQuerySchema } from "../../../utils/request-query";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { ErrorResponse } from "@/utils/responses";
+import { consumeCallbackState } from "@/utils/oauth-callback-state";
+import { callbackStateQuerySchema } from "@/utils/request-query";
 
 export const GET = withWideEvent(
   withAuth(async ({ request }) => {

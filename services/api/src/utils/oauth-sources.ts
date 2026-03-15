@@ -7,7 +7,7 @@ import {
 import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/providers/google";
 import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/providers/outlook";
-import type { database as contextDatabase } from "../context";
+import type { database as contextDatabase } from "@/context";
 import { spawnBackgroundJob } from "./background-task";
 import { getSourceProvider } from "@keeper.sh/providers";
 import { applySourceSyncDefaults } from "./source-sync-defaults";
@@ -70,7 +70,7 @@ const getUserOAuthSources = async (
   userId: string,
   provider: string,
 ): Promise<OAuthCalendarSource[]> => {
-  const { database } = await import("../context");
+  const { database } = await import("@/context");
   const sources = await database
     .select({
       createdAt: calendarsTable.createdAt,
@@ -108,7 +108,7 @@ const getUserOAuthSources = async (
 };
 
 const verifyOAuthSourceOwnership = async (userId: string, calendarId: string): Promise<boolean> => {
-  const { database } = await import("../context");
+  const { database } = await import("@/context");
   const [source] = await database
     .select({ id: calendarsTable.id })
     .from(calendarsTable)
@@ -133,7 +133,7 @@ const getOAuthDestinationCredentials = async (
   accountId: string,
   provider: string,
 ): Promise<OAuthAccountWithCredentials> => {
-  const { database } = await import("../context");
+  const { database } = await import("@/context");
   const [result] = await database
     .select({
       accessToken: oauthCredentialsTable.accessToken,
@@ -190,7 +190,7 @@ const getOAuthSourceCredentials = async (
   credentialId: string,
   provider: string,
 ): Promise<OAuthSourceWithCredentials> => {
-  const { database } = await import("../context");
+  const { database } = await import("@/context");
   const [result] = await database
     .select({
       accessToken: oauthCredentialsTable.accessToken,
@@ -288,7 +288,7 @@ const countUserAccountsWithDatabase = async (
 };
 
 const countUserAccounts = async (userId: string): Promise<number> => {
-  const { database } = await import("../context");
+  const { database } = await import("@/context");
   return countUserAccountsWithDatabase(database, userId);
 };
 
@@ -324,7 +324,7 @@ const findOAuthAccountId = async (
     oauthCredentialId: string;
   },
 ): Promise<string | null> => {
-  const { database } = await import("../context");
+  const { database } = await import("@/context");
   return findOAuthAccountIdWithDatabase(database, options);
 };
 
@@ -361,12 +361,12 @@ const hasExistingOAuthCalendar = async (
     userId: string;
   },
 ): Promise<boolean> => {
-  const { database } = await import("../context");
+  const { database } = await import("@/context");
   return hasExistingOAuthCalendarWithDatabase(database, options);
 };
 
 const syncOAuthSourcesByProvider = async (providerId: string): Promise<void> => {
-  const { database, oauthProviders, refreshLockStore } = await import("../context");
+  const { database, oauthProviders, refreshLockStore } = await import("@/context");
   const sourceProvider = getSourceProvider(providerId, {
     database,
     oauthProviders,
@@ -432,12 +432,12 @@ const findCredentialEmailWithDatabase = async (
 
 const createDefaultCreateOAuthSourceDependencies = (): CreateOAuthSourceDependencies => ({
   canAddAccount: async (userId, currentCount) => {
-    const { premiumService } = await import("../context");
+    const { premiumService } = await import("@/context");
     return premiumService.canAddAccount(userId, currentCount);
   },
   countUserAccounts,
   createCalendarAccount: async ({ displayName, email, oauthCredentialId, provider, userId }) => {
-    const { database } = await import("../context");
+    const { database } = await import("@/context");
     const [insertedAccount] = await database
       .insert(calendarAccountsTable)
       .values({
@@ -453,11 +453,11 @@ const createDefaultCreateOAuthSourceDependencies = (): CreateOAuthSourceDependen
     return insertedAccount?.id ?? null;
   },
   createSource: async (payload) => {
-    const { database } = await import("../context");
+    const { database } = await import("@/context");
     return createOAuthSourceRecordWithDatabase(database, payload);
   },
   findCredentialEmail: async (userId, oauthCredentialId) => {
-    const { database } = await import("../context");
+    const { database } = await import("@/context");
     return findCredentialEmailWithDatabase(database, userId, oauthCredentialId);
   },
   findExistingAccountId: findOAuthAccountId,
@@ -560,7 +560,7 @@ const createOAuthSourceWithDependencies = async (
 const createOAuthSource = async (
   options: CreateOAuthSourceOptions,
 ): Promise<OAuthCalendarSource> => {
-  const { database } = await import("../context");
+  const { database } = await import("@/context");
 
   return database.transaction(async (tx) => {
     await tx.execute(
@@ -622,12 +622,12 @@ interface ImportOAuthAccountDependencies {
 
 const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDependencies => ({
   canAddAccount: async (userId, currentCount) => {
-    const { premiumService } = await import("../context");
+    const { premiumService } = await import("@/context");
     return premiumService.canAddAccount(userId, currentCount);
   },
   countUserAccounts,
   createAccountId: async ({ userId, provider, oauthCredentialId, email }) => {
-    const { database } = await import("../context");
+    const { database } = await import("@/context");
     const [insertedAccount] = await database
       .insert(calendarAccountsTable)
       .values({
@@ -648,7 +648,7 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
   },
   findExistingAccountId: findOAuthAccountId,
   getUnimportedExternalCalendars: async (userId, accountId, externalCalendars) => {
-    const { database } = await import("../context");
+    const { database } = await import("@/context");
     const existingCalendars = await database
       .select({ externalCalendarId: calendarsTable.externalCalendarId })
       .from(calendarsTable)
@@ -672,7 +672,7 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
       return;
     }
 
-    const { database } = await import("../context");
+    const { database } = await import("@/context");
     await database
       .insert(calendarsTable)
       .values(
@@ -844,7 +844,7 @@ const insertOAuthCalendarsWithDatabase = async (
 const importOAuthAccountCalendars = async (
   options: ImportOAuthAccountOptions,
 ): Promise<string> => {
-  const { database } = await import("../context");
+  const { database } = await import("@/context");
 
   return database.transaction(async (tx) => {
     await tx.execute(

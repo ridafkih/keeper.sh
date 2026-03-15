@@ -1,4 +1,4 @@
-import { withWideEvent } from "../../utils/middleware";
+import { withWideEvent } from "@/utils/middleware";
 
 const GET = withWideEvent(() =>
   Response.json({

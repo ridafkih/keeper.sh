@@ -1,6 +1,6 @@
-import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { getUserIdentifierToken } from "../../../utils/user";
-import { baseUrl } from "../../../context";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { getUserIdentifierToken } from "@/utils/user";
+import { baseUrl } from "@/context";
 
 const getIcalUrl = (token: string): string | null => {
   const url = new URL(`/api/cal/${token}.ics`, baseUrl);

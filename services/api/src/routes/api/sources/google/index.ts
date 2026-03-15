@@ -1,8 +1,8 @@
 import { createOAuthSourceSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import { withAuth, withWideEvent } from "../../../../utils/middleware";
-import { respondWithLoggedError } from "../../../../utils/logging";
-import { ErrorResponse } from "../../../../utils/responses";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { respondWithLoggedError } from "@/utils/logging";
+import { ErrorResponse } from "@/utils/responses";
 import {
   OAuthSourceLimitError,
   DestinationNotFoundError,
@@ -10,8 +10,8 @@ import {
   DuplicateSourceError,
   getUserOAuthSources,
   createOAuthSource,
-} from "../../../../utils/oauth-sources";
-import { premiumService } from "../../../../context";
+} from "@/utils/oauth-sources";
+import { premiumService } from "@/context";
 
 const GOOGLE_PROVIDER = "google";
 

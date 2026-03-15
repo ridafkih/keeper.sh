@@ -1,11 +1,11 @@
 import { createSourceSchema } from "@keeper.sh/data-schemas";
-import { withAuth, withWideEvent } from "../../../utils/middleware";
+import { withAuth, withWideEvent } from "@/utils/middleware";
 import {
   InvalidSourceUrlError,
   SourceLimitError,
   createSource,
   getUserSources,
-} from "../../../utils/sources";
+} from "@/utils/sources";
 import {
   handleGetIcsSourcesRoute,
   handlePostIcsSourceRoute,

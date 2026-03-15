@@ -1,10 +1,10 @@
 import { listUserCalendars, CalendarListError } from "@keeper.sh/providers/google";
-import { withAuth, withWideEvent } from "../../../../utils/middleware";
-import { listOAuthCalendars } from "../../../../utils/oauth-calendar-listing";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { listOAuthCalendars } from "@/utils/oauth-calendar-listing";
 import {
   refreshGoogleAccessToken,
   refreshGoogleSourceAccessToken,
-} from "../../../../utils/oauth-refresh";
+} from "@/utils/oauth-refresh";
 
 const GOOGLE_PROVIDER = "google";
 

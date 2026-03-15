@@ -6,7 +6,7 @@ import type { CalDAVProviderId } from "@keeper.sh/providers";
 import { and, eq, sql } from "drizzle-orm";
 import { saveCalDAVDestinationWithDatabase } from "./destinations";
 import { triggerDestinationSync } from "./sync";
-import { database, encryptionKey, premiumService } from "../context";
+import { database, encryptionKey, premiumService } from "@/context";
 
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
 

@@ -2,10 +2,10 @@ import { feedbackRequestSchema } from "@keeper.sh/data-schemas";
 import { feedbackTable } from "@keeper.sh/database/schema";
 import { user as userTable } from "@keeper.sh/database/auth-schema";
 import { eq } from "drizzle-orm";
-import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { ErrorResponse } from "../../../utils/responses";
-import { database, resend, feedbackEmail } from "../../../context";
-import { respondWithLoggedError } from "../../../utils/logging";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { ErrorResponse } from "@/utils/responses";
+import { database, resend, feedbackEmail } from "@/context";
+import { respondWithLoggedError } from "@/utils/logging";
 
 const TEMPLATE_ID = {
   feedback: "user-feedback",

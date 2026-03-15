@@ -1,7 +1,7 @@
 import type { MaybePromise } from "bun";
 import { hasOAuthProviderApi } from "@keeper.sh/auth";
-import { auth, authCapabilities, env } from "../context";
-import { runApiWideEventContext, setWideEventFields, trackStatusError, widelog } from "../utils/logging";
+import { auth, authCapabilities, env } from "@/context";
+import { runApiWideEventContext, setWideEventFields, trackStatusError, widelog } from "@/utils/logging";
 import { prepareOAuthTokenRequest } from "./auth-oauth-resource";
 
 const HTTP_INTERNAL_SERVER_ERROR = 500;

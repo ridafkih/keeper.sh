@@ -3,7 +3,7 @@ import {
 } from "@keeper.sh/database/schema";
 import type { ValidatedState } from "@keeper.sh/providers";
 import { and, count, eq, sql } from "drizzle-orm";
-import type { database as contextDatabase } from "../context";
+import type { database as contextDatabase } from "@/context";
 import { oauthCallbackQuerySchema } from "./request-query";
 
 const MS_PER_SECOND = 1000;
@@ -198,7 +198,7 @@ const handleOAuthCallback = async (
   params: OAuthCallbackParams,
 ): Promise<{ userId: string; redirectUrl: URL }> => {
   const [{ baseUrl, database, premiumService }, destinationsModule, syncModule] = await Promise.all([
-    import("../context"),
+    import("@/context"),
     import("./destinations"),
     import("./sync"),
   ]);

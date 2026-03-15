@@ -1,6 +1,6 @@
 import { user as userTable } from "@keeper.sh/database";
 import { eq } from "drizzle-orm";
-import { database } from "../context";
+import { database } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;
 

@@ -5,7 +5,7 @@ import {
   userEventsTable,
 } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
-import type { KeeperDatabase, KeeperEvent } from "../types";
+import type { KeeperDatabase, KeeperEvent } from "@/types";
 
 const toKeeperEvent = (result: {
   id: string;

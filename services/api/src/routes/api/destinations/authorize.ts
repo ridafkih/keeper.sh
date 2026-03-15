@@ -1,10 +1,10 @@
 import { calendarAccountsTable } from "@keeper.sh/database/schema";
 import { and, count, eq } from "drizzle-orm";
-import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { ErrorResponse } from "../../../utils/responses";
-import { getAuthorizationUrl, isOAuthProvider } from "../../../utils/destinations";
-import { destinationAuthorizeQuerySchema } from "../../../utils/request-query";
-import { baseUrl, database, premiumService } from "../../../context";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { ErrorResponse } from "@/utils/responses";
+import { getAuthorizationUrl, isOAuthProvider } from "@/utils/destinations";
+import { destinationAuthorizeQuerySchema } from "@/utils/request-query";
+import { baseUrl, database, premiumService } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;
 

@@ -4,7 +4,7 @@ import { generateIcsCalendar } from "ts-ics";
 import type { IcsCalendar, IcsEvent } from "ts-ics";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { resolveUserIdentifier } from "./user";
-import { database } from "../context";
+import { database } from "@/context";
 
 interface FeedSettings {
   includeEventName: boolean;

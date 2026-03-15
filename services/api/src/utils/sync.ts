@@ -32,7 +32,7 @@ const runDestinationSyncTrigger = (
 
 const triggerDestinationSync = (userId: string): void => {
   const resolveDependencies = async (): Promise<DestinationSyncDependencies> => {
-    const { destinationProviders, syncCoordinator } = await import("../context");
+    const { destinationProviders, syncCoordinator } = await import("@/context");
     return {
       spawnBackgroundJob,
       syncDestinationsForUser: (userIdToSync) =>

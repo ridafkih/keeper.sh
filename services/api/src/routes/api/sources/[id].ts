@@ -1,15 +1,15 @@
 import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
-import { withAuth, withWideEvent } from "../../../utils/middleware";
-import { ErrorResponse } from "../../../utils/responses";
-import { database, premiumService } from "../../../context";
-import { triggerDestinationSync } from "../../../utils/sync";
-import { idParamSchema } from "../../../utils/request-query";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { ErrorResponse } from "@/utils/responses";
+import { database, premiumService } from "@/context";
+import { triggerDestinationSync } from "@/utils/sync";
+import { idParamSchema } from "@/utils/request-query";
 import {
   getDestinationsForSource,
   getSourcesForDestination,
-} from "../../../utils/source-destination-mappings";
-import { withProviderMetadata } from "../../../utils/provider-display";
+} from "@/utils/source-destination-mappings";
+import { withProviderMetadata } from "@/utils/provider-display";
 import { handlePatchSourceRoute } from "./[id]/source-item-routes";
 
 const GET = withWideEvent(

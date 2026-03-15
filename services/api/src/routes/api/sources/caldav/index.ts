@@ -1,16 +1,16 @@
 import { createCalDAVSourceSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import { withAuth, withWideEvent } from "../../../../utils/middleware";
-import { respondWithLoggedError, widelog } from "../../../../utils/logging";
-import { ErrorResponse } from "../../../../utils/responses";
-import { caldavSourcesQuerySchema } from "../../../../utils/request-query";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { respondWithLoggedError, widelog } from "@/utils/logging";
+import { ErrorResponse } from "@/utils/responses";
+import { caldavSourcesQuerySchema } from "@/utils/request-query";
 import {
   CalDAVSourceLimitError,
   DuplicateCalDAVSourceError,
   getUserCalDAVSources,
   createCalDAVSource,
-} from "../../../../utils/caldav-sources";
-import { extractServerHost } from "../../../../utils/caldav";
+} from "@/utils/caldav-sources";
+import { extractServerHost } from "@/utils/caldav";
 
 const GET = withWideEvent(
   withAuth(async ({ request, userId }) => {

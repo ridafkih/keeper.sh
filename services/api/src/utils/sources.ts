@@ -10,7 +10,7 @@ import {
 import { applySourceSyncDefaults } from "./source-sync-defaults";
 
 import { spawnBackgroundJob } from "./background-task";
-import { database, premiumService } from "../context";
+import { database, premiumService } from "@/context";
 
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
 

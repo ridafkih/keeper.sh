@@ -4,7 +4,7 @@ import {
   syncStatusTable,
 } from "@keeper.sh/database/schema";
 import { and, eq, inArray } from "drizzle-orm";
-import type { KeeperDatabase, KeeperSyncStatus } from "../types";
+import type { KeeperDatabase, KeeperSyncStatus } from "@/types";
 
 const toIsoString = (value: Date | null | undefined): string | null => {
   if (!value) {

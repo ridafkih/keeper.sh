@@ -1,6 +1,6 @@
-import { withWideEvent } from "../../../utils/middleware";
-import { generateUserCalendar } from "../../../utils/ical";
-import { ErrorResponse } from "../../../utils/responses";
+import { withWideEvent } from "@/utils/middleware";
+import { generateUserCalendar } from "@/utils/ical";
+import { ErrorResponse } from "@/utils/responses";
 
 const ICS_EXTENSION_LENGTH = 4;
 

@@ -3,8 +3,8 @@ import {
   calendarsTable,
 } from "@keeper.sh/database/schema";
 import { asc, eq } from "drizzle-orm";
-import { withAccountDisplay } from "../provider-display";
-import type { KeeperDatabase, KeeperSource } from "../types";
+import { withAccountDisplay } from "@/provider-display";
+import type { KeeperDatabase, KeeperSource } from "@/types";
 
 const listSources = async (database: KeeperDatabase, userId: string): Promise<KeeperSource[]> => {
   const calendars = await database
