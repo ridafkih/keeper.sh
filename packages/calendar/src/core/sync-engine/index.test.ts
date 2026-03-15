@@ -1,13 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { executeRemoteOperations } from "./index";
-import type { SyncOperation, PushResult, DeleteResult, SyncableEvent, EventMapping } from "@keeper.sh/calendar";
+import type { SyncOperation, PushResult, DeleteResult, SyncableEvent } from "../types";
+import type { EventMapping } from "../events/mappings";
 import type { PendingChanges } from "./types";
 
-function assertDefined<TValue>(value: TValue | null | undefined, message: string): asserts value is TValue {
-  if (value === null || value === undefined) {
-    throw new Error(message);
-  }
-}
+const isDefined = <TValue>(value: TValue | null): value is TValue =>
+  value !== null;
 
 const makeEvent = (id: string, startTime: Date, endTime: Date): SyncableEvent => ({
   id,
@@ -48,7 +46,9 @@ describe("executeRemoteOperations", () => {
     const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1" }]) });
 
     const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider);
-    assertDefined(outcome, "expected outcome");
+    if (!isDefined(outcome)) {
+      throw new Error("expected outcome");
+    }
 
     expect(outcome.result.added).toBe(1);
     expect(outcome.result.addFailed).toBe(0);
@@ -64,7 +64,9 @@ describe("executeRemoteOperations", () => {
     const provider = makeProvider({ deleteEvents: () => Promise.resolve([{ success: true }]) });
 
     const outcome = await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider);
-    assertDefined(outcome, "expected outcome");
+    if (!isDefined(outcome)) {
+      throw new Error("expected outcome");
+    }
 
     expect(outcome.result.removed).toBe(1);
     expect(outcome.result.removeFailed).toBe(0);
@@ -79,7 +81,9 @@ describe("executeRemoteOperations", () => {
     const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: false, error: "rate limited" }]) });
 
     const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider);
-    assertDefined(outcome, "expected outcome");
+    if (!isDefined(outcome)) {
+      throw new Error("expected outcome");
+    }
 
     expect(outcome.result.added).toBe(0);
     expect(outcome.result.addFailed).toBe(1);
@@ -92,7 +96,9 @@ describe("executeRemoteOperations", () => {
     const provider = makeProvider({ deleteEvents: () => Promise.resolve([{ success: false, error: "server error" }]) });
 
     const outcome = await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider);
-    assertDefined(outcome, "expected outcome");
+    if (!isDefined(outcome)) {
+      throw new Error("expected outcome");
+    }
 
     expect(outcome.result.removed).toBe(0);
     expect(outcome.result.removeFailed).toBe(1);
@@ -112,7 +118,9 @@ describe("executeRemoteOperations", () => {
     });
 
     const outcome = await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider);
-    assertDefined(outcome, "expected outcome");
+    if (!isDefined(outcome)) {
+      throw new Error("expected outcome");
+    }
 
     expect(outcome.result.added).toBe(1);
     expect(outcome.result.removed).toBe(1);
@@ -126,7 +134,9 @@ describe("executeRemoteOperations", () => {
     const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1" }]) });
 
     const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider);
-    assertDefined(outcome, "expected outcome");
+    if (!isDefined(outcome)) {
+      throw new Error("expected outcome");
+    }
 
     expect(outcome.changes.inserts[0]?.deleteIdentifier).toBe("remote-1");
   });
@@ -137,7 +147,9 @@ describe("executeRemoteOperations", () => {
     const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1", deleteId: "delete-key-1" }]) });
 
     const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider);
-    assertDefined(outcome, "expected outcome");
+    if (!isDefined(outcome)) {
+      throw new Error("expected outcome");
+    }
 
     expect(outcome.changes.inserts[0]?.deleteIdentifier).toBe("delete-key-1");
   });
@@ -146,7 +158,9 @@ describe("executeRemoteOperations", () => {
     const provider = makeProvider();
 
     const outcome = await executeRemoteOperations([], [], "dest-cal-1", provider);
-    assertDefined(outcome, "expected outcome");
+    if (!isDefined(outcome)) {
+      throw new Error("expected outcome");
+    }
 
     expect(outcome.result.added).toBe(0);
     expect(outcome.result.removed).toBe(0);
@@ -186,7 +200,9 @@ describe("executeRemoteOperations", () => {
     const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-x" }]) });
 
     const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider, () => Promise.resolve(true));
-    assertDefined(outcome, "expected outcome");
+    if (!isDefined(outcome)) {
+      throw new Error("expected outcome");
+    }
 
     expect(outcome.result.added).toBe(2);
     expect(outcome.changes.inserts).toHaveLength(2);
@@ -272,7 +288,7 @@ describe("syncCalendar", () => {
 
     expect(emittedEvents).toHaveLength(1);
 
-    const event = emittedEvents[0];
+    const [event] = emittedEvents;
     expect(event?.["calendar.id"]).toBe("dest-cal-1");
     expect(event?.["local_events.count"]).toBe(1);
     expect(event?.["remote_events.count"]).toBe(0);
@@ -346,7 +362,7 @@ describe("syncCalendar", () => {
         onSyncEvent: (event) => { emittedEvents.push(event); },
       });
     } catch {
-      // expected
+      // Expected to throw
     }
 
     expect(emittedEvents).toHaveLength(1);

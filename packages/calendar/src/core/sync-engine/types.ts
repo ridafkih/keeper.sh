@@ -1,4 +1,4 @@
-import type { SyncableEvent, PushResult, DeleteResult, RemoteEvent } from "@keeper.sh/calendar";
+import type { SyncableEvent, PushResult, DeleteResult, RemoteEvent } from "../types";
 
 interface CalendarSyncProvider {
   pushEvents: (events: SyncableEvent[]) => Promise<PushResult[]>;

@@ -1,5 +1,6 @@
-import type { SyncResult, EventMapping, SyncOperation, SyncableEvent, RemoteEvent } from "@keeper.sh/calendar";
-import { computeSyncOperations } from "@keeper.sh/calendar";
+import type { SyncResult, SyncOperation, SyncableEvent, RemoteEvent } from "../types";
+import type { EventMapping } from "../events/mappings";
+import { computeSyncOperations } from "../sync/operations";
 import type { CalendarSyncProvider, PendingChanges, PendingInsert } from "./types";
 
 const processAddOperation = async (
