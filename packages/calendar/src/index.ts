@@ -178,3 +178,9 @@ export {
   type DestinationProvidersConfig,
   type SourceProvidersConfig,
 } from "./utils/registry/server";
+
+export {
+  createSyncGenerationStore,
+  type SyncGeneration,
+  type SyncGenerationStore,
+} from "./core/sync/generation";
