@@ -341,3 +341,166 @@ describe("syncCalendar", () => {
     expect(flushCalled).toBe(false);
   });
 });
+
+describe("createRedisGenerationCheck", () => {
+  it("returns true when the generation counter has not been incremented by another caller", async () => {
+    const { createRedisGenerationCheck } = await import("./generation");
+    type GenerationStore = Parameters<typeof createRedisGenerationCheck>[0];
+
+    let counter = 0;
+    const store: GenerationStore = {
+      incr: async () => {
+        counter += 1;
+        return counter;
+      },
+      get: async () => String(counter),
+    };
+
+    const isCurrent = await createRedisGenerationCheck(store, "cal-1");
+
+    expect(await isCurrent()).toBe(true);
+  });
+
+  it("returns false when another caller increments the generation", async () => {
+    const { createRedisGenerationCheck } = await import("./generation");
+    type GenerationStore = Parameters<typeof createRedisGenerationCheck>[0];
+
+    let counter = 0;
+    const store: GenerationStore = {
+      incr: async () => {
+        counter += 1;
+        return counter;
+      },
+      get: async () => String(counter),
+    };
+
+    const isCurrent = await createRedisGenerationCheck(store, "cal-1");
+
+    counter += 1;
+
+    expect(await isCurrent()).toBe(false);
+  });
+});
+
+describe("createDatabaseFlush", () => {
+  it("batches all inserts and deletes into a single transaction callback", async () => {
+    const { createDatabaseFlush } = await import("./flush");
+    type TransactionClient = Parameters<Parameters<typeof createDatabaseFlush>[0]["transaction"]>[0] extends (tx: infer T) => unknown ? T : never;
+
+    const executedOperations: string[] = [];
+
+    const fakeTransaction = async (callback: (tx: TransactionClient) => Promise<void>) => {
+      const tx = {
+        insert: () => {
+          executedOperations.push("insert");
+          return { values: () => Promise.resolve() };
+        },
+        delete: () => {
+          executedOperations.push("delete");
+          return { where: () => Promise.resolve() };
+        },
+      };
+      await callback(tx as unknown as TransactionClient);
+    };
+
+    const flush = createDatabaseFlush({ transaction: fakeTransaction } as never);
+
+    await flush({
+      inserts: [
+        {
+          eventStateId: "ev-1",
+          calendarId: "cal-1",
+          destinationEventUid: "remote-1",
+          deleteIdentifier: "remote-1",
+          syncEventHash: null,
+          startTime: new Date("2026-03-15T09:00:00Z"),
+          endTime: new Date("2026-03-15T10:00:00Z"),
+        },
+      ],
+      deletes: ["map-1", "map-2"],
+    });
+
+    expect(executedOperations).toEqual(["delete", "insert"]);
+  });
+
+  it("skips delete when there are no deletes", async () => {
+    const { createDatabaseFlush } = await import("./flush");
+
+    const executedOperations: string[] = [];
+
+    const fakeTransaction = async (callback: (tx: unknown) => Promise<void>) => {
+      const tx = {
+        insert: () => {
+          executedOperations.push("insert");
+          return { values: () => Promise.resolve() };
+        },
+        delete: () => {
+          executedOperations.push("delete");
+          return { where: () => Promise.resolve() };
+        },
+      };
+      await callback(tx);
+    };
+
+    const flush = createDatabaseFlush({ transaction: fakeTransaction } as never);
+
+    await flush({
+      inserts: [
+        {
+          eventStateId: "ev-1",
+          calendarId: "cal-1",
+          destinationEventUid: "remote-1",
+          deleteIdentifier: "remote-1",
+          syncEventHash: null,
+          startTime: new Date("2026-03-15T09:00:00Z"),
+          endTime: new Date("2026-03-15T10:00:00Z"),
+        },
+      ],
+      deletes: [],
+    });
+
+    expect(executedOperations).toEqual(["insert"]);
+  });
+
+  it("skips insert when there are no inserts", async () => {
+    const { createDatabaseFlush } = await import("./flush");
+
+    const executedOperations: string[] = [];
+
+    const fakeTransaction = async (callback: (tx: unknown) => Promise<void>) => {
+      const tx = {
+        insert: () => {
+          executedOperations.push("insert");
+          return { values: () => Promise.resolve() };
+        },
+        delete: () => {
+          executedOperations.push("delete");
+          return { where: () => Promise.resolve() };
+        },
+      };
+      await callback(tx);
+    };
+
+    const flush = createDatabaseFlush({ transaction: fakeTransaction } as never);
+
+    await flush({ inserts: [], deletes: ["map-1"] });
+
+    expect(executedOperations).toEqual(["delete"]);
+  });
+
+  it("does nothing when changes are empty", async () => {
+    const { createDatabaseFlush } = await import("./flush");
+
+    let transactionCalled = false;
+
+    const fakeTransaction = async () => {
+      transactionCalled = true;
+    };
+
+    const flush = createDatabaseFlush({ transaction: fakeTransaction } as never);
+
+    await flush({ inserts: [], deletes: [] });
+
+    expect(transactionCalled).toBe(false);
+  });
+});
