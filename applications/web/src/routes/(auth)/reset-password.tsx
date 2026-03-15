@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import CircleCheck from "lucide-react/dist/esm/icons/circle-check";
-import { resetPassword } from "../../lib/auth";
-import { fetchAuthCapabilitiesWithApi } from "../../lib/auth-capabilities";
-import { resolveErrorMessage } from "../../utils/errors";
-import { Button, ButtonText } from "../../components/ui/primitives/button";
-import { Heading2 } from "../../components/ui/primitives/heading";
-import { Input } from "../../components/ui/primitives/input";
-import { Text } from "../../components/ui/primitives/text";
-import { TextLink } from "../../components/ui/primitives/text-link";
-import { AuthSwitchPrompt } from "../../features/auth/components/auth-switch-prompt";
+import { resetPassword } from "@/lib/auth";
+import { fetchAuthCapabilitiesWithApi } from "@/lib/auth-capabilities";
+import { resolveErrorMessage } from "@/utils/errors";
+import { Button, ButtonText } from "@/components/ui/primitives/button";
+import { Heading2 } from "@/components/ui/primitives/heading";
+import { Input } from "@/components/ui/primitives/input";
+import { Text } from "@/components/ui/primitives/text";
+import { TextLink } from "@/components/ui/primitives/text-link";
+import { AuthSwitchPrompt } from "@/features/auth/components/auth-switch-prompt";
 
 type SearchParams = { token?: string };
 

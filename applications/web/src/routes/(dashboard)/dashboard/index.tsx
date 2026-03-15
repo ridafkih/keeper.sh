@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR, { preload } from "swr";
-import { AnimatedReveal } from "../../../components/ui/primitives/animated-reveal";
+import { AnimatedReveal } from "@/components/ui/primitives/animated-reveal";
 import Calendar from "lucide-react/dist/esm/icons/calendar";
 import CalendarPlus from "lucide-react/dist/esm/icons/calendar-plus";
 import CalendarDays from "lucide-react/dist/esm/icons/calendar-days";
@@ -11,13 +11,13 @@ import MessageSquare from "lucide-react/dist/esm/icons/message-square";
 import Bug from "lucide-react/dist/esm/icons/bug";
 import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
 import User from "lucide-react/dist/esm/icons/user";
-import { ErrorState } from "../../../components/ui/primitives/error-state";
-import { signOut } from "../../../lib/auth";
-import { fetcher } from "../../../lib/fetcher";
-import KeeperLogo from "../../../assets/keeper.svg?react";
-import { EventGraph } from "../../../features/dashboard/components/event-graph";
-import { ProviderIcon } from "../../../components/ui/primitives/provider-icon";
-import type { CalendarAccount, CalendarSource } from "../../../types/api";
+import { ErrorState } from "@/components/ui/primitives/error-state";
+import { signOut } from "@/lib/auth";
+import { fetcher } from "@/lib/fetcher";
+import KeeperLogo from "@/assets/keeper.svg?react";
+import { EventGraph } from "@/features/dashboard/components/event-graph";
+import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
+import type { CalendarAccount, CalendarSource } from "@/types/api";
 import {
   NavigationMenu,
   NavigationMenuButtonItem,
@@ -25,13 +25,13 @@ import {
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
   NavigationMenuItemTrailing,
-} from "../../../components/ui/composites/navigation-menu/navigation-menu-items";
-import { NavigationMenuPopover } from "../../../components/ui/composites/navigation-menu/navigation-menu-popover";
-import { Text } from "../../../components/ui/primitives/text";
-import { ProviderIconStack } from "../../../components/ui/primitives/provider-icon-stack";
-import { pluralize } from "../../../lib/pluralize";
-import { useAnimatedSWR } from "../../../hooks/use-animated-swr";
-import { SyncStatus } from "../../../features/dashboard/components/sync-status";
+} from "@/components/ui/composites/navigation-menu/navigation-menu-items";
+import { NavigationMenuPopover } from "@/components/ui/composites/navigation-menu/navigation-menu-popover";
+import { Text } from "@/components/ui/primitives/text";
+import { ProviderIconStack } from "@/components/ui/primitives/provider-icon-stack";
+import { pluralize } from "@/lib/pluralize";
+import { useAnimatedSWR } from "@/hooks/use-animated-swr";
+import { SyncStatus } from "@/features/dashboard/components/sync-status";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/")({
   component: DashboardPage,

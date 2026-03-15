@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { LazyMotion } from "motion/react";
 import * as m from "motion/react-m";
-import { loadMotionFeatures } from "../lib/motion-features";
+import { loadMotionFeatures } from "@/lib/motion-features";
 import { tv } from "tailwind-variants/lite";
-import { Text } from "../components/ui/primitives/text";
+import { Text } from "@/components/ui/primitives/text";
 
 const PLACEHOLDER_COUNTS = [3, 5, 2, 7, 4, 6, 1, 8, 3, 5, 4, 6, 2, 7, 5];
 const GRAPH_HEIGHT = 128;

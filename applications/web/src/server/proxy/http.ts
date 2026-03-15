@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { clientDistDirectory } from "../paths";
+import { clientDistDirectory } from "@/server/paths";
 
 export function isMcpRequest(url: URL): boolean {
   return url.pathname === "/mcp";

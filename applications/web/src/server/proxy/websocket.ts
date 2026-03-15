@@ -1,5 +1,5 @@
-import type { SocketConnection, SocketProxyData, SocketServer } from "../types";
-import type { ServerConfig } from "../types";
+import type { SocketConnection, SocketProxyData, SocketServer } from "@/server/types";
+import type { ServerConfig } from "@/server/types";
 import { toProxiedUrl } from "./http";
 
 function isSocketProxyPath(url: URL): boolean {

@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { parseHTML } from "linkedom";
-import type { ViteAssets, ViteScript } from "../lib/router-context";
+import type { ViteAssets, ViteScript } from "@/lib/router-context";
 import { clientDistDirectory } from "./paths";
 
 interface ManifestChunk {

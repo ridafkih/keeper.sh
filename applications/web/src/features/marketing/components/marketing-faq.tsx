@@ -1,5 +1,5 @@
 import type { PropsWithChildren } from "react";
-import { Text } from "../../../components/ui/primitives/text";
+import { Text } from "@/components/ui/primitives/text";
 
 export function MarketingFaqSection({ children }: PropsWithChildren) {
   return <section className="w-full max-w-lg mx-auto pt-16 pb-4">{children}</section>;

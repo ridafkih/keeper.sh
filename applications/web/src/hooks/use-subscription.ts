@@ -1,6 +1,6 @@
 import useSWR from "swr";
-import { fetcher } from "../lib/fetcher";
-import { getCommercialMode } from "../config/commercial";
+import { fetcher } from "@/lib/fetcher";
+import { getCommercialMode } from "@/config/commercial";
 
 export interface SubscriptionState {
   plan: "free" | "pro";

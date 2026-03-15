@@ -1,6 +1,6 @@
 import { AnimatePresence, LazyMotion } from "motion/react";
 import * as m from "motion/react-m";
-import { loadMotionFeatures } from "../lib/motion-features";
+import { loadMotionFeatures } from "@/lib/motion-features";
 import { useEffect, useRef, useState } from "react";
 
 type Phase = "button" | "cursor" | "click" | "syncing" | "done";

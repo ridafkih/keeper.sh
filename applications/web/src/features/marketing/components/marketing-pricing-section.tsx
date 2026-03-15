@@ -1,8 +1,8 @@
 import type { PropsWithChildren } from "react";
 import { tv, type VariantProps } from "tailwind-variants/lite";
-import { Heading2, Heading3 } from "../../../components/ui/primitives/heading";
-import { Text } from "../../../components/ui/primitives/text";
-import { ButtonText, LinkButton } from "../../../components/ui/primitives/button";
+import { Heading2, Heading3 } from "@/components/ui/primitives/heading";
+import { Text } from "@/components/ui/primitives/text";
+import { ButtonText, LinkButton } from "@/components/ui/primitives/button";
 import CheckIcon from "lucide-react/dist/esm/icons/check";
 import InfinityIcon from "lucide-react/dist/esm/icons/infinity";
 import MinusIcon from "lucide-react/dist/esm/icons/minus";

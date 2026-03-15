@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import Calendar from "lucide-react/dist/esm/icons/calendar";
-import { Heading2 } from "../../../../components/ui/primitives/heading";
-import { Text } from "../../../../components/ui/primitives/text";
-import { ProviderIconPair } from "../../../../features/auth/components/oauth-preamble";
-import { ButtonText, LinkButton } from "../../../../components/ui/primitives/button";
+import { Heading2 } from "@/components/ui/primitives/heading";
+import { Text } from "@/components/ui/primitives/text";
+import { ProviderIconPair } from "@/features/auth/components/oauth-preamble";
+import { ButtonText, LinkButton } from "@/components/ui/primitives/button";
 
 export const Route = createFileRoute(
   "/(oauth)/dashboard/connect/ics-file",

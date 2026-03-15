@@ -1,6 +1,6 @@
 import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
-import { BackButton } from "../primitives/back-button";
-import { ErrorState } from "../primitives/error-state";
+import { BackButton } from "@/components/ui/primitives/back-button";
+import { ErrorState } from "@/components/ui/primitives/error-state";
 
 type RouteShellProps = {
   backFallback?: string;

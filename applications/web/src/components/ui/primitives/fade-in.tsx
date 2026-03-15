@@ -1,6 +1,6 @@
 import type { PropsWithChildren } from "react";
 import { LazyMotion, type HTMLMotionProps, type TargetAndTransition } from "motion/react";
-import { loadMotionFeatures } from "../../../lib/motion-features";
+import { loadMotionFeatures } from "@/lib/motion-features";
 import * as m from "motion/react-m";
 
 type Direction = "from-right" | "from-top";

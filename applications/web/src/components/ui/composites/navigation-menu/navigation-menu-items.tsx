@@ -2,7 +2,7 @@ import type { ComponentPropsWithoutRef, PropsWithChildren } from "react";
 import { use } from "react";
 import { Link } from "@tanstack/react-router";
 import ArrowRight from "lucide-react/dist/esm/icons/arrow-right";
-import { cn } from "../../../../utils/cn";
+import { cn } from "@/utils/cn";
 import {
   InsidePopoverContext,
   ItemDisabledContext,
@@ -19,8 +19,8 @@ import {
   navigationMenuToggleTrack,
   type MenuVariant,
 } from "./navigation-menu.styles";
-import { CheckboxIndicator } from "../../primitives/checkbox";
-import { Text } from "../../primitives/text";
+import { CheckboxIndicator } from "@/components/ui/primitives/checkbox";
+import { Text } from "@/components/ui/primitives/text";
 
 type NavigationMenuProps = PropsWithChildren<{
   variant?: MenuVariant;

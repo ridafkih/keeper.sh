@@ -2,15 +2,15 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR, { preload, useSWRConfig } from "swr";
 import Calendar from "lucide-react/dist/esm/icons/calendar";
-import { BackButton } from "../../../../components/ui/primitives/back-button";
-import { Pagination, PaginationPrevious, PaginationNext } from "../../../../components/ui/primitives/pagination";
-import { RouteShell } from "../../../../components/ui/shells/route-shell";
-import { Text } from "../../../../components/ui/primitives/text";
-import { MetadataRow } from "../../../../features/dashboard/components/metadata-row";
-import { fetcher, apiFetch } from "../../../../lib/fetcher";
-import { formatDate } from "../../../../lib/time";
-import { invalidateAccountsAndSources } from "../../../../lib/swr";
-import type { CalendarAccount, CalendarSource } from "../../../../types/api";
+import { BackButton } from "@/components/ui/primitives/back-button";
+import { Pagination, PaginationPrevious, PaginationNext } from "@/components/ui/primitives/pagination";
+import { RouteShell } from "@/components/ui/shells/route-shell";
+import { Text } from "@/components/ui/primitives/text";
+import { MetadataRow } from "@/features/dashboard/components/metadata-row";
+import { fetcher, apiFetch } from "@/lib/fetcher";
+import { formatDate } from "@/lib/time";
+import { invalidateAccountsAndSources } from "@/lib/swr";
+import type { CalendarAccount, CalendarSource } from "@/types/api";
 import {
   NavigationMenu,
   NavigationMenuEmptyItem,
@@ -19,11 +19,11 @@ import {
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
   NavigationMenuItemTrailing,
-} from "../../../../components/ui/composites/navigation-menu/navigation-menu-items";
-import { DeleteConfirmation } from "../../../../components/ui/primitives/delete-confirmation";
-import { DashboardSection } from "../../../../components/ui/primitives/dashboard-heading";
-import { pluralize } from "../../../../lib/pluralize";
-import { resolveErrorMessage } from "../../../../utils/errors";
+} from "@/components/ui/composites/navigation-menu/navigation-menu-items";
+import { DeleteConfirmation } from "@/components/ui/primitives/delete-confirmation";
+import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
+import { pluralize } from "@/lib/pluralize";
+import { resolveErrorMessage } from "@/utils/errors";
 
 export const Route = createFileRoute(
   "/(dashboard)/dashboard/accounts/$accountId/",

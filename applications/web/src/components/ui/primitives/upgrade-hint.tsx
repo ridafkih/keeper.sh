@@ -1,6 +1,6 @@
 import type { PropsWithChildren, ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { getCommercialMode } from "../../../config/commercial";
+import { getCommercialMode } from "@/config/commercial";
 import { Text } from "./text";
 
 function UpgradeHint({ children }: PropsWithChildren) {

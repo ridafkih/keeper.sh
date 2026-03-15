@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import Mail from "lucide-react/dist/esm/icons/mail";
-import { authClient } from "../../lib/auth-client";
-import { fetchAuthCapabilitiesWithApi } from "../../lib/auth-capabilities";
-import { Button, ButtonText } from "../../components/ui/primitives/button";
-import { Heading2 } from "../../components/ui/primitives/heading";
-import { Text } from "../../components/ui/primitives/text";
+import { authClient } from "@/lib/auth-client";
+import { fetchAuthCapabilitiesWithApi } from "@/lib/auth-capabilities";
+import { Button, ButtonText } from "@/components/ui/primitives/button";
+import { Heading2 } from "@/components/ui/primitives/heading";
+import { Text } from "@/components/ui/primitives/text";
 
 export const Route = createFileRoute("/(auth)/verify-email")({
   loader: async ({ context }) => {

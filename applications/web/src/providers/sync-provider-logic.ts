@@ -1,5 +1,5 @@
 import { isSocketMessage, isSyncAggregate } from "@keeper.sh/data-schemas/client";
-import type { CompositeSyncState, SyncAggregateData } from "../state/sync";
+import type { CompositeSyncState, SyncAggregateData } from "@/state/sync";
 
 type IncomingSocketAction =
   | { kind: "ignore" }

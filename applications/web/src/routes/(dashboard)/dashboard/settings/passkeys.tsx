@@ -2,29 +2,29 @@ import { useState } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import KeyRound from "lucide-react/dist/esm/icons/key-round";
 import Plus from "lucide-react/dist/esm/icons/plus";
-import { Button, ButtonText } from "../../../../components/ui/primitives/button";
-import { BackButton } from "../../../../components/ui/primitives/back-button";
-import { usePasskeys, addPasskey, deletePasskey } from "../../../../hooks/use-passkeys";
-import type { Passkey } from "../../../../hooks/use-passkeys";
-import { formatDateShort } from "../../../../lib/time";
+import { Button, ButtonText } from "@/components/ui/primitives/button";
+import { BackButton } from "@/components/ui/primitives/back-button";
+import { usePasskeys, addPasskey, deletePasskey } from "@/hooks/use-passkeys";
+import type { Passkey } from "@/hooks/use-passkeys";
+import { formatDateShort } from "@/lib/time";
 import {
   Modal,
   ModalContent,
   ModalDescription,
   ModalFooter,
   ModalTitle,
-} from "../../../../components/ui/primitives/modal";
+} from "@/components/ui/primitives/modal";
 import {
   NavigationMenu,
   NavigationMenuButtonItem,
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
   NavigationMenuItemTrailing,
-} from "../../../../components/ui/composites/navigation-menu/navigation-menu-items";
-import { ErrorState } from "../../../../components/ui/primitives/error-state";
-import { Text } from "../../../../components/ui/primitives/text";
-import { resolveErrorMessage } from "../../../../utils/errors";
-import { fetchAuthCapabilitiesWithApi } from "../../../../lib/auth-capabilities";
+} from "@/components/ui/composites/navigation-menu/navigation-menu-items";
+import { ErrorState } from "@/components/ui/primitives/error-state";
+import { Text } from "@/components/ui/primitives/text";
+import { resolveErrorMessage } from "@/utils/errors";
+import { fetchAuthCapabilitiesWithApi } from "@/lib/auth-capabilities";
 
 export const Route = createFileRoute(
   "/(dashboard)/dashboard/settings/passkeys",

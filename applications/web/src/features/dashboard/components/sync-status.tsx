@@ -1,8 +1,8 @@
 import { useAtomValue } from "jotai";
-import { syncStateAtom, syncStatusLabelAtom, syncStatusShimmerAtom } from "../../../state/sync";
-import { Text } from "../../../components/ui/primitives/text";
-import { ShimmerText } from "../../../components/ui/primitives/shimmer-text";
-import { Tooltip } from "../../../components/ui/primitives/tooltip";
+import { syncStateAtom, syncStatusLabelAtom, syncStatusShimmerAtom } from "@/state/sync";
+import { Text } from "@/components/ui/primitives/text";
+import { ShimmerText } from "@/components/ui/primitives/shimmer-text";
+import { Tooltip } from "@/components/ui/primitives/tooltip";
 import { clampPercent, resolveSyncPercent } from "./sync-status-helpers";
 
 function SyncProgressCircle({ percent }: { percent: number }) {

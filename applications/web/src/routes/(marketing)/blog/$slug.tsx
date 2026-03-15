@@ -1,11 +1,11 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { Streamdown } from "streamdown";
-import { Heading1 } from "../../../components/ui/primitives/heading";
-import { markdownComponents } from "../../../components/ui/primitives/markdown-component-map";
-import { Text } from "../../../components/ui/primitives/text";
-import { BlogPostCta } from "../../../features/blog/components/blog-post-cta";
-import { findBlogPostBySlug, formatIsoDate } from "../../../lib/blog-posts";
-import { canonicalUrl, jsonLdMeta, seoMeta, blogPostingSchema, breadcrumbSchema } from "../../../lib/seo";
+import { Heading1 } from "@/components/ui/primitives/heading";
+import { markdownComponents } from "@/components/ui/primitives/markdown-component-map";
+import { Text } from "@/components/ui/primitives/text";
+import { BlogPostCta } from "@/features/blog/components/blog-post-cta";
+import { findBlogPostBySlug, formatIsoDate } from "@/lib/blog-posts";
+import { canonicalUrl, jsonLdMeta, seoMeta, blogPostingSchema, breadcrumbSchema } from "@/lib/seo";
 
 export const Route = createFileRoute("/(marketing)/blog/$slug")({
   component: BlogPostPage,

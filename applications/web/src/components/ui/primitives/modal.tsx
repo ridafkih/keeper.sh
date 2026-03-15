@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { useSetAtom } from "jotai";
 import { Heading3 } from "./heading";
 import { Text } from "./text";
-import { popoverOverlayAtom } from "../../../state/popover-overlay";
+import { popoverOverlayAtom } from "@/state/popover-overlay";
 
 interface ModalContextValue {
   open: boolean;

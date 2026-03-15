@@ -1,4 +1,4 @@
-import type { CompositeSyncState } from "../../../state/sync";
+import type { CompositeSyncState } from "@/state/sync";
 
 const clampPercent = (value: number): number => {
   if (!Number.isFinite(value)) {

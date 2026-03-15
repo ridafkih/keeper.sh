@@ -3,29 +3,29 @@ import { createFileRoute } from "@tanstack/react-router";
 import useSWR, { preload, useSWRConfig } from "swr";
 import CheckIcon from "lucide-react/dist/esm/icons/check";
 import { useAtomValue, useStore } from "jotai";
-import { useEntitlements, useMutateEntitlements, canAddMore } from "../../../../hooks/use-entitlements";
-import { BackButton } from "../../../../components/ui/primitives/back-button";
-import { UpgradeHint, PremiumFeatureGate } from "../../../../components/ui/primitives/upgrade-hint";
-import { Pagination, PaginationPrevious, PaginationNext } from "../../../../components/ui/primitives/pagination";
-import { RouteShell } from "../../../../components/ui/shells/route-shell";
-import { MetadataRow } from "../../../../features/dashboard/components/metadata-row";
-import { ProviderIcon } from "../../../../components/ui/primitives/provider-icon";
-import { DashboardHeading1, DashboardSection } from "../../../../components/ui/primitives/dashboard-heading";
-import { apiFetch, fetcher } from "../../../../lib/fetcher";
-import { formatDate } from "../../../../lib/time";
-import { canPull, canPush } from "../../../../utils/calendars";
-import type { CalendarAccount, CalendarDetail, CalendarSource } from "../../../../types/api";
+import { useEntitlements, useMutateEntitlements, canAddMore } from "@/hooks/use-entitlements";
+import { BackButton } from "@/components/ui/primitives/back-button";
+import { UpgradeHint, PremiumFeatureGate } from "@/components/ui/primitives/upgrade-hint";
+import { Pagination, PaginationPrevious, PaginationNext } from "@/components/ui/primitives/pagination";
+import { RouteShell } from "@/components/ui/shells/route-shell";
+import { MetadataRow } from "@/features/dashboard/components/metadata-row";
+import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
+import { DashboardHeading1, DashboardSection } from "@/components/ui/primitives/dashboard-heading";
+import { apiFetch, fetcher } from "@/lib/fetcher";
+import { formatDate } from "@/lib/time";
+import { canPull, canPush } from "@/utils/calendars";
+import type { CalendarAccount, CalendarDetail, CalendarSource } from "@/types/api";
 import {
   NavigationMenu,
   NavigationMenuEmptyItem,
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
-} from "../../../../components/ui/composites/navigation-menu/navigation-menu-items";
+} from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import {
   NavigationMenuEditableItem,
   NavigationMenuEditableTemplateItem,
-} from "../../../../components/ui/composites/navigation-menu/navigation-menu-editable";
-import { MenuVariantContext, ItemDisabledContext } from "../../../../components/ui/composites/navigation-menu/navigation-menu.contexts";
+} from "@/components/ui/composites/navigation-menu/navigation-menu-editable";
+import { MenuVariantContext, ItemDisabledContext } from "@/components/ui/composites/navigation-menu/navigation-menu.contexts";
 import {
   DISABLED_LABEL_TONE,
   LABEL_TONE,
@@ -34,9 +34,9 @@ import {
   navigationMenuCheckboxIcon,
   navigationMenuToggleTrack,
   navigationMenuToggleThumb,
-} from "../../../../components/ui/composites/navigation-menu/navigation-menu.styles";
-import { Text } from "../../../../components/ui/primitives/text";
-import { TemplateText } from "../../../../components/ui/primitives/template-text";
+} from "@/components/ui/composites/navigation-menu/navigation-menu.styles";
+import { Text } from "@/components/ui/primitives/text";
+import { TemplateText } from "@/components/ui/primitives/template-text";
 import {
   calendarDetailAtom,
   calendarDetailLoadedAtom,
@@ -47,12 +47,12 @@ import {
   customEventNameAtom,
   excludeEventNameAtom,
   excludeFieldAtoms,
-} from "../../../../state/calendar-detail";
-import type { ExcludeField } from "../../../../state/calendar-detail";
+} from "@/state/calendar-detail";
+import type { ExcludeField } from "@/state/calendar-detail";
 import {
   destinationIdsAtom,
   selectDestinationInclusion,
-} from "../../../../state/destination-ids";
+} from "@/state/destination-ids";
 
 
 export const Route = createFileRoute(

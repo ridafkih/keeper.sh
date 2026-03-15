@@ -2,14 +2,14 @@ import { HeadContent, Outlet, Scripts, createRootRouteWithContext, useLocation }
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { SWRConfig } from "swr";
-import { Heading2 } from "../components/ui/primitives/heading";
-import { Text } from "../components/ui/primitives/text";
-import { LinkButton, ButtonText } from "../components/ui/primitives/button";
-import { fetcher, HttpError } from "../lib/fetcher";
-import { resolveErrorMessage } from "../utils/errors";
-import type { AppRouterContext, ViteScript } from "../lib/router-context";
-import { serializePublicRuntimeConfig } from "../lib/runtime-config";
-import { AnalyticsScripts } from "../components/analytics-scripts";
+import { Heading2 } from "@/components/ui/primitives/heading";
+import { Text } from "@/components/ui/primitives/text";
+import { LinkButton, ButtonText } from "@/components/ui/primitives/button";
+import { fetcher, HttpError } from "@/lib/fetcher";
+import { resolveErrorMessage } from "@/utils/errors";
+import type { AppRouterContext, ViteScript } from "@/lib/router-context";
+import { serializePublicRuntimeConfig } from "@/lib/runtime-config";
+import { AnalyticsScripts } from "@/components/analytics-scripts";
 
 const NON_RETRYABLE_STATUSES = new Set([401, 403, 404]);
 

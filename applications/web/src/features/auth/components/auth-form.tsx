@@ -2,7 +2,7 @@ import { useEffect, useRef, type Ref, type SubmitEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAtomValue, useSetAtom } from "jotai";
 import { AnimatePresence, LazyMotion, type TargetAndTransition, type Variants } from "motion/react";
-import { loadMotionFeatures } from "../../../lib/motion-features";
+import { loadMotionFeatures } from "@/lib/motion-features";
 import * as m from "motion/react-m";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
@@ -11,33 +11,33 @@ import {
   authFormErrorAtom,
   authFormStepAtom,
   type AuthFormStatus,
-} from "../../../state/auth-form";
-import { authClient } from "../../../lib/auth-client";
+} from "@/state/auth-form";
+import { authClient } from "@/lib/auth-client";
 import {
   getEnabledSocialProviders,
   resolveCredentialField,
   type AuthCapabilities,
-} from "../../../lib/auth-capabilities";
-import { signInWithCredential, signUpWithCredential } from "../../../lib/auth";
+} from "@/lib/auth-capabilities";
+import { signInWithCredential, signUpWithCredential } from "@/lib/auth";
 import {
   Button,
   LinkButton,
   ExternalLinkButton,
   ButtonText,
   ButtonIcon,
-} from "../../../components/ui/primitives/button";
-import { Divider } from "../../../components/ui/primitives/divider";
-import { ExternalTextLink, TextLink } from "../../../components/ui/primitives/text-link";
-import { Heading2 } from "../../../components/ui/primitives/heading";
-import { Input } from "../../../components/ui/primitives/input";
-import { Text } from "../../../components/ui/primitives/text";
-import { resolveErrorMessage } from "../../../utils/errors";
+} from "@/components/ui/primitives/button";
+import { Divider } from "@/components/ui/primitives/divider";
+import { ExternalTextLink, TextLink } from "@/components/ui/primitives/text-link";
+import { Heading2 } from "@/components/ui/primitives/heading";
+import { Input } from "@/components/ui/primitives/input";
+import { Text } from "@/components/ui/primitives/text";
+import { resolveErrorMessage } from "@/utils/errors";
 import {
   getMcpAuthorizationSearch,
   resolvePathWithSearch,
   resolveClientPostAuthRedirect,
   type StringSearchParams,
-} from "../../../lib/mcp-auth-flow";
+} from "@/lib/mcp-auth-flow";
 import { AuthSwitchPrompt } from "./auth-switch-prompt";
 
 function resolveInputTone(active: boolean | undefined): "error" | "neutral" {

@@ -1,6 +1,6 @@
 import type { PropsWithChildren } from "react";
-import { cn } from "../../../utils/cn";
-import { Text } from "../../../components/ui/primitives/text";
+import { cn } from "@/utils/cn";
+import { Text } from "@/components/ui/primitives/text";
 
 export function MarketingHowItWorksSection({ children }: PropsWithChildren) {
   return <section className="w-full pt-16 pb-4">{children}</section>;

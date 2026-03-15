@@ -7,21 +7,21 @@ import Lock from "lucide-react/dist/esm/icons/lock";
 import Mail from "lucide-react/dist/esm/icons/mail";
 import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
-import { pluralize } from "../../../../lib/pluralize";
-import { Button, ButtonText } from "../../../../components/ui/primitives/button";
-import { BackButton } from "../../../../components/ui/primitives/back-button";
-import { useSession } from "../../../../hooks/use-session";
-import { useApiTokens } from "../../../../hooks/use-api-tokens";
-import { usePasskeys } from "../../../../hooks/use-passkeys";
-import { Input } from "../../../../components/ui/primitives/input";
-import { deleteAccount } from "../../../../lib/auth";
+import { pluralize } from "@/lib/pluralize";
+import { Button, ButtonText } from "@/components/ui/primitives/button";
+import { BackButton } from "@/components/ui/primitives/back-button";
+import { useSession } from "@/hooks/use-session";
+import { useApiTokens } from "@/hooks/use-api-tokens";
+import { usePasskeys } from "@/hooks/use-passkeys";
+import { Input } from "@/components/ui/primitives/input";
+import { deleteAccount } from "@/lib/auth";
 import {
   Modal,
   ModalContent,
   ModalDescription,
   ModalFooter,
   ModalTitle,
-} from "../../../../components/ui/primitives/modal";
+} from "@/components/ui/primitives/modal";
 import {
   NavigationMenu,
   NavigationMenuButtonItem,
@@ -30,13 +30,13 @@ import {
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
   NavigationMenuItemTrailing,
-} from "../../../../components/ui/composites/navigation-menu/navigation-menu-items";
-import { Text } from "../../../../components/ui/primitives/text";
-import { resolveErrorMessage } from "../../../../utils/errors";
-import { fetchAuthCapabilitiesWithApi } from "../../../../lib/auth-capabilities";
-import { getCommercialMode } from "../../../../config/commercial";
-import { useSubscription, fetchSubscriptionStateWithApi } from "../../../../hooks/use-subscription";
-import { openCustomerPortal } from "../../../../utils/checkout";
+} from "@/components/ui/composites/navigation-menu/navigation-menu-items";
+import { Text } from "@/components/ui/primitives/text";
+import { resolveErrorMessage } from "@/utils/errors";
+import { fetchAuthCapabilitiesWithApi } from "@/lib/auth-capabilities";
+import { getCommercialMode } from "@/config/commercial";
+import { useSubscription, fetchSubscriptionStateWithApi } from "@/hooks/use-subscription";
+import { openCustomerPortal } from "@/utils/checkout";
 
 async function loadSubscription(context: { runtimeConfig: { commercialMode: boolean }; fetchApi: <T>(path: string, init?: RequestInit) => Promise<T> }) {
   if (!context.runtimeConfig.commercialMode) return undefined;

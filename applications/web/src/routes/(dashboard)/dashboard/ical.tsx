@@ -4,44 +4,44 @@ import useSWR, { useSWRConfig } from "swr";
 import { atom, useAtomValue, useStore } from "jotai";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import CheckIcon from "lucide-react/dist/esm/icons/check";
-import { fetcher, apiFetch } from "../../../lib/fetcher";
-import { BackButton } from "../../../components/ui/primitives/back-button";
-import { Input } from "../../../components/ui/primitives/input";
-import { Text } from "../../../components/ui/primitives/text";
-import { PremiumFeatureGate } from "../../../components/ui/primitives/upgrade-hint";
-import { DashboardSection } from "../../../components/ui/primitives/dashboard-heading";
-import { Button, ButtonIcon } from "../../../components/ui/primitives/button";
-import { ProviderIcon } from "../../../components/ui/primitives/provider-icon";
+import { fetcher, apiFetch } from "@/lib/fetcher";
+import { BackButton } from "@/components/ui/primitives/back-button";
+import { Input } from "@/components/ui/primitives/input";
+import { Text } from "@/components/ui/primitives/text";
+import { PremiumFeatureGate } from "@/components/ui/primitives/upgrade-hint";
+import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
+import { Button, ButtonIcon } from "@/components/ui/primitives/button";
+import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import {
   NavigationMenu,
   NavigationMenuCheckboxItem,
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
   NavigationMenuToggleItem,
-} from "../../../components/ui/composites/navigation-menu/navigation-menu-items";
+} from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import {
   NavigationMenuEditableTemplateItem,
-} from "../../../components/ui/composites/navigation-menu/navigation-menu-editable";
-import { TemplateText } from "../../../components/ui/primitives/template-text";
-import { ItemDisabledContext, MenuVariantContext } from "../../../components/ui/composites/navigation-menu/navigation-menu.contexts";
+} from "@/components/ui/composites/navigation-menu/navigation-menu-editable";
+import { TemplateText } from "@/components/ui/primitives/template-text";
+import { ItemDisabledContext, MenuVariantContext } from "@/components/ui/composites/navigation-menu/navigation-menu.contexts";
 import {
   DISABLED_LABEL_TONE,
   LABEL_TONE,
-} from "../../../components/ui/composites/navigation-menu/navigation-menu.styles";
+} from "@/components/ui/composites/navigation-menu/navigation-menu.styles";
 import {
   icalSourceInclusionAtom,
   selectSourceInclusion,
-} from "../../../state/ical-sources";
+} from "@/state/ical-sources";
 import {
   feedSettingsAtom,
   feedSettingsLoadedAtom,
   feedSettingAtoms,
   customEventNameAtom,
   includeEventNameAtom,
-} from "../../../state/ical-feed-settings";
-import type { FeedSettingToggleKey } from "../../../state/ical-feed-settings";
-import type { CalendarSource } from "../../../types/api";
-import { useEntitlements } from "../../../hooks/use-entitlements";
+} from "@/state/ical-feed-settings";
+import type { FeedSettingToggleKey } from "@/state/ical-feed-settings";
+import type { CalendarSource } from "@/types/api";
+import { useEntitlements } from "@/hooks/use-entitlements";
 
 type ICalTokenResponse = {
   token: string;

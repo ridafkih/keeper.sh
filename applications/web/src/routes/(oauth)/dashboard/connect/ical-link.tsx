@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import Link from "lucide-react/dist/esm/icons/link";
-import { Heading2 } from "../../../../components/ui/primitives/heading";
-import { Text } from "../../../../components/ui/primitives/text";
-import { ProviderIconPair } from "../../../../features/auth/components/oauth-preamble";
-import { ICSFeedForm } from "../../../../features/auth/components/ics-connect-form";
+import { Heading2 } from "@/components/ui/primitives/heading";
+import { Text } from "@/components/ui/primitives/text";
+import { ProviderIconPair } from "@/features/auth/components/oauth-preamble";
+import { ICSFeedForm } from "@/features/auth/components/ics-connect-form";
 
 export const Route = createFileRoute(
   "/(oauth)/dashboard/connect/ical-link",

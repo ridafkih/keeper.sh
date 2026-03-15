@@ -2,14 +2,14 @@ import { useRef, useState, useTransition } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
 import { useSWRConfig } from "swr";
-import { BackButton } from "../../../components/ui/primitives/back-button";
-import { Button, ButtonText } from "../../../components/ui/primitives/button";
-import { Divider } from "../../../components/ui/primitives/divider";
-import { Input } from "../../../components/ui/primitives/input";
-import { Text } from "../../../components/ui/primitives/text";
-import { apiFetch } from "../../../lib/fetcher";
-import { invalidateAccountsAndSources } from "../../../lib/swr";
-import { resolveErrorMessage } from "../../../utils/errors";
+import { BackButton } from "@/components/ui/primitives/back-button";
+import { Button, ButtonText } from "@/components/ui/primitives/button";
+import { Divider } from "@/components/ui/primitives/divider";
+import { Input } from "@/components/ui/primitives/input";
+import { Text } from "@/components/ui/primitives/text";
+import { apiFetch } from "@/lib/fetcher";
+import { invalidateAccountsAndSources } from "@/lib/swr";
+import { resolveErrorMessage } from "@/utils/errors";
 
 export type CalDAVProvider = "fastmail" | "icloud" | "caldav";
 

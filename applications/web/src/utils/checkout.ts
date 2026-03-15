@@ -1,4 +1,4 @@
-import { apiFetch } from "../lib/fetcher";
+import { apiFetch } from "@/lib/fetcher";
 
 interface CheckoutCallbacks {
   onSuccess?: () => void;

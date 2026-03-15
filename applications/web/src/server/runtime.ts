@@ -4,7 +4,7 @@ import type { ViteDevServer } from "vite";
 import { clientDistDirectory, serverDistEntry, sourceTemplatePath } from "./paths";
 import { proxyRequest, readStaticFile } from "./proxy/http";
 import { extractViteAssets } from "./vite-assets";
-import type { ViteAssets } from "../lib/router-context";
+import type { ViteAssets } from "@/lib/router-context";
 import type { Runtime, ServerConfig } from "./types";
 
 interface EntryServerModule {

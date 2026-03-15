@@ -1,5 +1,5 @@
 import type { PropsWithChildren } from "react";
-import { cn } from "../../../utils/cn";
+import { cn } from "@/utils/cn";
 
 type MarketingFeatureBentoCardProps = PropsWithChildren<{ className?: string }>;
 

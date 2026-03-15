@@ -1,4 +1,4 @@
-import { providerIcons } from "../lib/providers";
+import { providerIcons } from "@/lib/providers";
 
 const ORBIT_ITEMS = Object.entries(providerIcons).reverse();
 const ORBIT_DURATION = 12;

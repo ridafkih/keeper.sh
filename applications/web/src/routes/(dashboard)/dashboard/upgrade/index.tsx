@@ -1,9 +1,9 @@
 import { useState, useTransition } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { BackButton } from "../../../../components/ui/primitives/back-button";
-import { DashboardHeading1, DashboardHeading3 } from "../../../../components/ui/primitives/dashboard-heading";
-import { Text } from "../../../../components/ui/primitives/text";
-import { Button, ButtonText } from "../../../../components/ui/primitives/button";
+import { BackButton } from "@/components/ui/primitives/back-button";
+import { DashboardHeading1, DashboardHeading3 } from "@/components/ui/primitives/dashboard-heading";
+import { Text } from "@/components/ui/primitives/text";
+import { Button, ButtonText } from "@/components/ui/primitives/button";
 import {
   UpgradeCard,
   UpgradeCardSection,
@@ -11,16 +11,16 @@ import {
   UpgradeCardFeature,
   UpgradeCardFeatureIcon,
   UpgradeCardActions,
-} from "../../../../features/dashboard/components/upgrade-card";
+} from "@/features/dashboard/components/upgrade-card";
 import Check from "lucide-react/dist/esm/icons/check";
-import { HttpError } from "../../../../lib/fetcher";
+import { HttpError } from "@/lib/fetcher";
 import {
   fetchSubscriptionStateWithApi,
   useSubscription,
-} from "../../../../hooks/use-subscription";
-import { openCheckout, openCustomerPortal } from "../../../../utils/checkout";
-import { plans } from "../../../../config/plans";
-import { resolveUpgradeRedirect } from "../../../../lib/route-access-guards";
+} from "@/hooks/use-subscription";
+import { openCheckout, openCustomerPortal } from "@/utils/checkout";
+import { plans } from "@/config/plans";
+import { resolveUpgradeRedirect } from "@/lib/route-access-guards";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/upgrade/")({
   beforeLoad: ({ context }) => {

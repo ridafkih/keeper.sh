@@ -1,5 +1,5 @@
 import { AnimatePresence, LazyMotion } from "motion/react";
-import { loadMotionFeatures } from "../../../lib/motion-features";
+import { loadMotionFeatures } from "@/lib/motion-features";
 import * as m from "motion/react-m";
 import { Text } from "./text";
 import { ProviderIcon } from "./provider-icon";

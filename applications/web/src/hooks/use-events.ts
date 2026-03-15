@@ -1,7 +1,7 @@
 import useSWRInfinite from "swr/infinite";
-import { fetcher } from "../lib/fetcher";
+import { fetcher } from "@/lib/fetcher";
 import { useStartOfToday } from "./use-start-of-today";
-import type { ApiEvent } from "../types/api";
+import type { ApiEvent } from "@/types/api";
 
 export interface CalendarEvent {
   id: string;

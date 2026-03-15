@@ -1,9 +1,9 @@
 import { AnimatePresence, LazyMotion } from "motion/react";
 import * as m from "motion/react-m";
-import { loadMotionFeatures } from "../lib/motion-features";
+import { loadMotionFeatures } from "@/lib/motion-features";
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Text } from "../components/ui/primitives/text";
-import CONTRIBUTORS from "../features/marketing/contributors.json";
+import { Text } from "@/components/ui/primitives/text";
+import CONTRIBUTORS from "@/features/marketing/contributors.json";
 
 const VISIBLE_COUNT = 3;
 const ROTATE_INTERVAL_MS = 1800;

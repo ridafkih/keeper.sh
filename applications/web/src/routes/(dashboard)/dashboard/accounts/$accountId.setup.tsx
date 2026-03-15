@@ -1,25 +1,25 @@
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR from "swr";
-import { BackButton } from "../../../../components/ui/primitives/back-button";
-import { UpgradeHint } from "../../../../components/ui/primitives/upgrade-hint";
-import { DashboardSection } from "../../../../components/ui/primitives/dashboard-heading";
-import { Button, LinkButton, ButtonText } from "../../../../components/ui/primitives/button";
-import { apiFetch } from "../../../../lib/fetcher";
-import { useEntitlements, useMutateEntitlements, canAddMore } from "../../../../hooks/use-entitlements";
-import type { CalendarSource } from "../../../../types/api";
+import { BackButton } from "@/components/ui/primitives/back-button";
+import { UpgradeHint } from "@/components/ui/primitives/upgrade-hint";
+import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
+import { Button, LinkButton, ButtonText } from "@/components/ui/primitives/button";
+import { apiFetch } from "@/lib/fetcher";
+import { useEntitlements, useMutateEntitlements, canAddMore } from "@/hooks/use-entitlements";
+import type { CalendarSource } from "@/types/api";
 import {
   NavigationMenu,
   NavigationMenuCheckboxItem,
   NavigationMenuEmptyItem,
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
-} from "../../../../components/ui/composites/navigation-menu/navigation-menu-items";
-import { NavigationMenuEditableItem } from "../../../../components/ui/composites/navigation-menu/navigation-menu-editable";
-import { ProviderIcon } from "../../../../components/ui/primitives/provider-icon";
-import { RouteShell } from "../../../../components/ui/shells/route-shell";
-import { canPull, canPush, getCalendarProvider } from "../../../../utils/calendars";
-import { resolveUpdatedIds } from "../../../../utils/collections";
+} from "@/components/ui/composites/navigation-menu/navigation-menu-items";
+import { NavigationMenuEditableItem } from "@/components/ui/composites/navigation-menu/navigation-menu-editable";
+import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
+import { RouteShell } from "@/components/ui/shells/route-shell";
+import { canPull, canPush, getCalendarProvider } from "@/utils/calendars";
+import { resolveUpdatedIds } from "@/utils/collections";
 
 const VALID_STEPS = ["select", "rename", "destinations", "sources"] as const;
 type SetupStep = (typeof VALID_STEPS)[number];

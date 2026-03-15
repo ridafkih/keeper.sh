@@ -1,6 +1,6 @@
 import { use, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import Pencil from "lucide-react/dist/esm/icons/pencil";
-import { cn } from "../../../../utils/cn";
+import { cn } from "@/utils/cn";
 import { ItemDisabledContext, MenuVariantContext } from "./navigation-menu.contexts";
 import {
   DISABLED_LABEL_TONE,
@@ -9,7 +9,7 @@ import {
   navigationMenuItemStyle,
 } from "./navigation-menu.styles";
 import { NavigationMenuItemLabel } from "./navigation-menu-items";
-import { Text } from "../../primitives/text";
+import { Text } from "@/components/ui/primitives/text";
 
 type NavigationMenuEditableItemProps = {
   onCommit: (value: string) => Promise<void> | void;

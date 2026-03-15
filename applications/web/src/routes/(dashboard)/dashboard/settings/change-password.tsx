@@ -1,14 +1,14 @@
 import { useState, useTransition, type SubmitEvent } from "react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
-import { Button, ButtonText } from "../../../../components/ui/primitives/button";
-import { BackButton } from "../../../../components/ui/primitives/back-button";
-import { Text } from "../../../../components/ui/primitives/text";
-import { Divider } from "../../../../components/ui/primitives/divider";
-import { Input } from "../../../../components/ui/primitives/input";
-import { changePassword } from "../../../../lib/auth";
-import { fetchAuthCapabilitiesWithApi } from "../../../../lib/auth-capabilities";
-import { resolveErrorMessage } from "../../../../utils/errors";
+import { Button, ButtonText } from "@/components/ui/primitives/button";
+import { BackButton } from "@/components/ui/primitives/back-button";
+import { Text } from "@/components/ui/primitives/text";
+import { Divider } from "@/components/ui/primitives/divider";
+import { Input } from "@/components/ui/primitives/input";
+import { changePassword } from "@/lib/auth";
+import { fetchAuthCapabilitiesWithApi } from "@/lib/auth-capabilities";
+import { resolveErrorMessage } from "@/utils/errors";
 
 export const Route = createFileRoute(
   "/(dashboard)/dashboard/settings/change-password",

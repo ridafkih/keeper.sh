@@ -1,10 +1,10 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { AuthOAuthPreamble } from "../../../features/auth/components/oauth-preamble";
-import { fetchAuthCapabilitiesWithApi } from "../../../lib/auth-capabilities";
+import { AuthOAuthPreamble } from "@/features/auth/components/oauth-preamble";
+import { fetchAuthCapabilitiesWithApi } from "@/lib/auth-capabilities";
 import {
   getMcpAuthorizationSearch,
   toStringSearchParams,
-} from "../../../lib/mcp-auth-flow";
+} from "@/lib/mcp-auth-flow";
 
 export const Route = createFileRoute("/(oauth)/auth/outlook")({
   loader: async ({ context }) => {

@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { getMcpAuthorizationSearch } from "../../lib/mcp-auth-flow";
-import { resolveAuthRedirect } from "../../lib/route-access-guards";
+import { getMcpAuthorizationSearch } from "@/lib/mcp-auth-flow";
+import { resolveAuthRedirect } from "@/lib/route-access-guards";
 
 export const Route = createFileRoute("/(auth)")({
   beforeLoad: ({ context, search }) => {

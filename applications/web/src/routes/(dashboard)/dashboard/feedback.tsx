@@ -1,11 +1,11 @@
 import { useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { BackButton } from "../../../components/ui/primitives/back-button";
-import { DashboardSection } from "../../../components/ui/primitives/dashboard-heading";
-import { Text } from "../../../components/ui/primitives/text";
-import { Button, ButtonText, LinkButton } from "../../../components/ui/primitives/button";
-import { apiFetch } from "../../../lib/fetcher";
-import { resolveErrorMessage } from "../../../utils/errors";
+import { BackButton } from "@/components/ui/primitives/back-button";
+import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
+import { Text } from "@/components/ui/primitives/text";
+import { Button, ButtonText, LinkButton } from "@/components/ui/primitives/button";
+import { apiFetch } from "@/lib/fetcher";
+import { resolveErrorMessage } from "@/utils/errors";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/feedback")({
   component: FeedbackPage,

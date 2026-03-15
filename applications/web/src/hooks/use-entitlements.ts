@@ -1,6 +1,6 @@
 import { useMemo, useCallback } from "react";
 import useSWR, { useSWRConfig } from "swr";
-import { fetcher } from "../lib/fetcher";
+import { fetcher } from "@/lib/fetcher";
 import { useSubscription } from "./use-subscription";
 
 interface EntitlementLimit {

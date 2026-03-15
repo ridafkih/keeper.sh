@@ -1,19 +1,19 @@
 import type { ReactNode, SubmitEvent } from "react";
 import ArrowLeftRight from "lucide-react/dist/esm/icons/arrow-left-right";
 import Check from "lucide-react/dist/esm/icons/check";
-import KeeperLogo from "../../../assets/keeper.svg?react";
-import { authClient } from "../../../lib/auth-client";
+import KeeperLogo from "@/assets/keeper.svg?react";
+import { authClient } from "@/lib/auth-client";
 import {
   resolvePathWithSearch,
   resolveClientPostAuthRedirect,
   type StringSearchParams,
-} from "../../../lib/mcp-auth-flow";
-import { BackButton } from "../../../components/ui/primitives/back-button";
-import { Heading2 } from "../../../components/ui/primitives/heading";
-import { Text } from "../../../components/ui/primitives/text";
-import { ExternalTextLink } from "../../../components/ui/primitives/text-link";
-import { Divider } from "../../../components/ui/primitives/divider";
-import { Button, ButtonText } from "../../../components/ui/primitives/button";
+} from "@/lib/mcp-auth-flow";
+import { BackButton } from "@/components/ui/primitives/back-button";
+import { Heading2 } from "@/components/ui/primitives/heading";
+import { Text } from "@/components/ui/primitives/text";
+import { ExternalTextLink } from "@/components/ui/primitives/text-link";
+import { Divider } from "@/components/ui/primitives/divider";
+import { Button, ButtonText } from "@/components/ui/primitives/button";
 
 type Provider = "google" | "outlook" | "microsoft-365";
 

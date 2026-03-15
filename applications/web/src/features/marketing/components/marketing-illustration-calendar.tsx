@@ -1,9 +1,9 @@
 import { useAtomValue } from "jotai";
 import { LazyMotion } from "motion/react";
-import { loadMotionFeatures } from "../../../lib/motion-features";
+import { loadMotionFeatures } from "@/lib/motion-features";
 import * as m from "motion/react-m";
 import { memo, type PropsWithChildren } from "react";
-import { calendarEmphasizedAtom } from "../../../state/calendar-emphasized";
+import { calendarEmphasizedAtom } from "@/state/calendar-emphasized";
 
 export interface Skew {
   rotate: number;

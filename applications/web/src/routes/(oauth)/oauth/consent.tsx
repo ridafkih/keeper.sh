@@ -1,19 +1,19 @@
 import { useState } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
-import { Button, ButtonText } from "../../../components/ui/primitives/button";
-import { Divider } from "../../../components/ui/primitives/divider";
-import { Heading2 } from "../../../components/ui/primitives/heading";
-import { Text } from "../../../components/ui/primitives/text";
+import { Button, ButtonText } from "@/components/ui/primitives/button";
+import { Divider } from "@/components/ui/primitives/divider";
+import { Heading2 } from "@/components/ui/primitives/heading";
+import { Text } from "@/components/ui/primitives/text";
 import {
   PermissionsList,
   ProviderIconPair,
-} from "../../../features/auth/components/oauth-preamble";
+} from "@/features/auth/components/oauth-preamble";
 import {
   getMcpAuthorizationSearch,
   toStringSearchParams,
-} from "../../../lib/mcp-auth-flow";
-import { resolveErrorMessage } from "../../../utils/errors";
+} from "@/lib/mcp-auth-flow";
+import { resolveErrorMessage } from "@/utils/errors";
 
 type SearchParams = Record<string, string>;
 

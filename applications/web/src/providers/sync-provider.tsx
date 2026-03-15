@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useSetAtom } from "jotai";
-import { syncStateAtom, type CompositeSyncState } from "../state/sync";
+import { syncStateAtom, type CompositeSyncState } from "@/state/sync";
 import {
   parseIncomingSocketAction,
   shouldAcceptAggregatePayload,

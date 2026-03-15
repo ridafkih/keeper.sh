@@ -4,9 +4,9 @@ import {
   NavigationMenuItem,
   NavigationMenuLinkItem,
   NavigationMenuItemIcon,
-} from "../../../components/ui/composites/navigation-menu/navigation-menu-items";
-import { Text } from "../../../components/ui/primitives/text";
-import { cn } from "../../../utils/cn";
+} from "@/components/ui/composites/navigation-menu/navigation-menu-items";
+import { Text } from "@/components/ui/primitives/text";
+import { cn } from "@/utils/cn";
 
 interface MetadataRowProps {
   label: string;

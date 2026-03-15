@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import Check from "lucide-react/dist/esm/icons/check";
 import { tv } from "tailwind-variants/lite";
-import { cn } from "../../../utils/cn";
+import { cn } from "@/utils/cn";
 import { Text } from "./text";
 
 const checkboxIndicator = tv({

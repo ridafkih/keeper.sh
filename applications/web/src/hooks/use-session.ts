@@ -1,5 +1,5 @@
 import useSWR from "swr";
-import { authClient } from "../lib/auth-client";
+import { authClient } from "@/lib/auth-client";
 
 export interface SessionUser {
   id: string;

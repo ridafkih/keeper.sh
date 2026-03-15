@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parseHTML } from "linkedom";
-import type { AuthCapabilities } from "../../../lib/auth-capabilities";
+import type { AuthCapabilities } from "@/lib/auth-capabilities";
 import type { AuthScreenCopy } from "./auth-form";
 
 const passkeySignInMock = mock(() => Promise.resolve({ error: null }));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { CompositeSyncState, SyncAggregateData } from "../state/sync";
+import type { CompositeSyncState, SyncAggregateData } from "@/state/sync";
 import {
   parseIncomingSocketAction,
   shouldAcceptAggregatePayload,

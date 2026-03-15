@@ -5,23 +5,23 @@ import Copy from "lucide-react/dist/esm/icons/copy";
 import Gauge from "lucide-react/dist/esm/icons/gauge";
 import KeySquare from "lucide-react/dist/esm/icons/key-square";
 import Plus from "lucide-react/dist/esm/icons/plus";
-import { Button, ButtonIcon, ButtonText } from "../../../../components/ui/primitives/button";
-import { BackButton } from "../../../../components/ui/primitives/back-button";
-import { Input } from "../../../../components/ui/primitives/input";
+import { Button, ButtonIcon, ButtonText } from "@/components/ui/primitives/button";
+import { BackButton } from "@/components/ui/primitives/back-button";
+import { Input } from "@/components/ui/primitives/input";
 import {
   useApiTokens,
   createApiToken,
   deleteApiToken,
-} from "../../../../hooks/use-api-tokens";
-import type { ApiToken } from "../../../../hooks/use-api-tokens";
-import { useEntitlements } from "../../../../hooks/use-entitlements";
+} from "@/hooks/use-api-tokens";
+import type { ApiToken } from "@/hooks/use-api-tokens";
+import { useEntitlements } from "@/hooks/use-entitlements";
 import {
   Modal,
   ModalContent,
   ModalDescription,
   ModalFooter,
   ModalTitle,
-} from "../../../../components/ui/primitives/modal";
+} from "@/components/ui/primitives/modal";
 import {
   NavigationMenu,
   NavigationMenuButtonItem,
@@ -29,10 +29,10 @@ import {
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
   NavigationMenuItemTrailing,
-} from "../../../../components/ui/composites/navigation-menu/navigation-menu-items";
-import { ErrorState } from "../../../../components/ui/primitives/error-state";
-import { Text } from "../../../../components/ui/primitives/text";
-import { resolveErrorMessage } from "../../../../utils/errors";
+} from "@/components/ui/composites/navigation-menu/navigation-menu-items";
+import { ErrorState } from "@/components/ui/primitives/error-state";
+import { Text } from "@/components/ui/primitives/text";
+import { resolveErrorMessage } from "@/utils/errors";
 
 export const Route = createFileRoute(
   "/(dashboard)/dashboard/settings/api-tokens",

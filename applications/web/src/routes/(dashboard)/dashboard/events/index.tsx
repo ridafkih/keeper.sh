@@ -1,13 +1,13 @@
 import { useEffect, useRef, memo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
-import { BackButton } from "../../../../components/ui/primitives/back-button";
-import { ErrorState } from "../../../../components/ui/primitives/error-state";
-import { DashboardHeading1, DashboardHeading2 } from "../../../../components/ui/primitives/dashboard-heading";
-import { Text } from "../../../../components/ui/primitives/text";
-import { formatTime, formatTimeUntil, isEventPast, formatDayHeader } from "../../../../lib/time";
-import { useEvents, type CalendarEvent } from "../../../../hooks/use-events";
-import { cn } from "../../../../utils/cn";
+import { BackButton } from "@/components/ui/primitives/back-button";
+import { ErrorState } from "@/components/ui/primitives/error-state";
+import { DashboardHeading1, DashboardHeading2 } from "@/components/ui/primitives/dashboard-heading";
+import { Text } from "@/components/ui/primitives/text";
+import { formatTime, formatTimeUntil, isEventPast, formatDayHeader } from "@/lib/time";
+import { useEvents, type CalendarEvent } from "@/hooks/use-events";
+import { cn } from "@/utils/cn";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/events/")({
   component: EventsPage,

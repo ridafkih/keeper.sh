@@ -1,6 +1,6 @@
 import { atom } from "jotai";
 import { selectAtom } from "jotai/utils";
-import type { CalendarDetail } from "../types/api";
+import type { CalendarDetail } from "@/types/api";
 
 export const calendarDetailAtom = atom<CalendarDetail | null>(null);
 export const calendarDetailLoadedAtom = atom<string | false>(false);

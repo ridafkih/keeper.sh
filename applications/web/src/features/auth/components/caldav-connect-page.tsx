@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { Heading2 } from "../../../components/ui/primitives/heading";
-import { Text } from "../../../components/ui/primitives/text";
+import { Heading2 } from "@/components/ui/primitives/heading";
+import { Text } from "@/components/ui/primitives/text";
 import { ProviderIconPair } from "./oauth-preamble";
 import { CalDAVConnectForm, type CalDAVProvider } from "./caldav-connect-form";
 

@@ -1,11 +1,11 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { useLocation } from "@tanstack/react-router";
-import type { PublicRuntimeConfig } from "../lib/runtime-config";
+import type { PublicRuntimeConfig } from "@/lib/runtime-config";
 import {
   hasAnalyticsConsent,
   resolveAnalyticsConfig,
   track,
-} from "../lib/analytics";
+} from "@/lib/analytics";
 
 const subscribe = (callback: () => void): (() => void) => {
   window.addEventListener("storage", callback);

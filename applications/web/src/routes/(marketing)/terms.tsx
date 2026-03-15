@@ -1,9 +1,9 @@
 import type { PropsWithChildren } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Heading1, Heading2 } from "../../components/ui/primitives/heading";
-import { Text } from "../../components/ui/primitives/text";
-import { canonicalUrl, jsonLdMeta, seoMeta, webPageSchema, breadcrumbSchema } from "../../lib/seo";
-import { termsPageMetadata, formatMonthYear } from "../../lib/page-metadata";
+import { Heading1, Heading2 } from "@/components/ui/primitives/heading";
+import { Text } from "@/components/ui/primitives/text";
+import { canonicalUrl, jsonLdMeta, seoMeta, webPageSchema, breadcrumbSchema } from "@/lib/seo";
+import { termsPageMetadata, formatMonthYear } from "@/lib/page-metadata";
 
 export const Route = createFileRoute("/(marketing)/terms")({
   component: TermsPage,

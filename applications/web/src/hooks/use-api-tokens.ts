@@ -1,5 +1,5 @@
 import useSWR from "swr";
-import { fetcher, apiFetch } from "../lib/fetcher";
+import { fetcher, apiFetch } from "@/lib/fetcher";
 
 export interface ApiToken {
   id: string;

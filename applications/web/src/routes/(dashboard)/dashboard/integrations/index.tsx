@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { BackButton } from "../../../../components/ui/primitives/back-button";
-import { Heading2 } from "../../../../components/ui/primitives/heading";
-import { Text } from "../../../../components/ui/primitives/text";
+import { BackButton } from "@/components/ui/primitives/back-button";
+import { Heading2 } from "@/components/ui/primitives/heading";
+import { Text } from "@/components/ui/primitives/text";
 
 interface SearchParams {
   error?: string;

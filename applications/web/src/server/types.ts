@@ -1,5 +1,5 @@
 import type { Server as BunServer, ServerWebSocket as BunServerWebSocket } from "bun";
-import type { ViteAssets } from "../lib/router-context";
+import type { ViteAssets } from "@/lib/router-context";
 
 export interface Runtime {
   handleAssetRequest: (request: Request) => Promise<Response>;

@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import Mail from "lucide-react/dist/esm/icons/mail";
-import { forgotPassword } from "../../lib/auth";
-import { fetchAuthCapabilitiesWithApi } from "../../lib/auth-capabilities";
-import { resolveErrorMessage } from "../../utils/errors";
-import { Button, ButtonText } from "../../components/ui/primitives/button";
-import { Heading2 } from "../../components/ui/primitives/heading";
-import { Input } from "../../components/ui/primitives/input";
-import { Text } from "../../components/ui/primitives/text";
-import { TextLink } from "../../components/ui/primitives/text-link";
-import { AuthSwitchPrompt } from "../../features/auth/components/auth-switch-prompt";
+import { forgotPassword } from "@/lib/auth";
+import { fetchAuthCapabilitiesWithApi } from "@/lib/auth-capabilities";
+import { resolveErrorMessage } from "@/utils/errors";
+import { Button, ButtonText } from "@/components/ui/primitives/button";
+import { Heading2 } from "@/components/ui/primitives/heading";
+import { Input } from "@/components/ui/primitives/input";
+import { Text } from "@/components/ui/primitives/text";
+import { TextLink } from "@/components/ui/primitives/text-link";
+import { AuthSwitchPrompt } from "@/features/auth/components/auth-switch-prompt";
 
 export const Route = createFileRoute("/(auth)/forgot-password")({
   loader: async ({ context }) => {

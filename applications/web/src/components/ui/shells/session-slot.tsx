@@ -1,6 +1,6 @@
 import { type ReactNode, useSyncExternalStore } from "react";
 import { useRouteContext } from "@tanstack/react-router";
-import { hasSessionCookie } from "../../../lib/session-cookie";
+import { hasSessionCookie } from "@/lib/session-cookie";
 
 interface SessionSlotProps {
   authenticated: ReactNode;

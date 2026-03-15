@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { CompositeSyncState } from "../../../state/sync";
+import type { CompositeSyncState } from "@/state/sync";
 import { resolveSyncPercent } from "./sync-status-helpers";
 
 const createComposite = (

@@ -1,6 +1,6 @@
 import Calendar from "lucide-react/dist/esm/icons/calendar";
 import LinkIcon from "lucide-react/dist/esm/icons/link";
-import { providerIcons } from "../../../lib/providers";
+import { providerIcons } from "@/lib/providers";
 
 interface ProviderIconProps {
   provider?: string;

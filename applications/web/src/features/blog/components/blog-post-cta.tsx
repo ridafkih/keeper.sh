@@ -1,6 +1,6 @@
-import { ButtonText, LinkButton } from "../../../components/ui/primitives/button";
-import { Heading3 } from "../../../components/ui/primitives/heading";
-import { Text } from "../../../components/ui/primitives/text";
+import { ButtonText, LinkButton } from "@/components/ui/primitives/button";
+import { Heading3 } from "@/components/ui/primitives/heading";
+import { Text } from "@/components/ui/primitives/text";
 
 export function BlogPostCta() {
   return (

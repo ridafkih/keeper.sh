@@ -1,16 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import Calendar from "lucide-react/dist/esm/icons/calendar";
 import LinkIcon from "lucide-react/dist/esm/icons/link";
-import { BackButton } from "../../../../components/ui/primitives/back-button";
-import { PremiumFeatureGate } from "../../../../components/ui/primitives/upgrade-hint";
-import { useEntitlements, canAddMore } from "../../../../hooks/use-entitlements";
+import { BackButton } from "@/components/ui/primitives/back-button";
+import { PremiumFeatureGate } from "@/components/ui/primitives/upgrade-hint";
+import { useEntitlements, canAddMore } from "@/hooks/use-entitlements";
 import {
   NavigationMenu,
   NavigationMenuLinkItem,
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
   NavigationMenuItemTrailing,
-} from "../../../../components/ui/composites/navigation-menu/navigation-menu-items";
+} from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/connect/")({
   component: ConnectPage,

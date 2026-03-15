@@ -1,7 +1,7 @@
 import type { PropsWithChildren } from "react";
 import { Link } from "@tanstack/react-router";
-import { LayoutRow } from "../../../components/ui/shells/layout";
-import { StaggeredBackdropBlur } from "../../../components/ui/primitives/staggered-backdrop-blur";
+import { LayoutRow } from "@/components/ui/shells/layout";
+import { StaggeredBackdropBlur } from "@/components/ui/primitives/staggered-backdrop-blur";
 
 export function MarketingHeader({ children }: PropsWithChildren) {
   return (

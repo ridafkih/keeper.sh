@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { resolveDashboardRedirect } from "../../../lib/route-access-guards";
+import { resolveDashboardRedirect } from "@/lib/route-access-guards";
 
 export const Route = createFileRoute("/(oauth)/dashboard")({
   beforeLoad: ({ context }) => {

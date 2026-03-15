@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useSession } from "../../hooks/use-session";
-import { Text } from "../../components/ui/primitives/text";
+import { useSession } from "@/hooks/use-session";
+import { Text } from "@/components/ui/primitives/text";
 
 export const Route = createFileRoute("/(auth)/verify-authentication")({
   component: VerifyAuthenticationPage,

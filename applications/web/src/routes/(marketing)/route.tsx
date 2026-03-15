@@ -3,12 +3,12 @@ import { jsonLdMeta, organizationSchema } from '../../lib/seo'
 import { Layout, LayoutItem } from '../../components/ui/shells/layout'
 import { MarketingHeader, MarketingHeaderActions, MarketingHeaderBranding } from '../../features/marketing/components/marketing-header'
 import { MarketingFooter, MarketingFooterTagline, MarketingFooterNav, MarketingFooterNavGroup, MarketingFooterNavGroupLabel, MarketingFooterNavItem } from '../../features/marketing/components/marketing-footer'
-import KeeperLogo from "../../assets/keeper.svg?react";
+import KeeperLogo from "@/assets/keeper.svg?react";
 import { ButtonText, LinkButton } from '../../components/ui/primitives/button';
 import { GithubStarButton } from '../../components/ui/primitives/github-star-button';
 import { SessionSlot } from '../../components/ui/shells/session-slot';
 import HeartIcon from "lucide-react/dist/esm/icons/heart";
-import { ExternalTextLink } from "../../components/ui/primitives/text-link";
+import { ExternalTextLink } from "@/components/ui/primitives/text-link";
 
 interface GithubStarsLoaderData {
   count: number | null;

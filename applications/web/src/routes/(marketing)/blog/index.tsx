@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Heading1, Heading3 } from "../../../components/ui/primitives/heading";
-import { Text } from "../../../components/ui/primitives/text";
-import { blogPosts, formatIsoDate } from "../../../lib/blog-posts";
-import { canonicalUrl, jsonLdMeta, seoMeta, breadcrumbSchema, collectionPageSchema } from "../../../lib/seo";
+import { Heading1, Heading3 } from "@/components/ui/primitives/heading";
+import { Text } from "@/components/ui/primitives/text";
+import { blogPosts, formatIsoDate } from "@/lib/blog-posts";
+import { canonicalUrl, jsonLdMeta, seoMeta, breadcrumbSchema, collectionPageSchema } from "@/lib/seo";
 
 const BLOG_ILLUSTRATION_STYLE = {
   backgroundImage:
