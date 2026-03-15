@@ -63,7 +63,10 @@ describe("executeRemoteOperations", () => {
 
     const outcome = await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider);
 
-    expect(outcome).not.toBeNull();
+    if (outcome === null) {
+      throw new Error("Expected outcome to not be null");
+    }
+
     expect(outcome.result.removed).toBe(1);
     expect(outcome.result.removeFailed).toBe(0);
     expect(outcome.changes.deletes).toHaveLength(1);

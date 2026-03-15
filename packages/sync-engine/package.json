@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./index.ts"
+    ".": "./index.ts",
+    "./generation": "./generation.ts",
+    "./flush": "./flush.ts"
   },
   "scripts": {
     "types": "tsc --noEmit",
@@ -13,8 +15,7 @@
   "dependencies": {
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/calendar": "workspace:*",
-    "drizzle-orm": "^0.45.1",
-    "ioredis": "^5.10.0"
+    "drizzle-orm": "^0.45.1"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",

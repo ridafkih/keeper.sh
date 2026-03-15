@@ -82,7 +82,6 @@ export {
 } from "./core/source/write-event-states";
 export { syncDestinationsForUser, type DestinationProvider } from "./core/sync/destinations";
 export { computeSyncOperations } from "./core/sync/operations";
-export type { SyncOperation } from "./core/types";
 export {
   createSyncCoordinator,
   type SyncContext,
@@ -153,6 +152,7 @@ export type {
   SourceEvent,
   SourceSyncResult,
   OAuthSourceConfig,
+  SyncOperation,
 } from "./core/types";
 
 export {
