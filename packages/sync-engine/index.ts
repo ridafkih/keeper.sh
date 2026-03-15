@@ -89,6 +89,9 @@ const executeRemoteOperations = async (
         }
         break;
       }
+      default: {
+        break;
+      }
     }
   }
 

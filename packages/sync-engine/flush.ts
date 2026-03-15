@@ -3,8 +3,8 @@ import { eventMappingsTable } from "@keeper.sh/database/schema";
 import { inArray } from "drizzle-orm";
 import type { PendingChanges } from "./types";
 
-const createDatabaseFlush = (database: BunSQLDatabase): (changes: PendingChanges) => Promise<void> => {
-  return async (changes: PendingChanges): Promise<void> => {
+const createDatabaseFlush = (database: BunSQLDatabase): (changes: PendingChanges) => Promise<void> =>
+  async (changes: PendingChanges): Promise<void> => {
     if (changes.inserts.length === 0 && changes.deletes.length === 0) {
       return;
     }
@@ -29,6 +29,5 @@ const createDatabaseFlush = (database: BunSQLDatabase): (changes: PendingChanges
       }
     });
   };
-};
 
 export { createDatabaseFlush };
