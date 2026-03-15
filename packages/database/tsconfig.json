@@ -1,5 +1,5 @@
 {
   "extends": "@keeper.sh/typescript-config",
-  "include": ["src/**/*", "scripts/**/*", "drizzle.config.ts"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules"]
 }

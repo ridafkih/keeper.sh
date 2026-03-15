@@ -8,7 +8,7 @@ import {
   KEEPER_API_SCOPES,
   KEEPER_API_SOURCE_SCOPE,
   KEEPER_API_SYNC_SCOPE,
-} from "@keeper.sh/keeper-api/scopes";
+} from "@keeper.sh/constants";
 
 const KEEPER_MCP_OAUTH_SCOPES = [
   "openid",

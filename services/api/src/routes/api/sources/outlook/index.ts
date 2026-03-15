@@ -1,0 +1,61 @@
+import { createOAuthSourceSchema } from "@keeper.sh/data-schemas";
+import { HTTP_STATUS } from "@keeper.sh/constants";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { respondWithLoggedError } from "@/utils/logging";
+import { ErrorResponse } from "@/utils/responses";
+import {
+  OAuthSourceLimitError,
+  DestinationNotFoundError,
+  DestinationProviderMismatchError,
+  DuplicateSourceError,
+  getUserOAuthSources,
+  createOAuthSource,
+} from "@/utils/oauth-sources";
+
+const OUTLOOK_PROVIDER = "outlook";
+
+const GET = withWideEvent(
+  withAuth(async ({ userId }) => {
+    const sources = await getUserOAuthSources(userId, OUTLOOK_PROVIDER);
+    return Response.json(sources);
+  }),
+);
+
+const POST = withWideEvent(
+  withAuth(async ({ request, userId }) => {
+    const body = await request.json();
+
+    try {
+      const { externalCalendarId, name, oauthSourceCredentialId } =
+        createOAuthSourceSchema.assert(body);
+      const source = await createOAuthSource({
+        externalCalendarId,
+        name,
+        oauthCredentialId: oauthSourceCredentialId ?? "",
+        provider: OUTLOOK_PROVIDER,
+        userId,
+      });
+      return Response.json(source, { status: HTTP_STATUS.CREATED });
+    } catch (error) {
+      if (error instanceof OAuthSourceLimitError) {
+        return respondWithLoggedError(error, ErrorResponse.paymentRequired(error.message).toResponse());
+      }
+      if (error instanceof DestinationNotFoundError) {
+        return respondWithLoggedError(error, ErrorResponse.notFound(error.message).toResponse());
+      }
+      if (error instanceof DestinationProviderMismatchError) {
+        return respondWithLoggedError(error, ErrorResponse.badRequest(error.message).toResponse());
+      }
+      if (error instanceof DuplicateSourceError) {
+        return respondWithLoggedError(
+          error,
+          Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT }),
+        );
+      }
+
+      return respondWithLoggedError(error, ErrorResponse.badRequest("Invalid request body").toResponse());
+    }
+  }),
+);
+
+export { GET, POST };

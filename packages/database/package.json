@@ -12,11 +12,14 @@
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
     "types": "tsc --noEmit",
+    "test": "bun test",
     "lint": "oxlint ."
   },
   "dependencies": {
     "drizzle-orm": "0.45.1",
-    "pg": "8.16.3"
+    "pg": "8.16.3",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",

@@ -19,13 +19,13 @@ jobs:
         arch: [amd64, arm64]
         package:
           - name: api
-            dockerfile: applications/api/Dockerfile
+            dockerfile: services/api/Dockerfile
           - name: cron
-            dockerfile: applications/cron/Dockerfile
+            dockerfile: services/cron/Dockerfile
           - name: mcp
-            dockerfile: applications/mcp/Dockerfile
+            dockerfile: services/mcp/Dockerfile
           - name: web
-            dockerfile: packages/web/Dockerfile
+            dockerfile: applications/web/Dockerfile
         include:
           - arch: amd64
             runner: ubuntu-24.04

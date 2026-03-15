@@ -25,6 +25,12 @@
     "migrate": {
       "cache": false
     },
+    "test": {
+      "cache": false
+    },
+    "test": {
+      "cache": false
+    },
     "lint": {
       "inputs": ["src/**", ".oxlintrc.json", "../../.oxlintrc.json"],
       "cache": true

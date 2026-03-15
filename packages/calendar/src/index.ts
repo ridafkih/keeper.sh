@@ -1,4 +1,5 @@
 export * from "./types";
+export * from "./date-utils";
 export { pullRemoteCalendar, CalendarFetchError } from "./utils/pull-remote-calendar";
 export { parseIcsEvents } from "./utils/parse-ics-events";
 export { parseIcsCalendar } from "./utils/parse-ics-calendar";

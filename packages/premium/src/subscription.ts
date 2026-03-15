@@ -6,9 +6,9 @@ import {
   FREE_MAPPING_LIMIT,
   PRO_ACCOUNT_LIMIT,
   PRO_MAPPING_LIMIT,
-  planSchema,
 } from "./constants";
-import type { Plan } from "./constants";
+import { planSchema } from "@keeper.sh/data-schemas";
+import type { Plan } from "@keeper.sh/data-schemas";
 
 const FIRST_RESULT_LIMIT = 1;
 

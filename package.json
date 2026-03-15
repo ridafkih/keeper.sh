@@ -19,6 +19,7 @@
     "types": "turbo run types --parallel",
     "build": "turbo run build",
     "start": "turbo run start",
+    "test": "turbo run test",
     "lint": "turbo run lint",
     "unused": "knip"
   },
@@ -26,7 +27,8 @@
   "workspaces": {
     "packages": [
       "packages/*",
-      "applications/*"
+      "applications/*",
+      "services/*"
     ]
   }
 }
