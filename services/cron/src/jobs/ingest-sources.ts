@@ -40,13 +40,22 @@ const REDIS_MAX_RETRIES = 3;
 const withTimeout = <TResult>(
   operation: () => Promise<TResult>,
   timeoutMs: number,
-): Promise<TResult> =>
-  Promise.race([
+): Promise<TResult> => {
+  let timer: Timer | undefined;
+
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`Source ingestion timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  return Promise.race([
     Promise.resolve().then(operation),
-    Bun.sleep(timeoutMs).then((): never => {
-      throw new Error(`Source ingestion timed out after ${timeoutMs}ms`);
-    }),
-  ]);
+    timeoutPromise,
+  ]).finally(() => {
+    clearTimeout(timer);
+  });
+};
 
 const createIngestionFlush = (calendarId: string) =>
   async (changes: IngestionChanges): Promise<void> => {
@@ -307,6 +316,7 @@ const ingestIcsSources = async (): Promise<{ succeeded: number; failed: number }
       succeeded += 1;
     } else {
       failed += 1;
+      widelog.errorFields(result.reason, { prefix: "ingest.ics" });
     }
   }
 

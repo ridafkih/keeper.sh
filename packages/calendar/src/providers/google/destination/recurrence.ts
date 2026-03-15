@@ -1,7 +1,7 @@
 import type { SyncableEvent } from "../../../core/types";
 
 const formatByDayValue = (value: { day: string; occurrence?: number }): string => {
-  if (value.occurrence) {
+  if (value.occurrence !== undefined) {
     return `${value.occurrence}${value.day}`;
   }
   return value.day;

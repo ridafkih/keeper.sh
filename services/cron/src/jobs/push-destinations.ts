@@ -8,6 +8,7 @@ import {
   createDatabaseFlush,
   createGoogleOAuthService,
   createMicrosoftOAuthService,
+  allSettledWithConcurrency,
 } from "@keeper.sh/calendar";
 import type { CalendarSyncProvider, PendingChanges } from "@keeper.sh/calendar";
 import { createGoogleSyncProvider } from "@keeper.sh/calendar/google";
@@ -29,6 +30,7 @@ import { getUsersWithDestinationsByPlan } from "@/utils/get-sources";
 import env from "@/env";
 
 const USER_TIMEOUT_MS = 300_000;
+const USER_CONCURRENCY = 5;
 const REDIS_COMMAND_TIMEOUT_MS = 10_000;
 const REDIS_MAX_RETRIES = 3;
 
@@ -39,13 +41,22 @@ const withTimeout = <TResult>(
   operation: () => Promise<TResult>,
   timeoutMs: number,
   label: string,
-): Promise<TResult> =>
-  Promise.race([
+): Promise<TResult> => {
+  let timer: Timer | undefined;
+
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  return Promise.race([
     Promise.resolve().then(operation),
-    Bun.sleep(timeoutMs).then((): never => {
-      throw new Error(`${label} timed out after ${timeoutMs}ms`);
-    }),
-  ]);
+    timeoutPromise,
+  ]).finally(() => {
+    clearTimeout(timer);
+  });
+};
 
 const resolveOAuthProvider = async (
   provider: string,
@@ -246,14 +257,15 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
     let usersFailed = 0;
     const allSyncEvents: Record<string, unknown>[] = [];
 
-    const settlements = await Promise.allSettled(
-      usersWithDestinations.map((userId) =>
+    const settlements = await allSettledWithConcurrency(
+      usersWithDestinations.map((userId) => () =>
         withTimeout(
           () => syncDestinationsForUser(userId, redis, flush),
           USER_TIMEOUT_MS,
           `push:user:${userId}`,
         ),
       ),
+      { concurrency: USER_CONCURRENCY },
     );
 
     for (const settlement of settlements) {

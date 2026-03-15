@@ -5,7 +5,7 @@ import { injectJobs } from "./utils/inject-jobs";
 import { registerJobs } from "./utils/register-jobs";
 import { closeDatabase } from "@keeper.sh/database";
 import { widelog, destroyWideLogger, runCronWideEventContext } from "./utils/logging";
-import { database } from "./context";
+import { database, shutdownRefreshLockRedis } from "./context";
 import env from "./env";
 
 const jobsFolderPathname = join(import.meta.dirname, "jobs");
@@ -30,6 +30,7 @@ await entry({
           widelog.set("status_code", 200);
 
           return () => {
+            shutdownRefreshLockRedis();
             closeDatabase(database);
             destroyWideLogger();
           };

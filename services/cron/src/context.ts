@@ -31,6 +31,10 @@ const refreshLockRedis = new Redis(env.REDIS_URL, {
 
 const refreshLockStore = createRedisRefreshLockStore(refreshLockRedis);
 
+const shutdownRefreshLockRedis = (): void => {
+  refreshLockRedis.disconnect();
+};
+
 const createPolarClient = (): Polar | null => {
   if (env.POLAR_ACCESS_TOKEN && env.POLAR_MODE) {
     return new Polar({
@@ -43,4 +47,4 @@ const createPolarClient = (): Polar | null => {
 
 const polarClient = createPolarClient();
 
-export { database, premiumService, polarClient, refreshLockStore };
+export { database, premiumService, polarClient, refreshLockStore, shutdownRefreshLockRedis };

@@ -35,7 +35,7 @@ const processAddOperation = async (
 
 const processRemoveOperation = async (
   operation: Extract<SyncOperation, { type: "remove" }>,
-  existingMappings: EventMapping[],
+  mappingsByDestinationUid: Map<string, EventMapping>,
   provider: CalendarSyncProvider,
 ): Promise<{ success: boolean; mappingId: string | null }> => {
   const [deleteResult] = await provider.deleteEvents([operation.deleteId]);
@@ -44,9 +44,7 @@ const processRemoveOperation = async (
     return { success: false, mappingId: null };
   }
 
-  const mapping = existingMappings.find(
-    (existingMapping) => existingMapping.destinationEventUid === operation.uid,
-  );
+  const mapping = mappingsByDestinationUid.get(operation.uid);
 
   return { success: true, mappingId: mapping?.id ?? null };
 };
@@ -58,6 +56,11 @@ const executeRemoteOperations = async (
   provider: CalendarSyncProvider,
   isCurrent?: () => Promise<boolean>,
 ): Promise<{ changes: PendingChanges; result: SyncResult } | null> => {
+  const mappingsByDestinationUid = new Map<string, EventMapping>();
+  for (const mapping of existingMappings) {
+    mappingsByDestinationUid.set(mapping.destinationEventUid, mapping);
+  }
+
   const changes: PendingChanges = { inserts: [], deletes: [] };
   let added = 0;
   let addFailed = 0;
@@ -87,7 +90,7 @@ const executeRemoteOperations = async (
         break;
       }
       case "remove": {
-        const outcome = await processRemoveOperation(operation, existingMappings, provider);
+        const outcome = await processRemoveOperation(operation, mappingsByDestinationUid, provider);
         if (outcome.success) {
           removed += 1;
           if (outcome.mappingId) {
