@@ -13,19 +13,19 @@ FROM base AS build
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile
 COPY --from=prune /app/out/full/ .
-RUN bun run --cwd applications/api build
+RUN bun run --cwd services/api build
 
 FROM base AS runtime
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile --production
-COPY --from=build /app/applications/api/dist ./applications/api/dist
+COPY --from=build /app/services/api/dist ./services/api/dist
 COPY --from=build /app/packages/database/src ./packages/database/src
 COPY --from=source /app/packages/database/scripts ./packages/database/scripts
 COPY --from=source /app/packages/database/drizzle ./packages/database/drizzle
-COPY --from=source /app/applications/api/entrypoint.sh ./applications/api/entrypoint.sh
-RUN chmod +x ./applications/api/entrypoint.sh
+COPY --from=source /app/services/api/entrypoint.sh ./services/api/entrypoint.sh
+RUN chmod +x ./services/api/entrypoint.sh
 
 ENV DEV=production
 EXPOSE 3001
 
-ENTRYPOINT ["./applications/api/entrypoint.sh"]
+ENTRYPOINT ["./services/api/entrypoint.sh"]

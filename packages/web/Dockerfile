@@ -13,15 +13,15 @@ FROM base AS build
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile
 COPY --from=prune /app/out/full/ .
-RUN bun run --cwd applications/canary-web build
+RUN bun run --cwd applications/web build
 
 FROM base AS runtime
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile --production
-COPY --from=build /app/applications/canary-web/dist ./applications/canary-web/dist
-COPY --from=build /app/applications/canary-web/public ./applications/canary-web/public
+COPY --from=build /app/applications/web/dist ./applications/web/dist
+COPY --from=build /app/applications/web/public ./applications/web/public
 
-WORKDIR /app/applications/canary-web
+WORKDIR /app/applications/web
 
 ENV ENV=production
 EXPOSE 3000

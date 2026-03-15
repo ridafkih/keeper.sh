@@ -2,4 +2,4 @@
 set -e
 
 bun /app/packages/database/scripts/migrate.ts
-exec bun applications/api/dist/index.js
+exec bun services/api/dist/index.js

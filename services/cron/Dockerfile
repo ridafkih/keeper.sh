@@ -13,15 +13,15 @@ FROM base AS build
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile
 COPY --from=prune /app/out/full/ .
-RUN bun run --cwd applications/cron build
+RUN bun run --cwd services/cron build
 
 FROM base AS runtime
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile --production
-COPY --from=build /app/applications/cron/dist ./applications/cron/dist
-COPY --from=source /app/applications/cron/entrypoint.sh ./applications/cron/entrypoint.sh
-RUN chmod +x ./applications/cron/entrypoint.sh
+COPY --from=build /app/services/cron/dist ./services/cron/dist
+COPY --from=source /app/services/cron/entrypoint.sh ./services/cron/entrypoint.sh
+RUN chmod +x ./services/cron/entrypoint.sh
 
 ENV ENV=production
 
-ENTRYPOINT ["./applications/cron/entrypoint.sh"]
+ENTRYPOINT ["./services/cron/entrypoint.sh"]

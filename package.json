@@ -26,7 +26,8 @@
   "workspaces": {
     "packages": [
       "packages/*",
-      "applications/*"
+      "applications/*",
+      "services/*"
     ]
   }
 }

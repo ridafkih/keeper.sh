@@ -13,16 +13,16 @@ FROM base AS build
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile
 COPY --from=prune /app/out/full/ .
-RUN bun run --cwd applications/mcp build
+RUN bun run --cwd services/mcp build
 
 FROM base AS runtime
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile --production
-COPY --from=build /app/applications/mcp/dist ./applications/mcp/dist
-COPY --from=source /app/applications/mcp/entrypoint.sh ./applications/mcp/entrypoint.sh
-RUN chmod +x ./applications/mcp/entrypoint.sh
+COPY --from=build /app/services/mcp/dist ./services/mcp/dist
+COPY --from=source /app/services/mcp/entrypoint.sh ./services/mcp/entrypoint.sh
+RUN chmod +x ./services/mcp/entrypoint.sh
 
 ENV ENV=production
 EXPOSE 3002
 
-ENTRYPOINT ["./applications/mcp/entrypoint.sh"]
+ENTRYPOINT ["./services/mcp/entrypoint.sh"]

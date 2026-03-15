@@ -2,8 +2,8 @@
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "ignore": [
     "**/*.css",
-    "applications/cron/src/jobs/**/*",
-    "applications/canary-web/src/generated/**/*"
+    "services/cron/src/jobs/**/*",
+    "applications/web/src/generated/**/*"
   ],
   "ignoreBinaries": [],
   "ignoreDependencies": [],
@@ -18,22 +18,26 @@
       "entry": ["src/{index.ts,main.tsx,server.tsx,**/*.test.ts,**/*.test.tsx}"],
       "project": "src/**/*.{ts,tsx}"
     },
-    "applications/api": {
-      "entry": ["src/routes/**/*.ts", "src/**/*.test.ts"],
-      "project": "src/**/*.{ts,tsx}"
-    },
-    "applications/cron": {
-      "entry": ["src/jobs/*.ts", "src/**/*.test.ts"],
-      "project": "src/**/*.{ts,tsx}"
-    },
-    "applications/mcp": {
-      "entry": ["src/routes/**/*.ts", "src/**/*.test.ts"],
-      "project": "src/**/*.{ts,tsx}"
-    },
-    "applications/canary-web": {
+    "applications/web": {
       "entry": ["src/main.tsx", "src/server.tsx", "plugins/**/*.ts", "scripts/**/*.ts", "src/**/*.test.ts", "src/**/*.test.tsx"],
       "project": ["src/**/*.{ts,tsx}", "plugins/**/*.ts", "scripts/**/*.ts"],
       "ignoreDependencies": ["@babel/preset-typescript"]
+    },
+    "services/*": {
+      "entry": ["src/{index.ts,**/*.test.ts}"],
+      "project": "src/**/*.{ts,tsx}"
+    },
+    "services/api": {
+      "entry": ["src/routes/**/*.ts", "src/**/*.test.ts"],
+      "project": "src/**/*.{ts,tsx}"
+    },
+    "services/cron": {
+      "entry": ["src/jobs/*.ts", "src/**/*.test.ts"],
+      "project": "src/**/*.{ts,tsx}"
+    },
+    "services/mcp": {
+      "entry": ["src/routes/**/*.ts", "src/**/*.test.ts"],
+      "project": "src/**/*.{ts,tsx}"
     }
   }
 }

@@ -15,9 +15,9 @@ FROM base AS build
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile
 COPY --from=prune /app/out/full/ .
-RUN bun run --cwd applications/api build && \
-    bun run --cwd applications/cron build && \
-    bun run --cwd applications/canary-web build
+RUN bun run --cwd services/api build && \
+    bun run --cwd services/cron build && \
+    bun run --cwd applications/web build
 
 FROM debian:bookworm-slim AS runtime
 
@@ -50,13 +50,13 @@ WORKDIR /app
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile --production
 
-COPY --from=build /app/applications/api/dist ./applications/api/dist
-COPY --from=build /app/applications/cron/dist ./applications/cron/dist
+COPY --from=build /app/services/api/dist ./services/api/dist
+COPY --from=build /app/services/cron/dist ./services/cron/dist
 COPY --from=build /app/packages/database/src ./packages/database/src
 COPY --from=source /app/packages/database/scripts ./packages/database/scripts
 COPY --from=source /app/packages/database/drizzle ./packages/database/drizzle
 
-COPY --from=build /app/applications/canary-web/dist ./applications/canary-web/dist
+COPY --from=build /app/applications/web/dist ./applications/web/dist
 
 COPY docker/services/rootfs /
 

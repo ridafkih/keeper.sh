@@ -2,4 +2,4 @@
 exec 2>&1
 
 cd /app
-exec /root/.bun/bin/bun run applications/cron/dist/index.js
+exec /root/.bun/bin/bun run services/cron/dist/index.js
