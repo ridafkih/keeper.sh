@@ -14,7 +14,7 @@ const createFallbackPayload = (): SyncAggregateFallbackPayload => ({
 });
 
 describe("resolveSyncAggregatePayload", () => {
-  it("prefers live current aggregate even when cache exists", async () => {
+  it("prefers cached aggregate from Redis as cross-process source of truth", async () => {
     const fallbackPayload = createFallbackPayload();
 
     const resolvedPayload = await resolveSyncAggregatePayload("user-1", fallbackPayload, {
@@ -38,12 +38,13 @@ describe("resolveSyncAggregatePayload", () => {
     });
 
     expect(resolvedPayload).toEqual({
-      progressPercent: 40,
-      seq: 6,
-      syncEventsProcessed: 4,
-      syncEventsRemaining: 6,
+      progressPercent: 100,
+      seq: 5,
+      syncEventsProcessed: 10,
+      syncEventsRemaining: 0,
       syncEventsTotal: 10,
-      syncing: true,
+      syncing: false,
+      lastSyncedAt: "2026-03-08T10:00:00.000Z",
     });
   });
 
@@ -81,7 +82,7 @@ describe("resolveSyncAggregatePayload", () => {
     });
   });
 
-  it("ignores cached syncing aggregate when current state is idle", async () => {
+  it("returns cached syncing aggregate so reconnecting users see active progress", async () => {
     const fallbackPayload = createFallbackPayload();
 
     const resolvedPayload = await resolveSyncAggregatePayload("user-1", fallbackPayload, {
@@ -105,12 +106,13 @@ describe("resolveSyncAggregatePayload", () => {
     });
 
     expect(resolvedPayload).toEqual({
-      progressPercent: 100,
-      seq: 7028,
-      syncEventsProcessed: 0,
-      syncEventsRemaining: 0,
-      syncEventsTotal: 0,
-      syncing: false,
+      progressPercent: 1.6,
+      seq: 7027,
+      syncEventsProcessed: 47,
+      syncEventsRemaining: 2890,
+      syncEventsTotal: 2937,
+      syncing: true,
+      lastSyncedAt: "2026-03-08T10:00:00.000Z",
     });
   });
 
@@ -169,7 +171,7 @@ describe("resolveSyncAggregatePayload", () => {
     expect(resolvedPayload.lastSyncedAt).toBe("2026-03-08T11:00:00.000Z");
   });
 
-  it("prefers current aggregate when remaining events are positive", async () => {
+  it("returns cached aggregate even when in-memory has remaining events", async () => {
     const fallbackPayload = createFallbackPayload();
 
     const resolvedPayload = await resolveSyncAggregatePayload("user-1", fallbackPayload, {
@@ -193,12 +195,13 @@ describe("resolveSyncAggregatePayload", () => {
     });
 
     expect(resolvedPayload).toEqual({
-      progressPercent: 30,
-      seq: 13,
-      syncEventsProcessed: 3,
-      syncEventsRemaining: 7,
+      progressPercent: 60,
+      seq: 12,
+      syncEventsProcessed: 6,
+      syncEventsRemaining: 4,
       syncEventsTotal: 10,
       syncing: false,
+      lastSyncedAt: "2026-03-08T10:00:00.000Z",
     });
   });
 });

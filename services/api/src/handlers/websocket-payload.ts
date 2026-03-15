@@ -21,31 +21,20 @@ interface ResolveSyncAggregateDependencies {
   isValidSyncAggregate: (value: unknown) => value is SyncAggregatePayload;
 }
 
-const INITIAL_COUNT = 0;
-
 const resolveSyncAggregatePayload = async (
   userId: string,
   fallback: SyncAggregateFallbackPayload,
   dependencies: ResolveSyncAggregateDependencies,
 ): Promise<SyncAggregatePayload> => {
-  const current = dependencies.getCurrentSyncAggregate(userId, fallback);
-  const hasLiveCurrent = current.syncing || current.syncEventsRemaining > INITIAL_COUNT;
-  if (hasLiveCurrent) {
-    return current;
-  }
-
   const cached = await dependencies.getCachedSyncAggregate(userId);
-  if (!cached || !dependencies.isValidSyncAggregate(cached)) {
-    return current;
-  }
-  if (cached.syncing) {
-    return current;
+  if (cached && dependencies.isValidSyncAggregate(cached)) {
+    return {
+      ...cached,
+      ...(!("lastSyncedAt" in cached) && { lastSyncedAt: fallback.lastSyncedAt }),
+    };
   }
 
-  return {
-    ...cached,
-    ...(!("lastSyncedAt" in cached) && { lastSyncedAt: fallback.lastSyncedAt }),
-  };
+  return dependencies.getCurrentSyncAggregate(userId, fallback);
 };
 
 export { resolveSyncAggregatePayload };
