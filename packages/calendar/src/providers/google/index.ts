@@ -1,4 +1,4 @@
-// Source exports
+export { createGoogleSourceFetcher, type GoogleSourceFetcherConfig } from "./source/fetch-adapter";
 export { listUserCalendars, CalendarListError } from "./source/utils/list-calendars";
 export {
   fetchCalendarEvents,
