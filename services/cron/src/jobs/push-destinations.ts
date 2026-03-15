@@ -9,7 +9,7 @@ import { syncStatusTable } from "@keeper.sh/database/schema";
 import Redis from "ioredis";
 import { setCronEventFields, withCronWideEvent } from "@/utils/with-wide-event";
 import { widelog } from "@/utils/logging";
-import { database } from "@/context";
+import { database, refreshLockRedis } from "@/context";
 import { getUsersWithDestinationsByPlan } from "@/utils/get-sources";
 import env from "@/env";
 
@@ -42,7 +42,7 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
     maxRetriesPerRequest: REDIS_MAX_RETRIES,
   });
 
-  const broadcastService = createBroadcastService({ redis });
+  const broadcastService = createBroadcastService({ redis: refreshLockRedis });
 
   const persistSyncStatus = async (result: DestinationSyncResult, syncedAt: Date): Promise<void> => {
     await database
@@ -68,7 +68,7 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
       broadcastService.emit(userId, eventName, payload);
     },
     persistSyncStatus,
-    redis,
+    redis: refreshLockRedis,
   });
 
   const syncConfig: SyncConfig = {
