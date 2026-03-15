@@ -38,7 +38,7 @@ const createGoogleSourceFetcher = (config: GoogleSourceFetcherConfig): GoogleSou
     const result = await fetchCalendarEvents(fetchOptions);
 
     if (result.fullSyncRequired) {
-      return { events: [] };
+      return { events: [], fullSyncRequired: true };
     }
 
     const events = parseGoogleEvents(result.events);

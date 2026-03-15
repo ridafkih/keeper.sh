@@ -39,7 +39,7 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
     const result = await fetchCalendarEvents(fetchOptions);
 
     if (result.fullSyncRequired) {
-      return { events: [] };
+      return { events: [], fullSyncRequired: true };
     }
 
     const events = parseOutlookEvents(result.events);

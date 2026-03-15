@@ -16,16 +16,18 @@ const createDatabaseFlush = (database: BunSQLDatabase): (changes: PendingChanges
           .where(inArray(eventMappingsTable.id, changes.deletes));
       }
 
-      for (const insert of changes.inserts) {
-        await transaction.insert(eventMappingsTable).values({
-          eventStateId: insert.eventStateId,
-          calendarId: insert.calendarId,
-          destinationEventUid: insert.destinationEventUid,
-          deleteIdentifier: insert.deleteIdentifier,
-          syncEventHash: insert.syncEventHash,
-          startTime: insert.startTime,
-          endTime: insert.endTime,
-        });
+      if (changes.inserts.length > 0) {
+        await transaction.insert(eventMappingsTable).values(
+          changes.inserts.map((insert) => ({
+            eventStateId: insert.eventStateId,
+            calendarId: insert.calendarId,
+            destinationEventUid: insert.destinationEventUid,
+            deleteIdentifier: insert.deleteIdentifier,
+            syncEventHash: insert.syncEventHash,
+            startTime: insert.startTime,
+            endTime: insert.endTime,
+          })),
+        );
       }
     });
   };

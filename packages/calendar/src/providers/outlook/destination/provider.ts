@@ -13,6 +13,8 @@ import{ OAuthCalendarProvider } from "../../../core/oauth/provider";
 import{ createOAuthDestinationProvider } from "../../../core/oauth/create-provider";
 import{ getErrorMessage } from "../../../core/utils/error";
 import{ getOAuthSyncWindowStart } from "../../../core/oauth/sync-window";
+import { ensureValidToken } from "../../../core/oauth/ensure-valid-token";
+import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-valid-token";
 import { widelog } from "widelogger";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { MICROSOFT_GRAPH_API, OUTLOOK_PAGE_SIZE } from "../shared/api";
@@ -243,15 +245,29 @@ interface OutlookSyncProviderConfig {
   accessTokenExpiresAt: Date;
   calendarId: string;
   userId: string;
+  refreshAccessToken?: TokenRefresher;
 }
 
 const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
+  const tokenState: TokenState = {
+    accessToken: config.accessToken,
+    accessTokenExpiresAt: config.accessTokenExpiresAt,
+    refreshToken: config.refreshToken,
+  };
+
+  const refreshIfNeeded = async (): Promise<void> => {
+    if (config.refreshAccessToken) {
+      await ensureValidToken(tokenState, config.refreshAccessToken);
+    }
+  };
+
   const getHeaders = (): Record<string, string> => ({
-    Authorization: `Bearer ${config.accessToken}`,
+    Authorization: `Bearer ${tokenState.accessToken}`,
     "Content-Type": "application/json",
   });
 
   const pushEvents = async (events: SyncableEvent[]): Promise<PushResult[]> => {
+    await refreshIfNeeded();
     const results: PushResult[] = [];
 
     for (const event of events) {
@@ -284,6 +300,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
   };
 
   const deleteEvents = async (eventIds: string[]): Promise<DeleteResult[]> => {
+    await refreshIfNeeded();
     const results: DeleteResult[] = [];
 
     for (const eventId of eventIds) {
@@ -291,7 +308,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
         const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${eventId}`);
 
         const response = await fetch(url, {
-          headers: { Authorization: `Bearer ${config.accessToken}` },
+          headers: { Authorization: `Bearer ${tokenState.accessToken}` },
           method: "DELETE",
         });
 
@@ -331,6 +348,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
   };
 
   const listRemoteEvents = async (): Promise<RemoteEvent[]> => {
+    await refreshIfNeeded();
     const remoteEvents: RemoteEvent[] = [];
     let nextLink: string | null = null;
     const lookbackStart = getOAuthSyncWindowStart();
@@ -341,7 +359,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       const url = buildOutlookEventsUrl(lookbackStart, futureDate, nextLink);
 
       const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${config.accessToken}` },
+        headers: { Authorization: `Bearer ${tokenState.accessToken}` },
         method: "GET",
       });
 

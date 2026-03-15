@@ -90,6 +90,21 @@ describe("executeRemoteOperations", () => {
     expect(outcome.changes.inserts).toHaveLength(0);
   });
 
+  it("treats success without remoteId as a skip, not a failure", async () => {
+    const event = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
+    const operations: SyncOperation[] = [{ type: "add", event }];
+    const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true }]) });
+
+    const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider);
+    if (!isDefined(outcome)) {
+      throw new Error("expected outcome");
+    }
+
+    expect(outcome.result.added).toBe(0);
+    expect(outcome.result.addFailed).toBe(0);
+    expect(outcome.changes.inserts).toHaveLength(0);
+  });
+
   it("counts failed deletes without accumulating changes", async () => {
     const mapping = makeMapping("map-1", "ev-1", "remote-1");
     const operations: SyncOperation[] = [{ type: "remove", uid: "remote-1", deleteId: "remote-1", startTime: new Date("2026-03-15T09:00:00Z") }];
@@ -401,6 +416,25 @@ describe("createRedisGenerationCheck", () => {
     counter += 1;
     expect(await isCurrent()).toBe(false);
   });
+
+  it("sets a TTL on the generation key", async () => {
+    const { createRedisGenerationCheck, GENERATION_TTL_SECONDS } = await import("./generation");
+    type GenerationStore = Parameters<typeof createRedisGenerationCheck>[0];
+
+    let counter = 0;
+    const expireCalls: { key: string; seconds: number }[] = [];
+    const store: GenerationStore = {
+      incr: () => { counter += 1; return Promise.resolve(counter); },
+      get: () => Promise.resolve(String(counter)),
+      expire: (key, seconds) => { expireCalls.push({ key, seconds }); return Promise.resolve(1); },
+    };
+
+    await createRedisGenerationCheck(store, "cal-1");
+
+    expect(expireCalls).toHaveLength(1);
+    expect(expireCalls[0]?.key).toBe("sync:gen:cal-1");
+    expect(expireCalls[0]?.seconds).toBe(GENERATION_TTL_SECONDS);
+  });
 });
 
 describe("createDatabaseFlush", () => {
@@ -487,5 +521,46 @@ describe("createDatabaseFlush", () => {
     await flush({ inserts: [], deletes: [] });
 
     expect(transactionCalled).toBe(false);
+  });
+
+  it("calls insert once for multiple inserts using bulk values", async () => {
+    const { createDatabaseFlush } = await import("./flush");
+    let insertCallCount = 0;
+    let valuesReceived: unknown[] = [];
+
+    const fakeDatabase = {
+      transaction: (callback: (tx: unknown) => Promise<void>) => {
+        const tx = {
+          insert: () => {
+            insertCallCount += 1;
+            return {
+              values: (rows: unknown[]) => { valuesReceived = rows; return Promise.resolve(); },
+            };
+          },
+          delete: () => ({ where: () => Promise.resolve() }),
+        };
+        return callback(tx);
+      },
+    };
+
+    const flush = createDatabaseFlush(fakeDatabase as never);
+    await flush({
+      inserts: [
+        {
+          eventStateId: "ev-1", calendarId: "cal-1", destinationEventUid: "remote-1",
+          deleteIdentifier: "remote-1", syncEventHash: null,
+          startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
+        },
+        {
+          eventStateId: "ev-2", calendarId: "cal-1", destinationEventUid: "remote-2",
+          deleteIdentifier: "remote-2", syncEventHash: null,
+          startTime: new Date("2026-03-16T09:00:00Z"), endTime: new Date("2026-03-16T10:00:00Z"),
+        },
+      ],
+      deletes: [],
+    });
+
+    expect(insertCallCount).toBe(1);
+    expect(valuesReceived).toHaveLength(2);
   });
 });

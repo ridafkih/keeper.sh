@@ -7,15 +7,20 @@ const processAddOperation = async (
   operation: Extract<SyncOperation, { type: "add" }>,
   calendarId: string,
   provider: CalendarSyncProvider,
-): Promise<{ success: boolean; insert: PendingInsert | null }> => {
+): Promise<{ success: boolean; skipped: boolean; insert: PendingInsert | null }> => {
   const [pushResult] = await provider.pushEvents([operation.event]);
 
-  if (!pushResult?.success || !pushResult.remoteId) {
-    return { success: false, insert: null };
+  if (!pushResult?.success) {
+    return { success: false, skipped: false, insert: null };
+  }
+
+  if (!pushResult.remoteId) {
+    return { success: true, skipped: true, insert: null };
   }
 
   return {
     success: true,
+    skipped: false,
     insert: {
       eventStateId: operation.event.id,
       calendarId,
@@ -70,6 +75,9 @@ const executeRemoteOperations = async (
     switch (operation.type) {
       case "add": {
         const outcome = await processAddOperation(operation, calendarId, provider);
+        if (outcome.skipped) {
+          break;
+        }
         if (outcome.success && outcome.insert) {
           added += 1;
           changes.inserts.push(outcome.insert);

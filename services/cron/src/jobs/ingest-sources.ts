@@ -83,7 +83,7 @@ const createIngestionFlush = (calendarId: string) =>
         );
       }
 
-      if (changes.syncToken) {
+      if ("syncToken" in changes) {
         await transaction
           .update(calendarsTable)
           .set({ syncToken: changes.syncToken })
@@ -125,7 +125,13 @@ const resolveOAuthFetcher = (
   return null;
 };
 
-const ingestOAuthSources = async (redis: Redis): Promise<{ added: number; removed: number; errors: number }> => {
+interface IngestionSourceResult {
+  eventsAdded: number;
+  eventsRemoved: number;
+  ingestEvents: Record<string, unknown>[];
+}
+
+const ingestOAuthSources = async (redis: Redis): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
   const oauthSources = await database
     .select({
       calendarId: calendarsTable.id,
@@ -144,12 +150,13 @@ const ingestOAuthSources = async (redis: Redis): Promise<{ added: number; remove
   let added = 0;
   let removed = 0;
   let errors = 0;
+  const allIngestEvents: Record<string, unknown>[] = [];
 
   const settlements = await Promise.allSettled(
     oauthSources.map((source) =>
-      withTimeout(async () => {
+      withTimeout(async (): Promise<IngestionSourceResult> => {
         if (!source.externalCalendarId) {
-          return { eventsAdded: 0, eventsRemoved: 0 };
+          return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
         }
 
         const resolvedFetcher = resolveOAuthFetcher(source.provider, {
@@ -159,10 +166,11 @@ const ingestOAuthSources = async (redis: Redis): Promise<{ added: number; remove
         });
 
         if (!resolvedFetcher) {
-          return { eventsAdded: 0, eventsRemoved: 0 };
+          return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
         }
 
         const fetcher = resolvedFetcher;
+        const ingestEvents: Record<string, unknown>[] = [];
 
         const isCurrent = await createRedisGenerationCheck(redis, source.calendarId);
 
@@ -173,14 +181,14 @@ const ingestOAuthSources = async (redis: Redis): Promise<{ added: number; remove
           isCurrent,
           flush: createIngestionFlush(source.calendarId),
           onIngestEvent: (event) => {
-            widelog.setFields({
+            ingestEvents.push({
               ...event,
               "source.provider": source.provider,
             });
           },
         });
 
-        return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved };
+        return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
       }, SOURCE_TIMEOUT_MS),
     ),
   );
@@ -189,18 +197,19 @@ const ingestOAuthSources = async (redis: Redis): Promise<{ added: number; remove
     if (settlement.status === "fulfilled") {
       added += settlement.value.eventsAdded;
       removed += settlement.value.eventsRemoved;
+      allIngestEvents.push(...settlement.value.ingestEvents);
     } else {
       errors += 1;
       widelog.errorFields(settlement.reason, { prefix: "ingest.oauth" });
     }
   }
 
-  return { added, removed, errors };
+  return { added, removed, errors, ingestEvents: allIngestEvents };
 };
 
-const ingestCalDAVSources = async (redis: Redis): Promise<{ added: number; removed: number; errors: number }> => {
+const ingestCalDAVSources = async (redis: Redis): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
   if (!env.ENCRYPTION_KEY) {
-    return { added: 0, removed: 0, errors: 0 };
+    return { added: 0, removed: 0, errors: 0, ingestEvents: [] };
   }
 
   const encryptionKey = env.ENCRYPTION_KEY;
@@ -222,10 +231,11 @@ const ingestCalDAVSources = async (redis: Redis): Promise<{ added: number; remov
   let added = 0;
   let removed = 0;
   let errors = 0;
+  const allIngestEvents: Record<string, unknown>[] = [];
 
   const settlements = await Promise.allSettled(
     caldavSources.map((source) =>
-      withTimeout(async () => {
+      withTimeout(async (): Promise<IngestionSourceResult> => {
         const password = decryptPassword(source.encryptedPassword, encryptionKey);
 
         const fetcher = createCalDAVSourceFetcher({
@@ -235,6 +245,7 @@ const ingestCalDAVSources = async (redis: Redis): Promise<{ added: number; remov
           password,
         });
 
+        const ingestEvents: Record<string, unknown>[] = [];
         const isCurrent = await createRedisGenerationCheck(redis, source.calendarId);
 
         const result = await ingestSource({
@@ -244,14 +255,14 @@ const ingestCalDAVSources = async (redis: Redis): Promise<{ added: number; remov
           isCurrent,
           flush: createIngestionFlush(source.calendarId),
           onIngestEvent: (event) => {
-            widelog.setFields({
+            ingestEvents.push({
               ...event,
               "source.provider": source.provider,
             });
           },
         });
 
-        return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved };
+        return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
       }, SOURCE_TIMEOUT_MS),
     ),
   );
@@ -260,13 +271,14 @@ const ingestCalDAVSources = async (redis: Redis): Promise<{ added: number; remov
     if (settlement.status === "fulfilled") {
       added += settlement.value.eventsAdded;
       removed += settlement.value.eventsRemoved;
+      allIngestEvents.push(...settlement.value.ingestEvents);
     } else {
       errors += 1;
       widelog.errorFields(settlement.reason, { prefix: "ingest.caldav" });
     }
   }
 
-  return { added, removed, errors };
+  return { added, removed, errors, ingestEvents: allIngestEvents };
 };
 
 const ingestIcsSources = async (): Promise<{ succeeded: number; failed: number }> => {
@@ -327,9 +339,11 @@ export default withCronWideEvent({
         ingestIcsSources(),
       ]);
 
-      const oauth = extractSettledResult(oauthSettlement, { added: 0, removed: 0, errors: 1 }, "ingest.oauth");
-      const caldav = extractSettledResult(caldavSettlement, { added: 0, removed: 0, errors: 1 }, "ingest.caldav");
+      const oauth = extractSettledResult(oauthSettlement, { added: 0, removed: 0, errors: 1, ingestEvents: [] }, "ingest.oauth");
+      const caldav = extractSettledResult(caldavSettlement, { added: 0, removed: 0, errors: 1, ingestEvents: [] }, "ingest.caldav");
       const ics = extractSettledResult(icsSettlement, { succeeded: 0, failed: 1 }, "ingest.ics");
+
+      const allIngestEvents = [...oauth.ingestEvents, ...caldav.ingestEvents];
 
       setCronEventFields({
         "oauth.events.added": oauth.added,
@@ -340,6 +354,7 @@ export default withCronWideEvent({
         "caldav.errors": caldav.errors,
         "ics.succeeded": ics.succeeded,
         "ics.failed": ics.failed,
+        "ingest_events": allIngestEvents,
       });
     } finally {
       redis.disconnect();

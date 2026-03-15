@@ -3,6 +3,8 @@ import{ createOAuthDestinationProvider } from "../../../core/oauth/create-provid
 import{ generateEventUid, isKeeperEvent } from "../../../core/events/identity";
 import{ getErrorMessage } from "../../../core/utils/error";
 import{ getOAuthSyncWindowStart } from "../../../core/oauth/sync-window";
+import { ensureValidToken } from "../../../core/oauth/ensure-valid-token";
+import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-valid-token";
 import type{ BroadcastSyncStatus, DeleteResult, GoogleCalendarConfig, ListRemoteEventsOptions, PushResult, RemoteEvent, SyncableEvent } from "../../../core/types";
 import type{ DestinationProvider } from "../../../core/sync/destinations";
 import type{ OAuthTokenProvider } from "../../../core/oauth/provider";
@@ -407,10 +409,29 @@ interface GoogleSyncProviderConfig {
   externalCalendarId: string;
   calendarId: string;
   userId: string;
+  refreshAccessToken?: TokenRefresher;
 }
 
 const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
+  const tokenState: TokenState = {
+    accessToken: config.accessToken,
+    accessTokenExpiresAt: config.accessTokenExpiresAt,
+    refreshToken: config.refreshToken,
+  };
+
+  const refreshIfNeeded = async (): Promise<void> => {
+    if (config.refreshAccessToken) {
+      await ensureValidToken(tokenState, config.refreshAccessToken);
+    }
+  };
+
+  const getAuthHeaders = (): Record<string, string> => ({
+    Authorization: `Bearer ${tokenState.accessToken}`,
+    "Content-Type": "application/json",
+  });
+
   const pushEvents = async (events: SyncableEvent[]): Promise<PushResult[]> => {
+    await refreshIfNeeded();
     const results: PushResult[] = [];
 
     for (const event of events) {
@@ -433,10 +454,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
 
       const response = await fetch(url, {
         body: JSON.stringify(resource),
-        headers: {
-          Authorization: `Bearer ${config.accessToken}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         method: "POST",
       });
 
@@ -455,6 +473,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   };
 
   const deleteEvents = async (eventIds: string[]): Promise<DeleteResult[]> => {
+    await refreshIfNeeded();
     const results: DeleteResult[] = [];
 
     for (const uid of eventIds) {
@@ -465,7 +484,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       findUrl.searchParams.set("iCalUID", uid);
 
       const findResponse = await fetch(findUrl, {
-        headers: { Authorization: `Bearer ${config.accessToken}` },
+        headers: { Authorization: `Bearer ${tokenState.accessToken}` },
         method: "GET",
       });
 
@@ -490,7 +509,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       );
 
       const deleteResponse = await fetch(deleteUrl, {
-        headers: { Authorization: `Bearer ${config.accessToken}` },
+        headers: { Authorization: `Bearer ${tokenState.accessToken}` },
         method: "DELETE",
       });
 
@@ -509,6 +528,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   };
 
   const listRemoteEvents = async (): Promise<RemoteEvent[]> => {
+    await refreshIfNeeded();
     const remoteEvents: RemoteEvent[] = [];
     let pageToken: string | null = null;
     const lookbackStart = getOAuthSyncWindowStart();
@@ -528,7 +548,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       }
 
       const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${config.accessToken}` },
+        headers: { Authorization: `Bearer ${tokenState.accessToken}` },
         method: "GET",
       });
 

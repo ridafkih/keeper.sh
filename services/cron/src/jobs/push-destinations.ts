@@ -6,6 +6,8 @@ import {
   syncCalendar,
   createRedisGenerationCheck,
   createDatabaseFlush,
+  createGoogleOAuthService,
+  createMicrosoftOAuthService,
 } from "@keeper.sh/calendar";
 import type { CalendarSyncProvider, PendingChanges } from "@keeper.sh/calendar";
 import { createGoogleSyncProvider } from "@keeper.sh/calendar/google";
@@ -67,6 +69,10 @@ const resolveOAuthProvider = async (
   }
 
   if (provider === "google" && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
+    const googleOAuth = createGoogleOAuthService({
+      clientId: env.GOOGLE_CLIENT_ID,
+      clientSecret: env.GOOGLE_CLIENT_SECRET,
+    });
     return createGoogleSyncProvider({
       accessToken: oauthCred.accessToken,
       refreshToken: oauthCred.refreshToken,
@@ -74,16 +80,22 @@ const resolveOAuthProvider = async (
       externalCalendarId: "primary",
       calendarId,
       userId,
+      refreshAccessToken: (refreshToken) => googleOAuth.refreshAccessToken(refreshToken),
     });
   }
 
   if (provider === "outlook" && env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET) {
+    const microsoftOAuth = createMicrosoftOAuthService({
+      clientId: env.MICROSOFT_CLIENT_ID,
+      clientSecret: env.MICROSOFT_CLIENT_SECRET,
+    });
     return createOutlookSyncProvider({
       accessToken: oauthCred.accessToken,
       refreshToken: oauthCred.refreshToken,
       accessTokenExpiresAt: oauthCred.expiresAt,
       calendarId,
       userId,
+      refreshAccessToken: (refreshToken) => microsoftOAuth.refreshAccessToken(refreshToken),
     });
   }
 
@@ -121,11 +133,19 @@ const resolveCalDAVProvider = async (
   });
 };
 
+interface UserSyncResult {
+  added: number;
+  addFailed: number;
+  removed: number;
+  removeFailed: number;
+  syncEvents: Record<string, unknown>[];
+}
+
 const syncDestinationsForUser = async (
   userId: string,
   redis: Redis,
   flush: (changes: PendingChanges) => Promise<void>,
-): Promise<{ added: number; addFailed: number; removed: number; removeFailed: number }> => {
+): Promise<UserSyncResult> => {
   const destinations = await database
     .select({
       calendarId: calendarsTable.id,
@@ -146,6 +166,7 @@ const syncDestinationsForUser = async (
   let addFailed = 0;
   let removed = 0;
   let removeFailed = 0;
+  const syncEvents: Record<string, unknown>[] = [];
 
   for (const destination of destinations) {
     let syncProvider: CalendarSyncProvider | null = null;
@@ -181,7 +202,7 @@ const syncDestinationsForUser = async (
       isCurrent,
       flush,
       onSyncEvent: (event) => {
-        widelog.setFields({
+        syncEvents.push({
           ...event,
           "destination.provider": destination.provider,
           "user.id": destination.userId,
@@ -195,7 +216,7 @@ const syncDestinationsForUser = async (
     removeFailed += result.removeFailed;
   }
 
-  return { added, addFailed, removed, removeFailed };
+  return { added, addFailed, removed, removeFailed, syncEvents };
 };
 
 const runEgressJob = async (plan: Plan): Promise<void> => {
@@ -223,17 +244,12 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
     let totalRemoved = 0;
     let totalRemoveFailed = 0;
     let usersFailed = 0;
+    const allSyncEvents: Record<string, unknown>[] = [];
 
     const settlements = await Promise.allSettled(
       usersWithDestinations.map((userId) =>
         withTimeout(
-          async () => {
-            const result = await syncDestinationsForUser(userId, redis, flush);
-            totalAdded += result.added;
-            totalAddFailed += result.addFailed;
-            totalRemoved += result.removed;
-            totalRemoveFailed += result.removeFailed;
-          },
+          () => syncDestinationsForUser(userId, redis, flush),
           USER_TIMEOUT_MS,
           `push:user:${userId}`,
         ),
@@ -241,7 +257,13 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
     );
 
     for (const settlement of settlements) {
-      if (settlement.status === "rejected") {
+      if (settlement.status === "fulfilled") {
+        totalAdded += settlement.value.added;
+        totalAddFailed += settlement.value.addFailed;
+        totalRemoved += settlement.value.removed;
+        totalRemoveFailed += settlement.value.removeFailed;
+        allSyncEvents.push(...settlement.value.syncEvents);
+      } else {
         usersFailed += 1;
         widelog.errorFields(settlement.reason, { prefix: "push.user" });
       }
@@ -253,6 +275,7 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
       "events.removed": totalRemoved,
       "events.remove_failed": totalRemoveFailed,
       "user.failed": usersFailed,
+      "sync_events": allSyncEvents,
     });
   } finally {
     redis.disconnect();

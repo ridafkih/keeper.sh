@@ -16,12 +16,13 @@ interface FetchEventsResult {
   nextSyncToken?: string;
   cancelledEventUids?: string[];
   isDeltaSync?: boolean;
+  fullSyncRequired?: boolean;
 }
 
 interface IngestionChanges {
   inserts: SourceEvent[];
   deletes: string[];
-  syncToken?: string;
+  syncToken?: string | null;
 }
 
 interface IngestSourceOptions {
@@ -50,6 +51,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
   };
 
   const startTime = Date.now();
+  let flushed = false;
 
   try {
     const [fetchResult, existingEvents] = await Promise.all([
@@ -59,6 +61,14 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
 
     wideEvent["source_events.count"] = fetchResult.events.length;
     wideEvent["existing_events.count"] = existingEvents.length;
+
+    if (fetchResult.fullSyncRequired) {
+      wideEvent["outcome"] = "full-sync-required";
+      wideEvent["flushed"] = true;
+      await flush({ inserts: [], deletes: [], syncToken: null });
+      flushed = true;
+      return EMPTY_RESULT;
+    }
 
     const stillCurrent = await isCurrent();
     if (!stillCurrent) {
@@ -102,6 +112,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       syncToken: fetchResult.nextSyncToken,
     });
 
+    flushed = true;
     wideEvent["outcome"] = "success";
     wideEvent["flushed"] = true;
 
@@ -111,6 +122,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     };
   } catch (error) {
     wideEvent["outcome"] = "error";
+    wideEvent["flushed"] = flushed;
 
     if (error instanceof Error) {
       wideEvent["error.message"] = error.message;
