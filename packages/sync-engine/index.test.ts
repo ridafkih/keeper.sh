@@ -240,3 +240,104 @@ describe("executeRemoteOperations", () => {
     expect(outcome!.changes.inserts).toHaveLength(2);
   });
 });
+
+describe("syncCalendar", () => {
+  it("pushes new events and returns accumulated results without flushing until the end", async () => {
+    const { syncCalendar } = await import("./index");
+
+    const localEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
+
+    const provider = {
+      pushEvents: async (): Promise<PushResult[]> => [{ success: true, remoteId: "remote-1" }],
+      deleteEvents: async (): Promise<DeleteResult[]> => [],
+      listRemoteEvents: async () => [],
+    };
+
+    let flushedChanges: import("./types").PendingChanges | null = null;
+
+    const result = await syncCalendar({
+      calendarId: "dest-cal-1",
+      provider,
+      readState: async () => ({
+        localEvents: [localEvent],
+        existingMappings: [],
+        remoteEvents: [],
+      }),
+      isCurrent: async () => true,
+      flush: async (changes) => {
+        flushedChanges = changes;
+      },
+    });
+
+    expect(result.added).toBe(1);
+    expect(result.addFailed).toBe(0);
+    expect(flushedChanges).not.toBeNull();
+    expect(flushedChanges!.inserts).toHaveLength(1);
+    expect(flushedChanges!.inserts[0]!.destinationEventUid).toBe("remote-1");
+  });
+
+  it("does not flush when generation becomes stale before flush", async () => {
+    const { syncCalendar } = await import("./index");
+
+    const localEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
+
+    const provider = {
+      pushEvents: async (): Promise<PushResult[]> => [{ success: true, remoteId: "remote-1" }],
+      deleteEvents: async (): Promise<DeleteResult[]> => [],
+      listRemoteEvents: async () => [],
+    };
+
+    let flushCalled = false;
+    let checkCount = 0;
+
+    const result = await syncCalendar({
+      calendarId: "dest-cal-1",
+      provider,
+      readState: async () => ({
+        localEvents: [localEvent],
+        existingMappings: [],
+        remoteEvents: [],
+      }),
+      isCurrent: async () => {
+        checkCount += 1;
+        return checkCount <= 2;
+      },
+      flush: async () => {
+        flushCalled = true;
+      },
+    });
+
+    expect(result.added).toBe(0);
+    expect(flushCalled).toBe(false);
+  });
+
+  it("returns empty result when there are no operations", async () => {
+    const { syncCalendar } = await import("./index");
+
+    const provider = {
+      pushEvents: async (): Promise<PushResult[]> => [],
+      deleteEvents: async (): Promise<DeleteResult[]> => [],
+      listRemoteEvents: async () => [],
+    };
+
+    let flushCalled = false;
+
+    const result = await syncCalendar({
+      calendarId: "dest-cal-1",
+      provider,
+      readState: async () => ({
+        localEvents: [],
+        existingMappings: [],
+        remoteEvents: [],
+      }),
+      isCurrent: async () => true,
+      flush: async () => {
+        flushCalled = true;
+      },
+    });
+
+    expect(result.added).toBe(0);
+    expect(result.removed).toBe(0);
+    expect(flushCalled).toBe(false);
+  });
+});
