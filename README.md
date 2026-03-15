@@ -1,4 +1,4 @@
-![](./applications/canary-web/public/open-graph.png)
+![](./applications/web/public/open-graph.png)
 
 # About
 
