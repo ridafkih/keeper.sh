@@ -189,17 +189,6 @@
         "typescript": "5.9.3",
       },
     },
-    "packages/broadcast-client": {
-      "name": "@keeper.sh/broadcast-client",
-      "dependencies": {
-        "@keeper.sh/constants": "workspace:*",
-        "@keeper.sh/data-schemas": "workspace:*",
-      },
-      "devDependencies": {
-        "@keeper.sh/typescript-config": "workspace:*",
-        "typescript": "5.9.3",
-      },
-    },
     "packages/calendar": {
       "name": "@keeper.sh/calendar",
       "dependencies": {
@@ -485,43 +474,6 @@
         "typescript": "5.9.3",
       },
     },
-    "packages/pull-calendar": {
-      "name": "@keeper.sh/pull-calendar",
-      "dependencies": {
-        "@keeper.sh/calendar": "workspace:*",
-      },
-      "devDependencies": {
-        "@keeper.sh/typescript-config": "workspace:*",
-        "@types/bun": "latest",
-        "typescript": "5.9.3",
-      },
-    },
-    "packages/sync-calendar": {
-      "name": "@keeper.sh/sync-calendar",
-      "dependencies": {
-        "@keeper.sh/calendar": "workspace:*",
-        "@keeper.sh/database": "workspace:*",
-        "@keeper.sh/pull-calendar": "workspace:*",
-        "@keeper.sh/sync-events": "workspace:*",
-        "drizzle-orm": "0.45.1",
-      },
-      "devDependencies": {
-        "@keeper.sh/typescript-config": "workspace:*",
-        "@types/bun": "latest",
-        "typescript": "5.9.3",
-      },
-    },
-    "packages/sync-events": {
-      "name": "@keeper.sh/sync-events",
-      "dependencies": {
-        "@keeper.sh/calendar": "workspace:*",
-      },
-      "devDependencies": {
-        "@keeper.sh/typescript-config": "workspace:*",
-        "@types/bun": "latest",
-        "typescript": "5.9.3",
-      },
-    },
     "packages/typescript-config": {
       "name": "@keeper.sh/typescript-config",
       "devDependencies": {
@@ -757,8 +709,6 @@
 
     "@keeper.sh/broadcast": ["@keeper.sh/broadcast@workspace:packages/broadcast"],
 
-    "@keeper.sh/broadcast-client": ["@keeper.sh/broadcast-client@workspace:packages/broadcast-client"],
-
     "@keeper.sh/calendar": ["@keeper.sh/calendar@workspace:packages/calendar"],
 
     "@keeper.sh/constants": ["@keeper.sh/constants@workspace:packages/constants"],
@@ -802,12 +752,6 @@
     "@keeper.sh/provider-outlook": ["@keeper.sh/provider-outlook@workspace:packages/provider-outlook"],
 
     "@keeper.sh/provider-registry": ["@keeper.sh/provider-registry@workspace:packages/provider-registry"],
-
-    "@keeper.sh/pull-calendar": ["@keeper.sh/pull-calendar@workspace:packages/pull-calendar"],
-
-    "@keeper.sh/sync-calendar": ["@keeper.sh/sync-calendar@workspace:packages/sync-calendar"],
-
-    "@keeper.sh/sync-events": ["@keeper.sh/sync-events@workspace:packages/sync-events"],
 
     "@keeper.sh/typescript-config": ["@keeper.sh/typescript-config@workspace:packages/typescript-config"],
 
