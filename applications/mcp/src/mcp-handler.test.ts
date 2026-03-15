@@ -2,19 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { createKeeperMcpHandler } from "./mcp-handler";
 import { createKeeperMcpToolset } from "./toolset";
 
-const toolset = createKeeperMcpToolset({
-  getEventCount: () => Promise.resolve(0),
-  getEvent: () => Promise.resolve(null),
-  getEventsInRange: () => Promise.resolve([]),
-  getSyncStatuses: () => Promise.resolve([]),
-  listDestinations: () => Promise.resolve([]),
-  listMappings: () => Promise.resolve([]),
-  listSources: () => Promise.resolve([]),
-  createEvent: () => Promise.resolve({ success: false, error: "not implemented" }),
-  updateEvent: () => Promise.resolve({ success: false, error: "not implemented" }),
-  deleteEvent: () => Promise.resolve({ success: false, error: "not implemented" }),
-  rsvpEvent: () => Promise.resolve({ success: false, error: "not implemented" }),
-});
+const toolset = createKeeperMcpToolset();
 
 describe("createKeeperMcpHandler", () => {
   it("returns protected-resource metadata when authentication is missing", async () => {
@@ -25,6 +13,7 @@ describe("createKeeperMcpHandler", () => {
         },
       },
       mcpPublicUrl: "https://mcp.keeper.sh",
+      apiBaseUrl: "https://keeper.sh",
       toolset,
     });
 
@@ -56,6 +45,7 @@ describe("createKeeperMcpHandler", () => {
         },
       },
       mcpPublicUrl: "https://mcp.keeper.sh",
+      apiBaseUrl: "https://keeper.sh",
       toolset,
     });
 
@@ -82,6 +72,7 @@ describe("createKeeperMcpHandler", () => {
         },
       },
       mcpPublicUrl: "https://mcp.keeper.sh",
+      apiBaseUrl: "https://keeper.sh",
       toolset,
     });
 
@@ -94,6 +85,7 @@ describe("createKeeperMcpHandler", () => {
         }),
         headers: {
           "Content-Type": "application/json",
+          "Authorization": "Bearer test-token",
         },
         method: "POST",
       }),
@@ -115,6 +107,7 @@ describe("createKeeperMcpHandler", () => {
         },
       },
       mcpPublicUrl: "https://mcp.keeper.sh",
+      apiBaseUrl: "https://keeper.sh",
       toolset,
     });
 
@@ -138,6 +131,7 @@ describe("createKeeperMcpHandler", () => {
         },
       },
       mcpPublicUrl: "https://mcp.keeper.sh",
+      apiBaseUrl: "https://keeper.sh",
       toolset,
     });
 

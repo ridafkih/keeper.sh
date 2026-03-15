@@ -1,36 +1,41 @@
 import { userEventsTable } from "@keeper.sh/database/schema";
 import { eq } from "drizzle-orm";
-import type { KeeperDatabase, KeeperEvent } from "../types";
+import type { KeeperDatabase } from "../types";
 import type {
   EventInput,
   EventUpdateInput,
   EventActionResult,
   EventCreateResult,
+  PendingInvite,
+  ProviderCredentials,
   RsvpStatus,
 } from "../mutation-types";
-import { resolveCredentialsByCalendarId, resolveCredentialsByUserEventId } from "./resolve-credentials";
+import { resolveCredentialsByCalendarId, resolveCredentialsByEventId } from "./resolve-credentials";
 import { getEvent } from "../queries/get-event";
 import {
   createGoogleEvent,
   updateGoogleEvent,
   deleteGoogleEvent,
   rsvpGoogleEvent,
+  getPendingGoogleInvites,
 } from "./providers/google";
 import {
   createOutlookEvent,
   updateOutlookEvent,
   deleteOutlookEvent,
   rsvpOutlookEvent,
+  getPendingOutlookInvites,
 } from "./providers/outlook";
 import {
   createCalDAVEvent,
   updateCalDAVEvent,
   deleteCalDAVEvent,
   rsvpCalDAVEvent,
+  getPendingCalDAVInvites,
 } from "./providers/caldav";
 
 interface OAuthTokenRefresher {
-  getProvider: (providerId: string) => { refreshAccessToken: (refreshToken: string) => Promise<{ access_token: string; expires_in: number }> } | undefined;
+  getProvider: (providerId: string) => { refreshAccessToken: (refreshToken: string) => Promise<{ access_token: string; expires_in: number }> } | null;
 }
 
 interface MutationDependencies {
@@ -65,6 +70,95 @@ const ensureValidAccessToken = async (
   return result.access_token;
 };
 
+interface CreateProviderFailure {
+  success: false;
+  error: string;
+}
+
+interface CreateProviderSuccess {
+  success: true;
+  sourceEventUid: string | null;
+}
+
+type CreateProviderResult = CreateProviderFailure | CreateProviderSuccess;
+
+const createEventViaOAuth = async (
+  credentials: ProviderCredentials,
+  input: EventInput,
+  deps: MutationDependencies,
+): Promise<CreateProviderResult> => {
+  if (!credentials.oauth) {
+    return { success: false, error: "No OAuth credentials available." };
+  }
+
+  const accessToken = await ensureValidAccessToken(
+    credentials.provider,
+    credentials.oauth,
+    deps.oauthTokenRefresher,
+  );
+
+  if (credentials.provider === "google") {
+    const result = await createGoogleEvent(accessToken, credentials.externalCalendarId, input);
+    if (!result.success) {
+      return { success: false, error: result.error ?? "Google create failed." };
+    }
+    return { success: true, sourceEventUid: result.sourceEventUid ?? null };
+  }
+
+  if (credentials.provider === "outlook") {
+    const result = await createOutlookEvent(accessToken, input);
+    if (!result.success) {
+      return { success: false, error: result.error ?? "Outlook create failed." };
+    }
+    return { success: true, sourceEventUid: result.sourceEventUid ?? null };
+  }
+
+  return { success: false, error: `Unsupported OAuth provider: ${credentials.provider}` };
+};
+
+const createEventViaCalDAV = async (
+  credentials: ProviderCredentials,
+  input: EventInput,
+  encryptionKey: string,
+): Promise<CreateProviderResult> => {
+  if (!credentials.caldav || !credentials.calendarUrl) {
+    return { success: false, error: "Missing CalDAV credentials or calendar URL." };
+  }
+
+  const result = await createCalDAVEvent(
+    {
+      serverUrl: credentials.caldav.serverUrl,
+      calendarUrl: credentials.calendarUrl,
+      username: credentials.caldav.username,
+      encryptedPassword: credentials.caldav.encryptedPassword,
+      encryptionKey,
+    },
+    input,
+  );
+
+  if (!result.success) {
+    return { success: false, error: result.error ?? "CalDAV create failed." };
+  }
+
+  return { success: true, sourceEventUid: result.sourceEventUid ?? null };
+};
+
+const dispatchCreateEvent = (
+  credentials: ProviderCredentials,
+  input: EventInput,
+  deps: MutationDependencies,
+): Promise<CreateProviderResult> => {
+  if (credentials.oauth) {
+    return createEventViaOAuth(credentials, input, deps);
+  }
+
+  if (credentials.caldav && CALDAV_PROVIDERS.has(credentials.provider) && deps.encryptionKey && credentials.calendarUrl) {
+    return createEventViaCalDAV(credentials, input, deps.encryptionKey);
+  }
+
+  return Promise.resolve({ success: false, error: "Calendar provider not supported for event creation." });
+};
+
 const createEventMutation = async (
   deps: MutationDependencies,
   userId: string,
@@ -76,47 +170,10 @@ const createEventMutation = async (
     return { success: false, error: "Calendar not found or requires reauthentication." };
   }
 
-  let sourceEventUid: string | undefined;
+  const providerResult = await dispatchCreateEvent(credentials, input, deps);
 
-  if (credentials.oauth) {
-    const accessToken = await ensureValidAccessToken(
-      credentials.provider,
-      credentials.oauth,
-      deps.oauthTokenRefresher,
-    );
-
-    if (credentials.provider === "google") {
-      const result = await createGoogleEvent(accessToken, credentials.externalCalendarId, input);
-      if (!result.success) {
-        return result;
-      }
-      sourceEventUid = result.sourceEventUid;
-    } else if (credentials.provider === "outlook") {
-      const result = await createOutlookEvent(accessToken, input);
-      if (!result.success) {
-        return result;
-      }
-      sourceEventUid = result.sourceEventUid;
-    } else {
-      return { success: false, error: `Unsupported OAuth provider: ${credentials.provider}` };
-    }
-  } else if (credentials.caldav && CALDAV_PROVIDERS.has(credentials.provider) && deps.encryptionKey && credentials.calendarUrl) {
-    const result = await createCalDAVEvent(
-      {
-        serverUrl: credentials.caldav.serverUrl,
-        calendarUrl: credentials.calendarUrl,
-        username: credentials.caldav.username,
-        encryptedPassword: credentials.caldav.encryptedPassword,
-        encryptionKey: deps.encryptionKey,
-      },
-      input,
-    );
-    if (!result.success) {
-      return result;
-    }
-    sourceEventUid = result.sourceEventUid;
-  } else {
-    return { success: false, error: "Calendar provider not supported for event creation." };
+  if (!providerResult.success) {
+    return providerResult;
   }
 
   const [inserted] = await deps.database
@@ -124,7 +181,7 @@ const createEventMutation = async (
     .values({
       calendarId: input.calendarId,
       userId,
-      sourceEventUid: sourceEventUid ?? null,
+      sourceEventUid: providerResult.sourceEventUid,
       title: input.title,
       description: input.description ?? null,
       location: input.location ?? null,
@@ -140,27 +197,20 @@ const createEventMutation = async (
   }
 
   const event = await getEvent(deps.database, userId, inserted.id);
-  return { success: true, event: event ?? undefined };
+
+  if (event) {
+    return { success: true, event };
+  }
+
+  return { success: true };
 };
 
-const updateEventMutation = async (
-  deps: MutationDependencies,
-  userId: string,
-  eventId: string,
+const dispatchUpdateEvent = async (
+  credentials: ProviderCredentials,
+  sourceEventUid: string,
   updates: EventUpdateInput,
+  deps: MutationDependencies,
 ): Promise<EventActionResult> => {
-  const resolved = await resolveCredentialsByUserEventId(deps.database, userId, eventId);
-
-  if (!resolved) {
-    return { success: false, error: "Event not found." };
-  }
-
-  const { credentials, sourceEventUid } = resolved;
-
-  if (!sourceEventUid) {
-    return { success: false, error: "Event cannot be updated (no source UID)." };
-  }
-
   if (credentials.oauth) {
     const accessToken = await ensureValidAccessToken(
       credentials.provider,
@@ -169,20 +219,18 @@ const updateEventMutation = async (
     );
 
     if (credentials.provider === "google") {
-      const result = await updateGoogleEvent(accessToken, credentials.externalCalendarId, sourceEventUid, updates);
-      if (!result.success) {
-        return result;
-      }
-    } else if (credentials.provider === "outlook") {
-      const result = await updateOutlookEvent(accessToken, sourceEventUid, updates);
-      if (!result.success) {
-        return result;
-      }
-    } else {
-      return { success: false, error: `Unsupported OAuth provider: ${credentials.provider}` };
+      return updateGoogleEvent(accessToken, credentials.externalCalendarId, sourceEventUid, updates);
     }
-  } else if (credentials.caldav && CALDAV_PROVIDERS.has(credentials.provider) && deps.encryptionKey && credentials.calendarUrl) {
-    const result = await updateCalDAVEvent(
+
+    if (credentials.provider === "outlook") {
+      return updateOutlookEvent(accessToken, sourceEventUid, updates);
+    }
+
+    return { success: false, error: `Unsupported OAuth provider: ${credentials.provider}` };
+  }
+
+  if (credentials.caldav && CALDAV_PROVIDERS.has(credentials.provider) && deps.encryptionKey && credentials.calendarUrl) {
+    return updateCalDAVEvent(
       {
         serverUrl: credentials.caldav.serverUrl,
         calendarUrl: credentials.calendarUrl,
@@ -193,35 +241,68 @@ const updateEventMutation = async (
       sourceEventUid,
       updates,
     );
-    if (!result.success) {
-      return result;
-    }
-  } else {
-    return { success: false, error: "Calendar provider not supported for event updates." };
   }
 
+  return { success: false, error: "Calendar provider not supported for event updates." };
+};
+
+const buildDbUpdates = (updates: EventUpdateInput): Record<string, unknown> => {
   const dbUpdates: Record<string, unknown> = {};
-  if (updates.title !== undefined) {
+
+  if ("title" in updates) {
     dbUpdates.title = updates.title;
   }
-  if (updates.description !== undefined) {
+  if ("description" in updates) {
     dbUpdates.description = updates.description;
   }
-  if (updates.location !== undefined) {
+  if ("location" in updates) {
     dbUpdates.location = updates.location;
   }
-  if (updates.startTime !== undefined) {
-    dbUpdates.startTime = new Date(updates.startTime);
+  if ("startTime" in updates) {
+    dbUpdates.startTime = new Date(updates.startTime as string);
   }
-  if (updates.endTime !== undefined) {
-    dbUpdates.endTime = new Date(updates.endTime);
+  if ("endTime" in updates) {
+    dbUpdates.endTime = new Date(updates.endTime as string);
   }
-  if (updates.isAllDay !== undefined) {
+  if ("isAllDay" in updates) {
     dbUpdates.isAllDay = updates.isAllDay;
   }
-  if (updates.availability !== undefined) {
+  if ("availability" in updates) {
     dbUpdates.availability = updates.availability;
   }
+
+  return dbUpdates;
+};
+
+const updateEventMutation = async (
+  deps: MutationDependencies,
+  userId: string,
+  eventId: string,
+  updates: EventUpdateInput,
+): Promise<EventActionResult> => {
+  const resolved = await resolveCredentialsByEventId(deps.database, userId, eventId);
+
+  if (!resolved) {
+    return { success: false, error: "Event not found." };
+  }
+
+  if (resolved.eventSource === "synced") {
+    return { success: false, error: "Synced events cannot be updated. Only user-created events can be modified." };
+  }
+
+  const { credentials, sourceEventUid } = resolved;
+
+  if (!sourceEventUid) {
+    return { success: false, error: "Event cannot be updated (no source UID)." };
+  }
+
+  const providerResult = await dispatchUpdateEvent(credentials, sourceEventUid, updates, deps);
+
+  if (!providerResult.success) {
+    return providerResult;
+  }
+
+  const dbUpdates = buildDbUpdates(updates);
 
   if (Object.keys(dbUpdates).length > 0) {
     await deps.database
@@ -238,10 +319,14 @@ const deleteEventMutation = async (
   userId: string,
   eventId: string,
 ): Promise<EventActionResult> => {
-  const resolved = await resolveCredentialsByUserEventId(deps.database, userId, eventId);
+  const resolved = await resolveCredentialsByEventId(deps.database, userId, eventId);
 
   if (!resolved) {
     return { success: false, error: "Event not found." };
+  }
+
+  if (resolved.eventSource === "synced") {
+    return { success: false, error: "Synced events cannot be deleted. Only user-created events can be removed." };
   }
 
   const { credentials, sourceEventUid } = resolved;
@@ -295,7 +380,7 @@ const rsvpEventMutation = async (
   eventId: string,
   status: RsvpStatus,
 ): Promise<EventActionResult> => {
-  const resolved = await resolveCredentialsByUserEventId(deps.database, userId, eventId);
+  const resolved = await resolveCredentialsByEventId(deps.database, userId, eventId);
 
   if (!resolved) {
     return { success: false, error: "Event not found." };
@@ -347,5 +432,115 @@ const rsvpEventMutation = async (
   return { success: false, error: "RSVP not supported for this calendar provider." };
 };
 
-export { createEventMutation, updateEventMutation, deleteEventMutation, rsvpEventMutation };
+const fetchOAuthPendingInvites = async (
+  credentials: ProviderCredentials,
+  from: string,
+  to: string,
+  refresher?: OAuthTokenRefresher,
+): Promise<PendingInvite[]> => {
+  if (!credentials.oauth) {
+    return [];
+  }
+
+  const accessToken = await ensureValidAccessToken(
+    credentials.provider,
+    credentials.oauth,
+    refresher,
+  );
+
+  if (credentials.provider === "google") {
+    const providerInvites = await getPendingGoogleInvites(accessToken, credentials.externalCalendarId, from, to);
+    return providerInvites.map((invite) => ({
+      ...invite,
+      calendarId: credentials.calendarId,
+      provider: credentials.provider,
+    }));
+  }
+
+  if (credentials.provider === "outlook") {
+    const providerInvites = await getPendingOutlookInvites(accessToken, from, to);
+    return providerInvites.map((invite) => ({
+      ...invite,
+      calendarId: credentials.calendarId,
+      provider: credentials.provider,
+    }));
+  }
+
+  return [];
+};
+
+const fetchCalDAVPendingInvites = async (
+  credentials: ProviderCredentials,
+  from: string,
+  to: string,
+  encryptionKey: string,
+): Promise<PendingInvite[]> => {
+  if (!credentials.caldav || !credentials.calendarUrl || !credentials.email) {
+    return [];
+  }
+
+  if (!CALDAV_PROVIDERS.has(credentials.provider)) {
+    return [];
+  }
+
+  const providerInvites = await getPendingCalDAVInvites(
+    {
+      serverUrl: credentials.caldav.serverUrl,
+      calendarUrl: credentials.calendarUrl,
+      username: credentials.caldav.username,
+      encryptedPassword: credentials.caldav.encryptedPassword,
+      encryptionKey,
+    },
+    from,
+    to,
+    credentials.email,
+  );
+
+  return providerInvites.map((invite) => ({
+    ...invite,
+    calendarId: credentials.calendarId,
+    provider: credentials.provider,
+  }));
+};
+
+const fetchPendingInvitesForCalendar = (
+  credentials: ProviderCredentials,
+  from: string,
+  to: string,
+  deps: MutationDependencies,
+): Promise<PendingInvite[]> => {
+  if (credentials.oauth) {
+    return fetchOAuthPendingInvites(credentials, from, to, deps.oauthTokenRefresher);
+  }
+
+  if (credentials.caldav && deps.encryptionKey) {
+    return fetchCalDAVPendingInvites(credentials, from, to, deps.encryptionKey);
+  }
+
+  return Promise.resolve([]);
+};
+
+const getPendingInvitesMutation = async (
+  deps: MutationDependencies,
+  userId: string,
+  calendarId: string,
+  from: string,
+  to: string,
+): Promise<PendingInvite[]> => {
+  const credentials = await resolveCredentialsByCalendarId(deps.database, userId, calendarId);
+
+  if (!credentials) {
+    return [];
+  }
+
+  const invites = await fetchPendingInvitesForCalendar(credentials, from, to, deps);
+
+  invites.sort((left, right) =>
+    new Date(left.startTime).getTime() - new Date(right.startTime).getTime(),
+  );
+
+  return invites;
+};
+
+export { createEventMutation, updateEventMutation, deleteEventMutation, rsvpEventMutation, getPendingInvitesMutation };
 export type { MutationDependencies, OAuthTokenRefresher };

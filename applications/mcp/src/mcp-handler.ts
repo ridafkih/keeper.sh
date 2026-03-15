@@ -2,7 +2,7 @@ import { KEEPER_API_READ_SCOPE } from "@keeper.sh/auth";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { runMcpWideEventContext, setWideEventFields, widelog } from "./utils/logging";
-import type { KeeperMcpToolDefinition, KeeperMcpToolset } from "./toolset";
+import type { KeeperMcpToolDefinition, KeeperMcpToolset, KeeperToolContext } from "./toolset";
 
 const JSON_RPC_VERSION = "2.0";
 const JSON_RPC_ERROR_UNAUTHORIZED = -32_001;
@@ -20,6 +20,7 @@ interface KeeperMcpAuthSession {
 interface AuthenticatedKeeperMcpSession {
   scopes: string;
   userId: string;
+  bearerToken: string;
 }
 
 interface KeeperMcpAuth {
@@ -40,6 +41,7 @@ type McpSessionResolution =
 interface CreateKeeperMcpHandlerOptions {
   auth: KeeperMcpAuth;
   mcpPublicUrl: string;
+  apiBaseUrl: string;
   toolset: KeeperMcpToolset;
   serverInfo?: {
     name: string;
@@ -57,6 +59,19 @@ const hasScope = (scopes: string, requiredScope: string): boolean =>
 const isAuthValidationError = (error: unknown): boolean =>
   error instanceof Error && error.name === "APIError";
 
+const extractBearerToken = (headers: Headers): string | null => {
+  const authHeader = headers.get("authorization");
+  if (!authHeader) {
+    return null;
+  }
+
+  if (!authHeader.startsWith("Bearer ")) {
+    return null;
+  }
+
+  return authHeader.slice("Bearer ".length);
+};
+
 const resolveMcpSession = async (
   auth: KeeperMcpAuth,
   headers: Headers,
@@ -68,9 +83,16 @@ const resolveMcpSession = async (
       return { authenticated: false };
     }
 
+    const bearerToken = extractBearerToken(headers);
+
+    if (!bearerToken) {
+      return { authenticated: false };
+    }
+
     const authenticatedSession: AuthenticatedKeeperMcpSession = {
       scopes: session.scopes,
       userId: session.userId,
+      bearerToken,
     };
 
     return {
@@ -123,6 +145,7 @@ const createToolResponse = (result: unknown) => ({
 const registerToolset = (
   server: McpServer,
   toolset: Record<string, KeeperMcpToolDefinition<unknown>>,
+  toolContext: KeeperToolContext,
   userId: string,
 ): void => {
   for (const [name, tool] of Object.entries(toolset)) {
@@ -154,7 +177,7 @@ const registerToolset = (
           try {
             return await widelog.time.measure("duration_ms", async () => {
               try {
-                const result = await tool.execute({ userId }, input);
+                const result = await tool.execute(toolContext, input);
                 widelog.set("outcome", "success");
                 widelog.set("status_code", 200);
                 return createToolResponse(result);
@@ -175,6 +198,7 @@ const registerToolset = (
 
 const createAuthenticatedMcpServer = (
   toolset: KeeperMcpToolset,
+  toolContext: KeeperToolContext,
   userId: string,
   serverInfo: { name: string; version: string },
 ): McpServer => {
@@ -185,7 +209,7 @@ const createAuthenticatedMcpServer = (
   });
 
   const tools: Record<string, KeeperMcpToolDefinition<unknown>> = { ...toolset };
-  registerToolset(server, tools, userId);
+  registerToolset(server, tools, toolContext, userId);
 
   return server;
 };
@@ -193,6 +217,7 @@ const createAuthenticatedMcpServer = (
 const createKeeperMcpHandler = ({
   auth,
   mcpPublicUrl,
+  apiBaseUrl,
   toolset,
   serverInfo = {
     name: "keeper",
@@ -240,7 +265,7 @@ const createKeeperMcpHandler = ({
       return unauthorizedResponse();
     }
 
-    const { userId, scopes } = sessionResult.session;
+    const { userId, scopes, bearerToken } = sessionResult.session;
 
     if (!hasScope(scopes, KEEPER_API_READ_SCOPE)) {
       const insufficientScopeHeader =
@@ -261,7 +286,12 @@ const createKeeperMcpHandler = ({
       );
     }
 
-    const server = createAuthenticatedMcpServer(toolset, userId, serverInfo);
+    const toolContext: KeeperToolContext = {
+      bearerToken,
+      apiBaseUrl,
+    };
+
+    const server = createAuthenticatedMcpServer(toolset, toolContext, userId, serverInfo);
     const transport = new WebStandardStreamableHTTPServerTransport({
       enableJsonResponse,
     });

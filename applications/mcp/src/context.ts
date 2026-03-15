@@ -1,7 +1,6 @@
 import { isKeeperMcpEnabledAuth, createAuth } from "@keeper.sh/auth";
 import { createDatabase } from "@keeper.sh/database";
 import env from "@keeper.sh/env/mcp";
-import { createKeeperApi } from "@keeper.sh/keeper-api";
 import { createKeeperMcpHandler } from "./mcp-handler";
 import { createKeeperMcpToolset } from "./toolset";
 import { withWideEvent } from "./utils/middleware";
@@ -21,12 +20,12 @@ if (!isKeeperMcpEnabledAuth(baseAuth)) {
 }
 
 const auth = baseAuth;
-const keeperApi = createKeeperApi(database);
-const keeperMcpToolset = createKeeperMcpToolset(keeperApi);
+const keeperMcpToolset = createKeeperMcpToolset();
 const handleMcpRequest = createKeeperMcpHandler({
   auth,
   mcpPublicUrl: env.MCP_PUBLIC_URL,
+  apiBaseUrl: env.BETTER_AUTH_URL,
   toolset: keeperMcpToolset,
 });
 
-export { auth, database, env, handleMcpRequest, keeperApi, keeperMcpToolset, withWideEvent };
+export { auth, database, env, handleMcpRequest, keeperMcpToolset, withWideEvent };

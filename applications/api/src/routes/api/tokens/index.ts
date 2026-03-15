@@ -9,6 +9,8 @@ import {
   hashApiToken,
   extractTokenPrefix,
 } from "../../../utils/api-tokens";
+import { respondWithLoggedError } from "../../../utils/logging";
+import { tokenCreateBodySchema } from "../../../utils/request-body";
 
 const GET = withWideEvent(
   withAuth(async ({ userId }) => {
@@ -31,39 +33,47 @@ const GET = withWideEvent(
 
 const POST = withWideEvent(
   withAuth(async ({ userId, request }) => {
-    const body = (await request.json()) as { name?: string };
-    const name = body?.name;
+    const body = await request.json();
 
-    if (!name || typeof name !== "string" || name.trim().length === 0) {
-      return ErrorResponse.badRequest("Token name is required.").toResponse();
+    try {
+      const { name } = tokenCreateBodySchema.assert(body);
+
+      if (name.trim().length === 0) {
+        return ErrorResponse.badRequest("Token name cannot be empty.").toResponse();
+      }
+
+      const plainToken = generateApiToken();
+      const tokenHash = hashApiToken(plainToken);
+      const tokenPrefix = extractTokenPrefix(plainToken);
+
+      const [created] = await database
+        .insert(apiTokensTable)
+        .values({
+          userId,
+          name: name.trim(),
+          tokenHash,
+          tokenPrefix,
+        })
+        .returning({
+          id: apiTokensTable.id,
+          name: apiTokensTable.name,
+          tokenPrefix: apiTokensTable.tokenPrefix,
+          createdAt: apiTokensTable.createdAt,
+        });
+
+      return Response.json(
+        {
+          ...created,
+          token: plainToken,
+        },
+        { status: HTTP_STATUS.CREATED },
+      );
+    } catch (error) {
+      return respondWithLoggedError(
+        error,
+        ErrorResponse.badRequest("Token name is required.").toResponse(),
+      );
     }
-
-    const plainToken = generateApiToken();
-    const tokenHash = hashApiToken(plainToken);
-    const tokenPrefix = extractTokenPrefix(plainToken);
-
-    const [created] = await database
-      .insert(apiTokensTable)
-      .values({
-        userId,
-        name: name.trim(),
-        tokenHash,
-        tokenPrefix,
-      })
-      .returning({
-        id: apiTokensTable.id,
-        name: apiTokensTable.name,
-        tokenPrefix: apiTokensTable.tokenPrefix,
-        createdAt: apiTokensTable.createdAt,
-      });
-
-    return Response.json(
-      {
-        ...created,
-        token: plainToken,
-      },
-      { status: HTTP_STATUS.CREATED },
-    );
   }),
 );
 

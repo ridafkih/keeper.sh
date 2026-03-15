@@ -13,7 +13,7 @@ interface CalDAVCredentials {
   encryptionKey: string;
 }
 
-const getClient = async (credentials: CalDAVCredentials) => {
+const getClient = (credentials: CalDAVCredentials) => {
   const password = decryptPassword(credentials.encryptedPassword, credentials.encryptionKey);
   return createDAVClient({
     authMethod: "Basic",
@@ -32,10 +32,17 @@ const ensureTrailingSlash = (url: string): string => {
   return `${url}/`;
 };
 
-const buildIcsEvent = (uid: string, input: EventInput): IcsEvent => {
-  const isAllDay = input.isAllDay ?? false;
+const resolveIsAllDay = (input: { isAllDay?: boolean }): boolean => {
+  if (input.isAllDay === true) {
+    return true;
+  }
+  return false;
+};
 
-  return {
+const buildIcsEvent = (uid: string, input: EventInput): IcsEvent => {
+  const isAllDay = resolveIsAllDay(input);
+
+  const event: IcsEvent = {
     uid,
     summary: input.title,
     description: input.description,
@@ -49,8 +56,13 @@ const buildIcsEvent = (uid: string, input: EventInput): IcsEvent => {
       ...(isAllDay && { type: "DATE" as const }),
     },
     stamp: { date: new Date() },
-    ...(input.availability === "free" && { timeTransparent: "TRANSPARENT" as const }),
   };
+
+  if (input.availability === "free") {
+    event.timeTransparent = "TRANSPARENT";
+  }
+
+  return event;
 };
 
 const buildIcsCalendar = (events: IcsEvent[]): IcsCalendar => ({
@@ -62,6 +74,13 @@ const buildIcsCalendar = (events: IcsEvent[]): IcsCalendar => ({
 interface CalDAVEventResult {
   sourceEventUid: string;
 }
+
+const extractErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return fallback;
+};
 
 const createCalDAVEvent = async (
   credentials: CalDAVCredentials,
@@ -81,8 +100,7 @@ const createCalDAVEvent = async (
 
     return { success: true, sourceEventUid: uid };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "CalDAV create failed.";
-    return { success: false, error: message };
+    return { success: false, error: extractErrorMessage(error, "CalDAV create failed.") };
   }
 };
 
@@ -110,42 +128,51 @@ const fetchCalendarObject = async (
   return null;
 };
 
-const parseIcsString = (icsString: string): IcsCalendar => {
-  return convertIcsCalendar(undefined, icsString);
+// eslint-disable-next-line no-undefined -- convertIcsCalendar requires undefined as first arg for no schema
+const parseIcsString = (icsString: string): IcsCalendar => convertIcsCalendar(undefined, icsString);
+
+const resolveEventIsAllDay = (updates: EventUpdateInput, event: IcsEvent): boolean => {
+  if (updates.isAllDay === true || updates.isAllDay === false) {
+    return updates.isAllDay;
+  }
+  return event.start?.type === "DATE";
+};
+
+const resolveTransparency = (availability: string): "TRANSPARENT" | "OPAQUE" => {
+  if (availability === "free") {
+    return "TRANSPARENT";
+  }
+  return "OPAQUE";
 };
 
 const applyUpdatesToEvent = (event: IcsEvent, updates: EventUpdateInput): IcsEvent => {
   const updated = { ...event };
 
-  if (updates.title !== undefined) {
+  if ("title" in updates && typeof updates.title === "string") {
     updated.summary = updates.title;
   }
-  if (updates.description !== undefined) {
+  if ("description" in updates) {
     updated.description = updates.description;
   }
-  if (updates.location !== undefined) {
+  if ("location" in updates) {
     updated.location = updates.location;
   }
-  if (updates.startTime !== undefined) {
-    const isAllDay = updates.isAllDay ?? event.start?.type === "DATE";
+  if ("startTime" in updates && typeof updates.startTime === "string") {
+    const isAllDay = resolveEventIsAllDay(updates, event);
     updated.start = {
       date: new Date(updates.startTime),
       ...(isAllDay && { type: "DATE" as const }),
     };
   }
-  if (updates.endTime !== undefined) {
-    const isAllDay = updates.isAllDay ?? event.start?.type === "DATE";
+  if ("endTime" in updates && typeof updates.endTime === "string") {
+    const isAllDay = resolveEventIsAllDay(updates, event);
     updated.end = {
       date: new Date(updates.endTime),
       ...(isAllDay && { type: "DATE" as const }),
     };
   }
-  if (updates.availability !== undefined) {
-    if (updates.availability === "free") {
-      updated.timeTransparent = "TRANSPARENT";
-    } else {
-      updated.timeTransparent = "OPAQUE";
-    }
+  if ("availability" in updates && typeof updates.availability === "string") {
+    updated.timeTransparent = resolveTransparency(updates.availability);
   }
 
   updated.stamp = { date: new Date() };
@@ -186,8 +213,7 @@ const updateCalDAVEvent = async (
 
     return { success: true };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "CalDAV update failed.";
-    return { success: false, error: message };
+    return { success: false, error: extractErrorMessage(error, "CalDAV update failed.") };
   }
 };
 
@@ -204,7 +230,7 @@ const deleteCalDAVEvent = async (
         calendarObject: { url: objectUrl },
       });
     } catch (error) {
-      const status = (error as { status?: number }).status;
+      const { status } = error as { status?: number };
       if (status !== HTTP_STATUS.NOT_FOUND) {
         throw error;
       }
@@ -212,8 +238,7 @@ const deleteCalDAVEvent = async (
 
     return { success: true };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "CalDAV delete failed.";
-    return { success: false, error: message };
+    return { success: false, error: extractErrorMessage(error, "CalDAV delete failed.") };
   }
 };
 
@@ -282,9 +307,90 @@ const rsvpCalDAVEvent = async (
 
     return { success: true };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "CalDAV RSVP failed.";
-    return { success: false, error: message };
+    return { success: false, error: extractErrorMessage(error, "CalDAV RSVP failed.") };
   }
 };
 
-export { createCalDAVEvent, updateCalDAVEvent, deleteCalDAVEvent, rsvpCalDAVEvent };
+const getPendingCalDAVInvites = async (
+  credentials: CalDAVCredentials,
+  from: string,
+  to: string,
+  userEmail: string,
+): Promise<{
+  sourceEventUid: string;
+  title: string | null;
+  description: string | null;
+  location: string | null;
+  startTime: string;
+  endTime: string;
+  isAllDay: boolean;
+  organizer: string | null;
+}[]> => {
+  try {
+    const client = await getClient(credentials);
+    const objects = await client.fetchCalendarObjects({
+      calendar: { url: credentials.calendarUrl },
+      timeRange: { start: from, end: to },
+    });
+
+    const pendingEvents: {
+      sourceEventUid: string;
+      title: string | null;
+      description: string | null;
+      location: string | null;
+      startTime: string;
+      endTime: string;
+      isAllDay: boolean;
+      organizer: string | null;
+    }[] = [];
+
+    const normalizedEmail = userEmail.toLowerCase();
+
+    for (const object of objects) {
+      if (!object.data) {
+        continue;
+      }
+
+      const calendar = parseIcsString(object.data);
+      const [event] = calendar.events ?? [];
+
+      if (!event) {
+        continue;
+      }
+
+      const attendees = event.attendees ?? [];
+      const userAttendee = attendees.find(
+        (attendee) => attendee.email.toLowerCase() === normalizedEmail,
+      );
+
+      if (!userAttendee) {
+        continue;
+      }
+
+      if (userAttendee.partstat !== "NEEDS-ACTION") {
+        continue;
+      }
+
+      const isAllDay = event.start?.type === "DATE";
+      const organizerEmail = event.organizer?.email ?? null;
+      const endTime = event.end?.date?.toISOString() ?? event.start.date.toISOString();
+
+      pendingEvents.push({
+        sourceEventUid: event.uid,
+        title: event.summary ?? null,
+        description: event.description ?? null,
+        location: event.location ?? null,
+        startTime: event.start.date.toISOString(),
+        endTime,
+        isAllDay,
+        organizer: organizerEmail,
+      });
+    }
+
+    return pendingEvents;
+  } catch {
+    return [];
+  }
+};
+
+export { createCalDAVEvent, updateCalDAVEvent, deleteCalDAVEvent, rsvpCalDAVEvent, getPendingCalDAVInvites };

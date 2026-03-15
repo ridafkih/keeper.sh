@@ -31,5 +31,51 @@ const icalSettingsPatchBodySchema = type({
 });
 type IcalSettingsPatchBody = typeof icalSettingsPatchBodySchema.infer;
 
-export { calendarIdsBodySchema, sourcePatchBodySchema, icalSettingsPatchBodySchema };
-export type { CalendarIdsBody, SourcePatchBody, IcalSettingsPatchBody };
+const eventCreateBodySchema = type({
+  calendarId: "string",
+  title: "string",
+  "description?": "string",
+  "location?": "string",
+  startTime: "string",
+  endTime: "string",
+  "isAllDay?": "boolean",
+  "availability?": "'busy' | 'free'",
+  "+": "reject",
+});
+type EventCreateBody = typeof eventCreateBodySchema.infer;
+
+const eventPatchBodySchema = type({
+  "title?": "string",
+  "description?": "string",
+  "location?": "string",
+  "startTime?": "string",
+  "endTime?": "string",
+  "isAllDay?": "boolean",
+  "availability?": "'busy' | 'free'",
+  "rsvpStatus?": "'accepted' | 'declined' | 'tentative'",
+  "+": "reject",
+});
+type EventPatchBody = typeof eventPatchBodySchema.infer;
+
+const tokenCreateBodySchema = type({
+  name: "string",
+  "+": "reject",
+});
+type TokenCreateBody = typeof tokenCreateBodySchema.infer;
+
+export {
+  calendarIdsBodySchema,
+  sourcePatchBodySchema,
+  icalSettingsPatchBodySchema,
+  eventCreateBodySchema,
+  eventPatchBodySchema,
+  tokenCreateBodySchema,
+};
+export type {
+  CalendarIdsBody,
+  SourcePatchBody,
+  IcalSettingsPatchBody,
+  EventCreateBody,
+  EventPatchBody,
+  TokenCreateBody,
+};

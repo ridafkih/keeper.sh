@@ -32,6 +32,19 @@ interface EventCreateResult extends EventActionResult {
   event?: KeeperEvent;
 }
 
+interface PendingInvite {
+  sourceEventUid: string;
+  title: string | null;
+  description: string | null;
+  location: string | null;
+  startTime: string;
+  endTime: string;
+  isAllDay: boolean;
+  organizer: string | null;
+  calendarId: string;
+  provider: string;
+}
+
 interface ProviderCredentials {
   provider: string;
   calendarId: string;
@@ -55,6 +68,7 @@ export type {
   EventUpdateInput,
   EventActionResult,
   EventCreateResult,
+  PendingInvite,
   ProviderCredentials,
   RsvpStatus,
 };

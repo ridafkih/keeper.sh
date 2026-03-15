@@ -1,10 +1,12 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { normalizeDateRange, parseDateRangeParams } from "@keeper.sh/date-utils";
 import { createKeeperApi } from "@keeper.sh/keeper-api";
-import type { KeeperEventFilters, EventInput } from "@keeper.sh/keeper-api";
-import { withV1Auth, withWideEvent } from "../../../utils/middleware";
-import { ErrorResponse } from "../../../utils/responses";
-import { database, oauthProviders, encryptionKey } from "../../../context";
+import type { KeeperEventFilters } from "@keeper.sh/keeper-api";
+import { withV1Auth, withWideEvent } from "../../../../utils/middleware";
+import { ErrorResponse } from "../../../../utils/responses";
+import { respondWithLoggedError } from "../../../../utils/logging";
+import { eventCreateBodySchema } from "../../../../utils/request-body";
+import { database, oauthProviders, encryptionKey } from "../../../../context";
 
 const keeperApi = createKeeperApi(database, {
   oauthTokenRefresher: oauthProviders,
@@ -39,6 +41,13 @@ export const GET = withWideEvent(
     const url = new URL(request.url);
     const { from, to } = parseDateRangeParams(url);
     const { end, start } = normalizeDateRange(from, to);
+    const shouldCount = url.searchParams.get("count") === "true";
+
+    if (shouldCount) {
+      const count = await keeperApi.getEventCount(userId, { from: start, to: end });
+      return Response.json({ count });
+    }
+
     const filters = parseEventFilters(url);
     const events = await keeperApi.getEventsInRange(
       userId,
@@ -51,29 +60,23 @@ export const GET = withWideEvent(
 
 export const POST = withWideEvent(
   withV1Auth(async ({ request, userId }) => {
-    const body = (await request.json()) as Partial<EventInput>;
+    const body = await request.json();
 
-    if (!body.calendarId || !body.title || !body.startTime || !body.endTime) {
-      return ErrorResponse.badRequest("calendarId, title, startTime, and endTime are required.").toResponse();
+    try {
+      const input = eventCreateBodySchema.assert(body);
+
+      const result = await keeperApi.createEvent(userId, input);
+
+      if (!result.success) {
+        return ErrorResponse.badRequest(result.error ?? "Failed to create event.").toResponse();
+      }
+
+      return Response.json(result.event ?? { created: true }, { status: HTTP_STATUS.CREATED });
+    } catch (error) {
+      return respondWithLoggedError(
+        error,
+        ErrorResponse.badRequest("Invalid event data. calendarId, title, startTime, and endTime are required.").toResponse(),
+      );
     }
-
-    const input: EventInput = {
-      calendarId: body.calendarId,
-      title: body.title,
-      startTime: body.startTime,
-      endTime: body.endTime,
-      description: body.description,
-      location: body.location,
-      isAllDay: body.isAllDay,
-      availability: body.availability,
-    };
-
-    const result = await keeperApi.createEvent(userId, input);
-
-    if (!result.success) {
-      return ErrorResponse.badRequest(result.error ?? "Failed to create event.").toResponse();
-    }
-
-    return Response.json(result.event ?? { created: true }, { status: HTTP_STATUS.CREATED });
   }),
 );

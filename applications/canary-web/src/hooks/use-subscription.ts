@@ -1,5 +1,6 @@
 import useSWR from "swr";
 import { fetcher } from "../lib/fetcher";
+import { getCommercialMode } from "../config/commercial";
 
 export interface SubscriptionState {
   plan: "free" | "pro";
@@ -37,16 +38,25 @@ const fetchSubscriptionState = async (): Promise<SubscriptionState> => {
 };
 
 interface UseSubscriptionOptions {
+  enabled?: boolean;
   fallbackData?: SubscriptionState;
 }
 
+const resolveSubscriptionCacheKey = (enabled: boolean): string | null => {
+  if (!enabled) {
+    return null;
+  }
+
+  return SUBSCRIPTION_STATE_CACHE_KEY;
+};
+
 export function useSubscription(options: UseSubscriptionOptions = {}) {
+  const { enabled = getCommercialMode(), fallbackData } = options;
+  const cacheKey = resolveSubscriptionCacheKey(enabled);
   const { data, error, isLoading, mutate } = useSWR(
-    SUBSCRIPTION_STATE_CACHE_KEY,
+    cacheKey,
     fetchSubscriptionState,
-    {
-      fallbackData: options.fallbackData,
-    },
+    { fallbackData },
   );
   return { data, error, isLoading, mutate };
 }

@@ -62,7 +62,7 @@ const createGoogleEvent = async (
   }
 
   const created = await response.json() as GoogleEvent;
-  return { success: true, sourceEventUid: created.iCalUID ?? created.id ?? undefined };
+  return { success: true, sourceEventUid: created.iCalUID };
 };
 
 const findGoogleEventByUid = async (
@@ -88,6 +88,25 @@ const findGoogleEventByUid = async (
   return item ?? null;
 };
 
+const buildGoogleDateField = (
+  dateTime: string,
+  isAllDay: boolean,
+): { date: string } | { dateTime: string } => {
+  if (isAllDay) {
+    return { date: dateTime.slice(0, 10) };
+  }
+
+  return { dateTime };
+};
+
+const resolveGoogleTransparency = (availability: string): string => {
+  if (availability === "free") {
+    return "transparent";
+  }
+
+  return "opaque";
+};
+
 const updateGoogleEvent = async (
   accessToken: string,
   externalCalendarId: string | null,
@@ -107,33 +126,26 @@ const updateGoogleEvent = async (
   );
 
   const patch: Record<string, unknown> = {};
-  if (updates.title !== undefined) {
+  if ("title" in updates) {
     patch.summary = updates.title;
   }
-  if (updates.description !== undefined) {
+  if ("description" in updates) {
     patch.description = updates.description;
   }
-  if (updates.location !== undefined) {
+  if ("location" in updates) {
     patch.location = updates.location;
   }
 
-  const isAllDay = updates.isAllDay ?? existing.start?.date !== undefined;
-  if (updates.startTime !== undefined) {
-    if (isAllDay) {
-      patch.start = { date: updates.startTime.slice(0, 10) };
-    } else {
-      patch.start = { dateTime: updates.startTime };
-    }
+  const hasExistingDateStart = existing.start && "date" in existing.start;
+  const isAllDay = updates.isAllDay ?? (hasExistingDateStart === true);
+  if ("startTime" in updates) {
+    patch.start = buildGoogleDateField(updates.startTime as string, isAllDay);
   }
-  if (updates.endTime !== undefined) {
-    if (isAllDay) {
-      patch.end = { date: updates.endTime.slice(0, 10) };
-    } else {
-      patch.end = { dateTime: updates.endTime };
-    }
+  if ("endTime" in updates) {
+    patch.end = buildGoogleDateField(updates.endTime as string, isAllDay);
   }
-  if (updates.availability !== undefined) {
-    patch.transparency = updates.availability === "free" ? "transparent" : "opaque";
+  if ("availability" in updates) {
+    patch.transparency = resolveGoogleTransparency(updates.availability as string);
   }
 
   const response = await fetch(url, {
@@ -202,7 +214,10 @@ const rsvpGoogleEvent = async (
   );
 
   const rawEvent = existing as Record<string, unknown>;
-  const attendees = (Array.isArray(rawEvent.attendees) ? rawEvent.attendees : []) as Array<{ email?: string; responseStatus?: string; self?: boolean }>;
+  let attendees: { email?: string; responseStatus?: string; self?: boolean }[] = [];
+  if (Array.isArray(rawEvent.attendees)) {
+    attendees = rawEvent.attendees as { email?: string; responseStatus?: string; self?: boolean }[];
+  }
   const normalizedEmail = userEmail.toLowerCase();
   let found = false;
 
@@ -238,4 +253,127 @@ const rsvpGoogleEvent = async (
   return { success: true };
 };
 
-export { createGoogleEvent, updateGoogleEvent, deleteGoogleEvent, rsvpGoogleEvent };
+interface GoogleAttendee {
+  email?: string;
+  responseStatus?: string;
+  self?: boolean;
+}
+
+interface GoogleEventWithAttendees extends GoogleEvent {
+  attendees?: GoogleAttendee[];
+  organizer?: { email?: string; displayName?: string };
+}
+
+interface PendingGoogleEvent {
+  sourceEventUid: string;
+  title: string | null;
+  description: string | null;
+  location: string | null;
+  startTime: string;
+  endTime: string;
+  isAllDay: boolean;
+  organizer: string | null;
+}
+
+const parseGooglePendingEvent = (event: GoogleEventWithAttendees): PendingGoogleEvent | null => {
+  const selfAttendee = (event.attendees ?? []).find(
+    (attendee) => attendee.self === true,
+  );
+
+  if (!selfAttendee) {
+    return null;
+  }
+
+  if (selfAttendee.responseStatus !== "needsAction") {
+    return null;
+  }
+
+  if (!event.iCalUID) {
+    return null;
+  }
+
+  const startTime = event.start?.dateTime ?? event.start?.date;
+  const endTime = event.end?.dateTime ?? event.end?.date;
+
+  if (!startTime || !endTime) {
+    return null;
+  }
+
+  const isAllDay = Boolean(event.start && "date" in event.start);
+
+  return {
+    sourceEventUid: event.iCalUID,
+    title: event.summary ?? null,
+    description: event.description ?? null,
+    location: event.location ?? null,
+    startTime,
+    endTime,
+    isAllDay,
+    organizer: event.organizer?.email ?? null,
+  };
+};
+
+const fetchGoogleEventsPage = async (
+  accessToken: string,
+  calendarId: string,
+  from: string,
+  to: string,
+  pageToken: string | null,
+): Promise<{ items: GoogleEventWithAttendees[]; nextPageToken: string | null }> => {
+  const url = new URL(`calendars/${encodeURIComponent(calendarId)}/events`, GOOGLE_CALENDAR_API);
+  url.searchParams.set("timeMin", from);
+  url.searchParams.set("timeMax", to);
+  url.searchParams.set("singleEvents", "true");
+  url.searchParams.set("maxResults", "250");
+  if (pageToken) {
+    url.searchParams.set("pageToken", pageToken);
+  }
+
+  const response = await fetch(url, {
+    headers: buildHeaders(accessToken),
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    return { items: [], nextPageToken: null };
+  }
+
+  const body = await response.json() as {
+    items?: GoogleEventWithAttendees[];
+    nextPageToken?: string;
+  };
+
+  return {
+    items: body.items ?? [],
+    nextPageToken: body.nextPageToken ?? null,
+  };
+};
+
+const getPendingGoogleInvites = async (
+  accessToken: string,
+  externalCalendarId: string | null,
+  from: string,
+  to: string,
+): Promise<PendingGoogleEvent[]> => {
+  const calendarId = getCalendarId(externalCalendarId);
+  const pendingEvents: PendingGoogleEvent[] = [];
+
+  let pageToken: string | null = null;
+
+  do {
+    const page = await fetchGoogleEventsPage(accessToken, calendarId, from, to, pageToken);
+
+    for (const event of page.items) {
+      const parsed = parseGooglePendingEvent(event);
+      if (parsed) {
+        pendingEvents.push(parsed);
+      }
+    }
+
+    pageToken = page.nextPageToken;
+  } while (pageToken);
+
+  return pendingEvents;
+};
+
+export { createGoogleEvent, updateGoogleEvent, deleteGoogleEvent, rsvpGoogleEvent, getPendingGoogleInvites };

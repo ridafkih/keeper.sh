@@ -98,7 +98,7 @@ const getEventsInRange = async (
     syncedConditions.push(inArray(eventStatesTable.availability, filters.availability));
   }
 
-  if (filters?.isAllDay !== undefined) {
+  if (filters && "isAllDay" in filters && typeof filters.isAllDay === "boolean") {
     syncedConditions.push(eq(eventStatesTable.isAllDay, filters.isAllDay));
   }
 
@@ -127,7 +127,7 @@ const getEventsInRange = async (
     userConditions.push(inArray(userEventsTable.availability, filters.availability));
   }
 
-  if (filters?.isAllDay !== undefined) {
+  if (filters && "isAllDay" in filters && typeof filters.isAllDay === "boolean") {
     userConditions.push(eq(userEventsTable.isAllDay, filters.isAllDay));
   }
 

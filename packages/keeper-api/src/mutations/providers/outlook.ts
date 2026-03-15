@@ -27,6 +27,14 @@ const formatDateTime = (isoString: string, isAllDay: boolean): string => {
   return isoString;
 };
 
+const resolveOutlookShowAs = (availability?: string | null): string => {
+  if (availability === "free") {
+    return "free";
+  }
+
+  return "busy";
+};
+
 const createOutlookEvent = async (
   accessToken: string,
   input: EventInput,
@@ -45,7 +53,7 @@ const createOutlookEvent = async (
       timeZone: "UTC",
     },
     isAllDay,
-    showAs: input.availability === "free" ? "free" : "busy",
+    showAs: resolveOutlookShowAs(input.availability),
   };
 
   if (input.description) {
@@ -68,7 +76,7 @@ const createOutlookEvent = async (
   }
 
   const created = await response.json() as OutlookEvent;
-  return { success: true, sourceEventUid: created.iCalUId ?? created.id ?? undefined };
+  return { success: true, sourceEventUid: created.iCalUId };
 };
 
 const findOutlookEventByUid = async (
@@ -107,34 +115,34 @@ const updateOutlookEvent = async (
   const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${existing.id}`);
 
   const patch: Record<string, unknown> = {};
-  if (updates.title !== undefined) {
+  if ("title" in updates) {
     patch.subject = updates.title;
   }
-  if (updates.description !== undefined) {
+  if ("description" in updates) {
     patch.body = { content: updates.description, contentType: "text" };
   }
-  if (updates.location !== undefined) {
+  if ("location" in updates) {
     patch.location = { displayName: updates.location };
   }
 
   const isAllDay = updates.isAllDay ?? existing.isAllDay ?? false;
-  if (updates.startTime !== undefined) {
+  if ("startTime" in updates) {
     patch.start = {
-      dateTime: formatDateTime(updates.startTime, isAllDay),
+      dateTime: formatDateTime(updates.startTime as string, isAllDay),
       timeZone: "UTC",
     };
   }
-  if (updates.endTime !== undefined) {
+  if ("endTime" in updates) {
     patch.end = {
-      dateTime: formatDateTime(updates.endTime, isAllDay),
+      dateTime: formatDateTime(updates.endTime as string, isAllDay),
       timeZone: "UTC",
     };
   }
-  if (updates.isAllDay !== undefined) {
+  if ("isAllDay" in updates) {
     patch.isAllDay = updates.isAllDay;
   }
-  if (updates.availability !== undefined) {
-    patch.showAs = updates.availability === "free" ? "free" : "busy";
+  if ("availability" in updates) {
+    patch.showAs = resolveOutlookShowAs(updates.availability);
   }
 
   const response = await fetch(url, {
@@ -213,4 +221,102 @@ const rsvpOutlookEvent = async (
   return { success: true };
 };
 
-export { createOutlookEvent, updateOutlookEvent, deleteOutlookEvent, rsvpOutlookEvent };
+interface OutlookCalendarViewEvent {
+  id?: string;
+  iCalUId?: string;
+  subject?: string;
+  bodyPreview?: string;
+  location?: { displayName?: string };
+  start?: { dateTime?: string; timeZone?: string };
+  end?: { dateTime?: string; timeZone?: string };
+  isAllDay?: boolean;
+  responseStatus?: { response?: string };
+  organizer?: { emailAddress?: { address?: string; name?: string } };
+}
+
+const buildCalendarViewUrl = (from: string, to: string, nextLink: string | null): URL => {
+  if (nextLink) {
+    return new URL(nextLink);
+  }
+
+  const url = new URL(`${MICROSOFT_GRAPH_API}/me/calendarview`);
+  url.searchParams.set("startdatetime", from);
+  url.searchParams.set("enddatetime", to);
+  url.searchParams.set("$top", "100");
+  url.searchParams.set("$select", "id,iCalUId,subject,bodyPreview,location,start,end,isAllDay,responseStatus,organizer");
+  url.searchParams.set("$filter", "responseStatus/response eq 'notResponded'");
+  return url;
+};
+
+const getPendingOutlookInvites = async (
+  accessToken: string,
+  from: string,
+  to: string,
+): Promise<{
+  sourceEventUid: string;
+  title: string | null;
+  description: string | null;
+  location: string | null;
+  startTime: string;
+  endTime: string;
+  isAllDay: boolean;
+  organizer: string | null;
+}[]> => {
+  const pendingEvents: {
+    sourceEventUid: string;
+    title: string | null;
+    description: string | null;
+    location: string | null;
+    startTime: string;
+    endTime: string;
+    isAllDay: boolean;
+    organizer: string | null;
+  }[] = [];
+
+  let nextLink: string | null = null;
+
+  do {
+    const url = buildCalendarViewUrl(from, to, nextLink);
+
+    const response = await fetch(url, {
+      headers: buildHeaders(accessToken),
+      method: "GET",
+    });
+
+    if (!response.ok) {
+      break;
+    }
+
+    const body = await response.json() as {
+      value?: OutlookCalendarViewEvent[];
+      "@odata.nextLink"?: string;
+    };
+
+    for (const event of body.value ?? []) {
+      if (!event.iCalUId) {
+        continue;
+      }
+
+      if (!event.start?.dateTime || !event.end?.dateTime) {
+        continue;
+      }
+
+      pendingEvents.push({
+        sourceEventUid: event.iCalUId,
+        title: event.subject ?? null,
+        description: event.bodyPreview ?? null,
+        location: event.location?.displayName ?? null,
+        startTime: event.start.dateTime,
+        endTime: event.end.dateTime,
+        isAllDay: event.isAllDay ?? false,
+        organizer: event.organizer?.emailAddress?.address ?? null,
+      });
+    }
+
+    nextLink = body["@odata.nextLink"] ?? null;
+  } while (nextLink);
+
+  return pendingEvents;
+};
+
+export { createOutlookEvent, updateOutlookEvent, deleteOutlookEvent, rsvpOutlookEvent, getPendingOutlookInvites };

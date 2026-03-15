@@ -4,7 +4,7 @@ import Check from "lucide-react/dist/esm/icons/check";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import KeySquare from "lucide-react/dist/esm/icons/key-square";
 import Plus from "lucide-react/dist/esm/icons/plus";
-import { Button, ButtonText } from "../../../../components/ui/primitives/button";
+import { Button, ButtonIcon, ButtonText } from "../../../../components/ui/primitives/button";
 import { BackButton } from "../../../../components/ui/primitives/back-button";
 import { Input } from "../../../../components/ui/primitives/input";
 import {
@@ -36,6 +36,13 @@ export const Route = createFileRoute(
 )({
   component: ApiTokensPage,
 });
+
+function CopyTokenIcon({ copied }: { copied: boolean }) {
+  if (copied) {
+    return <Check size={16} />;
+  }
+  return <Copy size={16} />;
+}
 
 function ApiTokensPage() {
   const { data: tokens = [], error, mutate } = useApiTokens();
@@ -126,18 +133,10 @@ function ApiTokensPage() {
             integrations using this token will stop working.
           </ModalDescription>
           <ModalFooter>
-            <Button
-              variant="destructive"
-              className="w-full justify-center"
-              onClick={handleDelete}
-            >
+            <Button variant="destructive" className="w-full justify-center" onClick={handleDelete}>
               <ButtonText>Delete</ButtonText>
             </Button>
-            <Button
-              variant="elevated"
-              className="w-full justify-center"
-              onClick={() => setDeleteTarget(null)}
-            >
+            <Button variant="elevated" className="w-full justify-center" onClick={() => setDeleteTarget(null)}>
               <ButtonText>Cancel</ButtonText>
             </Button>
           </ModalFooter>
@@ -151,28 +150,47 @@ function ApiTokensPage() {
           <ModalDescription>
             Copy your token now. You won't be able to see it again.
           </ModalDescription>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             <Input
               readOnly
               value={revealedToken ?? ""}
-              className="font-mono text-xs"
+              className="text-sm"
             />
-            <Button variant="elevated" onClick={handleCopy}>
-              {copied ? <Check size={15} /> : <Copy size={15} />}
+            <Button
+              variant="border"
+              className="shrink-0 aspect-square"
+              onClick={handleCopy}
+              disabled={!revealedToken}
+            >
+              <ButtonIcon>
+                <CopyTokenIcon copied={copied} />
+              </ButtonIcon>
             </Button>
           </div>
           <ModalFooter>
-            <Button
-              variant="elevated"
-              className="w-full justify-center"
-              onClick={handleCloseReveal}
-            >
+            <Button variant="elevated" className="w-full justify-center" onClick={handleCloseReveal}>
               <ButtonText>Done</ButtonText>
             </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
     </div>
+  );
+}
+
+function CreateSubmitButton({ isCreating }: { isCreating: boolean }) {
+  if (isCreating) {
+    return (
+      <Button type="submit" className="w-full justify-center" disabled>
+        <ButtonText>Creating...</ButtonText>
+      </Button>
+    );
+  }
+
+  return (
+    <Button type="submit" className="w-full justify-center">
+      <ButtonText>Create</ButtonText>
+    </Button>
   );
 }
 
@@ -190,7 +208,8 @@ function CreateTokenButton({
   const nameRef = useRef<HTMLInputElement>(null);
   const [isCreating, setIsCreating] = useState(false);
 
-  const handleCreate = async () => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     const name = nameRef.current?.value?.trim();
     if (!name) return;
     onError(null);
@@ -217,29 +236,19 @@ function CreateTokenButton({
       </NavigationMenuButtonItem>
       <Modal open={createOpen} onOpenChange={setCreateOpen}>
         <ModalContent>
-          <ModalTitle>Create API token</ModalTitle>
-          <ModalDescription>
-            Give your token a name to help you remember what it's used for.
-          </ModalDescription>
-          <Input ref={nameRef} placeholder="Token name" />
-          <ModalFooter>
-            <Button
-              className="w-full justify-center"
-              onClick={handleCreate}
-              disabled={isCreating}
-            >
-              <ButtonText>
-                {isCreating ? "Creating..." : "Create"}
-              </ButtonText>
-            </Button>
-            <Button
-              variant="elevated"
-              className="w-full justify-center"
-              onClick={() => setCreateOpen(false)}
-            >
-              <ButtonText>Cancel</ButtonText>
-            </Button>
-          </ModalFooter>
+          <form onSubmit={handleSubmit} className="contents">
+            <ModalTitle>Create API token</ModalTitle>
+            <ModalDescription>
+              Give your token a name to help you remember what it's used for.
+            </ModalDescription>
+            <Input ref={nameRef} name="name" placeholder="Token name" autoFocus />
+            <ModalFooter>
+              <CreateSubmitButton isCreating={isCreating} />
+              <Button type="button" variant="elevated" className="w-full justify-center" onClick={() => setCreateOpen(false)}>
+                <ButtonText>Cancel</ButtonText>
+              </Button>
+            </ModalFooter>
+          </form>
         </ModalContent>
       </Modal>
     </>

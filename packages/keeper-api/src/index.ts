@@ -16,6 +16,7 @@ export type {
   EventUpdateInput,
   EventActionResult,
   EventCreateResult,
+  PendingInvite,
   RsvpStatus,
 } from "./mutation-types";
 export { withAccountDisplay, withProviderMetadata } from "./provider-display";

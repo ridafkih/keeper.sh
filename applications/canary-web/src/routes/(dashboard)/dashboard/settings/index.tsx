@@ -40,7 +40,11 @@ import { openCustomerPortal } from "../../../../utils/checkout";
 
 async function loadSubscription(context: { runtimeConfig: { commercialMode: boolean }; fetchApi: <T>(path: string, init?: RequestInit) => Promise<T> }) {
   if (!context.runtimeConfig.commercialMode) return undefined;
-  return fetchSubscriptionStateWithApi(context.fetchApi);
+  try {
+    return await fetchSubscriptionStateWithApi(context.fetchApi);
+  } catch {
+    return undefined;
+  }
 }
 
 export const Route = createFileRoute("/(dashboard)/dashboard/settings/")({

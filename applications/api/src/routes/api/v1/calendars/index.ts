@@ -1,7 +1,7 @@
 import { createKeeperApi } from "@keeper.sh/keeper-api";
 import type { KeeperSource } from "@keeper.sh/keeper-api";
-import { withV1Auth, withWideEvent } from "../../../utils/middleware";
-import { database } from "../../../context";
+import { withV1Auth, withWideEvent } from "../../../../utils/middleware";
+import { database } from "../../../../context";
 
 const keeperApi = createKeeperApi(database);
 
