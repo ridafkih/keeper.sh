@@ -1,6 +1,6 @@
 import { SYNC_TTL_SECONDS } from "@keeper.sh/constants";
 import type Redis from "ioredis";
-import type { DestinationSyncResult, SyncProgressUpdate } from "./coordinator";
+import type { DestinationSyncResult, SyncProgressUpdate } from "./types";
 import { SyncAggregateTracker } from "./aggregate-tracker";
 import type { SyncAggregateMessage, SyncAggregateSnapshot } from "./aggregate-tracker";
 import { widelog } from "widelogger";

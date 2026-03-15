@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { SyncAggregateTracker } from "./aggregate-tracker";
-import type { DestinationSyncResult, SyncProgressUpdate } from "./coordinator";
+import type { DestinationSyncResult, SyncProgressUpdate } from "./types";
 
 const createProgressUpdate = (
   overrides: Partial<SyncProgressUpdate> = {},

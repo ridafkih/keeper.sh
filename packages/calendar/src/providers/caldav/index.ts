@@ -1,6 +1,5 @@
 export { createCalDAVSourceFetcher, type CalDAVSourceFetcherConfig } from "./source/fetch-adapter";
-export { createCalDAVProvider, createCalDAVSyncProvider, type CalDAVSyncProviderConfig } from "./destination/provider";
-export { createCalDAVService } from "./destination/sync";
+export { createCalDAVSyncProvider, type CalDAVSyncProviderConfig } from "./destination/provider";
 
 export { createCalDAVSourceProvider } from "./source/provider";
 export { createCalDAVSourceService } from "./source/sync";

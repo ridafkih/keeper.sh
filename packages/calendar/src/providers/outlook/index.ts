@@ -24,9 +24,7 @@ export type {
 } from "./source/types";
 
 export {
-  createOutlookCalendarProvider,
   createOutlookSyncProvider,
-  type OutlookCalendarProviderConfig,
   type OutlookSyncProviderConfig,
 } from "./destination/provider";
 export {

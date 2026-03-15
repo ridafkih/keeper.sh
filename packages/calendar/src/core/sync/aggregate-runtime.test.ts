@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { createSyncAggregateRuntime } from "./aggregate-runtime";
 import { SyncAggregateTracker } from "./aggregate-tracker";
-import type { DestinationSyncResult, SyncProgressUpdate } from "./coordinator";
+import type { DestinationSyncResult, SyncProgressUpdate } from "./types";
 
 const sleep = (milliseconds: number): Promise<void> => Bun.sleep(milliseconds);
 

@@ -1,5 +1,5 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type { OAuthTokenProvider } from "./provider";
+import type { OAuthTokenProvider } from "./token-provider";
 import type { OAuthSourceProvider } from "./source-provider";
 import type { OAuthSourceConfig, SourceSyncResult } from "../types";
 import type { RefreshLockStore } from "./refresh-coordinator";

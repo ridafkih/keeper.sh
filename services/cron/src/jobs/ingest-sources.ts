@@ -33,25 +33,16 @@ const serializeOptionalJson = (value: unknown): string | null => {
   return JSON.stringify(value);
 };
 
-const withTimeout = async <TResult>(
+const withTimeout = <TResult>(
   operation: () => Promise<TResult>,
   timeoutMs: number,
-): Promise<TResult> => {
-  let timer: Timer | undefined;
-
-  const timeoutPromise = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => {
-      reject(new Error(`Source ingestion timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-  });
-
-  return Promise.race([
+): Promise<TResult> =>
+  Promise.race([
     Promise.resolve().then(operation),
-    timeoutPromise,
-  ]).finally(() => {
-    clearTimeout(timer);
-  });
-};
+    Bun.sleep(timeoutMs).then((): never => {
+      throw new Error(`Source ingestion timed out after ${timeoutMs}ms`);
+    }),
+  ]);
 
 const createIngestionFlush = (calendarId: string) =>
   async (changes: IngestionChanges): Promise<void> => {

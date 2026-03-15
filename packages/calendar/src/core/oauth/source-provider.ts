@@ -6,7 +6,7 @@ import {
 import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { eq } from "drizzle-orm";
 import type { OAuthSourceConfig, SourceEvent, SourceSyncResult } from "../types";
-import type { OAuthTokenProvider } from "./provider";
+import type { OAuthTokenProvider } from "./token-provider";
 import { isOAuthReauthRequiredError } from "./error-classification";
 import { runWithCredentialRefreshLock } from "./refresh-coordinator";
 

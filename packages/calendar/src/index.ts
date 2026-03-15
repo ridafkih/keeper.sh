@@ -1,4 +1,3 @@
-export { CalendarProvider } from "./core/sync/provider";
 export {
   createOAuthProviders,
   configureStateStore,
@@ -18,18 +17,12 @@ export {
   type OAuthConfigs,
 } from "./core/oauth/config";
 export {
-  OAuthCalendarProvider,
   type OAuthRefreshResult,
   type OAuthTokenProvider,
-  type AuthErrorResult,
-} from "./core/oauth/provider";
+} from "./core/oauth/token-provider";
 export {
   type RefreshLockStore,
 } from "./core/oauth/refresh-coordinator";
-export {
-  createOAuthDestinationProvider,
-  type CreateOAuthProviderOptions,
-} from "./core/oauth/create-provider";
 export {
   OAuthSourceProvider,
   type FetchEventsResult,
@@ -80,17 +73,12 @@ export {
   type EventStateInsertRow,
   type EventStateInsertClient,
 } from "./core/source/write-event-states";
-export { syncDestinationsForUser, type DestinationProvider } from "./core/sync/destinations";
 export { computeSyncOperations } from "./core/sync/operations";
 export {
-  createSyncCoordinator,
-  type SyncContext,
-  type SyncCoordinator,
-  type SyncCoordinatorConfig,
   type DestinationSyncResult,
   type SyncProgressUpdate,
   type SyncStage,
-} from "./core/sync/coordinator";
+} from "./core/sync/types";
 export {
   SyncAggregateTracker,
   type SyncAggregateSnapshot,
@@ -175,9 +163,7 @@ export type {
 } from "./utils/registry/registry";
 
 export {
-  createDestinationProviders,
   getSourceProvider,
-  type DestinationProvidersConfig,
   type SourceProvidersConfig,
 } from "./utils/registry/server";
 

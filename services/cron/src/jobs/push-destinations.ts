@@ -1,27 +1,8 @@
 import type { CronOptions } from "cronbake";
 import type { Plan } from "@keeper.sh/data-schemas";
-import {
-  getEventsForDestination,
-  getEventMappingsForDestination,
-  syncCalendar,
-  createRedisGenerationCheck,
-  createDatabaseFlush,
-  createGoogleOAuthService,
-  createMicrosoftOAuthService,
-  allSettledWithConcurrency,
-} from "@keeper.sh/calendar";
-import type { CalendarSyncProvider, PendingChanges } from "@keeper.sh/calendar";
-import { createGoogleSyncProvider } from "@keeper.sh/calendar/google";
-import { createOutlookSyncProvider } from "@keeper.sh/calendar/outlook";
-import { createCalDAVSyncProvider } from "@keeper.sh/calendar/caldav";
-import { decryptPassword } from "@keeper.sh/database";
-import {
-  calendarAccountsTable,
-  calendarsTable,
-  caldavCredentialsTable,
-  oauthCredentialsTable,
-} from "@keeper.sh/database/schema";
-import { and, arrayContains, eq } from "drizzle-orm";
+import { allSettledWithConcurrency } from "@keeper.sh/calendar";
+import { syncDestinationsForUser } from "@keeper.sh/sync";
+import type { SyncConfig } from "@keeper.sh/sync";
 import Redis from "ioredis";
 import { setCronEventFields, withCronWideEvent } from "@/utils/with-wide-event";
 import { widelog } from "@/utils/logging";
@@ -34,201 +15,17 @@ const USER_CONCURRENCY = 5;
 const REDIS_COMMAND_TIMEOUT_MS = 10_000;
 const REDIS_MAX_RETRIES = 3;
 
-const OAUTH_PROVIDERS = new Set(["google", "outlook"]);
-const CALDAV_PROVIDERS = new Set(["caldav", "fastmail", "icloud"]);
-
 const withTimeout = <TResult>(
   operation: () => Promise<TResult>,
   timeoutMs: number,
   label: string,
-): Promise<TResult> => {
-  let timer: Timer | undefined;
-
-  const timeoutPromise = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => {
-      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-  });
-
-  return Promise.race([
+): Promise<TResult> =>
+  Promise.race([
     Promise.resolve().then(operation),
-    timeoutPromise,
-  ]).finally(() => {
-    clearTimeout(timer);
-  });
-};
-
-const resolveOAuthProvider = async (
-  provider: string,
-  calendarId: string,
-  userId: string,
-  accountId: string,
-): Promise<CalendarSyncProvider | null> => {
-  const [oauthCred] = await database
-    .select({
-      accessToken: oauthCredentialsTable.accessToken,
-      refreshToken: oauthCredentialsTable.refreshToken,
-      expiresAt: oauthCredentialsTable.expiresAt,
-    })
-    .from(oauthCredentialsTable)
-    .innerJoin(calendarAccountsTable, eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id))
-    .where(eq(calendarAccountsTable.id, accountId))
-    .limit(1);
-
-  if (!oauthCred) {
-    return null;
-  }
-
-  if (provider === "google" && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
-    const googleOAuth = createGoogleOAuthService({
-      clientId: env.GOOGLE_CLIENT_ID,
-      clientSecret: env.GOOGLE_CLIENT_SECRET,
-    });
-    return createGoogleSyncProvider({
-      accessToken: oauthCred.accessToken,
-      refreshToken: oauthCred.refreshToken,
-      accessTokenExpiresAt: oauthCred.expiresAt,
-      externalCalendarId: "primary",
-      calendarId,
-      userId,
-      refreshAccessToken: (refreshToken) => googleOAuth.refreshAccessToken(refreshToken),
-    });
-  }
-
-  if (provider === "outlook" && env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET) {
-    const microsoftOAuth = createMicrosoftOAuthService({
-      clientId: env.MICROSOFT_CLIENT_ID,
-      clientSecret: env.MICROSOFT_CLIENT_SECRET,
-    });
-    return createOutlookSyncProvider({
-      accessToken: oauthCred.accessToken,
-      refreshToken: oauthCred.refreshToken,
-      accessTokenExpiresAt: oauthCred.expiresAt,
-      calendarId,
-      userId,
-      refreshAccessToken: (refreshToken) => microsoftOAuth.refreshAccessToken(refreshToken),
-    });
-  }
-
-  return null;
-};
-
-const resolveCalDAVProvider = async (
-  calendarId: string,
-  encryptionKey: string,
-): Promise<CalendarSyncProvider | null> => {
-  const [caldavCred] = await database
-    .select({
-      username: caldavCredentialsTable.username,
-      encryptedPassword: caldavCredentialsTable.encryptedPassword,
-      serverUrl: caldavCredentialsTable.serverUrl,
-      calendarUrl: calendarsTable.calendarUrl,
-    })
-    .from(caldavCredentialsTable)
-    .innerJoin(calendarAccountsTable, eq(calendarAccountsTable.caldavCredentialId, caldavCredentialsTable.id))
-    .innerJoin(calendarsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
-    .where(eq(calendarsTable.id, calendarId))
-    .limit(1);
-
-  if (!caldavCred) {
-    return null;
-  }
-
-  const password = decryptPassword(caldavCred.encryptedPassword, encryptionKey);
-
-  return createCalDAVSyncProvider({
-    calendarUrl: caldavCred.calendarUrl ?? caldavCred.serverUrl,
-    serverUrl: caldavCred.serverUrl,
-    username: caldavCred.username,
-    password,
-  });
-};
-
-interface UserSyncResult {
-  added: number;
-  addFailed: number;
-  removed: number;
-  removeFailed: number;
-  syncEvents: Record<string, unknown>[];
-}
-
-const syncDestinationsForUser = async (
-  userId: string,
-  redis: Redis,
-  flush: (changes: PendingChanges) => Promise<void>,
-): Promise<UserSyncResult> => {
-  const destinations = await database
-    .select({
-      calendarId: calendarsTable.id,
-      provider: calendarAccountsTable.provider,
-      userId: calendarsTable.userId,
-      accountId: calendarsTable.accountId,
-    })
-    .from(calendarsTable)
-    .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
-    .where(
-      and(
-        eq(calendarsTable.userId, userId),
-        arrayContains(calendarsTable.capabilities, ["push"]),
-      ),
-    );
-
-  let added = 0;
-  let addFailed = 0;
-  let removed = 0;
-  let removeFailed = 0;
-  const syncEvents: Record<string, unknown>[] = [];
-
-  for (const destination of destinations) {
-    let syncProvider: CalendarSyncProvider | null = null;
-
-    if (OAUTH_PROVIDERS.has(destination.provider)) {
-      syncProvider = await resolveOAuthProvider(
-        destination.provider, destination.calendarId,
-        destination.userId, destination.accountId,
-      );
-    }
-
-    if (CALDAV_PROVIDERS.has(destination.provider) && env.ENCRYPTION_KEY) {
-      syncProvider = await resolveCalDAVProvider(
-        destination.calendarId, env.ENCRYPTION_KEY,
-      );
-    }
-
-    if (!syncProvider) {
-      continue;
-    }
-
-    const providerRef = syncProvider;
-    const isCurrent = await createRedisGenerationCheck(redis, destination.calendarId);
-
-    const result = await syncCalendar({
-      calendarId: destination.calendarId,
-      provider: providerRef,
-      readState: async () => ({
-        localEvents: await getEventsForDestination(database, destination.calendarId),
-        existingMappings: await getEventMappingsForDestination(database, destination.calendarId),
-        remoteEvents: await providerRef.listRemoteEvents(),
-      }),
-      isCurrent,
-      flush,
-      onSyncEvent: (event) => {
-        syncEvents.push({
-          ...event,
-          "destination.provider": destination.provider,
-          "user.id": destination.userId,
-        });
-      },
-    });
-
-    added += result.added;
-    addFailed += result.addFailed;
-    removed += result.removed;
-    removeFailed += result.removeFailed;
-  }
-
-  return { added, addFailed, removed, removeFailed, syncEvents };
-};
+    Bun.sleep(timeoutMs).then((): never => {
+      throw new Error(`${label} timed out after ${timeoutMs}ms`);
+    }),
+  ]);
 
 const runEgressJob = async (plan: Plan): Promise<void> => {
   const usersWithDestinations = await getUsersWithDestinationsByPlan(plan);
@@ -247,7 +44,17 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
     maxRetriesPerRequest: REDIS_MAX_RETRIES,
   });
 
-  const flush = createDatabaseFlush(database);
+  const syncConfig: SyncConfig = {
+    database,
+    redis,
+    encryptionKey: env.ENCRYPTION_KEY,
+    oauthConfig: {
+      googleClientId: env.GOOGLE_CLIENT_ID,
+      googleClientSecret: env.GOOGLE_CLIENT_SECRET,
+      microsoftClientId: env.MICROSOFT_CLIENT_ID,
+      microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
+    },
+  };
 
   try {
     let totalAdded = 0;
@@ -260,7 +67,7 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
     const settlements = await allSettledWithConcurrency(
       usersWithDestinations.map((userId) => () =>
         withTimeout(
-          () => syncDestinationsForUser(userId, redis, flush),
+          () => syncDestinationsForUser(userId, syncConfig),
           USER_TIMEOUT_MS,
           `push:user:${userId}`,
         ),

@@ -6,7 +6,7 @@ import type { FetchEventsResult as BaseFetchEventsResult } from "../../../core/o
 import { createOAuthSourceProvider, type SourceProvider } from "../../../core/oauth/create-source-provider";
 import { encodeStoredSyncToken, resolveSyncTokenForWindow } from "../../../core/oauth/sync-token";
 import { getOAuthSyncWindow, OAUTH_SYNC_WINDOW_VERSION } from "../../../core/oauth/sync-window";
-import type { OAuthTokenProvider } from "../../../core/oauth/provider";
+import type { OAuthTokenProvider } from "../../../core/oauth/token-provider";
 import type { RefreshLockStore } from "../../../core/oauth/refresh-coordinator";
 import type { OAuthSourceConfig, SourceEvent, SourceSyncResult } from "../../../core/types";
 import {

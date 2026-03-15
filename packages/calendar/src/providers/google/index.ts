@@ -24,9 +24,7 @@ export type {
 } from "./source/types";
 
 export {
-  createGoogleCalendarProvider,
   createGoogleSyncProvider,
-  type GoogleCalendarProviderConfig,
   type GoogleSyncProviderConfig,
 } from "./destination/provider";
 export {

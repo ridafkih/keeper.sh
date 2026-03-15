@@ -1,4 +1,4 @@
-import type { DestinationSyncResult, SyncProgressUpdate } from "./coordinator";
+import type { DestinationSyncResult, SyncProgressUpdate } from "./types";
 
 interface CalendarOperationProgress {
   processed: number;
