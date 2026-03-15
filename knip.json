@@ -23,6 +23,10 @@
       "project": ["src/**/*.{ts,tsx}", "plugins/**/*.ts", "scripts/**/*.ts"],
       "ignoreDependencies": ["@babel/preset-typescript"]
     },
+    "packages/sync-engine": {
+      "entry": ["{index,generation,flush}.ts", "**/*.test.ts"],
+      "project": "**/*.ts"
+    },
     "services/*": {
       "entry": ["src/{index.ts,**/*.test.ts}"],
       "project": "src/**/*.{ts,tsx}"
