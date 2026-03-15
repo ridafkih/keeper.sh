@@ -5,11 +5,11 @@ import {
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
-import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/providers/google";
-import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/providers/outlook";
+import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/google";
+import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/outlook";
 import type { database as contextDatabase } from "@/context";
 import { spawnBackgroundJob } from "./background-task";
-import { getSourceProvider } from "@keeper.sh/providers";
+import { getSourceProvider } from "@keeper.sh/calendar";
 import { applySourceSyncDefaults } from "./source-sync-defaults";
 
 import { triggerDestinationSync } from "./sync";

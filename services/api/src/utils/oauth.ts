@@ -1,7 +1,7 @@
 import {
   calendarAccountsTable,
 } from "@keeper.sh/database/schema";
-import type { ValidatedState } from "@keeper.sh/providers";
+import type { ValidatedState } from "@keeper.sh/calendar";
 import { and, count, eq, sql } from "drizzle-orm";
 import type { database as contextDatabase } from "@/context";
 import { oauthCallbackQuerySchema } from "./request-query";

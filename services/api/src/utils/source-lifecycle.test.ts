@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { CalendarFetchError } from "@keeper.sh/calendar";
+import { CalendarFetchError } from "@keeper.sh/calendar/ics";
 import {
   SourceLimitError,
   runCreateSource,

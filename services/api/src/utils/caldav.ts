@@ -1,8 +1,8 @@
 import { calendarAccountsTable } from "@keeper.sh/database/schema";
-import { createCalDAVClient } from "@keeper.sh/providers/caldav";
+import { createCalDAVClient } from "@keeper.sh/calendar/caldav";
 import { encryptPassword } from "@keeper.sh/database";
-import { isCalDAVProvider } from "@keeper.sh/providers";
-import type { CalDAVProviderId } from "@keeper.sh/providers";
+import { isCalDAVProvider } from "@keeper.sh/calendar";
+import type { CalDAVProviderId } from "@keeper.sh/calendar";
 import { and, eq, sql } from "drizzle-orm";
 import { saveCalDAVDestinationWithDatabase } from "./destinations";
 import { triggerDestinationSync } from "./sync";

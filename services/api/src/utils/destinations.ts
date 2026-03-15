@@ -12,7 +12,7 @@ import type {
   OAuthTokens,
   NormalizedUserInfo as OAuthUserInfo,
   ValidatedState,
-} from "@keeper.sh/providers";
+} from "@keeper.sh/calendar";
 import { database, oauthProviders } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;

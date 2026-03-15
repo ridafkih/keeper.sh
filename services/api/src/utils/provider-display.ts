@@ -1,4 +1,4 @@
-import { getProvider } from "@keeper.sh/providers";
+import { getProvider } from "@keeper.sh/calendar";
 
 interface AccountDisplayInput {
   displayName: string | null;

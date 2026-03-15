@@ -1,5 +1,5 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import { normalizeDateRange, parseDateRangeParams } from "@keeper.sh/calendar";
+import { normalizeDateRange, parseDateRangeParams } from "@/utils/date-range";
 import { createKeeperApi } from "@/read-models";
 import type { KeeperEventFilters } from "@/types";
 import { withV1Auth, withWideEvent } from "@/utils/middleware";
