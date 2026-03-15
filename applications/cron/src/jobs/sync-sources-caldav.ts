@@ -99,7 +99,7 @@ const runCaldavSourceSyncJob = async (dependencies: CaldavSyncJobDependencies): 
 
 const createDefaultJobDependencies = async (): Promise<CaldavSyncJobDependencies> => {
   const [{ default: env }, { database }] = await Promise.all([
-    import("@keeper.sh/env/cron"),
+    import("../env"),
     import("../context"),
   ]);
 

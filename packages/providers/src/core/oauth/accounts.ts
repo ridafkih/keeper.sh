@@ -6,7 +6,7 @@ import {
   userSubscriptionsTable,
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, asc, eq, gte } from "drizzle-orm";
-import type { Plan } from "@keeper.sh/premium";
+import type { Plan } from "@keeper.sh/data-schemas";
 import type { SyncableEvent } from "../types";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { getOAuthSyncWindowStart } from "./sync-window";

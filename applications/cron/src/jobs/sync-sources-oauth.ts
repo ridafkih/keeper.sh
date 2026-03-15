@@ -154,7 +154,7 @@ const runOAuthSourceSyncJob = async (dependencies: OAuthSyncJobDependencies): Pr
 
 const createDefaultJobDependencies = async (): Promise<OAuthSyncJobDependencies> => {
   const [{ default: env }, { database, refreshLockStore }] = await Promise.all([
-    import("@keeper.sh/env/cron"),
+    import("../env"),
     import("../context"),
   ]);
 

@@ -3,7 +3,7 @@ import {
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq, inArray } from "drizzle-orm";
-import type { Plan } from "@keeper.sh/premium";
+import type { Plan } from "@keeper.sh/data-schemas";
 import { database, premiumService } from "../context";
 import { filterSourcesByPlan, filterUserIdsByPlan } from "./source-plan-selection";
 

@@ -1,5 +1,5 @@
 import type { CronOptions } from "cronbake";
-import type { Plan } from "@keeper.sh/premium";
+import type { Plan } from "@keeper.sh/data-schemas";
 import { syncDestinationsForUser as syncDestinationsForUserAcrossCalendars } from "@keeper.sh/providers";
 import type { SyncResult } from "@keeper.sh/providers";
 import { fetchAndSyncSource } from "@keeper.sh/calendar";

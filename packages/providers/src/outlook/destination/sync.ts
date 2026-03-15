@@ -4,7 +4,7 @@ import {
   getUserEventsForSync,
 } from "../../core";
 import type { OAuthAccount, SyncableEvent } from "../../core";
-import type { Plan } from "@keeper.sh/premium";
+import type { Plan } from "@keeper.sh/data-schemas";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 const PROVIDER = "outlook";
