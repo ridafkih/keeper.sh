@@ -231,6 +231,7 @@ describe("syncCalendar", () => {
     const flushCapture: PendingChanges[] = [];
 
     const result = await syncCalendar({
+      userId: "user-1",
       calendarId: "dest-cal-1",
       provider,
       readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
@@ -254,6 +255,7 @@ describe("syncCalendar", () => {
     let checkCount = 0;
 
     const result = await syncCalendar({
+      userId: "user-1",
       calendarId: "dest-cal-1",
       provider,
       readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
@@ -271,6 +273,7 @@ describe("syncCalendar", () => {
     let flushCalled = false;
 
     const result = await syncCalendar({
+      userId: "user-1",
       calendarId: "dest-cal-1",
       provider,
       readState: () => Promise.resolve({ localEvents: [], existingMappings: [], remoteEvents: [] }),
@@ -291,6 +294,7 @@ describe("syncCalendar", () => {
     const emittedEvents: Record<string, unknown>[] = [];
 
     await syncCalendar({
+      userId: "user-1",
       calendarId: "dest-cal-1",
       provider,
       readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
@@ -326,6 +330,7 @@ describe("syncCalendar", () => {
     let checkCount = 0;
 
     await syncCalendar({
+      userId: "user-1",
       calendarId: "dest-cal-1",
       provider,
       readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
@@ -346,6 +351,7 @@ describe("syncCalendar", () => {
     const emittedEvents: Record<string, unknown>[] = [];
 
     await syncCalendar({
+      userId: "user-1",
       calendarId: "dest-cal-1",
       provider,
       readState: () => Promise.resolve({ localEvents: [], existingMappings: [], remoteEvents: [] }),
@@ -367,6 +373,7 @@ describe("syncCalendar", () => {
 
     try {
       await syncCalendar({
+        userId: "user-1",
         calendarId: "dest-cal-1",
         provider,
         readState: () => Promise.reject(new Error("db connection failed")),

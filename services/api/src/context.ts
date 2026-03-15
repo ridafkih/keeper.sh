@@ -164,6 +164,7 @@ export {
   feedbackEmail,
   baseUrl,
   encryptionKey,
+  syncAggregateRuntime,
   getCurrentSyncAggregate,
   getCachedSyncAggregate,
 };

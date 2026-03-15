@@ -5,6 +5,7 @@ import {
   createDatabaseFlush,
   createRedisRateLimiter,
 } from "@keeper.sh/calendar";
+import type { SyncProgressUpdate } from "@keeper.sh/calendar";
 import {
   calendarAccountsTable,
   calendarsTable,
@@ -41,10 +42,15 @@ const EMPTY_RESULT: SyncDestinationsResult = {
   syncEvents: [],
 };
 
+interface SyncCallbacks {
+  onSyncEvent?: (event: Record<string, unknown>) => void;
+  onProgress?: (update: SyncProgressUpdate) => void;
+}
+
 const syncDestinationsForUser = async (
   userId: string,
   config: SyncConfig,
-  onSyncEvent?: (event: Record<string, unknown>) => void,
+  callbacks?: SyncCallbacks,
 ): Promise<SyncDestinationsResult> => {
   const { database, redis } = config;
 
@@ -110,6 +116,7 @@ const syncDestinationsForUser = async (
       const providerRef = syncProvider;
 
       const result = await syncCalendar({
+        userId: destination.userId,
         calendarId: destination.calendarId,
         provider: providerRef,
         readState: async () => ({
@@ -119,6 +126,7 @@ const syncDestinationsForUser = async (
         }),
         isCurrent: () => handle.isCurrent(),
         flush,
+        onProgress: callbacks?.onProgress,
         onSyncEvent: (event) => {
           const enrichedEvent = {
             ...event,
@@ -126,8 +134,8 @@ const syncDestinationsForUser = async (
             "user.id": destination.userId,
           };
           syncEvents.push(enrichedEvent);
-          if (onSyncEvent) {
-            onSyncEvent(enrichedEvent);
+          if (callbacks?.onSyncEvent) {
+            callbacks.onSyncEvent(enrichedEvent);
           }
         },
       });

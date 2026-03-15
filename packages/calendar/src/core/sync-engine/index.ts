@@ -1,5 +1,6 @@
 import type { SyncResult, SyncOperation, SyncableEvent, RemoteEvent, PushResult, DeleteResult } from "../types";
 import type { EventMapping } from "../events/mappings";
+import type { SyncProgressUpdate } from "../sync/types";
 import { computeSyncOperations } from "../sync/operations";
 import type { CalendarSyncProvider, PendingChanges } from "./types";
 
@@ -151,12 +152,15 @@ const mergeRunResult = (accumulated: PendingChanges, result: SyncResult, runResu
   };
 };
 
+type ProgressCallback = (processed: number, total: number) => void;
+
 const executeRemoteOperations = async (
   operations: SyncOperation[],
   existingMappings: EventMapping[],
   calendarId: string,
   provider: CalendarSyncProvider,
   isCurrent?: () => Promise<boolean>,
+  onRunComplete?: ProgressCallback,
 ): Promise<ExecuteRemoteResult> => {
   const mappingsByDestinationUid = new Map<string, EventMapping>();
   for (const mapping of existingMappings) {
@@ -165,8 +169,10 @@ const executeRemoteOperations = async (
 
   const changes: PendingChanges = { inserts: [], deletes: [] };
   const runs = groupOperationRuns(operations);
+  const totalOperations = operations.length;
   const emptyResult: SyncResult = { added: 0, addFailed: 0, removed: 0, removeFailed: 0 };
   let result = emptyResult;
+  let processed = 0;
   let superseded = false;
 
   for (const run of runs) {
@@ -177,11 +183,17 @@ const executeRemoteOperations = async (
     if (run.type === "add" && run.adds.length > 0) {
       const runResult = await executeAddRun(run.adds, calendarId, provider);
       result = mergeRunResult(changes, result, runResult);
+      processed += run.adds.length;
     }
 
     if (run.type === "remove" && run.removes.length > 0) {
       const runResult = await executeRemoveRun(run.removes, provider, mappingsByDestinationUid);
       result = mergeRunResult(changes, result, runResult);
+      processed += run.removes.length;
+    }
+
+    if (onRunComplete) {
+      onRunComplete(processed, totalOperations);
     }
 
     if (isCurrent) {
@@ -196,6 +208,7 @@ const executeRemoteOperations = async (
 };
 
 interface SyncCalendarOptions {
+  userId: string;
   calendarId: string;
   provider: CalendarSyncProvider;
   readState: () => Promise<{
@@ -206,12 +219,13 @@ interface SyncCalendarOptions {
   isCurrent: () => Promise<boolean>;
   flush: (changes: PendingChanges) => Promise<void>;
   onSyncEvent?: (event: Record<string, unknown>) => void;
+  onProgress?: (update: SyncProgressUpdate) => void;
 }
 
 const EMPTY_RESULT: SyncResult = { added: 0, addFailed: 0, removed: 0, removeFailed: 0 };
 
 const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncResult> => {
-  const { calendarId, provider, readState, isCurrent, flush, onSyncEvent } = options;
+  const { userId, calendarId, provider, readState, isCurrent, flush, onSyncEvent, onProgress } = options;
 
   const wideEvent: Record<string, unknown> = {
     "calendar.id": calendarId,
@@ -222,7 +236,24 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncResult> =
   const startTime = Date.now();
   let flushed = false;
 
+  const emitProgress = (stage: SyncProgressUpdate["stage"], localEventCount: number, remoteEventCount: number, progress?: { current: number; total: number }): void => {
+    if (!onProgress) {
+      return;
+    }
+    onProgress({
+      userId,
+      calendarId,
+      status: "syncing",
+      stage,
+      localEventCount,
+      remoteEventCount,
+      progress,
+      inSync: false,
+    });
+  };
+
   try {
+    emitProgress("fetching", 0, 0);
     const state = await readState();
 
     wideEvent["local_events.count"] = state.localEvents.length;
@@ -236,6 +267,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncResult> =
       return EMPTY_RESULT;
     }
 
+    emitProgress("comparing", state.localEvents.length, state.remoteEvents.length);
     const { operations, staleMappingIds } = computeSyncOperations(
       state.localEvents,
       state.existingMappings,
@@ -260,12 +292,17 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncResult> =
       return EMPTY_RESULT;
     }
 
+    emitProgress("processing", state.localEvents.length, state.remoteEvents.length, { current: 0, total: operations.length });
+
     const outcome = await executeRemoteOperations(
       operations,
       state.existingMappings,
       calendarId,
       provider,
       isCurrent,
+      (processed, total) => {
+        emitProgress("processing", state.localEvents.length, state.remoteEvents.length, { current: processed, total });
+      },
     );
 
     wideEvent["events.added"] = outcome.result.added;
