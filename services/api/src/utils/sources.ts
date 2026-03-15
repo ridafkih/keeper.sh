@@ -1,5 +1,5 @@
 import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
-import { fetchAndSyncSource, pullRemoteCalendar } from "@keeper.sh/calendar";
+import { fetchAndSyncSource, pullRemoteCalendar } from "@keeper.sh/calendar/ics";
 import { and, count, eq, sql } from "drizzle-orm";
 import { triggerDestinationSync } from "./sync";
 import {

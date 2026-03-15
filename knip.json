@@ -23,7 +23,7 @@
       "project": ["src/**/*.{ts,tsx}", "plugins/**/*.ts", "scripts/**/*.ts"],
       "ignoreDependencies": ["@babel/preset-typescript"]
     },
-    "services/*": {
+"services/*": {
       "entry": ["src/{index.ts,**/*.test.ts}"],
       "project": "src/**/*.{ts,tsx}"
     },
