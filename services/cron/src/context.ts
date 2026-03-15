@@ -5,7 +5,7 @@ import { createPremiumService } from "@keeper.sh/premium";
 import type { RefreshLockStore } from "@keeper.sh/calendar";
 import { Polar } from "@polar-sh/sdk";
 
-const database = createDatabase(env.DATABASE_URL);
+const database = await createDatabase(env.DATABASE_URL);
 
 const premiumService = createPremiumService({
   commercialMode: env.COMMERCIAL_MODE ?? false,

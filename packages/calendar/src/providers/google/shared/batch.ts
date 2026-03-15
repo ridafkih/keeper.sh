@@ -225,6 +225,11 @@ const executeBatch = async (
     body: requestBody,
   });
 
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Google Batch API ${response.status}: ${errorBody}`);
+  }
+
   const responseText = await response.text();
 
   const responseBoundary = extractResponseBoundary(response.headers.get("Content-Type"));

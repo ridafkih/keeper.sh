@@ -5,7 +5,6 @@ import { injectJobs } from "./utils/inject-jobs";
 import { registerJobs } from "./utils/register-jobs";
 import { closeDatabase } from "@keeper.sh/database";
 import { widelog, destroyWideLogger, runCronWideEventContext } from "./utils/logging";
-import { database, shutdownRefreshLockRedis } from "./context";
 import env from "./env";
 
 const jobsFolderPathname = join(import.meta.dirname, "jobs");
@@ -19,8 +18,11 @@ await entry({
       widelog.set("commercial.mode", env.COMMERCIAL_MODE ?? false);
       widelog.set("database.url.configured", Boolean(env.DATABASE_URL));
 
+      const { database, shutdownRefreshLockRedis } = await import("./context");
+
       try {
         return await widelog.time.measure("duration_ms", async () => {
+
           const jobs = await getAllJobs(jobsFolderPathname);
           const injectedJobs = injectJobs(jobs);
           registerJobs(injectedJobs);

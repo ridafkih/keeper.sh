@@ -50,6 +50,7 @@ async function createViteDevServerInstance(vitePort: number): Promise<ViteDevSer
     appType: "custom",
     server: {
       hmr: {
+        protocol: "ws",
         clientPort: vitePort,
         host: "localhost",
         port: vitePort,

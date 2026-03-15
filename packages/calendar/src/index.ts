@@ -21,6 +21,11 @@ export {
   type OAuthTokenProvider,
 } from "./core/oauth/token-provider";
 export {
+  ensureValidToken,
+  type TokenState,
+  type TokenRefresher,
+} from "./core/oauth/ensure-valid-token";
+export {
   type RefreshLockStore,
 } from "./core/oauth/refresh-coordinator";
 export {

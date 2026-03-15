@@ -3,8 +3,11 @@ import {
   ingestSource,
   allSettledWithConcurrency,
   insertEventStatesWithConflictResolution,
+  createGoogleOAuthService,
+  createMicrosoftOAuthService,
+  ensureValidToken,
 } from "@keeper.sh/calendar";
-import type { IngestionChanges, IngestionFetchEventsResult } from "@keeper.sh/calendar";
+import type { IngestionChanges, IngestionFetchEventsResult, TokenState } from "@keeper.sh/calendar";
 import { createIcsSourceFetcher } from "@keeper.sh/calendar/ics";
 import { createGoogleSourceFetcher } from "@keeper.sh/calendar/google";
 import { createOutlookSourceFetcher } from "@keeper.sh/calendar/outlook";
@@ -102,6 +105,26 @@ const readExistingEvents = (calendarId: string) =>
     .from(eventStatesTable)
     .where(eq(eventStatesTable.calendarId, calendarId));
 
+const resolveTokenRefresher = (provider: string) => {
+  if (provider === "google" && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
+    const googleOAuth = createGoogleOAuthService({
+      clientId: env.GOOGLE_CLIENT_ID,
+      clientSecret: env.GOOGLE_CLIENT_SECRET,
+    });
+    return (refreshToken: string) => googleOAuth.refreshAccessToken(refreshToken);
+  }
+
+  if (provider === "outlook" && env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET) {
+    const microsoftOAuth = createMicrosoftOAuthService({
+      clientId: env.MICROSOFT_CLIENT_ID,
+      clientSecret: env.MICROSOFT_CLIENT_SECRET,
+    });
+    return (refreshToken: string) => microsoftOAuth.refreshAccessToken(refreshToken);
+  }
+
+  return null;
+};
+
 interface OAuthFetcherParams {
   accessToken: string;
   externalCalendarId: string;
@@ -155,8 +178,19 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
           return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
         }
 
-        const resolvedFetcher = resolveOAuthFetcher(source.provider, {
+        const tokenRefresher = resolveTokenRefresher(source.provider);
+        const tokenState: TokenState = {
           accessToken: source.accessToken,
+          accessTokenExpiresAt: source.expiresAt,
+          refreshToken: source.refreshToken,
+        };
+
+        if (tokenRefresher) {
+          await ensureValidToken(tokenState, tokenRefresher);
+        }
+
+        const resolvedFetcher = resolveOAuthFetcher(source.provider, {
+          accessToken: tokenState.accessToken,
           externalCalendarId: source.externalCalendarId,
           syncToken: source.syncToken,
         });

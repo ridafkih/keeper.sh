@@ -198,7 +198,8 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       });
 
       if (!response.ok) {
-        throw new Error(response.statusText);
+        const errorBody = await response.text();
+        throw new Error(`Google Calendar API ${response.status}: ${errorBody}`);
       }
 
       const body = await response.json();

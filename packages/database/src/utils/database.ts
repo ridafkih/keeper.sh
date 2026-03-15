@@ -18,11 +18,28 @@ interface DatabaseInstance extends BunSQLDatabase {
   $client: SQL;
 }
 
-const createDatabase = (url: string, options?: DatabasePoolOptions): DatabaseInstance => {
+const CONNECTION_RETRY_DELAY_MS = 500;
+const CONNECTION_MAX_RETRIES = 10;
+
+const waitForConnection = async (database: DatabaseInstance): Promise<void> => {
+  for (let attempt = 0; attempt < CONNECTION_MAX_RETRIES; attempt++) {
+    try {
+      await database.execute("SELECT 1");
+      return;
+    } catch {
+      if (attempt < CONNECTION_MAX_RETRIES - 1) {
+        await Bun.sleep(CONNECTION_RETRY_DELAY_MS);
+      }
+    }
+  }
+  await database.execute("SELECT 1");
+};
+
+const createDatabase = async (url: string, options?: DatabasePoolOptions): Promise<DatabaseInstance> => {
   const statementTimeoutMs = options?.statementTimeoutMs ?? DEFAULT_STATEMENT_TIMEOUT_MS;
   const connectionUrl = appendStatementTimeout(url, statementTimeoutMs);
   const database = drizzle(connectionUrl);
-
+  await waitForConnection(database);
   return database;
 };
 
