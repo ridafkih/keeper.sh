@@ -1,5 +1,5 @@
-import { createKeeperApi } from "@keeper.sh/keeper-api";
-import type { KeeperSource } from "@keeper.sh/keeper-api";
+import { createKeeperApi } from "../../../../read-models";
+import type { KeeperSource } from "../../../../types";
 import { withV1Auth, withWideEvent } from "../../../../utils/middleware";
 import { database } from "../../../../context";
 

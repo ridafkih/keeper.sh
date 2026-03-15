@@ -1,7 +1,7 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { microsoftApiErrorSchema } from "@keeper.sh/data-schemas";
 import type { OutlookEvent } from "@keeper.sh/data-schemas";
-import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "../../mutation-types";
+import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "../../types";
 
 const MICROSOFT_GRAPH_API = "https://graph.microsoft.com/v1.0";
 

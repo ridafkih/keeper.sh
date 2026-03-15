@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { KeeperEvent } from "@keeper.sh/keeper-api";
+import type { KeeperEvent } from "@keeper.sh/data-schemas";
 
 interface KeeperToolContext {
   bearerToken: string;

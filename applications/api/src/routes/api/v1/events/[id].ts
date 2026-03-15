@@ -1,6 +1,6 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import { createKeeperApi } from "@keeper.sh/keeper-api";
-import type { RsvpStatus } from "@keeper.sh/keeper-api";
+import { createKeeperApi } from "../../../../read-models";
+import type { RsvpStatus } from "../../../../types";
 import { withV1Auth, withWideEvent } from "../../../../utils/middleware";
 import { ErrorResponse } from "../../../../utils/responses";
 import { respondWithLoggedError } from "../../../../utils/logging";

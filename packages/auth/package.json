@@ -11,9 +11,9 @@
   "dependencies": {
     "@better-auth/oauth-provider": "1.5.5",
     "@better-auth/passkey": "^1.5.5",
+    "@keeper.sh/constants": "workspace:*",
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/database": "workspace:*",
-    "@keeper.sh/keeper-api": "workspace:*",
     "@polar-sh/better-auth": "^1.6.3",
     "@polar-sh/sdk": "^0.42.1",
     "arktype": "^2.2.0",

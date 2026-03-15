@@ -9,7 +9,7 @@ import type {
   PendingInvite,
   ProviderCredentials,
   RsvpStatus,
-} from "../mutation-types";
+} from "../types";
 import { resolveCredentialsByCalendarId, resolveCredentialsByEventId } from "./resolve-credentials";
 import { getEvent } from "../queries/get-event";
 import {

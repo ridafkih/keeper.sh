@@ -1,7 +1,7 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { googleApiErrorSchema } from "@keeper.sh/data-schemas";
 import type { GoogleEvent } from "@keeper.sh/data-schemas";
-import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "../../mutation-types";
+import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "../../types";
 
 const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3/";
 
