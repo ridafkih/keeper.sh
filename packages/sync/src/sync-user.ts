@@ -17,7 +17,7 @@ import { resolveSyncProvider } from "./resolve-provider";
 import type { OAuthConfig } from "./resolve-provider";
 import { createSyncLock } from "./sync-lock";
 
-const GOOGLE_REQUESTS_PER_MINUTE = 600;
+const GOOGLE_REQUESTS_PER_MINUTE = 500;
 
 interface SyncConfig {
   database: BunSQLDatabase;

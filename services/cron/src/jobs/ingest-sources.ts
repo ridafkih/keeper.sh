@@ -29,7 +29,7 @@ import env from "@/env";
 
 const SOURCE_TIMEOUT_MS = 60_000;
 const SOURCE_CONCURRENCY = 5;
-const GOOGLE_REQUESTS_PER_MINUTE = 600;
+const GOOGLE_REQUESTS_PER_MINUTE = 500;
 
 const serializeOptionalJson = (value: unknown): string | null => {
   if (!value) {
