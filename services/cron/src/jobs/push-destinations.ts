@@ -19,10 +19,12 @@ import {
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq } from "drizzle-orm";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import Redis from "ioredis";
 import { setCronEventFields, withCronWideEvent } from "@/utils/with-wide-event";
 import { widelog } from "@/utils/logging";
+import { database } from "@/context";
+import { getUsersWithDestinationsByPlan } from "@/utils/get-sources";
+import env from "@/env";
 
 const USER_TIMEOUT_MS = 300_000;
 const REDIS_COMMAND_TIMEOUT_MS = 10_000;
@@ -44,12 +46,10 @@ const withTimeout = <TResult>(
   ]);
 
 const resolveOAuthProvider = async (
-  database: BunSQLDatabase,
   provider: string,
   calendarId: string,
   userId: string,
   accountId: string,
-  env: { GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; MICROSOFT_CLIENT_ID?: string; MICROSOFT_CLIENT_SECRET?: string },
 ): Promise<CalendarSyncProvider | null> => {
   const [oauthCred] = await database
     .select({
@@ -91,9 +91,7 @@ const resolveOAuthProvider = async (
 };
 
 const resolveCalDAVProvider = async (
-  database: BunSQLDatabase,
   calendarId: string,
-  accountId: string,
   encryptionKey: string,
 ): Promise<CalendarSyncProvider | null> => {
   const [caldavCred] = await database
@@ -124,11 +122,9 @@ const resolveCalDAVProvider = async (
 };
 
 const syncDestinationsForUser = async (
-  database: BunSQLDatabase,
   userId: string,
   redis: Redis,
   flush: (changes: PendingChanges) => Promise<void>,
-  env: { GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; MICROSOFT_CLIENT_ID?: string; MICROSOFT_CLIENT_SECRET?: string; ENCRYPTION_KEY?: string },
 ): Promise<{ added: number; addFailed: number; removed: number; removeFailed: number }> => {
   const destinations = await database
     .select({
@@ -156,14 +152,14 @@ const syncDestinationsForUser = async (
 
     if (OAUTH_PROVIDERS.has(destination.provider)) {
       syncProvider = await resolveOAuthProvider(
-        database, destination.provider, destination.calendarId,
-        destination.userId, destination.accountId, env,
+        destination.provider, destination.calendarId,
+        destination.userId, destination.accountId,
       );
     }
 
     if (CALDAV_PROVIDERS.has(destination.provider) && env.ENCRYPTION_KEY) {
       syncProvider = await resolveCalDAVProvider(
-        database, destination.calendarId, destination.accountId, env.ENCRYPTION_KEY,
+        destination.calendarId, env.ENCRYPTION_KEY,
       );
     }
 
@@ -203,16 +199,6 @@ const syncDestinationsForUser = async (
 };
 
 const runEgressJob = async (plan: Plan): Promise<void> => {
-  const [contextModule, sourcesModule, envModule] = await Promise.all([
-    import("@/context"),
-    import("@/utils/get-sources"),
-    import("@/env"),
-  ]);
-
-  const { database } = contextModule;
-  const { getUsersWithDestinationsByPlan } = sourcesModule;
-  const env = envModule.default;
-
   const usersWithDestinations = await getUsersWithDestinationsByPlan(plan);
 
   setCronEventFields({
@@ -242,7 +228,7 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
       usersWithDestinations.map((userId) =>
         withTimeout(
           async () => {
-            const result = await syncDestinationsForUser(database, userId, redis, flush, env);
+            const result = await syncDestinationsForUser(userId, redis, flush);
             totalAdded += result.added;
             totalAddFailed += result.addFailed;
             totalRemoved += result.removed;
