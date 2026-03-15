@@ -15,6 +15,8 @@ import { HTTP_STATUS } from "@keeper.sh/constants";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { widelog } from "widelogger";
 import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS } from "../shared/api";
+import { executeBatchChunked } from "../shared/batch";
+import type { BatchSubRequest } from "../shared/batch";
 import { hasRateLimitMessage, isAuthError } from "../shared/errors";
 import { parseEventTime } from "../shared/date-time";
 import { canSerializeGoogleEvent, serializeGoogleEvent } from "./serialize-event";
@@ -304,48 +306,62 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     }
   };
 
-  const getAuthHeaders = (): Record<string, string> => ({
-    Authorization: `Bearer ${tokenState.accessToken}`,
-    "Content-Type": "application/json",
-  });
+  const eventsPath = `/calendar/v3/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
 
   const pushEvents = async (events: SyncableEvent[]): Promise<PushResult[]> => {
     await refreshIfNeeded();
-    const results: PushResult[] = [];
 
-    for (const event of events) {
+    const results: PushResult[] = Array.from({ length: events.length });
+    const batchEntries: { batchIndex: number; originalIndex: number; uid: string }[] = [];
+    const subRequests: BatchSubRequest[] = [];
+
+    for (let index = 0; index < events.length; index++) {
+      const event = events[index];
+      if (!event) {
+        results[index] = { success: true };
+        continue;
+      }
+
       const uid = generateEventUid();
-      const resource = serializeGoogleEvent(
-        event,
-        uid,
-        buildRecurrenceRule(event),
-      );
+      const resource = serializeGoogleEvent(event, uid, buildRecurrenceRule(event));
 
       if (!resource) {
-        results.push({ success: true });
+        results[index] = { success: true };
         continue;
       }
 
-      const url = new URL(
-        `calendars/${encodeURIComponent(config.externalCalendarId)}/events`,
-        GOOGLE_CALENDAR_API,
-      );
-
-      const response = await fetch(url, {
-        body: JSON.stringify(resource),
-        headers: getAuthHeaders(),
+      batchEntries.push({ batchIndex: subRequests.length, originalIndex: index, uid });
+      subRequests.push({
         method: "POST",
+        path: eventsPath,
+        headers: { "Content-Type": "application/json" },
+        body: resource,
       });
+    }
 
-      if (!response.ok) {
-        const body = await response.json();
-        const { error } = googleApiErrorSchema.assert(body);
-        results.push({ error: error?.message ?? response.statusText, success: false });
+    if (subRequests.length === 0) {
+      return results;
+    }
+
+    const batchResponses = await executeBatchChunked(subRequests, tokenState.accessToken);
+
+    for (const entry of batchEntries) {
+      const response = batchResponses[entry.batchIndex];
+      if (!response) {
+        results[entry.originalIndex] = { error: "Missing batch response", success: false };
         continue;
       }
 
-      await response.json();
-      results.push({ remoteId: uid, success: true });
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        results[entry.originalIndex] = { remoteId: entry.uid, success: true };
+      } else if (response.statusCode === 409) {
+        results[entry.originalIndex] = { remoteId: entry.uid, success: true };
+      } else {
+        const errorBody = response.body as Record<string, unknown> | null;
+        const errorObj = errorBody?.error as Record<string, unknown> | undefined;
+        const errorMessage = (errorObj?.message as string) ?? `Batch sub-request failed with status ${response.statusCode}`;
+        results[entry.originalIndex] = { error: errorMessage, success: false };
+      }
     }
 
     return results;
@@ -353,54 +369,75 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
 
   const deleteEvents = async (eventIds: string[]): Promise<DeleteResult[]> => {
     await refreshIfNeeded();
-    const results: DeleteResult[] = [];
 
-    for (const uid of eventIds) {
-      const findUrl = new URL(
-        `calendars/${encodeURIComponent(config.externalCalendarId)}/events`,
-        GOOGLE_CALENDAR_API,
-      );
-      findUrl.searchParams.set("iCalUID", uid);
+    if (eventIds.length === 0) {
+      return [];
+    }
 
-      const findResponse = await fetch(findUrl, {
-        headers: { Authorization: `Bearer ${tokenState.accessToken}` },
-        method: "GET",
-      });
+    const findSubRequests: BatchSubRequest[] = eventIds.map((uid) => ({
+      method: "GET",
+      path: `${eventsPath}?iCalUID=${encodeURIComponent(uid)}`,
+    }));
 
-      if (!findResponse.ok) {
-        await findResponse.body?.cancel?.();
-        results.push({ success: true });
+    const findResponses = await executeBatchChunked(findSubRequests, tokenState.accessToken);
+
+    const deleteSubRequests: BatchSubRequest[] = [];
+    const deleteIndexToOriginalIndex: number[] = [];
+    const results: DeleteResult[] = Array.from({ length: eventIds.length });
+
+    for (let index = 0; index < eventIds.length; index++) {
+      const findResponse = findResponses[index];
+
+      if (!findResponse || findResponse.statusCode !== 200) {
+        results[index] = { success: true };
         continue;
       }
 
-      const findBody = await findResponse.json();
-      const { items } = googleEventListSchema.assert(findBody);
+      const findBody = findResponse.body as Record<string, unknown> | null;
+      const items = findBody?.items as Record<string, unknown>[] | undefined;
       const existing = items?.[0];
+      const eventId = existing?.id as string | undefined;
 
-      if (!existing?.id) {
-        results.push({ success: true });
+      if (!eventId) {
+        results[index] = { success: true };
         continue;
       }
 
-      const deleteUrl = new URL(
-        `calendars/${encodeURIComponent(config.externalCalendarId)}/events/${encodeURIComponent(existing.id)}`,
-        GOOGLE_CALENDAR_API,
-      );
-
-      const deleteResponse = await fetch(deleteUrl, {
-        headers: { Authorization: `Bearer ${tokenState.accessToken}` },
+      deleteIndexToOriginalIndex.push(index);
+      deleteSubRequests.push({
         method: "DELETE",
+        path: `${eventsPath}/${encodeURIComponent(eventId)}`,
       });
+    }
 
-      if (!deleteResponse.ok && deleteResponse.status !== HTTP_STATUS.NOT_FOUND) {
-        const body = await deleteResponse.json();
-        const { error } = googleApiErrorSchema.assert(body);
-        results.push({ error: error?.message ?? deleteResponse.statusText, success: false });
+    if (deleteSubRequests.length === 0) {
+      return results;
+    }
+
+    const deleteResponses = await executeBatchChunked(deleteSubRequests, tokenState.accessToken);
+
+    for (let deleteIndex = 0; deleteIndex < deleteResponses.length; deleteIndex++) {
+      const originalIndex = deleteIndexToOriginalIndex[deleteIndex];
+      if (typeof originalIndex !== "number") {
         continue;
       }
 
-      await deleteResponse.body?.cancel?.();
-      results.push({ success: true });
+      const deleteResponse = deleteResponses[deleteIndex];
+      if (!deleteResponse) {
+        results[originalIndex] = { error: "Missing batch response", success: false };
+        continue;
+      }
+
+      if (deleteResponse.statusCode >= 200 && deleteResponse.statusCode < 300) {
+        results[originalIndex] = { success: true };
+      } else if (deleteResponse.statusCode === HTTP_STATUS.NOT_FOUND) {
+        results[originalIndex] = { success: true };
+      } else {
+        const errorBody = deleteResponse.body as Record<string, unknown> | null;
+        const errorObj = errorBody?.error as Record<string, unknown> | undefined;
+        const errorMessage = (errorObj?.message as string) ?? `Delete failed with status ${deleteResponse.statusCode}`;
+        results[originalIndex] = { error: errorMessage, success: false };
+      }
     }
 
     return results;

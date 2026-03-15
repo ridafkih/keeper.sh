@@ -24,6 +24,9 @@ describe("resolveMcpAuthOptions", () => {
         consentPage: "https://app.keeper.sh/oauth/consent",
         loginPage: "https://app.keeper.sh/login",
         scopes: KEEPER_MCP_OAUTH_SCOPES,
+        silenceWarnings: {
+          oauthAuthServerConfig: true,
+        },
         validAudiences: ["https://mcp.keeper.sh"],
       },
       protectedResourceMetadata: {

@@ -27,6 +27,7 @@ const createRedisRefreshLockStore = (redisClient: Redis): RefreshLockStore => ({
 const refreshLockRedis = new Redis(env.REDIS_URL, {
   commandTimeout: REDIS_COMMAND_TIMEOUT_MS,
   maxRetriesPerRequest: 3,
+  lazyConnect: true,
 });
 
 const refreshLockStore = createRedisRefreshLockStore(refreshLockRedis);

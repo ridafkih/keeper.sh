@@ -32,6 +32,9 @@ interface ResolvedMcpAuthOptions {
     consentPage: string;
     loginPage: string;
     scopes: string[];
+    silenceWarnings: {
+      oauthAuthServerConfig: boolean;
+    };
     validAudiences: string[];
   };
   protectedResourceMetadata: {
@@ -71,6 +74,9 @@ const resolveMcpAuthOptions = (
       consentPage: resolveAbsoluteUrl("/oauth/consent", input.webBaseUrl),
       loginPage: resolveAbsoluteUrl("/login", input.webBaseUrl),
       scopes: KEEPER_MCP_OAUTH_SCOPES,
+      silenceWarnings: {
+        oauthAuthServerConfig: true,
+      },
       validAudiences: resolveValidAudiences(input.resourceBaseUrl),
     },
     protectedResourceMetadata: {

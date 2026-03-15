@@ -1,27 +1,32 @@
-import type { SyncResult, SyncOperation, SyncableEvent, RemoteEvent } from "../types";
+import type { SyncResult, SyncOperation, SyncableEvent, RemoteEvent, PushResult, DeleteResult } from "../types";
 import type { EventMapping } from "../events/mappings";
 import { computeSyncOperations } from "../sync/operations";
-import type { CalendarSyncProvider, PendingChanges, PendingInsert } from "./types";
+import type { CalendarSyncProvider, PendingChanges } from "./types";
 
-const processAddOperation = async (
-  operation: Extract<SyncOperation, { type: "add" }>,
+const processAddResults = (
+  addOperations: Extract<SyncOperation, { type: "add" }>[],
+  pushResults: PushResult[],
   calendarId: string,
-  provider: CalendarSyncProvider,
-): Promise<{ success: boolean; skipped: boolean; insert: PendingInsert | null }> => {
-  const [pushResult] = await provider.pushEvents([operation.event]);
+): { changes: PendingChanges; added: number; addFailed: number } => {
+  const changes: PendingChanges = { inserts: [], deletes: [] };
+  let added = 0;
+  let addFailed = 0;
 
-  if (!pushResult?.success) {
-    return { success: false, skipped: false, insert: null };
-  }
+  for (let index = 0; index < addOperations.length; index++) {
+    const operation = addOperations[index];
+    const pushResult = pushResults[index];
 
-  if (!pushResult.remoteId) {
-    return { success: true, skipped: true, insert: null };
-  }
+    if (!operation || !pushResult?.success) {
+      addFailed += 1;
+      continue;
+    }
 
-  return {
-    success: true,
-    skipped: false,
-    insert: {
+    if (!pushResult.remoteId) {
+      continue;
+    }
+
+    added += 1;
+    changes.inserts.push({
       eventStateId: operation.event.id,
       calendarId,
       destinationEventUid: pushResult.remoteId,
@@ -29,24 +34,38 @@ const processAddOperation = async (
       syncEventHash: null,
       startTime: operation.event.startTime,
       endTime: operation.event.endTime,
-    },
-  };
-};
-
-const processRemoveOperation = async (
-  operation: Extract<SyncOperation, { type: "remove" }>,
-  mappingsByDestinationUid: Map<string, EventMapping>,
-  provider: CalendarSyncProvider,
-): Promise<{ success: boolean; mappingId: string | null }> => {
-  const [deleteResult] = await provider.deleteEvents([operation.deleteId]);
-
-  if (!deleteResult?.success) {
-    return { success: false, mappingId: null };
+    });
   }
 
-  const mapping = mappingsByDestinationUid.get(operation.uid);
+  return { changes, added, addFailed };
+};
 
-  return { success: true, mappingId: mapping?.id ?? null };
+const processDeleteResults = (
+  removeOperations: Extract<SyncOperation, { type: "remove" }>[],
+  deleteResults: DeleteResult[],
+  mappingsByDestinationUid: Map<string, EventMapping>,
+): { deleteIds: string[]; removed: number; removeFailed: number } => {
+  const deleteIds: string[] = [];
+  let removed = 0;
+  let removeFailed = 0;
+
+  for (let index = 0; index < removeOperations.length; index++) {
+    const operation = removeOperations[index];
+    const deleteResult = deleteResults[index];
+
+    if (!operation || !deleteResult?.success) {
+      removeFailed += 1;
+      continue;
+    }
+
+    removed += 1;
+    const mapping = mappingsByDestinationUid.get(operation.uid);
+    if (mapping) {
+      deleteIds.push(mapping.id);
+    }
+  }
+
+  return { deleteIds, removed, removeFailed };
 };
 
 const executeRemoteOperations = async (
@@ -56,9 +75,27 @@ const executeRemoteOperations = async (
   provider: CalendarSyncProvider,
   isCurrent?: () => Promise<boolean>,
 ): Promise<{ changes: PendingChanges; result: SyncResult } | null> => {
+  if (isCurrent) {
+    const stillCurrent = await isCurrent();
+    if (!stillCurrent) {
+      return null;
+    }
+  }
+
   const mappingsByDestinationUid = new Map<string, EventMapping>();
   for (const mapping of existingMappings) {
     mappingsByDestinationUid.set(mapping.destinationEventUid, mapping);
+  }
+
+  const addOperations: Extract<SyncOperation, { type: "add" }>[] = [];
+  const removeOperations: Extract<SyncOperation, { type: "remove" }>[] = [];
+
+  for (const operation of operations) {
+    if (operation.type === "add") {
+      addOperations.push(operation);
+    } else if (operation.type === "remove") {
+      removeOperations.push(operation);
+    }
   }
 
   const changes: PendingChanges = { inserts: [], deletes: [] };
@@ -67,7 +104,17 @@ const executeRemoteOperations = async (
   let removed = 0;
   let removeFailed = 0;
 
-  for (const operation of operations) {
+  if (addOperations.length > 0) {
+    const addEvents = addOperations.map((op) => op.event);
+    const pushResults = await provider.pushEvents(addEvents);
+    const { added: addedCount, addFailed: addFailedCount, changes: addChanges } = processAddResults(addOperations, pushResults, calendarId);
+
+    added = addedCount;
+    addFailed = addFailedCount;
+    changes.inserts.push(...addChanges.inserts);
+  }
+
+  if (removeOperations.length > 0) {
     if (isCurrent) {
       const stillCurrent = await isCurrent();
       if (!stillCurrent) {
@@ -75,36 +122,13 @@ const executeRemoteOperations = async (
       }
     }
 
-    switch (operation.type) {
-      case "add": {
-        const outcome = await processAddOperation(operation, calendarId, provider);
-        if (outcome.skipped) {
-          break;
-        }
-        if (outcome.success && outcome.insert) {
-          added += 1;
-          changes.inserts.push(outcome.insert);
-        } else {
-          addFailed += 1;
-        }
-        break;
-      }
-      case "remove": {
-        const outcome = await processRemoveOperation(operation, mappingsByDestinationUid, provider);
-        if (outcome.success) {
-          removed += 1;
-          if (outcome.mappingId) {
-            changes.deletes.push(outcome.mappingId);
-          }
-        } else {
-          removeFailed += 1;
-        }
-        break;
-      }
-      default: {
-        break;
-      }
-    }
+    const idsToDelete = removeOperations.map((op) => op.deleteId);
+    const deleteResults = await provider.deleteEvents(idsToDelete);
+    const { removed: removedCount, removeFailed: removeFailedCount, deleteIds: deletedMappingIds } = processDeleteResults(removeOperations, deleteResults, mappingsByDestinationUid);
+
+    removed = removedCount;
+    removeFailed = removeFailedCount;
+    changes.deletes.push(...deletedMappingIds);
   }
 
   return { changes, result: { added, addFailed, removed, removeFailed } };

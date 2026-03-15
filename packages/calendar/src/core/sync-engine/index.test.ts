@@ -30,8 +30,8 @@ const makeMapping = (id: string, eventStateId: string, destinationEventUid: stri
 });
 
 const makeProvider = (overrides: Partial<{
-  pushEvents: () => Promise<PushResult[]>;
-  deleteEvents: () => Promise<DeleteResult[]>;
+  pushEvents: (events: SyncableEvent[]) => Promise<PushResult[]>;
+  deleteEvents: (eventIds: string[]) => Promise<DeleteResult[]>;
   listRemoteEvents: () => Promise<never[]>;
 }> = {}) => ({
   pushEvents: overrides.pushEvents ?? (() => Promise.resolve([])),
@@ -183,16 +183,38 @@ describe("executeRemoteOperations", () => {
     expect(outcome.changes.deletes).toHaveLength(0);
   });
 
-  it("abandons work and returns null when generation becomes stale mid-operation", async () => {
+  it("abandons work and returns null when generation becomes stale before adds", async () => {
     const event1 = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
-    const event2 = makeEvent("ev-2", new Date("2026-03-16T09:00:00Z"), new Date("2026-03-16T10:00:00Z"));
-    const operations: SyncOperation[] = [{ type: "add", event: event1 }, { type: "add", event: event2 }];
+    const operations: SyncOperation[] = [{ type: "add", event: event1 }];
 
     let pushCount = 0;
     const provider = makeProvider({
       pushEvents: () => {
         pushCount += 1;
-        return Promise.resolve([{ success: true, remoteId: `remote-${pushCount}` }]);
+        return Promise.resolve([{ success: true, remoteId: "remote-1" }]);
+      },
+    });
+
+    const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider, () => Promise.resolve(false));
+
+    expect(outcome).toBeNull();
+    expect(pushCount).toBe(0);
+  });
+
+  it("abandons deletes when generation becomes stale between adds and deletes", async () => {
+    const event1 = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
+    const mapping = makeMapping("map-1", "ev-1", "remote-1");
+    const operations: SyncOperation[] = [
+      { type: "add", event: event1 },
+      { type: "remove", uid: "remote-1", deleteId: "remote-1", startTime: new Date("2026-03-15T09:00:00Z") },
+    ];
+
+    let deleteCount = 0;
+    const provider = makeProvider({
+      pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-new" }]),
+      deleteEvents: () => {
+        deleteCount += 1;
+        return Promise.resolve([{ success: true }]);
       },
     });
 
@@ -202,17 +224,19 @@ describe("executeRemoteOperations", () => {
       return Promise.resolve(checkCount <= 1);
     };
 
-    const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider, isCurrent);
+    const outcome = await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider, isCurrent);
 
     expect(outcome).toBeNull();
-    expect(pushCount).toBe(1);
+    expect(deleteCount).toBe(0);
   });
 
   it("processes all operations when generation stays current", async () => {
     const event1 = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
     const event2 = makeEvent("ev-2", new Date("2026-03-16T09:00:00Z"), new Date("2026-03-16T10:00:00Z"));
     const operations: SyncOperation[] = [{ type: "add", event: event1 }, { type: "add", event: event2 }];
-    const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-x" }]) });
+    const provider = makeProvider({
+      pushEvents: (events) => Promise.resolve(events.map((_ev, idx) => ({ success: true, remoteId: `remote-${idx}` }))),
+    });
 
     const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider, () => Promise.resolve(true));
     if (!isDefined(outcome)) {
