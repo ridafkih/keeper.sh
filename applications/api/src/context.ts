@@ -24,7 +24,6 @@ const database = createDatabase(env.DATABASE_URL);
 const redis = new Redis(env.REDIS_URL, {
   commandTimeout: 10_000,
   maxRetriesPerRequest: 3,
-  enableOfflineQueue: false,
 });
 
 const createRedisStateStore = (redisClient: Redis): OAuthStateStore => ({
