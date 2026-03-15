@@ -206,7 +206,6 @@
     "services/cron": {
       "name": "@keeper.sh/cron",
       "dependencies": {
-        "@keeper.sh/broadcast": "workspace:*",
         "@keeper.sh/calendar": "workspace:*",
         "@keeper.sh/constants": "workspace:*",
         "@keeper.sh/data-schemas": "workspace:*",
