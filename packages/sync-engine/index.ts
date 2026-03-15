@@ -108,52 +108,112 @@ interface SyncCalendarOptions {
   }>;
   isCurrent: () => Promise<boolean>;
   flush: (changes: PendingChanges) => Promise<void>;
+  onSyncEvent?: (event: Record<string, unknown>) => void;
 }
 
 const EMPTY_RESULT: SyncResult = { added: 0, addFailed: 0, removed: 0, removeFailed: 0 };
 
 const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncResult> => {
-  const { calendarId, provider, readState, isCurrent, flush } = options;
+  const { calendarId, provider, readState, isCurrent, flush, onSyncEvent } = options;
 
-  const state = await readState();
+  const wideEvent: Record<string, unknown> = {
+    "calendar.id": calendarId,
+    "operation.name": "sync:calendar",
+    "operation.type": "sync",
+  };
 
-  const stillCurrent = await isCurrent();
-  if (!stillCurrent) {
-    return EMPTY_RESULT;
+  const startTime = Date.now();
+  let flushed = false;
+
+  try {
+    const state = await readState();
+
+    wideEvent["local_events.count"] = state.localEvents.length;
+    wideEvent["existing_mappings.count"] = state.existingMappings.length;
+    wideEvent["remote_events.count"] = state.remoteEvents.length;
+
+    const stillCurrent = await isCurrent();
+    if (!stillCurrent) {
+      wideEvent["outcome"] = "superseded";
+      wideEvent["flushed"] = false;
+      return EMPTY_RESULT;
+    }
+
+    const { operations, staleMappingIds } = computeSyncOperations(
+      state.localEvents,
+      state.existingMappings,
+      state.remoteEvents,
+    );
+
+    const addCount = operations.filter((op) => op.type === "add").length;
+    const removeCount = operations.filter((op) => op.type === "remove").length;
+
+    wideEvent["operations.add_count"] = addCount;
+    wideEvent["operations.remove_count"] = removeCount;
+    wideEvent["operations.total"] = operations.length;
+    wideEvent["stale_mappings.count"] = staleMappingIds.length;
+
+    if (operations.length === 0 && staleMappingIds.length === 0) {
+      wideEvent["outcome"] = "in-sync";
+      wideEvent["flushed"] = false;
+      wideEvent["events.added"] = 0;
+      wideEvent["events.add_failed"] = 0;
+      wideEvent["events.removed"] = 0;
+      wideEvent["events.remove_failed"] = 0;
+      return EMPTY_RESULT;
+    }
+
+    const outcome = await executeRemoteOperations(
+      operations,
+      state.existingMappings,
+      calendarId,
+      provider,
+      isCurrent,
+    );
+
+    if (outcome === null) {
+      wideEvent["outcome"] = "superseded";
+      wideEvent["flushed"] = false;
+      return EMPTY_RESULT;
+    }
+
+    wideEvent["events.added"] = outcome.result.added;
+    wideEvent["events.add_failed"] = outcome.result.addFailed;
+    wideEvent["events.removed"] = outcome.result.removed;
+    wideEvent["events.remove_failed"] = outcome.result.removeFailed;
+
+    outcome.changes.deletes.push(...staleMappingIds);
+
+    const canFlush = await isCurrent();
+    if (!canFlush) {
+      wideEvent["outcome"] = "superseded";
+      wideEvent["flushed"] = false;
+      return EMPTY_RESULT;
+    }
+
+    await flush(outcome.changes);
+    flushed = true;
+
+    wideEvent["outcome"] = "success";
+    wideEvent["flushed"] = true;
+    wideEvent["flush.inserts"] = outcome.changes.inserts.length;
+    wideEvent["flush.deletes"] = outcome.changes.deletes.length;
+
+    return outcome.result;
+  } catch (error) {
+    wideEvent["outcome"] = "error";
+    wideEvent["flushed"] = flushed;
+
+    if (error instanceof Error) {
+      wideEvent["error.message"] = error.message;
+      wideEvent["error.type"] = error.constructor.name;
+    }
+
+    throw error;
+  } finally {
+    wideEvent["duration_ms"] = Date.now() - startTime;
+    onSyncEvent?.(wideEvent);
   }
-
-  const { operations, staleMappingIds } = computeSyncOperations(
-    state.localEvents,
-    state.existingMappings,
-    state.remoteEvents,
-  );
-
-  if (operations.length === 0 && staleMappingIds.length === 0) {
-    return EMPTY_RESULT;
-  }
-
-  const outcome = await executeRemoteOperations(
-    operations,
-    state.existingMappings,
-    calendarId,
-    provider,
-    isCurrent,
-  );
-
-  if (outcome === null) {
-    return EMPTY_RESULT;
-  }
-
-  outcome.changes.deletes.push(...staleMappingIds);
-
-  const canFlush = await isCurrent();
-  if (!canFlush) {
-    return EMPTY_RESULT;
-  }
-
-  await flush(outcome.changes);
-
-  return outcome.result;
 };
 
 export { executeRemoteOperations, syncCalendar };

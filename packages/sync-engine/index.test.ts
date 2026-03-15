@@ -253,6 +253,107 @@ describe("syncCalendar", () => {
     expect(result.removed).toBe(0);
     expect(flushCalled).toBe(false);
   });
+
+  it("emits a wide event with sync context when onSyncEvent is provided", async () => {
+    const { syncCalendar } = await import("./index");
+    const localEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
+    const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1" }]) });
+
+    const emittedEvents: Record<string, unknown>[] = [];
+
+    await syncCalendar({
+      calendarId: "dest-cal-1",
+      provider,
+      readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
+      isCurrent: () => Promise.resolve(true),
+      flush: () => Promise.resolve(),
+      onSyncEvent: (event) => { emittedEvents.push(event); },
+    });
+
+    expect(emittedEvents).toHaveLength(1);
+
+    const event = emittedEvents[0];
+    expect(event?.["calendar.id"]).toBe("dest-cal-1");
+    expect(event?.["local_events.count"]).toBe(1);
+    expect(event?.["remote_events.count"]).toBe(0);
+    expect(event?.["existing_mappings.count"]).toBe(0);
+    expect(event?.["operations.add_count"]).toBe(1);
+    expect(event?.["operations.remove_count"]).toBe(0);
+    expect(event?.["events.added"]).toBe(1);
+    expect(event?.["events.add_failed"]).toBe(0);
+    expect(event?.["events.removed"]).toBe(0);
+    expect(event?.["events.remove_failed"]).toBe(0);
+    expect(event?.["outcome"]).toBe("success");
+    expect(event?.["flushed"]).toBe(true);
+    expect(typeof event?.["duration_ms"]).toBe("number");
+  });
+
+  it("emits a wide event with outcome superseded when generation becomes stale", async () => {
+    const { syncCalendar } = await import("./index");
+    const localEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
+    const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1" }]) });
+
+    const emittedEvents: Record<string, unknown>[] = [];
+    let checkCount = 0;
+
+    await syncCalendar({
+      calendarId: "dest-cal-1",
+      provider,
+      readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
+      isCurrent: () => { checkCount += 1; return Promise.resolve(checkCount <= 1); },
+      flush: () => Promise.resolve(),
+      onSyncEvent: (event) => { emittedEvents.push(event); },
+    });
+
+    expect(emittedEvents).toHaveLength(1);
+    expect(emittedEvents[0]?.["outcome"]).toBe("superseded");
+    expect(emittedEvents[0]?.["flushed"]).toBe(false);
+  });
+
+  it("emits a wide event with outcome in-sync when there are no operations", async () => {
+    const { syncCalendar } = await import("./index");
+    const provider = makeProvider();
+
+    const emittedEvents: Record<string, unknown>[] = [];
+
+    await syncCalendar({
+      calendarId: "dest-cal-1",
+      provider,
+      readState: () => Promise.resolve({ localEvents: [], existingMappings: [], remoteEvents: [] }),
+      isCurrent: () => Promise.resolve(true),
+      flush: () => Promise.resolve(),
+      onSyncEvent: (event) => { emittedEvents.push(event); },
+    });
+
+    expect(emittedEvents).toHaveLength(1);
+    expect(emittedEvents[0]?.["outcome"]).toBe("in-sync");
+    expect(emittedEvents[0]?.["flushed"]).toBe(false);
+  });
+
+  it("emits a wide event with error details when sync throws", async () => {
+    const { syncCalendar } = await import("./index");
+    const provider = makeProvider();
+
+    const emittedEvents: Record<string, unknown>[] = [];
+
+    try {
+      await syncCalendar({
+        calendarId: "dest-cal-1",
+        provider,
+        readState: () => Promise.reject(new Error("db connection failed")),
+        isCurrent: () => Promise.resolve(true),
+        flush: () => Promise.resolve(),
+        onSyncEvent: (event) => { emittedEvents.push(event); },
+      });
+    } catch {
+      // expected
+    }
+
+    expect(emittedEvents).toHaveLength(1);
+    expect(emittedEvents[0]?.["outcome"]).toBe("error");
+    expect(emittedEvents[0]?.["error.message"]).toBe("db connection failed");
+    expect(typeof emittedEvents[0]?.["duration_ms"]).toBe("number");
+  });
 });
 
 describe("createRedisGenerationCheck", () => {
