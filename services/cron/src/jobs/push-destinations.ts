@@ -181,6 +181,13 @@ const syncDestinationsForUser = async (
       }),
       isCurrent,
       flush,
+      onSyncEvent: (event) => {
+        widelog.setFields({
+          ...event,
+          "destination.provider": destination.provider,
+          "user.id": destination.userId,
+        });
+      },
     });
 
     added += result.added;
