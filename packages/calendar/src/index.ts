@@ -193,3 +193,10 @@ export type {
 export { createRedisGenerationCheck } from "./core/sync-engine/generation";
 export type { GenerationStore } from "./core/sync-engine/generation";
 export { createDatabaseFlush } from "./core/sync-engine/flush";
+export { ingestSource } from "./core/sync-engine/ingest";
+export type {
+  IngestSourceOptions,
+  IngestionResult,
+  IngestionChanges,
+  ExistingEventState,
+} from "./core/sync-engine/ingest";
