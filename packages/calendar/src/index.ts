@@ -180,3 +180,16 @@ export {
   type DestinationProvidersConfig,
   type SourceProvidersConfig,
 } from "./utils/registry/server";
+
+export {
+  executeRemoteOperations,
+  syncCalendar,
+} from "./core/sync-engine";
+export type {
+  CalendarSyncProvider,
+  PendingChanges,
+  SyncCalendarOptions,
+} from "./core/sync-engine";
+export { createRedisGenerationCheck } from "./core/sync-engine/generation";
+export type { GenerationStore } from "./core/sync-engine/generation";
+export { createDatabaseFlush } from "./core/sync-engine/flush";
