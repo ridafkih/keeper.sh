@@ -1,14 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import { executeRemoteOperations } from "./index";
-import type { SyncableEvent, SyncOperation, PushResult, DeleteResult, EventMapping } from "@keeper.sh/calendar";
+import type { SyncOperation, PushResult, DeleteResult, SyncableEvent, EventMapping } from "@keeper.sh/calendar";
 import type { PendingChanges } from "./types";
 
-const assertNotNull = <TValue>(value: TValue | null, message: string): TValue => {
-  if (value === null) {
+function assertDefined<TValue>(value: TValue | null | undefined, message: string): asserts value is TValue {
+  if (value === null || value === undefined) {
     throw new Error(message);
   }
-  return value;
-};
+}
 
 const makeEvent = (id: string, startTime: Date, endTime: Date): SyncableEvent => ({
   id,
@@ -43,18 +42,13 @@ const makeProvider = (overrides: Partial<{
 });
 
 describe("executeRemoteOperations", () => {
-  it("accumulates mapping inserts from successful pushes without writing to database", async () => {
+  it("accumulates mapping inserts from successful pushes", async () => {
     const event = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
     const operations: SyncOperation[] = [{ type: "add", event }];
+    const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1" }]) });
 
-    const provider = makeProvider({
-      pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1" }]),
-    });
-
-    const outcome = assertNotNull(
-      await executeRemoteOperations(operations, [], "dest-cal-1", provider),
-      "expected outcome",
-    );
+    const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider);
+    assertDefined(outcome, "expected outcome");
 
     expect(outcome.result.added).toBe(1);
     expect(outcome.result.addFailed).toBe(0);
@@ -66,21 +60,11 @@ describe("executeRemoteOperations", () => {
 
   it("accumulates mapping deletes from successful removes", async () => {
     const mapping = makeMapping("map-1", "ev-1", "remote-1");
-    const operations: SyncOperation[] = [{
-      type: "remove",
-      uid: "remote-1",
-      deleteId: "remote-1",
-      startTime: new Date("2026-03-15T09:00:00Z"),
-    }];
+    const operations: SyncOperation[] = [{ type: "remove", uid: "remote-1", deleteId: "remote-1", startTime: new Date("2026-03-15T09:00:00Z") }];
+    const provider = makeProvider({ deleteEvents: () => Promise.resolve([{ success: true }]) });
 
-    const provider = makeProvider({
-      deleteEvents: () => Promise.resolve([{ success: true }]),
-    });
-
-    const outcome = assertNotNull(
-      await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider),
-      "expected outcome",
-    );
+    const outcome = await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider);
+    assertDefined(outcome, "expected outcome");
 
     expect(outcome.result.removed).toBe(1);
     expect(outcome.result.removeFailed).toBe(0);
@@ -92,15 +76,10 @@ describe("executeRemoteOperations", () => {
   it("counts failed pushes without accumulating changes", async () => {
     const event = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
     const operations: SyncOperation[] = [{ type: "add", event }];
+    const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: false, error: "rate limited" }]) });
 
-    const provider = makeProvider({
-      pushEvents: () => Promise.resolve([{ success: false, error: "rate limited" }]),
-    });
-
-    const outcome = assertNotNull(
-      await executeRemoteOperations(operations, [], "dest-cal-1", provider),
-      "expected outcome",
-    );
+    const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider);
+    assertDefined(outcome, "expected outcome");
 
     expect(outcome.result.added).toBe(0);
     expect(outcome.result.addFailed).toBe(1);
@@ -109,21 +88,11 @@ describe("executeRemoteOperations", () => {
 
   it("counts failed deletes without accumulating changes", async () => {
     const mapping = makeMapping("map-1", "ev-1", "remote-1");
-    const operations: SyncOperation[] = [{
-      type: "remove",
-      uid: "remote-1",
-      deleteId: "remote-1",
-      startTime: new Date("2026-03-15T09:00:00Z"),
-    }];
+    const operations: SyncOperation[] = [{ type: "remove", uid: "remote-1", deleteId: "remote-1", startTime: new Date("2026-03-15T09:00:00Z") }];
+    const provider = makeProvider({ deleteEvents: () => Promise.resolve([{ success: false, error: "server error" }]) });
 
-    const provider = makeProvider({
-      deleteEvents: () => Promise.resolve([{ success: false, error: "server error" }]),
-    });
-
-    const outcome = assertNotNull(
-      await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider),
-      "expected outcome",
-    );
+    const outcome = await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider);
+    assertDefined(outcome, "expected outcome");
 
     expect(outcome.result.removed).toBe(0);
     expect(outcome.result.removeFailed).toBe(1);
@@ -133,21 +102,17 @@ describe("executeRemoteOperations", () => {
   it("processes mixed add and remove operations in order", async () => {
     const event = makeEvent("ev-2", new Date("2026-03-16T09:00:00Z"), new Date("2026-03-16T10:00:00Z"));
     const mapping = makeMapping("map-1", "ev-1", "remote-1");
-
     const operations: SyncOperation[] = [
       { type: "remove", uid: "remote-1", deleteId: "remote-1", startTime: new Date("2026-03-15T09:00:00Z") },
       { type: "add", event },
     ];
-
     const provider = makeProvider({
       pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-2" }]),
       deleteEvents: () => Promise.resolve([{ success: true }]),
     });
 
-    const outcome = assertNotNull(
-      await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider),
-      "expected outcome",
-    );
+    const outcome = await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider);
+    assertDefined(outcome, "expected outcome");
 
     expect(outcome.result.added).toBe(1);
     expect(outcome.result.removed).toBe(1);
@@ -158,15 +123,10 @@ describe("executeRemoteOperations", () => {
   it("uses remoteId as deleteIdentifier fallback when pushResult has no deleteId", async () => {
     const event = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
     const operations: SyncOperation[] = [{ type: "add", event }];
+    const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1" }]) });
 
-    const provider = makeProvider({
-      pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1" }]),
-    });
-
-    const outcome = assertNotNull(
-      await executeRemoteOperations(operations, [], "dest-cal-1", provider),
-      "expected outcome",
-    );
+    const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider);
+    assertDefined(outcome, "expected outcome");
 
     expect(outcome.changes.inserts[0]?.deleteIdentifier).toBe("remote-1");
   });
@@ -174,15 +134,10 @@ describe("executeRemoteOperations", () => {
   it("uses explicit deleteId from pushResult when provided", async () => {
     const event = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
     const operations: SyncOperation[] = [{ type: "add", event }];
+    const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1", deleteId: "delete-key-1" }]) });
 
-    const provider = makeProvider({
-      pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1", deleteId: "delete-key-1" }]),
-    });
-
-    const outcome = assertNotNull(
-      await executeRemoteOperations(operations, [], "dest-cal-1", provider),
-      "expected outcome",
-    );
+    const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider);
+    assertDefined(outcome, "expected outcome");
 
     expect(outcome.changes.inserts[0]?.deleteIdentifier).toBe("delete-key-1");
   });
@@ -190,10 +145,8 @@ describe("executeRemoteOperations", () => {
   it("returns empty result for zero operations", async () => {
     const provider = makeProvider();
 
-    const outcome = assertNotNull(
-      await executeRemoteOperations([], [], "dest-cal-1", provider),
-      "expected outcome",
-    );
+    const outcome = await executeRemoteOperations([], [], "dest-cal-1", provider);
+    assertDefined(outcome, "expected outcome");
 
     expect(outcome.result.added).toBe(0);
     expect(outcome.result.removed).toBe(0);
@@ -204,10 +157,7 @@ describe("executeRemoteOperations", () => {
   it("abandons work and returns null when generation becomes stale mid-operation", async () => {
     const event1 = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
     const event2 = makeEvent("ev-2", new Date("2026-03-16T09:00:00Z"), new Date("2026-03-16T10:00:00Z"));
-    const operations: SyncOperation[] = [
-      { type: "add", event: event1 },
-      { type: "add", event: event2 },
-    ];
+    const operations: SyncOperation[] = [{ type: "add", event: event1 }, { type: "add", event: event2 }];
 
     let pushCount = 0;
     const provider = makeProvider({
@@ -232,19 +182,11 @@ describe("executeRemoteOperations", () => {
   it("processes all operations when generation stays current", async () => {
     const event1 = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
     const event2 = makeEvent("ev-2", new Date("2026-03-16T09:00:00Z"), new Date("2026-03-16T10:00:00Z"));
-    const operations: SyncOperation[] = [
-      { type: "add", event: event1 },
-      { type: "add", event: event2 },
-    ];
+    const operations: SyncOperation[] = [{ type: "add", event: event1 }, { type: "add", event: event2 }];
+    const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-x" }]) });
 
-    const provider = makeProvider({
-      pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-x" }]),
-    });
-
-    const outcome = assertNotNull(
-      await executeRemoteOperations(operations, [], "dest-cal-1", provider, () => Promise.resolve(true)),
-      "expected outcome",
-    );
+    const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider, () => Promise.resolve(true));
+    assertDefined(outcome, "expected outcome");
 
     expect(outcome.result.added).toBe(2);
     expect(outcome.changes.inserts).toHaveLength(2);
@@ -252,44 +194,32 @@ describe("executeRemoteOperations", () => {
 });
 
 describe("syncCalendar", () => {
-  it("pushes new events and returns accumulated results without flushing until the end", async () => {
+  it("pushes new events and flushes accumulated changes at the end", async () => {
     const { syncCalendar } = await import("./index");
-
     const localEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
+    const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1" }]) });
 
-    const provider = makeProvider({
-      pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1" }]),
-    });
-
-    let flushedChanges: PendingChanges | null = null;
+    const flushCapture: PendingChanges[] = [];
 
     const result = await syncCalendar({
       calendarId: "dest-cal-1",
       provider,
       readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
       isCurrent: () => Promise.resolve(true),
-      flush: (changes) => {
-        flushedChanges = changes;
-        return Promise.resolve();
-      },
+      flush: (changes) => { flushCapture.push(changes); return Promise.resolve(); },
     });
-
-    const changes = assertNotNull(flushedChanges, "expected flush to be called");
 
     expect(result.added).toBe(1);
     expect(result.addFailed).toBe(0);
-    expect(changes.inserts).toHaveLength(1);
-    expect(changes.inserts[0]?.destinationEventUid).toBe("remote-1");
+    expect(flushCapture).toHaveLength(1);
+    expect(flushCapture[0]?.inserts).toHaveLength(1);
+    expect(flushCapture[0]?.inserts[0]?.destinationEventUid).toBe("remote-1");
   });
 
   it("does not flush when generation becomes stale before flush", async () => {
     const { syncCalendar } = await import("./index");
-
     const localEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
-
-    const provider = makeProvider({
-      pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1" }]),
-    });
+    const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1" }]) });
 
     let flushCalled = false;
     let checkCount = 0;
@@ -298,14 +228,8 @@ describe("syncCalendar", () => {
       calendarId: "dest-cal-1",
       provider,
       readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
-      isCurrent: () => {
-        checkCount += 1;
-        return Promise.resolve(checkCount <= 2);
-      },
-      flush: () => {
-        flushCalled = true;
-        return Promise.resolve();
-      },
+      isCurrent: () => { checkCount += 1; return Promise.resolve(checkCount <= 2); },
+      flush: () => { flushCalled = true; return Promise.resolve(); },
     });
 
     expect(result.added).toBe(0);
@@ -314,7 +238,6 @@ describe("syncCalendar", () => {
 
   it("returns empty result when there are no operations", async () => {
     const { syncCalendar } = await import("./index");
-
     const provider = makeProvider();
     let flushCalled = false;
 
@@ -323,10 +246,7 @@ describe("syncCalendar", () => {
       provider,
       readState: () => Promise.resolve({ localEvents: [], existingMappings: [], remoteEvents: [] }),
       isCurrent: () => Promise.resolve(true),
-      flush: () => {
-        flushCalled = true;
-        return Promise.resolve();
-      },
+      flush: () => { flushCalled = true; return Promise.resolve(); },
     });
 
     expect(result.added).toBe(0);
@@ -336,21 +256,17 @@ describe("syncCalendar", () => {
 });
 
 describe("createRedisGenerationCheck", () => {
-  it("returns true when the generation counter has not been incremented by another caller", async () => {
+  it("returns true when the generation counter has not been incremented", async () => {
     const { createRedisGenerationCheck } = await import("./generation");
     type GenerationStore = Parameters<typeof createRedisGenerationCheck>[0];
 
     let counter = 0;
     const store: GenerationStore = {
-      incr: () => {
-        counter += 1;
-        return Promise.resolve(counter);
-      },
+      incr: () => { counter += 1; return Promise.resolve(counter); },
       get: () => Promise.resolve(String(counter)),
     };
 
     const isCurrent = await createRedisGenerationCheck(store, "cal-1");
-
     expect(await isCurrent()).toBe(true);
   });
 
@@ -360,25 +276,19 @@ describe("createRedisGenerationCheck", () => {
 
     let counter = 0;
     const store: GenerationStore = {
-      incr: () => {
-        counter += 1;
-        return Promise.resolve(counter);
-      },
+      incr: () => { counter += 1; return Promise.resolve(counter); },
       get: () => Promise.resolve(String(counter)),
     };
 
     const isCurrent = await createRedisGenerationCheck(store, "cal-1");
-
     counter += 1;
-
     expect(await isCurrent()).toBe(false);
   });
 });
 
 describe("createDatabaseFlush", () => {
-  it("batches all inserts and deletes into a single transaction callback", async () => {
+  it("batches all inserts and deletes into a single transaction", async () => {
     const { createDatabaseFlush } = await import("./flush");
-
     const executedOperations: string[] = [];
 
     const fakeDatabase = {
@@ -392,7 +302,6 @@ describe("createDatabaseFlush", () => {
     };
 
     const flush = createDatabaseFlush(fakeDatabase as never);
-
     await flush({
       inserts: [{
         eventStateId: "ev-1", calendarId: "cal-1", destinationEventUid: "remote-1",
@@ -407,9 +316,7 @@ describe("createDatabaseFlush", () => {
 
   it("skips delete when there are no deletes", async () => {
     const { createDatabaseFlush } = await import("./flush");
-
     const executedOperations: string[] = [];
-
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
@@ -421,7 +328,6 @@ describe("createDatabaseFlush", () => {
     };
 
     const flush = createDatabaseFlush(fakeDatabase as never);
-
     await flush({
       inserts: [{
         eventStateId: "ev-1", calendarId: "cal-1", destinationEventUid: "remote-1",
@@ -436,9 +342,7 @@ describe("createDatabaseFlush", () => {
 
   it("skips insert when there are no inserts", async () => {
     const { createDatabaseFlush } = await import("./flush");
-
     const executedOperations: string[] = [];
-
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
@@ -450,7 +354,6 @@ describe("createDatabaseFlush", () => {
     };
 
     const flush = createDatabaseFlush(fakeDatabase as never);
-
     await flush({ inserts: [], deletes: ["map-1"] });
 
     expect(executedOperations).toEqual(["delete"]);
@@ -458,18 +361,12 @@ describe("createDatabaseFlush", () => {
 
   it("does nothing when changes are empty", async () => {
     const { createDatabaseFlush } = await import("./flush");
-
     let transactionCalled = false;
-
     const fakeDatabase = {
-      transaction: () => {
-        transactionCalled = true;
-        return Promise.resolve();
-      },
+      transaction: () => { transactionCalled = true; return Promise.resolve(); },
     };
 
     const flush = createDatabaseFlush(fakeDatabase as never);
-
     await flush({ inserts: [], deletes: [] });
 
     expect(transactionCalled).toBe(false);

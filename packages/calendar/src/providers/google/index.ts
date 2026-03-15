@@ -25,7 +25,9 @@ export type {
 
 export {
   createGoogleCalendarProvider,
+  createGoogleSyncProvider,
   type GoogleCalendarProviderConfig,
+  type GoogleSyncProviderConfig,
 } from "./destination/provider";
 export {
   getGoogleAccountsByPlan,
