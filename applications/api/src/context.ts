@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import env from "@keeper.sh/env/api";
+import env from "./env";
 import { createDatabase } from "@keeper.sh/database";
 import { syncStatusTable } from "@keeper.sh/database/schema";
 import Redis from "ioredis";

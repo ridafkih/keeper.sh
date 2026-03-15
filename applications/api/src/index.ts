@@ -9,7 +9,7 @@ import { isHttpMethod, isRouteModule } from "./utils/route-handler";
 import { socketQuerySchema } from "./utils/request-query";
 import { closeDatabase } from "@keeper.sh/database";
 import { broadcastService, database, redis } from "./context";
-import env from "@keeper.sh/env/api";
+import env from "./env";
 import { destroyWideLogger, runApiWideEventContext, setWideEventFields, widelog } from "./utils/logging";
 
 const HTTP_UNAUTHORIZED = 401;

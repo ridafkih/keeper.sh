@@ -1,6 +1,6 @@
 import { isKeeperMcpEnabledAuth, createAuth } from "@keeper.sh/auth";
 import { createDatabase } from "@keeper.sh/database";
-import env from "@keeper.sh/env/mcp";
+import env from "./env";
 import { createKeeperMcpHandler } from "./mcp-handler";
 import { createKeeperMcpToolset } from "./toolset";
 import { withWideEvent } from "./utils/middleware";

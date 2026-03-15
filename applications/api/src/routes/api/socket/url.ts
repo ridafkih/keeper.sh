@@ -1,4 +1,4 @@
-import env from "@keeper.sh/env/api";
+import env from "../../../env";
 import { withAuth, withWideEvent } from "../../../utils/middleware";
 import { generateSocketToken } from "../../../utils/state";
 

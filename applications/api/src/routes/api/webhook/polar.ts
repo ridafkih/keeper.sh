@@ -2,7 +2,7 @@ import type { MaybePromise } from "bun";
 import { WebhookVerificationError, validateEvent } from "@polar-sh/sdk/webhooks";
 import { ErrorResponse } from "../../../utils/responses";
 import { database } from "../../../context";
-import env from "@keeper.sh/env/api";
+import env from "../../../env";
 import { userSubscriptionsTable } from "@keeper.sh/database/schema";
 import { respondWithLoggedError, runApiWideEventContext, setWideEventFields, widelog } from "../../../utils/logging";
 

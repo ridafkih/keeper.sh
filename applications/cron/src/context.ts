@@ -1,4 +1,4 @@
-import env from "@keeper.sh/env/cron";
+import env from "./env";
 import { createDatabase } from "@keeper.sh/database";
 import { syncStatusTable } from "@keeper.sh/database/schema";
 import Redis from "ioredis";

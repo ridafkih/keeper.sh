@@ -6,7 +6,7 @@ import { registerJobs } from "./utils/register-jobs";
 import { closeDatabase } from "@keeper.sh/database";
 import { widelog, destroyWideLogger, runCronWideEventContext } from "./utils/logging";
 import { database } from "./context";
-import env from "@keeper.sh/env/cron";
+import env from "./env";
 
 const jobsFolderPathname = join(import.meta.dirname, "jobs");
 

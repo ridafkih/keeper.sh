@@ -1,6 +1,6 @@
 import { entry } from "entrykit";
 import { join } from "node:path";
-import { tryLoadMcpEnv } from "@keeper.sh/env/mcp";
+import { tryLoadMcpEnv } from "./env";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
 import { destroyWideLogger, runMcpWideEventContext, setWideEventFields, widelog } from "./utils/logging";
 
