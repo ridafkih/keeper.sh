@@ -237,5 +237,148 @@ const createOutlookCalendarProvider = (
   });
 };
 
-export { createOutlookCalendarProvider };
-export type { OutlookCalendarProviderConfig };
+interface OutlookSyncProviderConfig {
+  accessToken: string;
+  refreshToken: string;
+  accessTokenExpiresAt: Date;
+  calendarId: string;
+  userId: string;
+}
+
+const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
+  const getHeaders = (): Record<string, string> => ({
+    Authorization: `Bearer ${config.accessToken}`,
+    "Content-Type": "application/json",
+  });
+
+  const pushEvents = async (events: SyncableEvent[]): Promise<PushResult[]> => {
+    const results: PushResult[] = [];
+
+    for (const event of events) {
+      try {
+        const resource = serializeOutlookEvent(event);
+        const url = new URL(`${MICROSOFT_GRAPH_API}/me/calendar/events`);
+
+        const response = await fetch(url, {
+          body: JSON.stringify(resource),
+          headers: getHeaders(),
+          method: "POST",
+        });
+
+        if (!response.ok) {
+          const body = await response.json();
+          const { error } = microsoftApiErrorSchema.assert(body);
+          results.push({ error: error?.message ?? response.statusText, success: false });
+          continue;
+        }
+
+        const body = await response.json();
+        const created = outlookEventSchema.assert(body);
+        results.push({ deleteId: created.id, remoteId: created.iCalUId, success: true });
+      } catch (error) {
+        results.push({ error: getErrorMessage(error), success: false });
+      }
+    }
+
+    return results;
+  };
+
+  const deleteEvents = async (eventIds: string[]): Promise<DeleteResult[]> => {
+    const results: DeleteResult[] = [];
+
+    for (const eventId of eventIds) {
+      try {
+        const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${eventId}`);
+
+        const response = await fetch(url, {
+          headers: { Authorization: `Bearer ${config.accessToken}` },
+          method: "DELETE",
+        });
+
+        if (!response.ok && response.status !== HTTP_STATUS.NOT_FOUND) {
+          const body = await response.json();
+          const { error } = microsoftApiErrorSchema.assert(body);
+          results.push({ error: error?.message ?? response.statusText, success: false });
+          continue;
+        }
+
+        await response.body?.cancel?.();
+        results.push({ success: true });
+      } catch (error) {
+        results.push({ error: getErrorMessage(error), success: false });
+      }
+    }
+
+    return results;
+  };
+
+  const buildOutlookEventsUrl = (
+    lookbackStart: Date,
+    futureDate: Date,
+    nextLink: string | null,
+  ): URL => {
+    if (nextLink) {
+      return new URL(nextLink);
+    }
+    const baseUrl = new URL(`${MICROSOFT_GRAPH_API}/me/calendar/events`);
+    baseUrl.searchParams.set(
+      "$filter",
+      `categories/any(c:c eq '${KEEPER_CATEGORY}') and start/dateTime ge '${lookbackStart.toISOString()}' and start/dateTime le '${futureDate.toISOString()}'`,
+    );
+    baseUrl.searchParams.set("$top", String(OUTLOOK_PAGE_SIZE));
+    baseUrl.searchParams.set("$select", "id,iCalUId,subject,start,end,categories");
+    return baseUrl;
+  };
+
+  const listRemoteEvents = async (): Promise<RemoteEvent[]> => {
+    const remoteEvents: RemoteEvent[] = [];
+    let nextLink: string | null = null;
+    const lookbackStart = getOAuthSyncWindowStart();
+    const futureDate = new Date();
+    futureDate.setFullYear(futureDate.getFullYear() + 2);
+
+    do {
+      const url = buildOutlookEventsUrl(lookbackStart, futureDate, nextLink);
+
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${config.accessToken}` },
+        method: "GET",
+      });
+
+      if (!response.ok) {
+        const body = await response.json();
+        const { error } = microsoftApiErrorSchema.assert(body);
+        throw new Error(error?.message ?? response.statusText);
+      }
+
+      const body = await response.json();
+      const data = outlookEventListSchema.assert(body);
+
+      for (const event of data.value ?? []) {
+        const startTime = parseEventTime(event.start);
+        const endTime = parseEventTime(event.end);
+
+        if (!event.id || !event.iCalUId || !startTime || !endTime) {
+          continue;
+        }
+
+        remoteEvents.push({
+          deleteId: event.id,
+          endTime,
+          isKeeperEvent: event.categories?.includes(KEEPER_CATEGORY) ?? false,
+          startTime,
+          uid: event.iCalUId,
+        });
+      }
+
+      nextLink = data["@odata.nextLink"] ?? null;
+    } while (nextLink);
+
+    return remoteEvents;
+  };
+
+  return { pushEvents, deleteEvents, listRemoteEvents };
+};
+
+export { createOutlookCalendarProvider, createOutlookSyncProvider };
+export type { OutlookCalendarProviderConfig, OutlookSyncProviderConfig };
