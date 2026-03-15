@@ -25,18 +25,6 @@ const USER_CONCURRENCY = 5;
 const REDIS_COMMAND_TIMEOUT_MS = 10_000;
 const REDIS_MAX_RETRIES = 3;
 
-const withTimeout = <TResult>(
-  operation: () => Promise<TResult>,
-  timeoutMs: number,
-  label: string,
-): Promise<TResult> =>
-  Promise.race([
-    Promise.resolve().then(operation),
-    Bun.sleep(timeoutMs).then((): never => {
-      throw new Error(`${label} timed out after ${timeoutMs}ms`);
-    }),
-  ]);
-
 const runEgressJob = async (plan: Plan): Promise<void> => {
   const usersWithDestinations = await getUsersWithDestinationsByPlan(plan);
 
@@ -104,33 +92,30 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
     const allSyncEvents: Record<string, unknown>[] = [];
 
     const settlements = await allSettledWithConcurrency(
-      usersWithDestinations.map((userId) => () =>
-        withTimeout(
-          () => syncDestinationsForUser(userId, syncConfig, {
-            onProgress: (update) => {
-              syncAggregateRuntime.onSyncProgress(update);
-            },
-            onSyncEvent: (syncEvent) => {
-              const calendarId = syncEvent["calendar.id"];
-              const localCount = syncEvent["local_events.count"];
-              const remoteCount = syncEvent["remote_events.count"];
+      usersWithDestinations.map((userId) => () => {
+        const deadlineMs = Date.now() + USER_TIMEOUT_MS;
+        return syncDestinationsForUser(userId, { ...syncConfig, deadlineMs }, {
+          onProgress: (update) => {
+            syncAggregateRuntime.onSyncProgress(update);
+          },
+          onSyncEvent: (syncEvent) => {
+            const calendarId = syncEvent["calendar.id"];
+            const localCount = syncEvent["local_events.count"];
+            const remoteCount = syncEvent["remote_events.count"];
 
-              if (typeof calendarId !== "string") {
-                return;
-              }
+            if (typeof calendarId !== "string") {
+              return;
+            }
 
-              syncAggregateRuntime.onDestinationSync({
-                userId,
-                calendarId,
-                localEventCount: resolveCount(localCount),
-                remoteEventCount: resolveCount(remoteCount),
-              });
-            },
-          }),
-          USER_TIMEOUT_MS,
-          `push:user:${userId}`,
-        ),
-      ),
+            syncAggregateRuntime.onDestinationSync({
+              userId,
+              calendarId,
+              localEventCount: resolveCount(localCount),
+              remoteEventCount: resolveCount(remoteCount),
+            });
+          },
+        });
+      }),
       { concurrency: USER_CONCURRENCY },
     );
 

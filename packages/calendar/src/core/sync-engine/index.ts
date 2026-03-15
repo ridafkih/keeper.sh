@@ -154,6 +154,82 @@ const mergeRunResult = (accumulated: PendingChanges, result: SyncResult, runResu
 
 type ProgressCallback = (processed: number, total: number) => void;
 
+const OPERATION_CHUNK_SIZE = 50;
+
+const chunkOperations = <TOperation>(operations: TOperation[], size: number): TOperation[][] => {
+  const chunks: TOperation[][] = [];
+  for (let offset = 0; offset < operations.length; offset += size) {
+    chunks.push(operations.slice(offset, offset + size));
+  }
+  return chunks;
+};
+
+interface ChunkedExecutionState {
+  changes: PendingChanges;
+  result: SyncResult;
+  processed: number;
+  superseded: boolean;
+}
+
+const checkSuperseded = async (
+  state: ChunkedExecutionState,
+  isCurrent?: () => Promise<boolean>,
+): Promise<boolean> => {
+  if (!isCurrent) {
+    return false;
+  }
+  const stillCurrent = await isCurrent();
+  if (!stillCurrent) {
+    state.superseded = true;
+    return true;
+  }
+  return false;
+};
+
+const executeChunkedAdds = async (
+  adds: Extract<SyncOperation, { type: "add" }>[],
+  calendarId: string,
+  provider: CalendarSyncProvider,
+  state: ChunkedExecutionState,
+  totalOperations: number,
+  isCurrent?: () => Promise<boolean>,
+  onRunComplete?: ProgressCallback,
+): Promise<void> => {
+  const chunks = chunkOperations(adds, OPERATION_CHUNK_SIZE);
+  for (const chunk of chunks) {
+    if (state.superseded) {
+      return;
+    }
+    const runResult = await executeAddRun(chunk, calendarId, provider);
+    state.result = mergeRunResult(state.changes, state.result, runResult);
+    state.processed += chunk.length;
+    onRunComplete?.(state.processed, totalOperations);
+    await checkSuperseded(state, isCurrent);
+  }
+};
+
+const executeChunkedRemoves = async (
+  removes: Extract<SyncOperation, { type: "remove" }>[],
+  provider: CalendarSyncProvider,
+  mappingsByDestinationUid: Map<string, EventMapping>,
+  state: ChunkedExecutionState,
+  totalOperations: number,
+  isCurrent?: () => Promise<boolean>,
+  onRunComplete?: ProgressCallback,
+): Promise<void> => {
+  const chunks = chunkOperations(removes, OPERATION_CHUNK_SIZE);
+  for (const chunk of chunks) {
+    if (state.superseded) {
+      return;
+    }
+    const runResult = await executeRemoveRun(chunk, provider, mappingsByDestinationUid);
+    state.result = mergeRunResult(state.changes, state.result, runResult);
+    state.processed += chunk.length;
+    onRunComplete?.(state.processed, totalOperations);
+    await checkSuperseded(state, isCurrent);
+  }
+};
+
 const executeRemoteOperations = async (
   operations: SyncOperation[],
   existingMappings: EventMapping[],
@@ -167,44 +243,30 @@ const executeRemoteOperations = async (
     mappingsByDestinationUid.set(mapping.destinationEventUid, mapping);
   }
 
-  const changes: PendingChanges = { inserts: [], deletes: [] };
   const runs = groupOperationRuns(operations);
   const totalOperations = operations.length;
-  const emptyResult: SyncResult = { added: 0, addFailed: 0, removed: 0, removeFailed: 0 };
-  let result = emptyResult;
-  let processed = 0;
-  let superseded = false;
+  const state: ChunkedExecutionState = {
+    changes: { inserts: [], deletes: [] },
+    result: { added: 0, addFailed: 0, removed: 0, removeFailed: 0 },
+    processed: 0,
+    superseded: false,
+  };
 
   for (const run of runs) {
-    if (superseded) {
+    if (state.superseded) {
       break;
     }
 
     if (run.type === "add" && run.adds.length > 0) {
-      const runResult = await executeAddRun(run.adds, calendarId, provider);
-      result = mergeRunResult(changes, result, runResult);
-      processed += run.adds.length;
+      await executeChunkedAdds(run.adds, calendarId, provider, state, totalOperations, isCurrent, onRunComplete);
     }
 
     if (run.type === "remove" && run.removes.length > 0) {
-      const runResult = await executeRemoveRun(run.removes, provider, mappingsByDestinationUid);
-      result = mergeRunResult(changes, result, runResult);
-      processed += run.removes.length;
-    }
-
-    if (onRunComplete) {
-      onRunComplete(processed, totalOperations);
-    }
-
-    if (isCurrent) {
-      const stillCurrent = await isCurrent();
-      if (!stillCurrent) {
-        superseded = true;
-      }
+      await executeChunkedRemoves(run.removes, provider, mappingsByDestinationUid, state, totalOperations, isCurrent, onRunComplete);
     }
   }
 
-  return { changes, result, superseded };
+  return { changes: state.changes, result: state.result, superseded: state.superseded };
 };
 
 interface SyncCalendarOptions {

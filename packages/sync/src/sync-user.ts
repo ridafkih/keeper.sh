@@ -24,6 +24,7 @@ interface SyncConfig {
   redis: Redis;
   encryptionKey?: string;
   oauthConfig: OAuthConfig;
+  deadlineMs?: number;
 }
 
 interface SyncDestinationsResult {
@@ -124,7 +125,12 @@ const syncDestinationsForUser = async (
           existingMappings: await getEventMappingsForDestination(database, destination.calendarId),
           remoteEvents: await providerRef.listRemoteEvents(),
         }),
-        isCurrent: () => handle.isCurrent(),
+        isCurrent: () => {
+          if (config.deadlineMs && Date.now() >= config.deadlineMs) {
+            return Promise.resolve(false);
+          }
+          return handle.isCurrent();
+        },
         flush,
         onProgress: callbacks?.onProgress,
         onSyncEvent: (event) => {
