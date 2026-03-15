@@ -199,4 +199,5 @@ export type {
   IngestionResult,
   IngestionChanges,
   ExistingEventState,
+  FetchEventsResult as IngestionFetchEventsResult,
 } from "./core/sync-engine/ingest";

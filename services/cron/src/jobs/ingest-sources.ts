@@ -1,21 +1,41 @@
 import type { CronOptions } from "cronbake";
-import { allSettledWithConcurrency, getCalDAVProviders, createGoogleOAuthService, createMicrosoftOAuthService } from "@keeper.sh/calendar";
+import {
+  ingestSource,
+  createRedisGenerationCheck,
+  allSettledWithConcurrency,
+  insertEventStatesWithConflictResolution,
+} from "@keeper.sh/calendar";
+import type { IngestionChanges, IngestionFetchEventsResult } from "@keeper.sh/calendar";
 import { fetchAndSyncSource } from "@keeper.sh/calendar/ics";
-import { createGoogleCalendarSourceProvider } from "@keeper.sh/calendar/google";
-import { createOutlookSourceProvider } from "@keeper.sh/calendar/outlook";
-import { createCalDAVSourceProvider } from "@keeper.sh/calendar/caldav";
-import { createFastMailSourceProvider } from "@keeper.sh/calendar/fastmail";
-import { createICloudSourceProvider } from "@keeper.sh/calendar/icloud";
-import { calendarsTable } from "@keeper.sh/database/schema";
-import { eq } from "drizzle-orm";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { createGoogleSourceFetcher } from "@keeper.sh/calendar/google";
+import { createOutlookSourceFetcher } from "@keeper.sh/calendar/outlook";
+import { createCalDAVSourceFetcher } from "@keeper.sh/calendar/caldav";
+import { decryptPassword } from "@keeper.sh/database";
+import {
+  calendarAccountsTable,
+  calendarsTable,
+  caldavCredentialsTable,
+  eventStatesTable,
+  oauthCredentialsTable,
+} from "@keeper.sh/database/schema";
+import { and, arrayContains, eq, inArray } from "drizzle-orm";
+import Redis from "ioredis";
 import { setCronEventFields, withCronWideEvent } from "@/utils/with-wide-event";
 import { widelog } from "@/utils/logging";
-import { database, refreshLockStore } from "@/context";
+import { database } from "@/context";
 import env from "@/env";
 
 const SOURCE_TIMEOUT_MS = 60_000;
 const SOURCE_CONCURRENCY = 5;
+
+const serializeOptionalJson = (value: unknown): string | null => {
+  if (!value) {
+    return null;
+  }
+  return JSON.stringify(value);
+};
+const REDIS_COMMAND_TIMEOUT_MS = 10_000;
+const REDIS_MAX_RETRIES = 3;
 
 const withTimeout = <TResult>(
   operation: () => Promise<TResult>,
@@ -28,43 +48,141 @@ const withTimeout = <TResult>(
     }),
   ]);
 
-const ingestOAuthSources = async (): Promise<{ added: number; removed: number; errors: number }> => {
+const createIngestionFlush = (calendarId: string) =>
+  async (changes: IngestionChanges): Promise<void> => {
+    await database.transaction(async (transaction) => {
+      if (changes.deletes.length > 0) {
+        await transaction
+          .delete(eventStatesTable)
+          .where(
+            and(
+              eq(eventStatesTable.calendarId, calendarId),
+              inArray(eventStatesTable.id, changes.deletes),
+            ),
+          );
+      }
+
+      if (changes.inserts.length > 0) {
+        await insertEventStatesWithConflictResolution(
+          transaction,
+          changes.inserts.map((event) => ({
+            availability: event.availability,
+            calendarId,
+            description: event.description,
+            endTime: event.endTime,
+            exceptionDates: serializeOptionalJson(event.exceptionDates),
+            isAllDay: event.isAllDay,
+            location: event.location,
+            recurrenceRule: serializeOptionalJson(event.recurrenceRule),
+            sourceEventType: event.sourceEventType,
+            sourceEventUid: event.uid,
+            startTime: event.startTime,
+            startTimeZone: event.startTimeZone,
+            title: event.title,
+          })),
+        );
+      }
+
+      if (changes.syncToken) {
+        await transaction
+          .update(calendarsTable)
+          .set({ syncToken: changes.syncToken })
+          .where(eq(calendarsTable.id, calendarId));
+      }
+    });
+  };
+
+const readExistingEvents = (calendarId: string) =>
+  database
+    .select({
+      availability: eventStatesTable.availability,
+      endTime: eventStatesTable.endTime,
+      id: eventStatesTable.id,
+      isAllDay: eventStatesTable.isAllDay,
+      sourceEventType: eventStatesTable.sourceEventType,
+      sourceEventUid: eventStatesTable.sourceEventUid,
+      startTime: eventStatesTable.startTime,
+    })
+    .from(eventStatesTable)
+    .where(eq(eventStatesTable.calendarId, calendarId));
+
+interface OAuthFetcherParams {
+  accessToken: string;
+  externalCalendarId: string;
+  syncToken: string | null;
+}
+
+const resolveOAuthFetcher = (
+  provider: string,
+  params: OAuthFetcherParams,
+): { fetchEvents: () => Promise<IngestionFetchEventsResult> } | null => {
+  if (provider === "google") {
+    return createGoogleSourceFetcher(params);
+  }
+  if (provider === "outlook") {
+    return createOutlookSourceFetcher(params);
+  }
+  return null;
+};
+
+const ingestOAuthSources = async (redis: Redis): Promise<{ added: number; removed: number; errors: number }> => {
+  const oauthSources = await database
+    .select({
+      calendarId: calendarsTable.id,
+      provider: calendarAccountsTable.provider,
+      externalCalendarId: calendarsTable.externalCalendarId,
+      syncToken: calendarsTable.syncToken,
+      accessToken: oauthCredentialsTable.accessToken,
+      refreshToken: oauthCredentialsTable.refreshToken,
+      expiresAt: oauthCredentialsTable.expiresAt,
+    })
+    .from(calendarsTable)
+    .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
+    .innerJoin(oauthCredentialsTable, eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id))
+    .where(arrayContains(calendarsTable.capabilities, ["pull"]));
+
   let added = 0;
   let removed = 0;
   let errors = 0;
 
-  const providers: { name: string; sync: () => Promise<{ eventsAdded: number; eventsRemoved: number }> }[] = [];
-
-  if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
-    const googleClientId = env.GOOGLE_CLIENT_ID;
-    const googleClientSecret = env.GOOGLE_CLIENT_SECRET;
-    providers.push({
-      name: "google",
-      sync: async () => {
-        const oauthService = createGoogleOAuthService({ clientId: googleClientId, clientSecret: googleClientSecret });
-        const sourceProvider = createGoogleCalendarSourceProvider({ database, oauthProvider: oauthService, refreshLockStore });
-        const result = await sourceProvider.syncAllSources();
-        return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved };
-      },
-    });
-  }
-
-  if (env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET) {
-    const microsoftClientId = env.MICROSOFT_CLIENT_ID;
-    const microsoftClientSecret = env.MICROSOFT_CLIENT_SECRET;
-    providers.push({
-      name: "outlook",
-      sync: async () => {
-        const oauthService = createMicrosoftOAuthService({ clientId: microsoftClientId, clientSecret: microsoftClientSecret });
-        const sourceProvider = createOutlookSourceProvider({ database, oauthProvider: oauthService, refreshLockStore });
-        const result = await sourceProvider.syncAllSources();
-        return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved };
-      },
-    });
-  }
-
   const settlements = await Promise.allSettled(
-    providers.map((provider) => withTimeout(() => provider.sync(), SOURCE_TIMEOUT_MS)),
+    oauthSources.map((source) =>
+      withTimeout(async () => {
+        if (!source.externalCalendarId) {
+          return { eventsAdded: 0, eventsRemoved: 0 };
+        }
+
+        const resolvedFetcher = resolveOAuthFetcher(source.provider, {
+          accessToken: source.accessToken,
+          externalCalendarId: source.externalCalendarId,
+          syncToken: source.syncToken,
+        });
+
+        if (!resolvedFetcher) {
+          return { eventsAdded: 0, eventsRemoved: 0 };
+        }
+
+        const fetcher = resolvedFetcher;
+
+        const isCurrent = await createRedisGenerationCheck(redis, source.calendarId);
+
+        const result = await ingestSource({
+          calendarId: source.calendarId,
+          fetchEvents: () => fetcher.fetchEvents(),
+          readExistingEvents: () => readExistingEvents(source.calendarId),
+          isCurrent,
+          flush: createIngestionFlush(source.calendarId),
+          onIngestEvent: (event) => {
+            widelog.setFields({
+              ...event,
+              "source.provider": source.provider,
+            });
+          },
+        });
+
+        return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved };
+      }, SOURCE_TIMEOUT_MS),
+    ),
   );
 
   for (const settlement of settlements) {
@@ -80,40 +198,63 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
   return { added, removed, errors };
 };
 
-const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; errors: number }> => {
+const ingestCalDAVSources = async (redis: Redis): Promise<{ added: number; removed: number; errors: number }> => {
   if (!env.ENCRYPTION_KEY) {
     return { added: 0, removed: 0, errors: 0 };
   }
 
-  type ProviderFactory = (config: { database: BunSQLDatabase; encryptionKey: string }) => {
-    syncAllSources: () => Promise<{ eventsAdded: number; eventsRemoved: number }>;
-  };
+  const encryptionKey = env.ENCRYPTION_KEY;
 
-  const factories: Record<string, ProviderFactory> = {
-    caldav: createCalDAVSourceProvider,
-    fastmail: createFastMailSourceProvider,
-    icloud: createICloudSourceProvider,
-  };
-
-  const caldavProviders = getCalDAVProviders();
-  const syncTasks: (() => Promise<{ eventsAdded: number; eventsRemoved: number }>)[] = [];
-
-  for (const provider of caldavProviders) {
-    const factory = factories[provider.id];
-    if (!factory) {
-      continue;
-    }
-    const sourceProvider = factory({ database, encryptionKey: env.ENCRYPTION_KEY });
-    syncTasks.push(() => sourceProvider.syncAllSources());
-  }
-
-  const settlements = await Promise.allSettled(
-    syncTasks.map((task) => withTimeout(task, SOURCE_TIMEOUT_MS)),
-  );
+  const caldavSources = await database
+    .select({
+      calendarId: calendarsTable.id,
+      calendarUrl: calendarsTable.calendarUrl,
+      provider: calendarAccountsTable.provider,
+      username: caldavCredentialsTable.username,
+      encryptedPassword: caldavCredentialsTable.encryptedPassword,
+      serverUrl: caldavCredentialsTable.serverUrl,
+    })
+    .from(calendarsTable)
+    .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
+    .innerJoin(caldavCredentialsTable, eq(calendarAccountsTable.caldavCredentialId, caldavCredentialsTable.id))
+    .where(arrayContains(calendarsTable.capabilities, ["pull"]));
 
   let added = 0;
   let removed = 0;
   let errors = 0;
+
+  const settlements = await Promise.allSettled(
+    caldavSources.map((source) =>
+      withTimeout(async () => {
+        const password = decryptPassword(source.encryptedPassword, encryptionKey);
+
+        const fetcher = createCalDAVSourceFetcher({
+          calendarUrl: source.calendarUrl ?? source.serverUrl,
+          serverUrl: source.serverUrl,
+          username: source.username,
+          password,
+        });
+
+        const isCurrent = await createRedisGenerationCheck(redis, source.calendarId);
+
+        const result = await ingestSource({
+          calendarId: source.calendarId,
+          fetchEvents: () => fetcher.fetchEvents(),
+          readExistingEvents: () => readExistingEvents(source.calendarId),
+          isCurrent,
+          flush: createIngestionFlush(source.calendarId),
+          onIngestEvent: (event) => {
+            widelog.setFields({
+              ...event,
+              "source.provider": source.provider,
+            });
+          },
+        });
+
+        return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved };
+      }, SOURCE_TIMEOUT_MS),
+    ),
+  );
 
   for (const settlement of settlements) {
     if (settlement.status === "fulfilled") {
@@ -174,26 +315,35 @@ export default withCronWideEvent({
   async callback() {
     setCronEventFields({ "job.type": "ingest-sources" });
 
-    const [oauthSettlement, caldavSettlement, icsSettlement] = await Promise.allSettled([
-      ingestOAuthSources(),
-      ingestCalDAVSources(),
-      ingestIcsSources(),
-    ]);
-
-    const oauth = extractSettledResult(oauthSettlement, { added: 0, removed: 0, errors: 1 }, "ingest.oauth");
-    const caldav = extractSettledResult(caldavSettlement, { added: 0, removed: 0, errors: 1 }, "ingest.caldav");
-    const ics = extractSettledResult(icsSettlement, { succeeded: 0, failed: 1 }, "ingest.ics");
-
-    setCronEventFields({
-      "oauth.events.added": oauth.added,
-      "oauth.events.removed": oauth.removed,
-      "oauth.errors": oauth.errors,
-      "caldav.events.added": caldav.added,
-      "caldav.events.removed": caldav.removed,
-      "caldav.errors": caldav.errors,
-      "ics.succeeded": ics.succeeded,
-      "ics.failed": ics.failed,
+    const redis = new Redis(env.REDIS_URL, {
+      commandTimeout: REDIS_COMMAND_TIMEOUT_MS,
+      maxRetriesPerRequest: REDIS_MAX_RETRIES,
     });
+
+    try {
+      const [oauthSettlement, caldavSettlement, icsSettlement] = await Promise.allSettled([
+        ingestOAuthSources(redis),
+        ingestCalDAVSources(redis),
+        ingestIcsSources(),
+      ]);
+
+      const oauth = extractSettledResult(oauthSettlement, { added: 0, removed: 0, errors: 1 }, "ingest.oauth");
+      const caldav = extractSettledResult(caldavSettlement, { added: 0, removed: 0, errors: 1 }, "ingest.caldav");
+      const ics = extractSettledResult(icsSettlement, { succeeded: 0, failed: 1 }, "ingest.ics");
+
+      setCronEventFields({
+        "oauth.events.added": oauth.added,
+        "oauth.events.removed": oauth.removed,
+        "oauth.errors": oauth.errors,
+        "caldav.events.added": caldav.added,
+        "caldav.events.removed": caldav.removed,
+        "caldav.errors": caldav.errors,
+        "ics.succeeded": ics.succeeded,
+        "ics.failed": ics.failed,
+      });
+    } finally {
+      redis.disconnect();
+    }
   },
   cron: "@every_1_minutes",
   immediate: true,

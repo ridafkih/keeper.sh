@@ -1,3 +1,4 @@
+export { createOutlookSourceFetcher, type OutlookSourceFetcherConfig } from "./source/fetch-adapter";
 export { listUserCalendars, CalendarListError } from "./source/utils/list-calendars";
 export {
   fetchCalendarEvents,
