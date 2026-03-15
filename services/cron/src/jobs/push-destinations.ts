@@ -2,14 +2,31 @@ import type { CronOptions } from "cronbake";
 import type { Plan } from "@keeper.sh/data-schemas";
 import { getEventsForDestination, getEventMappingsForDestination } from "@keeper.sh/calendar";
 import { syncCalendar } from "@keeper.sh/sync-engine";
+import type { CalendarSyncProvider, PendingChanges } from "@keeper.sh/sync-engine";
 import { createRedisGenerationCheck } from "@keeper.sh/sync-engine/generation";
 import { createDatabaseFlush } from "@keeper.sh/sync-engine/flush";
+import { createGoogleSyncProvider } from "@keeper.sh/calendar/google";
+import { createOutlookSyncProvider } from "@keeper.sh/calendar/outlook";
+import { createCalDAVSyncProvider } from "@keeper.sh/calendar/caldav";
+import { decryptPassword } from "@keeper.sh/database";
+import {
+  calendarAccountsTable,
+  calendarsTable,
+  caldavCredentialsTable,
+  oauthCredentialsTable,
+} from "@keeper.sh/database/schema";
+import { and, arrayContains, eq } from "drizzle-orm";
+import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import Redis from "ioredis";
 import { setCronEventFields, withCronWideEvent } from "@/utils/with-wide-event";
 import { widelog } from "@/utils/logging";
 
 const USER_TIMEOUT_MS = 300_000;
 const REDIS_COMMAND_TIMEOUT_MS = 10_000;
 const REDIS_MAX_RETRIES = 3;
+
+const OAUTH_PROVIDERS = new Set(["google", "outlook"]);
+const CALDAV_PROVIDERS = new Set(["caldav", "fastmail", "icloud"]);
 
 const withTimeout = <TResult>(
   operation: () => Promise<TResult>,
@@ -23,21 +40,167 @@ const withTimeout = <TResult>(
     }),
   ]);
 
+const resolveOAuthProvider = async (
+  database: BunSQLDatabase,
+  provider: string,
+  calendarId: string,
+  userId: string,
+  accountId: string,
+  env: { GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; MICROSOFT_CLIENT_ID?: string; MICROSOFT_CLIENT_SECRET?: string },
+): Promise<CalendarSyncProvider | null> => {
+  const [oauthCred] = await database
+    .select({
+      accessToken: oauthCredentialsTable.accessToken,
+      refreshToken: oauthCredentialsTable.refreshToken,
+      expiresAt: oauthCredentialsTable.expiresAt,
+    })
+    .from(oauthCredentialsTable)
+    .innerJoin(calendarAccountsTable, eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id))
+    .where(eq(calendarAccountsTable.id, accountId))
+    .limit(1);
+
+  if (!oauthCred) {
+    return null;
+  }
+
+  if (provider === "google" && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
+    return createGoogleSyncProvider({
+      accessToken: oauthCred.accessToken,
+      refreshToken: oauthCred.refreshToken,
+      accessTokenExpiresAt: oauthCred.expiresAt,
+      externalCalendarId: "primary",
+      calendarId,
+      userId,
+    });
+  }
+
+  if (provider === "outlook" && env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET) {
+    return createOutlookSyncProvider({
+      accessToken: oauthCred.accessToken,
+      refreshToken: oauthCred.refreshToken,
+      accessTokenExpiresAt: oauthCred.expiresAt,
+      calendarId,
+      userId,
+    });
+  }
+
+  return null;
+};
+
+const resolveCalDAVProvider = async (
+  database: BunSQLDatabase,
+  calendarId: string,
+  accountId: string,
+  encryptionKey: string,
+): Promise<CalendarSyncProvider | null> => {
+  const [caldavCred] = await database
+    .select({
+      username: caldavCredentialsTable.username,
+      encryptedPassword: caldavCredentialsTable.encryptedPassword,
+      serverUrl: caldavCredentialsTable.serverUrl,
+      calendarUrl: calendarsTable.calendarUrl,
+    })
+    .from(caldavCredentialsTable)
+    .innerJoin(calendarAccountsTable, eq(calendarAccountsTable.caldavCredentialId, caldavCredentialsTable.id))
+    .innerJoin(calendarsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
+    .where(eq(calendarsTable.id, calendarId))
+    .limit(1);
+
+  if (!caldavCred) {
+    return null;
+  }
+
+  const password = decryptPassword(caldavCred.encryptedPassword, encryptionKey);
+
+  return createCalDAVSyncProvider({
+    calendarUrl: caldavCred.calendarUrl ?? caldavCred.serverUrl,
+    serverUrl: caldavCred.serverUrl,
+    username: caldavCred.username,
+    password,
+  });
+};
+
+const syncDestinationsForUser = async (
+  database: BunSQLDatabase,
+  userId: string,
+  redis: Redis,
+  flush: (changes: PendingChanges) => Promise<void>,
+  env: { GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; MICROSOFT_CLIENT_ID?: string; MICROSOFT_CLIENT_SECRET?: string; ENCRYPTION_KEY?: string },
+): Promise<{ added: number; addFailed: number; removed: number; removeFailed: number }> => {
+  const destinations = await database
+    .select({
+      calendarId: calendarsTable.id,
+      provider: calendarAccountsTable.provider,
+      userId: calendarsTable.userId,
+      accountId: calendarsTable.accountId,
+    })
+    .from(calendarsTable)
+    .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
+    .where(
+      and(
+        eq(calendarsTable.userId, userId),
+        arrayContains(calendarsTable.capabilities, ["push"]),
+      ),
+    );
+
+  let added = 0;
+  let addFailed = 0;
+  let removed = 0;
+  let removeFailed = 0;
+
+  for (const destination of destinations) {
+    let syncProvider: CalendarSyncProvider | null = null;
+
+    if (OAUTH_PROVIDERS.has(destination.provider)) {
+      syncProvider = await resolveOAuthProvider(
+        database, destination.provider, destination.calendarId,
+        destination.userId, destination.accountId, env,
+      );
+    }
+
+    if (CALDAV_PROVIDERS.has(destination.provider) && env.ENCRYPTION_KEY) {
+      syncProvider = await resolveCalDAVProvider(
+        database, destination.calendarId, destination.accountId, env.ENCRYPTION_KEY,
+      );
+    }
+
+    if (!syncProvider) {
+      continue;
+    }
+
+    const providerRef = syncProvider;
+    const isCurrent = await createRedisGenerationCheck(redis, destination.calendarId);
+
+    const result = await syncCalendar({
+      calendarId: destination.calendarId,
+      provider: providerRef,
+      readState: async () => ({
+        localEvents: await getEventsForDestination(database, destination.calendarId),
+        existingMappings: await getEventMappingsForDestination(database, destination.calendarId),
+        remoteEvents: await providerRef.listRemoteEvents(),
+      }),
+      isCurrent,
+      flush,
+    });
+
+    added += result.added;
+    addFailed += result.addFailed;
+    removed += result.removed;
+    removeFailed += result.removeFailed;
+  }
+
+  return { added, addFailed, removed, removeFailed };
+};
+
 const runEgressJob = async (plan: Plan): Promise<void> => {
-  const [contextModule, sourcesModule] = await Promise.all([
+  const [contextModule, sourcesModule, envModule] = await Promise.all([
     import("@/context"),
     import("@/utils/get-sources"),
+    import("@/env"),
   ]);
 
-  const { database, createSyncContext } = contextModule;
+  const { database } = contextModule;
   const { getUsersWithDestinationsByPlan } = sourcesModule;
-
-  const ioredis = await import("ioredis");
-  const Redis = ioredis.default;
-  const { calendarsTable, sourceDestinationMappingsTable } = await import("@keeper.sh/database/schema");
-  const { eq } = await import("drizzle-orm");
-
-  const envModule = await import("@/env");
   const env = envModule.default;
 
   const usersWithDestinations = await getUsersWithDestinationsByPlan(plan);
@@ -56,7 +219,6 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
     maxRetriesPerRequest: REDIS_MAX_RETRIES,
   });
 
-  const syncContext = createSyncContext();
   const flush = createDatabaseFlush(database);
 
   try {
@@ -70,36 +232,11 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
       usersWithDestinations.map((userId) =>
         withTimeout(
           async () => {
-            const destinationRows = await database
-              .selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
-              .from(sourceDestinationMappingsTable)
-              .innerJoin(calendarsTable, eq(calendarsTable.id, sourceDestinationMappingsTable.destinationCalendarId))
-              .where(eq(calendarsTable.userId, userId));
-
-            for (const row of destinationRows) {
-              const isCurrent = await createRedisGenerationCheck(redis, row.id);
-
-              const result = await syncCalendar({
-                calendarId: row.id,
-                provider: {
-                  pushEvents: () => Promise.resolve([]),
-                  deleteEvents: () => Promise.resolve([]),
-                  listRemoteEvents: () => Promise.resolve([]),
-                },
-                readState: async () => ({
-                  localEvents: await getEventsForDestination(database, row.id),
-                  existingMappings: await getEventMappingsForDestination(database, row.id),
-                  remoteEvents: [],
-                }),
-                isCurrent,
-                flush,
-              });
-
-              totalAdded += result.added;
-              totalAddFailed += result.addFailed;
-              totalRemoved += result.removed;
-              totalRemoveFailed += result.removeFailed;
-            }
+            const result = await syncDestinationsForUser(database, userId, redis, flush, env);
+            totalAdded += result.added;
+            totalAddFailed += result.addFailed;
+            totalRemoved += result.removed;
+            totalRemoveFailed += result.removeFailed;
           },
           USER_TIMEOUT_MS,
           `push:user:${userId}`,
@@ -122,7 +259,6 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
       "user.failed": usersFailed,
     });
   } finally {
-    syncContext.close();
     redis.disconnect();
   }
 };

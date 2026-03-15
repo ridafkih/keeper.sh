@@ -24,7 +24,9 @@ export type {
 
 export {
   createOutlookCalendarProvider,
+  createOutlookSyncProvider,
   type OutlookCalendarProviderConfig,
+  type OutlookSyncProviderConfig,
 } from "./destination/provider";
 export {
   getOutlookAccountsByPlan,

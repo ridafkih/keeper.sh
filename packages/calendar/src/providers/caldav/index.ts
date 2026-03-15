@@ -1,4 +1,4 @@
-export { createCalDAVProvider } from "./destination/provider";
+export { createCalDAVProvider, createCalDAVSyncProvider, type CalDAVSyncProviderConfig } from "./destination/provider";
 export { createCalDAVService } from "./destination/sync";
 
 export { createCalDAVSourceProvider } from "./source/provider";
