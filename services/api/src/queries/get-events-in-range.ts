@@ -4,7 +4,7 @@ import {
   eventStatesTable,
   userEventsTable,
 } from "@keeper.sh/database/schema";
-import { normalizeDateRange } from "@keeper.sh/calendar";
+import { normalizeDateRange } from "@/utils/date-range";
 import { and, arrayContains, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { KeeperDatabase, KeeperEvent, KeeperEventFilters, KeeperEventRangeInput } from "@/types";

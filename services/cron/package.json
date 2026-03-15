@@ -14,12 +14,11 @@
   },
   "dependencies": {
     "@keeper.sh/broadcast": "workspace:*",
-    "@keeper.sh/calendar": "workspace:*",
     "@keeper.sh/constants": "workspace:*",
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/premium": "workspace:*",
-    "@keeper.sh/providers": "workspace:*",
+    "@keeper.sh/calendar": "workspace:*",
     "@polar-sh/sdk": "^0.42.1",
     "arkenv": "^0.11.0",
     "cronbake": "0.4.0",
