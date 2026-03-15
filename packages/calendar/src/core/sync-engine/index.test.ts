@@ -247,7 +247,7 @@ describe("syncCalendar", () => {
     expect(flushCapture[0]?.inserts[0]?.destinationEventUid).toBe("remote-1");
   });
 
-  it("does not flush when generation becomes stale before flush", async () => {
+  it("returns accurate counts but skips flush when superseded after remote operations", async () => {
     const { syncCalendar } = await import("./index");
     const localEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
     const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1" }]) });
@@ -263,7 +263,7 @@ describe("syncCalendar", () => {
       flush: () => { flushCalled = true; return Promise.resolve(); },
     });
 
-    expect(result.added).toBe(0);
+    expect(result.added).toBe(1);
     expect(flushCalled).toBe(false);
   });
 
@@ -521,6 +521,57 @@ describe("createDatabaseFlush", () => {
     await flush({ inserts: [], deletes: [] });
 
     expect(transactionCalled).toBe(false);
+  });
+
+  it("chunks deletes into batches to avoid exceeding parameter limits", async () => {
+    const { createDatabaseFlush, FLUSH_BATCH_SIZE } = await import("./flush");
+    let deleteCallCount = 0;
+
+    const fakeDatabase = {
+      transaction: (callback: (tx: unknown) => Promise<void>) => {
+        const tx = {
+          insert: () => ({ values: () => Promise.resolve() }),
+          delete: () => { deleteCallCount += 1; return { where: () => Promise.resolve() }; },
+        };
+        return callback(tx);
+      },
+    };
+
+    const deleteIds = Array.from({ length: FLUSH_BATCH_SIZE + 10 }, (_, idx) => `map-${idx}`);
+
+    const flush = createDatabaseFlush(fakeDatabase as never);
+    await flush({ inserts: [], deletes: deleteIds });
+
+    expect(deleteCallCount).toBe(2);
+  });
+
+  it("chunks inserts into batches to avoid exceeding parameter limits", async () => {
+    const { createDatabaseFlush, FLUSH_BATCH_SIZE } = await import("./flush");
+    let insertCallCount = 0;
+
+    const fakeDatabase = {
+      transaction: (callback: (tx: unknown) => Promise<void>) => {
+        const tx = {
+          insert: () => {
+            insertCallCount += 1;
+            return { values: () => Promise.resolve() };
+          },
+          delete: () => ({ where: () => Promise.resolve() }),
+        };
+        return callback(tx);
+      },
+    };
+
+    const inserts = Array.from({ length: FLUSH_BATCH_SIZE + 10 }, (_, idx) => ({
+      eventStateId: `ev-${idx}`, calendarId: "cal-1", destinationEventUid: `remote-${idx}`,
+      deleteIdentifier: `remote-${idx}`, syncEventHash: null,
+      startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
+    }));
+
+    const flush = createDatabaseFlush(fakeDatabase as never);
+    await flush({ inserts, deletes: [] });
+
+    expect(insertCallCount).toBe(2);
   });
 
   it("calls insert once for multiple inserts using bulk values", async () => {

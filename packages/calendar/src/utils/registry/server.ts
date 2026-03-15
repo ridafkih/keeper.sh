@@ -1,8 +1,8 @@
-import type{ BroadcastSyncStatus } from "../../core/types";
-import type{ DestinationProvider } from "../../core/sync/destinations";
-import type{ OAuthProvider, OAuthProviders } from "../../core/oauth/providers";
-import type{ RefreshLockStore } from "../../core/oauth/refresh-coordinator";
-import type{ SourceProvider } from "../../core/oauth/create-source-provider";
+import type { BroadcastSyncStatus } from "../../core/types";
+import type { DestinationProvider } from "../../core/sync/destinations";
+import type { OAuthProvider, OAuthProviders } from "../../core/oauth/providers";
+import type { RefreshLockStore } from "../../core/oauth/refresh-coordinator";
+import type { SourceProvider } from "../../core/oauth/create-source-provider";
 import {
   createGoogleCalendarProvider,
   createGoogleCalendarSourceProvider,

@@ -152,8 +152,8 @@ const ingestOAuthSources = async (redis: Redis): Promise<{ added: number; remove
   let errors = 0;
   const allIngestEvents: Record<string, unknown>[] = [];
 
-  const settlements = await Promise.allSettled(
-    oauthSources.map((source) =>
+  const settlements = await allSettledWithConcurrency(
+    oauthSources.map((source) => () =>
       withTimeout(async (): Promise<IngestionSourceResult> => {
         if (!source.externalCalendarId) {
           return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
@@ -191,6 +191,7 @@ const ingestOAuthSources = async (redis: Redis): Promise<{ added: number; remove
         return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
       }, SOURCE_TIMEOUT_MS),
     ),
+    { concurrency: SOURCE_CONCURRENCY },
   );
 
   for (const settlement of settlements) {
@@ -233,8 +234,8 @@ const ingestCalDAVSources = async (redis: Redis): Promise<{ added: number; remov
   let errors = 0;
   const allIngestEvents: Record<string, unknown>[] = [];
 
-  const settlements = await Promise.allSettled(
-    caldavSources.map((source) =>
+  const settlements = await allSettledWithConcurrency(
+    caldavSources.map((source) => () =>
       withTimeout(async (): Promise<IngestionSourceResult> => {
         const password = decryptPassword(source.encryptedPassword, encryptionKey);
 
@@ -265,6 +266,7 @@ const ingestCalDAVSources = async (redis: Redis): Promise<{ added: number; remov
         return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
       }, SOURCE_TIMEOUT_MS),
     ),
+    { concurrency: SOURCE_CONCURRENCY },
   );
 
   for (const settlement of settlements) {

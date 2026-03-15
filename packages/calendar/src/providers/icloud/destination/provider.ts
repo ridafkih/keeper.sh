@@ -1,6 +1,6 @@
 import { createCalDAVProvider } from "../../caldav";
 import type { CalDAVProviderConfig } from "../../caldav";
-import type{ DestinationProvider } from "../../../core/sync/destinations";
+import type { DestinationProvider } from "../../../core/sync/destinations";
 
 const ICLOUD_SERVER_URL = "https://caldav.icloud.com/";
 

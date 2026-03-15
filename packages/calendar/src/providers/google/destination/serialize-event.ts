@@ -1,6 +1,6 @@
 import type { GoogleEvent } from "@keeper.sh/data-schemas";
-import type{ SyncableEvent } from "../../../core/types";
-import{ resolveIsAllDayEvent } from "../../../core/events/all-day";
+import type { SyncableEvent } from "../../../core/types";
+import { resolveIsAllDayEvent } from "../../../core/events/all-day";
 
 const formatDateOnly = (value: Date): string => value.toISOString().slice(0, 10);
 const MS_PER_DAY = 24 * 60 * 60 * 1000;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type{ ProcessEventsOptions } from "../../../core/oauth/source-provider";
-import type{ SourceEvent, SourceSyncResult } from "../../../core/types";
+import type { ProcessEventsOptions } from "../../../core/oauth/source-provider";
+import type { SourceEvent, SourceSyncResult } from "../../../core/types";
 import { OutlookSourceProvider } from "./provider";
 
 class TestableOutlookSourceProvider extends OutlookSourceProvider {

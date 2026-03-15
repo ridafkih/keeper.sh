@@ -1,9 +1,9 @@
 import { generateIcsCalendar } from "ts-ics";
 import { parseIcsCalendar } from "../../../ics";
 import type { IcsCalendar, IcsDuration, IcsEvent } from "ts-ics";
-import type{ SyncableEvent } from "../../../core/types";
-import{ isKeeperEvent } from "../../../core/events/identity";
-import{ resolveIsAllDayEvent } from "../../../core/events/all-day";
+import type { SyncableEvent } from "../../../core/types";
+import { isKeeperEvent } from "../../../core/events/identity";
+import { resolveIsAllDayEvent } from "../../../core/events/all-day";
 import {
   MS_PER_DAY,
   MS_PER_HOUR,

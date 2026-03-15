@@ -63,6 +63,13 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     wideEvent["existing_events.count"] = existingEvents.length;
 
     if (fetchResult.fullSyncRequired) {
+      const canFlushReset = await isCurrent();
+      if (!canFlushReset) {
+        wideEvent["outcome"] = "superseded";
+        wideEvent["flushed"] = false;
+        return EMPTY_RESULT;
+      }
+
       wideEvent["outcome"] = "full-sync-required";
       wideEvent["flushed"] = true;
       await flush({ inserts: [], deletes: [], syncToken: null });
@@ -94,6 +101,17 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     wideEvent["events.removed"] = eventStateIdsToRemove.length;
 
     if (eventsToAdd.length === 0 && eventStateIdsToRemove.length === 0) {
+      if (fetchResult.nextSyncToken) {
+        const canFlushToken = await isCurrent();
+        if (canFlushToken) {
+          await flush({ inserts: [], deletes: [], syncToken: fetchResult.nextSyncToken });
+          flushed = true;
+          wideEvent["outcome"] = "in-sync";
+          wideEvent["flushed"] = true;
+          return EMPTY_RESULT;
+        }
+      }
+
       wideEvent["outcome"] = "in-sync";
       wideEvent["flushed"] = false;
       return EMPTY_RESULT;

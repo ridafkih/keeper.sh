@@ -1,6 +1,6 @@
-import{ getOAuthAccountsByPlan, getOAuthAccountsForUser, getUserEventsForSync } from "../../../core/oauth/accounts";
-import type{ OAuthAccount } from "../../../core/oauth/accounts";
-import type{ SyncableEvent } from "../../../core/types";
+import { getOAuthAccountsByPlan, getOAuthAccountsForUser, getUserEventsForSync } from "../../../core/oauth/accounts";
+import type { OAuthAccount } from "../../../core/oauth/accounts";
+import type { SyncableEvent } from "../../../core/types";
 import type { Plan } from "@keeper.sh/data-schemas";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 

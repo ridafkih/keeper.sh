@@ -10,7 +10,7 @@ import { isSimpleAuthError } from "../../shared/errors";
 import { parseEventDateTime } from "../../shared/date-time";
 import { outlookEventListSchema } from "@keeper.sh/data-schemas";
 import { KEEPER_CATEGORY } from "@keeper.sh/constants";
-import{ isKeeperEvent } from "../../../../core/events/identity";
+import { isKeeperEvent } from "../../../../core/events/identity";
 
 class EventsFetchError extends Error {
   public readonly status: number;

@@ -1,4 +1,4 @@
-import type{ AuthType, ProviderDefinition } from "../../core/types";
+import type { AuthType, ProviderDefinition } from "../../core/types";
 
 const googleCalendarDefinition = {
   authType: "oauth",

@@ -1,5 +1,5 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type{ SyncableEvent } from "../../core/types";
+import type { SyncableEvent } from "../../core/types";
 
 interface CalDAVProviderOptions {
   providerId: string;

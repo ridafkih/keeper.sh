@@ -178,6 +178,63 @@ describe("ingestSource", () => {
     expect(flushCapture[0]?.syncToken).toBeNull();
   });
 
+  it("flushes sync token even when delta sync yields no event changes", async () => {
+    const { ingestSource } = await import("./ingest");
+
+    const flushCapture: { inserts: unknown[]; deletes: string[]; syncToken?: string | null }[] = [];
+
+    const result = await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({ events: [], isDeltaSync: true, nextSyncToken: "token-new" }),
+      readExistingEvents: () => Promise.resolve([]),
+      isCurrent: () => Promise.resolve(true),
+      flush: (changes) => { flushCapture.push(changes); return Promise.resolve(); },
+    });
+
+    expect(result.eventsAdded).toBe(0);
+    expect(result.eventsRemoved).toBe(0);
+    expect(flushCapture).toHaveLength(1);
+    expect(flushCapture[0]?.inserts).toHaveLength(0);
+    expect(flushCapture[0]?.deletes).toHaveLength(0);
+    expect(flushCapture[0]?.syncToken).toBe("token-new");
+  });
+
+  it("does not flush sync token when no changes and no sync token provided", async () => {
+    const { ingestSource } = await import("./ingest");
+
+    let flushCalled = false;
+
+    const result = await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({ events: [] }),
+      readExistingEvents: () => Promise.resolve([]),
+      isCurrent: () => Promise.resolve(true),
+      flush: () => { flushCalled = true; return Promise.resolve(); },
+    });
+
+    expect(result.eventsAdded).toBe(0);
+    expect(result.eventsRemoved).toBe(0);
+    expect(flushCalled).toBe(false);
+  });
+
+  it("checks isCurrent before flushing when fullSyncRequired is true", async () => {
+    const { ingestSource } = await import("./ingest");
+
+    let flushCalled = false;
+
+    const result = await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({ events: [], fullSyncRequired: true }),
+      readExistingEvents: () => Promise.resolve([]),
+      isCurrent: () => Promise.resolve(false),
+      flush: () => { flushCalled = true; return Promise.resolve(); },
+    });
+
+    expect(result.eventsAdded).toBe(0);
+    expect(result.eventsRemoved).toBe(0);
+    expect(flushCalled).toBe(false);
+  });
+
   it("emits wide event with flushed: false in error path", async () => {
     const { ingestSource } = await import("./ingest");
 

@@ -13,7 +13,7 @@ import {
 import { isSimpleAuthError } from "../../shared/errors";
 import { parseEventDateTime } from "../../shared/date-time";
 import { googleEventListSchema } from "@keeper.sh/data-schemas";
-import{ isKeeperEvent } from "../../../../core/events/identity";
+import { isKeeperEvent } from "../../../../core/events/identity";
 
 class EventsFetchError extends Error {
   public readonly status: number;

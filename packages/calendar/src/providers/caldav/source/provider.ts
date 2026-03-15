@@ -1,7 +1,7 @@
-import{ buildSourceEventStateIdsToRemove, buildSourceEventsToAdd } from "../../../core/source/event-diff";
-import{ insertEventStatesWithConflictResolution } from "../../../core/source/write-event-states";
-import{ isKeeperEvent } from "../../../core/events/identity";
-import type{ SourceEvent } from "../../../core/types";
+import { buildSourceEventStateIdsToRemove, buildSourceEventsToAdd } from "../../../core/source/event-diff";
+import { insertEventStatesWithConflictResolution } from "../../../core/source/write-event-states";
+import { isKeeperEvent } from "../../../core/events/identity";
+import type { SourceEvent } from "../../../core/types";
 import { calendarAccountsTable, calendarsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { widelog } from "widelogger";

@@ -197,7 +197,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncResult> =
     if (!canFlush) {
       wideEvent["outcome"] = "superseded";
       wideEvent["flushed"] = false;
-      return EMPTY_RESULT;
+      return outcome.result;
     }
 
     await flush(outcome.changes);

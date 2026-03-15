@@ -1,4 +1,4 @@
-import{ getOAuthSyncWindow } from "../../../core/oauth/sync-window";
+import { getOAuthSyncWindow } from "../../../core/oauth/sync-window";
 
 interface CalDAVSyncWindow {
   start: Date;
