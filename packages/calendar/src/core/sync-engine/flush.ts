@@ -42,7 +42,7 @@ const createDatabaseFlush = (database: BunSQLDatabase): (changes: PendingChanges
               startTime: insert.startTime,
               endTime: insert.endTime,
             })),
-          );
+          ).onConflictDoNothing();
         }
       }
     });
