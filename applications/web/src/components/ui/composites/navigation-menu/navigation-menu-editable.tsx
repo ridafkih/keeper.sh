@@ -299,7 +299,7 @@ function EditableItemDefaultValue({ value, label }: { value: ReactNode; label?: 
 
   return (
     <Text
-      size="sm"
+      size="base"
       tone={(disabled ? DISABLED_LABEL_TONE : LABEL_TONE)[variant ?? "default"]}
       className={cn("min-w-0 truncate", label && "flex-1 text-right")}
     >

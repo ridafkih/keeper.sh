@@ -245,7 +245,7 @@ function RenameItemValue() {
 
   return (
     <Text
-      size="sm"
+      size="base"
       tone={(disabled ? DISABLED_LABEL_TONE : LABEL_TONE)[variant ?? "default"]}
       className="min-w-0 truncate"
     >
@@ -473,7 +473,7 @@ function SyncEventNameTemplateValue() {
 
   return (
     <Text
-      size="sm"
+      size="base"
       tone={disabled ? "disabled" : "muted"}
       className="min-w-0 truncate flex-1 text-right"
     >

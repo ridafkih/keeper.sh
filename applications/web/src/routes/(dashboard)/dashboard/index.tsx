@@ -147,7 +147,7 @@ function CalendarsMenu() {
             </NavigationMenuItemIcon>
             <NavigationMenuItemLabel className="shrink-0">{calendar.name}</NavigationMenuItemLabel>
             <NavigationMenuItemTrailing className="overflow-hidden">
-              <Text size="sm" tone="muted" align="right" className="flex-1 min-w-0 truncate">
+              <Text size="base" tone="muted" align="right" className="flex-1 min-w-0 truncate">
                 {calendar.accountLabel}
               </Text>
             </NavigationMenuItemTrailing>
@@ -161,7 +161,7 @@ function CalendarsMenu() {
           </NavigationMenuItemIcon>
           <NavigationMenuItemLabel>View Events</NavigationMenuItemLabel>
           <NavigationMenuItemTrailing>
-            {eventCount != null && <Text size="sm" tone="muted">{pluralize(eventCount, "event")}</Text>}
+            {eventCount != null && <Text size="base" tone="muted">{pluralize(eventCount, "event")}</Text>}
           </NavigationMenuItemTrailing>
         </NavigationMenuLinkItem>
         <NavigationMenuLinkItem to="/dashboard/ical">
