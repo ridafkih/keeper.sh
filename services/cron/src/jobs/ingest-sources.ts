@@ -12,7 +12,7 @@ import type { IngestionChanges, IngestionFetchEventsResult, RedisRateLimiter, To
 import { createIcsSourceFetcher } from "@keeper.sh/calendar/ics";
 import { createGoogleSourceFetcher } from "@keeper.sh/calendar/google";
 import { createOutlookSourceFetcher } from "@keeper.sh/calendar/outlook";
-import { createCalDAVSourceFetcher } from "@keeper.sh/calendar/caldav";
+import { createCalDAVSourceFetcher, isCalDAVAuthenticationError } from "@keeper.sh/calendar/caldav";
 import { decryptPassword } from "@keeper.sh/database";
 import {
   calendarAccountsTable,
@@ -243,6 +243,21 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
 
           return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
         } catch (error) {
+          if (error instanceof Error && "status" in error && error.status === 404) {
+            await database
+              .update(calendarsTable)
+              .set({ disabled: true })
+              .where(eq(calendarsTable.id, source.calendarId));
+
+            widelog.setFields({
+              "ingest.oauth.disabled_calendar": true,
+              "ingest.oauth.disabled_calendar_id": source.calendarId,
+              "ingest.oauth.disabled_reason": "not_found",
+            });
+
+            return { eventsAdded: 0, eventsRemoved: 0, ingestEvents };
+          }
+
           if (error instanceof Error && "authRequired" in error && error.authRequired === true) {
             await database
               .update(calendarAccountsTable)
@@ -287,6 +302,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
 
   const caldavSources = await database
     .select({
+      accountId: calendarAccountsTable.id,
       calendarId: calendarsTable.id,
       calendarUrl: calendarsTable.calendarUrl,
       provider: calendarAccountsTable.provider,
@@ -339,6 +355,21 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
 
           return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
         } catch (error) {
+          if (isCalDAVAuthenticationError(error)) {
+            await database
+              .update(calendarAccountsTable)
+              .set({ needsReauthentication: true })
+              .where(eq(calendarAccountsTable.id, source.accountId));
+
+            widelog.setFields({
+              "ingest.caldav.reauth_required": true,
+              "ingest.caldav.reauth_account_id": source.accountId,
+              "ingest.caldav.reauth_provider": source.provider,
+            });
+
+            return { eventsAdded: 0, eventsRemoved: 0, ingestEvents };
+          }
+
           if (error instanceof Error && error.message.includes("404")) {
             await database
               .update(calendarsTable)
