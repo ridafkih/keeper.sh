@@ -8,6 +8,7 @@ import {
   MS_PER_SECOND,
   MS_PER_WEEK,
 } from "@keeper.sh/constants";
+import { normalizeTimezone } from "./normalize-timezone";
 
 const DEFAULT_DURATION_VALUE = 0;
 
@@ -44,7 +45,7 @@ const isKeeperEvent = (uid: string | undefined): boolean =>
   uid?.endsWith(KEEPER_EVENT_SUFFIX) ?? false;
 
 const getEventStartTimeZone = (event: IcsEvent): string | undefined =>
-  event.start.local?.timezone;
+  normalizeTimezone(event.start.local?.timezone);
 
 const getEventAvailability = (event: IcsEvent) => {
   if (event.timeTransparent === "TRANSPARENT") {
