@@ -53,7 +53,7 @@ const identifyStaleMappings = (
       continue;
     }
 
-    if (mapping.syncEventHash !== null && mapping.syncEventHash !== localEventHash) {
+    if (mapping.syncEventHash !== localEventHash) {
       staleMappingIds.push(mapping.id);
       staleRemoteMappings.push(mapping);
     }
