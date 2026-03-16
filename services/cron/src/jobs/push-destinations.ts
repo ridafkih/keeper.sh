@@ -1,6 +1,6 @@
 import type { CronOptions } from "cronbake";
 import type { Plan } from "@keeper.sh/data-schemas";
-import { allSettledWithConcurrency, createSyncAggregateRuntime } from "@keeper.sh/calendar";
+import { createSyncAggregateRuntime } from "@keeper.sh/calendar";
 import type { DestinationSyncResult } from "@keeper.sh/calendar";
 import { syncDestinationsForUser } from "@keeper.sh/sync";
 import type { SyncConfig } from "@keeper.sh/sync";
@@ -21,7 +21,6 @@ const resolveCount = (value: unknown): number => {
 };
 
 const USER_TIMEOUT_MS = 300_000;
-const USER_CONCURRENCY = 5;
 const REDIS_COMMAND_TIMEOUT_MS = 10_000;
 const REDIS_MAX_RETRIES = 3;
 
@@ -91,8 +90,8 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
     let usersFailed = 0;
     const allSyncEvents: Record<string, unknown>[] = [];
 
-    const settlements = await allSettledWithConcurrency(
-      usersWithDestinations.map((userId) => () => {
+    const settlements = await Promise.allSettled(
+      usersWithDestinations.map((userId) => {
         const deadlineMs = Date.now() + USER_TIMEOUT_MS;
         return syncDestinationsForUser(userId, { ...syncConfig, deadlineMs }, {
           onProgress: (update) => {
@@ -116,7 +115,6 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
           },
         });
       }),
-      { concurrency: USER_CONCURRENCY },
     );
 
     for (const settlement of settlements) {
