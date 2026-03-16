@@ -2,6 +2,7 @@ import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./generated/tanstack/route-tree.generated";
 import { HttpError } from "./lib/fetcher";
 import { getPublicRuntimeConfig, getServerPublicRuntimeConfig } from "./lib/runtime-config";
+import type { PublicRuntimeConfig } from "./lib/runtime-config";
 import { hasSessionCookie } from "./lib/session-cookie";
 import type { AppRouterContext } from "./lib/router-context";
 
@@ -82,24 +83,40 @@ function createWebFetcher(
   return createJsonFetcher(requestCookie, webOrigin);
 }
 
+function resolveRuntimeConfig(request: Request | undefined): PublicRuntimeConfig {
+  if (request) {
+    return getServerPublicRuntimeConfig({
+      environment: process.env,
+      countryCode: request.headers.get("cf-ipcountry"),
+    });
+  }
+
+  return getPublicRuntimeConfig();
+}
+
+function createSessionChecker(
+  request: Request | undefined,
+): () => boolean {
+  if (request) {
+    const cookieHeader = request.headers.get("cookie") ?? undefined;
+    const serverHasSession = hasSessionCookie(cookieHeader);
+    return () => serverHasSession;
+  }
+
+  return () => hasSessionCookie();
+}
+
 function buildRouterContext(
   request: Request | undefined,
   viteAssets: ViteAssets | undefined,
 ): AppRouterContext {
-  const cookieHeader = request?.headers.get("cookie") ?? undefined;
-  const serverHasSession = hasSessionCookie(cookieHeader);
-  const runtimeConfig = request
-    ? getServerPublicRuntimeConfig(process.env)
-    : getPublicRuntimeConfig();
-
   return {
     auth: {
-      hasSession: () =>
-        request ? serverHasSession : hasSessionCookie(),
+      hasSession: createSessionChecker(request),
     },
     fetchApi: createApiFetcher(request),
     fetchWeb: createWebFetcher(request),
-    runtimeConfig,
+    runtimeConfig: resolveRuntimeConfig(request),
     viteAssets: viteAssets ?? null,
   };
 }

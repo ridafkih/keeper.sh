@@ -7,6 +7,7 @@ import { Text } from "@/components/ui/primitives/text";
 import { Divider } from "@/components/ui/primitives/divider";
 import { Input } from "@/components/ui/primitives/input";
 import { changePassword } from "@/lib/auth";
+import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { fetchAuthCapabilitiesWithApi } from "@/lib/auth-capabilities";
 import { resolveErrorMessage } from "@/utils/errors";
 
@@ -51,6 +52,7 @@ function ChangePasswordPage() {
     startTransition(async () => {
       try {
         await changePassword(current, newPassword);
+        track(ANALYTICS_EVENTS.password_changed);
         navigate({ to: "/dashboard/settings" });
       } catch (err) {
         setError(resolveErrorMessage(err, "Failed to change password."));

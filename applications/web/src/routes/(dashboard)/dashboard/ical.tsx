@@ -5,6 +5,7 @@ import { atom, useAtomValue, useStore } from "jotai";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import CheckIcon from "lucide-react/dist/esm/icons/check";
 import { fetcher, apiFetch } from "@/lib/fetcher";
+import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { Input } from "@/components/ui/primitives/input";
 import { Text } from "@/components/ui/primitives/text";
@@ -109,6 +110,7 @@ function CopyButton({ value }: { value: string | null }) {
   const handleCopy = async () => {
     if (!value) return;
     await navigator.clipboard.writeText(value);
+    track(ANALYTICS_EVENTS.ical_link_copied);
     store.set(copiedAtom, true);
     setTimeout(() => store.set(copiedAtom, false), 2000);
   };
@@ -245,6 +247,7 @@ function EventNameToggle({ locked }: { locked: boolean }) {
       ? { includeEventName: false, customEventName: "Busy" }
       : { includeEventName: true, customEventName: "{{event_name}}" };
 
+    track(ANALYTICS_EVENTS.ical_setting_toggled, { field: "includeEventName", enabled: !current });
     store.set(feedSettingsAtom, (prev) => ({ ...prev, ...patch }));
     mutate(
       "/api/ical/settings",
@@ -293,6 +296,7 @@ function FeedSettingToggle({
 
     const current = store.get(feedSettingsAtom)[field];
     const newValue = !current;
+    track(ANALYTICS_EVENTS.ical_setting_toggled, { field, enabled: newValue });
     store.set(feedSettingsAtom, (prev) => ({ ...prev, [field]: newValue }));
     mutate(
       "/api/ical/settings",
@@ -386,6 +390,7 @@ function SourceCheckboxItem({
   const checked = useAtomValue(checkedAtom);
 
   const handleCheckedChange = (nextChecked: boolean) => {
+    track(ANALYTICS_EVENTS.ical_source_toggled, { enabled: nextChecked });
     store.set(icalSourceInclusionAtom, (prev) => ({ ...prev, [sourceId]: nextChecked }));
     apiFetch(`/api/sources/${sourceId}`, {
       method: "PATCH",

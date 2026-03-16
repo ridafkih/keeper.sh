@@ -43,6 +43,7 @@ import {
   MarketingPricingSection,
 } from '../../features/marketing/components/marketing-pricing-section'
 import { calendarEmphasizedAtom } from '../../state/calendar-emphasized'
+import { ANALYTICS_EVENTS } from '../../lib/analytics'
 import ArrowRightIcon from "lucide-react/dist/esm/icons/arrow-right";
 import ArrowUpRightIcon from "lucide-react/dist/esm/icons/arrow-up-right";
 
@@ -259,6 +260,8 @@ function MarketingPage() {
             size="compact"
             onMouseEnter={() => setEmphasized(true)}
             onMouseLeave={() => setEmphasized(false)}
+            data-visitors-event={ANALYTICS_EVENTS.marketing_cta_clicked}
+            data-visitors-cta="hero"
           >
             <ButtonText>Sync Calendars</ButtonText>
             <ButtonIcon>
@@ -409,7 +412,7 @@ function MarketingPage() {
                 Start syncing your calendars in seconds. Free to use, no credit card required.
               </Text>
               <div className="flex items-center gap-2 mt-2">
-                <LinkButton to="/register" size="compact" variant="inverse">
+                <LinkButton to="/register" size="compact" variant="inverse" data-visitors-event={ANALYTICS_EVENTS.marketing_cta_clicked} data-visitors-cta="bottom">
                   <ButtonText>Get Started</ButtonText>
                   <ButtonIcon>
                     <ArrowRightIcon size={16} />
