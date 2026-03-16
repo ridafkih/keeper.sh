@@ -4,6 +4,23 @@ import { resolveIsAllDayEvent } from "../../../core/events/all-day";
 
 const formatDateOnly = (value: Date): string => value.toISOString().slice(0, 10);
 
+const buildDateField = (
+  time: Date,
+  isAllDay: boolean,
+  startTimeZone: string | undefined,
+  recurrenceRule: string | null | undefined,
+): NonNullable<GoogleEvent["start"]> => {
+  if (isAllDay) {
+    return { date: formatDateOnly(time) };
+  }
+
+  const timeZone = startTimeZone ?? "UTC";
+  return {
+    dateTime: time.toISOString(),
+    ...(recurrenceRule && { timeZone }),
+  };
+};
+
 const canSerializeGoogleEvent = (event: SyncableEvent): boolean => {
   if (event.availability === "workingElsewhere") {
     return false;
@@ -23,37 +40,16 @@ const serializeGoogleEvent = (
 
   const isAllDay = resolveIsAllDayEvent(event);
 
-  const googleEvent: GoogleEvent = {
+  return {
     description: event.description,
+    end: buildDateField(event.endTime, isAllDay, event.startTimeZone, recurrenceRule),
     iCalUID: uid,
+    location: event.location,
+    start: buildDateField(event.startTime, isAllDay, event.startTimeZone, recurrenceRule),
     summary: event.summary,
+    ...(event.availability === "free" && { transparency: "transparent" }),
+    ...(recurrenceRule && { recurrence: [`RRULE:${recurrenceRule}`] }),
   };
-
-  googleEvent.location = event.location;
-  if (event.availability === "free") {
-    googleEvent.transparency = "transparent";
-  }
-
-  if (isAllDay) {
-    googleEvent.start = { date: formatDateOnly(event.startTime) };
-    googleEvent.end = { date: formatDateOnly(event.endTime) };
-  } else {
-    const recurrenceTimeZone = event.startTimeZone ?? "UTC";
-    googleEvent.start = {
-      dateTime: event.startTime.toISOString(),
-      ...(recurrenceRule && { timeZone: recurrenceTimeZone }),
-    };
-    googleEvent.end = {
-      dateTime: event.endTime.toISOString(),
-      ...(recurrenceRule && { timeZone: recurrenceTimeZone }),
-    };
-  }
-
-  if (recurrenceRule) {
-    googleEvent.recurrence = [`RRULE:${recurrenceRule}`];
-  }
-
-  return googleEvent;
 };
 
 export { canSerializeGoogleEvent, serializeGoogleEvent };

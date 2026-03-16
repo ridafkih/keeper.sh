@@ -42,7 +42,7 @@ const extractEventIdFromLookup = (body: unknown): string | undefined => {
   if (!firstItem) {
     return;
   }
-  return firstItem.id ?? undefined;
+  return firstItem.id;
 };
 
 const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
