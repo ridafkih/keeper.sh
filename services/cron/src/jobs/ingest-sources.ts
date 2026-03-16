@@ -168,6 +168,7 @@ interface IngestionSourceResult {
 const ingestOAuthSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
   const oauthSources = await database
     .select({
+      accountId: calendarAccountsTable.id,
       calendarId: calendarsTable.id,
       provider: calendarAccountsTable.provider,
       externalCalendarId: calendarsTable.externalCalendarId,
@@ -226,20 +227,38 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
         const fetcher = resolvedFetcher;
         const ingestEvents: Record<string, unknown>[] = [];
 
-        const result = await ingestSource({
-          calendarId: source.calendarId,
-          fetchEvents: () => fetcher.fetchEvents(),
-          readExistingEvents: () => readExistingEvents(source.calendarId),
-          flush: createIngestionFlush(source.calendarId),
-          onIngestEvent: (event) => {
-            ingestEvents.push({
-              ...event,
-              "source.provider": source.provider,
-            });
-          },
-        });
+        try {
+          const result = await ingestSource({
+            calendarId: source.calendarId,
+            fetchEvents: () => fetcher.fetchEvents(),
+            readExistingEvents: () => readExistingEvents(source.calendarId),
+            flush: createIngestionFlush(source.calendarId),
+            onIngestEvent: (event) => {
+              ingestEvents.push({
+                ...event,
+                "source.provider": source.provider,
+              });
+            },
+          });
 
-        return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
+          return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
+        } catch (error) {
+          if (error instanceof Error && "authRequired" in error && error.authRequired === true) {
+            await database
+              .update(calendarAccountsTable)
+              .set({ needsReauthentication: true })
+              .where(eq(calendarAccountsTable.id, source.accountId));
+
+            widelog.setFields({
+              "ingest.oauth.reauth_required": true,
+              "ingest.oauth.reauth_account_id": source.accountId,
+              "ingest.oauth.reauth_provider": source.provider,
+            });
+
+            return { eventsAdded: 0, eventsRemoved: 0, ingestEvents };
+          }
+          throw error;
+        }
       }, SOURCE_TIMEOUT_MS),
     ),
     { concurrency: SOURCE_CONCURRENCY },
@@ -436,8 +455,6 @@ export default withCronWideEvent({
     const caldav = extractSettledResult(caldavSettlement, defaultResult, "ingest.caldav");
     const ics = extractSettledResult(icsSettlement, defaultResult, "ingest.ics");
 
-    const allIngestEvents = [...oauth.ingestEvents, ...caldav.ingestEvents, ...ics.ingestEvents];
-
     setCronEventFields({
       "oauth.events.added": oauth.added,
       "oauth.events.removed": oauth.removed,
@@ -448,7 +465,6 @@ export default withCronWideEvent({
       "ics.events.added": ics.added,
       "ics.events.removed": ics.removed,
       "ics.errors": ics.errors,
-      "ingest_events": allIngestEvents,
     });
   },
   cron: "@every_1_minutes",

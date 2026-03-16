@@ -13,8 +13,14 @@ const GET = withWideEvent(
     listOAuthCalendars(request, userId, {
       isCalendarListError: (error): error is CalendarListError =>
         error instanceof CalendarListError,
-      listCalendars: listUserCalendars,
-      normalizeCalendars: (calendars) => calendars,
+      listCalendars: async (accessToken) => {
+        const calendars = await listUserCalendars(accessToken);
+        return calendars.map((calendar) => ({
+          id: calendar.id,
+          primary: calendar.primary,
+          summary: calendar.summary,
+        }));
+      },
       provider: GOOGLE_PROVIDER,
       refreshDestinationAccessToken: refreshGoogleAccessToken,
       refreshSourceAccessToken: refreshGoogleSourceAccessToken,

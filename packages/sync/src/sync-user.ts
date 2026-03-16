@@ -33,6 +33,7 @@ interface SyncDestinationsResult {
   addFailed: number;
   removed: number;
   removeFailed: number;
+  errors: string[];
   syncEvents: Record<string, unknown>[];
 }
 
@@ -41,6 +42,7 @@ const EMPTY_RESULT: SyncDestinationsResult = {
   addFailed: 0,
   removed: 0,
   removeFailed: 0,
+  errors: [],
   syncEvents: [],
 };
 
@@ -83,6 +85,7 @@ const syncDestinationsForUser = async (
   let addFailed = 0;
   let removed = 0;
   let removeFailed = 0;
+  const errors: string[] = [];
   const syncEvents: Record<string, unknown>[] = [];
 
   const rateLimiter = createRedisRateLimiter(
@@ -158,12 +161,13 @@ const syncDestinationsForUser = async (
       addFailed += result.addFailed;
       removed += result.removed;
       removeFailed += result.removeFailed;
+      errors.push(...result.errors);
     } finally {
       await handle.release();
     }
   }
 
-  return { added, addFailed, removed, removeFailed, syncEvents };
+  return { added, addFailed, removed, removeFailed, errors, syncEvents };
 };
 
 export { syncDestinationsForUser };

@@ -117,6 +117,8 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
       }),
     );
 
+    const uniqueErrors = new Set<string>();
+
     for (const settlement of settlements) {
       if (settlement.status === "fulfilled") {
         totalAdded += settlement.value.added;
@@ -124,6 +126,10 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
         totalRemoved += settlement.value.removed;
         totalRemoveFailed += settlement.value.removeFailed;
         allSyncEvents.push(...settlement.value.syncEvents);
+
+        for (const error of settlement.value.errors) {
+          uniqueErrors.add(error);
+        }
       } else {
         usersFailed += 1;
         widelog.errorFields(settlement.reason, { prefix: "push.user" });
@@ -136,8 +142,11 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
       "events.removed": totalRemoved,
       "events.remove_failed": totalRemoveFailed,
       "user.failed": usersFailed,
-      "sync_events": allSyncEvents,
     });
+
+    for (const error of uniqueErrors) {
+      widelog.append("events.errors", error);
+    }
   } finally {
     redis.disconnect();
   }

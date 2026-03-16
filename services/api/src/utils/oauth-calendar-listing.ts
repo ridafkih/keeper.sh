@@ -1,6 +1,11 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
+import {
+  calendarsTable,
+  calendarAccountsTable,
+} from "@keeper.sh/database/schema";
+import { and, eq } from "drizzle-orm";
 import { ErrorResponse } from "./responses";
-import { respondWithLoggedError } from "./logging";
+import { respondWithLoggedError, widelog } from "./logging";
 import {
   DestinationNotFoundError,
   DestinationProviderMismatchError,
@@ -25,10 +30,15 @@ interface CalendarListAuthError extends Error {
   authRequired: boolean;
 }
 
-interface OAuthCalendarListingOptions<TCalendar> {
+interface NormalizedCalendar {
+  id: string;
+  summary: string;
+  primary?: boolean;
+}
+
+interface OAuthCalendarListingOptions {
   provider: string;
-  listCalendars: (accessToken: string) => Promise<TCalendar[]>;
-  normalizeCalendars: (calendars: TCalendar[]) => unknown[];
+  listCalendars: (accessToken: string) => Promise<NormalizedCalendar[]>;
   refreshDestinationAccessToken: (
     destinationId: string,
     refreshToken: string,
@@ -41,7 +51,7 @@ interface OAuthCalendarListingOptions<TCalendar> {
 }
 
 type OAuthCalendarAccessOptions = Pick<
-  OAuthCalendarListingOptions<never>,
+  OAuthCalendarListingOptions,
   "provider" | "refreshDestinationAccessToken" | "refreshSourceAccessToken"
 >;
 
@@ -104,7 +114,7 @@ const resolveAccessToken = async (
 
 const handleCalendarListError = (
   error: unknown,
-  isCalendarListError: OAuthCalendarListingOptions<never>["isCalendarListError"],
+  isCalendarListError: OAuthCalendarListingOptions["isCalendarListError"],
 ): Response | null => {
   if (error instanceof DestinationNotFoundError) {
     return ErrorResponse.notFound(error.message).toResponse();
@@ -131,10 +141,59 @@ const handleCalendarListError = (
   return null;
 };
 
-const listOAuthCalendars = async <TCalendar>(
+const getStoredCalendars = async (
+  userId: string,
+  credentialId: string | null,
+  destinationId: string | null,
+): Promise<NormalizedCalendar[]> => {
+  const { database } = await import("@/context");
+
+  if (credentialId) {
+    const rows = await database
+      .select({
+        externalCalendarId: calendarsTable.externalCalendarId,
+        name: calendarsTable.name,
+      })
+      .from(calendarsTable)
+      .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
+      .where(
+        and(
+          eq(calendarsTable.userId, userId),
+          eq(calendarAccountsTable.oauthCredentialId, credentialId),
+        ),
+      );
+
+    return rows
+      .filter((row): row is typeof row & { externalCalendarId: string } => row.externalCalendarId !== null)
+      .map((row) => ({ id: row.externalCalendarId, summary: row.name }));
+  }
+
+  if (destinationId) {
+    const rows = await database
+      .select({
+        externalCalendarId: calendarsTable.externalCalendarId,
+        name: calendarsTable.name,
+      })
+      .from(calendarsTable)
+      .where(
+        and(
+          eq(calendarsTable.userId, userId),
+          eq(calendarsTable.accountId, destinationId),
+        ),
+      );
+
+    return rows
+      .filter((row): row is typeof row & { externalCalendarId: string } => row.externalCalendarId !== null)
+      .map((row) => ({ id: row.externalCalendarId, summary: row.name }));
+  }
+
+  return [];
+};
+
+const listOAuthCalendars = async (
   request: Request,
   userId: string,
-  options: OAuthCalendarListingOptions<TCalendar>,
+  options: OAuthCalendarListingOptions,
 ): Promise<Response> => {
   const url = new URL(request.url);
   const query = Object.fromEntries(url.searchParams.entries());
@@ -154,9 +213,23 @@ const listOAuthCalendars = async <TCalendar>(
       destinationId,
       options,
     );
-    const calendars = await options.listCalendars(accessToken);
 
-    return Response.json({ calendars: options.normalizeCalendars(calendars) });
+    try {
+      const calendars = await options.listCalendars(accessToken);
+      return Response.json({ calendars });
+    } catch (listError) {
+      if (options.isCalendarListError(listError) && listError.authRequired) {
+        const calendars = await getStoredCalendars(userId, credentialId, destinationId);
+        widelog.setFields({
+          "calendar_list.fallback": true,
+          "calendar_list.fallback_reason": "insufficient_scopes",
+          "calendar_list.stored_count": calendars.length,
+          "calendar_list.provider": options.provider,
+        });
+        return Response.json({ calendars });
+      }
+      throw listError;
+    }
   } catch (error) {
     const response = handleCalendarListError(error, options.isCalendarListError);
     if (response) {
@@ -168,4 +241,4 @@ const listOAuthCalendars = async <TCalendar>(
 };
 
 export { listOAuthCalendars };
-export type { OAuthCalendarListingOptions };
+export type { OAuthCalendarListingOptions, NormalizedCalendar };

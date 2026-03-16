@@ -306,9 +306,13 @@ interface SyncCalendarOptions {
   onProgress?: (update: SyncProgressUpdate) => void;
 }
 
-const EMPTY_RESULT: SyncResult = { added: 0, addFailed: 0, removed: 0, removeFailed: 0 };
+interface SyncCalendarResult extends SyncResult {
+  errors: string[];
+}
 
-const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncResult> => {
+const EMPTY_RESULT: SyncCalendarResult = { added: 0, addFailed: 0, removed: 0, removeFailed: 0, errors: [] };
+
+const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarResult> => {
   const { userId, calendarId, provider, readState, isCurrent, flush, onSyncEvent, onProgress } = options;
 
   const wideEvent: Record<string, unknown> = {
@@ -409,7 +413,8 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncResult> =
     wideEvent["flush.inserts"] = outcome.changes.inserts.length;
     wideEvent["flush.deletes"] = outcome.changes.deletes.length;
 
-    return outcome.result;
+    const errorMessages = outcome.errors.map((operationError) => operationError.error);
+    return { ...outcome.result, errors: errorMessages };
   } catch (error) {
     wideEvent["outcome"] = "error";
     wideEvent["flushed"] = flushed;
