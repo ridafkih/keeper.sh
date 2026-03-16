@@ -14,7 +14,7 @@ import {
 } from "@/features/dashboard/components/upgrade-card";
 import Check from "lucide-react/dist/esm/icons/check";
 import { HttpError } from "@/lib/fetcher";
-import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
+import { track, ANALYTICS_EVENTS, reportPurchaseConversion } from "@/lib/analytics";
 import {
   fetchSubscriptionStateWithApi,
   useSubscription,
@@ -101,7 +101,12 @@ function UpgradePage() {
     if (!productId) return;
     track(ANALYTICS_EVENTS.upgrade_started);
     startTransition(async () => {
-      await openCheckout(productId, { onSuccess: () => mutate() });
+      await openCheckout(productId, {
+        onSuccess: () => {
+          reportPurchaseConversion(runtimeConfig);
+          mutate();
+        },
+      });
     });
   };
 
