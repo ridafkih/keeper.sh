@@ -1,3 +1,5 @@
+import type { PublicRuntimeConfig } from "@/lib/runtime-config";
+
 export interface PlanConfig {
   id: "free" | "pro";
   name: string;
@@ -9,15 +11,13 @@ export interface PlanConfig {
   features: string[];
 }
 
-export const plans: PlanConfig[] = [
+const basePlans: Omit<PlanConfig, "monthlyProductId" | "yearlyProductId">[] = [
   {
     id: "free",
     name: "Free",
     description: "For personal use and getting started with calendar sync.",
     monthlyPrice: 0,
     yearlyPrice: 0,
-    monthlyProductId: null,
-    yearlyProductId: null,
     features: [
       "Up to 2 linked accounts",
       "Up to 3 sync mappings",
@@ -32,8 +32,6 @@ export const plans: PlanConfig[] = [
     description: "For power users who need fast syncs, advanced feed controls, and unlimited syncing.",
     monthlyPrice: 5,
     yearlyPrice: 42,
-    monthlyProductId: import.meta.env.VITE_POLAR_PRO_MONTHLY_PRODUCT_ID ?? null,
-    yearlyProductId: import.meta.env.VITE_POLAR_PRO_YEARLY_PRODUCT_ID ?? null,
     features: [
       "Syncing every 1 minute",
       "Unlimited linked accounts",
@@ -44,3 +42,16 @@ export const plans: PlanConfig[] = [
     ],
   },
 ];
+
+export const getPlans = (runtimeConfig: PublicRuntimeConfig): PlanConfig[] =>
+  basePlans.map((plan): PlanConfig => {
+    if (plan.id === "pro") {
+      return {
+        ...plan,
+        monthlyProductId: runtimeConfig.polarProMonthlyProductId,
+        yearlyProductId: runtimeConfig.polarProYearlyProductId,
+      };
+    }
+
+    return { ...plan, monthlyProductId: null, yearlyProductId: null };
+  });

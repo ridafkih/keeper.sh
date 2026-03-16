@@ -2,6 +2,8 @@ interface PublicRuntimeConfig {
   commercialMode: boolean;
   googleAdsConversionLabel: string | null;
   googleAdsId: string | null;
+  polarProMonthlyProductId: string | null;
+  polarProYearlyProductId: string | null;
   visitorsNowToken: string | null;
 }
 
@@ -9,6 +11,8 @@ interface RuntimeConfigSource {
   commercialMode?: boolean | null;
   googleAdsConversionLabel?: string | null;
   googleAdsId?: string | null;
+  polarProMonthlyProductId?: string | null;
+  polarProYearlyProductId?: string | null;
   visitorsNowToken?: string | null;
 }
 
@@ -28,6 +32,8 @@ const getServerPublicRuntimeConfig = (
     environment.VITE_GOOGLE_ADS_CONVERSION_LABEL,
   ),
   googleAdsId: normalizeOptionalValue(environment.VITE_GOOGLE_ADS_ID),
+  polarProMonthlyProductId: normalizeOptionalValue(environment.POLAR_PRO_MONTHLY_PRODUCT_ID),
+  polarProYearlyProductId: normalizeOptionalValue(environment.POLAR_PRO_YEARLY_PRODUCT_ID),
   visitorsNowToken: normalizeOptionalValue(environment.VITE_VISITORS_NOW_TOKEN),
 });
 
@@ -43,6 +49,8 @@ const resolvePublicRuntimeConfig = (source: RuntimeConfigSource): PublicRuntimeC
   commercialMode: source.commercialMode === true,
   googleAdsConversionLabel: normalizeOptionalValue(source.googleAdsConversionLabel),
   googleAdsId: normalizeOptionalValue(source.googleAdsId),
+  polarProMonthlyProductId: normalizeOptionalValue(source.polarProMonthlyProductId),
+  polarProYearlyProductId: normalizeOptionalValue(source.polarProYearlyProductId),
   visitorsNowToken: normalizeOptionalValue(source.visitorsNowToken),
 });
 

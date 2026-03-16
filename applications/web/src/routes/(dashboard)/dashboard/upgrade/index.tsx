@@ -19,8 +19,10 @@ import {
   useSubscription,
 } from "@/hooks/use-subscription";
 import { openCheckout, openCustomerPortal } from "@/utils/checkout";
-import { plans } from "@/config/plans";
+import { getPlans } from "@/config/plans";
+import type { PlanConfig } from "@/config/plans";
 import { resolveUpgradeRedirect } from "@/lib/route-access-guards";
+import type { PublicRuntimeConfig } from "@/lib/runtime-config";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/upgrade/")({
   beforeLoad: ({ context }) => {
@@ -59,17 +61,17 @@ export const Route = createFileRoute("/(dashboard)/dashboard/upgrade/")({
   component: UpgradePage,
 });
 
-function resolveProPlan() {
-  const plan = plans.find((candidatePlan) => candidatePlan.id === "pro");
+function resolveProPlan(runtimeConfig: PublicRuntimeConfig): PlanConfig {
+  const plan = getPlans(runtimeConfig).find((candidatePlan) => candidatePlan.id === "pro");
   if (!plan) {
     throw new Error("Missing pro plan configuration.");
   }
   return plan;
 }
 
-const proPlan = resolveProPlan();
-
 function UpgradePage() {
+  const { runtimeConfig } = Route.useRouteContext();
+  const proPlan = resolveProPlan(runtimeConfig);
   const { subscription: loaderSubscription } = Route.useLoaderData();
   const { data: subscription, isLoading, mutate } = useSubscription({
     fallbackData: loaderSubscription,
