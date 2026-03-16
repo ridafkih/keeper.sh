@@ -12,12 +12,19 @@ const resolveOutcome = (superseded: boolean): string => {
   return "success";
 };
 
+interface OperationError {
+  type: "add" | "remove";
+  error: string;
+  statusCode?: number;
+}
+
 const processAddResults = (
   addOperations: Extract<SyncOperation, { type: "add" }>[],
   pushResults: PushResult[],
   calendarId: string,
-): { changes: PendingChanges; added: number; addFailed: number } => {
+): { changes: PendingChanges; added: number; addFailed: number; errors: OperationError[] } => {
   const changes: PendingChanges = { inserts: [], deletes: [] };
+  const errors: OperationError[] = [];
   let added = 0;
   let addFailed = 0;
 
@@ -27,6 +34,9 @@ const processAddResults = (
 
     if (!operation || !pushResult?.success) {
       addFailed += 1;
+      if (pushResult?.error) {
+        errors.push({ type: "add", error: pushResult.error });
+      }
       continue;
     }
 
@@ -46,15 +56,16 @@ const processAddResults = (
     });
   }
 
-  return { changes, added, addFailed };
+  return { changes, added, addFailed, errors };
 };
 
 const processDeleteResults = (
   removeOperations: Extract<SyncOperation, { type: "remove" }>[],
   deleteResults: DeleteResult[],
   mappingsByDestinationUid: Map<string, EventMapping>,
-): { deleteIds: string[]; removed: number; removeFailed: number } => {
+): { deleteIds: string[]; removed: number; removeFailed: number; errors: OperationError[] } => {
   const deleteIds: string[] = [];
+  const errors: OperationError[] = [];
   let removed = 0;
   let removeFailed = 0;
 
@@ -64,6 +75,9 @@ const processDeleteResults = (
 
     if (!operation || !deleteResult?.success) {
       removeFailed += 1;
+      if (deleteResult?.error) {
+        errors.push({ type: "remove", error: deleteResult.error });
+      }
       continue;
     }
 
@@ -74,12 +88,13 @@ const processDeleteResults = (
     }
   }
 
-  return { deleteIds, removed, removeFailed };
+  return { deleteIds, removed, removeFailed, errors };
 };
 
 interface ExecuteRemoteResult {
   changes: PendingChanges;
   result: SyncResult;
+  errors: OperationError[];
   superseded: boolean;
 }
 
@@ -112,6 +127,7 @@ const groupOperationRuns = (operations: SyncOperation[]): OperationRun[] => {
 interface RunResult {
   changes: PendingChanges;
   result: SyncResult;
+  errors: OperationError[];
 }
 
 const executeAddRun = async (
@@ -121,10 +137,11 @@ const executeAddRun = async (
 ): Promise<RunResult> => {
   const addEvents = adds.map((op) => op.event);
   const pushResults = await provider.pushEvents(addEvents);
-  const { added, addFailed, changes } = processAddResults(adds, pushResults, calendarId);
+  const { added, addFailed, changes, errors } = processAddResults(adds, pushResults, calendarId);
   return {
     changes,
     result: { added, addFailed, removed: 0, removeFailed: 0 },
+    errors,
   };
 };
 
@@ -135,22 +152,24 @@ const executeRemoveRun = async (
 ): Promise<RunResult> => {
   const idsToDelete = removes.map((op) => op.deleteId);
   const deleteResults = await provider.deleteEvents(idsToDelete);
-  const { removed, removeFailed, deleteIds } = processDeleteResults(removes, deleteResults, mappingsByDestinationUid);
+  const { removed, removeFailed, deleteIds, errors } = processDeleteResults(removes, deleteResults, mappingsByDestinationUid);
   return {
     changes: { inserts: [], deletes: deleteIds },
     result: { added: 0, addFailed: 0, removed, removeFailed },
+    errors,
   };
 };
 
-const mergeRunResult = (accumulated: PendingChanges, result: SyncResult, runResult: RunResult): SyncResult => {
-  accumulated.inserts.push(...runResult.changes.inserts);
-  accumulated.deletes.push(...runResult.changes.deletes);
-  return {
-    added: result.added + runResult.result.added,
-    addFailed: result.addFailed + runResult.result.addFailed,
-    removed: result.removed + runResult.result.removed,
-    removeFailed: result.removeFailed + runResult.result.removeFailed,
+const mergeRunResult = (state: ChunkedExecutionState, runResult: RunResult): void => {
+  state.changes.inserts.push(...runResult.changes.inserts);
+  state.changes.deletes.push(...runResult.changes.deletes);
+  state.result = {
+    added: state.result.added + runResult.result.added,
+    addFailed: state.result.addFailed + runResult.result.addFailed,
+    removed: state.result.removed + runResult.result.removed,
+    removeFailed: state.result.removeFailed + runResult.result.removeFailed,
   };
+  state.errors.push(...runResult.errors);
 };
 
 type ProgressCallback = (processed: number, total: number) => void;
@@ -168,6 +187,7 @@ const chunkOperations = <TOperation>(operations: TOperation[], size: number): TO
 interface ChunkedExecutionState {
   changes: PendingChanges;
   result: SyncResult;
+  errors: OperationError[];
   processed: number;
   superseded: boolean;
 }
@@ -202,7 +222,7 @@ const executeChunkedAdds = async (
       return;
     }
     const runResult = await executeAddRun(chunk, calendarId, provider);
-    state.result = mergeRunResult(state.changes, state.result, runResult);
+    mergeRunResult(state, runResult);
     state.processed += chunk.length;
     onRunComplete?.(state.processed, totalOperations);
     await checkSuperseded(state, isCurrent);
@@ -224,7 +244,7 @@ const executeChunkedRemoves = async (
       return;
     }
     const runResult = await executeRemoveRun(chunk, provider, mappingsByDestinationUid);
-    state.result = mergeRunResult(state.changes, state.result, runResult);
+    mergeRunResult(state, runResult);
     state.processed += chunk.length;
     onRunComplete?.(state.processed, totalOperations);
     await checkSuperseded(state, isCurrent);
@@ -249,6 +269,7 @@ const executeRemoteOperations = async (
   const state: ChunkedExecutionState = {
     changes: { inserts: [], deletes: [] },
     result: { added: 0, addFailed: 0, removed: 0, removeFailed: 0 },
+    errors: [],
     processed: 0,
     superseded: false,
   };
@@ -267,7 +288,7 @@ const executeRemoteOperations = async (
     }
   }
 
-  return { changes: state.changes, result: state.result, superseded: state.superseded };
+  return { changes: state.changes, result: state.result, errors: state.errors, superseded: state.superseded };
 };
 
 interface SyncCalendarOptions {
@@ -373,6 +394,10 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncResult> =
     wideEvent["events.removed"] = outcome.result.removed;
     wideEvent["events.remove_failed"] = outcome.result.removeFailed;
     wideEvent["superseded"] = outcome.superseded;
+
+    if (outcome.errors.length > 0) {
+      wideEvent["operation_errors"] = outcome.errors;
+    }
 
     outcome.changes.deletes.push(...staleMappingIds);
 
