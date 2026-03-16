@@ -3,31 +3,13 @@ import type { SyncableEvent } from "../../../core/types";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
 
 const formatDateOnly = (value: Date): string => value.toISOString().slice(0, 10);
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-const isSingleDayAllDayEvent = (event: SyncableEvent): boolean => event.endTime.getTime() - event.startTime.getTime() === MS_PER_DAY;
-
-const buildWorkingLocationProperties = (
-  event: Pick<SyncableEvent, "location" | "summary">,
-): NonNullable<GoogleEvent["workingLocationProperties"]> => {
-  const label = event.location?.trim() || event.summary.trim();
-
-  return {
-    customLocation: { label },
-    type: "customLocation",
-  };
-};
 
 const canSerializeGoogleEvent = (event: SyncableEvent): boolean => {
-  if (event.availability !== "workingElsewhere") {
-    return true;
+  if (event.availability === "workingElsewhere") {
+    return false;
   }
 
-  if (!resolveIsAllDayEvent(event)) {
-    return true;
-  }
-
-  return isSingleDayAllDayEvent(event);
+  return true;
 };
 
 const serializeGoogleEvent = (
@@ -47,16 +29,9 @@ const serializeGoogleEvent = (
     summary: event.summary,
   };
 
-  if (event.availability === "workingElsewhere") {
-    googleEvent.eventType = "workingLocation";
+  googleEvent.location = event.location;
+  if (event.availability === "free") {
     googleEvent.transparency = "transparent";
-    googleEvent.visibility = "public";
-    googleEvent.workingLocationProperties = buildWorkingLocationProperties(event);
-  } else {
-    googleEvent.location = event.location;
-    if (event.availability === "free") {
-      googleEvent.transparency = "transparent";
-    }
   }
 
   if (isAllDay) {

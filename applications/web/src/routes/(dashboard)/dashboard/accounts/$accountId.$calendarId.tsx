@@ -79,7 +79,6 @@ const EXCLUSION_SETTINGS: SyncSetting[] = [
 
 const PROVIDER_EXCLUSION_SETTINGS: SyncSetting[] = [
   { field: "excludeFocusTime", label: "Exclude Focus Time Events", matchesField: true },
-  { field: "excludeWorkingLocation", label: "Exclude Working Location Events", matchesField: true },
   { field: "excludeOutOfOffice", label: "Exclude Out of Office Events", matchesField: true },
 ];
 

@@ -4,7 +4,7 @@ import { ensureValidToken } from "../../../core/oauth/ensure-valid-token";
 import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-valid-token";
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import type { DeleteResult, PushResult, RemoteEvent, SyncableEvent } from "../../../core/types";
-import { googleEventListSchema } from "@keeper.sh/data-schemas";
+import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS } from "../shared/api";
 import { executeBatchChunked } from "../shared/batch";
@@ -25,6 +25,25 @@ interface GoogleSyncProviderConfig {
 }
 
 const isDirectEventId = (identifier: string): boolean => !identifier.includes("@");
+
+const extractBatchErrorMessage = (body: unknown, fallbackStatus: number): string => {
+  const fallback = `Batch sub-request failed with status ${fallbackStatus}`;
+  if (!googleApiErrorSchema.allows(body)) {
+    return fallback;
+  }
+  return googleApiErrorSchema.assert(body).error?.message ?? fallback;
+};
+
+const extractEventIdFromLookup = (body: unknown): string | undefined => {
+  if (!googleEventListSchema.allows(body)) {
+    return;
+  }
+  const firstItem = googleEventListSchema.assert(body).items?.[0];
+  if (!firstItem) {
+    return;
+  }
+  return firstItem.id ?? undefined;
+};
 
 const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   const tokenState: TokenState = {
@@ -90,9 +109,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       } else if (response.statusCode === 409) {
         results[entry.originalIndex] = { error: "Event already exists (conflict)", success: false };
       } else {
-        const errorBody = response.body as Record<string, unknown> | null;
-        const errorObj = errorBody?.error as Record<string, unknown> | undefined;
-        const errorMessage = (errorObj?.message as string) ?? `Batch sub-request failed with status ${response.statusCode}`;
+        const errorMessage = extractBatchErrorMessage(response.body, response.statusCode);
         results[entry.originalIndex] = { error: errorMessage, success: false };
       }
     }
@@ -151,11 +168,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         continue;
       }
 
-      const findBody = findResponse.body as Record<string, unknown> | null;
-      const items = findBody?.items as Record<string, unknown>[] | undefined;
-      const existing = items?.[0];
-      const eventId = existing?.id as string | undefined;
-
+      const eventId = extractEventIdFromLookup(findResponse.body);
       if (!eventId) {
         results[originalIndex] = { success: true };
         continue;
@@ -204,9 +217,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       } else if (deleteResponse.statusCode === HTTP_STATUS.NOT_FOUND) {
         results[originalIndex] = { success: true };
       } else {
-        const errorBody = deleteResponse.body as Record<string, unknown> | null;
-        const errorObj = errorBody?.error as Record<string, unknown> | undefined;
-        const errorMessage = (errorObj?.message as string) ?? `Delete failed with status ${deleteResponse.statusCode}`;
+        const errorMessage = extractBatchErrorMessage(deleteResponse.body, deleteResponse.statusCode);
         results[originalIndex] = { error: errorMessage, success: false };
       }
     }
