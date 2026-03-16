@@ -2,6 +2,7 @@ const LOCK_PREFIX = "sync:lock:";
 const SIGNAL_PREFIX = "sync:signal:";
 const LOCK_TTL_SECONDS = 120;
 const POLL_INTERVAL_MS = 250;
+const POLL_TIMEOUT_MS = (LOCK_TTL_SECONDS * 1000) + 10_000;
 
 interface SyncLockRedis {
   get: (key: string) => Promise<string | null>;
@@ -101,14 +102,16 @@ const createSyncLock = (redis: SyncLockRedis) => {
       signalKey,
       holderId,
       String(LOCK_TTL_SECONDS),
-    ) as string;
+    );
 
     if (result === "acquired") {
       const handle = createLockHandle(redis, lockKey, signalKey, holderId);
       return { acquired: true, handle };
     }
 
-    while (true) {
+    const pollDeadline = Date.now() + POLL_TIMEOUT_MS;
+
+    while (Date.now() < pollDeadline) {
       if (abortSignal?.aborted) {
         return { acquired: false };
       }
@@ -127,7 +130,7 @@ const createSyncLock = (redis: SyncLockRedis) => {
           signalKey,
           holderId,
           String(LOCK_TTL_SECONDS),
-        ) as string;
+        );
 
         if (retryResult === "acquired") {
           const handle = createLockHandle(redis, lockKey, signalKey, holderId);
@@ -137,6 +140,8 @@ const createSyncLock = (redis: SyncLockRedis) => {
 
       await Bun.sleep(POLL_INTERVAL_MS);
     }
+
+    return { acquired: false };
   };
 
   return { acquire };

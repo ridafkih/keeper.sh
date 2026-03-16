@@ -23,8 +23,6 @@ const createPushSyncQueue = (connection: ConnectionOptions): Queue<PushSyncJobPa
     connection,
     defaultJobOptions: {
       attempts: 1,
-      removeOnComplete: { count: 200 },
-      removeOnFail: { count: 500 },
     },
   });
 

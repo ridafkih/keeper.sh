@@ -46,13 +46,20 @@ const syncAggregateRuntime = createSyncAggregateRuntime({
   redis: refreshLockRedis,
 });
 
-const processJob = async (job: Job<PushSyncJobPayload, PushSyncJobResult>): Promise<PushSyncJobResult> => {
+const processJob = async (
+  job: Job<PushSyncJobPayload, PushSyncJobResult>,
+  _token: string | undefined,
+  signal: AbortSignal | undefined,
+): Promise<PushSyncJobResult> => {
   const { userId, plan } = job.data;
   const deadlineMs = Date.now() + USER_TIMEOUT_MS;
 
   widelog.setFields({
+    "operation.name": "job:process",
+    "operation.type": "job",
+    "request.id": crypto.randomUUID(),
     "job.id": job.id,
-    "job.type": "push-sync",
+    "job.name": job.name,
     "user.id": userId,
     "subscription.plan": plan,
   });
@@ -61,6 +68,7 @@ const processJob = async (job: Job<PushSyncJobPayload, PushSyncJobResult>): Prom
     database,
     redis: refreshLockRedis,
     deadlineMs,
+    abortSignal: signal,
     encryptionKey: env.ENCRYPTION_KEY,
     oauthConfig: {
       googleClientId: env.GOOGLE_CLIENT_ID,
@@ -100,14 +108,15 @@ const processJob = async (job: Job<PushSyncJobPayload, PushSyncJobResult>): Prom
     "events.add_failed": result.addFailed,
     "events.removed": result.removed,
     "events.remove_failed": result.removeFailed,
+    "outcome": "success",
+    "status_code": 200,
   });
 
   for (const error of result.errors) {
     widelog.append("events.errors", error);
   }
 
-  widelog.set("outcome", "success");
-  widelog.set("status_code", 200);
+  widelog.flush();
 
   return {
     added: result.added,
