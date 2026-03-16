@@ -43,7 +43,7 @@ describe("normalizeTimezone", () => {
   });
 
   it("returns undefined for undefined input", () => {
-    expect(normalizeTimezone(undefined)).toBeUndefined();
+    expect(normalizeTimezone(globalThis.undefined)).toBeUndefined();
   });
 
   it("returns unknown timezone as-is when not in mapping", () => {

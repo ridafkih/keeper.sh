@@ -150,8 +150,8 @@ const WINDOWS_TO_IANA: Record<string, string> = {
 };
 
 const normalizeTimezone = (timezone: string | undefined): string | undefined => {
-  if (timezone === undefined) {
-    return undefined;
+  if (!timezone) {
+    return;
   }
 
   return WINDOWS_TO_IANA[timezone] ?? timezone;
