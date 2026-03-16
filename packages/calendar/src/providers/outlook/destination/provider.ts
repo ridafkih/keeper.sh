@@ -5,11 +5,14 @@ import {
   outlookEventSchema,
 } from "@keeper.sh/data-schemas";
 import type { DeleteResult, PushResult, RemoteEvent, SyncableEvent } from "../../../core/types";
-import { getErrorMessage } from "../../../core/utils/error";
+import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
+import { executeBatchChunked } from "../../../core/utils/batch";
+import type { BatchSubResponse } from "../../../core/utils/batch";
 import { getOAuthSyncWindowStart } from "../../../core/oauth/sync-window";
 import { ensureValidToken } from "../../../core/oauth/ensure-valid-token";
 import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-valid-token";
 import { MICROSOFT_GRAPH_API, OUTLOOK_PAGE_SIZE } from "../shared/api";
+import { createOutlookBatchExecutor } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
 import { serializeOutlookEvent } from "./serialize-event";
 
@@ -20,9 +23,51 @@ interface OutlookSyncProviderConfig {
   calendarId: string;
   userId: string;
   refreshAccessToken?: TokenRefresher;
+  rateLimiter?: RedisRateLimiter;
 }
 
+const resolveErrorMessage = (body: unknown, fallback: string): string => {
+  if (!microsoftApiErrorSchema.allows(body)) {
+    return fallback;
+  }
+  return microsoftApiErrorSchema.assert(body).error?.message ?? fallback;
+};
+
+const resolvePushResult = (response: BatchSubResponse): PushResult => {
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    return {
+      error: resolveErrorMessage(response.body, `Push failed with status ${response.statusCode}`),
+      success: false,
+    };
+  }
+
+  if (!outlookEventSchema.allows(response.body)) {
+    return { success: true };
+  }
+
+  const event = outlookEventSchema.assert(response.body);
+  if (!event.id || !event.iCalUId) {
+    return { success: true };
+  }
+
+  return { deleteId: event.id, remoteId: event.iCalUId, success: true };
+};
+
+const resolveDeleteResult = (response: BatchSubResponse): DeleteResult => {
+  if (response.statusCode >= 200 && response.statusCode < 300) {
+    return { success: true };
+  }
+  if (response.statusCode === HTTP_STATUS.NOT_FOUND) {
+    return { success: true };
+  }
+  return {
+    error: resolveErrorMessage(response.body, `Delete failed with status ${response.statusCode}`),
+    success: false,
+  };
+};
+
 const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
+  const batchExecutor = createOutlookBatchExecutor();
   const tokenState: TokenState = {
     accessToken: config.accessToken,
     accessTokenExpiresAt: config.accessTokenExpiresAt,
@@ -35,75 +80,37 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     }
   };
 
-  const getHeaders = (): Record<string, string> => ({
-    Authorization: `Bearer ${tokenState.accessToken}`,
-    "Content-Type": "application/json",
-  });
-
   const pushEvents = async (events: SyncableEvent[]): Promise<PushResult[]> => {
     await refreshIfNeeded();
-    const results: PushResult[] = [];
 
-    for (const event of events) {
-      try {
-        const resource = serializeOutlookEvent(event);
-        const url = new URL(`${MICROSOFT_GRAPH_API}/me/calendar/events`);
+    const subRequests = events.map((event) => ({
+      method: "POST",
+      path: "/me/calendar/events",
+      headers: { "Content-Type": "application/json" },
+      body: serializeOutlookEvent(event),
+    }));
 
-        const response = await fetch(url, {
-          body: JSON.stringify(resource),
-          headers: getHeaders(),
-          method: "POST",
-        });
-
-        if (!response.ok) {
-          const body = await response.json();
-          const { error } = microsoftApiErrorSchema.assert(body);
-          results.push({ error: error?.message ?? response.statusText, success: false });
-          continue;
-        }
-
-        const body = await response.json();
-        const created = outlookEventSchema.assert(body);
-        results.push({ deleteId: created.id, remoteId: created.iCalUId, success: true });
-      } catch (error) {
-        results.push({ error: getErrorMessage(error), success: false });
-      }
-    }
-
-    return results;
+    const batchResponses = await executeBatchChunked(batchExecutor, subRequests, tokenState.accessToken, config.rateLimiter);
+    return batchResponses.map((response) => resolvePushResult(response));
   };
 
   const deleteEvents = async (eventIds: string[]): Promise<DeleteResult[]> => {
     await refreshIfNeeded();
-    const results: DeleteResult[] = [];
 
-    for (const eventId of eventIds) {
-      try {
-        const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${eventId}`);
-
-        const response = await fetch(url, {
-          headers: { Authorization: `Bearer ${tokenState.accessToken}` },
-          method: "DELETE",
-        });
-
-        if (!response.ok && response.status !== HTTP_STATUS.NOT_FOUND) {
-          const body = await response.json();
-          const { error } = microsoftApiErrorSchema.assert(body);
-          results.push({ error: error?.message ?? response.statusText, success: false });
-          continue;
-        }
-
-        await response.body?.cancel?.();
-        results.push({ success: true });
-      } catch (error) {
-        results.push({ error: getErrorMessage(error), success: false });
-      }
+    if (eventIds.length === 0) {
+      return [];
     }
 
-    return results;
+    const subRequests = eventIds.map((eventId) => ({
+      method: "DELETE",
+      path: `/me/events/${eventId}`,
+    }));
+
+    const batchResponses = await executeBatchChunked(batchExecutor, subRequests, tokenState.accessToken, config.rateLimiter);
+    return batchResponses.map((response) => resolveDeleteResult(response));
   };
 
-  const buildOutlookEventsUrl = (
+  const buildEventsUrl = (
     lookbackStart: Date,
     futureDate: Date,
     nextLink: string | null,
@@ -130,7 +137,11 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     futureDate.setFullYear(futureDate.getFullYear() + 2);
 
     do {
-      const url = buildOutlookEventsUrl(lookbackStart, futureDate, nextLink);
+      if (config.rateLimiter) {
+        await config.rateLimiter.acquire(1);
+      }
+
+      const url = buildEventsUrl(lookbackStart, futureDate, nextLink);
 
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${tokenState.accessToken}` },
@@ -138,9 +149,8 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       });
 
       if (!response.ok) {
-        const body = await response.json();
-        const { error } = microsoftApiErrorSchema.assert(body);
-        throw new Error(error?.message ?? response.statusText);
+        const errorBody = await response.text();
+        throw new Error(`Microsoft Graph API ${response.status}: ${errorBody}`);
       }
 
       const body = await response.json();

@@ -1,18 +1,5 @@
-import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
+import type { BatchExecutor, BatchSubRequest, BatchSubResponse } from "../../../core/utils/batch";
 import { GOOGLE_BATCH_API, GOOGLE_BATCH_MAX_SIZE } from "./api";
-
-interface BatchSubRequest {
-  method: string;
-  path: string;
-  headers?: Record<string, string>;
-  body?: unknown;
-}
-
-interface BatchSubResponse {
-  statusCode: number;
-  headers: Record<string, string>;
-  body: unknown;
-}
 
 const generateBoundary = (): string =>
   `batch_${crypto.randomUUID().replaceAll("-", "")}`;
@@ -241,43 +228,15 @@ const executeBatch = async (
   return parseBatchResponseBody(responseText, responseBoundary);
 };
 
-const chunkArray = <TItem>(items: TItem[], size: number): TItem[][] => {
-  const chunks: TItem[][] = [];
-  for (let offset = 0; offset < items.length; offset += size) {
-    chunks.push(items.slice(offset, offset + size));
-  }
-  return chunks;
-};
-
-const executeBatchChunked = async (
-  subRequests: BatchSubRequest[],
-  accessToken: string,
-  rateLimiter?: RedisRateLimiter,
-): Promise<BatchSubResponse[]> => {
-  if (subRequests.length === 0) {
-    return [];
-  }
-
-  const chunks = chunkArray(subRequests, GOOGLE_BATCH_MAX_SIZE);
-  const allResponses: BatchSubResponse[] = [];
-
-  for (const chunk of chunks) {
-    if (rateLimiter) {
-      await rateLimiter.acquire(chunk.length);
-    }
-    const responses = await executeBatch(chunk, accessToken);
-    allResponses.push(...responses);
-  }
-
-  return allResponses;
-};
+const createGoogleBatchExecutor = (): BatchExecutor => ({
+  execute: executeBatch,
+  maxBatchSize: GOOGLE_BATCH_MAX_SIZE,
+});
 
 export {
   buildBatchRequestBody,
   parseBatchResponseBody,
   executeBatch,
-  executeBatchChunked,
-  chunkArray,
+  createGoogleBatchExecutor,
   extractResponseBoundary,
 };
-export type { BatchSubRequest, BatchSubResponse };

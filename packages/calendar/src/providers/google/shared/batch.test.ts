@@ -2,10 +2,10 @@ import { describe, expect, it } from "bun:test";
 import {
   buildBatchRequestBody,
   parseBatchResponseBody,
-  chunkArray,
   extractResponseBoundary,
 } from "./batch";
-import type { BatchSubRequest } from "./batch";
+import { chunkArray } from "../../../core/utils/batch";
+import type { BatchSubRequest } from "../../../core/utils/batch";
 
 describe("buildBatchRequestBody", () => {
   it("serializes a single POST sub-request with JSON body", () => {
