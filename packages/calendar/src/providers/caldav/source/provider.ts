@@ -4,7 +4,6 @@ import { isKeeperEvent } from "../../../core/events/identity";
 import type { SourceEvent } from "../../../core/types";
 import { calendarAccountsTable, calendarsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { and, eq, inArray } from "drizzle-orm";
-import { widelog } from "widelogger";
 import { CalDAVClient } from "../shared/client";
 import { parseICalToRemoteEvent } from "../shared/ics";
 import { isCalDAVAuthenticationError } from "./auth-error-classification";
@@ -191,11 +190,6 @@ const createCalDAVSourceProvider = (
   const syncSingleSource = async (
     account: CalDAVSourceAccount,
   ): Promise<CalDAVSourceSyncResult> => {
-    widelog.set("operation.name", "caldav-source:sync");
-    widelog.set("source.calendar_id", account.calendarId);
-    widelog.set("source.provider", options.providerId);
-    widelog.set("user.id", account.userId);
-
     try {
       await refreshOriginalName(account);
       const events = await fetchEventsFromCalDAV(account);
@@ -208,7 +202,6 @@ const createCalDAVSourceProvider = (
           .where(eq(calendarAccountsTable.id, account.calendarAccountId));
       }
 
-      widelog.errorFields(error);
       return {
         eventsAdded: EMPTY_COUNT,
         eventsRemoved: EMPTY_COUNT,

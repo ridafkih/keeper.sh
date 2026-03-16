@@ -28,8 +28,7 @@
     "ioredis": "^5.10.0",
     "resend": "^6.9.3",
     "ts-ics": "2.4.0",
-    "tsdav": "^2.1.8",
-    "widelogger": "^0.4.0"
+    "tsdav": "^2.1.8"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",

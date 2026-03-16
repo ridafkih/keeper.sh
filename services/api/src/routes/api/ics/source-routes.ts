@@ -1,5 +1,4 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import { respondWithLoggedError } from "@/utils/logging";
 import { ErrorResponse } from "@/utils/responses";
 
 interface IcsRouteContext {
@@ -54,26 +53,20 @@ const handlePostIcsSourceRoute = async (
         const { message: errorMessage } = error;
         message = errorMessage;
       }
-      return respondWithLoggedError(error, ErrorResponse.paymentRequired(message).toResponse());
+      return ErrorResponse.paymentRequired(message).toResponse();
     }
 
     if (dependencies.isInvalidSourceUrlError(error)) {
-      return respondWithLoggedError(
-        error,
-        Response.json(
-          {
-            authRequired: error.authRequired,
-            error: error.message,
-          },
-          { status: HTTP_STATUS.BAD_REQUEST },
-        ),
+      return Response.json(
+        {
+          authRequired: error.authRequired,
+          error: error.message,
+        },
+        { status: HTTP_STATUS.BAD_REQUEST },
       );
     }
 
-    return respondWithLoggedError(
-      error,
-      ErrorResponse.badRequest("Name and URL are required").toResponse(),
-    );
+    return ErrorResponse.badRequest("Name and URL are required").toResponse();
   }
 };
 

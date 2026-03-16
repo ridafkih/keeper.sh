@@ -1,5 +1,4 @@
 import { withWideEvent } from "@/utils/middleware";
-import { respondWithLoggedError } from "@/utils/logging";
 import { ErrorResponse } from "@/utils/responses";
 import {
   OAuthError,
@@ -22,14 +21,14 @@ const GET = withWideEvent(async ({ request, params }) => {
     return Response.redirect(redirectUrl.toString());
   } catch (error) {
     if (error instanceof OAuthError) {
-      return respondWithLoggedError(error, Response.redirect(error.redirectUrl.toString()));
+      return Response.redirect(error.redirectUrl.toString());
     }
 
     const errorUrl = buildRedirectUrl("/dashboard/integrations", baseUrl, {
       destination: "error",
       error: "Failed to connect",
     });
-    return respondWithLoggedError(error, Response.redirect(errorUrl.toString()));
+    return Response.redirect(errorUrl.toString());
   }
 });
 

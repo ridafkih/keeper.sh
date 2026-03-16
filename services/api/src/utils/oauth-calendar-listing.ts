@@ -5,7 +5,6 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
 import { ErrorResponse } from "./responses";
-import { respondWithLoggedError, widelog } from "./logging";
 import {
   DestinationNotFoundError,
   DestinationProviderMismatchError,
@@ -220,12 +219,6 @@ const listOAuthCalendars = async (
     } catch (listError) {
       if (options.isCalendarListError(listError) && listError.authRequired) {
         const calendars = await getStoredCalendars(userId, credentialId, destinationId);
-        widelog.setFields({
-          "calendar_list.fallback": true,
-          "calendar_list.fallback_reason": "insufficient_scopes",
-          "calendar_list.stored_count": calendars.length,
-          "calendar_list.provider": options.provider,
-        });
         return Response.json({ calendars });
       }
       throw listError;
@@ -233,7 +226,7 @@ const listOAuthCalendars = async (
   } catch (error) {
     const response = handleCalendarListError(error, options.isCalendarListError);
     if (response) {
-      return respondWithLoggedError(error, response);
+      return response;
     }
 
     throw error;

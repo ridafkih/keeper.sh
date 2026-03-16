@@ -55,8 +55,6 @@ export { RateLimiter, type RateLimiterConfig } from "./core/utils/rate-limiter";
 export { createRedisRateLimiter, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
 export { allSettledWithConcurrency, type AllSettledWithConcurrencyOptions } from "./core/utils/concurrency";
 export { getErrorMessage } from "./core/utils/error";
-export { widelogger } from "widelogger";
-export type { WideloggerOptions } from "widelogger";
 export { getEventsForDestination } from "./core/events/events";
 export {
   buildSourceEventIdentityKey,

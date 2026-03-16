@@ -7,15 +7,7 @@ import { user as userTable } from "@keeper.sh/database/auth-schema";
 import { and, count, eq, inArray } from "drizzle-orm";
 import { auth, database, premiumService, redis } from "@/context";
 import { checkAndIncrementApiUsage } from "./api-rate-limit";
-import {
-  runApiWideEventContext,
-  setWideEventFields,
-  widelog,
-  trackStatusError,
-} from "./logging";
 
-const HTTP_ERROR_THRESHOLD = 400;
-const HTTP_INTERNAL_SERVER_ERROR = 500;
 const DEFAULT_COUNT = 0;
 const MS_PER_DAY = 86_400_000;
 
@@ -33,49 +25,10 @@ type RouteHandler = (request: Request, params: Record<string, string>) => MaybeP
 type RouteCallback = (ctx: RouteContext) => MaybePromise<Response>;
 type AuthenticatedRouteCallback = (ctx: AuthenticatedRouteContext) => MaybePromise<Response>;
 
-const extractHttpContext = (request: Request): Record<string, unknown> => {
-  const url = new URL(request.url);
-  const origin = request.headers.get("origin");
-  const userAgent = request.headers.get("user-agent");
-  return {
-    http: {
-      method: request.method,
-      path: url.pathname,
-      ...(origin && { origin }),
-      ...(userAgent && { user_agent: userAgent }),
-    },
-    operation: {
-      name: `${request.method} ${url.pathname}`,
-      type: "http",
-    },
-    request: {
-      id: request.headers.get("x-request-id") ?? crypto.randomUUID(),
-    },
-  };
-};
-
-const mapHttpStatusToOutcome = (status: number): "success" | "error" => {
-  if (status >= HTTP_ERROR_THRESHOLD) {
-    return "error";
-  }
-
-  return "success";
-};
-
-const handleResponseStatus = (status: number): void => {
-  widelog.set("status_code", status);
-  widelog.set("outcome", mapHttpStatusToOutcome(status));
-  if (status >= HTTP_ERROR_THRESHOLD) {
-    trackStatusError(status, "HttpError");
-  }
-};
-
 const fetchUserPlan = async (userId: string): Promise<"free" | "pro" | null> => {
   try {
     return await premiumService.getUserPlan(userId);
-  } catch (error) {
-    widelog.set("user_context.plan.error", true);
-    widelog.errorFields(error, { prefix: "user_context.plan" });
+  } catch {
     return null;
   }
 };
@@ -112,9 +65,7 @@ const fetchUserCounts = async (
       "destination.count": destinations?.count ?? DEFAULT_COUNT,
       "source.count": sources?.count ?? DEFAULT_COUNT,
     };
-  } catch (error) {
-    widelog.set("user_context.counts.error", true);
-    widelog.errorFields(error, { prefix: "user_context.counts" });
+  } catch {
     return null;
   }
 };
@@ -130,9 +81,7 @@ const fetchAccountAgeDays = async (userId: string): Promise<number | null> => {
       return null;
     }
     return Math.floor((Date.now() - result.createdAt.getTime()) / MS_PER_DAY);
-  } catch (error) {
-    widelog.set("user_context.account_age.error", true);
-    widelog.errorFields(error, { prefix: "user_context.account_age" });
+  } catch {
     return null;
   }
 };
@@ -142,23 +91,11 @@ interface UserContext {
 }
 
 const enrichWithUserContext = async (userId: string): Promise<UserContext> => {
-  widelog.set("user.id", userId);
-
-  const [plan, counts, accountAgeDays] = await Promise.all([
+  const [plan] = await Promise.all([
     fetchUserPlan(userId),
     fetchUserCounts(userId),
     fetchAccountAgeDays(userId),
   ]);
-
-  if (plan) {
-    widelog.set("subscription.plan", plan);
-  }
-  if (counts) {
-    setWideEventFields(counts);
-  }
-  if (accountAgeDays !== null) {
-    widelog.set("account.age_days", accountAgeDays);
-  }
 
   return { plan };
 };
@@ -177,30 +114,12 @@ const getSession = async (request: Request): Promise<Session | null> => {
 const withWideEvent =
   (handler: RouteCallback): RouteHandler =>
   (request, params) =>
-    runApiWideEventContext(async () => {
-      setWideEventFields(extractHttpContext(request));
-      try {
-        return await widelog.time.measure("duration_ms", async () => {
-          try {
-            const response = await handler({ params, request });
-            handleResponseStatus(response.status);
-            return response;
-          } catch (error) {
-            widelog.set("status_code", HTTP_INTERNAL_SERVER_ERROR);
-            widelog.set("outcome", "error");
-            widelog.errorFields(error);
-            throw error;
-          }
-        });
-      } finally {
-        widelog.flush();
-      }
-    });
+    handler({ params, request });
 
 const withAuth =
   (handler: AuthenticatedRouteCallback): RouteCallback =>
   async ({ request, params }) => {
-    const session = await widelog.time.measure("auth.duration_ms", () => getSession(request));
+    const session = await getSession(request);
 
     if (!session?.user?.id) {
       return ErrorResponse.unauthorized().toResponse();
@@ -240,11 +159,8 @@ const resolveApiTokenUserId = async (bearerToken: string): Promise<string | null
 
 const enforceApiRateLimit = async (userId: string, plan: "free" | "pro" | null): Promise<Response | null> => {
   const rateLimitResult = await checkAndIncrementApiUsage(redis, userId, plan);
-  widelog.set("rate_limit.remaining", rateLimitResult.remaining);
-  widelog.set("rate_limit.limit", rateLimitResult.limit);
 
   if (!rateLimitResult.allowed) {
-    widelog.set("rate_limit.exceeded", true);
     return ErrorResponse.tooManyRequests("Daily API limit exceeded. Upgrade to Pro for unlimited access.").toResponse();
   }
 
@@ -260,15 +176,12 @@ const withV1Auth =
       const bearerToken = authHeader.slice("Bearer ".length);
 
       if (isApiToken(bearerToken)) {
-        const userId = await widelog.time.measure("auth.duration_ms", () =>
-          resolveApiTokenUserId(bearerToken),
-        );
+        const userId = await resolveApiTokenUserId(bearerToken);
 
         if (!userId) {
           return ErrorResponse.unauthorized().toResponse();
         }
 
-        widelog.set("auth.method", "api_token");
         const { plan } = await enrichWithUserContext(userId);
         const rateLimitResponse = await enforceApiRateLimit(userId, plan);
         if (rateLimitResponse) {
@@ -279,9 +192,7 @@ const withV1Auth =
 
       if (isKeeperMcpEnabledAuth(auth)) {
         const mcpAuth = auth;
-        const mcpSession = await widelog.time.measure("auth.duration_ms", () =>
-          mcpAuth.api.getMcpSession({ headers: request.headers }),
-        );
+        const mcpSession = await mcpAuth.api.getMcpSession({ headers: request.headers });
 
         if (!mcpSession?.userId) {
           return ErrorResponse.unauthorized().toResponse();
@@ -296,7 +207,7 @@ const withV1Auth =
       }
     }
 
-    const session = await widelog.time.measure("auth.duration_ms", () => getSession(request));
+    const session = await getSession(request);
 
     if (!session?.user?.id) {
       return ErrorResponse.unauthorized().toResponse();

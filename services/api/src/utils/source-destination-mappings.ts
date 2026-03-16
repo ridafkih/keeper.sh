@@ -6,7 +6,6 @@ import {
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { database as databaseInstance } from "@/context";
 import { triggerDestinationSync } from "./sync";
-import { widelog } from "./logging";
 
 const EMPTY_LIST_COUNT = 0;
 const USER_MAPPING_LOCK_NAMESPACE = 9001;
@@ -345,11 +344,7 @@ const runSetDestinationsForSource = async (
     }
   });
 
-  try {
-    dependencies.triggerDestinationSync(userId);
-  } catch (error) {
-    widelog.errorFields(error);
-  }
+  dependencies.triggerDestinationSync(userId);
 };
 
 const runSetSourcesForDestination = async (
@@ -402,11 +397,7 @@ const runSetSourcesForDestination = async (
     }
   });
 
-  try {
-    dependencies.triggerDestinationSync(userId);
-  } catch (error) {
-    widelog.errorFields(error);
-  }
+  dependencies.triggerDestinationSync(userId);
 };
 
 const getUserMappings = async (userId: string): Promise<SourceDestinationMapping[]> => {

@@ -9,7 +9,6 @@ import {
   hashApiToken,
   extractTokenPrefix,
 } from "@/utils/api-tokens";
-import { respondWithLoggedError } from "@/utils/logging";
 import { tokenCreateBodySchema } from "@/utils/request-body";
 
 const GET = withWideEvent(
@@ -68,11 +67,8 @@ const POST = withWideEvent(
         },
         { status: HTTP_STATUS.CREATED },
       );
-    } catch (error) {
-      return respondWithLoggedError(
-        error,
-        ErrorResponse.badRequest("Token name is required.").toResponse(),
-      );
+    } catch {
+      return ErrorResponse.badRequest("Token name is required.").toResponse();
     }
   }),
 );

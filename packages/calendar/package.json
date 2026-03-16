@@ -23,8 +23,7 @@
 "drizzle-orm": "^0.45.1",
     "ioredis": "^5.10.0",
     "ts-ics": "^2.4.3",
-    "tsdav": "^2.1.8",
-    "widelogger": "^0.4.0"
+    "tsdav": "^2.1.8"
   },
   "devDependencies": {
     "@keeper.sh/fixtures": "workspace:*",

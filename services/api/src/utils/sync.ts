@@ -1,7 +1,6 @@
 import { syncDestinationsForUser } from "@keeper.sh/sync";
 import type { SyncConfig, SyncDestinationsResult } from "@keeper.sh/sync";
 import { spawnBackgroundJob } from "./background-task";
-import { widelog } from "./logging";
 
 const resolveCount = (value: unknown): number => {
   if (typeof value === "number") {
@@ -36,11 +35,6 @@ const buildSyncConfig = async (): Promise<SyncConfig> => {
 const activeSyncAbortControllers = new Map<string, AbortController>();
 
 const triggerDestinationSync = (userId: string): void => {
-  const correlationId = crypto.randomUUID();
-
-  widelog.set("destination_sync.correlation_id", correlationId);
-  widelog.set("destination_sync.triggered", true);
-
   const previousController = activeSyncAbortControllers.get(userId);
   if (previousController) {
     previousController.abort();
@@ -49,7 +43,7 @@ const triggerDestinationSync = (userId: string): void => {
   const abortController = new AbortController();
   activeSyncAbortControllers.set(userId, abortController);
 
-  spawnBackgroundJob("destination-sync", { "user.id": userId, "correlation.id": correlationId }, async () => {
+  spawnBackgroundJob("destination-sync", { "user.id": userId }, async () => {
     const syncConfig = await buildSyncConfig();
     const { getSyncAggregateRuntime } = await import("@/context");
     const syncAggregateRuntime = getSyncAggregateRuntime();

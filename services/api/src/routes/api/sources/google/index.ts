@@ -1,7 +1,6 @@
 import { createOAuthSourceSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { withAuth, withWideEvent } from "@/utils/middleware";
-import { respondWithLoggedError } from "@/utils/logging";
 import { ErrorResponse } from "@/utils/responses";
 import {
   OAuthSourceLimitError,
@@ -52,22 +51,19 @@ const POST = withWideEvent(
       return Response.json(source, { status: HTTP_STATUS.CREATED });
     } catch (error) {
       if (error instanceof OAuthSourceLimitError) {
-        return respondWithLoggedError(error, ErrorResponse.paymentRequired(error.message).toResponse());
+        return ErrorResponse.paymentRequired(error.message).toResponse();
       }
       if (error instanceof DestinationNotFoundError) {
-        return respondWithLoggedError(error, ErrorResponse.notFound(error.message).toResponse());
+        return ErrorResponse.notFound(error.message).toResponse();
       }
       if (error instanceof DestinationProviderMismatchError) {
-        return respondWithLoggedError(error, ErrorResponse.badRequest(error.message).toResponse());
+        return ErrorResponse.badRequest(error.message).toResponse();
       }
       if (error instanceof DuplicateSourceError) {
-        return respondWithLoggedError(
-          error,
-          Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT }),
-        );
+        return Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT });
       }
 
-      return respondWithLoggedError(error, ErrorResponse.badRequest("Invalid request body").toResponse());
+      return ErrorResponse.badRequest("Invalid request body").toResponse();
     }
   }),
 );

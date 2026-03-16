@@ -2,17 +2,12 @@ import type { CronOptions } from "cronbake";
 import type { Plan } from "@keeper.sh/data-schemas";
 import { createPushSyncQueue } from "@keeper.sh/queue";
 import type { PushSyncJobPayload } from "@keeper.sh/queue";
-import { setCronEventFields, withCronWideEvent } from "@/utils/with-wide-event";
+import { withCronWideEvent } from "@/utils/with-wide-event";
 import { getUsersWithDestinationsByPlan } from "@/utils/get-sources";
 import env from "@/env";
 
 const runEgressJob = async (plan: Plan): Promise<void> => {
   const usersWithDestinations = await getUsersWithDestinationsByPlan(plan);
-
-  setCronEventFields({
-    "subscription.plan": plan,
-    "user.count": usersWithDestinations.length,
-  });
 
   if (usersWithDestinations.length === 0) {
     return;
@@ -27,10 +22,6 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
         data: { userId, plan } satisfies PushSyncJobPayload,
       })),
     );
-
-    setCronEventFields({
-      "jobs.enqueued": usersWithDestinations.length,
-    });
   } finally {
     await queue.close();
   }
@@ -39,7 +30,6 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
 const createPushJob = (plan: Plan, cron: string): CronOptions =>
   withCronWideEvent({
     async callback() {
-      setCronEventFields({ "job.type": "push-destinations" });
       await runEgressJob(plan);
     },
     cron,

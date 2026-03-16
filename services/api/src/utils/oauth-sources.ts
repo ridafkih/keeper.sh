@@ -13,7 +13,6 @@ import { getSourceProvider } from "@keeper.sh/calendar";
 import { applySourceSyncDefaults } from "./source-sync-defaults";
 
 import { triggerDestinationSync } from "./sync";
-import { widelog } from "./logging";
 
 const FIRST_RESULT_LIMIT = 1;
 const OAUTH_CALENDAR_TYPE = "oauth";
@@ -701,11 +700,6 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
       throw new Error(`No calendar listing support for provider: ${provider}`);
     } catch (error) {
       if (error instanceof Error && "authRequired" in error && error.authRequired === true) {
-        widelog.setFields({
-          "calendar_import.fallback": true,
-          "calendar_import.fallback_reason": "insufficient_scopes",
-          "calendar_import.provider": provider,
-        });
         return [];
       }
       throw error;

@@ -31,7 +31,6 @@
     "streamdown": "^2.4.0",
     "swr": "^2.4.1",
     "tailwind-variants": "^3.2.2",
-    "widelogger": "^0.4.0",
     "yaml": "^2.8.2"
   },
   "devDependencies": {

@@ -1,7 +1,6 @@
 import { KEEPER_API_READ_SCOPE } from "@keeper.sh/auth";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { runMcpWideEventContext, setWideEventFields, widelog } from "./utils/logging";
 import type { KeeperMcpToolDefinition, KeeperMcpToolset, KeeperToolContext } from "./toolset";
 
 const JSON_RPC_VERSION = "2.0";
@@ -146,7 +145,7 @@ const registerToolset = (
   server: McpServer,
   toolset: Record<string, KeeperMcpToolDefinition<unknown>>,
   toolContext: KeeperToolContext,
-  userId: string,
+  _userId: string,
 ): void => {
   for (const [name, tool] of Object.entries(toolset)) {
     server.registerTool(
@@ -156,42 +155,10 @@ const registerToolset = (
         inputSchema: tool.inputSchema,
         title: tool.title,
       },
-      (input: Record<string, unknown>) =>
-        runMcpWideEventContext(async () => {
-          setWideEventFields({
-            mcp: {
-              tool: name,
-            },
-            operation: {
-              name: `mcp:tool:${name}`,
-              type: "mcp",
-            },
-            request: {
-              id: crypto.randomUUID(),
-            },
-            user: {
-              id: userId,
-            },
-          });
-
-          try {
-            return await widelog.time.measure("duration_ms", async () => {
-              try {
-                const result = await tool.execute(toolContext, input);
-                widelog.set("outcome", "success");
-                widelog.set("status_code", 200);
-                return createToolResponse(result);
-              } catch (error) {
-                widelog.set("outcome", "error");
-                widelog.set("status_code", 500);
-                widelog.errorFields(error);
-                throw error;
-              }
-            });
-          } finally {
-            widelog.flush();
-          }
-        }),
+      async (input: Record<string, unknown>) => {
+        const result = await tool.execute(toolContext, input);
+        return createToolResponse(result);
+      },
     );
   }
 };

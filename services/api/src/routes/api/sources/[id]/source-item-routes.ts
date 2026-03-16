@@ -2,7 +2,6 @@ import type { SourcePatchBody } from "@/utils/request-body";
 import { sourcePatchBodySchema } from "@/utils/request-body";
 import { idParamSchema } from "@/utils/request-query";
 import { ErrorResponse } from "@/utils/responses";
-import { widelog } from "@/utils/logging";
 
 const EVENT_FILTER_FIELDS = [
   "excludeAllDayEvents",
@@ -104,11 +103,7 @@ const handlePatchSourceRoute = async (
     return ErrorResponse.notFound().toResponse();
   }
 
-  try {
-    dependencies.triggerDestinationSync(context.userId);
-  } catch (error) {
-    widelog.errorFields(error);
-  }
+  dependencies.triggerDestinationSync(context.userId);
 
   return Response.json(updated);
 };

@@ -3,7 +3,6 @@ import type Redis from "ioredis";
 import type { DestinationSyncResult, SyncProgressUpdate } from "./types";
 import { SyncAggregateTracker } from "./aggregate-tracker";
 import type { SyncAggregateMessage, SyncAggregateSnapshot } from "./aggregate-tracker";
-import { widelog } from "widelogger";
 
 const SYNC_AGGREGATE_LATEST_KEY_PREFIX = "sync:aggregate:latest:";
 const SYNC_AGGREGATE_SEQUENCE_KEY_PREFIX = "sync:aggregate:seq:";
@@ -66,10 +65,6 @@ const createSyncAggregateRuntime = (config: SyncAggregateRuntimeConfig): SyncAgg
     userId: string,
     aggregate: SyncAggregateMessage,
   ): Promise<void> => {
-    widelog.set("operation.name", "sync:aggregate:emit");
-    widelog.set("operation.type", "sync-aggregate");
-    widelog.set("user.id", userId);
-
     try {
       const sequenceKey = getSyncAggregateSequenceKey(userId);
       const sequence = await config.redis.incr(sequenceKey);
@@ -82,8 +77,7 @@ const createSyncAggregateRuntime = (config: SyncAggregateRuntimeConfig): SyncAgg
       await config.redis.expire(latestKey, SYNC_TTL_SECONDS);
 
       config.broadcast(userId, "sync:aggregate", payload);
-    } catch (error) {
-      widelog.errorFields(error);
+    } catch {
       config.broadcast(userId, "sync:aggregate", aggregate);
     }
   };
@@ -118,10 +112,6 @@ const createSyncAggregateRuntime = (config: SyncAggregateRuntimeConfig): SyncAgg
   const getCachedSyncAggregate = async (
     userId: string,
   ): Promise<SyncAggregateMessage | null> => {
-    widelog.set("operation.name", "sync:aggregate:cached:parse");
-    widelog.set("operation.type", "sync-aggregate");
-    widelog.set("user.id", userId);
-
     try {
       const value = await config.redis.get(getSyncAggregateLatestKey(userId));
       if (!value) {
@@ -133,8 +123,7 @@ const createSyncAggregateRuntime = (config: SyncAggregateRuntimeConfig): SyncAgg
         return parsed;
       }
       return null;
-    } catch (error) {
-      widelog.errorFields(error);
+    } catch {
       return null;
     }
   };

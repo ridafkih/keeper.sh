@@ -22,8 +22,7 @@ import {
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq, inArray } from "drizzle-orm";
-import { setCronEventFields, withCronWideEvent } from "@/utils/with-wide-event";
-import { widelog } from "@/utils/logging";
+import { withCronWideEvent } from "@/utils/with-wide-event";
 import { database, refreshLockRedis } from "@/context";
 import env from "@/env";
 
@@ -249,12 +248,6 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
               .set({ disabled: true })
               .where(eq(calendarsTable.id, source.calendarId));
 
-            widelog.setFields({
-              "ingest.oauth.disabled_calendar": true,
-              "ingest.oauth.disabled_calendar_id": source.calendarId,
-              "ingest.oauth.disabled_reason": "not_found",
-            });
-
             return { eventsAdded: 0, eventsRemoved: 0, ingestEvents };
           }
 
@@ -268,12 +261,6 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
               .update(calendarAccountsTable)
               .set({ needsReauthentication: true })
               .where(eq(calendarAccountsTable.id, source.accountId));
-
-            widelog.setFields({
-              "ingest.oauth.reauth_required": true,
-              "ingest.oauth.reauth_account_id": source.accountId,
-              "ingest.oauth.reauth_provider": source.provider,
-            });
 
             return { eventsAdded: 0, eventsRemoved: 0, ingestEvents };
           }
@@ -291,7 +278,6 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
       allIngestEvents.push(...settlement.value.ingestEvents);
     } else {
       errors += 1;
-      widelog.errorFields(settlement.reason, { prefix: "ingest.oauth" });
     }
   }
 
@@ -366,12 +352,6 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
               .set({ needsReauthentication: true })
               .where(eq(calendarAccountsTable.id, source.accountId));
 
-            widelog.setFields({
-              "ingest.caldav.reauth_required": true,
-              "ingest.caldav.reauth_account_id": source.accountId,
-              "ingest.caldav.reauth_provider": source.provider,
-            });
-
             return { eventsAdded: 0, eventsRemoved: 0, ingestEvents };
           }
 
@@ -395,7 +375,6 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
       allIngestEvents.push(...settlement.value.ingestEvents);
     } else {
       errors += 1;
-      widelog.errorFields(settlement.reason, { prefix: "ingest.caldav" });
     }
   }
 
@@ -457,51 +436,19 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
       allIngestEvents.push(...settlement.value.ingestEvents);
     } else {
       errors += 1;
-      widelog.errorFields(settlement.reason, { prefix: "ingest.ics" });
     }
   }
 
   return { added, removed, errors, ingestEvents: allIngestEvents };
 };
 
-const extractSettledResult = <TResult>(
-  settlement: PromiseSettledResult<TResult>,
-  fallback: TResult,
-  errorPrefix: string,
-): TResult => {
-  if (settlement.status === "fulfilled") {
-    return settlement.value;
-  }
-  widelog.errorFields(settlement.reason, { prefix: errorPrefix });
-  return fallback;
-};
-
 export default withCronWideEvent({
   async callback() {
-    setCronEventFields({ "job.type": "ingest-sources" });
-
-    const [oauthSettlement, caldavSettlement, icsSettlement] = await Promise.allSettled([
+    await Promise.allSettled([
       ingestOAuthSources(),
       ingestCalDAVSources(),
       ingestIcsSources(),
     ]);
-
-    const defaultResult = { added: 0, removed: 0, errors: 1, ingestEvents: [] };
-    const oauth = extractSettledResult(oauthSettlement, defaultResult, "ingest.oauth");
-    const caldav = extractSettledResult(caldavSettlement, defaultResult, "ingest.caldav");
-    const ics = extractSettledResult(icsSettlement, defaultResult, "ingest.ics");
-
-    setCronEventFields({
-      "oauth.events.added": oauth.added,
-      "oauth.events.removed": oauth.removed,
-      "oauth.errors": oauth.errors,
-      "caldav.events.added": caldav.added,
-      "caldav.events.removed": caldav.removed,
-      "caldav.errors": caldav.errors,
-      "ics.events.added": ics.added,
-      "ics.events.removed": ics.removed,
-      "ics.errors": ics.errors,
-    });
   },
   cron: "@every_1_minutes",
   immediate: true,

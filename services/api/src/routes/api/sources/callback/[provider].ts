@@ -1,5 +1,4 @@
 import { withWideEvent } from "@/utils/middleware";
-import { respondWithLoggedError } from "@/utils/logging";
 import { ErrorResponse } from "@/utils/responses";
 import { buildRedirectUrl, OAuthError } from "@/utils/oauth";
 import { oauthCallbackQuerySchema, providerParamSchema } from "@/utils/request-query";
@@ -82,10 +81,10 @@ const GET = withWideEvent(async ({ request, params }) => {
     return Response.redirect(successUrl.toString());
   } catch (error) {
     if (error instanceof OAuthError) {
-      return respondWithLoggedError(error, Response.redirect(error.redirectUrl.toString()));
+      return Response.redirect(error.redirectUrl.toString());
     }
 
-    return respondWithLoggedError(error, Response.redirect(errorUrl.toString()));
+    return Response.redirect(errorUrl.toString());
   }
 });
 

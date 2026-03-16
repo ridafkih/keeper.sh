@@ -7,7 +7,6 @@ import { syncDestinationsForUser } from "@keeper.sh/sync";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { syncStatusTable } from "@keeper.sh/database/schema";
 import { database, refreshLockRedis } from "./context";
-import { widelog } from "./utils/logging";
 import env from "./env";
 
 const resolveCount = (value: unknown): number => {
@@ -51,18 +50,8 @@ const processJob = async (
   _token: string | undefined,
   signal: AbortSignal | undefined,
 ): Promise<PushSyncJobResult> => {
-  const { userId, plan } = job.data;
+  const { userId } = job.data;
   const deadlineMs = Date.now() + USER_TIMEOUT_MS;
-
-  widelog.setFields({
-    "operation.name": "job:process",
-    "operation.type": "job",
-    "request.id": crypto.randomUUID(),
-    "job.id": job.id,
-    "job.name": job.name,
-    "user.id": userId,
-    "subscription.plan": plan,
-  });
 
   const result = await syncDestinationsForUser(userId, {
     database,
@@ -102,21 +91,6 @@ const processJob = async (
       });
     },
   });
-
-  widelog.setFields({
-    "events.added": result.added,
-    "events.add_failed": result.addFailed,
-    "events.removed": result.removed,
-    "events.remove_failed": result.removeFailed,
-    "outcome": "success",
-    "status_code": 200,
-  });
-
-  for (const error of result.errors) {
-    widelog.append("events.errors", error);
-  }
-
-  widelog.flush();
 
   return {
     added: result.added,
