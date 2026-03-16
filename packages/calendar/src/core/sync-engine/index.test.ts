@@ -450,7 +450,7 @@ describe("createDatabaseFlush", () => {
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
-          insert: () => { executedOperations.push("insert"); return { values: () => Promise.resolve() }; },
+          insert: () => { executedOperations.push("insert"); return { values: () => ({ onConflictDoNothing: () => Promise.resolve() }) }; },
           delete: () => { executedOperations.push("delete"); return { where: () => Promise.resolve() }; },
         };
         return callback(tx);
@@ -476,7 +476,7 @@ describe("createDatabaseFlush", () => {
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
-          insert: () => { executedOperations.push("insert"); return { values: () => Promise.resolve() }; },
+          insert: () => { executedOperations.push("insert"); return { values: () => ({ onConflictDoNothing: () => Promise.resolve() }) }; },
           delete: () => { executedOperations.push("delete"); return { where: () => Promise.resolve() }; },
         };
         return callback(tx);
@@ -502,7 +502,7 @@ describe("createDatabaseFlush", () => {
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
-          insert: () => { executedOperations.push("insert"); return { values: () => Promise.resolve() }; },
+          insert: () => { executedOperations.push("insert"); return { values: () => ({ onConflictDoNothing: () => Promise.resolve() }) }; },
           delete: () => { executedOperations.push("delete"); return { where: () => Promise.resolve() }; },
         };
         return callback(tx);
@@ -559,7 +559,7 @@ describe("createDatabaseFlush", () => {
         const tx = {
           insert: () => {
             insertCallCount += 1;
-            return { values: () => Promise.resolve() };
+            return { values: () => ({ onConflictDoNothing: () => Promise.resolve() }) };
           },
           delete: () => ({ where: () => Promise.resolve() }),
         };
@@ -590,7 +590,7 @@ describe("createDatabaseFlush", () => {
           insert: () => {
             insertCallCount += 1;
             return {
-              values: (rows: unknown[]) => { valuesReceived = rows; return Promise.resolve(); },
+              values: (rows: unknown[]) => { valuesReceived = rows; return { onConflictDoNothing: () => Promise.resolve() }; },
             };
           },
           delete: () => ({ where: () => Promise.resolve() }),
