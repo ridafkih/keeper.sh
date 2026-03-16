@@ -10,10 +10,20 @@ import {
   GOOGLE_CALENDAR_MAX_RESULTS,
   GONE_STATUS,
 } from "../../shared/api";
-import { isSimpleAuthError } from "../../shared/errors";
+import { isAuthError } from "../../shared/errors";
+import type { GoogleApiError } from "../../types";
+import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
 import { parseEventDateTime } from "../../shared/date-time";
-import { googleEventListSchema } from "@keeper.sh/data-schemas";
 import { isKeeperEvent } from "../../../../core/events/identity";
+
+const EMPTY_API_ERROR: GoogleApiError = {};
+
+const resolveApiError = (body: unknown): GoogleApiError => {
+  if (!googleApiErrorSchema.allows(body)) {
+    return EMPTY_API_ERROR;
+  }
+  return googleApiErrorSchema.assert(body).error ?? EMPTY_API_ERROR;
+};
 
 class EventsFetchError extends Error {
   public readonly status: number;
@@ -102,7 +112,10 @@ const fetchEventsPage = async (
   }
 
   if (!response.ok) {
-    const authRequired = isSimpleAuthError(response.status);
+    const errorBody = await response.json();
+    const apiError = resolveApiError(errorBody);
+    const authRequired = isAuthError(response.status, apiError);
+
     throw new EventsFetchError(
       `Failed to fetch events: ${response.status}`,
       response.status,

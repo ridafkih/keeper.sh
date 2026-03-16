@@ -456,6 +456,13 @@
       "when": 1773599952851,
       "tag": "0064_talented_black_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1773625829428,
+      "tag": "0065_dizzy_zarda",
+      "breakpoints": true
     }
   ]
 }

@@ -99,11 +99,16 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       return EMPTY_RESULT;
     }
 
-    await flush({
+    const changes: IngestionChanges = {
       inserts: eventsToAdd,
       deletes: eventStateIdsToRemove,
-      syncToken: fetchResult.nextSyncToken,
-    });
+    };
+
+    if (typeof fetchResult.nextSyncToken === "string") {
+      changes.syncToken = fetchResult.nextSyncToken;
+    }
+
+    await flush(changes);
 
     flushed = true;
     wideEvent["outcome"] = "success";

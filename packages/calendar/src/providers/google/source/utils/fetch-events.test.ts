@@ -138,7 +138,17 @@ describe("fetchCalendarEvents", () => {
   });
 
   it("throws auth-required error details on unauthorized response", async () => {
-    globalThis.fetch = createFetchQueue([new Response(null, { status: 401 })], []);
+    const errorBody = JSON.stringify({
+      error: {
+        code: 401,
+        message: "Request is missing required authentication credential.",
+        status: "UNAUTHENTICATED",
+        errors: [{ reason: "authError" }],
+      },
+    });
+    globalThis.fetch = createFetchQueue([
+      new Response(errorBody, { status: 401, headers: { "Content-Type": "application/json" } }),
+    ], []);
 
     try {
       await fetchCalendarEvents({

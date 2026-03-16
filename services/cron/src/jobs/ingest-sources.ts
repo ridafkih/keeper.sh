@@ -180,7 +180,12 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
     .innerJoin(oauthCredentialsTable, eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id))
-    .where(arrayContains(calendarsTable.capabilities, ["pull"]));
+    .where(
+      and(
+        arrayContains(calendarsTable.capabilities, ["pull"]),
+        eq(calendarsTable.disabled, false),
+      ),
+    );
 
   let added = 0;
   let removed = 0;
@@ -273,7 +278,12 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
     .innerJoin(caldavCredentialsTable, eq(calendarAccountsTable.caldavCredentialId, caldavCredentialsTable.id))
-    .where(arrayContains(calendarsTable.capabilities, ["pull"]));
+    .where(
+      and(
+        arrayContains(calendarsTable.capabilities, ["pull"]),
+        eq(calendarsTable.disabled, false),
+      ),
+    );
 
   let added = 0;
   let removed = 0;
@@ -294,20 +304,30 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
 
         const ingestEvents: Record<string, unknown>[] = [];
 
-        const result = await ingestSource({
-          calendarId: source.calendarId,
-          fetchEvents: () => fetcher.fetchEvents(),
-          readExistingEvents: () => readExistingEvents(source.calendarId),
-          flush: createIngestionFlush(source.calendarId),
-          onIngestEvent: (event) => {
-            ingestEvents.push({
-              ...event,
-              "source.provider": source.provider,
-            });
-          },
-        });
+        try {
+          const result = await ingestSource({
+            calendarId: source.calendarId,
+            fetchEvents: () => fetcher.fetchEvents(),
+            readExistingEvents: () => readExistingEvents(source.calendarId),
+            flush: createIngestionFlush(source.calendarId),
+            onIngestEvent: (event) => {
+              ingestEvents.push({
+                ...event,
+                "source.provider": source.provider,
+              });
+            },
+          });
 
-        return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
+          return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
+        } catch (error) {
+          if (error instanceof Error && error.message.includes("404")) {
+            await database
+              .update(calendarsTable)
+              .set({ disabled: true })
+              .where(eq(calendarsTable.id, source.calendarId));
+          }
+          throw error;
+        }
       }, SOURCE_TIMEOUT_MS),
     ),
     { concurrency: SOURCE_CONCURRENCY },
