@@ -258,7 +258,12 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
             return { eventsAdded: 0, eventsRemoved: 0, ingestEvents };
           }
 
-          if (error instanceof Error && "authRequired" in error && error.authRequired === true) {
+          const isAuthError = error instanceof Error && (
+            ("authRequired" in error && error.authRequired === true)
+            || ("oauthReauthRequired" in error && error.oauthReauthRequired === true)
+          );
+
+          if (isAuthError) {
             await database
               .update(calendarAccountsTable)
               .set({ needsReauthentication: true })
