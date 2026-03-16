@@ -6,8 +6,8 @@ describe("normalizeTimezone", () => {
     expect(normalizeTimezone("America/New_York")).toBe("America/New_York");
   });
 
-  it("returns UTC unchanged", () => {
-    expect(normalizeTimezone("UTC")).toBe("UTC");
+  it("maps Windows 'UTC' to Etc/UTC", () => {
+    expect(normalizeTimezone("UTC")).toBe("Etc/UTC");
   });
 
   it("maps 'Eastern Standard Time' to America/New_York", () => {

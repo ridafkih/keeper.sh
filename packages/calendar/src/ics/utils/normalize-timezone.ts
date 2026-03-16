@@ -5,7 +5,7 @@
  * .ics files (e.g. "Eastern Standard Time" instead of "America/New_York").
  * These are rejected by providers like Google Calendar that require IANA IDs.
  *
- * @see https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/default-time-zones
+ * @see https://github.com/unicode-org/cldr/blob/main/common/supplemental/windowsZones.xml
  */
 const WINDOWS_TO_IANA: Record<string, string> = {
   "AUS Central Standard Time": "Australia/Darwin",
@@ -32,7 +32,7 @@ const WINDOWS_TO_IANA: Record<string, string> = {
   "Caucasus Standard Time": "Asia/Yerevan",
   "Cen. Australia Standard Time": "Australia/Adelaide",
   "Central America Standard Time": "America/Guatemala",
-  "Central Asia Standard Time": "Asia/Almaty",
+  "Central Asia Standard Time": "Asia/Bishkek",
   "Central Brazilian Standard Time": "America/Cuiaba",
   "Central Europe Standard Time": "Europe/Budapest",
   "Central European Standard Time": "Europe/Warsaw",
@@ -78,7 +78,7 @@ const WINDOWS_TO_IANA: Record<string, string> = {
   "Montevideo Standard Time": "America/Montevideo",
   "Morocco Standard Time": "Africa/Casablanca",
   "Mountain Standard Time": "America/Denver",
-  "Mountain Standard Time (Mexico)": "America/Chihuahua",
+  "Mountain Standard Time (Mexico)": "America/Mazatlan",
   "Myanmar Standard Time": "Asia/Rangoon",
   "N. Central Asia Standard Time": "Asia/Novosibirsk",
   "Namibia Standard Time": "Africa/Windhoek",
@@ -127,7 +127,7 @@ const WINDOWS_TO_IANA: Record<string, string> = {
   "Turks And Caicos Standard Time": "America/Grand_Turk",
   "US Eastern Standard Time": "America/Indianapolis",
   "US Mountain Standard Time": "America/Phoenix",
-  "UTC": "UTC",
+  "UTC": "Etc/UTC",
   "UTC+12": "Etc/GMT-12",
   "UTC+13": "Etc/GMT-13",
   "UTC-02": "Etc/GMT+2",
