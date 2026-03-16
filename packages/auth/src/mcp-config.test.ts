@@ -17,6 +17,8 @@ describe("resolveMcpAuthOptions", () => {
       }),
     ).toEqual({
       oauthProvider: {
+        accessTokenExpiresIn: 2_592_000,
+        refreshTokenExpiresIn: 7_776_000,
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
         clientRegistrationAllowedScopes: KEEPER_MCP_OAUTH_SCOPES,
