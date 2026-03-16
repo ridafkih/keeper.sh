@@ -18,11 +18,16 @@ import { isKeeperEvent } from "../../../../core/events/identity";
 
 const EMPTY_API_ERROR: GoogleApiError = {};
 
-const resolveApiError = (body: unknown): GoogleApiError => {
-  if (!googleApiErrorSchema.allows(body)) {
+const parseApiErrorFromText = (text: string): GoogleApiError => {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!googleApiErrorSchema.allows(parsed)) {
+      return EMPTY_API_ERROR;
+    }
+    return googleApiErrorSchema.assert(parsed).error ?? EMPTY_API_ERROR;
+  } catch {
     return EMPTY_API_ERROR;
   }
-  return googleApiErrorSchema.assert(body).error ?? EMPTY_API_ERROR;
 };
 
 class EventsFetchError extends Error {
@@ -112,12 +117,12 @@ const fetchEventsPage = async (
   }
 
   if (!response.ok) {
-    const errorBody = await response.json();
-    const apiError = resolveApiError(errorBody);
+    const responseText = await response.text();
+    const apiError = parseApiErrorFromText(responseText);
     const authRequired = isAuthError(response.status, apiError);
 
     throw new EventsFetchError(
-      `Failed to fetch events: ${response.status}`,
+      `Failed to fetch events: ${response.status}: ${responseText}`,
       response.status,
       authRequired,
     );
