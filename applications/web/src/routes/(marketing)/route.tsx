@@ -9,6 +9,7 @@ import { GithubStarButton } from '../../components/ui/primitives/github-star-but
 import { SessionSlot } from '../../components/ui/shells/session-slot';
 import HeartIcon from "lucide-react/dist/esm/icons/heart";
 import { ExternalTextLink } from "@/components/ui/primitives/text-link";
+import { CookieConsent } from "@/components/cookie-consent";
 
 interface GithubStarsLoaderData {
   count: number | null;
@@ -40,6 +41,7 @@ export const Route = createFileRoute('/(marketing)')({
 
 function MarketingLayout() {
   const githubStars = Route.useLoaderData();
+  const { runtimeConfig } = Route.useRouteContext();
 
   return (
     <>
@@ -111,6 +113,7 @@ function MarketingLayout() {
         </MarketingFooter>
       </LayoutItem>
     </Layout>
+    {runtimeConfig.gdprApplies && <CookieConsent />}
     </>
   )
 }

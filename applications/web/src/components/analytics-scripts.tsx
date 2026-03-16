@@ -1,29 +1,48 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { useLocation } from "@tanstack/react-router";
 import type { PublicRuntimeConfig } from "@/lib/runtime-config";
 import {
-  hasAnalyticsConsent,
-  resolveAnalyticsConfig,
+  identify,
+  resolveEffectiveConsent,
   track,
 } from "@/lib/analytics";
+import { useSession } from "@/hooks/use-session";
 
 const subscribe = (callback: () => void): (() => void) => {
   window.addEventListener("storage", callback);
   return () => window.removeEventListener("storage", callback);
 };
 
-const getSnapshot = (): boolean => hasAnalyticsConsent();
 const getServerSnapshot = (): boolean => false;
 
+function resolveConsentLabel(hasConsent: boolean): "granted" | "denied" {
+  if (hasConsent) return "granted";
+  return "denied";
+}
+
 function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfig }) {
+  const { gdprApplies, googleAdsId, visitorsNowToken } = runtimeConfig;
+  const getSnapshot = useCallback(
+    () => resolveEffectiveConsent(gdprApplies),
+    [gdprApplies],
+  );
   const hasConsent = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const location = useLocation();
-  const consentState = hasConsent ? "granted" : "denied";
-  const { googleAdsId, visitorsNowToken } = resolveAnalyticsConfig(runtimeConfig);
+  const consentState = resolveConsentLabel(hasConsent);
+  const { user } = useSession();
+  const identifiedUserId = useRef<string | null>(null);
 
   useEffect(() => {
     track("page_view", { path: location.pathname });
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (identifiedUserId.current === user.id) return;
+
+    identifiedUserId.current = user.id;
+    identify({ id: user.id, email: user.email, name: user.name }, { gdprApplies });
+  }, [user, gdprApplies]);
 
   return (
     <>

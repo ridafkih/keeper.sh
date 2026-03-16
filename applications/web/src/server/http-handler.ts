@@ -1,6 +1,7 @@
 import { withCompression } from "./compression";
 import { isApiRequest, isMcpRequest, proxyRequest } from "./proxy/http";
 import { handleInternalRoute } from "./internal-routes";
+import { GDPR_COUNTRIES } from "@/config/gdpr";
 import type { Runtime, ServerConfig } from "./types";
 
 const CACHEABLE_PATHS = new Set(["/", "/blog", "/privacy", "/terms"]);
@@ -55,6 +56,11 @@ function withSecurityHeaders(response: Response, config: ServerConfig): Response
   });
 }
 
+function resolveGdprCacheSegment(countryCode: string): string {
+  if (GDPR_COUNTRIES.has(countryCode)) return "gdpr";
+  return "default";
+}
+
 export async function handleApplicationRequest(
   request: Request,
   runtime: Runtime,
@@ -80,9 +86,12 @@ export async function handleApplicationRequest(
   }
 
   const pathname = requestUrl.pathname;
+  const countryCode = request.headers.get("cf-ipcountry") ?? "";
+  const gdprSegment = resolveGdprCacheSegment(countryCode);
+  const cacheKey = `${pathname}:${gdprSegment}`;
 
   if (config.isProduction && CACHEABLE_PATHS.has(pathname)) {
-    const cached = getCachedHtml(pathname);
+    const cached = getCachedHtml(cacheKey);
     if (cached) {
       const cachedResponse = new Response(cached, {
         headers: { "content-type": "text/html; charset=utf-8" },
@@ -102,7 +111,7 @@ export async function handleApplicationRequest(
 
   if (config.isProduction && CACHEABLE_PATHS.has(pathname)) {
     const body = await routerResponse.text();
-    setCachedHtml(pathname, body);
+    setCachedHtml(cacheKey, body);
     const freshResponse = new Response(body, {
       headers: routerResponse.headers,
       status: routerResponse.status,

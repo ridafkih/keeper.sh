@@ -1,16 +1,33 @@
-import { getPublicRuntimeConfig, type PublicRuntimeConfig } from "./runtime-config";
+import type { PublicRuntimeConfig } from "./runtime-config";
 
-const CONSENT_KEY = "analytics_consent";
+const CONSENT_COOKIE = "keeper.analytics_consent";
+const CONSENT_MAX_AGE = 60 * 60 * 24 * 182;
 
-const resolveAnalyticsConfig = (
-  runtimeConfig?: PublicRuntimeConfig,
-): PublicRuntimeConfig => runtimeConfig ?? getPublicRuntimeConfig();
+function resolveConsentState(granted: boolean): "granted" | "denied" {
+  if (granted) return "granted";
+  return "denied";
+}
 
-const getConsentState = (granted: boolean): "granted" | "denied" =>
-  granted ? "granted" : "denied";
+function readCookieSource(cookieHeader?: string): string {
+  if (cookieHeader !== undefined) return cookieHeader;
+  if (typeof document === "undefined") return "";
+  return document.cookie;
+}
+
+function readConsentValue(cookieHeader?: string): string | null {
+  const source = readCookieSource(cookieHeader);
+  const prefix = `${CONSENT_COOKIE}=`;
+  const match = source
+    .split(";")
+    .map((cookie) => cookie.trim())
+    .find((cookie) => cookie.startsWith(prefix));
+
+  if (!match) return null;
+  return match.slice(prefix.length);
+}
 
 const updateGoogleConsent = (granted: boolean): void => {
-  const state = getConsentState(granted);
+  const state = resolveConsentState(granted);
   globalThis.gtag?.("consent", "update", {
     ad_personalization: state,
     ad_storage: state,
@@ -19,21 +36,26 @@ const updateGoogleConsent = (granted: boolean): void => {
   });
 };
 
-const hasAnalyticsConsent = (): boolean => {
-  if (typeof globalThis === "undefined") return false;
-  return localStorage.getItem(CONSENT_KEY) === "granted";
-};
+const hasAnalyticsConsent = (cookieHeader?: string): boolean =>
+  readConsentValue(cookieHeader) === "granted";
 
-const hasConsentChoice = (): boolean => {
-  if (typeof globalThis === "undefined") return false;
-  const value = localStorage.getItem(CONSENT_KEY);
+const hasConsentChoice = (cookieHeader?: string): boolean => {
+  const value = readConsentValue(cookieHeader);
   return value === "granted" || value === "denied";
 };
 
+function resolveEffectiveConsent(gdprApplies: boolean, cookieHeader?: string): boolean {
+  const value = readConsentValue(cookieHeader);
+  if (value === "granted") return true;
+  if (value === "denied") return false;
+  return !gdprApplies;
+}
+
 const setAnalyticsConsent = (granted: boolean): void => {
-  localStorage.setItem(CONSENT_KEY, getConsentState(granted));
+  const state = resolveConsentState(granted);
+  document.cookie = `${CONSENT_COOKIE}=${state}; path=/; max-age=${CONSENT_MAX_AGE}; samesite=lax`;
   updateGoogleConsent(granted);
-  globalThis.dispatchEvent(new StorageEvent("storage", { key: CONSENT_KEY }));
+  globalThis.dispatchEvent(new StorageEvent("storage", { key: CONSENT_COOKIE }));
 };
 
 type EventProperties = Record<string, string | number | boolean>;
@@ -62,8 +84,11 @@ interface ConversionOptions {
   transactionId: string | null;
 }
 
-const reportPurchaseConversion = (options?: ConversionOptions): void => {
-  const { googleAdsConversionLabel, googleAdsId } = resolveAnalyticsConfig();
+const reportPurchaseConversion = (
+  runtimeConfig: PublicRuntimeConfig,
+  options?: ConversionOptions,
+): void => {
+  const { googleAdsConversionLabel, googleAdsId } = runtimeConfig;
   if (!googleAdsId || !googleAdsConversionLabel) return;
   globalThis.gtag?.("event", "conversion", {
     send_to: `${googleAdsId}/${googleAdsConversionLabel}`,
@@ -86,7 +111,7 @@ export {
   hasConsentChoice,
   identify,
   reportPurchaseConversion,
-  resolveAnalyticsConfig,
+  resolveEffectiveConsent,
   setAnalyticsConsent,
   track,
 };
