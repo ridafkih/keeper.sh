@@ -55,6 +55,19 @@ services:
       - api
     restart: unless-stopped
 
+  worker:
+    image: ghcr.io/ridafkih/keeper-worker:latest
+    container_name: keeper-worker
+    env_file: .env
+    environment:
+      ENV: production
+      NODE_EXTRA_CA_CERTS: /certs/global-bundle.pem
+    volumes:
+      - ./global-bundle.pem:/certs/global-bundle.pem:ro
+    depends_on:
+      - redis
+    restart: unless-stopped
+
   mcp:
     image: ghcr.io/ridafkih/keeper-mcp:latest
     container_name: keeper-mcp

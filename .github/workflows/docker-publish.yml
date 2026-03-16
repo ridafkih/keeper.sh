@@ -22,6 +22,8 @@ jobs:
             dockerfile: services/api/Dockerfile
           - name: cron
             dockerfile: services/cron/Dockerfile
+          - name: worker
+            dockerfile: services/worker/Dockerfile
           - name: mcp
             dockerfile: services/mcp/Dockerfile
           - name: web
@@ -114,6 +116,7 @@ jobs:
         package:
           - api
           - cron
+          - worker
           - mcp
           - web
     steps:
