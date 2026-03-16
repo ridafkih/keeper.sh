@@ -88,7 +88,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         results[entry.originalIndex] = { remoteId: entry.uid, success: true };
       } else if (response.statusCode === 409) {
-        results[entry.originalIndex] = { remoteId: entry.uid, success: true };
+        results[entry.originalIndex] = { error: "Event already exists (conflict)", success: false };
       } else {
         const errorBody = response.body as Record<string, unknown> | null;
         const errorObj = errorBody?.error as Record<string, unknown> | undefined;
