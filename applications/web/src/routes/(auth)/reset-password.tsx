@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import CircleCheck from "lucide-react/dist/esm/icons/circle-check";
 import { resetPassword } from "@/lib/auth";
+import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { fetchAuthCapabilitiesWithApi } from "@/lib/auth-capabilities";
 import { resolveErrorMessage } from "@/utils/errors";
 import { Button, ButtonText } from "@/components/ui/primitives/button";
@@ -55,6 +56,7 @@ function ResetPasswordForm({ token }: { token: string }) {
 
     try {
       await resetPassword(token, password);
+      track(ANALYTICS_EVENTS.password_reset_completed);
       setStatus("success");
     } catch (err) {
       setError(resolveErrorMessage(err, "Failed to reset password"));

@@ -14,6 +14,7 @@ describe("resolvePublicRuntimeConfig", () => {
 
     expect(config).toEqual({
       commercialMode: false,
+      gdprApplies: false,
       googleAdsConversionLabel: "runtime-conversion",
       googleAdsId: "runtime-google",
       polarProMonthlyProductId: null,
@@ -31,6 +32,7 @@ describe("resolvePublicRuntimeConfig", () => {
 
     expect(config).toEqual({
       commercialMode: false,
+      gdprApplies: false,
       googleAdsConversionLabel: null,
       googleAdsId: null,
       polarProMonthlyProductId: null,

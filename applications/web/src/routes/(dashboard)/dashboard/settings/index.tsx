@@ -33,7 +33,7 @@ import {
   NavigationMenuItemLabel,
   NavigationMenuItemTrailing,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
-import { resolveEffectiveConsent, setAnalyticsConsent } from "@/lib/analytics";
+import { resolveEffectiveConsent, setAnalyticsConsent, track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { Text } from "@/components/ui/primitives/text";
 import { resolveErrorMessage } from "@/utils/errors";
 import { fetchAuthCapabilitiesWithApi } from "@/lib/auth-capabilities";
@@ -83,6 +83,7 @@ function SettingsPage() {
     resolveEffectiveConsent(runtimeConfig.gdprApplies),
   );
   const handleAnalyticsToggle = useCallback((checked: boolean) => {
+    track(ANALYTICS_EVENTS.analytics_consent_changed, { granted: checked });
     setAnalyticsConsent(checked);
     setAnalyticsConsentState(checked);
   }, []);
@@ -110,6 +111,7 @@ function SettingsPage() {
     setIsDeleting(true);
     try {
       await deleteAccount(password);
+      track(ANALYTICS_EVENTS.account_deleted);
       setDeleteOpen(false);
       navigate({ to: "/login" });
     } catch (err) {

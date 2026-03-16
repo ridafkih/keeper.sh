@@ -58,6 +58,40 @@ const setAnalyticsConsent = (granted: boolean): void => {
   globalThis.dispatchEvent(new StorageEvent("storage", { key: CONSENT_COOKIE }));
 };
 
+export const ANALYTICS_EVENTS = {
+  signup_completed: "signup_completed",
+  login_completed: "login_completed",
+  password_reset_requested: "password_reset_requested",
+  password_reset_completed: "password_reset_completed",
+  logout: "logout",
+  calendar_connect_started: "calendar_connect_started",
+  calendar_renamed: "calendar_renamed",
+  destination_toggled: "destination_toggled",
+  calendar_setting_toggled: "calendar_setting_toggled",
+  calendar_account_deleted: "calendar_account_deleted",
+  setup_step_completed: "setup_step_completed",
+  setup_skipped: "setup_skipped",
+  setup_completed: "setup_completed",
+  password_changed: "password_changed",
+  passkey_created: "passkey_created",
+  passkey_deleted: "passkey_deleted",
+  api_token_created: "api_token_created",
+  api_token_deleted: "api_token_deleted",
+  analytics_consent_changed: "analytics_consent_changed",
+  account_deleted: "account_deleted",
+  upgrade_billing_toggled: "upgrade_billing_toggled",
+  upgrade_started: "upgrade_started",
+  plan_managed: "plan_managed",
+  feedback_submitted: "feedback_submitted",
+  report_submitted: "report_submitted",
+  ical_link_copied: "ical_link_copied",
+  ical_setting_toggled: "ical_setting_toggled",
+  ical_source_toggled: "ical_source_toggled",
+  oauth_consent_granted: "oauth_consent_granted",
+  oauth_consent_denied: "oauth_consent_denied",
+  marketing_cta_clicked: "marketing_cta_clicked",
+} satisfies Record<string, string>;
+
 type EventProperties = Record<string, string | number | boolean>;
 
 const track = (event: string, properties?: EventProperties): void => {

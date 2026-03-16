@@ -6,6 +6,7 @@ import { Text } from "@/components/ui/primitives/text";
 import { Button, ButtonText, LinkButton } from "@/components/ui/primitives/button";
 import { Checkbox } from "@/components/ui/primitives/checkbox";
 import { apiFetch } from "@/lib/fetcher";
+import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { resolveErrorMessage } from "@/utils/errors";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/report")({
@@ -34,6 +35,7 @@ function ReportPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message, type: "report", wantsFollowUp }),
       });
+      track(ANALYTICS_EVENTS.report_submitted, { wants_follow_up: wantsFollowUp });
       setSubmitted(true);
     } catch (err) {
       setError(resolveErrorMessage(err, "Failed to submit report."));

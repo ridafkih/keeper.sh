@@ -12,6 +12,7 @@ import { MetadataRow } from "@/features/dashboard/components/metadata-row";
 import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { DashboardHeading1, DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { apiFetch, fetcher } from "@/lib/fetcher";
+import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { formatDate } from "@/lib/time";
 import { canPull, canPush } from "@/utils/calendars";
 import type { CalendarAccount, CalendarDetail, CalendarSource } from "@/types/api";
@@ -229,6 +230,7 @@ function RenameItem({ calendarId }: { calendarId: string }) {
     <NavigationMenuEditableItem
       getValue={() => store.get(calendarNameAtom)}
       onCommit={(newName) => {
+        track(ANALYTICS_EVENTS.calendar_renamed);
         store.set(calendarDetailAtom, (prev) => (prev ? { ...prev, name: newName } : prev));
         patchSource(mutate, calendarId, { name: newName });
       }}
@@ -331,6 +333,7 @@ function DestinationCheckboxItem({
     const currentIds = store.get(destinationIdsAtom);
     const previousSet = new Set(currentIds);
     const willCheck = !currentIds.has(destinationId);
+    track(ANALYTICS_EVENTS.destination_toggled, { enabled: willCheck });
     const updatedSet = new Set(currentIds);
     const delta = willCheck ? 1 : -1;
 
@@ -500,6 +503,7 @@ function SyncEventNameToggle({ calendarId, locked }: { calendarId: string; locke
       ? { excludeEventName: false, customEventName: "{{event_name}}" }
       : { excludeEventName: true, customEventName: "{{calendar_name}}" };
 
+    track(ANALYTICS_EVENTS.calendar_setting_toggled, { field: "excludeEventName", enabled: !current.excludeEventName });
     store.set(calendarDetailAtom, (prev) => (prev ? { ...prev, ...patch } : prev));
     patchSource(mutate, calendarId, patch);
   };
@@ -589,6 +593,7 @@ function ExcludeFieldToggle({
     if (!current) return;
 
     const newValue = !current[field];
+    track(ANALYTICS_EVENTS.calendar_setting_toggled, { field, enabled: newValue });
     store.set(calendarDetailAtom, (prev) => (prev ? { ...prev, [field]: newValue } : prev));
     patchSource(mutate, calendarId, { [field]: newValue });
   };

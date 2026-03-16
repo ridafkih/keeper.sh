@@ -14,6 +14,7 @@ import {
 } from "@/features/dashboard/components/upgrade-card";
 import Check from "lucide-react/dist/esm/icons/check";
 import { HttpError } from "@/lib/fetcher";
+import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import {
   fetchSubscriptionStateWithApi,
   useSubscription,
@@ -77,6 +78,12 @@ function UpgradePage() {
     fallbackData: loaderSubscription,
   });
   const [yearly, setYearly] = useState(false);
+
+  const handleBillingToggle = (checked: boolean) => {
+    const interval = checked ? "annual" : "monthly";
+    track(ANALYTICS_EVENTS.upgrade_billing_toggled, { interval });
+    setYearly(checked);
+  };
   const [isPending, startTransition] = useTransition();
 
   const currentPlan = subscription?.plan ?? "free";
@@ -92,12 +99,14 @@ function UpgradePage() {
 
   const handleUpgrade = () => {
     if (!productId) return;
+    track(ANALYTICS_EVENTS.upgrade_started);
     startTransition(async () => {
       await openCheckout(productId, { onSuccess: () => mutate() });
     });
   };
 
   const handleManage = () => {
+    track(ANALYTICS_EVENTS.plan_managed);
     startTransition(async () => {
       await openCustomerPortal();
     });
@@ -119,7 +128,7 @@ function UpgradePage() {
               {period}
             </Text>
           </div>
-          <UpgradeCardToggle checked={yearly} onCheckedChange={setYearly}>
+          <UpgradeCardToggle checked={yearly} onCheckedChange={handleBillingToggle}>
             <Text size="sm" tone="highlight">Annual billing</Text>
           </UpgradeCardToggle>
           <Text size="sm" align="left" className="text-neutral-400 pt-1">

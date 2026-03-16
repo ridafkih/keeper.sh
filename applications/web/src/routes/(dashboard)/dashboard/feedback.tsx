@@ -5,6 +5,7 @@ import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { Text } from "@/components/ui/primitives/text";
 import { Button, ButtonText, LinkButton } from "@/components/ui/primitives/button";
 import { apiFetch } from "@/lib/fetcher";
+import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { resolveErrorMessage } from "@/utils/errors";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/feedback")({
@@ -32,6 +33,7 @@ function FeedbackPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message, type: "feedback" }),
       });
+      track(ANALYTICS_EVENTS.feedback_submitted);
       setSubmitted(true);
     } catch (err) {
       setError(resolveErrorMessage(err, "Failed to submit feedback."));

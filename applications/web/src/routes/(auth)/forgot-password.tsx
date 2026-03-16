@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import Mail from "lucide-react/dist/esm/icons/mail";
 import { forgotPassword } from "@/lib/auth";
+import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { fetchAuthCapabilitiesWithApi } from "@/lib/auth-capabilities";
 import { resolveErrorMessage } from "@/utils/errors";
 import { Button, ButtonText } from "@/components/ui/primitives/button";
@@ -39,6 +40,7 @@ function ForgotPasswordPage() {
 
     try {
       await forgotPassword(email);
+      track(ANALYTICS_EVENTS.password_reset_requested);
       setStatus("sent");
     } catch (err) {
       setError(resolveErrorMessage(err, "Failed to send reset email"));
