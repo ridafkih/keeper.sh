@@ -374,9 +374,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncResult> =
     wideEvent["events.remove_failed"] = outcome.result.removeFailed;
     wideEvent["superseded"] = outcome.superseded;
 
-    if (!outcome.superseded) {
-      outcome.changes.deletes.push(...staleMappingIds);
-    }
+    outcome.changes.deletes.push(...staleMappingIds);
 
     await flush(outcome.changes);
     flushed = true;
