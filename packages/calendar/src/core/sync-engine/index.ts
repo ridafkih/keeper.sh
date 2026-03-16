@@ -1,6 +1,7 @@
 import type { SyncResult, SyncOperation, SyncableEvent, RemoteEvent, PushResult, DeleteResult } from "../types";
 import type { EventMapping } from "../events/mappings";
 import type { SyncProgressUpdate } from "../sync/types";
+import { createSyncEventContentHash } from "../events/content-hash";
 import { computeSyncOperations } from "../sync/operations";
 import type { CalendarSyncProvider, PendingChanges } from "./types";
 
@@ -39,7 +40,7 @@ const processAddResults = (
       calendarId,
       destinationEventUid: pushResult.remoteId,
       deleteIdentifier: pushResult.deleteId ?? pushResult.remoteId,
-      syncEventHash: null,
+      syncEventHash: createSyncEventContentHash(operation.event),
       startTime: operation.event.startTime,
       endTime: operation.event.endTime,
     });
