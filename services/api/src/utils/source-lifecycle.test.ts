@@ -118,8 +118,9 @@ describe("runCreateSource", () => {
           expect(fields).toEqual({ calendarId: "source-99", userId: "user-42" });
           backgroundCallback = callback;
         },
-        enqueuePushSync: async (userId: string) => {
+        enqueuePushSync: (userId: string) => {
           syncedUserIds.push(userId);
+          return Promise.resolve();
         },
         validateSourceUrl: () => Promise.resolve(),
       },

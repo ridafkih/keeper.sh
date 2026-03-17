@@ -177,12 +177,12 @@ const createSource = (userId: string, name: string, url: string): Promise<Source
           await ingestIcsSource(source);
         },
         spawnBackgroundJob,
-        enqueuePushSync: async (userId) => {
-          const plan = await premiumService.getUserPlan(userId);
+        enqueuePushSync: async (enqueuedUserId) => {
+          const plan = await premiumService.getUserPlan(enqueuedUserId);
           if (!plan) {
             throw new Error("Unable to resolve user plan for sync enqueue");
           }
-          await enqueuePushSync(userId, plan);
+          await enqueuePushSync(enqueuedUserId, plan);
         },
         validateSourceUrl,
       },

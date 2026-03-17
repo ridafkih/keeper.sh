@@ -12,11 +12,13 @@ const createMockQueue = (): { queue: PushSyncQueue; addedJobs: AddedJob[]; close
   const state = { addedJobs: [] as AddedJob[], closed: false };
 
   const queue: PushSyncQueue = {
-    add: async (name, data) => {
+    add: (name, data) => {
       state.addedJobs.push({ name, data });
+      return Promise.resolve();
     },
-    close: async () => {
+    close: () => {
       state.closed = true;
+      return Promise.resolve();
     },
   };
 
@@ -68,18 +70,19 @@ describe("runEnqueuePushSync", () => {
   });
 
   it("closes the queue even when add fails", async () => {
-    const failingQueue: PushSyncQueue = {
-      add: () => Promise.reject(new Error("queue unavailable")),
-      close: async () => {
-        closeCalled = true;
-      },
-    };
     let closeCalled = false;
 
+    const failingQueue: PushSyncQueue = {
+      add: () => Promise.reject(new Error("queue unavailable")),
+      close: () => {
+        closeCalled = true;
+        return Promise.resolve();
+      },
+    };
     try {
       await runEnqueuePushSync("user-1", "free", createDependencies(failingQueue, "id"));
     } catch {
-      // expected
+      // Expected
     }
 
     expect(closeCalled).toBe(true);

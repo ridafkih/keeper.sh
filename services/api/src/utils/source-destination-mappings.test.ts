@@ -241,8 +241,6 @@ describe("mapping transaction adversarial behavior", () => {
     let mappings = new Set<string>([
       createMappingKey("source-1", "dest-0"),
     ]);
-    let triggerCount = 0;
-
     const withTransaction = async <TResult>(
       transactionCallback: (transaction: {
         acquireUserLock: (userId: string) => Promise<void>;

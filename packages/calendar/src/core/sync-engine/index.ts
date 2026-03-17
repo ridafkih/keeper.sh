@@ -409,7 +409,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
 
     outcome.changes.deletes.push(...staleMappingIds);
 
-    const invalidated = isInvalidated ? await isInvalidated() : false;
+    const invalidated = await isInvalidated?.() ?? false;
     if (!invalidated) {
       await flush(outcome.changes);
       flushed = true;

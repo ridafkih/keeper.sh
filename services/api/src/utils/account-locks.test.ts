@@ -164,7 +164,7 @@ beforeAll(async () => {
   }));
 
   mock.module("./enqueue-push-sync", () => ({
-    enqueuePushSync: async (userId: string) => {
+    enqueuePushSync: (userId: string) => {
       triggerSyncCalls.push(userId);
     },
   }));

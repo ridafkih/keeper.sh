@@ -51,8 +51,9 @@ describe("handleOAuthCallbackWithDependencies", () => {
           persistCalendarDestinationCalls.push(payload);
           return Promise.resolve();
         },
-        enqueuePushSync: async (userId: string) => {
-          enqueuePushSyncCalls.push(userId);
+        enqueuePushSync: (userId: string) => {
+          enqueuePushSyncCalls.push(userId)
+          return Promise.resolve();
         },
         validateState: () => Promise.resolve({ destinationId: null, sourceCredentialId: null, userId: "user-1" }),
       },
@@ -91,8 +92,9 @@ describe("handleOAuthCallbackWithDependencies", () => {
           persistCalendarDestinationCalls.push(payload);
           return Promise.resolve();
         },
-        enqueuePushSync: async (userId: string) => {
+        enqueuePushSync: (userId: string) => {
           enqueuePushSyncCalls.push(userId);
+          return Promise.resolve();
         },
         validateState: () => Promise.resolve({ destinationId: null, sourceCredentialId: null, userId: "user-1" }),
       },
@@ -139,8 +141,9 @@ describe("handleOAuthCallbackWithDependencies", () => {
           persistCalendarDestinationCalls.push(payload);
           return Promise.resolve();
         },
-        enqueuePushSync: async (userId: string) => {
+        enqueuePushSync: (userId: string) => {
           enqueuePushSyncCalls.push(userId);
+          return Promise.resolve();
         },
         validateState: () => Promise.resolve({ destinationId: "destination-1", sourceCredentialId: null, userId: "user-1" }),
       },
