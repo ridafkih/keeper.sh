@@ -167,6 +167,7 @@ const syncDestinationsForUser = async (
           }
           return handle.isCurrent();
         },
+        isInvalidated: () => isCalendarInvalidated(redis, destination.calendarId),
         flush,
         onProgress: callbacks?.onProgress,
         onSyncEvent: (event) => {

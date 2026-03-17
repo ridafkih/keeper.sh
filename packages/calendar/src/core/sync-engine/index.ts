@@ -5,7 +5,10 @@ import { createSyncEventContentHash } from "../events/content-hash";
 import { computeSyncOperations } from "../sync/operations";
 import type { CalendarSyncProvider, PendingChanges } from "./types";
 
-const resolveOutcome = (superseded: boolean): string => {
+const resolveOutcome = (superseded: boolean, invalidated: boolean): string => {
+  if (invalidated) {
+    return "invalidated";
+  }
   if (superseded) {
     return "superseded";
   }
@@ -301,6 +304,7 @@ interface SyncCalendarOptions {
     remoteEvents: RemoteEvent[];
   }>;
   isCurrent: () => Promise<boolean>;
+  isInvalidated?: () => Promise<boolean>;
   flush: (changes: PendingChanges) => Promise<void>;
   onSyncEvent?: (event: Record<string, unknown>) => void;
   onProgress?: (update: SyncProgressUpdate) => void;
@@ -313,7 +317,7 @@ interface SyncCalendarResult extends SyncResult {
 const EMPTY_RESULT: SyncCalendarResult = { added: 0, addFailed: 0, removed: 0, removeFailed: 0, errors: [] };
 
 const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarResult> => {
-  const { userId, calendarId, provider, readState, isCurrent, flush, onSyncEvent, onProgress } = options;
+  const { userId, calendarId, provider, readState, isCurrent, isInvalidated, flush, onSyncEvent, onProgress } = options;
 
   const wideEvent: Record<string, unknown> = {
     "calendar.id": calendarId,
@@ -405,11 +409,15 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
 
     outcome.changes.deletes.push(...staleMappingIds);
 
-    await flush(outcome.changes);
-    flushed = true;
+    const invalidated = isInvalidated ? await isInvalidated() : false;
+    if (!invalidated) {
+      await flush(outcome.changes);
+      flushed = true;
+    }
 
-    wideEvent["outcome"] = resolveOutcome(outcome.superseded);
-    wideEvent["flushed"] = true;
+    wideEvent["invalidated"] = invalidated;
+    wideEvent["outcome"] = resolveOutcome(outcome.superseded, invalidated);
+    wideEvent["flushed"] = flushed;
     wideEvent["flush.inserts"] = outcome.changes.inserts.length;
     wideEvent["flush.deletes"] = outcome.changes.deletes.length;
 
