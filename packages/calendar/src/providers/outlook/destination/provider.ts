@@ -17,6 +17,7 @@ interface OutlookSyncProviderConfig {
   accessToken: string;
   refreshToken: string;
   accessTokenExpiresAt: Date;
+  externalCalendarId?: string;
   calendarId: string;
   userId: string;
   refreshAccessToken?: TokenRefresher;
@@ -40,6 +41,13 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     "Content-Type": "application/json",
   });
 
+  const getCalendarEventsUrl = (): string => {
+    if (config.externalCalendarId) {
+      return `${MICROSOFT_GRAPH_API}/me/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
+    }
+    return `${MICROSOFT_GRAPH_API}/me/calendar/events`;
+  };
+
   const pushEvents = async (events: SyncableEvent[]): Promise<PushResult[]> => {
     await refreshIfNeeded();
     const results: PushResult[] = [];
@@ -47,7 +55,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     for (const event of events) {
       try {
         const resource = serializeOutlookEvent(event);
-        const url = new URL(`${MICROSOFT_GRAPH_API}/me/calendar/events`);
+        const url = new URL(getCalendarEventsUrl());
 
         const response = await fetch(url, {
           body: JSON.stringify(resource),
@@ -111,7 +119,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     if (nextLink) {
       return new URL(nextLink);
     }
-    const baseUrl = new URL(`${MICROSOFT_GRAPH_API}/me/calendar/events`);
+    const baseUrl = new URL(getCalendarEventsUrl());
     baseUrl.searchParams.set(
       "$filter",
       `categories/any(c:c eq '${KEEPER_CATEGORY}') and start/dateTime ge '${lookbackStart.toISOString()}' and start/dateTime le '${futureDate.toISOString()}'`,
