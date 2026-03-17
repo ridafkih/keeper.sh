@@ -15,7 +15,7 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
 import { resolveSyncProvider } from "./resolve-provider";
 import type { OAuthConfig } from "./resolve-provider";
-import { createSyncLock } from "./sync-lock";
+import { createSyncLock, isCalendarInvalidated } from "./sync-lock";
 
 const GOOGLE_REQUESTS_PER_MINUTE = 500;
 
@@ -181,6 +181,11 @@ const syncDestinationsForUser = async (
           }
         },
       });
+
+      const invalidated = await isCalendarInvalidated(redis, destination.calendarId);
+      if (invalidated) {
+        continue;
+      }
 
       added += result.added;
       addFailed += result.addFailed;

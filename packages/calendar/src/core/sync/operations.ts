@@ -179,20 +179,13 @@ const computeSyncOperations = (
 
   const addOperations = buildAddOperations(localEvents, existingMappings, staleMappedEventIds);
 
-  const hasNoLocalEvents = localEvents.length === 0;
-  const hasNoMappings = existingMappings.length === 0;
-  const shouldSkipRemoteCleanup = hasNoLocalEvents && hasNoMappings;
-
-  let removeOperations: SyncOperation[] = [];
-  if (!shouldSkipRemoteCleanup) {
-    removeOperations = buildRemoveOperations(
-      existingMappings,
-      remoteEvents,
-      localEventIds,
-      mappedDestinationUids,
-      timeBoundary,
-    );
-  }
+  const removeOperations = buildRemoveOperations(
+    existingMappings,
+    remoteEvents,
+    localEventIds,
+    mappedDestinationUids,
+    timeBoundary,
+  );
 
   const staleMappingRemoveOperations = buildRemoveOperationsForMappings(staleRemoteMappings);
 

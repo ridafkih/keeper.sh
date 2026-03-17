@@ -13,7 +13,8 @@ import type {
   NormalizedUserInfo as OAuthUserInfo,
   ValidatedState,
 } from "@keeper.sh/calendar";
-import { database, oauthProviders } from "@/context";
+import { database, oauthProviders, redis } from "@/context";
+import { invalidateCalendarsForAccount } from "@/utils/invalidate-calendars";
 
 const FIRST_RESULT_LIMIT = 1;
 const EMPTY_RESULT_COUNT = 0;
@@ -312,6 +313,8 @@ const deleteCalendarDestination = async (
   userId: string,
   accountId: string,
 ): Promise<boolean> => {
+  await invalidateCalendarsForAccount(database, redis, accountId);
+
   const result = await database
     .delete(calendarAccountsTable)
     .where(
