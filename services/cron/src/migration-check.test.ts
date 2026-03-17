@@ -31,9 +31,10 @@ describe("checkWorkerMigrationStatus", () => {
     const stderrSpy = spyOn(process.stderr, "write").mockImplementation(() => true);
 
     try {
+      // eslint-disable-next-line @eslint/no-undefined @eslint-plugin-unicorn/no-useless-undefined
       checkWorkerMigrationStatus(undefined);
     } catch {
-      // expected — mock throws to prevent actual exit
+      // Expected — mock throws to prevent actual exit
     }
 
     expect(exitSpy).toHaveBeenCalledWith(1);
@@ -48,9 +49,10 @@ describe("checkWorkerMigrationStatus", () => {
     const stderrSpy = spyOn(process.stderr, "write").mockImplementation(() => true);
 
     try {
+      // eslint-disable-next-line @eslint/no-undefined @eslint-plugin-unicorn/no-useless-undefined
       checkWorkerMigrationStatus(undefined);
     } catch {
-      // expected
+      // Expected
     }
 
     const output = stderrSpy.mock.calls[0]?.[0];
