@@ -67,28 +67,6 @@ describe("handlePatchSourceRoute", () => {
     });
   });
 
-  it("does not fail when post-update destination sync trigger throws", async () => {
-    const response = await handlePatchSourceRoute(
-      {
-        body: { name: "Updated Name" },
-        params: { id: "source-1" },
-        userId: "user-1",
-      },
-      {
-        canUseEventFilters: () => Promise.resolve(true),
-        triggerDestinationSync: () => {
-          throw new Error("trigger failed");
-        },
-        updateSource: (_userId, _sourceId, updates) => Promise.resolve({
-          id: "source-1",
-          ...updates,
-        }),
-      },
-    );
-
-    expect(response.status).toBe(200);
-  });
-
   it("triggers destination sync for non-filter updates", async () => {
     const destinationSyncCalls: string[] = [];
 

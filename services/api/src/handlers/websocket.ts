@@ -6,6 +6,7 @@ import { and, eq, inArray, max } from "drizzle-orm";
 import { database, getCachedSyncAggregate, getCurrentSyncAggregate } from "@/context";
 import { resolveSyncAggregatePayload } from "./websocket-payload";
 import { runSendInitialSyncStatus } from "./websocket-initial-status";
+import { context, widelog } from "@/utils/logging";
 
 const selectLatestDestinationSyncedAt = async (userId: string): Promise<Date | null> => {
   const [aggregate] = await database
@@ -46,19 +47,32 @@ const baseWebsocketHandler = createWebsocketHandler({
   onConnect: sendInitialSyncStatus,
 });
 
-const runWebsocketBoundary = async (
-  _socket: Socket,
-  _operationName: "websocket:open" | "websocket:close",
+const runWebsocketBoundary = (
+  socket: Socket,
+  operationName: "websocket:open" | "websocket:close",
   callback: () => void | Promise<void>,
-): Promise<void> => {
-  await callback();
-};
+): Promise<void> =>
+  context(async () => {
+    widelog.set("operation.name", operationName);
+    widelog.set("operation.type", "connection");
+    widelog.set("request.id", crypto.randomUUID());
+    widelog.set("user.id", socket.data.userId);
+
+    try {
+      await widelog.time.measure("duration_ms", () => callback());
+    } catch (error) {
+      widelog.errorFields(error, { slug: "unclassified" });
+      throw error;
+    } finally {
+      widelog.flush();
+    }
+  });
 
 const websocketHandler = {
-  close(socket: Socket): void {
-    runWebsocketBoundary(socket, "websocket:close", () => {
+  close(socket: Socket) {
+    return runWebsocketBoundary(socket, "websocket:close", () => {
       baseWebsocketHandler.close(socket);
-    }).catch(() => null);
+    });
   },
   idleTimeout: baseWebsocketHandler.idleTimeout,
   message: baseWebsocketHandler.message,

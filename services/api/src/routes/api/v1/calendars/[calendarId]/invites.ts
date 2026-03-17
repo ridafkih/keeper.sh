@@ -2,6 +2,7 @@ import { normalizeDateRange, parseDateRangeParams } from "@/utils/date-range";
 import { createKeeperApi } from "@/read-models";
 import { withV1Auth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
+import { widelog } from "@/utils/logging";
 import { database, oauthProviders, encryptionKey } from "@/context";
 
 const keeperApi = createKeeperApi(database, {
@@ -11,6 +12,7 @@ const keeperApi = createKeeperApi(database, {
 
 const GET = withWideEvent(
   withV1Auth(async ({ request, params, userId }) => {
+    widelog.set("operation.name", "GET /api/v1/calendars/:calendarId/invites");
     const { calendarId } = params;
     if (!calendarId) {
       return ErrorResponse.badRequest("Calendar ID is required.").toResponse();

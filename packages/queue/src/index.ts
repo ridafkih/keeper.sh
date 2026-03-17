@@ -8,6 +8,7 @@ const USER_TIMEOUT_MS = 300_000;
 interface PushSyncJobPayload {
   userId: string;
   plan: Plan;
+  correlationId: string;
 }
 
 interface PushSyncJobResult {

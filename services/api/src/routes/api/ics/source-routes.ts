@@ -1,5 +1,6 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { ErrorResponse } from "@/utils/responses";
+import { widelog } from "@/utils/logging";
 
 interface IcsRouteContext {
   userId: string;
@@ -48,12 +49,12 @@ const handlePostIcsSourceRoute = async (
     return Response.json(source, { status: HTTP_STATUS.CREATED });
   } catch (error) {
     if (dependencies.isSourceLimitError(error)) {
-      let message = "Source limit reached";
+      widelog.errorFields(error, { slug: "source-limit-reached" });
+      const fallbackMessage = "Source limit reached";
       if (error instanceof Error) {
-        const { message: errorMessage } = error;
-        message = errorMessage;
+        return ErrorResponse.paymentRequired(error.message).toResponse();
       }
-      return ErrorResponse.paymentRequired(message).toResponse();
+      return ErrorResponse.paymentRequired(fallbackMessage).toResponse();
     }
 
     if (dependencies.isInvalidSourceUrlError(error)) {

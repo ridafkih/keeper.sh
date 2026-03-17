@@ -2,6 +2,7 @@ import { KEEPER_API_READ_SCOPE } from "@keeper.sh/auth";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { KeeperMcpToolDefinition, KeeperMcpToolset, KeeperToolContext } from "./toolset";
+import { widelog } from "./utils/logging";
 
 const JSON_RPC_VERSION = "2.0";
 const JSON_RPC_ERROR_UNAUTHORIZED = -32_001;
@@ -145,7 +146,7 @@ const registerToolset = (
   server: McpServer,
   toolset: Record<string, KeeperMcpToolDefinition<unknown>>,
   toolContext: KeeperToolContext,
-  _userId: string,
+  userId: string,
 ): void => {
   for (const [name, tool] of Object.entries(toolset)) {
     server.registerTool(
@@ -156,6 +157,8 @@ const registerToolset = (
         title: tool.title,
       },
       async (input: Record<string, unknown>) => {
+        widelog.set("mcp.tool", name);
+        widelog.set("user.id", userId);
         const result = await tool.execute(toolContext, input);
         return createToolResponse(result);
       },

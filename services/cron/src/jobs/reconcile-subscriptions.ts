@@ -2,6 +2,7 @@ import type { CronOptions } from "cronbake";
 import { userSubscriptionsTable } from "@keeper.sh/database/schema";
 import { user } from "@keeper.sh/database/auth-schema";
 import { withCronWideEvent } from "@/utils/with-wide-event";
+import { widelog } from "@/utils/logging";
 
 const EMPTY_SUBSCRIPTIONS_COUNT = 0;
 
@@ -47,7 +48,7 @@ const runReconcileSubscriptionsJob = async (
   const userIds = await dependencies.selectUserIds();
   const reconcileUserTimeoutMs = dependencies.reconcileUserTimeoutMs ?? RECONCILE_USER_TIMEOUT_MS;
 
-  await Promise.allSettled(
+  const settlements = await Promise.allSettled(
     userIds.map((userId) =>
       withOperationTimeout(
         () => dependencies.reconcileUserSubscription(userId),
@@ -55,6 +56,11 @@ const runReconcileSubscriptionsJob = async (
         `reconcile:subscription:${userId}`,
       )),
   );
+
+  const failedCount = settlements.filter((settlement) => settlement.status === "rejected").length;
+
+  widelog.set("batch.processed_count", userIds.length);
+  widelog.set("batch.failed_count", failedCount);
 };
 
 const createDefaultDependencies = async (): Promise<ReconcileSubscriptionsDependencies> => {

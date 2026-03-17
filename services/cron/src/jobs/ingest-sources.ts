@@ -23,6 +23,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq, inArray } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
+import { context, widelog } from "@/utils/logging";
 import { database, refreshLockRedis } from "@/context";
 import env from "@/env";
 
@@ -194,79 +195,124 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
 
   const settlements = await allSettledWithConcurrency(
     oauthSources.map((source) => () =>
-      withTimeout(async (): Promise<IngestionSourceResult> => {
-        if (!source.externalCalendarId) {
-          return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
-        }
-
-        const tokenRefresher = resolveTokenRefresher(source.provider);
-        const tokenState: TokenState = {
-          accessToken: source.accessToken,
-          accessTokenExpiresAt: source.expiresAt,
-          refreshToken: source.refreshToken,
-        };
-
-        if (tokenRefresher) {
-          await ensureValidToken(tokenState, tokenRefresher);
-        }
-
-        const rateLimiter = resolveRateLimiter(source.provider, source.userId);
-
-        const resolvedFetcher = resolveOAuthFetcher(source.provider, {
-          accessToken: tokenState.accessToken,
-          externalCalendarId: source.externalCalendarId,
-          syncToken: source.syncToken,
-          rateLimiter,
-        });
-
-        if (!resolvedFetcher) {
-          return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
-        }
-
-        const fetcher = resolvedFetcher;
-        const ingestEvents: Record<string, unknown>[] = [];
-
-        try {
-          const result = await ingestSource({
-            calendarId: source.calendarId,
-            fetchEvents: () => fetcher.fetchEvents(),
-            readExistingEvents: () => readExistingEvents(source.calendarId),
-            flush: createIngestionFlush(source.calendarId),
-            onIngestEvent: (event) => {
-              ingestEvents.push({
-                ...event,
-                "source.provider": source.provider,
-              });
-            },
-          });
-
-          return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
-        } catch (error) {
-          if (error instanceof Error && "status" in error && error.status === 404) {
-            await database
-              .update(calendarsTable)
-              .set({ disabled: true })
-              .where(eq(calendarsTable.id, source.calendarId));
-
-            return { eventsAdded: 0, eventsRemoved: 0, ingestEvents };
+      withTimeout((): Promise<IngestionSourceResult> =>
+        context(async () => {
+          widelog.set("operation.name", "ingest-source");
+          widelog.set("operation.type", "job");
+          widelog.set("sync.direction", "ingest");
+          widelog.set("user.id", source.userId);
+          widelog.set("provider.name", source.provider);
+          widelog.set("provider.account_id", source.accountId);
+          widelog.set("provider.calendar_id", source.calendarId);
+          if (source.externalCalendarId) {
+            widelog.set("provider.external_calendar_id", source.externalCalendarId);
           }
 
-          const isAuthError = error instanceof Error && (
-            ("authRequired" in error && error.authRequired === true)
-            || ("oauthReauthRequired" in error && error.oauthReauthRequired === true)
-          );
+          try {
+            if (!source.externalCalendarId) {
+  
+              widelog.set("outcome", "success");
+              widelog.set("sync.events_added", 0);
+              widelog.set("sync.events_removed", 0);
+              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
+            }
 
-          if (isAuthError) {
-            await database
-              .update(calendarAccountsTable)
-              .set({ needsReauthentication: true })
-              .where(eq(calendarAccountsTable.id, source.accountId));
+            const tokenRefresher = resolveTokenRefresher(source.provider);
+            const tokenState: TokenState = {
+              accessToken: source.accessToken,
+              accessTokenExpiresAt: source.expiresAt,
+              refreshToken: source.refreshToken,
+            };
 
-            return { eventsAdded: 0, eventsRemoved: 0, ingestEvents };
+            if (tokenRefresher) {
+              await ensureValidToken(tokenState, tokenRefresher);
+            }
+
+            const rateLimiter = resolveRateLimiter(source.provider, source.userId);
+
+            const resolvedFetcher = resolveOAuthFetcher(source.provider, {
+              accessToken: tokenState.accessToken,
+              externalCalendarId: source.externalCalendarId,
+              syncToken: source.syncToken,
+              rateLimiter,
+            });
+
+            if (!resolvedFetcher) {
+  
+              widelog.set("outcome", "success");
+              widelog.set("sync.events_added", 0);
+              widelog.set("sync.events_removed", 0);
+              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
+            }
+
+            const fetcher = resolvedFetcher;
+            const ingestEvents: Record<string, unknown>[] = [];
+
+            const result = await widelog.time.measure("duration_ms", () =>
+              ingestSource({
+                calendarId: source.calendarId,
+                fetchEvents: () => fetcher.fetchEvents(),
+                readExistingEvents: () => readExistingEvents(source.calendarId),
+                flush: createIngestionFlush(source.calendarId),
+                onIngestEvent: (event) => {
+                  ingestEvents.push({
+                    ...event,
+                    "source.provider": source.provider,
+                  });
+                },
+              }),
+            );
+
+            widelog.set("sync.events_added", result.eventsAdded);
+            widelog.set("sync.events_removed", result.eventsRemoved);
+
+            widelog.set("outcome", "success");
+
+            return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
+          } catch (error) {
+
+            widelog.set("outcome", "error");
+
+            if (error instanceof Error && "status" in error && error.status === 404) {
+              widelog.errorFields(error, { slug: "provider-calendar-not-found", retriable: false });
+
+              await database
+                .update(calendarsTable)
+                .set({ disabled: true })
+                .where(eq(calendarsTable.id, source.calendarId));
+
+              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
+            }
+
+            if (error instanceof Error && "authRequired" in error && error.authRequired === true) {
+              widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
+
+              await database
+                .update(calendarAccountsTable)
+                .set({ needsReauthentication: true })
+                .where(eq(calendarAccountsTable.id, source.accountId));
+
+              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
+            }
+
+            if (error instanceof Error && "oauthReauthRequired" in error && error.oauthReauthRequired === true) {
+              widelog.errorFields(error, { slug: "provider-token-refresh-failed", retriable: false, requiresReauth: true });
+
+              await database
+                .update(calendarAccountsTable)
+                .set({ needsReauthentication: true })
+                .where(eq(calendarAccountsTable.id, source.accountId));
+
+              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
+            }
+
+            widelog.errorFields(error, { slug: "provider-api-error", retriable: true });
+            throw error;
+          } finally {
+            widelog.flush();
           }
-          throw error;
-        }
-      }, SOURCE_TIMEOUT_MS),
+        }),
+      SOURCE_TIMEOUT_MS),
     ),
     { concurrency: SOURCE_CONCURRENCY },
   );
@@ -300,6 +346,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
       username: caldavCredentialsTable.username,
       encryptedPassword: caldavCredentialsTable.encryptedPassword,
       serverUrl: caldavCredentialsTable.serverUrl,
+      userId: calendarsTable.userId,
     })
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
@@ -318,52 +365,81 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
 
   const settlements = await allSettledWithConcurrency(
     caldavSources.map((source) => () =>
-      withTimeout(async (): Promise<IngestionSourceResult> => {
-        const password = decryptPassword(source.encryptedPassword, encryptionKey);
+      withTimeout((): Promise<IngestionSourceResult> =>
+        context(async () => {
+          widelog.set("operation.name", "ingest-source");
+          widelog.set("operation.type", "job");
+          widelog.set("sync.direction", "ingest");
+          widelog.set("user.id", source.userId);
+          widelog.set("provider.name", source.provider);
+          widelog.set("provider.account_id", source.accountId);
+          widelog.set("provider.calendar_id", source.calendarId);
 
-        const fetcher = createCalDAVSourceFetcher({
-          calendarUrl: source.calendarUrl ?? source.serverUrl,
-          serverUrl: source.serverUrl,
-          username: source.username,
-          password,
-        });
+          try {
+            const password = decryptPassword(source.encryptedPassword, encryptionKey);
 
-        const ingestEvents: Record<string, unknown>[] = [];
+            const fetcher = createCalDAVSourceFetcher({
+              calendarUrl: source.calendarUrl ?? source.serverUrl,
+              serverUrl: source.serverUrl,
+              username: source.username,
+              password,
+            });
 
-        try {
-          const result = await ingestSource({
-            calendarId: source.calendarId,
-            fetchEvents: () => fetcher.fetchEvents(),
-            readExistingEvents: () => readExistingEvents(source.calendarId),
-            flush: createIngestionFlush(source.calendarId),
-            onIngestEvent: (event) => {
-              ingestEvents.push({
-                ...event,
-                "source.provider": source.provider,
-              });
-            },
-          });
+            const ingestEvents: Record<string, unknown>[] = [];
 
-          return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
-        } catch (error) {
-          if (isCalDAVAuthenticationError(error)) {
-            await database
-              .update(calendarAccountsTable)
-              .set({ needsReauthentication: true })
-              .where(eq(calendarAccountsTable.id, source.accountId));
+            const result = await widelog.time.measure("duration_ms", () =>
+              ingestSource({
+                calendarId: source.calendarId,
+                fetchEvents: () => fetcher.fetchEvents(),
+                readExistingEvents: () => readExistingEvents(source.calendarId),
+                flush: createIngestionFlush(source.calendarId),
+                onIngestEvent: (event) => {
+                  ingestEvents.push({
+                    ...event,
+                    "source.provider": source.provider,
+                  });
+                },
+              }),
+            );
 
-            return { eventsAdded: 0, eventsRemoved: 0, ingestEvents };
+            widelog.set("sync.events_added", result.eventsAdded);
+            widelog.set("sync.events_removed", result.eventsRemoved);
+
+            widelog.set("outcome", "success");
+
+            return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
+          } catch (error) {
+
+            widelog.set("outcome", "error");
+
+            if (isCalDAVAuthenticationError(error)) {
+              widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
+
+              await database
+                .update(calendarAccountsTable)
+                .set({ needsReauthentication: true })
+                .where(eq(calendarAccountsTable.id, source.accountId));
+
+              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
+            }
+
+            if (error instanceof Error && error.message.includes("404")) {
+              widelog.errorFields(error, { slug: "provider-calendar-not-found", retriable: false });
+
+              await database
+                .update(calendarsTable)
+                .set({ disabled: true })
+                .where(eq(calendarsTable.id, source.calendarId));
+            } else {
+              widelog.errorFields(error, { slug: "provider-api-error", retriable: true });
+            }
+
+            throw error;
+          } finally {
+            widelog.flush();
           }
-
-          if (error instanceof Error && error.message.includes("404")) {
-            await database
-              .update(calendarsTable)
-              .set({ disabled: true })
-              .where(eq(calendarsTable.id, source.calendarId));
-          }
-          throw error;
-        }
-      }, SOURCE_TIMEOUT_MS),
+        }),
+      SOURCE_TIMEOUT_MS),
     ),
     { concurrency: SOURCE_CONCURRENCY },
   );
@@ -386,6 +462,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
     .select({
       calendarId: calendarsTable.id,
       url: calendarsTable.url,
+      userId: calendarsTable.userId,
     })
     .from(calendarsTable)
     .where(eq(calendarsTable.calendarType, "ical"));
@@ -397,34 +474,63 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
 
   const settlements = await allSettledWithConcurrency(
     icsSources.map((source) => () =>
-      withTimeout(async (): Promise<IngestionSourceResult> => {
-        if (!source.url) {
-          return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
-        }
+      withTimeout((): Promise<IngestionSourceResult> =>
+        context(async () => {
+          widelog.set("operation.name", "ingest-source");
+          widelog.set("operation.type", "job");
+          widelog.set("sync.direction", "ingest");
+          widelog.set("user.id", source.userId);
+          widelog.set("provider.name", "ical");
+          widelog.set("provider.calendar_id", source.calendarId);
 
-        const fetcher = createIcsSourceFetcher({
-          calendarId: source.calendarId,
-          url: source.url,
-          database,
-        });
+          try {
+            if (!source.url) {
+  
+              widelog.set("outcome", "success");
+              widelog.set("sync.events_added", 0);
+              widelog.set("sync.events_removed", 0);
+              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
+            }
 
-        const ingestEvents: Record<string, unknown>[] = [];
-
-        const result = await ingestSource({
-          calendarId: source.calendarId,
-          fetchEvents: () => fetcher.fetchEvents(),
-          readExistingEvents: () => readExistingEvents(source.calendarId),
-          flush: createIngestionFlush(source.calendarId),
-          onIngestEvent: (event) => {
-            ingestEvents.push({
-              ...event,
-              "source.provider": "ical",
+            const fetcher = createIcsSourceFetcher({
+              calendarId: source.calendarId,
+              url: source.url,
+              database,
             });
-          },
-        });
 
-        return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
-      }, SOURCE_TIMEOUT_MS),
+            const ingestEvents: Record<string, unknown>[] = [];
+
+            const result = await widelog.time.measure("duration_ms", () =>
+              ingestSource({
+                calendarId: source.calendarId,
+                fetchEvents: () => fetcher.fetchEvents(),
+                readExistingEvents: () => readExistingEvents(source.calendarId),
+                flush: createIngestionFlush(source.calendarId),
+                onIngestEvent: (event) => {
+                  ingestEvents.push({
+                    ...event,
+                    "source.provider": "ical",
+                  });
+                },
+              }),
+            );
+
+            widelog.set("sync.events_added", result.eventsAdded);
+            widelog.set("sync.events_removed", result.eventsRemoved);
+
+            widelog.set("outcome", "success");
+
+            return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
+          } catch (error) {
+
+            widelog.set("outcome", "error");
+            widelog.errorFields(error, { slug: "provider-api-error", retriable: true });
+            throw error;
+          } finally {
+            widelog.flush();
+          }
+        }),
+      SOURCE_TIMEOUT_MS),
     ),
     { concurrency: SOURCE_CONCURRENCY },
   );

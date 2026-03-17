@@ -1,6 +1,7 @@
 import { calendarsTable } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
+import { widelog } from "@/utils/logging";
 import { database } from "@/context";
 import {
   getDestinationsForSource,
@@ -12,7 +13,9 @@ import {
 } from "./mapping-routes";
 
 const GET = withWideEvent(
-  withAuth(({ params, userId }) => handleGetSourceDestinationsRoute(
+  withAuth(({ params, userId }) => {
+    widelog.set("operation.name", "GET /api/sources/:id/destinations");
+    return handleGetSourceDestinationsRoute(
       { params, userId },
       {
         getDestinationsForSource,
@@ -31,11 +34,13 @@ const GET = withWideEvent(
           return Boolean(source);
         },
       },
-    )),
+    );
+  }),
 );
 
 const PUT = withWideEvent(
   withAuth(async ({ request, params, userId }) => {
+    widelog.set("operation.name", "PUT /api/sources/:id/destinations");
     const payload = await request.json();
     return handlePutSourceDestinationsRoute(
       { body: payload, params, userId },

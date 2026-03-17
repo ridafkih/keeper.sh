@@ -17,6 +17,7 @@
     "@modelcontextprotocol/sdk": "1.27.1",
     "arkenv": "^0.11.0",
     "entrykit": "^0.1.3",
+    "widelogger": "^0.6.0",
     "zod": "^4.3.5"
   },
   "devDependencies": {

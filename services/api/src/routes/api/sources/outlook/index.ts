@@ -2,6 +2,7 @@ import { createOAuthSourceSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
+import { widelog } from "@/utils/logging";
 import {
   OAuthSourceLimitError,
   DestinationNotFoundError,
@@ -22,6 +23,7 @@ const GET = withWideEvent(
 
 const POST = withWideEvent(
   withAuth(async ({ request, userId }) => {
+    widelog.set("provider.name", "outlook");
     const body = await request.json();
 
     try {
@@ -37,6 +39,7 @@ const POST = withWideEvent(
       return Response.json(source, { status: HTTP_STATUS.CREATED });
     } catch (error) {
       if (error instanceof OAuthSourceLimitError) {
+        widelog.errorFields(error, { slug: "account-limit-reached" });
         return ErrorResponse.paymentRequired(error.message).toResponse();
       }
       if (error instanceof DestinationNotFoundError) {
@@ -46,6 +49,7 @@ const POST = withWideEvent(
         return ErrorResponse.badRequest(error.message).toResponse();
       }
       if (error instanceof DuplicateSourceError) {
+        widelog.errorFields(error, { slug: "duplicate-source" });
         return Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT });
       }
 

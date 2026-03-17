@@ -1,14 +1,14 @@
 import type { MaybePromise } from "bun";
 import { isKeeperMcpEnabledAuth } from "@keeper.sh/auth";
 import { ErrorResponse } from "./responses";
-import { apiTokensTable, calendarsTable, sourceDestinationMappingsTable } from "@keeper.sh/database/schema";
+import { apiTokensTable } from "@keeper.sh/database/schema";
 import { isApiToken, hashApiToken } from "./api-tokens";
 import { user as userTable } from "@keeper.sh/database/auth-schema";
-import { and, count, eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { auth, database, premiumService, redis } from "@/context";
 import { checkAndIncrementApiUsage } from "./api-rate-limit";
+import { context, widelog } from "./logging";
 
-const DEFAULT_COUNT = 0;
 const MS_PER_DAY = 86_400_000;
 
 interface RouteContext {
@@ -25,46 +25,16 @@ type RouteHandler = (request: Request, params: Record<string, string>) => MaybeP
 type RouteCallback = (ctx: RouteContext) => MaybePromise<Response>;
 type AuthenticatedRouteCallback = (ctx: AuthenticatedRouteContext) => MaybePromise<Response>;
 
+const resolveOutcome = (statusCode: number): "success" | "error" => {
+  if (statusCode >= 400) {
+    return "error";
+  }
+  return "success";
+};
+
 const fetchUserPlan = async (userId: string): Promise<"free" | "pro" | null> => {
   try {
     return await premiumService.getUserPlan(userId);
-  } catch {
-    return null;
-  }
-};
-
-const fetchUserCounts = async (
-  userId: string,
-): Promise<{ "source.count": number; "destination.count": number } | null> => {
-  try {
-    const [sources] = await database
-      .select({ count: count() })
-      .from(calendarsTable)
-      .where(
-        and(
-          eq(calendarsTable.userId, userId),
-          inArray(calendarsTable.id,
-            database.selectDistinct({ id: sourceDestinationMappingsTable.sourceCalendarId })
-              .from(sourceDestinationMappingsTable)
-          ),
-        ),
-      );
-    const [destinations] = await database
-      .select({ count: count() })
-      .from(calendarsTable)
-      .where(
-        and(
-          eq(calendarsTable.userId, userId),
-          inArray(calendarsTable.id,
-            database.selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
-              .from(sourceDestinationMappingsTable)
-          ),
-        ),
-      );
-    return {
-      "destination.count": destinations?.count ?? DEFAULT_COUNT,
-      "source.count": sources?.count ?? DEFAULT_COUNT,
-    };
   } catch {
     return null;
   }
@@ -91,11 +61,19 @@ interface UserContext {
 }
 
 const enrichWithUserContext = async (userId: string): Promise<UserContext> => {
-  const [plan] = await Promise.all([
+  widelog.set("user.id", userId);
+
+  const [plan, accountAgeDays] = await Promise.all([
     fetchUserPlan(userId),
-    fetchUserCounts(userId),
     fetchAccountAgeDays(userId),
   ]);
+
+  if (plan) {
+    widelog.set("user.plan", plan);
+  }
+  if (accountAgeDays !== null) {
+    widelog.set("user.account_age_days", accountAgeDays);
+  }
 
   return { plan };
 };
@@ -114,12 +92,43 @@ const getSession = async (request: Request): Promise<Session | null> => {
 const withWideEvent =
   (handler: RouteCallback): RouteHandler =>
   (request, params) =>
-    handler({ params, request });
+    context(async () => {
+      const url = new URL(request.url);
+      const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
+
+      widelog.set("operation.name", `${request.method} ${url.pathname}`);
+      widelog.set("operation.type", "http");
+      widelog.set("request.id", requestId);
+      widelog.set("http.method", request.method);
+      widelog.set("http.path", url.pathname);
+
+      const userAgent = request.headers.get("user-agent");
+      if (userAgent) {
+        widelog.set("http.user_agent", userAgent);
+      }
+
+      try {
+        return await widelog.time.measure("duration_ms", async () => {
+          const response = await handler({ params, request });
+          widelog.set("status_code", response.status);
+          widelog.set("outcome", resolveOutcome(response.status));
+          return response;
+        });
+      } catch (error) {
+        widelog.set("status_code", 500);
+        widelog.set("outcome", "error");
+        widelog.errorFields(error, { slug: "unclassified" });
+        throw error;
+      } finally {
+        widelog.flush();
+      }
+    });
 
 const withAuth =
   (handler: AuthenticatedRouteCallback): RouteCallback =>
   async ({ request, params }) => {
-    const session = await getSession(request);
+    const session = await widelog.time.measure("auth.duration_ms", () => getSession(request));
+    widelog.set("auth.method", "session");
 
     if (!session?.user?.id) {
       return ErrorResponse.unauthorized().toResponse();
@@ -159,8 +168,11 @@ const resolveApiTokenUserId = async (bearerToken: string): Promise<string | null
 
 const enforceApiRateLimit = async (userId: string, plan: "free" | "pro" | null): Promise<Response | null> => {
   const rateLimitResult = await checkAndIncrementApiUsage(redis, userId, plan);
+  widelog.set("rate_limit.remaining", rateLimitResult.remaining);
+  widelog.set("rate_limit.limit", rateLimitResult.limit);
 
   if (!rateLimitResult.allowed) {
+    widelog.set("rate_limit.exceeded", true);
     return ErrorResponse.tooManyRequests("Daily API limit exceeded. Upgrade to Pro for unlimited access.").toResponse();
   }
 
@@ -176,7 +188,10 @@ const withV1Auth =
       const bearerToken = authHeader.slice("Bearer ".length);
 
       if (isApiToken(bearerToken)) {
-        const userId = await resolveApiTokenUserId(bearerToken);
+        const userId = await widelog.time.measure("auth.duration_ms", () =>
+          resolveApiTokenUserId(bearerToken),
+        );
+        widelog.set("auth.method", "api_token");
 
         if (!userId) {
           return ErrorResponse.unauthorized().toResponse();
@@ -192,7 +207,10 @@ const withV1Auth =
 
       if (isKeeperMcpEnabledAuth(auth)) {
         const mcpAuth = auth;
-        const mcpSession = await mcpAuth.api.getMcpSession({ headers: request.headers });
+        const mcpSession = await widelog.time.measure("auth.duration_ms", () =>
+          mcpAuth.api.getMcpSession({ headers: request.headers }),
+        );
+        widelog.set("auth.method", "mcp_token");
 
         if (!mcpSession?.userId) {
           return ErrorResponse.unauthorized().toResponse();
@@ -207,7 +225,8 @@ const withV1Auth =
       }
     }
 
-    const session = await getSession(request);
+    const session = await widelog.time.measure("auth.duration_ms", () => getSession(request));
+    widelog.set("auth.method", "session");
 
     if (!session?.user?.id) {
       return ErrorResponse.unauthorized().toResponse();
@@ -217,5 +236,5 @@ const withV1Auth =
     return handler({ params, request, userId: session.user.id });
   };
 
-export { withAuth, withV1Auth, withWideEvent };
+export { resolveOutcome, withAuth, withV1Auth, withWideEvent };
 export type { RouteHandler };

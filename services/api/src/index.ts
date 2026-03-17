@@ -9,6 +9,7 @@ import { isHttpMethod, isRouteModule } from "./utils/route-handler";
 import { socketQuerySchema } from "./utils/request-query";
 import { closeDatabase } from "@keeper.sh/database";
 import { broadcastService, database, redis } from "./context";
+import { destroy } from "./utils/logging";
 import env from "./env";
 
 const HTTP_UNAUTHORIZED = 401;
@@ -90,6 +91,7 @@ await entry({
     await broadcastService.startSubscriber();
 
     return () => {
+      destroy();
       server.stop();
       closeDatabase(database);
       redis.disconnect();

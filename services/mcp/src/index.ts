@@ -2,6 +2,7 @@ import { entry } from "entrykit";
 import { join } from "node:path";
 import { tryLoadMcpEnv } from "./env";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
+import { destroy } from "./utils/logging";
 
 const env = tryLoadMcpEnv();
 
@@ -51,8 +52,9 @@ await entry({
       },
     });
 
-    return () => {
+    return async () => {
       server.stop();
+      await destroy();
     };
   },
   name: "mcp",

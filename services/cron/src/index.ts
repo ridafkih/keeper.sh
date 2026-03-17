@@ -4,6 +4,7 @@ import { getAllJobs } from "./utils/get-jobs";
 import { injectJobs } from "./utils/inject-jobs";
 import { registerJobs } from "./utils/register-jobs";
 import { closeDatabase } from "@keeper.sh/database";
+import { destroy } from "./utils/logging";
 
 const jobsFolderPathname = join(import.meta.dirname, "jobs");
 
@@ -16,6 +17,7 @@ await entry({
     registerJobs(injectedJobs);
 
     return () => {
+      destroy();
       shutdownRefreshLockRedis();
       closeDatabase(database);
     };

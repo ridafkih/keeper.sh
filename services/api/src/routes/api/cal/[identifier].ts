@@ -1,10 +1,12 @@
 import { withWideEvent } from "@/utils/middleware";
+import { widelog } from "@/utils/logging";
 import { generateUserCalendar } from "@/utils/ical";
 import { ErrorResponse } from "@/utils/responses";
 
 const ICS_EXTENSION_LENGTH = 4;
 
 const GET = withWideEvent(async ({ params }) => {
+  widelog.set("operation.name", "GET /api/cal/:identifier");
   const { identifier } = params;
 
   if (!identifier?.endsWith(".ics")) {

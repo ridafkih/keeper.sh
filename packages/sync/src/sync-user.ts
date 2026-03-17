@@ -19,6 +19,17 @@ import { createSyncLock } from "./sync-lock";
 
 const GOOGLE_REQUESTS_PER_MINUTE = 500;
 
+const extractNumericField = (event: Record<string, unknown> | undefined, key: string): number => {
+  if (!event) {
+    return 0;
+  }
+  const value = event[key];
+  if (typeof value === "number") {
+    return value;
+  }
+  return 0;
+};
+
 interface SyncConfig {
   database: BunSQLDatabase;
   redis: Redis;
@@ -46,9 +57,23 @@ const EMPTY_RESULT: SyncDestinationsResult = {
   syncEvents: [],
 };
 
+interface CalendarSyncCompletion {
+  provider: string;
+  accountId: string;
+  calendarId: string;
+  userId: string;
+  added: number;
+  addFailed: number;
+  removed: number;
+  removeFailed: number;
+  errors: string[];
+  durationMs: number;
+}
+
 interface SyncCallbacks {
   onSyncEvent?: (event: Record<string, unknown>) => void;
   onProgress?: (update: SyncProgressUpdate) => void;
+  onCalendarComplete?: (completion: CalendarSyncCompletion) => void;
 }
 
 const syncDestinationsForUser = async (
@@ -162,6 +187,24 @@ const syncDestinationsForUser = async (
       removed += result.removed;
       removeFailed += result.removeFailed;
       errors.push(...result.errors);
+
+      if (callbacks?.onCalendarComplete) {
+        const syncEvent = syncEvents.at(-1);
+        const durationMs = extractNumericField(syncEvent, "duration_ms");
+
+        callbacks.onCalendarComplete({
+          provider: destination.provider,
+          accountId: destination.accountId,
+          calendarId: destination.calendarId,
+          userId: destination.userId,
+          added: result.added,
+          addFailed: result.addFailed,
+          removed: result.removed,
+          removeFailed: result.removeFailed,
+          errors: result.errors,
+          durationMs,
+        });
+      }
     } finally {
       await handle.release();
     }
@@ -171,4 +214,4 @@ const syncDestinationsForUser = async (
 };
 
 export { syncDestinationsForUser };
-export type { SyncConfig, SyncDestinationsResult };
+export type { CalendarSyncCompletion, SyncConfig, SyncDestinationsResult };

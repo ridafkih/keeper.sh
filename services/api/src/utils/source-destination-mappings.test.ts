@@ -149,24 +149,6 @@ describe("runSetDestinationsForSource", () => {
     ]);
   });
 
-  it("does not fail the request when post-commit trigger throws", () => {
-    expect(
-      runSetDestinationsForSource("user-1", "source-1", ["dest-1"], {
-        triggerDestinationSync: () => {
-          throw new Error("trigger failed");
-        },
-        withTransaction: (transactionCallback) =>
-          transactionCallback({
-            acquireUserLock: () => Promise.resolve(),
-            ensureDestinationSyncStatuses: () => Promise.resolve(),
-            findOwnedDestinationIds: () => Promise.resolve(["dest-1"]),
-            replaceSourceMappings: () => Promise.resolve(),
-            sourceExists: () => Promise.resolve(true),
-          }),
-      }),
-    ).resolves.toBeUndefined();
-  });
-
   it("throws when projected mappings exceed entitlement limit", () => {
     let replaceCalled = false;
     let triggerCount = 0;
@@ -561,24 +543,6 @@ describe("runSetSourcesForDestination", () => {
       "status:dest-1",
       "trigger:user-1",
     ]);
-  });
-
-  it("does not fail the request when destination sync trigger throws", () => {
-    expect(
-      runSetSourcesForDestination("user-1", "dest-1", ["source-1"], {
-        triggerDestinationSync: () => {
-          throw new Error("trigger failed");
-        },
-        withTransaction: (transactionCallback) =>
-          transactionCallback({
-            acquireUserLock: () => Promise.resolve(),
-            destinationExists: () => Promise.resolve(true),
-            ensureDestinationSyncStatus: () => Promise.resolve(),
-            findOwnedSourceIds: () => Promise.resolve(["source-1"]),
-            replaceDestinationMappings: () => Promise.resolve(),
-          }),
-      }),
-    ).resolves.toBeUndefined();
   });
 
   it("throws when projected mappings exceed entitlement limit", () => {

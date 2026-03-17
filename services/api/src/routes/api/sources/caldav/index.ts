@@ -2,6 +2,7 @@ import { createCalDAVSourceSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
+import { widelog } from "@/utils/logging";
 import { caldavSourcesQuerySchema } from "@/utils/request-query";
 import {
   CalDAVSourceLimitError,
@@ -37,23 +38,27 @@ const POST = withWideEvent(
     try {
       const data = createCalDAVSourceSchema.assert(body);
 
+      widelog.set("provider.name", data.provider);
+
       const source = await createCalDAVSource(userId, data);
 
       return Response.json(source, { status: HTTP_STATUS.CREATED });
     } catch (error) {
       if (error instanceof CalDAVSourceLimitError) {
+        widelog.errorFields(error, { slug: "account-limit-reached" });
         return ErrorResponse.paymentRequired(error.message).toResponse();
       }
       if (error instanceof DuplicateCalDAVSourceError) {
+        widelog.errorFields(error, { slug: "duplicate-source" });
         return Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT });
       }
 
-      let message = "Invalid request body";
+      widelog.errorFields(error, { slug: "caldav-connection-failed" });
+      const fallbackMessage = "Invalid request body";
       if (error instanceof Error) {
-        const { message: errorMessage } = error;
-        message = errorMessage;
+        return ErrorResponse.badRequest(error.message).toResponse();
       }
-      return ErrorResponse.badRequest(message).toResponse();
+      return ErrorResponse.badRequest(fallbackMessage).toResponse();
     }
   }),
 );

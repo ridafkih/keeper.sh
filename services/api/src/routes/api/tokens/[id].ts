@@ -3,10 +3,12 @@ import { apiTokensTable } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
 import { database } from "@/context";
 import { withAuth, withWideEvent } from "@/utils/middleware";
+import { widelog } from "@/utils/logging";
 import { ErrorResponse } from "@/utils/responses";
 
 const DELETE = withWideEvent(
   withAuth(async ({ userId, params }) => {
+    widelog.set("operation.name", "DELETE /api/tokens/:id");
     const tokenId = params.id;
 
     if (!tokenId) {

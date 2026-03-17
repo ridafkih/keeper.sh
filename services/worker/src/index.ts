@@ -4,6 +4,7 @@ import { PUSH_SYNC_QUEUE_NAME } from "@keeper.sh/queue";
 import type { PushSyncJobPayload, PushSyncJobResult } from "@keeper.sh/queue";
 import { closeDatabase } from "@keeper.sh/database";
 import { processJob } from "./processor";
+import { destroy } from "./utils/logging";
 import env from "./env";
 
 const DEFAULT_CONCURRENCY = 5;
@@ -75,6 +76,7 @@ await entry({
       await worker.close();
       shutdownConnections();
       closeDatabase(database);
+      await destroy();
     };
   },
   name: "worker",
