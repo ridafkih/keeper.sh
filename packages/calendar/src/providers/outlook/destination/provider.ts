@@ -41,12 +41,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     "Content-Type": "application/json",
   });
 
-  const getCalendarEventsUrl = (): string => {
-    if (config.externalCalendarId) {
-      return `${MICROSOFT_GRAPH_API}/me/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
-    }
-    return `${MICROSOFT_GRAPH_API}/me/calendar/events`;
-  };
+  const calendarEventsUrl = `${MICROSOFT_GRAPH_API}/me/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
 
   const pushEvents = async (events: SyncableEvent[]): Promise<PushResult[]> => {
     await refreshIfNeeded();
@@ -55,7 +50,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     for (const event of events) {
       try {
         const resource = serializeOutlookEvent(event);
-        const url = new URL(getCalendarEventsUrl());
+        const url = new URL(calendarEventsUrl);
 
         const response = await fetch(url, {
           body: JSON.stringify(resource),
