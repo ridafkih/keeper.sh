@@ -15,7 +15,6 @@ import { baseUrl } from "@/context";
 const MS_PER_SECOND = 1000;
 
 const GET = withWideEvent(async ({ request, params }) => {
-  widelog.set("operation.name", "GET /api/sources/callback/:provider");
   if (!params.provider || !providerParamSchema.allows(params)) {
     return ErrorResponse.notFound().toResponse();
   }

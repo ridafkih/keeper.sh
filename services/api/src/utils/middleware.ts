@@ -20,7 +20,7 @@ interface AuthenticatedRouteContext extends RouteContext {
   userId: string;
 }
 
-type RouteHandler = (request: Request, params: Record<string, string>) => MaybePromise<Response>;
+type RouteHandler = (request: Request, params: Record<string, string>, routePattern?: string) => MaybePromise<Response>;
 
 type RouteCallback = (ctx: RouteContext) => MaybePromise<Response>;
 type AuthenticatedRouteCallback = (ctx: AuthenticatedRouteContext) => MaybePromise<Response>;
@@ -91,12 +91,12 @@ const getSession = async (request: Request): Promise<Session | null> => {
 
 const withWideEvent =
   (handler: RouteCallback): RouteHandler =>
-  (request, params) =>
+  (request, params, routePattern) =>
     context(async () => {
       const url = new URL(request.url);
       const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
-
-      widelog.set("operation.name", `${request.method} ${url.pathname}`);
+      const operationPath = routePattern ?? url.pathname;
+      widelog.set("operation.name", `${request.method} ${operationPath}`);
       widelog.set("operation.type", "http");
       widelog.set("request.id", requestId);
       widelog.set("http.method", request.method);

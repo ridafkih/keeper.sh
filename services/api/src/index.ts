@@ -84,7 +84,7 @@ await entry({
           return new Response("Method not allowed", { status: HTTP_METHOD_NOT_ALLOWED });
         }
 
-        return handler(request, match.params);
+        return handler(request, match.params, match.name);
       }),
     });
 

@@ -2,14 +2,12 @@ import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schem
 import { and, count, eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
-import { widelog } from "@/utils/logging";
 import { idParamSchema } from "@/utils/request-query";
 import { database } from "@/context";
 import { withAccountDisplay } from "@/utils/provider-display";
 
 const GET = withWideEvent(
   withAuth(async ({ params, userId }) => {
-    widelog.set("operation.name", "GET /api/accounts/:id");
     if (!params.id || !idParamSchema.allows(params)) {
       return ErrorResponse.badRequest("Account ID is required").toResponse();
     }
@@ -48,7 +46,6 @@ const GET = withWideEvent(
 
 const DELETE = withWideEvent(
   withAuth(async ({ params, userId }) => {
-    widelog.set("operation.name", "DELETE /api/accounts/:id");
     if (!params.id || !idParamSchema.allows(params)) {
       return ErrorResponse.badRequest("Account ID is required").toResponse();
     }

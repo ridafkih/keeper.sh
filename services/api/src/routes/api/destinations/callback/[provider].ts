@@ -11,7 +11,6 @@ import { providerParamSchema } from "@/utils/request-query";
 import { baseUrl } from "@/context";
 
 const GET = withWideEvent(async ({ request, params }) => {
-  widelog.set("operation.name", "GET /api/destinations/callback/:provider");
   if (!params.provider || !providerParamSchema.allows(params)) {
     return ErrorResponse.notFound().toResponse();
   }

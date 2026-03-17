@@ -3,7 +3,6 @@ import { createKeeperApi } from "@/read-models";
 import type { RsvpStatus } from "@/types";
 import { withV1Auth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
-import { widelog } from "@/utils/logging";
 import { eventPatchBodySchema } from "@/utils/request-body";
 import { database, oauthProviders, encryptionKey } from "@/context";
 
@@ -14,7 +13,6 @@ const keeperApi = createKeeperApi(database, {
 
 const GET = withWideEvent(
   withV1Auth(async ({ params, userId }) => {
-    widelog.set("operation.name", "GET /api/v1/events/:id");
     const eventId = params.id;
     if (!eventId) {
       return ErrorResponse.badRequest("Event ID is required.").toResponse();
@@ -31,7 +29,6 @@ const GET = withWideEvent(
 
 const PATCH = withWideEvent(
   withV1Auth(async ({ request, params, userId }) => {
-    widelog.set("operation.name", "PATCH /api/v1/events/:id");
     const eventId = params.id;
     if (!eventId) {
       return ErrorResponse.badRequest("Event ID is required.").toResponse();
@@ -76,7 +73,6 @@ const PATCH = withWideEvent(
 
 const DELETE = withWideEvent(
   withV1Auth(async ({ params, userId }) => {
-    widelog.set("operation.name", "DELETE /api/v1/events/:id");
     const eventId = params.id;
     if (!eventId) {
       return ErrorResponse.badRequest("Event ID is required.").toResponse();

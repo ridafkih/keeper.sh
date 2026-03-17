@@ -2,7 +2,6 @@ import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schem
 import { and, eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
-import { widelog } from "@/utils/logging";
 import { database, premiumService } from "@/context";
 import { triggerDestinationSync } from "@/utils/sync";
 import { idParamSchema } from "@/utils/request-query";
@@ -15,7 +14,6 @@ import { handlePatchSourceRoute } from "./[id]/source-item-routes";
 
 const GET = withWideEvent(
   withAuth(async ({ params, userId }) => {
-    widelog.set("operation.name", "GET /api/sources/:id");
     if (!params.id || !idParamSchema.allows(params)) {
       return ErrorResponse.badRequest("ID is required").toResponse();
     }
@@ -71,7 +69,6 @@ const GET = withWideEvent(
 
 const PATCH = withWideEvent(
   withAuth(async ({ request, params, userId }) => {
-    widelog.set("operation.name", "PATCH /api/sources/:id");
     const payload = await request.json();
     return handlePatchSourceRoute(
       { body: payload, params, userId },
