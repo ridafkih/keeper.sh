@@ -74,6 +74,9 @@ const resolveOAuthProvider = async (
   }
 
   if (provider === "outlook" && oauthConfig.microsoftClientId && oauthConfig.microsoftClientSecret) {
+    if (!oauthCred.externalCalendarId) {
+      return null;
+    }
     const microsoftOAuth = createMicrosoftOAuthService({
       clientId: oauthConfig.microsoftClientId,
       clientSecret: oauthConfig.microsoftClientSecret,
@@ -82,7 +85,7 @@ const resolveOAuthProvider = async (
       accessToken: oauthCred.accessToken,
       refreshToken: oauthCred.refreshToken,
       accessTokenExpiresAt: oauthCred.expiresAt,
-      externalCalendarId: oauthCred.externalCalendarId ?? undefined,
+      externalCalendarId: oauthCred.externalCalendarId,
       calendarId,
       userId,
       refreshAccessToken: (refreshToken) => microsoftOAuth.refreshAccessToken(refreshToken),

@@ -17,7 +17,7 @@ interface OutlookSyncProviderConfig {
   accessToken: string;
   refreshToken: string;
   accessTokenExpiresAt: Date;
-  externalCalendarId?: string;
+  externalCalendarId: string;
   calendarId: string;
   userId: string;
   refreshAccessToken?: TokenRefresher;
