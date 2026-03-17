@@ -62,7 +62,7 @@ function VerifyEmailPage() {
         <div className="flex flex-col">
           <Heading2 as="span" className="text-center">Check your email</Heading2>
           <Text size="sm" tone="muted" align="center">
-            We sent a verification link to your email. Click the link to verify your account.
+            We sent a verification link to your email. Click the link to verify your account. Please check your spam or junk folder if you don't see it in your inbox.
           </Text>
         </div>
       </div>
