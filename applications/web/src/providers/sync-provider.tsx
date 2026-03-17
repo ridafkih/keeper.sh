@@ -101,6 +101,13 @@ const startInitialAggregateTimer = (
   }, INITIAL_AGGREGATE_TIMEOUT_MS);
 };
 
+const resolveProgressPercent = (data: { syncEventsRemaining: number; progressPercent: number }): number => {
+  if (data.syncEventsRemaining === 0) {
+    return 100;
+  }
+  return data.progressPercent;
+};
+
 const handleMessage = (
   connectionState: ConnectionState,
   setSyncState: (state: CompositeSyncState) => void,
@@ -142,7 +149,7 @@ const handleMessage = (
     connected: true,
     hasReceivedAggregate: true,
     lastSyncedAt: action.data.lastSyncedAt ?? null,
-    progressPercent: action.data.progressPercent,
+    progressPercent: resolveProgressPercent(action.data),
     seq: action.data.seq,
     syncEventsProcessed: action.data.syncEventsProcessed,
     syncEventsRemaining: action.data.syncEventsRemaining,
