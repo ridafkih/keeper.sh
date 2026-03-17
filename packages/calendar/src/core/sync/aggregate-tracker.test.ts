@@ -181,7 +181,7 @@ describe("SyncAggregateTracker", () => {
       expect(aggregate.syncing).toBe(false);
     });
 
-    it("shows 0% progress when syncing with zero total", () => {
+    it("shows up-to-date when syncing with zero total", () => {
       const tracker = new SyncAggregateTracker({ progressThrottleMs: 0 });
       const result = tracker.trackProgress(
         createProgressUpdate({ progress: { current: 0, total: 0 } }),
@@ -189,7 +189,7 @@ describe("SyncAggregateTracker", () => {
 
       const aggregateMessage = requireAggregateMessage(result);
       expect(aggregateMessage.progressPercent).toBe(0);
-      expect(aggregateMessage.syncing).toBe(true);
+      expect(aggregateMessage.syncing).toBe(false);
     });
 
     it("isolates progress between different users", () => {

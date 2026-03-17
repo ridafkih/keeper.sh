@@ -170,7 +170,7 @@ class SyncAggregateTracker {
       syncEventsProcessed,
       syncEventsRemaining,
       syncEventsTotal,
-      syncing,
+      syncing: syncing && syncEventsRemaining > INITIAL_COUNT,
     };
   }
 
