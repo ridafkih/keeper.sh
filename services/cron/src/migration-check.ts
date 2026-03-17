@@ -1,4 +1,4 @@
-const MIGRATION_GUIDE_URL = "https://github.com/ridafkih/keeper.sh/issues/260";
+const MIGRATION_GUIDE_URL = "https://github.com/ridafkih/keeper.sh/issues/267";
 
 const checkWorkerMigrationStatus = (workerJobQueueEnabled: boolean | undefined): void => {
   if (workerJobQueueEnabled === true || workerJobQueueEnabled === false) {
