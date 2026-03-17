@@ -41,13 +41,15 @@ const resolveOAuthProvider = async (
       accessToken: oauthCredentialsTable.accessToken,
       refreshToken: oauthCredentialsTable.refreshToken,
       expiresAt: oauthCredentialsTable.expiresAt,
+      externalCalendarId: calendarsTable.externalCalendarId,
     })
     .from(oauthCredentialsTable)
     .innerJoin(calendarAccountsTable, eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id))
-    .where(eq(calendarAccountsTable.id, accountId))
+    .innerJoin(calendarsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
+    .where(eq(calendarsTable.id, calendarId))
     .limit(1);
 
-  if (!oauthCred) {
+  if (!oauthCred || !oauthCred.externalCalendarId) {
     return null;
   }
 
@@ -60,7 +62,7 @@ const resolveOAuthProvider = async (
       accessToken: oauthCred.accessToken,
       refreshToken: oauthCred.refreshToken,
       accessTokenExpiresAt: oauthCred.expiresAt,
-      externalCalendarId: "primary",
+      externalCalendarId: oauthCred.externalCalendarId,
       calendarId,
       userId,
       refreshAccessToken: (refreshToken) => googleOAuth.refreshAccessToken(refreshToken),
