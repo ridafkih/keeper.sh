@@ -9,7 +9,6 @@ describe("handlePatchSourceRoute", () => {
       { body: {}, params: {}, userId: "user-1" },
       {
         canUseEventFilters: () => Promise.resolve(true),
-        triggerDestinationSync: Boolean,
         updateSource: () => Promise.resolve(null),
       },
     );
@@ -22,7 +21,6 @@ describe("handlePatchSourceRoute", () => {
       { body: { unknown: true }, params: { id: "source-1" }, userId: "user-1" },
       {
         canUseEventFilters: () => Promise.resolve(true),
-        triggerDestinationSync: Boolean,
         updateSource: () => Promise.resolve(null),
       },
     );
@@ -39,7 +37,6 @@ describe("handlePatchSourceRoute", () => {
       },
       {
         canUseEventFilters: () => Promise.resolve(true),
-        triggerDestinationSync: Boolean,
         updateSource: () => Promise.resolve(null),
       },
     );
@@ -56,7 +53,6 @@ describe("handlePatchSourceRoute", () => {
       },
       {
         canUseEventFilters: () => Promise.resolve(false),
-        triggerDestinationSync: Boolean,
         updateSource: () => Promise.resolve(null),
       },
     );
@@ -67,9 +63,7 @@ describe("handlePatchSourceRoute", () => {
     });
   });
 
-  it("triggers destination sync for non-filter updates", async () => {
-    const destinationSyncCalls: string[] = [];
-
+  it("returns updated source for valid name update", async () => {
     const response = await handlePatchSourceRoute(
       {
         body: { name: "Updated Name" },
@@ -78,9 +72,6 @@ describe("handlePatchSourceRoute", () => {
       },
       {
         canUseEventFilters: () => Promise.resolve(true),
-        triggerDestinationSync: (userId) => {
-          destinationSyncCalls.push(userId);
-        },
         updateSource: (_userId, _sourceId, updates) => Promise.resolve({
           id: "source-1",
           ...updates,
@@ -89,12 +80,9 @@ describe("handlePatchSourceRoute", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(destinationSyncCalls).toEqual(["user-1"]);
   });
 
-  it("keeps destination-only exclusion updates on destination sync", async () => {
-    const destinationSyncCalls: string[] = [];
-
+  it("returns updated source for exclusion filter update", async () => {
     const response = await handlePatchSourceRoute(
       {
         body: { excludeEventDescription: true },
@@ -103,9 +91,6 @@ describe("handlePatchSourceRoute", () => {
       },
       {
         canUseEventFilters: () => Promise.resolve(true),
-        triggerDestinationSync: (userId) => {
-          destinationSyncCalls.push(userId);
-        },
         updateSource: (_userId, _sourceId, updates) => Promise.resolve({
           id: "source-1",
           ...updates,
@@ -114,6 +99,5 @@ describe("handlePatchSourceRoute", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(destinationSyncCalls).toEqual(["user-1"]);
   });
 });

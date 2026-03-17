@@ -101,6 +101,7 @@ beforeAll(async () => {
     encryptionKey: "encryption-key",
     premiumService: {
       canAddAccount: () => Promise.resolve(canAddAccountResult),
+      getUserPlan: () => Promise.resolve("free"),
     },
   }));
 
@@ -162,8 +163,8 @@ beforeAll(async () => {
     },
   }));
 
-  mock.module("./sync", () => ({
-    triggerDestinationSync: (userId: string) => {
+  mock.module("./enqueue-push-sync", () => ({
+    enqueuePushSync: async (userId: string) => {
       triggerSyncCalls.push(userId);
     },
   }));

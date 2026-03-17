@@ -5,7 +5,7 @@ import { isCalDAVProvider } from "@keeper.sh/calendar";
 import type { CalDAVProviderId } from "@keeper.sh/calendar";
 import { and, eq, sql } from "drizzle-orm";
 import { saveCalDAVDestinationWithDatabase } from "./destinations";
-import { triggerDestinationSync } from "./sync";
+import { enqueuePushSync } from "./enqueue-push-sync";
 import { database, encryptionKey, premiumService } from "@/context";
 
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
@@ -132,7 +132,11 @@ const createCalDAVDestination = async (
     );
   });
 
-  triggerDestinationSync(userId);
+  const plan = await premiumService.getUserPlan(userId);
+  if (!plan) {
+    throw new Error("Unable to resolve user plan for sync enqueue");
+  }
+  await enqueuePushSync(userId, plan);
 };
 
 const extractServerHost = (serverUrl: string): string | null => {

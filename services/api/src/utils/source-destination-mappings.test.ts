@@ -78,13 +78,8 @@ const createUserLockManager = (): UserLockManager => {
 
 describe("runSetDestinationsForSource", () => {
   it("throws when source calendar is not found and does not trigger sync", () => {
-    let triggerCount = 0;
-
     expect(
       runSetDestinationsForSource("user-1", "source-1", ["dest-1"], {
-        triggerDestinationSync: () => {
-          triggerCount += 1;
-        },
         withTransaction: (transactionCallback) =>
           transactionCallback({
             acquireUserLock: () => Promise.resolve(),
@@ -96,13 +91,12 @@ describe("runSetDestinationsForSource", () => {
       }),
     ).rejects.toThrow("Source calendar not found");
 
-    expect(triggerCount).toBe(0);
+
   });
 
   it("throws when destination calendars include invalid IDs", () => {
     expect(
       runSetDestinationsForSource("user-1", "source-1", ["dest-1", "dest-2"], {
-        triggerDestinationSync: Boolean,
         withTransaction: (transactionCallback) =>
           transactionCallback({
             acquireUserLock: () => Promise.resolve(),
@@ -119,9 +113,6 @@ describe("runSetDestinationsForSource", () => {
     const operationLog: string[] = [];
 
     await runSetDestinationsForSource("user-1", "source-1", ["dest-1", "dest-2"], {
-      triggerDestinationSync: (userId) => {
-        operationLog.push(`trigger:${userId}`);
-      },
       withTransaction: (transactionCallback) =>
         transactionCallback({
           acquireUserLock: (userId) => {
@@ -145,20 +136,14 @@ describe("runSetDestinationsForSource", () => {
       "lock:user-1",
       "replace:dest-1,dest-2",
       "status:dest-1,dest-2",
-      "trigger:user-1",
     ]);
   });
 
   it("throws when projected mappings exceed entitlement limit", () => {
     let replaceCalled = false;
-    let triggerCount = 0;
-
     expect(
       runSetDestinationsForSource("user-1", "source-1", ["dest-1", "dest-2", "dest-3"], {
         isMappingCountAllowed: () => Promise.resolve(false),
-        triggerDestinationSync: () => {
-          triggerCount += 1;
-        },
         withTransaction: (transactionCallback) =>
           transactionCallback({
             acquireUserLock: () => Promise.resolve(),
@@ -176,7 +161,7 @@ describe("runSetDestinationsForSource", () => {
     ).rejects.toThrow("Mapping limit reached");
 
     expect(replaceCalled).toBe(false);
-    expect(triggerCount).toBe(0);
+
   });
 });
 
@@ -185,7 +170,6 @@ describe("mapping transaction adversarial behavior", () => {
     let mappings = new Set<string>([
       createMappingKey("source-1", "dest-0"),
     ]);
-    const triggerUsers: string[] = [];
     const lockManager = createUserLockManager();
 
     const withTransaction = async <TResult>(
@@ -240,23 +224,17 @@ describe("mapping transaction adversarial behavior", () => {
     };
 
     const firstWrite = runSetDestinationsForSource("user-1", "source-1", ["dest-1", "dest-2"], {
-      triggerDestinationSync: (userId) => {
-        triggerUsers.push(userId);
-      },
       withTransaction,
     });
     await Bun.sleep(1);
     const secondWrite = runSetDestinationsForSource("user-1", "source-1", ["dest-3"], {
-      triggerDestinationSync: (userId) => {
-        triggerUsers.push(userId);
-      },
       withTransaction,
     });
 
     await Promise.all([firstWrite, secondWrite]);
 
     expect(collectDestinationIds(mappings, "source-1")).toEqual(["dest-3"]);
-    expect(triggerUsers).toEqual(["user-1", "user-1"]);
+
   });
 
   it("rolls back destination mapping writes when transaction fails mid-flight", () => {
@@ -308,15 +286,12 @@ describe("mapping transaction adversarial behavior", () => {
 
     expect(
       runSetDestinationsForSource("user-1", "source-1", ["dest-1"], {
-        triggerDestinationSync: () => {
-          triggerCount += 1;
-        },
         withTransaction,
       }),
     ).rejects.toThrow("status upsert failed");
 
     expect(collectDestinationIds(mappings, "source-1")).toEqual(["dest-0"]);
-    expect(triggerCount).toBe(0);
+
   });
 
   it("serializes cross-endpoint writes for the same user", async () => {
@@ -427,7 +402,6 @@ describe("mapping transaction adversarial behavior", () => {
       "source-a",
       ["dest-1", "dest-2"],
       {
-        triggerDestinationSync: Boolean,
         withTransaction: withDestinationTransaction,
       },
     );
@@ -437,7 +411,6 @@ describe("mapping transaction adversarial behavior", () => {
       "dest-1",
       ["source-b"],
       {
-        triggerDestinationSync: Boolean,
         withTransaction: withSourceTransaction,
       },
     );
@@ -453,7 +426,6 @@ describe("runSetSourcesForDestination", () => {
   it("throws when destination calendar is not found", () => {
     expect(
       runSetSourcesForDestination("user-1", "dest-1", ["source-1"], {
-        triggerDestinationSync: Boolean,
         withTransaction: (transactionCallback) =>
           transactionCallback({
             acquireUserLock: () => Promise.resolve(),
@@ -469,7 +441,6 @@ describe("runSetSourcesForDestination", () => {
   it("throws when source calendars include invalid IDs", () => {
     expect(
       runSetSourcesForDestination("user-1", "dest-1", ["source-1", "source-2"], {
-        triggerDestinationSync: Boolean,
         withTransaction: (transactionCallback) =>
           transactionCallback({
             acquireUserLock: () => Promise.resolve(),
@@ -486,9 +457,6 @@ describe("runSetSourcesForDestination", () => {
     const operationLog: string[] = [];
 
     await runSetSourcesForDestination("user-1", "dest-1", [], {
-      triggerDestinationSync: (userId) => {
-        operationLog.push(`trigger:${userId}`);
-      },
       withTransaction: (transactionCallback) =>
         transactionCallback({
           acquireUserLock: (userId) => {
@@ -511,7 +479,6 @@ describe("runSetSourcesForDestination", () => {
     expect(operationLog).toEqual([
       "lock:user-1",
       "replace:0",
-      "trigger:user-1",
     ]);
   });
 
@@ -519,9 +486,6 @@ describe("runSetSourcesForDestination", () => {
     const operationLog: string[] = [];
 
     await runSetSourcesForDestination("user-1", "dest-1", ["source-1"], {
-      triggerDestinationSync: (userId) => {
-        operationLog.push(`trigger:${userId}`);
-      },
       withTransaction: (transactionCallback) =>
         transactionCallback({
           acquireUserLock: () => Promise.resolve(),
@@ -541,20 +505,14 @@ describe("runSetSourcesForDestination", () => {
     expect(operationLog).toEqual([
       "replace:source-1",
       "status:dest-1",
-      "trigger:user-1",
     ]);
   });
 
   it("throws when projected mappings exceed entitlement limit", () => {
     let replaceCalled = false;
-    let triggerCount = 0;
-
     expect(
       runSetSourcesForDestination("user-1", "dest-1", ["source-1", "source-2"], {
         isMappingCountAllowed: () => Promise.resolve(false),
-        triggerDestinationSync: () => {
-          triggerCount += 1;
-        },
         withTransaction: (transactionCallback) =>
           transactionCallback({
             acquireUserLock: () => Promise.resolve(),
@@ -572,6 +530,6 @@ describe("runSetSourcesForDestination", () => {
     ).rejects.toThrow("Mapping limit reached");
 
     expect(replaceCalled).toBe(false);
-    expect(triggerCount).toBe(0);
+
   });
 });

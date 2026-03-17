@@ -3,7 +3,7 @@ import { pullRemoteCalendar, createIcsSourceFetcher } from "@keeper.sh/calendar/
 import { ingestSource, insertEventStatesWithConflictResolution } from "@keeper.sh/calendar";
 import type { IngestionChanges } from "@keeper.sh/calendar";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
-import { triggerDestinationSync } from "./sync";
+import { enqueuePushSync } from "./enqueue-push-sync";
 import {
   SourceLimitError,
   InvalidSourceUrlError,
@@ -177,7 +177,13 @@ const createSource = (userId: string, name: string, url: string): Promise<Source
           await ingestIcsSource(source);
         },
         spawnBackgroundJob,
-        triggerDestinationSync,
+        enqueuePushSync: async (userId) => {
+          const plan = await premiumService.getUserPlan(userId);
+          if (!plan) {
+            throw new Error("Unable to resolve user plan for sync enqueue");
+          }
+          await enqueuePushSync(userId, plan);
+        },
         validateSourceUrl,
       },
     ),

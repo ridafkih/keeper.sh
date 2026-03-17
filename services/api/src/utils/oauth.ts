@@ -94,7 +94,7 @@ interface HandleOAuthCallbackDependencies {
     refreshToken: string;
     userId: string;
   }) => Promise<void>;
-  triggerDestinationSync: (userId: string) => void;
+  enqueuePushSync: (userId: string) => Promise<void>;
   validateState: (state: string) => Promise<ValidatedState | null>;
 }
 
@@ -189,7 +189,7 @@ const handleOAuthCallbackWithDependencies = async (
     userId,
   });
 
-  dependencies.triggerDestinationSync(userId);
+  await dependencies.enqueuePushSync(userId);
 
   return { redirectUrl: successUrl, userId };
 };
@@ -197,10 +197,10 @@ const handleOAuthCallbackWithDependencies = async (
 const handleOAuthCallback = async (
   params: OAuthCallbackParams,
 ): Promise<{ userId: string; redirectUrl: URL }> => {
-  const [{ baseUrl, database, premiumService }, destinationsModule, syncModule] = await Promise.all([
+  const [{ baseUrl, database, premiumService }, destinationsModule, { enqueuePushSync }] = await Promise.all([
     import("@/context"),
     import("./destinations"),
-    import("./sync"),
+    import("./enqueue-push-sync"),
   ]);
 
   const persistCalendarDestination = async (payload: {
@@ -261,7 +261,13 @@ const handleOAuthCallback = async (
     getDestinationAccountId: destinationsModule.getDestinationAccountId,
     hasRequiredScopes: destinationsModule.hasRequiredScopes,
     persistCalendarDestination,
-    triggerDestinationSync: syncModule.triggerDestinationSync,
+    enqueuePushSync: async (userId) => {
+      const plan = await premiumService.getUserPlan(userId);
+      if (!plan) {
+        throw new Error("Unable to resolve user plan for sync enqueue");
+      }
+      await enqueuePushSync(userId, plan);
+    },
     validateState: destinationsModule.validateState,
   });
 };

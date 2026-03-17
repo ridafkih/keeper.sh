@@ -12,7 +12,7 @@ import { spawnBackgroundJob } from "./background-task";
 import { getSourceProvider } from "@keeper.sh/calendar";
 import { applySourceSyncDefaults } from "./source-sync-defaults";
 
-import { triggerDestinationSync } from "./sync";
+import { enqueuePushSync } from "./enqueue-push-sync";
 
 const FIRST_RESULT_LIMIT = 1;
 const OAUTH_CALENDAR_TYPE = "oauth";
@@ -465,7 +465,12 @@ const createDefaultCreateOAuthSourceDependencies = (): CreateOAuthSourceDependen
   triggerSync: (userId, provider) => {
     spawnBackgroundJob("oauth-source-sync", { userId, provider }, async () => {
       await syncOAuthSourcesByProvider(provider);
-      triggerDestinationSync(userId);
+      const { premiumService } = await import("@/context");
+      const plan = await premiumService.getUserPlan(userId);
+      if (!plan) {
+        throw new Error("Unable to resolve user plan for sync enqueue");
+      }
+      await enqueuePushSync(userId, plan);
     });
   },
 });
@@ -708,7 +713,12 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
   triggerSync: (userId, provider) => {
     spawnBackgroundJob("oauth-account-import", { userId, provider }, async () => {
       await syncOAuthSourcesByProvider(provider);
-      triggerDestinationSync(userId);
+      const { premiumService } = await import("@/context");
+      const plan = await premiumService.getUserPlan(userId);
+      if (!plan) {
+        throw new Error("Unable to resolve user plan for sync enqueue");
+      }
+      await enqueuePushSync(userId, plan);
     });
   },
 });

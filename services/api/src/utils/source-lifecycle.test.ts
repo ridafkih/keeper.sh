@@ -44,7 +44,7 @@ describe("runCreateSource", () => {
           createSourceCalendar: () => Promise.resolve(createSourceRecord()),
           fetchAndSyncSource: () => Promise.resolve(),
           spawnBackgroundJob: Boolean,
-          triggerDestinationSync: Boolean,
+          enqueuePushSync: () => Promise.resolve(),
           validateSourceUrl: () => Promise.resolve(),
         },
       ),
@@ -69,7 +69,7 @@ describe("runCreateSource", () => {
           createSourceCalendar: () => Promise.resolve(createSourceRecord()),
           fetchAndSyncSource: () => Promise.resolve(),
           spawnBackgroundJob: Boolean,
-          triggerDestinationSync: Boolean,
+          enqueuePushSync: () => Promise.resolve(),
           validateSourceUrl: () => Promise.reject(rejection),
         },
       ),
@@ -118,7 +118,7 @@ describe("runCreateSource", () => {
           expect(fields).toEqual({ calendarId: "source-99", userId: "user-42" });
           backgroundCallback = callback;
         },
-        triggerDestinationSync: (userId) => {
+        enqueuePushSync: async (userId: string) => {
           syncedUserIds.push(userId);
         },
         validateSourceUrl: () => Promise.resolve(),
@@ -150,7 +150,7 @@ describe("runCreateSource", () => {
           createSourceCalendar: () => Promise.resolve(createSourceRecord()),
           fetchAndSyncSource: () => Promise.resolve(),
           spawnBackgroundJob: Boolean,
-          triggerDestinationSync: Boolean,
+          enqueuePushSync: () => Promise.resolve(),
           validateSourceUrl: () => Promise.resolve(),
         },
       ),
@@ -174,7 +174,7 @@ describe("runCreateSource", () => {
             Promise.resolve<TestSource | undefined>(globalThis.undefined),
           fetchAndSyncSource: () => Promise.resolve(),
           spawnBackgroundJob: Boolean,
-          triggerDestinationSync: Boolean,
+          enqueuePushSync: () => Promise.resolve(),
           validateSourceUrl: () => Promise.resolve(),
         },
       ),

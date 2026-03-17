@@ -19,7 +19,7 @@
     "@keeper.sh/database": "workspace:*",
 "@keeper.sh/premium": "workspace:*",
     "@keeper.sh/calendar": "workspace:*",
-    "@keeper.sh/sync": "workspace:*",
+    "@keeper.sh/queue": "workspace:*",
     "@polar-sh/sdk": "^0.42.1",
     "arkenv": "^0.11.0",
     "arktype": "^2.2.0",

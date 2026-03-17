@@ -31,7 +31,7 @@ interface CreateSourceDependencies<TSource extends SourceReference> {
     callback: () => Promise<void>,
   ) => void;
   fetchAndSyncSource: (source: TSource) => Promise<void>;
-  triggerDestinationSync: (userId: string) => void;
+  enqueuePushSync: (userId: string) => Promise<void>;
 }
 
 class SourceLimitError extends Error {
@@ -92,7 +92,7 @@ const runCreateSource = async <TSource extends SourceReference>(
 
   dependencies.spawnBackgroundJob("ical-source-sync", { userId: input.userId, calendarId: source.id }, async () => {
     await dependencies.fetchAndSyncSource(source);
-    dependencies.triggerDestinationSync(input.userId);
+    await dependencies.enqueuePushSync(input.userId);
   });
 
   return source;

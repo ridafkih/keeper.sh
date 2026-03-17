@@ -34,7 +34,6 @@ interface PatchSourceDependencies {
     updates: Record<string, string | boolean>,
   ) => Promise<Record<string, unknown> | null>;
   canUseEventFilters: (userId: string) => Promise<boolean>;
-  triggerDestinationSync: (userId: string) => void;
 }
 
 const buildSourceUpdates = (
@@ -102,8 +101,6 @@ const handlePatchSourceRoute = async (
   if (!updated) {
     return ErrorResponse.notFound().toResponse();
   }
-
-  dependencies.triggerDestinationSync(context.userId);
 
   return Response.json(updated);
 };
