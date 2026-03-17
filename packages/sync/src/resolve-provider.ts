@@ -80,6 +80,7 @@ const resolveOAuthProvider = async (
       calendarId,
       userId,
       refreshAccessToken: (refreshToken) => microsoftOAuth.refreshAccessToken(refreshToken),
+      rateLimiter,
     });
   }
 

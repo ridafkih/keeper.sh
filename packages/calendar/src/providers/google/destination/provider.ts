@@ -7,8 +7,9 @@ import type { DeleteResult, PushResult, RemoteEvent, SyncableEvent } from "../..
 import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS } from "../shared/api";
-import { executeBatchChunked } from "../shared/batch";
-import type { BatchSubRequest } from "../shared/batch";
+import { createGoogleBatchExecutor } from "../shared/batch";
+import { executeBatchChunked } from "../../../core/utils/batch";
+import type { BatchSubRequest } from "../../../core/utils/batch";
 import { parseEventTime } from "../shared/date-time";
 import { serializeGoogleEvent } from "./serialize-event";
 import { buildRecurrenceRule } from "./recurrence";
@@ -46,6 +47,7 @@ const extractEventIdFromLookup = (body: unknown): string | undefined => {
 };
 
 const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
+  const batchExecutor = createGoogleBatchExecutor();
   const tokenState: TokenState = {
     accessToken: config.accessToken,
     accessTokenExpiresAt: config.accessTokenExpiresAt,
@@ -95,7 +97,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       return results;
     }
 
-    const batchResponses = await executeBatchChunked(subRequests, tokenState.accessToken, config.rateLimiter);
+    const batchResponses = await executeBatchChunked(batchExecutor, subRequests, tokenState.accessToken, config.rateLimiter);
 
     for (const entry of batchEntries) {
       const response = batchResponses[entry.batchIndex];
@@ -154,7 +156,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       path: `${eventsPath}?iCalUID=${encodeURIComponent(uid)}`,
     }));
 
-    const findResponses = await executeBatchChunked(findSubRequests, tokenState.accessToken, config.rateLimiter);
+    const findResponses = await executeBatchChunked(batchExecutor, findSubRequests, tokenState.accessToken, config.rateLimiter);
 
     for (let findIndex = 0; findIndex < lookupIds.length; findIndex++) {
       const originalIndex = lookupOriginalIndices[findIndex];
@@ -198,7 +200,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       return results;
     }
 
-    const deleteResponses = await executeBatchChunked(subRequests, tokenState.accessToken, config.rateLimiter);
+    const deleteResponses = await executeBatchChunked(batchExecutor, subRequests, tokenState.accessToken, config.rateLimiter);
 
     for (let deleteIndex = 0; deleteIndex < deleteResponses.length; deleteIndex++) {
       const originalIndex = indexMap[deleteIndex];
