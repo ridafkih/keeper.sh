@@ -89,6 +89,7 @@ ENV DATABASE_URL=postgresql://keeper:keeper@localhost:5432/keeper
 ENV REDIS_URL=redis://localhost:6379
 ENV API_PORT=3001
 ENV COMMERCIAL_MODE=false
+ENV WORKER_JOB_QUEUE_ENABLED=true
 ENV BETTER_AUTH_URL=http://localhost
 ENV VITE_API_URL=http://127.0.0.1:3001
 

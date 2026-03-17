@@ -5,6 +5,10 @@ import { injectJobs } from "./utils/inject-jobs";
 import { registerJobs } from "./utils/register-jobs";
 import { closeDatabase } from "@keeper.sh/database";
 import { destroy } from "./utils/logging";
+import { checkWorkerMigrationStatus } from "./migration-check";
+import env from "./env";
+
+checkWorkerMigrationStatus(env.WORKER_JOB_QUEUE_ENABLED);
 
 const jobsFolderPathname = join(import.meta.dirname, "jobs");
 

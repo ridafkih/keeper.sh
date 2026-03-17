@@ -49,6 +49,7 @@ services:
     environment:
       ENV: production
       NODE_EXTRA_CA_CERTS: /certs/global-bundle.pem
+      WORKER_JOB_QUEUE_ENABLED: "true"
     volumes:
       - ./global-bundle.pem:/certs/global-bundle.pem:ro
     depends_on:
