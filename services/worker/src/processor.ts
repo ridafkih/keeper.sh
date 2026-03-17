@@ -168,4 +168,4 @@ const processJob = (
     }
   });
 
-export { processJob };
+export { processJob, syncAggregateRuntime };

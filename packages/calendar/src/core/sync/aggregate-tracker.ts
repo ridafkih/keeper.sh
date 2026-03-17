@@ -34,6 +34,8 @@ class SyncAggregateTracker {
   private readonly lastProgressEmitAtByUser = new Map<string, number>();
   private readonly lastPayloadKeyByUser = new Map<string, string>();
   private readonly sequenceByUser = new Map<string, number>();
+  private readonly highWaterPercentByUser = new Map<string, number>();
+  private readonly syncingHeldByUser = new Set<string>();
 
   constructor(config?: SyncAggregateTrackerConfig) {
     this.progressThrottleMs = config?.progressThrottleMs ?? DEFAULT_PROGRESS_THROTTLE_MS;
@@ -144,12 +146,23 @@ class SyncAggregateTracker {
       }
     }
 
+    if (!syncing && this.syncingHeldByUser.has(userId)) {
+      syncing = true;
+    }
+
     const syncEventsRemaining = Math.max(syncEventsTotal - syncEventsProcessed, INITIAL_COUNT);
-    const progressPercent = SyncAggregateTracker.calculatePercent(
+    let progressPercent = SyncAggregateTracker.calculatePercent(
       syncEventsProcessed,
       syncEventsTotal,
       syncing,
     );
+
+    if (syncing) {
+      const highWater = this.highWaterPercentByUser.get(userId) ?? INITIAL_COUNT;
+      if (progressPercent < highWater) {
+        progressPercent = highWater;
+      }
+    }
 
     return {
       ...(options && "lastSyncedAt" in options && { lastSyncedAt: options.lastSyncedAt }),
@@ -197,6 +210,12 @@ class SyncAggregateTracker {
 
     this.lastPayloadKeyByUser.set(userId, payloadKey);
 
+    if (payload.syncing) {
+      this.highWaterPercentByUser.set(userId, payload.progressPercent);
+    } else {
+      this.highWaterPercentByUser.delete(userId);
+    }
+
     return {
       ...payload,
       seq: this.nextSequence(userId),
@@ -205,10 +224,6 @@ class SyncAggregateTracker {
 
   trackProgress(update: SyncProgressUpdate): SyncAggregateMessage | null {
     const progress = this.getUserProgress(update.userId);
-
-    if (update.stage === "fetching") {
-      progress.delete(update.calendarId);
-    }
 
     const current = progress.get(update.calendarId);
     const next = SyncAggregateTracker.mergeProgressEntry(current, update);
@@ -232,6 +247,14 @@ class SyncAggregateTracker {
 
     const payload = this.computeSnapshot(result.userId, { lastSyncedAt });
     return this.maybeEmit(result.userId, payload);
+  }
+
+  holdSyncing(userId: string): void {
+    this.syncingHeldByUser.add(userId);
+  }
+
+  releaseSyncing(userId: string): void {
+    this.syncingHeldByUser.delete(userId);
   }
 
   getCurrentAggregate(

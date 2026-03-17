@@ -18,6 +18,8 @@ interface SyncAggregateRuntime {
   emitSyncAggregate: (userId: string, aggregate: SyncAggregateMessage) => Promise<void>;
   onDestinationSync: (result: DestinationSyncResult) => Promise<void>;
   onSyncProgress: (update: SyncProgressUpdate) => void;
+  holdSyncing: (userId: string) => void;
+  releaseSyncing: (userId: string) => Promise<void>;
   getCurrentSyncAggregate: (
     userId: string,
     fallback?: Omit<SyncAggregateSnapshot, "syncing">,
@@ -128,10 +130,23 @@ const createSyncAggregateRuntime = (config: SyncAggregateRuntimeConfig): SyncAgg
     }
   };
 
+  const holdSyncing = (userId: string): void => {
+    tracker.holdSyncing(userId);
+  };
+
+  const releaseSyncing = async (userId: string): Promise<void> => {
+    tracker.releaseSyncing(userId);
+
+    const aggregate = tracker.getCurrentAggregate(userId);
+    await emitSyncAggregate(userId, aggregate);
+  };
+
   return {
     emitSyncAggregate,
     onDestinationSync,
     onSyncProgress,
+    holdSyncing,
+    releaseSyncing,
     getCurrentSyncAggregate,
     getCachedSyncAggregate,
   };

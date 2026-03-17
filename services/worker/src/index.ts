@@ -28,6 +28,8 @@ await entry({
     const { database, shutdownConnections } = await import("./context");
     const concurrency = parseConcurrency(env.WORKER_CONCURRENCY);
 
+    const { syncAggregateRuntime } = await import("./processor");
+
     const activeJobsByUser = new Map<string, string>();
 
     const worker = new Worker<PushSyncJobPayload, PushSyncJobResult>(
@@ -54,12 +56,14 @@ await entry({
       }
 
       activeJobsByUser.set(userId, job.id ?? "");
+      syncAggregateRuntime.holdSyncing(userId);
     });
 
     worker.on("completed", (job) => {
       const currentJobId = activeJobsByUser.get(job.data.userId);
       if (currentJobId === job.id) {
         activeJobsByUser.delete(job.data.userId);
+        syncAggregateRuntime.releaseSyncing(job.data.userId);
       }
     });
 
@@ -68,6 +72,7 @@ await entry({
         const currentJobId = activeJobsByUser.get(job.data.userId);
         if (currentJobId === job.id) {
           activeJobsByUser.delete(job.data.userId);
+          syncAggregateRuntime.releaseSyncing(job.data.userId);
         }
       }
     });
