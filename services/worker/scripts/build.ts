@@ -9,4 +9,5 @@ await build({
   outdir: "./dist",
   root: "src",
   target: "bun",
+  external: ["msgpackr-extract"],
 });
