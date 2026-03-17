@@ -8,6 +8,7 @@ describe("createOutlookSyncProvider", () => {
       accessToken: "test-token",
       refreshToken: "test-refresh",
       accessTokenExpiresAt: new Date(Date.now() + 3_600_000),
+      externalCalendarId: "external-cal-1",
       calendarId: "cal-1",
       userId: "user-1",
     });
