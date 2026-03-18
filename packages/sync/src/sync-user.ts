@@ -10,14 +10,57 @@ import {
   calendarAccountsTable,
   calendarsTable,
 } from "@keeper.sh/database/schema";
-import { and, arrayContains, eq } from "drizzle-orm";
+import { and, arrayContains, eq, isNull, lte, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
+import { computeDestinationBackoff } from "./destination-backoff";
+import { getErrorMessage, isBackoffEligibleError } from "./destination-errors";
 import { resolveSyncProvider } from "./resolve-provider";
 import type { OAuthConfig } from "./resolve-provider";
 import { createSyncLock, isCalendarInvalidated } from "./sync-lock";
 
 const GOOGLE_REQUESTS_PER_MINUTE = 500;
+
+const resetDestinationBackoff = async (
+  database: BunSQLDatabase,
+  calendarId: string,
+): Promise<void> => {
+  await database
+    .update(calendarsTable)
+    .set({ failureCount: 0, lastFailureAt: null, nextAttemptAt: null })
+    .where(eq(calendarsTable.id, calendarId));
+};
+
+const applyDestinationBackoff = async (
+  database: BunSQLDatabase,
+  calendarId: string,
+  currentFailureCount: number,
+): Promise<void> => {
+  const nextFailureCount = currentFailureCount + 1;
+  const { delayMs, shouldDisable } = computeDestinationBackoff(nextFailureCount);
+
+  if (shouldDisable) {
+    await database
+      .update(calendarsTable)
+      .set({
+        disabled: true,
+        failureCount: nextFailureCount,
+        lastFailureAt: new Date(),
+        nextAttemptAt: null,
+      })
+      .where(eq(calendarsTable.id, calendarId));
+    return;
+  }
+
+  await database
+    .update(calendarsTable)
+    .set({
+      failureCount: nextFailureCount,
+      lastFailureAt: new Date(),
+      nextAttemptAt: new Date(Date.now() + delayMs),
+    })
+    .where(eq(calendarsTable.id, calendarId));
+};
 
 const extractNumericField = (event: Record<string, unknown> | undefined, key: string): number => {
   if (!event) {
@@ -89,14 +132,20 @@ const syncDestinationsForUser = async (
       provider: calendarAccountsTable.provider,
       userId: calendarsTable.userId,
       accountId: calendarsTable.accountId,
+      failureCount: calendarsTable.failureCount,
     })
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
     .where(
       and(
         eq(calendarsTable.userId, userId),
+        eq(calendarsTable.disabled, false),
         arrayContains(calendarsTable.capabilities, ["push"]),
         eq(calendarAccountsTable.needsReauthentication, false),
+        or(
+          isNull(calendarsTable.nextAttemptAt),
+          lte(calendarsTable.nextAttemptAt, new Date()),
+        ),
       ),
     );
 
@@ -189,6 +238,10 @@ const syncDestinationsForUser = async (
         continue;
       }
 
+      if (destination.failureCount > 0) {
+        await resetDestinationBackoff(database, destination.calendarId);
+      }
+
       added += result.added;
       addFailed += result.addFailed;
       removed += result.removed;
@@ -212,6 +265,13 @@ const syncDestinationsForUser = async (
           durationMs,
         });
       }
+    } catch (error) {
+      if (!isBackoffEligibleError(error)) {
+        throw error;
+      }
+
+      await applyDestinationBackoff(database, destination.calendarId, destination.failureCount);
+      errors.push(getErrorMessage(error));
     } finally {
       await handle.release();
     }
