@@ -6,6 +6,7 @@ import Copy from "lucide-react/dist/esm/icons/copy";
 import CheckIcon from "lucide-react/dist/esm/icons/check";
 import { fetcher, apiFetch } from "@/lib/fetcher";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
+import { serializedPatch } from "@/lib/serialized-mutate";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { Input } from "@/components/ui/primitives/input";
 import { Text } from "@/components/ui/primitives/text";
@@ -60,6 +61,35 @@ interface FeedSettings {
 export const Route = createFileRoute("/(dashboard)/dashboard/ical")({
   component: ICalPage,
 });
+
+function patchFeedSettings(
+  mutate: ReturnType<typeof useSWRConfig>["mutate"],
+  patch: Record<string, unknown>,
+) {
+  const swrKey = "/api/ical/settings";
+  serializedPatch(swrKey, patch, (mergedPatch) => {
+    return mutate(
+      swrKey,
+      async (current: FeedSettings | undefined) => {
+        await apiFetch(swrKey, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(mergedPatch),
+        });
+        if (!current) return current;
+        return { ...current, ...mergedPatch };
+      },
+      {
+        optimisticData: (current: FeedSettings | undefined) => {
+          if (!current) return current!;
+          return { ...current, ...mergedPatch };
+        },
+        rollbackOnError: true,
+        revalidate: false,
+      },
+    );
+  });
+}
 
 function ICalPage() {
   const { data: entitlements } = useEntitlements();
@@ -188,22 +218,7 @@ function EventNameTemplateItem({ locked }: { locked: boolean }) {
         )}
         onCommit={(customEventName) => {
           store.set(feedSettingsAtom, (prev) => ({ ...prev, customEventName }));
-          mutate(
-            "/api/ical/settings",
-            async (current: FeedSettings | undefined) => {
-              await apiFetch("/api/ical/settings", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ customEventName }),
-              });
-              return { ...current!, customEventName };
-            },
-            {
-              optimisticData: (current: FeedSettings | undefined) => ({ ...current!, customEventName }),
-              rollbackOnError: true,
-              revalidate: false,
-            },
-          );
+          patchFeedSettings(mutate, { customEventName });
         }}
       >
         <EventNameTemplateValue />
@@ -242,29 +257,19 @@ function EventNameToggle({ locked }: { locked: boolean }) {
   const handleClick = () => {
     if (locked) return;
 
-    const current = store.get(feedSettingsAtom).includeEventName;
-    const patch = current
-      ? { includeEventName: false, customEventName: "Busy" }
-      : { includeEventName: true, customEventName: "{{event_name}}" };
+    const currentlyIncluded = store.get(feedSettingsAtom).includeEventName;
 
-    track(ANALYTICS_EVENTS.ical_setting_toggled, { field: "includeEventName", enabled: !current });
-    store.set(feedSettingsAtom, (prev) => ({ ...prev, ...patch }));
-    mutate(
-      "/api/ical/settings",
-      async (settings: FeedSettings | undefined) => {
-        await apiFetch("/api/ical/settings", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(patch),
-        });
-        return { ...settings!, ...patch };
-      },
-      {
-        optimisticData: (settings: FeedSettings | undefined) => ({ ...settings!, ...patch }),
-        rollbackOnError: true,
-        revalidate: false,
-      },
-    );
+    if (currentlyIncluded) {
+      const patch = { includeEventName: false, customEventName: "Busy" };
+      track(ANALYTICS_EVENTS.ical_setting_toggled, { field: "includeEventName", enabled: false });
+      store.set(feedSettingsAtom, (prev) => ({ ...prev, ...patch }));
+      patchFeedSettings(mutate, patch);
+    } else {
+      const patch = { includeEventName: true, customEventName: "{{event_name}}" };
+      track(ANALYTICS_EVENTS.ical_setting_toggled, { field: "includeEventName", enabled: true });
+      store.set(feedSettingsAtom, (prev) => ({ ...prev, ...patch }));
+      patchFeedSettings(mutate, patch);
+    }
   };
 
   return (
@@ -298,22 +303,7 @@ function FeedSettingToggle({
     const newValue = !current;
     track(ANALYTICS_EVENTS.ical_setting_toggled, { field, enabled: newValue });
     store.set(feedSettingsAtom, (prev) => ({ ...prev, [field]: newValue }));
-    mutate(
-      "/api/ical/settings",
-      async (settings: FeedSettings | undefined) => {
-        await apiFetch("/api/ical/settings", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ [field]: newValue }),
-        });
-        return { ...settings!, [field]: newValue };
-      },
-      {
-        optimisticData: (settings: FeedSettings | undefined) => ({ ...settings!, [field]: newValue }),
-        rollbackOnError: true,
-        revalidate: false,
-      },
-    );
+    patchFeedSettings(mutate, { [field]: newValue });
   };
 
   return (
@@ -392,10 +382,13 @@ function SourceCheckboxItem({
   const handleCheckedChange = (nextChecked: boolean) => {
     track(ANALYTICS_EVENTS.ical_source_toggled, { enabled: nextChecked });
     store.set(icalSourceInclusionAtom, (prev) => ({ ...prev, [sourceId]: nextChecked }));
-    apiFetch(`/api/sources/${sourceId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ includeInIcalFeed: nextChecked }),
+    const sourceKey = `/api/sources/${sourceId}`;
+    serializedPatch(sourceKey, { includeInIcalFeed: nextChecked }, (mergedPatch) => {
+      return apiFetch(sourceKey, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(mergedPatch),
+      });
     });
   };
 

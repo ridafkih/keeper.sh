@@ -13,6 +13,7 @@ import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { DashboardHeading1, DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { apiFetch, fetcher } from "@/lib/fetcher";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
+import { serializedPatch, serializedCall } from "@/lib/serialized-mutate";
 import { formatDate } from "@/lib/time";
 import { canPull, canPush } from "@/utils/calendars";
 import type { CalendarAccount, CalendarDetail, CalendarSource } from "@/types/api";
@@ -89,23 +90,29 @@ function patchSource(
   calendarId: string,
   patch: Record<string, unknown>,
 ) {
-  mutate(
-    `/api/sources/${calendarId}`,
-    async (current: CalendarDetail | undefined) => {
-      await apiFetch(`/api/sources/${calendarId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-      return current ? { ...current, ...patch } : current;
-    },
-    {
-      optimisticData: (current: CalendarDetail | undefined) =>
-        current ? { ...current, ...patch } : current!,
-      rollbackOnError: true,
-      revalidate: false,
-    },
-  );
+  const swrKey = `/api/sources/${calendarId}`;
+  serializedPatch(swrKey, patch, (mergedPatch) => {
+    return mutate(
+      swrKey,
+      async (current: CalendarDetail | undefined) => {
+        await apiFetch(swrKey, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(mergedPatch),
+        });
+        if (!current) return current;
+        return { ...current, ...mergedPatch };
+      },
+      {
+        optimisticData: (current: CalendarDetail | undefined) => {
+          if (!current) return current!;
+          return { ...current, ...mergedPatch };
+        },
+        rollbackOnError: true,
+        revalidate: false,
+      },
+    );
+  });
 }
 
 function useSeedCalendarDetail(calendarId: string, calendar: CalendarDetail | undefined) {
@@ -330,42 +337,43 @@ function DestinationCheckboxItem({
     if (disabled) return;
 
     const currentIds = store.get(destinationIdsAtom);
-    const previousSet = new Set(currentIds);
     const willCheck = !currentIds.has(destinationId);
     track(ANALYTICS_EVENTS.destination_toggled, { enabled: willCheck });
     const updatedSet = new Set(currentIds);
-    const delta = willCheck ? 1 : -1;
 
     if (willCheck) {
       updatedSet.add(destinationId);
+      adjustMappingCount(1);
     } else {
       updatedSet.delete(destinationId);
+      adjustMappingCount(-1);
     }
 
     store.set(destinationIdsAtom, updatedSet);
-    adjustMappingCount(delta);
 
-    const updatedIds = Array.from(updatedSet);
-    mutate(
-      `/api/sources/${calendarId}/destinations`,
-      async () => {
-        await apiFetch(`/api/sources/${calendarId}/destinations`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ calendarIds: updatedIds }),
-        });
-        return { destinationIds: updatedIds };
-      },
-      {
-        optimisticData: { destinationIds: updatedIds },
-        rollbackOnError: true,
-        revalidate: false,
-      },
-    ).catch(() => {
-      store.set(destinationIdsAtom, previousSet);
-      adjustMappingCount(-delta);
-    }).finally(() => {
-      void revalidateEntitlements();
+    const swrKey = `/api/sources/${calendarId}/destinations`;
+    serializedCall(swrKey, () => {
+      const latestIds = Array.from(store.get(destinationIdsAtom));
+      return mutate(
+        swrKey,
+        async () => {
+          await apiFetch(swrKey, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ calendarIds: latestIds }),
+          });
+          return { destinationIds: latestIds };
+        },
+        {
+          optimisticData: { destinationIds: latestIds },
+          rollbackOnError: true,
+          revalidate: false,
+        },
+      ).catch(() => {
+        void mutate(swrKey);
+      }).finally(() => {
+        void revalidateEntitlements();
+      });
     });
   };
 
