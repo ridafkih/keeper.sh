@@ -5,7 +5,7 @@ import {
   createDatabaseFlush,
   createRedisRateLimiter,
 } from "@keeper.sh/calendar";
-import type { SyncProgressUpdate } from "@keeper.sh/calendar";
+import type { SyncProgressUpdate, RefreshLockStore } from "@keeper.sh/calendar";
 import {
   calendarAccountsTable,
   calendarsTable,
@@ -35,6 +35,7 @@ interface SyncConfig {
   redis: Redis;
   encryptionKey?: string;
   oauthConfig: OAuthConfig;
+  refreshLockStore?: RefreshLockStore | null;
   deadlineMs?: number;
   abortSignal?: AbortSignal;
 }
@@ -140,6 +141,7 @@ const syncDestinationsForUser = async (
         accountId: destination.accountId,
         oauthConfig: config.oauthConfig,
         encryptionKey: config.encryptionKey,
+        refreshLockStore: config.refreshLockStore,
         rateLimiter,
       });
 

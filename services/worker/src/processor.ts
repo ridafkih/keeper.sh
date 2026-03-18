@@ -6,7 +6,7 @@ import { createSyncAggregateRuntime } from "@keeper.sh/calendar";
 import { syncDestinationsForUser } from "@keeper.sh/sync";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { syncStatusTable } from "@keeper.sh/database/schema";
-import { database, refreshLockRedis } from "./context";
+import { database, refreshLockRedis, refreshLockStore } from "./context";
 import { context, widelog } from "./utils/logging";
 import env from "./env";
 
@@ -99,6 +99,7 @@ const processJob = (
       const result = await syncDestinationsForUser(userId, {
         database,
         redis: refreshLockRedis,
+        refreshLockStore,
         deadlineMs,
         abortSignal: signal,
         encryptionKey: env.ENCRYPTION_KEY,
