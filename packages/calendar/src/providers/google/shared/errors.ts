@@ -76,7 +76,7 @@ const RATE_LIMIT_REASONS = new Set([
 const isRateLimitResponseStatus = (status: number): boolean =>
   status === HTTP_STATUS.FORBIDDEN || status === HTTP_STATUS.TOO_MANY_REQUESTS;
 
-const isRateLimitApiError = (status: number, error: GoogleApiError | undefined): boolean => {
+const isRateLimitApiError = (status: number, error?: GoogleApiError): boolean => {
   if (!isRateLimitResponseStatus(status)) {
     return false;
   }

@@ -151,9 +151,9 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
   const cancelledEventUids: string[] = [];
   const isDeltaSync = Boolean(syncToken);
 
-  const fetchPageWithBackoff = (options: PageFetchOptions): Promise<PageFetchResult | FullSyncRequiredResult> =>
+  const fetchPageWithBackoff = (pageOptions: PageFetchOptions): Promise<PageFetchResult | FullSyncRequiredResult> =>
     withBackoff(
-      () => fetchEventsPage(options),
+      () => fetchEventsPage(pageOptions),
       {
         shouldRetry: (error) =>
           error instanceof EventsFetchError && isRateLimitResponseStatus(error.status),

@@ -1,13 +1,13 @@
-import { describe, expect, it, mock } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { withBackoff, abortableSleep, computeDelay } from "./backoff";
 
 describe("computeDelay", () => {
   it("returns a delay in the range [2^n * 1000, 2^n * 1000 + 1000] for each attempt", () => {
     for (let attempt = 0; attempt < 5; attempt++) {
       const delay = computeDelay(attempt);
-      const baseDelay = 2 ** attempt * 1_000;
+      const baseDelay = 2 ** attempt * 1000;
       expect(delay).toBeGreaterThanOrEqual(baseDelay);
-      expect(delay).toBeLessThanOrEqual(baseDelay + 1_000);
+      expect(delay).toBeLessThanOrEqual(baseDelay + 1000);
     }
   });
 

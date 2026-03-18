@@ -54,7 +54,7 @@ describe("isRateLimitResponseStatus", () => {
 
 describe("isRateLimitApiError", () => {
   it("returns true for 429 regardless of error body", () => {
-    expect(isRateLimitApiError(429, undefined)).toBe(true);
+    expect(isRateLimitApiError(429)).toBe(true);
     expect(isRateLimitApiError(429, {})).toBe(true);
   });
 

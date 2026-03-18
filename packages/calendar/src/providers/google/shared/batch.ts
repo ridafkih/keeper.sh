@@ -222,7 +222,7 @@ class GoogleBatchApiError extends Error {
   }
 }
 
-const executeBatch = async (
+const executeBatch = (
   subRequests: BatchSubRequest[],
   accessToken: string,
 ): Promise<BatchSubResponse[]> =>
@@ -284,51 +284,6 @@ interface BatchChunkedOptions {
   signal?: AbortSignal;
 }
 
-const executeBatchChunked = async (
-  subRequests: BatchSubRequest[],
-  accessToken: string,
-  options?: BatchChunkedOptions,
-): Promise<BatchSubResponse[]> => {
-  if (subRequests.length === 0) {
-    return [];
-  }
-
-  const chunks = chunkArray(subRequests, GOOGLE_BATCH_MAX_SIZE);
-  const allResponses: BatchSubResponse[] = [];
-
-  for (const chunk of chunks) {
-    if (options?.rateLimiter) {
-      await options.rateLimiter.acquire(chunk.length);
-    }
-    const responses = await executeBatch(chunk, accessToken);
-
-    const rateLimitedIndices = collectRateLimitedIndices(responses);
-    if (rateLimitedIndices.length === 0) {
-      allResponses.push(...responses);
-      continue;
-    }
-
-    const rateLimitedRequests = rateLimitedIndices.map((index) => chunk[index]!);
-    const retryResponses = await retryRateLimitedSubRequests(
-      rateLimitedRequests,
-      accessToken,
-      options,
-    );
-
-    for (let retryIndex = 0; retryIndex < rateLimitedIndices.length; retryIndex++) {
-      const originalIndex = rateLimitedIndices[retryIndex]!;
-      const retryResponse = retryResponses[retryIndex];
-      if (retryResponse) {
-        responses[originalIndex] = retryResponse;
-      }
-    }
-
-    allResponses.push(...responses);
-  }
-
-  return allResponses;
-};
-
 const retryRateLimitedSubRequests = async (
   subRequests: BatchSubRequest[],
   accessToken: string,
@@ -356,7 +311,10 @@ const retryRateLimitedSubRequests = async (
 
     const stillPending: typeof pending = [];
     for (let responseIndex = 0; responseIndex < pending.length; responseIndex++) {
-      const entry = pending[responseIndex]!;
+      const entry = pending[responseIndex];
+      if (!entry) {
+        continue;
+      }
       const response = responses[responseIndex];
       if (response && isRateLimitResponseStatus(response.statusCode)) {
         stillPending.push(entry);
@@ -374,6 +332,58 @@ const retryRateLimitedSubRequests = async (
   }
 
   return results;
+};
+
+const executeBatchChunked = async (
+  subRequests: BatchSubRequest[],
+  accessToken: string,
+  options?: BatchChunkedOptions,
+): Promise<BatchSubResponse[]> => {
+  if (subRequests.length === 0) {
+    return [];
+  }
+
+  const chunks = chunkArray(subRequests, GOOGLE_BATCH_MAX_SIZE);
+  const allResponses: BatchSubResponse[] = [];
+
+  for (const chunk of chunks) {
+    if (options?.rateLimiter) {
+      await options.rateLimiter.acquire(chunk.length);
+    }
+    const responses = await executeBatch(chunk, accessToken);
+
+    const rateLimitedIndices = collectRateLimitedIndices(responses);
+    if (rateLimitedIndices.length === 0) {
+      allResponses.push(...responses);
+      continue;
+    }
+
+    const rateLimitedRequests: BatchSubRequest[] = [];
+    for (const index of rateLimitedIndices) {
+      const request = chunk[index];
+      if (!request) {
+        throw new Error(`Missing batch sub-request at index ${index}`);
+      }
+      rateLimitedRequests.push(request);
+    }
+    const retryResponses = await retryRateLimitedSubRequests(
+      rateLimitedRequests,
+      accessToken,
+      options,
+    );
+
+    for (let retryIndex = 0; retryIndex < rateLimitedIndices.length; retryIndex++) {
+      const originalIndex = rateLimitedIndices[retryIndex];
+      const retryResponse = retryResponses[retryIndex];
+      if (typeof originalIndex === "number" && retryResponse) {
+        responses[originalIndex] = retryResponse;
+      }
+    }
+
+    allResponses.push(...responses);
+  }
+
+  return allResponses;
 };
 
 export {

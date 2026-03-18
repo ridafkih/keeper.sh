@@ -299,8 +299,9 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     let pageToken: string | null = null;
 
     do {
-      const page = await withBackoff(
-        () => fetchRemoteEventsPage(pageToken),
+      const currentPageToken: string | null = pageToken;
+      const page: { items: RemoteEvent[]; nextPageToken: string | null } = await withBackoff(
+        () => fetchRemoteEventsPage(currentPageToken),
         {
           signal: config.signal,
           shouldRetry: (error) =>

@@ -1,25 +1,33 @@
-const MAX_JITTER_MS = 1_000;
+const MAX_JITTER_MS = 1000;
 const MAX_BACKOFF_MS = 64_000;
 const DEFAULT_MAX_RETRIES = 5;
 const BACKOFF_MULTIPLIER = 2;
 
 const computeDelay = (attempt: number): number => {
-  const baseDelay = BACKOFF_MULTIPLIER ** attempt * 1_000;
+  const baseDelay = BACKOFF_MULTIPLIER ** attempt * 1000;
   const jitter = Math.random() * MAX_JITTER_MS;
   return Math.min(baseDelay + jitter, MAX_BACKOFF_MS);
 };
+
+const createAbortPromise = (signal: AbortSignal): Promise<never> =>
+  // eslint-disable-next-line promise/avoid-new -- required to bridge AbortSignal to Promise rejection
+  new Promise((_resolve, reject) => {
+    signal.addEventListener("abort", () => {
+      reject(signal.reason);
+    }, { once: true });
+  });
 
 const abortableSleep = (delayMs: number, signal?: AbortSignal): Promise<void> => {
   if (signal?.aborted) {
     return Promise.reject(signal.reason);
   }
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, delayMs);
-    signal?.addEventListener("abort", () => {
-      clearTimeout(timer);
-      reject(signal.reason);
-    }, { once: true });
-  });
+  if (!signal) {
+    return Bun.sleep(delayMs);
+  }
+  return Promise.race([
+    Bun.sleep(delayMs),
+    createAbortPromise(signal),
+  ]);
 };
 
 interface BackoffOptions {
