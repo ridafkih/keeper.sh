@@ -1,5 +1,6 @@
 import type { SourceEvent } from "../../core/types";
 import type { FetchEventsResult } from "../../core/sync-engine/ingest";
+import type { SafeFetchOptions } from "../../utils/safe-fetch";
 import { pullRemoteCalendar } from "./pull-remote-calendar";
 import { parseIcsCalendar } from "./parse-ics-calendar";
 import { parseIcsEvents } from "./parse-ics-events";
@@ -10,6 +11,7 @@ interface IcsSourceFetcherConfig {
   calendarId: string;
   url: string;
   database: BunSQLDatabase;
+  safeFetchOptions?: SafeFetchOptions;
 }
 
 interface IcsSourceFetcher {
@@ -19,7 +21,7 @@ interface IcsSourceFetcher {
 const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetcher => {
   const fetchRemoteIcal = async (): Promise<string | null> => {
     try {
-      const { ical } = await pullRemoteCalendar("ical", config.url);
+      const { ical } = await pullRemoteCalendar("ical", config.url, config.safeFetchOptions);
       return ical;
     } catch {
       return null;

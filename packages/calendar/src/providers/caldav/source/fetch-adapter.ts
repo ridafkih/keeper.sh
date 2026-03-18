@@ -1,5 +1,6 @@
 import type { SourceEvent } from "../../../core/types";
 import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
+import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import { isKeeperEvent } from "../../../core/events/identity";
 import { CalDAVClient } from "../shared/client";
 import { parseICalToRemoteEvent } from "../shared/ics";
@@ -12,6 +13,7 @@ interface CalDAVSourceFetcherConfig {
   serverUrl: string;
   username: string;
   password: string;
+  safeFetchOptions?: SafeFetchOptions;
 }
 
 interface CalDAVSourceFetcher {
@@ -22,7 +24,7 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
   const client = new CalDAVClient({
     credentials: { password: config.password, username: config.username },
     serverUrl: config.serverUrl,
-  });
+  }, config.safeFetchOptions);
 
   const fetchEvents = async (): Promise<FetchEventsResult> => {
     const syncWindow = getCalDAVSyncWindow(YEARS_UNTIL_FUTURE);

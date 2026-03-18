@@ -10,6 +10,7 @@ import {
   runCreateSource,
 } from "./source-lifecycle";
 import { applySourceSyncDefaults } from "./source-sync-defaults";
+import { safeFetchOptions } from "./safe-fetch-options";
 
 import { spawnBackgroundJob } from "./background-task";
 import { database, premiumService } from "@/context";
@@ -73,6 +74,7 @@ const ingestIcsSource = async (source: Source): Promise<void> => {
     calendarId: source.id,
     url: source.url,
     database,
+    safeFetchOptions,
   });
 
   await ingestSource({
@@ -126,7 +128,7 @@ const verifySourceOwnership = async (userId: string, calendarId: string): Promis
 };
 
 const validateSourceUrl = async (url: string): Promise<void> => {
-  await pullRemoteCalendar("json", url);
+  await pullRemoteCalendar("json", url, safeFetchOptions);
 };
 
 const createSource = (userId: string, name: string, url: string): Promise<Source> =>

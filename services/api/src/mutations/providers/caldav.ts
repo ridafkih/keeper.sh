@@ -2,7 +2,9 @@ import { convertIcsCalendar, generateIcsCalendar } from "ts-ics";
 import type { IcsCalendar, IcsEvent } from "ts-ics";
 import { HTTP_STATUS, KEEPER_USER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { decryptPassword } from "@keeper.sh/database";
+import { validateUrlSafety } from "@keeper.sh/calendar/safe-fetch";
 import { createDAVClient } from "tsdav";
+import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "@/types";
 
 interface CalDAVCredentials {
@@ -13,7 +15,8 @@ interface CalDAVCredentials {
   encryptionKey: string;
 }
 
-const getClient = (credentials: CalDAVCredentials) => {
+const getClient = async (credentials: CalDAVCredentials) => {
+  await validateUrlSafety(credentials.serverUrl, safeFetchOptions);
   const password = decryptPassword(credentials.encryptedPassword, credentials.encryptionKey);
   return createDAVClient({
     authMethod: "Basic",

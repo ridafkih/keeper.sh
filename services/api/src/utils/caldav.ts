@@ -6,6 +6,7 @@ import type { CalDAVProviderId } from "@keeper.sh/calendar";
 import { and, eq, sql } from "drizzle-orm";
 import { saveCalDAVDestinationWithDatabase } from "./destinations";
 import { enqueuePushSync } from "./enqueue-push-sync";
+import { safeFetchOptions } from "./safe-fetch-options";
 import { database, encryptionKey, premiumService } from "@/context";
 
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
@@ -44,7 +45,7 @@ const discoverCalendars = async (
     const client = createCalDAVClient({
       credentials,
       serverUrl,
-    });
+    }, safeFetchOptions);
 
     const calendars = await client.discoverCalendars();
 
