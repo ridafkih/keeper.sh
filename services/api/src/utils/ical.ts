@@ -1,5 +1,6 @@
 import { calendarsTable, eventStatesTable, icalFeedSettingsTable } from "@keeper.sh/database/schema";
 import { KEEPER_EVENT_SUFFIX } from "@keeper.sh/constants";
+import { resolveIsAllDayEvent } from "@keeper.sh/calendar";
 import { generateIcsCalendar } from "ts-ics";
 import type { IcsCalendar, IcsEvent } from "ts-ics";
 import { and, asc, eq, inArray } from "drizzle-orm";
@@ -29,14 +30,15 @@ interface CalendarEvent {
   location: string | null;
   startTime: Date;
   endTime: Date;
+  isAllDay: boolean | null;
   calendarName: string;
 }
 
-const isAllDayEvent = (event: CalendarEvent): boolean => {
-  const durationMs = event.endTime.getTime() - event.startTime.getTime();
-  const hours = durationMs / (1000 * 60 * 60);
-  return hours >= 24 && event.startTime.getHours() === 0 && event.endTime.getHours() === 0;
-};
+const toAllDayShape = (event: CalendarEvent) => ({
+  startTime: event.startTime,
+  endTime: event.endTime,
+  ...(event.isAllDay !== null && { isAllDay: event.isAllDay }),
+});
 
 const resolveTemplate = (template: string, variables: Record<string, string>): string =>
   template.replaceAll(/\{\{(\w+)\}\}/g, (match, name) => variables[name] ?? match);
@@ -54,16 +56,19 @@ const resolveEventSummary = (event: CalendarEvent, settings: FeedSettings): stri
 };
 
 const formatEventsAsIcal = (events: CalendarEvent[], settings: FeedSettings): string => {
-  let filteredEvents = events;
-  if (settings.excludeAllDayEvents) {
-    filteredEvents = events.filter((event) => !isAllDayEvent(event));
-  }
+  const filteredEvents = events.filter((event) => {
+    if (!settings.excludeAllDayEvents) {
+      return true;
+    }
+    return !resolveIsAllDayEvent(toAllDayShape(event));
+  });
 
   const icsEvents: IcsEvent[] = filteredEvents.map((event) => {
+    const isAllDay = resolveIsAllDayEvent(toAllDayShape(event));
     const icsEvent: IcsEvent = {
-      end: { date: event.endTime },
+      end: { date: event.endTime, ...(isAllDay && { type: "DATE" as const }) },
       stamp: { date: new Date() },
-      start: { date: event.startTime },
+      start: { date: event.startTime, ...(isAllDay && { type: "DATE" as const }) },
       summary: resolveEventSummary(event, settings),
       uid: `${event.id}${KEEPER_EVENT_SUFFIX}`,
     };
@@ -131,6 +136,7 @@ const generateUserCalendar = async (identifier: string): Promise<string | null> 
       location: eventStatesTable.location,
       startTime: eventStatesTable.startTime,
       endTime: eventStatesTable.endTime,
+      isAllDay: eventStatesTable.isAllDay,
       calendarName: calendarsTable.name,
     })
     .from(eventStatesTable)
@@ -141,4 +147,4 @@ const generateUserCalendar = async (identifier: string): Promise<string | null> 
   return formatEventsAsIcal(events, settings);
 };
 
-export { generateUserCalendar };
+export { formatEventsAsIcal, generateUserCalendar };

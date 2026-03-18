@@ -1,16 +1,17 @@
-import { describe, expect, it } from "bun:test";
+import { beforeAll, describe, expect, it, mock } from "bun:test";
+import type { formatEventsAsIcal as formatEventsAsIcalFn } from "./ical";
 
-/**
- * The ical utility functions are not individually exported — only `generateUserCalendar`
- * is exported, and it depends on `../context`. We test the pure logic by re-implementing
- * the key functions against the same patterns used in the source.
- */
-
-const isAllDayEvent = (event: { startTime: Date; endTime: Date }): boolean => {
-  const durationMs = event.endTime.getTime() - event.startTime.getTime();
-  const hours = durationMs / (1000 * 60 * 60);
-  return hours >= 24 && event.startTime.getHours() === 0 && event.endTime.getHours() === 0;
+let formatEventsAsIcal: typeof formatEventsAsIcalFn = () => {
+  throw new Error("Module not loaded");
 };
+
+beforeAll(async () => {
+  mock.module("../context", () => ({
+    database: {},
+  }));
+
+  ({ formatEventsAsIcal } = await import("./ical"));
+});
 
 const resolveTemplate = (template: string, variables: Record<string, string>): string =>
   template.replaceAll(/\{\{(\w+)\}\}/g, (match, name: string) => variables[name] ?? match);
@@ -37,41 +38,73 @@ const resolveEventSummary = (event: CalendarEvent, settings: FeedSettings): stri
   });
 };
 
-describe("isAllDayEvent", () => {
-  it("returns true for a 24-hour event starting at midnight", () => {
-    expect(
-      isAllDayEvent({
-        startTime: new Date("2026-03-08T00:00:00"),
-        endTime: new Date("2026-03-09T00:00:00"),
-      }),
-    ).toBe(true);
-  });
+const DEFAULT_SETTINGS = {
+  includeEventName: false,
+  includeEventDescription: false,
+  includeEventLocation: false,
+  excludeAllDayEvents: false,
+  customEventName: "Busy",
+};
 
-  it("returns true for multi-day events starting at midnight", () => {
-    expect(
-      isAllDayEvent({
-        startTime: new Date("2026-03-08T00:00:00"),
-        endTime: new Date("2026-03-11T00:00:00"),
-      }),
-    ).toBe(true);
-  });
+const makeEvent = (overrides: Partial<Parameters<typeof formatEventsAsIcalFn>[0][number]> = {}) => ({
+  id: "test-event-id",
+  title: "Test Event",
+  description: null,
+  location: null,
+  startTime: new Date("2026-03-28T00:00:00Z"),
+  endTime: new Date("2026-03-29T00:00:00Z"),
+  isAllDay: false,
+  calendarName: "Work",
+  ...overrides,
+});
 
-  it("returns false for events shorter than 24 hours", () => {
-    expect(
-      isAllDayEvent({
-        startTime: new Date("2026-03-08T09:00:00"),
-        endTime: new Date("2026-03-08T17:00:00"),
-      }),
-    ).toBe(false);
-  });
+describe("formatEventsAsIcal", () => {
+  describe("all-day events", () => {
+    it("emits VALUE=DATE for all-day events instead of datetime", () => {
+      const ics = formatEventsAsIcal(
+        [makeEvent({ isAllDay: true })],
+        DEFAULT_SETTINGS,
+      );
 
-  it("returns false for 24-hour events not starting at midnight", () => {
-    expect(
-      isAllDayEvent({
-        startTime: new Date("2026-03-08T06:00:00"),
-        endTime: new Date("2026-03-09T06:00:00"),
-      }),
-    ).toBe(false);
+      expect(ics).toContain("DTSTART;VALUE=DATE:20260328");
+      expect(ics).toContain("DTEND;VALUE=DATE:20260329");
+      expect(ics).not.toContain("DTSTART:20260328T000000Z");
+      expect(ics).not.toContain("DTEND:20260329T000000Z");
+    });
+
+    it("emits datetime format for non-all-day events", () => {
+      const ics = formatEventsAsIcal(
+        [makeEvent({
+          isAllDay: false,
+          startTime: new Date("2026-03-28T09:00:00Z"),
+          endTime: new Date("2026-03-28T17:00:00Z"),
+        })],
+        DEFAULT_SETTINGS,
+      );
+
+      expect(ics).toContain("DTSTART:20260328T090000Z");
+      expect(ics).toContain("DTEND:20260328T170000Z");
+    });
+
+    it("infers all-day when isAllDay is null and times are midnight UTC", () => {
+      const ics = formatEventsAsIcal(
+        [makeEvent({ isAllDay: null })],
+        DEFAULT_SETTINGS,
+      );
+
+      expect(ics).toContain("DTSTART;VALUE=DATE:20260328");
+      expect(ics).toContain("DTEND;VALUE=DATE:20260329");
+    });
+
+    it("filters all-day events when excludeAllDayEvents is true", () => {
+      const ics = formatEventsAsIcal(
+        [makeEvent({ isAllDay: true })],
+        { ...DEFAULT_SETTINGS, excludeAllDayEvents: true },
+      );
+
+      expect(ics).not.toContain("Test Event");
+      expect(ics).not.toContain("test-event-id");
+    });
   });
 });
 
