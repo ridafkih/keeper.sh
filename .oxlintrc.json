@@ -43,6 +43,7 @@
     "react/jsx-filename-extension": "off",
     "react/no-unescaped-entities": "off",
     "react/jsx-props-no-spreading": "off",
+    "promise/avoid-new": "off",
     "promise/prefer-await-to-then": "off",
     "promise/prefer-await-to-callbacks": "off",
     "no-duplicate-imports": "off",

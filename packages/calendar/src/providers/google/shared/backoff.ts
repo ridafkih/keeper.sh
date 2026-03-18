@@ -10,7 +10,6 @@ const computeDelay = (attempt: number): number => {
 };
 
 const createAbortPromise = (signal: AbortSignal): Promise<never> =>
-  // eslint-disable-next-line promise/avoid-new -- required to bridge AbortSignal to Promise rejection
   new Promise((_resolve, reject) => {
     signal.addEventListener("abort", () => {
       reject(signal.reason);
