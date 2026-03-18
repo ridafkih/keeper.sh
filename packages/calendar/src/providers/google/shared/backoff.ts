@@ -9,12 +9,28 @@ const computeDelay = (attempt: number): number => {
   return Math.min(baseDelay + jitter, MAX_BACKOFF_MS);
 };
 
-const createAbortPromise = (signal: AbortSignal): Promise<never> =>
-  new Promise((_resolve, reject) => {
-    signal.addEventListener("abort", () => {
-      reject(signal.reason);
-    }, { once: true });
-  });
+const createAbortableTimer = (
+  delayMs: number,
+  signal: AbortSignal,
+  resolve: () => void,
+  reject: (reason: unknown) => void,
+): void => {
+  const controller = new AbortController();
+
+  const onAbort = () => {
+    controller.abort();
+    reject(signal.reason);
+  };
+
+  const onTimeout = () => {
+    signal.removeEventListener("abort", onAbort);
+    resolve();
+  };
+
+  signal.addEventListener("abort", onAbort, { once: true });
+  const timer = setTimeout(onTimeout, delayMs);
+  controller.signal.addEventListener("abort", () => clearTimeout(timer), { once: true });
+};
 
 const abortableSleep = (delayMs: number, signal?: AbortSignal): Promise<void> => {
   if (signal?.aborted) {
@@ -23,10 +39,9 @@ const abortableSleep = (delayMs: number, signal?: AbortSignal): Promise<void> =>
   if (!signal) {
     return Bun.sleep(delayMs);
   }
-  return Promise.race([
-    Bun.sleep(delayMs),
-    createAbortPromise(signal),
-  ]);
+  return new Promise((resolve, reject) => {
+    createAbortableTimer(delayMs, signal, resolve, reject);
+  });
 };
 
 interface BackoffOptions {
