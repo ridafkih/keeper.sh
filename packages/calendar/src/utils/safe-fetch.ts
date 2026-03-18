@@ -33,12 +33,12 @@ const isUnicastAddress = (address: string): boolean => {
   }
 };
 
-const isHostAllowed = (hostname: string, allowedPrivateHosts: Set<string> | undefined): boolean => {
+const isHostAllowed = (host: string, allowedPrivateHosts: Set<string> | undefined): boolean => {
   if (!allowedPrivateHosts) {
     return false;
   }
 
-  return allowedPrivateHosts.has(hostname);
+  return allowedPrivateHosts.has(host);
 };
 
 const validateUrlSafety = async (url: string, options?: SafeFetchOptions): Promise<void> => {
@@ -54,9 +54,10 @@ const validateUrlSafety = async (url: string, options?: SafeFetchOptions): Promi
     return;
   }
 
+  const host = parsed.host;
   const hostname = parsed.hostname.replace(/^\[/, "").replace(/\]$/, "");
 
-  if (isHostAllowed(hostname, options.allowedPrivateHosts)) {
+  if (isHostAllowed(host, options.allowedPrivateHosts)) {
     return;
   }
 

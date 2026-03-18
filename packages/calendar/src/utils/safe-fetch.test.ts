@@ -123,15 +123,25 @@ describe("validateUrlSafety", () => {
   });
 
   describe("allowedPrivateHosts", () => {
-    it("allows a private IP when it is in the whitelist", async () => {
-      const options: SafeFetchOptions = { blockPrivateResolution: true, allowedPrivateHosts: new Set(["192.168.1.50"]) };
+    it("allows a private IP with port when host:port is in the whitelist", async () => {
+      const options: SafeFetchOptions = { blockPrivateResolution: true, allowedPrivateHosts: new Set(["192.168.1.50:5232"]) };
       await expect(validateUrlSafety("http://192.168.1.50:5232/", options)).resolves.toBeUndefined();
     });
 
-    it("allows a private hostname when it is in the whitelist", async () => {
+    it("allows a private IP on default port when hostname is in the whitelist", async () => {
+      const options: SafeFetchOptions = { blockPrivateResolution: true, allowedPrivateHosts: new Set(["192.168.1.50"]) };
+      await expect(validateUrlSafety("http://192.168.1.50/", options)).resolves.toBeUndefined();
+    });
+
+    it("allows a private hostname with port when host:port is in the whitelist", async () => {
       mockResolve4.mockResolvedValue(["10.0.0.5"]);
-      const options: SafeFetchOptions = { blockPrivateResolution: true, allowedPrivateHosts: new Set(["radicale.local"]) };
+      const options: SafeFetchOptions = { blockPrivateResolution: true, allowedPrivateHosts: new Set(["radicale.local:5232"]) };
       await expect(validateUrlSafety("http://radicale.local:5232/", options)).resolves.toBeUndefined();
+    });
+
+    it("rejects when port differs from whitelist entry", async () => {
+      const options: SafeFetchOptions = { blockPrivateResolution: true, allowedPrivateHosts: new Set(["192.168.1.50:5232"]) };
+      await expect(validateUrlSafety("http://192.168.1.50:9999/", options)).rejects.toThrow(UrlSafetyError);
     });
 
     it("still rejects private IPs not in the whitelist", async () => {

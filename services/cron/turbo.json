@@ -14,7 +14,9 @@
         "GOOGLE_CLIENT_SECRET",
         "MICROSOFT_CLIENT_ID",
         "MICROSOFT_CLIENT_SECRET",
-        "ENCRYPTION_KEY"
+        "ENCRYPTION_KEY",
+        "BLOCK_PRIVATE_RESOLUTION",
+        "PRIVATE_RESOLUTION_WHITELIST"
       ]
     },
     "start": {
@@ -29,7 +31,9 @@
         "GOOGLE_CLIENT_SECRET",
         "MICROSOFT_CLIENT_ID",
         "MICROSOFT_CLIENT_SECRET",
-        "ENCRYPTION_KEY"
+        "ENCRYPTION_KEY",
+        "BLOCK_PRIVATE_RESOLUTION",
+        "PRIVATE_RESOLUTION_WHITELIST"
       ]
     }
   }
