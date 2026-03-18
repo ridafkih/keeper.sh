@@ -2,7 +2,7 @@ import { HTTP_STATUS } from "@keeper.sh/constants";
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import { GOOGLE_BATCH_API, GOOGLE_BATCH_MAX_SIZE } from "./api";
 import { withBackoff, abortableSleep, computeDelay, DEFAULT_MAX_RETRIES } from "./backoff";
-import { isRateLimitResponseStatus } from "./errors";
+import { isRateLimitApiError, parseGoogleApiError, parseGoogleApiErrorFromBody } from "./errors";
 
 interface BatchSubRequest {
   method: string;
@@ -215,10 +215,12 @@ const extractResponseBoundary = (contentType: string | null): string | null => {
 
 class GoogleBatchApiError extends Error {
   public readonly status: number;
+  public readonly apiError: ReturnType<typeof parseGoogleApiError>;
   constructor(status: number, body: string) {
     super(`Google Batch API ${status}: ${body}`);
     this.name = "GoogleBatchApiError";
     this.status = status;
+    this.apiError = parseGoogleApiError(body);
   }
 }
 
@@ -256,7 +258,7 @@ const executeBatch = (
     },
     {
       shouldRetry: (error) =>
-        error instanceof GoogleBatchApiError && isRateLimitResponseStatus(error.status),
+        error instanceof GoogleBatchApiError && isRateLimitApiError(error.status, error.apiError),
     },
   );
 
@@ -272,7 +274,7 @@ const collectRateLimitedIndices = (responses: BatchSubResponse[]): number[] => {
   const indices: number[] = [];
   for (let index = 0; index < responses.length; index++) {
     const response = responses[index];
-    if (response && isRateLimitResponseStatus(response.statusCode)) {
+    if (response && isRateLimitApiError(response.statusCode, parseGoogleApiErrorFromBody(response.body))) {
       indices.push(index);
     }
   }
@@ -316,7 +318,7 @@ const retryRateLimitedSubRequests = async (
         continue;
       }
       const response = responses[responseIndex];
-      if (response && isRateLimitResponseStatus(response.statusCode)) {
+      if (response && isRateLimitApiError(response.statusCode, parseGoogleApiErrorFromBody(response.body))) {
         stillPending.push(entry);
       } else if (response) {
         results[entry.index] = response;

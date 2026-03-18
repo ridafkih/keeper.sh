@@ -16,7 +16,7 @@ import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-sch
 import { parseEventDateTime } from "../../shared/date-time";
 import { isKeeperEvent } from "../../../../core/events/identity";
 import { withBackoff } from "../../shared/backoff";
-import { isRateLimitResponseStatus } from "../../shared/errors";
+import { isRateLimitApiError } from "../../shared/errors";
 
 const EMPTY_API_ERROR: GoogleApiError = {};
 
@@ -35,16 +35,19 @@ const parseApiErrorFromText = (text: string): GoogleApiError => {
 class EventsFetchError extends Error {
   public readonly status: number;
   public readonly authRequired: boolean;
+  public readonly apiError: GoogleApiError;
 
   constructor(
     message: string,
     status: number,
     authRequired = false,
+    apiError: GoogleApiError = {},
   ) {
     super(message);
     this.name = "EventsFetchError";
     this.status = status;
     this.authRequired = authRequired;
+    this.apiError = apiError;
   }
 }
 
@@ -127,6 +130,7 @@ const fetchEventsPage = async (
       `Failed to fetch events: ${response.status}: ${responseText}`,
       response.status,
       authRequired,
+      apiError,
     );
   }
 
@@ -156,7 +160,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
       () => fetchEventsPage(pageOptions),
       {
         shouldRetry: (error) =>
-          error instanceof EventsFetchError && isRateLimitResponseStatus(error.status),
+          error instanceof EventsFetchError && isRateLimitApiError(error.status, error.apiError),
       },
     );
 

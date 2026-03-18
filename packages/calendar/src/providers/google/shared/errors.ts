@@ -1,4 +1,5 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
+import { googleApiErrorSchema } from "@keeper.sh/data-schemas";
 import type { GoogleApiError } from "../types";
 
 const GOOGLE_PERMISSION_REAUTH_REASONS = new Set([
@@ -92,4 +93,25 @@ const isRateLimitApiError = (status: number, error?: GoogleApiError): boolean =>
   return false;
 };
 
-export { hasRateLimitMessage, isAuthError, isRateLimitApiError, isRateLimitResponseStatus, isSimpleAuthError };
+const EMPTY_API_ERROR: GoogleApiError = {};
+
+const parseGoogleApiError = (text: string): GoogleApiError => {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!googleApiErrorSchema.allows(parsed)) {
+      return EMPTY_API_ERROR;
+    }
+    return googleApiErrorSchema.assert(parsed).error ?? EMPTY_API_ERROR;
+  } catch {
+    return EMPTY_API_ERROR;
+  }
+};
+
+const parseGoogleApiErrorFromBody = (body: unknown): GoogleApiError => {
+  if (!googleApiErrorSchema.allows(body)) {
+    return EMPTY_API_ERROR;
+  }
+  return googleApiErrorSchema.assert(body).error ?? EMPTY_API_ERROR;
+};
+
+export { hasRateLimitMessage, isAuthError, isRateLimitApiError, isRateLimitResponseStatus, isSimpleAuthError, parseGoogleApiError, parseGoogleApiErrorFromBody };

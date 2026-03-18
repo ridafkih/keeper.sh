@@ -9,7 +9,7 @@ import { HTTP_STATUS } from "@keeper.sh/constants";
 import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS } from "../shared/api";
 import { withBackoff } from "../shared/backoff";
 import { executeBatchChunked } from "../shared/batch";
-import { isRateLimitResponseStatus } from "../shared/errors";
+import { isRateLimitApiError, parseGoogleApiError } from "../shared/errors";
 import type { BatchSubRequest } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
 import { serializeGoogleEvent } from "./serialize-event";
@@ -29,10 +29,12 @@ interface GoogleSyncProviderConfig {
 
 class GoogleCalendarApiError extends Error {
   public readonly status: number;
+  public readonly apiError: ReturnType<typeof parseGoogleApiError>;
   constructor(status: number, body: string) {
     super(`Google Calendar API ${status}: ${body}`);
     this.name = "GoogleCalendarApiError";
     this.status = status;
+    this.apiError = parseGoogleApiError(body);
   }
 }
 
@@ -305,7 +307,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         {
           signal: config.signal,
           shouldRetry: (error) =>
-            error instanceof GoogleCalendarApiError && isRateLimitResponseStatus(error.status),
+            error instanceof GoogleCalendarApiError && isRateLimitApiError(error.status, error.apiError),
         },
       );
       remoteEvents.push(...page.items);
