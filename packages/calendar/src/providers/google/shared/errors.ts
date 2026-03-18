@@ -69,9 +69,8 @@ const isSimpleAuthError = (status: number): boolean => status === 401 || status 
 
 const RATE_LIMIT_REASONS = new Set([
   "ratelimitexceeded",
+  "userratelimitexceeded",
   "rate_limit_exceeded",
-  "userlimitexceeded",
-  "quotaexceeded",
 ]);
 
 const isRateLimitResponseStatus = (status: number): boolean =>
