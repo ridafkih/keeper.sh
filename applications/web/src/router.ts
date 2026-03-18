@@ -13,8 +13,16 @@ interface CreateAppRouterOptions {
   viteAssets?: ViteAssets;
 }
 
+function getConfiguredApiOrigin(): string | undefined {
+  if (typeof window === "undefined") {
+    return process.env.VITE_API_URL;
+  }
+
+  return import.meta.env.VITE_API_URL;
+}
+
 function resolveApiOrigin(request: Request | undefined): string {
-  const configuredApiOrigin = import.meta.env.VITE_API_URL;
+  const configuredApiOrigin = getConfiguredApiOrigin();
   if (configuredApiOrigin && configuredApiOrigin.length > 0) {
     return configuredApiOrigin;
   }
