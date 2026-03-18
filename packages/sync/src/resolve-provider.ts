@@ -1,8 +1,10 @@
-import type { CalendarSyncProvider } from "@keeper.sh/calendar";
+import type { CalendarSyncProvider, RefreshLockStore } from "@keeper.sh/calendar";
 import type { RedisRateLimiter } from "@keeper.sh/calendar";
 import {
   createGoogleOAuthService,
   createMicrosoftOAuthService,
+  runWithCredentialRefreshLock,
+  isOAuthReauthRequiredError,
 } from "@keeper.sh/calendar";
 import { createGoogleSyncProvider } from "@keeper.sh/calendar/google";
 import { createOutlookSyncProvider } from "@keeper.sh/calendar/outlook";
@@ -20,12 +22,62 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 const OAUTH_PROVIDERS = new Set(["google", "outlook"]);
 const CALDAV_PROVIDERS = new Set(["caldav", "fastmail", "icloud"]);
 
+const MS_PER_SECOND = 1000;
+
 interface OAuthConfig {
   googleClientId?: string;
   googleClientSecret?: string;
   microsoftClientId?: string;
   microsoftClientSecret?: string;
 }
+
+interface CoordinatedRefresherOptions {
+  database: BunSQLDatabase;
+  oauthCredentialId: string;
+  calendarAccountId: string;
+  refreshLockStore: RefreshLockStore | null;
+  rawRefresh: (refreshToken: string) => Promise<{
+    access_token: string;
+    expires_in: number;
+    refresh_token?: string;
+  }>;
+}
+
+const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
+  const { database, oauthCredentialId, calendarAccountId, refreshLockStore, rawRefresh } = options;
+
+  return (refreshToken: string) =>
+    runWithCredentialRefreshLock(
+      oauthCredentialId,
+      async () => {
+        try {
+          const result = await rawRefresh(refreshToken);
+
+          const newExpiresAt = new Date(Date.now() + result.expires_in * MS_PER_SECOND);
+
+          await database
+            .update(oauthCredentialsTable)
+            .set({
+              accessToken: result.access_token,
+              expiresAt: newExpiresAt,
+              refreshToken: result.refresh_token ?? refreshToken,
+            })
+            .where(eq(oauthCredentialsTable.id, oauthCredentialId));
+
+          return result;
+        } catch (error) {
+          if (isOAuthReauthRequiredError(error)) {
+            await database
+              .update(calendarAccountsTable)
+              .set({ needsReauthentication: true })
+              .where(eq(calendarAccountsTable.id, calendarAccountId));
+          }
+          throw error;
+        }
+      },
+      refreshLockStore,
+    );
+};
 
 const resolveOAuthProvider = async (
   database: BunSQLDatabase,
@@ -34,6 +86,7 @@ const resolveOAuthProvider = async (
   userId: string,
   accountId: string,
   oauthConfig: OAuthConfig,
+  refreshLockStore: RefreshLockStore | null,
   rateLimiter?: RedisRateLimiter,
   signal?: AbortSignal,
 ): Promise<CalendarSyncProvider | null> => {
@@ -43,6 +96,7 @@ const resolveOAuthProvider = async (
       refreshToken: oauthCredentialsTable.refreshToken,
       expiresAt: oauthCredentialsTable.expiresAt,
       externalCalendarId: calendarsTable.externalCalendarId,
+      oauthCredentialId: oauthCredentialsTable.id,
     })
     .from(oauthCredentialsTable)
     .innerJoin(calendarAccountsTable, eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id))
@@ -69,7 +123,13 @@ const resolveOAuthProvider = async (
       externalCalendarId: oauthCred.externalCalendarId,
       calendarId,
       userId,
-      refreshAccessToken: (refreshToken) => googleOAuth.refreshAccessToken(refreshToken),
+      refreshAccessToken: createCoordinatedRefresher({
+        database,
+        oauthCredentialId: oauthCred.oauthCredentialId,
+        calendarAccountId: accountId,
+        refreshLockStore,
+        rawRefresh: (refreshToken) => googleOAuth.refreshAccessToken(refreshToken),
+      }),
       rateLimiter,
       signal,
     });
@@ -90,7 +150,13 @@ const resolveOAuthProvider = async (
       externalCalendarId: oauthCred.externalCalendarId,
       calendarId,
       userId,
-      refreshAccessToken: (refreshToken) => microsoftOAuth.refreshAccessToken(refreshToken),
+      refreshAccessToken: createCoordinatedRefresher({
+        database,
+        oauthCredentialId: oauthCred.oauthCredentialId,
+        calendarAccountId: accountId,
+        refreshLockStore,
+        rawRefresh: (refreshToken) => microsoftOAuth.refreshAccessToken(refreshToken),
+      }),
     });
   }
 
@@ -137,6 +203,7 @@ interface ResolveProviderOptions {
   accountId: string;
   oauthConfig: OAuthConfig;
   encryptionKey?: string;
+  refreshLockStore?: RefreshLockStore | null;
   rateLimiter?: RedisRateLimiter;
   signal?: AbortSignal;
 }
@@ -150,6 +217,7 @@ const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarS
       options.userId,
       options.accountId,
       options.oauthConfig,
+      options.refreshLockStore ?? null,
       options.rateLimiter,
       options.signal,
     );

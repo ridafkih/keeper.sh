@@ -26,8 +26,10 @@ export {
   type TokenRefresher,
 } from "./core/oauth/ensure-valid-token";
 export {
+  runWithCredentialRefreshLock,
   type RefreshLockStore,
 } from "./core/oauth/refresh-coordinator";
+export { isOAuthReauthRequiredError } from "./core/oauth/error-classification";
 export {
   OAuthSourceProvider,
   type FetchEventsResult,

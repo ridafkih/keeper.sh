@@ -467,7 +467,12 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
       userId: calendarsTable.userId,
     })
     .from(calendarsTable)
-    .where(eq(calendarsTable.calendarType, "ical"));
+    .where(
+      and(
+        eq(calendarsTable.calendarType, "ical"),
+        eq(calendarsTable.disabled, false),
+      ),
+    );
 
   let added = 0;
   let removed = 0;
