@@ -15,6 +15,8 @@ import type { GoogleApiError } from "../../types";
 import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
 import { parseEventDateTime } from "../../shared/date-time";
 import { isKeeperEvent } from "../../../../core/events/identity";
+import { withBackoff } from "../../shared/backoff";
+import { isRateLimitResponseStatus } from "../../shared/errors";
 
 const EMPTY_API_ERROR: GoogleApiError = {};
 
@@ -149,11 +151,20 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
   const cancelledEventUids: string[] = [];
   const isDeltaSync = Boolean(syncToken);
 
+  const fetchPageWithBackoff = (options: PageFetchOptions): Promise<PageFetchResult | FullSyncRequiredResult> =>
+    withBackoff(
+      () => fetchEventsPage(options),
+      {
+        shouldRetry: (error) =>
+          error instanceof EventsFetchError && isRateLimitResponseStatus(error.status),
+      },
+    );
+
   if (rateLimiter) {
     await rateLimiter.acquire(1);
   }
 
-  let result = await fetchEventsPage({
+  let result = await fetchPageWithBackoff({
     accessToken,
     baseUrl,
     maxResults,
@@ -184,7 +195,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
       await rateLimiter.acquire(1);
     }
 
-    result = await fetchEventsPage({
+    result = await fetchPageWithBackoff({
       accessToken,
       baseUrl,
       maxResults,

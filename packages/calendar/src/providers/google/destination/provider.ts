@@ -7,7 +7,9 @@ import type { DeleteResult, PushResult, RemoteEvent, SyncableEvent } from "../..
 import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS } from "../shared/api";
+import { withBackoff } from "../shared/backoff";
 import { executeBatchChunked } from "../shared/batch";
+import { isRateLimitResponseStatus } from "../shared/errors";
 import type { BatchSubRequest } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
 import { serializeGoogleEvent } from "./serialize-event";
@@ -22,6 +24,16 @@ interface GoogleSyncProviderConfig {
   userId: string;
   refreshAccessToken?: TokenRefresher;
   rateLimiter?: RedisRateLimiter;
+  signal?: AbortSignal;
+}
+
+class GoogleCalendarApiError extends Error {
+  public readonly status: number;
+  constructor(status: number, body: string) {
+    super(`Google Calendar API ${status}: ${body}`);
+    this.name = "GoogleCalendarApiError";
+    this.status = status;
+  }
 }
 
 const isDirectEventId = (identifier: string): boolean => !identifier.includes("@");
@@ -95,7 +107,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       return results;
     }
 
-    const batchResponses = await executeBatchChunked(subRequests, tokenState.accessToken, config.rateLimiter);
+    const batchResponses = await executeBatchChunked(subRequests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal });
 
     for (const entry of batchEntries) {
       const response = batchResponses[entry.batchIndex];
@@ -154,7 +166,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       path: `${eventsPath}?iCalUID=${encodeURIComponent(uid)}`,
     }));
 
-    const findResponses = await executeBatchChunked(findSubRequests, tokenState.accessToken, config.rateLimiter);
+    const findResponses = await executeBatchChunked(findSubRequests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal });
 
     for (let findIndex = 0; findIndex < lookupIds.length; findIndex++) {
       const originalIndex = lookupOriginalIndices[findIndex];
@@ -198,7 +210,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       return results;
     }
 
-    const deleteResponses = await executeBatchChunked(subRequests, tokenState.accessToken, config.rateLimiter);
+    const deleteResponses = await executeBatchChunked(subRequests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal });
 
     for (let deleteIndex = 0; deleteIndex < deleteResponses.length; deleteIndex++) {
       const originalIndex = indexMap[deleteIndex];
@@ -225,62 +237,78 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     return results;
   };
 
+  const fetchRemoteEventsPage = async (pageToken: string | null): Promise<{
+    items: RemoteEvent[];
+    nextPageToken: string | null;
+  }> => {
+    if (config.rateLimiter) {
+      await config.rateLimiter.acquire(1);
+    }
+
+    const url = new URL(
+      `calendars/${encodeURIComponent(config.externalCalendarId)}/events`,
+      GOOGLE_CALENDAR_API,
+    );
+    url.searchParams.set("maxResults", String(GOOGLE_CALENDAR_MAX_RESULTS));
+    url.searchParams.set("timeMin", getOAuthSyncWindowStart().toISOString());
+    const futureDate = new Date();
+    futureDate.setFullYear(futureDate.getFullYear() + 2);
+    url.searchParams.set("timeMax", futureDate.toISOString());
+    if (pageToken) {
+      url.searchParams.set("pageToken", pageToken);
+    }
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${tokenState.accessToken}` },
+      method: "GET",
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new GoogleCalendarApiError(response.status, errorBody);
+    }
+
+    const body = await response.json();
+    const data = googleEventListSchema.assert(body);
+
+    const items: RemoteEvent[] = [];
+    for (const event of data.items ?? []) {
+      if (!event.iCalUID || !isKeeperEvent(event.iCalUID)) {
+        continue;
+      }
+      const startTime = parseEventTime(event.start);
+      const endTime = parseEventTime(event.end);
+      if (!startTime || !endTime) {
+        continue;
+      }
+      items.push({
+        deleteId: event.id ?? event.iCalUID,
+        endTime,
+        isKeeperEvent: true,
+        startTime,
+        uid: event.iCalUID,
+      });
+    }
+
+    return { items, nextPageToken: data.nextPageToken ?? null };
+  };
+
   const listRemoteEvents = async (): Promise<RemoteEvent[]> => {
     await refreshIfNeeded();
     const remoteEvents: RemoteEvent[] = [];
     let pageToken: string | null = null;
-    const lookbackStart = getOAuthSyncWindowStart();
-    const futureDate = new Date();
-    futureDate.setFullYear(futureDate.getFullYear() + 2);
 
     do {
-      if (config.rateLimiter) {
-        await config.rateLimiter.acquire(1);
-      }
-
-      const url = new URL(
-        `calendars/${encodeURIComponent(config.externalCalendarId)}/events`,
-        GOOGLE_CALENDAR_API,
+      const page = await withBackoff(
+        () => fetchRemoteEventsPage(pageToken),
+        {
+          signal: config.signal,
+          shouldRetry: (error) =>
+            error instanceof GoogleCalendarApiError && isRateLimitResponseStatus(error.status),
+        },
       );
-      url.searchParams.set("maxResults", String(GOOGLE_CALENDAR_MAX_RESULTS));
-      url.searchParams.set("timeMin", lookbackStart.toISOString());
-      url.searchParams.set("timeMax", futureDate.toISOString());
-      if (pageToken) {
-        url.searchParams.set("pageToken", pageToken);
-      }
-
-      const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${tokenState.accessToken}` },
-        method: "GET",
-      });
-
-      if (!response.ok) {
-        const errorBody = await response.text();
-        throw new Error(`Google Calendar API ${response.status}: ${errorBody}`);
-      }
-
-      const body = await response.json();
-      const data = googleEventListSchema.assert(body);
-
-      for (const event of data.items ?? []) {
-        if (!event.iCalUID || !isKeeperEvent(event.iCalUID)) {
-          continue;
-        }
-        const startTime = parseEventTime(event.start);
-        const endTime = parseEventTime(event.end);
-        if (!startTime || !endTime) {
-          continue;
-        }
-        remoteEvents.push({
-          deleteId: event.id ?? event.iCalUID,
-          endTime,
-          isKeeperEvent: true,
-          startTime,
-          uid: event.iCalUID,
-        });
-      }
-
-      pageToken = data.nextPageToken ?? null;
+      remoteEvents.push(...page.items);
+      pageToken = page.nextPageToken;
     } while (pageToken);
 
     return remoteEvents;

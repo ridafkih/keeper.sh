@@ -141,6 +141,7 @@ const syncDestinationsForUser = async (
         oauthConfig: config.oauthConfig,
         encryptionKey: config.encryptionKey,
         rateLimiter,
+        signal: config.abortSignal,
       });
 
       if (!syncProvider) {
