@@ -33,12 +33,12 @@ describe("deletePolarCustomerByExternalId", () => {
 
   it("does not write to stderr during tests when deletion fails unexpectedly", () => {
     const deleteExternal = mock(() => Promise.reject(new Error("polar unavailable")));
-    const stderrWrite = mock(() => true as never);
+    const stderrWrite = mock(() => true);
     const originalNodeEnv = process.env.NODE_ENV;
     const originalStderrWrite = process.stderr.write.bind(process.stderr);
 
     process.env.NODE_ENV = "test";
-    process.stderr.write = stderrWrite as typeof process.stderr.write;
+    process.stderr.write = stderrWrite;
 
     try {
       expect(

@@ -57,6 +57,25 @@ const googleEventListSchema = type({
 });
 type GoogleEventList = typeof googleEventListSchema.infer;
 
+const googleAttendeeSchema = type({
+  "email?": "string",
+  "responseStatus?": "string",
+  "self?": "boolean",
+});
+type GoogleAttendee = typeof googleAttendeeSchema.infer;
+
+const googleEventWithAttendeesSchema = googleEventSchema.and({
+  "attendees?": googleAttendeeSchema.array(),
+  "organizer?": { "email?": "string", "displayName?": "string" },
+});
+type GoogleEventWithAttendees = typeof googleEventWithAttendeesSchema.infer;
+
+const googleEventWithAttendeesListSchema = type({
+  "items?": googleEventWithAttendeesSchema.array(),
+  "nextPageToken?": "string",
+});
+type GoogleEventWithAttendeesList = typeof googleEventWithAttendeesListSchema.infer;
+
 const googleApiErrorSchema = type({
   "error?": {
     "code?": "number",
@@ -126,6 +145,26 @@ const outlookEventListSchema = type({
   "value?": outlookEventSchema.array(),
 });
 type OutlookEventList = typeof outlookEventListSchema.infer;
+
+const outlookCalendarViewEventSchema = type({
+  "id?": "string",
+  "iCalUId?": "string",
+  "subject?": "string",
+  "bodyPreview?": "string",
+  "location?": { "displayName?": "string" },
+  "start?": { "dateTime?": "string", "timeZone?": "string" },
+  "end?": { "dateTime?": "string", "timeZone?": "string" },
+  "isAllDay?": "boolean",
+  "responseStatus?": { "response?": "string" },
+  "organizer?": { "emailAddress?": { "address?": "string", "name?": "string" } },
+});
+type OutlookCalendarViewEvent = typeof outlookCalendarViewEventSchema.infer;
+
+const outlookCalendarViewListSchema = type({
+  "value?": outlookCalendarViewEventSchema.array(),
+  "@odata.nextLink?": "string",
+});
+type OutlookCalendarViewList = typeof outlookCalendarViewListSchema.infer;
 
 const microsoftApiErrorSchema = type({
   "error?": { "code?": "string", "message?": "string" },
@@ -319,6 +358,9 @@ export {
   stringSchema,
   googleEventSchema,
   googleEventListSchema,
+  googleAttendeeSchema,
+  googleEventWithAttendeesSchema,
+  googleEventWithAttendeesListSchema,
   googleApiErrorSchema,
   googleTokenResponseSchema,
   googleUserInfoSchema,
@@ -326,6 +368,8 @@ export {
   microsoftUserInfoSchema,
   outlookEventSchema,
   outlookEventListSchema,
+  outlookCalendarViewEventSchema,
+  outlookCalendarViewListSchema,
   microsoftApiErrorSchema,
   authSocialProvidersSchema,
   authCapabilitiesSchema,
@@ -357,6 +401,9 @@ export type {
   CreateSource,
   GoogleEvent,
   GoogleEventList,
+  GoogleAttendee,
+  GoogleEventWithAttendees,
+  GoogleEventWithAttendeesList,
   GoogleApiError,
   GoogleTokenResponse,
   GoogleUserInfo,
@@ -364,6 +411,8 @@ export type {
   MicrosoftUserInfo,
   OutlookEvent,
   OutlookEventList,
+  OutlookCalendarViewEvent,
+  OutlookCalendarViewList,
   MicrosoftApiError,
   AuthSocialProviders,
   AuthCapabilities,

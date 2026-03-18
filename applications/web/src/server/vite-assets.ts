@@ -67,13 +67,12 @@ async function readManifestPreloads(): Promise<string[]> {
   const manifestPath = path.join(clientDistDirectory, ".vite", "manifest.json");
   try {
     const content = await fs.readFile(manifestPath, "utf-8");
-    const manifest = JSON.parse(content) as ViteManifest;
+    const manifest = JSON.parse(content);
 
     const entryChunk = manifest["index.html"];
     if (entryChunk == null) return [];
 
     const allFiles = collectTransitiveImports(manifest, "index.html");
-    // Exclude the entry script itself (it's already loaded via <script>)
     return allFiles.filter((file) => file !== `/${entryChunk.file}`);
   } catch {
     return [];

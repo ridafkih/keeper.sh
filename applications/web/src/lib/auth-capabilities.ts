@@ -39,10 +39,26 @@ const resolveCredentialField = (
 
 const getEnabledSocialProviders = (
   capabilities: AuthCapabilities,
-): SocialProviderId[] =>
-  Object.entries(capabilities.socialProviders)
-    .filter(([, enabled]) => enabled)
-    .map(([provider]) => provider as SocialProviderId);
+): SocialProviderId[] => {
+  /**
+   * TODO: Move this to providers, and have it based off
+   * the defined metadata.
+   * @param providerName
+   */
+  const isValidProvider = (providerName: string): providerName is "google" | "microsoft" => {
+    if (providerName === "google") return true;
+    if (providerName === "microsoft") return true;
+    return false;
+  }
+
+  const providers: SocialProviderId[] = [];
+  for (const [provider, enabled] of Object.entries(capabilities.socialProviders)) {
+    if (!isValidProvider(provider) || !enabled) continue;
+    providers.push(provider)
+  }
+
+  return providers;
+}
 
 const supportsPasskeys = (capabilities: AuthCapabilities): boolean =>
   capabilities.supportsPasskeys;

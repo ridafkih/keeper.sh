@@ -1,17 +1,19 @@
 import { z } from "zod";
 
-interface KeeperEvent {
-  id: string;
-  startTime: string;
-  endTime: string;
-  title: string | null;
-  description: string | null;
-  location: string | null;
-  calendarId: string;
-  calendarName: string;
-  calendarProvider: string;
-  calendarUrl: string | null;
-}
+const keeperEventSchema = z.object({
+  id: z.string(),
+  startTime: z.string(),
+  endTime: z.string(),
+  title: z.string().nullable(),
+  description: z.string().nullable(),
+  location: z.string().nullable(),
+  calendarId: z.string(),
+  calendarName: z.string(),
+  calendarProvider: z.string(),
+  calendarUrl: z.string().nullable(),
+});
+
+type KeeperEvent = z.infer<typeof keeperEventSchema>;
 
 interface KeeperToolContext {
   bearerToken: string;
@@ -25,12 +27,13 @@ interface KeeperMcpToolDefinition<TResult> {
   execute: (context: KeeperToolContext, input?: Record<string, unknown>) => Promise<TResult>;
 }
 
-interface KeeperCalendar {
-  id: string;
-  name: string;
-  provider: string;
-  account: string;
-}
+const keeperCalendarSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  provider: z.string(),
+  account: z.string(),
+});
+type KeeperCalendar = z.infer<typeof keeperCalendarSchema>;
 
 interface KeeperMcpToolset {
   list_calendars: KeeperMcpToolDefinition<KeeperCalendar[]>;
@@ -46,11 +49,14 @@ interface KeeperMcpToolset {
   get_ical_feed: KeeperMcpToolDefinition<{ url: string }>;
 }
 
-const apiFetch = async <TResult>(
+const isErrorResponse = (value: unknown): value is { error: string } =>
+  typeof value === "object" && value !== null && "error" in value && typeof value.error === "string";
+
+const apiFetchRaw = async (
   context: KeeperToolContext,
   path: string,
   options?: RequestInit,
-): Promise<TResult> => {
+): Promise<unknown> => {
   const url = `${context.apiBaseUrl}${path}`;
   const response = await fetch(url, {
     ...options,
@@ -62,16 +68,28 @@ const apiFetch = async <TResult>(
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    const message = (body as { error?: string })?.error ?? response.statusText;
-    throw new Error(message);
+    const body: unknown = await response.json().catch(() => null);
+    if (isErrorResponse(body)) {
+      throw new Error(body.error);
+    }
+    throw new Error(response.statusText);
   }
 
   if (response.status === 204) {
-    return {} as TResult;
+    return {};
   }
 
-  return response.json() as Promise<TResult>;
+  return response.json();
+};
+
+const apiFetch = async <TResult>(
+  context: KeeperToolContext,
+  path: string,
+  schema: z.ZodType<TResult>,
+  options?: RequestInit,
+): Promise<TResult> => {
+  const raw = await apiFetchRaw(context, path, options);
+  return schema.parse(raw);
 };
 
 const eventRangeSchema = {
@@ -141,7 +159,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
     title: "List calendars",
     description:
       "List all calendars the user has connected to Keeper, including provider name and account.",
-    execute: (context) => apiFetch<KeeperCalendar[]>(context, "/api/v1/calendars"),
+    execute: (context) => apiFetch(context, "/api/v1/calendars", z.array(keeperCalendarSchema)),
   },
   get_event_count: {
     title: "Get event count",
@@ -159,7 +177,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
       if (input?.to && typeof input.to === "string") {
         params.set("to", input.to);
       }
-      return apiFetch<{ count: number }>(context, `/api/v1/events?${params}`);
+      return apiFetch(context, `/api/v1/events?${params}`, z.object({ count: z.number() }));
     },
   },
   get_events: {
@@ -172,7 +190,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
         throw new Error("'from', 'to', and 'timezone' are required");
       }
       const params = new URLSearchParams({ from: input.from, to: input.to });
-      const events = await apiFetch<KeeperEvent[]>(context, `/api/v1/events?${params}`);
+      const events = await apiFetch(context, `/api/v1/events?${params}`, z.array(keeperEventSchema));
       return events.map((event) => localizeEvent(event, input.timezone));
     },
   },
@@ -186,7 +204,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
       if (!input?.eventId || typeof input.eventId !== "string") {
         throw new Error("'eventId' is required");
       }
-      return apiFetch<KeeperEvent>(context, `/api/v1/events/${input.eventId}`);
+      return apiFetch(context, `/api/v1/events/${input.eventId}`, keeperEventSchema);
     },
   },
   create_event: {
@@ -207,7 +225,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
       if (!input?.calendarId || !input?.title || !input?.startTime || !input?.endTime) {
         throw new Error("'calendarId', 'title', 'startTime', and 'endTime' are required");
       }
-      return apiFetch<KeeperEvent>(context, "/api/v1/events", {
+      return apiFetch(context, "/api/v1/events", keeperEventSchema, {
         method: "POST",
         body: JSON.stringify(input),
       });
@@ -232,7 +250,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
         throw new Error("'eventId' is required");
       }
       const { eventId, ...updates } = input;
-      return apiFetch<KeeperEvent>(context, `/api/v1/events/${eventId}`, {
+      return apiFetch(context, `/api/v1/events/${eventId}`, keeperEventSchema, {
         method: "PATCH",
         body: JSON.stringify(updates),
       });
@@ -248,7 +266,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
       if (!input?.eventId || typeof input.eventId !== "string") {
         throw new Error("'eventId' is required");
       }
-      await apiFetch(context, `/api/v1/events/${input.eventId}`, {
+      await apiFetchRaw(context, `/api/v1/events/${input.eventId}`, {
         method: "DELETE",
       });
       return { deleted: true };
@@ -269,7 +287,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
       if (!input?.rsvpStatus || typeof input.rsvpStatus !== "string") {
         throw new Error("'rsvpStatus' is required");
       }
-      return apiFetch<{ rsvpStatus: string }>(context, `/api/v1/events/${input.eventId}`, {
+      return apiFetch(context, `/api/v1/events/${input.eventId}`, z.object({ rsvpStatus: z.string() }), {
         method: "PATCH",
         body: JSON.stringify({ rsvpStatus: input.rsvpStatus }),
       });
@@ -291,18 +309,18 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
         throw new Error("'from', 'to', and 'timezone' are required");
       }
       const params = new URLSearchParams({ from: input.from, to: input.to });
-      return apiFetch<unknown[]>(context, `/api/v1/calendars/${input.calendarId}/invites?${params}`);
+      return apiFetch(context, `/api/v1/calendars/${input.calendarId}/invites?${params}`, z.array(z.unknown()));
     },
   },
   list_accounts: {
     title: "List accounts",
     description: "List all connected calendar accounts with provider information.",
-    execute: (context) => apiFetch<unknown[]>(context, "/api/v1/accounts"),
+    execute: (context) => apiFetch(context, "/api/v1/accounts", z.array(z.unknown())),
   },
   get_ical_feed: {
     title: "Get iCal feed URL",
     description: "Get the user's iCal feed URL for subscribing in other calendar apps.",
-    execute: (context) => apiFetch<{ url: string }>(context, "/api/v1/ical"),
+    execute: (context) => apiFetch(context, "/api/v1/ical", z.object({ url: z.string() })),
   },
 });
 

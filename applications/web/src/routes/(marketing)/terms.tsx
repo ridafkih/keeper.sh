@@ -2,22 +2,22 @@ import type { PropsWithChildren } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Heading1, Heading2 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
-import { canonicalUrl, jsonLdMeta, seoMeta, webPageSchema, breadcrumbSchema } from "@/lib/seo";
+import { canonicalUrl, jsonLdScript, seoMeta, webPageSchema, breadcrumbSchema } from "@/lib/seo";
 import { termsPageMetadata, formatMonthYear } from "@/lib/page-metadata";
 
 export const Route = createFileRoute("/(marketing)/terms")({
   component: TermsPage,
   head: () => ({
     links: [{ rel: "canonical", href: canonicalUrl("/terms") }],
-    meta: [
-      ...seoMeta({
-        title: "Terms & Conditions",
-        description:
-          "Terms of service for Keeper.sh. Covers account registration, subscription billing, acceptable use, and data ownership for our calendar syncing service.",
-        path: "/terms",
-      }),
-      jsonLdMeta(webPageSchema("Terms & Conditions", "Terms and conditions for using Keeper.sh, the open-source calendar syncing service.", "/terms")),
-      jsonLdMeta(breadcrumbSchema([{ name: "Home", path: "/" }, { name: "Terms & Conditions", path: "/terms" }])),
+    meta: seoMeta({
+      title: "Terms & Conditions",
+      description:
+        "Terms of service for Keeper.sh. Covers account registration, subscription billing, acceptable use, and data ownership for our calendar syncing service.",
+      path: "/terms",
+    }),
+    scripts: [
+      jsonLdScript(webPageSchema("Terms & Conditions", "Terms and conditions for using Keeper.sh, the open-source calendar syncing service.", "/terms")),
+      jsonLdScript(breadcrumbSchema([{ name: "Home", path: "/" }, { name: "Terms & Conditions", path: "/terms" }])),
     ],
   }),
 });

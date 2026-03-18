@@ -1,5 +1,5 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import { microsoftApiErrorSchema } from "@keeper.sh/data-schemas";
+import { microsoftApiErrorSchema, outlookCalendarViewListSchema, outlookEventListSchema, outlookEventSchema } from "@keeper.sh/data-schemas";
 import type { OutlookEvent } from "@keeper.sh/data-schemas";
 import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "@/types";
 
@@ -75,7 +75,7 @@ const createOutlookEvent = async (
     return { success: false, error: errorMessage };
   }
 
-  const created = await response.json() as OutlookEvent;
+  const created = outlookEventSchema.assert(await response.json());
   return { success: true, sourceEventUid: created.iCalUId };
 };
 
@@ -96,7 +96,7 @@ const findOutlookEventByUid = async (
     return null;
   }
 
-  const body = await response.json() as { value?: OutlookEvent[] };
+  const body = outlookEventListSchema.assert(await response.json());
   const [item] = body.value ?? [];
   return item ?? null;
 };
@@ -126,15 +126,15 @@ const updateOutlookEvent = async (
   }
 
   const isAllDay = updates.isAllDay ?? existing.isAllDay ?? false;
-  if ("startTime" in updates) {
+  if ("startTime" in updates && updates.startTime) {
     patch.start = {
-      dateTime: formatDateTime(updates.startTime as string, isAllDay),
+      dateTime: formatDateTime(updates.startTime, isAllDay),
       timeZone: "UTC",
     };
   }
-  if ("endTime" in updates) {
+  if ("endTime" in updates && updates.endTime) {
     patch.end = {
-      dateTime: formatDateTime(updates.endTime as string, isAllDay),
+      dateTime: formatDateTime(updates.endTime, isAllDay),
       timeZone: "UTC",
     };
   }
@@ -221,19 +221,6 @@ const rsvpOutlookEvent = async (
   return { success: true };
 };
 
-interface OutlookCalendarViewEvent {
-  id?: string;
-  iCalUId?: string;
-  subject?: string;
-  bodyPreview?: string;
-  location?: { displayName?: string };
-  start?: { dateTime?: string; timeZone?: string };
-  end?: { dateTime?: string; timeZone?: string };
-  isAllDay?: boolean;
-  responseStatus?: { response?: string };
-  organizer?: { emailAddress?: { address?: string; name?: string } };
-}
-
 const buildCalendarViewUrl = (from: string, to: string, nextLink: string | null): URL => {
   if (nextLink) {
     return new URL(nextLink);
@@ -287,10 +274,7 @@ const getPendingOutlookInvites = async (
       break;
     }
 
-    const body = await response.json() as {
-      value?: OutlookCalendarViewEvent[];
-      "@odata.nextLink"?: string;
-    };
+    const body = outlookCalendarViewListSchema.assert(await response.json());
 
     for (const event of body.value ?? []) {
       if (!event.iCalUId) {

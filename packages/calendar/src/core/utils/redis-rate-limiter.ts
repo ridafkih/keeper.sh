@@ -60,7 +60,7 @@ const createRedisRateLimiter = (
       const now = Date.now();
       const windowStart = now - MS_PER_MINUTE;
 
-      const waitTime = (await redis.eval(
+      const waitTime = Number((await redis.eval(
         ACQUIRE_SCRIPT,
         1,
         key,
@@ -68,7 +68,7 @@ const createRedisRateLimiter = (
         String(now),
         String(count),
         String(requestsPerMinute),
-      )) as number;
+      )));
 
       if (waitTime <= 0) {
         return;

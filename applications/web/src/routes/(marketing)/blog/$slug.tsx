@@ -5,7 +5,7 @@ import { markdownComponents } from "@/components/ui/primitives/markdown-componen
 import { Text } from "@/components/ui/primitives/text";
 import { BlogPostCta } from "@/features/blog/components/blog-post-cta";
 import { findBlogPostBySlug, formatIsoDate } from "@/lib/blog-posts";
-import { canonicalUrl, jsonLdMeta, seoMeta, blogPostingSchema, breadcrumbSchema } from "@/lib/seo";
+import { canonicalUrl, jsonLdScript, seoMeta, blogPostingSchema, breadcrumbSchema } from "@/lib/seo";
 
 export const Route = createFileRoute("/(marketing)/blog/$slug")({
   component: BlogPostPage,
@@ -32,7 +32,9 @@ export const Route = createFileRoute("/(marketing)/blog/$slug")({
           content: tag,
           property: "article:tag",
         })),
-        jsonLdMeta(blogPostingSchema({
+      ],
+      scripts: [
+        jsonLdScript(blogPostingSchema({
           title: blogPost.metadata.title,
           description: blogPost.metadata.description,
           slug: params.slug,
@@ -40,7 +42,7 @@ export const Route = createFileRoute("/(marketing)/blog/$slug")({
           updatedAt: blogPost.metadata.updatedAt,
           tags: blogPost.metadata.tags,
         })),
-        jsonLdMeta(breadcrumbSchema([
+        jsonLdScript(breadcrumbSchema([
           { name: "Home", path: "/" },
           { name: "Blog", path: "/blog" },
           { name: blogPost.metadata.title, path: postUrl },
