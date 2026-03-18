@@ -2,6 +2,7 @@ import { withCompression } from "./compression";
 import { isApiRequest, isMcpRequest, proxyRequest } from "./proxy/http";
 import { handleInternalRoute } from "./internal-routes";
 import { GDPR_COUNTRIES } from "@/config/gdpr";
+import { hasSessionCookie } from "@/lib/session-cookie";
 import type { Runtime, ServerConfig } from "./types";
 
 const CACHEABLE_PATHS = new Set(["/", "/blog", "/privacy", "/terms"]);
@@ -88,7 +89,9 @@ export async function handleApplicationRequest(
   const pathname = requestUrl.pathname;
   const countryCode = request.headers.get("cf-ipcountry") ?? "";
   const gdprSegment = resolveGdprCacheSegment(countryCode);
-  const cacheKey = `${pathname}:${gdprSegment}`;
+  const cookieHeader = request.headers.get("cookie") ?? undefined;
+  const authSegment = hasSessionCookie(cookieHeader) ? "authed" : "anon";
+  const cacheKey = `${pathname}:${gdprSegment}:${authSegment}`;
 
   if (config.isProduction && CACHEABLE_PATHS.has(pathname)) {
     const cached = getCachedHtml(cacheKey);
