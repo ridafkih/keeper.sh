@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Heading1, Heading3 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
 import { blogPosts, formatIsoDate } from "@/lib/blog-posts";
-import { canonicalUrl, jsonLdMeta, seoMeta, breadcrumbSchema, collectionPageSchema } from "@/lib/seo";
+import { canonicalUrl, jsonLdScript, seoMeta, breadcrumbSchema, collectionPageSchema } from "@/lib/seo";
 
 const BLOG_ILLUSTRATION_STYLE = {
   backgroundImage:
@@ -13,17 +13,17 @@ export const Route = createFileRoute("/(marketing)/blog/")({
   component: BlogDirectoryPage,
   head: () => ({
     links: [{ rel: "canonical", href: canonicalUrl("/blog") }],
-    meta: [
-      ...seoMeta({
-        title: "Blog",
-        description: "Product updates, engineering deep-dives, and calendar syncing tips from the Keeper.sh team.",
-        path: "/blog",
-      }),
-      jsonLdMeta(breadcrumbSchema([
+    meta: seoMeta({
+      title: "Blog",
+      description: "Product updates, engineering deep-dives, and calendar syncing tips from the Keeper.sh team.",
+      path: "/blog",
+    }),
+    scripts: [
+      jsonLdScript(breadcrumbSchema([
         { name: "Home", path: "/" },
         { name: "Blog", path: "/blog" },
       ])),
-      jsonLdMeta(collectionPageSchema(blogPosts)),
+      jsonLdScript(collectionPageSchema(blogPosts)),
     ],
   }),
 });

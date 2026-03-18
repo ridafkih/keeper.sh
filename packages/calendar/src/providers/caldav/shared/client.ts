@@ -1,4 +1,6 @@
 import { createDAVClient } from "tsdav";
+import { validateUrlSafety } from "../../../utils/safe-fetch";
+import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import type { CalDAVClientConfig, CalendarInfo } from "../types";
 
 interface CalendarObject {
@@ -19,13 +21,16 @@ const getDisplayName = (name: unknown): string => {
 class CalDAVClient {
   private client: DAVClientInstance | null = null;
   private config: CalDAVClientConfig;
+  private safeFetchOptions?: SafeFetchOptions;
 
-  constructor(config: CalDAVClientConfig) {
+  constructor(config: CalDAVClientConfig, safeFetchOptions?: SafeFetchOptions) {
     this.config = config;
+    this.safeFetchOptions = safeFetchOptions;
   }
 
   private async getClient(): Promise<DAVClientInstance> {
     if (!this.client) {
+      await validateUrlSafety(this.config.serverUrl, this.safeFetchOptions);
       this.client = await createDAVClient({
         authMethod: "Basic",
         credentials: this.config.credentials,
@@ -125,6 +130,7 @@ class CalDAVClient {
   }
 }
 
-const createCalDAVClient = (config: CalDAVClientConfig): CalDAVClient => new CalDAVClient(config);
+const createCalDAVClient = (config: CalDAVClientConfig, safeFetchOptions?: SafeFetchOptions): CalDAVClient =>
+  new CalDAVClient(config, safeFetchOptions);
 
 export { CalDAVClient, createCalDAVClient };

@@ -9,7 +9,8 @@
     "./outlook": "./src/providers/outlook/index.ts",
     "./fastmail": "./src/providers/fastmail/index.ts",
     "./icloud": "./src/providers/icloud/index.ts",
-    "./ics": "./src/ics/index.ts"
+    "./ics": "./src/ics/index.ts",
+    "./safe-fetch": "./src/utils/safe-fetch.ts"
   },
   "scripts": {
     "types": "tsc --noEmit",
@@ -20,8 +21,9 @@
     "@keeper.sh/constants": "workspace:*",
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/database": "workspace:*",
-"drizzle-orm": "^0.45.1",
+    "drizzle-orm": "^0.45.1",
     "ioredis": "^5.10.0",
+    "ipaddr.js": "^2.3.0",
     "ts-ics": "^2.4.3",
     "tsdav": "^2.1.8"
   },

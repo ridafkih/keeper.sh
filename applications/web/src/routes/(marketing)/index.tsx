@@ -1,6 +1,6 @@
 import { useSetAtom } from 'jotai'
 import { createFileRoute } from '@tanstack/react-router'
-import { canonicalUrl, jsonLdMeta, seoMeta, softwareApplicationSchema } from '../../lib/seo'
+import { canonicalUrl, jsonLdScript, seoMeta, softwareApplicationSchema } from '../../lib/seo'
 import { Heading1, Heading2, Heading3 } from '../../components/ui/primitives/heading'
 import { Text } from '../../components/ui/primitives/text'
 import {
@@ -231,16 +231,14 @@ export const Route = createFileRoute('/(marketing)/')({
   component: MarketingPage,
   head: () => ({
     links: [{ rel: "canonical", href: canonicalUrl("/") }],
-    meta: [
-      ...seoMeta({
-        title: "Open-Source Calendar Syncing for Google, Outlook & iCloud",
-        description:
-          "Keep your personal, work, and school calendars in sync automatically. Open-source (AGPL-3.0) calendar syncing for Google Calendar, Outlook, iCloud, FastMail, and CalDAV.",
-        path: "/",
-        brandPosition: "before",
-      }),
-      jsonLdMeta(softwareApplicationSchema()),
-    ],
+    meta: seoMeta({
+      title: "Open-Source Calendar Syncing for Google, Outlook & iCloud",
+      description:
+        "Keep your personal, work, and school calendars in sync automatically. Open-source (AGPL-3.0) calendar syncing for Google Calendar, Outlook, iCloud, FastMail, and CalDAV.",
+      path: "/",
+      brandPosition: "before",
+    }),
+    scripts: [jsonLdScript(softwareApplicationSchema())],
   }),
 })
 

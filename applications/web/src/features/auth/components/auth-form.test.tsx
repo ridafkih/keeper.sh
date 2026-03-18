@@ -192,14 +192,14 @@ describe("AuthForm", () => {
       window,
     });
 
-    window.event = undefined;
-    window.HTMLElement.prototype.attachEvent = () => undefined;
-    window.HTMLElement.prototype.detachEvent = () => undefined;
-
     const container = document.getElementById("app");
     if (!container) throw new Error("Expected app container");
 
-    const root = createRoot(container as unknown as Element);
+    if (!(container instanceof HTMLElement)) {
+      throw Error("container must be Element")
+    }
+
+    const root = createRoot(container);
 
     try {
       await act(async () => {

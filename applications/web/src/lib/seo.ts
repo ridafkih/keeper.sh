@@ -5,8 +5,8 @@ export function canonicalUrl(path: string): string {
   return `${SITE_URL}${path}`;
 }
 
-export function jsonLdMeta(data: Record<string, unknown>) {
-  return { "script:ld+json": data } as Record<string, unknown>;
+export function jsonLdScript(data: Record<string, unknown>) {
+  return { type: "application/ld+json", children: JSON.stringify(data) };
 }
 
 export function seoMeta({

@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
-import { jsonLdMeta, organizationSchema } from '../../lib/seo'
+import { jsonLdScript, organizationSchema } from '../../lib/seo'
 import { Layout, LayoutItem } from '../../components/ui/shells/layout'
 import { MarketingHeader, MarketingHeaderActions, MarketingHeaderBranding } from '../../features/marketing/components/marketing-header'
 import { MarketingFooter, MarketingFooterTagline, MarketingFooterNav, MarketingFooterNavGroup, MarketingFooterNavGroupLabel, MarketingFooterNavItem } from '../../features/marketing/components/marketing-footer'
@@ -34,7 +34,7 @@ export const Route = createFileRoute('/(marketing)')({
     }
   },
   head: () => ({
-    meta: [jsonLdMeta(organizationSchema)],
+    scripts: [jsonLdScript(organizationSchema)],
   }),
   component: MarketingLayout,
 })

@@ -26,6 +26,7 @@ import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import { database, refreshLockRedis } from "@/context";
 import env from "@/env";
+import { safeFetchOptions } from "@/utils/safe-fetch-options";
 
 const SOURCE_TIMEOUT_MS = 60_000;
 const SOURCE_CONCURRENCY = 5;
@@ -383,6 +384,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
               serverUrl: source.serverUrl,
               username: source.username,
               password,
+              safeFetchOptions,
             });
 
             const ingestEvents: Record<string, unknown>[] = [];
@@ -496,6 +498,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
               calendarId: source.calendarId,
               url: source.url,
               database,
+              safeFetchOptions,
             });
 
             const ingestEvents: Record<string, unknown>[] = [];

@@ -77,6 +77,11 @@ const createTxInstance = (): object => ({
 });
 
 beforeAll(async () => {
+  mock.module("../env", () => ({
+    default: {},
+    schema: {},
+  }));
+
   mock.module("../context", () => ({
     baseUrl: "https://keeper.test",
     database: {

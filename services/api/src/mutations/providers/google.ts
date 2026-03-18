@@ -1,6 +1,6 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import { googleApiErrorSchema } from "@keeper.sh/data-schemas";
-import type { GoogleEvent } from "@keeper.sh/data-schemas";
+import { googleApiErrorSchema, googleEventSchema, googleEventWithAttendeesListSchema } from "@keeper.sh/data-schemas";
+import type { GoogleAttendee, GoogleEvent, GoogleEventWithAttendees } from "@keeper.sh/data-schemas";
 import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "@/types";
 
 const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3/";
@@ -61,7 +61,7 @@ const createGoogleEvent = async (
     return { success: false, error: errorMessage };
   }
 
-  const created = await response.json() as GoogleEvent;
+  const created = googleEventSchema.assert(await response.json());
   return { success: true, sourceEventUid: created.iCalUID };
 };
 
@@ -69,7 +69,7 @@ const findGoogleEventByUid = async (
   accessToken: string,
   externalCalendarId: string | null,
   sourceEventUid: string,
-): Promise<GoogleEvent | null> => {
+): Promise<GoogleEventWithAttendees | null> => {
   const calendarId = getCalendarId(externalCalendarId);
   const url = new URL(`calendars/${encodeURIComponent(calendarId)}/events`, GOOGLE_CALENDAR_API);
   url.searchParams.set("iCalUID", sourceEventUid);
@@ -83,7 +83,7 @@ const findGoogleEventByUid = async (
     return null;
   }
 
-  const body = await response.json() as { items?: GoogleEvent[] };
+  const body = googleEventWithAttendeesListSchema.assert(await response.json());
   const [item] = body.items ?? [];
   return item ?? null;
 };
@@ -138,14 +138,14 @@ const updateGoogleEvent = async (
 
   const hasExistingDateStart = existing.start && "date" in existing.start;
   const isAllDay = updates.isAllDay ?? (hasExistingDateStart === true);
-  if ("startTime" in updates) {
-    patch.start = buildGoogleDateField(updates.startTime as string, isAllDay);
+  if ("startTime" in updates && updates.startTime) {
+    patch.start = buildGoogleDateField(updates.startTime, isAllDay);
   }
-  if ("endTime" in updates) {
-    patch.end = buildGoogleDateField(updates.endTime as string, isAllDay);
+  if ("endTime" in updates && updates.endTime) {
+    patch.end = buildGoogleDateField(updates.endTime, isAllDay);
   }
-  if ("availability" in updates) {
-    patch.transparency = resolveGoogleTransparency(updates.availability as string);
+  if ("availability" in updates && updates.availability) {
+    patch.transparency = resolveGoogleTransparency(updates.availability);
   }
 
   const response = await fetch(url, {
@@ -213,24 +213,24 @@ const rsvpGoogleEvent = async (
     GOOGLE_CALENDAR_API,
   );
 
-  const rawEvent = existing as Record<string, unknown>;
-  let attendees: { email?: string; responseStatus?: string; self?: boolean }[] = [];
-  if (Array.isArray(rawEvent.attendees)) {
-    attendees = rawEvent.attendees as { email?: string; responseStatus?: string; self?: boolean }[];
-  }
+  const attendees = existing.attendees ?? [];
   const normalizedEmail = userEmail.toLowerCase();
-  let found = false;
+
+  const isMatchingAttendee = (attendee: GoogleAttendee): boolean => {
+    const attendeeEmail = (attendee.email ?? "").toLowerCase();
+    return attendeeEmail === normalizedEmail || attendee.self === true;
+  };
+
+  const hasMatch = attendees.some((attendee) => isMatchingAttendee(attendee));
 
   const updatedAttendees = attendees.map((attendee) => {
-    const attendeeEmail = (attendee.email ?? "").toLowerCase();
-    if (attendeeEmail === normalizedEmail || attendee.self === true) {
-      found = true;
+    if (isMatchingAttendee(attendee)) {
       return { ...attendee, responseStatus: status };
     }
     return attendee;
   });
 
-  if (!found) {
+  if (!hasMatch) {
     updatedAttendees.push({
       email: userEmail,
       responseStatus: status,
@@ -252,17 +252,6 @@ const rsvpGoogleEvent = async (
   await response.json();
   return { success: true };
 };
-
-interface GoogleAttendee {
-  email?: string;
-  responseStatus?: string;
-  self?: boolean;
-}
-
-interface GoogleEventWithAttendees extends GoogleEvent {
-  attendees?: GoogleAttendee[];
-  organizer?: { email?: string; displayName?: string };
-}
 
 interface PendingGoogleEvent {
   sourceEventUid: string;
@@ -338,10 +327,7 @@ const fetchGoogleEventsPage = async (
     return { items: [], nextPageToken: null };
   }
 
-  const body = await response.json() as {
-    items?: GoogleEventWithAttendees[];
-    nextPageToken?: string;
-  };
+  const body = googleEventWithAttendeesListSchema.assert(await response.json());
 
   return {
     items: body.items ?? [],

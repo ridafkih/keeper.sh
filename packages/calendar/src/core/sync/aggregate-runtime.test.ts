@@ -2,27 +2,58 @@ import { describe, expect, it } from "bun:test";
 import { createSyncAggregateRuntime } from "./aggregate-runtime";
 import { SyncAggregateTracker } from "./aggregate-tracker";
 import type { DestinationSyncResult, SyncProgressUpdate } from "./types";
+import Redis from "ioredis";
 
 const sleep = (milliseconds: number): Promise<void> => Bun.sleep(milliseconds);
 
-const createMockRedis = () => {
+const createMockRedis = (): Redis => {
   const store = new Map<string, string>();
 
-  return {
-    store,
-    incr: (key: string): Promise<number> => {
-      const current = Number.parseInt(store.get(key) ?? "0", 10);
-      const next = current + 1;
-      store.set(key, String(next));
-      return Promise.resolve(next);
-    },
-    expire: (_key: string, _seconds: number): Promise<number> => Promise.resolve(1),
-    get: (key: string): Promise<string | null> => Promise.resolve(store.get(key) ?? null),
-    set: (key: string, value: string): Promise<void> => {
-      store.set(key, value);
-      return Promise.resolve();
-    },
-  };
+  const stub = (property: keyof Redis) => {
+    switch (property) {
+      case "incr": {
+        return (key: string) => {
+          const current = Number.parseInt(store.get(key) ?? "0", 10);
+          const next = current + 1;
+          store.set(key, String(next));
+          return Promise.resolve(next);
+        }
+      }
+      case "get": {
+        return (key: string): Promise<string | null> => Promise.resolve(store.get(key) ?? null)
+      }
+      case "set": {
+        return (key: string, value: string): Promise<"OK"> => {
+          store.set(key, value);
+          return Promise.resolve("OK");
+        }
+      }
+      default: {
+        return () => null;
+      }
+    }
+  }
+
+  const instance: Redis = Object.create(Redis.prototype);
+
+  const isRedisMethod = (property: string | symbol): property is keyof Redis =>
+    property in Redis.prototype;
+
+  const NoopRedis = new Proxy(instance, {
+    get(target, property, receiver) {
+      if (isRedisMethod(property)) {
+        const value = target[property];
+        if (typeof value === "function") {
+          return stub(property);
+        }
+        return Reflect.get(target, property, receiver);
+      }
+
+      return Reflect.get(target, property, receiver);
+    }
+  })
+
+  return NoopRedis;
 };
 
 const ignoredCallbacks: unknown[] = [];
@@ -71,7 +102,7 @@ describe("createSyncAggregateRuntime", () => {
       const runtime = createSyncAggregateRuntime({
         broadcast: (userId, event, data) => broadcasts.push({ data, event, userId }),
         persistSyncStatus: ignorePersistSyncStatus,
-        redis: redis as never,
+        redis: redis,
         tracker: new SyncAggregateTracker({ progressThrottleMs: 0 }),
       });
 
@@ -105,7 +136,7 @@ describe("createSyncAggregateRuntime", () => {
           persisted.push({ result, syncedAt });
           return Promise.resolve();
         },
-        redis: redis as never,
+        redis: redis,
         tracker,
       });
 
@@ -138,7 +169,7 @@ describe("createSyncAggregateRuntime", () => {
           persisted.push(true);
           return Promise.resolve();
         },
-        redis: redis as never,
+        redis: redis,
         tracker: new SyncAggregateTracker({ progressThrottleMs: 0 }),
       });
 
@@ -159,7 +190,7 @@ describe("createSyncAggregateRuntime", () => {
       const runtime = createSyncAggregateRuntime({
         broadcast: ignoreBroadcast,
         persistSyncStatus: ignorePersistSyncStatus,
-        redis: redis as never,
+        redis: redis,
         tracker,
       });
 
@@ -176,7 +207,7 @@ describe("createSyncAggregateRuntime", () => {
       const runtime = createSyncAggregateRuntime({
         broadcast: ignoreBroadcast,
         persistSyncStatus: ignorePersistSyncStatus,
-        redis: redis as never,
+        redis: redis,
         tracker,
       });
 
@@ -197,7 +228,7 @@ describe("createSyncAggregateRuntime", () => {
       const runtime = createSyncAggregateRuntime({
         broadcast: ignoreBroadcast,
         persistSyncStatus: ignorePersistSyncStatus,
-        redis: redis as never,
+        redis: redis,
       });
 
       const result = await runtime.getCachedSyncAggregate("user-1");
@@ -214,12 +245,12 @@ describe("createSyncAggregateRuntime", () => {
         syncEventsTotal: 10,
         syncing: false,
       };
-      redis.store.set("sync:aggregate:latest:user-1", JSON.stringify(cached));
+      redis.set("sync:aggregate:latest:user-1", JSON.stringify(cached));
 
       const runtime = createSyncAggregateRuntime({
         broadcast: ignoreBroadcast,
         persistSyncStatus: ignorePersistSyncStatus,
-        redis: redis as never,
+        redis: redis,
       });
 
       const result = await runtime.getCachedSyncAggregate("user-1");
@@ -228,12 +259,12 @@ describe("createSyncAggregateRuntime", () => {
 
     it("returns null for invalid cached JSON", async () => {
       const redis = createMockRedis();
-      redis.store.set("sync:aggregate:latest:user-1", "not-valid-json");
+      redis.set("sync:aggregate:latest:user-1", "not-valid-json");
 
       const runtime = createSyncAggregateRuntime({
         broadcast: ignoreBroadcast,
         persistSyncStatus: ignorePersistSyncStatus,
-        redis: redis as never,
+        redis: redis,
       });
 
       const result = await runtime.getCachedSyncAggregate("user-1");
@@ -242,7 +273,7 @@ describe("createSyncAggregateRuntime", () => {
 
     it("returns null for valid JSON that doesn't match aggregate shape", async () => {
       const redis = createMockRedis();
-      redis.store.set(
+      redis.set(
         "sync:aggregate:latest:user-1",
         JSON.stringify({ foo: "bar" }),
       );
@@ -250,7 +281,7 @@ describe("createSyncAggregateRuntime", () => {
       const runtime = createSyncAggregateRuntime({
         broadcast: ignoreBroadcast,
         persistSyncStatus: ignorePersistSyncStatus,
-        redis: redis as never,
+        redis: redis,
       });
 
       const result = await runtime.getCachedSyncAggregate("user-1");
@@ -268,12 +299,13 @@ describe("createSyncAggregateRuntime", () => {
         syncEventsTotal: 5,
         syncing: false,
       };
-      redis.store.set("sync:aggregate:latest:user-1", JSON.stringify(cached));
+
+      redis.set("sync:aggregate:latest:user-1", JSON.stringify(cached));
 
       const runtime = createSyncAggregateRuntime({
         broadcast: ignoreBroadcast,
         persistSyncStatus: ignorePersistSyncStatus,
-        redis: redis as never,
+        redis: redis,
       });
 
       const result = await runtime.getCachedSyncAggregate("user-1");
@@ -291,7 +323,7 @@ describe("createSyncAggregateRuntime", () => {
           broadcasts.push({ data, eventName, userId });
         },
         persistSyncStatus: ignorePersistSyncStatus,
-        redis: redis as never,
+        redis: redis,
       });
 
       await runtime.emitSyncAggregate("user-1", {
@@ -316,7 +348,7 @@ describe("createSyncAggregateRuntime", () => {
       }
       expect(broadcastData.seq).toBe(1);
 
-      const stored = redis.store.get("sync:aggregate:latest:user-1");
+      const stored = redis.get("sync:aggregate:latest:user-1");
       expect(stored).toBeDefined();
     });
 
@@ -329,7 +361,7 @@ describe("createSyncAggregateRuntime", () => {
           broadcasts.push({ data, eventName, userId });
         },
         persistSyncStatus: ignorePersistSyncStatus,
-        redis: redis as never,
+        redis: redis,
       });
 
       await runtime.emitSyncAggregate("user-1", {
@@ -342,25 +374,21 @@ describe("createSyncAggregateRuntime", () => {
       });
 
       expect(broadcasts).toHaveLength(1);
-      expect(redis.store.get("sync:aggregate:latest:user-1")).toBeDefined();
-      expect(redis.store.get("sync:aggregate:seq:user-1")).toBe("1");
+      expect(redis.get("sync:aggregate:latest:user-1")).toBeDefined();
+      expect(redis.get("sync:aggregate:seq:user-1")).resolves.toBe("1");
     });
 
     it("still broadcasts even if redis fails", async () => {
       const broadcasts: { data: unknown; eventName: string; userId: string }[] = [];
-      const failingRedis = {
-        incr: (): Promise<number> => Promise.reject(new Error("redis down")),
-        expire: (): Promise<number> => Promise.resolve(1),
-        get: (): Promise<string | null> => Promise.resolve(null),
-        set: (): Promise<void> => Promise.resolve(),
-      };
+      const failingRedis = createMockRedis();
+      failingRedis.incr = (() => Promise.reject(new Error("redis down"))) satisfies typeof failingRedis.incr;
 
       const runtime = createSyncAggregateRuntime({
         broadcast: (userId, eventName, data) => {
           broadcasts.push({ data, eventName, userId });
         },
         persistSyncStatus: ignorePersistSyncStatus,
-        redis: failingRedis as never,
+        redis: failingRedis,
       });
 
       const aggregate = {

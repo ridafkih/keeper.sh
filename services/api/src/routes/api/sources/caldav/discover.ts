@@ -2,6 +2,7 @@ import { caldavDiscoverSourceSchema } from "@keeper.sh/data-schemas";
 import { createCalDAVClient } from "@keeper.sh/calendar/caldav";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
+import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import { widelog } from "@/utils/logging";
 
 const POST = withWideEvent(
@@ -17,7 +18,7 @@ const POST = withWideEvent(
           username,
         },
         serverUrl,
-      });
+      }, safeFetchOptions);
 
       const calendars = await client.discoverCalendars();
 

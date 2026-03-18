@@ -258,11 +258,11 @@ const buildDbUpdates = (updates: EventUpdateInput): Record<string, unknown> => {
   if ("location" in updates) {
     dbUpdates.location = updates.location;
   }
-  if ("startTime" in updates) {
-    dbUpdates.startTime = new Date(updates.startTime as string);
+  if ("startTime" in updates && updates.startTime) {
+    dbUpdates.startTime = new Date(updates.startTime);
   }
-  if ("endTime" in updates) {
-    dbUpdates.endTime = new Date(updates.endTime as string);
+  if ("endTime" in updates && updates.endTime) {
+    dbUpdates.endTime = new Date(updates.endTime);
   }
   if ("isAllDay" in updates) {
     dbUpdates.isAllDay = updates.isAllDay;

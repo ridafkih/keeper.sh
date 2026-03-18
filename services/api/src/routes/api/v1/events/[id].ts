@@ -1,6 +1,5 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { createKeeperApi } from "@/read-models";
-import type { RsvpStatus } from "@/types";
 import { withV1Auth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { eventPatchBodySchema } from "@/utils/request-body";
@@ -40,7 +39,7 @@ const PATCH = withWideEvent(
       const validated = eventPatchBodySchema.assert(body);
 
       if (validated.rsvpStatus) {
-        const result = await keeperApi.rsvpEvent(userId, eventId, validated.rsvpStatus as RsvpStatus);
+        const result = await keeperApi.rsvpEvent(userId, eventId, validated.rsvpStatus);
 
         if (!result.success) {
           return ErrorResponse.badRequest(result.error ?? "Failed to update RSVP status.").toResponse();

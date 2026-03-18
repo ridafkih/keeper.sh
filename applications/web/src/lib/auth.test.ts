@@ -40,7 +40,7 @@ beforeEach(() => {
   authClientMock.signUp.email.mockClear();
   globalThis.fetch = mock(() =>
     Promise.resolve(new Response(JSON.stringify({}), { status: 200 })),
-  ) as typeof fetch;
+  );
 });
 
 describe("signInWithCredential", () => {
