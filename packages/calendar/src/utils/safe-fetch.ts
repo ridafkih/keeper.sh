@@ -17,88 +17,83 @@ class UrlSafetyError extends Error {
   }
 }
 
+type SafeFetch = (input: string | Request | URL, init?: RequestInit) => Promise<Response>;
+
+const normalizeToIPv4 = (parsed: ipaddr.IPv4 | ipaddr.IPv6): ipaddr.IPv4 | ipaddr.IPv6 => {
+  if (parsed.kind() === "ipv6" && "isIPv4MappedAddress" in parsed && parsed.isIPv4MappedAddress()) {
+    return parsed.toIPv4Address();
+  }
+  return parsed;
+};
+
 const isUnicastAddress = (address: string): boolean => {
   try {
-    const parsed = ipaddr.parse(address);
-
-    if (parsed.kind() === "ipv6" && "isIPv4MappedAddress" in parsed) {
-      if (parsed.isIPv4MappedAddress()) {
-        return parsed.toIPv4Address().range() === "unicast";
-      }
-    }
-
+    const parsed = normalizeToIPv4(ipaddr.parse(address));
     return parsed.range() === "unicast";
   } catch {
     return false;
   }
 };
 
-const isHostAllowed = (host: string, allowedPrivateHosts: Set<string> | undefined): boolean => {
-  if (!allowedPrivateHosts) {
-    return false;
+const assertUnicastAddress = (address: string, message: string): void => {
+  if (!isUnicastAddress(address)) {
+    throw new UrlSafetyError(message);
+  }
+};
+
+const resolveAllAddresses = async (hostname: string): Promise<string[]> => {
+  const results = await Promise.allSettled([resolve4(hostname), resolve6(hostname)]);
+
+  const addresses = results.flatMap((result) => {
+    if (result.status === "fulfilled") {
+      return result.value;
+    }
+    return [];
+  });
+
+  if (addresses.length === 0) {
+    throw new UrlSafetyError("The provided URL could not be resolved to any IP address.");
   }
 
-  return allowedPrivateHosts.has(host);
+  return addresses;
+};
+
+const stripBrackets = (hostname: string): string => hostname.replace(/^\[/, "").replace(/\]$/, "");
+
+const validateProtocol = (protocol: string): void => {
+  if (!ALLOWED_PROTOCOLS.has(protocol)) {
+    throw new UrlSafetyError(
+      `URL scheme "${protocol.replace(":", "")}" is not allowed. Only HTTP and HTTPS are supported.`,
+    );
+  }
+};
+
+const validateHostResolution = async (host: string, hostname: string, options: SafeFetchOptions): Promise<void> => {
+  if (options.allowedPrivateHosts?.has(host)) {
+    return;
+  }
+
+  if (ipaddr.isValid(hostname)) {
+    assertUnicastAddress(hostname, "The provided URL points to a private or reserved network address.");
+    return;
+  }
+
+  const addresses = await resolveAllAddresses(hostname);
+
+  for (const address of addresses) {
+    assertUnicastAddress(address, "The provided URL resolves to a private or reserved network address.");
+  }
 };
 
 const validateUrlSafety = async (url: string, options?: SafeFetchOptions): Promise<void> => {
   const parsed = new URL(url);
-
-  if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) {
-    throw new UrlSafetyError(
-      `URL scheme "${parsed.protocol.replace(":", "")}" is not allowed. Only HTTP and HTTPS are supported.`,
-    );
-  }
+  validateProtocol(parsed.protocol);
 
   if (!options?.blockPrivateResolution) {
     return;
   }
 
-  const host = parsed.host;
-  const hostname = parsed.hostname.replace(/^\[/, "").replace(/\]$/, "");
-
-  if (isHostAllowed(host, options.allowedPrivateHosts)) {
-    return;
-  }
-
-  if (ipaddr.isValid(hostname)) {
-    if (!isUnicastAddress(hostname)) {
-      throw new UrlSafetyError(
-        "The provided URL points to a private or reserved network address.",
-      );
-    }
-    return;
-  }
-
-  const resolvedAddresses: string[] = [];
-
-  try {
-    const ipv4Addresses = await resolve4(hostname);
-    resolvedAddresses.push(...ipv4Addresses);
-  } catch {
-    // hostname may not have A records
-  }
-
-  try {
-    const ipv6Addresses = await resolve6(hostname);
-    resolvedAddresses.push(...ipv6Addresses);
-  } catch {
-    // hostname may not have AAAA records
-  }
-
-  if (resolvedAddresses.length === 0) {
-    throw new UrlSafetyError(
-      "The provided URL could not be resolved to any IP address.",
-    );
-  }
-
-  for (const address of resolvedAddresses) {
-    if (!isUnicastAddress(address)) {
-      throw new UrlSafetyError(
-        "The provided URL resolves to a private or reserved network address.",
-      );
-    }
-  }
+  await validateHostResolution(parsed.host, stripBrackets(parsed.hostname), options);
 };
 
 const resolveRedirectUrl = (response: Response, originalUrl: string): string | null => {
@@ -114,110 +109,92 @@ const resolveRedirectUrl = (response: Response, originalUrl: string): string | n
   }
 };
 
-const isCrossOrigin = (urlA: string, urlB: string): boolean => {
-  const originA = new URL(urlA).origin;
-  const originB = new URL(urlB).origin;
-  return originA !== originB;
+const isCrossOrigin = (current: string, next: string): boolean => new URL(current).origin !== new URL(next).origin;
+
+const toHeaderRecord = (headers: RequestInit["headers"]): Record<string, string> => {
+  const normalized = new Headers(headers);
+  const record: Record<string, string> = {};
+
+  for (const [key, value] of normalized.entries()) {
+    record[key] = value;
+  }
+
+  return record;
 };
 
-const stripAuthorizationHeader = (
+const withoutAuthorization = (headers: Record<string, string>): Record<string, string> => Object.fromEntries(Object.entries(headers).filter(([key]) => key.toLowerCase() !== "authorization"));
+
+const isRedirect = (response: Response): boolean => REDIRECT_STATUS_CODES.has(response.status);
+
+const getHeadersForRedirect = (
   headers: Record<string, string>,
+  currentUrl: string,
+  redirectUrl: string,
 ): Record<string, string> => {
-  const filtered: Record<string, string> = {};
-  for (const [key, value] of Object.entries(headers)) {
-    if (key.toLowerCase() !== "authorization") {
-      filtered[key] = value;
-    }
+  if (isCrossOrigin(currentUrl, redirectUrl)) {
+    return withoutAuthorization(headers);
   }
-  return filtered;
+  return headers;
 };
 
-type SafeFetch = (input: string | Request | URL, init?: RequestInit) => Promise<Response>;
+const followRedirects = async (
+  initialUrl: string,
+  initialResponse: Response,
+  init: RequestInit | undefined,
+  options: SafeFetchOptions | undefined,
+): Promise<Response> => {
+  const headers = toHeaderRecord(init?.headers);
+  let currentUrl = initialUrl;
+  let currentResponse = initialResponse;
+  let currentHeaders = headers;
 
-const extractHeaders = (headers: RequestInit["headers"] | undefined): Record<string, string> => {
-  const result: Record<string, string> = {};
+  for (let count = 0; count < MAX_REDIRECTS; count++) {
+    const redirectUrl = resolveRedirectUrl(currentResponse, currentUrl);
+    if (!redirectUrl) {
+      return currentResponse;
+    }
 
-  if (!headers) {
-    return result;
-  }
+    await validateUrlSafety(redirectUrl, options);
 
-  if (headers instanceof Headers) {
-    headers.forEach((value, key) => {
-      result[key] = value;
+    currentHeaders = getHeadersForRedirect(currentHeaders, currentUrl, redirectUrl);
+    currentUrl = redirectUrl;
+
+    currentResponse = await globalThis.fetch(currentUrl, {
+      ...init,
+      headers: currentHeaders,
+      redirect: "manual",
     });
-    return result;
-  }
 
-  if (Array.isArray(headers)) {
-    for (const entry of headers) {
-      const key = entry[0];
-      const value = entry[1];
-      if (key !== undefined && value !== undefined) {
-        result[key] = value;
-      }
-    }
-    return result;
-  }
-
-  for (const [key, value] of Object.entries(headers)) {
-    if (typeof value === "string") {
-      result[key] = value;
+    if (!isRedirect(currentResponse)) {
+      return currentResponse;
     }
   }
 
-  return result;
+  throw new UrlSafetyError(`Too many redirects (exceeded ${MAX_REDIRECTS}).`);
 };
 
-const createSafeFetch = (options?: SafeFetchOptions): SafeFetch => {
-  const safeFetch: SafeFetch = async (input, init) => {
-    const initialUrl = input instanceof Request ? input.url : input.toString();
-    await validateUrlSafety(initialUrl, options);
+const extractUrl = (input: string | Request | URL): string => {
+  if (input instanceof Request) {
+    return input.url;
+  }
+  return input.toString();
+};
+
+const createSafeFetch = (options?: SafeFetchOptions): SafeFetch => async (input, init) => {
+    const url = extractUrl(input);
+    await validateUrlSafety(url, options);
 
     const response = await globalThis.fetch(input, {
       ...init,
       redirect: "manual",
     });
 
-    if (!REDIRECT_STATUS_CODES.has(response.status)) {
+    if (!isRedirect(response)) {
       return response;
     }
 
-    let currentUrl = initialUrl;
-    let currentResponse = response;
-    let currentHeaders = extractHeaders(init?.headers);
-
-    for (let redirectCount = 0; redirectCount < MAX_REDIRECTS; redirectCount++) {
-      const redirectUrl = resolveRedirectUrl(currentResponse, currentUrl);
-      if (!redirectUrl) {
-        return currentResponse;
-      }
-
-      await validateUrlSafety(redirectUrl, options);
-
-      if (isCrossOrigin(currentUrl, redirectUrl)) {
-        currentHeaders = stripAuthorizationHeader(currentHeaders);
-      }
-
-      currentUrl = redirectUrl;
-
-      currentResponse = await globalThis.fetch(currentUrl, {
-        ...init,
-        headers: currentHeaders,
-        redirect: "manual",
-      });
-
-      if (!REDIRECT_STATUS_CODES.has(currentResponse.status)) {
-        return currentResponse;
-      }
-    }
-
-    throw new UrlSafetyError(
-      `Too many redirects (exceeded ${MAX_REDIRECTS}).`,
-    );
+    return followRedirects(url, response, init, options);
   };
-
-  return safeFetch;
-};
 
 export { createSafeFetch, UrlSafetyError, validateUrlSafety };
 export type { SafeFetchOptions };
