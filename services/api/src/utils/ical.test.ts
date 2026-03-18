@@ -1,32 +1,21 @@
-import { beforeAll, describe, expect, it, mock } from "bun:test";
-import type { formatEventsAsIcal as formatEventsAsIcalFn } from "./ical";
-
-let formatEventsAsIcal: typeof formatEventsAsIcalFn = () => {
-  throw new Error("Module not loaded");
-};
-
-beforeAll(async () => {
-  mock.module("../context", () => ({
-    database: {},
-  }));
-
-  ({ formatEventsAsIcal } = await import("./ical"));
-});
+import { describe, expect, it } from "bun:test";
+import { formatEventsAsIcal } from "./ical-format";
+import type { CalendarEvent } from "./ical-format";
 
 const resolveTemplate = (template: string, variables: Record<string, string>): string =>
   template.replaceAll(/\{\{(\w+)\}\}/g, (match, name: string) => variables[name] ?? match);
 
-interface CalendarEvent {
+interface SummaryEvent {
   title: string | null;
   calendarName: string;
 }
 
-interface FeedSettings {
+interface SummarySettings {
   includeEventName: boolean;
   customEventName: string;
 }
 
-const resolveEventSummary = (event: CalendarEvent, settings: FeedSettings): string => {
+const resolveEventSummary = (event: SummaryEvent, settings: SummarySettings): string => {
   let template = settings.customEventName;
   if (settings.includeEventName) {
     template = event.title || settings.customEventName;
@@ -46,7 +35,7 @@ const DEFAULT_SETTINGS = {
   customEventName: "Busy",
 };
 
-const makeEvent = (overrides: Partial<Parameters<typeof formatEventsAsIcalFn>[0][number]> = {}) => ({
+const makeEvent = (overrides: Partial<CalendarEvent> = {}): CalendarEvent => ({
   id: "test-event-id",
   title: "Test Event",
   description: null,
