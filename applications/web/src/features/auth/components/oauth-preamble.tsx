@@ -35,6 +35,12 @@ const PROVIDER_SOCIAL_MAP: Partial<Record<Provider, string>> = {
   outlook: "microsoft",
 };
 
+const PROVIDER_API_MAP: Record<Provider, string> = {
+  google: "google",
+  outlook: "outlook",
+  "microsoft-365": "outlook",
+};
+
 export function PermissionsList({ items }: { items: readonly string[] }) {
   return (
     <ul className="flex flex-col gap-1">
@@ -121,7 +127,8 @@ interface LinkOAuthPreambleProps {
 export function LinkOAuthPreamble({ provider }: LinkOAuthPreambleProps) {
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
-    window.location.href = `/api/sources/authorize?provider=${provider}`;
+    const apiProvider = PROVIDER_API_MAP[provider];
+    window.location.href = `/api/sources/authorize?provider=${apiProvider}`;
   };
 
   return (
