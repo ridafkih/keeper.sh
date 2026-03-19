@@ -11,6 +11,7 @@ interface SyncAggregate {
   syncEventsTotal: number;
   syncing: boolean;
   lastSyncedAt?: string | null;
+  pending?: boolean;
 }
 
 const isSocketMessage = (value: unknown): value is SocketMessage => {

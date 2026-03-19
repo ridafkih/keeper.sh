@@ -1,11 +1,25 @@
 import { useAtomValue } from "jotai";
+import { tv } from "tailwind-variants/lite";
 import { syncStateAtom, syncStatusLabelAtom, syncStatusShimmerAtom } from "@/state/sync";
 import { Text } from "@/components/ui/primitives/text";
 import { ShimmerText } from "@/components/ui/primitives/shimmer-text";
 import { Tooltip } from "@/components/ui/primitives/tooltip";
 import { clampPercent, resolveSyncPercent } from "./sync-status-helpers";
 
-function SyncProgressCircle({ percent }: { percent: number }) {
+const progressStroke = tv({
+  base: "transition-[stroke-dashoffset] duration-300 ease-out motion-reduce:transition-none",
+  variants: {
+    pending: {
+      true: "stroke-yellow-400",
+      false: "stroke-emerald-400",
+    },
+  },
+  defaultVariants: {
+    pending: false,
+  },
+});
+
+function SyncProgressCircle({ percent, pending }: { percent: number; pending: boolean }) {
   const radius = 5;
   const circumference = 2 * Math.PI * radius;
   const clampedPercent = clampPercent(percent);
@@ -28,7 +42,7 @@ function SyncProgressCircle({ percent }: { percent: number }) {
         fill="none"
         strokeWidth={2}
         strokeLinecap="round"
-        className="stroke-emerald-400 transition-[stroke-dashoffset] duration-300 ease-out motion-reduce:transition-none"
+        className={progressStroke({ pending })}
         style={{
           strokeDasharray: circumference,
           strokeDashoffset,
@@ -40,8 +54,11 @@ function SyncProgressCircle({ percent }: { percent: number }) {
 
 function SyncProgressIndicator() {
   const composite = useAtomValue(syncStateAtom);
+  const label = useAtomValue(syncStatusLabelAtom);
+  const pending = label === "Pending";
+
   if (!composite.connected) {
-    return <SyncProgressCircle percent={0} />;
+    return <SyncProgressCircle percent={0} pending={false} />;
   }
 
   const percent = resolveSyncPercent(composite);
@@ -49,7 +66,7 @@ function SyncProgressIndicator() {
     return null;
   }
 
-  return <SyncProgressCircle percent={percent} />;
+  return <SyncProgressCircle percent={percent} pending={pending} />;
 }
 
 function SyncStatusLabel() {

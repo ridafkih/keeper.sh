@@ -3,9 +3,10 @@ import { createWebsocketHandler } from "@keeper.sh/broadcast";
 import type { Socket } from "@keeper.sh/broadcast";
 import { syncAggregateSchema } from "@keeper.sh/data-schemas";
 import { and, eq, inArray, max } from "drizzle-orm";
-import { database, getCachedSyncAggregate, getCurrentSyncAggregate } from "@/context";
+import { database, redis, getCachedSyncAggregate, getCurrentSyncAggregate } from "@/context";
 import { resolveSyncAggregatePayload } from "./websocket-payload";
 import { runSendInitialSyncStatus } from "./websocket-initial-status";
+import { isUserPending } from "@/utils/sync-pending";
 import { context, widelog } from "@/utils/logging";
 
 const selectLatestDestinationSyncedAt = async (userId: string): Promise<Date | null> => {
@@ -41,6 +42,7 @@ const sendInitialSyncStatus = (userId: string, socket: Socket): Promise<void> =>
         isValidSyncAggregate: syncAggregateSchema.allows,
       }),
     selectLatestDestinationSyncedAt,
+    isSyncPending: (userIdToCheck) => isUserPending(redis, userIdToCheck),
   });
 
 const baseWebsocketHandler = createWebsocketHandler({

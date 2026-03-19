@@ -1,5 +1,4 @@
 import { atom } from "jotai";
-import { selectAtom } from "jotai/utils";
 import type { SyncAggregate } from "@keeper.sh/data-schemas/client";
 
 export type CompositeState = "idle" | "syncing";
@@ -16,6 +15,7 @@ export interface CompositeSyncState {
   lastSyncedAt: string | null;
   connected: boolean;
   hasReceivedAggregate: boolean;
+  pending: boolean;
 }
 
 export const syncStateAtom = atom<CompositeSyncState>({
@@ -28,9 +28,15 @@ export const syncStateAtom = atom<CompositeSyncState>({
   lastSyncedAt: null,
   connected: false,
   hasReceivedAggregate: false,
+  pending: false,
 });
 
-export const syncStatusLabelAtom = selectAtom(syncStateAtom, (composite) => {
+export const syncPendingAtom = atom(false);
+
+export const syncStatusLabelAtom = atom((get) => {
+  const composite = get(syncStateAtom);
+  const localPending = get(syncPendingAtom);
+
   if (!composite.connected) {
     return "Connecting";
   }
@@ -43,6 +49,10 @@ export const syncStatusLabelAtom = selectAtom(syncStateAtom, (composite) => {
     return "Syncing";
   }
 
+  if (localPending || composite.pending) {
+    return "Pending";
+  }
+
   if (composite.syncEventsRemaining === 0) {
     return "Up to Date";
   }
@@ -50,8 +60,15 @@ export const syncStatusLabelAtom = selectAtom(syncStateAtom, (composite) => {
   return "Sync Paused";
 });
 
-export const syncStatusShimmerAtom = selectAtom(
-  syncStateAtom,
-  (composite) =>
-    !composite.connected || !composite.hasReceivedAggregate || composite.state === "syncing",
-);
+export const syncStatusShimmerAtom = atom((get) => {
+  const composite = get(syncStateAtom);
+  const localPending = get(syncPendingAtom);
+
+  return (
+    !composite.connected ||
+    !composite.hasReceivedAggregate ||
+    composite.state === "syncing" ||
+    localPending ||
+    composite.pending
+  );
+});

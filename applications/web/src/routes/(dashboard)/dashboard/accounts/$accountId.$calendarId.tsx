@@ -55,6 +55,7 @@ import {
   destinationIdsAtom,
   selectDestinationInclusion,
 } from "@/state/destination-ids";
+import { syncPendingAtom } from "@/state/sync";
 
 
 export const Route = createFileRoute(
@@ -84,12 +85,21 @@ const PROVIDER_EXCLUSION_SETTINGS: SyncSetting[] = [
 ];
 
 const PROVIDERS_WITH_EXTRA_SETTINGS = new Set(["google"]);
+const NON_SYNC_AFFECTING_FIELDS = new Set(["includeInIcalFeed", "name"]);
+
+function hasSyncAffectingFields(patch: Record<string, unknown>): boolean {
+  return Object.keys(patch).some((key) => !NON_SYNC_AFFECTING_FIELDS.has(key));
+}
 
 function patchSource(
   store: ReturnType<typeof useStore>,
   calendarId: string,
   patch: Record<string, unknown>,
 ) {
+  if (hasSyncAffectingFields(patch)) {
+    store.set(syncPendingAtom, true);
+  }
+
   const swrKey = `/api/sources/${calendarId}`;
   serializedPatch(
     swrKey,
@@ -343,6 +353,7 @@ function DestinationCheckboxItem({
     }
 
     store.set(destinationIdsAtom, updatedSet);
+    store.set(syncPendingAtom, true);
 
     const swrKey = `/api/sources/${calendarId}/destinations`;
     serializedCall(swrKey, () => {

@@ -97,6 +97,19 @@ export {
   type SyncAggregateRuntime,
 } from "./core/sync/aggregate-runtime";
 export {
+  SYNC_AFFECTING_FIELDS,
+  markSyncPending,
+  clearSyncPending,
+  isSyncPending,
+  storeSettingsSnapshot,
+  ensureSettingsSnapshot,
+  reconcileSourceSettings,
+  removeFromSettingsDirty,
+  clearSettingsDirty,
+  isUserPending,
+  broadcastPendingAggregate,
+} from "./core/sync/sync-pending";
+export {
   getEventMappingsForDestination,
   createEventMapping,
   deleteEventMapping,

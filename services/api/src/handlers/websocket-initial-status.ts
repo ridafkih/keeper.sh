@@ -12,6 +12,7 @@ interface InitialSyncAggregateFallbackPayload {
 
 interface OutgoingSyncAggregatePayload {
   lastSyncedAt?: string | null;
+  pending?: boolean;
   progressPercent: number;
   syncEventsProcessed: number;
   syncEventsRemaining: number;
@@ -27,10 +28,23 @@ interface SendInitialSyncStatusDependencies {
     fallback: InitialSyncAggregateFallbackPayload,
   ) => Promise<unknown>;
   isValidSyncAggregate: (value: unknown) => value is OutgoingSyncAggregatePayload;
+  isSyncPending?: (userId: string) => Promise<boolean>;
 }
 
 const INITIAL_COUNT = 0;
 const COMPLETE_PERCENT = 100;
+
+const applyPendingFlag = async (
+  payload: OutgoingSyncAggregatePayload,
+  userId: string,
+  dependencies: SendInitialSyncStatusDependencies,
+): Promise<OutgoingSyncAggregatePayload> => {
+  const pending = await dependencies.isSyncPending?.(userId);
+  if (!pending) {
+    return payload;
+  }
+  return { ...payload, pending: true };
+};
 
 const createInitialFallbackPayload = (
   lastSyncedAt: string | null,
@@ -60,9 +74,11 @@ const runSendInitialSyncStatus = async (
     throw new Error("Invalid initial sync aggregate payload");
   }
 
+  const data = await applyPendingFlag(resolvedPayload, userId, dependencies);
+
   socket.send(
     JSON.stringify({
-      data: resolvedPayload,
+      data,
       event: "sync:aggregate",
     }),
   );

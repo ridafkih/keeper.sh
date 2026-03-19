@@ -3,9 +3,11 @@ import { and, count, eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { idParamSchema } from "@/utils/request-query";
-import { database, redis } from "@/context";
+import { database, redis, broadcastService } from "@/context";
 import { withAccountDisplay } from "@/utils/provider-display";
 import { invalidateCalendarsForAccount } from "@/utils/invalidate-calendars";
+import { markSyncPending, broadcastPendingAggregate } from "@/utils/sync-pending";
+import { removeFromSettingsDirty } from "@keeper.sh/calendar";
 
 const GET = withWideEvent(
   withAuth(async ({ params, userId }) => {
@@ -52,6 +54,11 @@ const DELETE = withWideEvent(
     }
     const { id } = params;
 
+    const accountCalendars = await database
+      .select({ id: calendarsTable.id })
+      .from(calendarsTable)
+      .where(eq(calendarsTable.accountId, id));
+
     await invalidateCalendarsForAccount(database, redis, id);
 
     const [deleted] = await database
@@ -67,6 +74,12 @@ const DELETE = withWideEvent(
     if (!deleted) {
       return ErrorResponse.notFound("Account not found").toResponse();
     }
+
+    const deletedCalendarIds = accountCalendars.map((row) => row.id);
+    await removeFromSettingsDirty(redis, userId, deletedCalendarIds);
+
+    await markSyncPending(redis, userId);
+    await broadcastPendingAggregate(redis, broadcastService.emit, userId);
 
     return Response.json({ success: true });
   }),

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useSetAtom } from "jotai";
-import { syncStateAtom, type CompositeSyncState } from "@/state/sync";
+import { syncStateAtom, syncPendingAtom, type CompositeSyncState } from "@/state/sync";
 import {
   parseIncomingSocketAction,
   shouldAcceptAggregatePayload,
@@ -32,6 +32,7 @@ const INITIAL_SYNC_STATE: CompositeSyncState = {
   syncEventsTotal: 0,
   state: "idle",
   hasReceivedAggregate: false,
+  pending: false,
 };
 
 const getWebSocketProtocol = (): string =>
@@ -111,6 +112,7 @@ const resolveProgressPercent = (data: { syncEventsRemaining: number; progressPer
 const handleMessage = (
   connectionState: ConnectionState,
   setSyncState: (state: CompositeSyncState) => void,
+  setSyncPending: (pending: boolean) => void,
   raw: string,
   socket: WebSocket,
 ): void => {
@@ -145,6 +147,13 @@ const handleMessage = (
   clearInitialAggregateTimer(connectionState);
   connectionState.lastSeq = decision.nextSeq;
 
+  const isSyncing = action.data.syncing;
+  const pendingFromServer = action.data.pending ?? false;
+
+  if (isSyncing || action.data.pending === false) {
+    setSyncPending(false);
+  }
+
   applyState(connectionState, setSyncState, {
     connected: true,
     hasReceivedAggregate: true,
@@ -154,7 +163,8 @@ const handleMessage = (
     syncEventsProcessed: action.data.syncEventsProcessed,
     syncEventsRemaining: action.data.syncEventsRemaining,
     syncEventsTotal: action.data.syncEventsTotal,
-    state: action.data.syncing ? "syncing" : "idle",
+    state: isSyncing ? "syncing" : "idle",
+    pending: pendingFromServer,
   });
 };
 
@@ -171,6 +181,7 @@ const scheduleReconnect = (connectionState: ConnectionState, connectFn: () => vo
 const connect = async (
   connectionState: ConnectionState,
   setSyncState: (state: CompositeSyncState) => void,
+  setSyncPending: (pending: boolean) => void,
 ): Promise<void> => {
   if (connectionState.disposed) {
     return;
@@ -195,14 +206,14 @@ const connect = async (
       startInitialAggregateTimer(connectionState, socket);
     });
     socket.addEventListener("message", (event) => {
-      handleMessage(connectionState, setSyncState, String(event.data), socket);
+      handleMessage(connectionState, setSyncState, setSyncPending, String(event.data), socket);
     });
     socket.addEventListener("close", () => {
       clearInitialAggregateTimer(connectionState);
       connectionState.hasReceivedSocketAggregate = false;
       setConnected(connectionState, setSyncState, false);
       scheduleReconnect(connectionState, () => {
-        void connect(connectionState, setSyncState);
+        void connect(connectionState, setSyncState, setSyncPending);
       });
     });
     socket.addEventListener("error", () => {
@@ -211,7 +222,7 @@ const connect = async (
   } catch {
     setConnected(connectionState, setSyncState, false);
     scheduleReconnect(connectionState, () => {
-      void connect(connectionState, setSyncState);
+      void connect(connectionState, setSyncState, setSyncPending);
     });
   }
 };
@@ -228,6 +239,7 @@ const dispose = (connectionState: ConnectionState): void => {
 
 export function SyncProvider() {
   const setSyncState = useSetAtom(syncStateAtom);
+  const setSyncPending = useSetAtom(syncPendingAtom);
 
   useEffect(() => {
     const connectionState: ConnectionState = {
@@ -242,11 +254,11 @@ export function SyncProvider() {
       socket: null,
     };
 
-    void connect(connectionState, setSyncState);
+    void connect(connectionState, setSyncState, setSyncPending);
     return () => {
       dispose(connectionState);
     };
-  }, [setSyncState]);
+  }, [setSyncState, setSyncPending]);
 
   return null;
 }
