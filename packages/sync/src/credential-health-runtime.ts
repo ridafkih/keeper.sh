@@ -1,9 +1,13 @@
 import {
+  type RuntimeMachine,
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
   MachineRuntimeDriver,
 } from "@keeper.sh/machine-orchestration";
+import type { OAuthRefreshResult } from "@keeper.sh/calendar";
 import {
+  CredentialHealthCommandType,
+  CredentialHealthEventType,
   CredentialHealthStateMachine,
   TransitionPolicy,
 } from "@keeper.sh/state-machines";
@@ -17,12 +21,6 @@ import type {
   EventEnvelope,
   MachineSnapshot,
 } from "@keeper.sh/state-machines";
-
-interface OAuthRefreshResult {
-  access_token: string;
-  expires_in: number;
-  refresh_token?: string;
-}
 
 interface CredentialHealthRuntimeInput {
   oauthCredentialId: string;
@@ -43,20 +41,17 @@ interface CredentialHealthRuntime {
   getSnapshot: () => Promise<MachineSnapshot<CredentialHealthState, CredentialHealthContext>>;
 }
 
-interface CredentialHealthMachine {
-  restore: (
-    snapshot: MachineSnapshot<CredentialHealthState, CredentialHealthContext>,
-  ) => void;
-  dispatch: (
-    envelope: EventEnvelope<CredentialHealthEvent>,
-  ) => CredentialHealthTransitionResult;
-}
-
 const MS_PER_SECOND = 1000;
 
 class RestorableCredentialHealthStateMachine
   extends CredentialHealthStateMachine
-  implements CredentialHealthMachine
+  implements RuntimeMachine<
+    CredentialHealthState,
+    CredentialHealthContext,
+    CredentialHealthEvent,
+    CredentialHealthCommand,
+    CredentialHealthOutput
+  >
 {
   restore(snapshot: MachineSnapshot<CredentialHealthState, CredentialHealthContext>): void {
     this.state = snapshot.state;
@@ -98,17 +93,21 @@ const createCredentialHealthRuntime = (
     aggregateId: input.oauthCredentialId,
     commandBus: {
       execute: async (command) => {
-        if (command.type === "REFRESH_TOKEN") {
-          return;
+        switch (command.type) {
+          case CredentialHealthCommandType.REFRESH_TOKEN: {
+            return;
+          }
+          case CredentialHealthCommandType.MARK_ACCOUNT_REAUTH_REQUIRED: {
+            await input.markNeedsReauthentication();
+            return;
+          }
+          case CredentialHealthCommandType.PERSIST_REFRESHED_CREDENTIALS: {
+            return;
+          }
+          default: {
+            throw new Error("Unhandled credential health command");
+          }
         }
-        if (command.type === "MARK_ACCOUNT_REAUTH_REQUIRED") {
-          await input.markNeedsReauthentication();
-          return;
-        }
-        if (command.type === "PERSIST_REFRESHED_CREDENTIALS") {
-          return;
-        }
-        throw new Error("Unhandled credential health command");
       },
     },
     envelopeStore,
@@ -146,21 +145,23 @@ const createCredentialHealthRuntime = (
   };
 
   const refresh = async (refreshToken: string): Promise<OAuthRefreshResult> => {
-    const expiryTransition = await dispatch({ type: "TOKEN_EXPIRY_DETECTED" });
-    const shouldRefresh = expiryTransition.commands.some((command) => command.type === "REFRESH_TOKEN");
+    const expiryTransition = await dispatch({ type: CredentialHealthEventType.TOKEN_EXPIRY_DETECTED });
+    const shouldRefresh = expiryTransition.commands.some(
+      (command) => command.type === CredentialHealthCommandType.REFRESH_TOKEN,
+    );
     if (!shouldRefresh) {
       throw new Error("Invariant violated: expected REFRESH_TOKEN command");
     }
 
-    await dispatch({ type: "REFRESH_STARTED" });
+    await dispatch({ type: CredentialHealthEventType.REFRESH_STARTED });
 
     try {
       const refreshed = await input.refreshAccessToken(refreshToken);
       const newExpiresAt = new Date(Date.now() + refreshed.expires_in * MS_PER_SECOND);
 
       await dispatch({
+        type: CredentialHealthEventType.REFRESH_SUCCEEDED,
         newExpiresAt: newExpiresAt.toISOString(),
-        type: "REFRESH_SUCCEEDED",
       });
       await input.persistRefreshedCredentials({
         accessToken: refreshed.access_token,
@@ -171,10 +172,10 @@ const createCredentialHealthRuntime = (
     } catch (error) {
       const code = resolveErrorCode(error);
       if (input.isReauthRequiredError(error)) {
-        await dispatch({ code, type: "REFRESH_REAUTH_REQUIRED" });
+        await dispatch({ code, type: CredentialHealthEventType.REFRESH_REAUTH_REQUIRED });
         throw error;
       }
-      await dispatch({ code, type: "REFRESH_RETRYABLE_FAILED" });
+      await dispatch({ code, type: CredentialHealthEventType.REFRESH_RETRYABLE_FAILED });
       throw error;
     }
   };

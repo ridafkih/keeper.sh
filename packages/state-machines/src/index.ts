@@ -59,7 +59,11 @@ export type {
   SyncLifecycleApplicationServiceDependencies,
 } from "./orchestration/sync-lifecycle.application-service";
 
-export { PushJobArbitrationStateMachine } from "./push-job-arbitration.machine";
+export {
+  PushJobArbitrationCommandType,
+  PushJobArbitrationEventType,
+  PushJobArbitrationStateMachine,
+} from "./push-job-arbitration.machine";
 export type {
   PushJobArbitrationCommand,
   PushJobArbitrationContext,
@@ -71,7 +75,11 @@ export type {
   PushJobArbitrationTransitionResult,
 } from "./push-job-arbitration.machine";
 
-export { DestinationExecutionStateMachine } from "./destination-execution.machine";
+export {
+  DestinationExecutionCommandType,
+  DestinationExecutionEventType,
+  DestinationExecutionStateMachine,
+} from "./destination-execution.machine";
 export type {
   DestinationExecutionCommand,
   DestinationExecutionContext,
@@ -83,7 +91,11 @@ export type {
   DestinationExecutionTransitionResult,
 } from "./destination-execution.machine";
 
-export { SourceIngestionLifecycleStateMachine } from "./source-ingestion-lifecycle.machine";
+export {
+  SourceIngestionLifecycleCommandType,
+  SourceIngestionLifecycleEventType,
+  SourceIngestionLifecycleStateMachine,
+} from "./source-ingestion-lifecycle.machine";
 export type {
   SourceIngestionLifecycleCommand,
   SourceIngestionLifecycleContext,
@@ -95,7 +107,11 @@ export type {
   SourceIngestionLifecycleTransitionResult,
 } from "./source-ingestion-lifecycle.machine";
 
-export { CredentialHealthStateMachine } from "./credential-health.machine";
+export {
+  CredentialHealthCommandType,
+  CredentialHealthEventType,
+  CredentialHealthStateMachine,
+} from "./credential-health.machine";
 export type {
   CredentialHealthCommand,
   CredentialHealthContext,

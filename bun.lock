@@ -98,6 +98,7 @@
         "@keeper.sh/constants": "workspace:*",
         "@keeper.sh/data-schemas": "workspace:*",
         "@keeper.sh/database": "workspace:*",
+        "@keeper.sh/state-machines": "workspace:*",
         "drizzle-orm": "^0.45.1",
         "ioredis": "^5.10.0",
         "ipaddr.js": "^2.3.0",

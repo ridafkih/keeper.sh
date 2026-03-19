@@ -1,3 +1,5 @@
+import { resolveSyncTokenFromMachine } from "./sync-token-strategy-runtime";
+
 const VERSIONED_SYNC_TOKEN_PREFIX = "keeper:sync-token:";
 const LEGACY_SYNC_WINDOW_VERSION = 0;
 
@@ -82,16 +84,14 @@ const resolveSyncTokenForWindow = (
   }
 
   const decodedSyncToken = decodeStoredSyncToken(storedSyncToken);
-  if (decodedSyncToken.syncWindowVersion < requiredSyncWindowVersion) {
-    return {
-      requiresBackfill: true,
-      syncToken: null,
-    };
-  }
-
+  const machineResolution = resolveSyncTokenFromMachine({
+    loadedWindowVersion: decodedSyncToken.syncWindowVersion,
+    requiredWindowVersion: requiredSyncWindowVersion,
+    token: decodedSyncToken.syncToken,
+  });
   return {
-    requiresBackfill: false,
-    syncToken: decodedSyncToken.syncToken,
+    requiresBackfill: machineResolution.requiresBackfill,
+    syncToken: machineResolution.resolvedToken,
   };
 };
 

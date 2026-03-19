@@ -3,6 +3,23 @@ import type { MachineSnapshot, MachineTransitionResult } from "./core/state-mach
 import type { EventEnvelope } from "./core/event-envelope";
 import type { TransitionPolicy } from "./core/transition-policy";
 
+const DestinationExecutionEventType = {
+  EXECUTION_FATAL_FAILED: "EXECUTION_FATAL_FAILED",
+  EXECUTION_RETRYABLE_FAILED: "EXECUTION_RETRYABLE_FAILED",
+  EXECUTION_STARTED: "EXECUTION_STARTED",
+  EXECUTION_SUCCEEDED: "EXECUTION_SUCCEEDED",
+  INVALIDATION_DETECTED: "INVALIDATION_DETECTED",
+  LOCK_ACQUIRED: "LOCK_ACQUIRED",
+  LOCK_WAIT_STARTED: "LOCK_WAIT_STARTED",
+} as const;
+
+const DestinationExecutionCommandType = {
+  APPLY_BACKOFF: "APPLY_BACKOFF",
+  DISABLE_DESTINATION: "DISABLE_DESTINATION",
+  EMIT_SYNC_EVENT: "EMIT_SYNC_EVENT",
+  RELEASE_LOCK: "RELEASE_LOCK",
+} as const;
+
 type DestinationExecutionState =
   | "ready"
   | "lock_pending"
@@ -24,19 +41,31 @@ interface DestinationExecutionContext {
 }
 
 type DestinationExecutionEvent =
-  | { type: "LOCK_WAIT_STARTED"; holderId: string }
-  | { type: "LOCK_ACQUIRED"; holderId: string }
-  | { type: "EXECUTION_STARTED" }
-  | { type: "EXECUTION_SUCCEEDED"; eventsAdded: number; eventsRemoved: number }
-  | { type: "INVALIDATION_DETECTED"; at: string }
-  | { type: "EXECUTION_RETRYABLE_FAILED"; code: string; nextAttemptAt: string }
-  | { type: "EXECUTION_FATAL_FAILED"; code: string; reason: string };
+  | { type: typeof DestinationExecutionEventType.LOCK_WAIT_STARTED; holderId: string }
+  | { type: typeof DestinationExecutionEventType.LOCK_ACQUIRED; holderId: string }
+  | { type: typeof DestinationExecutionEventType.EXECUTION_STARTED }
+  | {
+    type: typeof DestinationExecutionEventType.EXECUTION_SUCCEEDED;
+    eventsAdded: number;
+    eventsRemoved: number;
+  }
+  | { type: typeof DestinationExecutionEventType.INVALIDATION_DETECTED; at: string }
+  | {
+    type: typeof DestinationExecutionEventType.EXECUTION_RETRYABLE_FAILED;
+    code: string;
+    nextAttemptAt: string;
+  }
+  | { type: typeof DestinationExecutionEventType.EXECUTION_FATAL_FAILED; code: string; reason: string };
 
 type DestinationExecutionCommand =
-  | { type: "RELEASE_LOCK"; holderId: string }
-  | { type: "APPLY_BACKOFF"; nextAttemptAt: string }
-  | { type: "DISABLE_DESTINATION"; reason: string }
-  | { type: "EMIT_SYNC_EVENT"; eventsAdded: number; eventsRemoved: number };
+  | { type: typeof DestinationExecutionCommandType.RELEASE_LOCK; holderId: string }
+  | { type: typeof DestinationExecutionCommandType.APPLY_BACKOFF; nextAttemptAt: string }
+  | { type: typeof DestinationExecutionCommandType.DISABLE_DESTINATION; reason: string }
+  | {
+    type: typeof DestinationExecutionCommandType.EMIT_SYNC_EVENT;
+    eventsAdded: number;
+    eventsRemoved: number;
+  };
 
 type DestinationExecutionOutput =
   | { type: "DESTINATION_EXECUTION_COMPLETED"; changed: boolean }
@@ -103,22 +132,26 @@ class DestinationExecutionStateMachine
   }
 
   protected isTransitionAllowed(event: DestinationExecutionEvent): boolean {
-    if (event.type === "LOCK_WAIT_STARTED") {
-      return this.state === "ready";
+    switch (event.type) {
+      case DestinationExecutionEventType.LOCK_WAIT_STARTED: {
+        return this.state === "ready";
+      }
+      case DestinationExecutionEventType.LOCK_ACQUIRED: {
+        return this.state === "ready" || this.state === "lock_pending";
+      }
+      case DestinationExecutionEventType.EXECUTION_STARTED: {
+        return this.state === "locked";
+      }
+      case DestinationExecutionEventType.EXECUTION_SUCCEEDED:
+      case DestinationExecutionEventType.INVALIDATION_DETECTED:
+      case DestinationExecutionEventType.EXECUTION_RETRYABLE_FAILED:
+      case DestinationExecutionEventType.EXECUTION_FATAL_FAILED: {
+        return this.state === "executing";
+      }
+      default: {
+        return false;
+      }
     }
-    if (event.type === "LOCK_ACQUIRED") {
-      return this.state === "ready" || this.state === "lock_pending";
-    }
-    if (event.type === "EXECUTION_STARTED") {
-      return this.state === "locked";
-    }
-    if (event.type === "EXECUTION_SUCCEEDED" || event.type === "INVALIDATION_DETECTED") {
-      return this.state === "executing";
-    }
-    if (event.type === "EXECUTION_RETRYABLE_FAILED" || event.type === "EXECUTION_FATAL_FAILED") {
-      return this.state === "executing";
-    }
-    return false;
   }
 
   protected getInvariants(): ((snapshot: DestinationExecutionSnapshot) => void)[] {
@@ -135,21 +168,21 @@ class DestinationExecutionStateMachine
 
   protected transition(event: DestinationExecutionEvent): DestinationExecutionTransitionResult {
     switch (event.type) {
-      case "LOCK_WAIT_STARTED": {
+      case DestinationExecutionEventType.LOCK_WAIT_STARTED: {
         this.state = "lock_pending";
         this.context = { ...this.context, lockHolderId: event.holderId };
         return this.result();
       }
-      case "LOCK_ACQUIRED": {
+      case DestinationExecutionEventType.LOCK_ACQUIRED: {
         this.state = "locked";
         this.context = { ...this.context, lockHolderId: event.holderId };
         return this.result();
       }
-      case "EXECUTION_STARTED": {
+      case DestinationExecutionEventType.EXECUTION_STARTED: {
         this.state = "executing";
         return this.result();
       }
-      case "EXECUTION_SUCCEEDED": {
+      case DestinationExecutionEventType.EXECUTION_SUCCEEDED: {
         const holderId = this.requireLockHolderId();
         this.state = "completed";
         const changed = event.eventsAdded > 0 || event.eventsRemoved > 0;
@@ -158,21 +191,25 @@ class DestinationExecutionStateMachine
         this.context = nextContext;
         return this.result(
           [
-            { type: "RELEASE_LOCK", holderId },
-            { type: "EMIT_SYNC_EVENT", eventsAdded: event.eventsAdded, eventsRemoved: event.eventsRemoved },
+            { type: DestinationExecutionCommandType.RELEASE_LOCK, holderId },
+            {
+              type: DestinationExecutionCommandType.EMIT_SYNC_EVENT,
+              eventsAdded: event.eventsAdded,
+              eventsRemoved: event.eventsRemoved,
+            },
           ],
           [{ type: "DESTINATION_EXECUTION_COMPLETED", changed }],
         );
       }
-      case "INVALIDATION_DETECTED": {
+      case DestinationExecutionEventType.INVALIDATION_DETECTED: {
         const holderId = this.requireLockHolderId();
         this.state = "invalidated";
         const nextContext = { ...this.context, invalidatedAt: event.at };
         delete nextContext.lockHolderId;
         this.context = nextContext;
-        return this.result([{ type: "RELEASE_LOCK", holderId }]);
+        return this.result([{ type: DestinationExecutionCommandType.RELEASE_LOCK, holderId }]);
       }
-      case "EXECUTION_RETRYABLE_FAILED": {
+      case DestinationExecutionEventType.EXECUTION_RETRYABLE_FAILED: {
         const holderId = this.requireLockHolderId();
         this.state = "backoff_scheduled";
         const nextContext = {
@@ -185,13 +222,13 @@ class DestinationExecutionStateMachine
         this.context = nextContext;
         return this.result(
           [
-            { type: "APPLY_BACKOFF", nextAttemptAt: event.nextAttemptAt },
-            { type: "RELEASE_LOCK", holderId },
+            { type: DestinationExecutionCommandType.APPLY_BACKOFF, nextAttemptAt: event.nextAttemptAt },
+            { type: DestinationExecutionCommandType.RELEASE_LOCK, holderId },
           ],
           [{ type: "DESTINATION_EXECUTION_FAILED", code: event.code, retryable: true }],
         );
       }
-      case "EXECUTION_FATAL_FAILED": {
+      case DestinationExecutionEventType.EXECUTION_FATAL_FAILED: {
         const holderId = this.requireLockHolderId();
         this.state = "disabled_terminal";
         const nextContext = {
@@ -204,8 +241,8 @@ class DestinationExecutionStateMachine
         this.context = nextContext;
         return this.result(
           [
-            { type: "DISABLE_DESTINATION", reason: event.reason },
-            { type: "RELEASE_LOCK", holderId },
+            { type: DestinationExecutionCommandType.DISABLE_DESTINATION, reason: event.reason },
+            { type: DestinationExecutionCommandType.RELEASE_LOCK, holderId },
           ],
           [{ type: "DESTINATION_EXECUTION_FAILED", code: event.code, retryable: false }],
         );
@@ -217,7 +254,11 @@ class DestinationExecutionStateMachine
   }
 }
 
-export { DestinationExecutionStateMachine };
+export {
+  DestinationExecutionCommandType,
+  DestinationExecutionEventType,
+  DestinationExecutionStateMachine,
+};
 export type {
   DestinationExecutionCommand,
   DestinationExecutionContext,

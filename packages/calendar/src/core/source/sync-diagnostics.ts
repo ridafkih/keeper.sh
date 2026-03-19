@@ -1,3 +1,4 @@
+import { resolveSourceSyncTokenActionFromMachine } from "../oauth/sync-token-strategy-runtime";
 import type { SourceEvent } from "../types";
 import type { ExistingSourceEventState } from "./event-diff";
 
@@ -84,17 +85,7 @@ const splitSourceEventsByStorageIdentity = (
 const resolveSourceSyncTokenAction = (
   nextSyncToken: string | undefined,
   isDeltaSync: boolean | undefined,
-): SourceSyncTokenAction => {
-  if (nextSyncToken) {
-    return { nextSyncTokenToPersist: nextSyncToken, shouldResetSyncToken: false };
-  }
-
-  if (isDeltaSync) {
-    return { shouldResetSyncToken: true };
-  }
-
-  return { shouldResetSyncToken: false };
-};
+): SourceSyncTokenAction => resolveSourceSyncTokenActionFromMachine({ isDeltaSync, nextSyncToken });
 
 export {
   filterSourceEventsToSyncWindow,

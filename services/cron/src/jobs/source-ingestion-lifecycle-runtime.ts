@@ -1,9 +1,11 @@
 import {
+  type RuntimeMachine,
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
   MachineRuntimeDriver,
 } from "@keeper.sh/machine-orchestration";
 import {
+  SourceIngestionLifecycleCommandType,
   SourceIngestionLifecycleStateMachine,
   TransitionPolicy,
 } from "@keeper.sh/state-machines";
@@ -36,18 +38,15 @@ interface SourceIngestionLifecycleRuntime {
   ) => Promise<SourceIngestionLifecycleTransitionResult>;
 }
 
-interface SourceIngestionLifecycleMachine {
-  restore: (
-    snapshot: MachineSnapshot<SourceIngestionLifecycleState, SourceIngestionLifecycleContext>,
-  ) => void;
-  dispatch: (
-    envelope: EventEnvelope<SourceIngestionLifecycleEvent>,
-  ) => SourceIngestionLifecycleTransitionResult;
-}
-
 class RestorableSourceIngestionLifecycleStateMachine
   extends SourceIngestionLifecycleStateMachine
-  implements SourceIngestionLifecycleMachine
+  implements RuntimeMachine<
+    SourceIngestionLifecycleState,
+    SourceIngestionLifecycleContext,
+    SourceIngestionLifecycleEvent,
+    SourceIngestionLifecycleCommand,
+    SourceIngestionLifecycleOutput
+  >
 {
   restore(
     snapshot: MachineSnapshot<SourceIngestionLifecycleState, SourceIngestionLifecycleContext>,
@@ -80,19 +79,23 @@ const createSourceIngestionLifecycleRuntime = (
     aggregateId: input.sourceId,
     commandBus: {
       execute: async (command) => {
-        if (command.type === "MARK_NEEDS_REAUTH") {
-          await input.handlers.markNeedsReauth();
-          return;
+        switch (command.type) {
+          case SourceIngestionLifecycleCommandType.MARK_NEEDS_REAUTH: {
+            await input.handlers.markNeedsReauth();
+            return;
+          }
+          case SourceIngestionLifecycleCommandType.DISABLE_SOURCE: {
+            await input.handlers.disableSource();
+            return;
+          }
+          case SourceIngestionLifecycleCommandType.PERSIST_SYNC_TOKEN: {
+            await input.handlers.persistSyncToken(command.syncToken);
+            return;
+          }
+          default: {
+            throw new Error("Unhandled source ingestion command");
+          }
         }
-        if (command.type === "DISABLE_SOURCE") {
-          await input.handlers.disableSource();
-          return;
-        }
-        if (command.type === "PERSIST_SYNC_TOKEN") {
-          await input.handlers.persistSyncToken(command.syncToken);
-          return;
-        }
-        throw new Error("Unhandled source ingestion command");
       },
     },
     envelopeStore,

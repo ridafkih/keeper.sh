@@ -1,9 +1,12 @@
 import {
+  type RuntimeMachine,
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
   MachineRuntimeDriver,
 } from "@keeper.sh/machine-orchestration";
 import {
+  DestinationExecutionCommandType,
+  DestinationExecutionEventType,
   DestinationExecutionStateMachine,
   TransitionPolicy,
 } from "@keeper.sh/state-machines";
@@ -36,18 +39,15 @@ interface DestinationExecutionRuntime {
   releaseIfHeld: () => Promise<void>;
 }
 
-interface DestinationExecutionMachine {
-  restore: (
-    snapshot: MachineSnapshot<DestinationExecutionState, DestinationExecutionContext>,
-  ) => void;
-  dispatch: (
-    envelope: EventEnvelope<DestinationExecutionEvent>,
-  ) => DestinationExecutionTransitionResult;
-}
-
 class RestorableDestinationExecutionStateMachine
   extends DestinationExecutionStateMachine
-  implements DestinationExecutionMachine
+  implements RuntimeMachine<
+    DestinationExecutionState,
+    DestinationExecutionContext,
+    DestinationExecutionEvent,
+    DestinationExecutionCommand,
+    DestinationExecutionOutput
+  >
 {
   restore(snapshot: MachineSnapshot<DestinationExecutionState, DestinationExecutionContext>): void {
     this.state = snapshot.state;
@@ -84,24 +84,28 @@ const createDestinationExecutionRuntime = (
     aggregateId: input.calendarId,
     commandBus: {
       execute: async (command) => {
-        if (command.type === "RELEASE_LOCK") {
-          released = true;
-          await input.handlers.releaseLock(command.holderId);
-          return;
+        switch (command.type) {
+          case DestinationExecutionCommandType.RELEASE_LOCK: {
+            released = true;
+            await input.handlers.releaseLock(command.holderId);
+            return;
+          }
+          case DestinationExecutionCommandType.APPLY_BACKOFF: {
+            await input.handlers.applyBackoff(command.nextAttemptAt);
+            return;
+          }
+          case DestinationExecutionCommandType.DISABLE_DESTINATION: {
+            await input.handlers.disableDestination(command.reason);
+            return;
+          }
+          case DestinationExecutionCommandType.EMIT_SYNC_EVENT: {
+            await input.handlers.emitSyncEvent(command.eventsAdded, command.eventsRemoved);
+            return;
+          }
+          default: {
+            throw new Error("Unhandled destination execution command");
+          }
         }
-        if (command.type === "APPLY_BACKOFF") {
-          await input.handlers.applyBackoff(command.nextAttemptAt);
-          return;
-        }
-        if (command.type === "DISABLE_DESTINATION") {
-          await input.handlers.disableDestination(command.reason);
-          return;
-        }
-        if (command.type === "EMIT_SYNC_EVENT") {
-          await input.handlers.emitSyncEvent(command.eventsAdded, command.eventsRemoved);
-          return;
-        }
-        throw new Error("Unhandled destination execution command");
       },
     },
     envelopeStore,
@@ -122,7 +126,10 @@ const createDestinationExecutionRuntime = (
       });
       initialized = true;
     }
-    if (event.type === "LOCK_ACQUIRED" || event.type === "LOCK_WAIT_STARTED") {
+    if (
+      event.type === DestinationExecutionEventType.LOCK_ACQUIRED
+      || event.type === DestinationExecutionEventType.LOCK_WAIT_STARTED
+    ) {
       currentHolderId = event.holderId;
     }
     envelopeSequence += 1;

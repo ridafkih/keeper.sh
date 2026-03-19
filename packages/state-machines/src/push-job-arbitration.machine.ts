@@ -3,6 +3,19 @@ import type { MachineSnapshot, MachineTransitionResult } from "./core/state-mach
 import type { EventEnvelope } from "./core/event-envelope";
 import type { TransitionPolicy } from "./core/transition-policy";
 
+const PushJobArbitrationEventType = {
+  JOB_ACTIVATED: "JOB_ACTIVATED",
+  JOB_CANCELLED: "JOB_CANCELLED",
+  JOB_COMPLETED: "JOB_COMPLETED",
+  JOB_FAILED: "JOB_FAILED",
+} as const;
+
+const PushJobArbitrationCommandType = {
+  CANCEL_JOB: "CANCEL_JOB",
+  HOLD_SYNCING: "HOLD_SYNCING",
+  RELEASE_SYNCING: "RELEASE_SYNCING",
+} as const;
+
 type PushJobArbitrationState = "idle" | "active";
 
 interface PushJobArbitrationContext {
@@ -10,15 +23,15 @@ interface PushJobArbitrationContext {
 }
 
 type PushJobArbitrationEvent =
-  | { type: "JOB_ACTIVATED"; jobId: string }
-  | { type: "JOB_COMPLETED"; jobId: string }
-  | { type: "JOB_FAILED"; jobId: string }
-  | { type: "JOB_CANCELLED"; jobId: string };
+  | { type: typeof PushJobArbitrationEventType.JOB_ACTIVATED; jobId: string }
+  | { type: typeof PushJobArbitrationEventType.JOB_COMPLETED; jobId: string }
+  | { type: typeof PushJobArbitrationEventType.JOB_FAILED; jobId: string }
+  | { type: typeof PushJobArbitrationEventType.JOB_CANCELLED; jobId: string };
 
 type PushJobArbitrationCommand =
-  | { type: "HOLD_SYNCING" }
-  | { type: "RELEASE_SYNCING" }
-  | { type: "CANCEL_JOB"; jobId: string };
+  | { type: typeof PushJobArbitrationCommandType.HOLD_SYNCING }
+  | { type: typeof PushJobArbitrationCommandType.RELEASE_SYNCING }
+  | { type: typeof PushJobArbitrationCommandType.CANCEL_JOB; jobId: string };
 
 type PushJobArbitrationOutput = never;
 
@@ -68,10 +81,14 @@ class PushJobArbitrationStateMachine
   }
 
   protected isTransitionAllowed(event: PushJobArbitrationEvent): boolean {
-    if (event.type === "JOB_ACTIVATED") {
-      return true;
+    switch (event.type) {
+      case PushJobArbitrationEventType.JOB_ACTIVATED: {
+        return true;
+      }
+      default: {
+        return this.state === "active" && this.context.activeJobId === event.jobId;
+      }
     }
-    return this.state === "active" && this.context.activeJobId === event.jobId;
   }
 
   protected getInvariants(): ((snapshot: PushJobArbitrationSnapshot) => void)[] {
@@ -82,7 +99,7 @@ class PushJobArbitrationStateMachine
     if (this.state === "idle") {
       this.state = "active";
       this.context = { activeJobId: jobId };
-      return this.result([{ type: "HOLD_SYNCING" }]);
+      return this.result([{ type: PushJobArbitrationCommandType.HOLD_SYNCING }]);
     }
 
     if (this.context.activeJobId === jobId) {
@@ -96,25 +113,25 @@ class PushJobArbitrationStateMachine
     this.context = { activeJobId: jobId };
     this.state = "active";
     return this.result([
-      { jobId: previousJobId, type: "CANCEL_JOB" },
-      { type: "HOLD_SYNCING" },
+      { jobId: previousJobId, type: PushJobArbitrationCommandType.CANCEL_JOB },
+      { type: PushJobArbitrationCommandType.HOLD_SYNCING },
     ]);
   }
 
   private settle(): PushJobArbitrationTransitionResult {
     this.state = "idle";
     this.context = {};
-    return this.result([{ type: "RELEASE_SYNCING" }]);
+    return this.result([{ type: PushJobArbitrationCommandType.RELEASE_SYNCING }]);
   }
 
   protected transition(event: PushJobArbitrationEvent): PushJobArbitrationTransitionResult {
     switch (event.type) {
-      case "JOB_ACTIVATED": {
+      case PushJobArbitrationEventType.JOB_ACTIVATED: {
         return this.activate(event.jobId);
       }
-      case "JOB_COMPLETED":
-      case "JOB_FAILED":
-      case "JOB_CANCELLED": {
+      case PushJobArbitrationEventType.JOB_COMPLETED:
+      case PushJobArbitrationEventType.JOB_FAILED:
+      case PushJobArbitrationEventType.JOB_CANCELLED: {
         return this.settle();
       }
       default: {
@@ -124,7 +141,11 @@ class PushJobArbitrationStateMachine
   }
 }
 
-export { PushJobArbitrationStateMachine };
+export {
+  PushJobArbitrationCommandType,
+  PushJobArbitrationEventType,
+  PushJobArbitrationStateMachine,
+};
 export type {
   PushJobArbitrationCommand,
   PushJobArbitrationContext,

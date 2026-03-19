@@ -3,6 +3,22 @@ import type { MachineSnapshot, MachineTransitionResult } from "./core/state-mach
 import type { EventEnvelope } from "./core/event-envelope";
 import type { TransitionPolicy } from "./core/transition-policy";
 
+const SourceIngestionLifecycleEventType = {
+  AUTH_FAILURE: "AUTH_FAILURE",
+  FETCH_SUCCEEDED: "FETCH_SUCCEEDED",
+  FETCHER_RESOLVED: "FETCHER_RESOLVED",
+  INGEST_SUCCEEDED: "INGEST_SUCCEEDED",
+  NOT_FOUND: "NOT_FOUND",
+  SOURCE_SELECTED: "SOURCE_SELECTED",
+  TRANSIENT_FAILURE: "TRANSIENT_FAILURE",
+} as const;
+
+const SourceIngestionLifecycleCommandType = {
+  DISABLE_SOURCE: "DISABLE_SOURCE",
+  MARK_NEEDS_REAUTH: "MARK_NEEDS_REAUTH",
+  PERSIST_SYNC_TOKEN: "PERSIST_SYNC_TOKEN",
+} as const;
+
 type SourceIngestionLifecycleState =
   | "source_selected"
   | "provider_ready"
@@ -23,18 +39,23 @@ interface SourceIngestionLifecycleContext {
 }
 
 type SourceIngestionLifecycleEvent =
-  | { type: "SOURCE_SELECTED" }
-  | { type: "FETCHER_RESOLVED" }
-  | { type: "FETCH_SUCCEEDED" }
-  | { type: "INGEST_SUCCEEDED"; eventsAdded: number; eventsRemoved: number; nextSyncToken?: string }
-  | { type: "AUTH_FAILURE"; code: string }
-  | { type: "NOT_FOUND"; code: string }
-  | { type: "TRANSIENT_FAILURE"; code: string };
+  | { type: typeof SourceIngestionLifecycleEventType.SOURCE_SELECTED }
+  | { type: typeof SourceIngestionLifecycleEventType.FETCHER_RESOLVED }
+  | { type: typeof SourceIngestionLifecycleEventType.FETCH_SUCCEEDED }
+  | {
+    type: typeof SourceIngestionLifecycleEventType.INGEST_SUCCEEDED;
+    eventsAdded: number;
+    eventsRemoved: number;
+    nextSyncToken?: string;
+  }
+  | { type: typeof SourceIngestionLifecycleEventType.AUTH_FAILURE; code: string }
+  | { type: typeof SourceIngestionLifecycleEventType.NOT_FOUND; code: string }
+  | { type: typeof SourceIngestionLifecycleEventType.TRANSIENT_FAILURE; code: string };
 
 type SourceIngestionLifecycleCommand =
-  | { type: "MARK_NEEDS_REAUTH" }
-  | { type: "DISABLE_SOURCE" }
-  | { type: "PERSIST_SYNC_TOKEN"; syncToken: string };
+  | { type: typeof SourceIngestionLifecycleCommandType.MARK_NEEDS_REAUTH }
+  | { type: typeof SourceIngestionLifecycleCommandType.DISABLE_SOURCE }
+  | { type: typeof SourceIngestionLifecycleCommandType.PERSIST_SYNC_TOKEN; syncToken: string };
 
 type SourceIngestionLifecycleOutput =
   | { type: "INGEST_COMPLETED"; changed: boolean }
@@ -96,22 +117,28 @@ class SourceIngestionLifecycleStateMachine
   }
 
   protected isTransitionAllowed(event: SourceIngestionLifecycleEvent): boolean {
-    if (event.type === "SOURCE_SELECTED") {
-      return this.state === "source_selected";
+    switch (event.type) {
+      case SourceIngestionLifecycleEventType.SOURCE_SELECTED: {
+        return this.state === "source_selected";
+      }
+      case SourceIngestionLifecycleEventType.FETCHER_RESOLVED: {
+        return this.state === "provider_ready";
+      }
+      case SourceIngestionLifecycleEventType.FETCH_SUCCEEDED: {
+        return this.state === "fetching";
+      }
+      case SourceIngestionLifecycleEventType.INGEST_SUCCEEDED: {
+        return this.state === "ingesting";
+      }
+      case SourceIngestionLifecycleEventType.AUTH_FAILURE:
+      case SourceIngestionLifecycleEventType.NOT_FOUND:
+      case SourceIngestionLifecycleEventType.TRANSIENT_FAILURE: {
+        return this.state === "fetching" || this.state === "ingesting";
+      }
+      default: {
+        return false;
+      }
     }
-    if (event.type === "FETCHER_RESOLVED") {
-      return this.state === "provider_ready";
-    }
-    if (event.type === "FETCH_SUCCEEDED") {
-      return this.state === "fetching";
-    }
-    if (event.type === "INGEST_SUCCEEDED") {
-      return this.state === "ingesting";
-    }
-    if (event.type === "AUTH_FAILURE" || event.type === "NOT_FOUND" || event.type === "TRANSIENT_FAILURE") {
-      return this.state === "fetching" || this.state === "ingesting";
-    }
-    return false;
   }
 
   protected getInvariants(): ((snapshot: SourceIngestionLifecycleSnapshot) => void)[] {
@@ -120,19 +147,19 @@ class SourceIngestionLifecycleStateMachine
 
   protected transition(event: SourceIngestionLifecycleEvent): SourceIngestionLifecycleTransitionResult {
     switch (event.type) {
-      case "SOURCE_SELECTED": {
+      case SourceIngestionLifecycleEventType.SOURCE_SELECTED: {
         this.state = "provider_ready";
         return this.result();
       }
-      case "FETCHER_RESOLVED": {
+      case SourceIngestionLifecycleEventType.FETCHER_RESOLVED: {
         this.state = "fetching";
         return this.result();
       }
-      case "FETCH_SUCCEEDED": {
+      case SourceIngestionLifecycleEventType.FETCH_SUCCEEDED: {
         this.state = "ingesting";
         return this.result();
       }
-      case "INGEST_SUCCEEDED": {
+      case SourceIngestionLifecycleEventType.INGEST_SUCCEEDED: {
         this.state = "completed";
         this.context = {
           ...this.context,
@@ -144,27 +171,30 @@ class SourceIngestionLifecycleStateMachine
         const changed = event.eventsAdded > 0 || event.eventsRemoved > 0;
         const commands: SourceIngestionLifecycleCommand[] = [];
         if (event.nextSyncToken) {
-          commands.push({ type: "PERSIST_SYNC_TOKEN", syncToken: event.nextSyncToken });
+          commands.push({
+            type: SourceIngestionLifecycleCommandType.PERSIST_SYNC_TOKEN,
+            syncToken: event.nextSyncToken,
+          });
         }
         return this.result(commands, [{ type: "INGEST_COMPLETED", changed }]);
       }
-      case "AUTH_FAILURE": {
+      case SourceIngestionLifecycleEventType.AUTH_FAILURE: {
         this.state = "auth_blocked";
         this.context = { ...this.context, lastErrorCode: event.code };
         return this.result(
-          [{ type: "MARK_NEEDS_REAUTH" }],
+          [{ type: SourceIngestionLifecycleCommandType.MARK_NEEDS_REAUTH }],
           [{ type: "INGEST_FAILED", code: event.code, retryable: false }],
         );
       }
-      case "NOT_FOUND": {
+      case SourceIngestionLifecycleEventType.NOT_FOUND: {
         this.state = "not_found_disabled";
         this.context = { ...this.context, lastErrorCode: event.code };
         return this.result(
-          [{ type: "DISABLE_SOURCE" }],
+          [{ type: SourceIngestionLifecycleCommandType.DISABLE_SOURCE }],
           [{ type: "INGEST_FAILED", code: event.code, retryable: false }],
         );
       }
-      case "TRANSIENT_FAILURE": {
+      case SourceIngestionLifecycleEventType.TRANSIENT_FAILURE: {
         this.state = "transient_error";
         this.context = { ...this.context, lastErrorCode: event.code };
         return this.result([], [{ type: "INGEST_FAILED", code: event.code, retryable: true }]);
@@ -176,7 +206,11 @@ class SourceIngestionLifecycleStateMachine
   }
 }
 
-export { SourceIngestionLifecycleStateMachine };
+export {
+  SourceIngestionLifecycleStateMachine,
+  SourceIngestionLifecycleCommandType,
+  SourceIngestionLifecycleEventType,
+};
 export type {
   SourceIngestionLifecycleCommand,
   SourceIngestionLifecycleContext,

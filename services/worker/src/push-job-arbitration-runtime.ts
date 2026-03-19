@@ -1,9 +1,13 @@
 import {
+  type CommandBus,
+  type RuntimeMachine,
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
   MachineRuntimeDriver,
 } from "@keeper.sh/machine-orchestration";
 import {
+  PushJobArbitrationCommandType,
+  PushJobArbitrationEventType,
   PushJobArbitrationStateMachine,
   TransitionPolicy,
 } from "@keeper.sh/state-machines";
@@ -15,7 +19,6 @@ import type {
   PushJobArbitrationEvent,
   PushJobArbitrationOutput,
   PushJobArbitrationState,
-  PushJobArbitrationTransitionResult,
 } from "@keeper.sh/state-machines";
 
 interface WorkerQueueControlPort {
@@ -38,20 +41,17 @@ interface PushJobArbitrationRuntime {
   onJobFailed: (input: { userId: string; jobId: string }) => Promise<void>;
 }
 
-interface PushArbitrationMachine {
-  restore: (
-    snapshot: MachineSnapshot<PushJobArbitrationState, PushJobArbitrationContext>,
-  ) => void;
-  dispatch: (
-    envelope: EventEnvelope<PushJobArbitrationEvent>,
-  ) => PushJobArbitrationTransitionResult;
-}
-
 const SUPERSEDED_REASON = "superseded by newer sync";
 
 class RestorablePushJobArbitrationStateMachine
   extends PushJobArbitrationStateMachine
-  implements PushArbitrationMachine
+  implements RuntimeMachine<
+    PushJobArbitrationState,
+    PushJobArbitrationContext,
+    PushJobArbitrationEvent,
+    PushJobArbitrationCommand,
+    PushJobArbitrationOutput
+  >
 {
   restore(snapshot: MachineSnapshot<PushJobArbitrationState, PushJobArbitrationContext>): void {
     this.state = snapshot.state;
@@ -78,23 +78,25 @@ const buildEnvelope = (
 const createCommandBus = (
   dependencies: PushJobArbitrationRuntimeDependencies,
   userId: string,
-): {
-  execute: (command: PushJobArbitrationCommand) => Promise<void>;
-} => ({
+): CommandBus<PushJobArbitrationCommand> => ({
   execute: async (command) => {
-    if (command.type === "CANCEL_JOB") {
-      await dependencies.worker.cancelJob(command.jobId, SUPERSEDED_REASON);
-      return;
+    switch (command.type) {
+      case PushJobArbitrationCommandType.CANCEL_JOB: {
+        await dependencies.worker.cancelJob(command.jobId, SUPERSEDED_REASON);
+        return;
+      }
+      case PushJobArbitrationCommandType.HOLD_SYNCING: {
+        await dependencies.syncing.holdSyncing(userId);
+        return;
+      }
+      case PushJobArbitrationCommandType.RELEASE_SYNCING: {
+        await dependencies.syncing.releaseSyncing(userId);
+        return;
+      }
+      default: {
+        throw new Error("Unhandled push arbitration command");
+      }
     }
-    if (command.type === "HOLD_SYNCING") {
-      await dependencies.syncing.holdSyncing(userId);
-      return;
-    }
-    if (command.type === "RELEASE_SYNCING") {
-      await dependencies.syncing.releaseSyncing(userId);
-      return;
-    }
-    throw new Error("Unhandled push arbitration command");
   },
 });
 
@@ -131,13 +133,13 @@ const createPushJobArbitrationRuntime = (
   dependencies: PushJobArbitrationRuntimeDependencies,
 ): PushJobArbitrationRuntime => ({
   onJobActive: async ({ jobId, userId }) => {
-    await dispatch(dependencies, userId, jobId, { jobId, type: "JOB_ACTIVATED" });
+    await dispatch(dependencies, userId, jobId, { jobId, type: PushJobArbitrationEventType.JOB_ACTIVATED });
   },
   onJobCompleted: async ({ jobId, userId }) => {
-    await dispatch(dependencies, userId, jobId, { jobId, type: "JOB_COMPLETED" });
+    await dispatch(dependencies, userId, jobId, { jobId, type: PushJobArbitrationEventType.JOB_COMPLETED });
   },
   onJobFailed: async ({ jobId, userId }) => {
-    await dispatch(dependencies, userId, jobId, { jobId, type: "JOB_FAILED" });
+    await dispatch(dependencies, userId, jobId, { jobId, type: PushJobArbitrationEventType.JOB_FAILED });
   },
 });
 

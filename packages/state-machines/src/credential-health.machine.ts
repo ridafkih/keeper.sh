@@ -3,6 +3,20 @@ import type { MachineSnapshot, MachineTransitionResult } from "./core/state-mach
 import type { EventEnvelope } from "./core/event-envelope";
 import type { TransitionPolicy } from "./core/transition-policy";
 
+const CredentialHealthEventType = {
+  REFRESH_REAUTH_REQUIRED: "REFRESH_REAUTH_REQUIRED",
+  REFRESH_RETRYABLE_FAILED: "REFRESH_RETRYABLE_FAILED",
+  REFRESH_STARTED: "REFRESH_STARTED",
+  REFRESH_SUCCEEDED: "REFRESH_SUCCEEDED",
+  TOKEN_EXPIRY_DETECTED: "TOKEN_EXPIRY_DETECTED",
+} as const;
+
+const CredentialHealthCommandType = {
+  MARK_ACCOUNT_REAUTH_REQUIRED: "MARK_ACCOUNT_REAUTH_REQUIRED",
+  PERSIST_REFRESHED_CREDENTIALS: "PERSIST_REFRESHED_CREDENTIALS",
+  REFRESH_TOKEN: "REFRESH_TOKEN",
+} as const;
+
 type CredentialHealthState =
   | "token_valid"
   | "refresh_required"
@@ -19,16 +33,16 @@ interface CredentialHealthContext {
 }
 
 type CredentialHealthEvent =
-  | { type: "TOKEN_EXPIRY_DETECTED" }
-  | { type: "REFRESH_STARTED" }
-  | { type: "REFRESH_SUCCEEDED"; newExpiresAt: string }
-  | { type: "REFRESH_REAUTH_REQUIRED"; code: string }
-  | { type: "REFRESH_RETRYABLE_FAILED"; code: string };
+  | { type: typeof CredentialHealthEventType.TOKEN_EXPIRY_DETECTED }
+  | { type: typeof CredentialHealthEventType.REFRESH_STARTED }
+  | { type: typeof CredentialHealthEventType.REFRESH_SUCCEEDED; newExpiresAt: string }
+  | { type: typeof CredentialHealthEventType.REFRESH_REAUTH_REQUIRED; code: string }
+  | { type: typeof CredentialHealthEventType.REFRESH_RETRYABLE_FAILED; code: string };
 
 type CredentialHealthCommand =
-  | { type: "REFRESH_TOKEN" }
-  | { type: "MARK_ACCOUNT_REAUTH_REQUIRED" }
-  | { type: "PERSIST_REFRESHED_CREDENTIALS"; expiresAt: string };
+  | { type: typeof CredentialHealthCommandType.REFRESH_TOKEN }
+  | { type: typeof CredentialHealthCommandType.MARK_ACCOUNT_REAUTH_REQUIRED }
+  | { type: typeof CredentialHealthCommandType.PERSIST_REFRESHED_CREDENTIALS; expiresAt: string };
 
 type CredentialHealthOutput =
   | { type: "CREDENTIALS_HEALTHY" }
@@ -88,20 +102,22 @@ class CredentialHealthStateMachine
   }
 
   protected isTransitionAllowed(event: CredentialHealthEvent): boolean {
-    if (event.type === "TOKEN_EXPIRY_DETECTED") {
-      return this.state === "token_valid";
+    switch (event.type) {
+      case CredentialHealthEventType.TOKEN_EXPIRY_DETECTED: {
+        return this.state === "token_valid";
+      }
+      case CredentialHealthEventType.REFRESH_STARTED: {
+        return this.state === "refresh_required";
+      }
+      case CredentialHealthEventType.REFRESH_SUCCEEDED:
+      case CredentialHealthEventType.REFRESH_REAUTH_REQUIRED:
+      case CredentialHealthEventType.REFRESH_RETRYABLE_FAILED: {
+        return this.state === "refreshing";
+      }
+      default: {
+        return false;
+      }
     }
-    if (event.type === "REFRESH_STARTED") {
-      return this.state === "refresh_required";
-    }
-    if (
-      event.type === "REFRESH_SUCCEEDED"
-      || event.type === "REFRESH_REAUTH_REQUIRED"
-      || event.type === "REFRESH_RETRYABLE_FAILED"
-    ) {
-      return this.state === "refreshing";
-    }
-    return false;
   }
 
   protected getInvariants(): ((snapshot: CredentialHealthSnapshot) => void)[] {
@@ -110,35 +126,35 @@ class CredentialHealthStateMachine
 
   protected transition(event: CredentialHealthEvent): CredentialHealthTransitionResult {
     switch (event.type) {
-      case "TOKEN_EXPIRY_DETECTED": {
+      case CredentialHealthEventType.TOKEN_EXPIRY_DETECTED: {
         this.state = "refresh_required";
-        return this.result([{ type: "REFRESH_TOKEN" }]);
+        return this.result([{ type: CredentialHealthCommandType.REFRESH_TOKEN }]);
       }
-      case "REFRESH_STARTED": {
+      case CredentialHealthEventType.REFRESH_STARTED: {
         this.state = "refreshing";
         this.context = { ...this.context, refreshAttempts: this.context.refreshAttempts + 1 };
         return this.result();
       }
-      case "REFRESH_SUCCEEDED": {
+      case CredentialHealthEventType.REFRESH_SUCCEEDED: {
         this.state = "token_valid";
         this.context = {
           ...this.context,
           accessTokenExpiresAt: event.newExpiresAt,
         };
         return this.result(
-          [{ expiresAt: event.newExpiresAt, type: "PERSIST_REFRESHED_CREDENTIALS" }],
+          [{ expiresAt: event.newExpiresAt, type: CredentialHealthCommandType.PERSIST_REFRESHED_CREDENTIALS }],
           [{ type: "CREDENTIALS_HEALTHY" }],
         );
       }
-      case "REFRESH_REAUTH_REQUIRED": {
+      case CredentialHealthEventType.REFRESH_REAUTH_REQUIRED: {
         this.state = "reauth_required";
         this.context = { ...this.context, lastErrorCode: event.code };
         return this.result(
-          [{ type: "MARK_ACCOUNT_REAUTH_REQUIRED" }],
+          [{ type: CredentialHealthCommandType.MARK_ACCOUNT_REAUTH_REQUIRED }],
           [{ code: event.code, type: "CREDENTIALS_REAUTH_REQUIRED" }],
         );
       }
-      case "REFRESH_RETRYABLE_FAILED": {
+      case CredentialHealthEventType.REFRESH_RETRYABLE_FAILED: {
         this.state = "refresh_failed_retryable";
         this.context = { ...this.context, lastErrorCode: event.code };
         return this.result([], [{ code: event.code, type: "CREDENTIALS_REFRESH_RETRYABLE_FAILURE" }]);
@@ -150,7 +166,11 @@ class CredentialHealthStateMachine
   }
 }
 
-export { CredentialHealthStateMachine };
+export {
+  CredentialHealthCommandType,
+  CredentialHealthEventType,
+  CredentialHealthStateMachine,
+};
 export type {
   CredentialHealthCommand,
   CredentialHealthContext,

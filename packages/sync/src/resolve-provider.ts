@@ -3,6 +3,7 @@ import type { RedisRateLimiter } from "@keeper.sh/calendar";
 import {
   createGoogleOAuthService,
   createMicrosoftOAuthService,
+  type OAuthRefreshResult,
   runWithCredentialRefreshLock,
   isOAuthReauthRequiredError,
 } from "@keeper.sh/calendar";
@@ -36,11 +37,7 @@ interface CoordinatedRefresherOptions {
   calendarAccountId: string;
   accessTokenExpiresAt: Date;
   refreshLockStore: RefreshLockStore | null;
-  rawRefresh: (refreshToken: string) => Promise<{
-    access_token: string;
-    expires_in: number;
-    refresh_token?: string;
-  }>;
+  rawRefresh: (refreshToken: string) => Promise<OAuthRefreshResult>;
 }
 
 const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
