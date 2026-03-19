@@ -49,6 +49,12 @@ export type {
   SyncTokenStrategyOrchestratorDependencies,
 } from "./sync-token-strategy-orchestrator";
 
+export { SourceDiffReconciliationOrchestrator } from "./source-diff-reconciliation-orchestrator";
+export type {
+  SourceDiffReconciliationDomainEvent,
+  SourceDiffReconciliationOrchestratorDependencies,
+} from "./source-diff-reconciliation-orchestrator";
+
 export {
   MachineCompositionCoordinator,
   resolveSyncLifecycleEventsFromIngestionOutputs,

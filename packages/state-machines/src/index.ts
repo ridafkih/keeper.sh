@@ -134,3 +134,19 @@ export type {
   SyncTokenStrategyState,
   SyncTokenStrategyTransitionResult,
 } from "./sync-token-strategy.machine";
+
+export {
+  SourceDiffReconciliationCommandType,
+  SourceDiffReconciliationEventType,
+  SourceDiffReconciliationStateMachine,
+} from "./source-diff-reconciliation.machine";
+export type {
+  SourceDiffReconciliationCommand,
+  SourceDiffReconciliationContext,
+  SourceDiffReconciliationEvent,
+  SourceDiffReconciliationMachine,
+  SourceDiffReconciliationOutput,
+  SourceDiffReconciliationSnapshot,
+  SourceDiffReconciliationState,
+  SourceDiffReconciliationTransitionResult,
+} from "./source-diff-reconciliation.machine";
