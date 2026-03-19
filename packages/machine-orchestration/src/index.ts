@@ -19,6 +19,36 @@ export type {
   SourceProvisioningOrchestratorDependencies,
 } from "./source-provisioning-orchestrator";
 
+export { PushJobArbitrationOrchestrator } from "./push-job-arbitration-orchestrator";
+export type {
+  PushJobArbitrationDomainEvent,
+  PushJobArbitrationOrchestratorDependencies,
+} from "./push-job-arbitration-orchestrator";
+
+export { DestinationExecutionOrchestrator } from "./destination-execution-orchestrator";
+export type {
+  DestinationExecutionDomainEvent,
+  DestinationExecutionOrchestratorDependencies,
+} from "./destination-execution-orchestrator";
+
+export { SourceIngestionLifecycleOrchestrator } from "./source-ingestion-lifecycle-orchestrator";
+export type {
+  SourceIngestionLifecycleDomainEvent,
+  SourceIngestionLifecycleOrchestratorDependencies,
+} from "./source-ingestion-lifecycle-orchestrator";
+
+export { CredentialHealthOrchestrator } from "./credential-health-orchestrator";
+export type {
+  CredentialHealthDomainEvent,
+  CredentialHealthOrchestratorDependencies,
+} from "./credential-health-orchestrator";
+
+export { SyncTokenStrategyOrchestrator } from "./sync-token-strategy-orchestrator";
+export type {
+  SyncTokenStrategyDomainEvent,
+  SyncTokenStrategyOrchestratorDependencies,
+} from "./sync-token-strategy-orchestrator";
+
 export {
   MachineCompositionCoordinator,
   resolveSyncLifecycleEventsFromIngestionOutputs,
@@ -31,9 +61,14 @@ export type {
 
 export { KeeperRuntime } from "./keeper-runtime";
 export type {
+  CredentialHealthRuntimePort,
+  DestinationExecutionRuntimePort,
   KeeperRuntimeDependencies,
   MachineCompositionCoordinatorPort,
+  PushJobArbitrationRuntimePort,
+  SourceIngestionLifecycleRuntimePort,
   SyncLifecycleRuntimePort,
+  SyncTokenStrategyRuntimePort,
 } from "./keeper-runtime";
 
 export { createKeeperRuntime } from "./create-keeper-runtime";

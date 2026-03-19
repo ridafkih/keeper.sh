@@ -28,6 +28,15 @@ describe("createKeeperRuntime", () => {
           broadcasts.push(userId);
         },
       },
+      credentialHealthContext: {
+        accessTokenExpiresAt: "2026-03-19T17:00:00.000Z",
+        calendarAccountId: "acc-1",
+        oauthCredentialId: "cred-1",
+      },
+      destinationExecutionContext: {
+        calendarId: "cal-1",
+        failureCount: 0,
+      },
       envelopeFactory: buildEnvelopeFactory(),
       ingestionInput: {
         accountId: "acc-1",
@@ -45,6 +54,13 @@ describe("createKeeperRuntime", () => {
         provider: "google",
         requestId: "req-1",
         userId: "user-1",
+      },
+      sourceIngestionLifecycleContext: {
+        provider: "google",
+        sourceId: "src-1",
+      },
+      syncTokenStrategyContext: {
+        requiredWindowVersion: 1,
       },
       transitionPolicy: TransitionPolicy.IGNORE,
       userId: "user-1",
@@ -74,6 +90,15 @@ describe("createKeeperRuntime", () => {
           broadcasts += 1;
         },
       },
+      credentialHealthContext: {
+        accessTokenExpiresAt: "2026-03-19T17:00:00.000Z",
+        calendarAccountId: "acc-2",
+        oauthCredentialId: "cred-2",
+      },
+      destinationExecutionContext: {
+        calendarId: "cal-2",
+        failureCount: 0,
+      },
       envelopeFactory: buildEnvelopeFactory(),
       ingestionInput: {
         accountId: "acc-2",
@@ -91,6 +116,13 @@ describe("createKeeperRuntime", () => {
         provider: "google",
         requestId: "req-2",
         userId: "user-2",
+      },
+      sourceIngestionLifecycleContext: {
+        provider: "google",
+        sourceId: "src-2",
+      },
+      syncTokenStrategyContext: {
+        requiredWindowVersion: 1,
       },
       transitionPolicy: TransitionPolicy.IGNORE,
       userId: "user-2",
@@ -111,5 +143,87 @@ describe("createKeeperRuntime", () => {
     expect(enqueues.length).toBe(1);
     expect(enqueues[0]?.userId).toBe("user-2");
     expect(broadcasts).toBe(0);
+  });
+
+  it("routes additional slice events through isolated orchestrators", () => {
+    const runtime = createKeeperRuntime({
+      broadcaster: {
+        publishLifecycleUpdate: () => 0,
+      },
+      credentialHealthContext: {
+        accessTokenExpiresAt: "2026-03-19T17:00:00.000Z",
+        calendarAccountId: "acc-3",
+        oauthCredentialId: "cred-3",
+      },
+      destinationExecutionContext: {
+        calendarId: "cal-3",
+        failureCount: 0,
+      },
+      envelopeFactory: buildEnvelopeFactory(),
+      ingestionInput: {
+        accountId: "acc-3",
+        provider: "google",
+        sourceCalendarId: "src-3",
+        userId: "user-3",
+      },
+      jobCoordinator: {
+        requestEnqueueIdempotent: () => 0,
+      },
+      sourceIngestionLifecycleContext: {
+        provider: "google",
+        sourceId: "src-3",
+      },
+      sourceProvisioningInput: {
+        mode: "create_single",
+        provider: "google",
+        requestId: "req-3",
+        userId: "user-3",
+      },
+      syncTokenStrategyContext: {
+        requiredWindowVersion: 2,
+      },
+      transitionPolicy: TransitionPolicy.REJECT,
+      userId: "user-3",
+    });
+
+    const arbitration = runtime.handlePushJobArbitrationEvent({
+      actorId: "worker-push",
+      jobId: "job-1",
+      type: "JOB_ACTIVATED",
+    });
+    expect(arbitration.commands).toEqual([{ type: "HOLD_SYNCING" }]);
+
+    runtime.handleDestinationExecutionEvent({ actorId: "worker-sync", holderId: "lock-1", type: "LOCK_ACQUIRED" });
+    runtime.handleDestinationExecutionEvent({ actorId: "worker-sync", type: "EXECUTION_STARTED" });
+    const destination = runtime.handleDestinationExecutionEvent({
+      actorId: "worker-sync",
+      code: "timeout",
+      nextAttemptAt: "2026-03-19T18:00:00.000Z",
+      type: "EXECUTION_RETRYABLE_FAILED",
+    });
+    expect(destination.state).toBe("backoff_scheduled");
+
+    runtime.handleSourceIngestionLifecycleEvent({ actorId: "worker-ingest", type: "SOURCE_SELECTED" });
+    runtime.handleSourceIngestionLifecycleEvent({ actorId: "worker-ingest", type: "FETCHER_RESOLVED" });
+    const sourceIngestion = runtime.handleSourceIngestionLifecycleEvent({
+      actorId: "worker-ingest",
+      code: "timeout",
+      type: "TRANSIENT_FAILURE",
+    });
+    expect(sourceIngestion.state).toBe("transient_error");
+
+    const credential = runtime.handleCredentialHealthEvent({
+      actorId: "worker-auth",
+      type: "TOKEN_EXPIRY_DETECTED",
+    });
+    expect(credential.commands).toEqual([{ type: "REFRESH_TOKEN" }]);
+
+    const token = runtime.handleSyncTokenStrategyEvent({
+      actorId: "svc-sync",
+      loadedWindowVersion: 1,
+      token: "token-old",
+      type: "TOKEN_LOADED",
+    });
+    expect(token.state).toBe("token_reset_required");
   });
 });

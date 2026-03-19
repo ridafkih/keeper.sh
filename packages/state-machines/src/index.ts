@@ -58,3 +58,63 @@ export type {
   SyncLifecycleBroadcaster,
   SyncLifecycleApplicationServiceDependencies,
 } from "./orchestration/sync-lifecycle.application-service";
+
+export { PushJobArbitrationStateMachine } from "./push-job-arbitration.machine";
+export type {
+  PushJobArbitrationCommand,
+  PushJobArbitrationContext,
+  PushJobArbitrationEvent,
+  PushJobArbitrationMachine,
+  PushJobArbitrationOutput,
+  PushJobArbitrationSnapshot,
+  PushJobArbitrationState,
+  PushJobArbitrationTransitionResult,
+} from "./push-job-arbitration.machine";
+
+export { DestinationExecutionStateMachine } from "./destination-execution.machine";
+export type {
+  DestinationExecutionCommand,
+  DestinationExecutionContext,
+  DestinationExecutionEvent,
+  DestinationExecutionMachine,
+  DestinationExecutionOutput,
+  DestinationExecutionSnapshot,
+  DestinationExecutionState,
+  DestinationExecutionTransitionResult,
+} from "./destination-execution.machine";
+
+export { SourceIngestionLifecycleStateMachine } from "./source-ingestion-lifecycle.machine";
+export type {
+  SourceIngestionLifecycleCommand,
+  SourceIngestionLifecycleContext,
+  SourceIngestionLifecycleEvent,
+  SourceIngestionLifecycleMachine,
+  SourceIngestionLifecycleOutput,
+  SourceIngestionLifecycleSnapshot,
+  SourceIngestionLifecycleState,
+  SourceIngestionLifecycleTransitionResult,
+} from "./source-ingestion-lifecycle.machine";
+
+export { CredentialHealthStateMachine } from "./credential-health.machine";
+export type {
+  CredentialHealthCommand,
+  CredentialHealthContext,
+  CredentialHealthEvent,
+  CredentialHealthMachine,
+  CredentialHealthOutput,
+  CredentialHealthSnapshot,
+  CredentialHealthState,
+  CredentialHealthTransitionResult,
+} from "./credential-health.machine";
+
+export { SyncTokenStrategyStateMachine } from "./sync-token-strategy.machine";
+export type {
+  SyncTokenStrategyCommand,
+  SyncTokenStrategyContext,
+  SyncTokenStrategyEvent,
+  SyncTokenStrategyMachine,
+  SyncTokenStrategyOutput,
+  SyncTokenStrategySnapshot,
+  SyncTokenStrategyState,
+  SyncTokenStrategyTransitionResult,
+} from "./sync-token-strategy.machine";
