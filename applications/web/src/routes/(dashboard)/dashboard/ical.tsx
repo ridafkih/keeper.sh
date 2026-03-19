@@ -199,13 +199,14 @@ function EventNameDisabledProvider({ locked, children }: { locked: boolean; chil
 
 function EventNameTemplateItem({ locked }: { locked: boolean }) {
   const store = useStore();
+  const eventName = useAtomValue(customEventNameAtom);
 
   return (
     <EventNameDisabledProvider locked={locked}>
       <NavigationMenuEditableTemplateItem
         label="Event Name"
         disabled={locked}
-        getValue={() => store.get(feedSettingsAtom).customEventName || "{{event_name}}"}
+        value={eventName || "{{event_name}}"}
         renderInput={(live) => (
           <TemplateText template={live} variables={TEMPLATE_VARIABLES} />
         )}

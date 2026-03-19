@@ -1,4 +1,4 @@
-import { use, useEffect, useMemo, useRef } from "react";
+import { use, useEffect, useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import useSWR, { preload, useSWRConfig } from "swr";
 import CheckIcon from "lucide-react/dist/esm/icons/check";
@@ -111,18 +111,14 @@ function patchSource(
 
 function useSeedCalendarDetail(calendarId: string, calendar: CalendarDetail | undefined) {
   const store = useStore();
-  const lastSeededRef = useRef<CalendarDetail | undefined>(undefined);
 
   useEffect(() => {
-    if (store.get(calendarDetailLoadedAtom) !== calendarId) {
-      store.set(calendarDetailAtom, calendar ?? null);
-      store.set(calendarDetailLoadedAtom, calendarId);
-      store.set(calendarDetailErrorAtom, null);
-      lastSeededRef.current = calendar;
-    } else if (calendar && calendar !== lastSeededRef.current) {
-      store.set(calendarDetailAtom, calendar);
-      lastSeededRef.current = calendar;
-    }
+    if (!calendar) return;
+    if (store.get(calendarDetailLoadedAtom) === calendarId) return;
+
+    store.set(calendarDetailAtom, calendar);
+    store.set(calendarDetailLoadedAtom, calendarId);
+    store.set(calendarDetailErrorAtom, null);
   }, [calendarId, calendar, store]);
 }
 
@@ -227,10 +223,11 @@ function RenameSection({ calendarId }: { calendarId: string }) {
 
 function RenameItem({ calendarId }: { calendarId: string }) {
   const store = useStore();
+  const name = useAtomValue(calendarNameAtom);
 
   return (
     <NavigationMenuEditableItem
-      getValue={() => store.get(calendarNameAtom)}
+      value={name}
       onCommit={(newName) => {
         track(ANALYTICS_EVENTS.calendar_renamed);
         store.set(calendarDetailAtom, (prev) => (prev ? { ...prev, name: newName } : prev));
@@ -443,13 +440,14 @@ function SyncEventNameDisabledProvider({ locked, children }: { locked: boolean; 
 
 function SyncEventNameTemplateItem({ calendarId, locked }: { calendarId: string; locked: boolean }) {
   const store = useStore();
+  const customEventName = useAtomValue(customEventNameAtom);
 
   return (
     <SyncEventNameDisabledProvider locked={locked}>
       <NavigationMenuEditableTemplateItem
         label="Event Name"
         disabled={locked}
-        getValue={() => store.get(calendarDetailAtom)?.customEventName || "{{event_name}}"}
+        value={customEventName || "{{event_name}}"}
         renderInput={(live) => (
           <SyncEventNameTemplateInput template={live} />
         )}
