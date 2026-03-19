@@ -1,44 +1,25 @@
 # SyncLifecycleMachine
 
 ## Goal
-Coordinate sync intent and user-visible sync status at the **user** level.
+Coordinate user-level sync lifecycle state and emit orchestration commands.
 
-This machine is the authoritative model for:
-- when a user is considered pending,
-- when a push sync job should run or be superseded,
-- what websocket `sync:aggregate` should represent.
+## Current Implementation
+- Class: `SyncLifecycleStateMachine`
+- Dispatch model: strict envelope input via `dispatch(envelope)`
+- Transition policy: configurable (`TransitionPolicy.IGNORE` or `TransitionPolicy.REJECT`)
+- Invariants: enforced after each transition
+- Command execution owner: `SyncLifecycleApplicationService`
 
-It replaces fragmented transition logic currently spread across API routes, cron pending updates, and worker events.
+## States
+- `idle`
+- `pending`
+- `running`
+- `degraded`
 
-## Scope
-**In scope**
-- User-level lifecycle (`idle`, `pending`, `running`, `degraded`).
-- Pending reasons (ingest changed, mappings changed, settings dirty, manual trigger).
-- Queue/job orchestration decisions (enqueue, supersede, release).
-- Aggregate emission policy (initial status and incremental updates).
-
-**Out of scope**
-- Provider-specific fetch/sync behavior (handled by `IngestionMachine`).
-- Account/source creation rules (handled by `SourceProvisioningMachine`).
-
-## State Model
-State is tracked per `userId`.
-
-```ts
-type SyncLifecycleState =
-  | "idle"
-  | "pending"
-  | "running"
-  | "degraded";
-```
-
-### Extended State (Context)
+## Context
 - `pendingReasons: Set<"ingest_changed" | "mappings_changed" | "settings_dirty" | "manual">`
 - `activeJobId?: string`
-- `lastJobStartedAt?: string`
-- `lastJobFinishedAt?: string`
-- `lastError?: { code: string; at: string }`
-- `aggregateSeq: number`
+- `lastError?: { code: string; at: string; policy: ErrorPolicy }`
 
 ## Events
 - `INGEST_CHANGED`
@@ -46,63 +27,28 @@ type SyncLifecycleState =
 - `SETTINGS_DIRTY`
 - `SETTINGS_CLEAN`
 - `MANUAL_SYNC_REQUESTED`
-- `JOB_ENQUEUED`
 - `JOB_STARTED`
-- `JOB_PROGRESS`
 - `JOB_COMPLETED`
 - `JOB_FAILED`
-- `JOB_SUPERSEDED`
-- `REAUTH_REQUIRED`
 
-## Transition Summary
-- `idle` + pending-intent event -> `pending`
-- `pending` + `JOB_STARTED` -> `running`
-- `running` + `JOB_COMPLETED` and no pending reasons -> `idle`
-- `running` + `JOB_COMPLETED` and pending reasons remain -> `pending`
-- `running` + `JOB_FAILED` -> `degraded` (or `pending` if immediately retryable)
-- `degraded` + new pending-intent -> `pending`
+## Commands
+- `REQUEST_PUSH_SYNC_ENQUEUE`
+- `BROADCAST_AGGREGATE`
 
-## Side Effects
-On transitions, this machine may:
-- write/delete pending keys in Redis,
-- update dirty markers for source settings,
-- enqueue a push job with idempotency key,
-- cancel/supersede stale user jobs,
-- emit websocket `sync:aggregate` payloads,
-- annotate wide logs with transition metadata.
+## Transition Policy and Invariants
+- Invalid transitions are ignored by default, or rejected in strict mode.
+- Built-in invariant: when state is `running`, `activeJobId` must be present.
 
-All side effects should execute via effect handlers, not inline route logic.
+## Ownership Boundary
+**Machine owns**
+- state transitions and command emission.
 
-## Integration Contracts
-### Inputs from API
-- Source/destination/account mapping updates.
-- Source settings updates.
-- Manual “sync now” requests.
+**Application service owns**
+- idempotent enqueue arbitration,
+- broadcast execution,
+- integration with queue, transport, and logging context.
 
-### Inputs from Cron / Ingestion
-- “source changed” facts from ingestion.
-
-### Inputs from Worker
-- job `active/completed/failed/progress`.
-
-### Outputs
-- queue commands (`enqueue`, `cancel`),
-- websocket broadcast commands,
-- redis pending/dirty updates.
-
-## Reliability Requirements
-- Idempotent transition handling by `(userId, eventId)`.
-- Deterministic reducers (pure state transition function).
-- At-least-once event safety for worker/cron signals.
-- No user-level double-running semantics (single active job ownership per user).
-
-## Suggested Persistence
-- Hot state: Redis hash per user.
-- Audit/debug stream: append-only transition log (optional DB table).
-
-## Migration Plan
-1. Introduce machine reducer + effect interface.
-2. Route existing pending/broadcast calls through machine APIs.
-3. Connect worker and cron event producers.
-4. Remove duplicate pending orchestration code paths.
-
+## Migration Direction
+1. Route route/cron/worker sync signals through envelope dispatch.
+2. Move enqueue/broadcast execution to app service command handling only.
+3. Remove duplicated pending-sync checks from routes and jobs.
