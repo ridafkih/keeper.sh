@@ -289,3 +289,8 @@ For each target machine:
 - `packages/sync` destination execution now routes through a machine runtime adapter (`DestinationExecutionStateMachine`) for lock-held execution paths.
 - Success, invalidation, retryable failure, and terminal disable flows now dispatch explicit machine events and execute machine commands for release/backoff/disable.
 - `sync-user` no longer owns inline backoff transition branching for lock-held destination execution.
+
+## Third Production Slice Cutover (2026-03-19)
+- `services/cron` source ingestion paths (oauth, caldav, ics) now dispatch through `SourceIngestionLifecycleStateMachine` via a dedicated runtime adapter.
+- Reauth/disable behavior is executed via machine commands (`MARK_NEEDS_REAUTH`, `DISABLE_SOURCE`) instead of duplicated branch updates in provider-specific catches.
+- Successful ingestion transitions now flow through explicit `FETCH_SUCCEEDED` and `INGEST_SUCCEEDED` machine events.

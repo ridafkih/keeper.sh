@@ -27,6 +27,7 @@ import { context, widelog } from "@/utils/logging";
 import { database, refreshLockRedis } from "@/context";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
+import { createSourceIngestionLifecycleRuntime } from "./source-ingestion-lifecycle-runtime";
 
 const SOURCE_TIMEOUT_MS = 60_000;
 const SOURCE_CONCURRENCY = 5;
@@ -160,6 +161,31 @@ const resolveOAuthFetcher = (
   return null;
 };
 
+const resolveIngestionErrorCode = (error: unknown): string => {
+  if (error instanceof Error) {
+    if (error.message.includes("timed out")) {
+      return "timeout";
+    }
+    if (error.message.includes("404")) {
+      return "not_found";
+    }
+    return "transient_failure";
+  }
+  return "unknown_error";
+};
+
+const isNotFoundError = (error: unknown): boolean => error instanceof Error && "status" in error && error.status === 404;
+
+const isOAuthAuthFailure = (error: unknown): boolean => {
+  if (error instanceof Error && "authRequired" in error && error.authRequired === true) {
+    return true;
+  }
+  if (error instanceof Error && "oauthReauthRequired" in error && error.oauthReauthRequired === true) {
+    return true;
+  }
+  return false;
+};
+
 interface IngestionSourceResult {
   eventsAdded: number;
   eventsRemoved: number;
@@ -209,9 +235,42 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
             widelog.set("provider.external_calendar_id", source.externalCalendarId);
           }
 
+          const sourceRuntime = createSourceIngestionLifecycleRuntime({
+            handlers: {
+              disableSource: async () => {
+                await database
+                  .update(calendarsTable)
+                  .set({ disabled: true })
+                  .where(eq(calendarsTable.id, source.calendarId));
+              },
+              markNeedsReauth: async () => {
+                await database
+                  .update(calendarAccountsTable)
+                  .set({ needsReauthentication: true })
+                  .where(eq(calendarAccountsTable.id, source.accountId));
+              },
+              persistSyncToken: async (syncToken) => {
+                await database
+                  .update(calendarsTable)
+                  .set({ syncToken })
+                  .where(eq(calendarsTable.id, source.calendarId));
+              },
+            },
+            provider: source.provider,
+            sourceId: source.calendarId,
+          });
+
           try {
+            await sourceRuntime.dispatch({ type: "SOURCE_SELECTED" });
+            await sourceRuntime.dispatch({ type: "FETCHER_RESOLVED" });
+
             if (!source.externalCalendarId) {
-  
+              await sourceRuntime.dispatch({ type: "FETCH_SUCCEEDED" });
+              await sourceRuntime.dispatch({
+                eventsAdded: 0,
+                eventsRemoved: 0,
+                type: "INGEST_SUCCEEDED",
+              });
               widelog.set("outcome", "success");
               widelog.set("sync.events_added", 0);
               widelog.set("sync.events_removed", 0);
@@ -239,7 +298,12 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
             });
 
             if (!resolvedFetcher) {
-  
+              await sourceRuntime.dispatch({ type: "FETCH_SUCCEEDED" });
+              await sourceRuntime.dispatch({
+                eventsAdded: 0,
+                eventsRemoved: 0,
+                type: "INGEST_SUCCEEDED",
+              });
               widelog.set("outcome", "success");
               widelog.set("sync.events_added", 0);
               widelog.set("sync.events_removed", 0);
@@ -267,6 +331,13 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
             widelog.set("sync.events_added", result.eventsAdded);
             widelog.set("sync.events_removed", result.eventsRemoved);
 
+            await sourceRuntime.dispatch({ type: "FETCH_SUCCEEDED" });
+            await sourceRuntime.dispatch({
+              eventsAdded: result.eventsAdded,
+              eventsRemoved: result.eventsRemoved,
+              type: "INGEST_SUCCEEDED",
+            });
+
             widelog.set("outcome", "success");
 
             return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
@@ -274,39 +345,28 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
 
             widelog.set("outcome", "error");
 
-            if (error instanceof Error && "status" in error && error.status === 404) {
+            if (isNotFoundError(error)) {
+              await sourceRuntime.dispatch({
+                code: resolveIngestionErrorCode(error),
+                type: "NOT_FOUND",
+              });
               widelog.errorFields(error, { slug: "provider-calendar-not-found", retriable: false });
-
-              await database
-                .update(calendarsTable)
-                .set({ disabled: true })
-                .where(eq(calendarsTable.id, source.calendarId));
-
               return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
             }
 
-            if (error instanceof Error && "authRequired" in error && error.authRequired === true) {
-              widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
-
-              await database
-                .update(calendarAccountsTable)
-                .set({ needsReauthentication: true })
-                .where(eq(calendarAccountsTable.id, source.accountId));
-
-              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
-            }
-
-            if (error instanceof Error && "oauthReauthRequired" in error && error.oauthReauthRequired === true) {
+            if (isOAuthAuthFailure(error)) {
+              await sourceRuntime.dispatch({
+                code: "auth_required",
+                type: "AUTH_FAILURE",
+              });
               widelog.errorFields(error, { slug: "provider-token-refresh-failed", retriable: false, requiresReauth: true });
-
-              await database
-                .update(calendarAccountsTable)
-                .set({ needsReauthentication: true })
-                .where(eq(calendarAccountsTable.id, source.accountId));
-
               return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
             }
 
+            await sourceRuntime.dispatch({
+              code: resolveIngestionErrorCode(error),
+              type: "TRANSIENT_FAILURE",
+            });
             widelog.errorFields(error, { slug: "provider-api-error", retriable: true });
             throw error;
           } finally {
@@ -376,7 +436,30 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
           widelog.set("provider.account_id", source.accountId);
           widelog.set("provider.calendar_id", source.calendarId);
 
+          const sourceRuntime = createSourceIngestionLifecycleRuntime({
+            handlers: {
+              disableSource: async () => {
+                await database
+                  .update(calendarsTable)
+                  .set({ disabled: true })
+                  .where(eq(calendarsTable.id, source.calendarId));
+              },
+              markNeedsReauth: async () => {
+                await database
+                  .update(calendarAccountsTable)
+                  .set({ needsReauthentication: true })
+                  .where(eq(calendarAccountsTable.id, source.accountId));
+              },
+              persistSyncToken: () => Promise.resolve(),
+            },
+            provider: source.provider,
+            sourceId: source.calendarId,
+          });
+
           try {
+            await sourceRuntime.dispatch({ type: "SOURCE_SELECTED" });
+            await sourceRuntime.dispatch({ type: "FETCHER_RESOLVED" });
+
             const password = decryptPassword(source.encryptedPassword, encryptionKey);
 
             const fetcher = createCalDAVSourceFetcher({
@@ -407,6 +490,13 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
             widelog.set("sync.events_added", result.eventsAdded);
             widelog.set("sync.events_removed", result.eventsRemoved);
 
+            await sourceRuntime.dispatch({ type: "FETCH_SUCCEEDED" });
+            await sourceRuntime.dispatch({
+              eventsAdded: result.eventsAdded,
+              eventsRemoved: result.eventsRemoved,
+              type: "INGEST_SUCCEEDED",
+            });
+
             widelog.set("outcome", "success");
 
             return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
@@ -415,24 +505,25 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
             widelog.set("outcome", "error");
 
             if (isCalDAVAuthenticationError(error)) {
+              await sourceRuntime.dispatch({
+                code: "auth_required",
+                type: "AUTH_FAILURE",
+              });
               widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
-
-              await database
-                .update(calendarAccountsTable)
-                .set({ needsReauthentication: true })
-                .where(eq(calendarAccountsTable.id, source.accountId));
-
               return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
             }
 
             if (error instanceof Error && error.message.includes("404")) {
+              await sourceRuntime.dispatch({
+                code: resolveIngestionErrorCode(error),
+                type: "NOT_FOUND",
+              });
               widelog.errorFields(error, { slug: "provider-calendar-not-found", retriable: false });
-
-              await database
-                .update(calendarsTable)
-                .set({ disabled: true })
-                .where(eq(calendarsTable.id, source.calendarId));
             } else {
+              await sourceRuntime.dispatch({
+                code: resolveIngestionErrorCode(error),
+                type: "TRANSIENT_FAILURE",
+              });
               widelog.errorFields(error, { slug: "provider-api-error", retriable: true });
             }
 
@@ -490,9 +581,32 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
           widelog.set("provider.name", "ical");
           widelog.set("provider.calendar_id", source.calendarId);
 
+          const sourceRuntime = createSourceIngestionLifecycleRuntime({
+            handlers: {
+              disableSource: async () => {
+                await database
+                  .update(calendarsTable)
+                  .set({ disabled: true })
+                  .where(eq(calendarsTable.id, source.calendarId));
+              },
+              markNeedsReauth: () => Promise.resolve(),
+              persistSyncToken: () => Promise.resolve(),
+            },
+            provider: "ical",
+            sourceId: source.calendarId,
+          });
+
           try {
+            await sourceRuntime.dispatch({ type: "SOURCE_SELECTED" });
+            await sourceRuntime.dispatch({ type: "FETCHER_RESOLVED" });
+
             if (!source.url) {
-  
+              await sourceRuntime.dispatch({ type: "FETCH_SUCCEEDED" });
+              await sourceRuntime.dispatch({
+                eventsAdded: 0,
+                eventsRemoved: 0,
+                type: "INGEST_SUCCEEDED",
+              });
               widelog.set("outcome", "success");
               widelog.set("sync.events_added", 0);
               widelog.set("sync.events_removed", 0);
@@ -526,12 +640,23 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
             widelog.set("sync.events_added", result.eventsAdded);
             widelog.set("sync.events_removed", result.eventsRemoved);
 
+            await sourceRuntime.dispatch({ type: "FETCH_SUCCEEDED" });
+            await sourceRuntime.dispatch({
+              eventsAdded: result.eventsAdded,
+              eventsRemoved: result.eventsRemoved,
+              type: "INGEST_SUCCEEDED",
+            });
+
             widelog.set("outcome", "success");
 
             return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
           } catch (error) {
 
             widelog.set("outcome", "error");
+            await sourceRuntime.dispatch({
+              code: resolveIngestionErrorCode(error),
+              type: "TRANSIENT_FAILURE",
+            });
             widelog.errorFields(error, { slug: "provider-api-error", retriable: true });
             throw error;
           } finally {

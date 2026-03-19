@@ -101,8 +101,7 @@ const createDestinationExecutionRuntime = (
           await input.handlers.emitSyncEvent(command.eventsAdded, command.eventsRemoved);
           return;
         }
-        const _exhaustive: never = command;
-        return _exhaustive;
+        throw new Error("Unhandled destination execution command");
       },
     },
     envelopeStore,

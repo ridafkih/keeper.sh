@@ -94,8 +94,7 @@ const createCommandBus = (
       await dependencies.syncing.releaseSyncing(userId);
       return;
     }
-    const _exhaustive: never = command;
-    return _exhaustive;
+    throw new Error("Unhandled push arbitration command");
   },
 });
 
