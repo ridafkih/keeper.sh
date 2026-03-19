@@ -284,3 +284,8 @@ For each target machine:
 - `services/worker` push job arbitration now runs through the authoritative machine runtime driver path.
 - Legacy in-memory `activeJobsByUser` arbitration logic is removed from worker event handlers.
 - Worker lifecycle events (`active`, `completed`, `failed`) now dispatch into `PushJobArbitrationStateMachine` via `MachineRuntimeDriver`.
+
+## Second Production Slice Cutover (2026-03-19)
+- `packages/sync` destination execution now routes through a machine runtime adapter (`DestinationExecutionStateMachine`) for lock-held execution paths.
+- Success, invalidation, retryable failure, and terminal disable flows now dispatch explicit machine events and execute machine commands for release/backoff/disable.
+- `sync-user` no longer owns inline backoff transition branching for lock-held destination execution.

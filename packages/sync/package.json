@@ -13,6 +13,8 @@
   "dependencies": {
     "@keeper.sh/calendar": "workspace:*",
     "@keeper.sh/database": "workspace:*",
+    "@keeper.sh/machine-orchestration": "workspace:*",
+    "@keeper.sh/state-machines": "workspace:*",
     "drizzle-orm": "^0.45.1",
     "ioredis": "^5.6.1"
   },

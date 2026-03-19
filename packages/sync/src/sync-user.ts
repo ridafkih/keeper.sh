@@ -14,6 +14,7 @@ import { and, arrayContains, eq, isNull, lte, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
 import { computeDestinationBackoff } from "./destination-backoff";
+import { createDestinationExecutionRuntime } from "./destination-execution-runtime";
 import { getErrorMessage, isBackoffEligibleError } from "./destination-errors";
 import { resolveSyncProvider } from "./resolve-provider";
 import type { OAuthConfig } from "./resolve-provider";
@@ -28,37 +29,6 @@ const resetDestinationBackoff = async (
   await database
     .update(calendarsTable)
     .set({ failureCount: 0, lastFailureAt: null, nextAttemptAt: null })
-    .where(eq(calendarsTable.id, calendarId));
-};
-
-const applyDestinationBackoff = async (
-  database: BunSQLDatabase,
-  calendarId: string,
-  currentFailureCount: number,
-): Promise<void> => {
-  const nextFailureCount = currentFailureCount + 1;
-  const { delayMs, shouldDisable } = computeDestinationBackoff(nextFailureCount);
-
-  if (shouldDisable) {
-    await database
-      .update(calendarsTable)
-      .set({
-        disabled: true,
-        failureCount: nextFailureCount,
-        lastFailureAt: new Date(),
-        nextAttemptAt: null,
-      })
-      .where(eq(calendarsTable.id, calendarId));
-    return;
-  }
-
-  await database
-    .update(calendarsTable)
-    .set({
-      failureCount: nextFailureCount,
-      lastFailureAt: new Date(),
-      nextAttemptAt: new Date(Date.now() + delayMs),
-    })
     .where(eq(calendarsTable.id, calendarId));
 };
 
@@ -181,8 +151,45 @@ const syncDestinationsForUser = async (
     }
 
     const { handle } = lockResult;
+    const destinationRuntime = createDestinationExecutionRuntime({
+      calendarId: destination.calendarId,
+      failureCount: destination.failureCount,
+      handlers: {
+        applyBackoff: async (nextAttemptAt) => {
+          await database
+            .update(calendarsTable)
+            .set({
+              failureCount: destination.failureCount + 1,
+              lastFailureAt: new Date(),
+              nextAttemptAt: new Date(nextAttemptAt),
+            })
+            .where(eq(calendarsTable.id, destination.calendarId));
+        },
+        disableDestination: async () => {
+          await database
+            .update(calendarsTable)
+            .set({
+              disabled: true,
+              failureCount: destination.failureCount + 1,
+              lastFailureAt: new Date(),
+              nextAttemptAt: null,
+            })
+            .where(eq(calendarsTable.id, destination.calendarId));
+        },
+        emitSyncEvent: () => Promise.resolve(),
+        releaseLock: async () => {
+          await handle.release();
+        },
+      },
+    });
 
     try {
+      await destinationRuntime.dispatch({
+        holderId: destination.calendarId,
+        type: "LOCK_ACQUIRED",
+      });
+      await destinationRuntime.dispatch({ type: "EXECUTION_STARTED" });
+
       const syncProvider = await resolveSyncProvider({
         database,
         provider: destination.provider,
@@ -238,12 +245,22 @@ const syncDestinationsForUser = async (
 
       const invalidated = await isCalendarInvalidated(redis, destination.calendarId);
       if (invalidated) {
+        await destinationRuntime.dispatch({
+          at: new Date().toISOString(),
+          type: "INVALIDATION_DETECTED",
+        });
         continue;
       }
 
       if (destination.failureCount > 0) {
         await resetDestinationBackoff(database, destination.calendarId);
       }
+
+      await destinationRuntime.dispatch({
+        eventsAdded: result.added,
+        eventsRemoved: result.removed,
+        type: "EXECUTION_SUCCEEDED",
+      });
 
       added += result.added;
       addFailed += result.addFailed;
@@ -270,13 +287,26 @@ const syncDestinationsForUser = async (
       }
     } catch (error) {
       if (!isBackoffEligibleError(error)) {
+        await destinationRuntime.releaseIfHeld();
         throw error;
       }
 
-      await applyDestinationBackoff(database, destination.calendarId, destination.failureCount);
+      const { delayMs, shouldDisable } = computeDestinationBackoff(destination.failureCount + 1);
+      if (shouldDisable) {
+        await destinationRuntime.dispatch({
+          code: "destination-disabled",
+          reason: getErrorMessage(error),
+          type: "EXECUTION_FATAL_FAILED",
+        });
+      }
+      if (!shouldDisable) {
+        await destinationRuntime.dispatch({
+          code: "destination-backoff",
+          nextAttemptAt: new Date(Date.now() + delayMs).toISOString(),
+          type: "EXECUTION_RETRYABLE_FAILED",
+        });
+      }
       errors.push(getErrorMessage(error));
-    } finally {
-      await handle.release();
     }
   }
 
