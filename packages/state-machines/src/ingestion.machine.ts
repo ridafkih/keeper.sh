@@ -78,7 +78,25 @@ class IngestionStateMachine
   >
   implements IngestionMachine
 {
-  constructor(input: IngestionMachineInput, options?: { transitionPolicy?: TransitionPolicy }) {
+  private readonly invariants: ((snapshot: IngestionSnapshot) => void)[] = [
+    ({ state, context }) => {
+      if (
+        (state === "auth_blocked"
+          || state === "not_found_disabled"
+          || state === "transient_error")
+        && !context.lastError
+      ) {
+        throw new Error("Invariant violated: error states require lastError");
+      }
+    },
+    ({ context }) => {
+      if (context.eventsAdded < 0 || context.eventsRemoved < 0) {
+        throw new Error("Invariant violated: event counters must be non-negative");
+      }
+    },
+  ];
+
+  constructor(input: IngestionMachineInput, options: { transitionPolicy: TransitionPolicy }) {
     super(
       "ready",
       {
@@ -86,7 +104,7 @@ class IngestionStateMachine
         eventsAdded: 0,
         eventsRemoved: 0,
       },
-      { transitionPolicy: options?.transitionPolicy },
+      { transitionPolicy: options.transitionPolicy },
     );
   }
 
@@ -104,6 +122,10 @@ class IngestionStateMachine
       return this.state === "applying";
     }
     return this.state === "fetching" || this.state === "diffing" || this.state === "applying";
+  }
+
+  protected getInvariants(): ((snapshot: IngestionSnapshot) => void)[] {
+    return this.invariants;
   }
 
   private transitionTo(

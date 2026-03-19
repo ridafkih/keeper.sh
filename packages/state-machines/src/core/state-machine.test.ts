@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { StateMachine } from "./state-machine";
 import { createEventEnvelope } from "./event-envelope";
+import type { EventActor } from "./event-envelope";
 import { TransitionPolicy } from "./transition-policy";
 
 type DemoState = "idle" | "active";
@@ -8,8 +9,22 @@ interface DemoContext {
   count: number;
 }
 type DemoEvent = { type: "INC" } | { type: "RESET" };
-type DemoCommand = { type: "NOOP" };
-type DemoOutput = { type: "COUNT_CHANGED"; count: number };
+interface DemoCommand {
+  type: "NOOP";
+}
+interface DemoOutput {
+  type: "COUNT_CHANGED";
+  count: number;
+}
+
+let envelopeSequence = 0;
+const envelope = <TEvent>(event: TEvent, actor: EventActor) => {
+  envelopeSequence += 1;
+  return createEventEnvelope(event, actor, {
+    id: `env-core-${envelopeSequence}`,
+    occurredAt: `2026-03-19T10:50:${String(envelopeSequence).padStart(2, "0")}.000Z`,
+  });
+};
 
 class DemoMachine extends StateMachine<
   DemoState,
@@ -18,7 +33,9 @@ class DemoMachine extends StateMachine<
   DemoCommand,
   DemoOutput
 > {
-  constructor(transitionPolicy = TransitionPolicy.IGNORE) {
+  private readonly invariants: ((snapshot: { context: DemoContext }) => void)[] = [];
+
+  constructor(transitionPolicy: TransitionPolicy) {
     super("idle", { count: 0 }, { transitionPolicy });
   }
 
@@ -27,6 +44,10 @@ class DemoMachine extends StateMachine<
       return false;
     }
     return true;
+  }
+
+  protected getInvariants() {
+    return this.invariants;
   }
 
   protected transition(event: DemoEvent) {
@@ -42,6 +63,9 @@ class DemoMachine extends StateMachine<
         this.context = { count: 0 };
         return this.result([{ type: "NOOP" }], [{ count: 0, type: "COUNT_CHANGED" }]);
       }
+      default: {
+        return this.result();
+      }
     }
   }
 }
@@ -53,18 +77,27 @@ class InvariantMachine extends StateMachine<
   DemoCommand,
   DemoOutput
 > {
+  private readonly invariants = [
+    ({ context }: { context: DemoContext }) => {
+      if (context.count < 0) {
+        throw new Error("Invariant violated: count must be non-negative");
+      }
+    },
+  ];
+
   constructor() {
-    super("idle", { count: 0 });
+    super("idle", { count: 0 }, { transitionPolicy: TransitionPolicy.IGNORE });
   }
 
   protected getInvariants() {
-    return [
-      ({ context }: { context: DemoContext }) => {
-        if (context.count < 0) {
-          throw new Error("Invariant violated: count must be non-negative");
-        }
-      },
-    ];
+    return this.invariants;
+  }
+
+  protected isTransitionAllowed(event: DemoEvent): boolean {
+    if (event.type === "INC") {
+      return this.state === "idle" || this.state === "active";
+    }
+    return this.state === "idle" || this.state === "active";
   }
 
   protected transition(event: DemoEvent) {
@@ -77,7 +110,7 @@ class InvariantMachine extends StateMachine<
 
 describe("StateMachine base class", () => {
   it("exposes current snapshot", () => {
-    const machine = new DemoMachine();
+    const machine = new DemoMachine(TransitionPolicy.IGNORE);
     expect(machine.getSnapshot()).toEqual({
       context: { count: 0 },
       state: "idle",
@@ -85,9 +118,9 @@ describe("StateMachine base class", () => {
   });
 
   it("returns structured transition result with commands and outputs", () => {
-    const machine = new DemoMachine();
+    const machine = new DemoMachine(TransitionPolicy.IGNORE);
     const result = machine.dispatch(
-      createEventEnvelope(
+      envelope(
         { type: "INC" },
         { type: "system", id: "test" },
       ),
@@ -104,7 +137,7 @@ describe("StateMachine base class", () => {
 
     expect(() =>
       machine.dispatch(
-        createEventEnvelope(
+        envelope(
           { type: "RESET" },
           { type: "system", id: "test" },
         ),
@@ -115,7 +148,7 @@ describe("StateMachine base class", () => {
   it("ignores disallowed transition in ignore mode", () => {
     const machine = new DemoMachine(TransitionPolicy.IGNORE);
     const result = machine.dispatch(
-      createEventEnvelope(
+      envelope(
         { type: "RESET" },
         { type: "system", id: "test" },
       ),
@@ -131,7 +164,7 @@ describe("StateMachine base class", () => {
 
     expect(() =>
       machine.dispatch(
-        createEventEnvelope(
+        envelope(
           { type: "INC" },
           { type: "system", id: "test" },
         ),
@@ -140,15 +173,15 @@ describe("StateMachine base class", () => {
   });
 
   it("stops notifying listener after unsubscribe", () => {
-    const machine = new DemoMachine();
+    const machine = new DemoMachine(TransitionPolicy.IGNORE);
     let calls = 0;
     const unsubscribe = machine.subscribe(() => {
       calls += 1;
     });
 
-    machine.dispatch(createEventEnvelope({ type: "INC" }, { type: "system", id: "test" }));
+    machine.dispatch(envelope({ type: "INC" }, { type: "system", id: "test" }));
     unsubscribe();
-    machine.dispatch(createEventEnvelope({ type: "RESET" }, { type: "system", id: "test" }));
+    machine.dispatch(envelope({ type: "RESET" }, { type: "system", id: "test" }));
 
     expect(calls).toBe(1);
   });

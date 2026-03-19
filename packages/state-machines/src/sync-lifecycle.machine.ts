@@ -1,8 +1,8 @@
 import { StateMachine } from "./core/state-machine";
 import type { MachineSnapshot, MachineTransitionResult } from "./core/state-machine";
 import type { EventEnvelope } from "./core/event-envelope";
-import { TransitionPolicy } from "./core/transition-policy";
-import { ErrorPolicy } from "./errors/error-policy";
+import type { TransitionPolicy } from "./core/transition-policy";
+import type { ErrorPolicy } from "./errors/error-policy";
 
 type PendingReason =
   | "ingest_changed"
@@ -50,11 +50,7 @@ interface SyncLifecycleMachine {
 const addReason = (
   context: SyncLifecycleContext,
   reason: PendingReason,
-): SyncLifecycleContext => {
-  const pendingReasons = new Set(context.pendingReasons);
-  pendingReasons.add(reason);
-  return { ...context, pendingReasons };
-};
+): SyncLifecycleContext => ({ ...context, pendingReasons: new Set([...context.pendingReasons, reason]) });
 
 const clearSettingsReason = (context: SyncLifecycleContext): SyncLifecycleContext => {
   const pendingReasons = new Set(context.pendingReasons);
@@ -72,11 +68,29 @@ class SyncLifecycleStateMachine
   >
   implements SyncLifecycleMachine
 {
-  constructor(options?: { transitionPolicy?: TransitionPolicy }) {
+  private readonly invariants: ((snapshot: SyncLifecycleSnapshot) => void)[] = [
+    ({ state, context }) => {
+      if (state === "running" && !context.activeJobId) {
+        throw new Error("Invariant violated: running state requires activeJobId");
+      }
+    },
+    ({ state, context }) => {
+      if (state === "degraded" && !context.lastError) {
+        throw new Error("Invariant violated: degraded state requires lastError");
+      }
+    },
+    ({ state, context }) => {
+      if (state === "pending" && context.pendingReasons.size === 0) {
+        throw new Error("Invariant violated: pending state requires pending reasons");
+      }
+    },
+  ];
+
+  constructor(options: { transitionPolicy: TransitionPolicy }) {
     super(
       "idle",
       { pendingReasons: new Set() },
-      { transitionPolicy: options?.transitionPolicy },
+      { transitionPolicy: options.transitionPolicy },
     );
   }
 
@@ -90,14 +104,8 @@ class SyncLifecycleStateMachine
     return true;
   }
 
-  protected getInvariants(): Array<(snapshot: SyncLifecycleSnapshot) => void> {
-    return [
-      ({ state, context }) => {
-        if (state === "running" && !context.activeJobId) {
-          throw new Error("Invariant violated: running state requires activeJobId");
-        }
-      },
-    ];
+  protected getInvariants(): ((snapshot: SyncLifecycleSnapshot) => void)[] {
+    return this.invariants;
   }
 
   private transitionToPending(
@@ -113,9 +121,10 @@ class SyncLifecycleStateMachine
   }
 
   private transitionToIdle(commands: SyncLifecycleCommand[]): SyncLifecycleTransitionResult {
+    const rest = { ...this.context };
+    delete rest.activeJobId;
     this.context = {
-      ...this.context,
-      activeJobId: undefined,
+      ...rest,
       pendingReasons: new Set(),
     };
     this.state = "idle";
@@ -128,9 +137,10 @@ class SyncLifecycleStateMachine
     policy: ErrorPolicy,
     commands: SyncLifecycleCommand[],
   ): SyncLifecycleTransitionResult {
+    const rest = { ...this.context };
+    delete rest.activeJobId;
     this.context = {
-      ...this.context,
-      activeJobId: undefined,
+      ...rest,
       lastError: {
         code,
         at: new Date().toISOString(),
@@ -182,6 +192,9 @@ class SyncLifecycleStateMachine
 
       case "JOB_FAILED": {
         return this.transitionToDegraded(event.code, event.policy, commands);
+      }
+      default: {
+        return this.result(commands);
       }
     }
   }

@@ -1,8 +1,18 @@
 import { describe, expect, it } from "bun:test";
 import { IngestionFailureType, IngestionStateMachine } from "./ingestion.machine";
 import { createEventEnvelope } from "./core/event-envelope";
+import type { EventActor } from "./core/event-envelope";
 import { ErrorPolicy } from "./errors/error-policy";
 import { TransitionPolicy } from "./core/transition-policy";
+
+let envelopeSequence = 0;
+const envelope = <TEvent>(event: TEvent, actor: EventActor) => {
+  envelopeSequence += 1;
+  return createEventEnvelope(event, actor, {
+    id: `env-ingest-${envelopeSequence}`,
+    occurredAt: `2026-03-19T10:10:${String(envelopeSequence).padStart(2, "0")}.000Z`,
+  });
+};
 
 describe("IngestionMachine", () => {
   it("starts in ready state", () => {
@@ -11,7 +21,7 @@ describe("IngestionMachine", () => {
       provider: "google",
       sourceCalendarId: "src-1",
       userId: "user-1",
-    });
+    }, { transitionPolicy: TransitionPolicy.IGNORE });
 
     expect(machine.getSnapshot().state).toBe("ready");
   });
@@ -22,10 +32,10 @@ describe("IngestionMachine", () => {
       provider: "google",
       sourceCalendarId: "src-1",
       userId: "user-1",
-    });
+    }, { transitionPolicy: TransitionPolicy.IGNORE });
 
     const result = machine.dispatch(
-      createEventEnvelope({ type: "START" }, { type: "system", id: "cron" }),
+      envelope({ type: "START" }, { type: "system", id: "cron" }),
     );
 
     expect(result.state).toBe("fetching");
@@ -37,14 +47,14 @@ describe("IngestionMachine", () => {
       provider: "google",
       sourceCalendarId: "src-1",
       userId: "user-1",
-    });
+    }, { transitionPolicy: TransitionPolicy.IGNORE });
 
-    machine.dispatch(createEventEnvelope({ type: "START" }, { type: "system", id: "cron" }));
-    machine.dispatch(createEventEnvelope({ type: "FETCH_OK" }, { type: "system", id: "cron" }));
-    machine.dispatch(createEventEnvelope({ type: "DIFF_OK" }, { type: "system", id: "cron" }));
+    machine.dispatch(envelope({ type: "START" }, { type: "system", id: "cron" }));
+    machine.dispatch(envelope({ type: "FETCH_OK" }, { type: "system", id: "cron" }));
+    machine.dispatch(envelope({ type: "DIFF_OK" }, { type: "system", id: "cron" }));
 
     const result = machine.dispatch(
-      createEventEnvelope(
+      envelope(
         {
           type: "APPLY_OK",
           eventsAdded: 2,
@@ -68,11 +78,11 @@ describe("IngestionMachine", () => {
       provider: "outlook",
       sourceCalendarId: "src-1",
       userId: "user-1",
-    });
-    machine.dispatch(createEventEnvelope({ type: "START" }, { type: "system", id: "cron" }));
+    }, { transitionPolicy: TransitionPolicy.IGNORE });
+    machine.dispatch(envelope({ type: "START" }, { type: "system", id: "cron" }));
 
     const result = machine.dispatch(
-      createEventEnvelope(
+      envelope(
         {
           code: "provider-auth-failed",
           type: "FETCH_AUTH_ERROR",
@@ -101,7 +111,29 @@ describe("IngestionMachine", () => {
 
     expect(() =>
       machine.dispatch(
-        createEventEnvelope({ type: "DIFF_OK" }, { type: "system", id: "cron" }),
+        envelope({ type: "DIFF_OK" }, { type: "system", id: "cron" }),
+      ),
+    ).toThrow("Transition rejected");
+  });
+
+  it("rejects restart after terminal auth_blocked in strict mode", () => {
+    const machine = new IngestionStateMachine({
+      accountId: "acc-1",
+      provider: "google",
+      sourceCalendarId: "src-1",
+      userId: "user-1",
+    }, { transitionPolicy: TransitionPolicy.REJECT });
+    machine.dispatch(envelope({ type: "START" }, { type: "system", id: "cron" }));
+    machine.dispatch(
+      envelope(
+        { code: "provider-auth-failed", type: "FETCH_AUTH_ERROR" },
+        { type: "system", id: "cron" },
+      ),
+    );
+
+    expect(() =>
+      machine.dispatch(
+        envelope({ type: "START" }, { type: "system", id: "cron" }),
       ),
     ).toThrow("Transition rejected");
   });

@@ -1,5 +1,4 @@
 import type { EventEnvelope } from "../core/event-envelope";
-import { SyncLifecycleStateMachine } from "../sync-lifecycle.machine";
 import type { SyncLifecycleEvent, SyncLifecycleMachine } from "../sync-lifecycle.machine";
 
 interface JobCoordinator {
@@ -14,7 +13,7 @@ interface SyncLifecycleApplicationServiceDependencies {
   userId: string;
   jobCoordinator: JobCoordinator;
   broadcaster: SyncLifecycleBroadcaster;
-  machine?: SyncLifecycleMachine;
+  machine: SyncLifecycleMachine;
 }
 
 class SyncLifecycleApplicationService {
@@ -27,7 +26,7 @@ class SyncLifecycleApplicationService {
     this.userId = dependencies.userId;
     this.jobCoordinator = dependencies.jobCoordinator;
     this.broadcaster = dependencies.broadcaster;
-    this.machine = dependencies.machine ?? new SyncLifecycleStateMachine();
+    this.machine = dependencies.machine;
   }
 
   handle(envelope: EventEnvelope<SyncLifecycleEvent>): void {

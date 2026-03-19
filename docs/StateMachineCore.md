@@ -18,6 +18,7 @@ All machines process events via:
   - `occurredAt`
   - optional `causationId`
   - optional `correlationId`
+- Envelope metadata is explicit and caller-provided (`id`, `occurredAt`); no runtime defaults.
 
 ## Policy Contract
 - `IGNORE`: disallowed transition returns no-op result.

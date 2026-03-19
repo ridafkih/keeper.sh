@@ -12,25 +12,25 @@ interface EventEnvelope<TEvent> {
   correlationId?: string;
 }
 
-interface EventEnvelopeOptions {
+interface EventEnvelopeMetadata {
+  id: string;
+  occurredAt: string;
   causationId?: string;
   correlationId?: string;
-  id?: string;
-  occurredAt?: string;
 }
 
 const createEventEnvelope = <TEvent>(
   event: TEvent,
   actor: EventActor,
-  options?: EventEnvelopeOptions,
+  metadata: EventEnvelopeMetadata,
 ): EventEnvelope<TEvent> => ({
-  id: options?.id ?? crypto.randomUUID(),
+  id: metadata.id,
   event,
   actor,
-  occurredAt: options?.occurredAt ?? new Date().toISOString(),
-  ...(options?.causationId && { causationId: options.causationId }),
-  ...(options?.correlationId && { correlationId: options.correlationId }),
+  occurredAt: metadata.occurredAt,
+  ...(metadata.causationId && { causationId: metadata.causationId }),
+  ...(metadata.correlationId && { correlationId: metadata.correlationId }),
 });
 
 export { createEventEnvelope };
-export type { EventActor, EventEnvelope, EventEnvelopeOptions };
+export type { EventActor, EventEnvelope, EventEnvelopeMetadata };

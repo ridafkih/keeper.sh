@@ -1,6 +1,17 @@
 import { describe, expect, it } from "bun:test";
 import { SourceProvisioningStateMachine } from "./source-provisioning.machine";
 import { createEventEnvelope } from "./core/event-envelope";
+import type { EventActor } from "./core/event-envelope";
+import { TransitionPolicy } from "./core/transition-policy";
+
+let envelopeSequence = 0;
+const envelope = <TEvent>(event: TEvent, actor: EventActor) => {
+  envelopeSequence += 1;
+  return createEventEnvelope(event, actor, {
+    id: `env-provision-${envelopeSequence}`,
+    occurredAt: `2026-03-19T10:20:${String(envelopeSequence).padStart(2, "0")}.000Z`,
+  });
+};
 
 describe("SourceProvisioningMachine", () => {
   it("starts in validating state", () => {
@@ -9,7 +20,7 @@ describe("SourceProvisioningMachine", () => {
       provider: "ics",
       requestId: "req-1",
       userId: "user-1",
-    });
+    }, { transitionPolicy: TransitionPolicy.IGNORE });
 
     expect(machine.getSnapshot().state).toBe("validating");
   });
@@ -20,10 +31,10 @@ describe("SourceProvisioningMachine", () => {
       provider: "ics",
       requestId: "req-1",
       userId: "user-1",
-    });
+    }, { transitionPolicy: TransitionPolicy.IGNORE });
 
     const result = machine.dispatch(
-      createEventEnvelope({ type: "VALIDATION_PASSED" }, { type: "user", id: "user-1" }),
+      envelope({ type: "VALIDATION_PASSED" }, { type: "user", id: "user-1" }),
     );
 
     expect(result.state).toBe("quota_check");
@@ -35,13 +46,13 @@ describe("SourceProvisioningMachine", () => {
       provider: "ics",
       requestId: "req-1",
       userId: "user-1",
-    });
+    }, { transitionPolicy: TransitionPolicy.IGNORE });
     machine.dispatch(
-      createEventEnvelope({ type: "VALIDATION_PASSED" }, { type: "user", id: "user-1" }),
+      envelope({ type: "VALIDATION_PASSED" }, { type: "user", id: "user-1" }),
     );
 
     const result = machine.dispatch(
-      createEventEnvelope({ type: "QUOTA_DENIED" }, { type: "system", id: "billing" }),
+      envelope({ type: "QUOTA_DENIED" }, { type: "system", id: "billing" }),
     );
 
     expect(result.state).toBe("rejected");
@@ -54,16 +65,16 @@ describe("SourceProvisioningMachine", () => {
       provider: "google",
       requestId: "req-1",
       userId: "user-1",
-    });
+    }, { transitionPolicy: TransitionPolicy.IGNORE });
 
-    machine.dispatch(createEventEnvelope({ type: "VALIDATION_PASSED" }, { type: "user", id: "user-1" }));
-    machine.dispatch(createEventEnvelope({ type: "QUOTA_ALLOWED" }, { type: "system", id: "billing" }));
-    machine.dispatch(createEventEnvelope({ type: "DEDUPLICATION_PASSED" }, { type: "system", id: "api" }));
-    machine.dispatch(createEventEnvelope({ accountId: "acc-1", type: "ACCOUNT_REUSED" }, { type: "system", id: "api" }));
-    machine.dispatch(createEventEnvelope({ sourceIds: ["src-1"], type: "SOURCE_CREATED" }, { type: "system", id: "api" }));
+    machine.dispatch(envelope({ type: "VALIDATION_PASSED" }, { type: "user", id: "user-1" }));
+    machine.dispatch(envelope({ type: "QUOTA_ALLOWED" }, { type: "system", id: "billing" }));
+    machine.dispatch(envelope({ type: "DEDUPLICATION_PASSED" }, { type: "system", id: "api" }));
+    machine.dispatch(envelope({ accountId: "acc-1", type: "ACCOUNT_REUSED" }, { type: "system", id: "api" }));
+    machine.dispatch(envelope({ sourceIds: ["src-1"], type: "SOURCE_CREATED" }, { type: "system", id: "api" }));
 
     const result = machine.dispatch(
-      createEventEnvelope(
+      envelope(
         {
           mode: "create_single",
           sourceIds: ["src-1"],
@@ -79,5 +90,23 @@ describe("SourceProvisioningMachine", () => {
       sourceIds: ["src-1"],
       type: "SOURCE_PROVISIONED",
     });
+  });
+
+  it("rejects follow-up transitions after rejection in strict mode", () => {
+    const machine = new SourceProvisioningStateMachine({
+      mode: "create_single",
+      provider: "ics",
+      requestId: "req-3",
+      userId: "user-3",
+    }, { transitionPolicy: TransitionPolicy.REJECT });
+
+    machine.dispatch(envelope({ type: "VALIDATION_PASSED" }, { type: "user", id: "user-3" }));
+    machine.dispatch(envelope({ type: "QUOTA_DENIED" }, { type: "system", id: "billing" }));
+
+    expect(() =>
+      machine.dispatch(
+        envelope({ type: "DEDUPLICATION_PASSED" }, { type: "system", id: "api" }),
+      ),
+    ).toThrow("Transition rejected");
   });
 });

@@ -34,11 +34,11 @@ abstract class StateMachine<TState, TContext, TEvent, TCommand, TOutput> {
   protected constructor(
     initialState: TState,
     initialContext: TContext,
-    options?: { transitionPolicy?: TransitionPolicy },
+    options: { transitionPolicy: TransitionPolicy },
   ) {
     this.state = initialState;
     this.context = initialContext;
-    this.transitionPolicy = options?.transitionPolicy ?? TransitionPolicy.IGNORE;
+    this.transitionPolicy = options.transitionPolicy;
   }
 
   getSnapshot(): MachineSnapshot<TState, TContext> {
@@ -97,13 +97,9 @@ abstract class StateMachine<TState, TContext, TEvent, TCommand, TOutput> {
     event: TEvent,
   ): MachineTransitionResult<TState, TContext, TCommand, TOutput>;
 
-  protected isTransitionAllowed(_event: TEvent): boolean {
-    return true;
-  }
+  protected abstract isTransitionAllowed(event: TEvent): boolean;
 
-  protected getInvariants(): Array<(snapshot: MachineSnapshot<TState, TContext>) => void> {
-    return [];
-  }
+  protected abstract getInvariants(): ((snapshot: MachineSnapshot<TState, TContext>) => void)[];
 
   private assertInvariants(): void {
     const snapshot = this.getSnapshot();

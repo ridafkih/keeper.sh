@@ -1,7 +1,7 @@
 import { StateMachine } from "./core/state-machine";
 import type { MachineSnapshot, MachineTransitionResult } from "./core/state-machine";
 import type { EventEnvelope } from "./core/event-envelope";
-import { TransitionPolicy } from "./core/transition-policy";
+import type { TransitionPolicy } from "./core/transition-policy";
 
 type SourceProvisioningProvider = "ics" | "google" | "outlook" | "caldav";
 type SourceProvisioningMode = "create_single" | "import_bulk";
@@ -80,14 +80,35 @@ class SourceProvisioningStateMachine
   >
   implements SourceProvisioningMachine
 {
-  constructor(input: SourceProvisioningInput, options?: { transitionPolicy?: TransitionPolicy }) {
+  private readonly invariants: ((snapshot: SourceProvisioningSnapshot) => void)[] = [
+    ({ state, context }) => {
+      if (state === "rejected" && !context.rejectionReason) {
+        throw new Error("Invariant violated: rejected state requires rejectionReason");
+      }
+    },
+    ({ state, context }) => {
+      if ((state === "bootstrap_sync" || state === "done") && context.createdSourceIds.length === 0) {
+        throw new Error("Invariant violated: bootstrap/done states require createdSourceIds");
+      }
+    },
+    ({ state, context }) => {
+      if (
+        (state === "source_create" || state === "bootstrap_sync" || state === "done")
+        && !context.createdAccountId
+      ) {
+        throw new Error("Invariant violated: source lifecycle states require createdAccountId");
+      }
+    },
+  ];
+
+  constructor(input: SourceProvisioningInput, options: { transitionPolicy: TransitionPolicy }) {
     super(
       "validating",
       {
         ...input,
         createdSourceIds: [],
       },
-      { transitionPolicy: options?.transitionPolicy },
+      { transitionPolicy: options.transitionPolicy },
     );
   }
 
@@ -111,6 +132,10 @@ class SourceProvisioningStateMachine
       return this.state === "bootstrap_sync";
     }
     return false;
+  }
+
+  protected getInvariants(): ((snapshot: SourceProvisioningSnapshot) => void)[] {
+    return this.invariants;
   }
 
   private transitionTo(state: SourceProvisioningState): SourceProvisioningTransitionResult {
@@ -209,6 +234,9 @@ class SourceProvisioningStateMachine
         if (this.state === "bootstrap_sync") {
           return this.complete(event.mode, event.sourceIds);
         }
+        return this.result();
+      }
+      default: {
         return this.result();
       }
     }
