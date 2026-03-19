@@ -18,11 +18,10 @@ import {
 } from "@keeper.sh/database/schema";
 import { eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { createCredentialHealthRuntime } from "./credential-health-runtime";
 
 const OAUTH_PROVIDERS = new Set(["google", "outlook"]);
 const CALDAV_PROVIDERS = new Set(["caldav", "fastmail", "icloud"]);
-
-const MS_PER_SECOND = 1000;
 
 interface OAuthConfig {
   googleClientId?: string;
@@ -35,6 +34,7 @@ interface CoordinatedRefresherOptions {
   database: BunSQLDatabase;
   oauthCredentialId: string;
   calendarAccountId: string;
+  accessTokenExpiresAt: Date;
   refreshLockStore: RefreshLockStore | null;
   rawRefresh: (refreshToken: string) => Promise<{
     access_token: string;
@@ -44,37 +44,43 @@ interface CoordinatedRefresherOptions {
 }
 
 const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
-  const { database, oauthCredentialId, calendarAccountId, refreshLockStore, rawRefresh } = options;
+  const {
+    accessTokenExpiresAt,
+    database,
+    oauthCredentialId,
+    calendarAccountId,
+    refreshLockStore,
+    rawRefresh,
+  } = options;
+
+  const runtime = createCredentialHealthRuntime({
+    accessTokenExpiresAt,
+    calendarAccountId,
+    isReauthRequiredError: (error) => isOAuthReauthRequiredError(error),
+    markNeedsReauthentication: async () => {
+      await database
+        .update(calendarAccountsTable)
+        .set({ needsReauthentication: true })
+        .where(eq(calendarAccountsTable.id, calendarAccountId));
+    },
+    oauthCredentialId,
+    persistRefreshedCredentials: async ({ accessToken, expiresAt, refreshToken }) => {
+      await database
+        .update(oauthCredentialsTable)
+        .set({
+          accessToken,
+          expiresAt,
+          refreshToken,
+        })
+        .where(eq(oauthCredentialsTable.id, oauthCredentialId));
+    },
+    refreshAccessToken: rawRefresh,
+  });
 
   return (refreshToken: string) =>
     runWithCredentialRefreshLock(
       oauthCredentialId,
-      async () => {
-        try {
-          const result = await rawRefresh(refreshToken);
-
-          const newExpiresAt = new Date(Date.now() + result.expires_in * MS_PER_SECOND);
-
-          await database
-            .update(oauthCredentialsTable)
-            .set({
-              accessToken: result.access_token,
-              expiresAt: newExpiresAt,
-              refreshToken: result.refresh_token ?? refreshToken,
-            })
-            .where(eq(oauthCredentialsTable.id, oauthCredentialId));
-
-          return result;
-        } catch (error) {
-          if (isOAuthReauthRequiredError(error)) {
-            await database
-              .update(calendarAccountsTable)
-              .set({ needsReauthentication: true })
-              .where(eq(calendarAccountsTable.id, calendarAccountId));
-          }
-          throw error;
-        }
-      },
+      () => runtime.refresh(refreshToken),
       refreshLockStore,
     );
 };
@@ -124,6 +130,7 @@ const resolveOAuthProvider = async (
       calendarId,
       userId,
       refreshAccessToken: createCoordinatedRefresher({
+        accessTokenExpiresAt: oauthCred.expiresAt,
         database,
         oauthCredentialId: oauthCred.oauthCredentialId,
         calendarAccountId: accountId,
@@ -151,6 +158,7 @@ const resolveOAuthProvider = async (
       calendarId,
       userId,
       refreshAccessToken: createCoordinatedRefresher({
+        accessTokenExpiresAt: oauthCred.expiresAt,
         database,
         oauthCredentialId: oauthCred.oauthCredentialId,
         calendarAccountId: accountId,

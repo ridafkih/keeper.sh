@@ -294,3 +294,8 @@ For each target machine:
 - `services/cron` source ingestion paths (oauth, caldav, ics) now dispatch through `SourceIngestionLifecycleStateMachine` via a dedicated runtime adapter.
 - Reauth/disable behavior is executed via machine commands (`MARK_NEEDS_REAUTH`, `DISABLE_SOURCE`) instead of duplicated branch updates in provider-specific catches.
 - Successful ingestion transitions now flow through explicit `FETCH_SUCCEEDED` and `INGEST_SUCCEEDED` machine events.
+
+## Fourth Production Slice Cutover (2026-03-19)
+- OAuth credential refresh in `packages/sync` now runs through a dedicated `CredentialHealthStateMachine` runtime adapter.
+- Refresh success persists credentials via machine-governed transition flow; terminal auth failures mark `needsReauthentication` via machine command handling.
+- `resolve-provider` coordinated refresh now wraps the machine runtime with existing distributed refresh lock coordination.
