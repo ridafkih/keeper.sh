@@ -147,6 +147,23 @@ class InMemorySnapshotStore<TState, TContext> implements SnapshotStore<TState, T
     return Promise.resolve();
   }
 
+  initializeIfMissing(
+    aggregateId: string,
+    snapshot: MachineSnapshot<TState, TContext>,
+  ): Promise<SnapshotRecord<TState, TContext>> {
+    const existing = this.records.get(aggregateId);
+    if (existing) {
+      return Promise.resolve(existing);
+    }
+
+    const created = {
+      snapshot,
+      version: 0,
+    };
+    this.records.set(aggregateId, created);
+    return Promise.resolve(created);
+  }
+
   read(aggregateId: string): Promise<SnapshotRecord<TState, TContext> | null> {
     return Promise.resolve(this.records.get(aggregateId) ?? null);
   }

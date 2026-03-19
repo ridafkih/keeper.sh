@@ -6,6 +6,7 @@ import { closeDatabase } from "@keeper.sh/database";
 import { processJob } from "./processor";
 import { destroy } from "./utils/logging";
 import env from "./env";
+import { createPushJobArbitrationRuntime } from "./push-job-arbitration-runtime";
 
 const DEFAULT_CONCURRENCY = 5;
 const LOCK_DURATION_MS = 360_000;
@@ -23,14 +24,27 @@ const parseConcurrency = (value: string | undefined): number => {
   return parsed;
 };
 
+const requireJobId = (job: { id?: string }): string => {
+  const { id } = job;
+  if (!id) {
+    throw new Error("Worker invariant violated: job.id is required");
+  }
+  return id;
+};
+
+const toWorkerError = (error: unknown): Error => {
+  if (error instanceof Error) {
+    return error;
+  }
+  return new Error(String(error));
+};
+
 await entry({
   main: async () => {
     const { database, shutdownConnections } = await import("./context");
     const concurrency = parseConcurrency(env.WORKER_CONCURRENCY);
 
     const { syncAggregateRuntime } = await import("./processor");
-
-    const activeJobsByUser = new Map<string, string>();
 
     const worker = new Worker<PushSyncJobPayload, PushSyncJobResult>(
       PUSH_SYNC_QUEUE_NAME,
@@ -47,33 +61,51 @@ await entry({
       },
     );
 
+    const pushArbitrationRuntime = createPushJobArbitrationRuntime({
+      syncing: {
+        holdSyncing: (userId) => syncAggregateRuntime.holdSyncing(userId),
+        releaseSyncing: (userId) => syncAggregateRuntime.releaseSyncing(userId),
+      },
+      worker: {
+        cancelJob: (jobId, reason) => worker.cancelJob(jobId, reason),
+      },
+    });
+
     worker.on("active", (job) => {
-      const { userId } = job.data;
-      const previousJobId = activeJobsByUser.get(userId);
-
-      if (previousJobId && previousJobId !== job.id) {
-        worker.cancelJob(previousJobId, "superseded by newer sync");
-      }
-
-      activeJobsByUser.set(userId, job.id ?? "");
-      syncAggregateRuntime.holdSyncing(userId);
+      const jobId = requireJobId(job);
+      pushArbitrationRuntime
+        .onJobActive({
+          jobId,
+          userId: job.data.userId,
+        })
+        .catch((error) => {
+          worker.emit("error", toWorkerError(error));
+        });
     });
 
     worker.on("completed", (job) => {
-      const currentJobId = activeJobsByUser.get(job.data.userId);
-      if (currentJobId === job.id) {
-        activeJobsByUser.delete(job.data.userId);
-        syncAggregateRuntime.releaseSyncing(job.data.userId);
-      }
+      const jobId = requireJobId(job);
+      pushArbitrationRuntime
+        .onJobCompleted({
+          jobId,
+          userId: job.data.userId,
+        })
+        .catch((error) => {
+          worker.emit("error", toWorkerError(error));
+        });
     });
 
     worker.on("failed", (job) => {
       if (job) {
-        const currentJobId = activeJobsByUser.get(job.data.userId);
-        if (currentJobId === job.id) {
-          activeJobsByUser.delete(job.data.userId);
-          syncAggregateRuntime.releaseSyncing(job.data.userId);
-        }
+        const jobId = requireJobId(job);
+        pushArbitrationRuntime
+          .onJobFailed({
+            jobId,
+            userId: job.data.userId,
+          })
+          .catch((error) => {
+            worker.emit("error", toWorkerError(error));
+          });
       }
     });
 

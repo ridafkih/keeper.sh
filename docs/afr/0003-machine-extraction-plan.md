@@ -279,3 +279,8 @@ For each target machine:
 - Package validation is green for both:
   - `/Users/ridafkih/keeper.sh/packages/state-machines`
   - `/Users/ridafkih/keeper.sh/packages/machine-orchestration`
+
+## First Production Slice Cutover (2026-03-19)
+- `services/worker` push job arbitration now runs through the authoritative machine runtime driver path.
+- Legacy in-memory `activeJobsByUser` arbitration logic is removed from worker event handlers.
+- Worker lifecycle events (`active`, `completed`, `failed`) now dispatch into `PushJobArbitrationStateMachine` via `MachineRuntimeDriver`.
