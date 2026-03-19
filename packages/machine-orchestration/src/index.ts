@@ -73,3 +73,19 @@ export type {
 
 export { createKeeperRuntime } from "./create-keeper-runtime";
 export type { CreateKeeperRuntimeDependencies } from "./create-keeper-runtime";
+
+export {
+  InMemoryEnvelopeStore,
+  InMemorySnapshotStore,
+  MachineConcurrencyError,
+  MachineRuntimeDriver,
+} from "./machine-runtime-driver";
+export type {
+  CommandBus,
+  EnvelopeStore,
+  MachineProcessResult,
+  MachineRuntimeDriverDependencies,
+  RuntimeMachine,
+  SnapshotRecord,
+  SnapshotStore,
+} from "./machine-runtime-driver";
