@@ -47,10 +47,24 @@ const isRuntimeJobEntrypoint = (entrypoint: string): boolean => {
     && !fileName.endsWith(".test.js")
     && !fileName.endsWith(".spec.ts")
     && !fileName.endsWith(".spec.js")
+    && !fileName.endsWith("-runtime.ts")
+    && !fileName.endsWith("-runtime.js")
     && !fileName.endsWith(".d.ts");
 };
 
-export const getAllJobs = async (rootDirectory: string): Promise<CronOptions[]> => {
+interface JobModuleExport {
+  entrypoint: string;
+  defaultExport: unknown;
+}
+
+const collectJobsFromModuleExports = (
+  moduleExports: JobModuleExport[],
+): CronOptions[] =>
+  moduleExports.flatMap(({ defaultExport, entrypoint }) =>
+    normalizeJobExport(defaultExport, entrypoint),
+  );
+
+const getAllJobs = async (rootDirectory: string): Promise<CronOptions[]> => {
   const globPattern = join(rootDirectory, "**/*.{ts,js}");
   const globScanner = new Glob(globPattern);
   const allEntrypoints = await Array.fromAsync(globScanner.scan());
@@ -64,8 +78,7 @@ export const getAllJobs = async (rootDirectory: string): Promise<CronOptions[]> 
     };
   });
 
-  const defaultExports = await Promise.all(imports);
-  return defaultExports.flatMap(({ defaultExport, entrypoint }) =>
-    normalizeJobExport(defaultExport, entrypoint),
-  );
+  return collectJobsFromModuleExports(await Promise.all(imports));
 };
+
+export { collectJobsFromModuleExports, getAllJobs, isRuntimeJobEntrypoint };

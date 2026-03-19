@@ -20,6 +20,7 @@ describe("destination execution runtime", () => {
           return Promise.resolve();
         },
       },
+      onRuntimeEvent: () => Promise.resolve(),
     });
 
     await runtime.dispatch({ holderId: "holder-1", type: "LOCK_ACQUIRED" });
@@ -53,6 +54,7 @@ describe("destination execution runtime", () => {
           return Promise.resolve();
         },
       },
+      onRuntimeEvent: () => Promise.resolve(),
     });
 
     await runtime.dispatch({ holderId: "holder-2", type: "LOCK_ACQUIRED" });
@@ -82,6 +84,7 @@ describe("destination execution runtime", () => {
           return Promise.resolve();
         },
       },
+      onRuntimeEvent: () => Promise.resolve(),
     });
 
     await runtime.dispatch({ holderId: "holder-3", type: "LOCK_ACQUIRED" });
@@ -89,5 +92,65 @@ describe("destination execution runtime", () => {
     await runtime.releaseIfHeld();
 
     expect(released).toEqual(["holder-3"]);
+  });
+
+  it("emits runtime processed events", async () => {
+    const processed: string[] = [];
+    const runtime = createDestinationExecutionRuntime({
+      calendarId: "cal-4",
+      failureCount: 0,
+      handlers: {
+        applyBackoff: () => Promise.resolve(),
+        disableDestination: () => Promise.resolve(),
+        emitSyncEvent: () => Promise.resolve(),
+        releaseLock: () => Promise.resolve(),
+      },
+      onRuntimeEvent: (event) => {
+        processed.push(event.envelope.event.type);
+        return Promise.resolve();
+      },
+    });
+
+    await runtime.dispatch({ holderId: "holder-4", type: "LOCK_ACQUIRED" });
+    await runtime.dispatch({ type: "EXECUTION_STARTED" });
+
+    expect(processed).toEqual(["LOCK_ACQUIRED", "EXECUTION_STARTED"]);
+  });
+
+  it("does not share dedup state across runtime instances", async () => {
+    const firstRuntime = createDestinationExecutionRuntime({
+      calendarId: "cal-shared",
+      failureCount: 0,
+      handlers: {
+        applyBackoff: () => Promise.resolve(),
+        disableDestination: () => Promise.resolve(),
+        emitSyncEvent: () => Promise.resolve(),
+        releaseLock: () => Promise.resolve(),
+      },
+      onRuntimeEvent: () => Promise.resolve(),
+    });
+    const secondRuntime = createDestinationExecutionRuntime({
+      calendarId: "cal-shared",
+      failureCount: 0,
+      handlers: {
+        applyBackoff: () => Promise.resolve(),
+        disableDestination: () => Promise.resolve(),
+        emitSyncEvent: () => Promise.resolve(),
+        releaseLock: () => Promise.resolve(),
+      },
+      onRuntimeEvent: () => Promise.resolve(),
+    });
+
+    const firstTransition = await firstRuntime.dispatch({
+      holderId: "holder-a",
+      type: "LOCK_ACQUIRED",
+    });
+    const secondTransition = await secondRuntime.dispatch({
+      holderId: "holder-b",
+      type: "LOCK_ACQUIRED",
+    });
+
+    expect(firstTransition.state).toBe("locked");
+    expect(secondTransition.state).toBe("locked");
   });
 });

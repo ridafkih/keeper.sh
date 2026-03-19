@@ -10,6 +10,7 @@ import {
   MachineConcurrencyError,
   MachineRuntimeDriver,
 } from "./machine-runtime-driver";
+import type { RuntimeProcessEvent } from "./machine-runtime-driver";
 
 type TestState = "idle" | "active";
 interface TestContext {
@@ -76,6 +77,7 @@ describe("MachineRuntimeDriver", () => {
     await snapshotStore.initialize("aggregate-1", { context: {}, state: "idle" });
 
     const executed: TestCommand[] = [];
+    const events: RuntimeProcessEvent<TestState, TestContext, TestEvent, TestCommand, never>[] = [];
     const driver = new MachineRuntimeDriver<
       TestState,
       TestContext,
@@ -88,6 +90,11 @@ describe("MachineRuntimeDriver", () => {
         execute: (command) => {
           executed.push(command);
           return Promise.resolve();
+        },
+      },
+      eventSink: {
+        onProcessed: (event) => {
+          events.push(event);
         },
       },
       envelopeStore,
@@ -106,6 +113,10 @@ describe("MachineRuntimeDriver", () => {
       state: "active",
     });
     expect(await envelopeStore.hasProcessed("aggregate-1", "env-1")).toBe(true);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.duplicate).toBe(false);
+    expect(events[0]?.version).toBe(1);
+    expect(events[0]?.transition?.state).toBe("active");
   });
 
   it("does not re-execute duplicate envelope", async () => {
@@ -114,6 +125,7 @@ describe("MachineRuntimeDriver", () => {
     await snapshotStore.initialize("aggregate-2", { context: {}, state: "idle" });
 
     const executed: TestCommand[] = [];
+    const events: RuntimeProcessEvent<TestState, TestContext, TestEvent, TestCommand, never>[] = [];
     const driver = new MachineRuntimeDriver<
       TestState,
       TestContext,
@@ -128,6 +140,11 @@ describe("MachineRuntimeDriver", () => {
           return Promise.resolve();
         },
       },
+      eventSink: {
+        onProcessed: (event) => {
+          events.push(event);
+        },
+      },
       envelopeStore,
       machine: new FakeMachine(),
       snapshotStore,
@@ -139,6 +156,8 @@ describe("MachineRuntimeDriver", () => {
     expect(duplicate.duplicate).toBe(true);
     expect(duplicate.transition).toBeUndefined();
     expect(executed).toEqual([{ id: "entity-2", type: "DO_WORK" }]);
+    expect(events).toHaveLength(2);
+    expect(events[1]?.duplicate).toBe(true);
   });
 
   it("fails on compare-and-set conflict and does not mark processed", async () => {
@@ -158,6 +177,9 @@ describe("MachineRuntimeDriver", () => {
         execute: async () => {
           await snapshotStore.forceBumpVersion("aggregate-3");
         },
+      },
+      eventSink: {
+        onProcessed: () => Promise.resolve(),
       },
       envelopeStore,
       machine: new FakeMachine(),
@@ -185,6 +207,9 @@ describe("MachineRuntimeDriver", () => {
       aggregateId: "aggregate-4",
       commandBus: {
         execute: () => Promise.reject(new Error("command failure")),
+      },
+      eventSink: {
+        onProcessed: () => Promise.resolve(),
       },
       envelopeStore,
       machine: new FakeMachine(),

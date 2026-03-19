@@ -62,6 +62,7 @@ await entry({
     );
 
     const pushArbitrationRuntime = createPushJobArbitrationRuntime({
+      onRuntimeEvent: () => Promise.resolve(),
       syncing: {
         holdSyncing: (userId) => syncAggregateRuntime.holdSyncing(userId),
         releaseSyncing: (userId) => syncAggregateRuntime.releaseSyncing(userId),

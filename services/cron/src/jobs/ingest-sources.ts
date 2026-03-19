@@ -24,6 +24,7 @@ import {
 import { and, arrayContains, eq, inArray } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
+import { createMachineRuntimeWidelogSink } from "@/utils/machine-runtime-widelog";
 import { database, refreshLockRedis } from "@/context";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
@@ -234,6 +235,12 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
           if (source.externalCalendarId) {
             widelog.set("provider.external_calendar_id", source.externalCalendarId);
           }
+          const onRuntimeEvent = createMachineRuntimeWidelogSink(
+            "source_ingestion_lifecycle",
+            (field, value) => {
+              widelog.set(field, value);
+            },
+          );
 
           const sourceRuntime = createSourceIngestionLifecycleRuntime({
             handlers: {
@@ -256,6 +263,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
                   .where(eq(calendarsTable.id, source.calendarId));
               },
             },
+            onRuntimeEvent,
             provider: source.provider,
             sourceId: source.calendarId,
           });
@@ -435,6 +443,12 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
           widelog.set("provider.name", source.provider);
           widelog.set("provider.account_id", source.accountId);
           widelog.set("provider.calendar_id", source.calendarId);
+          const onRuntimeEvent = createMachineRuntimeWidelogSink(
+            "source_ingestion_lifecycle",
+            (field, value) => {
+              widelog.set(field, value);
+            },
+          );
 
           const sourceRuntime = createSourceIngestionLifecycleRuntime({
             handlers: {
@@ -452,6 +466,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
               },
               persistSyncToken: () => Promise.resolve(),
             },
+            onRuntimeEvent,
             provider: source.provider,
             sourceId: source.calendarId,
           });
@@ -580,6 +595,12 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
           widelog.set("user.id", source.userId);
           widelog.set("provider.name", "ical");
           widelog.set("provider.calendar_id", source.calendarId);
+          const onRuntimeEvent = createMachineRuntimeWidelogSink(
+            "source_ingestion_lifecycle",
+            (field, value) => {
+              widelog.set(field, value);
+            },
+          );
 
           const sourceRuntime = createSourceIngestionLifecycleRuntime({
             handlers: {
@@ -592,6 +613,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
               markNeedsReauth: () => Promise.resolve(),
               persistSyncToken: () => Promise.resolve(),
             },
+            onRuntimeEvent,
             provider: "ical",
             sourceId: source.calendarId,
           });

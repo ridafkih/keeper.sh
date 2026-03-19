@@ -89,6 +89,8 @@ export {
 export type {
   CommandBus,
   EnvelopeStore,
+  RuntimeEventSink,
+  RuntimeProcessEvent,
   MachineProcessResult,
   MachineRuntimeDriverDependencies,
   RuntimeMachine,

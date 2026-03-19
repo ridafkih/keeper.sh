@@ -15,9 +15,11 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
 import { computeDestinationBackoff } from "./destination-backoff";
 import { createDestinationExecutionRuntime } from "./destination-execution-runtime";
+import type { DestinationExecutionRuntimeEvent } from "./destination-execution-runtime";
 import { getErrorMessage, isBackoffEligibleError } from "./destination-errors";
 import { resolveSyncProvider } from "./resolve-provider";
 import type { OAuthConfig } from "./resolve-provider";
+import type { CredentialHealthRuntimeEvent } from "./credential-health-runtime";
 import { createSyncLock, isCalendarInvalidated } from "./sync-lock";
 
 const GOOGLE_REQUESTS_PER_MINUTE = 500;
@@ -84,10 +86,30 @@ interface CalendarSyncCompletion {
   durationMs: number;
 }
 
+interface CalendarSyncFailure {
+  provider: string;
+  accountId: string;
+  calendarId: string;
+  userId: string;
+  error: string;
+  durationMs: number;
+  retryable: boolean;
+  disabled: boolean;
+}
+
 interface SyncCallbacks {
   onSyncEvent?: (event: Record<string, unknown>) => void;
   onProgress?: (update: SyncProgressUpdate) => void;
-  onCalendarComplete?: (completion: CalendarSyncCompletion) => void;
+  onCalendarComplete?: (completion: CalendarSyncCompletion) => Promise<void> | void;
+  onCalendarFailed?: (failure: CalendarSyncFailure) => Promise<void> | void;
+  onDestinationRuntimeEvent?: (
+    calendarId: string,
+    event: DestinationExecutionRuntimeEvent,
+  ) => Promise<void> | void;
+  onCredentialRuntimeEvent?: (
+    calendarId: string,
+    event: CredentialHealthRuntimeEvent,
+  ) => Promise<void> | void;
 }
 
 const syncDestinationsForUser = async (
@@ -139,12 +161,19 @@ const syncDestinationsForUser = async (
     `ratelimit:${userId}:google`,
     { requestsPerMinute: GOOGLE_REQUESTS_PER_MINUTE },
   );
+  const notifyCalendarFailed = (failure: CalendarSyncFailure): Promise<void> => {
+    if (!callbacks?.onCalendarFailed) {
+      return Promise.resolve();
+    }
+    return Promise.resolve(callbacks.onCalendarFailed(failure));
+  };
 
   for (const destination of destinations) {
     if (config.abortSignal?.aborted) {
       break;
     }
 
+    const calendarSyncStartedAt = Date.now();
     const lockResult = await syncLock.acquire(destination.calendarId);
     if (!lockResult.acquired) {
       continue;
@@ -181,6 +210,11 @@ const syncDestinationsForUser = async (
           await handle.release();
         },
       },
+      onRuntimeEvent: (event) => {
+        if (callbacks?.onDestinationRuntimeEvent) {
+          return callbacks.onDestinationRuntimeEvent(destination.calendarId, event);
+        }
+      },
     });
 
     try {
@@ -201,6 +235,7 @@ const syncDestinationsForUser = async (
         refreshLockStore: config.refreshLockStore,
         rateLimiter,
         signal: config.abortSignal,
+        onCredentialRuntimeEvent: callbacks?.onCredentialRuntimeEvent,
       });
 
       if (!syncProvider) {
@@ -272,7 +307,7 @@ const syncDestinationsForUser = async (
         const syncEvent = syncEvents.at(-1);
         const durationMs = extractNumericField(syncEvent, "duration_ms");
 
-        callbacks.onCalendarComplete({
+        await callbacks.onCalendarComplete({
           provider: destination.provider,
           accountId: destination.accountId,
           calendarId: destination.calendarId,
@@ -288,14 +323,25 @@ const syncDestinationsForUser = async (
     } catch (error) {
       if (!isBackoffEligibleError(error)) {
         await destinationRuntime.releaseIfHeld();
+        await notifyCalendarFailed({
+          provider: destination.provider,
+          accountId: destination.accountId,
+          calendarId: destination.calendarId,
+          userId: destination.userId,
+          error: getErrorMessage(error),
+          durationMs: Date.now() - calendarSyncStartedAt,
+          retryable: false,
+          disabled: false,
+        });
         throw error;
       }
 
       const { delayMs, shouldDisable } = computeDestinationBackoff(destination.failureCount + 1);
+      const errorMessage = getErrorMessage(error);
       if (shouldDisable) {
         await destinationRuntime.dispatch({
           code: "destination-disabled",
-          reason: getErrorMessage(error),
+          reason: errorMessage,
           type: "EXECUTION_FATAL_FAILED",
         });
       }
@@ -306,7 +352,17 @@ const syncDestinationsForUser = async (
           type: "EXECUTION_RETRYABLE_FAILED",
         });
       }
-      errors.push(getErrorMessage(error));
+      errors.push(errorMessage);
+      await notifyCalendarFailed({
+        provider: destination.provider,
+        accountId: destination.accountId,
+        calendarId: destination.calendarId,
+        userId: destination.userId,
+        error: errorMessage,
+        durationMs: Date.now() - calendarSyncStartedAt,
+        retryable: !shouldDisable,
+        disabled: shouldDisable,
+      });
     }
   }
 
@@ -314,4 +370,9 @@ const syncDestinationsForUser = async (
 };
 
 export { syncDestinationsForUser };
-export type { CalendarSyncCompletion, SyncConfig, SyncDestinationsResult };
+export type {
+  CalendarSyncCompletion,
+  CalendarSyncFailure,
+  SyncConfig,
+  SyncDestinationsResult,
+};

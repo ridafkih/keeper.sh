@@ -1,4 +1,5 @@
 import {
+  type RuntimeProcessEvent,
   type RuntimeMachine,
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
@@ -34,12 +35,29 @@ interface CredentialHealthRuntimeInput {
   }) => Promise<void>;
   markNeedsReauthentication: () => Promise<void>;
   isReauthRequiredError: (error: unknown) => boolean;
+  onRuntimeEvent: (
+    event: RuntimeProcessEvent<
+      CredentialHealthState,
+      CredentialHealthContext,
+      CredentialHealthEvent,
+      CredentialHealthCommand,
+      CredentialHealthOutput
+    >,
+  ) => Promise<void> | void;
 }
 
 interface CredentialHealthRuntime {
   refresh: (refreshToken: string) => Promise<OAuthRefreshResult>;
   getSnapshot: () => Promise<MachineSnapshot<CredentialHealthState, CredentialHealthContext>>;
 }
+
+type CredentialHealthRuntimeEvent = RuntimeProcessEvent<
+  CredentialHealthState,
+  CredentialHealthContext,
+  CredentialHealthEvent,
+  CredentialHealthCommand,
+  CredentialHealthOutput
+>;
 
 const MS_PER_SECOND = 1000;
 
@@ -111,6 +129,9 @@ const createCredentialHealthRuntime = (
       },
     },
     envelopeStore,
+    eventSink: {
+      onProcessed: (event) => input.onRuntimeEvent(event),
+    },
     machine,
     snapshotStore,
   });
@@ -195,4 +216,9 @@ const createCredentialHealthRuntime = (
 };
 
 export { createCredentialHealthRuntime };
-export type { CredentialHealthRuntime, CredentialHealthRuntimeInput, OAuthRefreshResult };
+export type {
+  CredentialHealthRuntime,
+  CredentialHealthRuntimeEvent,
+  CredentialHealthRuntimeInput,
+  OAuthRefreshResult,
+};

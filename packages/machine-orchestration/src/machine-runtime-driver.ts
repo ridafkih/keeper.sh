@@ -27,6 +27,21 @@ interface CommandBus<TCommand> {
   execute: (command: TCommand) => Promise<void>;
 }
 
+interface RuntimeProcessEvent<TState, TContext, TEvent, TCommand, TOutput> {
+  aggregateId: string;
+  duplicate: boolean;
+  envelope: EventEnvelope<TEvent>;
+  snapshot: MachineSnapshot<TState, TContext>;
+  transition?: MachineTransitionResult<TState, TContext, TCommand, TOutput>;
+  version: number;
+}
+
+interface RuntimeEventSink<TState, TContext, TEvent, TCommand, TOutput> {
+  onProcessed: (
+    event: RuntimeProcessEvent<TState, TContext, TEvent, TCommand, TOutput>,
+  ) => Promise<void> | void;
+}
+
 interface RuntimeMachine<TState, TContext, TEvent, TCommand, TOutput> {
   restore: (snapshot: MachineSnapshot<TState, TContext>) => void;
   dispatch: (
@@ -46,6 +61,7 @@ interface MachineRuntimeDriverDependencies<
   snapshotStore: SnapshotStore<TState, TContext>;
   envelopeStore: EnvelopeStore;
   commandBus: CommandBus<TCommand>;
+  eventSink: RuntimeEventSink<TState, TContext, TEvent, TCommand, TOutput>;
 }
 
 interface MachineProcessResult<TState, TContext, TCommand, TOutput> {
@@ -67,6 +83,7 @@ class MachineRuntimeDriver<TState, TContext, TEvent, TCommand, TOutput> {
   private readonly snapshotStore: SnapshotStore<TState, TContext>;
   private readonly envelopeStore: EnvelopeStore;
   private readonly commandBus: CommandBus<TCommand>;
+  private readonly eventSink: RuntimeEventSink<TState, TContext, TEvent, TCommand, TOutput>;
 
   constructor(
     dependencies: MachineRuntimeDriverDependencies<
@@ -82,11 +99,19 @@ class MachineRuntimeDriver<TState, TContext, TEvent, TCommand, TOutput> {
     this.snapshotStore = dependencies.snapshotStore;
     this.envelopeStore = dependencies.envelopeStore;
     this.commandBus = dependencies.commandBus;
+    this.eventSink = dependencies.eventSink;
   }
 
   async process(envelope: EventEnvelope<TEvent>): Promise<MachineProcessResult<TState, TContext, TCommand, TOutput>> {
     if (await this.envelopeStore.hasProcessed(this.aggregateId, envelope.id)) {
       const record = await this.requireSnapshotRecord();
+      await this.eventSink.onProcessed({
+        aggregateId: this.aggregateId,
+        duplicate: true,
+        envelope,
+        snapshot: record.snapshot,
+        version: record.version,
+      });
       return {
         duplicate: true,
         version: record.version,
@@ -117,6 +142,17 @@ class MachineRuntimeDriver<TState, TContext, TEvent, TCommand, TOutput> {
     }
 
     await this.envelopeStore.markProcessed(this.aggregateId, envelope.id);
+    await this.eventSink.onProcessed({
+      aggregateId: this.aggregateId,
+      duplicate: false,
+      envelope,
+      snapshot: {
+        context: transition.context,
+        state: transition.state,
+      },
+      transition,
+      version: nextRecord.version,
+    });
     return {
       duplicate: false,
       transition,
@@ -223,6 +259,8 @@ export { InMemoryEnvelopeStore, InMemorySnapshotStore, MachineConcurrencyError, 
 export type {
   CommandBus,
   EnvelopeStore,
+  RuntimeEventSink,
+  RuntimeProcessEvent,
   MachineProcessResult,
   MachineRuntimeDriverDependencies,
   RuntimeMachine,

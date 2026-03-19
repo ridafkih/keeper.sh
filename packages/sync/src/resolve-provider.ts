@@ -20,6 +20,7 @@ import {
 import { eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { createCredentialHealthRuntime } from "./credential-health-runtime";
+import type { CredentialHealthRuntimeEvent } from "./credential-health-runtime";
 
 const OAUTH_PROVIDERS = new Set(["google", "outlook"]);
 const CALDAV_PROVIDERS = new Set(["caldav", "fastmail", "icloud"]);
@@ -32,12 +33,17 @@ interface OAuthConfig {
 }
 
 interface CoordinatedRefresherOptions {
+  calendarId: string;
   database: BunSQLDatabase;
   oauthCredentialId: string;
   calendarAccountId: string;
   accessTokenExpiresAt: Date;
   refreshLockStore: RefreshLockStore | null;
   rawRefresh: (refreshToken: string) => Promise<OAuthRefreshResult>;
+  onCredentialRuntimeEvent?: (
+    calendarId: string,
+    event: CredentialHealthRuntimeEvent,
+  ) => Promise<void> | void;
 }
 
 const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
@@ -72,6 +78,11 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
         .where(eq(oauthCredentialsTable.id, oauthCredentialId));
     },
     refreshAccessToken: rawRefresh,
+    onRuntimeEvent: (event) => {
+      if (options.onCredentialRuntimeEvent) {
+        return options.onCredentialRuntimeEvent(options.calendarId, event);
+      }
+    },
   });
 
   return (refreshToken: string) =>
@@ -90,6 +101,10 @@ const resolveOAuthProvider = async (
   accountId: string,
   oauthConfig: OAuthConfig,
   refreshLockStore: RefreshLockStore | null,
+  onCredentialRuntimeEvent?: (
+    calendarId: string,
+    event: CredentialHealthRuntimeEvent,
+  ) => Promise<void> | void,
   rateLimiter?: RedisRateLimiter,
   signal?: AbortSignal,
 ): Promise<CalendarSyncProvider | null> => {
@@ -127,12 +142,14 @@ const resolveOAuthProvider = async (
       calendarId,
       userId,
       refreshAccessToken: createCoordinatedRefresher({
+        calendarId,
         accessTokenExpiresAt: oauthCred.expiresAt,
         database,
         oauthCredentialId: oauthCred.oauthCredentialId,
         calendarAccountId: accountId,
         refreshLockStore,
         rawRefresh: (refreshToken) => googleOAuth.refreshAccessToken(refreshToken),
+        onCredentialRuntimeEvent,
       }),
       rateLimiter,
       signal,
@@ -155,12 +172,14 @@ const resolveOAuthProvider = async (
       calendarId,
       userId,
       refreshAccessToken: createCoordinatedRefresher({
+        calendarId,
         accessTokenExpiresAt: oauthCred.expiresAt,
         database,
         oauthCredentialId: oauthCred.oauthCredentialId,
         calendarAccountId: accountId,
         refreshLockStore,
         rawRefresh: (refreshToken) => microsoftOAuth.refreshAccessToken(refreshToken),
+        onCredentialRuntimeEvent,
       }),
     });
   }
@@ -211,6 +230,10 @@ interface ResolveProviderOptions {
   refreshLockStore?: RefreshLockStore | null;
   rateLimiter?: RedisRateLimiter;
   signal?: AbortSignal;
+  onCredentialRuntimeEvent?: (
+    calendarId: string,
+    event: CredentialHealthRuntimeEvent,
+  ) => Promise<void> | void;
 }
 
 const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarSyncProvider | null> => {
@@ -223,6 +246,7 @@ const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarS
       options.accountId,
       options.oauthConfig,
       options.refreshLockStore ?? null,
+      options.onCredentialRuntimeEvent,
       options.rateLimiter,
       options.signal,
     );

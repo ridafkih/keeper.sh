@@ -1,4 +1,5 @@
 import {
+  type RuntimeProcessEvent,
   type RuntimeMachine,
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
@@ -30,6 +31,15 @@ interface SourceIngestionLifecycleRuntimeInput {
   sourceId: string;
   provider: string;
   handlers: SourceIngestionLifecycleCommandHandlers;
+  onRuntimeEvent: (
+    event: RuntimeProcessEvent<
+      SourceIngestionLifecycleState,
+      SourceIngestionLifecycleContext,
+      SourceIngestionLifecycleEvent,
+      SourceIngestionLifecycleCommand,
+      SourceIngestionLifecycleOutput
+    >,
+  ) => Promise<void> | void;
 }
 
 interface SourceIngestionLifecycleRuntime {
@@ -99,6 +109,9 @@ const createSourceIngestionLifecycleRuntime = (
       },
     },
     envelopeStore,
+    eventSink: {
+      onProcessed: (event) => input.onRuntimeEvent(event),
+    },
     machine,
     snapshotStore,
   });

@@ -20,6 +20,7 @@ describe("credential health runtime", () => {
           expires_in: 3600,
           refresh_token: "next-refresh",
         }),
+      onRuntimeEvent: () => Promise.resolve(),
     });
 
     const refreshed = await runtime.refresh("old-refresh");
@@ -45,6 +46,7 @@ describe("credential health runtime", () => {
       oauthCredentialId: "cred-2",
       persistRefreshedCredentials: () => Promise.resolve(),
       refreshAccessToken: () => Promise.reject(new Error("invalid_grant")),
+      onRuntimeEvent: () => Promise.resolve(),
     });
 
     await expect(runtime.refresh("old-refresh")).rejects.toThrow("invalid_grant");
@@ -63,11 +65,42 @@ describe("credential health runtime", () => {
       oauthCredentialId: "cred-3",
       persistRefreshedCredentials: () => Promise.resolve(),
       refreshAccessToken: () => Promise.reject(new Error("timeout")),
+      onRuntimeEvent: () => Promise.resolve(),
     });
 
     await expect(runtime.refresh("old-refresh")).rejects.toThrow("timeout");
     const snapshot = await runtime.getSnapshot();
 
     expect(snapshot.state).toBe("refresh_failed_retryable");
+  });
+
+  it("emits runtime processed events during refresh flow", async () => {
+    const processed: string[] = [];
+    const runtime = createCredentialHealthRuntime({
+      accessTokenExpiresAt: new Date("2026-03-19T20:00:00.000Z"),
+      calendarAccountId: "acc-4",
+      isReauthRequiredError: () => false,
+      markNeedsReauthentication: () => Promise.resolve(),
+      oauthCredentialId: "cred-4",
+      persistRefreshedCredentials: () => Promise.resolve(),
+      refreshAccessToken: () =>
+        Promise.resolve({
+          access_token: "next-access",
+          expires_in: 3600,
+          refresh_token: "next-refresh",
+        }),
+      onRuntimeEvent: (event) => {
+        processed.push(event.envelope.event.type);
+        return Promise.resolve();
+      },
+    });
+
+    await runtime.refresh("old-refresh");
+
+    expect(processed).toEqual([
+      "TOKEN_EXPIRY_DETECTED",
+      "REFRESH_STARTED",
+      "REFRESH_SUCCEEDED",
+    ]);
   });
 });

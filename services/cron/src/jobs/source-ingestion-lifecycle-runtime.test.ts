@@ -13,6 +13,7 @@ describe("source ingestion lifecycle runtime", () => {
         },
         persistSyncToken: () => Promise.resolve(),
       },
+      onRuntimeEvent: () => Promise.resolve(),
       provider: "google",
       sourceId: "src-1",
     });
@@ -39,6 +40,7 @@ describe("source ingestion lifecycle runtime", () => {
         markNeedsReauth: () => Promise.resolve(),
         persistSyncToken: () => Promise.resolve(),
       },
+      onRuntimeEvent: () => Promise.resolve(),
       provider: "caldav",
       sourceId: "src-2",
     });
@@ -65,6 +67,7 @@ describe("source ingestion lifecycle runtime", () => {
           return Promise.resolve();
         },
       },
+      onRuntimeEvent: () => Promise.resolve(),
       provider: "google",
       sourceId: "src-3",
     });

@@ -1,4 +1,5 @@
 import {
+  type RuntimeProcessEvent,
   type RuntimeMachine,
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
@@ -32,12 +33,29 @@ interface DestinationExecutionRuntimeInput {
   calendarId: string;
   failureCount: number;
   handlers: DestinationExecutionCommandHandlers;
+  onRuntimeEvent: (
+    event: RuntimeProcessEvent<
+      DestinationExecutionState,
+      DestinationExecutionContext,
+      DestinationExecutionEvent,
+      DestinationExecutionCommand,
+      DestinationExecutionOutput
+    >,
+  ) => Promise<void> | void;
 }
 
 interface DestinationExecutionRuntime {
   dispatch: (event: DestinationExecutionEvent) => Promise<DestinationExecutionTransitionResult>;
   releaseIfHeld: () => Promise<void>;
 }
+
+type DestinationExecutionRuntimeEvent = RuntimeProcessEvent<
+  DestinationExecutionState,
+  DestinationExecutionContext,
+  DestinationExecutionEvent,
+  DestinationExecutionCommand,
+  DestinationExecutionOutput
+>;
 
 class RestorableDestinationExecutionStateMachine
   extends DestinationExecutionStateMachine
@@ -55,12 +73,6 @@ class RestorableDestinationExecutionStateMachine
   }
 }
 
-const snapshotStore = new InMemorySnapshotStore<
-  DestinationExecutionState,
-  DestinationExecutionContext
->();
-const envelopeStore = new InMemoryEnvelopeStore();
-
 const createDestinationExecutionRuntime = (
   input: DestinationExecutionRuntimeInput,
 ): DestinationExecutionRuntime => {
@@ -68,6 +80,11 @@ const createDestinationExecutionRuntime = (
   let initialized = false;
   let released = false;
   let currentHolderId: string | null = null;
+  const snapshotStore = new InMemorySnapshotStore<
+    DestinationExecutionState,
+    DestinationExecutionContext
+  >();
+  const envelopeStore = new InMemoryEnvelopeStore();
 
   const machine = new RestorableDestinationExecutionStateMachine(
     { calendarId: input.calendarId, failureCount: input.failureCount },
@@ -109,6 +126,9 @@ const createDestinationExecutionRuntime = (
       },
     },
     envelopeStore,
+    eventSink: {
+      onProcessed: (event) => input.onRuntimeEvent(event),
+    },
     machine,
     snapshotStore,
   });
@@ -160,6 +180,7 @@ const createDestinationExecutionRuntime = (
 export { createDestinationExecutionRuntime };
 export type {
   DestinationExecutionCommandHandlers,
+  DestinationExecutionRuntimeEvent,
   DestinationExecutionRuntime,
   DestinationExecutionRuntimeInput,
 };

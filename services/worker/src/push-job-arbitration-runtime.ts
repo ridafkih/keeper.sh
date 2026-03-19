@@ -1,5 +1,6 @@
 import {
   type CommandBus,
+  type RuntimeProcessEvent,
   type RuntimeMachine,
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
@@ -33,6 +34,15 @@ interface SyncingAggregatePort {
 interface PushJobArbitrationRuntimeDependencies {
   worker: WorkerQueueControlPort;
   syncing: SyncingAggregatePort;
+  onRuntimeEvent: (
+    event: RuntimeProcessEvent<
+      PushJobArbitrationState,
+      PushJobArbitrationContext,
+      PushJobArbitrationEvent,
+      PushJobArbitrationCommand,
+      PushJobArbitrationOutput
+    >,
+  ) => Promise<void> | void;
 }
 
 interface PushJobArbitrationRuntime {
@@ -121,6 +131,9 @@ const dispatch = async (
     aggregateId: userId,
     commandBus: createCommandBus(dependencies, userId),
     envelopeStore,
+    eventSink: {
+      onProcessed: (processedEvent) => dependencies.onRuntimeEvent(processedEvent),
+    },
     machine,
     snapshotStore,
   });
@@ -131,17 +144,32 @@ const dispatch = async (
 
 const createPushJobArbitrationRuntime = (
   dependencies: PushJobArbitrationRuntimeDependencies,
-): PushJobArbitrationRuntime => ({
-  onJobActive: async ({ jobId, userId }) => {
-    await dispatch(dependencies, userId, jobId, { jobId, type: PushJobArbitrationEventType.JOB_ACTIVATED });
-  },
-  onJobCompleted: async ({ jobId, userId }) => {
-    await dispatch(dependencies, userId, jobId, { jobId, type: PushJobArbitrationEventType.JOB_COMPLETED });
-  },
-  onJobFailed: async ({ jobId, userId }) => {
-    await dispatch(dependencies, userId, jobId, { jobId, type: PushJobArbitrationEventType.JOB_FAILED });
-  },
-});
+): PushJobArbitrationRuntime => {
+  const queuesByUserId = new Map<string, Promise<void>>();
+
+  const enqueueForUser = (userId: string, action: () => Promise<void>): Promise<void> => {
+    const previous = queuesByUserId.get(userId) ?? Promise.resolve();
+    const next = previous.then(action, action);
+    queuesByUserId.set(userId, next);
+    return next.finally(() => {
+      if (queuesByUserId.get(userId) === next) {
+        queuesByUserId.delete(userId);
+      }
+    });
+  };
+
+  return {
+    onJobActive: ({ jobId, userId }) =>
+      enqueueForUser(userId, () =>
+        dispatch(dependencies, userId, jobId, { jobId, type: PushJobArbitrationEventType.JOB_ACTIVATED })),
+    onJobCompleted: ({ jobId, userId }) =>
+      enqueueForUser(userId, () =>
+        dispatch(dependencies, userId, jobId, { jobId, type: PushJobArbitrationEventType.JOB_COMPLETED })),
+    onJobFailed: ({ jobId, userId }) =>
+      enqueueForUser(userId, () =>
+        dispatch(dependencies, userId, jobId, { jobId, type: PushJobArbitrationEventType.JOB_FAILED })),
+  };
+};
 
 export { SUPERSEDED_REASON, createPushJobArbitrationRuntime };
 export type {
