@@ -75,6 +75,14 @@ export {
   type SourceSyncTokenAction,
 } from "./core/source/sync-diagnostics";
 export {
+  createSourceDiffReconciliationRuntime,
+  type SourceDiffReconciliationFetchResult,
+  type SourceDiffReconciliationPlan,
+  type SourceDiffReconciliationRuntime,
+  type SourceDiffReconciliationRuntimeEnvelope,
+  type SourceDiffReconciliationRuntimeInput,
+} from "./core/source/source-diff-reconciliation-runtime";
+export {
   insertEventStatesWithConflictResolution,
   type EventStateInsertRow,
   type EventStateInsertClient,
