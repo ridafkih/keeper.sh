@@ -28,3 +28,13 @@ export type {
   MachineCompositionCoordinatorDependencies,
   SyncLifecycleEventSink,
 } from "./machine-composition-coordinator";
+
+export { KeeperRuntime } from "./keeper-runtime";
+export type {
+  KeeperRuntimeDependencies,
+  MachineCompositionCoordinatorPort,
+  SyncLifecycleRuntimePort,
+} from "./keeper-runtime";
+
+export { createKeeperRuntime } from "./create-keeper-runtime";
+export type { CreateKeeperRuntimeDependencies } from "./create-keeper-runtime";
