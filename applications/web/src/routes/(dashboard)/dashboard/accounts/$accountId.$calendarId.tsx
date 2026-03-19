@@ -1,4 +1,4 @@
-import { use, useEffect, useMemo } from "react";
+import { use, useEffect, useMemo, useRef } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import useSWR, { preload, useSWRConfig } from "swr";
 import CheckIcon from "lucide-react/dist/esm/icons/check";
@@ -86,45 +86,42 @@ const PROVIDER_EXCLUSION_SETTINGS: SyncSetting[] = [
 const PROVIDERS_WITH_EXTRA_SETTINGS = new Set(["google"]);
 
 function patchSource(
-  mutate: ReturnType<typeof useSWRConfig>["mutate"],
+  store: ReturnType<typeof useStore>,
   calendarId: string,
   patch: Record<string, unknown>,
 ) {
   const swrKey = `/api/sources/${calendarId}`;
-  serializedPatch(swrKey, patch, (mergedPatch) => {
-    return mutate(
-      swrKey,
-      async (current: CalendarDetail | undefined) => {
-        await apiFetch(swrKey, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(mergedPatch),
-        });
-        if (!current) return current;
-        return { ...current, ...mergedPatch };
-      },
-      {
-        optimisticData: (current: CalendarDetail | undefined) => {
-          if (!current) return current!;
-          return { ...current, ...mergedPatch };
-        },
-        rollbackOnError: true,
-        revalidate: false,
-      },
-    );
-  });
+  serializedPatch(
+    swrKey,
+    patch,
+    (mergedPatch) => {
+      return apiFetch(swrKey, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(mergedPatch),
+      });
+    },
+    () => {
+      fetcher<CalendarDetail>(swrKey).then((serverState) => {
+        store.set(calendarDetailAtom, serverState);
+      });
+    },
+  );
 }
 
 function useSeedCalendarDetail(calendarId: string, calendar: CalendarDetail | undefined) {
   const store = useStore();
+  const lastSeededRef = useRef<CalendarDetail | undefined>(undefined);
 
   useEffect(() => {
     if (store.get(calendarDetailLoadedAtom) !== calendarId) {
       store.set(calendarDetailAtom, calendar ?? null);
       store.set(calendarDetailLoadedAtom, calendarId);
       store.set(calendarDetailErrorAtom, null);
-    } else if (calendar) {
+      lastSeededRef.current = calendar;
+    } else if (calendar && calendar !== lastSeededRef.current) {
       store.set(calendarDetailAtom, calendar);
+      lastSeededRef.current = calendar;
     }
   }, [calendarId, calendar, store]);
 }
@@ -230,7 +227,6 @@ function RenameSection({ calendarId }: { calendarId: string }) {
 
 function RenameItem({ calendarId }: { calendarId: string }) {
   const store = useStore();
-  const { mutate } = useSWRConfig();
 
   return (
     <NavigationMenuEditableItem
@@ -238,7 +234,7 @@ function RenameItem({ calendarId }: { calendarId: string }) {
       onCommit={(newName) => {
         track(ANALYTICS_EVENTS.calendar_renamed);
         store.set(calendarDetailAtom, (prev) => (prev ? { ...prev, name: newName } : prev));
-        patchSource(mutate, calendarId, { name: newName });
+        patchSource(store, calendarId, { name: newName });
       }}
     >
       <RenameItemValue />
@@ -447,7 +443,6 @@ function SyncEventNameDisabledProvider({ locked, children }: { locked: boolean; 
 
 function SyncEventNameTemplateItem({ calendarId, locked }: { calendarId: string; locked: boolean }) {
   const store = useStore();
-  const { mutate } = useSWRConfig();
 
   return (
     <SyncEventNameDisabledProvider locked={locked}>
@@ -460,7 +455,7 @@ function SyncEventNameTemplateItem({ calendarId, locked }: { calendarId: string;
         )}
         onCommit={(customEventName) => {
           store.set(calendarDetailAtom, (prev) => (prev ? { ...prev, customEventName } : prev));
-          patchSource(mutate, calendarId, { customEventName });
+          patchSource(store, calendarId, { customEventName });
         }}
       >
         <SyncEventNameTemplateValue />
@@ -499,7 +494,6 @@ function SyncEventNameTemplateValue() {
 function SyncEventNameToggle({ calendarId, locked }: { calendarId: string; locked: boolean }) {
   const store = useStore();
   const variant = use(MenuVariantContext);
-  const { mutate } = useSWRConfig();
 
   const handleClick = () => {
     if (locked) return;
@@ -512,7 +506,7 @@ function SyncEventNameToggle({ calendarId, locked }: { calendarId: string; locke
 
     track(ANALYTICS_EVENTS.calendar_setting_toggled, { field: "excludeEventName", enabled: !current.excludeEventName });
     store.set(calendarDetailAtom, (prev) => (prev ? { ...prev, ...patch } : prev));
-    patchSource(mutate, calendarId, patch);
+    patchSource(store, calendarId, patch);
   };
 
   return (
@@ -592,7 +586,6 @@ function ExcludeFieldToggle({
 }) {
   const store = useStore();
   const variant = use(MenuVariantContext);
-  const { mutate } = useSWRConfig();
 
   const handleClick = () => {
     if (locked) return;
@@ -602,7 +595,7 @@ function ExcludeFieldToggle({
     const newValue = !current[field];
     track(ANALYTICS_EVENTS.calendar_setting_toggled, { field, enabled: newValue });
     store.set(calendarDetailAtom, (prev) => (prev ? { ...prev, [field]: newValue } : prev));
-    patchSource(mutate, calendarId, { [field]: newValue });
+    patchSource(store, calendarId, { [field]: newValue });
   };
 
   return (

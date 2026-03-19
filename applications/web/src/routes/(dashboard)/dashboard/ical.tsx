@@ -1,6 +1,6 @@
 import { use, useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR from "swr";
 import { atom, useAtomValue, useStore } from "jotai";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import CheckIcon from "lucide-react/dist/esm/icons/check";
@@ -63,32 +63,26 @@ export const Route = createFileRoute("/(dashboard)/dashboard/ical")({
 });
 
 function patchFeedSettings(
-  mutate: ReturnType<typeof useSWRConfig>["mutate"],
+  store: ReturnType<typeof useStore>,
   patch: Record<string, unknown>,
 ) {
   const swrKey = "/api/ical/settings";
-  serializedPatch(swrKey, patch, (mergedPatch) => {
-    return mutate(
-      swrKey,
-      async (current: FeedSettings | undefined) => {
-        await apiFetch(swrKey, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(mergedPatch),
-        });
-        if (!current) return current;
-        return { ...current, ...mergedPatch };
-      },
-      {
-        optimisticData: (current: FeedSettings | undefined) => {
-          if (!current) return current!;
-          return { ...current, ...mergedPatch };
-        },
-        rollbackOnError: true,
-        revalidate: false,
-      },
-    );
-  });
+  serializedPatch(
+    swrKey,
+    patch,
+    (mergedPatch) => {
+      return apiFetch(swrKey, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(mergedPatch),
+      });
+    },
+    () => {
+      fetcher<FeedSettings>(swrKey).then((serverState) => {
+        store.set(feedSettingsAtom, serverState);
+      });
+    },
+  );
 }
 
 function ICalPage() {
@@ -205,7 +199,6 @@ function EventNameDisabledProvider({ locked, children }: { locked: boolean; chil
 
 function EventNameTemplateItem({ locked }: { locked: boolean }) {
   const store = useStore();
-  const { mutate } = useSWRConfig();
 
   return (
     <EventNameDisabledProvider locked={locked}>
@@ -218,7 +211,7 @@ function EventNameTemplateItem({ locked }: { locked: boolean }) {
         )}
         onCommit={(customEventName) => {
           store.set(feedSettingsAtom, (prev) => ({ ...prev, customEventName }));
-          patchFeedSettings(mutate, { customEventName });
+          patchFeedSettings(store, { customEventName });
         }}
       >
         <EventNameTemplateValue />
@@ -252,7 +245,6 @@ function EventNameTemplateValue() {
 function EventNameToggle({ locked }: { locked: boolean }) {
   const store = useStore();
   const checked = useAtomValue(includeEventNameAtom);
-  const { mutate } = useSWRConfig();
 
   const handleClick = () => {
     if (locked) return;
@@ -263,12 +255,12 @@ function EventNameToggle({ locked }: { locked: boolean }) {
       const patch = { includeEventName: false, customEventName: "Busy" };
       track(ANALYTICS_EVENTS.ical_setting_toggled, { field: "includeEventName", enabled: false });
       store.set(feedSettingsAtom, (prev) => ({ ...prev, ...patch }));
-      patchFeedSettings(mutate, patch);
+      patchFeedSettings(store, patch);
     } else {
       const patch = { includeEventName: true, customEventName: "{{event_name}}" };
       track(ANALYTICS_EVENTS.ical_setting_toggled, { field: "includeEventName", enabled: true });
       store.set(feedSettingsAtom, (prev) => ({ ...prev, ...patch }));
-      patchFeedSettings(mutate, patch);
+      patchFeedSettings(store, patch);
     }
   };
 
@@ -294,7 +286,6 @@ function FeedSettingToggle({
 }) {
   const store = useStore();
   const checked = useAtomValue(feedSettingAtoms[field]);
-  const { mutate } = useSWRConfig();
 
   const handleClick = () => {
     if (locked) return;
@@ -303,7 +294,7 @@ function FeedSettingToggle({
     const newValue = !current;
     track(ANALYTICS_EVENTS.ical_setting_toggled, { field, enabled: newValue });
     store.set(feedSettingsAtom, (prev) => ({ ...prev, [field]: newValue }));
-    patchFeedSettings(mutate, { [field]: newValue });
+    patchFeedSettings(store, { [field]: newValue });
   };
 
   return (
