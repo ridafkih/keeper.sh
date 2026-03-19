@@ -10,6 +10,8 @@ import {
 } from "@/utils/source-destination-mappings";
 import { withProviderMetadata } from "@/utils/provider-display";
 import { handlePatchSourceRoute } from "./[id]/source-item-routes";
+import { ensureSettingsSnapshot, reconcileSourceSettings, isUserPending, broadcastPendingAggregate } from "@/utils/sync-pending";
+import { redis, broadcastService } from "@/context";
 
 const GET = withWideEvent(
   withAuth(async ({ params, userId }) => {
@@ -66,10 +68,53 @@ const GET = withWideEvent(
   }),
 );
 
+const NON_SYNC_AFFECTING_FIELDS = new Set(["includeInIcalFeed", "name"]);
+
+const readCurrentSyncFields = async (
+  userId: string,
+  calendarId: string,
+): Promise<Record<string, unknown> | null> => {
+  const [current] = await database
+    .select({
+      customEventName: calendarsTable.customEventName,
+      excludeAllDayEvents: calendarsTable.excludeAllDayEvents,
+      excludeEventDescription: calendarsTable.excludeEventDescription,
+      excludeEventLocation: calendarsTable.excludeEventLocation,
+      excludeEventName: calendarsTable.excludeEventName,
+      excludeFocusTime: calendarsTable.excludeFocusTime,
+      excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
+      excludeWorkingLocation: calendarsTable.excludeWorkingLocation,
+    })
+    .from(calendarsTable)
+    .where(and(eq(calendarsTable.id, calendarId), eq(calendarsTable.userId, userId)))
+    .limit(1);
+
+  return current ?? null;
+};
+
+const hasSyncAffectingPayload = (
+  calendarId: string | undefined,
+  payload: unknown,
+): calendarId is string => {
+  if (!calendarId) {
+    return false;
+  }
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+  return Object.keys(payload).some((key) => !NON_SYNC_AFFECTING_FIELDS.has(key));
+};
+
 const PATCH = withWideEvent(
   withAuth(async ({ request, params, userId }) => {
     const payload = await request.json();
-    return handlePatchSourceRoute(
+
+    let preUpdateSettings: Record<string, unknown> | null = null;
+    if (hasSyncAffectingPayload(params.id, payload)) {
+      preUpdateSettings = await readCurrentSyncFields(userId, params.id);
+    }
+
+    const response = await handlePatchSourceRoute(
       { body: payload, params, userId },
       {
         canUseEventFilters: (candidateUserId) => premiumService.canUseEventFilters(candidateUserId),
@@ -89,6 +134,19 @@ const PATCH = withWideEvent(
         },
       },
     );
+
+    if (response.ok && params.id && preUpdateSettings) {
+      await ensureSettingsSnapshot(redis, params.id, preUpdateSettings);
+
+      const postUpdateSettings = await readCurrentSyncFields(userId, params.id);
+      if (postUpdateSettings) {
+        await reconcileSourceSettings(redis, userId, params.id, postUpdateSettings);
+        const pending = await isUserPending(redis, userId);
+        await broadcastPendingAggregate(redis, broadcastService.emit, userId, pending);
+      }
+    }
+
+    return response;
   }),
 );
 

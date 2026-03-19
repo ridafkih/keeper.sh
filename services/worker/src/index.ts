@@ -3,6 +3,9 @@ import { Worker } from "bullmq";
 import { PUSH_SYNC_QUEUE_NAME } from "@keeper.sh/queue";
 import type { PushSyncJobPayload, PushSyncJobResult } from "@keeper.sh/queue";
 import { closeDatabase } from "@keeper.sh/database";
+import { calendarsTable, sourceDestinationMappingsTable } from "@keeper.sh/database/schema";
+import { clearSyncPending, clearSettingsDirty, storeSettingsSnapshot } from "@keeper.sh/calendar";
+import { and, eq, inArray } from "drizzle-orm";
 import { processJob } from "./processor";
 import { destroy } from "./utils/logging";
 import env from "./env";
@@ -30,6 +33,38 @@ await entry({
 
     const { syncAggregateRuntime } = await import("./processor");
 
+    const { refreshLockRedis } = await import("./context");
+
+    const snapshotSourceSettings = async (userId: string): Promise<void> => {
+      const sourcesWithMappings = database
+        .selectDistinct({ id: sourceDestinationMappingsTable.sourceCalendarId })
+        .from(sourceDestinationMappingsTable);
+
+      const sources = await database
+        .select({
+          id: calendarsTable.id,
+          customEventName: calendarsTable.customEventName,
+          excludeAllDayEvents: calendarsTable.excludeAllDayEvents,
+          excludeEventDescription: calendarsTable.excludeEventDescription,
+          excludeEventLocation: calendarsTable.excludeEventLocation,
+          excludeEventName: calendarsTable.excludeEventName,
+          excludeFocusTime: calendarsTable.excludeFocusTime,
+          excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
+          excludeWorkingLocation: calendarsTable.excludeWorkingLocation,
+        })
+        .from(calendarsTable)
+        .where(
+          and(
+            eq(calendarsTable.userId, userId),
+            inArray(calendarsTable.id, sourcesWithMappings),
+          ),
+        );
+
+      await Promise.all(
+        sources.map((row) => storeSettingsSnapshot(refreshLockRedis, row.id, row)),
+      );
+    };
+
     const activeJobsByUser = new Map<string, string>();
 
     const worker = new Worker<PushSyncJobPayload, PushSyncJobResult>(
@@ -47,7 +82,7 @@ await entry({
       },
     );
 
-    worker.on("active", (job) => {
+    worker.on("active", async (job) => {
       const { userId } = job.data;
       const previousJobId = activeJobsByUser.get(userId);
 
@@ -57,6 +92,11 @@ await entry({
 
       activeJobsByUser.set(userId, job.id ?? "");
       syncAggregateRuntime.holdSyncing(userId);
+      await Promise.all([
+        clearSyncPending(refreshLockRedis, userId),
+        clearSettingsDirty(refreshLockRedis, userId),
+        snapshotSourceSettings(userId),
+      ]);
     });
 
     worker.on("completed", (job) => {

@@ -20,8 +20,11 @@ import {
   caldavCredentialsTable,
   eventStatesTable,
   oauthCredentialsTable,
+  sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq, inArray } from "drizzle-orm";
+import { markSyncPending, broadcastPendingAggregate } from "@keeper.sh/calendar";
+import { createBroadcastService } from "@keeper.sh/broadcast";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import { database, refreshLockRedis } from "@/context";
@@ -166,7 +169,12 @@ interface IngestionSourceResult {
   ingestEvents: Record<string, unknown>[];
 }
 
-const ingestOAuthSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
+interface ChangedSource {
+  calendarId: string;
+  userId: string;
+}
+
+const ingestOAuthSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[]; changedSources: ChangedSource[] }> => {
   const oauthSources = await database
     .select({
       accountId: calendarAccountsTable.id,
@@ -193,6 +201,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
   let removed = 0;
   let errors = 0;
   const allIngestEvents: Record<string, unknown>[] = [];
+  const changedSources: ChangedSource[] = [];
 
   const settlements = await allSettledWithConcurrency(
     oauthSources.map((source) => () =>
@@ -318,22 +327,27 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
     { concurrency: SOURCE_CONCURRENCY },
   );
 
-  for (const settlement of settlements) {
+  for (const [index, settlement] of settlements.entries()) {
     if (settlement.status === "fulfilled") {
       added += settlement.value.eventsAdded;
       removed += settlement.value.eventsRemoved;
       allIngestEvents.push(...settlement.value.ingestEvents);
+
+      const source = oauthSources[index];
+      if ((settlement.value.eventsAdded > 0 || settlement.value.eventsRemoved > 0) && source) {
+        changedSources.push({ calendarId: source.calendarId, userId: source.userId });
+      }
     } else {
       errors += 1;
     }
   }
 
-  return { added, removed, errors, ingestEvents: allIngestEvents };
+  return { added, removed, errors, ingestEvents: allIngestEvents, changedSources };
 };
 
-const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
+const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[]; changedSources: ChangedSource[] }> => {
   if (!env.ENCRYPTION_KEY) {
-    return { added: 0, removed: 0, errors: 0, ingestEvents: [] };
+    return { added: 0, removed: 0, errors: 0, ingestEvents: [], changedSources: [] };
   }
 
   const encryptionKey = env.ENCRYPTION_KEY;
@@ -363,6 +377,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
   let removed = 0;
   let errors = 0;
   const allIngestEvents: Record<string, unknown>[] = [];
+  const changedSources: ChangedSource[] = [];
 
   const settlements = await allSettledWithConcurrency(
     caldavSources.map((source) => () =>
@@ -446,20 +461,25 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
     { concurrency: SOURCE_CONCURRENCY },
   );
 
-  for (const settlement of settlements) {
+  for (const [index, settlement] of settlements.entries()) {
     if (settlement.status === "fulfilled") {
       added += settlement.value.eventsAdded;
       removed += settlement.value.eventsRemoved;
       allIngestEvents.push(...settlement.value.ingestEvents);
+
+      const source = caldavSources[index];
+      if ((settlement.value.eventsAdded > 0 || settlement.value.eventsRemoved > 0) && source) {
+        changedSources.push({ calendarId: source.calendarId, userId: source.userId });
+      }
     } else {
       errors += 1;
     }
   }
 
-  return { added, removed, errors, ingestEvents: allIngestEvents };
+  return { added, removed, errors, ingestEvents: allIngestEvents, changedSources };
 };
 
-const ingestIcsSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
+const ingestIcsSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[]; changedSources: ChangedSource[] }> => {
   const icsSources = await database
     .select({
       calendarId: calendarsTable.id,
@@ -478,6 +498,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
   let removed = 0;
   let errors = 0;
   const allIngestEvents: Record<string, unknown>[] = [];
+  const changedSources: ChangedSource[] = [];
 
   const settlements = await allSettledWithConcurrency(
     icsSources.map((source) => () =>
@@ -543,26 +564,71 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
     { concurrency: SOURCE_CONCURRENCY },
   );
 
-  for (const settlement of settlements) {
+  for (const [index, settlement] of settlements.entries()) {
     if (settlement.status === "fulfilled") {
       added += settlement.value.eventsAdded;
       removed += settlement.value.eventsRemoved;
       allIngestEvents.push(...settlement.value.ingestEvents);
+
+      const source = icsSources[index];
+      if ((settlement.value.eventsAdded > 0 || settlement.value.eventsRemoved > 0) && source) {
+        changedSources.push({ calendarId: source.calendarId, userId: source.userId });
+      }
     } else {
       errors += 1;
     }
   }
 
-  return { added, removed, errors, ingestEvents: allIngestEvents };
+  return { added, removed, errors, ingestEvents: allIngestEvents, changedSources };
+};
+
+const markChangedUsersAsPending = async (changedSources: ChangedSource[]): Promise<void> => {
+  if (changedSources.length === 0) {
+    return;
+  }
+
+  const changedCalendarIds = changedSources.map((source) => source.calendarId);
+  const userIdsByCalendar = new Map(changedSources.map((source) => [source.calendarId, source.userId]));
+
+  const mappedSources = await database
+    .selectDistinct({ sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId })
+    .from(sourceDestinationMappingsTable)
+    .where(inArray(sourceDestinationMappingsTable.sourceCalendarId, changedCalendarIds));
+
+  const pendingUserIds = new Set<string>();
+  for (const row of mappedSources) {
+    const userId = userIdsByCalendar.get(row.sourceCalendarId);
+    if (userId) {
+      pendingUserIds.add(userId);
+    }
+  }
+
+  const broadcastService = createBroadcastService({ redis: refreshLockRedis });
+
+  await Promise.all(
+    [...pendingUserIds].map(async (userId) => {
+      await markSyncPending(refreshLockRedis, userId);
+      await broadcastPendingAggregate(refreshLockRedis, broadcastService.emit, userId);
+    }),
+  );
 };
 
 export default withCronWideEvent({
   async callback() {
-    await Promise.allSettled([
+    const results = await Promise.allSettled([
       ingestOAuthSources(),
       ingestCalDAVSources(),
       ingestIcsSources(),
     ]);
+
+    const changedSources = results.flatMap((result) => {
+      if (result.status === "fulfilled") {
+        return result.value.changedSources;
+      }
+      return [];
+    });
+
+    await markChangedUsersAsPending(changedSources);
   },
   cron: "@every_1_minutes",
   immediate: true,

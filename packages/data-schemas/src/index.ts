@@ -225,6 +225,7 @@ const syncAggregateSchema = type({
   syncEventsTotal: "number",
   syncing: "boolean",
   "lastSyncedAt?": "string | null",
+  "pending?": "boolean",
 });
 type SyncAggregate = typeof syncAggregateSchema.infer;
 

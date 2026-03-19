@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR from "swr";
+import { useSetAtom } from "jotai";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { UpgradeHint } from "@/components/ui/primitives/upgrade-hint";
 import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
@@ -21,6 +22,7 @@ import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { RouteShell } from "@/components/ui/shells/route-shell";
 import { canPull, canPush, getCalendarProvider } from "@/utils/calendars";
 import { resolveUpdatedIds } from "@/utils/collections";
+import { syncPendingAtom } from "@/state/sync";
 
 const VALID_STEPS = ["select", "rename", "destinations", "sources"] as const;
 type SetupStep = (typeof VALID_STEPS)[number];
@@ -230,6 +232,7 @@ function useCalendarMapping({
   const endpoint = calendarId ? `/api/sources/${calendarId}/${route}` : null;
   const { data, mutate } = useSWR<CalendarMappingData>(endpoint);
   const { adjustMappingCount, revalidateEntitlements } = useMutateEntitlements();
+  const setSyncPending = useSetAtom(syncPendingAtom);
 
   const selectedIds = new Set(data?.[responseKey] ?? []);
 
@@ -241,6 +244,7 @@ function useCalendarMapping({
     const delta = checked ? 1 : -1;
 
     adjustMappingCount(delta);
+    setSyncPending(true);
 
     try {
       await mutate(

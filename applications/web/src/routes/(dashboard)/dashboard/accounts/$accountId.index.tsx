@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR, { preload, useSWRConfig } from "swr";
+import { useSetAtom } from "jotai";
 import Calendar from "lucide-react/dist/esm/icons/calendar";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { Pagination, PaginationPrevious, PaginationNext } from "@/components/ui/primitives/pagination";
@@ -25,6 +26,7 @@ import { DeleteConfirmation } from "@/components/ui/primitives/delete-confirmati
 import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { pluralize } from "@/lib/pluralize";
 import { resolveErrorMessage } from "@/utils/errors";
+import { syncPendingAtom } from "@/state/sync";
 
 export const Route = createFileRoute(
   "/(dashboard)/dashboard/accounts/$accountId/",
@@ -64,6 +66,7 @@ function AccountDetailPage() {
     "/api/sources",
   );
 
+  const setSyncPending = useSetAtom(syncPendingAtom);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isDeleting, startDeleteTransition] = useTransition();
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -73,6 +76,7 @@ function AccountDetailPage() {
 
   const handleConfirmDelete = () => {
     setDeleteError(null);
+    setSyncPending(true);
 
     startDeleteTransition(async () => {
       try {
