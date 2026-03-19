@@ -1,5 +1,6 @@
-import { buildSourceEventStateIdsToRemove, buildSourceEventsToAdd } from "../../../core/source/event-diff";
-import { filterSourceEventsToSyncWindow, resolveSourceSyncTokenAction, splitSourceEventsByStorageIdentity } from "../../../core/source/sync-diagnostics";
+import { TransitionPolicy } from "@keeper.sh/state-machines";
+import { filterSourceEventsToSyncWindow, resolveSourceSyncTokenAction } from "../../../core/source/sync-diagnostics";
+import { createSourceDiffReconciliationRuntime } from "../../../core/source/source-diff-reconciliation-runtime";
 import { insertEventStatesWithConflictResolution } from "../../../core/source/write-event-states";
 import { OAuthSourceProvider, type ProcessEventsOptions } from "../../../core/oauth/source-provider";
 import type { FetchEventsResult as BaseFetchEventsResult } from "../../../core/oauth/source-provider";
@@ -123,52 +124,78 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
       .from(eventStatesTable)
       .where(eq(eventStatesTable.calendarId, calendarId));
 
-    const eventsToAdd = buildSourceEventsToAdd(existingEvents, eventsInWindow, { isDeltaSync });
-    const eventStateIdsToRemove = buildSourceEventStateIdsToRemove(
-      existingEvents,
-      eventsInWindow,
-      { cancelledEventUids, isDeltaSync },
-    );
-    const { eventsToInsert, eventsToUpdate } = splitSourceEventsByStorageIdentity(
-      existingEvents,
-      eventsToAdd,
-    );
+    let eventsInserted = EMPTY_COUNT;
+    let eventsRemoved = EMPTY_COUNT;
+    let eventsUpdated = EMPTY_COUNT;
 
-    if (eventStateIdsToRemove.length > EMPTY_COUNT || eventsToAdd.length > EMPTY_COUNT) {
-      await database.transaction(async (transactionDatabase) => {
-        if (eventStateIdsToRemove.length > EMPTY_COUNT) {
-          await transactionDatabase
-            .delete(eventStatesTable)
-            .where(
-              and(
-                eq(eventStatesTable.calendarId, calendarId),
-                inArray(eventStatesTable.id, eventStateIdsToRemove),
-              ),
+    const runtime = createSourceDiffReconciliationRuntime({
+      applyDiff: async (plan) => {
+        eventsInserted = plan.addedCount;
+        eventsRemoved = plan.removedCount;
+        eventsUpdated = plan.updatedCount;
+
+        const eventsToWrite = [...plan.eventsToInsert, ...plan.eventsToUpdate];
+        if (plan.eventStateIdsToRemove.length === EMPTY_COUNT && eventsToWrite.length === EMPTY_COUNT) {
+          return;
+        }
+
+        await database.transaction(async (transactionDatabase) => {
+          if (plan.eventStateIdsToRemove.length > EMPTY_COUNT) {
+            await transactionDatabase
+              .delete(eventStatesTable)
+              .where(
+                and(
+                  eq(eventStatesTable.calendarId, calendarId),
+                  inArray(eventStatesTable.id, plan.eventStateIdsToRemove),
+                ),
+              );
+          }
+
+          if (eventsToWrite.length > EMPTY_COUNT) {
+            await insertEventStatesWithConflictResolution(
+              transactionDatabase,
+              eventsToWrite.map((event) => ({
+                availability: event.availability,
+                calendarId,
+                description: event.description,
+                endTime: event.endTime,
+                exceptionDates: stringifyIfPresent(event.exceptionDates),
+                isAllDay: event.isAllDay,
+                location: event.location,
+                recurrenceRule: stringifyIfPresent(event.recurrenceRule),
+                sourceEventType: event.sourceEventType,
+                sourceEventUid: event.uid,
+                startTime: event.startTime,
+                startTimeZone: event.startTimeZone,
+                title: event.title,
+              })),
             );
+          }
+        });
+      },
+      fetchEvents: () =>
+        Promise.resolve({
+          cancelledEventUids: cancelledEventUids ?? [],
+          events: eventsInWindow,
+          isDeltaSync: isDeltaSync ?? false,
+        }),
+      isRetryableError: () => false,
+      readExistingEvents: () => Promise.resolve(existingEvents),
+      resolveErrorCode: (error) => {
+        if (error instanceof Error) {
+          return error.message;
         }
+        return String(error);
+      },
+      sourceId: calendarId,
+      transitionPolicy: TransitionPolicy.REJECT,
+    });
 
-        if (eventsToAdd.length > EMPTY_COUNT) {
-          await insertEventStatesWithConflictResolution(
-            transactionDatabase,
-            eventsToAdd.map((event) => ({
-              availability: event.availability,
-              calendarId,
-              description: event.description,
-              endTime: event.endTime,
-              exceptionDates: stringifyIfPresent(event.exceptionDates),
-              isAllDay: event.isAllDay,
-              location: event.location,
-              recurrenceRule: stringifyIfPresent(event.recurrenceRule),
-              sourceEventType: event.sourceEventType,
-              sourceEventUid: event.uid,
-              startTime: event.startTime,
-              startTimeZone: event.startTimeZone,
-              title: event.title,
-            })),
-          );
-        }
-      });
-    }
+    await runtime.reconcile({
+      actor: { id: "google-source-provider", type: "system" },
+      id: `google-source-reconcile:${calendarId}:${Date.now()}`,
+      occurredAt: new Date().toISOString(),
+    });
 
     const syncTokenAction = resolveSourceSyncTokenAction(nextSyncToken, isDeltaSync);
     if (syncTokenAction.shouldResetSyncToken) {
@@ -182,11 +209,11 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
     }
 
     return {
-      eventsAdded: eventsToInsert.length,
+      eventsAdded: eventsInserted,
       eventsFilteredOutOfWindow,
-      eventsInserted: eventsToInsert.length,
-      eventsRemoved: eventStateIdsToRemove.length,
-      eventsUpdated: eventsToUpdate.length,
+      eventsInserted,
+      eventsRemoved,
+      eventsUpdated,
       syncTokenResetCount: Number(syncTokenAction.shouldResetSyncToken),
       syncToken: nextSyncToken,
     };

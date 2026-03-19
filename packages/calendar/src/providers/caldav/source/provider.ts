@@ -1,4 +1,5 @@
-import { buildSourceEventStateIdsToRemove, buildSourceEventsToAdd } from "../../../core/source/event-diff";
+import { TransitionPolicy } from "@keeper.sh/state-machines";
+import { createSourceDiffReconciliationRuntime } from "../../../core/source/source-diff-reconciliation-runtime";
 import { insertEventStatesWithConflictResolution } from "../../../core/source/write-event-states";
 import { isKeeperEvent } from "../../../core/events/identity";
 import type { SourceEvent } from "../../../core/types";
@@ -105,7 +106,7 @@ const createCalDAVSourceProvider = (
     return events;
   };
 
-  const processEvents = async (
+const processEvents = async (
     calendarId: string,
     events: SourceEvent[],
   ): Promise<CalDAVSourceSyncResult> => {
@@ -122,44 +123,80 @@ const createCalDAVSourceProvider = (
       .from(eventStatesTable)
       .where(eq(eventStatesTable.calendarId, calendarId));
 
-    const eventsToAdd = buildSourceEventsToAdd(existingEvents, events, { isDeltaSync: false });
-    const eventStateIdsToRemove = buildSourceEventStateIdsToRemove(existingEvents, events);
+    let eventsAdded = EMPTY_COUNT;
+    let eventsRemoved = EMPTY_COUNT;
 
-    if (eventStateIdsToRemove.length > EMPTY_COUNT) {
-      await database
-        .delete(eventStatesTable)
-        .where(
-          and(
-            eq(eventStatesTable.calendarId, calendarId),
-            inArray(eventStatesTable.id, eventStateIdsToRemove),
-          ),
-        );
-    }
+    const runtime = createSourceDiffReconciliationRuntime({
+      applyDiff: async (plan) => {
+        eventsAdded = plan.addedCount + plan.updatedCount;
+        eventsRemoved = plan.removedCount;
 
-    if (eventsToAdd.length > EMPTY_COUNT) {
-      await insertEventStatesWithConflictResolution(
-        database,
-        eventsToAdd.map((event) => ({
-          availability: event.availability,
-          calendarId,
-          description: event.description,
-          endTime: event.endTime,
-          exceptionDates: stringifyIfPresent(event.exceptionDates),
-          isAllDay: event.isAllDay,
-          location: event.location,
-          recurrenceRule: stringifyIfPresent(event.recurrenceRule),
-          sourceEventType: event.sourceEventType ?? "default",
-          sourceEventUid: event.uid,
-          startTime: event.startTime,
-          startTimeZone: event.startTimeZone,
-          title: event.title,
-        })),
-      );
-    }
+        const eventsToWrite = [...plan.eventsToInsert, ...plan.eventsToUpdate];
+        if (plan.eventStateIdsToRemove.length === EMPTY_COUNT && eventsToWrite.length === EMPTY_COUNT) {
+          return;
+        }
+
+        await database.transaction(async (transactionDatabase) => {
+          if (plan.eventStateIdsToRemove.length > EMPTY_COUNT) {
+            await transactionDatabase
+              .delete(eventStatesTable)
+              .where(
+                and(
+                  eq(eventStatesTable.calendarId, calendarId),
+                  inArray(eventStatesTable.id, plan.eventStateIdsToRemove),
+                ),
+              );
+          }
+
+          if (eventsToWrite.length > EMPTY_COUNT) {
+            await insertEventStatesWithConflictResolution(
+              transactionDatabase,
+              eventsToWrite.map((event) => ({
+                availability: event.availability,
+                calendarId,
+                description: event.description,
+                endTime: event.endTime,
+                exceptionDates: stringifyIfPresent(event.exceptionDates),
+                isAllDay: event.isAllDay,
+                location: event.location,
+                recurrenceRule: stringifyIfPresent(event.recurrenceRule),
+                sourceEventType: event.sourceEventType ?? "default",
+                sourceEventUid: event.uid,
+                startTime: event.startTime,
+                startTimeZone: event.startTimeZone,
+                title: event.title,
+              })),
+            );
+          }
+        });
+      },
+      fetchEvents: () =>
+        Promise.resolve({
+          cancelledEventUids: [],
+          events,
+          isDeltaSync: false,
+        }),
+      isRetryableError: () => false,
+      readExistingEvents: () => Promise.resolve(existingEvents),
+      resolveErrorCode: (error) => {
+        if (error instanceof Error) {
+          return error.message;
+        }
+        return String(error);
+      },
+      sourceId: calendarId,
+      transitionPolicy: TransitionPolicy.REJECT,
+    });
+
+    await runtime.reconcile({
+      actor: { id: "caldav-source-provider", type: "system" },
+      id: `caldav-source-reconcile:${calendarId}:${Date.now()}`,
+      occurredAt: new Date().toISOString(),
+    });
 
     return {
-      eventsAdded: eventsToAdd.length,
-      eventsRemoved: eventStateIdsToRemove.length,
+      eventsAdded,
+      eventsRemoved,
       syncToken: null,
     };
   };
