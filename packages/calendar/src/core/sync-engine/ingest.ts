@@ -1,5 +1,6 @@
 import type { SourceEvent } from "../types";
-import { buildSourceEventsToAdd, buildSourceEventStateIdsToRemove } from "../source/event-diff";
+import { TransitionPolicy } from "@keeper.sh/state-machines";
+import { createSourceDiffReconciliationRuntime } from "../source/source-diff-reconciliation-runtime";
 
 interface ExistingEventState {
   id: string;
@@ -69,54 +70,80 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       return EMPTY_RESULT;
     }
 
-    const eventsToAdd = buildSourceEventsToAdd(existingEvents, fetchResult.events, {
-      isDeltaSync: fetchResult.isDeltaSync ?? false,
+    let eventsAdded = 0;
+    let eventsRemoved = 0;
+    let diffApplied = false;
+    const runtime = createSourceDiffReconciliationRuntime({
+      applyDiff: async (plan) => {
+        diffApplied = true;
+        eventsAdded = plan.addedCount + plan.updatedCount;
+        eventsRemoved = plan.removedCount;
+
+        const changes: IngestionChanges = {
+          inserts: [...plan.eventsToInsert, ...plan.eventsToUpdate],
+          deletes: plan.eventStateIdsToRemove,
+        };
+
+        if (typeof fetchResult.nextSyncToken === "string") {
+          changes.syncToken = fetchResult.nextSyncToken;
+        }
+
+        await flush(changes);
+        flushed = true;
+      },
+      fetchEvents: () =>
+        Promise.resolve({
+          events: fetchResult.events,
+          isDeltaSync: fetchResult.isDeltaSync ?? false,
+          cancelledEventUids: fetchResult.cancelledEventUids ?? [],
+        }),
+      isRetryableError: () => false,
+      readExistingEvents: () => Promise.resolve(existingEvents),
+      resolveErrorCode: (error) => {
+        if (error instanceof Error) {
+          return error.message.slice(0, 120);
+        }
+        return String(error).slice(0, 120);
+      },
+      sourceId: calendarId,
+      transitionPolicy: TransitionPolicy.REJECT,
     });
 
-    const eventStateIdsToRemove = buildSourceEventStateIdsToRemove(
-      existingEvents,
-      fetchResult.events,
-      {
-        cancelledEventUids: fetchResult.cancelledEventUids,
-        isDeltaSync: fetchResult.isDeltaSync ?? false,
-      },
-    );
+    const transition = await runtime.reconcile({
+      actor: { id: "ingest-source-runtime", type: "system" },
+      id: `ingest-source:${calendarId}:${startTime}`,
+      occurredAt: new Date(startTime).toISOString(),
+    });
 
-    wideEvent["events.added"] = eventsToAdd.length;
-    wideEvent["events.removed"] = eventStateIdsToRemove.length;
-
-    if (eventsToAdd.length === 0 && eventStateIdsToRemove.length === 0) {
+    if (!diffApplied) {
       if (fetchResult.nextSyncToken) {
         await flush({ inserts: [], deletes: [], syncToken: fetchResult.nextSyncToken });
         flushed = true;
+        wideEvent["events.added"] = 0;
+        wideEvent["events.removed"] = 0;
         wideEvent["outcome"] = "in-sync";
         wideEvent["flushed"] = true;
         return EMPTY_RESULT;
       }
 
+      wideEvent["events.added"] = 0;
+      wideEvent["events.removed"] = 0;
       wideEvent["outcome"] = "in-sync";
       wideEvent["flushed"] = false;
       return EMPTY_RESULT;
     }
 
-    const changes: IngestionChanges = {
-      inserts: eventsToAdd,
-      deletes: eventStateIdsToRemove,
-    };
-
-    if (typeof fetchResult.nextSyncToken === "string") {
-      changes.syncToken = fetchResult.nextSyncToken;
+    wideEvent["events.added"] = eventsAdded;
+    wideEvent["events.removed"] = eventsRemoved;
+    wideEvent["outcome"] = "error";
+    if (transition.state === "completed") {
+      wideEvent["outcome"] = "success";
     }
-
-    await flush(changes);
-
-    flushed = true;
-    wideEvent["outcome"] = "success";
     wideEvent["flushed"] = true;
 
     return {
-      eventsAdded: eventsToAdd.length,
-      eventsRemoved: eventStateIdsToRemove.length,
+      eventsAdded,
+      eventsRemoved,
     };
   } catch (error) {
     wideEvent["outcome"] = "error";

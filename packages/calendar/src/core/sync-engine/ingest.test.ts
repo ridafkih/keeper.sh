@@ -19,6 +19,45 @@ interface ExistingEvent {
 }
 
 describe("ingestSource", () => {
+  it("treats same-storage-identity metadata changes as upserts", async () => {
+    const { ingestSource } = await import("./ingest");
+
+    const existingEvent: ExistingEvent = {
+      id: "state-1",
+      sourceEventUid: "uid-1",
+      startTime: new Date("2026-03-15T09:00:00Z"),
+      endTime: new Date("2026-03-15T10:00:00Z"),
+      availability: null,
+      isAllDay: null,
+      sourceEventType: null,
+    };
+
+    const incomingEvent = makeSourceEvent(
+      "uid-1",
+      new Date("2026-03-15T09:00:00Z"),
+      new Date("2026-03-15T10:00:00Z"),
+    );
+    incomingEvent.isAllDay = true;
+
+    const flushCapture: { inserts: unknown[]; deletes: string[] }[] = [];
+
+    const result = await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({ events: [incomingEvent], isDeltaSync: false }),
+      readExistingEvents: () => Promise.resolve([existingEvent]),
+      flush: (changes) => {
+        flushCapture.push(changes);
+        return Promise.resolve();
+      },
+    });
+
+    expect(result.eventsAdded).toBe(1);
+    expect(result.eventsRemoved).toBe(0);
+    expect(flushCapture).toHaveLength(1);
+    expect(flushCapture[0]?.inserts).toHaveLength(1);
+    expect(flushCapture[0]?.deletes).toHaveLength(0);
+  });
+
   it("accumulates event inserts from new source events and flushes at the end", async () => {
     const { ingestSource } = await import("./ingest");
 
