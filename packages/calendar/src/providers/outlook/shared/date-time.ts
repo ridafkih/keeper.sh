@@ -3,35 +3,40 @@ import { normalizeTimezone } from "../../../ics/utils/normalize-timezone";
 
 const MS_PER_MINUTE = 60_000;
 
-/**
- * Resolves the UTC offset (in minutes) for a given IANA timezone at a specific instant.
- * Uses Intl.DateTimeFormat to extract the offset from the formatted output.
- */
-const getTimezoneOffsetMinutes = (ianaTimezone: string, referenceDate: Date): number => {
-  const formatter = new Intl.DateTimeFormat("en-US", {
+const timezoneFormatter = (ianaTimezone: string) =>
+  new Intl.DateTimeFormat("en-US", {
     timeZone: ianaTimezone,
-    timeZoneName: "longOffset",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
   });
 
-  const parts = formatter.formatToParts(referenceDate);
-  const tzPart = parts.find((part) => part.type === "timeZoneName");
+const getPartValue = (
+  parts: Intl.DateTimeFormatPart[],
+  type: Intl.DateTimeFormatPartTypes,
+): number => Number(parts.find((part) => part.type === type)?.value);
 
-  if (!tzPart?.value) {
-    return 0;
-  }
+/**
+ * Resolves the UTC offset (in minutes) for a given IANA timezone at a specific instant
+ * by comparing the local wall-clock parts to the true UTC timestamp.
+ */
+const getTimezoneOffsetMinutes = (ianaTimezone: string, referenceDate: Date): number => {
+  const parts = timezoneFormatter(ianaTimezone).formatToParts(referenceDate);
 
-  // Format is "GMT", "GMT+7", "GMT+05:30", "GMT-8", etc.
-  const match = /GMT([+-])(\d{1,2})(?::(\d{2}))?/.exec(tzPart.value);
+  const localAsUtcMs = Date.UTC(
+    getPartValue(parts, "year"),
+    getPartValue(parts, "month") - 1,
+    getPartValue(parts, "day"),
+    getPartValue(parts, "hour"),
+    getPartValue(parts, "minute"),
+    getPartValue(parts, "second"),
+  );
 
-  if (!match) {
-    return 0;
-  }
-
-  const sign = match[1] === "-" ? -1 : 1;
-  const hours = Number.parseInt(match[2], 10);
-  const minutes = match[3] ? Number.parseInt(match[3], 10) : 0;
-
-  return sign * (hours * 60 + minutes);
+  return (localAsUtcMs - referenceDate.getTime()) / MS_PER_MINUTE;
 };
 
 /**
@@ -39,7 +44,6 @@ const getTimezoneOffsetMinutes = (ianaTimezone: string, referenceDate: Date): nu
  * Returns a Date with the correct UTC instant.
  */
 const parseDateTimeWithTimezone = (dateTimeStr: string, timeZone: string): Date => {
-  // If the string already has timezone info (ends with Z or has offset), parse directly
   if (dateTimeStr.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(dateTimeStr)) {
     return new Date(dateTimeStr);
   }
@@ -49,15 +53,9 @@ const parseDateTimeWithTimezone = (dateTimeStr: string, timeZone: string): Date 
   }
 
   const ianaTimezone = normalizeTimezone(timeZone) ?? timeZone;
-
-  // Parse as UTC first to get a reference point for offset calculation
   const asUtc = new Date(`${dateTimeStr}Z`);
-
-  // Get the timezone offset at this approximate instant
   const offsetMinutes = getTimezoneOffsetMinutes(ianaTimezone, asUtc);
 
-  // Subtract the offset to convert from local time to UTC
-  // e.g., timezone UTC+7, local 11:00 → UTC 04:00 (subtract 7 hours)
   return new Date(asUtc.getTime() - offsetMinutes * MS_PER_MINUTE);
 };
 
