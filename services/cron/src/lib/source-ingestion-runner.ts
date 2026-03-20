@@ -1,5 +1,6 @@
 import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
 import { ErrorPolicy } from "@keeper.sh/state-machines";
+import type { SourceIngestionLifecycleEvent } from "@keeper.sh/state-machines";
 import type { SourceIngestionFailureDecision } from "./source-ingestion-failure";
 
 interface SourceIngestionResult {
@@ -8,26 +9,8 @@ interface SourceIngestionResult {
   ingestEvents: Record<string, unknown>[];
 }
 
-type SourceIngestionRuntimeEvent =
-  | { type: SourceIngestionLifecycleEventType.SOURCE_SELECTED }
-  | { type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED }
-  | { type: SourceIngestionLifecycleEventType.FETCH_SUCCEEDED }
-  | {
-    type: SourceIngestionLifecycleEventType.INGEST_SUCCEEDED;
-    eventsAdded: number;
-    eventsRemoved: number;
-    nextSyncToken?: string;
-  }
-  | {
-    type:
-      | SourceIngestionLifecycleEventType.AUTH_FAILURE
-      | SourceIngestionLifecycleEventType.NOT_FOUND
-      | SourceIngestionLifecycleEventType.TRANSIENT_FAILURE;
-    code: string;
-  };
-
 interface SourceIngestionRuntime {
-  dispatch: (event: SourceIngestionRuntimeEvent) => Promise<unknown>;
+  dispatch: (event: SourceIngestionLifecycleEvent) => Promise<unknown>;
 }
 
 interface SourceIngestionLogger {
@@ -148,5 +131,4 @@ export type {
   SourceIngestionMetadata,
   SourceIngestionResult,
   SourceIngestionRuntime,
-  SourceIngestionRuntimeEvent,
 };

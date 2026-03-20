@@ -20,10 +20,10 @@ Mode: `clean-break` (no compatibility bridge)
 - [ ] A2. Create shared failure enums for destination execution outcomes.
 - [ ] A3. Create shared failure enums for credential refresh outcomes.
 - [ ] A4. Replace string literal failure tags in machine outputs with enums.
-- [ ] A5. Replace string literal failure tags in orchestrators with enums.
-- [ ] A6. Replace string literal failure tags in runtime adapters with enums.
-- [ ] A7. Replace string literal failure tags in logging classification with enums.
-- [ ] A8. Remove duplicate union type aliases that mirror enum values.
+- [x] A5. Replace string literal failure tags in orchestrators with enums.
+- [x] A6. Replace string literal failure tags in runtime adapters with enums.
+- [x] A7. Replace string literal failure tags in logging classification with enums.
+- [x] A8. Remove duplicate union type aliases that mirror enum values.
 - [ ] A9. Centralize error-code mapping helpers behind enum-returning functions.
 - [ ] A10. Add compile-time exhaustiveness checks via typed mapping records.
 - [ ] A11. Add tests for each enum mapping edge case.
@@ -108,7 +108,6 @@ Mode: `clean-break` (no compatibility bridge)
 ## Immediate Execution Queue
 
 - [ ] Q1. Execute Phase A task set A1–A4 in first patch.
-- [ ] Q2. Execute Phase A task set A5–A8 in second patch.
+- [x] Q2. Execute Phase A task set A5–A8 in second patch.
 - [ ] Q3. Execute Phase B task set B1–B4 in third patch.
 - [ ] Q4. Execute Phase C task set C1–C4 in fourth patch.
-

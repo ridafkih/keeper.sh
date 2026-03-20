@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { ErrorPolicy } from "@keeper.sh/state-machines";
 import { resolveDestinationFailureOutput } from "./destination-failure-policy";
 
 describe("resolveDestinationFailureOutput", () => {
@@ -14,6 +15,7 @@ describe("resolveDestinationFailureOutput", () => {
     expect(policy).toEqual({
       code: "provider-timeout",
       disabled: false,
+      policy: ErrorPolicy.RETRYABLE,
       retryable: true,
     });
   });
@@ -30,6 +32,7 @@ describe("resolveDestinationFailureOutput", () => {
     expect(policy).toEqual({
       code: "auth-failed",
       disabled: true,
+      policy: ErrorPolicy.TERMINAL,
       retryable: false,
     });
   });

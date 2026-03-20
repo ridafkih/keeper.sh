@@ -4,7 +4,7 @@ export { createEventEnvelope } from "./core/event-envelope";
 export type { EventActor, EventEnvelope, EventEnvelopeMetadata } from "./core/event-envelope";
 export { withMachineSubscription } from "./core/with-subscription";
 export { TransitionPolicy } from "./core/transition-policy";
-export { ErrorPolicy } from "./errors/error-policy";
+export { ErrorPolicy, isRetryablePolicy, isTerminalPolicy } from "./errors/error-policy";
 
 export { SyncLifecycleStateMachine } from "./sync-lifecycle.machine";
 export type {

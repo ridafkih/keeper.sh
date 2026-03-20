@@ -4,4 +4,10 @@ enum ErrorPolicy {
   REQUIRES_REAUTH = "requires_reauth",
 }
 
-export { ErrorPolicy };
+const isRetryablePolicy = (policy: ErrorPolicy): boolean =>
+  policy === ErrorPolicy.RETRYABLE;
+
+const isTerminalPolicy = (policy: ErrorPolicy): boolean =>
+  policy === ErrorPolicy.TERMINAL || policy === ErrorPolicy.REQUIRES_REAUTH;
+
+export { ErrorPolicy, isRetryablePolicy, isTerminalPolicy };
