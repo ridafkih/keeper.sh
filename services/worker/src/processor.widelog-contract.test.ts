@@ -194,15 +194,6 @@ beforeAll(async () => {
     },
   }));
 
-  mock.module("@keeper.sh/calendar", () => ({
-    createSyncAggregateRuntime: () => ({
-      holdSyncing: () => Promise.resolve(),
-      onDestinationSync: () => Promise.resolve(),
-      onSyncProgress: () => Promise.resolve(),
-      releaseSyncing: () => Promise.resolve(),
-    }),
-  }));
-
   mock.module("@keeper.sh/broadcast", () => ({
     createBroadcastService: () => ({
       emit: () => Promise.resolve(),
@@ -218,7 +209,11 @@ beforeAll(async () => {
         }),
       }),
     },
-    refreshLockRedis: {},
+    refreshLockRedis: {
+      get: () => Promise.resolve(null),
+      publish: () => Promise.resolve(0),
+      set: () => Promise.resolve("OK"),
+    },
     refreshLockStore: {},
   }));
 

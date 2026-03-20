@@ -98,15 +98,21 @@ class SyncLifecycleOrchestrator {
     const result = this.machine.dispatch(envelope);
 
     for (const command of result.commands) {
-      if (command.type === "REQUEST_PUSH_SYNC_ENQUEUE") {
-        this.jobCoordinator.requestEnqueueIdempotent(
-          this.userId,
-          resolveIdempotencyKey(this.userId, result.state, result.context.pendingReasons),
-        );
-      }
-
-      if (command.type === "BROADCAST_AGGREGATE") {
-        this.broadcaster.publishLifecycleUpdate(this.userId);
+      switch (command.type) {
+        case "REQUEST_PUSH_SYNC_ENQUEUE": {
+          this.jobCoordinator.requestEnqueueIdempotent(
+            this.userId,
+            resolveIdempotencyKey(this.userId, result.state, result.context.pendingReasons),
+          );
+          break;
+        }
+        case "BROADCAST_AGGREGATE": {
+          this.broadcaster.publishLifecycleUpdate(this.userId);
+          break;
+        }
+        default: {
+          throw new Error("Unhandled sync lifecycle command");
+        }
       }
     }
 

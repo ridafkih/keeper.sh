@@ -170,7 +170,8 @@ class MachineRuntimeDriver<TState, TContext, TEvent, TCommand, TOutput> {
   private async processUnlocked(
     envelope: EventEnvelope<TEvent>,
   ): Promise<MachineProcessResult<TState, TContext, TCommand, TOutput>> {
-    if (await this.envelopeStore.hasProcessed(this.aggregateId, envelope.id)) {
+    const isDuplicateEnvelope = await this.envelopeStore.hasProcessed(this.aggregateId, envelope.id);
+    if (isDuplicateEnvelope) {
       const record = await this.requireSnapshotRecord();
       await this.eventSink.onProcessed({
         aggregateId: this.aggregateId,
@@ -283,7 +284,7 @@ class MachineRuntimeDriver<TState, TContext, TEvent, TCommand, TOutput> {
     }
   }
 
-  private static async runWithAggregateLock<TResult>(
+  private static runWithAggregateLock<TResult>(
     aggregateId: string,
     operation: () => Promise<TResult>,
   ): Promise<TResult> {

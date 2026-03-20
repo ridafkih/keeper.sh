@@ -15,9 +15,11 @@ import { and, arrayContains, eq, isNull, lte, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
 import { createDestinationExecutionRuntime } from "./destination-execution-runtime";
+import type { DestinationExecutionDispatchResult } from "./destination-execution-runtime";
 import type { DestinationExecutionRuntimeEvent } from "./destination-execution-runtime";
+import { resolveDestinationFailureOutput } from "./destination-failure-policy";
 import { getErrorMessage, isBackoffEligibleError } from "./destination-errors";
-import { resolveSyncProvider } from "./resolve-provider";
+import { resolveSyncProviderOutcome, ProviderResolutionStatus } from "./resolve-provider";
 import type { OAuthConfig } from "./resolve-provider";
 import type { CredentialHealthRuntimeEvent } from "./credential-health-runtime";
 import { createSyncLock, isCalendarInvalidated } from "./sync-lock";
@@ -50,7 +52,7 @@ interface SyncConfig {
   redis: Redis;
   encryptionKey?: string;
   oauthConfig: OAuthConfig;
-  refreshLockStore?: RefreshLockStore | null;
+  refreshLockStore: RefreshLockStore | null;
   deadlineMs?: number;
   abortSignal?: AbortSignal;
 }
@@ -97,6 +99,14 @@ interface CalendarSyncFailure {
   disabled: boolean;
 }
 
+interface SyncDestination {
+  accountId: string;
+  calendarId: string;
+  failureCount: number;
+  provider: string;
+  userId: string;
+}
+
 interface SyncCallbacks {
   onSyncEvent?: (event: Record<string, unknown>) => void;
   onProgress?: (update: SyncProgressUpdate) => void;
@@ -112,6 +122,68 @@ interface SyncCallbacks {
   ) => Promise<void> | void;
 }
 
+const createIsCurrentResolver = (
+  input: {
+    abortSignal?: AbortSignal;
+    deadlineMs?: number;
+    isCurrent: () => Promise<boolean>;
+  },
+): (() => Promise<boolean>) =>
+  () => {
+    if (input.abortSignal?.aborted) {
+      return Promise.resolve(false);
+    }
+    if (input.deadlineMs && Date.now() >= input.deadlineMs) {
+      return Promise.resolve(false);
+    }
+    return input.isCurrent();
+  };
+
+interface HandleDispatchConflictInput {
+  result: DestinationExecutionDispatchResult;
+  runtime: ReturnType<typeof createDestinationExecutionRuntime>;
+  destination: SyncDestination;
+  startedAtMs: number;
+  conflictCode: string;
+  notifyCalendarFailed: (failure: CalendarSyncFailure) => Promise<void>;
+}
+
+const handleDispatchConflict = async (
+  input: HandleDispatchConflictInput,
+): Promise<boolean> => {
+  if (input.result.outcome === "TRANSITION_APPLIED") {
+    return false;
+  }
+  await input.runtime.releaseIfHeld();
+  await input.notifyCalendarFailed({
+    provider: input.destination.provider,
+    accountId: input.destination.accountId,
+    calendarId: input.destination.calendarId,
+    userId: input.destination.userId,
+    error: input.conflictCode,
+    durationMs: Date.now() - input.startedAtMs,
+    retryable: true,
+    disabled: false,
+  });
+  return true;
+};
+
+const notifyCalendarCompleteIfNeeded = async (input: {
+  callbacks?: SyncCallbacks;
+  completion: Omit<CalendarSyncCompletion, "durationMs">;
+  syncEvents: Record<string, unknown>[];
+}): Promise<void> => {
+  if (!input.callbacks?.onCalendarComplete) {
+    return;
+  }
+  const syncEvent = input.syncEvents.at(-1);
+  const durationMs = extractNumericField(syncEvent, "duration_ms");
+  await input.callbacks.onCalendarComplete({
+    ...input.completion,
+    durationMs,
+  });
+};
+
 const syncDestinationsForUser = async (
   userId: string,
   config: SyncConfig,
@@ -119,7 +191,7 @@ const syncDestinationsForUser = async (
 ): Promise<SyncDestinationsResult> => {
   const { database, redis } = config;
 
-  const destinations = await database
+  const destinations: SyncDestination[] = await database
     .select({
       calendarId: calendarsTable.id,
       provider: calendarAccountsTable.provider,
@@ -222,13 +294,36 @@ const syncDestinationsForUser = async (
     });
 
     try {
-      await destinationRuntime.dispatch({
+      const lockAcquiredResult = await destinationRuntime.dispatch({
         holderId: destination.calendarId,
         type: "LOCK_ACQUIRED",
       });
-      await destinationRuntime.dispatch({ type: "EXECUTION_STARTED" });
+      const lockAcquireConflict = await handleDispatchConflict({
+        result: lockAcquiredResult,
+        runtime: destinationRuntime,
+        destination,
+        startedAtMs: calendarSyncStartedAt,
+        conflictCode: "machine_conflict_lock_acquired",
+        notifyCalendarFailed,
+      });
+      if (lockAcquireConflict) {
+        continue;
+      }
 
-      const syncProvider = await resolveSyncProvider({
+      const executionStartedResult = await destinationRuntime.dispatch({ type: "EXECUTION_STARTED" });
+      const executionStartConflict = await handleDispatchConflict({
+        result: executionStartedResult,
+        runtime: destinationRuntime,
+        destination,
+        startedAtMs: calendarSyncStartedAt,
+        conflictCode: "machine_conflict_execution_started",
+        notifyCalendarFailed,
+      });
+      if (executionStartConflict) {
+        continue;
+      }
+
+      const syncProviderOutcome = await resolveSyncProviderOutcome({
         database,
         provider: destination.provider,
         calendarId: destination.calendarId,
@@ -243,13 +338,44 @@ const syncDestinationsForUser = async (
         onCredentialRuntimeEvent: callbacks?.onCredentialRuntimeEvent,
       });
 
-      if (!syncProvider) {
+      if (syncProviderOutcome.status !== ProviderResolutionStatus.RESOLVED) {
+        const code = syncProviderOutcome.status.toLowerCase();
+        const failedResult = await destinationRuntime.dispatch({
+          code,
+          reason: code,
+          type: "EXECUTION_FATAL_FAILED",
+        });
+        const providerResolutionFailureConflict = await handleDispatchConflict({
+          result: failedResult,
+          runtime: destinationRuntime,
+          destination,
+          startedAtMs: calendarSyncStartedAt,
+          conflictCode: "machine_conflict_provider_resolution_failed",
+          notifyCalendarFailed,
+        });
+        if (providerResolutionFailureConflict) {
+          continue;
+        }
+        if (failedResult.outcome !== "TRANSITION_APPLIED") {
+          throw new Error("Invariant violated: fatal failure transition missing");
+        }
+        const failedPolicy = resolveDestinationFailureOutput(failedResult.transition.outputs);
+        await notifyCalendarFailed({
+          provider: destination.provider,
+          accountId: destination.accountId,
+          calendarId: destination.calendarId,
+          userId: destination.userId,
+          error: code,
+          durationMs: Date.now() - calendarSyncStartedAt,
+          retryable: failedPolicy.retryable,
+          disabled: failedPolicy.disabled,
+        });
         continue;
       }
 
-      const providerRef = syncProvider;
+      const providerRef = syncProviderOutcome.provider;
 
-      const result = await syncCalendar({
+        const result = await syncCalendar({
         userId: destination.userId,
         calendarId: destination.calendarId,
         provider: providerRef,
@@ -258,15 +384,11 @@ const syncDestinationsForUser = async (
           existingMappings: await getEventMappingsForDestination(database, destination.calendarId),
           remoteEvents: await providerRef.listRemoteEvents(),
         }),
-        isCurrent: () => {
-          if (config.abortSignal?.aborted) {
-            return Promise.resolve(false);
-          }
-          if (config.deadlineMs && Date.now() >= config.deadlineMs) {
-            return Promise.resolve(false);
-          }
-          return handle.isCurrent();
-        },
+          isCurrent: createIsCurrentResolver({
+            abortSignal: config.abortSignal,
+            deadlineMs: config.deadlineMs,
+            isCurrent: () => handle.isCurrent(),
+          }),
         isInvalidated: () => isCalendarInvalidated(redis, destination.calendarId),
         flush,
         onProgress: callbacks?.onProgress,
@@ -285,9 +407,17 @@ const syncDestinationsForUser = async (
 
       const invalidated = await isCalendarInvalidated(redis, destination.calendarId);
       if (invalidated) {
-        await destinationRuntime.dispatch({
+        const invalidationResult = await destinationRuntime.dispatch({
           at: new Date().toISOString(),
           type: "INVALIDATION_DETECTED",
+        });
+        await handleDispatchConflict({
+          result: invalidationResult,
+          runtime: destinationRuntime,
+          destination,
+          startedAtMs: calendarSyncStartedAt,
+          conflictCode: "machine_conflict_invalidation_detected",
+          notifyCalendarFailed,
         });
         continue;
       }
@@ -296,11 +426,22 @@ const syncDestinationsForUser = async (
         await resetDestinationBackoff(database, destination.calendarId);
       }
 
-      await destinationRuntime.dispatch({
+      const successResult = await destinationRuntime.dispatch({
         eventsAdded: result.added,
         eventsRemoved: result.removed,
         type: "EXECUTION_SUCCEEDED",
       });
+      const executionSuccessConflict = await handleDispatchConflict({
+        result: successResult,
+        runtime: destinationRuntime,
+        destination,
+        startedAtMs: calendarSyncStartedAt,
+        conflictCode: "machine_conflict_execution_succeeded",
+        notifyCalendarFailed,
+      });
+      if (executionSuccessConflict) {
+        continue;
+      }
 
       added += result.added;
       addFailed += result.addFailed;
@@ -308,23 +449,21 @@ const syncDestinationsForUser = async (
       removeFailed += result.removeFailed;
       errors.push(...result.errors);
 
-      if (callbacks?.onCalendarComplete) {
-        const syncEvent = syncEvents.at(-1);
-        const durationMs = extractNumericField(syncEvent, "duration_ms");
-
-        await callbacks.onCalendarComplete({
-          provider: destination.provider,
-          accountId: destination.accountId,
-          calendarId: destination.calendarId,
-          userId: destination.userId,
-          added: result.added,
-          addFailed: result.addFailed,
-          removed: result.removed,
-          removeFailed: result.removeFailed,
-          errors: result.errors,
-          durationMs,
+        await notifyCalendarCompleteIfNeeded({
+          callbacks,
+          completion: {
+            provider: destination.provider,
+            accountId: destination.accountId,
+            calendarId: destination.calendarId,
+            userId: destination.userId,
+            added: result.added,
+            addFailed: result.addFailed,
+            removed: result.removed,
+            removeFailed: result.removeFailed,
+            errors: result.errors,
+          },
+          syncEvents,
         });
-      }
     } catch (error) {
       if (!isBackoffEligibleError(error)) {
         await destinationRuntime.releaseIfHeld();
@@ -342,16 +481,37 @@ const syncDestinationsForUser = async (
       }
 
       const errorMessage = getErrorMessage(error);
-      const failureTransition = await destinationRuntime.dispatch({
+      const failureResult: DestinationExecutionDispatchResult = await destinationRuntime.dispatch({
         code: errorMessage,
         reason: errorMessage,
         at: new Date().toISOString(),
         type: "EXECUTION_FAILED",
       });
-      const failureOutput = failureTransition.outputs.find(
-        (output) => output.type === "DESTINATION_EXECUTION_FAILED",
-      );
-      const retryable = failureOutput?.retryable ?? false;
+      const executionFailureConflict = await handleDispatchConflict({
+        result: failureResult,
+        runtime: destinationRuntime,
+        destination,
+        startedAtMs: calendarSyncStartedAt,
+        conflictCode: "machine_conflict_execution_failed",
+        notifyCalendarFailed,
+      });
+      if (executionFailureConflict) {
+        continue;
+      }
+      if (failureResult.outcome !== "TRANSITION_APPLIED") {
+        await notifyCalendarFailed({
+          provider: destination.provider,
+          accountId: destination.accountId,
+          calendarId: destination.calendarId,
+          userId: destination.userId,
+          error: "machine_conflict_execution_failed",
+          durationMs: Date.now() - calendarSyncStartedAt,
+          retryable: true,
+          disabled: false,
+        });
+        continue;
+      }
+      const failurePolicy = resolveDestinationFailureOutput(failureResult.transition.outputs);
       errors.push(errorMessage);
       await notifyCalendarFailed({
         provider: destination.provider,
@@ -360,8 +520,8 @@ const syncDestinationsForUser = async (
         userId: destination.userId,
         error: errorMessage,
         durationMs: Date.now() - calendarSyncStartedAt,
-        retryable,
-        disabled: !retryable,
+        retryable: failurePolicy.retryable,
+        disabled: failurePolicy.disabled,
       });
     }
   }

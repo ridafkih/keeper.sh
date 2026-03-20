@@ -3,15 +3,10 @@ import {
   ingestSource,
   allSettledWithConcurrency,
   insertEventStatesWithConflictResolution,
-  createGoogleOAuthService,
-  createMicrosoftOAuthService,
-  createRedisRateLimiter,
   ensureValidToken,
 } from "@keeper.sh/calendar";
-import type { IngestionChanges, IngestionFetchEventsResult, RedisRateLimiter, TokenState } from "@keeper.sh/calendar";
+import type { IngestionChanges, TokenState } from "@keeper.sh/calendar";
 import { createIcsSourceFetcher } from "@keeper.sh/calendar/ics";
-import { createGoogleSourceFetcher } from "@keeper.sh/calendar/google";
-import { createOutlookSourceFetcher } from "@keeper.sh/calendar/outlook";
 import { createCalDAVSourceFetcher, isCalDAVAuthenticationError } from "@keeper.sh/calendar/caldav";
 import { decryptPassword } from "@keeper.sh/database";
 import {
@@ -30,11 +25,14 @@ import { database, refreshLockRedis } from "@/context";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import { createSourceIngestionLifecycleRuntime } from "./source-ingestion-lifecycle-runtime";
+import {
+  OAuthIngestionResolutionStatus,
+  createOAuthIngestionResolutionDependencies,
+  resolveOAuthIngestionResolution,
+} from "../lib/oauth-ingestion-resolution";
 
 const SOURCE_TIMEOUT_MS = 60_000;
 const SOURCE_CONCURRENCY = 5;
-const GOOGLE_REQUESTS_PER_MINUTE = 500;
-
 const serializeOptionalJson = (value: unknown): string | null => {
   if (!value) {
     return null;
@@ -111,58 +109,6 @@ const readExistingEvents = (calendarId: string) =>
     .from(eventStatesTable)
     .where(eq(eventStatesTable.calendarId, calendarId));
 
-const resolveTokenRefresher = (provider: string) => {
-  if (provider === "google" && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
-    const googleOAuth = createGoogleOAuthService({
-      clientId: env.GOOGLE_CLIENT_ID,
-      clientSecret: env.GOOGLE_CLIENT_SECRET,
-    });
-    return (refreshToken: string) => googleOAuth.refreshAccessToken(refreshToken);
-  }
-
-  if (provider === "outlook" && env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET) {
-    const microsoftOAuth = createMicrosoftOAuthService({
-      clientId: env.MICROSOFT_CLIENT_ID,
-      clientSecret: env.MICROSOFT_CLIENT_SECRET,
-    });
-    return (refreshToken: string) => microsoftOAuth.refreshAccessToken(refreshToken);
-  }
-
-  return null;
-};
-
-const resolveRateLimiter = (provider: string, userId: string): RedisRateLimiter | undefined => {
-  if (provider !== "google") {
-    return;
-  }
-
-  return createRedisRateLimiter(
-    refreshLockRedis,
-    `ratelimit:${userId}:google`,
-    { requestsPerMinute: GOOGLE_REQUESTS_PER_MINUTE },
-  );
-};
-
-interface OAuthFetcherParams {
-  accessToken: string;
-  externalCalendarId: string;
-  syncToken: string | null;
-  rateLimiter?: RedisRateLimiter;
-}
-
-const resolveOAuthFetcher = (
-  provider: string,
-  params: OAuthFetcherParams,
-): { fetchEvents: () => Promise<IngestionFetchEventsResult> } | null => {
-  if (provider === "google") {
-    return createGoogleSourceFetcher(params);
-  }
-  if (provider === "outlook") {
-    return createOutlookSourceFetcher(params);
-  }
-  return null;
-};
-
 const resolveIngestionErrorCode = (error: unknown): string => {
   if (error instanceof Error) {
     if (error.message.includes("timed out")) {
@@ -194,7 +140,116 @@ interface IngestionSourceResult {
   ingestEvents: Record<string, unknown>[];
 }
 
+type IngestionFailureEventType = "AUTH_FAILURE" | "NOT_FOUND" | "TRANSIENT_FAILURE";
+
+interface IngestionFailureDecision {
+  eventType: IngestionFailureEventType;
+  code: string;
+  logSlug: string;
+  requiresReauth: boolean;
+  retriable: boolean;
+}
+
+const dispatchEmptyIngestionSuccess = async (input: {
+  sourceRuntime: ReturnType<typeof createSourceIngestionLifecycleRuntime>;
+}): Promise<IngestionSourceResult> => {
+  await input.sourceRuntime.dispatch({ type: "FETCH_SUCCEEDED" });
+  await input.sourceRuntime.dispatch({
+    eventsAdded: 0,
+    eventsRemoved: 0,
+    type: "INGEST_SUCCEEDED",
+  });
+  widelog.set("outcome", "success");
+  widelog.set("sync.events_added", 0);
+  widelog.set("sync.events_removed", 0);
+  return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
+};
+
+const dispatchIngestionSuccess = async (input: {
+  eventsAdded: number;
+  eventsRemoved: number;
+  nextSyncToken?: string;
+  sourceRuntime: ReturnType<typeof createSourceIngestionLifecycleRuntime>;
+}): Promise<void> => {
+  widelog.set("sync.events_added", input.eventsAdded);
+  widelog.set("sync.events_removed", input.eventsRemoved);
+
+  await input.sourceRuntime.dispatch({ type: "FETCH_SUCCEEDED" });
+  await input.sourceRuntime.dispatch({
+    eventsAdded: input.eventsAdded,
+    eventsRemoved: input.eventsRemoved,
+    nextSyncToken: input.nextSyncToken,
+    type: "INGEST_SUCCEEDED",
+  });
+
+  widelog.set("outcome", "success");
+};
+
+const createSourceRuntime = (input: {
+  provider: string;
+  sourceId: string;
+  disableSource: () => Promise<void>;
+  markNeedsReauth: () => Promise<void>;
+  persistSyncToken: (syncToken: string) => Promise<void>;
+}) =>
+  createSourceIngestionLifecycleRuntime({
+    handlers: {
+      disableSource: input.disableSource,
+      markNeedsReauth: input.markNeedsReauth,
+      persistSyncToken: input.persistSyncToken,
+    },
+    outboxStore: new RedisCommandOutboxStore({
+      keyPrefix: "machine:outbox:source-ingestion-lifecycle",
+      redis: refreshLockRedis,
+    }),
+    onRuntimeEvent: createMachineRuntimeWidelogSink(
+      "source_ingestion_lifecycle",
+      (field, value) => {
+        widelog.set(field, value);
+      },
+    ),
+    provider: input.provider,
+    sourceId: input.sourceId,
+  });
+
+const classifyIngestionFailure = (
+  error: unknown,
+  input?: {
+    authFailureSlug?: string;
+    isAuthFailure?: (error: unknown) => boolean;
+  },
+): IngestionFailureDecision => {
+  if (input?.isAuthFailure?.(error)) {
+    return {
+      eventType: "AUTH_FAILURE",
+      code: "auth_required",
+      logSlug: input.authFailureSlug ?? "provider-auth-failed",
+      requiresReauth: true,
+      retriable: false,
+    };
+  }
+
+  if (isNotFoundError(error) || (error instanceof Error && error.message.includes("404"))) {
+    return {
+      eventType: "NOT_FOUND",
+      code: resolveIngestionErrorCode(error),
+      logSlug: "provider-calendar-not-found",
+      requiresReauth: false,
+      retriable: false,
+    };
+  }
+
+  return {
+    eventType: "TRANSIENT_FAILURE",
+    code: resolveIngestionErrorCode(error),
+    logSlug: "provider-api-error",
+    requiresReauth: false,
+    retriable: true,
+  };
+};
+
 const ingestOAuthSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
+  const oauthResolutionDependencies = createOAuthIngestionResolutionDependencies(refreshLockRedis);
   const oauthSources = await database
     .select({
       accountId: calendarAccountsTable.id,
@@ -236,100 +291,64 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
           if (source.externalCalendarId) {
             widelog.set("provider.external_calendar_id", source.externalCalendarId);
           }
-          const onRuntimeEvent = createMachineRuntimeWidelogSink(
-            "source_ingestion_lifecycle",
-            (field, value) => {
-              widelog.set(field, value);
-            },
-          );
-
-          const sourceRuntime = createSourceIngestionLifecycleRuntime({
-            handlers: {
-              disableSource: async () => {
-                await database
-                  .update(calendarsTable)
-                  .set({ disabled: true })
-                  .where(eq(calendarsTable.id, source.calendarId));
-              },
-              markNeedsReauth: async () => {
-                await database
-                  .update(calendarAccountsTable)
-                  .set({ needsReauthentication: true })
-                  .where(eq(calendarAccountsTable.id, source.accountId));
-              },
-              persistSyncToken: async (syncToken) => {
-                await database
-                  .update(calendarsTable)
-                  .set({ syncToken })
-                  .where(eq(calendarsTable.id, source.calendarId));
-              },
-            },
-            outboxStore: new RedisCommandOutboxStore({
-              keyPrefix: "machine:outbox:source-ingestion-lifecycle",
-              redis: refreshLockRedis,
-            }),
-            onRuntimeEvent,
+          const sourceRuntime = createSourceRuntime({
             provider: source.provider,
             sourceId: source.calendarId,
+            disableSource: async () => {
+              await database
+                .update(calendarsTable)
+                .set({ disabled: true })
+                .where(eq(calendarsTable.id, source.calendarId));
+            },
+            markNeedsReauth: async () => {
+              await database
+                .update(calendarAccountsTable)
+                .set({ needsReauthentication: true })
+                .where(eq(calendarAccountsTable.id, source.accountId));
+            },
+            persistSyncToken: async (syncToken) => {
+              await database
+                .update(calendarsTable)
+                .set({ syncToken })
+                .where(eq(calendarsTable.id, source.calendarId));
+            },
           });
 
           try {
             await sourceRuntime.dispatch({ type: "SOURCE_SELECTED" });
             await sourceRuntime.dispatch({ type: "FETCHER_RESOLVED" });
 
-            if (!source.externalCalendarId) {
-              await sourceRuntime.dispatch({ type: "FETCH_SUCCEEDED" });
-              await sourceRuntime.dispatch({
-                eventsAdded: 0,
-                eventsRemoved: 0,
-                type: "INGEST_SUCCEEDED",
-              });
-              widelog.set("outcome", "success");
-              widelog.set("sync.events_added", 0);
-              widelog.set("sync.events_removed", 0);
-              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
+            const resolution = resolveOAuthIngestionResolution({
+              accessToken: source.accessToken,
+              externalCalendarId: source.externalCalendarId,
+              oauthConfig: {
+                googleClientId: env.GOOGLE_CLIENT_ID,
+                googleClientSecret: env.GOOGLE_CLIENT_SECRET,
+                microsoftClientId: env.MICROSOFT_CLIENT_ID,
+                microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
+              },
+              provider: source.provider,
+              syncToken: source.syncToken,
+              userId: source.userId,
+            }, oauthResolutionDependencies);
+
+            if (resolution.status !== OAuthIngestionResolutionStatus.RESOLVED) {
+              return dispatchEmptyIngestionSuccess({ sourceRuntime });
             }
 
-            const tokenRefresher = resolveTokenRefresher(source.provider);
             const tokenState: TokenState = {
               accessToken: source.accessToken,
               accessTokenExpiresAt: source.expiresAt,
               refreshToken: source.refreshToken,
             };
 
-            if (tokenRefresher) {
-              await ensureValidToken(tokenState, tokenRefresher);
-            }
-
-            const rateLimiter = resolveRateLimiter(source.provider, source.userId);
-
-            const resolvedFetcher = resolveOAuthFetcher(source.provider, {
-              accessToken: tokenState.accessToken,
-              externalCalendarId: source.externalCalendarId,
-              syncToken: source.syncToken,
-              rateLimiter,
-            });
-
-            if (!resolvedFetcher) {
-              await sourceRuntime.dispatch({ type: "FETCH_SUCCEEDED" });
-              await sourceRuntime.dispatch({
-                eventsAdded: 0,
-                eventsRemoved: 0,
-                type: "INGEST_SUCCEEDED",
-              });
-              widelog.set("outcome", "success");
-              widelog.set("sync.events_added", 0);
-              widelog.set("sync.events_removed", 0);
-              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
-            }
-
-            const fetcher = resolvedFetcher;
+            await ensureValidToken(tokenState, resolution.tokenRefresher);
             const ingestEvents: Record<string, unknown>[] = [];
 
             const result = await widelog.time.measure("duration_ms", () =>
               ingestSource({
                 calendarId: source.calendarId,
-                fetchEvents: () => fetcher.fetchEvents(),
+                fetchEvents: () => resolution.fetcher.fetchEvents(),
                 readExistingEvents: () => readExistingEvents(source.calendarId),
                 flush: createIngestionFlush(source.calendarId),
                 onIngestEvent: (event) => {
@@ -341,47 +360,34 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
               }),
             );
 
-            widelog.set("sync.events_added", result.eventsAdded);
-            widelog.set("sync.events_removed", result.eventsRemoved);
-
-            await sourceRuntime.dispatch({ type: "FETCH_SUCCEEDED" });
-            await sourceRuntime.dispatch({
+            await dispatchIngestionSuccess({
+              sourceRuntime,
               eventsAdded: result.eventsAdded,
               eventsRemoved: result.eventsRemoved,
-              type: "INGEST_SUCCEEDED",
             });
-
-            widelog.set("outcome", "success");
 
             return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
           } catch (error) {
 
             widelog.set("outcome", "error");
-
-            if (isNotFoundError(error)) {
-              await sourceRuntime.dispatch({
-                code: resolveIngestionErrorCode(error),
-                type: "NOT_FOUND",
-              });
-              widelog.errorFields(error, { slug: "provider-calendar-not-found", retriable: false });
-              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
-            }
-
-            if (isOAuthAuthFailure(error)) {
-              await sourceRuntime.dispatch({
-                code: "auth_required",
-                type: "AUTH_FAILURE",
-              });
-              widelog.errorFields(error, { slug: "provider-token-refresh-failed", retriable: false, requiresReauth: true });
-              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
-            }
+            const failureDecision = classifyIngestionFailure(error, {
+              authFailureSlug: "provider-token-refresh-failed",
+              isAuthFailure: isOAuthAuthFailure,
+            });
 
             await sourceRuntime.dispatch({
-              code: resolveIngestionErrorCode(error),
-              type: "TRANSIENT_FAILURE",
+              code: failureDecision.code,
+              type: failureDecision.eventType,
             });
-            widelog.errorFields(error, { slug: "provider-api-error", retriable: true });
-            throw error;
+            widelog.errorFields(error, {
+              slug: failureDecision.logSlug,
+              retriable: failureDecision.retriable,
+              requiresReauth: failureDecision.requiresReauth,
+            });
+            if (failureDecision.retriable) {
+              throw error;
+            }
+            return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
           } finally {
             widelog.flush();
           }
@@ -448,36 +454,22 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
           widelog.set("provider.name", source.provider);
           widelog.set("provider.account_id", source.accountId);
           widelog.set("provider.calendar_id", source.calendarId);
-          const onRuntimeEvent = createMachineRuntimeWidelogSink(
-            "source_ingestion_lifecycle",
-            (field, value) => {
-              widelog.set(field, value);
-            },
-          );
-
-          const sourceRuntime = createSourceIngestionLifecycleRuntime({
-            handlers: {
-              disableSource: async () => {
-                await database
-                  .update(calendarsTable)
-                  .set({ disabled: true })
-                  .where(eq(calendarsTable.id, source.calendarId));
-              },
-              markNeedsReauth: async () => {
-                await database
-                  .update(calendarAccountsTable)
-                  .set({ needsReauthentication: true })
-                  .where(eq(calendarAccountsTable.id, source.accountId));
-              },
-              persistSyncToken: () => Promise.resolve(),
-            },
-            outboxStore: new RedisCommandOutboxStore({
-              keyPrefix: "machine:outbox:source-ingestion-lifecycle",
-              redis: refreshLockRedis,
-            }),
-            onRuntimeEvent,
+          const sourceRuntime = createSourceRuntime({
             provider: source.provider,
             sourceId: source.calendarId,
+            disableSource: async () => {
+              await database
+                .update(calendarsTable)
+                .set({ disabled: true })
+                .where(eq(calendarsTable.id, source.calendarId));
+            },
+            markNeedsReauth: async () => {
+              await database
+                .update(calendarAccountsTable)
+                .set({ needsReauthentication: true })
+                .where(eq(calendarAccountsTable.id, source.accountId));
+            },
+            persistSyncToken: () => Promise.resolve(),
           });
 
           try {
@@ -511,47 +503,34 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
               }),
             );
 
-            widelog.set("sync.events_added", result.eventsAdded);
-            widelog.set("sync.events_removed", result.eventsRemoved);
-
-            await sourceRuntime.dispatch({ type: "FETCH_SUCCEEDED" });
-            await sourceRuntime.dispatch({
+            await dispatchIngestionSuccess({
+              sourceRuntime,
               eventsAdded: result.eventsAdded,
               eventsRemoved: result.eventsRemoved,
-              type: "INGEST_SUCCEEDED",
             });
-
-            widelog.set("outcome", "success");
 
             return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
           } catch (error) {
 
             widelog.set("outcome", "error");
+            const failureDecision = classifyIngestionFailure(error, {
+              authFailureSlug: "provider-auth-failed",
+              isAuthFailure: isCalDAVAuthenticationError,
+            });
 
-            if (isCalDAVAuthenticationError(error)) {
-              await sourceRuntime.dispatch({
-                code: "auth_required",
-                type: "AUTH_FAILURE",
-              });
-              widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
-              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
+            await sourceRuntime.dispatch({
+              code: failureDecision.code,
+              type: failureDecision.eventType,
+            });
+            widelog.errorFields(error, {
+              slug: failureDecision.logSlug,
+              retriable: failureDecision.retriable,
+              requiresReauth: failureDecision.requiresReauth,
+            });
+            if (failureDecision.retriable) {
+              throw error;
             }
-
-            if (error instanceof Error && error.message.includes("404")) {
-              await sourceRuntime.dispatch({
-                code: resolveIngestionErrorCode(error),
-                type: "NOT_FOUND",
-              });
-              widelog.errorFields(error, { slug: "provider-calendar-not-found", retriable: false });
-            } else {
-              await sourceRuntime.dispatch({
-                code: resolveIngestionErrorCode(error),
-                type: "TRANSIENT_FAILURE",
-              });
-              widelog.errorFields(error, { slug: "provider-api-error", retriable: true });
-            }
-
-            throw error;
+            return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
           } finally {
             widelog.flush();
           }
@@ -604,31 +583,17 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
           widelog.set("user.id", source.userId);
           widelog.set("provider.name", "ical");
           widelog.set("provider.calendar_id", source.calendarId);
-          const onRuntimeEvent = createMachineRuntimeWidelogSink(
-            "source_ingestion_lifecycle",
-            (field, value) => {
-              widelog.set(field, value);
-            },
-          );
-
-          const sourceRuntime = createSourceIngestionLifecycleRuntime({
-            handlers: {
-              disableSource: async () => {
-                await database
-                  .update(calendarsTable)
-                  .set({ disabled: true })
-                  .where(eq(calendarsTable.id, source.calendarId));
-              },
-              markNeedsReauth: () => Promise.resolve(),
-              persistSyncToken: () => Promise.resolve(),
-            },
-            outboxStore: new RedisCommandOutboxStore({
-              keyPrefix: "machine:outbox:source-ingestion-lifecycle",
-              redis: refreshLockRedis,
-            }),
-            onRuntimeEvent,
+          const sourceRuntime = createSourceRuntime({
             provider: "ical",
             sourceId: source.calendarId,
+            disableSource: async () => {
+              await database
+                .update(calendarsTable)
+                .set({ disabled: true })
+                .where(eq(calendarsTable.id, source.calendarId));
+            },
+            markNeedsReauth: () => Promise.resolve(),
+            persistSyncToken: () => Promise.resolve(),
           });
 
           try {
@@ -636,16 +601,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
             await sourceRuntime.dispatch({ type: "FETCHER_RESOLVED" });
 
             if (!source.url) {
-              await sourceRuntime.dispatch({ type: "FETCH_SUCCEEDED" });
-              await sourceRuntime.dispatch({
-                eventsAdded: 0,
-                eventsRemoved: 0,
-                type: "INGEST_SUCCEEDED",
-              });
-              widelog.set("outcome", "success");
-              widelog.set("sync.events_added", 0);
-              widelog.set("sync.events_removed", 0);
-              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
+              return dispatchEmptyIngestionSuccess({ sourceRuntime });
             }
 
             const fetcher = createIcsSourceFetcher({
@@ -672,28 +628,30 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
               }),
             );
 
-            widelog.set("sync.events_added", result.eventsAdded);
-            widelog.set("sync.events_removed", result.eventsRemoved);
-
-            await sourceRuntime.dispatch({ type: "FETCH_SUCCEEDED" });
-            await sourceRuntime.dispatch({
+            await dispatchIngestionSuccess({
+              sourceRuntime,
               eventsAdded: result.eventsAdded,
               eventsRemoved: result.eventsRemoved,
-              type: "INGEST_SUCCEEDED",
             });
-
-            widelog.set("outcome", "success");
 
             return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
           } catch (error) {
 
             widelog.set("outcome", "error");
+            const failureDecision = classifyIngestionFailure(error);
             await sourceRuntime.dispatch({
-              code: resolveIngestionErrorCode(error),
-              type: "TRANSIENT_FAILURE",
+              code: failureDecision.code,
+              type: failureDecision.eventType,
             });
-            widelog.errorFields(error, { slug: "provider-api-error", retriable: true });
-            throw error;
+            widelog.errorFields(error, {
+              slug: failureDecision.logSlug,
+              retriable: failureDecision.retriable,
+              requiresReauth: failureDecision.requiresReauth,
+            });
+            if (failureDecision.retriable) {
+              throw error;
+            }
+            return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
           } finally {
             widelog.flush();
           }

@@ -28,12 +28,17 @@ describe("destination execution runtime", () => {
 
     await runtime.dispatch({ holderId: "holder-1", type: "LOCK_ACQUIRED" });
     await runtime.dispatch({ type: "EXECUTION_STARTED" });
-    const transition = await runtime.dispatch({
+    const result = await runtime.dispatch({
       eventsAdded: 3,
       eventsRemoved: 1,
       type: "EXECUTION_SUCCEEDED",
     });
 
+    expect(result.outcome).toBe("TRANSITION_APPLIED");
+    if (result.outcome !== "TRANSITION_APPLIED") {
+      throw new Error("Expected transition to be applied");
+    }
+    const { transition } = result;
     expect(transition.state).toBe("completed");
     expect(released).toEqual(["holder-1"]);
     expect(emitted).toEqual([{ added: 3, removed: 1 }]);
@@ -63,12 +68,17 @@ describe("destination execution runtime", () => {
 
     await runtime.dispatch({ holderId: "holder-2", type: "LOCK_ACQUIRED" });
     await runtime.dispatch({ type: "EXECUTION_STARTED" });
-    const transition = await runtime.dispatch({
+    const result = await runtime.dispatch({
       code: "timeout",
       nextAttemptAt: "2026-03-19T20:00:00.000Z",
       type: "EXECUTION_RETRYABLE_FAILED",
     });
 
+    expect(result.outcome).toBe("TRANSITION_APPLIED");
+    if (result.outcome !== "TRANSITION_APPLIED") {
+      throw new Error("Expected transition to be applied");
+    }
+    const { transition } = result;
     expect(transition.state).toBe("backoff_scheduled");
     expect(backoff).toEqual(["2026-03-19T20:00:00.000Z"]);
     expect(released).toEqual(["holder-2"]);
@@ -149,16 +159,24 @@ describe("destination execution runtime", () => {
       onRuntimeEvent: () => Promise.resolve(),
     });
 
-    const firstTransition = await firstRuntime.dispatch({
+    const firstResult = await firstRuntime.dispatch({
       holderId: "holder-a",
       type: "LOCK_ACQUIRED",
     });
-    const secondTransition = await secondRuntime.dispatch({
+    const secondResult = await secondRuntime.dispatch({
       holderId: "holder-b",
       type: "LOCK_ACQUIRED",
     });
 
-    expect(firstTransition.state).toBe("locked");
-    expect(secondTransition.state).toBe("locked");
+    expect(firstResult.outcome).toBe("TRANSITION_APPLIED");
+    expect(secondResult.outcome).toBe("TRANSITION_APPLIED");
+    if (firstResult.outcome !== "TRANSITION_APPLIED") {
+      throw new Error("Expected first transition to be applied");
+    }
+    if (secondResult.outcome !== "TRANSITION_APPLIED") {
+      throw new Error("Expected second transition to be applied");
+    }
+    expect(firstResult.transition.state).toBe("locked");
+    expect(secondResult.transition.state).toBe("locked");
   });
 });

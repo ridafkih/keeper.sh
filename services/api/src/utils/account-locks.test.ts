@@ -6,6 +6,7 @@ import type {
   createOAuthSource as createOAuthSourceFn,
   importOAuthAccountCalendars as importOAuthAccountCalendarsFn,
 } from "./oauth-sources";
+import * as actualCalendarModule from "../../../../packages/calendar/src/index";
 
 let createCalDAVDestination: typeof createCalDAVDestinationFn = () =>
   Promise.reject(new Error("Module not loaded"));
@@ -97,7 +98,7 @@ beforeAll(async () => {
       transaction: async (callback: (tx: object) => Promise<unknown>) => {
         transactionOpen = true;
         try {
-          return callback(txInstance);
+          return await callback(txInstance);
         } finally {
           transactionOpen = false;
         }
@@ -211,11 +212,15 @@ beforeAll(async () => {
   }));
 
   mock.module("@keeper.sh/calendar", () => ({
+    ...actualCalendarModule,
     PROVIDER_DEFINITIONS: [],
     getActiveProviders: () => [],
     getCalDAVProviders: () => [],
     getOAuthProviders: () => [],
     getProvider: () => globalThis.undefined,
+    getSourceProvider: () => ({
+      fetchCalendars: () => Promise.resolve([]),
+    }),
     getProvidersByAuthType: () => [],
     isCalDAVProvider: () => true,
     isOAuthProvider: () => false,

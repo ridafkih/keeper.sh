@@ -58,22 +58,7 @@ const mapDomainEventToMachineEvent = (domainEvent: IngestionDomainEvent): Ingest
   return { type: "TIMEOUT", code: domainEvent.code };
 };
 
-const mapDomainActor = (domainEvent: IngestionDomainEvent): EventActor => {
-  if (
-    domainEvent.type === "INGESTION_RUN_REQUESTED"
-    || domainEvent.type === "REMOTE_FETCH_SUCCEEDED"
-    || domainEvent.type === "DIFF_SUCCEEDED"
-    || domainEvent.type === "APPLY_COMPLETED"
-    || domainEvent.type === "FETCH_AUTH_FAILED"
-    || domainEvent.type === "FETCH_NOT_FOUND"
-    || domainEvent.type === "FETCH_TRANSIENT_FAILED"
-    || domainEvent.type === "FETCH_TIMEOUT"
-  ) {
-    return { type: "worker", id: domainEvent.actorId };
-  }
-
-  return { type: "system", id: "machine-orchestration" };
-};
+const mapDomainActor = (domainEvent: IngestionDomainEvent): EventActor => ({ type: "worker", id: domainEvent.actorId });
 
 class IngestionOrchestrator {
   private readonly machine: IngestionMachine;

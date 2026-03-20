@@ -24,14 +24,44 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { createCredentialHealthRuntime } from "./credential-health-runtime";
 import type { CredentialHealthRuntimeEvent } from "./credential-health-runtime";
 
-const OAUTH_PROVIDERS = new Set(["google", "outlook"]);
-const CALDAV_PROVIDERS = new Set(["caldav", "fastmail", "icloud"]);
+const OAUTH_PROVIDER_NAMES = ["google", "outlook"] as const;
+const CALDAV_PROVIDER_NAMES = ["caldav", "fastmail", "icloud"] as const;
+
+type OAuthProviderName = (typeof OAUTH_PROVIDER_NAMES)[number];
+type CaldavProviderName = (typeof CALDAV_PROVIDER_NAMES)[number];
+
+const OAUTH_PROVIDERS = new Set<string>(OAUTH_PROVIDER_NAMES);
+const CALDAV_PROVIDERS = new Set<string>(CALDAV_PROVIDER_NAMES);
 
 interface OAuthConfig {
   googleClientId?: string;
   googleClientSecret?: string;
   microsoftClientId?: string;
   microsoftClientSecret?: string;
+}
+
+const ProviderResolutionStatus = {
+  MISCONFIGURED_PROVIDER: "MISCONFIGURED_PROVIDER",
+  MISSING_PROVIDER_CREDENTIALS: "MISSING_PROVIDER_CREDENTIALS",
+  RESOLVED: "RESOLVED",
+  UNSUPPORTED_PROVIDER: "UNSUPPORTED_PROVIDER",
+} as const;
+
+type ProviderResolutionStatus =
+  (typeof ProviderResolutionStatus)[keyof typeof ProviderResolutionStatus];
+
+type ProviderResolutionOutcome =
+  | { status: typeof ProviderResolutionStatus.RESOLVED; provider: CalendarSyncProvider }
+  | { status: typeof ProviderResolutionStatus.UNSUPPORTED_PROVIDER }
+  | { status: typeof ProviderResolutionStatus.MISCONFIGURED_PROVIDER }
+  | { status: typeof ProviderResolutionStatus.MISSING_PROVIDER_CREDENTIALS };
+
+interface OAuthCredentialRecord {
+  accessToken: string;
+  expiresAt: Date;
+  externalCalendarId: string | null;
+  oauthCredentialId: string;
+  refreshToken: string;
 }
 
 interface CoordinatedRefresherOptions {
@@ -48,6 +78,99 @@ interface CoordinatedRefresherOptions {
     event: CredentialHealthRuntimeEvent,
   ) => Promise<void> | void;
 }
+
+interface OAuthProviderBuildInput {
+  accountId: string;
+  calendarId: string;
+  database: BunSQLDatabase;
+  oauthConfig: OAuthConfig;
+  oauthCredential: OAuthCredentialRecord;
+  onCredentialRuntimeEvent?: (
+    calendarId: string,
+    event: CredentialHealthRuntimeEvent,
+  ) => Promise<void> | void;
+  outboxRedis: Redis;
+  rateLimiter?: RedisRateLimiter;
+  refreshLockStore: RefreshLockStore | null;
+  signal?: AbortSignal;
+  userId: string;
+}
+
+const isOAuthProvider = (provider: string): provider is OAuthProviderName => (
+  OAUTH_PROVIDERS.has(provider)
+);
+
+const isCaldavProvider = (provider: string): provider is CaldavProviderName => (
+  CALDAV_PROVIDERS.has(provider)
+);
+
+const resolvedProvider = (
+  provider: CalendarSyncProvider,
+): ProviderResolutionOutcome => ({
+  status: ProviderResolutionStatus.RESOLVED,
+  provider,
+});
+
+const unresolvedProvider = (
+  status: Exclude<ProviderResolutionStatus, typeof ProviderResolutionStatus.RESOLVED>,
+): ProviderResolutionOutcome => ({ status });
+
+const resolveProviderSupportStatus = (
+  provider: string,
+  encryptionKey?: string,
+): Exclude<ProviderResolutionStatus, typeof ProviderResolutionStatus.RESOLVED> => {
+  if (isOAuthProvider(provider)) {
+    return ProviderResolutionStatus.MISCONFIGURED_PROVIDER;
+  }
+
+  if (!isCaldavProvider(provider)) {
+    return ProviderResolutionStatus.UNSUPPORTED_PROVIDER;
+  }
+
+  if (!encryptionKey) {
+    return ProviderResolutionStatus.MISCONFIGURED_PROVIDER;
+  }
+
+  return ProviderResolutionStatus.MISSING_PROVIDER_CREDENTIALS;
+};
+
+const loadOAuthCredential = async (
+  database: BunSQLDatabase,
+  calendarId: string,
+): Promise<OAuthCredentialRecord | null> => {
+  const [oauthCred] = await database
+    .select({
+      accessToken: oauthCredentialsTable.accessToken,
+      refreshToken: oauthCredentialsTable.refreshToken,
+      expiresAt: oauthCredentialsTable.expiresAt,
+      externalCalendarId: calendarsTable.externalCalendarId,
+      oauthCredentialId: oauthCredentialsTable.id,
+    })
+    .from(oauthCredentialsTable)
+    .innerJoin(calendarAccountsTable, eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id))
+    .innerJoin(calendarsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
+    .where(eq(calendarsTable.id, calendarId))
+    .limit(1);
+
+  return oauthCred ?? null;
+};
+
+const hasOAuthConfig = (
+  provider: OAuthProviderName,
+  oauthConfig: OAuthConfig,
+): boolean => {
+  switch (provider) {
+    case "google": {
+      return Boolean(oauthConfig.googleClientId && oauthConfig.googleClientSecret);
+    }
+    case "outlook": {
+      return Boolean(oauthConfig.microsoftClientId && oauthConfig.microsoftClientSecret);
+    }
+    default: {
+      return false;
+    }
+  }
+};
 
 const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
   const {
@@ -100,108 +223,162 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
     );
 };
 
-const resolveOAuthProvider = async (
-  database: BunSQLDatabase,
-  provider: string,
-  calendarId: string,
-  userId: string,
-  accountId: string,
-  oauthConfig: OAuthConfig,
-  refreshLockStore: RefreshLockStore | null,
-  outboxRedis: Redis,
+const buildGoogleOAuthProvider = (
+  input: OAuthProviderBuildInput,
+): ProviderResolutionOutcome => {
+  if (!hasOAuthConfig("google", input.oauthConfig)) {
+    return unresolvedProvider(ProviderResolutionStatus.MISCONFIGURED_PROVIDER);
+  }
+  if (!input.oauthCredential.externalCalendarId) {
+    return unresolvedProvider(ProviderResolutionStatus.MISSING_PROVIDER_CREDENTIALS);
+  }
+
+  const { googleClientId, googleClientSecret } = input.oauthConfig;
+  if (!googleClientId || !googleClientSecret) {
+    return unresolvedProvider(ProviderResolutionStatus.MISCONFIGURED_PROVIDER);
+  }
+
+  const googleOAuth = createGoogleOAuthService({
+    clientId: googleClientId,
+    clientSecret: googleClientSecret,
+  });
+
+  return resolvedProvider(createGoogleSyncProvider({
+    accessToken: input.oauthCredential.accessToken,
+    refreshToken: input.oauthCredential.refreshToken,
+    accessTokenExpiresAt: input.oauthCredential.expiresAt,
+    externalCalendarId: input.oauthCredential.externalCalendarId,
+    calendarId: input.calendarId,
+    userId: input.userId,
+    refreshAccessToken: createCoordinatedRefresher({
+      calendarId: input.calendarId,
+      accessTokenExpiresAt: input.oauthCredential.expiresAt,
+      database: input.database,
+      oauthCredentialId: input.oauthCredential.oauthCredentialId,
+      calendarAccountId: input.accountId,
+      refreshLockStore: input.refreshLockStore,
+      outboxRedis: input.outboxRedis,
+      rawRefresh: (refreshToken) => googleOAuth.refreshAccessToken(refreshToken),
+      onCredentialRuntimeEvent: input.onCredentialRuntimeEvent,
+    }),
+    rateLimiter: input.rateLimiter,
+    signal: input.signal,
+  }));
+};
+
+const buildOutlookOAuthProvider = (
+  input: OAuthProviderBuildInput,
+): ProviderResolutionOutcome => {
+  if (!hasOAuthConfig("outlook", input.oauthConfig)) {
+    return unresolvedProvider(ProviderResolutionStatus.MISCONFIGURED_PROVIDER);
+  }
+  if (!input.oauthCredential.externalCalendarId) {
+    return unresolvedProvider(ProviderResolutionStatus.MISSING_PROVIDER_CREDENTIALS);
+  }
+
+  const { microsoftClientId, microsoftClientSecret } = input.oauthConfig;
+  if (!microsoftClientId || !microsoftClientSecret) {
+    return unresolvedProvider(ProviderResolutionStatus.MISCONFIGURED_PROVIDER);
+  }
+
+  const microsoftOAuth = createMicrosoftOAuthService({
+    clientId: microsoftClientId,
+    clientSecret: microsoftClientSecret,
+  });
+
+  return resolvedProvider(createOutlookSyncProvider({
+    accessToken: input.oauthCredential.accessToken,
+    refreshToken: input.oauthCredential.refreshToken,
+    accessTokenExpiresAt: input.oauthCredential.expiresAt,
+    externalCalendarId: input.oauthCredential.externalCalendarId,
+    calendarId: input.calendarId,
+    userId: input.userId,
+    refreshAccessToken: createCoordinatedRefresher({
+      calendarId: input.calendarId,
+      accessTokenExpiresAt: input.oauthCredential.expiresAt,
+      database: input.database,
+      oauthCredentialId: input.oauthCredential.oauthCredentialId,
+      calendarAccountId: input.accountId,
+      refreshLockStore: input.refreshLockStore,
+      outboxRedis: input.outboxRedis,
+      rawRefresh: (refreshToken) => microsoftOAuth.refreshAccessToken(refreshToken),
+      onCredentialRuntimeEvent: input.onCredentialRuntimeEvent,
+    }),
+  }));
+};
+
+const OAUTH_PROVIDER_STRATEGY: Record<
+  OAuthProviderName,
+  (input: OAuthProviderBuildInput) => ProviderResolutionOutcome
+> = {
+  google: buildGoogleOAuthProvider,
+  outlook: buildOutlookOAuthProvider,
+};
+
+interface ResolveOAuthProviderOptions {
+  database: BunSQLDatabase;
+  provider: string;
+  calendarId: string;
+  userId: string;
+  accountId: string;
+  oauthConfig: OAuthConfig;
+  refreshLockStore: RefreshLockStore | null;
+  outboxRedis: Redis;
   onCredentialRuntimeEvent?: (
     calendarId: string,
     event: CredentialHealthRuntimeEvent,
-  ) => Promise<void> | void,
-  rateLimiter?: RedisRateLimiter,
-  signal?: AbortSignal,
-): Promise<CalendarSyncProvider | null> => {
-  const [oauthCred] = await database
-    .select({
-      accessToken: oauthCredentialsTable.accessToken,
-      refreshToken: oauthCredentialsTable.refreshToken,
-      expiresAt: oauthCredentialsTable.expiresAt,
-      externalCalendarId: calendarsTable.externalCalendarId,
-      oauthCredentialId: oauthCredentialsTable.id,
-    })
-    .from(oauthCredentialsTable)
-    .innerJoin(calendarAccountsTable, eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id))
-    .innerJoin(calendarsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
-    .where(eq(calendarsTable.id, calendarId))
-    .limit(1);
+  ) => Promise<void> | void;
+  rateLimiter?: RedisRateLimiter;
+  signal?: AbortSignal;
+}
 
-  if (!oauthCred) {
-    return null;
+const resolveOAuthProvider = async (
+  options: ResolveOAuthProviderOptions,
+): Promise<ProviderResolutionOutcome> => {
+  const {
+    database,
+    provider,
+    calendarId,
+    userId,
+    accountId,
+    oauthConfig,
+    refreshLockStore,
+    outboxRedis,
+    onCredentialRuntimeEvent,
+    rateLimiter,
+    signal,
+  } = options;
+
+  if (!isOAuthProvider(provider)) {
+    return unresolvedProvider(ProviderResolutionStatus.UNSUPPORTED_PROVIDER);
   }
 
-  if (provider === "google" && oauthConfig.googleClientId && oauthConfig.googleClientSecret) {
-    if (!oauthCred.externalCalendarId) {
-      return null;
-    }
-    const googleOAuth = createGoogleOAuthService({
-      clientId: oauthConfig.googleClientId,
-      clientSecret: oauthConfig.googleClientSecret,
-    });
-    return createGoogleSyncProvider({
-      accessToken: oauthCred.accessToken,
-      refreshToken: oauthCred.refreshToken,
-      accessTokenExpiresAt: oauthCred.expiresAt,
-      externalCalendarId: oauthCred.externalCalendarId,
-      calendarId,
-      userId,
-      refreshAccessToken: createCoordinatedRefresher({
-        calendarId,
-        accessTokenExpiresAt: oauthCred.expiresAt,
-        database,
-        oauthCredentialId: oauthCred.oauthCredentialId,
-        calendarAccountId: accountId,
-        refreshLockStore,
-        outboxRedis,
-        rawRefresh: (refreshToken) => googleOAuth.refreshAccessToken(refreshToken),
-        onCredentialRuntimeEvent,
-      }),
-      rateLimiter,
-      signal,
-    });
+  const oauthCredential = await loadOAuthCredential(database, calendarId);
+  if (!oauthCredential) {
+    return unresolvedProvider(ProviderResolutionStatus.MISSING_PROVIDER_CREDENTIALS);
   }
 
-  if (provider === "outlook" && oauthConfig.microsoftClientId && oauthConfig.microsoftClientSecret) {
-    if (!oauthCred.externalCalendarId) {
-      return null;
-    }
-    const microsoftOAuth = createMicrosoftOAuthService({
-      clientId: oauthConfig.microsoftClientId,
-      clientSecret: oauthConfig.microsoftClientSecret,
-    });
-    return createOutlookSyncProvider({
-      accessToken: oauthCred.accessToken,
-      refreshToken: oauthCred.refreshToken,
-      accessTokenExpiresAt: oauthCred.expiresAt,
-      externalCalendarId: oauthCred.externalCalendarId,
-      calendarId,
-      userId,
-      refreshAccessToken: createCoordinatedRefresher({
-        calendarId,
-        accessTokenExpiresAt: oauthCred.expiresAt,
-        database,
-        oauthCredentialId: oauthCred.oauthCredentialId,
-        calendarAccountId: accountId,
-        refreshLockStore,
-        outboxRedis,
-        rawRefresh: (refreshToken) => microsoftOAuth.refreshAccessToken(refreshToken),
-        onCredentialRuntimeEvent,
-      }),
-    });
-  }
-
-  return null;
+  const resolveOAuthStrategy = OAUTH_PROVIDER_STRATEGY[provider];
+  return resolveOAuthStrategy({
+    accountId,
+    calendarId,
+    database,
+    oauthConfig,
+    oauthCredential,
+    onCredentialRuntimeEvent,
+    outboxRedis,
+    rateLimiter,
+    refreshLockStore,
+    signal,
+    userId,
+  });
 };
 
 const resolveCalDAVProvider = async (
   database: BunSQLDatabase,
   calendarId: string,
   encryptionKey: string,
-): Promise<CalendarSyncProvider | null> => {
+): Promise<ProviderResolutionOutcome> => {
   const [caldavCred] = await database
     .select({
       username: caldavCredentialsTable.username,
@@ -216,17 +393,20 @@ const resolveCalDAVProvider = async (
     .limit(1);
 
   if (!caldavCred) {
-    return null;
+    return unresolvedProvider(ProviderResolutionStatus.MISSING_PROVIDER_CREDENTIALS);
   }
 
   const password = decryptPassword(caldavCred.encryptedPassword, encryptionKey);
 
-  return createCalDAVSyncProvider({
-    calendarUrl: caldavCred.calendarUrl ?? caldavCred.serverUrl,
-    serverUrl: caldavCred.serverUrl,
-    username: caldavCred.username,
-    password,
-  });
+  return {
+    status: ProviderResolutionStatus.RESOLVED,
+    provider: createCalDAVSyncProvider({
+      calendarUrl: caldavCred.calendarUrl ?? caldavCred.serverUrl,
+      serverUrl: caldavCred.serverUrl,
+      username: caldavCred.username,
+      password,
+    }),
+  };
 };
 
 interface ResolveProviderOptions {
@@ -237,7 +417,7 @@ interface ResolveProviderOptions {
   accountId: string;
   oauthConfig: OAuthConfig;
   encryptionKey?: string;
-  refreshLockStore?: RefreshLockStore | null;
+  refreshLockStore: RefreshLockStore | null;
   outboxRedis: Redis;
   rateLimiter?: RedisRateLimiter;
   signal?: AbortSignal;
@@ -247,24 +427,24 @@ interface ResolveProviderOptions {
   ) => Promise<void> | void;
 }
 
-const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarSyncProvider | null> => {
-  if (OAUTH_PROVIDERS.has(options.provider)) {
-    return resolveOAuthProvider(
-      options.database,
-      options.provider,
-      options.calendarId,
-      options.userId,
-      options.accountId,
-      options.oauthConfig,
-      options.refreshLockStore ?? null,
-      options.outboxRedis,
-      options.onCredentialRuntimeEvent,
-      options.rateLimiter,
-      options.signal,
-    );
+const resolveSyncProviderOutcome = (options: ResolveProviderOptions): Promise<ProviderResolutionOutcome> => {
+  if (isOAuthProvider(options.provider)) {
+    return resolveOAuthProvider({
+      database: options.database,
+      provider: options.provider,
+      calendarId: options.calendarId,
+      userId: options.userId,
+      accountId: options.accountId,
+      oauthConfig: options.oauthConfig,
+      refreshLockStore: options.refreshLockStore,
+      outboxRedis: options.outboxRedis,
+      onCredentialRuntimeEvent: options.onCredentialRuntimeEvent,
+      rateLimiter: options.rateLimiter,
+      signal: options.signal,
+    });
   }
 
-  if (CALDAV_PROVIDERS.has(options.provider) && options.encryptionKey) {
+  if (isCaldavProvider(options.provider) && options.encryptionKey) {
     return resolveCalDAVProvider(
       options.database,
       options.calendarId,
@@ -272,8 +452,27 @@ const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarS
     );
   }
 
-  return Promise.resolve(null);
+  return Promise.resolve(
+    unresolvedProvider(resolveProviderSupportStatus(options.provider, options.encryptionKey)),
+  );
 };
 
-export { resolveSyncProvider };
-export type { OAuthConfig };
+const resolveSyncProvider = async (
+  options: ResolveProviderOptions,
+): Promise<CalendarSyncProvider | null> => {
+  const outcome = await resolveSyncProviderOutcome(options);
+  if (outcome.status !== ProviderResolutionStatus.RESOLVED) {
+    return null;
+  }
+  return outcome.provider;
+};
+
+export {
+  ProviderResolutionStatus,
+  resolveSyncProvider,
+  resolveSyncProviderOutcome,
+};
+export type {
+  OAuthConfig,
+  ProviderResolutionOutcome,
+};

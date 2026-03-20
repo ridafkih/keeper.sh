@@ -24,13 +24,23 @@ interface MachineCompositionCoordinatorDependencies {
   syncLifecycle: SyncLifecycleEventSink;
 }
 
+type RoutedSyncLifecycleEventType = Extract<
+  SyncLifecycleDomainEvent,
+  { type: "CONTENT_CHANGED" | "SYNC_REQUESTED" }
+>["type"];
+
 const resolveSyncLifecycleEventsFromIngestionOutputs = (
   outputs: IngestionOutput[],
 ): SyncLifecycleDomainEvent[] => {
   const events: SyncLifecycleDomainEvent[] = [];
+  const syncLifecycleEventByOutputType: Partial<Record<IngestionOutput["type"], RoutedSyncLifecycleEventType>> = {
+    SOURCE_CHANGED: "CONTENT_CHANGED",
+  };
+
   for (const output of outputs) {
-    if (output.type === "SOURCE_CHANGED") {
-      events.push({ actorId: "svc-composition", type: "CONTENT_CHANGED" });
+    const eventType = syncLifecycleEventByOutputType[output.type];
+    if (eventType) {
+      events.push({ actorId: "svc-composition", type: eventType });
     }
   }
   return events;
@@ -40,9 +50,14 @@ const resolveSyncLifecycleEventsFromProvisioningOutputs = (
   outputs: SourceProvisioningOutput[],
 ): SyncLifecycleDomainEvent[] => {
   const events: SyncLifecycleDomainEvent[] = [];
+  const syncLifecycleEventByOutputType: Partial<Record<SourceProvisioningOutput["type"], RoutedSyncLifecycleEventType>> = {
+    BOOTSTRAP_REQUESTED: "SYNC_REQUESTED",
+  };
+
   for (const output of outputs) {
-    if (output.type === "BOOTSTRAP_REQUESTED") {
-      events.push({ actorId: "svc-composition", type: "SYNC_REQUESTED" });
+    const eventType = syncLifecycleEventByOutputType[output.type];
+    if (eventType) {
+      events.push({ actorId: "svc-composition", type: eventType });
     }
   }
   return events;

@@ -48,9 +48,23 @@ interface DestinationExecutionRuntimeInput {
 }
 
 interface DestinationExecutionRuntime {
-  dispatch: (event: DestinationExecutionEvent) => Promise<DestinationExecutionTransitionResult>;
+  dispatch: (event: DestinationExecutionEvent) => Promise<DestinationExecutionDispatchResult>;
   releaseIfHeld: () => Promise<void>;
 }
+
+type DestinationExecutionDispatchResult =
+  | {
+    outcome: "TRANSITION_APPLIED";
+    transition: DestinationExecutionTransitionResult;
+  }
+  | {
+    outcome: "DUPLICATE_IGNORED";
+  }
+  | {
+    outcome: "CONFLICT_DETECTED";
+    aggregateId: string;
+    envelopeId: string;
+  };
 
 type DestinationExecutionRuntimeEvent = RuntimeProcessEvent<
   DestinationExecutionState,
@@ -139,7 +153,7 @@ const createDestinationExecutionRuntime = (
 
   const dispatch = async (
     event: DestinationExecutionEvent,
-  ): Promise<DestinationExecutionTransitionResult> => {
+  ): Promise<DestinationExecutionDispatchResult> => {
     if (!initialized) {
       await snapshotStore.initialize(input.calendarId, {
         context: {
@@ -165,13 +179,25 @@ const createDestinationExecutionRuntime = (
     };
     const result = await driver.process(envelope);
     if (result.outcome === "CONFLICT_DETECTED") {
-      throw new MachineConflictDetectedError(input.calendarId, envelope.id);
+      return {
+        outcome: "CONFLICT_DETECTED",
+        aggregateId: input.calendarId,
+        envelopeId: envelope.id,
+      };
+    }
+    if (result.outcome === "DUPLICATE_IGNORED") {
+      return {
+        outcome: "DUPLICATE_IGNORED",
+      };
     }
     if (!result.transition) {
-      throw new Error("Invariant violated: destination execution transition missing");
+      throw new MachineConflictDetectedError(input.calendarId, envelope.id);
     }
     await driver.drainOutbox();
-    return result.transition;
+    return {
+      outcome: "TRANSITION_APPLIED",
+      transition: result.transition,
+    };
   };
 
   const releaseIfHeld = async (): Promise<void> => {
@@ -187,6 +213,7 @@ const createDestinationExecutionRuntime = (
 
 export { createDestinationExecutionRuntime };
 export type {
+  DestinationExecutionDispatchResult,
   DestinationExecutionCommandHandlers,
   DestinationExecutionRuntimeEvent,
   DestinationExecutionRuntime,
