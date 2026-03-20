@@ -1,12 +1,12 @@
 import type {
   EventActor,
-  SourceIngestionLifecycleEvent,
+  SourceIngestionLifecycleEventType,
   SourceIngestionLifecycleMachine,
   SourceIngestionLifecycleSnapshot,
   SourceIngestionLifecycleTransitionResult,
 } from "@keeper.sh/state-machines";
-import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
 import type { EnvelopeFactory } from "./envelope-factory";
+import { mapSourceIngestionLifecycleDomainEvent } from "./source-ingestion-lifecycle-event-mapper";
 
 type SourceIngestionLifecycleDomainEvent =
   | { type: SourceIngestionLifecycleEventType.SOURCE_SELECTED; actorId: string }
@@ -27,27 +27,6 @@ interface SourceIngestionLifecycleOrchestratorDependencies {
   machine: SourceIngestionLifecycleMachine;
   envelopeFactory: EnvelopeFactory;
 }
-
-const mapDomainEventToMachineEvent = (
-  domainEvent: SourceIngestionLifecycleDomainEvent,
-): SourceIngestionLifecycleEvent => {
-  if (domainEvent.type === SourceIngestionLifecycleEventType.INGEST_SUCCEEDED) {
-    return {
-      type: SourceIngestionLifecycleEventType.INGEST_SUCCEEDED,
-      eventsAdded: domainEvent.eventsAdded,
-      eventsRemoved: domainEvent.eventsRemoved,
-      nextSyncToken: domainEvent.nextSyncToken,
-    };
-  }
-  if (
-    domainEvent.type === SourceIngestionLifecycleEventType.AUTH_FAILURE
-    || domainEvent.type === SourceIngestionLifecycleEventType.NOT_FOUND
-    || domainEvent.type === SourceIngestionLifecycleEventType.TRANSIENT_FAILURE
-  ) {
-    return { type: domainEvent.type, code: domainEvent.code };
-  }
-  return { type: domainEvent.type };
-};
 
 const mapDomainActor = (domainEvent: SourceIngestionLifecycleDomainEvent): EventActor => ({ type: "worker", id: domainEvent.actorId });
 
@@ -73,7 +52,7 @@ class SourceIngestionLifecycleOrchestrator {
   handleTransition(
     domainEvent: SourceIngestionLifecycleDomainEvent,
   ): SourceIngestionLifecycleTransitionResult {
-    const machineEvent = mapDomainEventToMachineEvent(domainEvent);
+    const machineEvent = mapSourceIngestionLifecycleDomainEvent(domainEvent);
     const actor = mapDomainActor(domainEvent);
     const envelope = this.envelopeFactory.createEnvelope(machineEvent, actor);
     return this.machine.dispatch(envelope);

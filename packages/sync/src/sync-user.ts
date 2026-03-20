@@ -99,6 +99,11 @@ interface CalendarSyncFailure {
   disabled: boolean;
 }
 
+enum DestinationExecutionErrorClassification {
+  RETRYABLE = "retryable",
+  TERMINAL = "terminal",
+}
+
 interface SyncDestination {
   accountId: string;
   calendarId: string;
@@ -148,6 +153,34 @@ interface HandleDispatchConflictInput {
   notifyCalendarFailed: (failure: CalendarSyncFailure) => Promise<void>;
 }
 
+interface BuildCalendarFailureInput {
+  destination: SyncDestination;
+  startedAtMs: number;
+  error: string;
+  retryable: boolean;
+  disabled: boolean;
+}
+
+const buildCalendarFailure = (input: BuildCalendarFailureInput): CalendarSyncFailure => ({
+  provider: input.destination.provider,
+  accountId: input.destination.accountId,
+  calendarId: input.destination.calendarId,
+  userId: input.destination.userId,
+  error: input.error,
+  durationMs: Date.now() - input.startedAtMs,
+  retryable: input.retryable,
+  disabled: input.disabled,
+});
+
+const classifyDestinationExecutionError = (
+  error: unknown,
+): DestinationExecutionErrorClassification => {
+  if (isBackoffEligibleError(error)) {
+    return DestinationExecutionErrorClassification.RETRYABLE;
+  }
+  return DestinationExecutionErrorClassification.TERMINAL;
+};
+
 const handleDispatchConflict = async (
   input: HandleDispatchConflictInput,
 ): Promise<boolean> => {
@@ -155,16 +188,15 @@ const handleDispatchConflict = async (
     return false;
   }
   await input.runtime.releaseIfHeld();
-  await input.notifyCalendarFailed({
-    provider: input.destination.provider,
-    accountId: input.destination.accountId,
-    calendarId: input.destination.calendarId,
-    userId: input.destination.userId,
-    error: input.conflictCode,
-    durationMs: Date.now() - input.startedAtMs,
-    retryable: true,
-    disabled: false,
-  });
+  await input.notifyCalendarFailed(
+    buildCalendarFailure({
+      destination: input.destination,
+      startedAtMs: input.startedAtMs,
+      error: input.conflictCode,
+      retryable: true,
+      disabled: false,
+    }),
+  );
   return true;
 };
 
@@ -360,16 +392,15 @@ const syncDestinationsForUser = async (
           throw new Error("Invariant violated: fatal failure transition missing");
         }
         const failedPolicy = resolveDestinationFailureOutput(failedResult.transition.outputs);
-        await notifyCalendarFailed({
-          provider: destination.provider,
-          accountId: destination.accountId,
-          calendarId: destination.calendarId,
-          userId: destination.userId,
-          error: code,
-          durationMs: Date.now() - calendarSyncStartedAt,
-          retryable: failedPolicy.retryable,
-          disabled: failedPolicy.disabled,
-        });
+        await notifyCalendarFailed(
+          buildCalendarFailure({
+            destination,
+            startedAtMs: calendarSyncStartedAt,
+            error: code,
+            retryable: failedPolicy.retryable,
+            disabled: failedPolicy.disabled,
+          }),
+        );
         continue;
       }
 
@@ -465,22 +496,23 @@ const syncDestinationsForUser = async (
           syncEvents,
         });
     } catch (error) {
-      if (!isBackoffEligibleError(error)) {
+      const errorMessage = getErrorMessage(error);
+      const classification = classifyDestinationExecutionError(error);
+
+      if (classification === DestinationExecutionErrorClassification.TERMINAL) {
         await destinationRuntime.releaseIfHeld();
-        await notifyCalendarFailed({
-          provider: destination.provider,
-          accountId: destination.accountId,
-          calendarId: destination.calendarId,
-          userId: destination.userId,
-          error: getErrorMessage(error),
-          durationMs: Date.now() - calendarSyncStartedAt,
-          retryable: false,
-          disabled: false,
-        });
+        await notifyCalendarFailed(
+          buildCalendarFailure({
+            destination,
+            startedAtMs: calendarSyncStartedAt,
+            error: errorMessage,
+            retryable: false,
+            disabled: false,
+          }),
+        );
         throw error;
       }
 
-      const errorMessage = getErrorMessage(error);
       const failureResult: DestinationExecutionDispatchResult = await destinationRuntime.dispatch({
         code: errorMessage,
         reason: errorMessage,
@@ -499,30 +531,28 @@ const syncDestinationsForUser = async (
         continue;
       }
       if (failureResult.outcome !== "TRANSITION_APPLIED") {
-        await notifyCalendarFailed({
-          provider: destination.provider,
-          accountId: destination.accountId,
-          calendarId: destination.calendarId,
-          userId: destination.userId,
-          error: "machine_conflict_execution_failed",
-          durationMs: Date.now() - calendarSyncStartedAt,
-          retryable: true,
-          disabled: false,
-        });
+        await notifyCalendarFailed(
+          buildCalendarFailure({
+            destination,
+            startedAtMs: calendarSyncStartedAt,
+            error: "machine_conflict_execution_failed",
+            retryable: true,
+            disabled: false,
+          }),
+        );
         continue;
       }
       const failurePolicy = resolveDestinationFailureOutput(failureResult.transition.outputs);
       errors.push(errorMessage);
-      await notifyCalendarFailed({
-        provider: destination.provider,
-        accountId: destination.accountId,
-        calendarId: destination.calendarId,
-        userId: destination.userId,
-        error: errorMessage,
-        durationMs: Date.now() - calendarSyncStartedAt,
-        retryable: failurePolicy.retryable,
-        disabled: failurePolicy.disabled,
-      });
+      await notifyCalendarFailed(
+        buildCalendarFailure({
+          destination,
+          startedAtMs: calendarSyncStartedAt,
+          error: errorMessage,
+          retryable: failurePolicy.retryable,
+          disabled: failurePolicy.disabled,
+        }),
+      );
     }
   }
 
