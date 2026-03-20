@@ -116,6 +116,7 @@ const fetchEventsPage = async (
   const response = await fetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${accessToken}`,
+      Prefer: 'outlook.timezone="UTC"',
     },
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   }).catch((error) => {

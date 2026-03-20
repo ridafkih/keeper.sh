@@ -1,6 +1,6 @@
 import { getEventCount } from "./queries/get-event-count";
 import { getEvent } from "./queries/get-event";
-import { getEventsInRange, normalizeEventRange } from "./queries/get-events-in-range";
+import { getEventsInRange, parseEventRange } from "./queries/get-events-in-range";
 import { getSyncStatuses } from "./queries/get-sync-statuses";
 import { listDestinations } from "./queries/list-destinations";
 import { listMappings } from "./queries/list-mappings";
@@ -43,5 +43,5 @@ const createKeeperApi = (database: KeeperDatabase, options?: KeeperApiOptions): 
   };
 };
 
-export { createKeeperApi, normalizeEventRange };
+export { createKeeperApi, parseEventRange };
 export type { KeeperApiOptions };

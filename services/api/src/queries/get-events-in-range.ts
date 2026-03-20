@@ -4,7 +4,6 @@ import {
   eventStatesTable,
   userEventsTable,
 } from "@keeper.sh/database/schema";
-import { normalizeDateRange } from "@/utils/date-range";
 import { and, arrayContains, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { KeeperDatabase, KeeperEvent, KeeperEventFilters, KeeperEventRangeInput } from "@/types";
@@ -21,15 +20,15 @@ const toRequiredDate = (value: Date | string, label: "from" | "to"): Date => {
   return parsedDate;
 };
 
-const normalizeEventRange = (
+const parseEventRange = (
   range: KeeperEventRangeInput,
 ): {
   start: Date;
   end: Date;
-} => normalizeDateRange(
-  toRequiredDate(range.from, "from"),
-  toRequiredDate(range.to, "to"),
-);
+} => ({
+  start: toRequiredDate(range.from, "from"),
+  end: toRequiredDate(range.to, "to"),
+});
 
 interface SourceInfo {
   name: string;
@@ -81,7 +80,7 @@ const getEventsInRange = async (
   range: KeeperEventRangeInput,
   filters?: KeeperEventFilters,
 ): Promise<KeeperEvent[]> => {
-  const { start, end } = normalizeEventRange(range);
+  const { start, end } = parseEventRange(range);
   const { calendarIds, sourceMap } = await getSourcesForUser(database, userId, filters);
 
   if (calendarIds.length === EMPTY_RESULT_COUNT) {
@@ -170,4 +169,4 @@ const getEventsInRange = async (
   });
 };
 
-export { getEventsInRange, normalizeEventRange };
+export { getEventsInRange, parseEventRange };

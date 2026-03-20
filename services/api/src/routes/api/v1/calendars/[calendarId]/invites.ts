@@ -1,4 +1,4 @@
-import { normalizeDateRange, parseDateRangeParams } from "@/utils/date-range";
+import { parseDateRangeParams } from "@/utils/date-range";
 import { createKeeperApi } from "@/read-models";
 import { withV1Auth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
@@ -18,13 +18,12 @@ const GET = withWideEvent(
 
     const url = new URL(request.url);
     const { from, to } = parseDateRangeParams(url);
-    const { start, end } = normalizeDateRange(from, to);
 
     const invites = await keeperApi.getPendingInvites(
       userId,
       calendarId,
-      start.toISOString(),
-      end.toISOString(),
+      from.toISOString(),
+      to.toISOString(),
     );
 
     return Response.json(invites);
