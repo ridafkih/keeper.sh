@@ -13,7 +13,6 @@ import {
 import { and, arrayContains, eq, isNull, lte, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
-import { computeDestinationBackoff } from "./destination-backoff";
 import { createDestinationExecutionRuntime } from "./destination-execution-runtime";
 import type { DestinationExecutionRuntimeEvent } from "./destination-execution-runtime";
 import { getErrorMessage, isBackoffEligibleError } from "./destination-errors";
@@ -336,22 +335,17 @@ const syncDestinationsForUser = async (
         throw error;
       }
 
-      const { delayMs, shouldDisable } = computeDestinationBackoff(destination.failureCount + 1);
       const errorMessage = getErrorMessage(error);
-      if (shouldDisable) {
-        await destinationRuntime.dispatch({
-          code: "destination-disabled",
-          reason: errorMessage,
-          type: "EXECUTION_FATAL_FAILED",
-        });
-      }
-      if (!shouldDisable) {
-        await destinationRuntime.dispatch({
-          code: "destination-backoff",
-          nextAttemptAt: new Date(Date.now() + delayMs).toISOString(),
-          type: "EXECUTION_RETRYABLE_FAILED",
-        });
-      }
+      const failureTransition = await destinationRuntime.dispatch({
+        code: errorMessage,
+        reason: errorMessage,
+        at: new Date().toISOString(),
+        type: "EXECUTION_FAILED",
+      });
+      const failureOutput = failureTransition.outputs.find(
+        (output) => output.type === "DESTINATION_EXECUTION_FAILED",
+      );
+      const retryable = failureOutput?.retryable ?? false;
       errors.push(errorMessage);
       await notifyCalendarFailed({
         provider: destination.provider,
@@ -360,8 +354,8 @@ const syncDestinationsForUser = async (
         userId: destination.userId,
         error: errorMessage,
         durationMs: Date.now() - calendarSyncStartedAt,
-        retryable: !shouldDisable,
-        disabled: shouldDisable,
+        retryable,
+        disabled: !retryable,
       });
     }
   }

@@ -10,7 +10,7 @@ describe("machine runtime widelog sink", () => {
 
     sink({
       aggregateId: "source-1",
-      duplicate: false,
+      outcome: "APPLIED",
       envelope: {
         event: { type: "SOURCE_SELECTED" },
         id: "env-1",
@@ -25,6 +25,7 @@ describe("machine runtime widelog sink", () => {
 
     expect(writes.get("machine.source_ingestion_lifecycle.processed_total")).toBe(1);
     expect(writes.get("machine.source_ingestion_lifecycle.duplicate_total")).toBe(0);
+    expect(writes.get("machine.source_ingestion_lifecycle.conflict_total")).toBe(0);
     expect(writes.get("machine.source_ingestion_lifecycle.commands_total")).toBe(1);
     expect(writes.get("machine.source_ingestion_lifecycle.outputs_total")).toBe(1);
     expect(writes.get("machine.source_ingestion_lifecycle.last_envelope_id")).toBe("env-1");

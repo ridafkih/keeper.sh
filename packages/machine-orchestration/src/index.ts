@@ -83,12 +83,14 @@ export type { CreateKeeperRuntimeDependencies } from "./create-keeper-runtime";
 export {
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
-  MachineConcurrencyError,
+  MachineConflictDetectedError,
+  isMachineConflictDetectedError,
   MachineRuntimeDriver,
 } from "./machine-runtime-driver";
 export type {
   CommandBus,
   EnvelopeStore,
+  MachineProcessOutcome,
   RuntimeEventSink,
   RuntimeProcessEvent,
   MachineProcessResult,

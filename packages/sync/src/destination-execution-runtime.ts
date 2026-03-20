@@ -1,4 +1,5 @@
 import {
+  MachineConflictDetectedError,
   type RuntimeProcessEvent,
   type RuntimeMachine,
   InMemoryEnvelopeStore,
@@ -160,6 +161,9 @@ const createDestinationExecutionRuntime = (
       occurredAt: new Date().toISOString(),
     };
     const result = await driver.process(envelope);
+    if (result.outcome === "CONFLICT_DETECTED") {
+      throw new MachineConflictDetectedError(input.calendarId, envelope.id);
+    }
     if (!result.transition) {
       throw new Error("Invariant violated: destination execution transition missing");
     }

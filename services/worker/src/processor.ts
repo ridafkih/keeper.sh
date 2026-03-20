@@ -79,12 +79,16 @@ const setJobWideEventFields = (
   job: Job<PushSyncJobPayload, PushSyncJobResult>,
   userId: string,
 ): void => {
+  if (job.id === globalThis.undefined) {
+    throw new Error("Invariant violated: worker job id missing");
+  }
+  const jobId = String(job.id);
   widelog.set("operation.name", "push-sync").sticky();
   widelog.set("operation.type", "job").sticky();
   widelog.set("sync.direction", "push").sticky();
   widelog.set("user.id", userId).sticky();
   widelog.set("user.plan", job.data.plan).sticky();
-  widelog.set("job.id", job.id ?? "").sticky();
+  widelog.set("job.id", jobId).sticky();
   widelog.set("job.name", job.name).sticky();
   widelog.set("correlation.id", job.data.correlationId).sticky();
 };
@@ -96,6 +100,10 @@ const processJob = (
 ): Promise<PushSyncJobResult> =>
   context(async () => {
     const { userId } = job.data;
+    if (job.id === globalThis.undefined) {
+      throw new Error("Invariant violated: worker job id missing");
+    }
+    const jobId = String(job.id);
 
     setJobWideEventFields(job, userId);
     widelog.errors(classifySyncError);
@@ -119,6 +127,7 @@ const processJob = (
         widelog.set("provider.name", input.provider);
         widelog.set("provider.account_id", input.accountId);
         widelog.set("provider.calendar_id", input.calendarId);
+        widelog.set("calendar_sync.id", `${jobId}:${input.calendarId}`);
         widelog.set("sync.events_added", input.added);
         widelog.set("sync.events_removed", input.removed);
         widelog.set("sync.events_failed", input.failed);

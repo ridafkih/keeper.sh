@@ -1,4 +1,5 @@
 import {
+  MachineConflictDetectedError,
   type RuntimeProcessEvent,
   type RuntimeMachine,
   InMemoryEnvelopeStore,
@@ -138,6 +139,9 @@ const createSourceIngestionLifecycleRuntime = (
       occurredAt: new Date().toISOString(),
     };
     const result = await driver.process(envelope);
+    if (result.outcome === "CONFLICT_DETECTED") {
+      throw new MachineConflictDetectedError(input.sourceId, envelope.id);
+    }
     if (!result.transition) {
       throw new Error("Invariant violated: source ingestion transition missing");
     }

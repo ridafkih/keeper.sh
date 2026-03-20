@@ -1,4 +1,5 @@
 import {
+  MachineConflictDetectedError,
   type RuntimeProcessEvent,
   type RuntimeMachine,
   InMemoryEnvelopeStore,
@@ -159,6 +160,9 @@ const createCredentialHealthRuntime = (
     };
 
     const result = await driver.process(envelope);
+    if (result.outcome === "CONFLICT_DETECTED") {
+      throw new MachineConflictDetectedError(input.oauthCredentialId, envelope.id);
+    }
     if (!result.transition) {
       throw new Error("Invariant violated: credential health transition missing");
     }

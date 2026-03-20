@@ -1,5 +1,6 @@
 import {
   type CommandBus,
+  MachineConflictDetectedError,
   type RuntimeProcessEvent,
   type RuntimeMachine,
   InMemoryEnvelopeStore,
@@ -139,7 +140,11 @@ const dispatch = async (
   });
 
   const envelope = buildEnvelope(event, jobId);
-  await driver.process(envelope);
+  const result = await driver.process(envelope);
+  if (result.outcome === "APPLIED" || result.outcome === "DUPLICATE_IGNORED") {
+    return;
+  }
+  throw new MachineConflictDetectedError(userId, envelope.id);
 };
 
 const createPushJobArbitrationRuntime = (

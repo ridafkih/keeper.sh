@@ -4,6 +4,7 @@ import type { EventEnvelope } from "./core/event-envelope";
 import type { TransitionPolicy } from "./core/transition-policy";
 
 const DestinationExecutionEventType = {
+  EXECUTION_FAILED: "EXECUTION_FAILED",
   EXECUTION_FATAL_FAILED: "EXECUTION_FATAL_FAILED",
   EXECUTION_RETRYABLE_FAILED: "EXECUTION_RETRYABLE_FAILED",
   EXECUTION_STARTED: "EXECUTION_STARTED",
@@ -50,6 +51,12 @@ type DestinationExecutionEvent =
     eventsRemoved: number;
   }
   | { type: typeof DestinationExecutionEventType.INVALIDATION_DETECTED; at: string }
+  | {
+    type: typeof DestinationExecutionEventType.EXECUTION_FAILED;
+    code: string;
+    reason: string;
+    at: string;
+  }
   | {
     type: typeof DestinationExecutionEventType.EXECUTION_RETRYABLE_FAILED;
     code: string;
@@ -99,6 +106,9 @@ class DestinationExecutionStateMachine
   >
   implements DestinationExecutionMachine
 {
+  private static readonly BASE_DELAY_MS = 5 * 60 * 1000;
+  private static readonly DISABLE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+
   private readonly invariants: ((snapshot: DestinationExecutionSnapshot) => void)[] = [
     ({ state, context }) => {
       if ((state === "locked" || state === "executing") && !context.lockHolderId) {
@@ -144,6 +154,7 @@ class DestinationExecutionStateMachine
       }
       case DestinationExecutionEventType.EXECUTION_SUCCEEDED:
       case DestinationExecutionEventType.INVALIDATION_DETECTED:
+      case DestinationExecutionEventType.EXECUTION_FAILED:
       case DestinationExecutionEventType.EXECUTION_RETRYABLE_FAILED:
       case DestinationExecutionEventType.EXECUTION_FATAL_FAILED: {
         return this.state === "executing";
@@ -164,6 +175,21 @@ class DestinationExecutionStateMachine
       throw new Error("Invariant violated: missing lock holder for release");
     }
     return holderId;
+  }
+
+  private static toNextAttemptAt(failureCount: number, at: string): string {
+    const parsedAt = Date.parse(at);
+    if (Number.isNaN(parsedAt)) {
+      throw new TypeError("Invariant violated: failed event requires a valid at timestamp");
+    }
+    const uncappedDelayMs = DestinationExecutionStateMachine.BASE_DELAY_MS * (2 ** (failureCount - 1));
+    const delayMs = Math.min(uncappedDelayMs, DestinationExecutionStateMachine.DISABLE_THRESHOLD_MS);
+    return new Date(parsedAt + delayMs).toISOString();
+  }
+
+  private static shouldDisable(failureCount: number): boolean {
+    const uncappedDelayMs = DestinationExecutionStateMachine.BASE_DELAY_MS * (2 ** (failureCount - 1));
+    return uncappedDelayMs >= DestinationExecutionStateMachine.DISABLE_THRESHOLD_MS;
   }
 
   protected transition(event: DestinationExecutionEvent): DestinationExecutionTransitionResult {
@@ -208,6 +234,46 @@ class DestinationExecutionStateMachine
         delete nextContext.lockHolderId;
         this.context = nextContext;
         return this.result([{ type: DestinationExecutionCommandType.RELEASE_LOCK, holderId }]);
+      }
+      case DestinationExecutionEventType.EXECUTION_FAILED: {
+        const holderId = this.requireLockHolderId();
+        const nextFailureCount = this.context.failureCount + 1;
+        if (DestinationExecutionStateMachine.shouldDisable(nextFailureCount)) {
+          this.state = "disabled_terminal";
+          const nextContext = {
+            ...this.context,
+            disableReason: event.reason,
+            failureCount: nextFailureCount,
+            lastErrorCode: event.code,
+          };
+          delete nextContext.lockHolderId;
+          this.context = nextContext;
+          return this.result(
+            [
+              { type: DestinationExecutionCommandType.DISABLE_DESTINATION, reason: event.reason },
+              { type: DestinationExecutionCommandType.RELEASE_LOCK, holderId },
+            ],
+            [{ type: "DESTINATION_EXECUTION_FAILED", code: event.code, retryable: false }],
+          );
+        }
+
+        this.state = "backoff_scheduled";
+        const nextAttemptAt = DestinationExecutionStateMachine.toNextAttemptAt(nextFailureCount, event.at);
+        const nextContext = {
+          ...this.context,
+          backoffUntil: nextAttemptAt,
+          failureCount: nextFailureCount,
+          lastErrorCode: event.code,
+        };
+        delete nextContext.lockHolderId;
+        this.context = nextContext;
+        return this.result(
+          [
+            { type: DestinationExecutionCommandType.APPLY_BACKOFF, nextAttemptAt },
+            { type: DestinationExecutionCommandType.RELEASE_LOCK, holderId },
+          ],
+          [{ type: "DESTINATION_EXECUTION_FAILED", code: event.code, retryable: true }],
+        );
       }
       case DestinationExecutionEventType.EXECUTION_RETRYABLE_FAILED: {
         const holderId = this.requireLockHolderId();

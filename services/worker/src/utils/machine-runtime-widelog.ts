@@ -10,7 +10,7 @@ interface RuntimeTransitionLike {
 
 interface RuntimeProcessEventLike {
   aggregateId: string;
-  duplicate: boolean;
+  outcome: "APPLIED" | "DUPLICATE_IGNORED" | "CONFLICT_DETECTED";
   envelope: RuntimeEnvelopeLike;
   snapshot: { state: string };
   transition?: RuntimeTransitionLike;
@@ -25,19 +25,24 @@ const createMachineRuntimeWidelogSink = (
 ) => {
   let processedTotal = 0;
   let duplicateTotal = 0;
+  let conflictTotal = 0;
   let commandsTotal = 0;
   let outputsTotal = 0;
 
   return (event: RuntimeProcessEventLike): void => {
     processedTotal += 1;
-    if (event.duplicate) {
+    if (event.outcome === "DUPLICATE_IGNORED") {
       duplicateTotal += 1;
+    }
+    if (event.outcome === "CONFLICT_DETECTED") {
+      conflictTotal += 1;
     }
     commandsTotal += event.transition?.commands.length ?? 0;
     outputsTotal += event.transition?.outputs.length ?? 0;
 
     setField(`machine.${machine}.processed_total`, processedTotal);
     setField(`machine.${machine}.duplicate_total`, duplicateTotal);
+    setField(`machine.${machine}.conflict_total`, conflictTotal);
     setField(`machine.${machine}.commands_total`, commandsTotal);
     setField(`machine.${machine}.outputs_total`, outputsTotal);
     setField(`machine.${machine}.last_envelope_id`, event.envelope.id);

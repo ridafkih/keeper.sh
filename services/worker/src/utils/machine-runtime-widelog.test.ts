@@ -10,7 +10,7 @@ describe("machine runtime widelog sink", () => {
 
     sink({
       aggregateId: "cal-1",
-      duplicate: false,
+      outcome: "APPLIED",
       envelope: {
         event: { type: "EXECUTION_STARTED" },
         id: "env-1",
@@ -25,7 +25,7 @@ describe("machine runtime widelog sink", () => {
 
     sink({
       aggregateId: "cal-1",
-      duplicate: true,
+      outcome: "DUPLICATE_IGNORED",
       envelope: {
         event: { type: "EXECUTION_STARTED" },
         id: "env-1",
@@ -36,6 +36,7 @@ describe("machine runtime widelog sink", () => {
 
     expect(writes.get("machine.destination_execution.processed_total")).toBe(2);
     expect(writes.get("machine.destination_execution.duplicate_total")).toBe(1);
+    expect(writes.get("machine.destination_execution.conflict_total")).toBe(0);
     expect(writes.get("machine.destination_execution.commands_total")).toBe(1);
     expect(writes.get("machine.destination_execution.outputs_total")).toBe(1);
     expect(writes.get("machine.destination_execution.last_envelope_id")).toBe("env-1");

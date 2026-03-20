@@ -7,7 +7,7 @@ describe("per-calendar machine field collector", () => {
 
     collector.pushEvent("destination_execution", "cal-a", {
       aggregateId: "cal-a",
-      duplicate: false,
+      outcome: "APPLIED",
       envelope: { id: "a-1", event: { type: "LOCK_ACQUIRED" } },
       snapshot: { state: "locked" },
       transition: {
@@ -18,7 +18,7 @@ describe("per-calendar machine field collector", () => {
     });
     collector.pushEvent("destination_execution", "cal-a", {
       aggregateId: "cal-a",
-      duplicate: false,
+      outcome: "APPLIED",
       envelope: { id: "a-2", event: { type: "EXECUTION_STARTED" } },
       snapshot: { state: "executing" },
       transition: {
@@ -29,7 +29,7 @@ describe("per-calendar machine field collector", () => {
     });
     collector.pushEvent("destination_execution", "cal-b", {
       aggregateId: "cal-b",
-      duplicate: false,
+      outcome: "APPLIED",
       envelope: { id: "b-1", event: { type: "LOCK_ACQUIRED" } },
       snapshot: { state: "locked" },
       transition: {
@@ -51,7 +51,7 @@ describe("per-calendar machine field collector", () => {
 
     collector.pushEvent("credential_health", "cal-z", {
       aggregateId: "oauth-1",
-      duplicate: false,
+      outcome: "APPLIED",
       envelope: { id: "z-1", event: { type: "REFRESH_STARTED" } },
       snapshot: { state: "refreshing" },
       transition: {

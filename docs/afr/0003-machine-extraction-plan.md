@@ -299,3 +299,13 @@ For each target machine:
 - OAuth credential refresh in `packages/sync` now runs through a dedicated `CredentialHealthStateMachine` runtime adapter.
 - Refresh success persists credentials via machine-governed transition flow; terminal auth failures mark `needsReauthentication` via machine command handling.
 - `resolve-provider` coordinated refresh now wraps the machine runtime with existing distributed refresh lock coordination.
+
+## Concurrency Semantics Hardening (2026-03-19)
+- `MachineRuntimeDriver` now models concurrency with explicit runtime outcomes instead of throw-based CAS handling:
+  - `APPLIED`
+  - `DUPLICATE_IGNORED`
+  - `CONFLICT_DETECTED`
+- Runtime event sinks now receive `outcome` and aggregate both `duplicate_total` and `conflict_total`.
+- `MachineRuntimeDriver` now enforces in-process aggregate-level serialization via an internal lock queue, reducing hot contention and eliminating same-process retry storms.
+- Runtime adapters now use single-attempt dispatch; `CONFLICT_DETECTED` is treated as explicit invariant failure for caller handling instead of blind retry loops.
+- Adversarial parallel-dispatch coverage exists at driver level (`machine-runtime-driver.test.ts`) to assert deterministic serialized processing on the same aggregate.

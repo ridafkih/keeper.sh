@@ -36,7 +36,7 @@ describe("DestinationExecutionStateMachine", () => {
 
   it("schedules backoff and releases lock on retryable failure", () => {
     const machine = new DestinationExecutionStateMachine(
-      { calendarId: "cal-2", failureCount: 1 },
+      { calendarId: "cal-2", failureCount: 0 },
       { transitionPolicy: TransitionPolicy.IGNORE },
     );
     machine.dispatch(envelope({ holderId: "holder-2", type: "LOCK_ACQUIRED" }, { type: "worker", id: "w-2" }));
@@ -46,15 +46,16 @@ describe("DestinationExecutionStateMachine", () => {
       envelope(
         {
           code: "rate-limited",
-          nextAttemptAt: "2026-03-19T13:30:00.000Z",
-          type: "EXECUTION_RETRYABLE_FAILED",
+          reason: "provider-rate-limited",
+          at: "2026-03-19T13:25:00.000Z",
+          type: "EXECUTION_FAILED",
         },
         { type: "worker", id: "w-2" },
       ),
     );
 
     expect(transition.state).toBe("backoff_scheduled");
-    expect(transition.context.failureCount).toBe(2);
+    expect(transition.context.failureCount).toBe(1);
     expect(transition.commands).toEqual([
       { nextAttemptAt: "2026-03-19T13:30:00.000Z", type: "APPLY_BACKOFF" },
       { holderId: "holder-2", type: "RELEASE_LOCK" },
@@ -64,7 +65,7 @@ describe("DestinationExecutionStateMachine", () => {
 
   it("disables destination and releases lock on fatal failure", () => {
     const machine = new DestinationExecutionStateMachine(
-      { calendarId: "cal-3", failureCount: 2 },
+      { calendarId: "cal-3", failureCount: 9 },
       { transitionPolicy: TransitionPolicy.IGNORE },
     );
     machine.dispatch(envelope({ holderId: "holder-3", type: "LOCK_ACQUIRED" }, { type: "worker", id: "w-3" }));
@@ -72,7 +73,12 @@ describe("DestinationExecutionStateMachine", () => {
 
     const transition = machine.dispatch(
       envelope(
-        { code: "forbidden", reason: "auth-permanent", type: "EXECUTION_FATAL_FAILED" },
+        {
+          code: "forbidden",
+          reason: "auth-permanent",
+          at: "2026-03-19T13:00:00.000Z",
+          type: "EXECUTION_FAILED",
+        },
         { type: "worker", id: "w-3" },
       ),
     );

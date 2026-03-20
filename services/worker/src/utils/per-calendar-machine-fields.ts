@@ -5,7 +5,7 @@ type MachineFieldValue = string | number;
 
 interface RuntimeProcessEventLike {
   aggregateId: string;
-  duplicate: boolean;
+  outcome: "APPLIED" | "DUPLICATE_IGNORED" | "CONFLICT_DETECTED";
   envelope: { id: string; event: { type: string } };
   snapshot: { state: string };
   transition?: { commands: { type: string }[]; outputs: { type: string }[] };
