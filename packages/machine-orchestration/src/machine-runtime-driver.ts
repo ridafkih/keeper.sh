@@ -120,6 +120,27 @@ class MachineConflictDetectedError extends Error {
   }
 }
 
+class OutboxRecordCorruptedError extends Error {
+  readonly aggregateId: string;
+  readonly envelopeId: string;
+  readonly field: "commands" | "nextCommandIndex";
+
+  constructor(
+    aggregateId: string,
+    envelopeId: string,
+    field: "commands" | "nextCommandIndex",
+    reason: string,
+  ) {
+    super(
+      `Outbox entry corrupted for aggregate ${aggregateId} (envelope ${envelopeId}): ${field} ${reason}`,
+    );
+    this.name = "OutboxRecordCorruptedError";
+    this.aggregateId = aggregateId;
+    this.envelopeId = envelopeId;
+    this.field = field;
+  }
+}
+
 const isMachineConflictDetectedError = (
   error: unknown,
 ): error is MachineConflictDetectedError => {
@@ -479,9 +500,9 @@ class RedisCommandOutboxStore<TCommand> implements RecoverableCommandOutboxStore
   private readonly redis: RedisCommandOutboxStoreClient;
   private readonly keyPrefix: string;
 
-  constructor(input: { redis: RedisCommandOutboxStoreClient; keyPrefix?: string }) {
+  constructor(input: { redis: RedisCommandOutboxStoreClient; keyPrefix: string }) {
     this.redis = input.redis;
-    this.keyPrefix = input.keyPrefix ?? "machine:outbox";
+    this.keyPrefix = input.keyPrefix;
   }
 
   async enqueue(record: OutboxRecord<TCommand>): Promise<void> {
@@ -520,10 +541,36 @@ class RedisCommandOutboxStore<TCommand> implements RecoverableCommandOutboxStore
       return this.readNext(aggregateId);
     }
 
-    const rawCommands = values.commands ?? "[]";
-    const nextCommandIndexRaw = values.nextCommandIndex ?? "0";
+    const rawCommands = values.commands;
+    if (typeof rawCommands !== "string") {
+      throw new OutboxRecordCorruptedError(
+        aggregateId,
+        envelopeId,
+        "commands",
+        "missing commands",
+      );
+    }
+
+    const nextCommandIndexRaw = values.nextCommandIndex;
+    if (typeof nextCommandIndexRaw !== "string") {
+      throw new OutboxRecordCorruptedError(
+        aggregateId,
+        envelopeId,
+        "nextCommandIndex",
+        "missing nextCommandIndex",
+      );
+    }
+
     const commands = JSON.parse(rawCommands) as TCommand[];
-    const nextCommandIndex = Number.parseInt(nextCommandIndexRaw, 10) || 0;
+    const nextCommandIndex = Number.parseInt(nextCommandIndexRaw, 10);
+    if (!Number.isInteger(nextCommandIndex) || nextCommandIndex < 0) {
+      throw new OutboxRecordCorruptedError(
+        aggregateId,
+        envelopeId,
+        "nextCommandIndex",
+        "invalid nextCommandIndex",
+      );
+    }
 
     return {
       aggregateId,
@@ -579,6 +626,7 @@ export {
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
   MachineConflictDetectedError,
+  OutboxRecordCorruptedError,
   RedisCommandOutboxStore,
   isMachineConflictDetectedError,
   MachineRuntimeDriver,

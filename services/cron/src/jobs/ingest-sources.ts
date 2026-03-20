@@ -30,6 +30,11 @@ import {
   createOAuthIngestionResolutionDependencies,
   resolveOAuthIngestionResolution,
 } from "../lib/oauth-ingestion-resolution";
+import {
+  runSourceIngestionUnit,
+  type SourceIngestionFailureDecision,
+  type SourceIngestionLogger,
+} from "../lib/source-ingestion-runner";
 
 const SOURCE_TIMEOUT_MS = 60_000;
 const SOURCE_CONCURRENCY = 5;
@@ -140,51 +145,6 @@ interface IngestionSourceResult {
   ingestEvents: Record<string, unknown>[];
 }
 
-type IngestionFailureEventType = "AUTH_FAILURE" | "NOT_FOUND" | "TRANSIENT_FAILURE";
-
-interface IngestionFailureDecision {
-  eventType: IngestionFailureEventType;
-  code: string;
-  logSlug: string;
-  requiresReauth: boolean;
-  retriable: boolean;
-}
-
-const dispatchEmptyIngestionSuccess = async (input: {
-  sourceRuntime: ReturnType<typeof createSourceIngestionLifecycleRuntime>;
-}): Promise<IngestionSourceResult> => {
-  await input.sourceRuntime.dispatch({ type: "FETCH_SUCCEEDED" });
-  await input.sourceRuntime.dispatch({
-    eventsAdded: 0,
-    eventsRemoved: 0,
-    type: "INGEST_SUCCEEDED",
-  });
-  widelog.set("outcome", "success");
-  widelog.set("sync.events_added", 0);
-  widelog.set("sync.events_removed", 0);
-  return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
-};
-
-const dispatchIngestionSuccess = async (input: {
-  eventsAdded: number;
-  eventsRemoved: number;
-  nextSyncToken?: string;
-  sourceRuntime: ReturnType<typeof createSourceIngestionLifecycleRuntime>;
-}): Promise<void> => {
-  widelog.set("sync.events_added", input.eventsAdded);
-  widelog.set("sync.events_removed", input.eventsRemoved);
-
-  await input.sourceRuntime.dispatch({ type: "FETCH_SUCCEEDED" });
-  await input.sourceRuntime.dispatch({
-    eventsAdded: input.eventsAdded,
-    eventsRemoved: input.eventsRemoved,
-    nextSyncToken: input.nextSyncToken,
-    type: "INGEST_SUCCEEDED",
-  });
-
-  widelog.set("outcome", "success");
-};
-
 const createSourceRuntime = (input: {
   provider: string;
   sourceId: string;
@@ -218,7 +178,7 @@ const classifyIngestionFailure = (
     authFailureSlug?: string;
     isAuthFailure?: (error: unknown) => boolean;
   },
-): IngestionFailureDecision => {
+): SourceIngestionFailureDecision => {
   if (input?.isAuthFailure?.(error)) {
     return {
       eventType: "AUTH_FAILURE",
@@ -247,6 +207,20 @@ const classifyIngestionFailure = (
     retriable: true,
   };
 };
+
+const createSourceIngestionLogger = (): SourceIngestionLogger => ({
+  errorFields: (error, fields) => {
+    widelog.errorFields(error, fields);
+  },
+  flush: () => {
+    widelog.flush();
+  },
+  measureDuration: <TResult>(operation: () => Promise<TResult>) =>
+    widelog.time.measure("duration_ms", operation),
+  set: (field, value) => {
+    widelog.set(field, value as Parameters<typeof widelog.set>[1]);
+  },
+});
 
 const ingestOAuthSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
   const oauthResolutionDependencies = createOAuthIngestionResolutionDependencies(refreshLockRedis);
@@ -280,17 +254,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
   const settlements = await allSettledWithConcurrency(
     oauthSources.map((source) => () =>
       withTimeout((): Promise<IngestionSourceResult> =>
-        context(async () => {
-          widelog.set("operation.name", "ingest-source");
-          widelog.set("operation.type", "job");
-          widelog.set("sync.direction", "ingest");
-          widelog.set("user.id", source.userId);
-          widelog.set("provider.name", source.provider);
-          widelog.set("provider.account_id", source.accountId);
-          widelog.set("provider.calendar_id", source.calendarId);
-          if (source.externalCalendarId) {
-            widelog.set("provider.external_calendar_id", source.externalCalendarId);
-          }
+        context(() => {
           const sourceRuntime = createSourceRuntime({
             provider: source.provider,
             sourceId: source.calendarId,
@@ -314,39 +278,40 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
             },
           });
 
-          try {
-            await sourceRuntime.dispatch({ type: "SOURCE_SELECTED" });
-            await sourceRuntime.dispatch({ type: "FETCHER_RESOLVED" });
+          const logger = createSourceIngestionLogger();
+          return runSourceIngestionUnit({
+            classifyFailure: (error) => classifyIngestionFailure(error, {
+              authFailureSlug: "provider-token-refresh-failed",
+              isAuthFailure: isOAuthAuthFailure,
+            }),
+            executeIngest: async () => {
+              const resolution = resolveOAuthIngestionResolution({
+                accessToken: source.accessToken,
+                externalCalendarId: source.externalCalendarId,
+                oauthConfig: {
+                  googleClientId: env.GOOGLE_CLIENT_ID,
+                  googleClientSecret: env.GOOGLE_CLIENT_SECRET,
+                  microsoftClientId: env.MICROSOFT_CLIENT_ID,
+                  microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
+                },
+                provider: source.provider,
+                syncToken: source.syncToken,
+                userId: source.userId,
+              }, oauthResolutionDependencies);
 
-            const resolution = resolveOAuthIngestionResolution({
-              accessToken: source.accessToken,
-              externalCalendarId: source.externalCalendarId,
-              oauthConfig: {
-                googleClientId: env.GOOGLE_CLIENT_ID,
-                googleClientSecret: env.GOOGLE_CLIENT_SECRET,
-                microsoftClientId: env.MICROSOFT_CLIENT_ID,
-                microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
-              },
-              provider: source.provider,
-              syncToken: source.syncToken,
-              userId: source.userId,
-            }, oauthResolutionDependencies);
+              if (resolution.status !== OAuthIngestionResolutionStatus.RESOLVED) {
+                return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
+              }
 
-            if (resolution.status !== OAuthIngestionResolutionStatus.RESOLVED) {
-              return dispatchEmptyIngestionSuccess({ sourceRuntime });
-            }
+              const tokenState: TokenState = {
+                accessToken: source.accessToken,
+                accessTokenExpiresAt: source.expiresAt,
+                refreshToken: source.refreshToken,
+              };
+              await ensureValidToken(tokenState, resolution.tokenRefresher);
 
-            const tokenState: TokenState = {
-              accessToken: source.accessToken,
-              accessTokenExpiresAt: source.expiresAt,
-              refreshToken: source.refreshToken,
-            };
-
-            await ensureValidToken(tokenState, resolution.tokenRefresher);
-            const ingestEvents: Record<string, unknown>[] = [];
-
-            const result = await widelog.time.measure("duration_ms", () =>
-              ingestSource({
+              const ingestEvents: Record<string, unknown>[] = [];
+              const ingestResult = await ingestSource({
                 calendarId: source.calendarId,
                 fetchEvents: () => resolution.fetcher.fetchEvents(),
                 readExistingEvents: () => readExistingEvents(source.calendarId),
@@ -357,40 +322,23 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
                     "source.provider": source.provider,
                   });
                 },
-              }),
-            );
-
-            await dispatchIngestionSuccess({
-              sourceRuntime,
-              eventsAdded: result.eventsAdded,
-              eventsRemoved: result.eventsRemoved,
-            });
-
-            return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
-          } catch (error) {
-
-            widelog.set("outcome", "error");
-            const failureDecision = classifyIngestionFailure(error, {
-              authFailureSlug: "provider-token-refresh-failed",
-              isAuthFailure: isOAuthAuthFailure,
-            });
-
-            await sourceRuntime.dispatch({
-              code: failureDecision.code,
-              type: failureDecision.eventType,
-            });
-            widelog.errorFields(error, {
-              slug: failureDecision.logSlug,
-              retriable: failureDecision.retriable,
-              requiresReauth: failureDecision.requiresReauth,
-            });
-            if (failureDecision.retriable) {
-              throw error;
-            }
-            return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
-          } finally {
-            widelog.flush();
-          }
+              });
+              return {
+                eventsAdded: ingestResult.eventsAdded,
+                eventsRemoved: ingestResult.eventsRemoved,
+                ingestEvents,
+              };
+            },
+            logger,
+            metadata: {
+              accountId: source.accountId,
+              calendarId: source.calendarId,
+              externalCalendarId: source.externalCalendarId,
+              provider: source.provider,
+              userId: source.userId,
+            },
+            runtime: sourceRuntime,
+          });
         }),
       SOURCE_TIMEOUT_MS),
     ),
@@ -446,14 +394,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
   const settlements = await allSettledWithConcurrency(
     caldavSources.map((source) => () =>
       withTimeout((): Promise<IngestionSourceResult> =>
-        context(async () => {
-          widelog.set("operation.name", "ingest-source");
-          widelog.set("operation.type", "job");
-          widelog.set("sync.direction", "ingest");
-          widelog.set("user.id", source.userId);
-          widelog.set("provider.name", source.provider);
-          widelog.set("provider.account_id", source.accountId);
-          widelog.set("provider.calendar_id", source.calendarId);
+        context(() => {
           const sourceRuntime = createSourceRuntime({
             provider: source.provider,
             sourceId: source.calendarId,
@@ -472,24 +413,24 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
             persistSyncToken: () => Promise.resolve(),
           });
 
-          try {
-            await sourceRuntime.dispatch({ type: "SOURCE_SELECTED" });
-            await sourceRuntime.dispatch({ type: "FETCHER_RESOLVED" });
+          const logger = createSourceIngestionLogger();
+          return runSourceIngestionUnit({
+            classifyFailure: (error) => classifyIngestionFailure(error, {
+              authFailureSlug: "provider-auth-failed",
+              isAuthFailure: isCalDAVAuthenticationError,
+            }),
+            executeIngest: async () => {
+              const password = decryptPassword(source.encryptedPassword, encryptionKey);
+              const fetcher = createCalDAVSourceFetcher({
+                calendarUrl: source.calendarUrl ?? source.serverUrl,
+                password,
+                safeFetchOptions,
+                serverUrl: source.serverUrl,
+                username: source.username,
+              });
 
-            const password = decryptPassword(source.encryptedPassword, encryptionKey);
-
-            const fetcher = createCalDAVSourceFetcher({
-              calendarUrl: source.calendarUrl ?? source.serverUrl,
-              serverUrl: source.serverUrl,
-              username: source.username,
-              password,
-              safeFetchOptions,
-            });
-
-            const ingestEvents: Record<string, unknown>[] = [];
-
-            const result = await widelog.time.measure("duration_ms", () =>
-              ingestSource({
+              const ingestEvents: Record<string, unknown>[] = [];
+              const ingestResult = await ingestSource({
                 calendarId: source.calendarId,
                 fetchEvents: () => fetcher.fetchEvents(),
                 readExistingEvents: () => readExistingEvents(source.calendarId),
@@ -500,40 +441,22 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
                     "source.provider": source.provider,
                   });
                 },
-              }),
-            );
-
-            await dispatchIngestionSuccess({
-              sourceRuntime,
-              eventsAdded: result.eventsAdded,
-              eventsRemoved: result.eventsRemoved,
-            });
-
-            return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
-          } catch (error) {
-
-            widelog.set("outcome", "error");
-            const failureDecision = classifyIngestionFailure(error, {
-              authFailureSlug: "provider-auth-failed",
-              isAuthFailure: isCalDAVAuthenticationError,
-            });
-
-            await sourceRuntime.dispatch({
-              code: failureDecision.code,
-              type: failureDecision.eventType,
-            });
-            widelog.errorFields(error, {
-              slug: failureDecision.logSlug,
-              retriable: failureDecision.retriable,
-              requiresReauth: failureDecision.requiresReauth,
-            });
-            if (failureDecision.retriable) {
-              throw error;
-            }
-            return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
-          } finally {
-            widelog.flush();
-          }
+              });
+              return {
+                eventsAdded: ingestResult.eventsAdded,
+                eventsRemoved: ingestResult.eventsRemoved,
+                ingestEvents,
+              };
+            },
+            logger,
+            metadata: {
+              accountId: source.accountId,
+              calendarId: source.calendarId,
+              provider: source.provider,
+              userId: source.userId,
+            },
+            runtime: sourceRuntime,
+          });
         }),
       SOURCE_TIMEOUT_MS),
     ),
@@ -576,13 +499,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
   const settlements = await allSettledWithConcurrency(
     icsSources.map((source) => () =>
       withTimeout((): Promise<IngestionSourceResult> =>
-        context(async () => {
-          widelog.set("operation.name", "ingest-source");
-          widelog.set("operation.type", "job");
-          widelog.set("sync.direction", "ingest");
-          widelog.set("user.id", source.userId);
-          widelog.set("provider.name", "ical");
-          widelog.set("provider.calendar_id", source.calendarId);
+        context(() => {
           const sourceRuntime = createSourceRuntime({
             provider: "ical",
             sourceId: source.calendarId,
@@ -596,25 +513,23 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
             persistSyncToken: () => Promise.resolve(),
           });
 
-          try {
-            await sourceRuntime.dispatch({ type: "SOURCE_SELECTED" });
-            await sourceRuntime.dispatch({ type: "FETCHER_RESOLVED" });
+          const logger = createSourceIngestionLogger();
+          return runSourceIngestionUnit({
+            classifyFailure: (error) => classifyIngestionFailure(error),
+            executeIngest: async () => {
+              if (!source.url) {
+                return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
+              }
 
-            if (!source.url) {
-              return dispatchEmptyIngestionSuccess({ sourceRuntime });
-            }
+              const fetcher = createIcsSourceFetcher({
+                calendarId: source.calendarId,
+                database,
+                safeFetchOptions,
+                url: source.url,
+              });
 
-            const fetcher = createIcsSourceFetcher({
-              calendarId: source.calendarId,
-              url: source.url,
-              database,
-              safeFetchOptions,
-            });
-
-            const ingestEvents: Record<string, unknown>[] = [];
-
-            const result = await widelog.time.measure("duration_ms", () =>
-              ingestSource({
+              const ingestEvents: Record<string, unknown>[] = [];
+              const ingestResult = await ingestSource({
                 calendarId: source.calendarId,
                 fetchEvents: () => fetcher.fetchEvents(),
                 readExistingEvents: () => readExistingEvents(source.calendarId),
@@ -625,36 +540,21 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
                     "source.provider": "ical",
                   });
                 },
-              }),
-            );
-
-            await dispatchIngestionSuccess({
-              sourceRuntime,
-              eventsAdded: result.eventsAdded,
-              eventsRemoved: result.eventsRemoved,
-            });
-
-            return { eventsAdded: result.eventsAdded, eventsRemoved: result.eventsRemoved, ingestEvents };
-          } catch (error) {
-
-            widelog.set("outcome", "error");
-            const failureDecision = classifyIngestionFailure(error);
-            await sourceRuntime.dispatch({
-              code: failureDecision.code,
-              type: failureDecision.eventType,
-            });
-            widelog.errorFields(error, {
-              slug: failureDecision.logSlug,
-              retriable: failureDecision.retriable,
-              requiresReauth: failureDecision.requiresReauth,
-            });
-            if (failureDecision.retriable) {
-              throw error;
-            }
-            return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
-          } finally {
-            widelog.flush();
-          }
+              });
+              return {
+                eventsAdded: ingestResult.eventsAdded,
+                eventsRemoved: ingestResult.eventsRemoved,
+                ingestEvents,
+              };
+            },
+            logger,
+            metadata: {
+              calendarId: source.calendarId,
+              provider: "ical",
+              userId: source.userId,
+            },
+            runtime: sourceRuntime,
+          });
         }),
       SOURCE_TIMEOUT_MS),
     ),

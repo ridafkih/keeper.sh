@@ -409,6 +409,115 @@ describe("RedisCommandOutboxStore", () => {
     expect(await store.readNext("agg-1")).toBeNull();
     expect(await store.listAggregates()).toEqual([]);
   });
+
+  it("throws when entry is missing required commands field", async () => {
+    const hashes = new Map<string, Record<string, string>>();
+    const lists = new Map<string, string[]>();
+    const sets = new Map<string, Set<string>>();
+    const redis = {
+      del: (_key: string) => Promise.resolve(0),
+      exists: (_key: string) => Promise.resolve(0),
+      hgetall: (key: string) => Promise.resolve(hashes.get(key) ?? {}),
+      hincrby: (_key: string, _field: string, _increment: number) => Promise.resolve(0),
+      hset: (key: string, data: Record<string, string>) => {
+        hashes.set(key, { ...hashes.get(key), ...data });
+        return Promise.resolve(Object.keys(data).length);
+      },
+      lindex: (key: string, index: number) =>
+        Promise.resolve((lists.get(key) ?? [])[index] ?? null),
+      llen: (key: string) => Promise.resolve((lists.get(key) ?? []).length),
+      lpop: (key: string) => {
+        const entries = lists.get(key) ?? [];
+        const value = entries.shift() ?? null;
+        lists.set(key, entries);
+        return Promise.resolve(value);
+      },
+      lrem: (_key: string, _count: number, _value: string) => Promise.resolve(0),
+      rpush: (key: string, value: string) => {
+        const entries = lists.get(key) ?? [];
+        entries.push(value);
+        lists.set(key, entries);
+        return Promise.resolve(entries.length);
+      },
+      sadd: (key: string, value: string) => {
+        const values = sets.get(key) ?? new Set<string>();
+        values.add(value);
+        sets.set(key, values);
+        return Promise.resolve(1);
+      },
+      smembers: (key: string) => Promise.resolve([...(sets.get(key) ?? new Set<string>()).values()]),
+      srem: (_key: string, _value: string) => Promise.resolve(0),
+    };
+
+    const store = new RedisCommandOutboxStore<TestCommand>({
+      keyPrefix: "test:outbox",
+      redis,
+    });
+
+    lists.set("test:outbox:aggregate:agg-corrupt:queue", ["env-corrupt"]);
+    hashes.set("test:outbox:aggregate:agg-corrupt:entry:env-corrupt", {
+      nextCommandIndex: "0",
+    });
+
+    await expect(store.readNext("agg-corrupt")).rejects.toThrow(
+      "missing commands",
+    );
+  });
+
+  it("throws when nextCommandIndex is not numeric", async () => {
+    const hashes = new Map<string, Record<string, string>>();
+    const lists = new Map<string, string[]>();
+    const sets = new Map<string, Set<string>>();
+    const redis = {
+      del: (_key: string) => Promise.resolve(0),
+      exists: (_key: string) => Promise.resolve(0),
+      hgetall: (key: string) => Promise.resolve(hashes.get(key) ?? {}),
+      hincrby: (_key: string, _field: string, _increment: number) => Promise.resolve(0),
+      hset: (key: string, data: Record<string, string>) => {
+        hashes.set(key, { ...hashes.get(key), ...data });
+        return Promise.resolve(Object.keys(data).length);
+      },
+      lindex: (key: string, index: number) =>
+        Promise.resolve((lists.get(key) ?? [])[index] ?? null),
+      llen: (key: string) => Promise.resolve((lists.get(key) ?? []).length),
+      lpop: (key: string) => {
+        const entries = lists.get(key) ?? [];
+        const value = entries.shift() ?? null;
+        lists.set(key, entries);
+        return Promise.resolve(value);
+      },
+      lrem: (_key: string, _count: number, _value: string) => Promise.resolve(0),
+      rpush: (key: string, value: string) => {
+        const entries = lists.get(key) ?? [];
+        entries.push(value);
+        lists.set(key, entries);
+        return Promise.resolve(entries.length);
+      },
+      sadd: (key: string, value: string) => {
+        const values = sets.get(key) ?? new Set<string>();
+        values.add(value);
+        sets.set(key, values);
+        return Promise.resolve(1);
+      },
+      smembers: (key: string) => Promise.resolve([...(sets.get(key) ?? new Set<string>()).values()]),
+      srem: (_key: string, _value: string) => Promise.resolve(0),
+    };
+
+    const store = new RedisCommandOutboxStore<TestCommand>({
+      keyPrefix: "test:outbox",
+      redis,
+    });
+
+    lists.set("test:outbox:aggregate:agg-corrupt:queue", ["env-corrupt"]);
+    hashes.set("test:outbox:aggregate:agg-corrupt:entry:env-corrupt", {
+      commands: JSON.stringify([{ id: "x", type: "DO_WORK" }]),
+      nextCommandIndex: "not-a-number",
+    });
+
+    await expect(store.readNext("agg-corrupt")).rejects.toThrow(
+      "invalid nextCommandIndex",
+    );
+  });
 });
 
 describe("MachineRuntimeDriver outbox drain helpers", () => {
