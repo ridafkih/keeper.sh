@@ -57,8 +57,8 @@ Mode: `clean-break` (no compatibility bridge)
 
 ## Phase D — Concurrency and Recovery Robustness
 
-- [ ] D1. Re-audit per-aggregate serialization guarantees in runtime driver.
-- [ ] D2. Add adversarial parallel dispatch tests for every runtime adapter.
+- [x] D1. Re-audit per-aggregate serialization guarantees in runtime driver.
+- [x] D2. Add adversarial parallel dispatch tests for every runtime adapter.
 - [ ] D3. Add duplicate envelope replay tests per machine aggregate.
 - [ ] D4. Add stale terminal-event tests per machine aggregate.
 - [ ] D5. Add conflict-detected handling tests for all caller policies.

@@ -82,6 +82,15 @@ class RestorableCredentialHealthStateMachine
   }
 }
 
+const buildNoopTransition = (
+  snapshot: MachineSnapshot<CredentialHealthState, CredentialHealthContext>,
+): CredentialHealthTransitionResult => ({
+  commands: [],
+  context: snapshot.context,
+  outputs: [],
+  state: snapshot.state,
+});
+
 const resolveErrorCode = (error: unknown): string => {
   if (error instanceof Error) {
     return error.message.slice(0, 120);
@@ -177,6 +186,9 @@ const createCredentialHealthRuntime = (
     if (result.outcome === "CONFLICT_DETECTED") {
       throw new MachineConflictDetectedError(input.oauthCredentialId, envelope.id);
     }
+    if (result.outcome === "DUPLICATE_IGNORED") {
+      return buildNoopTransition(result.snapshot);
+    }
     if (!result.transition) {
       throw new RuntimeInvariantViolationError({
         aggregateId: input.oauthCredentialId,
@@ -189,7 +201,7 @@ const createCredentialHealthRuntime = (
     return result.transition;
   };
 
-  const refresh = async (refreshToken: string): Promise<OAuthRefreshResult> => {
+  const executeRefresh = async (refreshToken: string): Promise<OAuthRefreshResult> => {
     const expiryTransition = await dispatch({ type: CredentialHealthEventType.TOKEN_EXPIRY_DETECTED });
     const shouldRefresh = expiryTransition.commands.some(
       (command) => command.type === CredentialHealthCommandType.REFRESH_TOKEN,
@@ -228,6 +240,21 @@ const createCredentialHealthRuntime = (
       await dispatch({ code, type: CredentialHealthEventType.REFRESH_RETRYABLE_FAILED });
       throw error;
     }
+  };
+
+  let inFlightRefresh: Promise<OAuthRefreshResult> | null = null;
+
+  const refresh = (refreshToken: string): Promise<OAuthRefreshResult> => {
+    if (inFlightRefresh) {
+      return inFlightRefresh;
+    }
+    const nextRefresh = executeRefresh(refreshToken).finally(() => {
+      if (inFlightRefresh === nextRefresh) {
+        inFlightRefresh = null;
+      }
+    });
+    inFlightRefresh = nextRefresh;
+    return nextRefresh;
   };
 
   const getSnapshot = async (): Promise<MachineSnapshot<CredentialHealthState, CredentialHealthContext>> => {

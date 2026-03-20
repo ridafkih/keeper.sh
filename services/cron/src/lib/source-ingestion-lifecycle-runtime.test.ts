@@ -146,4 +146,47 @@ describe("source ingestion lifecycle runtime", () => {
       surface: "source-ingestion-lifecycle-runtime",
     });
   });
+
+  it("ignores duplicate replayed events without side effects", async () => {
+    const persistedTokens: string[] = [];
+    const runtime = createSourceIngestionLifecycleRuntime({
+      createEnvelope: (event) => ({
+        actor: { id: "test-cron-ingest", type: "system" },
+        event,
+        id: `src-dup:${event.type}`,
+        occurredAt: "2026-03-20T00:00:00.000Z",
+      }),
+      handlers: {
+        disableSource: () => Promise.resolve(),
+        markNeedsReauth: () => Promise.resolve(),
+        persistSyncToken: (token) => {
+          persistedTokens.push(token);
+          return Promise.resolve();
+        },
+      },
+      outboxStore: new InMemoryCommandOutboxStore<SourceIngestionLifecycleCommand>(),
+      onRuntimeEvent: () => Promise.resolve(),
+      provider: "google",
+      sourceId: "src-dup",
+    });
+
+    await runtime.dispatch({ type: SourceIngestionLifecycleEventType.SOURCE_SELECTED });
+    await runtime.dispatch({ type: SourceIngestionLifecycleEventType.SOURCE_SELECTED });
+    await runtime.dispatch({ type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED });
+    await runtime.dispatch({ type: SourceIngestionLifecycleEventType.FETCH_SUCCEEDED });
+    await runtime.dispatch({
+      eventsAdded: 1,
+      eventsRemoved: 0,
+      nextSyncToken: "dup-token",
+      type: SourceIngestionLifecycleEventType.INGEST_SUCCEEDED,
+    });
+    await runtime.dispatch({
+      eventsAdded: 1,
+      eventsRemoved: 0,
+      nextSyncToken: "dup-token",
+      type: SourceIngestionLifecycleEventType.INGEST_SUCCEEDED,
+    });
+
+    expect(persistedTokens).toEqual(["dup-token"]);
+  });
 });

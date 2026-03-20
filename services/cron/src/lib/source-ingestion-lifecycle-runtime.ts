@@ -73,6 +73,15 @@ class RestorableSourceIngestionLifecycleStateMachine
   }
 }
 
+const buildNoopTransition = (
+  snapshot: MachineSnapshot<SourceIngestionLifecycleState, SourceIngestionLifecycleContext>,
+): SourceIngestionLifecycleTransitionResult => ({
+  commands: [],
+  context: snapshot.context,
+  outputs: [],
+  state: snapshot.state,
+});
+
 const createSourceIngestionLifecycleRuntime = (
   input: SourceIngestionLifecycleRuntimeInput,
 ): SourceIngestionLifecycleRuntime => {
@@ -159,6 +168,9 @@ const createSourceIngestionLifecycleRuntime = (
     const result = await driver.process(envelope);
     if (result.outcome === "CONFLICT_DETECTED") {
       throw new MachineConflictDetectedError(input.sourceId, envelope.id);
+    }
+    if (result.outcome === "DUPLICATE_IGNORED") {
+      return buildNoopTransition(result.snapshot);
     }
     if (!result.transition) {
       throw new RuntimeInvariantViolationError({

@@ -165,4 +165,39 @@ describe("credential health runtime", () => {
       surface: "credential-health-runtime",
     });
   });
+
+  it("coalesces adversarial parallel refresh calls into one refresh operation", async () => {
+    let refreshCalls = 0;
+    const runtime = createCredentialHealthRuntime({
+      accessTokenExpiresAt: new Date("2026-03-19T20:00:00.000Z"),
+      calendarAccountId: "acc-parallel",
+      createEnvelope: createEnvelopeFactory("cred-parallel"),
+      isReauthRequiredError: () => false,
+      markNeedsReauthentication: () => Promise.resolve(),
+      oauthCredentialId: "cred-parallel",
+      outboxStore: new InMemoryCommandOutboxStore<CredentialHealthCommand>(),
+      persistRefreshedCredentials: () => Promise.resolve(),
+      refreshAccessToken: async () => {
+        refreshCalls += 1;
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 20);
+        });
+        return {
+          access_token: "next-access",
+          expires_in: 3600,
+          refresh_token: "next-refresh",
+        };
+      },
+      onRuntimeEvent: () => Promise.resolve(),
+    });
+
+    const [first, second] = await Promise.all([
+      runtime.refresh("old-refresh"),
+      runtime.refresh("old-refresh"),
+    ]);
+
+    expect(first.access_token).toBe("next-access");
+    expect(second.access_token).toBe("next-access");
+    expect(refreshCalls).toBe(1);
+  });
 });

@@ -235,4 +235,57 @@ describe("destination execution runtime", () => {
       surface: "destination-execution-runtime",
     });
   });
+
+  it("handles adversarial parallel terminal dispatch without duplicate side effects", async () => {
+    const released: string[] = [];
+    const emitted: string[] = [];
+    const runtime = createDestinationExecutionRuntime({
+      calendarId: "cal-parallel",
+      createEnvelope: (event) => ({
+        actor: { id: "test-sync-runtime", type: "system" },
+        event,
+        id: `cal-parallel:${event.type}`,
+        occurredAt: "2026-03-20T00:00:00.000Z",
+      }),
+      failureCount: 0,
+      handlers: {
+        applyBackoff: () => Promise.resolve(),
+        disableDestination: () => Promise.resolve(),
+        emitSyncEvent: (eventsAdded, eventsRemoved) => {
+          emitted.push(`${eventsAdded}:${eventsRemoved}`);
+          return Promise.resolve();
+        },
+        releaseLock: (holderId) => {
+          released.push(holderId);
+          return Promise.resolve();
+        },
+      },
+      outboxStore: new InMemoryCommandOutboxStore<DestinationExecutionCommand>(),
+      onRuntimeEvent: () => Promise.resolve(),
+    });
+
+    await runtime.dispatch({ holderId: "holder-parallel", type: "LOCK_ACQUIRED" });
+    await runtime.dispatch({ type: "EXECUTION_STARTED" });
+
+    const [first, second] = await Promise.all([
+      runtime.dispatch({
+        eventsAdded: 2,
+        eventsRemoved: 1,
+        type: "EXECUTION_SUCCEEDED",
+      }),
+      runtime.dispatch({
+        eventsAdded: 2,
+        eventsRemoved: 1,
+        type: "EXECUTION_SUCCEEDED",
+      }),
+    ]);
+
+    const outcomes = [first.outcome, second.outcome];
+    expect(outcomes).toContain("TRANSITION_APPLIED");
+    expect(
+      outcomes.includes("DUPLICATE_IGNORED") || outcomes.includes("CONFLICT_DETECTED"),
+    ).toBe(true);
+    expect(released).toEqual(["holder-parallel"]);
+    expect(emitted).toEqual(["2:1"]);
+  });
 });
