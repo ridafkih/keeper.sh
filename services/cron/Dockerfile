@@ -19,7 +19,6 @@ FROM base AS runtime
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile --production
 COPY --from=build /app/services/cron/dist ./services/cron/dist
-COPY --from=source /app/packages/log-transport ./packages/log-transport
 COPY --from=source /app/services/cron/entrypoint.sh ./services/cron/entrypoint.sh
 RUN chmod +x ./services/cron/entrypoint.sh
 

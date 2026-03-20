@@ -1,4 +1,0 @@
-{
-  "extends": "@keeper.sh/typescript-config/tsconfig.json",
-  "include": ["src"]
-}

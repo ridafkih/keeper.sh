@@ -2,8 +2,4 @@
 exec 2>&1
 
 cd /app
-if [ -n "$OTEL_EXPORTER_OTLP_ENDPOINT" ]; then
-  exec /root/.bun/bin/bun run services/api/dist/index.js | /root/.bun/bin/bun packages/log-transport/src/index.ts
-else
-  exec /root/.bun/bin/bun run services/api/dist/index.js
-fi
+exec /root/.bun/bin/bun run services/api/dist/index.js

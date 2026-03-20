@@ -54,7 +54,6 @@ RUN bun install --frozen-lockfile --production
 COPY --from=build /app/services/api/dist ./services/api/dist
 COPY --from=build /app/services/cron/dist ./services/cron/dist
 COPY --from=build /app/services/worker/dist ./services/worker/dist
-COPY --from=source /app/packages/log-transport ./packages/log-transport
 COPY --from=build /app/packages/database/src ./packages/database/src
 COPY --from=source /app/packages/database/scripts ./packages/database/scripts
 COPY --from=source /app/packages/database/drizzle ./packages/database/drizzle

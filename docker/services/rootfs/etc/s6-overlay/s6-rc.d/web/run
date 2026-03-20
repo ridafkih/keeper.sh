@@ -4,8 +4,4 @@ exec 2>&1
 cd /app/applications/web
 export HOSTNAME=0.0.0.0
 export PORT=3000
-if [ -n "$OTEL_EXPORTER_OTLP_ENDPOINT" ]; then
-  exec /root/.bun/bin/bun dist/server-entry/index.js | /root/.bun/bin/bun ../../packages/log-transport/src/index.ts
-else
-  exec /root/.bun/bin/bun dist/server-entry/index.js
-fi
+exec /root/.bun/bin/bun dist/server-entry/index.js
