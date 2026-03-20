@@ -1,6 +1,6 @@
 import {
   type CommandBus,
-  InMemoryCommandOutboxStore,
+  type RecoverableCommandOutboxStore,
   MachineConflictDetectedError,
   type RuntimeProcessEvent,
   type RuntimeMachine,
@@ -34,6 +34,7 @@ interface SyncingAggregatePort {
 }
 
 interface PushJobArbitrationRuntimeDependencies {
+  outboxStore: RecoverableCommandOutboxStore<PushJobArbitrationCommand>;
   worker: WorkerQueueControlPort;
   syncing: SyncingAggregatePort;
   onRuntimeEvent: (
@@ -51,6 +52,7 @@ interface PushJobArbitrationRuntime {
   onJobActive: (input: { userId: string; jobId: string }) => Promise<void>;
   onJobCompleted: (input: { userId: string; jobId: string }) => Promise<void>;
   onJobFailed: (input: { userId: string; jobId: string }) => Promise<void>;
+  recoverPending: () => Promise<void>;
 }
 
 const SUPERSEDED_REASON = "superseded by newer sync";
@@ -76,7 +78,6 @@ const snapshotStore = new InMemorySnapshotStore<
   PushJobArbitrationContext
 >();
 const envelopeStore = new InMemoryEnvelopeStore();
-const outboxStore = new InMemoryCommandOutboxStore<PushJobArbitrationCommand>();
 
 const buildEnvelope = (
   event: PushJobArbitrationEvent,
@@ -134,7 +135,7 @@ const dispatch = async (
     aggregateId: userId,
     commandBus: createCommandBus(dependencies, userId),
     envelopeStore,
-    outboxStore,
+    outboxStore: dependencies.outboxStore,
     eventSink: {
       onProcessed: (processedEvent) => dependencies.onRuntimeEvent(processedEvent),
     },
@@ -149,6 +150,34 @@ const dispatch = async (
     return;
   }
   throw new MachineConflictDetectedError(userId, envelope.id);
+};
+
+const drainPendingForUser = async (
+  dependencies: PushJobArbitrationRuntimeDependencies,
+  userId: string,
+): Promise<void> => {
+  const machine = new RestorablePushJobArbitrationStateMachine({
+    transitionPolicy: TransitionPolicy.IGNORE,
+  });
+  const driver = new MachineRuntimeDriver<
+    PushJobArbitrationState,
+    PushJobArbitrationContext,
+    PushJobArbitrationEvent,
+    PushJobArbitrationCommand,
+    PushJobArbitrationOutput
+  >({
+    aggregateId: userId,
+    commandBus: createCommandBus(dependencies, userId),
+    envelopeStore,
+    outboxStore: dependencies.outboxStore,
+    eventSink: {
+      onProcessed: (processedEvent) => dependencies.onRuntimeEvent(processedEvent),
+    },
+    machine,
+    snapshotStore,
+  });
+  await snapshotStore.initializeIfMissing(userId, { context: {}, state: "idle" });
+  await driver.drainOutbox();
 };
 
 const createPushJobArbitrationRuntime = (
@@ -177,6 +206,12 @@ const createPushJobArbitrationRuntime = (
     onJobFailed: ({ jobId, userId }) =>
       enqueueForUser(userId, () =>
         dispatch(dependencies, userId, jobId, { jobId, type: PushJobArbitrationEventType.JOB_FAILED })),
+    recoverPending: async () => {
+      const userIds = await dependencies.outboxStore.listAggregates();
+      for (const userId of userIds) {
+        await enqueueForUser(userId, () => drainPendingForUser(dependencies, userId));
+      }
+    },
   };
 };
 

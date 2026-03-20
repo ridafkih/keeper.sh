@@ -1,4 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import { InMemoryCommandOutboxStore } from "@keeper.sh/machine-orchestration";
+import {
+  PushJobArbitrationCommandType,
+  type PushJobArbitrationCommand,
+} from "@keeper.sh/state-machines";
 import {
   SUPERSEDED_REASON,
   createPushJobArbitrationRuntime,
@@ -10,6 +15,7 @@ describe("push job arbitration runtime", () => {
     const held: string[] = [];
     const released: string[] = [];
     const runtime = createPushJobArbitrationRuntime({
+      outboxStore: new InMemoryCommandOutboxStore<PushJobArbitrationCommand>(),
       onRuntimeEvent: () => Promise.resolve(),
       syncing: {
         holdSyncing: (userId) => {
@@ -42,6 +48,7 @@ describe("push job arbitration runtime", () => {
   it("deduplicates replayed active event by envelope id", async () => {
     const held: string[] = [];
     const runtime = createPushJobArbitrationRuntime({
+      outboxStore: new InMemoryCommandOutboxStore<PushJobArbitrationCommand>(),
       onRuntimeEvent: () => Promise.resolve(),
       syncing: {
         holdSyncing: (userId) => {
@@ -66,6 +73,7 @@ describe("push job arbitration runtime", () => {
     const held: string[] = [];
     const released: string[] = [];
     const runtime = createPushJobArbitrationRuntime({
+      outboxStore: new InMemoryCommandOutboxStore<PushJobArbitrationCommand>(),
       onRuntimeEvent: () => Promise.resolve(),
       syncing: {
         holdSyncing: (userId) => {
@@ -97,5 +105,36 @@ describe("push job arbitration runtime", () => {
     expect(cancelled).toEqual([{ jobId: "job-1", reason: SUPERSEDED_REASON }]);
     expect(held).toEqual(["user-3", "user-3"]);
     expect(released).toEqual(["user-3"]);
+  });
+
+  it("recovers and drains pending outbox commands", async () => {
+    const held: string[] = [];
+    const outboxStore = new InMemoryCommandOutboxStore<PushJobArbitrationCommand>();
+    await outboxStore.enqueue({
+      aggregateId: "user-4",
+      commands: [{ type: PushJobArbitrationCommandType.HOLD_SYNCING }],
+      envelopeId: "recover-env-1",
+      nextCommandIndex: 0,
+    });
+
+    const runtime = createPushJobArbitrationRuntime({
+      outboxStore,
+      onRuntimeEvent: () => Promise.resolve(),
+      syncing: {
+        holdSyncing: (userId) => {
+          held.push(userId);
+          return Promise.resolve();
+        },
+        releaseSyncing: () => Promise.resolve(),
+      },
+      worker: {
+        cancelJob: () => Promise.resolve(),
+      },
+    });
+
+    await runtime.recoverPending();
+
+    expect(held).toEqual(["user-4"]);
+    expect(await outboxStore.listAggregates()).toEqual([]);
   });
 });

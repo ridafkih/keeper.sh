@@ -3,6 +3,7 @@ import { Worker } from "bullmq";
 import { PUSH_SYNC_QUEUE_NAME } from "@keeper.sh/queue";
 import type { PushSyncJobPayload, PushSyncJobResult } from "@keeper.sh/queue";
 import { closeDatabase } from "@keeper.sh/database";
+import { RedisCommandOutboxStore } from "@keeper.sh/machine-orchestration";
 import { processJob } from "./processor";
 import { destroy } from "./utils/logging";
 import env from "./env";
@@ -12,6 +13,7 @@ const DEFAULT_CONCURRENCY = 5;
 const LOCK_DURATION_MS = 360_000;
 const STALLED_INTERVAL_MS = 30_000;
 const MAX_STALLED_COUNT = 1;
+const RECOVERY_INTERVAL_MS = 10_000;
 
 const parseConcurrency = (value: string | undefined): number => {
   if (!value) {
@@ -41,7 +43,7 @@ const toWorkerError = (error: unknown): Error => {
 
 await entry({
   main: async () => {
-    const { database, shutdownConnections } = await import("./context");
+    const { database, refreshLockRedis, shutdownConnections } = await import("./context");
     const concurrency = parseConcurrency(env.WORKER_CONCURRENCY);
 
     const { syncAggregateRuntime } = await import("./processor");
@@ -62,6 +64,10 @@ await entry({
     );
 
     const pushArbitrationRuntime = createPushJobArbitrationRuntime({
+      outboxStore: new RedisCommandOutboxStore({
+        keyPrefix: "machine:outbox:push-arbitration",
+        redis: refreshLockRedis,
+      }),
       onRuntimeEvent: () => Promise.resolve(),
       syncing: {
         holdSyncing: (userId) => syncAggregateRuntime.holdSyncing(userId),
@@ -71,6 +77,12 @@ await entry({
         cancelJob: (jobId, reason) => worker.cancelJob(jobId, reason),
       },
     });
+    await pushArbitrationRuntime.recoverPending();
+    const recoveryInterval = setInterval(() => {
+      pushArbitrationRuntime.recoverPending().catch((error) => {
+        worker.emit("error", toWorkerError(error));
+      });
+    }, RECOVERY_INTERVAL_MS);
 
     worker.on("active", (job) => {
       const jobId = requireJobId(job);
@@ -111,6 +123,7 @@ await entry({
     });
 
     return async () => {
+      clearInterval(recoveryInterval);
       await worker.close();
       shutdownConnections();
       closeDatabase(database);

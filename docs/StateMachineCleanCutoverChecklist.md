@@ -19,6 +19,8 @@ This checklist is for a single cutover where the new machine-orchestrated backen
 
 - [ ] `MachineRuntimeDriver` + runtime adapters are the only transition authority.
 - [ ] Runtime command dispatch is outbox-first (`process` enqueues, `drainOutbox` executes).
+- [ ] Durable outbox backend is configured for machine command persistence.
+- [ ] Recovery worker drains pending outbox aggregates on startup and interval.
 - [ ] Application services do orchestration and IO only, not transition logic.
 - [ ] Repeated conditional flows (retry/backoff/disable) are encoded as machine events/transitions.
 - [ ] Invariant failures are fail-fast and observable (no silent fallbacks).

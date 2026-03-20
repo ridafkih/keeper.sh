@@ -85,6 +85,7 @@ export {
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
   MachineConflictDetectedError,
+  RedisCommandOutboxStore,
   isMachineConflictDetectedError,
   MachineRuntimeDriver,
 } from "./machine-runtime-driver";
@@ -93,6 +94,8 @@ export type {
   CommandOutboxStore,
   EnvelopeStore,
   OutboxRecord,
+  RecoverableCommandOutboxStore,
+  RedisCommandOutboxStoreClient,
   MachineProcessOutcome,
   RuntimeEventSink,
   RuntimeProcessEvent,

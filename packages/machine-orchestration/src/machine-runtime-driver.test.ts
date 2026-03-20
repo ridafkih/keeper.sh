@@ -10,6 +10,7 @@ import {
   InMemorySnapshotStore,
   MachineConflictDetectedError,
   MachineRuntimeDriver,
+  RedisCommandOutboxStore,
   isMachineConflictDetectedError,
 } from "./machine-runtime-driver";
 import type { RuntimeProcessEvent } from "./machine-runtime-driver";
@@ -313,5 +314,94 @@ describe("MachineRuntimeDriver", () => {
     await driverA.drainOutbox();
     const remaining = await outboxStore.readNext("aggregate-5");
     expect(remaining).toBeNull();
+  });
+});
+
+describe("RedisCommandOutboxStore", () => {
+  it("persists records and supports resumable drain state", async () => {
+    const strings = new Map<string, string>();
+    const hashes = new Map<string, Record<string, string>>();
+    const lists = new Map<string, string[]>();
+    const sets = new Map<string, Set<string>>();
+    const redis = {
+      del: (key: string) => {
+        const hadHash = hashes.delete(key);
+        const hadString = strings.delete(key);
+        return Promise.resolve(Number(hadHash || hadString));
+      },
+      exists: (key: string) => Promise.resolve(Number(hashes.has(key) || strings.has(key))),
+      hgetall: (key: string) => Promise.resolve(hashes.get(key) ?? {}),
+      hincrby: (key: string, field: string, increment: number) => {
+        const current = hashes.get(key) ?? {};
+        const value = Number.parseInt(current[field] ?? "0", 10) + increment;
+        current[field] = String(value);
+        hashes.set(key, current);
+        return Promise.resolve(value);
+      },
+      hset: (key: string, data: Record<string, string>) => {
+        hashes.set(key, { ...hashes.get(key), ...data });
+        return Promise.resolve(Object.keys(data).length);
+      },
+      lindex: (key: string, index: number) =>
+        Promise.resolve((lists.get(key) ?? [])[index] ?? null),
+      llen: (key: string) => Promise.resolve((lists.get(key) ?? []).length),
+      lpop: (key: string) => {
+        const entries = lists.get(key) ?? [];
+        const value = entries.shift() ?? null;
+        lists.set(key, entries);
+        return Promise.resolve(value);
+      },
+      lrem: (key: string, _count: number, value: string) => {
+        const entries = lists.get(key) ?? [];
+        const nextEntries = entries.filter((entry) => entry !== value);
+        lists.set(key, nextEntries);
+        return Promise.resolve(entries.length - nextEntries.length);
+      },
+      rpush: (key: string, value: string) => {
+        const entries = lists.get(key) ?? [];
+        entries.push(value);
+        lists.set(key, entries);
+        return Promise.resolve(entries.length);
+      },
+      sadd: (key: string, value: string) => {
+        const values = sets.get(key) ?? new Set<string>();
+        const { size } = values;
+        values.add(value);
+        sets.set(key, values);
+        return Promise.resolve(Number(values.size !== size));
+      },
+      smembers: (key: string) => Promise.resolve([...(sets.get(key) ?? new Set<string>()).values()]),
+      srem: (key: string, value: string) => {
+        const values = sets.get(key) ?? new Set<string>();
+        const deleted = values.delete(value);
+        sets.set(key, values);
+        return Promise.resolve(Number(deleted));
+      },
+    };
+
+    const store = new RedisCommandOutboxStore<TestCommand>({
+      keyPrefix: "test:outbox",
+      redis,
+    });
+
+    await store.enqueue({
+      aggregateId: "agg-1",
+      commands: [{ id: "x", type: "DO_WORK" }],
+      envelopeId: "env-1",
+      nextCommandIndex: 0,
+    });
+
+    const first = await store.readNext("agg-1");
+    expect(first?.envelopeId).toBe("env-1");
+    expect(first?.nextCommandIndex).toBe(0);
+    expect(await store.listAggregates()).toEqual(["agg-1"]);
+
+    await store.advanceNextCommand("agg-1", "env-1");
+    const second = await store.readNext("agg-1");
+    expect(second?.nextCommandIndex).toBe(1);
+
+    await store.complete("agg-1", "env-1");
+    expect(await store.readNext("agg-1")).toBeNull();
+    expect(await store.listAggregates()).toEqual([]);
   });
 });

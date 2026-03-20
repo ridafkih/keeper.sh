@@ -311,4 +311,6 @@ For each target machine:
 - Driver execution is now outbox-first:
   - `process()` persists snapshot transition and enqueues commands to outbox.
   - `drainOutbox()` executes queued commands with per-command progress tracking (`nextCommandIndex`) for resumable dispatch after partial command failure.
+- Durable outbox backend is now available via `RedisCommandOutboxStore` (aggregate queue + per-envelope entry schema).
+- Worker push arbitration now uses Redis outbox and runs startup/interval recovery (`recoverPending`) to drain orphaned command queues after restarts.
 - Adversarial parallel-dispatch coverage exists at driver level (`machine-runtime-driver.test.ts`) to assert deterministic serialized processing on the same aggregate.

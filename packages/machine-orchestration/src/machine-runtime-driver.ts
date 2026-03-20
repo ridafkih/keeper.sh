@@ -41,6 +41,26 @@ interface CommandOutboxStore<TCommand> {
   readNext: (aggregateId: string) => Promise<OutboxRecord<TCommand> | null>;
 }
 
+interface RecoverableCommandOutboxStore<TCommand> extends CommandOutboxStore<TCommand> {
+  listAggregates: () => Promise<string[]>;
+}
+
+interface RedisCommandOutboxStoreClient {
+  del: (key: string) => Promise<number>;
+  exists: (key: string) => Promise<number>;
+  hgetall: (key: string) => Promise<Record<string, string>>;
+  hincrby: (key: string, field: string, increment: number) => Promise<number>;
+  hset: (key: string, data: Record<string, string>) => Promise<number>;
+  lindex: (key: string, index: number) => Promise<string | null>;
+  llen: (key: string) => Promise<number>;
+  lpop: (key: string) => Promise<string | null>;
+  lrem: (key: string, count: number, value: string) => Promise<number>;
+  rpush: (key: string, value: string) => Promise<number>;
+  sadd: (key: string, value: string) => Promise<number>;
+  smembers: (key: string) => Promise<string[]>;
+  srem: (key: string, value: string) => Promise<number>;
+}
+
 interface RuntimeProcessEvent<TState, TContext, TEvent, TCommand, TOutput> {
   aggregateId: string;
   outcome: MachineProcessOutcome;
@@ -360,7 +380,7 @@ class InMemoryEnvelopeStore implements EnvelopeStore {
   }
 }
 
-class InMemoryCommandOutboxStore<TCommand> implements CommandOutboxStore<TCommand> {
+class InMemoryCommandOutboxStore<TCommand> implements RecoverableCommandOutboxStore<TCommand> {
   private readonly recordsByAggregate = new Map<string, OutboxRecord<TCommand>[]>();
 
   enqueue(record: OutboxRecord<TCommand>): Promise<void> {
@@ -423,6 +443,109 @@ class InMemoryCommandOutboxStore<TCommand> implements CommandOutboxStore<TComman
     this.recordsByAggregate.set(aggregateId, records);
     return Promise.resolve();
   }
+
+  listAggregates(): Promise<string[]> {
+    return Promise.resolve([...this.recordsByAggregate.keys()]);
+  }
+}
+
+class RedisCommandOutboxStore<TCommand> implements RecoverableCommandOutboxStore<TCommand> {
+  private readonly redis: RedisCommandOutboxStoreClient;
+  private readonly keyPrefix: string;
+
+  constructor(input: { redis: RedisCommandOutboxStoreClient; keyPrefix?: string }) {
+    this.redis = input.redis;
+    this.keyPrefix = input.keyPrefix ?? "machine:outbox";
+  }
+
+  async enqueue(record: OutboxRecord<TCommand>): Promise<void> {
+    if (record.commands.length === 0) {
+      return;
+    }
+
+    const entryKey = this.resolveEntryKey(record.aggregateId, record.envelopeId);
+    const exists = await this.redis.exists(entryKey);
+    if (exists > 0) {
+      return;
+    }
+
+    await this.redis.hset(entryKey, {
+      commands: JSON.stringify(record.commands),
+      nextCommandIndex: String(record.nextCommandIndex),
+    });
+    await this.redis.rpush(this.resolveQueueKey(record.aggregateId), record.envelopeId);
+    await this.redis.sadd(this.resolveAggregatesKey(), record.aggregateId);
+  }
+
+  async readNext(aggregateId: string): Promise<OutboxRecord<TCommand> | null> {
+    const queueKey = this.resolveQueueKey(aggregateId);
+    const envelopeId = await this.redis.lindex(queueKey, 0);
+    if (!envelopeId) {
+      return null;
+    }
+
+    const entryKey = this.resolveEntryKey(aggregateId, envelopeId);
+    const values = await this.redis.hgetall(entryKey);
+    if (Object.keys(values).length === 0) {
+      await this.redis.lpop(queueKey);
+      if ((await this.redis.llen(queueKey)) === 0) {
+        await this.redis.srem(this.resolveAggregatesKey(), aggregateId);
+      }
+      return this.readNext(aggregateId);
+    }
+
+    const rawCommands = values.commands ?? "[]";
+    const nextCommandIndexRaw = values.nextCommandIndex ?? "0";
+    const commands = JSON.parse(rawCommands) as TCommand[];
+    const nextCommandIndex = Number.parseInt(nextCommandIndexRaw, 10) || 0;
+
+    return {
+      aggregateId,
+      commands,
+      envelopeId,
+      nextCommandIndex,
+    };
+  }
+
+  async advanceNextCommand(aggregateId: string, envelopeId: string): Promise<void> {
+    await this.redis.hincrby(
+      this.resolveEntryKey(aggregateId, envelopeId),
+      "nextCommandIndex",
+      1,
+    );
+  }
+
+  async complete(aggregateId: string, envelopeId: string): Promise<void> {
+    const queueKey = this.resolveQueueKey(aggregateId);
+    const first = await this.redis.lindex(queueKey, 0);
+    if (first === envelopeId) {
+      await this.redis.lpop(queueKey);
+    }
+    if (first !== envelopeId) {
+      await this.redis.lrem(queueKey, 1, envelopeId);
+    }
+    await this.redis.del(this.resolveEntryKey(aggregateId, envelopeId));
+
+    if ((await this.redis.llen(queueKey)) === 0) {
+      await this.redis.srem(this.resolveAggregatesKey(), aggregateId);
+    }
+  }
+
+  listAggregates(): Promise<string[]> {
+    return this.redis.smembers(this.resolveAggregatesKey());
+  }
+
+  private resolveAggregatesKey(): string {
+    return `${this.keyPrefix}:aggregates`;
+  }
+
+  private resolveQueueKey(aggregateId: string): string {
+    return `${this.keyPrefix}:aggregate:${aggregateId}:queue`;
+  }
+
+  private resolveEntryKey(aggregateId: string, envelopeId: string): string {
+    return `${this.keyPrefix}:aggregate:${aggregateId}:entry:${envelopeId}`;
+  }
 }
 
 export {
@@ -430,6 +553,7 @@ export {
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
   MachineConflictDetectedError,
+  RedisCommandOutboxStore,
   isMachineConflictDetectedError,
   MachineRuntimeDriver,
 };
@@ -438,6 +562,8 @@ export type {
   CommandOutboxStore,
   EnvelopeStore,
   OutboxRecord,
+  RecoverableCommandOutboxStore,
+  RedisCommandOutboxStoreClient,
   RuntimeEventSink,
   RuntimeProcessEvent,
   MachineProcessResult,
