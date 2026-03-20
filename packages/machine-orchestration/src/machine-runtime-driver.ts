@@ -27,6 +27,20 @@ interface CommandBus<TCommand> {
   execute: (command: TCommand) => Promise<void>;
 }
 
+interface OutboxRecord<TCommand> {
+  aggregateId: string;
+  envelopeId: string;
+  commands: TCommand[];
+  nextCommandIndex: number;
+}
+
+interface CommandOutboxStore<TCommand> {
+  advanceNextCommand: (aggregateId: string, envelopeId: string) => Promise<void>;
+  complete: (aggregateId: string, envelopeId: string) => Promise<void>;
+  enqueue: (record: OutboxRecord<TCommand>) => Promise<void>;
+  readNext: (aggregateId: string) => Promise<OutboxRecord<TCommand> | null>;
+}
+
 interface RuntimeProcessEvent<TState, TContext, TEvent, TCommand, TOutput> {
   aggregateId: string;
   outcome: MachineProcessOutcome;
@@ -60,6 +74,7 @@ interface MachineRuntimeDriverDependencies<
   machine: RuntimeMachine<TState, TContext, TEvent, TCommand, TOutput>;
   snapshotStore: SnapshotStore<TState, TContext>;
   envelopeStore: EnvelopeStore;
+  outboxStore: CommandOutboxStore<TCommand>;
   commandBus: CommandBus<TCommand>;
   eventSink: RuntimeEventSink<TState, TContext, TEvent, TCommand, TOutput>;
 }
@@ -106,6 +121,7 @@ class MachineRuntimeDriver<TState, TContext, TEvent, TCommand, TOutput> {
   private readonly machine: RuntimeMachine<TState, TContext, TEvent, TCommand, TOutput>;
   private readonly snapshotStore: SnapshotStore<TState, TContext>;
   private readonly envelopeStore: EnvelopeStore;
+  private readonly outboxStore: CommandOutboxStore<TCommand>;
   private readonly commandBus: CommandBus<TCommand>;
   private readonly eventSink: RuntimeEventSink<TState, TContext, TEvent, TCommand, TOutput>;
 
@@ -122,6 +138,7 @@ class MachineRuntimeDriver<TState, TContext, TEvent, TCommand, TOutput> {
     this.machine = dependencies.machine;
     this.snapshotStore = dependencies.snapshotStore;
     this.envelopeStore = dependencies.envelopeStore;
+    this.outboxStore = dependencies.outboxStore;
     this.commandBus = dependencies.commandBus;
     this.eventSink = dependencies.eventSink;
   }
@@ -153,10 +170,6 @@ class MachineRuntimeDriver<TState, TContext, TEvent, TCommand, TOutput> {
     this.machine.restore(currentRecord.snapshot);
     const transition = this.machine.dispatch(envelope);
 
-    for (const command of transition.commands) {
-      await this.commandBus.execute(command);
-    }
-
     const nextRecord = await this.snapshotStore.compareAndSet(
       this.aggregateId,
       currentRecord.version,
@@ -182,6 +195,12 @@ class MachineRuntimeDriver<TState, TContext, TEvent, TCommand, TOutput> {
       };
     }
 
+    await this.outboxStore.enqueue({
+      aggregateId: this.aggregateId,
+      commands: transition.commands,
+      envelopeId: envelope.id,
+      nextCommandIndex: 0,
+    });
     await this.envelopeStore.markProcessed(this.aggregateId, envelope.id);
     await this.eventSink.onProcessed({
       aggregateId: this.aggregateId,
@@ -203,6 +222,27 @@ class MachineRuntimeDriver<TState, TContext, TEvent, TCommand, TOutput> {
       transition,
       version: nextRecord.version,
     };
+  }
+
+  drainOutbox(): Promise<void> {
+    return this.runWithAggregateLock(() => this.drainOutboxUnlocked());
+  }
+
+  private async drainOutboxUnlocked(): Promise<void> {
+    while (true) {
+      const next = await this.outboxStore.readNext(this.aggregateId);
+      if (!next) {
+        return;
+      }
+
+      const command = next.commands.at(next.nextCommandIndex);
+      if (command === globalThis.undefined) {
+        await this.outboxStore.complete(this.aggregateId, next.envelopeId);
+        continue;
+      }
+      await this.commandBus.execute(command);
+      await this.outboxStore.advanceNextCommand(this.aggregateId, next.envelopeId);
+    }
   }
 
   private async runWithAggregateLock<TResult>(
@@ -320,7 +360,73 @@ class InMemoryEnvelopeStore implements EnvelopeStore {
   }
 }
 
+class InMemoryCommandOutboxStore<TCommand> implements CommandOutboxStore<TCommand> {
+  private readonly recordsByAggregate = new Map<string, OutboxRecord<TCommand>[]>();
+
+  enqueue(record: OutboxRecord<TCommand>): Promise<void> {
+    if (record.commands.length === 0) {
+      return Promise.resolve();
+    }
+    const existing = this.recordsByAggregate.get(record.aggregateId) ?? [];
+    if (existing.some((entry) => entry.envelopeId === record.envelopeId)) {
+      return Promise.resolve();
+    }
+    existing.push({
+      aggregateId: record.aggregateId,
+      commands: [...record.commands],
+      envelopeId: record.envelopeId,
+      nextCommandIndex: record.nextCommandIndex,
+    });
+    this.recordsByAggregate.set(record.aggregateId, existing);
+    return Promise.resolve();
+  }
+
+  readNext(aggregateId: string): Promise<OutboxRecord<TCommand> | null> {
+    const records = this.recordsByAggregate.get(aggregateId);
+    if (!records || records.length === 0) {
+      return Promise.resolve(null);
+    }
+    const [next] = records;
+    if (!next) {
+      return Promise.resolve(null);
+    }
+    return Promise.resolve(next);
+  }
+
+  advanceNextCommand(aggregateId: string, envelopeId: string): Promise<void> {
+    const records = this.recordsByAggregate.get(aggregateId);
+    if (!records || records.length === 0) {
+      return Promise.resolve();
+    }
+    const [next] = records;
+    if (!next || next.envelopeId !== envelopeId) {
+      return Promise.resolve();
+    }
+    next.nextCommandIndex += 1;
+    return Promise.resolve();
+  }
+
+  complete(aggregateId: string, envelopeId: string): Promise<void> {
+    const records = this.recordsByAggregate.get(aggregateId);
+    if (!records || records.length === 0) {
+      return Promise.resolve();
+    }
+    const [next] = records;
+    if (!next || next.envelopeId !== envelopeId) {
+      return Promise.resolve();
+    }
+    records.shift();
+    if (records.length === 0) {
+      this.recordsByAggregate.delete(aggregateId);
+      return Promise.resolve();
+    }
+    this.recordsByAggregate.set(aggregateId, records);
+    return Promise.resolve();
+  }
+}
+
 export {
+  InMemoryCommandOutboxStore,
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
   MachineConflictDetectedError,
@@ -329,7 +435,9 @@ export {
 };
 export type {
   CommandBus,
+  CommandOutboxStore,
   EnvelopeStore,
+  OutboxRecord,
   RuntimeEventSink,
   RuntimeProcessEvent,
   MachineProcessResult,

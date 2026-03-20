@@ -1,4 +1,5 @@
 import {
+  InMemoryCommandOutboxStore,
   MachineConflictDetectedError,
   type RuntimeProcessEvent,
   type RuntimeMachine,
@@ -94,6 +95,7 @@ const createCredentialHealthRuntime = (
     CredentialHealthContext
   >();
   const envelopeStore = new InMemoryEnvelopeStore();
+  const outboxStore = new InMemoryCommandOutboxStore<CredentialHealthCommand>();
   const machine = new RestorableCredentialHealthStateMachine(
     {
       accessTokenExpiresAt: input.accessTokenExpiresAt.toISOString(),
@@ -130,6 +132,7 @@ const createCredentialHealthRuntime = (
       },
     },
     envelopeStore,
+    outboxStore,
     eventSink: {
       onProcessed: (event) => input.onRuntimeEvent(event),
     },
@@ -166,6 +169,7 @@ const createCredentialHealthRuntime = (
     if (!result.transition) {
       throw new Error("Invariant violated: credential health transition missing");
     }
+    await driver.drainOutbox();
     return result.transition;
   };
 

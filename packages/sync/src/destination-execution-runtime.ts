@@ -1,4 +1,5 @@
 import {
+  InMemoryCommandOutboxStore,
   MachineConflictDetectedError,
   type RuntimeProcessEvent,
   type RuntimeMachine,
@@ -86,6 +87,7 @@ const createDestinationExecutionRuntime = (
     DestinationExecutionContext
   >();
   const envelopeStore = new InMemoryEnvelopeStore();
+  const outboxStore = new InMemoryCommandOutboxStore<DestinationExecutionCommand>();
 
   const machine = new RestorableDestinationExecutionStateMachine(
     { calendarId: input.calendarId, failureCount: input.failureCount },
@@ -127,6 +129,7 @@ const createDestinationExecutionRuntime = (
       },
     },
     envelopeStore,
+    outboxStore,
     eventSink: {
       onProcessed: (event) => input.onRuntimeEvent(event),
     },
@@ -167,6 +170,7 @@ const createDestinationExecutionRuntime = (
     if (!result.transition) {
       throw new Error("Invariant violated: destination execution transition missing");
     }
+    await driver.drainOutbox();
     return result.transition;
   };
 

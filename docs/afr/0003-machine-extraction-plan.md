@@ -307,5 +307,8 @@ For each target machine:
   - `CONFLICT_DETECTED`
 - Runtime event sinks now receive `outcome` and aggregate both `duplicate_total` and `conflict_total`.
 - `MachineRuntimeDriver` now enforces in-process aggregate-level serialization via an internal lock queue, reducing hot contention and eliminating same-process retry storms.
-- Runtime adapters now use single-attempt dispatch; `CONFLICT_DETECTED` is treated as explicit invariant failure for caller handling instead of blind retry loops.
+- Runtime adapters now use single-attempt dispatch; `CONFLICT_DETECTED` is represented by typed `MachineConflictDetectedError` for explicit caller handling.
+- Driver execution is now outbox-first:
+  - `process()` persists snapshot transition and enqueues commands to outbox.
+  - `drainOutbox()` executes queued commands with per-command progress tracking (`nextCommandIndex`) for resumable dispatch after partial command failure.
 - Adversarial parallel-dispatch coverage exists at driver level (`machine-runtime-driver.test.ts`) to assert deterministic serialized processing on the same aggregate.

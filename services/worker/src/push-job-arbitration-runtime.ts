@@ -1,5 +1,6 @@
 import {
   type CommandBus,
+  InMemoryCommandOutboxStore,
   MachineConflictDetectedError,
   type RuntimeProcessEvent,
   type RuntimeMachine,
@@ -75,6 +76,7 @@ const snapshotStore = new InMemorySnapshotStore<
   PushJobArbitrationContext
 >();
 const envelopeStore = new InMemoryEnvelopeStore();
+const outboxStore = new InMemoryCommandOutboxStore<PushJobArbitrationCommand>();
 
 const buildEnvelope = (
   event: PushJobArbitrationEvent,
@@ -132,6 +134,7 @@ const dispatch = async (
     aggregateId: userId,
     commandBus: createCommandBus(dependencies, userId),
     envelopeStore,
+    outboxStore,
     eventSink: {
       onProcessed: (processedEvent) => dependencies.onRuntimeEvent(processedEvent),
     },
@@ -142,6 +145,7 @@ const dispatch = async (
   const envelope = buildEnvelope(event, jobId);
   const result = await driver.process(envelope);
   if (result.outcome === "APPLIED" || result.outcome === "DUPLICATE_IGNORED") {
+    await driver.drainOutbox();
     return;
   }
   throw new MachineConflictDetectedError(userId, envelope.id);

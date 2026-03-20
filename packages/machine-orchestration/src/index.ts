@@ -81,6 +81,7 @@ export { createKeeperRuntime } from "./create-keeper-runtime";
 export type { CreateKeeperRuntimeDependencies } from "./create-keeper-runtime";
 
 export {
+  InMemoryCommandOutboxStore,
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
   MachineConflictDetectedError,
@@ -89,7 +90,9 @@ export {
 } from "./machine-runtime-driver";
 export type {
   CommandBus,
+  CommandOutboxStore,
   EnvelopeStore,
+  OutboxRecord,
   MachineProcessOutcome,
   RuntimeEventSink,
   RuntimeProcessEvent,

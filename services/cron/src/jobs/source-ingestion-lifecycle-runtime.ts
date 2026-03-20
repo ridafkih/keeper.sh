@@ -1,4 +1,5 @@
 import {
+  InMemoryCommandOutboxStore,
   MachineConflictDetectedError,
   type RuntimeProcessEvent,
   type RuntimeMachine,
@@ -76,6 +77,7 @@ const createSourceIngestionLifecycleRuntime = (
     SourceIngestionLifecycleContext
   >();
   const envelopeStore = new InMemoryEnvelopeStore();
+  const outboxStore = new InMemoryCommandOutboxStore<SourceIngestionLifecycleCommand>();
   const machine = new RestorableSourceIngestionLifecycleStateMachine(
     { provider: input.provider, sourceId: input.sourceId },
     { transitionPolicy: TransitionPolicy.IGNORE },
@@ -110,6 +112,7 @@ const createSourceIngestionLifecycleRuntime = (
       },
     },
     envelopeStore,
+    outboxStore,
     eventSink: {
       onProcessed: (event) => input.onRuntimeEvent(event),
     },
@@ -145,6 +148,7 @@ const createSourceIngestionLifecycleRuntime = (
     if (!result.transition) {
       throw new Error("Invariant violated: source ingestion transition missing");
     }
+    await driver.drainOutbox();
     return result.transition;
   };
 
