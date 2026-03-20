@@ -68,6 +68,12 @@ await entry({
     );
 
     const pushArbitrationRuntime = createPushJobArbitrationRuntime({
+      createEnvelope: (event, jobId) => ({
+        actor: { id: "worker-bullmq", type: "system" },
+        event,
+        id: `${event.type}:${jobId}`,
+        occurredAt: new Date().toISOString(),
+      }),
       outboxStore: new RedisCommandOutboxStore({
         keyPrefix: "machine:outbox:push-arbitration",
         redis: refreshLockRedis,

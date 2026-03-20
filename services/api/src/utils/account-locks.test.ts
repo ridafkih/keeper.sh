@@ -6,7 +6,8 @@ import type {
   createOAuthSource as createOAuthSourceFn,
   importOAuthAccountCalendars as importOAuthAccountCalendarsFn,
 } from "./oauth-sources";
-import * as actualCalendarModule from "../../../../packages/calendar/src/index";
+
+let actualCalendarModule: Record<string, unknown> = {};
 
 let createCalDAVDestination: typeof createCalDAVDestinationFn = () =>
   Promise.reject(new Error("Module not loaded"));
@@ -78,6 +79,8 @@ const createTxInstance = (): object => ({
 });
 
 beforeAll(async () => {
+  actualCalendarModule = await import("../../../../packages/calendar/src/index");
+
   mock.module("../env", () => ({
     default: {},
     schema: {},
@@ -179,7 +182,8 @@ beforeAll(async () => {
     encryptPassword: () => "encrypted-password",
   }));
 
-  mock.module("@keeper.sh/calendar/caldav", () => ({
+  mock.module("@keeper.sh/calendar", () => ({
+    ...actualCalendarModule,
     createCalDAVClient: () => ({
       discoverCalendars: () => Promise.resolve([]),
     }),
@@ -189,30 +193,20 @@ beforeAll(async () => {
     createCalDAVSourceProvider: () => ({
       id: "icloud",
     }),
-  }));
-
-  mock.module("@keeper.sh/calendar/google", () => ({
     createGoogleCalendarProvider: () => ({
       id: "google",
     }),
     createGoogleCalendarSourceProvider: () => ({
       id: "google",
     }),
-    listUserCalendars: () => Promise.resolve(googleCalendars),
-  }));
-
-  mock.module("@keeper.sh/calendar/outlook", () => ({
+    listGoogleUserCalendars: () => Promise.resolve(googleCalendars),
     createOutlookCalendarProvider: () => ({
       id: "outlook",
     }),
     createOutlookSourceProvider: () => ({
       id: "outlook",
     }),
-    listUserCalendars: () => Promise.resolve([]),
-  }));
-
-  mock.module("@keeper.sh/calendar", () => ({
-    ...actualCalendarModule,
+    listOutlookUserCalendars: () => Promise.resolve([]),
     PROVIDER_DEFINITIONS: [],
     getActiveProviders: () => [],
     getCalDAVProviders: () => [],

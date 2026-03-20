@@ -1,4 +1,7 @@
-import { listUserCalendars, CalendarListError } from "@keeper.sh/calendar/google";
+import {
+  listGoogleUserCalendars,
+  GoogleCalendarListError,
+} from "@keeper.sh/calendar";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { widelog } from "@/utils/logging";
 import { listOAuthCalendars } from "@/utils/oauth-calendar-listing";
@@ -13,10 +16,10 @@ const GET = withWideEvent(
   withAuth(({ request, userId }) => {
     widelog.set("provider.name", "google");
     return listOAuthCalendars(request, userId, {
-      isCalendarListError: (error): error is CalendarListError =>
-        error instanceof CalendarListError,
+      isCalendarListError: (error): error is GoogleCalendarListError =>
+        error instanceof GoogleCalendarListError,
       listCalendars: async (accessToken) => {
-        const calendars = await listUserCalendars(accessToken);
+        const calendars = await listGoogleUserCalendars(accessToken);
         return calendars.map((calendar) => ({
           id: calendar.id,
           primary: calendar.primary,

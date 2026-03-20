@@ -1,5 +1,5 @@
 import { calendarAccountsTable } from "@keeper.sh/database/schema";
-import { createCalDAVClient } from "@keeper.sh/calendar/caldav";
+import { createCalDAVClient } from "@keeper.sh/calendar";
 import { encryptPassword } from "@keeper.sh/database";
 import { isCalDAVProvider } from "@keeper.sh/calendar";
 import type { CalDAVProviderId } from "@keeper.sh/calendar";

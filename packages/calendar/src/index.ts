@@ -201,3 +201,46 @@ export type {
   ExistingEventState,
   FetchEventsResult as IngestionFetchEventsResult,
 } from "./core/sync-engine/ingest";
+export {
+  pullRemoteCalendar,
+  CalendarFetchError,
+} from "./ics/utils/pull-remote-calendar";
+export {
+  createIcsSourceFetcher,
+  type IcsSourceFetcher,
+  type IcsSourceFetcherConfig,
+} from "./ics/utils/fetch-adapter";
+export {
+  createGoogleSourceFetcher,
+  type GoogleSourceFetcherConfig,
+} from "./providers/google/source/fetch-adapter";
+export {
+  createOutlookSourceFetcher,
+  type OutlookSourceFetcherConfig,
+} from "./providers/outlook/source/fetch-adapter";
+export {
+  listUserCalendars as listGoogleUserCalendars,
+  CalendarListError as GoogleCalendarListError,
+} from "./providers/google/source/utils/list-calendars";
+export {
+  listUserCalendars as listOutlookUserCalendars,
+  CalendarListError as OutlookCalendarListError,
+} from "./providers/outlook/source/utils/list-calendars";
+export {
+  createGoogleSyncProvider,
+  type GoogleSyncProviderConfig,
+} from "./providers/google/destination/provider";
+export {
+  createOutlookSyncProvider,
+  type OutlookSyncProviderConfig,
+} from "./providers/outlook/destination/provider";
+export {
+  createCalDAVSourceFetcher,
+  type CalDAVSourceFetcherConfig,
+} from "./providers/caldav/source/fetch-adapter";
+export { isCalDAVAuthenticationError } from "./providers/caldav/source/auth-error-classification";
+export {
+  createCalDAVSyncProvider,
+  type CalDAVSyncProviderConfig,
+} from "./providers/caldav/destination/provider";
+export { createCalDAVClient } from "./providers/caldav/shared/client";

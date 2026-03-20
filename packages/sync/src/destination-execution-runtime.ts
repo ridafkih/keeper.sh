@@ -34,6 +34,9 @@ interface DestinationExecutionCommandHandlers {
 interface DestinationExecutionRuntimeInput {
   calendarId: string;
   failureCount: number;
+  createEnvelope: (
+    event: DestinationExecutionEvent,
+  ) => EventEnvelope<DestinationExecutionEvent>;
   handlers: DestinationExecutionCommandHandlers;
   outboxStore: CommandOutboxStore<DestinationExecutionCommand>;
   onRuntimeEvent: (
@@ -93,7 +96,6 @@ class RestorableDestinationExecutionStateMachine
 const createDestinationExecutionRuntime = (
   input: DestinationExecutionRuntimeInput,
 ): DestinationExecutionRuntime => {
-  let envelopeSequence = 0;
   let initialized = false;
   let released = false;
   let currentHolderId: string | null = null;
@@ -170,13 +172,13 @@ const createDestinationExecutionRuntime = (
     ) {
       currentHolderId = event.holderId;
     }
-    envelopeSequence += 1;
-    const envelope: EventEnvelope<DestinationExecutionEvent> = {
-      actor: { id: "sync-runtime", type: "system" },
-      event,
-      id: `${input.calendarId}:${envelopeSequence}:${event.type}`,
-      occurredAt: new Date().toISOString(),
-    };
+    const envelope = input.createEnvelope(event);
+    if (!envelope.id) {
+      throw new Error("Invariant violated: destination execution envelope id is required");
+    }
+    if (!envelope.occurredAt || Number.isNaN(Date.parse(envelope.occurredAt))) {
+      throw new Error("Invariant violated: destination execution envelope occurredAt is invalid");
+    }
     const result = await driver.process(envelope);
     if (result.outcome === "CONFLICT_DETECTED") {
       return {

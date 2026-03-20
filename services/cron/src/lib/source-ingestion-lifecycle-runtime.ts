@@ -32,6 +32,9 @@ interface SourceIngestionLifecycleCommandHandlers {
 interface SourceIngestionLifecycleRuntimeInput {
   sourceId: string;
   provider: string;
+  createEnvelope: (
+    event: SourceIngestionLifecycleEvent,
+  ) => EventEnvelope<SourceIngestionLifecycleEvent>;
   handlers: SourceIngestionLifecycleCommandHandlers;
   outboxStore: CommandOutboxStore<SourceIngestionLifecycleCommand>;
   onRuntimeEvent: (
@@ -72,7 +75,7 @@ class RestorableSourceIngestionLifecycleStateMachine
 const createSourceIngestionLifecycleRuntime = (
   input: SourceIngestionLifecycleRuntimeInput,
 ): SourceIngestionLifecycleRuntime => {
-  let envelopeSequence = 0;
+  let initialized = false;
   const snapshotStore = new InMemorySnapshotStore<
     SourceIngestionLifecycleState,
     SourceIngestionLifecycleContext
@@ -123,7 +126,7 @@ const createSourceIngestionLifecycleRuntime = (
   const dispatch = async (
     event: SourceIngestionLifecycleEvent,
   ): Promise<SourceIngestionLifecycleTransitionResult> => {
-    if (envelopeSequence === 0) {
+    if (!initialized) {
       await snapshotStore.initialize(input.sourceId, {
         context: {
           eventsAdded: 0,
@@ -133,14 +136,15 @@ const createSourceIngestionLifecycleRuntime = (
         },
         state: "source_selected",
       });
+      initialized = true;
     }
-    envelopeSequence += 1;
-    const envelope: EventEnvelope<SourceIngestionLifecycleEvent> = {
-      actor: { id: "cron-ingest", type: "system" },
-      event,
-      id: `${input.sourceId}:${envelopeSequence}:${event.type}`,
-      occurredAt: new Date().toISOString(),
-    };
+    const envelope = input.createEnvelope(event);
+    if (!envelope.id) {
+      throw new Error("Invariant violated: source ingestion envelope id is required");
+    }
+    if (!envelope.occurredAt || Number.isNaN(Date.parse(envelope.occurredAt))) {
+      throw new Error("Invariant violated: source ingestion envelope occurredAt is invalid");
+    }
     const result = await driver.process(envelope);
     if (result.outcome === "CONFLICT_DETECTED") {
       throw new MachineConflictDetectedError(input.sourceId, envelope.id);

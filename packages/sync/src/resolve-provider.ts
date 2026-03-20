@@ -8,10 +8,10 @@ import {
   type OAuthRefreshResult,
   runWithCredentialRefreshLock,
   isOAuthReauthRequiredError,
+  createGoogleSyncProvider,
+  createOutlookSyncProvider,
+  createCalDAVSyncProvider,
 } from "@keeper.sh/calendar";
-import { createGoogleSyncProvider } from "@keeper.sh/calendar/google";
-import { createOutlookSyncProvider } from "@keeper.sh/calendar/outlook";
-import { createCalDAVSyncProvider } from "@keeper.sh/calendar/caldav";
 import { decryptPassword } from "@keeper.sh/database";
 import {
   calendarAccountsTable,
@@ -181,10 +181,20 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
     refreshLockStore,
     rawRefresh,
   } = options;
+  let envelopeSequence = 0;
 
   const runtime = createCredentialHealthRuntime({
     accessTokenExpiresAt,
     calendarAccountId,
+    createEnvelope: (event) => {
+      envelopeSequence += 1;
+      return {
+        actor: { id: "sync-refresh", type: "system" },
+        event,
+        id: `${oauthCredentialId}:${envelopeSequence}:${event.type}`,
+        occurredAt: new Date().toISOString(),
+      };
+    },
     isReauthRequiredError: (error) => isOAuthReauthRequiredError(error),
     markNeedsReauthentication: async () => {
       await database

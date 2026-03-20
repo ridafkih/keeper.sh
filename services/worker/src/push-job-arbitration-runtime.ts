@@ -34,6 +34,10 @@ interface SyncingAggregatePort {
 }
 
 interface PushJobArbitrationRuntimeDependencies {
+  createEnvelope: (
+    event: PushJobArbitrationEvent,
+    jobId: string,
+  ) => EventEnvelope<PushJobArbitrationEvent>;
   outboxStore: RecoverableCommandOutboxStore<PushJobArbitrationCommand>;
   worker: WorkerQueueControlPort;
   syncing: SyncingAggregatePort;
@@ -78,16 +82,6 @@ const snapshotStore = new InMemorySnapshotStore<
   PushJobArbitrationContext
 >();
 const envelopeStore = new InMemoryEnvelopeStore();
-
-const buildEnvelope = (
-  event: PushJobArbitrationEvent,
-  jobId: string,
-): EventEnvelope<PushJobArbitrationEvent> => ({
-  actor: { id: "worker-bullmq", type: "system" },
-  event,
-  id: `${event.type}:${jobId}`,
-  occurredAt: new Date().toISOString(),
-});
 
 const createCommandBus = (
   dependencies: PushJobArbitrationRuntimeDependencies,
@@ -143,7 +137,13 @@ const dispatch = async (
     snapshotStore,
   });
 
-  const envelope = buildEnvelope(event, jobId);
+  const envelope = dependencies.createEnvelope(event, jobId);
+  if (!envelope.id) {
+    throw new Error("Invariant violated: push arbitration envelope id is required");
+  }
+  if (!envelope.occurredAt || Number.isNaN(Date.parse(envelope.occurredAt))) {
+    throw new Error("Invariant violated: push arbitration envelope occurredAt is invalid");
+  }
   const result = await driver.process(envelope);
   if (result.outcome === "APPLIED" || result.outcome === "DUPLICATE_IGNORED") {
     await driver.drainOutbox();

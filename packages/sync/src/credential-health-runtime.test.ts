@@ -1,7 +1,23 @@
 import { describe, expect, it } from "bun:test";
 import { InMemoryCommandOutboxStore } from "@keeper.sh/machine-orchestration";
 import type { CredentialHealthCommand } from "@keeper.sh/state-machines";
+import type { CredentialHealthEvent, EventEnvelope } from "@keeper.sh/state-machines";
 import { createCredentialHealthRuntime } from "./credential-health-runtime";
+
+const createEnvelopeFactory = (
+  credentialId: string,
+): ((event: CredentialHealthEvent) => EventEnvelope<CredentialHealthEvent>) => {
+  let sequence = 0;
+  return (event) => {
+    sequence += 1;
+    return {
+      actor: { id: "test-sync-refresh", type: "system" },
+      event,
+      id: `${credentialId}:${sequence}:${event.type}`,
+      occurredAt: `2026-03-20T00:00:${String(sequence).padStart(2, "0")}.000Z`,
+    };
+  };
+};
 
 describe("credential health runtime", () => {
   it("refreshes and persists credentials on success", async () => {
@@ -9,6 +25,7 @@ describe("credential health runtime", () => {
     const runtime = createCredentialHealthRuntime({
       accessTokenExpiresAt: new Date("2026-03-19T20:00:00.000Z"),
       calendarAccountId: "acc-1",
+      createEnvelope: createEnvelopeFactory("cred-1"),
       isReauthRequiredError: () => false,
       markNeedsReauthentication: () => Promise.resolve(),
       oauthCredentialId: "cred-1",
@@ -41,6 +58,7 @@ describe("credential health runtime", () => {
     const runtime = createCredentialHealthRuntime({
       accessTokenExpiresAt: new Date("2026-03-19T20:00:00.000Z"),
       calendarAccountId: "acc-2",
+      createEnvelope: createEnvelopeFactory("cred-2"),
       isReauthRequiredError: () => true,
       markNeedsReauthentication: () => {
         marked += 1;
@@ -64,6 +82,7 @@ describe("credential health runtime", () => {
     const runtime = createCredentialHealthRuntime({
       accessTokenExpiresAt: new Date("2026-03-19T20:00:00.000Z"),
       calendarAccountId: "acc-3",
+      createEnvelope: createEnvelopeFactory("cred-3"),
       isReauthRequiredError: () => false,
       markNeedsReauthentication: () => Promise.resolve(),
       oauthCredentialId: "cred-3",
@@ -84,6 +103,7 @@ describe("credential health runtime", () => {
     const runtime = createCredentialHealthRuntime({
       accessTokenExpiresAt: new Date("2026-03-19T20:00:00.000Z"),
       calendarAccountId: "acc-4",
+      createEnvelope: createEnvelopeFactory("cred-4"),
       isReauthRequiredError: () => false,
       markNeedsReauthentication: () => Promise.resolve(),
       oauthCredentialId: "cred-4",
@@ -108,5 +128,34 @@ describe("credential health runtime", () => {
       "REFRESH_STARTED",
       "REFRESH_SUCCEEDED",
     ]);
+  });
+
+  it("fails fast when envelope metadata is invalid", async () => {
+    const runtime = createCredentialHealthRuntime({
+      accessTokenExpiresAt: new Date("2026-03-19T20:00:00.000Z"),
+      calendarAccountId: "acc-invalid",
+      createEnvelope: (event) => ({
+        actor: { id: "test-sync-refresh", type: "system" },
+        event,
+        id: "",
+        occurredAt: "invalid-time",
+      }),
+      isReauthRequiredError: () => false,
+      markNeedsReauthentication: () => Promise.resolve(),
+      oauthCredentialId: "cred-invalid",
+      outboxStore: new InMemoryCommandOutboxStore<CredentialHealthCommand>(),
+      persistRefreshedCredentials: () => Promise.resolve(),
+      refreshAccessToken: () =>
+        Promise.resolve({
+          access_token: "next-access",
+          expires_in: 3600,
+          refresh_token: "next-refresh",
+        }),
+      onRuntimeEvent: () => Promise.resolve(),
+    });
+
+    await expect(runtime.refresh("old-refresh")).rejects.toThrow(
+      "credential health envelope id is required",
+    );
   });
 });

@@ -3,10 +3,10 @@ import type { RefreshLockStore } from "../../core/oauth/refresh-coordinator";
 import type { SourceProvider } from "../../core/oauth/create-source-provider";
 import {
   createGoogleCalendarSourceProvider,
-} from "../../providers/google";
+} from "../../providers/google/source/provider";
 import {
   createOutlookSourceProvider,
-} from "../../providers/outlook";
+} from "../../providers/outlook/source/provider";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 interface SourceFactoryConfig {

@@ -1,5 +1,5 @@
-import { createCalDAVSourceProvider } from "../../caldav";
-import type { CalDAVSourceProviderConfig } from "../../caldav";
+import { createCalDAVSourceProvider } from "../../caldav/source/provider";
+import type { CalDAVSourceProviderConfig } from "../../caldav/types";
 
 const PROVIDER_OPTIONS = {
   providerId: "icloud",

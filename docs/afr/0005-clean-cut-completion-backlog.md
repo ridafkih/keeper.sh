@@ -44,14 +44,14 @@ Mode: `clean-break` (no compatibility bridge)
 
 ## Phase C — Determinism and Invariant Hardening
 
-- [ ] C1. Audit machine runtime constructors for optional fallback defaults.
-- [ ] C2. Remove optional fallback defaults from runtime-critical constructors.
-- [ ] C3. Enforce required envelope metadata in all internal dispatch builders.
-- [ ] C4. Ensure no auto-generated envelope IDs in runtime paths.
-- [ ] C5. Ensure no auto-generated envelope timestamps in runtime paths.
-- [ ] C6. Add invariant checks for malformed envelope payloads.
-- [ ] C7. Add invariant checks for malformed outbox records (all stores).
-- [ ] C8. Add invariant checks for invalid snapshot transitions.
+- [x] C1. Audit machine runtime constructors for optional fallback defaults.
+- [x] C2. Remove optional fallback defaults from runtime-critical constructors.
+- [x] C3. Enforce required envelope metadata in all internal dispatch builders.
+- [x] C4. Ensure no auto-generated envelope IDs in runtime paths.
+- [x] C5. Ensure no auto-generated envelope timestamps in runtime paths.
+- [x] C6. Add invariant checks for malformed envelope payloads.
+- [x] C7. Add invariant checks for malformed outbox records (all stores).
+- [x] C8. Add invariant checks for invalid snapshot transitions.
 - [ ] C9. Add tests for invariant failures and deterministic error surfaces.
 - [ ] C10. Ensure invariant violations fail fast with typed errors.
 
@@ -110,4 +110,4 @@ Mode: `clean-break` (no compatibility bridge)
 - [ ] Q1. Execute Phase A task set A1–A4 in first patch.
 - [x] Q2. Execute Phase A task set A5–A8 in second patch.
 - [x] Q3. Execute Phase B task set B1–B4 in third patch.
-- [ ] Q4. Execute Phase C task set C1–C4 in fourth patch.
+- [x] Q4. Execute Phase C task set C1–C4 in fourth patch.

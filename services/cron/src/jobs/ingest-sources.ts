@@ -4,10 +4,11 @@ import {
   allSettledWithConcurrency,
   insertEventStatesWithConflictResolution,
   ensureValidToken,
+  createIcsSourceFetcher,
+  createCalDAVSourceFetcher,
+  isCalDAVAuthenticationError,
 } from "@keeper.sh/calendar";
 import type { IngestionChanges, TokenState } from "@keeper.sh/calendar";
-import { createIcsSourceFetcher } from "@keeper.sh/calendar/ics";
-import { createCalDAVSourceFetcher, isCalDAVAuthenticationError } from "@keeper.sh/calendar/caldav";
 import { decryptPassword } from "@keeper.sh/database";
 import {
   calendarAccountsTable,
@@ -24,7 +25,7 @@ import { createMachineRuntimeWidelogSink } from "@/utils/machine-runtime-widelog
 import { database, refreshLockRedis } from "@/context";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
-import { createSourceIngestionLifecycleRuntime } from "./source-ingestion-lifecycle-runtime";
+import { createSourceIngestionLifecycleRuntime } from "../lib/source-ingestion-lifecycle-runtime";
 import {
   OAuthIngestionResolutionStatus,
   createOAuthIngestionResolutionDependencies,
@@ -155,8 +156,18 @@ const createSourceRuntime = (input: {
   disableSource: () => Promise<void>;
   markNeedsReauth: () => Promise<void>;
   persistSyncToken: (syncToken: string) => Promise<void>;
-}) =>
-  createSourceIngestionLifecycleRuntime({
+}) => {
+  let envelopeSequence = 0;
+  return createSourceIngestionLifecycleRuntime({
+    createEnvelope: (event) => {
+      envelopeSequence += 1;
+      return {
+        actor: { id: "cron-ingest", type: "system" },
+        event,
+        id: `${input.sourceId}:${envelopeSequence}:${event.type}`,
+        occurredAt: new Date().toISOString(),
+      };
+    },
     handlers: {
       disableSource: input.disableSource,
       markNeedsReauth: input.markNeedsReauth,
@@ -175,6 +186,7 @@ const createSourceRuntime = (input: {
     provider: input.provider,
     sourceId: input.sourceId,
   });
+};
 
 const createSourceIngestionLogger = (): SourceIngestionLogger => ({
   errorFields: (error, fields) => {

@@ -141,6 +141,110 @@ class OutboxRecordCorruptedError extends Error {
   }
 }
 
+class EnvelopeInvariantError extends Error {
+  readonly aggregateId: string;
+
+  constructor(aggregateId: string, reason: string) {
+    super(`Envelope invariant violated for aggregate ${aggregateId}: ${reason}`);
+    this.name = "EnvelopeInvariantError";
+    this.aggregateId = aggregateId;
+  }
+}
+
+class SnapshotInvariantError extends Error {
+  readonly aggregateId: string;
+
+  constructor(aggregateId: string, reason: string) {
+    super(`Snapshot invariant violated for aggregate ${aggregateId}: ${reason}`);
+    this.name = "SnapshotInvariantError";
+    this.aggregateId = aggregateId;
+  }
+}
+
+class RuntimeInvariantViolationError extends Error {
+  readonly aggregateId: string;
+  readonly code: string;
+  readonly surface: string;
+
+  constructor(input: {
+    aggregateId: string;
+    code: string;
+    surface: string;
+    reason: string;
+  }) {
+    super(
+      `Runtime invariant violated for ${input.surface} aggregate ${input.aggregateId}: ${input.reason}`,
+    );
+    this.name = "RuntimeInvariantViolationError";
+    this.aggregateId = input.aggregateId;
+    this.code = input.code;
+    this.surface = input.surface;
+  }
+}
+
+const assertEnvelopeInvariant = <TEvent>(
+  aggregateId: string,
+  envelope: EventEnvelope<TEvent>,
+): void => {
+  if (typeof envelope.id !== "string" || envelope.id.trim().length === 0) {
+    throw new EnvelopeInvariantError(aggregateId, "id is required");
+  }
+  if (typeof envelope.occurredAt !== "string" || Number.isNaN(Date.parse(envelope.occurredAt))) {
+    throw new EnvelopeInvariantError(aggregateId, "occurredAt must be a valid timestamp");
+  }
+  if (typeof envelope.actor?.id !== "string" || envelope.actor.id.trim().length === 0) {
+    throw new EnvelopeInvariantError(aggregateId, "actor.id is required");
+  }
+  if (typeof envelope.actor?.type !== "string" || envelope.actor.type.trim().length === 0) {
+    throw new EnvelopeInvariantError(aggregateId, "actor.type is required");
+  }
+  if (!envelope.event || typeof envelope.event !== "object") {
+    throw new EnvelopeInvariantError(aggregateId, "event payload must be an object");
+  }
+  const eventType = (envelope.event as { type?: unknown }).type;
+  if (typeof eventType !== "string" || eventType.trim().length === 0) {
+    throw new EnvelopeInvariantError(aggregateId, "event.type is required");
+  }
+};
+
+const assertSnapshotInvariant = <TState, TContext>(
+  aggregateId: string,
+  snapshot: MachineSnapshot<TState, TContext>,
+): void => {
+  if (snapshot.context === globalThis.undefined) {
+    throw new SnapshotInvariantError(aggregateId, "context is required");
+  }
+  if (snapshot.state === globalThis.undefined || snapshot.state === null) {
+    throw new SnapshotInvariantError(aggregateId, "state is required");
+  }
+};
+
+const assertOutboxRecordInvariant = <TCommand>(
+  aggregateId: string,
+  record: OutboxRecord<TCommand>,
+): void => {
+  if (!Array.isArray(record.commands)) {
+    throw new OutboxRecordCorruptedError(
+      aggregateId,
+      record.envelopeId,
+      "commands",
+      "invalid commands",
+    );
+  }
+  if (
+    !Number.isInteger(record.nextCommandIndex)
+    || record.nextCommandIndex < 0
+    || record.nextCommandIndex > record.commands.length
+  ) {
+    throw new OutboxRecordCorruptedError(
+      aggregateId,
+      record.envelopeId,
+      "nextCommandIndex",
+      "invalid nextCommandIndex",
+    );
+  }
+};
+
 const isMachineConflictDetectedError = (
   error: unknown,
 ): error is MachineConflictDetectedError => {
@@ -191,6 +295,7 @@ class MachineRuntimeDriver<TState, TContext, TEvent, TCommand, TOutput> {
   private async processUnlocked(
     envelope: EventEnvelope<TEvent>,
   ): Promise<MachineProcessResult<TState, TContext, TCommand, TOutput>> {
+    assertEnvelopeInvariant(this.aggregateId, envelope);
     const isDuplicateEnvelope = await this.envelopeStore.hasProcessed(this.aggregateId, envelope.id);
     if (isDuplicateEnvelope) {
       const record = await this.requireSnapshotRecord();
@@ -211,6 +316,10 @@ class MachineRuntimeDriver<TState, TContext, TEvent, TCommand, TOutput> {
     const currentRecord = await this.requireSnapshotRecord();
     this.machine.restore(currentRecord.snapshot);
     const transition = this.machine.dispatch(envelope);
+    assertSnapshotInvariant(this.aggregateId, {
+      context: transition.context,
+      state: transition.state,
+    });
 
     const nextRecord = await this.snapshotStore.compareAndSet(
       this.aggregateId,
@@ -337,6 +446,7 @@ class MachineRuntimeDriver<TState, TContext, TEvent, TCommand, TOutput> {
     if (!record) {
       throw new Error(`Snapshot not initialized for aggregate ${this.aggregateId}`);
     }
+    assertSnapshotInvariant(this.aggregateId, record.snapshot);
     return record;
   }
 }
@@ -348,6 +458,7 @@ class InMemorySnapshotStore<TState, TContext> implements SnapshotStore<TState, T
     aggregateId: string,
     snapshot: MachineSnapshot<TState, TContext>,
   ): Promise<void> {
+    assertSnapshotInvariant(aggregateId, snapshot);
     this.records.set(aggregateId, {
       snapshot,
       version: 0,
@@ -359,6 +470,7 @@ class InMemorySnapshotStore<TState, TContext> implements SnapshotStore<TState, T
     aggregateId: string,
     snapshot: MachineSnapshot<TState, TContext>,
   ): Promise<SnapshotRecord<TState, TContext>> {
+    assertSnapshotInvariant(aggregateId, snapshot);
     const existing = this.records.get(aggregateId);
     if (existing) {
       return Promise.resolve(existing);
@@ -381,6 +493,7 @@ class InMemorySnapshotStore<TState, TContext> implements SnapshotStore<TState, T
     expectedVersion: number,
     snapshot: MachineSnapshot<TState, TContext>,
   ): Promise<SnapshotRecord<TState, TContext> | null> {
+    assertSnapshotInvariant(aggregateId, snapshot);
     const current = this.records.get(aggregateId);
     if (!current || current.version !== expectedVersion) {
       return Promise.resolve(null);
@@ -431,6 +544,7 @@ class InMemoryCommandOutboxStore<TCommand> implements RecoverableCommandOutboxSt
   private readonly recordsByAggregate = new Map<string, OutboxRecord<TCommand>[]>();
 
   enqueue(record: OutboxRecord<TCommand>): Promise<void> {
+    assertOutboxRecordInvariant(record.aggregateId, record);
     if (record.commands.length === 0) {
       return Promise.resolve();
     }
@@ -457,6 +571,7 @@ class InMemoryCommandOutboxStore<TCommand> implements RecoverableCommandOutboxSt
     if (!next) {
       return Promise.resolve(null);
     }
+    assertOutboxRecordInvariant(aggregateId, next);
     return Promise.resolve(next);
   }
 
@@ -561,9 +676,36 @@ class RedisCommandOutboxStore<TCommand> implements RecoverableCommandOutboxStore
       );
     }
 
-    const commands = JSON.parse(rawCommands) as TCommand[];
+    const commands = (() => {
+      try {
+        return JSON.parse(rawCommands) as TCommand[];
+      } catch {
+        throw new OutboxRecordCorruptedError(
+          aggregateId,
+          envelopeId,
+          "commands",
+          "invalid commands",
+        );
+      }
+    })();
+    if (!Array.isArray(commands)) {
+      throw new OutboxRecordCorruptedError(
+        aggregateId,
+        envelopeId,
+        "commands",
+        "invalid commands",
+      );
+    }
     const nextCommandIndex = Number.parseInt(nextCommandIndexRaw, 10);
     if (!Number.isInteger(nextCommandIndex) || nextCommandIndex < 0) {
+      throw new OutboxRecordCorruptedError(
+        aggregateId,
+        envelopeId,
+        "nextCommandIndex",
+        "invalid nextCommandIndex",
+      );
+    }
+    if (nextCommandIndex > commands.length) {
       throw new OutboxRecordCorruptedError(
         aggregateId,
         envelopeId,
@@ -622,12 +764,15 @@ class RedisCommandOutboxStore<TCommand> implements RecoverableCommandOutboxStore
 }
 
 export {
+  EnvelopeInvariantError,
   InMemoryCommandOutboxStore,
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
   MachineConflictDetectedError,
   OutboxRecordCorruptedError,
   RedisCommandOutboxStore,
+  RuntimeInvariantViolationError,
+  SnapshotInvariantError,
   isMachineConflictDetectedError,
   MachineRuntimeDriver,
 };

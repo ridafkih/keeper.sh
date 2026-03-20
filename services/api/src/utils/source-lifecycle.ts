@@ -1,4 +1,4 @@
-import { CalendarFetchError } from "@keeper.sh/calendar/ics";
+import { CalendarFetchError } from "@keeper.sh/calendar";
 
 interface SourceReference {
   id: string;

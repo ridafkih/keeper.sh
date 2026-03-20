@@ -4,12 +4,6 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./caldav": "./src/providers/caldav/index.ts",
-    "./google": "./src/providers/google/index.ts",
-    "./outlook": "./src/providers/outlook/index.ts",
-    "./fastmail": "./src/providers/fastmail/index.ts",
-    "./icloud": "./src/providers/icloud/index.ts",
-    "./ics": "./src/ics/index.ts",
     "./safe-fetch": "./src/utils/safe-fetch.ts"
   },
   "scripts": {

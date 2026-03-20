@@ -2,14 +2,14 @@ import {
   createGoogleOAuthService,
   createMicrosoftOAuthService,
   createRedisRateLimiter,
+  createGoogleSourceFetcher,
+  createOutlookSourceFetcher,
 } from "@keeper.sh/calendar";
 import type {
   IngestionFetchEventsResult,
   OAuthRefreshResult,
   RedisRateLimiter,
 } from "@keeper.sh/calendar";
-import { createGoogleSourceFetcher } from "@keeper.sh/calendar/google";
-import { createOutlookSourceFetcher } from "@keeper.sh/calendar/outlook";
 import type Redis from "ioredis";
 
 const OAUTH_INGESTION_PROVIDER_NAMES = ["google", "outlook"] as const;

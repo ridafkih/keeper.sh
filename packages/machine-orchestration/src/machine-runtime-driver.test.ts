@@ -320,6 +320,80 @@ describe("MachineRuntimeDriver", () => {
     const remaining = await outboxStore.readNext("aggregate-5");
     expect(remaining).toBeNull();
   });
+
+  it("fails fast when envelope metadata is malformed", async () => {
+    const snapshotStore = new InMemorySnapshotStore<TestState, TestContext>();
+    const envelopeStore = new InMemoryEnvelopeStore();
+    const outboxStore = new InMemoryCommandOutboxStore<TestCommand>();
+    await snapshotStore.initialize("aggregate-bad-envelope", { context: {}, state: "idle" });
+
+    const driver = new MachineRuntimeDriver<
+      TestState,
+      TestContext,
+      TestEvent,
+      TestCommand,
+      never
+    >({
+      aggregateId: "aggregate-bad-envelope",
+      commandBus: {
+        execute: () => Promise.resolve(),
+      },
+      eventSink: {
+        onProcessed: () => Promise.resolve(),
+      },
+      envelopeStore,
+      outboxStore,
+      machine: new FakeMachine(),
+      snapshotStore,
+    });
+
+    await expect(
+      driver.process({
+        actor: { id: "svc-test", type: "system" },
+        event: { id: "entity-bad", type: "ACTIVATE" },
+        id: "",
+        occurredAt: "invalid-time",
+      }),
+    ).rejects.toThrow("Envelope invariant violated");
+  });
+
+  it("fails fast when stored snapshot is malformed", async () => {
+    const snapshotStore = {
+      compareAndSet: () => Promise.resolve(null),
+      read: () =>
+        Promise.resolve({
+          snapshot: ({
+            context: globalThis.undefined,
+            state: "idle",
+          } as unknown) as MachineSnapshot<TestState, TestContext>,
+          version: 0,
+        }),
+    };
+
+    const driver = new MachineRuntimeDriver<
+      TestState,
+      TestContext,
+      TestEvent,
+      TestCommand,
+      never
+    >({
+      aggregateId: "aggregate-bad-snapshot",
+      commandBus: {
+        execute: () => Promise.resolve(),
+      },
+      eventSink: {
+        onProcessed: () => Promise.resolve(),
+      },
+      envelopeStore: new InMemoryEnvelopeStore(),
+      outboxStore: new InMemoryCommandOutboxStore<TestCommand>(),
+      machine: new FakeMachine(),
+      snapshotStore,
+    });
+
+    await expect(
+      driver.process(buildEnvelope("env-bad-snapshot", "entity-bad-snapshot")),
+    ).rejects.toThrow("Snapshot invariant violated");
+  });
 });
 
 describe("RedisCommandOutboxStore", () => {
@@ -544,5 +618,17 @@ describe("MachineRuntimeDriver outbox drain helpers", () => {
 
     expect(executed).toEqual(["command-1"]);
     expect(await outboxStore.readNext("aggregate-static")).toBeNull();
+  });
+
+  it("fails fast when in-memory outbox nextCommandIndex is invalid", () => {
+    const outboxStore = new InMemoryCommandOutboxStore<TestCommand>();
+    expect(() =>
+      outboxStore.enqueue({
+        aggregateId: "aggregate-invalid-index",
+        commands: [{ id: "command-1", type: "DO_WORK" }],
+        envelopeId: "env-invalid-index",
+        nextCommandIndex: -1,
+      }),
+    ).toThrow("nextCommandIndex");
   });
 });

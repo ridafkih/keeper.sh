@@ -273,8 +273,18 @@ const syncDestinationsForUser = async (
     }
 
     const { handle } = lockResult;
+    let envelopeSequence = 0;
     const destinationRuntime = createDestinationExecutionRuntime({
       calendarId: destination.calendarId,
+      createEnvelope: (event) => {
+        envelopeSequence += 1;
+        return {
+          actor: { id: "sync-runtime", type: "system" },
+          event,
+          id: `${destination.calendarId}:${envelopeSequence}:${event.type}`,
+          occurredAt: new Date().toISOString(),
+        };
+      },
       failureCount: destination.failureCount,
       handlers: {
         applyBackoff: async (nextAttemptAt) => {

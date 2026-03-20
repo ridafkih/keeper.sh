@@ -1,5 +1,5 @@
 import { caldavDiscoverSourceSchema } from "@keeper.sh/data-schemas";
-import { createCalDAVClient } from "@keeper.sh/calendar/caldav";
+import { createCalDAVClient } from "@keeper.sh/calendar";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";

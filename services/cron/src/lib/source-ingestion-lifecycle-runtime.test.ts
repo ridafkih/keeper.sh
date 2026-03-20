@@ -2,7 +2,26 @@ import { describe, expect, it } from "bun:test";
 import { InMemoryCommandOutboxStore } from "@keeper.sh/machine-orchestration";
 import type { SourceIngestionLifecycleCommand } from "@keeper.sh/state-machines";
 import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
+import type {
+  EventEnvelope,
+  SourceIngestionLifecycleEvent,
+} from "@keeper.sh/state-machines";
 import { createSourceIngestionLifecycleRuntime } from "./source-ingestion-lifecycle-runtime";
+
+const createEnvelopeFactory = (
+  sourceId: string,
+): ((event: SourceIngestionLifecycleEvent) => EventEnvelope<SourceIngestionLifecycleEvent>) => {
+  let sequence = 0;
+  return (event) => {
+    sequence += 1;
+    return {
+      actor: { id: "test-cron-ingest", type: "system" },
+      event,
+      id: `${sourceId}:${sequence}:${event.type}`,
+      occurredAt: `2026-03-20T00:00:${String(sequence).padStart(2, "0")}.000Z`,
+    };
+  };
+};
 
 describe("source ingestion lifecycle runtime", () => {
   it("marks reauthentication required on auth failure", async () => {
@@ -16,6 +35,7 @@ describe("source ingestion lifecycle runtime", () => {
         },
         persistSyncToken: () => Promise.resolve(),
       },
+      createEnvelope: createEnvelopeFactory("src-1"),
       outboxStore: new InMemoryCommandOutboxStore<SourceIngestionLifecycleCommand>(),
       onRuntimeEvent: () => Promise.resolve(),
       provider: "google",
@@ -44,6 +64,7 @@ describe("source ingestion lifecycle runtime", () => {
         markNeedsReauth: () => Promise.resolve(),
         persistSyncToken: () => Promise.resolve(),
       },
+      createEnvelope: createEnvelopeFactory("src-2"),
       outboxStore: new InMemoryCommandOutboxStore<SourceIngestionLifecycleCommand>(),
       onRuntimeEvent: () => Promise.resolve(),
       provider: "caldav",
@@ -72,6 +93,7 @@ describe("source ingestion lifecycle runtime", () => {
           return Promise.resolve();
         },
       },
+      createEnvelope: createEnvelopeFactory("src-3"),
       outboxStore: new InMemoryCommandOutboxStore<SourceIngestionLifecycleCommand>(),
       onRuntimeEvent: () => Promise.resolve(),
       provider: "google",
@@ -90,5 +112,29 @@ describe("source ingestion lifecycle runtime", () => {
 
     expect(transition.state).toBe("completed");
     expect(persistedTokens).toEqual(["token-1"]);
+  });
+
+  it("fails fast when envelope metadata is invalid", async () => {
+    const runtime = createSourceIngestionLifecycleRuntime({
+      createEnvelope: (event) => ({
+        actor: { id: "test-cron-ingest", type: "system" },
+        event,
+        id: "",
+        occurredAt: "invalid-time",
+      }),
+      handlers: {
+        disableSource: () => Promise.resolve(),
+        markNeedsReauth: () => Promise.resolve(),
+        persistSyncToken: () => Promise.resolve(),
+      },
+      outboxStore: new InMemoryCommandOutboxStore<SourceIngestionLifecycleCommand>(),
+      onRuntimeEvent: () => Promise.resolve(),
+      provider: "google",
+      sourceId: "src-invalid",
+    });
+
+    await expect(
+      runtime.dispatch({ type: SourceIngestionLifecycleEventType.SOURCE_SELECTED }),
+    ).rejects.toThrow("source ingestion envelope id is required");
   });
 });

@@ -1,5 +1,5 @@
 import { generateIcsCalendar } from "ts-ics";
-import { parseIcsCalendar } from "../../../ics";
+import { parseIcsCalendar } from "../../../ics/utils/parse-ics-calendar";
 import type { IcsCalendar, IcsDuration, IcsEvent } from "ts-ics";
 import type { SyncableEvent } from "../../../core/types";
 import { isKeeperEvent } from "../../../core/events/identity";

@@ -29,6 +29,7 @@ interface CredentialHealthRuntimeInput {
   oauthCredentialId: string;
   calendarAccountId: string;
   accessTokenExpiresAt: Date;
+  createEnvelope: (event: CredentialHealthEvent) => EventEnvelope<CredentialHealthEvent>;
   refreshAccessToken: (refreshToken: string) => Promise<OAuthRefreshResult>;
   outboxStore: CommandOutboxStore<CredentialHealthCommand>;
   persistRefreshedCredentials: (input: {
@@ -90,7 +91,6 @@ const resolveErrorCode = (error: unknown): string => {
 const createCredentialHealthRuntime = (
   input: CredentialHealthRuntimeInput,
 ): CredentialHealthRuntime => {
-  let envelopeSequence = 0;
   const snapshotStore = new InMemorySnapshotStore<
     CredentialHealthState,
     CredentialHealthContext
@@ -154,13 +154,13 @@ const createCredentialHealthRuntime = (
     };
     await snapshotStore.initializeIfMissing(input.oauthCredentialId, initialSnapshot);
 
-    envelopeSequence += 1;
-    const envelope: EventEnvelope<CredentialHealthEvent> = {
-      actor: { id: "sync-refresh", type: "system" },
-      event,
-      id: `${input.oauthCredentialId}:${envelopeSequence}:${event.type}`,
-      occurredAt: new Date().toISOString(),
-    };
+    const envelope = input.createEnvelope(event);
+    if (!envelope.id) {
+      throw new Error("Invariant violated: credential health envelope id is required");
+    }
+    if (!envelope.occurredAt || Number.isNaN(Date.parse(envelope.occurredAt))) {
+      throw new Error("Invariant violated: credential health envelope occurredAt is invalid");
+    }
 
     const result = await driver.process(envelope);
     if (result.outcome === "CONFLICT_DETECTED") {

@@ -1,4 +1,7 @@
-import { listUserCalendars, CalendarListError } from "@keeper.sh/calendar/outlook";
+import {
+  listOutlookUserCalendars,
+  OutlookCalendarListError,
+} from "@keeper.sh/calendar";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { widelog } from "@/utils/logging";
 import { listOAuthCalendars } from "@/utils/oauth-calendar-listing";
@@ -13,10 +16,10 @@ const GET = withWideEvent(
   withAuth(({ request, userId }) => {
     widelog.set("provider.name", "outlook");
     return listOAuthCalendars(request, userId, {
-      isCalendarListError: (error): error is CalendarListError =>
-        error instanceof CalendarListError,
+      isCalendarListError: (error): error is OutlookCalendarListError =>
+        error instanceof OutlookCalendarListError,
       listCalendars: async (accessToken) => {
-        const calendars = await listUserCalendars(accessToken);
+        const calendars = await listOutlookUserCalendars(accessToken);
         return calendars.map(({ id, name, isDefaultCalendar }) => ({
           id,
           primary: Boolean(isDefaultCalendar),
