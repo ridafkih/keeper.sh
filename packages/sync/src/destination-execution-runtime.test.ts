@@ -288,4 +288,93 @@ describe("destination execution runtime", () => {
     expect(released).toEqual(["holder-parallel"]);
     expect(emitted).toEqual(["2:1"]);
   });
+
+  it("ignores duplicate replayed terminal envelope id", async () => {
+    const emitted: string[] = [];
+    const runtime = createDestinationExecutionRuntime({
+      calendarId: "cal-dup",
+      createEnvelope: (event) => ({
+        actor: { id: "test-sync-runtime", type: "system" },
+        event,
+        id: `cal-dup:${event.type}`,
+        occurredAt: "2026-03-20T00:00:00.000Z",
+      }),
+      failureCount: 0,
+      handlers: {
+        applyBackoff: () => Promise.resolve(),
+        disableDestination: () => Promise.resolve(),
+        emitSyncEvent: (eventsAdded, eventsRemoved) => {
+          emitted.push(`${eventsAdded}:${eventsRemoved}`);
+          return Promise.resolve();
+        },
+        releaseLock: () => Promise.resolve(),
+      },
+      outboxStore: new InMemoryCommandOutboxStore<DestinationExecutionCommand>(),
+      onRuntimeEvent: () => Promise.resolve(),
+    });
+
+    await runtime.dispatch({ holderId: "holder-dup", type: "LOCK_ACQUIRED" });
+    await runtime.dispatch({ type: "EXECUTION_STARTED" });
+    const first = await runtime.dispatch({
+      eventsAdded: 1,
+      eventsRemoved: 0,
+      type: "EXECUTION_SUCCEEDED",
+    });
+    const second = await runtime.dispatch({
+      eventsAdded: 1,
+      eventsRemoved: 0,
+      type: "EXECUTION_SUCCEEDED",
+    });
+
+    expect(first.outcome).toBe("TRANSITION_APPLIED");
+    expect(second.outcome).toBe("DUPLICATE_IGNORED");
+    expect(emitted).toEqual(["1:0"]);
+  });
+
+  it("ignores stale terminal event after completion", async () => {
+    const emitted: string[] = [];
+    const disabled: string[] = [];
+    const runtime = createDestinationExecutionRuntime({
+      calendarId: "cal-stale",
+      createEnvelope: createEnvelopeFactory("cal-stale"),
+      failureCount: 0,
+      handlers: {
+        applyBackoff: () => Promise.resolve(),
+        disableDestination: (reason) => {
+          disabled.push(reason);
+          return Promise.resolve();
+        },
+        emitSyncEvent: (eventsAdded, eventsRemoved) => {
+          emitted.push(`${eventsAdded}:${eventsRemoved}`);
+          return Promise.resolve();
+        },
+        releaseLock: () => Promise.resolve(),
+      },
+      outboxStore: new InMemoryCommandOutboxStore<DestinationExecutionCommand>(),
+      onRuntimeEvent: () => Promise.resolve(),
+    });
+
+    await runtime.dispatch({ holderId: "holder-stale", type: "LOCK_ACQUIRED" });
+    await runtime.dispatch({ type: "EXECUTION_STARTED" });
+    await runtime.dispatch({
+      eventsAdded: 4,
+      eventsRemoved: 1,
+      type: "EXECUTION_SUCCEEDED",
+    });
+    const stale = await runtime.dispatch({
+      code: "late-failure",
+      reason: "late-failure",
+      type: "EXECUTION_FATAL_FAILED",
+    });
+
+    expect(stale.outcome).toBe("TRANSITION_APPLIED");
+    if (stale.outcome !== "TRANSITION_APPLIED") {
+      throw new Error("Expected stale dispatch transition to be applied");
+    }
+    expect(stale.transition.state).toBe("completed");
+    expect(stale.transition.commands).toEqual([]);
+    expect(stale.transition.outputs).toEqual([]);
+    expect(emitted).toEqual(["4:1"]);
+    expect(disabled).toEqual([]);
+  });
 });

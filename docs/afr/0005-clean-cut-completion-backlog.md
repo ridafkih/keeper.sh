@@ -59,8 +59,8 @@ Mode: `clean-break` (no compatibility bridge)
 
 - [x] D1. Re-audit per-aggregate serialization guarantees in runtime driver.
 - [x] D2. Add adversarial parallel dispatch tests for every runtime adapter.
-- [ ] D3. Add duplicate envelope replay tests per machine aggregate.
-- [ ] D4. Add stale terminal-event tests per machine aggregate.
+- [x] D3. Add duplicate envelope replay tests per machine aggregate.
+- [x] D4. Add stale terminal-event tests per machine aggregate.
 - [ ] D5. Add conflict-detected handling tests for all caller policies.
 - [ ] D6. Add outbox corruption tests for each outbox namespace.
 - [ ] D7. Add outbox recovery idempotency tests (startup + interval).

@@ -34,15 +34,26 @@ describe("machine runtime widelog sink", () => {
       version: 1,
     });
 
-    expect(writes.get("machine.destination_execution.processed_total")).toBe(2);
+    sink({
+      aggregateId: "cal-1",
+      outcome: "CONFLICT_DETECTED",
+      envelope: {
+        event: { type: "EXECUTION_STARTED" },
+        id: "env-2",
+      },
+      snapshot: { state: "executing" },
+      version: 2,
+    });
+
+    expect(writes.get("machine.destination_execution.processed_total")).toBe(3);
     expect(writes.get("machine.destination_execution.duplicate_total")).toBe(1);
-    expect(writes.get("machine.destination_execution.conflict_total")).toBe(0);
+    expect(writes.get("machine.destination_execution.conflict_total")).toBe(1);
     expect(writes.get("machine.destination_execution.commands_total")).toBe(1);
     expect(writes.get("machine.destination_execution.outputs_total")).toBe(1);
-    expect(writes.get("machine.destination_execution.last_envelope_id")).toBe("env-1");
+    expect(writes.get("machine.destination_execution.last_envelope_id")).toBe("env-2");
     expect(writes.get("machine.destination_execution.last_event_type")).toBe("EXECUTION_STARTED");
     expect(writes.get("machine.destination_execution.last_state")).toBe("executing");
-    expect(writes.get("machine.destination_execution.last_version")).toBe(1);
+    expect(writes.get("machine.destination_execution.last_version")).toBe(2);
     expect(writes.get("machine.destination_execution.aggregate_id")).toBe("cal-1");
   });
 });

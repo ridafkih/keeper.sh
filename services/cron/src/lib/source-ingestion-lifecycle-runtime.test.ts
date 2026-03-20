@@ -189,4 +189,52 @@ describe("source ingestion lifecycle runtime", () => {
 
     expect(persistedTokens).toEqual(["dup-token"]);
   });
+
+  it("ignores stale terminal event after completion", async () => {
+    let markNeedsReauthCalls = 0;
+    let disableCalls = 0;
+    const persistedTokens: string[] = [];
+    const runtime = createSourceIngestionLifecycleRuntime({
+      handlers: {
+        disableSource: () => {
+          disableCalls += 1;
+          return Promise.resolve();
+        },
+        markNeedsReauth: () => {
+          markNeedsReauthCalls += 1;
+          return Promise.resolve();
+        },
+        persistSyncToken: (token) => {
+          persistedTokens.push(token);
+          return Promise.resolve();
+        },
+      },
+      createEnvelope: createEnvelopeFactory("src-stale"),
+      outboxStore: new InMemoryCommandOutboxStore<SourceIngestionLifecycleCommand>(),
+      onRuntimeEvent: () => Promise.resolve(),
+      provider: "google",
+      sourceId: "src-stale",
+    });
+
+    await runtime.dispatch({ type: SourceIngestionLifecycleEventType.SOURCE_SELECTED });
+    await runtime.dispatch({ type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED });
+    await runtime.dispatch({ type: SourceIngestionLifecycleEventType.FETCH_SUCCEEDED });
+    await runtime.dispatch({
+      eventsAdded: 2,
+      eventsRemoved: 0,
+      nextSyncToken: "fresh-token",
+      type: SourceIngestionLifecycleEventType.INGEST_SUCCEEDED,
+    });
+    const stale = await runtime.dispatch({
+      code: "auth_required",
+      type: SourceIngestionLifecycleEventType.AUTH_FAILURE,
+    });
+
+    expect(stale.state).toBe("completed");
+    expect(stale.commands).toEqual([]);
+    expect(stale.outputs).toEqual([]);
+    expect(persistedTokens).toEqual(["fresh-token"]);
+    expect(markNeedsReauthCalls).toBe(0);
+    expect(disableCalls).toBe(0);
+  });
 });

@@ -1,7 +1,7 @@
-# 0009 — Runtime Concurrency Hardening (D1–D2)
+# 0009 — Runtime Concurrency Hardening (D1–D5)
 
 Status: `active`
-Scope: Phase D (`D1`–`D2`)
+Scope: Phase D (`D1`–`D5`)
 
 ## Objective
 
@@ -28,9 +28,25 @@ Harden runtime behavior under adversarial parallel dispatch/replay so machine si
     - `packages/sync/src/credential-health-runtime.test.ts`
   - duplicate replay is ignored without repeated side effects:
     - `services/cron/src/lib/source-ingestion-lifecycle-runtime.test.ts`
+- Added explicit duplicate-replay tests for runtime adapters:
+  - `packages/sync/src/destination-execution-runtime.test.ts`
+  - `services/cron/src/lib/source-ingestion-lifecycle-runtime.test.ts`
+  - `services/worker/src/push-job-arbitration-runtime.test.ts`
+- Added stale terminal-event tests:
+  - `packages/sync/src/destination-execution-runtime.test.ts`
+  - `services/cron/src/lib/source-ingestion-lifecycle-runtime.test.ts`
+- Added conflict-policy tests:
+  - extracted and covered destination conflict policy behavior in
+    `packages/sync/src/dispatch-conflict-policy.ts`
+    with tests in `packages/sync/src/dispatch-conflict-policy.test.ts`
+  - covered conflict event accounting in widelog sinks:
+    - `services/worker/src/utils/machine-runtime-widelog.test.ts`
+    - `services/cron/src/utils/machine-runtime-widelog.test.ts`
 
 ## Validation
 
 - `bun test packages/sync/src/destination-execution-runtime.test.ts packages/sync/src/credential-health-runtime.test.ts services/cron/src/lib/source-ingestion-lifecycle-runtime.test.ts`
 - `bunx turbo run lint types --filter=./packages/sync --filter=./services/cron`
 - `bun test` (repo root)
+- `bun test packages/sync/src/dispatch-conflict-policy.test.ts services/worker/src/utils/machine-runtime-widelog.test.ts services/cron/src/utils/machine-runtime-widelog.test.ts`
+- `bunx turbo run lint types --filter=./packages/sync --filter=./services/cron --filter=./services/worker`
