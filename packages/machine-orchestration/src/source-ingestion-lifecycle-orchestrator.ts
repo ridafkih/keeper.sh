@@ -5,22 +5,23 @@ import type {
   SourceIngestionLifecycleSnapshot,
   SourceIngestionLifecycleTransitionResult,
 } from "@keeper.sh/state-machines";
+import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
 import type { EnvelopeFactory } from "./envelope-factory";
 
 type SourceIngestionLifecycleDomainEvent =
-  | { type: "SOURCE_SELECTED"; actorId: string }
-  | { type: "FETCHER_RESOLVED"; actorId: string }
-  | { type: "FETCH_SUCCEEDED"; actorId: string }
+  | { type: SourceIngestionLifecycleEventType.SOURCE_SELECTED; actorId: string }
+  | { type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED; actorId: string }
+  | { type: SourceIngestionLifecycleEventType.FETCH_SUCCEEDED; actorId: string }
   | {
-      type: "INGEST_SUCCEEDED";
+      type: SourceIngestionLifecycleEventType.INGEST_SUCCEEDED;
       actorId: string;
       eventsAdded: number;
       eventsRemoved: number;
       nextSyncToken?: string;
     }
-  | { type: "AUTH_FAILURE"; actorId: string; code: string }
-  | { type: "NOT_FOUND"; actorId: string; code: string }
-  | { type: "TRANSIENT_FAILURE"; actorId: string; code: string };
+  | { type: SourceIngestionLifecycleEventType.AUTH_FAILURE; actorId: string; code: string }
+  | { type: SourceIngestionLifecycleEventType.NOT_FOUND; actorId: string; code: string }
+  | { type: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE; actorId: string; code: string };
 
 interface SourceIngestionLifecycleOrchestratorDependencies {
   machine: SourceIngestionLifecycleMachine;
@@ -30,18 +31,18 @@ interface SourceIngestionLifecycleOrchestratorDependencies {
 const mapDomainEventToMachineEvent = (
   domainEvent: SourceIngestionLifecycleDomainEvent,
 ): SourceIngestionLifecycleEvent => {
-  if (domainEvent.type === "INGEST_SUCCEEDED") {
+  if (domainEvent.type === SourceIngestionLifecycleEventType.INGEST_SUCCEEDED) {
     return {
-      type: "INGEST_SUCCEEDED",
+      type: SourceIngestionLifecycleEventType.INGEST_SUCCEEDED,
       eventsAdded: domainEvent.eventsAdded,
       eventsRemoved: domainEvent.eventsRemoved,
       nextSyncToken: domainEvent.nextSyncToken,
     };
   }
   if (
-    domainEvent.type === "AUTH_FAILURE"
-    || domainEvent.type === "NOT_FOUND"
-    || domainEvent.type === "TRANSIENT_FAILURE"
+    domainEvent.type === SourceIngestionLifecycleEventType.AUTH_FAILURE
+    || domainEvent.type === SourceIngestionLifecycleEventType.NOT_FOUND
+    || domainEvent.type === SourceIngestionLifecycleEventType.TRANSIENT_FAILURE
   ) {
     return { type: domainEvent.type, code: domainEvent.code };
   }

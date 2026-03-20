@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { TransitionPolicy } from "@keeper.sh/state-machines";
+import { SourceIngestionLifecycleEventType, TransitionPolicy } from "@keeper.sh/state-machines";
 import type { EnvelopeFactory } from "./envelope-factory";
 import { createKeeperRuntime } from "./create-keeper-runtime";
 
@@ -203,12 +203,18 @@ describe("createKeeperRuntime", () => {
     });
     expect(destination.state).toBe("backoff_scheduled");
 
-    runtime.handleSourceIngestionLifecycleEvent({ actorId: "worker-ingest", type: "SOURCE_SELECTED" });
-    runtime.handleSourceIngestionLifecycleEvent({ actorId: "worker-ingest", type: "FETCHER_RESOLVED" });
+    runtime.handleSourceIngestionLifecycleEvent({
+      actorId: "worker-ingest",
+      type: SourceIngestionLifecycleEventType.SOURCE_SELECTED,
+    });
+    runtime.handleSourceIngestionLifecycleEvent({
+      actorId: "worker-ingest",
+      type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED,
+    });
     const sourceIngestion = runtime.handleSourceIngestionLifecycleEvent({
       actorId: "worker-ingest",
       code: "timeout",
-      type: "TRANSIENT_FAILURE",
+      type: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
     });
     expect(sourceIngestion.state).toBe("transient_error");
 

@@ -2,7 +2,11 @@ import { describe, expect, it } from "bun:test";
 import { createEventEnvelope } from "./core/event-envelope";
 import type { EventActor } from "./core/event-envelope";
 import { TransitionPolicy } from "./core/transition-policy";
-import { SourceIngestionLifecycleStateMachine } from "./source-ingestion-lifecycle.machine";
+import {
+  SourceIngestionLifecycleCommandType,
+  SourceIngestionLifecycleEventType,
+  SourceIngestionLifecycleStateMachine,
+} from "./source-ingestion-lifecycle.machine";
 
 let envelopeSequence = 0;
 const envelope = <TEvent>(event: TEvent, actor: EventActor) => {
@@ -19,9 +23,15 @@ describe("SourceIngestionLifecycleStateMachine", () => {
       { provider: "google", sourceId: "source-1" },
       { transitionPolicy: TransitionPolicy.IGNORE },
     );
-    machine.dispatch(envelope({ type: "SOURCE_SELECTED" }, { type: "system", id: "cron" }));
-    machine.dispatch(envelope({ type: "FETCHER_RESOLVED" }, { type: "system", id: "cron" }));
-    machine.dispatch(envelope({ type: "FETCH_SUCCEEDED" }, { type: "system", id: "cron" }));
+    machine.dispatch(
+      envelope({ type: SourceIngestionLifecycleEventType.SOURCE_SELECTED }, { type: "system", id: "cron" }),
+    );
+    machine.dispatch(
+      envelope({ type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED }, { type: "system", id: "cron" }),
+    );
+    machine.dispatch(
+      envelope({ type: SourceIngestionLifecycleEventType.FETCH_SUCCEEDED }, { type: "system", id: "cron" }),
+    );
 
     const transition = machine.dispatch(
       envelope(
@@ -29,14 +39,16 @@ describe("SourceIngestionLifecycleStateMachine", () => {
           eventsAdded: 5,
           eventsRemoved: 1,
           nextSyncToken: "token-1",
-          type: "INGEST_SUCCEEDED",
+          type: SourceIngestionLifecycleEventType.INGEST_SUCCEEDED,
         },
         { type: "system", id: "cron" },
       ),
     );
 
     expect(transition.state).toBe("completed");
-    expect(transition.commands).toEqual([{ syncToken: "token-1", type: "PERSIST_SYNC_TOKEN" }]);
+    expect(transition.commands).toEqual([
+      { syncToken: "token-1", type: SourceIngestionLifecycleCommandType.PERSIST_SYNC_TOKEN },
+    ]);
     expect(transition.outputs).toEqual([{ changed: true, type: "INGEST_COMPLETED" }]);
   });
 
@@ -45,15 +57,22 @@ describe("SourceIngestionLifecycleStateMachine", () => {
       { provider: "outlook", sourceId: "source-2" },
       { transitionPolicy: TransitionPolicy.IGNORE },
     );
-    machine.dispatch(envelope({ type: "SOURCE_SELECTED" }, { type: "system", id: "cron" }));
-    machine.dispatch(envelope({ type: "FETCHER_RESOLVED" }, { type: "system", id: "cron" }));
+    machine.dispatch(
+      envelope({ type: SourceIngestionLifecycleEventType.SOURCE_SELECTED }, { type: "system", id: "cron" }),
+    );
+    machine.dispatch(
+      envelope({ type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED }, { type: "system", id: "cron" }),
+    );
 
     const transition = machine.dispatch(
-      envelope({ code: "token-expired", type: "AUTH_FAILURE" }, { type: "system", id: "cron" }),
+      envelope(
+        { code: "token-expired", type: SourceIngestionLifecycleEventType.AUTH_FAILURE },
+        { type: "system", id: "cron" },
+      ),
     );
 
     expect(transition.state).toBe("auth_blocked");
-    expect(transition.commands).toEqual([{ type: "MARK_NEEDS_REAUTH" }]);
+    expect(transition.commands).toEqual([{ type: SourceIngestionLifecycleCommandType.MARK_NEEDS_REAUTH }]);
     expect(transition.outputs).toEqual([{ code: "token-expired", retryable: false, type: "INGEST_FAILED" }]);
   });
 
@@ -62,15 +81,22 @@ describe("SourceIngestionLifecycleStateMachine", () => {
       { provider: "ical", sourceId: "source-3" },
       { transitionPolicy: TransitionPolicy.IGNORE },
     );
-    machine.dispatch(envelope({ type: "SOURCE_SELECTED" }, { type: "system", id: "cron" }));
-    machine.dispatch(envelope({ type: "FETCHER_RESOLVED" }, { type: "system", id: "cron" }));
+    machine.dispatch(
+      envelope({ type: SourceIngestionLifecycleEventType.SOURCE_SELECTED }, { type: "system", id: "cron" }),
+    );
+    machine.dispatch(
+      envelope({ type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED }, { type: "system", id: "cron" }),
+    );
 
     const transition = machine.dispatch(
-      envelope({ code: "404", type: "NOT_FOUND" }, { type: "system", id: "cron" }),
+      envelope(
+        { code: "404", type: SourceIngestionLifecycleEventType.NOT_FOUND },
+        { type: "system", id: "cron" },
+      ),
     );
 
     expect(transition.state).toBe("not_found_disabled");
-    expect(transition.commands).toEqual([{ type: "DISABLE_SOURCE" }]);
+    expect(transition.commands).toEqual([{ type: SourceIngestionLifecycleCommandType.DISABLE_SOURCE }]);
   });
 
   it("rejects out-of-order success transition in strict mode", () => {
@@ -82,7 +108,7 @@ describe("SourceIngestionLifecycleStateMachine", () => {
     expect(() =>
       machine.dispatch(
         envelope(
-          { eventsAdded: 0, eventsRemoved: 0, type: "INGEST_SUCCEEDED" },
+          { eventsAdded: 0, eventsRemoved: 0, type: SourceIngestionLifecycleEventType.INGEST_SUCCEEDED },
           { type: "system", id: "cron" },
         ),
       ),
@@ -94,11 +120,18 @@ describe("SourceIngestionLifecycleStateMachine", () => {
       { provider: "google", sourceId: "source-5" },
       { transitionPolicy: TransitionPolicy.IGNORE },
     );
-    machine.dispatch(envelope({ type: "SOURCE_SELECTED" }, { type: "system", id: "cron" }));
-    machine.dispatch(envelope({ type: "FETCHER_RESOLVED" }, { type: "system", id: "cron" }));
+    machine.dispatch(
+      envelope({ type: SourceIngestionLifecycleEventType.SOURCE_SELECTED }, { type: "system", id: "cron" }),
+    );
+    machine.dispatch(
+      envelope({ type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED }, { type: "system", id: "cron" }),
+    );
 
     const transition = machine.dispatch(
-      envelope({ code: "timeout", type: "TRANSIENT_FAILURE" }, { type: "system", id: "cron" }),
+      envelope(
+        { code: "timeout", type: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE },
+        { type: "system", id: "cron" },
+      ),
     );
 
     expect(transition.state).toBe("transient_error");
@@ -110,15 +143,22 @@ describe("SourceIngestionLifecycleStateMachine", () => {
       { provider: "google", sourceId: "source-6" },
       { transitionPolicy: TransitionPolicy.REJECT },
     );
-    machine.dispatch(envelope({ type: "SOURCE_SELECTED" }, { type: "system", id: "cron" }));
-    machine.dispatch(envelope({ type: "FETCHER_RESOLVED" }, { type: "system", id: "cron" }));
     machine.dispatch(
-      envelope({ code: "invalid_grant", type: "AUTH_FAILURE" }, { type: "system", id: "cron" }),
+      envelope({ type: SourceIngestionLifecycleEventType.SOURCE_SELECTED }, { type: "system", id: "cron" }),
+    );
+    machine.dispatch(
+      envelope({ type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED }, { type: "system", id: "cron" }),
+    );
+    machine.dispatch(
+      envelope(
+        { code: "invalid_grant", type: SourceIngestionLifecycleEventType.AUTH_FAILURE },
+        { type: "system", id: "cron" },
+      ),
     );
 
     expect(() =>
       machine.dispatch(
-        envelope({ type: "FETCH_SUCCEEDED" }, { type: "system", id: "cron" }),
+        envelope({ type: SourceIngestionLifecycleEventType.FETCH_SUCCEEDED }, { type: "system", id: "cron" }),
       ),
     ).toThrow("Transition rejected");
   });

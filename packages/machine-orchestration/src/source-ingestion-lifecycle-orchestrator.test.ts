@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { SourceIngestionLifecycleStateMachine, TransitionPolicy } from "@keeper.sh/state-machines";
+import {
+  SourceIngestionLifecycleCommandType,
+  SourceIngestionLifecycleEventType,
+  SourceIngestionLifecycleStateMachine,
+  TransitionPolicy,
+} from "@keeper.sh/state-machines";
 import type { EnvelopeFactory } from "./envelope-factory";
 import { SourceIngestionLifecycleOrchestrator } from "./source-ingestion-lifecycle-orchestrator";
 
@@ -28,20 +33,20 @@ describe("SourceIngestionLifecycleOrchestrator", () => {
       ),
     });
 
-    orchestrator.handleTransition({ actorId: "worker-1", type: "SOURCE_SELECTED" });
-    orchestrator.handleTransition({ actorId: "worker-1", type: "FETCHER_RESOLVED" });
-    orchestrator.handleTransition({ actorId: "worker-1", type: "FETCH_SUCCEEDED" });
+    orchestrator.handleTransition({ actorId: "worker-1", type: SourceIngestionLifecycleEventType.SOURCE_SELECTED });
+    orchestrator.handleTransition({ actorId: "worker-1", type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED });
+    orchestrator.handleTransition({ actorId: "worker-1", type: SourceIngestionLifecycleEventType.FETCH_SUCCEEDED });
     const transition = orchestrator.handleTransition({
       actorId: "worker-1",
       eventsAdded: 1,
       eventsRemoved: 0,
       nextSyncToken: "next-sync-token",
-      type: "INGEST_SUCCEEDED",
+      type: SourceIngestionLifecycleEventType.INGEST_SUCCEEDED,
     });
 
     expect(transition.state).toBe("completed");
     expect(transition.commands).toEqual([
-      { syncToken: "next-sync-token", type: "PERSIST_SYNC_TOKEN" },
+      { syncToken: "next-sync-token", type: SourceIngestionLifecycleCommandType.PERSIST_SYNC_TOKEN },
     ]);
   });
 
@@ -54,16 +59,16 @@ describe("SourceIngestionLifecycleOrchestrator", () => {
       ),
     });
 
-    orchestrator.handleTransition({ actorId: "worker-1", type: "SOURCE_SELECTED" });
-    orchestrator.handleTransition({ actorId: "worker-1", type: "FETCHER_RESOLVED" });
+    orchestrator.handleTransition({ actorId: "worker-1", type: SourceIngestionLifecycleEventType.SOURCE_SELECTED });
+    orchestrator.handleTransition({ actorId: "worker-1", type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED });
     const transition = orchestrator.handleTransition({
       actorId: "worker-1",
       code: "invalid_grant",
-      type: "AUTH_FAILURE",
+      type: SourceIngestionLifecycleEventType.AUTH_FAILURE,
     });
 
     expect(transition.state).toBe("auth_blocked");
-    expect(transition.commands).toEqual([{ type: "MARK_NEEDS_REAUTH" }]);
+    expect(transition.commands).toEqual([{ type: SourceIngestionLifecycleCommandType.MARK_NEEDS_REAUTH }]);
   });
 
   it("rejects out-of-order ingest success in strict mode", () => {
@@ -80,7 +85,7 @@ describe("SourceIngestionLifecycleOrchestrator", () => {
         actorId: "worker-1",
         eventsAdded: 1,
         eventsRemoved: 0,
-        type: "INGEST_SUCCEEDED",
+        type: SourceIngestionLifecycleEventType.INGEST_SUCCEEDED,
       }),
     ).toThrow("Transition rejected");
   });

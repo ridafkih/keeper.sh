@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
 import {
   runSourceIngestionUnit,
   type SourceIngestionFailureDecision,
@@ -61,7 +62,7 @@ describe("runSourceIngestionUnit", () => {
       runtime,
       classifyFailure: (): SourceIngestionFailureDecision => ({
         code: "transient_failure",
-        eventType: "TRANSIENT_FAILURE",
+        eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
         logSlug: "provider-api-error",
         requiresReauth: false,
         retriable: true,
@@ -70,10 +71,15 @@ describe("runSourceIngestionUnit", () => {
 
     expect(result).toEqual(successfulResult);
     expect(events).toEqual([
-      { type: "SOURCE_SELECTED" },
-      { type: "FETCHER_RESOLVED" },
-      { type: "FETCH_SUCCEEDED" },
-      { eventsAdded: 2, eventsRemoved: 1, nextSyncToken: globalThis.undefined, type: "INGEST_SUCCEEDED" },
+      { type: SourceIngestionLifecycleEventType.SOURCE_SELECTED },
+      { type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED },
+      { type: SourceIngestionLifecycleEventType.FETCH_SUCCEEDED },
+      {
+        eventsAdded: 2,
+        eventsRemoved: 1,
+        nextSyncToken: globalThis.undefined,
+        type: SourceIngestionLifecycleEventType.INGEST_SUCCEEDED,
+      },
     ]);
     expect(fields.get("operation.name")).toBe("ingest-source");
     expect(fields.get("provider.name")).toBe("google");
@@ -102,7 +108,7 @@ describe("runSourceIngestionUnit", () => {
       runtime,
       classifyFailure: (): SourceIngestionFailureDecision => ({
         code: "transient_failure",
-        eventType: "TRANSIENT_FAILURE",
+        eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
         logSlug: "provider-api-error",
         requiresReauth: false,
         retriable: true,
@@ -110,9 +116,9 @@ describe("runSourceIngestionUnit", () => {
     })).rejects.toBe(expectedError);
 
     expect(events).toEqual([
-      { type: "SOURCE_SELECTED" },
-      { type: "FETCHER_RESOLVED" },
-      { code: "transient_failure", type: "TRANSIENT_FAILURE" },
+      { type: SourceIngestionLifecycleEventType.SOURCE_SELECTED },
+      { type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED },
+      { code: "transient_failure", type: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE },
     ]);
     expect(fields.get("outcome")).toBe("error");
     expect(errorFieldCalls).toHaveLength(1);
@@ -139,7 +145,7 @@ describe("runSourceIngestionUnit", () => {
       runtime,
       classifyFailure: (): SourceIngestionFailureDecision => ({
         code: "not_found",
-        eventType: "NOT_FOUND",
+        eventType: SourceIngestionLifecycleEventType.NOT_FOUND,
         logSlug: "provider-calendar-not-found",
         requiresReauth: false,
         retriable: false,
@@ -152,9 +158,9 @@ describe("runSourceIngestionUnit", () => {
       ingestEvents: [],
     });
     expect(events).toEqual([
-      { type: "SOURCE_SELECTED" },
-      { type: "FETCHER_RESOLVED" },
-      { code: "not_found", type: "NOT_FOUND" },
+      { type: SourceIngestionLifecycleEventType.SOURCE_SELECTED },
+      { type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED },
+      { code: "not_found", type: SourceIngestionLifecycleEventType.NOT_FOUND },
     ]);
     expect(fields.get("outcome")).toBe("error");
     expect(getFlushCount()).toBe(1);

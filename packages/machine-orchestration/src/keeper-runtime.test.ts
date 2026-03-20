@@ -9,6 +9,7 @@ import type {
   SyncLifecycleSnapshot,
   SyncTokenStrategyTransitionResult,
 } from "@keeper.sh/state-machines";
+import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
 import type { CredentialHealthDomainEvent } from "./credential-health-orchestrator";
 import type { DestinationExecutionDomainEvent } from "./destination-execution-orchestrator";
 import { KeeperRuntime } from "./keeper-runtime";
@@ -374,7 +375,7 @@ describe("KeeperRuntime", () => {
     });
     runtime.handleSourceIngestionLifecycleEvent({
       actorId: "worker-2",
-      type: "SOURCE_SELECTED",
+      type: SourceIngestionLifecycleEventType.SOURCE_SELECTED,
     });
     runtime.handleCredentialHealthEvent({
       actorId: "worker-3",
@@ -387,7 +388,9 @@ describe("KeeperRuntime", () => {
     });
 
     expect(destinationCalls).toEqual([{ actorId: "worker-1", holderId: "lock-1", type: "LOCK_ACQUIRED" }]);
-    expect(sourceIngestionCalls).toEqual([{ actorId: "worker-2", type: "SOURCE_SELECTED" }]);
+    expect(sourceIngestionCalls).toEqual([
+      { actorId: "worker-2", type: SourceIngestionLifecycleEventType.SOURCE_SELECTED },
+    ]);
     expect(credentialCalls).toEqual([{ actorId: "worker-3", type: "TOKEN_EXPIRY_DETECTED" }]);
     expect(tokenCalls).toEqual([{ actorId: "svc-sync", token: null, type: "TOKEN_LOADED" }]);
   });

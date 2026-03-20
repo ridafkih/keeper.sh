@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { InMemoryCommandOutboxStore } from "@keeper.sh/machine-orchestration";
 import type { SourceIngestionLifecycleCommand } from "@keeper.sh/state-machines";
+import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
 import { createSourceIngestionLifecycleRuntime } from "./source-ingestion-lifecycle-runtime";
 
 describe("source ingestion lifecycle runtime", () => {
@@ -21,11 +22,11 @@ describe("source ingestion lifecycle runtime", () => {
       sourceId: "src-1",
     });
 
-    await runtime.dispatch({ type: "SOURCE_SELECTED" });
-    await runtime.dispatch({ type: "FETCHER_RESOLVED" });
+    await runtime.dispatch({ type: SourceIngestionLifecycleEventType.SOURCE_SELECTED });
+    await runtime.dispatch({ type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED });
     const transition = await runtime.dispatch({
       code: "auth_required",
-      type: "AUTH_FAILURE",
+      type: SourceIngestionLifecycleEventType.AUTH_FAILURE,
     });
 
     expect(transition.state).toBe("auth_blocked");
@@ -49,11 +50,11 @@ describe("source ingestion lifecycle runtime", () => {
       sourceId: "src-2",
     });
 
-    await runtime.dispatch({ type: "SOURCE_SELECTED" });
-    await runtime.dispatch({ type: "FETCHER_RESOLVED" });
+    await runtime.dispatch({ type: SourceIngestionLifecycleEventType.SOURCE_SELECTED });
+    await runtime.dispatch({ type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED });
     const transition = await runtime.dispatch({
       code: "not_found",
-      type: "NOT_FOUND",
+      type: SourceIngestionLifecycleEventType.NOT_FOUND,
     });
 
     expect(transition.state).toBe("not_found_disabled");
@@ -77,14 +78,14 @@ describe("source ingestion lifecycle runtime", () => {
       sourceId: "src-3",
     });
 
-    await runtime.dispatch({ type: "SOURCE_SELECTED" });
-    await runtime.dispatch({ type: "FETCHER_RESOLVED" });
-    await runtime.dispatch({ type: "FETCH_SUCCEEDED" });
+    await runtime.dispatch({ type: SourceIngestionLifecycleEventType.SOURCE_SELECTED });
+    await runtime.dispatch({ type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED });
+    await runtime.dispatch({ type: SourceIngestionLifecycleEventType.FETCH_SUCCEEDED });
     const transition = await runtime.dispatch({
       eventsAdded: 1,
       eventsRemoved: 0,
       nextSyncToken: "token-1",
-      type: "INGEST_SUCCEEDED",
+      type: SourceIngestionLifecycleEventType.INGEST_SUCCEEDED,
     });
 
     expect(transition.state).toBe("completed");

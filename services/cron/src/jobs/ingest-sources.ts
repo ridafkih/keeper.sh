@@ -18,6 +18,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq, inArray } from "drizzle-orm";
 import { RedisCommandOutboxStore } from "@keeper.sh/machine-orchestration";
+import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import { createMachineRuntimeWidelogSink } from "@/utils/machine-runtime-widelog";
@@ -181,7 +182,7 @@ const classifyIngestionFailure = (
 ): SourceIngestionFailureDecision => {
   if (input?.isAuthFailure?.(error)) {
     return {
-      eventType: "AUTH_FAILURE",
+      eventType: SourceIngestionLifecycleEventType.AUTH_FAILURE,
       code: "auth_required",
       logSlug: input.authFailureSlug ?? "provider-auth-failed",
       requiresReauth: true,
@@ -191,7 +192,7 @@ const classifyIngestionFailure = (
 
   if (isNotFoundError(error) || (error instanceof Error && error.message.includes("404"))) {
     return {
-      eventType: "NOT_FOUND",
+      eventType: SourceIngestionLifecycleEventType.NOT_FOUND,
       code: resolveIngestionErrorCode(error),
       logSlug: "provider-calendar-not-found",
       requiresReauth: false,
@@ -200,7 +201,7 @@ const classifyIngestionFailure = (
   }
 
   return {
-    eventType: "TRANSIENT_FAILURE",
+    eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
     code: resolveIngestionErrorCode(error),
     logSlug: "provider-api-error",
     requiresReauth: false,

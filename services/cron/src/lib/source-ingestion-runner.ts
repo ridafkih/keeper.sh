@@ -1,5 +1,10 @@
+import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
+
 interface SourceIngestionFailureDecision {
-  eventType: "AUTH_FAILURE" | "NOT_FOUND" | "TRANSIENT_FAILURE";
+  eventType:
+    | SourceIngestionLifecycleEventType.AUTH_FAILURE
+    | SourceIngestionLifecycleEventType.NOT_FOUND
+    | SourceIngestionLifecycleEventType.TRANSIENT_FAILURE;
   code: string;
   logSlug: string;
   requiresReauth: boolean;
@@ -13,17 +18,20 @@ interface SourceIngestionResult {
 }
 
 type SourceIngestionRuntimeEvent =
-  | { type: "SOURCE_SELECTED" }
-  | { type: "FETCHER_RESOLVED" }
-  | { type: "FETCH_SUCCEEDED" }
+  | { type: SourceIngestionLifecycleEventType.SOURCE_SELECTED }
+  | { type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED }
+  | { type: SourceIngestionLifecycleEventType.FETCH_SUCCEEDED }
   | {
-    type: "INGEST_SUCCEEDED";
+    type: SourceIngestionLifecycleEventType.INGEST_SUCCEEDED;
     eventsAdded: number;
     eventsRemoved: number;
     nextSyncToken?: string;
   }
   | {
-    type: "AUTH_FAILURE" | "NOT_FOUND" | "TRANSIENT_FAILURE";
+    type:
+      | SourceIngestionLifecycleEventType.AUTH_FAILURE
+      | SourceIngestionLifecycleEventType.NOT_FOUND
+      | SourceIngestionLifecycleEventType.TRANSIENT_FAILURE;
     code: string;
   };
 
@@ -91,12 +99,12 @@ const dispatchIngestionSuccess = async (input: {
   logger.set("sync.events_added", result.eventsAdded);
   logger.set("sync.events_removed", result.eventsRemoved);
 
-  await runtime.dispatch({ type: "FETCH_SUCCEEDED" });
+  await runtime.dispatch({ type: SourceIngestionLifecycleEventType.FETCH_SUCCEEDED });
   await runtime.dispatch({
     eventsAdded: result.eventsAdded,
     eventsRemoved: result.eventsRemoved,
     nextSyncToken: input.nextSyncToken,
-    type: "INGEST_SUCCEEDED",
+    type: SourceIngestionLifecycleEventType.INGEST_SUCCEEDED,
   });
 
   logger.set("outcome", "success");
@@ -108,8 +116,8 @@ const runSourceIngestionUnit = async (
   applyCommonWidelogFields(input.logger, input.metadata);
 
   try {
-    await input.runtime.dispatch({ type: "SOURCE_SELECTED" });
-    await input.runtime.dispatch({ type: "FETCHER_RESOLVED" });
+    await input.runtime.dispatch({ type: SourceIngestionLifecycleEventType.SOURCE_SELECTED });
+    await input.runtime.dispatch({ type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED });
 
     const result = await input.logger.measureDuration(input.executeIngest);
     await dispatchIngestionSuccess({

@@ -3,21 +3,21 @@ import type { MachineSnapshot, MachineTransitionResult } from "./core/state-mach
 import type { EventEnvelope } from "./core/event-envelope";
 import type { TransitionPolicy } from "./core/transition-policy";
 
-const SourceIngestionLifecycleEventType = {
-  AUTH_FAILURE: "AUTH_FAILURE",
-  FETCH_SUCCEEDED: "FETCH_SUCCEEDED",
-  FETCHER_RESOLVED: "FETCHER_RESOLVED",
-  INGEST_SUCCEEDED: "INGEST_SUCCEEDED",
-  NOT_FOUND: "NOT_FOUND",
-  SOURCE_SELECTED: "SOURCE_SELECTED",
-  TRANSIENT_FAILURE: "TRANSIENT_FAILURE",
-} as const;
+enum SourceIngestionLifecycleEventType {
+  AUTH_FAILURE = "AUTH_FAILURE",
+  FETCH_SUCCEEDED = "FETCH_SUCCEEDED",
+  FETCHER_RESOLVED = "FETCHER_RESOLVED",
+  INGEST_SUCCEEDED = "INGEST_SUCCEEDED",
+  NOT_FOUND = "NOT_FOUND",
+  SOURCE_SELECTED = "SOURCE_SELECTED",
+  TRANSIENT_FAILURE = "TRANSIENT_FAILURE",
+}
 
-const SourceIngestionLifecycleCommandType = {
-  DISABLE_SOURCE: "DISABLE_SOURCE",
-  MARK_NEEDS_REAUTH: "MARK_NEEDS_REAUTH",
-  PERSIST_SYNC_TOKEN: "PERSIST_SYNC_TOKEN",
-} as const;
+enum SourceIngestionLifecycleCommandType {
+  DISABLE_SOURCE = "DISABLE_SOURCE",
+  MARK_NEEDS_REAUTH = "MARK_NEEDS_REAUTH",
+  PERSIST_SYNC_TOKEN = "PERSIST_SYNC_TOKEN",
+}
 
 type SourceIngestionLifecycleState =
   | "source_selected"
@@ -39,23 +39,23 @@ interface SourceIngestionLifecycleContext {
 }
 
 type SourceIngestionLifecycleEvent =
-  | { type: typeof SourceIngestionLifecycleEventType.SOURCE_SELECTED }
-  | { type: typeof SourceIngestionLifecycleEventType.FETCHER_RESOLVED }
-  | { type: typeof SourceIngestionLifecycleEventType.FETCH_SUCCEEDED }
+  | { type: SourceIngestionLifecycleEventType.SOURCE_SELECTED }
+  | { type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED }
+  | { type: SourceIngestionLifecycleEventType.FETCH_SUCCEEDED }
   | {
-    type: typeof SourceIngestionLifecycleEventType.INGEST_SUCCEEDED;
+    type: SourceIngestionLifecycleEventType.INGEST_SUCCEEDED;
     eventsAdded: number;
     eventsRemoved: number;
     nextSyncToken?: string;
   }
-  | { type: typeof SourceIngestionLifecycleEventType.AUTH_FAILURE; code: string }
-  | { type: typeof SourceIngestionLifecycleEventType.NOT_FOUND; code: string }
-  | { type: typeof SourceIngestionLifecycleEventType.TRANSIENT_FAILURE; code: string };
+  | { type: SourceIngestionLifecycleEventType.AUTH_FAILURE; code: string }
+  | { type: SourceIngestionLifecycleEventType.NOT_FOUND; code: string }
+  | { type: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE; code: string };
 
 type SourceIngestionLifecycleCommand =
-  | { type: typeof SourceIngestionLifecycleCommandType.MARK_NEEDS_REAUTH }
-  | { type: typeof SourceIngestionLifecycleCommandType.DISABLE_SOURCE }
-  | { type: typeof SourceIngestionLifecycleCommandType.PERSIST_SYNC_TOKEN; syncToken: string };
+  | { type: SourceIngestionLifecycleCommandType.MARK_NEEDS_REAUTH }
+  | { type: SourceIngestionLifecycleCommandType.DISABLE_SOURCE }
+  | { type: SourceIngestionLifecycleCommandType.PERSIST_SYNC_TOKEN; syncToken: string };
 
 type SourceIngestionLifecycleOutput =
   | { type: "INGEST_COMPLETED"; changed: boolean }
