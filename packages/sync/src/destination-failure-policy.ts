@@ -1,9 +1,9 @@
 import {
-  ErrorPolicy,
   isRetryablePolicy,
   isTerminalPolicy,
 } from "@keeper.sh/state-machines";
 import type { DestinationExecutionOutput } from "@keeper.sh/state-machines";
+import type { ErrorPolicy } from "@keeper.sh/state-machines";
 
 interface DestinationFailurePolicy {
   code: string;
@@ -11,13 +11,6 @@ interface DestinationFailurePolicy {
   policy: ErrorPolicy;
   retryable: boolean;
 }
-
-const resolveFailurePolicy = (retryable: boolean): ErrorPolicy => {
-  if (retryable) {
-    return ErrorPolicy.RETRYABLE;
-  }
-  return ErrorPolicy.TERMINAL;
-};
 
 const resolveDestinationFailureOutput = (
   outputs: DestinationExecutionOutput[],
@@ -39,10 +32,10 @@ const resolveDestinationFailureOutput = (
     );
   }
 
-  const policy = resolveFailurePolicy(failureOutput.retryable);
+  const { code, policy } = failureOutput;
   return {
+    code,
     policy,
-    code: failureOutput.code,
     disabled: isTerminalPolicy(policy),
     retryable: isRetryablePolicy(policy),
   };

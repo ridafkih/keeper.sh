@@ -2,6 +2,8 @@ import { StateMachine } from "./core/state-machine";
 import type { MachineSnapshot, MachineTransitionResult } from "./core/state-machine";
 import type { EventEnvelope } from "./core/event-envelope";
 import type { TransitionPolicy } from "./core/transition-policy";
+import type { ErrorPolicy } from "./errors/error-policy";
+import { ErrorPolicy as ErrorPolicyValue } from "./errors/error-policy";
 
 const DestinationExecutionEventType = {
   EXECUTION_FAILED: "EXECUTION_FAILED",
@@ -76,7 +78,7 @@ type DestinationExecutionCommand =
 
 type DestinationExecutionOutput =
   | { type: "DESTINATION_EXECUTION_COMPLETED"; changed: boolean }
-  | { type: "DESTINATION_EXECUTION_FAILED"; retryable: boolean; code: string };
+  | { type: "DESTINATION_EXECUTION_FAILED"; policy: ErrorPolicy; code: string };
 
 type DestinationExecutionSnapshot = MachineSnapshot<
   DestinationExecutionState,
@@ -253,7 +255,7 @@ class DestinationExecutionStateMachine
               { type: DestinationExecutionCommandType.DISABLE_DESTINATION, reason: event.reason },
               { type: DestinationExecutionCommandType.RELEASE_LOCK, holderId },
             ],
-            [{ type: "DESTINATION_EXECUTION_FAILED", code: event.code, retryable: false }],
+            [{ type: "DESTINATION_EXECUTION_FAILED", code: event.code, policy: ErrorPolicyValue.TERMINAL }],
           );
         }
 
@@ -272,7 +274,7 @@ class DestinationExecutionStateMachine
             { type: DestinationExecutionCommandType.APPLY_BACKOFF, nextAttemptAt },
             { type: DestinationExecutionCommandType.RELEASE_LOCK, holderId },
           ],
-          [{ type: "DESTINATION_EXECUTION_FAILED", code: event.code, retryable: true }],
+          [{ type: "DESTINATION_EXECUTION_FAILED", code: event.code, policy: ErrorPolicyValue.RETRYABLE }],
         );
       }
       case DestinationExecutionEventType.EXECUTION_RETRYABLE_FAILED: {
@@ -291,7 +293,7 @@ class DestinationExecutionStateMachine
             { type: DestinationExecutionCommandType.APPLY_BACKOFF, nextAttemptAt: event.nextAttemptAt },
             { type: DestinationExecutionCommandType.RELEASE_LOCK, holderId },
           ],
-          [{ type: "DESTINATION_EXECUTION_FAILED", code: event.code, retryable: true }],
+          [{ type: "DESTINATION_EXECUTION_FAILED", code: event.code, policy: ErrorPolicyValue.RETRYABLE }],
         );
       }
       case DestinationExecutionEventType.EXECUTION_FATAL_FAILED: {
@@ -310,7 +312,7 @@ class DestinationExecutionStateMachine
             { type: DestinationExecutionCommandType.DISABLE_DESTINATION, reason: event.reason },
             { type: DestinationExecutionCommandType.RELEASE_LOCK, holderId },
           ],
-          [{ type: "DESTINATION_EXECUTION_FAILED", code: event.code, retryable: false }],
+          [{ type: "DESTINATION_EXECUTION_FAILED", code: event.code, policy: ErrorPolicyValue.TERMINAL }],
         );
       }
       default: {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { createEventEnvelope } from "./core/event-envelope";
 import type { EventActor } from "./core/event-envelope";
 import { TransitionPolicy } from "./core/transition-policy";
+import { ErrorPolicy } from "./errors/error-policy";
 import { DestinationExecutionStateMachine } from "./destination-execution.machine";
 
 let envelopeSequence = 0;
@@ -60,7 +61,7 @@ describe("DestinationExecutionStateMachine", () => {
       { nextAttemptAt: "2026-03-19T13:30:00.000Z", type: "APPLY_BACKOFF" },
       { holderId: "holder-2", type: "RELEASE_LOCK" },
     ]);
-    expect(transition.outputs).toEqual([{ code: "rate-limited", retryable: true, type: "DESTINATION_EXECUTION_FAILED" }]);
+    expect(transition.outputs).toEqual([{ code: "rate-limited", policy: ErrorPolicy.RETRYABLE, type: "DESTINATION_EXECUTION_FAILED" }]);
   });
 
   it("disables destination and releases lock on fatal failure", () => {
@@ -89,7 +90,7 @@ describe("DestinationExecutionStateMachine", () => {
       { reason: "auth-permanent", type: "DISABLE_DESTINATION" },
       { holderId: "holder-3", type: "RELEASE_LOCK" },
     ]);
-    expect(transition.outputs).toEqual([{ code: "forbidden", retryable: false, type: "DESTINATION_EXECUTION_FAILED" }]);
+    expect(transition.outputs).toEqual([{ code: "forbidden", policy: ErrorPolicy.TERMINAL, type: "DESTINATION_EXECUTION_FAILED" }]);
   });
 
   it("rejects out-of-order execution event in strict mode", () => {

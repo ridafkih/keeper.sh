@@ -8,7 +8,7 @@ describe("resolveDestinationFailureOutput", () => {
       {
         type: "DESTINATION_EXECUTION_FAILED",
         code: "provider-timeout",
-        retryable: true,
+        policy: ErrorPolicy.RETRYABLE,
       },
     ]);
 
@@ -25,7 +25,7 @@ describe("resolveDestinationFailureOutput", () => {
       {
         type: "DESTINATION_EXECUTION_FAILED",
         code: "auth-failed",
-        retryable: false,
+        policy: ErrorPolicy.TERMINAL,
       },
     ]);
 
@@ -54,12 +54,12 @@ describe("resolveDestinationFailureOutput", () => {
         {
           type: "DESTINATION_EXECUTION_FAILED",
           code: "a",
-          retryable: true,
+          policy: ErrorPolicy.RETRYABLE,
         },
         {
           type: "DESTINATION_EXECUTION_FAILED",
           code: "b",
-          retryable: false,
+          policy: ErrorPolicy.TERMINAL,
         },
       ]),
     ).toThrow("Invariant violated: expected exactly one DESTINATION_EXECUTION_FAILED output");

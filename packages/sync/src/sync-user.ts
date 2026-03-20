@@ -18,7 +18,10 @@ import { createDestinationExecutionRuntime } from "./destination-execution-runti
 import type { DestinationExecutionDispatchResult } from "./destination-execution-runtime";
 import type { DestinationExecutionRuntimeEvent } from "./destination-execution-runtime";
 import { resolveDestinationFailureOutput } from "./destination-failure-policy";
-import { getErrorMessage, isBackoffEligibleError } from "./destination-errors";
+import {
+  DestinationExecutionFailureClassification,
+  mapDestinationExecutionFailureEvent,
+} from "./destination-execution-failure-event";
 import { resolveSyncProviderOutcome, ProviderResolutionStatus } from "./resolve-provider";
 import type { OAuthConfig } from "./resolve-provider";
 import type { CredentialHealthRuntimeEvent } from "./credential-health-runtime";
@@ -99,11 +102,6 @@ interface CalendarSyncFailure {
   disabled: boolean;
 }
 
-enum DestinationExecutionErrorClassification {
-  RETRYABLE = "retryable",
-  TERMINAL = "terminal",
-}
-
 interface SyncDestination {
   accountId: string;
   calendarId: string;
@@ -171,15 +169,6 @@ const buildCalendarFailure = (input: BuildCalendarFailureInput): CalendarSyncFai
   retryable: input.retryable,
   disabled: input.disabled,
 });
-
-const classifyDestinationExecutionError = (
-  error: unknown,
-): DestinationExecutionErrorClassification => {
-  if (isBackoffEligibleError(error)) {
-    return DestinationExecutionErrorClassification.RETRYABLE;
-  }
-  return DestinationExecutionErrorClassification.TERMINAL;
-};
 
 const handleDispatchConflict = async (
   input: HandleDispatchConflictInput,
@@ -496,29 +485,12 @@ const syncDestinationsForUser = async (
           syncEvents,
         });
     } catch (error) {
-      const errorMessage = getErrorMessage(error);
-      const classification = classifyDestinationExecutionError(error);
-
-      if (classification === DestinationExecutionErrorClassification.TERMINAL) {
-        await destinationRuntime.releaseIfHeld();
-        await notifyCalendarFailed(
-          buildCalendarFailure({
-            destination,
-            startedAtMs: calendarSyncStartedAt,
-            error: errorMessage,
-            retryable: false,
-            disabled: false,
-          }),
-        );
-        throw error;
-      }
-
-      const failureResult: DestinationExecutionDispatchResult = await destinationRuntime.dispatch({
-        code: errorMessage,
-        reason: errorMessage,
-        at: new Date().toISOString(),
-        type: "EXECUTION_FAILED",
-      });
+      const mappedFailure = mapDestinationExecutionFailureEvent(
+        error,
+        new Date().toISOString(),
+      );
+      const failureResult: DestinationExecutionDispatchResult =
+        await destinationRuntime.dispatch(mappedFailure.event);
       const executionFailureConflict = await handleDispatchConflict({
         result: failureResult,
         runtime: destinationRuntime,
@@ -543,16 +515,22 @@ const syncDestinationsForUser = async (
         continue;
       }
       const failurePolicy = resolveDestinationFailureOutput(failureResult.transition.outputs);
-      errors.push(errorMessage);
+      errors.push(mappedFailure.errorMessage);
       await notifyCalendarFailed(
         buildCalendarFailure({
           destination,
           startedAtMs: calendarSyncStartedAt,
-          error: errorMessage,
+          error: mappedFailure.errorMessage,
           retryable: failurePolicy.retryable,
           disabled: failurePolicy.disabled,
         }),
       );
+      if (
+        mappedFailure.classification
+        === DestinationExecutionFailureClassification.TERMINAL
+      ) {
+        throw error;
+      }
     }
   }
 

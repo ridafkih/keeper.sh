@@ -31,10 +31,10 @@ Mode: `clean-break` (no compatibility bridge)
 
 ## Phase B — Branching Hotspot Extraction
 
-- [ ] B1. Identify remaining non-machine policy branches in `packages/sync`.
-- [ ] B2. Identify remaining non-machine policy branches in `services/cron`.
-- [ ] B3. Identify remaining non-machine policy branches in `services/worker`.
-- [ ] B4. Extract retry decisioning into machine transition outputs.
+- [x] B1. Identify remaining non-machine policy branches in `packages/sync`.
+- [x] B2. Identify remaining non-machine policy branches in `services/cron`.
+- [x] B3. Identify remaining non-machine policy branches in `services/worker`.
+- [x] B4. Extract retry decisioning into machine transition outputs.
 - [ ] B5. Extract disable decisioning into machine transition outputs.
 - [ ] B6. Extract reauth decisioning into machine transition outputs.
 - [ ] B7. Extract backoff schedule decisioning into machine transition outputs.
@@ -109,5 +109,5 @@ Mode: `clean-break` (no compatibility bridge)
 
 - [ ] Q1. Execute Phase A task set A1–A4 in first patch.
 - [x] Q2. Execute Phase A task set A5–A8 in second patch.
-- [ ] Q3. Execute Phase B task set B1–B4 in third patch.
+- [x] Q3. Execute Phase B task set B1–B4 in third patch.
 - [ ] Q4. Execute Phase C task set C1–C4 in fourth patch.
