@@ -1,0 +1,66 @@
+import { ErrorPolicy, SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
+
+enum SourceIngestionFailureLogSlug {
+  AUTH_FAILED = "provider-auth-failed",
+  TOKEN_REFRESH_FAILED = "provider-token-refresh-failed",
+  NOT_FOUND = "provider-calendar-not-found",
+  TRANSIENT = "provider-api-error",
+}
+
+interface SourceIngestionFailureDecision {
+  eventType:
+    | SourceIngestionLifecycleEventType.AUTH_FAILURE
+    | SourceIngestionLifecycleEventType.NOT_FOUND
+    | SourceIngestionLifecycleEventType.TRANSIENT_FAILURE;
+  code: string;
+  logSlug: SourceIngestionFailureLogSlug;
+  policy: ErrorPolicy;
+}
+
+interface SourceIngestionFailureClassifierOptions {
+  authFailureSlug?: SourceIngestionFailureLogSlug;
+  isAuthFailure?: (error: unknown) => boolean;
+}
+
+interface SourceIngestionFailureClassifierDependencies {
+  isNotFoundError: (error: unknown) => boolean;
+  resolveErrorCode: (error: unknown) => string;
+}
+
+const classifySourceIngestionFailure = (
+  error: unknown,
+  dependencies: SourceIngestionFailureClassifierDependencies,
+  options?: SourceIngestionFailureClassifierOptions,
+): SourceIngestionFailureDecision => {
+  if (options?.isAuthFailure?.(error)) {
+    return {
+      eventType: SourceIngestionLifecycleEventType.AUTH_FAILURE,
+      code: "auth_required",
+      logSlug: options.authFailureSlug ?? SourceIngestionFailureLogSlug.AUTH_FAILED,
+      policy: ErrorPolicy.REQUIRES_REAUTH,
+    };
+  }
+
+  if (dependencies.isNotFoundError(error) || (error instanceof Error && error.message.includes("404"))) {
+    return {
+      eventType: SourceIngestionLifecycleEventType.NOT_FOUND,
+      code: dependencies.resolveErrorCode(error),
+      logSlug: SourceIngestionFailureLogSlug.NOT_FOUND,
+      policy: ErrorPolicy.TERMINAL,
+    };
+  }
+
+  return {
+    eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
+    code: dependencies.resolveErrorCode(error),
+    logSlug: SourceIngestionFailureLogSlug.TRANSIENT,
+    policy: ErrorPolicy.RETRYABLE,
+  };
+};
+
+export { classifySourceIngestionFailure, SourceIngestionFailureLogSlug };
+export type {
+  SourceIngestionFailureClassifierDependencies,
+  SourceIngestionFailureClassifierOptions,
+  SourceIngestionFailureDecision,
+};

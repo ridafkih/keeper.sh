@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
+import { ErrorPolicy, SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
 import {
   runSourceIngestionUnit,
   type SourceIngestionFailureDecision,
@@ -7,6 +7,7 @@ import {
   type SourceIngestionResult,
   type SourceIngestionRuntime,
 } from "./source-ingestion-runner";
+import { SourceIngestionFailureLogSlug } from "./source-ingestion-failure";
 
 const createLogger = () => {
   const fields = new Map<string, unknown>();
@@ -63,9 +64,8 @@ describe("runSourceIngestionUnit", () => {
       classifyFailure: (): SourceIngestionFailureDecision => ({
         code: "transient_failure",
         eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
-        logSlug: "provider-api-error",
-        requiresReauth: false,
-        retriable: true,
+        logSlug: SourceIngestionFailureLogSlug.TRANSIENT,
+        policy: ErrorPolicy.RETRYABLE,
       }),
     });
 
@@ -109,9 +109,8 @@ describe("runSourceIngestionUnit", () => {
       classifyFailure: (): SourceIngestionFailureDecision => ({
         code: "transient_failure",
         eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
-        logSlug: "provider-api-error",
-        requiresReauth: false,
-        retriable: true,
+        logSlug: SourceIngestionFailureLogSlug.TRANSIENT,
+        policy: ErrorPolicy.RETRYABLE,
       }),
     })).rejects.toBe(expectedError);
 
@@ -123,6 +122,7 @@ describe("runSourceIngestionUnit", () => {
     expect(fields.get("outcome")).toBe("error");
     expect(errorFieldCalls).toHaveLength(1);
     expect(errorFieldCalls[0]?.fields).toEqual({
+      policy: ErrorPolicy.RETRYABLE,
       slug: "provider-api-error",
       retriable: true,
       requiresReauth: false,
@@ -146,9 +146,8 @@ describe("runSourceIngestionUnit", () => {
       classifyFailure: (): SourceIngestionFailureDecision => ({
         code: "not_found",
         eventType: SourceIngestionLifecycleEventType.NOT_FOUND,
-        logSlug: "provider-calendar-not-found",
-        requiresReauth: false,
-        retriable: false,
+        logSlug: SourceIngestionFailureLogSlug.NOT_FOUND,
+        policy: ErrorPolicy.TERMINAL,
       }),
     });
 

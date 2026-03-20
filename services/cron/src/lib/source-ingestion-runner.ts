@@ -1,15 +1,6 @@
 import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
-
-interface SourceIngestionFailureDecision {
-  eventType:
-    | SourceIngestionLifecycleEventType.AUTH_FAILURE
-    | SourceIngestionLifecycleEventType.NOT_FOUND
-    | SourceIngestionLifecycleEventType.TRANSIENT_FAILURE;
-  code: string;
-  logSlug: string;
-  requiresReauth: boolean;
-  retriable: boolean;
-}
+import { ErrorPolicy } from "@keeper.sh/state-machines";
+import type { SourceIngestionFailureDecision } from "./source-ingestion-failure";
 
 interface SourceIngestionResult {
   eventsAdded: number;
@@ -136,10 +127,11 @@ const runSourceIngestionUnit = async (
     });
     input.logger.errorFields(error, {
       slug: failureDecision.logSlug,
-      retriable: failureDecision.retriable,
-      requiresReauth: failureDecision.requiresReauth,
+      policy: failureDecision.policy,
+      retriable: failureDecision.policy === ErrorPolicy.RETRYABLE,
+      requiresReauth: failureDecision.policy === ErrorPolicy.REQUIRES_REAUTH,
     });
-    if (failureDecision.retriable) {
+    if (failureDecision.policy === ErrorPolicy.RETRYABLE) {
       throw error;
     }
     return ZERO_RESULT;

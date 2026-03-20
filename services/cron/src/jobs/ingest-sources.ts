@@ -18,7 +18,6 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq, inArray } from "drizzle-orm";
 import { RedisCommandOutboxStore } from "@keeper.sh/machine-orchestration";
-import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import { createMachineRuntimeWidelogSink } from "@/utils/machine-runtime-widelog";
@@ -33,9 +32,12 @@ import {
 } from "../lib/oauth-ingestion-resolution";
 import {
   runSourceIngestionUnit,
-  type SourceIngestionFailureDecision,
   type SourceIngestionLogger,
 } from "../lib/source-ingestion-runner";
+import {
+  classifySourceIngestionFailure,
+  SourceIngestionFailureLogSlug,
+} from "../lib/source-ingestion-failure";
 
 const SOURCE_TIMEOUT_MS = 60_000;
 const SOURCE_CONCURRENCY = 5;
@@ -173,42 +175,6 @@ const createSourceRuntime = (input: {
     sourceId: input.sourceId,
   });
 
-const classifyIngestionFailure = (
-  error: unknown,
-  input?: {
-    authFailureSlug?: string;
-    isAuthFailure?: (error: unknown) => boolean;
-  },
-): SourceIngestionFailureDecision => {
-  if (input?.isAuthFailure?.(error)) {
-    return {
-      eventType: SourceIngestionLifecycleEventType.AUTH_FAILURE,
-      code: "auth_required",
-      logSlug: input.authFailureSlug ?? "provider-auth-failed",
-      requiresReauth: true,
-      retriable: false,
-    };
-  }
-
-  if (isNotFoundError(error) || (error instanceof Error && error.message.includes("404"))) {
-    return {
-      eventType: SourceIngestionLifecycleEventType.NOT_FOUND,
-      code: resolveIngestionErrorCode(error),
-      logSlug: "provider-calendar-not-found",
-      requiresReauth: false,
-      retriable: false,
-    };
-  }
-
-  return {
-    eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
-    code: resolveIngestionErrorCode(error),
-    logSlug: "provider-api-error",
-    requiresReauth: false,
-    retriable: true,
-  };
-};
-
 const createSourceIngestionLogger = (): SourceIngestionLogger => ({
   errorFields: (error, fields) => {
     widelog.errorFields(error, fields);
@@ -281,10 +247,15 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
 
           const logger = createSourceIngestionLogger();
           return runSourceIngestionUnit({
-            classifyFailure: (error) => classifyIngestionFailure(error, {
-              authFailureSlug: "provider-token-refresh-failed",
-              isAuthFailure: isOAuthAuthFailure,
-            }),
+            classifyFailure: (error) =>
+              classifySourceIngestionFailure(
+                error,
+                { isNotFoundError, resolveErrorCode: resolveIngestionErrorCode },
+                {
+                  authFailureSlug: SourceIngestionFailureLogSlug.TOKEN_REFRESH_FAILED,
+                  isAuthFailure: isOAuthAuthFailure,
+                },
+              ),
             executeIngest: async () => {
               const resolution = resolveOAuthIngestionResolution({
                 accessToken: source.accessToken,
@@ -416,10 +387,15 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
 
           const logger = createSourceIngestionLogger();
           return runSourceIngestionUnit({
-            classifyFailure: (error) => classifyIngestionFailure(error, {
-              authFailureSlug: "provider-auth-failed",
-              isAuthFailure: isCalDAVAuthenticationError,
-            }),
+            classifyFailure: (error) =>
+              classifySourceIngestionFailure(
+                error,
+                { isNotFoundError, resolveErrorCode: resolveIngestionErrorCode },
+                {
+                  authFailureSlug: SourceIngestionFailureLogSlug.AUTH_FAILED,
+                  isAuthFailure: isCalDAVAuthenticationError,
+                },
+              ),
             executeIngest: async () => {
               const password = decryptPassword(source.encryptedPassword, encryptionKey);
               const fetcher = createCalDAVSourceFetcher({
@@ -516,7 +492,11 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
 
           const logger = createSourceIngestionLogger();
           return runSourceIngestionUnit({
-            classifyFailure: (error) => classifyIngestionFailure(error),
+            classifyFailure: (error) =>
+              classifySourceIngestionFailure(
+                error,
+                { isNotFoundError, resolveErrorCode: resolveIngestionErrorCode },
+              ),
             executeIngest: async () => {
               if (!source.url) {
                 return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
