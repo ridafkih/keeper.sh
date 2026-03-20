@@ -58,7 +58,7 @@ const withBackoff = async <TResult>(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await operation();
+      return operation();
     } catch (error) {
       const isLastAttempt = attempt === maxRetries;
       if (isLastAttempt || !options.shouldRetry(error)) {

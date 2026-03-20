@@ -6,6 +6,7 @@ import {
   createRedisRateLimiter,
 } from "@keeper.sh/calendar";
 import type { SyncProgressUpdate, RefreshLockStore } from "@keeper.sh/calendar";
+import { RedisCommandOutboxStore } from "@keeper.sh/machine-orchestration";
 import {
   calendarAccountsTable,
   calendarsTable,
@@ -209,6 +210,10 @@ const syncDestinationsForUser = async (
           await handle.release();
         },
       },
+      outboxStore: new RedisCommandOutboxStore({
+        keyPrefix: "machine:outbox:destination-execution",
+        redis,
+      }),
       onRuntimeEvent: (event) => {
         if (callbacks?.onDestinationRuntimeEvent) {
           return callbacks.onDestinationRuntimeEvent(destination.calendarId, event);
@@ -230,6 +235,7 @@ const syncDestinationsForUser = async (
         userId: destination.userId,
         accountId: destination.accountId,
         oauthConfig: config.oauthConfig,
+        outboxRedis: redis,
         encryptionKey: config.encryptionKey,
         refreshLockStore: config.refreshLockStore,
         rateLimiter,

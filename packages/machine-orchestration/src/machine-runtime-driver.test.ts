@@ -405,3 +405,30 @@ describe("RedisCommandOutboxStore", () => {
     expect(await store.listAggregates()).toEqual([]);
   });
 });
+
+describe("MachineRuntimeDriver outbox drain helpers", () => {
+  it("drains an aggregate outbox through static helper", async () => {
+    const executed: string[] = [];
+    const outboxStore = new InMemoryCommandOutboxStore<TestCommand>();
+    await outboxStore.enqueue({
+      aggregateId: "aggregate-static",
+      commands: [{ id: "command-1", type: "DO_WORK" }],
+      envelopeId: "env-static",
+      nextCommandIndex: 0,
+    });
+
+    await MachineRuntimeDriver.drainAggregateOutbox({
+      aggregateId: "aggregate-static",
+      commandBus: {
+        execute: (command) => {
+          executed.push(command.id);
+          return Promise.resolve();
+        },
+      },
+      outboxStore,
+    });
+
+    expect(executed).toEqual(["command-1"]);
+    expect(await outboxStore.readNext("aggregate-static")).toBeNull();
+  });
+});

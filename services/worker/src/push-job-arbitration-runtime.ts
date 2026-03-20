@@ -156,28 +156,11 @@ const drainPendingForUser = async (
   dependencies: PushJobArbitrationRuntimeDependencies,
   userId: string,
 ): Promise<void> => {
-  const machine = new RestorablePushJobArbitrationStateMachine({
-    transitionPolicy: TransitionPolicy.IGNORE,
-  });
-  const driver = new MachineRuntimeDriver<
-    PushJobArbitrationState,
-    PushJobArbitrationContext,
-    PushJobArbitrationEvent,
-    PushJobArbitrationCommand,
-    PushJobArbitrationOutput
-  >({
+  await MachineRuntimeDriver.drainAggregateOutbox({
     aggregateId: userId,
     commandBus: createCommandBus(dependencies, userId),
-    envelopeStore,
     outboxStore: dependencies.outboxStore,
-    eventSink: {
-      onProcessed: (processedEvent) => dependencies.onRuntimeEvent(processedEvent),
-    },
-    machine,
-    snapshotStore,
   });
-  await snapshotStore.initializeIfMissing(userId, { context: {}, state: "idle" });
-  await driver.drainOutbox();
 };
 
 const createPushJobArbitrationRuntime = (

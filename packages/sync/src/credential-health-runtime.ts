@@ -1,5 +1,5 @@
 import {
-  InMemoryCommandOutboxStore,
+  type CommandOutboxStore,
   MachineConflictDetectedError,
   type RuntimeProcessEvent,
   type RuntimeMachine,
@@ -30,6 +30,7 @@ interface CredentialHealthRuntimeInput {
   calendarAccountId: string;
   accessTokenExpiresAt: Date;
   refreshAccessToken: (refreshToken: string) => Promise<OAuthRefreshResult>;
+  outboxStore: CommandOutboxStore<CredentialHealthCommand>;
   persistRefreshedCredentials: (input: {
     accessToken: string;
     expiresAt: Date;
@@ -95,7 +96,6 @@ const createCredentialHealthRuntime = (
     CredentialHealthContext
   >();
   const envelopeStore = new InMemoryEnvelopeStore();
-  const outboxStore = new InMemoryCommandOutboxStore<CredentialHealthCommand>();
   const machine = new RestorableCredentialHealthStateMachine(
     {
       accessTokenExpiresAt: input.accessTokenExpiresAt.toISOString(),
@@ -132,7 +132,7 @@ const createCredentialHealthRuntime = (
       },
     },
     envelopeStore,
-    outboxStore,
+    outboxStore: input.outboxStore,
     eventSink: {
       onProcessed: (event) => input.onRuntimeEvent(event),
     },

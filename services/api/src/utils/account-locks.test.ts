@@ -97,7 +97,7 @@ beforeAll(async () => {
       transaction: async (callback: (tx: object) => Promise<unknown>) => {
         transactionOpen = true;
         try {
-          return await callback(txInstance);
+          return callback(txInstance);
         } finally {
           transactionOpen = false;
         }

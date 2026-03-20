@@ -1,4 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import { InMemoryCommandOutboxStore } from "@keeper.sh/machine-orchestration";
+import type { CredentialHealthCommand } from "@keeper.sh/state-machines";
 import { createCredentialHealthRuntime } from "./credential-health-runtime";
 
 describe("credential health runtime", () => {
@@ -10,6 +12,7 @@ describe("credential health runtime", () => {
       isReauthRequiredError: () => false,
       markNeedsReauthentication: () => Promise.resolve(),
       oauthCredentialId: "cred-1",
+      outboxStore: new InMemoryCommandOutboxStore<CredentialHealthCommand>(),
       persistRefreshedCredentials: ({ accessToken, refreshToken }) => {
         persisted.push({ accessToken, refreshToken });
         return Promise.resolve();
@@ -44,6 +47,7 @@ describe("credential health runtime", () => {
         return Promise.resolve();
       },
       oauthCredentialId: "cred-2",
+      outboxStore: new InMemoryCommandOutboxStore<CredentialHealthCommand>(),
       persistRefreshedCredentials: () => Promise.resolve(),
       refreshAccessToken: () => Promise.reject(new Error("invalid_grant")),
       onRuntimeEvent: () => Promise.resolve(),
@@ -63,6 +67,7 @@ describe("credential health runtime", () => {
       isReauthRequiredError: () => false,
       markNeedsReauthentication: () => Promise.resolve(),
       oauthCredentialId: "cred-3",
+      outboxStore: new InMemoryCommandOutboxStore<CredentialHealthCommand>(),
       persistRefreshedCredentials: () => Promise.resolve(),
       refreshAccessToken: () => Promise.reject(new Error("timeout")),
       onRuntimeEvent: () => Promise.resolve(),
@@ -82,6 +87,7 @@ describe("credential health runtime", () => {
       isReauthRequiredError: () => false,
       markNeedsReauthentication: () => Promise.resolve(),
       oauthCredentialId: "cred-4",
+      outboxStore: new InMemoryCommandOutboxStore<CredentialHealthCommand>(),
       persistRefreshedCredentials: () => Promise.resolve(),
       refreshAccessToken: () =>
         Promise.resolve({

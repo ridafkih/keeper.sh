@@ -313,4 +313,7 @@ For each target machine:
   - `drainOutbox()` executes queued commands with per-command progress tracking (`nextCommandIndex`) for resumable dispatch after partial command failure.
 - Durable outbox backend is now available via `RedisCommandOutboxStore` (aggregate queue + per-envelope entry schema).
 - Worker push arbitration now uses Redis outbox and runs startup/interval recovery (`recoverPending`) to drain orphaned command queues after restarts.
+- `destination_execution` runtime now uses Redis outbox in sync worker paths (`machine:outbox:destination-execution`).
+- `credential_health` runtime now uses Redis outbox in coordinated OAuth refresh paths (`machine:outbox:credential-health`).
+- `source_ingestion_lifecycle` runtime now uses Redis outbox in cron ingestion paths (`machine:outbox:source-ingestion-lifecycle`).
 - Adversarial parallel-dispatch coverage exists at driver level (`machine-runtime-driver.test.ts`) to assert deterministic serialized processing on the same aggregate.

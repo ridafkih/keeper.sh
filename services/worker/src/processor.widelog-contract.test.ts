@@ -43,10 +43,10 @@ let processJob: ProcessJob = (..._args) =>
 
 beforeAll(async () => {
   mock.module("./utils/logging", () => ({
-    context: async <TResult>(callback: () => Promise<TResult> | TResult): Promise<TResult> => {
+    context: <TResult>(callback: () => Promise<TResult> | TResult): Promise<TResult> => {
       pushContext();
       try {
-        return await callback();
+        return Promise.resolve(callback());
       } finally {
         popContext();
       }

@@ -171,7 +171,7 @@ const handleAuthRequest = (pathname: string, request: Request): Promise<Response
     widelog.set("http.path", pathname);
 
     try {
-      return await widelog.time.measure("duration_ms", async () => {
+      return widelog.time.measure("duration_ms", async () => {
         const response = await processAuth(pathname, request);
         widelog.set("status_code", response.status);
         widelog.set("outcome", resolveOutcome(response.status));

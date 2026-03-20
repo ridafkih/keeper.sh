@@ -22,6 +22,7 @@ import {
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq, inArray } from "drizzle-orm";
+import { RedisCommandOutboxStore } from "@keeper.sh/machine-orchestration";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import { createMachineRuntimeWidelogSink } from "@/utils/machine-runtime-widelog";
@@ -263,6 +264,10 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
                   .where(eq(calendarsTable.id, source.calendarId));
               },
             },
+            outboxStore: new RedisCommandOutboxStore({
+              keyPrefix: "machine:outbox:source-ingestion-lifecycle",
+              redis: refreshLockRedis,
+            }),
             onRuntimeEvent,
             provider: source.provider,
             sourceId: source.calendarId,
@@ -466,6 +471,10 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
               },
               persistSyncToken: () => Promise.resolve(),
             },
+            outboxStore: new RedisCommandOutboxStore({
+              keyPrefix: "machine:outbox:source-ingestion-lifecycle",
+              redis: refreshLockRedis,
+            }),
             onRuntimeEvent,
             provider: source.provider,
             sourceId: source.calendarId,
@@ -613,6 +622,10 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
               markNeedsReauth: () => Promise.resolve(),
               persistSyncToken: () => Promise.resolve(),
             },
+            outboxStore: new RedisCommandOutboxStore({
+              keyPrefix: "machine:outbox:source-ingestion-lifecycle",
+              redis: refreshLockRedis,
+            }),
             onRuntimeEvent,
             provider: "ical",
             sourceId: source.calendarId,

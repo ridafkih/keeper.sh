@@ -34,7 +34,7 @@ const resolveOutcome = (statusCode: number): "success" | "error" => {
 
 const fetchUserPlan = async (userId: string): Promise<"free" | "pro" | null> => {
   try {
-    return await premiumService.getUserPlan(userId);
+    return premiumService.getUserPlan(userId);
   } catch {
     return null;
   }
@@ -108,7 +108,7 @@ const withWideEvent =
       }
 
       try {
-        return await widelog.time.measure("duration_ms", async () => {
+        return widelog.time.measure("duration_ms", async () => {
           const response = await handler({ params, request });
           widelog.set("status_code", response.status);
           widelog.set("outcome", resolveOutcome(response.status));

@@ -25,7 +25,7 @@ export const Route = createFileRoute('/(marketing)')({
   },
   loader: async ({ context }) => {
     try {
-      return await context.fetchWeb<GithubStarsLoaderData>("/internal/github-stars");
+      return context.fetchWeb<GithubStarsLoaderData>("/internal/github-stars");
     } catch {
       return {
         count: null,

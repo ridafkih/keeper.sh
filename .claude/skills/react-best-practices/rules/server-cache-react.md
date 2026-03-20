@@ -15,9 +15,9 @@ Use `React.cache()` for server-side request deduplication. Authentication and da
 import { cache } from 'react'
 
 export const getCurrentUser = cache(async () => {
-  const session = await auth()
+ session = await auth()
   if (!session?.user?.id) return null
-  return await db.user.findUnique({
+  return db.user.findUnique({
     where: { id: session.user.id }
   })
 })

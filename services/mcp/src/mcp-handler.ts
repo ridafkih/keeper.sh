@@ -268,7 +268,7 @@ const createKeeperMcpHandler = ({
 
     try {
       await server.connect(transport);
-      return await transport.handleRequest(request);
+      return handleRequest(request);
     } finally {
       await transport.close();
       await server.close();

@@ -1,5 +1,7 @@
 import type { CalendarSyncProvider, RefreshLockStore } from "@keeper.sh/calendar";
 import type { RedisRateLimiter } from "@keeper.sh/calendar";
+import { RedisCommandOutboxStore } from "@keeper.sh/machine-orchestration";
+import type Redis from "ioredis";
 import {
   createGoogleOAuthService,
   createMicrosoftOAuthService,
@@ -39,6 +41,7 @@ interface CoordinatedRefresherOptions {
   calendarAccountId: string;
   accessTokenExpiresAt: Date;
   refreshLockStore: RefreshLockStore | null;
+  outboxRedis: Redis;
   rawRefresh: (refreshToken: string) => Promise<OAuthRefreshResult>;
   onCredentialRuntimeEvent?: (
     calendarId: string,
@@ -78,6 +81,10 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
         .where(eq(oauthCredentialsTable.id, oauthCredentialId));
     },
     refreshAccessToken: rawRefresh,
+    outboxStore: new RedisCommandOutboxStore({
+      keyPrefix: "machine:outbox:credential-health",
+      redis: options.outboxRedis,
+    }),
     onRuntimeEvent: (event) => {
       if (options.onCredentialRuntimeEvent) {
         return options.onCredentialRuntimeEvent(options.calendarId, event);
@@ -101,6 +108,7 @@ const resolveOAuthProvider = async (
   accountId: string,
   oauthConfig: OAuthConfig,
   refreshLockStore: RefreshLockStore | null,
+  outboxRedis: Redis,
   onCredentialRuntimeEvent?: (
     calendarId: string,
     event: CredentialHealthRuntimeEvent,
@@ -148,6 +156,7 @@ const resolveOAuthProvider = async (
         oauthCredentialId: oauthCred.oauthCredentialId,
         calendarAccountId: accountId,
         refreshLockStore,
+        outboxRedis,
         rawRefresh: (refreshToken) => googleOAuth.refreshAccessToken(refreshToken),
         onCredentialRuntimeEvent,
       }),
@@ -178,6 +187,7 @@ const resolveOAuthProvider = async (
         oauthCredentialId: oauthCred.oauthCredentialId,
         calendarAccountId: accountId,
         refreshLockStore,
+        outboxRedis,
         rawRefresh: (refreshToken) => microsoftOAuth.refreshAccessToken(refreshToken),
         onCredentialRuntimeEvent,
       }),
@@ -228,6 +238,7 @@ interface ResolveProviderOptions {
   oauthConfig: OAuthConfig;
   encryptionKey?: string;
   refreshLockStore?: RefreshLockStore | null;
+  outboxRedis: Redis;
   rateLimiter?: RedisRateLimiter;
   signal?: AbortSignal;
   onCredentialRuntimeEvent?: (
@@ -246,6 +257,7 @@ const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarS
       options.accountId,
       options.oauthConfig,
       options.refreshLockStore ?? null,
+      options.outboxRedis,
       options.onCredentialRuntimeEvent,
       options.rateLimiter,
       options.signal,

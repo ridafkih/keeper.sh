@@ -28,7 +28,7 @@ const withWideEvent =
       }
 
       try {
-        return await widelog.time.measure("duration_ms", async () => {
+        return widelog.time.measure("duration_ms", async () => {
           const response = await handler(request);
           widelog.set("status_code", response.status);
           widelog.set("outcome", resolveOutcome(response.status));

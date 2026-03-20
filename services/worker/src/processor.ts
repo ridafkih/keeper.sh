@@ -83,7 +83,7 @@ const setJobWideEventFields = (
     throw new Error("Invariant violated: worker job id missing");
   }
   const jobId = String(job.id);
-  widelog.set("operation.name", "push-sync").sticky();
+  widelog.set("operation.name", "push-sync");
   widelog.set("operation.type", "job").sticky();
   widelog.set("sync.direction", "push").sticky();
   widelog.set("user.id", userId).sticky();
@@ -222,11 +222,14 @@ const processJob = (
 
       const failed = result.addFailed + result.removeFailed;
       const attempted = result.added + result.removed + failed;
-      widelog.set("sync.events_added", result.added);
-      widelog.set("sync.events_removed", result.removed);
-      widelog.set("sync.events_failed", failed);
-      widelog.set("outcome", resolveSyncOutcome(failed, attempted));
-      widelog.flush();
+      await context(() => {
+        setJobWideEventFields(job, userId);
+        widelog.set("sync.events_added", result.added);
+        widelog.set("sync.events_removed", result.removed);
+        widelog.set("sync.events_failed", failed);
+        widelog.set("outcome", resolveSyncOutcome(failed, attempted));
+        widelog.flush();
+      });
 
       return {
         added: result.added,
@@ -236,9 +239,12 @@ const processJob = (
         errors: result.errors,
       };
     } catch (error) {
-      widelog.set("outcome", "error");
-      widelog.errorFields(error, { slug: "push-sync-failed" });
-      widelog.flush();
+      await context(() => {
+        setJobWideEventFields(job, userId);
+        widelog.set("outcome", "error");
+        widelog.errorFields(error, { slug: "push-sync-failed" });
+        widelog.flush();
+      });
       throw error;
     }
   });

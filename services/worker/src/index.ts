@@ -4,10 +4,14 @@ import { PUSH_SYNC_QUEUE_NAME } from "@keeper.sh/queue";
 import type { PushSyncJobPayload, PushSyncJobResult } from "@keeper.sh/queue";
 import { closeDatabase } from "@keeper.sh/database";
 import { RedisCommandOutboxStore } from "@keeper.sh/machine-orchestration";
+import { calendarAccountsTable } from "@keeper.sh/database/schema";
+import { eq } from "drizzle-orm";
 import { processJob } from "./processor";
 import { destroy } from "./utils/logging";
 import env from "./env";
 import { createPushJobArbitrationRuntime } from "./push-job-arbitration-runtime";
+import { recoverCredentialHealthOutbox } from "./recovery/credential-health-outbox-recovery";
+import type { CredentialHealthCommand } from "@keeper.sh/state-machines";
 
 const DEFAULT_CONCURRENCY = 5;
 const LOCK_DURATION_MS = 360_000;
@@ -78,8 +82,32 @@ await entry({
       },
     });
     await pushArbitrationRuntime.recoverPending();
+    const credentialHealthOutboxStore = new RedisCommandOutboxStore<CredentialHealthCommand>({
+      keyPrefix: "machine:outbox:credential-health",
+      redis: refreshLockRedis,
+    });
+    await recoverCredentialHealthOutbox({
+      outboxStore: credentialHealthOutboxStore,
+      markNeedsReauthentication: async (oauthCredentialId) => {
+        await database
+          .update(calendarAccountsTable)
+          .set({ needsReauthentication: true })
+          .where(eq(calendarAccountsTable.oauthCredentialId, oauthCredentialId));
+      },
+    });
     const recoveryInterval = setInterval(() => {
-      pushArbitrationRuntime.recoverPending().catch((error) => {
+      Promise.all([
+        pushArbitrationRuntime.recoverPending(),
+        recoverCredentialHealthOutbox({
+          outboxStore: credentialHealthOutboxStore,
+          markNeedsReauthentication: async (oauthCredentialId) => {
+            await database
+              .update(calendarAccountsTable)
+              .set({ needsReauthentication: true })
+              .where(eq(calendarAccountsTable.oauthCredentialId, oauthCredentialId));
+          },
+        }),
+      ]).catch((error) => {
         worker.emit("error", toWorkerError(error));
       });
     }, RECOVERY_INTERVAL_MS);

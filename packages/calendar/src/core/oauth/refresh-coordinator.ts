@@ -32,7 +32,7 @@ const executeWithDistributedLock = async (
   }
 
   try {
-    return await runRefresh();
+    return runRefresh();
   } finally {
     await lockStore.release(lockKey).catch(() => {
       // Lock release is best-effort; TTL ensures cleanup

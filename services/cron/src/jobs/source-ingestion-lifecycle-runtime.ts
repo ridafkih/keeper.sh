@@ -1,5 +1,5 @@
 import {
-  InMemoryCommandOutboxStore,
+  type CommandOutboxStore,
   MachineConflictDetectedError,
   type RuntimeProcessEvent,
   type RuntimeMachine,
@@ -33,6 +33,7 @@ interface SourceIngestionLifecycleRuntimeInput {
   sourceId: string;
   provider: string;
   handlers: SourceIngestionLifecycleCommandHandlers;
+  outboxStore: CommandOutboxStore<SourceIngestionLifecycleCommand>;
   onRuntimeEvent: (
     event: RuntimeProcessEvent<
       SourceIngestionLifecycleState,
@@ -77,7 +78,6 @@ const createSourceIngestionLifecycleRuntime = (
     SourceIngestionLifecycleContext
   >();
   const envelopeStore = new InMemoryEnvelopeStore();
-  const outboxStore = new InMemoryCommandOutboxStore<SourceIngestionLifecycleCommand>();
   const machine = new RestorableSourceIngestionLifecycleStateMachine(
     { provider: input.provider, sourceId: input.sourceId },
     { transitionPolicy: TransitionPolicy.IGNORE },
@@ -112,7 +112,7 @@ const createSourceIngestionLifecycleRuntime = (
       },
     },
     envelopeStore,
-    outboxStore,
+    outboxStore: input.outboxStore,
     eventSink: {
       onProcessed: (event) => input.onRuntimeEvent(event),
     },

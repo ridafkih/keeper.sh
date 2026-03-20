@@ -1,4 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import { InMemoryCommandOutboxStore } from "@keeper.sh/machine-orchestration";
+import type { DestinationExecutionCommand } from "@keeper.sh/state-machines";
 import { createDestinationExecutionRuntime } from "./destination-execution-runtime";
 
 describe("destination execution runtime", () => {
@@ -20,6 +22,7 @@ describe("destination execution runtime", () => {
           return Promise.resolve();
         },
       },
+      outboxStore: new InMemoryCommandOutboxStore<DestinationExecutionCommand>(),
       onRuntimeEvent: () => Promise.resolve(),
     });
 
@@ -54,6 +57,7 @@ describe("destination execution runtime", () => {
           return Promise.resolve();
         },
       },
+      outboxStore: new InMemoryCommandOutboxStore<DestinationExecutionCommand>(),
       onRuntimeEvent: () => Promise.resolve(),
     });
 
@@ -84,6 +88,7 @@ describe("destination execution runtime", () => {
           return Promise.resolve();
         },
       },
+      outboxStore: new InMemoryCommandOutboxStore<DestinationExecutionCommand>(),
       onRuntimeEvent: () => Promise.resolve(),
     });
 
@@ -105,6 +110,7 @@ describe("destination execution runtime", () => {
         emitSyncEvent: () => Promise.resolve(),
         releaseLock: () => Promise.resolve(),
       },
+      outboxStore: new InMemoryCommandOutboxStore<DestinationExecutionCommand>(),
       onRuntimeEvent: (event) => {
         processed.push(event.envelope.event.type);
         return Promise.resolve();
@@ -127,6 +133,7 @@ describe("destination execution runtime", () => {
         emitSyncEvent: () => Promise.resolve(),
         releaseLock: () => Promise.resolve(),
       },
+      outboxStore: new InMemoryCommandOutboxStore<DestinationExecutionCommand>(),
       onRuntimeEvent: () => Promise.resolve(),
     });
     const secondRuntime = createDestinationExecutionRuntime({
@@ -138,6 +145,7 @@ describe("destination execution runtime", () => {
         emitSyncEvent: () => Promise.resolve(),
         releaseLock: () => Promise.resolve(),
       },
+      outboxStore: new InMemoryCommandOutboxStore<DestinationExecutionCommand>(),
       onRuntimeEvent: () => Promise.resolve(),
     });
 

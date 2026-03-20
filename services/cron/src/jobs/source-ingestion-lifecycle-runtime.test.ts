@@ -1,4 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import { InMemoryCommandOutboxStore } from "@keeper.sh/machine-orchestration";
+import type { SourceIngestionLifecycleCommand } from "@keeper.sh/state-machines";
 import { createSourceIngestionLifecycleRuntime } from "./source-ingestion-lifecycle-runtime";
 
 describe("source ingestion lifecycle runtime", () => {
@@ -13,6 +15,7 @@ describe("source ingestion lifecycle runtime", () => {
         },
         persistSyncToken: () => Promise.resolve(),
       },
+      outboxStore: new InMemoryCommandOutboxStore<SourceIngestionLifecycleCommand>(),
       onRuntimeEvent: () => Promise.resolve(),
       provider: "google",
       sourceId: "src-1",
@@ -40,6 +43,7 @@ describe("source ingestion lifecycle runtime", () => {
         markNeedsReauth: () => Promise.resolve(),
         persistSyncToken: () => Promise.resolve(),
       },
+      outboxStore: new InMemoryCommandOutboxStore<SourceIngestionLifecycleCommand>(),
       onRuntimeEvent: () => Promise.resolve(),
       provider: "caldav",
       sourceId: "src-2",
@@ -67,6 +71,7 @@ describe("source ingestion lifecycle runtime", () => {
           return Promise.resolve();
         },
       },
+      outboxStore: new InMemoryCommandOutboxStore<SourceIngestionLifecycleCommand>(),
       onRuntimeEvent: () => Promise.resolve(),
       provider: "google",
       sourceId: "src-3",

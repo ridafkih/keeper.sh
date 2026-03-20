@@ -118,7 +118,7 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
 
     const tokenData = await runWithCredentialRefreshLock(oauthCredentialId, async () => {
       try {
-        return await this.oauthProvider.refreshAccessToken(refreshToken);
+        return this.oauthProvider.refreshAccessToken(refreshToken);
       } catch (error) {
         if (isOAuthReauthRequiredError(error)) {
           await this.markNeedsReauthentication();

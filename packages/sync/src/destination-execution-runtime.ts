@@ -1,5 +1,5 @@
 import {
-  InMemoryCommandOutboxStore,
+  type CommandOutboxStore,
   MachineConflictDetectedError,
   type RuntimeProcessEvent,
   type RuntimeMachine,
@@ -35,6 +35,7 @@ interface DestinationExecutionRuntimeInput {
   calendarId: string;
   failureCount: number;
   handlers: DestinationExecutionCommandHandlers;
+  outboxStore: CommandOutboxStore<DestinationExecutionCommand>;
   onRuntimeEvent: (
     event: RuntimeProcessEvent<
       DestinationExecutionState,
@@ -87,7 +88,6 @@ const createDestinationExecutionRuntime = (
     DestinationExecutionContext
   >();
   const envelopeStore = new InMemoryEnvelopeStore();
-  const outboxStore = new InMemoryCommandOutboxStore<DestinationExecutionCommand>();
 
   const machine = new RestorableDestinationExecutionStateMachine(
     { calendarId: input.calendarId, failureCount: input.failureCount },
@@ -129,7 +129,7 @@ const createDestinationExecutionRuntime = (
       },
     },
     envelopeStore,
-    outboxStore,
+    outboxStore: input.outboxStore,
     eventSink: {
       onProcessed: (event) => input.onRuntimeEvent(event),
     },

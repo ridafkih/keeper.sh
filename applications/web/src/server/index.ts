@@ -46,7 +46,7 @@ await entry({
           }
 
           try {
-            return await widelog.time.measure("duration_ms", async () => {
+            return widelog.time.measure("duration_ms", async () => {
               const response = await handleApplicationRequest(request, runtime, config);
               widelog.set("status_code", response.status);
               widelog.set("outcome", resolveOutcome(response.status));

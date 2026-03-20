@@ -56,7 +56,7 @@ async function updateResource(resourceId: string, userId: string) {
     return { error: 'Forbidden' }
   }
   
-  return await updateResourceData(resource, permissions)
+  return updateResourceData(resource, permissions)
 }
 
 // Correct: fetches only when needed
@@ -72,8 +72,7 @@ async function updateResource(resourceId: string, userId: string) {
   if (!permissions.canEdit) {
     return { error: 'Forbidden' }
   }
-  
-  return await updateResourceData(resource, permissions)
+  return updateResourceData(resource, permissions)
 }
 ```
 

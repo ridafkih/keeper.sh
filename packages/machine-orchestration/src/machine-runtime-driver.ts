@@ -245,44 +245,69 @@ class MachineRuntimeDriver<TState, TContext, TEvent, TCommand, TOutput> {
   }
 
   drainOutbox(): Promise<void> {
-    return this.runWithAggregateLock(() => this.drainOutboxUnlocked());
+    return MachineRuntimeDriver.drainAggregateOutbox({
+      aggregateId: this.aggregateId,
+      commandBus: this.commandBus,
+      outboxStore: this.outboxStore,
+    });
   }
 
-  private async drainOutboxUnlocked(): Promise<void> {
+  static drainAggregateOutbox<TCommand>(input: {
+    aggregateId: string;
+    outboxStore: CommandOutboxStore<TCommand>;
+    commandBus: CommandBus<TCommand>;
+  }): Promise<void> {
+    return MachineRuntimeDriver.runWithAggregateLock(input.aggregateId, async () => {
+      await MachineRuntimeDriver.drainOutboxUnlocked(input.aggregateId, input.outboxStore, input.commandBus);
+    });
+  }
+
+  private static async drainOutboxUnlocked<TCommand>(
+    aggregateId: string,
+    outboxStore: CommandOutboxStore<TCommand>,
+    commandBus: CommandBus<TCommand>,
+  ): Promise<void> {
     while (true) {
-      const next = await this.outboxStore.readNext(this.aggregateId);
+      const next = await outboxStore.readNext(aggregateId);
       if (!next) {
         return;
       }
 
       const command = next.commands.at(next.nextCommandIndex);
       if (command === globalThis.undefined) {
-        await this.outboxStore.complete(this.aggregateId, next.envelopeId);
+        await outboxStore.complete(aggregateId, next.envelopeId);
         continue;
       }
-      await this.commandBus.execute(command);
-      await this.outboxStore.advanceNextCommand(this.aggregateId, next.envelopeId);
+      await commandBus.execute(command);
+      await outboxStore.advanceNextCommand(aggregateId, next.envelopeId);
     }
   }
 
-  private async runWithAggregateLock<TResult>(
+  private static async runWithAggregateLock<TResult>(
+    aggregateId: string,
     operation: () => Promise<TResult>,
   ): Promise<TResult> {
-    const prior = MachineRuntimeDriver.aggregateLocks.get(this.aggregateId) ?? Promise.resolve();
+    const prior = MachineRuntimeDriver.aggregateLocks.get(aggregateId) ?? Promise.resolve();
     const current = prior.then(operation, operation);
     const lockTail = current.then(
       () => globalThis.undefined,
       () => globalThis.undefined,
     );
-    MachineRuntimeDriver.aggregateLocks.set(this.aggregateId, lockTail);
+    MachineRuntimeDriver.aggregateLocks.set(aggregateId, lockTail);
 
     try {
-      return await current;
+      return current;
     } finally {
-      if (MachineRuntimeDriver.aggregateLocks.get(this.aggregateId) === lockTail) {
-        MachineRuntimeDriver.aggregateLocks.delete(this.aggregateId);
+      if (MachineRuntimeDriver.aggregateLocks.get(aggregateId) === lockTail) {
+        MachineRuntimeDriver.aggregateLocks.delete(aggregateId);
       }
     }
+  }
+
+  private runWithAggregateLock<TResult>(
+    operation: () => Promise<TResult>,
+  ): Promise<TResult> {
+    return MachineRuntimeDriver.runWithAggregateLock(this.aggregateId, operation);
   }
 
   private async requireSnapshotRecord(): Promise<SnapshotRecord<TState, TContext>> {
