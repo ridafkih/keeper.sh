@@ -20,10 +20,13 @@ COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile --production
 COPY --from=build /app/applications/web/dist ./applications/web/dist
 COPY --from=build /app/applications/web/public ./applications/web/public
+COPY --from=source /app/packages/log-transport ./packages/log-transport
+COPY --from=source /app/applications/web/entrypoint.sh ./applications/web/entrypoint.sh
+RUN chmod +x ./applications/web/entrypoint.sh
 
 WORKDIR /app/applications/web
 
 ENV ENV=production
 EXPOSE 3000
 
-CMD ["bun", "dist/server-entry/index.js"]
+ENTRYPOINT ["./entrypoint.sh"]
