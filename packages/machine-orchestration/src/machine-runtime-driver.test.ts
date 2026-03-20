@@ -11,6 +11,7 @@ import {
   InMemorySnapshotStore,
   MachineConflictDetectedError,
   MachineRuntimeDriver,
+  OutboxRecordCorruptedError,
   RedisCommandOutboxStore,
   SnapshotInvariantError,
   isMachineConflictDetectedError,
@@ -593,6 +594,71 @@ describe("RedisCommandOutboxStore", () => {
     await expect(store.readNext("agg-corrupt")).rejects.toThrow(
       "invalid nextCommandIndex",
     );
+  });
+
+  it("throws on corrupted entries across all runtime outbox namespaces", async () => {
+    const keyPrefixes = [
+      "machine:outbox:destination-execution",
+      "machine:outbox:credential-health",
+      "machine:outbox:source-ingestion-lifecycle",
+      "machine:outbox:push-arbitration",
+    ] as const;
+    for (const keyPrefix of keyPrefixes) {
+      const hashes = new Map<string, Record<string, string>>();
+      const lists = new Map<string, string[]>();
+      const sets = new Map<string, Set<string>>();
+      const redis = {
+        del: (_key: string) => Promise.resolve(0),
+        exists: (_key: string) => Promise.resolve(0),
+        hgetall: (key: string) => Promise.resolve(hashes.get(key) ?? {}),
+        hincrby: (_key: string, _field: string, _increment: number) => Promise.resolve(0),
+        hset: (key: string, data: Record<string, string>) => {
+          hashes.set(key, { ...hashes.get(key), ...data });
+          return Promise.resolve(Object.keys(data).length);
+        },
+        lindex: (key: string, index: number) =>
+          Promise.resolve((lists.get(key) ?? [])[index] ?? null),
+        llen: (key: string) => Promise.resolve((lists.get(key) ?? []).length),
+        lpop: (key: string) => {
+          const entries = lists.get(key) ?? [];
+          const value = entries.shift() ?? null;
+          lists.set(key, entries);
+          return Promise.resolve(value);
+        },
+        lrem: (_key: string, _count: number, _value: string) => Promise.resolve(0),
+        rpush: (key: string, value: string) => {
+          const entries = lists.get(key) ?? [];
+          entries.push(value);
+          lists.set(key, entries);
+          return Promise.resolve(entries.length);
+        },
+        sadd: (key: string, value: string) => {
+          const values = sets.get(key) ?? new Set<string>();
+          values.add(value);
+          sets.set(key, values);
+          return Promise.resolve(1);
+        },
+        smembers: (key: string) => Promise.resolve([...(sets.get(key) ?? new Set<string>()).values()]),
+        srem: (_key: string, _value: string) => Promise.resolve(0),
+      };
+
+      const store = new RedisCommandOutboxStore<TestCommand>({
+        keyPrefix,
+        redis,
+      });
+
+      const aggregateId = "agg-corrupt";
+      const envelopeId = "env-corrupt";
+      lists.set(`${keyPrefix}:aggregate:${aggregateId}:queue`, [envelopeId]);
+      hashes.set(`${keyPrefix}:aggregate:${aggregateId}:entry:${envelopeId}`, {
+        nextCommandIndex: "0",
+      });
+
+      await expect(store.readNext(aggregateId)).rejects.toBeInstanceOf(
+        OutboxRecordCorruptedError,
+      );
+      await expect(store.readNext(aggregateId)).rejects.toThrow("missing commands");
+    }
   });
 });
 

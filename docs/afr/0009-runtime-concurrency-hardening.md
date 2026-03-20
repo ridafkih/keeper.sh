@@ -1,7 +1,7 @@
-# 0009 — Runtime Concurrency Hardening (D1–D5)
+# 0009 — Runtime Concurrency Hardening (D1–D6)
 
 Status: `active`
-Scope: Phase D (`D1`–`D5`)
+Scope: Phase D (`D1`–`D6`)
 
 ## Objective
 
@@ -42,6 +42,13 @@ Harden runtime behavior under adversarial parallel dispatch/replay so machine si
   - covered conflict event accounting in widelog sinks:
     - `services/worker/src/utils/machine-runtime-widelog.test.ts`
     - `services/cron/src/utils/machine-runtime-widelog.test.ts`
+- Added outbox corruption coverage for all active runtime namespaces:
+  - `machine:outbox:destination-execution`
+  - `machine:outbox:credential-health`
+  - `machine:outbox:source-ingestion-lifecycle`
+  - `machine:outbox:push-arbitration`
+  - implemented in
+    `packages/machine-orchestration/src/machine-runtime-driver.test.ts`
 
 ## Validation
 
@@ -50,3 +57,5 @@ Harden runtime behavior under adversarial parallel dispatch/replay so machine si
 - `bun test` (repo root)
 - `bun test packages/sync/src/dispatch-conflict-policy.test.ts services/worker/src/utils/machine-runtime-widelog.test.ts services/cron/src/utils/machine-runtime-widelog.test.ts`
 - `bunx turbo run lint types --filter=./packages/sync --filter=./services/cron --filter=./services/worker`
+- `bun test packages/machine-orchestration/src/machine-runtime-driver.test.ts`
+- `bunx turbo run lint types --filter=./packages/machine-orchestration`
