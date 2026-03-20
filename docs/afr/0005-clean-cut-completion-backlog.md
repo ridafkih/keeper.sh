@@ -52,8 +52,8 @@ Mode: `clean-break` (no compatibility bridge)
 - [x] C6. Add invariant checks for malformed envelope payloads.
 - [x] C7. Add invariant checks for malformed outbox records (all stores).
 - [x] C8. Add invariant checks for invalid snapshot transitions.
-- [ ] C9. Add tests for invariant failures and deterministic error surfaces.
-- [ ] C10. Ensure invariant violations fail fast with typed errors.
+- [x] C9. Add tests for invariant failures and deterministic error surfaces.
+- [x] C10. Ensure invariant violations fail fast with typed errors.
 
 ## Phase D — Concurrency and Recovery Robustness
 

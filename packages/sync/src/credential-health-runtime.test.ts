@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { InMemoryCommandOutboxStore } from "@keeper.sh/machine-orchestration";
+import {
+  InMemoryCommandOutboxStore,
+  RuntimeInvariantViolationError,
+} from "@keeper.sh/machine-orchestration";
 import type { CredentialHealthCommand } from "@keeper.sh/state-machines";
 import type { CredentialHealthEvent, EventEnvelope } from "@keeper.sh/state-machines";
 import { createCredentialHealthRuntime } from "./credential-health-runtime";
@@ -154,8 +157,12 @@ describe("credential health runtime", () => {
       onRuntimeEvent: () => Promise.resolve(),
     });
 
-    await expect(runtime.refresh("old-refresh")).rejects.toThrow(
-      "credential health envelope id is required",
+    await expect(runtime.refresh("old-refresh")).rejects.toBeInstanceOf(
+      RuntimeInvariantViolationError,
     );
+    await expect(runtime.refresh("old-refresh")).rejects.toMatchObject({
+      code: "CREDENTIAL_HEALTH_ENVELOPE_ID_REQUIRED",
+      surface: "credential-health-runtime",
+    });
   });
 });

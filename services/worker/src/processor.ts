@@ -1,6 +1,7 @@
 import type { Job } from "bullmq";
 import type { PushSyncJobPayload, PushSyncJobResult } from "@keeper.sh/queue";
 import { USER_TIMEOUT_MS } from "@keeper.sh/queue";
+import { RuntimeInvariantViolationError } from "@keeper.sh/machine-orchestration";
 import type { DestinationSyncResult } from "@keeper.sh/calendar";
 import { createSyncAggregateRuntime } from "@keeper.sh/calendar";
 import { syncDestinationsForUser } from "@keeper.sh/sync";
@@ -61,14 +62,26 @@ const resolveSyncOutcome = (failed: number, total: number): "success" | "partial
   return "success";
 };
 
-const setJobWideEventFields = (
+const resolveRequiredJobId = (
   job: Job<PushSyncJobPayload, PushSyncJobResult>,
   userId: string,
-): void => {
+): string => {
   if (job.id === globalThis.undefined) {
-    throw new Error("Invariant violated: worker job id missing");
+    throw new RuntimeInvariantViolationError({
+      aggregateId: userId,
+      code: "WORKER_JOB_ID_REQUIRED",
+      reason: "worker job id missing",
+      surface: "worker-processor",
+    });
   }
-  const jobId = String(job.id);
+  return String(job.id);
+};
+
+const setJobWideEventFields = (
+  job: Job<PushSyncJobPayload, PushSyncJobResult>,
+  jobId: string,
+  userId: string,
+): void => {
   widelog.set("operation.name", "push-sync");
   widelog.set("operation.type", "job").sticky();
   widelog.set("sync.direction", "push").sticky();
@@ -86,12 +99,9 @@ const processJob = (
 ): Promise<PushSyncJobResult> =>
   context(async () => {
     const { userId } = job.data;
-    if (job.id === globalThis.undefined) {
-      throw new Error("Invariant violated: worker job id missing");
-    }
-    const jobId = String(job.id);
+    const jobId = resolveRequiredJobId(job, userId);
 
-    setJobWideEventFields(job, userId);
+    setJobWideEventFields(job, jobId, userId);
     widelog.errors(classifySyncError);
     const machineFieldCollector = createPerCalendarMachineFieldCollector();
     const emitCalendarWideEvent = async (
@@ -108,7 +118,7 @@ const processJob = (
       },
     ): Promise<void> => {
       await context(() => {
-        setJobWideEventFields(job, userId);
+        setJobWideEventFields(job, jobId, userId);
         widelog.set("operation.name", "push-sync-calendar");
         widelog.set("provider.name", input.provider);
         widelog.set("provider.account_id", input.accountId);
@@ -209,7 +219,7 @@ const processJob = (
       const failed = result.addFailed + result.removeFailed;
       const attempted = result.added + result.removed + failed;
       await context(() => {
-        setJobWideEventFields(job, userId);
+        setJobWideEventFields(job, jobId, userId);
         widelog.set("sync.events_added", result.added);
         widelog.set("sync.events_removed", result.removed);
         widelog.set("sync.events_failed", failed);
@@ -226,7 +236,7 @@ const processJob = (
       };
     } catch (error) {
       await context(() => {
-        setJobWideEventFields(job, userId);
+        setJobWideEventFields(job, jobId, userId);
         widelog.set("outcome", "error");
         widelog.errorFields(error, { slug: "push-sync-failed" });
         widelog.flush();

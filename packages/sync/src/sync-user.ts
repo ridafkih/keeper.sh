@@ -7,6 +7,7 @@ import {
 } from "@keeper.sh/calendar";
 import type { SyncProgressUpdate, RefreshLockStore } from "@keeper.sh/calendar";
 import { RedisCommandOutboxStore } from "@keeper.sh/machine-orchestration";
+import { RuntimeInvariantViolationError } from "@keeper.sh/machine-orchestration";
 import {
   calendarAccountsTable,
   calendarsTable,
@@ -388,7 +389,12 @@ const syncDestinationsForUser = async (
           continue;
         }
         if (failedResult.outcome !== "TRANSITION_APPLIED") {
-          throw new Error("Invariant violated: fatal failure transition missing");
+          throw new RuntimeInvariantViolationError({
+            aggregateId: destination.calendarId,
+            code: "DESTINATION_FATAL_FAILURE_TRANSITION_MISSING",
+            reason: "fatal failure dispatch did not apply a transition",
+            surface: "sync-user",
+          });
         }
         const failedPolicy = resolveDestinationFailureOutput(failedResult.transition.outputs);
         await notifyCalendarFailed(

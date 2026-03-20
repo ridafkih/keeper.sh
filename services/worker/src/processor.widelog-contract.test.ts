@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Job } from "bullmq";
 import type { PushSyncJobPayload, PushSyncJobResult } from "@keeper.sh/queue";
+import { RuntimeInvariantViolationError } from "@keeper.sh/machine-orchestration";
 
 interface MockWideEvent {
   errors: string[];
@@ -239,6 +240,45 @@ beforeEach(() => {
 });
 
 describe("processJob widelog contract", () => {
+  it("fails fast with typed invariant when job id is missing", async () => {
+    await expect(
+      processJob(
+        {
+          data: {
+            correlationId: "corr-1",
+            plan: "pro",
+            userId: "user-1",
+          },
+          id: globalThis.undefined,
+          name: "sync-user-1",
+          updateProgress: () => Promise.resolve(),
+        } as unknown as Job<PushSyncJobPayload, PushSyncJobResult>,
+        globalThis.undefined,
+        globalThis.undefined,
+      ),
+    ).rejects.toThrow(RuntimeInvariantViolationError);
+    await expect(
+      processJob(
+        {
+          data: {
+            correlationId: "corr-1",
+            plan: "pro",
+            userId: "user-1",
+          },
+          id: globalThis.undefined,
+          name: "sync-user-1",
+          updateProgress: () => Promise.resolve(),
+        } as unknown as Job<PushSyncJobPayload, PushSyncJobResult>,
+        globalThis.undefined,
+        globalThis.undefined,
+      ),
+    ).rejects.toMatchObject({
+      aggregateId: "user-1",
+      code: "WORKER_JOB_ID_REQUIRED",
+      surface: "worker-processor",
+    });
+  });
+
   it("emits isolated calendar logs plus one job summary log", async () => {
     const result = await processJob(
       {

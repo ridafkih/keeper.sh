@@ -4,6 +4,7 @@ import {
 } from "@keeper.sh/state-machines";
 import type { DestinationExecutionOutput } from "@keeper.sh/state-machines";
 import type { ErrorPolicy } from "@keeper.sh/state-machines";
+import { RuntimeInvariantViolationError } from "@keeper.sh/machine-orchestration";
 
 interface DestinationFailurePolicy {
   code: string;
@@ -20,16 +21,22 @@ const resolveDestinationFailureOutput = (
   );
 
   if (failedOutputs.length !== 1) {
-    throw new Error(
-      "Invariant violated: expected exactly one DESTINATION_EXECUTION_FAILED output",
-    );
+    throw new RuntimeInvariantViolationError({
+      aggregateId: "destination-failure-policy",
+      code: "DESTINATION_FAILURE_OUTPUT_COUNT_INVALID",
+      reason: "expected exactly one DESTINATION_EXECUTION_FAILED output",
+      surface: "destination-failure-policy",
+    });
   }
 
   const [failureOutput] = failedOutputs;
   if (!failureOutput) {
-    throw new Error(
-      "Invariant violated: missing DESTINATION_EXECUTION_FAILED output",
-    );
+    throw new RuntimeInvariantViolationError({
+      aggregateId: "destination-failure-policy",
+      code: "DESTINATION_FAILURE_OUTPUT_MISSING",
+      reason: "missing DESTINATION_EXECUTION_FAILED output",
+      surface: "destination-failure-policy",
+    });
   }
 
   const { code, policy } = failureOutput;

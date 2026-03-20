@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { InMemoryCommandOutboxStore } from "@keeper.sh/machine-orchestration";
+import {
+  InMemoryCommandOutboxStore,
+  RuntimeInvariantViolationError,
+} from "@keeper.sh/machine-orchestration";
 import type { SourceIngestionLifecycleCommand } from "@keeper.sh/state-machines";
 import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
 import type {
@@ -135,6 +138,12 @@ describe("source ingestion lifecycle runtime", () => {
 
     await expect(
       runtime.dispatch({ type: SourceIngestionLifecycleEventType.SOURCE_SELECTED }),
-    ).rejects.toThrow("source ingestion envelope id is required");
+    ).rejects.toBeInstanceOf(RuntimeInvariantViolationError);
+    await expect(
+      runtime.dispatch({ type: SourceIngestionLifecycleEventType.SOURCE_SELECTED }),
+    ).rejects.toMatchObject({
+      code: "SOURCE_INGESTION_ENVELOPE_ID_REQUIRED",
+      surface: "source-ingestion-lifecycle-runtime",
+    });
   });
 });

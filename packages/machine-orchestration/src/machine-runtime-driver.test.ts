@@ -5,12 +5,14 @@ import type {
   MachineTransitionResult,
 } from "@keeper.sh/state-machines";
 import {
+  EnvelopeInvariantError,
   InMemoryCommandOutboxStore,
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
   MachineConflictDetectedError,
   MachineRuntimeDriver,
   RedisCommandOutboxStore,
+  SnapshotInvariantError,
   isMachineConflictDetectedError,
 } from "./machine-runtime-driver";
 import type { RuntimeProcessEvent } from "./machine-runtime-driver";
@@ -354,7 +356,7 @@ describe("MachineRuntimeDriver", () => {
         id: "",
         occurredAt: "invalid-time",
       }),
-    ).rejects.toThrow("Envelope invariant violated");
+    ).rejects.toBeInstanceOf(EnvelopeInvariantError);
   });
 
   it("fails fast when stored snapshot is malformed", async () => {
@@ -392,7 +394,7 @@ describe("MachineRuntimeDriver", () => {
 
     await expect(
       driver.process(buildEnvelope("env-bad-snapshot", "entity-bad-snapshot")),
-    ).rejects.toThrow("Snapshot invariant violated");
+    ).rejects.toBeInstanceOf(SnapshotInvariantError);
   });
 });
 

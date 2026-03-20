@@ -12,7 +12,7 @@ Remove runtime-owned envelope fallbacks and require explicit envelope metadata (
 - Runtime-owned envelope generation was present in:
   - `packages/sync/src/destination-execution-runtime.ts`
   - `packages/sync/src/credential-health-runtime.ts`
-  - `services/cron/src/jobs/source-ingestion-lifecycle-runtime.ts`
+  - `services/cron/src/lib/source-ingestion-lifecycle-runtime.ts`
   - `services/worker/src/push-job-arbitration-runtime.ts`
 - These paths generated envelope IDs/timestamps internally (`sequence` + `new Date().toISOString()`), making determinism and replay provenance implicit instead of explicit.
 
@@ -34,12 +34,11 @@ Remove runtime-owned envelope fallbacks and require explicit envelope metadata (
 - Added fail-fast tests for invalid envelope metadata in:
   - `packages/sync/src/destination-execution-runtime.test.ts`
   - `packages/sync/src/credential-health-runtime.test.ts`
-  - `services/cron/src/jobs/source-ingestion-lifecycle-runtime.test.ts`
+  - `services/cron/src/lib/source-ingestion-lifecycle-runtime.test.ts`
   - `services/worker/src/push-job-arbitration-runtime.test.ts`
 
 ## Validation
 
-- `bun test packages/sync/src/destination-execution-runtime.test.ts packages/sync/src/credential-health-runtime.test.ts services/cron/src/jobs/source-ingestion-lifecycle-runtime.test.ts services/worker/src/push-job-arbitration-runtime.test.ts`
+- `bun test packages/sync/src/destination-execution-runtime.test.ts packages/sync/src/credential-health-runtime.test.ts services/cron/src/lib/source-ingestion-lifecycle-runtime.test.ts services/worker/src/push-job-arbitration-runtime.test.ts`
 - `bunx turbo run lint types --filter=./packages/sync --filter=./services/cron --filter=./services/worker`
 - `bun test` (repo root)
-

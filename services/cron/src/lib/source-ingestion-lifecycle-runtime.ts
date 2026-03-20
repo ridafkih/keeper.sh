@@ -1,6 +1,7 @@
 import {
   type CommandOutboxStore,
   MachineConflictDetectedError,
+  RuntimeInvariantViolationError,
   type RuntimeProcessEvent,
   type RuntimeMachine,
   InMemoryEnvelopeStore,
@@ -140,17 +141,32 @@ const createSourceIngestionLifecycleRuntime = (
     }
     const envelope = input.createEnvelope(event);
     if (!envelope.id) {
-      throw new Error("Invariant violated: source ingestion envelope id is required");
+      throw new RuntimeInvariantViolationError({
+        aggregateId: input.sourceId,
+        code: "SOURCE_INGESTION_ENVELOPE_ID_REQUIRED",
+        reason: "envelope id is required",
+        surface: "source-ingestion-lifecycle-runtime",
+      });
     }
     if (!envelope.occurredAt || Number.isNaN(Date.parse(envelope.occurredAt))) {
-      throw new Error("Invariant violated: source ingestion envelope occurredAt is invalid");
+      throw new RuntimeInvariantViolationError({
+        aggregateId: input.sourceId,
+        code: "SOURCE_INGESTION_ENVELOPE_OCCURRED_AT_INVALID",
+        reason: "envelope occurredAt is invalid",
+        surface: "source-ingestion-lifecycle-runtime",
+      });
     }
     const result = await driver.process(envelope);
     if (result.outcome === "CONFLICT_DETECTED") {
       throw new MachineConflictDetectedError(input.sourceId, envelope.id);
     }
     if (!result.transition) {
-      throw new Error("Invariant violated: source ingestion transition missing");
+      throw new RuntimeInvariantViolationError({
+        aggregateId: input.sourceId,
+        code: "SOURCE_INGESTION_TRANSITION_MISSING",
+        reason: "runtime process returned applied outcome without transition",
+        surface: "source-ingestion-lifecycle-runtime",
+      });
     }
     await driver.drainOutbox();
     return result.transition;

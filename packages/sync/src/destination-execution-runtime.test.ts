@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { InMemoryCommandOutboxStore } from "@keeper.sh/machine-orchestration";
+import {
+  InMemoryCommandOutboxStore,
+  RuntimeInvariantViolationError,
+} from "@keeper.sh/machine-orchestration";
 import type { DestinationExecutionCommand } from "@keeper.sh/state-machines";
 import type { DestinationExecutionEvent, EventEnvelope } from "@keeper.sh/state-machines";
 import { createDestinationExecutionRuntime } from "./destination-execution-runtime";
@@ -224,6 +227,12 @@ describe("destination execution runtime", () => {
 
     await expect(
       runtime.dispatch({ holderId: "holder-invalid", type: "LOCK_ACQUIRED" }),
-    ).rejects.toThrow("destination execution envelope id is required");
+    ).rejects.toBeInstanceOf(RuntimeInvariantViolationError);
+    await expect(
+      runtime.dispatch({ holderId: "holder-invalid", type: "LOCK_ACQUIRED" }),
+    ).rejects.toMatchObject({
+      code: "DESTINATION_EXECUTION_ENVELOPE_ID_REQUIRED",
+      surface: "destination-execution-runtime",
+    });
   });
 });

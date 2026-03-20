@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { RuntimeInvariantViolationError } from "@keeper.sh/machine-orchestration";
 import { ErrorPolicy } from "@keeper.sh/state-machines";
 import { resolveDestinationFailureOutput } from "./destination-failure-policy";
 
@@ -45,7 +46,19 @@ describe("resolveDestinationFailureOutput", () => {
           type: "DESTINATION_EXECUTION_COMPLETED",
         },
       ]),
-    ).toThrow("Invariant violated: expected exactly one DESTINATION_EXECUTION_FAILED output");
+    ).toThrow(RuntimeInvariantViolationError);
+    expect(() =>
+      resolveDestinationFailureOutput([
+        {
+          changed: false,
+          type: "DESTINATION_EXECUTION_COMPLETED",
+        },
+      ]),
+    ).toThrow(expect.objectContaining({
+      aggregateId: "destination-failure-policy",
+      code: "DESTINATION_FAILURE_OUTPUT_COUNT_INVALID",
+      surface: "destination-failure-policy",
+    }));
   });
 
   it("throws when failed output is duplicated", () => {
@@ -62,6 +75,24 @@ describe("resolveDestinationFailureOutput", () => {
           policy: ErrorPolicy.TERMINAL,
         },
       ]),
-    ).toThrow("Invariant violated: expected exactly one DESTINATION_EXECUTION_FAILED output");
+    ).toThrow(RuntimeInvariantViolationError);
+    expect(() =>
+      resolveDestinationFailureOutput([
+        {
+          type: "DESTINATION_EXECUTION_FAILED",
+          code: "a",
+          policy: ErrorPolicy.RETRYABLE,
+        },
+        {
+          type: "DESTINATION_EXECUTION_FAILED",
+          code: "b",
+          policy: ErrorPolicy.TERMINAL,
+        },
+      ]),
+    ).toThrow(expect.objectContaining({
+      aggregateId: "destination-failure-policy",
+      code: "DESTINATION_FAILURE_OUTPUT_COUNT_INVALID",
+      surface: "destination-failure-policy",
+    }));
   });
 });

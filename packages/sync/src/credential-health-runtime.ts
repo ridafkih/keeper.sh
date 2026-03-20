@@ -1,6 +1,7 @@
 import {
   type CommandOutboxStore,
   MachineConflictDetectedError,
+  RuntimeInvariantViolationError,
   type RuntimeProcessEvent,
   type RuntimeMachine,
   InMemoryEnvelopeStore,
@@ -156,10 +157,20 @@ const createCredentialHealthRuntime = (
 
     const envelope = input.createEnvelope(event);
     if (!envelope.id) {
-      throw new Error("Invariant violated: credential health envelope id is required");
+      throw new RuntimeInvariantViolationError({
+        aggregateId: input.oauthCredentialId,
+        code: "CREDENTIAL_HEALTH_ENVELOPE_ID_REQUIRED",
+        reason: "envelope id is required",
+        surface: "credential-health-runtime",
+      });
     }
     if (!envelope.occurredAt || Number.isNaN(Date.parse(envelope.occurredAt))) {
-      throw new Error("Invariant violated: credential health envelope occurredAt is invalid");
+      throw new RuntimeInvariantViolationError({
+        aggregateId: input.oauthCredentialId,
+        code: "CREDENTIAL_HEALTH_ENVELOPE_OCCURRED_AT_INVALID",
+        reason: "envelope occurredAt is invalid",
+        surface: "credential-health-runtime",
+      });
     }
 
     const result = await driver.process(envelope);
@@ -167,7 +178,12 @@ const createCredentialHealthRuntime = (
       throw new MachineConflictDetectedError(input.oauthCredentialId, envelope.id);
     }
     if (!result.transition) {
-      throw new Error("Invariant violated: credential health transition missing");
+      throw new RuntimeInvariantViolationError({
+        aggregateId: input.oauthCredentialId,
+        code: "CREDENTIAL_HEALTH_TRANSITION_MISSING",
+        reason: "runtime process returned applied outcome without transition",
+        surface: "credential-health-runtime",
+      });
     }
     await driver.drainOutbox();
     return result.transition;
@@ -179,7 +195,12 @@ const createCredentialHealthRuntime = (
       (command) => command.type === CredentialHealthCommandType.REFRESH_TOKEN,
     );
     if (!shouldRefresh) {
-      throw new Error("Invariant violated: expected REFRESH_TOKEN command");
+      throw new RuntimeInvariantViolationError({
+        aggregateId: input.oauthCredentialId,
+        code: "CREDENTIAL_HEALTH_REFRESH_COMMAND_MISSING",
+        reason: "expected REFRESH_TOKEN command on token expiry",
+        surface: "credential-health-runtime",
+      });
     }
 
     await dispatch({ type: CredentialHealthEventType.REFRESH_STARTED });

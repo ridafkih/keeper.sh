@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { InMemoryCommandOutboxStore } from "@keeper.sh/machine-orchestration";
+import {
+  InMemoryCommandOutboxStore,
+  RuntimeInvariantViolationError,
+} from "@keeper.sh/machine-orchestration";
 import {
   PushJobArbitrationCommandType,
   type PushJobArbitrationEvent,
@@ -185,6 +188,12 @@ describe("push job arbitration runtime", () => {
 
     await expect(
       runtime.onJobActive({ jobId: "job-invalid", userId: "user-invalid" }),
-    ).rejects.toThrow("push arbitration envelope id is required");
+    ).rejects.toBeInstanceOf(RuntimeInvariantViolationError);
+    await expect(
+      runtime.onJobActive({ jobId: "job-invalid", userId: "user-invalid" }),
+    ).rejects.toMatchObject({
+      code: "PUSH_ARBITRATION_ENVELOPE_ID_REQUIRED",
+      surface: "push-job-arbitration-runtime",
+    });
   });
 });

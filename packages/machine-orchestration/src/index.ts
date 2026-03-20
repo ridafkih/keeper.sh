@@ -82,6 +82,7 @@ export type { CreateKeeperRuntimeDependencies } from "./create-keeper-runtime";
 
 export {
   InMemoryCommandOutboxStore,
+  RuntimeInvariantViolationError,
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
   MachineConflictDetectedError,

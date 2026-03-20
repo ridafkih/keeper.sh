@@ -2,6 +2,7 @@ import {
   type CommandBus,
   type RecoverableCommandOutboxStore,
   MachineConflictDetectedError,
+  RuntimeInvariantViolationError,
   type RuntimeProcessEvent,
   type RuntimeMachine,
   InMemoryEnvelopeStore,
@@ -139,10 +140,20 @@ const dispatch = async (
 
   const envelope = dependencies.createEnvelope(event, jobId);
   if (!envelope.id) {
-    throw new Error("Invariant violated: push arbitration envelope id is required");
+    throw new RuntimeInvariantViolationError({
+      aggregateId: userId,
+      code: "PUSH_ARBITRATION_ENVELOPE_ID_REQUIRED",
+      reason: "envelope id is required",
+      surface: "push-job-arbitration-runtime",
+    });
   }
   if (!envelope.occurredAt || Number.isNaN(Date.parse(envelope.occurredAt))) {
-    throw new Error("Invariant violated: push arbitration envelope occurredAt is invalid");
+    throw new RuntimeInvariantViolationError({
+      aggregateId: userId,
+      code: "PUSH_ARBITRATION_ENVELOPE_OCCURRED_AT_INVALID",
+      reason: "envelope occurredAt is invalid",
+      surface: "push-job-arbitration-runtime",
+    });
   }
   const result = await driver.process(envelope);
   if (result.outcome === "APPLIED" || result.outcome === "DUPLICATE_IGNORED") {

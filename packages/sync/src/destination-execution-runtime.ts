@@ -1,6 +1,6 @@
 import {
   type CommandOutboxStore,
-  MachineConflictDetectedError,
+  RuntimeInvariantViolationError,
   type RuntimeProcessEvent,
   type RuntimeMachine,
   InMemoryEnvelopeStore,
@@ -174,10 +174,20 @@ const createDestinationExecutionRuntime = (
     }
     const envelope = input.createEnvelope(event);
     if (!envelope.id) {
-      throw new Error("Invariant violated: destination execution envelope id is required");
+      throw new RuntimeInvariantViolationError({
+        aggregateId: input.calendarId,
+        code: "DESTINATION_EXECUTION_ENVELOPE_ID_REQUIRED",
+        reason: "envelope id is required",
+        surface: "destination-execution-runtime",
+      });
     }
     if (!envelope.occurredAt || Number.isNaN(Date.parse(envelope.occurredAt))) {
-      throw new Error("Invariant violated: destination execution envelope occurredAt is invalid");
+      throw new RuntimeInvariantViolationError({
+        aggregateId: input.calendarId,
+        code: "DESTINATION_EXECUTION_ENVELOPE_OCCURRED_AT_INVALID",
+        reason: "envelope occurredAt is invalid",
+        surface: "destination-execution-runtime",
+      });
     }
     const result = await driver.process(envelope);
     if (result.outcome === "CONFLICT_DETECTED") {
@@ -193,7 +203,12 @@ const createDestinationExecutionRuntime = (
       };
     }
     if (!result.transition) {
-      throw new MachineConflictDetectedError(input.calendarId, envelope.id);
+      throw new RuntimeInvariantViolationError({
+        aggregateId: input.calendarId,
+        code: "DESTINATION_EXECUTION_TRANSITION_MISSING",
+        reason: "runtime process returned applied outcome without transition",
+        surface: "destination-execution-runtime",
+      });
     }
     await driver.drainOutbox();
     return {
