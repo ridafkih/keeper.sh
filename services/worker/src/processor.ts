@@ -9,6 +9,7 @@ import { syncStatusTable } from "@keeper.sh/database/schema";
 import { database, refreshLockRedis, refreshLockStore } from "./context";
 import { context, widelog } from "./utils/logging";
 import { createPerCalendarMachineFieldCollector } from "./utils/per-calendar-machine-fields";
+import { classifySyncError } from "./utils/sync-error-classification";
 import env from "./env";
 
 const resolveCount = (value: unknown): number => {
@@ -16,21 +17,6 @@ const resolveCount = (value: unknown): number => {
     return value;
   }
   return 0;
-};
-
-const classifySyncError = (error: unknown): string => {
-  if (typeof error === "string") {
-    if (error.includes("conflict") || error.includes("409")) {
-      return "sync-push-conflict";
-    }
-    if (error.includes("timeout")) {
-      return "provider-api-timeout";
-    }
-    if (error.includes("rate") || error.includes("429")) {
-      return "provider-rate-limited";
-    }
-  }
-  return "sync-push-failed";
 };
 
 const broadcastService = createBroadcastService({ redis: refreshLockRedis });

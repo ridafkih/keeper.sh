@@ -38,6 +38,7 @@ import {
   classifySourceIngestionFailure,
   SourceIngestionFailureLogSlug,
 } from "../lib/source-ingestion-failure";
+import { summarizeIngestionSettlements } from "../lib/ingestion-settlement-summary";
 
 const SOURCE_TIMEOUT_MS = 60_000;
 const SOURCE_CONCURRENCY = 5;
@@ -213,11 +214,6 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
       ),
     );
 
-  let added = 0;
-  let removed = 0;
-  let errors = 0;
-  const allIngestEvents: Record<string, unknown>[] = [];
-
   const settlements = await allSettledWithConcurrency(
     oauthSources.map((source) => () =>
       withTimeout((): Promise<IngestionSourceResult> =>
@@ -316,18 +312,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
     ),
     { concurrency: SOURCE_CONCURRENCY },
   );
-
-  for (const settlement of settlements) {
-    if (settlement.status === "fulfilled") {
-      added += settlement.value.eventsAdded;
-      removed += settlement.value.eventsRemoved;
-      allIngestEvents.push(...settlement.value.ingestEvents);
-    } else {
-      errors += 1;
-    }
-  }
-
-  return { added, removed, errors, ingestEvents: allIngestEvents };
+  return summarizeIngestionSettlements(settlements);
 };
 
 const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
@@ -357,11 +342,6 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
         eq(calendarsTable.disabled, false),
       ),
     );
-
-  let added = 0;
-  let removed = 0;
-  let errors = 0;
-  const allIngestEvents: Record<string, unknown>[] = [];
 
   const settlements = await allSettledWithConcurrency(
     caldavSources.map((source) => () =>
@@ -439,18 +419,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
     ),
     { concurrency: SOURCE_CONCURRENCY },
   );
-
-  for (const settlement of settlements) {
-    if (settlement.status === "fulfilled") {
-      added += settlement.value.eventsAdded;
-      removed += settlement.value.eventsRemoved;
-      allIngestEvents.push(...settlement.value.ingestEvents);
-    } else {
-      errors += 1;
-    }
-  }
-
-  return { added, removed, errors, ingestEvents: allIngestEvents };
+  return summarizeIngestionSettlements(settlements);
 };
 
 const ingestIcsSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
@@ -467,11 +436,6 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
         eq(calendarsTable.disabled, false),
       ),
     );
-
-  let added = 0;
-  let removed = 0;
-  let errors = 0;
-  const allIngestEvents: Record<string, unknown>[] = [];
 
   const settlements = await allSettledWithConcurrency(
     icsSources.map((source) => () =>
@@ -541,18 +505,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
     ),
     { concurrency: SOURCE_CONCURRENCY },
   );
-
-  for (const settlement of settlements) {
-    if (settlement.status === "fulfilled") {
-      added += settlement.value.eventsAdded;
-      removed += settlement.value.eventsRemoved;
-      allIngestEvents.push(...settlement.value.ingestEvents);
-    } else {
-      errors += 1;
-    }
-  }
-
-  return { added, removed, errors, ingestEvents: allIngestEvents };
+  return summarizeIngestionSettlements(settlements);
 };
 
 export default withCronWideEvent({
