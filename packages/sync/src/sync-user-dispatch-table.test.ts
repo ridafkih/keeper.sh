@@ -3,7 +3,7 @@ import { DestinationExecutionEventType } from "@keeper.sh/state-machines";
 import {
   DispatchConflictCode,
 } from "./dispatch-conflict-policy";
-import { ProviderResolutionStatus } from "./resolve-provider";
+import { ProviderResolutionStatus } from "./provider-resolution-policy";
 import {
   createProviderResolutionFailedStep,
   createStartupDispatchSteps,

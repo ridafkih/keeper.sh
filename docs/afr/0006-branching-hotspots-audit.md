@@ -1,7 +1,7 @@
 # 0006 — Branching Hotspots Audit (Q3)
 
 Status: `active`
-Scope: Phase B (`B1`–`B8`)
+Scope: Phase B (`B1`–`B10`)
 
 ## Objective
 
@@ -69,6 +69,20 @@ Identify remaining non-machine policy branching in `packages/sync`, `services/cr
   - provider-resolution failure dispatch now runs through table-mapped machine event
   - repeated conflict-handling boilerplate collapsed into `dispatchWithConflictHandling(...)`
 - Added tests:
+  - `packages/sync/src/sync-user-dispatch-table.test.ts`
+
+## Implemented in Q6 (B9–B10)
+
+- Extracted provider-specific resolution policy into adapter-boundary module:
+  - `packages/sync/src/provider-resolution-policy.ts`
+  - provider family detection (`isOAuthProviderName`, `isCaldavProviderName`)
+  - OAuth config validation policy (`hasOAuthProviderConfig`)
+  - unresolved support mapping (`resolveProviderSupportStatus`)
+  - deterministic unresolved status code mapping (`toUnresolvedProviderStatusCode`)
+- Updated `packages/sync/src/resolve-provider.ts` to consume policy module instead of embedding provider policy branches.
+- Updated `packages/sync/src/sync-user-dispatch-table.ts` to consume canonical unresolved status policy/codes from the same boundary module.
+- Added tests that assert orchestration now consumes boundary policy rather than inline business branching:
+  - `packages/sync/src/provider-resolution-policy.test.ts`
   - `packages/sync/src/sync-user-dispatch-table.test.ts`
 
 ## Validation

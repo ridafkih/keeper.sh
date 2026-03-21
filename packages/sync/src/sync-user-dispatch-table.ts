@@ -1,7 +1,12 @@
 import { DestinationExecutionEventType } from "@keeper.sh/state-machines";
 import type { DestinationExecutionEvent } from "@keeper.sh/state-machines";
 import { DispatchConflictCode } from "./dispatch-conflict-policy";
-import { ProviderResolutionStatus } from "./resolve-provider";
+import {
+  ProviderResolutionStatus,
+  toUnresolvedProviderStatusCode,
+  unresolvedProviderResolutionStatuses,
+} from "./provider-resolution-policy";
+import type { UnresolvedProviderResolutionStatus } from "./provider-resolution-policy";
 
 interface DestinationDispatchStep {
   conflictCode: DispatchConflictCode;
@@ -26,30 +31,19 @@ const createStartupDispatchSteps = (
   },
 ];
 
-const unresolvedProviderStatuses: readonly Exclude<
-  ProviderResolutionStatus,
-  typeof ProviderResolutionStatus.RESOLVED
->[] = [
-  ProviderResolutionStatus.MISCONFIGURED_PROVIDER,
-  ProviderResolutionStatus.MISSING_PROVIDER_CREDENTIALS,
-  ProviderResolutionStatus.UNSUPPORTED_PROVIDER,
-] as const;
+const unresolvedProviderStatuses = unresolvedProviderResolutionStatuses;
 
 const isUnresolvedProviderStatus = (
   status: ProviderResolutionStatus,
-): status is Exclude<ProviderResolutionStatus, typeof ProviderResolutionStatus.RESOLVED> =>
+): status is UnresolvedProviderResolutionStatus =>
   unresolvedProviderStatuses.includes(
-    status as Exclude<ProviderResolutionStatus, typeof ProviderResolutionStatus.RESOLVED>,
+    status as UnresolvedProviderResolutionStatus,
   );
 
-const toProviderFailureCode = (
-  status: Exclude<ProviderResolutionStatus, typeof ProviderResolutionStatus.RESOLVED>,
-): string => status.toLowerCase();
-
 const createProviderResolutionFailedStep = (
-  status: Exclude<ProviderResolutionStatus, typeof ProviderResolutionStatus.RESOLVED>,
+  status: UnresolvedProviderResolutionStatus,
 ): DestinationDispatchStep => {
-  const code = toProviderFailureCode(status);
+  const code = toUnresolvedProviderStatusCode(status);
   return {
     conflictCode: DispatchConflictCode.PROVIDER_RESOLUTION_FAILED,
     event: {

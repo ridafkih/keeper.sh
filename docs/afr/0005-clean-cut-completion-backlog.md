@@ -39,8 +39,8 @@ Mode: `clean-break` (no compatibility bridge)
 - [x] B6. Extract reauth decisioning into machine transition outputs.
 - [x] B7. Extract backoff schedule decisioning into machine transition outputs.
 - [x] B8. Replace orchestration `if` trees with deterministic command/event dispatch tables.
-- [ ] B9. Move any remaining provider-specific policy logic into adapter boundaries.
-- [ ] B10. Add tests ensuring orchestration layers no longer encode business policy.
+- [x] B9. Move any remaining provider-specific policy logic into adapter boundaries.
+- [x] B10. Add tests ensuring orchestration layers no longer encode business policy.
 
 ## Phase C — Determinism and Invariant Hardening
 

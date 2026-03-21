@@ -23,32 +23,18 @@ import { eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { createCredentialHealthRuntime } from "./credential-health-runtime";
 import type { CredentialHealthRuntimeEvent } from "./credential-health-runtime";
-
-const OAUTH_PROVIDER_NAMES = ["google", "outlook"] as const;
-const CALDAV_PROVIDER_NAMES = ["caldav", "fastmail", "icloud"] as const;
-
-type OAuthProviderName = (typeof OAUTH_PROVIDER_NAMES)[number];
-type CaldavProviderName = (typeof CALDAV_PROVIDER_NAMES)[number];
-
-const OAUTH_PROVIDERS = new Set<string>(OAUTH_PROVIDER_NAMES);
-const CALDAV_PROVIDERS = new Set<string>(CALDAV_PROVIDER_NAMES);
-
-interface OAuthConfig {
-  googleClientId?: string;
-  googleClientSecret?: string;
-  microsoftClientId?: string;
-  microsoftClientSecret?: string;
-}
-
-const ProviderResolutionStatus = {
-  MISCONFIGURED_PROVIDER: "MISCONFIGURED_PROVIDER",
-  MISSING_PROVIDER_CREDENTIALS: "MISSING_PROVIDER_CREDENTIALS",
-  RESOLVED: "RESOLVED",
-  UNSUPPORTED_PROVIDER: "UNSUPPORTED_PROVIDER",
-} as const;
-
-type ProviderResolutionStatus =
-  (typeof ProviderResolutionStatus)[keyof typeof ProviderResolutionStatus];
+import {
+  ProviderResolutionStatus,
+  hasOAuthProviderConfig,
+  isCaldavProviderName,
+  isOAuthProviderName,
+  resolveProviderSupportStatus,
+} from "./provider-resolution-policy";
+import type {
+  OAuthConfig,
+  OAuthProviderName,
+  ProviderResolutionStatus as ProviderResolutionStatusType,
+} from "./provider-resolution-policy";
 
 type ProviderResolutionOutcome =
   | { status: typeof ProviderResolutionStatus.RESOLVED; provider: CalendarSyncProvider }
@@ -96,14 +82,6 @@ interface OAuthProviderBuildInput {
   userId: string;
 }
 
-const isOAuthProvider = (provider: string): provider is OAuthProviderName => (
-  OAUTH_PROVIDERS.has(provider)
-);
-
-const isCaldavProvider = (provider: string): provider is CaldavProviderName => (
-  CALDAV_PROVIDERS.has(provider)
-);
-
 const resolvedProvider = (
   provider: CalendarSyncProvider,
 ): ProviderResolutionOutcome => ({
@@ -112,27 +90,8 @@ const resolvedProvider = (
 });
 
 const unresolvedProvider = (
-  status: Exclude<ProviderResolutionStatus, typeof ProviderResolutionStatus.RESOLVED>,
+  status: Exclude<ProviderResolutionStatusType, typeof ProviderResolutionStatus.RESOLVED>,
 ): ProviderResolutionOutcome => ({ status });
-
-const resolveProviderSupportStatus = (
-  provider: string,
-  encryptionKey?: string,
-): Exclude<ProviderResolutionStatus, typeof ProviderResolutionStatus.RESOLVED> => {
-  if (isOAuthProvider(provider)) {
-    return ProviderResolutionStatus.MISCONFIGURED_PROVIDER;
-  }
-
-  if (!isCaldavProvider(provider)) {
-    return ProviderResolutionStatus.UNSUPPORTED_PROVIDER;
-  }
-
-  if (!encryptionKey) {
-    return ProviderResolutionStatus.MISCONFIGURED_PROVIDER;
-  }
-
-  return ProviderResolutionStatus.MISSING_PROVIDER_CREDENTIALS;
-};
 
 const loadOAuthCredential = async (
   database: BunSQLDatabase,
@@ -153,23 +112,6 @@ const loadOAuthCredential = async (
     .limit(1);
 
   return oauthCred ?? null;
-};
-
-const hasOAuthConfig = (
-  provider: OAuthProviderName,
-  oauthConfig: OAuthConfig,
-): boolean => {
-  switch (provider) {
-    case "google": {
-      return Boolean(oauthConfig.googleClientId && oauthConfig.googleClientSecret);
-    }
-    case "outlook": {
-      return Boolean(oauthConfig.microsoftClientId && oauthConfig.microsoftClientSecret);
-    }
-    default: {
-      return false;
-    }
-  }
 };
 
 const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
@@ -236,7 +178,7 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
 const buildGoogleOAuthProvider = (
   input: OAuthProviderBuildInput,
 ): ProviderResolutionOutcome => {
-  if (!hasOAuthConfig("google", input.oauthConfig)) {
+  if (!hasOAuthProviderConfig("google", input.oauthConfig)) {
     return unresolvedProvider(ProviderResolutionStatus.MISCONFIGURED_PROVIDER);
   }
   if (!input.oauthCredential.externalCalendarId) {
@@ -279,7 +221,7 @@ const buildGoogleOAuthProvider = (
 const buildOutlookOAuthProvider = (
   input: OAuthProviderBuildInput,
 ): ProviderResolutionOutcome => {
-  if (!hasOAuthConfig("outlook", input.oauthConfig)) {
+  if (!hasOAuthProviderConfig("outlook", input.oauthConfig)) {
     return unresolvedProvider(ProviderResolutionStatus.MISCONFIGURED_PROVIDER);
   }
   if (!input.oauthCredential.externalCalendarId) {
@@ -359,7 +301,7 @@ const resolveOAuthProvider = async (
     signal,
   } = options;
 
-  if (!isOAuthProvider(provider)) {
+  if (!isOAuthProviderName(provider)) {
     return unresolvedProvider(ProviderResolutionStatus.UNSUPPORTED_PROVIDER);
   }
 
@@ -438,7 +380,7 @@ interface ResolveProviderOptions {
 }
 
 const resolveSyncProviderOutcome = (options: ResolveProviderOptions): Promise<ProviderResolutionOutcome> => {
-  if (isOAuthProvider(options.provider)) {
+  if (isOAuthProviderName(options.provider)) {
     return resolveOAuthProvider({
       database: options.database,
       provider: options.provider,
@@ -454,7 +396,7 @@ const resolveSyncProviderOutcome = (options: ResolveProviderOptions): Promise<Pr
     });
   }
 
-  if (isCaldavProvider(options.provider) && options.encryptionKey) {
+  if (isCaldavProviderName(options.provider) && options.encryptionKey) {
     return resolveCalDAVProvider(
       options.database,
       options.calendarId,
