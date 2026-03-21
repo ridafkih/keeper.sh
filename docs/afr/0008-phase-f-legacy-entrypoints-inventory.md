@@ -47,6 +47,16 @@ This is a clean-cut decision: cron now always enqueues destination sync jobs.
 - Updated worker call site:
   - `services/worker/src/processor.ts` now invokes `runKeeperSyncRuntimeForUser`
 
+## Build-Graph Verification
+
+- Verified no runtime imports remain for deleted legacy paths:
+  - `migration-check`
+  - `sync-user.ts`
+  - `sync-user-dispatch-table`
+  - `syncDestinationsForUser`
+- Command used:
+  - `rg -n "migration-check|sync-user\\.ts|sync-user-dispatch-table|syncDestinationsForUser" services packages -S`
+
 ## Next Deletion Slices
 
 - **F2/F3/F4/F5 (worker+sync):**

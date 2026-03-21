@@ -89,10 +89,10 @@ Mode: `clean-break` (no compatibility bridge)
 - [ ] F4. Remove legacy credential refresh orchestration paths.
 - [ ] F5. Remove legacy sync lifecycle orchestration paths.
 - [ ] F6. Remove legacy source provisioning orchestration paths.
-- [ ] F7. Remove deprecated helpers replaced by machine adapters.
+- [x] F7. Remove deprecated helpers replaced by machine adapters.
 - [ ] F8. Remove dead tests tied to deleted legacy behavior.
 - [x] F9. Remove dead feature flags no longer needed post-cutover.
-- [ ] F10. Verify build graph has no imports from deleted paths.
+- [x] F10. Verify build graph has no imports from deleted paths.
 
 ## Phase G — Validation and Operational Readiness
 
