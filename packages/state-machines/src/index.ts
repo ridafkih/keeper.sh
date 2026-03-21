@@ -92,6 +92,7 @@ export type {
 } from "./destination-execution.machine";
 
 export {
+  SourceIngestionFailureType,
   SourceIngestionLifecycleCommandType,
   SourceIngestionLifecycleEventType,
   SourceIngestionLifecycleStateMachine,

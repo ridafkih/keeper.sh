@@ -4,6 +4,7 @@ import type { EventActor } from "./core/event-envelope";
 import { TransitionPolicy } from "./core/transition-policy";
 import { ErrorPolicy } from "./errors/error-policy";
 import {
+  SourceIngestionFailureType,
   SourceIngestionLifecycleCommandType,
   SourceIngestionLifecycleEventType,
   SourceIngestionLifecycleStateMachine,
@@ -75,7 +76,12 @@ describe("SourceIngestionLifecycleStateMachine", () => {
     expect(transition.state).toBe("auth_blocked");
     expect(transition.commands).toEqual([{ type: SourceIngestionLifecycleCommandType.MARK_NEEDS_REAUTH }]);
     expect(transition.outputs).toEqual([
-      { code: "token-expired", policy: ErrorPolicy.REQUIRES_REAUTH, type: "INGEST_FAILED" },
+      {
+        code: "token-expired",
+        failureType: SourceIngestionFailureType.AUTH,
+        policy: ErrorPolicy.REQUIRES_REAUTH,
+        type: "INGEST_FAILED",
+      },
     ]);
   });
 
@@ -139,7 +145,12 @@ describe("SourceIngestionLifecycleStateMachine", () => {
 
     expect(transition.state).toBe("transient_error");
     expect(transition.outputs).toEqual([
-      { code: "timeout", policy: ErrorPolicy.RETRYABLE, type: "INGEST_FAILED" },
+      {
+        code: "timeout",
+        failureType: SourceIngestionFailureType.TRANSIENT,
+        policy: ErrorPolicy.RETRYABLE,
+        type: "INGEST_FAILED",
+      },
     ]);
   });
 

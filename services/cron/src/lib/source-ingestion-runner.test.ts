@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ErrorPolicy, SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
+import { ErrorPolicy, SourceIngestionFailureType, SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
 import type { SourceIngestionLifecycleTransitionResult } from "@keeper.sh/state-machines";
 import {
   runSourceIngestionUnit,
@@ -88,7 +88,12 @@ const createRuntime = () => {
             provider: "google",
             sourceId: "source-1",
           },
-          outputs: [{ code: event.code, policy: ErrorPolicy.RETRYABLE, type: "INGEST_FAILED" }],
+          outputs: [{
+            code: event.code,
+            failureType: SourceIngestionFailureType.TRANSIENT,
+            policy: ErrorPolicy.RETRYABLE,
+            type: "INGEST_FAILED",
+          }],
           state: "transient_error",
         });
       }
@@ -102,7 +107,12 @@ const createRuntime = () => {
             provider: "google",
             sourceId: "source-1",
           },
-          outputs: [{ code: event.code, policy: ErrorPolicy.REQUIRES_REAUTH, type: "INGEST_FAILED" }],
+          outputs: [{
+            code: event.code,
+            failureType: SourceIngestionFailureType.AUTH,
+            policy: ErrorPolicy.REQUIRES_REAUTH,
+            type: "INGEST_FAILED",
+          }],
           state: "auth_blocked",
         });
       }
@@ -116,7 +126,12 @@ const createRuntime = () => {
             provider: "google",
             sourceId: "source-1",
           },
-          outputs: [{ code: event.code, policy: ErrorPolicy.TERMINAL, type: "INGEST_FAILED" }],
+          outputs: [{
+            code: event.code,
+            failureType: SourceIngestionFailureType.NOT_FOUND,
+            policy: ErrorPolicy.TERMINAL,
+            type: "INGEST_FAILED",
+          }],
           state: "not_found_disabled",
         });
       }
@@ -272,6 +287,7 @@ describe("runSourceIngestionUnit", () => {
             },
             outputs: [{
               code: SourceIngestionErrorCode.NOT_FOUND,
+              failureType: SourceIngestionFailureType.NOT_FOUND,
               policy: ErrorPolicy.TERMINAL,
               type: "INGEST_FAILED",
             }],

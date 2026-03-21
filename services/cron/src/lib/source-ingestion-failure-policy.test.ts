@@ -1,13 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { RuntimeInvariantViolationError } from "@keeper.sh/machine-orchestration";
-import { ErrorPolicy } from "@keeper.sh/state-machines";
+import { ErrorPolicy, SourceIngestionFailureType } from "@keeper.sh/state-machines";
 import { SourceIngestionErrorCode } from "./source-ingestion-error-code";
 import { resolveSourceIngestionFailurePolicy } from "./source-ingestion-failure-policy";
 
 describe("resolveSourceIngestionFailurePolicy", () => {
   test("returns retryable policy for retryable failure output", () => {
     const policy = resolveSourceIngestionFailurePolicy({
-      outputs: [{ code: "transient_failure", policy: ErrorPolicy.RETRYABLE, type: "INGEST_FAILED" }],
+      outputs: [{
+        code: "transient_failure",
+        failureType: SourceIngestionFailureType.TRANSIENT,
+        policy: ErrorPolicy.RETRYABLE,
+        type: "INGEST_FAILED",
+      }],
       state: "transient_error",
     });
 
@@ -20,7 +25,12 @@ describe("resolveSourceIngestionFailurePolicy", () => {
 
   test("returns requires reauth policy for auth_blocked state", () => {
     const policy = resolveSourceIngestionFailurePolicy({
-      outputs: [{ code: "auth_required", policy: ErrorPolicy.REQUIRES_REAUTH, type: "INGEST_FAILED" }],
+      outputs: [{
+        code: "auth_required",
+        failureType: SourceIngestionFailureType.AUTH,
+        policy: ErrorPolicy.REQUIRES_REAUTH,
+        type: "INGEST_FAILED",
+      }],
       state: "auth_blocked",
     });
 
@@ -33,7 +43,12 @@ describe("resolveSourceIngestionFailurePolicy", () => {
 
   test("returns terminal policy for non-retryable non-reauth states", () => {
     const policy = resolveSourceIngestionFailurePolicy({
-      outputs: [{ code: "not_found", policy: ErrorPolicy.TERMINAL, type: "INGEST_FAILED" }],
+      outputs: [{
+        code: "not_found",
+        failureType: SourceIngestionFailureType.NOT_FOUND,
+        policy: ErrorPolicy.TERMINAL,
+        type: "INGEST_FAILED",
+      }],
       state: "not_found_disabled",
     });
 
@@ -55,7 +70,12 @@ describe("resolveSourceIngestionFailurePolicy", () => {
   test("fails fast when failure code is unknown", () => {
     expect(() =>
       resolveSourceIngestionFailurePolicy({
-        outputs: [{ code: "mystery", policy: ErrorPolicy.TERMINAL, type: "INGEST_FAILED" }],
+        outputs: [{
+          code: "mystery",
+          failureType: SourceIngestionFailureType.NOT_FOUND,
+          policy: ErrorPolicy.TERMINAL,
+          type: "INGEST_FAILED",
+        }],
         state: "not_found_disabled",
       })).toThrow(RuntimeInvariantViolationError);
   });

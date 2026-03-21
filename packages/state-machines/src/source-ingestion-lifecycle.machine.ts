@@ -21,6 +21,12 @@ enum SourceIngestionLifecycleCommandType {
   PERSIST_SYNC_TOKEN = "PERSIST_SYNC_TOKEN",
 }
 
+enum SourceIngestionFailureType {
+  AUTH = "auth",
+  NOT_FOUND = "not_found",
+  TRANSIENT = "transient",
+}
+
 type SourceIngestionLifecycleState =
   | "source_selected"
   | "provider_ready"
@@ -61,7 +67,7 @@ type SourceIngestionLifecycleCommand =
 
 type SourceIngestionLifecycleOutput =
   | { type: "INGEST_COMPLETED"; changed: boolean }
-  | { type: "INGEST_FAILED"; policy: ErrorPolicy; code: string };
+  | { type: "INGEST_FAILED"; policy: ErrorPolicy; code: string; failureType: SourceIngestionFailureType };
 
 type SourceIngestionLifecycleSnapshot = MachineSnapshot<
   SourceIngestionLifecycleState,
@@ -185,7 +191,12 @@ class SourceIngestionLifecycleStateMachine
         this.context = { ...this.context, lastErrorCode: event.code };
         return this.result(
           [{ type: SourceIngestionLifecycleCommandType.MARK_NEEDS_REAUTH }],
-          [{ type: "INGEST_FAILED", code: event.code, policy: ErrorPolicyValue.REQUIRES_REAUTH }],
+          [{
+            type: "INGEST_FAILED",
+            code: event.code,
+            policy: ErrorPolicyValue.REQUIRES_REAUTH,
+            failureType: SourceIngestionFailureType.AUTH,
+          }],
         );
       }
       case SourceIngestionLifecycleEventType.NOT_FOUND: {
@@ -193,13 +204,23 @@ class SourceIngestionLifecycleStateMachine
         this.context = { ...this.context, lastErrorCode: event.code };
         return this.result(
           [{ type: SourceIngestionLifecycleCommandType.DISABLE_SOURCE }],
-          [{ type: "INGEST_FAILED", code: event.code, policy: ErrorPolicyValue.TERMINAL }],
+          [{
+            type: "INGEST_FAILED",
+            code: event.code,
+            policy: ErrorPolicyValue.TERMINAL,
+            failureType: SourceIngestionFailureType.NOT_FOUND,
+          }],
         );
       }
       case SourceIngestionLifecycleEventType.TRANSIENT_FAILURE: {
         this.state = "transient_error";
         this.context = { ...this.context, lastErrorCode: event.code };
-        return this.result([], [{ type: "INGEST_FAILED", code: event.code, policy: ErrorPolicyValue.RETRYABLE }]);
+        return this.result([], [{
+          type: "INGEST_FAILED",
+          code: event.code,
+          policy: ErrorPolicyValue.RETRYABLE,
+          failureType: SourceIngestionFailureType.TRANSIENT,
+        }]);
       }
       default: {
         return this.result();
@@ -211,6 +232,7 @@ class SourceIngestionLifecycleStateMachine
 export {
   SourceIngestionLifecycleStateMachine,
   SourceIngestionLifecycleCommandType,
+  SourceIngestionFailureType,
   SourceIngestionLifecycleEventType,
 };
 export type {
