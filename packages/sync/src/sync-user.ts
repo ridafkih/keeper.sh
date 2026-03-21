@@ -1,101 +1,78 @@
 import {
-  syncCalendar,
-  getEventsForDestination,
-  getEventMappingsForDestination,
   createDatabaseFlush,
   createRedisRateLimiter,
+  getEventMappingsForDestination,
+  getEventsForDestination,
+  syncCalendar,
 } from "@keeper.sh/calendar";
-import type { SyncProgressUpdate, RefreshLockStore } from "@keeper.sh/calendar";
-import { RedisCommandOutboxStore } from "@keeper.sh/machine-orchestration";
-import { RuntimeInvariantViolationError } from "@keeper.sh/machine-orchestration";
+import type { RefreshLockStore, SyncProgressUpdate } from "@keeper.sh/calendar";
+import { RuntimeInvariantViolationError, RedisCommandOutboxStore } from "@keeper.sh/machine-orchestration";
 import {
   calendarAccountsTable,
   calendarsTable,
 } from "@keeper.sh/database/schema";
+import type { DestinationExecutionEvent } from "@keeper.sh/state-machines";
 import { and, arrayContains, eq, isNull, lte, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
+import type { CredentialHealthRuntimeEvent } from "./credential-health-runtime";
+import type {
+  DestinationExecutionDispatchResult,
+  DestinationExecutionRuntimeEvent,
+} from "./destination-execution-runtime";
 import { createDestinationExecutionRuntime } from "./destination-execution-runtime";
-import type { DestinationExecutionDispatchResult } from "./destination-execution-runtime";
-import type { DestinationExecutionRuntimeEvent } from "./destination-execution-runtime";
+import {
+  mapDestinationExecutionFailureEvent,
+  DestinationExecutionFailureClassification,
+} from "./destination-execution-failure-event";
+import { resolveDestinationFailureOutput } from "./destination-failure-policy";
 import {
   buildCalendarFailure,
   DispatchConflictCode,
   handleDispatchConflict,
 } from "./dispatch-conflict-policy";
 import type { CalendarSyncFailure } from "./dispatch-conflict-policy";
-import { resolveDestinationFailureOutput } from "./destination-failure-policy";
-import {
-  DestinationExecutionFailureClassification,
-  mapDestinationExecutionFailureEvent,
-} from "./destination-execution-failure-event";
-import { resolveSyncProviderOutcome, ProviderResolutionStatus } from "./resolve-provider";
 import type { OAuthConfig } from "./resolve-provider";
-import type { CredentialHealthRuntimeEvent } from "./credential-health-runtime";
+import { ProviderResolutionStatus, resolveSyncProviderOutcome } from "./resolve-provider";
 import { createSyncLock, isCalendarInvalidated } from "./sync-lock";
+import {
+  createProviderResolutionFailedStep,
+  createStartupDispatchSteps,
+  isUnresolvedProviderStatus,
+} from "./sync-user-dispatch-table";
 
 const GOOGLE_REQUESTS_PER_MINUTE = 500;
 
-const resetDestinationBackoff = async (
-  database: BunSQLDatabase,
-  calendarId: string,
-): Promise<void> => {
-  await database
-    .update(calendarsTable)
-    .set({ failureCount: 0, lastFailureAt: null, nextAttemptAt: null })
-    .where(eq(calendarsTable.id, calendarId));
-};
-
-const extractNumericField = (event: Record<string, unknown> | undefined, key: string): number => {
-  if (!event) {
-    return 0;
-  }
-  const value = event[key];
-  if (typeof value === "number") {
-    return value;
-  }
-  return 0;
-};
-
 interface SyncConfig {
+  abortSignal?: AbortSignal;
   database: BunSQLDatabase;
-  redis: Redis;
+  deadlineMs?: number;
   encryptionKey?: string;
   oauthConfig: OAuthConfig;
+  redis: Redis;
   refreshLockStore: RefreshLockStore | null;
-  deadlineMs?: number;
-  abortSignal?: AbortSignal;
 }
 
 interface SyncDestinationsResult {
-  added: number;
   addFailed: number;
-  removed: number;
-  removeFailed: number;
+  added: number;
   errors: string[];
+  removeFailed: number;
+  removed: number;
   syncEvents: Record<string, unknown>[];
 }
 
-const EMPTY_RESULT: SyncDestinationsResult = {
-  added: 0,
-  addFailed: 0,
-  removed: 0,
-  removeFailed: 0,
-  errors: [],
-  syncEvents: [],
-};
-
 interface CalendarSyncCompletion {
-  provider: string;
   accountId: string;
-  calendarId: string;
-  userId: string;
-  added: number;
   addFailed: number;
-  removed: number;
-  removeFailed: number;
-  errors: string[];
+  added: number;
+  calendarId: string;
   durationMs: number;
+  errors: string[];
+  provider: string;
+  removeFailed: number;
+  removed: number;
+  userId: string;
 }
 
 interface SyncDestination {
@@ -107,34 +84,79 @@ interface SyncDestination {
 }
 
 interface SyncCallbacks {
-  onSyncEvent?: (event: Record<string, unknown>) => void;
-  onProgress?: (update: SyncProgressUpdate) => void;
   onCalendarComplete?: (completion: CalendarSyncCompletion) => Promise<void> | void;
   onCalendarFailed?: (failure: CalendarSyncFailure) => Promise<void> | void;
-  onDestinationRuntimeEvent?: (
-    calendarId: string,
-    event: DestinationExecutionRuntimeEvent,
-  ) => Promise<void> | void;
   onCredentialRuntimeEvent?: (
     calendarId: string,
     event: CredentialHealthRuntimeEvent,
   ) => Promise<void> | void;
+  onDestinationRuntimeEvent?: (
+    calendarId: string,
+    event: DestinationExecutionRuntimeEvent,
+  ) => Promise<void> | void;
+  onProgress?: (update: SyncProgressUpdate) => void;
+  onSyncEvent?: (event: Record<string, unknown>) => void;
 }
 
-const createIsCurrentResolver = (
-  input: {
-    abortSignal?: AbortSignal;
-    deadlineMs?: number;
-    isCurrent: () => Promise<boolean>;
-  },
-): (() => Promise<boolean>) =>
+interface DestinationRuntimePort {
+  dispatch: (event: DestinationExecutionEvent) => Promise<DestinationExecutionDispatchResult>;
+  releaseIfHeld: () => Promise<void>;
+}
+
+interface DispatchWithConflictInput {
+  conflictCode: DispatchConflictCode;
+  destination: SyncDestination;
+  event: DestinationExecutionEvent;
+  notifyCalendarFailed: (failure: CalendarSyncFailure) => Promise<void>;
+  runtime: DestinationRuntimePort;
+  startedAtMs: number;
+}
+
+const EMPTY_RESULT: SyncDestinationsResult = {
+  addFailed: 0,
+  added: 0,
+  errors: [],
+  removeFailed: 0,
+  removed: 0,
+  syncEvents: [],
+};
+
+const extractNumericField = (
+  event: Record<string, unknown> | globalThis.undefined,
+  key: string,
+): number => {
+  if (!event) {
+    return 0;
+  }
+
+  const value = event[key];
+  return typeof value === "number" ? value : 0;
+};
+
+const resetDestinationBackoff = async (
+  database: BunSQLDatabase,
+  calendarId: string,
+): Promise<void> => {
+  await database
+    .update(calendarsTable)
+    .set({ failureCount: 0, lastFailureAt: null, nextAttemptAt: null })
+    .where(eq(calendarsTable.id, calendarId));
+};
+
+const createIsCurrentResolver = (input: {
+  abortSignal?: AbortSignal;
+  deadlineMs?: number;
+  isCurrent: () => Promise<boolean>;
+}): (() => Promise<boolean>) =>
   () => {
     if (input.abortSignal?.aborted) {
       return Promise.resolve(false);
     }
+
     if (input.deadlineMs && Date.now() >= input.deadlineMs) {
       return Promise.resolve(false);
     }
+
     return input.isCurrent();
   };
 
@@ -146,12 +168,59 @@ const notifyCalendarCompleteIfNeeded = async (input: {
   if (!input.callbacks?.onCalendarComplete) {
     return;
   }
+
   const syncEvent = input.syncEvents.at(-1);
   const durationMs = extractNumericField(syncEvent, "duration_ms");
+
   await input.callbacks.onCalendarComplete({
     ...input.completion,
     durationMs,
   });
+};
+
+const dispatchWithConflictHandling = async (
+  input: DispatchWithConflictInput,
+): Promise<{
+  conflictHandled: boolean;
+  result: DestinationExecutionDispatchResult;
+}> => {
+  const result = await input.runtime.dispatch(input.event);
+  const conflictHandled = await handleDispatchConflict({
+    conflictCode: input.conflictCode,
+    destination: input.destination,
+    notifyCalendarFailed: input.notifyCalendarFailed,
+    result,
+    runtime: input.runtime,
+    startedAtMs: input.startedAtMs,
+  });
+
+  return { conflictHandled, result };
+};
+
+const runStartupDispatchSteps = async (input: {
+  calendarId: string;
+  destination: SyncDestination;
+  notifyCalendarFailed: (failure: CalendarSyncFailure) => Promise<void>;
+  runtime: DestinationRuntimePort;
+  startedAtMs: number;
+}): Promise<boolean> => {
+  const steps = createStartupDispatchSteps(input.calendarId);
+  for (const step of steps) {
+    const startupDispatchResult = await dispatchWithConflictHandling({
+      conflictCode: step.conflictCode,
+      destination: input.destination,
+      event: step.event,
+      notifyCalendarFailed: input.notifyCalendarFailed,
+      runtime: input.runtime,
+      startedAtMs: input.startedAtMs,
+    });
+
+    if (startupDispatchResult.conflictHandled) {
+      return true;
+    }
+  }
+
+  return false;
 };
 
 const syncDestinationsForUser = async (
@@ -160,14 +229,13 @@ const syncDestinationsForUser = async (
   callbacks?: SyncCallbacks,
 ): Promise<SyncDestinationsResult> => {
   const { database, redis } = config;
-
   const destinations: SyncDestination[] = await database
     .select({
+      accountId: calendarsTable.accountId,
       calendarId: calendarsTable.id,
+      failureCount: calendarsTable.failureCount,
       provider: calendarAccountsTable.provider,
       userId: calendarsTable.userId,
-      accountId: calendarsTable.accountId,
-      failureCount: calendarsTable.failureCount,
     })
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
@@ -190,6 +258,11 @@ const syncDestinationsForUser = async (
 
   const flush = createDatabaseFlush(database);
   const syncLock = createSyncLock(redis);
+  const rateLimiter = createRedisRateLimiter(
+    redis,
+    `ratelimit:${userId}:google`,
+    { requestsPerMinute: GOOGLE_REQUESTS_PER_MINUTE },
+  );
 
   let added = 0;
   let addFailed = 0;
@@ -198,11 +271,6 @@ const syncDestinationsForUser = async (
   const errors: string[] = [];
   const syncEvents: Record<string, unknown>[] = [];
 
-  const rateLimiter = createRedisRateLimiter(
-    redis,
-    `ratelimit:${userId}:google`,
-    { requestsPerMinute: GOOGLE_REQUESTS_PER_MINUTE },
-  );
   const notifyCalendarFailed = (failure: CalendarSyncFailure): Promise<void> => {
     if (!callbacks?.onCalendarFailed) {
       return Promise.resolve();
@@ -262,80 +330,67 @@ const syncDestinationsForUser = async (
           await handle.release();
         },
       },
+      onRuntimeEvent: (event) => callbacks?.onDestinationRuntimeEvent?.(destination.calendarId, event),
       outboxStore: new RedisCommandOutboxStore({
         keyPrefix: "machine:outbox:destination-execution",
         redis,
       }),
-      onRuntimeEvent: (event) => {
-        if (callbacks?.onDestinationRuntimeEvent) {
-          return callbacks.onDestinationRuntimeEvent(destination.calendarId, event);
-        }
-      },
     });
 
     try {
-      const lockAcquiredResult = await destinationRuntime.dispatch({
-        holderId: destination.calendarId,
-        type: "LOCK_ACQUIRED",
-      });
-      const lockAcquireConflict = await handleDispatchConflict({
-        result: lockAcquiredResult,
-        runtime: destinationRuntime,
+      const startupConflictHandled = await runStartupDispatchSteps({
+        calendarId: destination.calendarId,
         destination,
-        startedAtMs: calendarSyncStartedAt,
-        conflictCode: DispatchConflictCode.LOCK_ACQUIRED,
         notifyCalendarFailed,
-      });
-      if (lockAcquireConflict) {
-        continue;
-      }
-
-      const executionStartedResult = await destinationRuntime.dispatch({ type: "EXECUTION_STARTED" });
-      const executionStartConflict = await handleDispatchConflict({
-        result: executionStartedResult,
         runtime: destinationRuntime,
-        destination,
         startedAtMs: calendarSyncStartedAt,
-        conflictCode: DispatchConflictCode.EXECUTION_STARTED,
-        notifyCalendarFailed,
       });
-      if (executionStartConflict) {
+      if (startupConflictHandled) {
         continue;
       }
 
       const syncProviderOutcome = await resolveSyncProviderOutcome({
-        database,
-        provider: destination.provider,
-        calendarId: destination.calendarId,
-        userId: destination.userId,
         accountId: destination.accountId,
-        oauthConfig: config.oauthConfig,
-        outboxRedis: redis,
+        calendarId: destination.calendarId,
+        database,
         encryptionKey: config.encryptionKey,
-        refreshLockStore: config.refreshLockStore,
-        rateLimiter,
-        signal: config.abortSignal,
+        oauthConfig: config.oauthConfig,
         onCredentialRuntimeEvent: callbacks?.onCredentialRuntimeEvent,
+        outboxRedis: redis,
+        provider: destination.provider,
+        rateLimiter,
+        refreshLockStore: config.refreshLockStore,
+        signal: config.abortSignal,
+        userId: destination.userId,
       });
 
       if (syncProviderOutcome.status !== ProviderResolutionStatus.RESOLVED) {
-        const code = syncProviderOutcome.status.toLowerCase();
-        const failedResult = await destinationRuntime.dispatch({
-          code,
-          reason: code,
-          type: "EXECUTION_FATAL_FAILED",
-        });
-        const providerResolutionFailureConflict = await handleDispatchConflict({
-          result: failedResult,
-          runtime: destinationRuntime,
+        if (!isUnresolvedProviderStatus(syncProviderOutcome.status)) {
+          throw new RuntimeInvariantViolationError({
+            aggregateId: destination.calendarId,
+            code: "DESTINATION_PROVIDER_RESOLUTION_STATUS_INVALID",
+            reason: `unexpected provider resolution status: ${syncProviderOutcome.status}`,
+            surface: "sync-user",
+          });
+        }
+
+        const providerResolutionFailedStep = createProviderResolutionFailedStep(
+          syncProviderOutcome.status,
+        );
+        const providerResolutionDispatchResult = await dispatchWithConflictHandling({
+          conflictCode: providerResolutionFailedStep.conflictCode,
           destination,
-          startedAtMs: calendarSyncStartedAt,
-          conflictCode: DispatchConflictCode.PROVIDER_RESOLUTION_FAILED,
+          event: providerResolutionFailedStep.event,
           notifyCalendarFailed,
+          runtime: destinationRuntime,
+          startedAtMs: calendarSyncStartedAt,
         });
-        if (providerResolutionFailureConflict) {
+
+        if (providerResolutionDispatchResult.conflictHandled) {
           continue;
         }
+
+        const { result: failedResult } = providerResolutionDispatchResult;
         if (failedResult.outcome !== "TRANSITION_APPLIED") {
           throw new RuntimeInvariantViolationError({
             aggregateId: destination.calendarId,
@@ -344,37 +399,30 @@ const syncDestinationsForUser = async (
             surface: "sync-user",
           });
         }
+
         const failedPolicy = resolveDestinationFailureOutput(failedResult.transition.outputs);
         await notifyCalendarFailed(
           buildCalendarFailure({
             destination,
-            startedAtMs: calendarSyncStartedAt,
-            error: code,
-            retryable: failedPolicy.retryable,
             disabled: failedPolicy.disabled,
+            error: providerResolutionFailedStep.event.code,
+            retryable: failedPolicy.retryable,
+            startedAtMs: calendarSyncStartedAt,
           }),
         );
         continue;
       }
 
       const providerRef = syncProviderOutcome.provider;
-
-        const result = await syncCalendar({
-        userId: destination.userId,
+      const result = await syncCalendar({
         calendarId: destination.calendarId,
-        provider: providerRef,
-        readState: async () => ({
-          localEvents: await getEventsForDestination(database, destination.calendarId),
-          existingMappings: await getEventMappingsForDestination(database, destination.calendarId),
-          remoteEvents: await providerRef.listRemoteEvents(),
-        }),
-          isCurrent: createIsCurrentResolver({
-            abortSignal: config.abortSignal,
-            deadlineMs: config.deadlineMs,
-            isCurrent: () => handle.isCurrent(),
-          }),
-        isInvalidated: () => isCalendarInvalidated(redis, destination.calendarId),
         flush,
+        isCurrent: createIsCurrentResolver({
+          abortSignal: config.abortSignal,
+          deadlineMs: config.deadlineMs,
+          isCurrent: () => handle.isCurrent(),
+        }),
+        isInvalidated: () => isCalendarInvalidated(redis, destination.calendarId),
         onProgress: callbacks?.onProgress,
         onSyncEvent: (event) => {
           const enrichedEvent = {
@@ -383,25 +431,29 @@ const syncDestinationsForUser = async (
             "user.id": destination.userId,
           };
           syncEvents.push(enrichedEvent);
-          if (callbacks?.onSyncEvent) {
-            callbacks.onSyncEvent(enrichedEvent);
-          }
+          callbacks?.onSyncEvent?.(enrichedEvent);
         },
+        provider: providerRef,
+        readState: async () => ({
+          existingMappings: await getEventMappingsForDestination(database, destination.calendarId),
+          localEvents: await getEventsForDestination(database, destination.calendarId),
+          remoteEvents: await providerRef.listRemoteEvents(),
+        }),
+        userId: destination.userId,
       });
 
       const invalidated = await isCalendarInvalidated(redis, destination.calendarId);
       if (invalidated) {
-        const invalidationResult = await destinationRuntime.dispatch({
-          at: new Date().toISOString(),
-          type: "INVALIDATION_DETECTED",
-        });
-        await handleDispatchConflict({
-          result: invalidationResult,
-          runtime: destinationRuntime,
-          destination,
-          startedAtMs: calendarSyncStartedAt,
+        await dispatchWithConflictHandling({
           conflictCode: DispatchConflictCode.INVALIDATION_DETECTED,
+          destination,
+          event: {
+            at: new Date().toISOString(),
+            type: "INVALIDATION_DETECTED",
+          },
           notifyCalendarFailed,
+          runtime: destinationRuntime,
+          startedAtMs: calendarSyncStartedAt,
         });
         continue;
       }
@@ -410,20 +462,19 @@ const syncDestinationsForUser = async (
         await resetDestinationBackoff(database, destination.calendarId);
       }
 
-      const successResult = await destinationRuntime.dispatch({
-        eventsAdded: result.added,
-        eventsRemoved: result.removed,
-        type: "EXECUTION_SUCCEEDED",
-      });
-      const executionSuccessConflict = await handleDispatchConflict({
-        result: successResult,
-        runtime: destinationRuntime,
-        destination,
-        startedAtMs: calendarSyncStartedAt,
+      const successDispatchResult = await dispatchWithConflictHandling({
         conflictCode: DispatchConflictCode.EXECUTION_SUCCEEDED,
+        destination,
+        event: {
+          eventsAdded: result.added,
+          eventsRemoved: result.removed,
+          type: "EXECUTION_SUCCEEDED",
+        },
         notifyCalendarFailed,
+        runtime: destinationRuntime,
+        startedAtMs: calendarSyncStartedAt,
       });
-      if (executionSuccessConflict) {
+      if (successDispatchResult.conflictHandled) {
         continue;
       }
 
@@ -433,72 +484,71 @@ const syncDestinationsForUser = async (
       removeFailed += result.removeFailed;
       errors.push(...result.errors);
 
-        await notifyCalendarCompleteIfNeeded({
-          callbacks,
-          completion: {
-            provider: destination.provider,
-            accountId: destination.accountId,
-            calendarId: destination.calendarId,
-            userId: destination.userId,
-            added: result.added,
-            addFailed: result.addFailed,
-            removed: result.removed,
-            removeFailed: result.removeFailed,
-            errors: result.errors,
-          },
-          syncEvents,
-        });
+      await notifyCalendarCompleteIfNeeded({
+        callbacks,
+        completion: {
+          accountId: destination.accountId,
+          addFailed: result.addFailed,
+          added: result.added,
+          calendarId: destination.calendarId,
+          errors: result.errors,
+          provider: destination.provider,
+          removeFailed: result.removeFailed,
+          removed: result.removed,
+          userId: destination.userId,
+        },
+        syncEvents,
+      });
     } catch (error) {
       const mappedFailure = mapDestinationExecutionFailureEvent(
         error,
         new Date().toISOString(),
       );
-      const failureResult: DestinationExecutionDispatchResult =
-        await destinationRuntime.dispatch(mappedFailure.event);
+      const failureResult = await destinationRuntime.dispatch(mappedFailure.event);
       const executionFailureConflict = await handleDispatchConflict({
+        conflictCode: DispatchConflictCode.EXECUTION_FAILED,
+        destination,
+        notifyCalendarFailed,
         result: failureResult,
         runtime: destinationRuntime,
-        destination,
         startedAtMs: calendarSyncStartedAt,
-        conflictCode: DispatchConflictCode.EXECUTION_FAILED,
-        notifyCalendarFailed,
       });
       if (executionFailureConflict) {
         continue;
       }
+
       if (failureResult.outcome !== "TRANSITION_APPLIED") {
         await notifyCalendarFailed(
           buildCalendarFailure({
             destination,
-            startedAtMs: calendarSyncStartedAt,
+            disabled: false,
             error: DispatchConflictCode.EXECUTION_FAILED,
             retryable: true,
-            disabled: false,
+            startedAtMs: calendarSyncStartedAt,
           }),
         );
         continue;
       }
+
       const failurePolicy = resolveDestinationFailureOutput(failureResult.transition.outputs);
       errors.push(mappedFailure.errorMessage);
       await notifyCalendarFailed(
         buildCalendarFailure({
           destination,
-          startedAtMs: calendarSyncStartedAt,
+          disabled: failurePolicy.disabled,
           error: mappedFailure.errorMessage,
           retryable: failurePolicy.retryable,
-          disabled: failurePolicy.disabled,
+          startedAtMs: calendarSyncStartedAt,
         }),
       );
-      if (
-        mappedFailure.classification
-        === DestinationExecutionFailureClassification.TERMINAL
-      ) {
+
+      if (mappedFailure.classification === DestinationExecutionFailureClassification.TERMINAL) {
         throw error;
       }
     }
   }
 
-  return { added, addFailed, removed, removeFailed, errors, syncEvents };
+  return { addFailed, added, errors, removeFailed, removed, syncEvents };
 };
 
 export { syncDestinationsForUser };

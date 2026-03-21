@@ -1,7 +1,7 @@
 # 0006 — Branching Hotspots Audit (Q3)
 
 Status: `active`
-Scope: Phase B (`B1`–`B7`)
+Scope: Phase B (`B1`–`B8`)
 
 ## Objective
 
@@ -57,6 +57,19 @@ Identify remaining non-machine policy branching in `packages/sync`, `services/cr
   - `services/cron/src/lib/source-ingestion-failure-policy.test.ts`
   - `services/cron/src/lib/source-ingestion-runner.test.ts` (machine-output source-of-truth case)
   - Updated existing source-ingestion failure/runner contract tests to match non-redundant decision shape.
+
+## Implemented in Q5 (B8)
+
+- Added deterministic dispatch table module:
+  - `packages/sync/src/sync-user-dispatch-table.ts`
+  - startup dispatch steps (`LOCK_ACQUIRED`, `EXECUTION_STARTED`) as ordered table entries
+  - unresolved provider status -> fatal machine event mapping helper
+- Refactored `packages/sync/src/sync-user.ts` to consume table-driven helpers:
+  - startup transition dispatch now runs via table iteration helper
+  - provider-resolution failure dispatch now runs through table-mapped machine event
+  - repeated conflict-handling boilerplate collapsed into `dispatchWithConflictHandling(...)`
+- Added tests:
+  - `packages/sync/src/sync-user-dispatch-table.test.ts`
 
 ## Validation
 
