@@ -6,7 +6,7 @@
     "applications/web/src/generated/**/*"
   ],
   "ignoreBinaries": [],
-  "ignoreDependencies": [],
+  "ignoreDependencies": ["pino-opentelemetry-transport"],
   "ignoreWorkspaces": ["packages/typescript-config"],
   "ignoreExportsUsedInFile": true,
   "workspaces": {

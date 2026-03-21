@@ -1,24 +1,28 @@
+import type { WideloggerOptions } from "widelogger";
 import { widelogger, widelog } from "widelogger";
 
-const otelEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+const environment = process.env.ENV ?? "production";
 
-const { context, destroy } = widelogger({
+const options: WideloggerOptions = {
   service: "keeper-mcp",
   defaultEventName: "wide_event",
   commitHash: process.env.COMMIT_SHA,
-  environment: process.env.ENV ?? "production",
+  environment,
   version: process.env.npm_package_version,
-  transport: otelEndpoint
-    ? {
-        target: "pino-opentelemetry-transport",
-        options: {
-          resourceAttributes: {
-            "service.name": "keeper-mcp",
-            "deployment.environment": process.env.ENV ?? "production",
-          },
-        },
-      }
-    : undefined,
-});
+};
+
+if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+  options.transport = {
+    target: "pino-opentelemetry-transport",
+    options: {
+      resourceAttributes: {
+        "service.name": "keeper-mcp",
+        "deployment.environment": environment,
+      },
+    },
+  };
+}
+
+const { context, destroy } = widelogger(options);
 
 export { context, destroy, widelog };
