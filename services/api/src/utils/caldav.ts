@@ -7,6 +7,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { saveCalDAVDestinationWithDatabase } from "./destinations";
 import { enqueuePushSync } from "./enqueue-push-sync";
 import { safeFetchOptions } from "./safe-fetch-options";
+import { resolveSyncEnqueuePlan } from "./sync-enqueue-plan";
 import { database, encryptionKey, premiumService } from "@/context";
 
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
@@ -133,10 +134,9 @@ const createCalDAVDestination = async (
     );
   });
 
-  const plan = await premiumService.getUserPlan(userId);
-  if (!plan) {
-    throw new Error("Unable to resolve user plan for sync enqueue");
-  }
+  const plan = await resolveSyncEnqueuePlan(userId, (resolvedUserId) =>
+    premiumService.getUserPlan(resolvedUserId),
+  );
   await enqueuePushSync(userId, plan);
 };
 

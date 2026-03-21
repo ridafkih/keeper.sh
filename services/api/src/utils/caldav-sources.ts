@@ -15,6 +15,7 @@ import { encryptPassword } from "@keeper.sh/database";
 import { database, premiumService, encryptionKey } from "@/context";
 import { enqueuePushSync } from "./enqueue-push-sync";
 import { applySourceSyncDefaults } from "./source-sync-defaults";
+import { resolveSyncEnqueuePlan } from "./sync-enqueue-plan";
 
 const FIRST_RESULT_LIMIT = 1;
 const CALDAV_CALENDAR_TYPE = "caldav";
@@ -69,12 +70,6 @@ class CalDAVSourceCreateError extends Error {
 class CalDAVSourceProvisioningInvariantError extends Error {
   constructor() {
     super("Invariant violated: source provisioning did not request bootstrap sync");
-  }
-}
-
-class CalDAVSyncEnqueuePlanError extends Error {
-  constructor() {
-    super("Unable to resolve user plan for sync enqueue");
   }
 }
 
@@ -367,10 +362,9 @@ const createCalDAVSource = async (
     };
   });
 
-  const plan = await premiumService.getUserPlan(userId);
-  if (!plan) {
-    throw new CalDAVSyncEnqueuePlanError();
-  }
+  const plan = await resolveSyncEnqueuePlan(userId, (resolvedUserId) =>
+    premiumService.getUserPlan(resolvedUserId),
+  );
   await enqueuePushSync(userId, plan);
 
   return result;
@@ -400,7 +394,6 @@ export {
   CalDAVEncryptionKeyMissingError,
   CalDAVSourceCreateError,
   CalDAVSourceProvisioningInvariantError,
-  CalDAVSyncEnqueuePlanError,
   DuplicateCalDAVSourceError,
   getUserCalDAVSources,
   createCalDAVSource,

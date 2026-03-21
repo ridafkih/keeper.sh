@@ -19,6 +19,7 @@ import type { database as contextDatabase } from "@/context";
 import { spawnBackgroundJob } from "./background-task";
 import { getSourceProvider } from "@keeper.sh/calendar";
 import { applySourceSyncDefaults } from "./source-sync-defaults";
+import { resolveSyncEnqueuePlan } from "./sync-enqueue-plan";
 
 import { enqueuePushSync } from "./enqueue-push-sync";
 
@@ -56,6 +57,30 @@ class DuplicateSourceError extends Error {
 class UnsupportedOAuthProviderError extends Error {
   constructor(operation: "source_create" | "account_import" | "calendar_listing", provider: string) {
     super(`Unsupported OAuth provider for ${operation}: ${provider}`);
+  }
+}
+
+class OAuthSourceAccountCreateError extends Error {
+  constructor() {
+    super("Failed to create calendar account");
+  }
+}
+
+class OAuthSourceCreateError extends Error {
+  constructor() {
+    super("Failed to create OAuth calendar source");
+  }
+}
+
+class OAuthSourceProvisioningInvariantError extends Error {
+  constructor() {
+    super("Invariant violated: source provisioning did not request bootstrap sync");
+  }
+}
+
+class OAuthImportAccountCreateError extends Error {
+  constructor() {
+    super("Failed to find or create calendar account");
   }
 }
 
@@ -523,10 +548,9 @@ const createDefaultCreateOAuthSourceDependencies = (): CreateOAuthSourceDependen
     spawnBackgroundJob("oauth-source-sync", { userId, provider }, async () => {
       await syncOAuthSourcesByProvider(provider);
       const { premiumService } = await import("@/context");
-      const plan = await premiumService.getUserPlan(userId);
-      if (!plan) {
-        throw new Error("Unable to resolve user plan for sync enqueue");
-      }
+      const plan = await resolveSyncEnqueuePlan(userId, (resolvedUserId) =>
+        premiumService.getUserPlan(resolvedUserId),
+      );
       await enqueuePushSync(userId, plan);
     });
   },
@@ -605,7 +629,7 @@ const createOAuthSourceWithDependencies = async (
   });
 
   if (!accountId) {
-    throw new Error("Failed to create calendar account");
+    throw new OAuthSourceAccountCreateError();
   }
   if (existingAccountId) {
     dispatchProvisioningEvent({ accountId, type: "ACCOUNT_REUSED" });
@@ -626,7 +650,7 @@ const createOAuthSourceWithDependencies = async (
   });
 
   if (!source) {
-    throw new Error("Failed to create OAuth calendar source");
+    throw new OAuthSourceCreateError();
   }
   dispatchProvisioningEvent({
     sourceIds: [source.id],
@@ -641,7 +665,7 @@ const createOAuthSourceWithDependencies = async (
     (output) => output.type === "BOOTSTRAP_REQUESTED",
   );
   if (!bootstrapRequested) {
-    throw new Error("Invariant violated: source provisioning did not request bootstrap sync");
+    throw new OAuthSourceProvisioningInvariantError();
   }
 
   dependencies.triggerSync(userId, provider);
@@ -738,7 +762,7 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
       .returning({ id: calendarAccountsTable.id });
 
     if (!insertedAccount?.id) {
-      throw new Error("Failed to find or create calendar account");
+      throw new OAuthImportAccountCreateError();
     }
 
     return insertedAccount.id;
@@ -804,10 +828,9 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
     spawnBackgroundJob("oauth-account-import", { userId, provider }, async () => {
       await syncOAuthSourcesByProvider(provider);
       const { premiumService } = await import("@/context");
-      const plan = await premiumService.getUserPlan(userId);
-      if (!plan) {
-        throw new Error("Unable to resolve user plan for sync enqueue");
-      }
+      const plan = await resolveSyncEnqueuePlan(userId, (resolvedUserId) =>
+        premiumService.getUserPlan(resolvedUserId),
+      );
       await enqueuePushSync(userId, plan);
     });
   },
@@ -882,7 +905,7 @@ const importOAuthAccountCalendarsWithDependencies = async (
     (output) => output.type === "BOOTSTRAP_REQUESTED",
   );
   if (!bootstrapRequested) {
-    throw new Error("Invariant violated: source provisioning did not request bootstrap sync");
+    throw new OAuthSourceProvisioningInvariantError();
   }
   dependencies.triggerSync(userId, provider);
 
@@ -921,7 +944,7 @@ const createOAuthAccountIdWithDatabase = async (
     .returning({ id: calendarAccountsTable.id });
 
   if (!insertedAccount?.id) {
-    throw new Error("Failed to find or create calendar account");
+    throw new OAuthImportAccountCreateError();
   }
 
   return insertedAccount.id;
@@ -1010,6 +1033,10 @@ export {
   SourceCredentialNotFoundError,
   SourceCredentialProviderMismatchError,
   UnsupportedOAuthProviderError,
+  OAuthSourceAccountCreateError,
+  OAuthSourceCreateError,
+  OAuthSourceProvisioningInvariantError,
+  OAuthImportAccountCreateError,
   getUserOAuthSources,
   verifyOAuthSourceOwnership,
   getOAuthDestinationCredentials,

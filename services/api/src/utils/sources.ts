@@ -14,6 +14,7 @@ import {
   runCreateSource,
 } from "./source-lifecycle";
 import { applySourceSyncDefaults } from "./source-sync-defaults";
+import { resolveSyncEnqueuePlan } from "./sync-enqueue-plan";
 import { safeFetchOptions } from "./safe-fetch-options";
 
 import { spawnBackgroundJob } from "./background-task";
@@ -184,10 +185,10 @@ const createSource = (userId: string, name: string, url: string): Promise<Source
         },
         spawnBackgroundJob,
         enqueuePushSync: async (enqueuedUserId) => {
-          const plan = await premiumService.getUserPlan(enqueuedUserId);
-          if (!plan) {
-            throw new Error("Unable to resolve user plan for sync enqueue");
-          }
+          const plan = await resolveSyncEnqueuePlan(
+            enqueuedUserId,
+            (resolvedUserId) => premiumService.getUserPlan(resolvedUserId),
+          );
           await enqueuePushSync(enqueuedUserId, plan);
         },
         validateSourceUrl,

@@ -5,6 +5,7 @@ import type { ValidatedState } from "@keeper.sh/calendar";
 import { and, count, eq, sql } from "drizzle-orm";
 import type { database as contextDatabase } from "@/context";
 import { oauthCallbackQuerySchema } from "./request-query";
+import { resolveSyncEnqueuePlan } from "./sync-enqueue-plan";
 
 const MS_PER_SECOND = 1000;
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
@@ -262,10 +263,9 @@ const handleOAuthCallback = async (
     hasRequiredScopes: destinationsModule.hasRequiredScopes,
     persistCalendarDestination,
     enqueuePushSync: async (userId) => {
-      const plan = await premiumService.getUserPlan(userId);
-      if (!plan) {
-        throw new Error("Unable to resolve user plan for sync enqueue");
-      }
+      const plan = await resolveSyncEnqueuePlan(userId, (resolvedUserId) =>
+        premiumService.getUserPlan(resolvedUserId),
+      );
       await enqueuePushSync(userId, plan);
     },
     validateState: destinationsModule.validateState,

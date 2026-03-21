@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import {
+  OAuthSourceAccountCreateError,
+  OAuthSourceCreateError,
   createOAuthSourceWithDependencies,
   importOAuthAccountCalendarsWithDependencies,
   UnsupportedOAuthProviderError,
@@ -273,5 +275,53 @@ describe("createOAuthSourceWithDependencies", () => {
     expect(createAccountCalls).toHaveLength(0);
     expect(createSourceCalls).toHaveLength(0);
     expect(triggerSyncCalls).toHaveLength(0);
+  });
+
+  it("throws typed error when account creation fails", () => {
+    expect(
+      createOAuthSourceWithDependencies(
+        {
+          externalCalendarId: "external-1",
+          name: "Team Calendar",
+          oauthCredentialId: "credential-1",
+          provider: "google",
+          userId: "user-1",
+        },
+        {
+          canAddAccount: () => Promise.resolve(true),
+          countUserAccounts: () => Promise.resolve(0),
+          createCalendarAccount: () => Promise.resolve(null),
+          createSource: () => Promise.resolve({ id: "source-1", name: "Team Calendar" }),
+          findCredentialEmail: () => Promise.resolve({ email: "person@example.com", exists: true }),
+          findExistingAccountId: () => Promise.resolve(null),
+          hasExistingCalendar: () => Promise.resolve(false),
+          triggerSync: () => null,
+        },
+      ),
+    ).rejects.toBeInstanceOf(OAuthSourceAccountCreateError);
+  });
+
+  it("throws typed error when source creation fails", () => {
+    expect(
+      createOAuthSourceWithDependencies(
+        {
+          externalCalendarId: "external-1",
+          name: "Team Calendar",
+          oauthCredentialId: "credential-1",
+          provider: "google",
+          userId: "user-1",
+        },
+        {
+          canAddAccount: () => Promise.resolve(true),
+          countUserAccounts: () => Promise.resolve(0),
+          createCalendarAccount: () => Promise.resolve("account-1"),
+          createSource: () => Promise.resolve(null),
+          findCredentialEmail: () => Promise.resolve({ email: "person@example.com", exists: true }),
+          findExistingAccountId: () => Promise.resolve(null),
+          hasExistingCalendar: () => Promise.resolve(false),
+          triggerSync: () => null,
+        },
+      ),
+    ).rejects.toBeInstanceOf(OAuthSourceCreateError);
   });
 });
