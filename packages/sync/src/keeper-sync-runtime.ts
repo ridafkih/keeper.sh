@@ -122,7 +122,7 @@ const EMPTY_RESULT: KeeperSyncRuntimeResult = {
 };
 
 const extractNumericField = (
-  event: Record<string, unknown> | globalThis.undefined,
+  event: Record<string, unknown> | undefined,
   key: string,
 ): number => {
   if (!event) {
@@ -130,7 +130,10 @@ const extractNumericField = (
   }
 
   const value = event[key];
-  return typeof value === "number" ? value : 0;
+  if (typeof value === "number") {
+    return value;
+  }
+  return 0;
 };
 
 const resetDestinationBackoff = async (
@@ -405,7 +408,7 @@ const runKeeperSyncRuntimeForUser = async (
           buildCalendarFailure({
             destination,
             disabled: failedPolicy.disabled,
-            error: providerResolutionFailedStep.event.code,
+            error: syncProviderOutcome.status,
             retryable: failedPolicy.retryable,
             startedAtMs: calendarSyncStartedAt,
           }),

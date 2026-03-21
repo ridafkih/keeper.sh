@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ErrorPolicy, SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
+import type { SourceIngestionLifecycleTransitionResult } from "@keeper.sh/state-machines";
 import {
   runSourceIngestionUnit,
   type SourceIngestionFailureDecision,
@@ -8,6 +9,7 @@ import {
   type SourceIngestionRuntime,
 } from "./source-ingestion-runner";
 import { SourceIngestionFailureLogSlug } from "./source-ingestion-failure";
+import { SourceIngestionErrorCode } from "./source-ingestion-error-code";
 
 const createLogger = () => {
   const fields = new Map<string, unknown>();
@@ -27,6 +29,18 @@ const createLogger = () => {
   };
   return { logger, fields, errorFieldCalls, getFlushCount: () => flushCount };
 };
+
+const createBaseTransition = (): SourceIngestionLifecycleTransitionResult => ({
+  commands: [],
+  context: {
+    eventsAdded: 0,
+    eventsRemoved: 0,
+    provider: "google",
+    sourceId: "source-1",
+  },
+  outputs: [],
+  state: "source_selected",
+});
 
 const createRuntime = () => {
   const events: unknown[] = [];
@@ -75,7 +89,7 @@ const createRuntime = () => {
           state: "not_found_disabled",
         });
       }
-      return Promise.resolve({ commands: [], outputs: [], state: "source_selected", context: {} });
+      return Promise.resolve(createBaseTransition());
     },
   };
   return { runtime, events };
@@ -104,7 +118,7 @@ describe("runSourceIngestionUnit", () => {
       },
       runtime,
       classifyFailure: (): SourceIngestionFailureDecision => ({
-        code: "transient_failure",
+        code: SourceIngestionErrorCode.TRANSIENT_FAILURE,
         eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
         logSlug: SourceIngestionFailureLogSlug.TRANSIENT,
       }),
@@ -149,7 +163,7 @@ describe("runSourceIngestionUnit", () => {
       },
       runtime,
       classifyFailure: (): SourceIngestionFailureDecision => ({
-        code: "transient_failure",
+        code: SourceIngestionErrorCode.TRANSIENT_FAILURE,
         eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
         logSlug: SourceIngestionFailureLogSlug.TRANSIENT,
       }),
@@ -158,7 +172,10 @@ describe("runSourceIngestionUnit", () => {
     expect(events).toEqual([
       { type: SourceIngestionLifecycleEventType.SOURCE_SELECTED },
       { type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED },
-      { code: "transient_failure", type: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE },
+      {
+        code: SourceIngestionErrorCode.TRANSIENT_FAILURE,
+        type: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
+      },
     ]);
     expect(fields.get("outcome")).toBe("error");
     expect(errorFieldCalls).toHaveLength(1);
@@ -185,7 +202,7 @@ describe("runSourceIngestionUnit", () => {
       },
       runtime,
       classifyFailure: (): SourceIngestionFailureDecision => ({
-        code: "not_found",
+        code: SourceIngestionErrorCode.NOT_FOUND,
         eventType: SourceIngestionLifecycleEventType.NOT_FOUND,
         logSlug: SourceIngestionFailureLogSlug.NOT_FOUND,
       }),
@@ -199,7 +216,7 @@ describe("runSourceIngestionUnit", () => {
     expect(events).toEqual([
       { type: SourceIngestionLifecycleEventType.SOURCE_SELECTED },
       { type: SourceIngestionLifecycleEventType.FETCHER_RESOLVED },
-      { code: "not_found", type: SourceIngestionLifecycleEventType.NOT_FOUND },
+      { code: SourceIngestionErrorCode.NOT_FOUND, type: SourceIngestionLifecycleEventType.NOT_FOUND },
     ]);
     expect(fields.get("outcome")).toBe("error");
     expect(getFlushCount()).toBe(1);
@@ -213,12 +230,27 @@ describe("runSourceIngestionUnit", () => {
         if (event.type === SourceIngestionLifecycleEventType.TRANSIENT_FAILURE) {
           return Promise.resolve({
             commands: [],
-            context: {},
-            outputs: [{ code: "not_found", retryable: false, type: "INGEST_FAILED" }],
+            context: {
+              eventsAdded: 0,
+              eventsRemoved: 0,
+              provider: "google",
+              sourceId: "source-1",
+            },
+            outputs: [{ code: SourceIngestionErrorCode.NOT_FOUND, retryable: false, type: "INGEST_FAILED" }],
             state: "not_found_disabled",
           });
         }
-        return Promise.resolve({ commands: [], outputs: [], state: "source_selected", context: {} });
+        return Promise.resolve({
+          commands: [],
+          context: {
+            eventsAdded: 0,
+            eventsRemoved: 0,
+            provider: "google",
+            sourceId: "source-1",
+          },
+          outputs: [],
+          state: "source_selected",
+        });
       },
     };
 
@@ -232,7 +264,7 @@ describe("runSourceIngestionUnit", () => {
       },
       runtime,
       classifyFailure: (): SourceIngestionFailureDecision => ({
-        code: "transient_failure",
+        code: SourceIngestionErrorCode.TRANSIENT_FAILURE,
         eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
         logSlug: SourceIngestionFailureLogSlug.TRANSIENT,
       }),

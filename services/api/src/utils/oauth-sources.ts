@@ -566,9 +566,7 @@ const createOAuthSourceWithDependencies = async (
     throw new DuplicateSourceError();
   }
 
-  let accountId = existingAccountId;
-
-  if (!accountId) {
+  if (!existingAccountId) {
     const existingAccountCount = await dependencies.countUserAccounts(userId);
     const allowed = await dependencies.canAddAccount(userId, existingAccountCount);
     if (!allowed) {
@@ -580,23 +578,21 @@ const createOAuthSourceWithDependencies = async (
   dispatchProvisioningEvent({ type: "QUOTA_ALLOWED" });
   dispatchProvisioningEvent({ type: "DEDUPLICATION_PASSED" });
 
+  const accountId = existingAccountId ?? await dependencies.createCalendarAccount({
+    displayName: credential.email,
+    email: credential.email,
+    oauthCredentialId,
+    provider,
+    userId,
+  });
+
   if (!accountId) {
-    const createdAccountId = await dependencies.createCalendarAccount({
-      displayName: credential.email,
-      email: credential.email,
-      oauthCredentialId,
-      provider,
-      userId,
-    });
-
-    if (!createdAccountId) {
-      throw new Error("Failed to create calendar account");
-    }
-
-    accountId = createdAccountId;
-    dispatchProvisioningEvent({ accountId, type: "ACCOUNT_CREATED" });
-  } else {
+    throw new Error("Failed to create calendar account");
+  }
+  if (existingAccountId) {
     dispatchProvisioningEvent({ accountId, type: "ACCOUNT_REUSED" });
+  } else {
+    dispatchProvisioningEvent({ accountId, type: "ACCOUNT_CREATED" });
   }
 
   const source = await dependencies.createSource({
@@ -823,9 +819,7 @@ const importOAuthAccountCalendarsWithDependencies = async (
     userId,
   });
   dispatchProvisioningEvent({ type: "VALIDATION_PASSED" });
-  let accountId = existingAccountId;
-
-  if (!accountId) {
+  if (!existingAccountId) {
     const existingAccountCount = await dependencies.countUserAccounts(userId);
     const allowed = await dependencies.canAddAccount(userId, existingAccountCount);
     if (!allowed) {
@@ -836,22 +830,16 @@ const importOAuthAccountCalendarsWithDependencies = async (
   dispatchProvisioningEvent({ type: "QUOTA_ALLOWED" });
   dispatchProvisioningEvent({ type: "DEDUPLICATION_PASSED" });
 
-  if (!accountId) {
-    accountId = await dependencies.createAccountId({
-      email,
-      oauthCredentialId,
-      provider,
-      userId,
-    });
-    dispatchProvisioningEvent({
-      accountId,
-      type: "ACCOUNT_CREATED",
-    });
+  const accountId = existingAccountId ?? await dependencies.createAccountId({
+    email,
+    oauthCredentialId,
+    provider,
+    userId,
+  });
+  if (existingAccountId) {
+    dispatchProvisioningEvent({ accountId, type: "ACCOUNT_REUSED" });
   } else {
-    dispatchProvisioningEvent({
-      accountId,
-      type: "ACCOUNT_REUSED",
-    });
+    dispatchProvisioningEvent({ accountId, type: "ACCOUNT_CREATED" });
   }
 
   const externalCalendars = await dependencies.listCalendars(provider, accessToken);

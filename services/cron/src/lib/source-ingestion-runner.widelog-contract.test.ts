@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
+import type { SourceIngestionLifecycleTransitionResult } from "@keeper.sh/state-machines";
 import {
   runSourceIngestionUnit,
   type SourceIngestionFailureDecision,
@@ -7,6 +8,7 @@ import {
   type SourceIngestionRuntime,
 } from "./source-ingestion-runner";
 import { SourceIngestionFailureLogSlug } from "./source-ingestion-failure";
+import { SourceIngestionErrorCode } from "./source-ingestion-error-code";
 
 interface FlushedEvent {
   fields: Record<string, unknown>;
@@ -38,10 +40,22 @@ const createCapturingLogger = (): {
 
 const createRetryableClassifier = (): ((error: unknown) => SourceIngestionFailureDecision) =>
   () => ({
-    code: "transient_failure",
+    code: SourceIngestionErrorCode.TRANSIENT_FAILURE,
     eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
     logSlug: SourceIngestionFailureLogSlug.TRANSIENT,
   });
+
+const createBaseTransition = (): SourceIngestionLifecycleTransitionResult => ({
+  commands: [],
+  context: {
+    eventsAdded: 0,
+    eventsRemoved: 0,
+    provider: "google",
+    sourceId: "source-test",
+  },
+  outputs: [],
+  state: "source_selected",
+});
 
 describe("source ingestion widelog contract", () => {
   test("emits one isolated per-calendar wide event per source unit", async () => {
@@ -52,12 +66,12 @@ describe("source ingestion widelog contract", () => {
         if (event.type === SourceIngestionLifecycleEventType.FETCHER_RESOLVED) {
           logger.set("machine.source_ingestion_lifecycle.processed_total", 2);
         }
-        return Promise.resolve(globalThis.undefined);
+        return Promise.resolve(createBaseTransition());
       },
     };
 
     const runtimeB: SourceIngestionRuntime = {
-      dispatch: () => Promise.resolve(globalThis.undefined),
+      dispatch: () => Promise.resolve(createBaseTransition()),
     };
 
     await runSourceIngestionUnit({

@@ -87,6 +87,5 @@ export type {
   CaldavProviderName,
   OAuthConfig,
   OAuthProviderName,
-  ProviderResolutionStatus,
   UnresolvedProviderResolutionStatus,
 };
