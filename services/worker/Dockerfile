@@ -19,6 +19,8 @@ FROM base AS runtime
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile --production
 COPY --from=build /app/services/worker/dist ./services/worker/dist
+COPY --from=prune /app/out/full/packages/otelemetry ./packages/otelemetry
+RUN bun link --cwd packages/otelemetry
 COPY --from=source /app/services/worker/entrypoint.sh ./services/worker/entrypoint.sh
 RUN chmod +x ./services/worker/entrypoint.sh
 

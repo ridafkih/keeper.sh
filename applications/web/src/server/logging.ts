@@ -8,17 +8,6 @@ const { context, destroy } = widelogger({
   commitHash: process.env.COMMIT_SHA,
   environment,
   version: process.env.npm_package_version,
-  ...(process.env.OTEL_EXPORTER_OTLP_ENDPOINT && {
-    transport: {
-      target: "pino-opentelemetry-transport",
-      options: {
-        resourceAttributes: {
-          "service.name": "keeper-web",
-          "deployment.environment": environment,
-        },
-      },
-    },
-  }),
 });
 
 export { context, destroy, widelog };
