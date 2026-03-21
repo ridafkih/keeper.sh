@@ -45,7 +45,7 @@ const classifySourceIngestionFailure = (
     };
   }
 
-  if (dependencies.isNotFoundError(error) || (error instanceof Error && error.message.includes("404"))) {
+  if (dependencies.isNotFoundError(error)) {
     return {
       eventType: SourceIngestionLifecycleEventType.NOT_FOUND,
       code: mapSourceIngestionFailureEventToErrorCode(

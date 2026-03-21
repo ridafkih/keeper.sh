@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
+import { isSourceIngestionNotFoundError } from "./source-ingestion-errors";
 import {
   classifySourceIngestionFailure,
   SourceIngestionFailureLogSlug,
@@ -7,8 +8,7 @@ import {
 import { SourceIngestionErrorCode } from "./source-ingestion-error-code";
 
 const dependencies = {
-  isNotFoundError: (error: unknown): boolean =>
-    error instanceof Error && error.message.includes("404"),
+  isNotFoundError: isSourceIngestionNotFoundError,
   resolveErrorCode: (_error: unknown): SourceIngestionErrorCode =>
     SourceIngestionErrorCode.TRANSIENT_FAILURE,
 };
@@ -32,10 +32,7 @@ describe("classifySourceIngestionFailure", () => {
   });
 
   it("returns terminal policy for not found failures", () => {
-    const decision = classifySourceIngestionFailure(
-      new Error("upstream 404"),
-      dependencies,
-    );
+    const decision = classifySourceIngestionFailure({ status: 404 }, dependencies);
 
     expect(decision).toEqual({
       code: SourceIngestionErrorCode.NOT_FOUND,

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
 import {
+  SourceIngestionNotFoundError,
+  SourceIngestionTimeoutError,
+} from "./source-ingestion-errors";
+import {
   SourceIngestionErrorCode,
   mapSourceIngestionFailureEventToErrorCode,
   parseSourceIngestionErrorCode,
@@ -26,13 +30,18 @@ describe("source-ingestion-error-code", () => {
     ).toBe(SourceIngestionErrorCode.TRANSIENT_FAILURE);
   });
 
-  it("resolves timeout and not-found errors deterministically", () => {
-    expect(
-      resolveSourceIngestionErrorCode(new Error("request timed out after 60000ms")),
-    ).toBe(SourceIngestionErrorCode.TIMEOUT);
-    expect(resolveSourceIngestionErrorCode(new Error("upstream 404"))).toBe(
+  it("resolves typed timeout and not-found errors deterministically", () => {
+    expect(resolveSourceIngestionErrorCode(new SourceIngestionTimeoutError(60_000))).toBe(
+      SourceIngestionErrorCode.TIMEOUT,
+    );
+    expect(resolveSourceIngestionErrorCode(new SourceIngestionNotFoundError())).toBe(
       SourceIngestionErrorCode.NOT_FOUND,
     );
+  });
+
+  it("resolves structured 404 errors as not-found", () => {
+    const error = { status: 404 };
+    expect(resolveSourceIngestionErrorCode(error)).toBe(SourceIngestionErrorCode.NOT_FOUND);
   });
 
   it("parses known string values and rejects unknown codes", () => {
@@ -42,4 +51,3 @@ describe("source-ingestion-error-code", () => {
     expect(parseSourceIngestionErrorCode("mystery_code")).toBeNull();
   });
 });
-

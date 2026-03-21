@@ -1,4 +1,8 @@
 import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
+import {
+  isSourceIngestionNotFoundError,
+  isSourceIngestionTimeoutError,
+} from "./source-ingestion-errors";
 
 enum SourceIngestionErrorCode {
   AUTH_REQUIRED = "auth_required",
@@ -33,14 +37,11 @@ const mapSourceIngestionFailureEventToErrorCode = (
 const resolveSourceIngestionErrorCode = (
   error: unknown,
 ): SourceIngestionErrorCode => {
-  const message = error instanceof Error ? error.message : String(error);
-  const normalizedMessage = message.toLowerCase();
-
-  if (normalizedMessage.includes("timed out")) {
+  if (isSourceIngestionTimeoutError(error)) {
     return SourceIngestionErrorCode.TIMEOUT;
   }
 
-  if (normalizedMessage.includes("404")) {
+  if (isSourceIngestionNotFoundError(error)) {
     return SourceIngestionErrorCode.NOT_FOUND;
   }
 
@@ -68,4 +69,3 @@ export {
   resolveSourceIngestionErrorCode,
 };
 export type { SourceIngestionFailureEventType };
-

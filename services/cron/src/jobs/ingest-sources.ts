@@ -39,6 +39,10 @@ import {
   classifySourceIngestionFailure,
   SourceIngestionFailureLogSlug,
 } from "../lib/source-ingestion-failure";
+import {
+  isSourceIngestionNotFoundError,
+  SourceIngestionTimeoutError,
+} from "../lib/source-ingestion-errors";
 import { resolveSourceIngestionFailurePolicy } from "../lib/source-ingestion-failure-policy";
 import { resolveSourceIngestionErrorCode } from "../lib/source-ingestion-error-code";
 import { summarizeIngestionSettlements } from "../lib/ingestion-settlement-summary";
@@ -59,7 +63,7 @@ const withTimeout = <TResult>(
   Promise.race([
     Promise.resolve().then(operation),
     Bun.sleep(timeoutMs).then((): never => {
-      throw new Error(`Source ingestion timed out after ${timeoutMs}ms`);
+      throw new SourceIngestionTimeoutError(timeoutMs);
     }),
   ]);
 
@@ -121,7 +125,7 @@ const readExistingEvents = (calendarId: string) =>
     .from(eventStatesTable)
     .where(eq(eventStatesTable.calendarId, calendarId));
 
-const isNotFoundError = (error: unknown): boolean => error instanceof Error && "status" in error && error.status === 404;
+const isNotFoundError = isSourceIngestionNotFoundError;
 
 const isOAuthAuthFailure = (error: unknown): boolean => {
   if (error instanceof Error && "authRequired" in error && error.authRequired === true) {
