@@ -1,7 +1,11 @@
 import { ErrorResponse } from "@/utils/responses";
 import { calendarIdsBodySchema } from "@/utils/request-body";
 import { idParamSchema } from "@/utils/request-query";
-import { MAPPING_LIMIT_ERROR_MESSAGE } from "@/utils/source-destination-mappings";
+import {
+  MappingInvalidSetError,
+  MappingLimitExceededError,
+  MappingPrimaryNotFoundError,
+} from "@/utils/source-destination-mappings";
 
 interface MappingRouteContext {
   params: Record<string, string>;
@@ -50,22 +54,16 @@ const resolveIdParam = (
 
 const mapMappingDomainError = (
   error: unknown,
-  missingCalendarMessage: string,
-  invalidLinkedCalendarsMessage: string,
 ): Response | null => {
-  if (!(error instanceof Error)) {
-    return null;
-  }
-
-  if (error.message === missingCalendarMessage) {
+  if (error instanceof MappingPrimaryNotFoundError) {
     return ErrorResponse.notFound().toResponse();
   }
 
-  if (error.message === invalidLinkedCalendarsMessage) {
+  if (error instanceof MappingInvalidSetError) {
     return ErrorResponse.badRequest(error.message).toResponse();
   }
 
-  if (error.message === MAPPING_LIMIT_ERROR_MESSAGE) {
+  if (error instanceof MappingLimitExceededError) {
     return ErrorResponse.paymentRequired(error.message).toResponse();
   }
 
@@ -110,11 +108,7 @@ const handlePutSourceDestinationsRoute = async (
       context.body.calendarIds,
     );
   } catch (error) {
-    const mappedResponse = mapMappingDomainError(
-      error,
-      "Source calendar not found",
-      "Some destination calendars not found",
-    );
+    const mappedResponse = mapMappingDomainError(error);
     if (mappedResponse) {
       return mappedResponse;
     }
@@ -162,11 +156,7 @@ const handlePutSourcesForDestinationRoute = async (
       context.body.calendarIds,
     );
   } catch (error) {
-    const mappedResponse = mapMappingDomainError(
-      error,
-      "Destination calendar not found",
-      "Some source calendars not found",
-    );
+    const mappedResponse = mapMappingDomainError(error);
     if (mappedResponse) {
       return mappedResponse;
     }

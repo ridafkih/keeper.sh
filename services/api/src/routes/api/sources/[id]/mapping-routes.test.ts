@@ -5,7 +5,12 @@ import {
   handlePutSourceDestinationsRoute,
   handlePutSourcesForDestinationRoute,
 } from "./mapping-routes";
-import { MAPPING_LIMIT_ERROR_MESSAGE } from "@/utils/source-destination-mappings";
+import {
+  MAPPING_LIMIT_ERROR_MESSAGE,
+  MappingInvalidSetError,
+  MappingLimitExceededError,
+  MappingPrimaryNotFoundError,
+} from "@/utils/source-destination-mappings";
 
 const readJson = (response: Response): Promise<unknown> => response.json();
 
@@ -73,7 +78,7 @@ describe("handlePutSourceDestinationsRoute", () => {
       },
       {
         setDestinationsForSource: () =>
-          Promise.reject(new Error("Source calendar not found")),
+          Promise.reject(new MappingPrimaryNotFoundError("Source calendar not found")),
       },
     );
 
@@ -89,7 +94,7 @@ describe("handlePutSourceDestinationsRoute", () => {
       },
       {
         setDestinationsForSource: () =>
-          Promise.reject(new Error("Some destination calendars not found")),
+          Promise.reject(new MappingInvalidSetError("Some destination calendars not found")),
       },
     );
 
@@ -108,7 +113,7 @@ describe("handlePutSourceDestinationsRoute", () => {
       },
       {
         setDestinationsForSource: () =>
-          Promise.reject(new Error(MAPPING_LIMIT_ERROR_MESSAGE)),
+          Promise.reject(new MappingLimitExceededError()),
       },
     );
 
@@ -183,7 +188,7 @@ describe("handlePutSourcesForDestinationRoute", () => {
       },
       {
         setSourcesForDestination: () =>
-          Promise.reject(new Error("Destination calendar not found")),
+          Promise.reject(new MappingPrimaryNotFoundError("Destination calendar not found")),
       },
     );
 
@@ -199,7 +204,7 @@ describe("handlePutSourcesForDestinationRoute", () => {
       },
       {
         setSourcesForDestination: () =>
-          Promise.reject(new Error("Some source calendars not found")),
+          Promise.reject(new MappingInvalidSetError("Some source calendars not found")),
       },
     );
 
@@ -218,7 +223,7 @@ describe("handlePutSourcesForDestinationRoute", () => {
       },
       {
         setSourcesForDestination: () =>
-          Promise.reject(new Error(MAPPING_LIMIT_ERROR_MESSAGE)),
+          Promise.reject(new MappingLimitExceededError()),
       },
     );
 

@@ -18,6 +18,27 @@ const DESTINATION_NOT_FOUND_MESSAGE = "Destination calendar not found";
 const DESTINATION_SET_INVALID_MESSAGE = "Some destination calendars not found";
 const SOURCE_SET_INVALID_MESSAGE = "Some source calendars not found";
 
+class MappingLimitExceededError extends Error {
+  constructor() {
+    super(MAPPING_LIMIT_ERROR_MESSAGE);
+    this.name = "MappingLimitExceededError";
+  }
+}
+
+class MappingPrimaryNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MappingPrimaryNotFoundError";
+  }
+}
+
+class MappingInvalidSetError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MappingInvalidSetError";
+  }
+}
+
 const classifyMappingFailure = (input: {
   error: unknown;
   invalidSetMessage: string;
@@ -92,13 +113,13 @@ const runMappingRuntime = async (input: {
   const outputs = new Set(transition.outputs.map((output) => output.type));
 
   if (outputs.has("MAPPING_LIMIT_REJECTED")) {
-    throw new Error(MAPPING_LIMIT_ERROR_MESSAGE);
+    throw new MappingLimitExceededError();
   }
   if (outputs.has("PRIMARY_NOT_FOUND_REJECTED")) {
-    throw new Error(input.notFoundMessage);
+    throw new MappingPrimaryNotFoundError(input.notFoundMessage);
   }
   if (outputs.has("INVALID_SOURCE_SET_REJECTED")) {
-    throw new Error(input.invalidSetMessage);
+    throw new MappingInvalidSetError(input.invalidSetMessage);
   }
 };
 
@@ -174,6 +195,9 @@ export {
   getDestinationsForSource,
   getSourcesForDestination,
   MAPPING_LIMIT_ERROR_MESSAGE,
+  MappingInvalidSetError,
+  MappingLimitExceededError,
+  MappingPrimaryNotFoundError,
   setDestinationsForSource,
   setSourcesForDestination,
   SOURCE_NOT_FOUND_MESSAGE,
