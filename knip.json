@@ -6,7 +6,7 @@
     "applications/web/src/generated/**/*"
   ],
   "ignoreBinaries": [],
-  "ignoreDependencies": [],
+  "ignoreDependencies": ["@keeper.sh/otelemetry"],
   "ignoreWorkspaces": ["packages/typescript-config"],
   "ignoreExportsUsedInFile": true,
   "workspaces": {

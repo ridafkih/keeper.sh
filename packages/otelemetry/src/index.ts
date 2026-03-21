@@ -31,34 +31,35 @@ const PINO_SEVERITY_TEXT: Record<number, string> = {
   60: "FATAL",
 };
 
-function parseLogLine(line: string) {
+const parseLogLine = (line: string) => {
   const { msg: message, level, time, service, ...attributes } = JSON.parse(line);
   return { message, level, time, service, attributes };
-}
+};
 
-function forwardToCollector(
+const forwardToCollector = (
   logger: ReturnType<LoggerProvider["getLogger"]>,
   { message, level, time, attributes }: ReturnType<typeof parseLogLine>,
-) {
+) => {
   logger.emit({
     body: message,
     severityNumber: PINO_SEVERITY[level] ?? SeverityNumber.INFO,
     severityText: PINO_SEVERITY_TEXT[level] ?? "INFO",
-    timestamp: time ? new Date(time) : undefined,
+    ...(time && { timestamp: new Date(time) }),
     attributes,
   });
-}
+};
 
-if (!process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
-  process.stdin.pipe(process.stdout);
-} else {
+if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
   const lineReader = createInterface({ input: process.stdin });
   const lineIterator = lineReader[Symbol.asyncIterator]();
 
   const firstResult = await lineIterator.next();
-  if (firstResult.done) process.exit(0);
 
-  process.stdout.write(firstResult.value + "\n");
+  if (firstResult.done) {
+    process.exit(0);
+  }
+
+  process.stdout.write(`${firstResult.value}\n`);
 
   const firstLogEntry = parseLogLine(firstResult.value);
   const serviceName = firstLogEntry.service ?? "unknown";
@@ -82,13 +83,15 @@ if (!process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
   forwardToCollector(logger, firstLogEntry);
 
   for await (const line of lineIterator) {
-    process.stdout.write(line + "\n");
+    process.stdout.write(`${line}\n`);
     try {
       forwardToCollector(logger, parseLogLine(line));
     } catch {
-      // not JSON, pass through
+      // Non-JSON line, pass through only
     }
   }
 
   await provider.shutdown();
+} else {
+  process.stdin.pipe(process.stdout);
 }
