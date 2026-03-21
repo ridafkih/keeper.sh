@@ -6,6 +6,7 @@ import { createGoogleOAuthService } from "@keeper.sh/calendar";
 import { createMicrosoftOAuthService } from "@keeper.sh/calendar";
 import { eq } from "drizzle-orm";
 import { database, env } from "@/context";
+import { resolveOAuthProviderConfig } from "./oauth-provider-config";
 
 const FIRST_RESULT_LIMIT = 1;
 const MS_PER_SECOND = 1000;
@@ -19,13 +20,15 @@ const refreshGoogleAccessToken = async (
   accountId: string,
   refreshToken: string,
 ): Promise<RefreshResult> => {
-  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
-    throw new Error("Google OAuth not configured");
-  }
+  const { clientId, clientSecret } = resolveOAuthProviderConfig(
+    "google",
+    env.GOOGLE_CLIENT_ID,
+    env.GOOGLE_CLIENT_SECRET,
+  );
 
   const googleOAuth = createGoogleOAuthService({
-    clientId: env.GOOGLE_CLIENT_ID,
-    clientSecret: env.GOOGLE_CLIENT_SECRET,
+    clientId,
+    clientSecret,
   });
 
   const tokenData = await googleOAuth.refreshAccessToken(refreshToken);
@@ -58,13 +61,15 @@ const refreshMicrosoftAccessToken = async (
   accountId: string,
   refreshToken: string,
 ): Promise<RefreshResult> => {
-  if (!env.MICROSOFT_CLIENT_ID || !env.MICROSOFT_CLIENT_SECRET) {
-    throw new Error("Microsoft OAuth not configured");
-  }
+  const { clientId, clientSecret } = resolveOAuthProviderConfig(
+    "microsoft",
+    env.MICROSOFT_CLIENT_ID,
+    env.MICROSOFT_CLIENT_SECRET,
+  );
 
   const microsoftOAuth = createMicrosoftOAuthService({
-    clientId: env.MICROSOFT_CLIENT_ID,
-    clientSecret: env.MICROSOFT_CLIENT_SECRET,
+    clientId,
+    clientSecret,
   });
 
   const tokenData = await microsoftOAuth.refreshAccessToken(refreshToken);
@@ -97,13 +102,15 @@ const refreshGoogleSourceAccessToken = async (
   credentialId: string,
   refreshToken: string,
 ): Promise<RefreshResult> => {
-  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
-    throw new Error("Google OAuth not configured");
-  }
+  const { clientId, clientSecret } = resolveOAuthProviderConfig(
+    "google",
+    env.GOOGLE_CLIENT_ID,
+    env.GOOGLE_CLIENT_SECRET,
+  );
 
   const googleOAuth = createGoogleOAuthService({
-    clientId: env.GOOGLE_CLIENT_ID,
-    clientSecret: env.GOOGLE_CLIENT_SECRET,
+    clientId,
+    clientSecret,
   });
 
   const tokenData = await googleOAuth.refreshAccessToken(refreshToken);
@@ -128,13 +135,15 @@ const refreshMicrosoftSourceAccessToken = async (
   credentialId: string,
   refreshToken: string,
 ): Promise<RefreshResult> => {
-  if (!env.MICROSOFT_CLIENT_ID || !env.MICROSOFT_CLIENT_SECRET) {
-    throw new Error("Microsoft OAuth not configured");
-  }
+  const { clientId, clientSecret } = resolveOAuthProviderConfig(
+    "microsoft",
+    env.MICROSOFT_CLIENT_ID,
+    env.MICROSOFT_CLIENT_SECRET,
+  );
 
   const microsoftOAuth = createMicrosoftOAuthService({
-    clientId: env.MICROSOFT_CLIENT_ID,
-    clientSecret: env.MICROSOFT_CLIENT_SECRET,
+    clientId,
+    clientSecret,
   });
 
   const tokenData = await microsoftOAuth.refreshAccessToken(refreshToken);

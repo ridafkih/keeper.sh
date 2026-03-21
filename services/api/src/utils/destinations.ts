@@ -20,6 +20,36 @@ const FIRST_RESULT_LIMIT = 1;
 const EMPTY_RESULT_COUNT = 0;
 type DestinationDatabase = Pick<typeof database, "delete" | "insert" | "select" | "selectDistinct" | "update">;
 
+class OAuthProviderNotFoundError extends Error {
+  constructor(provider: string) {
+    super(`OAuth provider not found: ${provider}`);
+  }
+}
+
+class DestinationAccountOwnershipError extends Error {
+  constructor() {
+    super("This account is already linked to another user");
+  }
+}
+
+class OAuthCredentialCreateError extends Error {
+  constructor() {
+    super("Failed to create OAuth credentials");
+  }
+}
+
+class CalDAVCredentialCreateError extends Error {
+  constructor() {
+    super("Failed to create CalDAV credentials");
+  }
+}
+
+class DestinationAccountCreateError extends Error {
+  constructor() {
+    super("Failed to create calendar account");
+  }
+}
+
 const isOAuthProvider = (provider: string): boolean => oauthProviders.isOAuthProvider(provider);
 
 const hasRequiredScopes = (provider: string, grantedScopes: string): boolean =>
@@ -28,7 +58,7 @@ const hasRequiredScopes = (provider: string, grantedScopes: string): boolean =>
 const getOAuthProviderOrThrow = (provider: string) => {
   const oauthProvider = oauthProviders.getProvider(provider);
   if (!oauthProvider) {
-    throw new Error(`OAuth provider not found: ${provider}`);
+    throw new OAuthProviderNotFoundError(provider);
   }
   return oauthProvider;
 };
@@ -93,7 +123,7 @@ const validateAccountOwnership = (
   userId: string,
 ): void => {
   if (existingAccount && existingAccount.userId !== userId) {
-    throw new Error("This account is already linked to another user");
+    throw new DestinationAccountOwnershipError();
   }
 };
 
@@ -247,7 +277,7 @@ const saveCalendarDestinationWithDatabase = async (
     .returning({ id: oauthCredentialsTable.id });
 
   if (!credential) {
-    throw new Error("Failed to create OAuth credentials");
+    throw new OAuthCredentialCreateError();
   }
 
   const calendarId = await upsertAccountAndCalendarWithDatabase(databaseClient, {
@@ -401,7 +431,7 @@ const saveCalDAVDestinationWithDatabase = async (
     .returning({ id: caldavCredentialsTable.id });
 
   if (!credential) {
-    throw new Error("Failed to create CalDAV credentials");
+    throw new CalDAVCredentialCreateError();
   }
 
   const [account] = await databaseClient
@@ -417,7 +447,7 @@ const saveCalDAVDestinationWithDatabase = async (
     .returning({ id: calendarAccountsTable.id });
 
   if (!account) {
-    throw new Error("Failed to create calendar account");
+    throw new DestinationAccountCreateError();
   }
 
   const [calendar] = await databaseClient
@@ -473,4 +503,9 @@ export {
   saveCalDAVDestination,
   saveCalDAVDestinationWithDatabase,
   saveCalendarDestinationWithDatabase,
+  OAuthProviderNotFoundError,
+  DestinationAccountOwnershipError,
+  OAuthCredentialCreateError,
+  CalDAVCredentialCreateError,
+  DestinationAccountCreateError,
 };
