@@ -200,6 +200,46 @@ describe("push job arbitration runtime", () => {
     expect(await outboxStore.listAggregates()).toEqual([]);
   });
 
+  it("does not double-execute pending commands when recovery overlaps live dispatch", async () => {
+    const held: string[] = [];
+    const released: string[] = [];
+    const outboxStore = new InMemoryCommandOutboxStore<PushJobArbitrationCommand>();
+    await outboxStore.enqueue({
+      aggregateId: "user-6",
+      commands: [{ type: PushJobArbitrationCommandType.HOLD_SYNCING }],
+      envelopeId: "recover-env-3",
+      nextCommandIndex: 0,
+    });
+
+    const runtime = createPushJobArbitrationRuntime({
+      createEnvelope: createEnvelopeFactory("runtime-6"),
+      outboxStore,
+      onRuntimeEvent: () => Promise.resolve(),
+      syncing: {
+        holdSyncing: (userId) => {
+          held.push(userId);
+          return Promise.resolve();
+        },
+        releaseSyncing: (userId) => {
+          released.push(userId);
+          return Promise.resolve();
+        },
+      },
+      worker: {
+        cancelJob: () => Promise.resolve(),
+      },
+    });
+
+    await Promise.all([
+      runtime.recoverPending(),
+      runtime.onJobCompleted({ jobId: "job-stale", userId: "user-6" }),
+    ]);
+
+    expect(held).toEqual(["user-6"]);
+    expect(released).toEqual([]);
+    expect(await outboxStore.listAggregates()).toEqual([]);
+  });
+
   it("fails fast when envelope metadata is invalid", async () => {
     const runtime = createPushJobArbitrationRuntime({
       createEnvelope: (event) => ({

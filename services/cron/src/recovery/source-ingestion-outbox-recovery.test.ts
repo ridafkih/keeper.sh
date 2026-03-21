@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { InMemoryCommandOutboxStore } from "@keeper.sh/machine-orchestration";
+import {
+  InMemoryCommandOutboxStore,
+  MachineRuntimeDriver,
+} from "@keeper.sh/machine-orchestration";
 import {
   SourceIngestionLifecycleCommandType,
   type SourceIngestionLifecycleCommand,
@@ -106,6 +109,45 @@ describe("recoverSourceIngestionOutbox", () => {
     expect(marked).toEqual(["cal-3"]);
     expect(disabled).toEqual(["cal-4"]);
     expect(tokens).toEqual([{ calendarId: "cal-3", token: "token-3" }]);
+    expect(await outboxStore.listAggregates()).toEqual([]);
+  });
+
+  it("does not double-execute when recovery overlaps live aggregate drain", async () => {
+    const marked: string[] = [];
+    const outboxStore = new InMemoryCommandOutboxStore<SourceIngestionLifecycleCommand>();
+    await outboxStore.enqueue({
+      aggregateId: "cal-5",
+      commands: [{ type: SourceIngestionLifecycleCommandType.MARK_NEEDS_REAUTH }],
+      envelopeId: "env-5",
+      nextCommandIndex: 0,
+    });
+
+    await Promise.all([
+      recoverSourceIngestionOutbox({
+        outboxStore,
+        disableSource: () => Promise.resolve(),
+        markNeedsReauth: (calendarId) => {
+          marked.push(calendarId);
+          return Promise.resolve();
+        },
+        persistSyncToken: () => Promise.resolve(),
+      }),
+      MachineRuntimeDriver.drainAggregateOutbox({
+        aggregateId: "cal-5",
+        commandBus: {
+          execute: (command) => {
+            if (command.type !== SourceIngestionLifecycleCommandType.MARK_NEEDS_REAUTH) {
+              throw new Error("Unexpected source-ingestion command during overlap test");
+            }
+            marked.push("cal-5");
+            return Promise.resolve();
+          },
+        },
+        outboxStore,
+      }),
+    ]);
+
+    expect(marked).toEqual(["cal-5"]);
     expect(await outboxStore.listAggregates()).toEqual([]);
   });
 });

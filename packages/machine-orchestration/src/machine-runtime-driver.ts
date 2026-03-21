@@ -426,13 +426,11 @@ class MachineRuntimeDriver<TState, TContext, TEvent, TCommand, TOutput> {
     );
     MachineRuntimeDriver.aggregateLocks.set(aggregateId, lockTail);
 
-    try {
-      return current;
-    } finally {
+    return current.finally(() => {
       if (MachineRuntimeDriver.aggregateLocks.get(aggregateId) === lockTail) {
         MachineRuntimeDriver.aggregateLocks.delete(aggregateId);
       }
-    }
+    });
   }
 
   private runWithAggregateLock<TResult>(

@@ -1,7 +1,7 @@
-# 0009 — Runtime Concurrency Hardening (D1–D7)
+# 0009 — Runtime Concurrency Hardening (D1–D8)
 
 Status: `active`
-Scope: Phase D (`D1`–`D7`)
+Scope: Phase D (`D1`–`D8`)
 
 ## Objective
 
@@ -56,6 +56,15 @@ Harden runtime behavior under adversarial parallel dispatch/replay so machine si
     - `services/cron/src/recovery/source-ingestion-outbox-recovery.test.ts`
   - worker push-arbitration pending recovery drains once across repeated runs:
     - `services/worker/src/push-job-arbitration-runtime.test.ts`
+- Added recovery/live-overlap coverage and fixed a lock lifecycle bug:
+  - overlap tests verify pending commands are not double-executed when recovery and live
+    aggregate drain/dispatch run concurrently:
+    - `services/worker/src/recovery/credential-health-outbox-recovery.test.ts`
+    - `services/cron/src/recovery/source-ingestion-outbox-recovery.test.ts`
+    - `services/worker/src/push-job-arbitration-runtime.test.ts`
+  - fixed `MachineRuntimeDriver` aggregate lock cleanup to occur after operation settlement,
+    preventing premature lock deletion under overlap:
+    - `packages/machine-orchestration/src/machine-runtime-driver.ts`
 
 ## Validation
 
@@ -67,4 +76,5 @@ Harden runtime behavior under adversarial parallel dispatch/replay so machine si
 - `bun test packages/machine-orchestration/src/machine-runtime-driver.test.ts`
 - `bunx turbo run lint types --filter=./packages/machine-orchestration`
 - `bun test services/worker/src/recovery/credential-health-outbox-recovery.test.ts services/cron/src/recovery/source-ingestion-outbox-recovery.test.ts services/worker/src/push-job-arbitration-runtime.test.ts`
+- `bun test services/worker/src/recovery/credential-health-outbox-recovery.test.ts services/cron/src/recovery/source-ingestion-outbox-recovery.test.ts services/worker/src/push-job-arbitration-runtime.test.ts packages/machine-orchestration/src/machine-runtime-driver.test.ts`
 - `bun test` (repo root)
