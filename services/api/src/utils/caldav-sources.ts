@@ -36,6 +36,48 @@ class DuplicateCalDAVSourceError extends Error {
   }
 }
 
+class CalDAVSourceCredentialCreateError extends Error {
+  constructor() {
+    super("Failed to create CalDAV source credential");
+  }
+}
+
+class CalDAVSourceAccountCreateError extends Error {
+  constructor() {
+    super("Failed to create calendar account");
+  }
+}
+
+class CalDAVSourceMissingCalendarUrlError extends Error {
+  constructor(sourceId: string) {
+    super(`CalDAV source ${sourceId} is missing calendarUrl`);
+  }
+}
+
+class CalDAVEncryptionKeyMissingError extends Error {
+  constructor() {
+    super("Encryption key not configured");
+  }
+}
+
+class CalDAVSourceCreateError extends Error {
+  constructor() {
+    super("Failed to create CalDAV source");
+  }
+}
+
+class CalDAVSourceProvisioningInvariantError extends Error {
+  constructor() {
+    super("Invariant violated: source provisioning did not request bootstrap sync");
+  }
+}
+
+class CalDAVSyncEnqueuePlanError extends Error {
+  constructor() {
+    super("Unable to resolve user plan for sync enqueue");
+  }
+}
+
 interface CalDAVSource {
   id: string;
   accountId: string;
@@ -105,7 +147,7 @@ const createCalDAVAccount = async (
     .returning({ id: caldavCredentialsTable.id });
 
   if (!credential) {
-    throw new Error("Failed to create CalDAV source credential");
+    throw new CalDAVSourceCredentialCreateError();
   }
 
   const [account] = await databaseClient
@@ -120,7 +162,7 @@ const createCalDAVAccount = async (
     .returning({ id: calendarAccountsTable.id });
 
   if (!account) {
-    throw new Error("Failed to create calendar account");
+    throw new CalDAVSourceAccountCreateError();
   }
 
   return account.id;
@@ -162,7 +204,7 @@ const getUserCalDAVSources = async (userId: string, provider?: string): Promise<
 
   return sources.map((source) => {
     if (!source.calendarUrl) {
-      throw new Error(`CalDAV source ${source.id} is missing calendarUrl`);
+      throw new CalDAVSourceMissingCalendarUrlError(source.id);
     }
     return {
       ...source,
@@ -216,7 +258,7 @@ const createCalDAVSource = async (
       reason: "invalid_source",
       type: "VALIDATION_FAILED",
     });
-    throw new Error("Encryption key not configured");
+    throw new CalDAVEncryptionKeyMissingError();
   }
 
   const resolvedEncryptionKey = encryptionKey;
@@ -294,7 +336,7 @@ const createCalDAVSource = async (
       .returning();
 
     if (!source) {
-      throw new Error("Failed to create CalDAV source");
+      throw new CalDAVSourceCreateError();
     }
     dispatchProvisioningEvent({
       sourceIds: [source.id],
@@ -309,7 +351,7 @@ const createCalDAVSource = async (
       (output) => output.type === "BOOTSTRAP_REQUESTED",
     );
     if (!bootstrapRequested) {
-      throw new Error("Invariant violated: source provisioning did not request bootstrap sync");
+      throw new CalDAVSourceProvisioningInvariantError();
     }
 
     return {
@@ -327,7 +369,7 @@ const createCalDAVSource = async (
 
   const plan = await premiumService.getUserPlan(userId);
   if (!plan) {
-    throw new Error("Unable to resolve user plan for sync enqueue");
+    throw new CalDAVSyncEnqueuePlanError();
   }
   await enqueuePushSync(userId, plan);
 
@@ -352,6 +394,13 @@ const verifyCalDAVSourceOwnership = async (userId: string, calendarId: string): 
 
 export {
   CalDAVSourceLimitError,
+  CalDAVSourceCredentialCreateError,
+  CalDAVSourceAccountCreateError,
+  CalDAVSourceMissingCalendarUrlError,
+  CalDAVEncryptionKeyMissingError,
+  CalDAVSourceCreateError,
+  CalDAVSourceProvisioningInvariantError,
+  CalDAVSyncEnqueuePlanError,
   DuplicateCalDAVSourceError,
   getUserCalDAVSources,
   createCalDAVSource,

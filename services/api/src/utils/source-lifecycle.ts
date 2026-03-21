@@ -61,6 +61,24 @@ class InvalidSourceUrlError extends Error {
   }
 }
 
+class SourceCalendarAccountCreateError extends Error {
+  constructor() {
+    super("Failed to create calendar account");
+  }
+}
+
+class SourceCalendarCreateError extends Error {
+  constructor() {
+    super("Failed to create source");
+  }
+}
+
+class SourceProvisioningInvariantError extends Error {
+  constructor() {
+    super("Invariant violated: source provisioning did not request bootstrap sync");
+  }
+}
+
 const runCreateSource = async <TSource extends SourceReference>(
   input: CreateSourceInput,
   dependencies: CreateSourceDependencies<TSource>,
@@ -115,7 +133,7 @@ const runCreateSource = async <TSource extends SourceReference>(
     userId: input.userId,
   });
   if (!accountId) {
-    throw new Error("Failed to create calendar account");
+    throw new SourceCalendarAccountCreateError();
   }
   dispatchProvisioningEvent({
     accountId,
@@ -129,7 +147,7 @@ const runCreateSource = async <TSource extends SourceReference>(
     userId: input.userId,
   });
   if (!source) {
-    throw new Error("Failed to create source");
+    throw new SourceCalendarCreateError();
   }
   dispatchProvisioningEvent({
     sourceIds: [source.id],
@@ -144,7 +162,7 @@ const runCreateSource = async <TSource extends SourceReference>(
     (output) => output.type === "BOOTSTRAP_REQUESTED",
   );
   if (!bootstrapRequested) {
-    throw new Error("Invariant violated: source provisioning did not request bootstrap sync");
+    throw new SourceProvisioningInvariantError();
   }
 
   dependencies.spawnBackgroundJob("ical-source-sync", { userId: input.userId, calendarId: source.id }, async () => {
@@ -158,6 +176,9 @@ const runCreateSource = async <TSource extends SourceReference>(
 export {
   SourceLimitError,
   InvalidSourceUrlError,
+  SourceCalendarAccountCreateError,
+  SourceCalendarCreateError,
+  SourceProvisioningInvariantError,
   runCreateSource,
 };
 export type {

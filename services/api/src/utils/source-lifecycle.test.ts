@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { CalendarFetchError } from "@keeper.sh/calendar";
 import {
   SourceLimitError,
+  SourceCalendarAccountCreateError,
+  SourceCalendarCreateError,
   runCreateSource,
 } from "./source-lifecycle";
 
@@ -155,7 +157,7 @@ describe("runCreateSource", () => {
           validateSourceUrl: () => Promise.resolve(),
         },
       ),
-    ).rejects.toThrow("Failed to create calendar account");
+    ).rejects.toBeInstanceOf(SourceCalendarAccountCreateError);
   });
 
   it("throws when source calendar creation fails", () => {
@@ -179,6 +181,6 @@ describe("runCreateSource", () => {
           validateSourceUrl: () => Promise.resolve(),
         },
       ),
-    ).rejects.toThrow("Failed to create source");
+    ).rejects.toBeInstanceOf(SourceCalendarCreateError);
   });
 });
