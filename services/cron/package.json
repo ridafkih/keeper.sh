@@ -24,7 +24,8 @@
     "drizzle-orm": "^0.45.1",
     "entrykit": "^0.1.3",
     "ioredis": "^5.10.0",
-    "widelogger": "^0.6.0"
+    "pino-opentelemetry-transport": "^3.0.0",
+    "widelogger": "^0.7.0"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",
