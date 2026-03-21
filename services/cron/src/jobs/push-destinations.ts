@@ -8,10 +8,6 @@ import { getUsersWithDestinationsByPlan } from "@/utils/get-sources";
 import env from "@/env";
 
 const runEgressJob = async (plan: Plan): Promise<void> => {
-  if (env.WORKER_JOB_QUEUE_ENABLED === false) {
-    return;
-  }
-
   const usersWithDestinations = await getUsersWithDestinationsByPlan(plan);
 
   const correlationId = crypto.randomUUID();

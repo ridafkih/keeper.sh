@@ -83,7 +83,7 @@ Mode: `clean-break` (no compatibility bridge)
 
 ## Phase F — Clean Cutover (Delete Legacy)
 
-- [ ] F1. Enumerate legacy orchestration entrypoints still reachable.
+- [x] F1. Enumerate legacy orchestration entrypoints still reachable.
 - [ ] F2. Remove legacy ingestion orchestration paths.
 - [ ] F3. Remove legacy destination execution orchestration paths.
 - [ ] F4. Remove legacy credential refresh orchestration paths.
@@ -91,7 +91,7 @@ Mode: `clean-break` (no compatibility bridge)
 - [ ] F6. Remove legacy source provisioning orchestration paths.
 - [ ] F7. Remove deprecated helpers replaced by machine adapters.
 - [ ] F8. Remove dead tests tied to deleted legacy behavior.
-- [ ] F9. Remove dead feature flags no longer needed post-cutover.
+- [x] F9. Remove dead feature flags no longer needed post-cutover.
 - [ ] F10. Verify build graph has no imports from deleted paths.
 
 ## Phase G — Validation and Operational Readiness

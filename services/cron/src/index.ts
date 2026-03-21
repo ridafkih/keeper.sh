@@ -8,12 +8,8 @@ import { RedisCommandOutboxStore } from "@keeper.sh/machine-orchestration";
 import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
 import { eq } from "drizzle-orm";
 import { context, destroy, widelog } from "./utils/logging";
-import { checkWorkerMigrationStatus } from "./migration-check";
-import env from "./env";
 import { recoverSourceIngestionOutbox } from "./recovery/source-ingestion-outbox-recovery";
 import type { SourceIngestionLifecycleCommand } from "@keeper.sh/state-machines";
-
-checkWorkerMigrationStatus(env.WORKER_JOB_QUEUE_ENABLED);
 
 const jobsFolderPathname = join(import.meta.dirname, "jobs");
 const RECOVERY_INTERVAL_MS = 10_000;

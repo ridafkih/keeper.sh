@@ -13,7 +13,6 @@ const schema = {
   POLAR_ACCESS_TOKEN: "string?",
   POLAR_MODE: "'sandbox' | 'production' | undefined?",
   REDIS_URL: "string.url",
-  WORKER_JOB_QUEUE_ENABLED: "boolean?",
 } as const;
 
 export { schema };
