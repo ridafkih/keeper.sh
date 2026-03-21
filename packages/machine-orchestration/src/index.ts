@@ -127,10 +127,17 @@ export { invalidateCalendar, isCalendarInvalidated } from "./sync-lock";
 export type { InvalidationRedis } from "./sync-lock";
 export type { OAuthConfig } from "./resolve-provider";
 export {
+  DESTINATION_CALENDAR_NOT_FOUND_MESSAGE,
   getUserMappings,
   getDestinationsForSource,
   getSourcesForDestination,
+  INVALID_DESTINATION_SET_MESSAGE,
+  INVALID_SOURCE_SET_MESSAGE,
   MAPPING_LIMIT_ERROR_MESSAGE,
+  MappingInvalidSetError,
+  MappingLimitExceededError,
+  MappingPrimaryNotFoundError,
+  SOURCE_CALENDAR_NOT_FOUND_MESSAGE,
   setDestinationsForSource,
   setSourcesForDestination,
 } from "./source-destination-mappings";

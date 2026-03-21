@@ -11,6 +11,31 @@ const USER_MAPPING_LOCK_NAMESPACE = 9001;
 const UNKNOWN_CALENDAR_TYPE = "unknown";
 const MAPPING_LIMIT_ERROR_MESSAGE =
   "Mapping limit reached. Upgrade to Pro for unlimited sync mappings.";
+const SOURCE_CALENDAR_NOT_FOUND_MESSAGE = "Source calendar not found";
+const DESTINATION_CALENDAR_NOT_FOUND_MESSAGE = "Destination calendar not found";
+const INVALID_DESTINATION_SET_MESSAGE = "Some destination calendars not found";
+const INVALID_SOURCE_SET_MESSAGE = "Some source calendars not found";
+
+class MappingLimitExceededError extends Error {
+  constructor() {
+    super(MAPPING_LIMIT_ERROR_MESSAGE);
+    this.name = "MappingLimitExceededError";
+  }
+}
+
+class MappingPrimaryNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MappingPrimaryNotFoundError";
+  }
+}
+
+class MappingInvalidSetError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MappingInvalidSetError";
+  }
+}
 
 type DatabaseClient = BunSQLDatabase;
 type DatabaseTransactionCallback = Parameters<DatabaseClient["transaction"]>[0];
@@ -77,12 +102,12 @@ interface MappingServiceDependencies {
 const assertAllIdsOwned = (
   requestedIds: string[],
   validIds: string[],
-  errorMessage: string,
+  invalidSetMessage: string,
 ): void => {
   const validIdSet = new Set(validIds);
   const invalidIds = requestedIds.filter((requestedId) => !validIdSet.has(requestedId));
   if (invalidIds.length > EMPTY_LIST_COUNT) {
-    throw new Error(errorMessage);
+    throw new MappingInvalidSetError(invalidSetMessage);
   }
 };
 
@@ -300,7 +325,7 @@ const runSetDestinationsForSource = async (
 
     const sourceExists = await transaction.sourceExists(userId, sourceCalendarId);
     if (!sourceExists) {
-      throw new Error("Source calendar not found");
+      throw new MappingPrimaryNotFoundError(SOURCE_CALENDAR_NOT_FOUND_MESSAGE);
     }
 
     if (uniqueDestinationCalendarIds.length > EMPTY_LIST_COUNT) {
@@ -311,7 +336,7 @@ const runSetDestinationsForSource = async (
       assertAllIdsOwned(
         uniqueDestinationCalendarIds,
         validDestinationIds,
-        "Some destination calendars not found",
+        INVALID_DESTINATION_SET_MESSAGE,
       );
     }
 
@@ -330,7 +355,7 @@ const runSetDestinationsForSource = async (
 
       const allowed = await dependencies.isMappingCountAllowed(userId, nextMappingCount);
       if (!allowed) {
-        throw new Error(MAPPING_LIMIT_ERROR_MESSAGE);
+        throw new MappingLimitExceededError();
       }
     }
 
@@ -372,12 +397,12 @@ const runSetSourcesForDestination = async (
 
     const destinationExists = await transaction.destinationExists(userId, destinationCalendarId);
     if (!destinationExists) {
-      throw new Error("Destination calendar not found");
+      throw new MappingPrimaryNotFoundError(DESTINATION_CALENDAR_NOT_FOUND_MESSAGE);
     }
 
     if (uniqueSourceCalendarIds.length > EMPTY_LIST_COUNT) {
       const validSourceIds = await transaction.findOwnedSourceIds(userId, uniqueSourceCalendarIds);
-      assertAllIdsOwned(uniqueSourceCalendarIds, validSourceIds, "Some source calendars not found");
+      assertAllIdsOwned(uniqueSourceCalendarIds, validSourceIds, INVALID_SOURCE_SET_MESSAGE);
     }
 
     if (
@@ -395,7 +420,7 @@ const runSetSourcesForDestination = async (
 
       const allowed = await dependencies.isMappingCountAllowed(userId, nextMappingCount);
       if (!allowed) {
-        throw new Error(MAPPING_LIMIT_ERROR_MESSAGE);
+        throw new MappingLimitExceededError();
       }
     }
 
@@ -533,10 +558,17 @@ const setSourcesForDestination = async (input: {
 };
 
 export {
+  DESTINATION_CALENDAR_NOT_FOUND_MESSAGE,
   getUserMappings,
   getDestinationsForSource,
   getSourcesForDestination,
+  INVALID_DESTINATION_SET_MESSAGE,
+  INVALID_SOURCE_SET_MESSAGE,
   MAPPING_LIMIT_ERROR_MESSAGE,
+  MappingInvalidSetError,
+  MappingLimitExceededError,
+  MappingPrimaryNotFoundError,
+  SOURCE_CALENDAR_NOT_FOUND_MESSAGE,
   setDestinationsForSource,
   setSourcesForDestination,
   runSetDestinationsForSource,

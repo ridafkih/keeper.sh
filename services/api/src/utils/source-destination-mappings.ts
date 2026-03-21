@@ -1,10 +1,17 @@
 import {
   createSourceDestinationMappingRuntime,
+  DESTINATION_CALENDAR_NOT_FOUND_MESSAGE,
   getDestinationsForSource as getDestinationsForSourceInMachine,
   getSourcesForDestination as getSourcesForDestinationInMachine,
   getUserMappings as getUserMappingsInMachine,
+  INVALID_DESTINATION_SET_MESSAGE,
+  INVALID_SOURCE_SET_MESSAGE,
   MAPPING_LIMIT_ERROR_MESSAGE,
+  MappingInvalidSetError,
+  MappingLimitExceededError,
+  MappingPrimaryNotFoundError,
   RedisCommandOutboxStore,
+  SOURCE_CALENDAR_NOT_FOUND_MESSAGE,
   setDestinationsForSource as setDestinationsForSourceInMachine,
   setSourcesForDestination as setSourcesForDestinationInMachine,
   type SourceDestinationMappingFailureEvent,
@@ -13,47 +20,21 @@ import { SourceDestinationMappingEventType } from "@keeper.sh/state-machines";
 import type { SourceDestinationMappingCommand } from "@keeper.sh/state-machines";
 import { enqueuePushSync } from "./enqueue-push-sync";
 
-const SOURCE_NOT_FOUND_MESSAGE = "Source calendar not found";
-const DESTINATION_NOT_FOUND_MESSAGE = "Destination calendar not found";
-const DESTINATION_SET_INVALID_MESSAGE = "Some destination calendars not found";
-const SOURCE_SET_INVALID_MESSAGE = "Some source calendars not found";
-
-class MappingLimitExceededError extends Error {
-  constructor() {
-    super(MAPPING_LIMIT_ERROR_MESSAGE);
-    this.name = "MappingLimitExceededError";
-  }
-}
-
-class MappingPrimaryNotFoundError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "MappingPrimaryNotFoundError";
-  }
-}
-
-class MappingInvalidSetError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "MappingInvalidSetError";
-  }
-}
+const SOURCE_NOT_FOUND_MESSAGE = SOURCE_CALENDAR_NOT_FOUND_MESSAGE;
+const DESTINATION_NOT_FOUND_MESSAGE = DESTINATION_CALENDAR_NOT_FOUND_MESSAGE;
+const DESTINATION_SET_INVALID_MESSAGE = INVALID_DESTINATION_SET_MESSAGE;
+const SOURCE_SET_INVALID_MESSAGE = INVALID_SOURCE_SET_MESSAGE;
 
 const classifyMappingFailure = (input: {
   error: unknown;
-  invalidSetMessage: string;
-  notFoundMessage: string;
 }): SourceDestinationMappingFailureEvent | null => {
-  if (!(input.error instanceof Error)) {
-    return null;
-  }
-  if (input.error.message === MAPPING_LIMIT_ERROR_MESSAGE) {
+  if (input.error instanceof MappingLimitExceededError) {
     return { type: SourceDestinationMappingEventType.LIMIT_REJECTED };
   }
-  if (input.error.message === input.invalidSetMessage) {
+  if (input.error instanceof MappingInvalidSetError) {
     return { type: SourceDestinationMappingEventType.INVALID_SET_REJECTED };
   }
-  if (input.error.message === input.notFoundMessage) {
+  if (input.error instanceof MappingPrimaryNotFoundError) {
     return { type: SourceDestinationMappingEventType.PRIMARY_NOT_FOUND_REJECTED };
   }
   return null;
@@ -89,8 +70,6 @@ const runMappingRuntime = async (input: {
     classifyFailure: (error) =>
       classifyMappingFailure({
         error,
-        invalidSetMessage: input.invalidSetMessage,
-        notFoundMessage: input.notFoundMessage,
       }),
     createEnvelope: (event) => {
       sequence += 1;
