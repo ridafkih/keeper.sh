@@ -3,8 +3,8 @@ import type { RedisRateLimiter } from "@keeper.sh/calendar";
 import {
   createCredentialHealthRuntime,
   type CredentialHealthRuntimeEvent,
-  RedisCommandOutboxStore,
-} from "@keeper.sh/machine-orchestration";
+} from "./credential-health-runtime";
+import { RedisCommandOutboxStore } from "./machine-runtime-driver";
 import type Redis from "ioredis";
 import {
   createGoogleOAuthService,

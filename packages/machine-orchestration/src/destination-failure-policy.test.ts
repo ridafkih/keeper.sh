@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { RuntimeInvariantViolationError } from "@keeper.sh/machine-orchestration";
 import { ErrorPolicy } from "@keeper.sh/state-machines";
+import { RuntimeInvariantViolationError } from "./machine-runtime-driver";
 import { resolveDestinationFailureOutput } from "./destination-failure-policy";
 
 describe("resolveDestinationFailureOutput", () => {

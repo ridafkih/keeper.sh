@@ -6,14 +6,16 @@ import {
   syncCalendar,
 } from "@keeper.sh/calendar";
 import type { RefreshLockStore, SyncProgressUpdate } from "@keeper.sh/calendar";
+import { type CredentialHealthRuntimeEvent } from "./credential-health-runtime";
 import {
   createDestinationExecutionRuntime,
-  type CredentialHealthRuntimeEvent,
   type DestinationExecutionDispatchResult,
   type DestinationExecutionRuntimeEvent,
-  RuntimeInvariantViolationError,
+} from "./destination-execution-runtime";
+import {
   RedisCommandOutboxStore,
-} from "@keeper.sh/machine-orchestration";
+  RuntimeInvariantViolationError,
+} from "./machine-runtime-driver";
 import {
   calendarAccountsTable,
   calendarsTable,

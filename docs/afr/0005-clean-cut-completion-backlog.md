@@ -5,13 +5,13 @@ Mode: `clean-break` (no compatibility bridge)
 
 ## Definition of Done
 
-- [ ] Machine runtimes are the only orchestration path for ingest/push/provision/credential/token flows.
-- [ ] Legacy orchestration paths are deleted (not bypassed).
+- [x] Machine runtimes are the only orchestration path for ingest/push/provision/credential/token flows.
+- [x] Legacy orchestration paths are deleted (not bypassed).
 - [ ] No hidden fallbacks/defaults in machine-critical runtime paths.
 - [ ] Error/failure vocabulary is enum-first and consistent across packages.
 - [ ] Adversarial tests cover conflict/duplicate/stale/replay/corruption/failure classes.
 - [ ] Widelog units are deterministic and self-contained (per-calendar + per-job).
-- [ ] `bun test` passes at repo root.
+- [x] `bun test` passes at repo root.
 - [ ] Cutover checklist is fully complete and reviewed.
 
 ## Phase A — Vocabulary and Type Unification
@@ -84,10 +84,10 @@ Mode: `clean-break` (no compatibility bridge)
 ## Phase F — Clean Cutover (Delete Legacy)
 
 - [x] F1. Enumerate legacy orchestration entrypoints still reachable.
-- [ ] F2. Remove legacy ingestion orchestration paths.
-- [ ] F3. Remove legacy destination execution orchestration paths.
-- [ ] F4. Remove legacy credential refresh orchestration paths.
-- [ ] F5. Remove legacy sync lifecycle orchestration paths.
+- [x] F2. Remove legacy ingestion orchestration paths.
+- [x] F3. Remove legacy destination execution orchestration paths.
+- [x] F4. Remove legacy credential refresh orchestration paths.
+- [x] F5. Remove legacy sync lifecycle orchestration paths.
 - [x] F6. Remove legacy source provisioning orchestration paths.
 - [x] F7. Remove deprecated helpers replaced by machine adapters.
 - [ ] F8. Remove dead tests tied to deleted legacy behavior.

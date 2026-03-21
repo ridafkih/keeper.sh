@@ -5,13 +5,9 @@ Scope: Phase F clean-cut migration
 
 ## Reachable Legacy Entrypoints
 
-- `services/worker/src/processor.ts`
-  - Reachability: `services/worker/src/index.ts` -> `processJob(...)` -> `runKeeperSyncRuntimeForUser(...)`
-  - Legacy concern: runtime flow is still monolithic in sync package and should be split into narrower orchestration services.
-
-- `packages/sync/src/keeper-sync-runtime.ts`
-  - Reachability: package export in `packages/sync/src/index.ts`, consumed by worker processor.
-  - Legacy concern: still acts as root orchestration coordinator for destination execution + provider resolution + calendar sync loop.
+- None.
+- Worker sync runtime now resolves through `@keeper.sh/machine-orchestration` and no longer imports `@keeper.sh/sync`.
+- `packages/sync` package has been removed.
 
 - `services/api/src/utils/source-lifecycle.ts`, `services/api/src/utils/oauth-sources.ts`, `services/api/src/utils/caldav-sources.ts`
   - Reachability: API source routes create/update source state through direct helper flows.
@@ -57,10 +53,12 @@ This is a clean-cut decision: cron now always enqueues destination sync jobs.
 - Command used:
   - `rg -n "migration-check|sync-user\\.ts|sync-user-dispatch-table|syncDestinationsForUser" services packages -S`
 
-## Next Deletion Slices
+## Completed Deletion Slices
 
 - **F2/F3/F4/F5 (worker+sync):**
-  - Split `keeper-sync-runtime` monolith into narrower runtime slices and delete redundant orchestration branches.
+  - moved sync runtime stack from `packages/sync/src/*` to `packages/machine-orchestration/src/*`
+  - worker now imports `runKeeperSyncRuntimeForUser` via `services/worker/src/runtime/sync-runtime.ts` from `@keeper.sh/machine-orchestration`
+  - deleted `packages/sync` package (`package.json`, `tsconfig.json`, `src/index.ts`)
 
 - **F6 (api source provisioning):**
   - `ICS create-source` path is now machine-wired at lifecycle level:

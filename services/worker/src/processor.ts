@@ -4,7 +4,7 @@ import { USER_TIMEOUT_MS } from "@keeper.sh/queue";
 import { RuntimeInvariantViolationError } from "@keeper.sh/machine-orchestration";
 import type { DestinationSyncResult } from "@keeper.sh/calendar";
 import { createSyncAggregateRuntime } from "@keeper.sh/calendar";
-import { runKeeperSyncRuntimeForUser } from "@keeper.sh/sync";
+import { runKeeperSyncRuntimeForUser } from "./runtime/sync-runtime";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { syncStatusTable } from "@keeper.sh/database/schema";
 import { database, refreshLockRedis, refreshLockStore } from "./context";

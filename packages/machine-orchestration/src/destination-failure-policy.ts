@@ -4,7 +4,7 @@ import {
 } from "@keeper.sh/state-machines";
 import type { DestinationExecutionOutput } from "@keeper.sh/state-machines";
 import type { ErrorPolicy } from "@keeper.sh/state-machines";
-import { RuntimeInvariantViolationError } from "@keeper.sh/machine-orchestration";
+import { RuntimeInvariantViolationError } from "./machine-runtime-driver";
 
 interface DestinationFailurePolicy {
   code: string;
