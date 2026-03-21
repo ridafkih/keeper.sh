@@ -167,10 +167,6 @@ There are seven images currently available, two of them are designed for conveni
 | MCP_PUBLIC_URL                 | `api`, `mcp`  | Optional. Public URL of the MCP resource. Enables OAuth on the API and identifies the MCP server to clients.<br><br>e.g. `https://keeper.example.com/mcp`           |
 | VITE_MCP_URL                   | `web`         | Optional. Internal URL the web server uses to proxy `/mcp` requests to the MCP service.<br><br>e.g. `http://mcp:3002`                                              |
 | MCP_PORT                       | `mcp`         | Optional. Port the MCP server listens on.<br><br>e.g. `3002`                                                                                                       |
-| OTEL_EXPORTER_OTLP_ENDPOINT    | `api`, `cron`, `worker`, `mcp`, `web` | Optional. When set, enables forwarding structured logs to an OpenTelemetry collector via [`pino-opentelemetry-transport`](https://github.com/Vunovati/pino-opentelemetry-transport). The transport runs in a dedicated worker thread and does not affect application performance.<br><br>e.g. `https://otel-collector.example.com:4318` |
-| OTEL_EXPORTER_OTLP_PROTOCOL    | `api`, `cron`, `worker`, `mcp`, `web` | Optional. Protocol used by the OTLP exporter. Defaults to `http/protobuf` per the OpenTelemetry spec.<br><br>e.g. `http/protobuf`, `grpc`, `http/json` |
-| OTEL_EXPORTER_OTLP_HEADERS     | `api`, `cron`, `worker`, `mcp`, `web` | Optional. Headers sent with every OTLP export request. Use this for authentication (e.g. Basic auth or API keys).<br><br>e.g. `Authorization=Basic dXNlcjpwYXNz` |
-
 The following environment variables are baked into the web image at **build time**. They are pre-configured in the official Docker images and only need to be set if you are building from source.
 
 | Name                              | Description                                                        |
