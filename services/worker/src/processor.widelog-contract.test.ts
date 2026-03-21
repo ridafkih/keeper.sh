@@ -322,6 +322,12 @@ describe("processJob widelog contract", () => {
     }
     expect(summary.fields["sync.events_added"]).toBe(1);
     expect(summary.fields["sync.events_removed"]).toBe(2);
+    expect(summary.fields["correlation.id"]).toBe("corr-1");
     expect(summary.fields["outcome"]).toBe("success");
+    expect(summary.fields["calendar_sync.id"]).toBe(globalThis.undefined);
+    expect(summary.fields["provider.calendar_id"]).toBe(globalThis.undefined);
+    expect(summary.fields["machine.destination_execution.processed_total"]).toBe(
+      globalThis.undefined,
+    );
   });
 });

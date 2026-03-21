@@ -70,16 +70,16 @@ Mode: `clean-break` (no compatibility bridge)
 
 ## Phase E — Widelog Contract Finalization
 
-- [ ] E1. Define canonical per-calendar widelog contract fields in docs.
-- [ ] E2. Define canonical per-job widelog contract fields in docs.
-- [ ] E3. Ensure each per-calendar unit starts one context and flushes once.
+- [x] E1. Define canonical per-calendar widelog contract fields in docs.
+- [x] E2. Define canonical per-job widelog contract fields in docs.
+- [x] E3. Ensure each per-calendar unit starts one context and flushes once.
 - [ ] E4. Ensure per-job context is separate from per-calendar contexts.
 - [ ] E5. Remove any immediate context+flush wrappers that act as plain logs.
 - [ ] E6. Normalize machine field naming across cron/worker/api.
-- [ ] E7. Add tests asserting per-calendar log isolation.
+- [x] E7. Add tests asserting per-calendar log isolation.
 - [ ] E8. Add tests asserting per-job summary log isolation.
-- [ ] E9. Add tests asserting correlation IDs and calendar sync IDs are deterministic.
-- [ ] E10. Add tests asserting no field bleed between calendar units.
+- [x] E9. Add tests asserting correlation IDs and calendar sync IDs are deterministic.
+- [x] E10. Add tests asserting no field bleed between calendar units.
 
 ## Phase F — Clean Cutover (Delete Legacy)
 

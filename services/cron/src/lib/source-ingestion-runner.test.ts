@@ -85,6 +85,7 @@ describe("runSourceIngestionUnit", () => {
     expect(fields.get("provider.name")).toBe("google");
     expect(fields.get("provider.account_id")).toBe("account-1");
     expect(fields.get("provider.calendar_id")).toBe("calendar-1");
+    expect(fields.get("calendar_sync.id")).toBe("google:calendar-1");
     expect(fields.get("provider.external_calendar_id")).toBe("external-1");
     expect(fields.get("sync.events_added")).toBe(2);
     expect(fields.get("sync.events_removed")).toBe(1);

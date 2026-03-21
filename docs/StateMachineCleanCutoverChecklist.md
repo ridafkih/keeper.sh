@@ -9,7 +9,7 @@ This checklist is for a single cutover where the new machine-orchestrated backen
   - [ ] one `push-sync-calendar` wide event per calendar unit-of-work
   - [ ] one `push-sync` summary event per worker job
   - [ ] machine counters are isolated per calendar (no cross-calendar accumulation)
-- [ ] Deterministic `calendar_sync.id` is emitted on every calendar-wide event.
+- [x] Deterministic `calendar_sync.id` is emitted on every calendar-wide event.
 - [ ] Cron runtime discovery excludes helper runtime modules.
 - [ ] Push arbitration concurrency conflicts are eliminated by per-user serialization.
 - [ ] Machine runtime CAS contention is modeled as `CONFLICT_DETECTED` (not throw-driven control flow).

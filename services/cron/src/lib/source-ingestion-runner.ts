@@ -53,6 +53,7 @@ const applyCommonWidelogFields = (
   logger.set("user.id", metadata.userId);
   logger.set("provider.name", metadata.provider);
   logger.set("provider.calendar_id", metadata.calendarId);
+  logger.set("calendar_sync.id", `${metadata.provider}:${metadata.calendarId}`);
 
   if (metadata.accountId) {
     logger.set("provider.account_id", metadata.accountId);
