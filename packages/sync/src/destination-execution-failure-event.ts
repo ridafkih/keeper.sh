@@ -1,11 +1,10 @@
 import { DestinationExecutionEventType } from "@keeper.sh/state-machines";
 import type { DestinationExecutionEvent } from "@keeper.sh/state-machines";
 import { getErrorMessage, isBackoffEligibleError } from "./destination-errors";
-
-enum DestinationExecutionFailureClassification {
-  RETRYABLE = "retryable",
-  TERMINAL = "terminal",
-}
+import {
+  DestinationExecutionFailureClassification,
+  mapDestinationFailureClassificationToErrorCode,
+} from "./destination-execution-error-code";
 
 interface DestinationExecutionFailureEventMap {
   classification: DestinationExecutionFailureClassification;
@@ -27,23 +26,29 @@ const mapDestinationExecutionFailureEvent = (
 ): DestinationExecutionFailureEventMap => {
   const errorMessage = getErrorMessage(error);
   if (isBackoffEligibleError(error)) {
+    const code = mapDestinationFailureClassificationToErrorCode(
+      DestinationExecutionFailureClassification.RETRYABLE,
+    );
     return {
       classification: DestinationExecutionFailureClassification.RETRYABLE,
       errorMessage,
       event: {
         at: occurredAt,
-        code: errorMessage,
+        code,
         reason: errorMessage,
         type: DestinationExecutionEventType.EXECUTION_FAILED,
       },
     };
   }
 
+  const code = mapDestinationFailureClassificationToErrorCode(
+    DestinationExecutionFailureClassification.TERMINAL,
+  );
   return {
     classification: DestinationExecutionFailureClassification.TERMINAL,
     errorMessage,
     event: {
-      code: errorMessage,
+      code,
       reason: errorMessage,
       type: DestinationExecutionEventType.EXECUTION_FATAL_FAILED,
     },

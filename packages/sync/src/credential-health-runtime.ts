@@ -15,6 +15,7 @@ import {
   CredentialHealthStateMachine,
   TransitionPolicy,
 } from "@keeper.sh/state-machines";
+import { resolveCredentialRefreshErrorCode } from "./credential-refresh-error-code";
 import type {
   CredentialHealthCommand,
   CredentialHealthContext,
@@ -90,13 +91,6 @@ const buildNoopTransition = (
   outputs: [],
   state: snapshot.state,
 });
-
-const resolveErrorCode = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message.slice(0, 120);
-  }
-  return String(error).slice(0, 120);
-};
 
 const createCredentialHealthRuntime = (
   input: CredentialHealthRuntimeInput,
@@ -232,7 +226,7 @@ const createCredentialHealthRuntime = (
       });
       return refreshed;
     } catch (error) {
-      const code = resolveErrorCode(error);
+      const code = resolveCredentialRefreshErrorCode(error);
       if (input.isReauthRequiredError(error)) {
         await dispatch({ code, type: CredentialHealthEventType.REFRESH_REAUTH_REQUIRED });
         throw error;

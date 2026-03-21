@@ -39,6 +39,7 @@ import {
   classifySourceIngestionFailure,
   SourceIngestionFailureLogSlug,
 } from "../lib/source-ingestion-failure";
+import { resolveSourceIngestionErrorCode } from "../lib/source-ingestion-error-code";
 import { summarizeIngestionSettlements } from "../lib/ingestion-settlement-summary";
 
 const SOURCE_TIMEOUT_MS = 60_000;
@@ -118,19 +119,6 @@ const readExistingEvents = (calendarId: string) =>
     })
     .from(eventStatesTable)
     .where(eq(eventStatesTable.calendarId, calendarId));
-
-const resolveIngestionErrorCode = (error: unknown): string => {
-  if (error instanceof Error) {
-    if (error.message.includes("timed out")) {
-      return "timeout";
-    }
-    if (error.message.includes("404")) {
-      return "not_found";
-    }
-    return "transient_failure";
-  }
-  return "unknown_error";
-};
 
 const isNotFoundError = (error: unknown): boolean => error instanceof Error && "status" in error && error.status === 404;
 
@@ -258,7 +246,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
             classifyFailure: (error) =>
               classifySourceIngestionFailure(
                 error,
-                { isNotFoundError, resolveErrorCode: resolveIngestionErrorCode },
+                { isNotFoundError, resolveErrorCode: resolveSourceIngestionErrorCode },
                 {
                   authFailureSlug: SourceIngestionFailureLogSlug.TOKEN_REFRESH_FAILED,
                   isAuthFailure: isOAuthAuthFailure,
@@ -382,7 +370,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
             classifyFailure: (error) =>
               classifySourceIngestionFailure(
                 error,
-                { isNotFoundError, resolveErrorCode: resolveIngestionErrorCode },
+                { isNotFoundError, resolveErrorCode: resolveSourceIngestionErrorCode },
                 {
                   authFailureSlug: SourceIngestionFailureLogSlug.AUTH_FAILED,
                   isAuthFailure: isCalDAVAuthenticationError,
@@ -471,7 +459,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
             classifyFailure: (error) =>
               classifySourceIngestionFailure(
                 error,
-                { isNotFoundError, resolveErrorCode: resolveIngestionErrorCode },
+                { isNotFoundError, resolveErrorCode: resolveSourceIngestionErrorCode },
               ),
             executeIngest: async () => {
               if (!source.url) {

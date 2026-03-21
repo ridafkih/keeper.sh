@@ -24,9 +24,9 @@ Mode: `clean-break` (no compatibility bridge)
 - [x] A6. Replace string literal failure tags in runtime adapters with enums.
 - [x] A7. Replace string literal failure tags in logging classification with enums.
 - [x] A8. Remove duplicate union type aliases that mirror enum values.
-- [ ] A9. Centralize error-code mapping helpers behind enum-returning functions.
-- [ ] A10. Add compile-time exhaustiveness checks via typed mapping records.
-- [ ] A11. Add tests for each enum mapping edge case.
+- [x] A9. Centralize error-code mapping helpers behind enum-returning functions.
+- [x] A10. Add compile-time exhaustiveness checks via typed mapping records.
+- [x] A11. Add tests for each enum mapping edge case.
 - [ ] A12. Delete now-unused string-literal constants.
 
 ## Phase B — Branching Hotspot Extraction

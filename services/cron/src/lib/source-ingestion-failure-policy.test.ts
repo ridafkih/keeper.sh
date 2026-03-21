@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { RuntimeInvariantViolationError } from "@keeper.sh/machine-orchestration";
 import { ErrorPolicy } from "@keeper.sh/state-machines";
+import { SourceIngestionErrorCode } from "./source-ingestion-error-code";
 import { resolveSourceIngestionFailurePolicy } from "./source-ingestion-failure-policy";
 
 describe("resolveSourceIngestionFailurePolicy", () => {
@@ -11,7 +12,7 @@ describe("resolveSourceIngestionFailurePolicy", () => {
     });
 
     expect(policy).toEqual({
-      code: "transient_failure",
+      code: SourceIngestionErrorCode.TRANSIENT_FAILURE,
       policy: ErrorPolicy.RETRYABLE,
       retryable: true,
       requiresReauth: false,
@@ -25,7 +26,7 @@ describe("resolveSourceIngestionFailurePolicy", () => {
     });
 
     expect(policy).toEqual({
-      code: "auth_required",
+      code: SourceIngestionErrorCode.AUTH_REQUIRED,
       policy: ErrorPolicy.REQUIRES_REAUTH,
       retryable: false,
       requiresReauth: true,
@@ -39,7 +40,7 @@ describe("resolveSourceIngestionFailurePolicy", () => {
     });
 
     expect(policy).toEqual({
-      code: "not_found",
+      code: SourceIngestionErrorCode.NOT_FOUND,
       policy: ErrorPolicy.TERMINAL,
       retryable: false,
       requiresReauth: false,
@@ -51,6 +52,14 @@ describe("resolveSourceIngestionFailurePolicy", () => {
       resolveSourceIngestionFailurePolicy({
         outputs: [],
         state: "transient_error",
+      })).toThrow(RuntimeInvariantViolationError);
+  });
+
+  test("fails fast when failure code is unknown", () => {
+    expect(() =>
+      resolveSourceIngestionFailurePolicy({
+        outputs: [{ code: "mystery", retryable: false, type: "INGEST_FAILED" }],
+        state: "not_found_disabled",
       })).toThrow(RuntimeInvariantViolationError);
   });
 });

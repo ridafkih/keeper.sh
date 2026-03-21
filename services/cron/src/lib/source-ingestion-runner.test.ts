@@ -214,7 +214,7 @@ describe("runSourceIngestionUnit", () => {
           return Promise.resolve({
             commands: [],
             context: {},
-            outputs: [{ code: "forced_terminal", retryable: false, type: "INGEST_FAILED" }],
+            outputs: [{ code: "not_found", retryable: false, type: "INGEST_FAILED" }],
             state: "not_found_disabled",
           });
         }

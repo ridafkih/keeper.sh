@@ -1,4 +1,8 @@
 import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
+import {
+  mapSourceIngestionFailureEventToErrorCode,
+  SourceIngestionErrorCode,
+} from "./source-ingestion-error-code";
 
 enum SourceIngestionFailureLogSlug {
   AUTH_FAILED = "provider-auth-failed",
@@ -12,7 +16,7 @@ interface SourceIngestionFailureDecision {
     | SourceIngestionLifecycleEventType.AUTH_FAILURE
     | SourceIngestionLifecycleEventType.NOT_FOUND
     | SourceIngestionLifecycleEventType.TRANSIENT_FAILURE;
-  code: string;
+  code: SourceIngestionErrorCode;
   logSlug: SourceIngestionFailureLogSlug;
 }
 
@@ -23,7 +27,7 @@ interface SourceIngestionFailureClassifierOptions {
 
 interface SourceIngestionFailureClassifierDependencies {
   isNotFoundError: (error: unknown) => boolean;
-  resolveErrorCode: (error: unknown) => string;
+  resolveErrorCode: (error: unknown) => SourceIngestionErrorCode;
 }
 
 const classifySourceIngestionFailure = (
@@ -34,7 +38,9 @@ const classifySourceIngestionFailure = (
   if (options?.isAuthFailure?.(error)) {
     return {
       eventType: SourceIngestionLifecycleEventType.AUTH_FAILURE,
-      code: "auth_required",
+      code: mapSourceIngestionFailureEventToErrorCode(
+        SourceIngestionLifecycleEventType.AUTH_FAILURE,
+      ),
       logSlug: options.authFailureSlug ?? SourceIngestionFailureLogSlug.AUTH_FAILED,
     };
   }
@@ -42,7 +48,9 @@ const classifySourceIngestionFailure = (
   if (dependencies.isNotFoundError(error) || (error instanceof Error && error.message.includes("404"))) {
     return {
       eventType: SourceIngestionLifecycleEventType.NOT_FOUND,
-      code: dependencies.resolveErrorCode(error),
+      code: mapSourceIngestionFailureEventToErrorCode(
+        SourceIngestionLifecycleEventType.NOT_FOUND,
+      ),
       logSlug: SourceIngestionFailureLogSlug.NOT_FOUND,
     };
   }

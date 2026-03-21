@@ -4,11 +4,13 @@ import {
   classifySourceIngestionFailure,
   SourceIngestionFailureLogSlug,
 } from "./source-ingestion-failure";
+import { SourceIngestionErrorCode } from "./source-ingestion-error-code";
 
 const dependencies = {
   isNotFoundError: (error: unknown): boolean =>
     error instanceof Error && error.message.includes("404"),
-  resolveErrorCode: (_error: unknown): string => "resolved_code",
+  resolveErrorCode: (_error: unknown): SourceIngestionErrorCode =>
+    SourceIngestionErrorCode.TRANSIENT_FAILURE,
 };
 
 describe("classifySourceIngestionFailure", () => {
@@ -23,7 +25,7 @@ describe("classifySourceIngestionFailure", () => {
     );
 
     expect(decision).toEqual({
-      code: "auth_required",
+      code: SourceIngestionErrorCode.AUTH_REQUIRED,
       eventType: SourceIngestionLifecycleEventType.AUTH_FAILURE,
       logSlug: SourceIngestionFailureLogSlug.TOKEN_REFRESH_FAILED,
     });
@@ -36,7 +38,7 @@ describe("classifySourceIngestionFailure", () => {
     );
 
     expect(decision).toEqual({
-      code: "resolved_code",
+      code: SourceIngestionErrorCode.NOT_FOUND,
       eventType: SourceIngestionLifecycleEventType.NOT_FOUND,
       logSlug: SourceIngestionFailureLogSlug.NOT_FOUND,
     });
@@ -47,12 +49,12 @@ describe("classifySourceIngestionFailure", () => {
       new Error("upstream timeout"),
       {
         isNotFoundError: () => false,
-        resolveErrorCode: () => "transient_failure",
+        resolveErrorCode: () => SourceIngestionErrorCode.TRANSIENT_FAILURE,
       },
     );
 
     expect(decision).toEqual({
-      code: "transient_failure",
+      code: SourceIngestionErrorCode.TRANSIENT_FAILURE,
       eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
       logSlug: SourceIngestionFailureLogSlug.TRANSIENT,
     });

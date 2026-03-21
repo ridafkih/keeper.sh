@@ -85,6 +85,27 @@ Identify remaining non-machine policy branching in `packages/sync`, `services/cr
   - `packages/sync/src/provider-resolution-policy.test.ts`
   - `packages/sync/src/sync-user-dispatch-table.test.ts`
 
+## Implemented in Q7 (A9–A11)
+
+- Centralized ingestion failure code mapping behind enum-returning helpers:
+  - `services/cron/src/lib/source-ingestion-error-code.ts`
+  - canonical enum + parse helper + event->code mapping + error->code resolver
+- Wired ingestion classifier/policy/runtime call sites to canonical ingestion codes:
+  - `services/cron/src/lib/source-ingestion-failure.ts`
+  - `services/cron/src/lib/source-ingestion-failure-policy.ts`
+  - `services/cron/src/jobs/ingest-sources.ts`
+- Centralized destination execution failure code mapping behind enum + typed record:
+  - `packages/sync/src/destination-execution-error-code.ts`
+  - wired from `packages/sync/src/destination-execution-failure-event.ts`
+- Centralized credential refresh error mapping behind enum-returning helper:
+  - `packages/sync/src/credential-refresh-error-code.ts`
+  - wired from `packages/sync/src/credential-health-runtime.ts`
+- Added enum mapping edge-case tests:
+  - `services/cron/src/lib/source-ingestion-error-code.test.ts`
+  - `services/cron/src/lib/source-ingestion-failure-policy.test.ts` (unknown-code invariant)
+  - `packages/sync/src/destination-execution-error-code.test.ts`
+  - `packages/sync/src/credential-refresh-error-code.test.ts`
+
 ## Validation
 
 - `bun test packages/sync/src/destination-execution-failure-event.test.ts packages/sync/src/destination-execution-runtime.test.ts packages/sync/src/destination-failure-policy.test.ts`

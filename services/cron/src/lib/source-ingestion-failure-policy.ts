@@ -4,9 +4,13 @@ import type {
   SourceIngestionLifecycleOutput,
   SourceIngestionLifecycleState,
 } from "@keeper.sh/state-machines";
+import {
+  parseSourceIngestionErrorCode,
+  SourceIngestionErrorCode,
+} from "./source-ingestion-error-code";
 
 interface SourceIngestionFailurePolicy {
-  code: string;
+  code: SourceIngestionErrorCode;
   policy: ErrorPolicy;
   retryable: boolean;
   requiresReauth: boolean;
@@ -43,9 +47,19 @@ const resolveSourceIngestionFailurePolicy = (
     });
   }
 
+  const parsedCode = parseSourceIngestionErrorCode(failureOutput.code);
+  if (!parsedCode) {
+    throw new RuntimeInvariantViolationError({
+      aggregateId: "source-ingestion-failure-policy",
+      code: "SOURCE_INGESTION_FAILURE_CODE_INVALID",
+      reason: `unknown ingestion failure code: ${failureOutput.code}`,
+      surface: "source-ingestion-failure-policy",
+    });
+  }
+
   if (failureOutput.retryable) {
     return {
-      code: failureOutput.code,
+      code: parsedCode,
       policy: ErrorPolicy.RETRYABLE,
       retryable: true,
       requiresReauth: false,
@@ -54,7 +68,7 @@ const resolveSourceIngestionFailurePolicy = (
 
   if (input.state === "auth_blocked") {
     return {
-      code: failureOutput.code,
+      code: parsedCode,
       policy: ErrorPolicy.REQUIRES_REAUTH,
       retryable: false,
       requiresReauth: true,
@@ -62,7 +76,7 @@ const resolveSourceIngestionFailurePolicy = (
   }
 
   return {
-    code: failureOutput.code,
+    code: parsedCode,
     policy: ErrorPolicy.TERMINAL,
     retryable: false,
     requiresReauth: false,

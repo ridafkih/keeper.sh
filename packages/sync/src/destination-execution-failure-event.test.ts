@@ -4,6 +4,7 @@ import {
   DestinationExecutionFailureClassification,
   mapDestinationExecutionFailureEvent,
 } from "./destination-execution-failure-event";
+import { DestinationExecutionErrorCode } from "./destination-execution-error-code";
 
 describe("mapDestinationExecutionFailureEvent", () => {
   it("maps backoff-eligible errors to retryable machine failure event", () => {
@@ -17,7 +18,7 @@ describe("mapDestinationExecutionFailureEvent", () => {
     );
     expect(mapped.event).toEqual({
       at: "2026-03-20T00:00:00.000Z",
-      code: "404 Not Found",
+      code: DestinationExecutionErrorCode.RETRYABLE_FAILURE,
       reason: "404 Not Found",
       type: DestinationExecutionEventType.EXECUTION_FAILED,
     });
@@ -33,7 +34,7 @@ describe("mapDestinationExecutionFailureEvent", () => {
       DestinationExecutionFailureClassification.TERMINAL,
     );
     expect(mapped.event).toEqual({
-      code: "json parse exploded",
+      code: DestinationExecutionErrorCode.TERMINAL_FAILURE,
       reason: "json parse exploded",
       type: DestinationExecutionEventType.EXECUTION_FATAL_FAILED,
     });
