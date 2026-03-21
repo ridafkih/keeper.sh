@@ -90,7 +90,7 @@ Mode: `clean-break` (no compatibility bridge)
 - [x] F5. Remove legacy sync lifecycle orchestration paths.
 - [x] F6. Remove legacy source provisioning orchestration paths.
 - [x] F7. Remove deprecated helpers replaced by machine adapters.
-- [ ] F8. Remove dead tests tied to deleted legacy behavior.
+- [x] F8. Remove dead tests tied to deleted legacy behavior.
 - [x] F9. Remove dead feature flags no longer needed post-cutover.
 - [x] F10. Verify build graph has no imports from deleted paths.
 
@@ -110,6 +110,7 @@ Mode: `clean-break` (no compatibility bridge)
 - `2026-03-21`: attempted startup dry-runs for `@keeper.sh/cron` and `@keeper.sh/worker`; both failed early with `PostgresError: Connection closed` while executing `SELECT 1` (environment dependency unavailable in this container run).
 - `2026-03-21`: added bounded-key cardinality coverage for runtime machine widelog sink in `packages/machine-orchestration/src/machine-runtime-widelog.test.ts`.
 - `2026-03-21`: added per-calendar collector lifecycle stress coverage in `services/worker/src/utils/per-calendar-machine-fields.test.ts` to enforce state release after consume.
+- `2026-03-21`: audited legacy/dead test surfaces in active packages and removed/retained only tests tied to current machine-first behavior.
 
 ## Immediate Execution Queue
 
