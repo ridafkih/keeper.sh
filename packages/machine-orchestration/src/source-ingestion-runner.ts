@@ -2,7 +2,6 @@ import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
 import type {
   SourceIngestionLifecycleEvent,
   SourceIngestionLifecycleOutput,
-  SourceIngestionLifecycleState,
   SourceIngestionLifecycleTransitionResult,
 } from "@keeper.sh/state-machines";
 import { ErrorPolicy } from "@keeper.sh/state-machines";
@@ -55,7 +54,6 @@ interface RunSourceIngestionUnitInput {
   classifyFailure: (error: unknown) => SourceIngestionFailureDecision;
   resolveFailurePolicy: (input: {
     outputs: SourceIngestionLifecycleOutput[];
-    state: SourceIngestionLifecycleState;
   }) => SourceIngestionFailurePolicy;
   nextSyncToken?: string;
 }
@@ -134,7 +132,6 @@ const runSourceIngestionUnit = async (
     });
     const failurePolicy = input.resolveFailurePolicy({
       outputs: failureTransition.outputs,
-      state: failureTransition.state,
     });
     input.logger.errorFields(error, {
       slug: failureDecision.logSlug,

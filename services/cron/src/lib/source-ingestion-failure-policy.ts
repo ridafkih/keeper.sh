@@ -2,7 +2,6 @@ import { RuntimeInvariantViolationError } from "@keeper.sh/machine-orchestration
 import { ErrorPolicy } from "@keeper.sh/state-machines";
 import type {
   SourceIngestionLifecycleOutput,
-  SourceIngestionLifecycleState,
 } from "@keeper.sh/state-machines";
 import {
   parseSourceIngestionErrorCode,
@@ -17,7 +16,6 @@ interface SourceIngestionFailurePolicy {
 
 interface ResolveSourceIngestionFailurePolicyInput {
   outputs: SourceIngestionLifecycleOutput[];
-  state: SourceIngestionLifecycleState;
 }
 
 const resolveSourceIngestionFailurePolicy = (

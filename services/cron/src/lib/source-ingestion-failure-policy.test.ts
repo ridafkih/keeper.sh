@@ -13,7 +13,6 @@ describe("resolveSourceIngestionFailurePolicy", () => {
         policy: ErrorPolicy.RETRYABLE,
         type: "INGEST_FAILED",
       }],
-      state: "transient_error",
     });
 
     expect(policy).toEqual({
@@ -31,7 +30,6 @@ describe("resolveSourceIngestionFailurePolicy", () => {
         policy: ErrorPolicy.REQUIRES_REAUTH,
         type: "INGEST_FAILED",
       }],
-      state: "auth_blocked",
     });
 
     expect(policy).toEqual({
@@ -49,7 +47,6 @@ describe("resolveSourceIngestionFailurePolicy", () => {
         policy: ErrorPolicy.TERMINAL,
         type: "INGEST_FAILED",
       }],
-      state: "not_found_disabled",
     });
 
     expect(policy).toEqual({
@@ -63,7 +60,6 @@ describe("resolveSourceIngestionFailurePolicy", () => {
     expect(() =>
       resolveSourceIngestionFailurePolicy({
         outputs: [],
-        state: "transient_error",
       })).toThrow(RuntimeInvariantViolationError);
   });
 
@@ -76,7 +72,6 @@ describe("resolveSourceIngestionFailurePolicy", () => {
           policy: ErrorPolicy.TERMINAL,
           type: "INGEST_FAILED",
         }],
-        state: "not_found_disabled",
       })).toThrow(RuntimeInvariantViolationError);
   });
 });

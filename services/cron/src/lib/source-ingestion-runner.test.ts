@@ -21,14 +21,14 @@ const resolveFailurePolicy: RunSourceIngestionUnitInput["resolveFailurePolicy"] 
       requiresReauth: false,
     };
   }
-  if (input.state === "auth_blocked") {
+  if (failedOutput.policy === ErrorPolicy.REQUIRES_REAUTH) {
     return {
       code: failedOutput.code,
       policy: ErrorPolicy.REQUIRES_REAUTH,
       requiresReauth: true,
     };
   }
-  if (input.state === "not_found_disabled") {
+  if (failedOutput.policy === ErrorPolicy.TERMINAL) {
     return {
       code: failedOutput.code,
       policy: ErrorPolicy.TERMINAL,
