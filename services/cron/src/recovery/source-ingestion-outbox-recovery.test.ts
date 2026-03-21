@@ -182,4 +182,42 @@ describe("recoverSourceIngestionOutbox", () => {
     expect(tokens).toEqual([{ calendarId: "cal-6", token: "token-6" }]);
     expect(await outboxStore.listAggregates()).toEqual([]);
   });
+
+  it("keeps aggregate recoverable after partial command failure", async () => {
+    const markAttempts: string[] = [];
+    const outboxStore = new InMemoryCommandOutboxStore<SourceIngestionLifecycleCommand>();
+    await outboxStore.enqueue({
+      aggregateId: "cal-7",
+      commands: [{ type: SourceIngestionLifecycleCommandType.MARK_NEEDS_REAUTH }],
+      envelopeId: "env-7",
+      nextCommandIndex: 0,
+    });
+
+    await expect(
+      recoverSourceIngestionOutbox({
+        outboxStore,
+        disableSource: () => Promise.resolve(),
+        markNeedsReauth: (calendarId) => {
+          markAttempts.push(calendarId);
+          throw new Error("temporary account write failure");
+        },
+        persistSyncToken: () => Promise.resolve(),
+      }),
+    ).rejects.toThrow("temporary account write failure");
+
+    expect(await outboxStore.listAggregates()).toEqual(["cal-7"]);
+
+    await recoverSourceIngestionOutbox({
+      outboxStore,
+      disableSource: () => Promise.resolve(),
+      markNeedsReauth: (calendarId) => {
+        markAttempts.push(calendarId);
+        return Promise.resolve();
+      },
+      persistSyncToken: () => Promise.resolve(),
+    });
+
+    expect(markAttempts).toEqual(["cal-7", "cal-7"]);
+    expect(await outboxStore.listAggregates()).toEqual([]);
+  });
 });

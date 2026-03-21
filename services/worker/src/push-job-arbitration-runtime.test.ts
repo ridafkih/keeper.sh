@@ -280,6 +280,57 @@ describe("push job arbitration runtime", () => {
     expect(await outboxStore.listAggregates()).toEqual([]);
   });
 
+  it("keeps pending aggregate recoverable after command failure", async () => {
+    const held: string[] = [];
+    const outboxStore = new InMemoryCommandOutboxStore<PushJobArbitrationCommand>();
+    await outboxStore.enqueue({
+      aggregateId: "user-8",
+      commands: [{ type: PushJobArbitrationCommandType.HOLD_SYNCING }],
+      envelopeId: "recover-env-5",
+      nextCommandIndex: 0,
+    });
+
+    const runtime = createPushJobArbitrationRuntime({
+      createEnvelope: createEnvelopeFactory("runtime-8"),
+      outboxStore,
+      onRuntimeEvent: () => Promise.resolve(),
+      syncing: {
+        holdSyncing: (userId) => {
+          held.push(userId);
+          throw new Error("temporary syncing write failure");
+        },
+        releaseSyncing: () => Promise.resolve(),
+      },
+      worker: {
+        cancelJob: () => Promise.resolve(),
+      },
+    });
+
+    await expect(runtime.recoverPending()).rejects.toThrow("temporary syncing write failure");
+    expect(await outboxStore.listAggregates()).toEqual(["user-8"]);
+
+    const retryRuntime = createPushJobArbitrationRuntime({
+      createEnvelope: createEnvelopeFactory("runtime-8-retry"),
+      outboxStore,
+      onRuntimeEvent: () => Promise.resolve(),
+      syncing: {
+        holdSyncing: (userId) => {
+          held.push(userId);
+          return Promise.resolve();
+        },
+        releaseSyncing: () => Promise.resolve(),
+      },
+      worker: {
+        cancelJob: () => Promise.resolve(),
+      },
+    });
+
+    await retryRuntime.recoverPending();
+
+    expect(held).toEqual(["user-8", "user-8"]);
+    expect(await outboxStore.listAggregates()).toEqual([]);
+  });
+
   it("fails fast when envelope metadata is invalid", async () => {
     const runtime = createPushJobArbitrationRuntime({
       createEnvelope: (event) => ({

@@ -123,4 +123,38 @@ describe("recoverCredentialHealthOutbox", () => {
     expect(marked).toEqual(["oauth-4"]);
     expect(await outboxStore.listAggregates()).toEqual([]);
   });
+
+  it("keeps aggregate recoverable after partial command failure", async () => {
+    const attempts: string[] = [];
+    const outboxStore = new InMemoryCommandOutboxStore<CredentialHealthCommand>();
+    await outboxStore.enqueue({
+      aggregateId: "oauth-5",
+      commands: [{ type: CredentialHealthCommandType.MARK_ACCOUNT_REAUTH_REQUIRED }],
+      envelopeId: "env-5",
+      nextCommandIndex: 0,
+    });
+
+    await expect(
+      recoverCredentialHealthOutbox({
+        outboxStore,
+        markNeedsReauthentication: (oauthCredentialId) => {
+          attempts.push(oauthCredentialId);
+          throw new Error("temporary database failure");
+        },
+      }),
+    ).rejects.toThrow("temporary database failure");
+
+    expect(await outboxStore.listAggregates()).toEqual(["oauth-5"]);
+
+    await recoverCredentialHealthOutbox({
+      outboxStore,
+      markNeedsReauthentication: (oauthCredentialId) => {
+        attempts.push(oauthCredentialId);
+        return Promise.resolve();
+      },
+    });
+
+    expect(attempts).toEqual(["oauth-5", "oauth-5"]);
+    expect(await outboxStore.listAggregates()).toEqual([]);
+  });
 });

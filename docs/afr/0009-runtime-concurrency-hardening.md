@@ -1,7 +1,7 @@
-# 0009 — Runtime Concurrency Hardening (D1–D9)
+# 0009 — Runtime Concurrency Hardening (D1–D10)
 
 Status: `active`
-Scope: Phase D (`D1`–`D9`)
+Scope: Phase D (`D1`–`D10`)
 
 ## Objective
 
@@ -71,6 +71,13 @@ Harden runtime behavior under adversarial parallel dispatch/replay so machine si
   - cron source-ingestion recovery resumes at `nextCommandIndex` and drains remaining command:
     - `services/cron/src/recovery/source-ingestion-outbox-recovery.test.ts`
   - worker push-arbitration recovery resumes partially drained records:
+    - `services/worker/src/push-job-arbitration-runtime.test.ts`
+- Added partial-command-failure recovery coverage (no stuck aggregates):
+  - worker credential-health recovery retries successfully after first command failure:
+    - `services/worker/src/recovery/credential-health-outbox-recovery.test.ts`
+  - cron source-ingestion recovery retries successfully after first command failure:
+    - `services/cron/src/recovery/source-ingestion-outbox-recovery.test.ts`
+  - worker push-arbitration recovery retries successfully after first command failure:
     - `services/worker/src/push-job-arbitration-runtime.test.ts`
 
 ## Validation

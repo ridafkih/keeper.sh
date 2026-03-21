@@ -66,7 +66,7 @@ Mode: `clean-break` (no compatibility bridge)
 - [x] D7. Add outbox recovery idempotency tests (startup + interval).
 - [x] D8. Verify no double-execution when recovery and live traffic overlap.
 - [x] D9. Verify no command loss after process restart.
-- [ ] D10. Verify no stuck aggregate after partial command execution failures.
+- [x] D10. Verify no stuck aggregate after partial command execution failures.
 
 ## Phase E — Widelog Contract Finalization
 
