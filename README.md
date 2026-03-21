@@ -167,6 +167,9 @@ There are seven images currently available, two of them are designed for conveni
 | MCP_PUBLIC_URL                 | `api`, `mcp`  | Optional. Public URL of the MCP resource. Enables OAuth on the API and identifies the MCP server to clients.<br><br>e.g. `https://keeper.example.com/mcp`           |
 | VITE_MCP_URL                   | `web`         | Optional. Internal URL the web server uses to proxy `/mcp` requests to the MCP service.<br><br>e.g. `http://mcp:3002`                                              |
 | MCP_PORT                       | `mcp`         | Optional. Port the MCP server listens on.<br><br>e.g. `3002`                                                                                                       |
+| OTEL_EXPORTER_OTLP_ENDPOINT    | `api`, `cron`, `worker`, `mcp`, `web` | Optional. When set, enables forwarding structured logs to an OpenTelemetry collector via [`pino-opentelemetry-transport`](https://github.com/Vunovati/pino-opentelemetry-transport). The transport runs in a dedicated worker thread and does not affect application performance.<br><br>e.g. `https://otel-collector.example.com:4318` |
+| OTEL_EXPORTER_OTLP_PROTOCOL    | `api`, `cron`, `worker`, `mcp`, `web` | Optional. Protocol used by the OTLP exporter. Defaults to `http/protobuf` per the OpenTelemetry spec.<br><br>e.g. `http/protobuf`, `grpc`, `http/json` |
+| OTEL_EXPORTER_OTLP_HEADERS     | `api`, `cron`, `worker`, `mcp`, `web` | Optional. Headers sent with every OTLP export request. Use this for authentication (e.g. Basic auth or API keys).<br><br>e.g. `Authorization=Basic dXNlcjpwYXNz` |
 
 The following environment variables are baked into the web image at **build time**. They are pre-configured in the official Docker images and only need to be set if you are building from source.
 
@@ -542,6 +545,66 @@ To enable MCP on a self-hosted instance:
 1. Run the `keeper-mcp` container with `MCP_PORT`, `MCP_PUBLIC_URL`, `DATABASE_URL`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL`.
 2. Set `MCP_PUBLIC_URL` on the `api` service to the same value (e.g. `https://keeper.example.com/mcp`).
 3. Set `VITE_MCP_URL` on the `web` service to the internal URL of the MCP container (e.g. `http://mcp:3002`).
+
+# OpenTelemetry (OTEL) Log Forwarding
+
+Keeper can forward structured logs from all services to an [OpenTelemetry](https://opentelemetry.io/) collector using [`pino-opentelemetry-transport`](https://github.com/Vunovati/pino-opentelemetry-transport). The transport runs in a dedicated Pino worker thread, so it does not block the application event loop.
+
+## Enabling OTEL
+
+Set the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable on any service to enable log forwarding. When the variable is not set, services behave exactly as before — no OTEL dependency is loaded.
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector.example.com:4318
+```
+
+## Authentication
+
+If your collector is protected with credentials, pass them via the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
+
+**Basic auth (username & password):**
+
+```bash
+# Base64-encode "username:password"
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic $(echo -n 'username:password' | base64)"
+```
+
+**Bearer token / API key:**
+
+```bash
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer my-api-token"
+```
+
+## Protocol
+
+The exporter defaults to `http/protobuf`. To use a different protocol, set:
+
+```bash
+OTEL_EXPORTER_OTLP_PROTOCOL=grpc        # or http/json
+```
+
+## Resource Attributes
+
+Each service automatically sets the following [resource attributes](https://opentelemetry.io/docs/specs/semconv/resource/) on exported logs:
+
+| Attribute                  | Value                                      |
+| -------------------------- | ------------------------------------------ |
+| `service.name`             | `keeper-api`, `keeper-web`, etc.           |
+| `deployment.environment`   | Value of `ENV` (defaults to `production`)  |
+
+## Docker Compose Example
+
+To forward logs from the `keeper-services` image to a collector:
+
+```yaml
+services:
+  keeper:
+    image: ghcr.io/ridafkih/keeper-services:latest
+    environment:
+      # ... existing env vars ...
+      OTEL_EXPORTER_OTLP_ENDPOINT: https://otel-collector.example.com:4318
+      OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Basic dXNlcjpwYXNz"
+```
 
 # Modules
 
