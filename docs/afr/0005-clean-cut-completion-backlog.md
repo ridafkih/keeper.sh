@@ -105,6 +105,10 @@ Mode: `clean-break` (no compatibility bridge)
 - [ ] G7. Update `docs/StateMachineCleanCutoverChecklist.md` completion status.
 - [ ] G8. Publish final architecture + flow docs for handoff.
 
+### Latest Validation Notes
+
+- `2026-03-21`: attempted startup dry-runs for `@keeper.sh/cron` and `@keeper.sh/worker`; both failed early with `PostgresError: Connection closed` while executing `SELECT 1` (environment dependency unavailable in this container run).
+
 ## Immediate Execution Queue
 
 - [ ] Q1. Execute Phase A task set A1–A4 in first patch.
