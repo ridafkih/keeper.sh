@@ -98,4 +98,29 @@ describe("recoverCredentialHealthOutbox", () => {
     expect(marked).toEqual(["oauth-3"]);
     expect(await outboxStore.listAggregates()).toEqual([]);
   });
+
+  it("resumes partially drained records without losing remaining commands", async () => {
+    const marked: string[] = [];
+    const outboxStore = new InMemoryCommandOutboxStore<CredentialHealthCommand>();
+    await outboxStore.enqueue({
+      aggregateId: "oauth-4",
+      commands: [
+        { type: CredentialHealthCommandType.REFRESH_TOKEN },
+        { type: CredentialHealthCommandType.MARK_ACCOUNT_REAUTH_REQUIRED },
+      ],
+      envelopeId: "env-4",
+      nextCommandIndex: 1,
+    });
+
+    await recoverCredentialHealthOutbox({
+      outboxStore,
+      markNeedsReauthentication: (oauthCredentialId) => {
+        marked.push(oauthCredentialId);
+        return Promise.resolve();
+      },
+    });
+
+    expect(marked).toEqual(["oauth-4"]);
+    expect(await outboxStore.listAggregates()).toEqual([]);
+  });
 });

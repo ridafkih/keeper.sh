@@ -1,7 +1,7 @@
-# 0009 — Runtime Concurrency Hardening (D1–D8)
+# 0009 — Runtime Concurrency Hardening (D1–D9)
 
 Status: `active`
-Scope: Phase D (`D1`–`D8`)
+Scope: Phase D (`D1`–`D9`)
 
 ## Objective
 
@@ -65,6 +65,13 @@ Harden runtime behavior under adversarial parallel dispatch/replay so machine si
   - fixed `MachineRuntimeDriver` aggregate lock cleanup to occur after operation settlement,
     preventing premature lock deletion under overlap:
     - `packages/machine-orchestration/src/machine-runtime-driver.ts`
+- Added restart-resume coverage for partial outbox progress:
+  - worker credential-health recovery resumes at `nextCommandIndex` and drains remaining command:
+    - `services/worker/src/recovery/credential-health-outbox-recovery.test.ts`
+  - cron source-ingestion recovery resumes at `nextCommandIndex` and drains remaining command:
+    - `services/cron/src/recovery/source-ingestion-outbox-recovery.test.ts`
+  - worker push-arbitration recovery resumes partially drained records:
+    - `services/worker/src/push-job-arbitration-runtime.test.ts`
 
 ## Validation
 

@@ -150,4 +150,36 @@ describe("recoverSourceIngestionOutbox", () => {
     expect(marked).toEqual(["cal-5"]);
     expect(await outboxStore.listAggregates()).toEqual([]);
   });
+
+  it("resumes partially drained records without losing remaining commands", async () => {
+    const marked: string[] = [];
+    const tokens: { calendarId: string; token: string }[] = [];
+    const outboxStore = new InMemoryCommandOutboxStore<SourceIngestionLifecycleCommand>();
+    await outboxStore.enqueue({
+      aggregateId: "cal-6",
+      commands: [
+        { type: SourceIngestionLifecycleCommandType.MARK_NEEDS_REAUTH },
+        { type: SourceIngestionLifecycleCommandType.PERSIST_SYNC_TOKEN, syncToken: "token-6" },
+      ],
+      envelopeId: "env-6",
+      nextCommandIndex: 1,
+    });
+
+    await recoverSourceIngestionOutbox({
+      outboxStore,
+      disableSource: () => Promise.resolve(),
+      markNeedsReauth: (calendarId) => {
+        marked.push(calendarId);
+        return Promise.resolve();
+      },
+      persistSyncToken: (calendarId, syncToken) => {
+        tokens.push({ calendarId, token: syncToken });
+        return Promise.resolve();
+      },
+    });
+
+    expect(marked).toEqual([]);
+    expect(tokens).toEqual([{ calendarId: "cal-6", token: "token-6" }]);
+    expect(await outboxStore.listAggregates()).toEqual([]);
+  });
 });
