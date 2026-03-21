@@ -1,7 +1,6 @@
 import { resolveSyncTokenFromMachine } from "./sync-token-strategy-runtime";
 
 const VERSIONED_SYNC_TOKEN_PREFIX = "keeper:sync-token:";
-const LEGACY_SYNC_WINDOW_VERSION = 0;
 
 interface DecodedSyncToken {
   syncToken: string;
@@ -13,53 +12,46 @@ interface ResolvedSyncToken {
   requiresBackfill: boolean;
 }
 
-const parseVersionNumber = (value: string): number => {
+const parseVersionNumber = (value: string): number | null => {
   const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed < LEGACY_SYNC_WINDOW_VERSION) {
-    return LEGACY_SYNC_WINDOW_VERSION;
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
   }
   return parsed;
 };
 
-const decodeStoredSyncToken = (storedSyncToken: string): DecodedSyncToken => {
+const decodeStoredSyncToken = (storedSyncToken: string): DecodedSyncToken | null => {
   if (!storedSyncToken.startsWith(VERSIONED_SYNC_TOKEN_PREFIX)) {
-    return {
-      syncToken: storedSyncToken,
-      syncWindowVersion: LEGACY_SYNC_WINDOW_VERSION,
-    };
+    return null;
   }
 
   const serializedValue = storedSyncToken.slice(VERSIONED_SYNC_TOKEN_PREFIX.length);
   const separatorIndex = serializedValue.indexOf(":");
 
   if (separatorIndex <= 0 || separatorIndex === serializedValue.length - 1) {
-    return {
-      syncToken: storedSyncToken,
-      syncWindowVersion: LEGACY_SYNC_WINDOW_VERSION,
-    };
+    return null;
   }
 
   const versionValue = serializedValue.slice(0, separatorIndex);
   const encodedTokenValue = serializedValue.slice(separatorIndex + 1);
 
+  const parsedVersion = parseVersionNumber(versionValue);
+  if (parsedVersion === null) {
+    return null;
+  }
+
   try {
     const decodedToken = Buffer.from(encodedTokenValue, "base64url").toString("utf8");
     if (decodedToken.length === 0) {
-      return {
-        syncToken: storedSyncToken,
-        syncWindowVersion: LEGACY_SYNC_WINDOW_VERSION,
-      };
+      return null;
     }
 
     return {
       syncToken: decodedToken,
-      syncWindowVersion: parseVersionNumber(versionValue),
+      syncWindowVersion: parsedVersion,
     };
   } catch {
-    return {
-      syncToken: storedSyncToken,
-      syncWindowVersion: LEGACY_SYNC_WINDOW_VERSION,
-    };
+    return null;
   }
 };
 
@@ -68,7 +60,7 @@ const encodeStoredSyncToken = (
   syncWindowVersion: number,
 ): string => {
   const encodedTokenValue = Buffer.from(syncToken, "utf8").toString("base64url");
-  const normalizedVersion = parseVersionNumber(String(syncWindowVersion));
+  const normalizedVersion = parseVersionNumber(String(syncWindowVersion)) ?? 0;
   return `${VERSIONED_SYNC_TOKEN_PREFIX}${normalizedVersion}:${encodedTokenValue}`;
 };
 
@@ -84,6 +76,12 @@ const resolveSyncTokenForWindow = (
   }
 
   const decodedSyncToken = decodeStoredSyncToken(storedSyncToken);
+  if (decodedSyncToken === null) {
+    return {
+      requiresBackfill: true,
+      syncToken: null,
+    };
+  }
   const machineResolution = resolveSyncTokenFromMachine({
     loadedWindowVersion: decodedSyncToken.syncWindowVersion,
     requiredWindowVersion: requiredSyncWindowVersion,

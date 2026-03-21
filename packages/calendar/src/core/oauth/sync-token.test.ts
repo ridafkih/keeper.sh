@@ -6,10 +6,9 @@ import {
 } from "./sync-token";
 
 describe("sync token versioning", () => {
-  it("treats legacy plain token as version zero", () => {
+  it("rejects unversioned stored tokens", () => {
     const decoded = decodeStoredSyncToken("legacy-google-sync-token");
-    expect(decoded.syncToken).toBe("legacy-google-sync-token");
-    expect(decoded.syncWindowVersion).toBe(0);
+    expect(decoded).toBeNull();
   });
 
   it("encodes and decodes current-version tokens", () => {
@@ -25,10 +24,17 @@ describe("sync token versioning", () => {
     expect(decoded.syncWindowVersion).toBe(1);
   });
 
+  it("forces full sync for unversioned stored token", () => {
+    const resolution = resolveSyncTokenForWindow("legacy-token", 1);
+    expect(resolution.syncToken).toBeNull();
+    expect(resolution.requiresBackfill).toBeTrue();
+  });
+
   it("forces full sync when stored token version is stale", () => {
-    const legacyResolution = resolveSyncTokenForWindow("legacy-token", 1);
-    expect(legacyResolution.syncToken).toBeNull();
-    expect(legacyResolution.requiresBackfill).toBeTrue();
+    const encoded = encodeStoredSyncToken("stale-token", 0);
+    const resolution = resolveSyncTokenForWindow(encoded, 1);
+    expect(resolution.syncToken).toBeNull();
+    expect(resolution.requiresBackfill).toBeTrue();
   });
 
   it("uses token when stored version matches required version", () => {
