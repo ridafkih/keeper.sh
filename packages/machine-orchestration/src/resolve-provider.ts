@@ -27,7 +27,6 @@ import { eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import {
   ProviderResolutionStatus,
-  hasOAuthProviderConfig,
   isCaldavProviderName,
   isOAuthProviderName,
   resolveProviderSupportStatus,
@@ -37,6 +36,7 @@ import type {
   OAuthProviderName,
   ProviderResolutionStatus as ProviderResolutionStatusType,
 } from "./provider-resolution-policy";
+import { resolveOAuthClientConfig } from "./oauth-client-config";
 
 type ProviderResolutionOutcome =
   | { status: typeof ProviderResolutionStatus.RESOLVED; provider: CalendarSyncProvider }
@@ -180,21 +180,18 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
 const buildGoogleOAuthProvider = (
   input: OAuthProviderBuildInput,
 ): ProviderResolutionOutcome => {
-  if (!hasOAuthProviderConfig("google", input.oauthConfig)) {
-    return unresolvedProvider(ProviderResolutionStatus.MISCONFIGURED_PROVIDER);
-  }
   if (!input.oauthCredential.externalCalendarId) {
     return unresolvedProvider(ProviderResolutionStatus.MISSING_PROVIDER_CREDENTIALS);
   }
 
-  const { googleClientId, googleClientSecret } = input.oauthConfig;
-  if (!googleClientId || !googleClientSecret) {
+  const clientConfig = resolveOAuthClientConfig("google", input.oauthConfig);
+  if (!clientConfig) {
     return unresolvedProvider(ProviderResolutionStatus.MISCONFIGURED_PROVIDER);
   }
 
   const googleOAuth = createGoogleOAuthService({
-    clientId: googleClientId,
-    clientSecret: googleClientSecret,
+    clientId: clientConfig.clientId,
+    clientSecret: clientConfig.clientSecret,
   });
 
   return resolvedProvider(createGoogleSyncProvider({
@@ -223,21 +220,18 @@ const buildGoogleOAuthProvider = (
 const buildOutlookOAuthProvider = (
   input: OAuthProviderBuildInput,
 ): ProviderResolutionOutcome => {
-  if (!hasOAuthProviderConfig("outlook", input.oauthConfig)) {
-    return unresolvedProvider(ProviderResolutionStatus.MISCONFIGURED_PROVIDER);
-  }
   if (!input.oauthCredential.externalCalendarId) {
     return unresolvedProvider(ProviderResolutionStatus.MISSING_PROVIDER_CREDENTIALS);
   }
 
-  const { microsoftClientId, microsoftClientSecret } = input.oauthConfig;
-  if (!microsoftClientId || !microsoftClientSecret) {
+  const clientConfig = resolveOAuthClientConfig("outlook", input.oauthConfig);
+  if (!clientConfig) {
     return unresolvedProvider(ProviderResolutionStatus.MISCONFIGURED_PROVIDER);
   }
 
   const microsoftOAuth = createMicrosoftOAuthService({
-    clientId: microsoftClientId,
-    clientSecret: microsoftClientSecret,
+    clientId: clientConfig.clientId,
+    clientSecret: clientConfig.clientSecret,
   });
 
   return resolvedProvider(createOutlookSyncProvider({
