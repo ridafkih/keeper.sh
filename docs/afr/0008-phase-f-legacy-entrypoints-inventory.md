@@ -14,8 +14,11 @@ Scope: Phase F clean-cut migration
   - Legacy concern: source provisioning still bypasses `SourceProvisioning` orchestration runtime.
 
 - `services/api/src/utils/source-destination-mappings.ts`
-  - Reachability: source mapping routes call API wrapper which delegates to machine-orchestration mapping runtime.
-  - Status: mapping mutation/read logic moved into `packages/machine-orchestration/src/source-destination-mappings.ts`.
+  - Reachability: source mapping routes call API wrapper which delegates to machine runtime.
+  - Status: legacy direct mapping mutation flow removed from API util; runtime-authoritative path now:
+    - `packages/machine-orchestration/src/source-destination-mapping-runtime.ts`
+    - `packages/machine-orchestration/src/source-destination-mappings.ts`
+    - `packages/state-machines/src/source-destination-mapping.machine.ts`
 
 ## Deleted in Prior Slice
 
@@ -76,3 +79,5 @@ This is a clean-cut decision: cron now always enqueues destination sync jobs.
   - Delete now-orphaned helpers/tests once authoritative runtime slices land.
   - Source-destination mapping core tests now live in machine-orchestration:
     - `packages/machine-orchestration/src/source-destination-mappings.test.ts`
+  - Source-destination mapping runtime tests:
+    - `packages/machine-orchestration/src/source-destination-mapping-runtime.test.ts`

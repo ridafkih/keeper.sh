@@ -27,6 +27,7 @@ interface SourceDestinationMapping {
 interface SetDestinationsTransaction {
   acquireUserLock: (userId: string) => Promise<void>;
   sourceExists: (userId: string, sourceCalendarId: string) => Promise<boolean>;
+  listDestinationIdsForSource?: (sourceCalendarId: string) => Promise<string[]>;
   countUserMappings?: (userId: string) => Promise<number>;
   countMappingsForSource?: (sourceCalendarId: string) => Promise<number>;
   findOwnedDestinationIds: (
@@ -50,6 +51,7 @@ interface SetDestinationsDependencies {
 interface SetSourcesTransaction {
   acquireUserLock: (userId: string) => Promise<void>;
   destinationExists: (userId: string, destinationCalendarId: string) => Promise<boolean>;
+  listSourceIdsForDestination?: (destinationCalendarId: string) => Promise<string[]>;
   countUserMappings?: (userId: string) => Promise<number>;
   countMappingsForDestination?: (destinationCalendarId: string) => Promise<number>;
   findOwnedSourceIds: (userId: string, sourceCalendarIds: string[]) => Promise<string[]>;
@@ -120,6 +122,14 @@ const createSetDestinationsTransaction = (
       .where(eq(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarId));
 
     return Number(result?.value ?? EMPTY_LIST_COUNT);
+  },
+  listDestinationIdsForSource: async (sourceCalendarId) => {
+    const rows = await transactionClient
+      .select({ destinationCalendarId: sourceDestinationMappingsTable.destinationCalendarId })
+      .from(sourceDestinationMappingsTable)
+      .where(eq(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarId));
+
+    return rows.map((row) => row.destinationCalendarId).toSorted();
   },
   findOwnedDestinationIds: async (userId, destinationCalendarIds) => {
     if (destinationCalendarIds.length === EMPTY_LIST_COUNT) {
@@ -206,6 +216,14 @@ const createSetSourcesTransaction = (
 
     return Number(result?.value ?? EMPTY_LIST_COUNT);
   },
+  listSourceIdsForDestination: async (destinationCalendarId) => {
+    const rows = await transactionClient
+      .select({ sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId })
+      .from(sourceDestinationMappingsTable)
+      .where(eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId));
+
+    return rows.map((row) => row.sourceCalendarId).toSorted();
+  },
   findOwnedSourceIds: async (userId, sourceCalendarIds) => {
     if (sourceCalendarIds.length === EMPTY_LIST_COUNT) {
       return [];
@@ -270,11 +288,15 @@ const runSetDestinationsForSource = async (
   sourceCalendarId: string,
   destinationCalendarIds: string[],
   dependencies: SetDestinationsDependencies,
-): Promise<void> => {
+): Promise<boolean> => {
   const uniqueDestinationCalendarIds = [...new Set(destinationCalendarIds)];
 
-  await dependencies.withTransaction(async (transaction) => {
+  return dependencies.withTransaction(async (transaction) => {
     await transaction.acquireUserLock(userId);
+
+    const currentDestinationIds = transaction.listDestinationIdsForSource
+      ? await transaction.listDestinationIdsForSource(sourceCalendarId)
+      : [];
 
     const sourceExists = await transaction.sourceExists(userId, sourceCalendarId);
     if (!sourceExists) {
@@ -317,6 +339,19 @@ const runSetDestinationsForSource = async (
     if (uniqueDestinationCalendarIds.length > EMPTY_LIST_COUNT) {
       await transaction.ensureDestinationSyncStatuses(uniqueDestinationCalendarIds);
     }
+
+    if (!transaction.listDestinationIdsForSource) {
+      return true;
+    }
+
+    const nextDestinationIds = [...uniqueDestinationCalendarIds].toSorted();
+    if (currentDestinationIds.length !== nextDestinationIds.length) {
+      return true;
+    }
+
+    return currentDestinationIds.some(
+      (destinationCalendarId, index) => destinationCalendarId !== nextDestinationIds[index],
+    );
   });
 };
 
@@ -325,11 +360,15 @@ const runSetSourcesForDestination = async (
   destinationCalendarId: string,
   sourceCalendarIds: string[],
   dependencies: SetSourcesDependencies,
-): Promise<void> => {
+): Promise<boolean> => {
   const uniqueSourceCalendarIds = [...new Set(sourceCalendarIds)];
 
-  await dependencies.withTransaction(async (transaction) => {
+  return dependencies.withTransaction(async (transaction) => {
     await transaction.acquireUserLock(userId);
+
+    const currentSourceIds = transaction.listSourceIdsForDestination
+      ? await transaction.listSourceIdsForDestination(destinationCalendarId)
+      : [];
 
     const destinationExists = await transaction.destinationExists(userId, destinationCalendarId);
     if (!destinationExists) {
@@ -365,6 +404,17 @@ const runSetSourcesForDestination = async (
     if (uniqueSourceCalendarIds.length > EMPTY_LIST_COUNT) {
       await transaction.ensureDestinationSyncStatus(destinationCalendarId);
     }
+
+    if (!transaction.listSourceIdsForDestination) {
+      return true;
+    }
+
+    const nextSourceIds = [...uniqueSourceCalendarIds].toSorted();
+    if (currentSourceIds.length !== nextSourceIds.length) {
+      return true;
+    }
+
+    return currentSourceIds.some((sourceCalendarId, index) => sourceCalendarId !== nextSourceIds[index]);
   });
 };
 
@@ -459,8 +509,8 @@ const setDestinationsForSource = async (input: {
   sourceCalendarId: string;
   destinationCalendarIds: string[];
   dependencies: MappingServiceDependencies;
-}): Promise<void> => {
-  await runSetDestinationsForSource(
+}): Promise<boolean> => {
+  return runSetDestinationsForSource(
     input.userId,
     input.sourceCalendarId,
     input.destinationCalendarIds,
@@ -473,8 +523,8 @@ const setSourcesForDestination = async (input: {
   destinationCalendarId: string;
   sourceCalendarIds: string[];
   dependencies: MappingServiceDependencies;
-}): Promise<void> => {
-  await runSetSourcesForDestination(
+}): Promise<boolean> => {
+  return runSetSourcesForDestination(
     input.userId,
     input.destinationCalendarId,
     input.sourceCalendarIds,

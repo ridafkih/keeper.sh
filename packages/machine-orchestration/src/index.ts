@@ -133,13 +133,18 @@ export {
   MAPPING_LIMIT_ERROR_MESSAGE,
   setDestinationsForSource,
   setSourcesForDestination,
-  runSetDestinationsForSource,
-  runSetSourcesForDestination,
 } from "./source-destination-mappings";
 export type {
   MappingServiceDependencies,
   SourceDestinationMapping,
 } from "./source-destination-mappings";
+export { createSourceDestinationMappingRuntime } from "./source-destination-mapping-runtime";
+export type {
+  SourceDestinationMappingFailureEvent,
+  SourceDestinationMappingRuntime,
+  SourceDestinationMappingRuntimeHandlers,
+  SourceDestinationMappingRuntimeInput,
+} from "./source-destination-mapping-runtime";
 
 export {
   InMemoryCommandOutboxStore,

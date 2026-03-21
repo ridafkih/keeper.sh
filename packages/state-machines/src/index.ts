@@ -150,3 +150,19 @@ export type {
   SourceDiffReconciliationState,
   SourceDiffReconciliationTransitionResult,
 } from "./source-diff-reconciliation.machine";
+
+export {
+  SourceDestinationMappingCommandType,
+  SourceDestinationMappingEventType,
+  SourceDestinationMappingStateMachine,
+} from "./source-destination-mapping.machine";
+export type {
+  SourceDestinationMappingCommand,
+  SourceDestinationMappingContext,
+  SourceDestinationMappingEvent,
+  SourceDestinationMappingMachine,
+  SourceDestinationMappingOutput,
+  SourceDestinationMappingSnapshot,
+  SourceDestinationMappingState,
+  SourceDestinationMappingTransitionResult,
+} from "./source-destination-mapping.machine";
