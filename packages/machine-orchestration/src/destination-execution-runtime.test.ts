@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   InMemoryCommandOutboxStore,
   RuntimeInvariantViolationError,
-} from "@keeper.sh/machine-orchestration";
+} from "./machine-runtime-driver";
 import type { DestinationExecutionCommand } from "@keeper.sh/state-machines";
 import type { DestinationExecutionEvent, EventEnvelope } from "@keeper.sh/state-machines";
 import { createDestinationExecutionRuntime } from "./destination-execution-runtime";

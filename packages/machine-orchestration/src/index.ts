@@ -30,6 +30,14 @@ export type {
   DestinationExecutionDomainEvent,
   DestinationExecutionOrchestratorDependencies,
 } from "./destination-execution-orchestrator";
+export { createDestinationExecutionRuntime } from "./destination-execution-runtime";
+export type {
+  DestinationExecutionCommandHandlers,
+  DestinationExecutionDispatchResult,
+  DestinationExecutionRuntime,
+  DestinationExecutionRuntimeEvent,
+  DestinationExecutionRuntimeInput,
+} from "./destination-execution-runtime";
 
 export { SourceIngestionLifecycleOrchestrator } from "./source-ingestion-lifecycle-orchestrator";
 export type {

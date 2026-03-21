@@ -6,7 +6,13 @@ import {
   syncCalendar,
 } from "@keeper.sh/calendar";
 import type { RefreshLockStore, SyncProgressUpdate } from "@keeper.sh/calendar";
-import { RuntimeInvariantViolationError, RedisCommandOutboxStore } from "@keeper.sh/machine-orchestration";
+import {
+  createDestinationExecutionRuntime,
+  type DestinationExecutionDispatchResult,
+  type DestinationExecutionRuntimeEvent,
+  RuntimeInvariantViolationError,
+  RedisCommandOutboxStore,
+} from "@keeper.sh/machine-orchestration";
 import {
   calendarAccountsTable,
   calendarsTable,
@@ -16,11 +22,6 @@ import { and, arrayContains, eq, isNull, lte, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
 import type { CredentialHealthRuntimeEvent } from "./credential-health-runtime";
-import type {
-  DestinationExecutionDispatchResult,
-  DestinationExecutionRuntimeEvent,
-} from "./destination-execution-runtime";
-import { createDestinationExecutionRuntime } from "./destination-execution-runtime";
 import {
   mapDestinationExecutionFailureEvent,
   DestinationExecutionFailureClassification,

@@ -1,4 +1,4 @@
-import type { DestinationExecutionDispatchResult } from "./destination-execution-runtime";
+import type { DestinationExecutionDispatchResult } from "@keeper.sh/machine-orchestration";
 
 interface ConflictPolicyDestination {
   accountId: string;

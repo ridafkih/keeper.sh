@@ -1,12 +1,12 @@
 import {
   type CommandOutboxStore,
-  RuntimeInvariantViolationError,
-  type RuntimeProcessEvent,
-  type RuntimeMachine,
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
+  RuntimeInvariantViolationError,
   MachineRuntimeDriver,
-} from "@keeper.sh/machine-orchestration";
+  type RuntimeProcessEvent,
+  type RuntimeMachine,
+} from "./machine-runtime-driver";
 import {
   DestinationExecutionCommandType,
   DestinationExecutionEventType,
