@@ -63,7 +63,11 @@ This is a clean-cut decision: cron now always enqueues destination sync jobs.
   - Split `keeper-sync-runtime` monolith into narrower runtime slices and delete redundant orchestration branches.
 
 - **F6 (api source provisioning):**
-  - Route source create/import/mapping workflows through `SourceProvisioning` + `SyncLifecycle` orchestration boundary.
+  - `ICS create-source` path is now machine-wired at lifecycle level:
+    - `services/api/src/utils/source-lifecycle.ts` dispatches `SourceProvisioningStateMachine` transitions.
+    - bootstrap sync spawn is guarded by machine output (`BOOTSTRAP_REQUESTED`) invariant.
+  - Remaining work:
+    - Route OAuth + CalDAV create/import/mapping workflows through the same machine boundary.
 
 - **F7/F8:**
   - Delete now-orphaned helpers/tests once authoritative runtime slices land.

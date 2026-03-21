@@ -20,6 +20,7 @@
 "@keeper.sh/premium": "workspace:*",
     "@keeper.sh/calendar": "workspace:*",
     "@keeper.sh/queue": "workspace:*",
+    "@keeper.sh/state-machines": "workspace:*",
     "@polar-sh/sdk": "^0.42.1",
     "arkenv": "^0.11.0",
     "arktype": "^2.2.0",
