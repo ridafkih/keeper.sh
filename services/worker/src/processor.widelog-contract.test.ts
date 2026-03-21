@@ -98,7 +98,7 @@ beforeAll(async () => {
   }));
 
   mock.module("@keeper.sh/sync", () => ({
-    syncDestinationsForUser: async (
+    runKeeperSyncRuntimeForUser: async (
       _userId: string,
       _config: unknown,
       callbacks: {

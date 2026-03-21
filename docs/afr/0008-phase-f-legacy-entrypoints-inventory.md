@@ -6,10 +6,10 @@ Scope: Phase F clean-cut migration
 ## Reachable Legacy Entrypoints
 
 - `services/worker/src/processor.ts`
-  - Reachability: `services/worker/src/index.ts` -> `processJob(...)` -> `syncDestinationsForUser(...)`
-  - Legacy concern: monolithic orchestration path in `packages/sync/src/sync-user.ts` still owns cross-machine flow control.
+  - Reachability: `services/worker/src/index.ts` -> `processJob(...)` -> `runKeeperSyncRuntimeForUser(...)`
+  - Legacy concern: runtime flow is still monolithic in sync package and should be split into narrower orchestration services.
 
-- `packages/sync/src/sync-user.ts`
+- `packages/sync/src/keeper-sync-runtime.ts`
   - Reachability: package export in `packages/sync/src/index.ts`, consumed by worker processor.
   - Legacy concern: still acts as root orchestration coordinator for destination execution + provider resolution + calendar sync loop.
 
@@ -21,7 +21,7 @@ Scope: Phase F clean-cut migration
   - Reachability: source mapping routes mutate mapping graph directly.
   - Legacy concern: sync lifecycle triggering still helper-driven (`enqueuePushSync`) instead of runtime-authoritative.
 
-## Deleted in This Slice
+## Deleted in Prior Slice
 
 - Removed cron migration-flag branch and migration gate:
   - deleted `services/cron/src/migration-check.ts`
@@ -33,15 +33,27 @@ Scope: Phase F clean-cut migration
 
 This is a clean-cut decision: cron now always enqueues destination sync jobs.
 
+## Deleted in This Slice
+
+- Removed legacy `sync-user` entrypoint/module surface:
+  - deleted `packages/sync/src/sync-user.ts`
+  - deleted `packages/sync/src/sync-user-dispatch-table.ts`
+  - deleted `packages/sync/src/sync-user-dispatch-table.test.ts`
+- Replaced with runtime-authoritative naming/surface:
+  - `packages/sync/src/keeper-sync-runtime.ts`
+  - `packages/sync/src/keeper-sync-runtime-dispatch-table.ts`
+  - `packages/sync/src/keeper-sync-runtime-dispatch-table.test.ts`
+  - `packages/sync/src/index.ts` now exports `runKeeperSyncRuntimeForUser`
+- Updated worker call site:
+  - `services/worker/src/processor.ts` now invokes `runKeeperSyncRuntimeForUser`
+
 ## Next Deletion Slices
 
 - **F2/F3/F4/F5 (worker+sync):**
-  - Replace `syncDestinationsForUser` entrypoint with a runtime-authoritative orchestrator service.
-  - Remove `packages/sync/src/sync-user.ts` export surface after replacement.
+  - Split `keeper-sync-runtime` monolith into narrower runtime slices and delete redundant orchestration branches.
 
 - **F6 (api source provisioning):**
   - Route source create/import/mapping workflows through `SourceProvisioning` + `SyncLifecycle` orchestration boundary.
 
 - **F7/F8:**
   - Delete now-orphaned helpers/tests once authoritative runtime slices land.
-

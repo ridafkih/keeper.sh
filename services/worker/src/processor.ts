@@ -4,7 +4,7 @@ import { USER_TIMEOUT_MS } from "@keeper.sh/queue";
 import { RuntimeInvariantViolationError } from "@keeper.sh/machine-orchestration";
 import type { DestinationSyncResult } from "@keeper.sh/calendar";
 import { createSyncAggregateRuntime } from "@keeper.sh/calendar";
-import { syncDestinationsForUser } from "@keeper.sh/sync";
+import { runKeeperSyncRuntimeForUser } from "@keeper.sh/sync";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { syncStatusTable } from "@keeper.sh/database/schema";
 import { database, refreshLockRedis, refreshLockStore } from "./context";
@@ -143,7 +143,7 @@ const processJob = (
     const deadlineMs = Date.now() + USER_TIMEOUT_MS;
 
     try {
-      const result = await syncDestinationsForUser(userId, {
+      const result = await runKeeperSyncRuntimeForUser(userId, {
         database,
         redis: refreshLockRedis,
         refreshLockStore,

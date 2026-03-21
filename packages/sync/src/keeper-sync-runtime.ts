@@ -39,11 +39,11 @@ import {
   createProviderResolutionFailedStep,
   createStartupDispatchSteps,
   isUnresolvedProviderStatus,
-} from "./sync-user-dispatch-table";
+} from "./keeper-sync-runtime-dispatch-table";
 
 const GOOGLE_REQUESTS_PER_MINUTE = 500;
 
-interface SyncConfig {
+interface KeeperSyncRuntimeConfig {
   abortSignal?: AbortSignal;
   database: BunSQLDatabase;
   deadlineMs?: number;
@@ -53,7 +53,7 @@ interface SyncConfig {
   refreshLockStore: RefreshLockStore | null;
 }
 
-interface SyncDestinationsResult {
+interface KeeperSyncRuntimeResult {
   addFailed: number;
   added: number;
   errors: string[];
@@ -112,7 +112,7 @@ interface DispatchWithConflictInput {
   startedAtMs: number;
 }
 
-const EMPTY_RESULT: SyncDestinationsResult = {
+const EMPTY_RESULT: KeeperSyncRuntimeResult = {
   addFailed: 0,
   added: 0,
   errors: [],
@@ -223,11 +223,11 @@ const runStartupDispatchSteps = async (input: {
   return false;
 };
 
-const syncDestinationsForUser = async (
+const runKeeperSyncRuntimeForUser = async (
   userId: string,
-  config: SyncConfig,
+  config: KeeperSyncRuntimeConfig,
   callbacks?: SyncCallbacks,
-): Promise<SyncDestinationsResult> => {
+): Promise<KeeperSyncRuntimeResult> => {
   const { database, redis } = config;
   const destinations: SyncDestination[] = await database
     .select({
@@ -370,7 +370,7 @@ const syncDestinationsForUser = async (
             aggregateId: destination.calendarId,
             code: "DESTINATION_PROVIDER_RESOLUTION_STATUS_INVALID",
             reason: `unexpected provider resolution status: ${syncProviderOutcome.status}`,
-            surface: "sync-user",
+            surface: "keeper-sync-runtime",
           });
         }
 
@@ -396,7 +396,7 @@ const syncDestinationsForUser = async (
             aggregateId: destination.calendarId,
             code: "DESTINATION_FATAL_FAILURE_TRANSITION_MISSING",
             reason: "fatal failure dispatch did not apply a transition",
-            surface: "sync-user",
+            surface: "keeper-sync-runtime",
           });
         }
 
@@ -551,10 +551,10 @@ const syncDestinationsForUser = async (
   return { addFailed, added, errors, removeFailed, removed, syncEvents };
 };
 
-export { syncDestinationsForUser };
+export { runKeeperSyncRuntimeForUser };
 export type {
   CalendarSyncCompletion,
   CalendarSyncFailure,
-  SyncConfig,
-  SyncDestinationsResult,
+  KeeperSyncRuntimeConfig,
+  KeeperSyncRuntimeResult,
 };

@@ -9,9 +9,9 @@ import {
   createStartupDispatchSteps,
   isUnresolvedProviderStatus,
   unresolvedProviderStatuses,
-} from "./sync-user-dispatch-table";
+} from "./keeper-sync-runtime-dispatch-table";
 
-describe("sync-user dispatch table", () => {
+describe("keeper sync runtime dispatch table", () => {
   it("creates deterministic startup dispatch steps", () => {
     const steps = createStartupDispatchSteps("calendar-1");
     expect(steps).toEqual([
