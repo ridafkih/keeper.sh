@@ -221,6 +221,7 @@
         "@keeper.sh/constants": "workspace:*",
         "@keeper.sh/data-schemas": "workspace:*",
         "@keeper.sh/database": "workspace:*",
+        "@keeper.sh/machine-orchestration": "workspace:*",
         "@keeper.sh/premium": "workspace:*",
         "@keeper.sh/queue": "workspace:*",
         "@keeper.sh/state-machines": "workspace:*",

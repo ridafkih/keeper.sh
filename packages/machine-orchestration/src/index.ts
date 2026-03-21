@@ -126,6 +126,20 @@ export type {
 export { invalidateCalendar, isCalendarInvalidated } from "./sync-lock";
 export type { InvalidationRedis } from "./sync-lock";
 export type { OAuthConfig } from "./resolve-provider";
+export {
+  getUserMappings,
+  getDestinationsForSource,
+  getSourcesForDestination,
+  MAPPING_LIMIT_ERROR_MESSAGE,
+  setDestinationsForSource,
+  setSourcesForDestination,
+  runSetDestinationsForSource,
+  runSetSourcesForDestination,
+} from "./source-destination-mappings";
+export type {
+  MappingServiceDependencies,
+  SourceDestinationMapping,
+} from "./source-destination-mappings";
 
 export {
   InMemoryCommandOutboxStore,
