@@ -107,6 +107,15 @@ export type {
   SourceIngestionLifecycleRuntime,
   SourceIngestionLifecycleRuntimeInput,
 } from "./source-ingestion-lifecycle-runtime";
+export { runSourceIngestionUnit } from "./source-ingestion-runner";
+export type {
+  RunSourceIngestionUnitInput,
+  SourceIngestionFailureDecision,
+  SourceIngestionLogger,
+  SourceIngestionMetadata,
+  SourceIngestionResult,
+  SourceIngestionRuntime,
+} from "./source-ingestion-runner";
 
 export {
   InMemoryCommandOutboxStore,

@@ -3,13 +3,48 @@ import { ErrorPolicy, SourceIngestionLifecycleEventType } from "@keeper.sh/state
 import type { SourceIngestionLifecycleTransitionResult } from "@keeper.sh/state-machines";
 import {
   runSourceIngestionUnit,
+  type RunSourceIngestionUnitInput,
   type SourceIngestionFailureDecision,
   type SourceIngestionLogger,
   type SourceIngestionResult,
   type SourceIngestionRuntime,
-} from "./source-ingestion-runner";
+} from "@keeper.sh/machine-orchestration";
 import { SourceIngestionFailureLogSlug } from "./source-ingestion-failure";
 import { SourceIngestionErrorCode } from "./source-ingestion-error-code";
+
+const resolveFailurePolicy: RunSourceIngestionUnitInput["resolveFailurePolicy"] = (input) => {
+  const failedOutput = input.outputs.find((output) => output.type === "INGEST_FAILED");
+  if (!failedOutput) {
+    return {
+      code: "unknown",
+      policy: ErrorPolicy.RETRYABLE,
+      requiresReauth: false,
+      retryable: true,
+    };
+  }
+  if (input.state === "auth_blocked") {
+    return {
+      code: failedOutput.code,
+      policy: ErrorPolicy.REQUIRES_REAUTH,
+      requiresReauth: true,
+      retryable: false,
+    };
+  }
+  if (input.state === "not_found_disabled") {
+    return {
+      code: failedOutput.code,
+      policy: ErrorPolicy.TERMINAL,
+      requiresReauth: false,
+      retryable: false,
+    };
+  }
+  return {
+    code: failedOutput.code,
+    policy: ErrorPolicy.RETRYABLE,
+    requiresReauth: false,
+    retryable: true,
+  };
+};
 
 const createLogger = () => {
   const fields = new Map<string, unknown>();
@@ -122,6 +157,7 @@ describe("runSourceIngestionUnit", () => {
         eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
         logSlug: SourceIngestionFailureLogSlug.TRANSIENT,
       }),
+      resolveFailurePolicy,
     });
 
     expect(result).toEqual(successfulResult);
@@ -167,6 +203,7 @@ describe("runSourceIngestionUnit", () => {
         eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
         logSlug: SourceIngestionFailureLogSlug.TRANSIENT,
       }),
+      resolveFailurePolicy,
     })).rejects.toBe(expectedError);
 
     expect(events).toEqual([
@@ -206,6 +243,7 @@ describe("runSourceIngestionUnit", () => {
         eventType: SourceIngestionLifecycleEventType.NOT_FOUND,
         logSlug: SourceIngestionFailureLogSlug.NOT_FOUND,
       }),
+      resolveFailurePolicy,
     });
 
     expect(result).toEqual({
@@ -268,6 +306,7 @@ describe("runSourceIngestionUnit", () => {
         eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
         logSlug: SourceIngestionFailureLogSlug.TRANSIENT,
       }),
+      resolveFailurePolicy,
     });
 
     expect(result).toEqual({

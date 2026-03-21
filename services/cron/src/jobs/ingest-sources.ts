@@ -20,6 +20,10 @@ import {
 import { and, arrayContains, eq, inArray } from "drizzle-orm";
 import { RedisCommandOutboxStore } from "@keeper.sh/machine-orchestration";
 import { createSourceIngestionLifecycleRuntime } from "@keeper.sh/machine-orchestration";
+import {
+  runSourceIngestionUnit,
+  type SourceIngestionLogger,
+} from "@keeper.sh/machine-orchestration";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import { createMachineRuntimeWidelogSink } from "@/utils/machine-runtime-widelog";
@@ -32,13 +36,10 @@ import {
   resolveOAuthIngestionResolution,
 } from "../lib/oauth-ingestion-resolution";
 import {
-  runSourceIngestionUnit,
-  type SourceIngestionLogger,
-} from "../lib/source-ingestion-runner";
-import {
   classifySourceIngestionFailure,
   SourceIngestionFailureLogSlug,
 } from "../lib/source-ingestion-failure";
+import { resolveSourceIngestionFailurePolicy } from "../lib/source-ingestion-failure-policy";
 import { resolveSourceIngestionErrorCode } from "../lib/source-ingestion-error-code";
 import { summarizeIngestionSettlements } from "../lib/ingestion-settlement-summary";
 
@@ -252,6 +253,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
                   isAuthFailure: isOAuthAuthFailure,
                 },
               ),
+            resolveFailurePolicy: resolveSourceIngestionFailurePolicy,
             executeIngest: async () => {
               const resolution = resolveOAuthIngestionResolution({
                 accessToken: source.accessToken,
@@ -376,6 +378,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
                   isAuthFailure: isCalDAVAuthenticationError,
                 },
               ),
+            resolveFailurePolicy: resolveSourceIngestionFailurePolicy,
             executeIngest: async () => {
               const password = decryptPassword(source.encryptedPassword, encryptionKey);
               const fetcher = createCalDAVSourceFetcher({
@@ -461,6 +464,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
                 error,
                 { isNotFoundError, resolveErrorCode: resolveSourceIngestionErrorCode },
               ),
+            resolveFailurePolicy: resolveSourceIngestionFailurePolicy,
             executeIngest: async () => {
               if (!source.url) {
                 return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };

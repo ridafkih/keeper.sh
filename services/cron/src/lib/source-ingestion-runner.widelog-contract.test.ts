@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { ErrorPolicy } from "@keeper.sh/state-machines";
 import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
 import type { SourceIngestionLifecycleTransitionResult } from "@keeper.sh/state-machines";
 import {
   runSourceIngestionUnit,
+  type RunSourceIngestionUnitInput,
   type SourceIngestionFailureDecision,
   type SourceIngestionLogger,
   type SourceIngestionRuntime,
-} from "./source-ingestion-runner";
+} from "@keeper.sh/machine-orchestration";
 import { SourceIngestionFailureLogSlug } from "./source-ingestion-failure";
 import { SourceIngestionErrorCode } from "./source-ingestion-error-code";
 
@@ -44,6 +46,13 @@ const createRetryableClassifier = (): ((error: unknown) => SourceIngestionFailur
     eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
     logSlug: SourceIngestionFailureLogSlug.TRANSIENT,
   });
+
+const resolveFailurePolicy: RunSourceIngestionUnitInput["resolveFailurePolicy"] = () => ({
+  code: SourceIngestionErrorCode.TRANSIENT_FAILURE,
+  policy: ErrorPolicy.RETRYABLE,
+  requiresReauth: false,
+  retryable: true,
+});
 
 const createBaseTransition = (): SourceIngestionLifecycleTransitionResult => ({
   commands: [],
@@ -88,6 +97,7 @@ describe("source ingestion widelog contract", () => {
         provider: "google",
         userId: "user-1",
       },
+      resolveFailurePolicy,
       runtime: runtimeA,
     });
 
@@ -105,6 +115,7 @@ describe("source ingestion widelog contract", () => {
         provider: "ical",
         userId: "user-1",
       },
+      resolveFailurePolicy,
       runtime: runtimeB,
     });
 

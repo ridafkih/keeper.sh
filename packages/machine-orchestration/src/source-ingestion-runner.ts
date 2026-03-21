@@ -1,8 +1,11 @@
 import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
-import type { SourceIngestionLifecycleEvent } from "@keeper.sh/state-machines";
-import type { SourceIngestionLifecycleTransitionResult } from "@keeper.sh/state-machines";
-import type { SourceIngestionFailureDecision } from "./source-ingestion-failure";
-import { resolveSourceIngestionFailurePolicy } from "./source-ingestion-failure-policy";
+import type {
+  SourceIngestionLifecycleEvent,
+  SourceIngestionLifecycleOutput,
+  SourceIngestionLifecycleState,
+  SourceIngestionLifecycleTransitionResult,
+} from "@keeper.sh/state-machines";
+import { ErrorPolicy } from "@keeper.sh/state-machines";
 
 interface SourceIngestionResult {
   eventsAdded: number;
@@ -29,12 +32,32 @@ interface SourceIngestionMetadata {
   externalCalendarId?: string | null;
 }
 
+interface SourceIngestionFailureDecision {
+  eventType:
+    | SourceIngestionLifecycleEventType.AUTH_FAILURE
+    | SourceIngestionLifecycleEventType.NOT_FOUND
+    | SourceIngestionLifecycleEventType.TRANSIENT_FAILURE;
+  code: string;
+  logSlug: string;
+}
+
+interface SourceIngestionFailurePolicy {
+  code: string;
+  policy: ErrorPolicy;
+  retryable: boolean;
+  requiresReauth: boolean;
+}
+
 interface RunSourceIngestionUnitInput {
   runtime: SourceIngestionRuntime;
   logger: SourceIngestionLogger;
   metadata: SourceIngestionMetadata;
   executeIngest: () => Promise<SourceIngestionResult>;
   classifyFailure: (error: unknown) => SourceIngestionFailureDecision;
+  resolveFailurePolicy: (input: {
+    outputs: SourceIngestionLifecycleOutput[];
+    state: SourceIngestionLifecycleState;
+  }) => SourceIngestionFailurePolicy;
   nextSyncToken?: string;
 }
 
@@ -110,7 +133,7 @@ const runSourceIngestionUnit = async (
       code: failureDecision.code,
       type: failureDecision.eventType,
     });
-    const failurePolicy = resolveSourceIngestionFailurePolicy({
+    const failurePolicy = input.resolveFailurePolicy({
       outputs: failureTransition.outputs,
       state: failureTransition.state,
     });
