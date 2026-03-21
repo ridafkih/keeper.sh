@@ -1,7 +1,7 @@
-# 0009 — Runtime Concurrency Hardening (D1–D6)
+# 0009 — Runtime Concurrency Hardening (D1–D7)
 
 Status: `active`
-Scope: Phase D (`D1`–`D6`)
+Scope: Phase D (`D1`–`D7`)
 
 ## Objective
 
@@ -49,6 +49,13 @@ Harden runtime behavior under adversarial parallel dispatch/replay so machine si
   - `machine:outbox:push-arbitration`
   - implemented in
     `packages/machine-orchestration/src/machine-runtime-driver.test.ts`
+- Added startup+interval recovery idempotency coverage:
+  - worker credential-health recovery drains once even when recovery runs twice:
+    - `services/worker/src/recovery/credential-health-outbox-recovery.test.ts`
+  - cron source-ingestion recovery drains once even when recovery runs twice:
+    - `services/cron/src/recovery/source-ingestion-outbox-recovery.test.ts`
+  - worker push-arbitration pending recovery drains once across repeated runs:
+    - `services/worker/src/push-job-arbitration-runtime.test.ts`
 
 ## Validation
 
@@ -59,3 +66,5 @@ Harden runtime behavior under adversarial parallel dispatch/replay so machine si
 - `bunx turbo run lint types --filter=./packages/sync --filter=./services/cron --filter=./services/worker`
 - `bun test packages/machine-orchestration/src/machine-runtime-driver.test.ts`
 - `bunx turbo run lint types --filter=./packages/machine-orchestration`
+- `bun test services/worker/src/recovery/credential-health-outbox-recovery.test.ts services/cron/src/recovery/source-ingestion-outbox-recovery.test.ts services/worker/src/push-job-arbitration-runtime.test.ts`
+- `bun test` (repo root)

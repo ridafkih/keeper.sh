@@ -167,6 +167,39 @@ describe("push job arbitration runtime", () => {
     expect(await outboxStore.listAggregates()).toEqual([]);
   });
 
+  it("keeps recoverPending idempotent across startup and interval runs", async () => {
+    const held: string[] = [];
+    const outboxStore = new InMemoryCommandOutboxStore<PushJobArbitrationCommand>();
+    await outboxStore.enqueue({
+      aggregateId: "user-5",
+      commands: [{ type: PushJobArbitrationCommandType.HOLD_SYNCING }],
+      envelopeId: "recover-env-2",
+      nextCommandIndex: 0,
+    });
+
+    const runtime = createPushJobArbitrationRuntime({
+      createEnvelope: createEnvelopeFactory("runtime-5"),
+      outboxStore,
+      onRuntimeEvent: () => Promise.resolve(),
+      syncing: {
+        holdSyncing: (userId) => {
+          held.push(userId);
+          return Promise.resolve();
+        },
+        releaseSyncing: () => Promise.resolve(),
+      },
+      worker: {
+        cancelJob: () => Promise.resolve(),
+      },
+    });
+
+    await runtime.recoverPending();
+    await runtime.recoverPending();
+
+    expect(held).toEqual(["user-5"]);
+    expect(await outboxStore.listAggregates()).toEqual([]);
+  });
+
   it("fails fast when envelope metadata is invalid", async () => {
     const runtime = createPushJobArbitrationRuntime({
       createEnvelope: (event) => ({

@@ -63,7 +63,7 @@ Mode: `clean-break` (no compatibility bridge)
 - [x] D4. Add stale terminal-event tests per machine aggregate.
 - [ ] D5. Add conflict-detected handling tests for all caller policies.
 - [x] D6. Add outbox corruption tests for each outbox namespace.
-- [ ] D7. Add outbox recovery idempotency tests (startup + interval).
+- [x] D7. Add outbox recovery idempotency tests (startup + interval).
 - [ ] D8. Verify no double-execution when recovery and live traffic overlap.
 - [ ] D9. Verify no command loss after process restart.
 - [ ] D10. Verify no stuck aggregate after partial command execution failures.
