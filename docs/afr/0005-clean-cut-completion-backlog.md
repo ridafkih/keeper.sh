@@ -27,7 +27,7 @@ Mode: `clean-break` (no compatibility bridge)
 - [x] A9. Centralize error-code mapping helpers behind enum-returning functions.
 - [x] A10. Add compile-time exhaustiveness checks via typed mapping records.
 - [x] A11. Add tests for each enum mapping edge case.
-- [ ] A12. Delete now-unused string-literal constants.
+- [x] A12. Delete now-unused string-literal constants.
 
 ## Phase B — Branching Hotspot Extraction
 
