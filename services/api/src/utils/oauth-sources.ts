@@ -25,7 +25,9 @@ import { enqueuePushSync } from "./enqueue-push-sync";
 const FIRST_RESULT_LIMIT = 1;
 const OAUTH_CALENDAR_TYPE = "oauth";
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
+const SUPPORTED_OAUTH_PROVIDER_IDS = new Set(["google", "outlook"]);
 type OAuthSourceDatabase = Pick<typeof contextDatabase, "insert" | "select" | "selectDistinct">;
+type OAuthProviderId = "google" | "outlook";
 
 class OAuthSourceLimitError extends Error {
   constructor() {
@@ -51,6 +53,12 @@ class DuplicateSourceError extends Error {
   }
 }
 
+class UnsupportedOAuthProviderError extends Error {
+  constructor(operation: "source_create" | "account_import" | "calendar_listing", provider: string) {
+    super(`Unsupported OAuth provider for ${operation}: ${provider}`);
+  }
+}
+
 interface OAuthCalendarSource {
   id: string;
   name: string;
@@ -72,6 +80,18 @@ interface OAuthSourceWithCredentials {
   accessToken: string;
   refreshToken: string;
   expiresAt: Date;
+}
+
+const isOAuthProviderId = (provider: string): provider is OAuthProviderId =>
+  SUPPORTED_OAUTH_PROVIDER_IDS.has(provider);
+
+function assertOAuthProviderId(
+  operation: "source_create" | "account_import" | "calendar_listing",
+  provider: string,
+): asserts provider is OAuthProviderId {
+  if (!isOAuthProviderId(provider)) {
+    throw new UnsupportedOAuthProviderError(operation, provider);
+  }
 }
 
 const getUserOAuthSources = async (
@@ -526,9 +546,7 @@ const createOAuthSourceWithDependencies = async (
     excludeOutOfOffice = false,
     excludeWorkingLocation = false,
   } = options;
-  if (provider !== "google" && provider !== "outlook") {
-    throw new Error(`Invalid OAuth source provider for provisioning machine: ${provider}`);
-  }
+  assertOAuthProviderId("source_create", provider);
   const requestId = crypto.randomUUID();
   const dispatchProvisioningEvent = createSourceProvisioningDispatcher({
     mode: "create_single",
@@ -544,7 +562,7 @@ const createOAuthSourceWithDependencies = async (
       reason: "invalid_source",
       type: "VALIDATION_FAILED",
     });
-    throw new Error("Source credential not found");
+    throw new SourceCredentialNotFoundError();
   }
   dispatchProvisioningEvent({ type: "VALIDATION_PASSED" });
 
@@ -767,16 +785,14 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
       );
   },
   listCalendars: async (provider, accessToken) => {
+    assertOAuthProviderId("calendar_listing", provider);
     try {
       if (provider === "google") {
         const calendars = await listGoogleCalendars(accessToken);
         return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.summary }));
       }
-      if (provider === "outlook") {
-        const calendars = await listOutlookCalendars(accessToken);
-        return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.name }));
-      }
-      throw new Error(`No calendar listing support for provider: ${provider}`);
+      const calendars = await listOutlookCalendars(accessToken);
+      return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.name }));
     } catch (error) {
       if (error instanceof Error && "authRequired" in error && error.authRequired === true) {
         return [];
@@ -802,9 +818,7 @@ const importOAuthAccountCalendarsWithDependencies = async (
   dependencies: ImportOAuthAccountDependencies,
 ): Promise<string> => {
   const { userId, provider, oauthCredentialId, accessToken, email } = options;
-  if (provider !== "google" && provider !== "outlook") {
-    throw new Error(`Invalid OAuth import provider for provisioning machine: ${provider}`);
-  }
+  assertOAuthProviderId("account_import", provider);
   const requestId = crypto.randomUUID();
   const dispatchProvisioningEvent = createSourceProvisioningDispatcher({
     mode: "import_bulk",
@@ -995,6 +1009,7 @@ export {
   DuplicateSourceError,
   SourceCredentialNotFoundError,
   SourceCredentialProviderMismatchError,
+  UnsupportedOAuthProviderError,
   getUserOAuthSources,
   verifyOAuthSourceOwnership,
   getOAuthDestinationCredentials,

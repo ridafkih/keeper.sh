@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import {
   createOAuthSourceWithDependencies,
   importOAuthAccountCalendarsWithDependencies,
+  UnsupportedOAuthProviderError,
 } from "./oauth-sources";
 
 let canAddAccountCalls: [string, number][] = [];
@@ -23,6 +24,30 @@ beforeEach(() => {
 });
 
 describe("importOAuthAccountCalendarsWithDependencies", () => {
+  it("fails fast on unsupported providers for account import", () => {
+    expect(
+      importOAuthAccountCalendarsWithDependencies(
+        {
+          accessToken: "token",
+          email: "person@example.com",
+          oauthCredentialId: "credential-1",
+          provider: "icloud",
+          userId: "user-1",
+        },
+        {
+          canAddAccount: () => Promise.resolve(true),
+          countUserAccounts: () => Promise.resolve(0),
+          createAccountId: () => Promise.resolve("account-1"),
+          findExistingAccountId: () => Promise.resolve(null),
+          getUnimportedExternalCalendars: () => Promise.resolve([]),
+          insertCalendars: () => Promise.resolve(),
+          listCalendars: () => Promise.resolve([]),
+          triggerSync: () => null,
+        },
+      ),
+    ).rejects.toBeInstanceOf(UnsupportedOAuthProviderError);
+  });
+
   it("rejects creating a new OAuth account when the user is at the account limit", () => {
     canAddAccountResult = false;
 
@@ -95,6 +120,30 @@ describe("importOAuthAccountCalendarsWithDependencies", () => {
 });
 
 describe("createOAuthSourceWithDependencies", () => {
+  it("fails fast on unsupported providers for source creation", () => {
+    expect(
+      createOAuthSourceWithDependencies(
+        {
+          externalCalendarId: "external-1",
+          name: "Team Calendar",
+          oauthCredentialId: "credential-1",
+          provider: "icloud",
+          userId: "user-1",
+        },
+        {
+          canAddAccount: () => Promise.resolve(true),
+          countUserAccounts: () => Promise.resolve(0),
+          createCalendarAccount: () => Promise.resolve("account-1"),
+          createSource: () => Promise.resolve({ id: "source-1", name: "Team Calendar" }),
+          findCredentialEmail: () => Promise.resolve({ email: "person@example.com", exists: true }),
+          findExistingAccountId: () => Promise.resolve(null),
+          hasExistingCalendar: () => Promise.resolve(false),
+          triggerSync: () => null,
+        },
+      ),
+    ).rejects.toBeInstanceOf(UnsupportedOAuthProviderError);
+  });
+
   it("allows source credentials whose email is null", async () => {
     const source = await createOAuthSourceWithDependencies(
       {
