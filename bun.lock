@@ -161,6 +161,7 @@
     "packages/machine-orchestration": {
       "name": "@keeper.sh/machine-orchestration",
       "dependencies": {
+        "@keeper.sh/calendar": "workspace:*",
         "@keeper.sh/state-machines": "workspace:*",
       },
       "devDependencies": {

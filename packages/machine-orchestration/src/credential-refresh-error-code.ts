@@ -7,7 +7,11 @@ enum CredentialRefreshErrorCode {
 const resolveCredentialRefreshErrorCode = (
   error: unknown,
 ): CredentialRefreshErrorCode => {
-  const message = error instanceof Error ? error.message : String(error);
+  let message = String(error);
+  if (error instanceof Error) {
+    const { message: errorMessage } = error;
+    message = errorMessage;
+  }
   const normalizedMessage = message.toLowerCase();
 
   if (normalizedMessage.includes("invalid_grant")) {
@@ -25,4 +29,3 @@ export {
   CredentialRefreshErrorCode,
   resolveCredentialRefreshErrorCode,
 };
-

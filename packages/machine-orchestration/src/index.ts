@@ -50,6 +50,13 @@ export type {
   CredentialHealthDomainEvent,
   CredentialHealthOrchestratorDependencies,
 } from "./credential-health-orchestrator";
+export { createCredentialHealthRuntime } from "./credential-health-runtime";
+export type {
+  CredentialHealthRuntime,
+  CredentialHealthRuntimeEvent,
+  CredentialHealthRuntimeInput,
+  OAuthRefreshResult,
+} from "./credential-health-runtime";
 
 export { SyncTokenStrategyOrchestrator } from "./sync-token-strategy-orchestrator";
 export type {

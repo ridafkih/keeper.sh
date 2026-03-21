@@ -1,6 +1,10 @@
 import type { CalendarSyncProvider, RefreshLockStore } from "@keeper.sh/calendar";
 import type { RedisRateLimiter } from "@keeper.sh/calendar";
-import { RedisCommandOutboxStore } from "@keeper.sh/machine-orchestration";
+import {
+  createCredentialHealthRuntime,
+  type CredentialHealthRuntimeEvent,
+  RedisCommandOutboxStore,
+} from "@keeper.sh/machine-orchestration";
 import type Redis from "ioredis";
 import {
   createGoogleOAuthService,
@@ -21,8 +25,6 @@ import {
 } from "@keeper.sh/database/schema";
 import { eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { createCredentialHealthRuntime } from "./credential-health-runtime";
-import type { CredentialHealthRuntimeEvent } from "./credential-health-runtime";
 import {
   ProviderResolutionStatus,
   hasOAuthProviderConfig,

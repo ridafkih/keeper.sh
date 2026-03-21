@@ -8,6 +8,7 @@ import {
 import type { RefreshLockStore, SyncProgressUpdate } from "@keeper.sh/calendar";
 import {
   createDestinationExecutionRuntime,
+  type CredentialHealthRuntimeEvent,
   type DestinationExecutionDispatchResult,
   type DestinationExecutionRuntimeEvent,
   RuntimeInvariantViolationError,
@@ -21,7 +22,6 @@ import type { DestinationExecutionEvent } from "@keeper.sh/state-machines";
 import { and, arrayContains, eq, isNull, lte, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
-import type { CredentialHealthRuntimeEvent } from "./credential-health-runtime";
 import {
   mapDestinationExecutionFailureEvent,
   DestinationExecutionFailureClassification,
