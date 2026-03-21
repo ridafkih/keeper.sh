@@ -2,6 +2,8 @@ import { StateMachine } from "./core/state-machine";
 import type { MachineSnapshot, MachineTransitionResult } from "./core/state-machine";
 import type { EventEnvelope } from "./core/event-envelope";
 import type { TransitionPolicy } from "./core/transition-policy";
+import type { ErrorPolicy } from "./errors/error-policy";
+import { ErrorPolicy as ErrorPolicyValue } from "./errors/error-policy";
 
 const SourceDiffReconciliationEventType = {
   APPLY_FATAL_FAILED: "APPLY_FATAL_FAILED",
@@ -58,7 +60,7 @@ type SourceDiffReconciliationCommand =
 
 type SourceDiffReconciliationOutput =
   | { type: "RECONCILIATION_COMPLETED"; changed: boolean }
-  | { type: "RECONCILIATION_FAILED"; retryable: boolean; code: string };
+  | { type: "RECONCILIATION_FAILED"; policy: ErrorPolicy; code: string };
 
 type SourceDiffReconciliationSnapshot = MachineSnapshot<
   SourceDiffReconciliationState,
@@ -184,12 +186,18 @@ class SourceDiffReconciliationStateMachine
       case SourceDiffReconciliationEventType.APPLY_RETRYABLE_FAILED: {
         this.state = "failed_retryable";
         this.context = { ...this.context, lastErrorCode: event.code };
-        return this.result([], [{ code: event.code, retryable: true, type: "RECONCILIATION_FAILED" }]);
+        return this.result(
+          [],
+          [{ code: event.code, policy: ErrorPolicyValue.RETRYABLE, type: "RECONCILIATION_FAILED" }],
+        );
       }
       case SourceDiffReconciliationEventType.APPLY_FATAL_FAILED: {
         this.state = "failed_terminal";
         this.context = { ...this.context, lastErrorCode: event.code };
-        return this.result([], [{ code: event.code, retryable: false, type: "RECONCILIATION_FAILED" }]);
+        return this.result(
+          [],
+          [{ code: event.code, policy: ErrorPolicyValue.TERMINAL, type: "RECONCILIATION_FAILED" }],
+        );
       }
       default: {
         return this.result();

@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { createEventEnvelope } from "./core/event-envelope";
 import type { EventActor } from "./core/event-envelope";
 import { TransitionPolicy } from "./core/transition-policy";
+import { ErrorPolicy } from "./errors/error-policy";
 import {
   SourceDiffReconciliationCommandType,
   SourceDiffReconciliationEventType,
@@ -175,7 +176,9 @@ describe("SourceDiffReconciliationStateMachine", () => {
     );
 
     expect(transition.state).toBe("failed_retryable");
-    expect(transition.outputs).toEqual([{ code: "timeout", retryable: true, type: "RECONCILIATION_FAILED" }]);
+    expect(transition.outputs).toEqual([
+      { code: "timeout", policy: ErrorPolicy.RETRYABLE, type: "RECONCILIATION_FAILED" },
+    ]);
   });
 
   it("rejects out-of-order apply success in strict mode", () => {

@@ -7,7 +7,7 @@ import { resolveSourceIngestionFailurePolicy } from "./source-ingestion-failure-
 describe("resolveSourceIngestionFailurePolicy", () => {
   test("returns retryable policy for retryable failure output", () => {
     const policy = resolveSourceIngestionFailurePolicy({
-      outputs: [{ code: "transient_failure", retryable: true, type: "INGEST_FAILED" }],
+      outputs: [{ code: "transient_failure", policy: ErrorPolicy.RETRYABLE, type: "INGEST_FAILED" }],
       state: "transient_error",
     });
 
@@ -20,7 +20,7 @@ describe("resolveSourceIngestionFailurePolicy", () => {
 
   test("returns requires reauth policy for auth_blocked state", () => {
     const policy = resolveSourceIngestionFailurePolicy({
-      outputs: [{ code: "auth_required", retryable: false, type: "INGEST_FAILED" }],
+      outputs: [{ code: "auth_required", policy: ErrorPolicy.REQUIRES_REAUTH, type: "INGEST_FAILED" }],
       state: "auth_blocked",
     });
 
@@ -33,7 +33,7 @@ describe("resolveSourceIngestionFailurePolicy", () => {
 
   test("returns terminal policy for non-retryable non-reauth states", () => {
     const policy = resolveSourceIngestionFailurePolicy({
-      outputs: [{ code: "not_found", retryable: false, type: "INGEST_FAILED" }],
+      outputs: [{ code: "not_found", policy: ErrorPolicy.TERMINAL, type: "INGEST_FAILED" }],
       state: "not_found_disabled",
     });
 
@@ -55,7 +55,7 @@ describe("resolveSourceIngestionFailurePolicy", () => {
   test("fails fast when failure code is unknown", () => {
     expect(() =>
       resolveSourceIngestionFailurePolicy({
-        outputs: [{ code: "mystery", retryable: false, type: "INGEST_FAILED" }],
+        outputs: [{ code: "mystery", policy: ErrorPolicy.TERMINAL, type: "INGEST_FAILED" }],
         state: "not_found_disabled",
       })).toThrow(RuntimeInvariantViolationError);
   });

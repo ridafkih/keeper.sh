@@ -56,7 +56,7 @@ const resolveSourceIngestionFailurePolicy = (
     });
   }
 
-  if (failureOutput.retryable) {
+  if (failureOutput.policy === ErrorPolicy.RETRYABLE) {
     return {
       code: parsedCode,
       policy: ErrorPolicy.RETRYABLE,
@@ -64,7 +64,7 @@ const resolveSourceIngestionFailurePolicy = (
     };
   }
 
-  if (input.state === "auth_blocked") {
+  if (failureOutput.policy === ErrorPolicy.REQUIRES_REAUTH) {
     return {
       code: parsedCode,
       policy: ErrorPolicy.REQUIRES_REAUTH,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  ErrorPolicy,
   SourceDiffReconciliationCommandType,
   SourceDiffReconciliationEventType,
   SourceDiffReconciliationStateMachine,
@@ -87,6 +88,8 @@ describe("SourceDiffReconciliationOrchestrator", () => {
     });
 
     expect(transition.state).toBe("failed_retryable");
-    expect(transition.outputs).toEqual([{ code: "timeout", retryable: true, type: "RECONCILIATION_FAILED" }]);
+    expect(transition.outputs).toEqual([
+      { code: "timeout", policy: ErrorPolicy.RETRYABLE, type: "RECONCILIATION_FAILED" },
+    ]);
   });
 });

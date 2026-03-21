@@ -88,7 +88,7 @@ const createRuntime = () => {
             provider: "google",
             sourceId: "source-1",
           },
-          outputs: [{ code: event.code, retryable: true, type: "INGEST_FAILED" }],
+          outputs: [{ code: event.code, policy: ErrorPolicy.RETRYABLE, type: "INGEST_FAILED" }],
           state: "transient_error",
         });
       }
@@ -102,7 +102,7 @@ const createRuntime = () => {
             provider: "google",
             sourceId: "source-1",
           },
-          outputs: [{ code: event.code, retryable: false, type: "INGEST_FAILED" }],
+          outputs: [{ code: event.code, policy: ErrorPolicy.REQUIRES_REAUTH, type: "INGEST_FAILED" }],
           state: "auth_blocked",
         });
       }
@@ -116,7 +116,7 @@ const createRuntime = () => {
             provider: "google",
             sourceId: "source-1",
           },
-          outputs: [{ code: event.code, retryable: false, type: "INGEST_FAILED" }],
+          outputs: [{ code: event.code, policy: ErrorPolicy.TERMINAL, type: "INGEST_FAILED" }],
           state: "not_found_disabled",
         });
       }
@@ -270,7 +270,11 @@ describe("runSourceIngestionUnit", () => {
               provider: "google",
               sourceId: "source-1",
             },
-            outputs: [{ code: SourceIngestionErrorCode.NOT_FOUND, retryable: false, type: "INGEST_FAILED" }],
+            outputs: [{
+              code: SourceIngestionErrorCode.NOT_FOUND,
+              policy: ErrorPolicy.TERMINAL,
+              type: "INGEST_FAILED",
+            }],
             state: "not_found_disabled",
           });
         }

@@ -2,6 +2,8 @@ import { StateMachine } from "./core/state-machine";
 import type { MachineSnapshot, MachineTransitionResult } from "./core/state-machine";
 import type { EventEnvelope } from "./core/event-envelope";
 import type { TransitionPolicy } from "./core/transition-policy";
+import type { ErrorPolicy } from "./errors/error-policy";
+import { ErrorPolicy as ErrorPolicyValue } from "./errors/error-policy";
 
 enum SourceIngestionLifecycleEventType {
   AUTH_FAILURE = "AUTH_FAILURE",
@@ -59,7 +61,7 @@ type SourceIngestionLifecycleCommand =
 
 type SourceIngestionLifecycleOutput =
   | { type: "INGEST_COMPLETED"; changed: boolean }
-  | { type: "INGEST_FAILED"; retryable: boolean; code: string };
+  | { type: "INGEST_FAILED"; policy: ErrorPolicy; code: string };
 
 type SourceIngestionLifecycleSnapshot = MachineSnapshot<
   SourceIngestionLifecycleState,
@@ -183,7 +185,7 @@ class SourceIngestionLifecycleStateMachine
         this.context = { ...this.context, lastErrorCode: event.code };
         return this.result(
           [{ type: SourceIngestionLifecycleCommandType.MARK_NEEDS_REAUTH }],
-          [{ type: "INGEST_FAILED", code: event.code, retryable: false }],
+          [{ type: "INGEST_FAILED", code: event.code, policy: ErrorPolicyValue.REQUIRES_REAUTH }],
         );
       }
       case SourceIngestionLifecycleEventType.NOT_FOUND: {
@@ -191,13 +193,13 @@ class SourceIngestionLifecycleStateMachine
         this.context = { ...this.context, lastErrorCode: event.code };
         return this.result(
           [{ type: SourceIngestionLifecycleCommandType.DISABLE_SOURCE }],
-          [{ type: "INGEST_FAILED", code: event.code, retryable: false }],
+          [{ type: "INGEST_FAILED", code: event.code, policy: ErrorPolicyValue.TERMINAL }],
         );
       }
       case SourceIngestionLifecycleEventType.TRANSIENT_FAILURE: {
         this.state = "transient_error";
         this.context = { ...this.context, lastErrorCode: event.code };
-        return this.result([], [{ type: "INGEST_FAILED", code: event.code, retryable: true }]);
+        return this.result([], [{ type: "INGEST_FAILED", code: event.code, policy: ErrorPolicyValue.RETRYABLE }]);
       }
       default: {
         return this.result();

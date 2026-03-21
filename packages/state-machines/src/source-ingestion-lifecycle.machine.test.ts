@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { createEventEnvelope } from "./core/event-envelope";
 import type { EventActor } from "./core/event-envelope";
 import { TransitionPolicy } from "./core/transition-policy";
+import { ErrorPolicy } from "./errors/error-policy";
 import {
   SourceIngestionLifecycleCommandType,
   SourceIngestionLifecycleEventType,
@@ -73,7 +74,9 @@ describe("SourceIngestionLifecycleStateMachine", () => {
 
     expect(transition.state).toBe("auth_blocked");
     expect(transition.commands).toEqual([{ type: SourceIngestionLifecycleCommandType.MARK_NEEDS_REAUTH }]);
-    expect(transition.outputs).toEqual([{ code: "token-expired", retryable: false, type: "INGEST_FAILED" }]);
+    expect(transition.outputs).toEqual([
+      { code: "token-expired", policy: ErrorPolicy.REQUIRES_REAUTH, type: "INGEST_FAILED" },
+    ]);
   });
 
   it("moves to disabled state on not found", () => {
@@ -135,7 +138,9 @@ describe("SourceIngestionLifecycleStateMachine", () => {
     );
 
     expect(transition.state).toBe("transient_error");
-    expect(transition.outputs).toEqual([{ code: "timeout", retryable: true, type: "INGEST_FAILED" }]);
+    expect(transition.outputs).toEqual([
+      { code: "timeout", policy: ErrorPolicy.RETRYABLE, type: "INGEST_FAILED" },
+    ]);
   });
 
   it("blocks terminal state re-entry in strict mode", () => {
