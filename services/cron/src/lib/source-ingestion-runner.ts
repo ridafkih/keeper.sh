@@ -1,7 +1,8 @@
 import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
-import { ErrorPolicy } from "@keeper.sh/state-machines";
 import type { SourceIngestionLifecycleEvent } from "@keeper.sh/state-machines";
+import type { SourceIngestionLifecycleTransitionResult } from "@keeper.sh/state-machines";
 import type { SourceIngestionFailureDecision } from "./source-ingestion-failure";
+import { resolveSourceIngestionFailurePolicy } from "./source-ingestion-failure-policy";
 
 interface SourceIngestionResult {
   eventsAdded: number;
@@ -10,7 +11,7 @@ interface SourceIngestionResult {
 }
 
 interface SourceIngestionRuntime {
-  dispatch: (event: SourceIngestionLifecycleEvent) => Promise<unknown>;
+  dispatch: (event: SourceIngestionLifecycleEvent) => Promise<SourceIngestionLifecycleTransitionResult>;
 }
 
 interface SourceIngestionLogger {
@@ -105,17 +106,21 @@ const runSourceIngestionUnit = async (
   } catch (error) {
     input.logger.set("outcome", "error");
     const failureDecision = input.classifyFailure(error);
-    await input.runtime.dispatch({
+    const failureTransition = await input.runtime.dispatch({
       code: failureDecision.code,
       type: failureDecision.eventType,
     });
+    const failurePolicy = resolveSourceIngestionFailurePolicy({
+      outputs: failureTransition.outputs,
+      state: failureTransition.state,
+    });
     input.logger.errorFields(error, {
       slug: failureDecision.logSlug,
-      policy: failureDecision.policy,
-      retriable: failureDecision.policy === ErrorPolicy.RETRYABLE,
-      requiresReauth: failureDecision.policy === ErrorPolicy.REQUIRES_REAUTH,
+      policy: failurePolicy.policy,
+      retriable: failurePolicy.retryable,
+      requiresReauth: failurePolicy.requiresReauth,
     });
-    if (failureDecision.policy === ErrorPolicy.RETRYABLE) {
+    if (failurePolicy.retryable) {
       throw error;
     }
     return ZERO_RESULT;

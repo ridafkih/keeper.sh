@@ -1,4 +1,4 @@
-import { ErrorPolicy, SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
+import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
 
 enum SourceIngestionFailureLogSlug {
   AUTH_FAILED = "provider-auth-failed",
@@ -14,7 +14,6 @@ interface SourceIngestionFailureDecision {
     | SourceIngestionLifecycleEventType.TRANSIENT_FAILURE;
   code: string;
   logSlug: SourceIngestionFailureLogSlug;
-  policy: ErrorPolicy;
 }
 
 interface SourceIngestionFailureClassifierOptions {
@@ -37,7 +36,6 @@ const classifySourceIngestionFailure = (
       eventType: SourceIngestionLifecycleEventType.AUTH_FAILURE,
       code: "auth_required",
       logSlug: options.authFailureSlug ?? SourceIngestionFailureLogSlug.AUTH_FAILED,
-      policy: ErrorPolicy.REQUIRES_REAUTH,
     };
   }
 
@@ -46,7 +44,6 @@ const classifySourceIngestionFailure = (
       eventType: SourceIngestionLifecycleEventType.NOT_FOUND,
       code: dependencies.resolveErrorCode(error),
       logSlug: SourceIngestionFailureLogSlug.NOT_FOUND,
-      policy: ErrorPolicy.TERMINAL,
     };
   }
 
@@ -54,7 +51,6 @@ const classifySourceIngestionFailure = (
     eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
     code: dependencies.resolveErrorCode(error),
     logSlug: SourceIngestionFailureLogSlug.TRANSIENT,
-    policy: ErrorPolicy.RETRYABLE,
   };
 };
 

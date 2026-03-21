@@ -1,7 +1,7 @@
 # 0006 — Branching Hotspots Audit (Q3)
 
 Status: `active`
-Scope: Phase B (`B1`–`B4`)
+Scope: Phase B (`B1`–`B7`)
 
 ## Objective
 
@@ -43,9 +43,23 @@ Identify remaining non-machine policy branching in `packages/sync`, `services/cr
   - Resolves final retry/disable decision from machine transition outputs via `resolveDestinationFailureOutput`.
   - Preserves terminal rethrow behavior after machine-driven failure handling.
 
+## Implemented in Q4 (B5–B7)
+
+- Added `services/cron/src/lib/source-ingestion-failure-policy.ts`.
+  - `resolveSourceIngestionFailurePolicy(...)` derives retryable/terminal/requires-reauth strictly from machine transition outputs + resulting state.
+  - Includes invariant assertions for malformed failure-output surfaces.
+- Updated `services/cron/src/lib/source-ingestion-runner.ts`:
+  - Removed classifier-driven retryability control flow.
+  - Runner now dispatches failure event, resolves policy from machine transition output, logs that resolved policy, then decides throw/swallow from machine policy only.
+- Simplified `services/cron/src/lib/source-ingestion-failure.ts`:
+  - Removed redundant `policy` field from classifier decision shape; classifier now maps errors to machine events + log slug only.
+- Added tests:
+  - `services/cron/src/lib/source-ingestion-failure-policy.test.ts`
+  - `services/cron/src/lib/source-ingestion-runner.test.ts` (machine-output source-of-truth case)
+  - Updated existing source-ingestion failure/runner contract tests to match non-redundant decision shape.
+
 ## Validation
 
 - `bun test packages/sync/src/destination-execution-failure-event.test.ts packages/sync/src/destination-execution-runtime.test.ts packages/sync/src/destination-failure-policy.test.ts`
 - `bunx turbo run lint types --filter=./packages/sync --filter=./packages/state-machines`
 - `bun test` (repo root)
-

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { ErrorPolicy, SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
+import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
 import {
   classifySourceIngestionFailure,
   SourceIngestionFailureLogSlug,
@@ -26,7 +26,6 @@ describe("classifySourceIngestionFailure", () => {
       code: "auth_required",
       eventType: SourceIngestionLifecycleEventType.AUTH_FAILURE,
       logSlug: SourceIngestionFailureLogSlug.TOKEN_REFRESH_FAILED,
-      policy: ErrorPolicy.REQUIRES_REAUTH,
     });
   });
 
@@ -40,7 +39,6 @@ describe("classifySourceIngestionFailure", () => {
       code: "resolved_code",
       eventType: SourceIngestionLifecycleEventType.NOT_FOUND,
       logSlug: SourceIngestionFailureLogSlug.NOT_FOUND,
-      policy: ErrorPolicy.TERMINAL,
     });
   });
 
@@ -57,7 +55,6 @@ describe("classifySourceIngestionFailure", () => {
       code: "transient_failure",
       eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
       logSlug: SourceIngestionFailureLogSlug.TRANSIENT,
-      policy: ErrorPolicy.RETRYABLE,
     });
   });
 });

@@ -33,6 +33,48 @@ const createRuntime = () => {
   const runtime: SourceIngestionRuntime = {
     dispatch: (event) => {
       events.push(event);
+      if (event.type === SourceIngestionLifecycleEventType.TRANSIENT_FAILURE) {
+        return Promise.resolve({
+          commands: [],
+          context: {
+            eventsAdded: 0,
+            eventsRemoved: 0,
+            lastErrorCode: event.code,
+            provider: "google",
+            sourceId: "source-1",
+          },
+          outputs: [{ code: event.code, retryable: true, type: "INGEST_FAILED" }],
+          state: "transient_error",
+        });
+      }
+      if (event.type === SourceIngestionLifecycleEventType.AUTH_FAILURE) {
+        return Promise.resolve({
+          commands: [],
+          context: {
+            eventsAdded: 0,
+            eventsRemoved: 0,
+            lastErrorCode: event.code,
+            provider: "google",
+            sourceId: "source-1",
+          },
+          outputs: [{ code: event.code, retryable: false, type: "INGEST_FAILED" }],
+          state: "auth_blocked",
+        });
+      }
+      if (event.type === SourceIngestionLifecycleEventType.NOT_FOUND) {
+        return Promise.resolve({
+          commands: [],
+          context: {
+            eventsAdded: 0,
+            eventsRemoved: 0,
+            lastErrorCode: event.code,
+            provider: "google",
+            sourceId: "source-1",
+          },
+          outputs: [{ code: event.code, retryable: false, type: "INGEST_FAILED" }],
+          state: "not_found_disabled",
+        });
+      }
       return Promise.resolve({ commands: [], outputs: [], state: "source_selected", context: {} });
     },
   };
@@ -65,7 +107,6 @@ describe("runSourceIngestionUnit", () => {
         code: "transient_failure",
         eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
         logSlug: SourceIngestionFailureLogSlug.TRANSIENT,
-        policy: ErrorPolicy.RETRYABLE,
       }),
     });
 
@@ -111,7 +152,6 @@ describe("runSourceIngestionUnit", () => {
         code: "transient_failure",
         eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
         logSlug: SourceIngestionFailureLogSlug.TRANSIENT,
-        policy: ErrorPolicy.RETRYABLE,
       }),
     })).rejects.toBe(expectedError);
 
@@ -148,7 +188,6 @@ describe("runSourceIngestionUnit", () => {
         code: "not_found",
         eventType: SourceIngestionLifecycleEventType.NOT_FOUND,
         logSlug: SourceIngestionFailureLogSlug.NOT_FOUND,
-        policy: ErrorPolicy.TERMINAL,
       }),
     });
 
@@ -164,5 +203,45 @@ describe("runSourceIngestionUnit", () => {
     ]);
     expect(fields.get("outcome")).toBe("error");
     expect(getFlushCount()).toBe(1);
+  });
+
+  test("uses machine failure outputs as source of truth for retryability", async () => {
+    const { logger } = createLogger();
+    const expectedError = new Error("provider timed out");
+    const runtime: SourceIngestionRuntime = {
+      dispatch: (event) => {
+        if (event.type === SourceIngestionLifecycleEventType.TRANSIENT_FAILURE) {
+          return Promise.resolve({
+            commands: [],
+            context: {},
+            outputs: [{ code: "forced_terminal", retryable: false, type: "INGEST_FAILED" }],
+            state: "not_found_disabled",
+          });
+        }
+        return Promise.resolve({ commands: [], outputs: [], state: "source_selected", context: {} });
+      },
+    };
+
+    const result = await runSourceIngestionUnit({
+      executeIngest: () => Promise.reject(expectedError),
+      logger,
+      metadata: {
+        calendarId: "calendar-machine-policy",
+        provider: "google",
+        userId: "user-1",
+      },
+      runtime,
+      classifyFailure: (): SourceIngestionFailureDecision => ({
+        code: "transient_failure",
+        eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
+        logSlug: SourceIngestionFailureLogSlug.TRANSIENT,
+      }),
+    });
+
+    expect(result).toEqual({
+      eventsAdded: 0,
+      eventsRemoved: 0,
+      ingestEvents: [],
+    });
   });
 });

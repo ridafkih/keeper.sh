@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
-import { ErrorPolicy } from "@keeper.sh/state-machines";
 import {
   runSourceIngestionUnit,
   type SourceIngestionFailureDecision,
@@ -42,7 +41,6 @@ const createRetryableClassifier = (): ((error: unknown) => SourceIngestionFailur
     code: "transient_failure",
     eventType: SourceIngestionLifecycleEventType.TRANSIENT_FAILURE,
     logSlug: SourceIngestionFailureLogSlug.TRANSIENT,
-    policy: ErrorPolicy.RETRYABLE,
   });
 
 describe("source ingestion widelog contract", () => {

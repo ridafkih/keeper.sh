@@ -35,9 +35,9 @@ Mode: `clean-break` (no compatibility bridge)
 - [x] B2. Identify remaining non-machine policy branches in `services/cron`.
 - [x] B3. Identify remaining non-machine policy branches in `services/worker`.
 - [x] B4. Extract retry decisioning into machine transition outputs.
-- [ ] B5. Extract disable decisioning into machine transition outputs.
-- [ ] B6. Extract reauth decisioning into machine transition outputs.
-- [ ] B7. Extract backoff schedule decisioning into machine transition outputs.
+- [x] B5. Extract disable decisioning into machine transition outputs.
+- [x] B6. Extract reauth decisioning into machine transition outputs.
+- [x] B7. Extract backoff schedule decisioning into machine transition outputs.
 - [ ] B8. Replace orchestration `if` trees with deterministic command/event dispatch tables.
 - [ ] B9. Move any remaining provider-specific policy logic into adapter boundaries.
 - [ ] B10. Add tests ensuring orchestration layers no longer encode business policy.
