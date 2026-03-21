@@ -103,7 +103,7 @@ Mode: `clean-break` (no compatibility bridge)
 - [x] G5. Validate machine metrics/logging cardinality remains bounded.
 - [x] G6. Validate no memory growth from per-calendar machine field accumulation.
 - [ ] G7. Update `docs/StateMachineCleanCutoverChecklist.md` completion status.
-- [ ] G8. Publish final architecture + flow docs for handoff.
+- [x] G8. Publish final architecture + flow docs for handoff.
 
 ### Latest Validation Notes
 
