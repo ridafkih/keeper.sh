@@ -79,6 +79,13 @@ export type {
 
 export { createKeeperRuntime } from "./create-keeper-runtime";
 export type { CreateKeeperRuntimeDependencies } from "./create-keeper-runtime";
+export { createMachineRuntimeWidelogSink } from "./machine-runtime-widelog";
+export type {
+  MachineRuntimeWidelogSetField,
+  RuntimeEnvelopeLike,
+  RuntimeProcessEventLike,
+  RuntimeTransitionLike,
+} from "./machine-runtime-widelog";
 
 export {
   InMemoryCommandOutboxStore,
