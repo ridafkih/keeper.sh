@@ -46,11 +46,9 @@ beforeAll(async () => {
   mock.module("./utils/logging", () => ({
     context: <TResult>(callback: () => Promise<TResult> | TResult): Promise<TResult> => {
       pushContext();
-      try {
-        return Promise.resolve(callback());
-      } finally {
+      return Promise.resolve(callback()).finally(() => {
         popContext();
-      }
+      });
     },
     destroy: () => Promise.resolve(),
     widelog: {

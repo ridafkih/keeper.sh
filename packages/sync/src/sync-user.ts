@@ -20,6 +20,7 @@ import type { DestinationExecutionDispatchResult } from "./destination-execution
 import type { DestinationExecutionRuntimeEvent } from "./destination-execution-runtime";
 import {
   buildCalendarFailure,
+  DispatchConflictCode,
   handleDispatchConflict,
 } from "./dispatch-conflict-policy";
 import type { CalendarSyncFailure } from "./dispatch-conflict-policy";
@@ -282,7 +283,7 @@ const syncDestinationsForUser = async (
         runtime: destinationRuntime,
         destination,
         startedAtMs: calendarSyncStartedAt,
-        conflictCode: "machine_conflict_lock_acquired",
+        conflictCode: DispatchConflictCode.LOCK_ACQUIRED,
         notifyCalendarFailed,
       });
       if (lockAcquireConflict) {
@@ -295,7 +296,7 @@ const syncDestinationsForUser = async (
         runtime: destinationRuntime,
         destination,
         startedAtMs: calendarSyncStartedAt,
-        conflictCode: "machine_conflict_execution_started",
+        conflictCode: DispatchConflictCode.EXECUTION_STARTED,
         notifyCalendarFailed,
       });
       if (executionStartConflict) {
@@ -329,7 +330,7 @@ const syncDestinationsForUser = async (
           runtime: destinationRuntime,
           destination,
           startedAtMs: calendarSyncStartedAt,
-          conflictCode: "machine_conflict_provider_resolution_failed",
+          conflictCode: DispatchConflictCode.PROVIDER_RESOLUTION_FAILED,
           notifyCalendarFailed,
         });
         if (providerResolutionFailureConflict) {
@@ -399,7 +400,7 @@ const syncDestinationsForUser = async (
           runtime: destinationRuntime,
           destination,
           startedAtMs: calendarSyncStartedAt,
-          conflictCode: "machine_conflict_invalidation_detected",
+          conflictCode: DispatchConflictCode.INVALIDATION_DETECTED,
           notifyCalendarFailed,
         });
         continue;
@@ -419,7 +420,7 @@ const syncDestinationsForUser = async (
         runtime: destinationRuntime,
         destination,
         startedAtMs: calendarSyncStartedAt,
-        conflictCode: "machine_conflict_execution_succeeded",
+        conflictCode: DispatchConflictCode.EXECUTION_SUCCEEDED,
         notifyCalendarFailed,
       });
       if (executionSuccessConflict) {
@@ -459,7 +460,7 @@ const syncDestinationsForUser = async (
         runtime: destinationRuntime,
         destination,
         startedAtMs: calendarSyncStartedAt,
-        conflictCode: "machine_conflict_execution_failed",
+        conflictCode: DispatchConflictCode.EXECUTION_FAILED,
         notifyCalendarFailed,
       });
       if (executionFailureConflict) {
@@ -470,7 +471,7 @@ const syncDestinationsForUser = async (
           buildCalendarFailure({
             destination,
             startedAtMs: calendarSyncStartedAt,
-            error: "machine_conflict_execution_failed",
+            error: DispatchConflictCode.EXECUTION_FAILED,
             retryable: true,
             disabled: false,
           }),

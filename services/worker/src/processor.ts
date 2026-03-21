@@ -11,6 +11,7 @@ import { database, refreshLockRedis, refreshLockStore } from "./context";
 import { context, widelog } from "./utils/logging";
 import { createPerCalendarMachineFieldCollector } from "./utils/per-calendar-machine-fields";
 import { classifySyncError } from "./utils/sync-error-classification";
+import { emitWideEvent } from "./utils/emit-wide-event";
 import env from "./env";
 
 const resolveCount = (value: unknown): number => {
@@ -117,7 +118,7 @@ const processJob = (
         outcome: "success" | "partial" | "error";
       },
     ): Promise<void> => {
-      await context(() => {
+      await emitWideEvent(() => {
         setJobWideEventFields(job, jobId, userId);
         widelog.set("operation.name", "push-sync-calendar");
         widelog.set("provider.name", input.provider);
@@ -136,7 +137,6 @@ const processJob = (
           widelog.error("sync.failures", syncError);
         }
         widelog.set("outcome", input.outcome);
-        widelog.flush();
       });
     };
 
@@ -218,13 +218,12 @@ const processJob = (
 
       const failed = result.addFailed + result.removeFailed;
       const attempted = result.added + result.removed + failed;
-      await context(() => {
+      await emitWideEvent(() => {
         setJobWideEventFields(job, jobId, userId);
         widelog.set("sync.events_added", result.added);
         widelog.set("sync.events_removed", result.removed);
         widelog.set("sync.events_failed", failed);
         widelog.set("outcome", resolveSyncOutcome(failed, attempted));
-        widelog.flush();
       });
 
       return {
@@ -235,11 +234,10 @@ const processJob = (
         errors: result.errors,
       };
     } catch (error) {
-      await context(() => {
+      await emitWideEvent(() => {
         setJobWideEventFields(job, jobId, userId);
         widelog.set("outcome", "error");
         widelog.errorFields(error, { slug: "push-sync-failed" });
-        widelog.flush();
       });
       throw error;
     }

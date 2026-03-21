@@ -61,7 +61,7 @@ Mode: `clean-break` (no compatibility bridge)
 - [x] D2. Add adversarial parallel dispatch tests for every runtime adapter.
 - [x] D3. Add duplicate envelope replay tests per machine aggregate.
 - [x] D4. Add stale terminal-event tests per machine aggregate.
-- [ ] D5. Add conflict-detected handling tests for all caller policies.
+- [x] D5. Add conflict-detected handling tests for all caller policies.
 - [x] D6. Add outbox corruption tests for each outbox namespace.
 - [x] D7. Add outbox recovery idempotency tests (startup + interval).
 - [x] D8. Verify no double-execution when recovery and live traffic overlap.
@@ -74,7 +74,7 @@ Mode: `clean-break` (no compatibility bridge)
 - [x] E2. Define canonical per-job widelog contract fields in docs.
 - [x] E3. Ensure each per-calendar unit starts one context and flushes once.
 - [x] E4. Ensure per-job context is separate from per-calendar contexts.
-- [ ] E5. Remove any immediate context+flush wrappers that act as plain logs.
+- [x] E5. Remove any immediate context+flush wrappers that act as plain logs.
 - [x] E6. Normalize machine field naming across cron/worker/api.
 - [x] E7. Add tests asserting per-calendar log isolation.
 - [x] E8. Add tests asserting per-job summary log isolation.
