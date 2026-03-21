@@ -26,7 +26,7 @@ import {
 } from "@keeper.sh/machine-orchestration";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
-import { createMachineRuntimeWidelogSink } from "@/utils/machine-runtime-widelog";
+import { createMachineRuntimeWidelogSink } from "@keeper.sh/machine-orchestration";
 import { database, refreshLockRedis } from "@/context";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";

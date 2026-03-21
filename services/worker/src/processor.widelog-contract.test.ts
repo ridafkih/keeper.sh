@@ -97,7 +97,7 @@ beforeAll(async () => {
     },
   }));
 
-  mock.module("./runtime/sync-runtime", () => ({
+  mock.module("@keeper.sh/machine-orchestration", () => ({
     runKeeperSyncRuntimeForUser: async (
       _userId: string,
       _config: unknown,

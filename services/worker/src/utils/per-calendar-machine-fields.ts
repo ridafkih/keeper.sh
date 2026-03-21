@@ -1,16 +1,10 @@
-import { createMachineRuntimeWidelogSink } from "./machine-runtime-widelog";
+import {
+  createMachineRuntimeWidelogSink,
+  type RuntimeProcessEventLike,
+} from "@keeper.sh/machine-orchestration";
 
 type MachineName = "destination_execution" | "credential_health";
 type MachineFieldValue = string | number;
-
-interface RuntimeProcessEventLike {
-  aggregateId: string;
-  outcome: "APPLIED" | "DUPLICATE_IGNORED" | "CONFLICT_DETECTED";
-  envelope: { id: string; event: { type: string } };
-  snapshot: { state: string };
-  transition?: { commands: { type: string }[]; outputs: { type: string }[] };
-  version: number;
-}
 
 interface PerCalendarMachineFieldCollector {
   pushEvent: (
