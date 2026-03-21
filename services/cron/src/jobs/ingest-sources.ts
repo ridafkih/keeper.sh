@@ -19,13 +19,13 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq, inArray } from "drizzle-orm";
 import { RedisCommandOutboxStore } from "@keeper.sh/machine-orchestration";
+import { createSourceIngestionLifecycleRuntime } from "@keeper.sh/machine-orchestration";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import { createMachineRuntimeWidelogSink } from "@/utils/machine-runtime-widelog";
 import { database, refreshLockRedis } from "@/context";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
-import { createSourceIngestionLifecycleRuntime } from "../lib/source-ingestion-lifecycle-runtime";
 import {
   OAuthIngestionResolutionStatus,
   createOAuthIngestionResolutionDependencies,

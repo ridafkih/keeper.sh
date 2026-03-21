@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   InMemoryCommandOutboxStore,
   RuntimeInvariantViolationError,
-} from "@keeper.sh/machine-orchestration";
+} from "./machine-runtime-driver";
 import type { SourceIngestionLifecycleCommand } from "@keeper.sh/state-machines";
 import { SourceIngestionLifecycleEventType } from "@keeper.sh/state-machines";
 import type {

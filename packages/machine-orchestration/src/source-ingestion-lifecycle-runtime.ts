@@ -1,13 +1,13 @@
 import {
   type CommandOutboxStore,
-  MachineConflictDetectedError,
-  RuntimeInvariantViolationError,
-  type RuntimeProcessEvent,
-  type RuntimeMachine,
   InMemoryEnvelopeStore,
   InMemorySnapshotStore,
+  MachineConflictDetectedError,
   MachineRuntimeDriver,
-} from "@keeper.sh/machine-orchestration";
+  RuntimeInvariantViolationError,
+  type RuntimeMachine,
+  type RuntimeProcessEvent,
+} from "./machine-runtime-driver";
 import {
   SourceIngestionLifecycleCommandType,
   SourceIngestionLifecycleStateMachine,

@@ -86,6 +86,12 @@ export type {
   RuntimeProcessEventLike,
   RuntimeTransitionLike,
 } from "./machine-runtime-widelog";
+export { createSourceIngestionLifecycleRuntime } from "./source-ingestion-lifecycle-runtime";
+export type {
+  SourceIngestionLifecycleCommandHandlers,
+  SourceIngestionLifecycleRuntime,
+  SourceIngestionLifecycleRuntimeInput,
+} from "./source-ingestion-lifecycle-runtime";
 
 export {
   InMemoryCommandOutboxStore,
