@@ -546,66 +546,6 @@ To enable MCP on a self-hosted instance:
 2. Set `MCP_PUBLIC_URL` on the `api` service to the same value (e.g. `https://keeper.example.com/mcp`).
 3. Set `VITE_MCP_URL` on the `web` service to the internal URL of the MCP container (e.g. `http://mcp:3002`).
 
-# OpenTelemetry (OTEL) Log Forwarding
-
-Keeper can forward structured logs from all services to an [OpenTelemetry](https://opentelemetry.io/) collector using [`pino-opentelemetry-transport`](https://github.com/Vunovati/pino-opentelemetry-transport). The transport runs in a dedicated Pino worker thread, so it does not block the application event loop.
-
-## Enabling OTEL
-
-Set the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable on any service to enable log forwarding. When the variable is not set, services behave exactly as before — no OTEL dependency is loaded.
-
-```bash
-OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector.example.com:4318
-```
-
-## Authentication
-
-If your collector is protected with credentials, pass them via the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
-
-**Basic auth (username & password):**
-
-```bash
-# Base64-encode "username:password"
-OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic $(echo -n 'username:password' | base64)"
-```
-
-**Bearer token / API key:**
-
-```bash
-OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer my-api-token"
-```
-
-## Protocol
-
-The exporter defaults to `http/protobuf`. To use a different protocol, set:
-
-```bash
-OTEL_EXPORTER_OTLP_PROTOCOL=grpc        # or http/json
-```
-
-## Resource Attributes
-
-Each service automatically sets the following [resource attributes](https://opentelemetry.io/docs/specs/semconv/resource/) on exported logs:
-
-| Attribute                  | Value                                      |
-| -------------------------- | ------------------------------------------ |
-| `service.name`             | `keeper-api`, `keeper-web`, etc.           |
-| `deployment.environment`   | Value of `ENV` (defaults to `production`)  |
-
-## Docker Compose Example
-
-To forward logs from the `keeper-services` image to a collector:
-
-```yaml
-services:
-  keeper:
-    image: ghcr.io/ridafkih/keeper-services:latest
-    environment:
-      # ... existing env vars ...
-      OTEL_EXPORTER_OTLP_ENDPOINT: https://otel-collector.example.com:4318
-      OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Basic dXNlcjpwYXNz"
-```
-
 # Modules
 
 ## Applications
