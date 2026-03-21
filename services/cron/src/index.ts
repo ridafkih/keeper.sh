@@ -20,8 +20,8 @@ await entry({
     const injectedJobs = injectJobs(jobs);
     registerJobs(injectedJobs);
 
-    return () => {
-      destroy();
+    return async () => {
+      await destroy();
       shutdownRefreshLockRedis();
       closeDatabase(database);
     };

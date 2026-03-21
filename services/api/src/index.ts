@@ -90,8 +90,8 @@ await entry({
 
     await broadcastService.startSubscriber();
 
-    return () => {
-      destroy();
+    return async () => {
+      await destroy();
       server.stop();
       closeDatabase(database);
       redis.disconnect();
