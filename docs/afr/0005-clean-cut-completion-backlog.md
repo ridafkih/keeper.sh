@@ -88,7 +88,7 @@ Mode: `clean-break` (no compatibility bridge)
 - [ ] F3. Remove legacy destination execution orchestration paths.
 - [ ] F4. Remove legacy credential refresh orchestration paths.
 - [ ] F5. Remove legacy sync lifecycle orchestration paths.
-- [ ] F6. Remove legacy source provisioning orchestration paths.
+- [x] F6. Remove legacy source provisioning orchestration paths.
 - [x] F7. Remove deprecated helpers replaced by machine adapters.
 - [ ] F8. Remove dead tests tied to deleted legacy behavior.
 - [x] F9. Remove dead feature flags no longer needed post-cutover.
@@ -97,7 +97,7 @@ Mode: `clean-break` (no compatibility bridge)
 ## Phase G — Validation and Operational Readiness
 
 - [ ] G1. Run package-level lint/types/tests for each touched package.
-- [ ] G2. Run full repository test suite.
+- [x] G2. Run full repository test suite.
 - [ ] G3. Dry-run cron startup to validate job loading and recovery startup paths.
 - [ ] G4. Dry-run worker startup to validate recovery startup paths.
 - [ ] G5. Validate machine metrics/logging cardinality remains bounded.

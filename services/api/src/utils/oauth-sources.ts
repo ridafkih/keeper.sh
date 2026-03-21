@@ -9,6 +9,12 @@ import {
   listGoogleUserCalendars as listGoogleCalendars,
   listOutlookUserCalendars as listOutlookCalendars,
 } from "@keeper.sh/calendar";
+import {
+  createEventEnvelope,
+  SourceProvisioningStateMachine,
+  TransitionPolicy,
+} from "@keeper.sh/state-machines";
+import type { SourceProvisioningEvent } from "@keeper.sh/state-machines";
 import type { database as contextDatabase } from "@/context";
 import { spawnBackgroundJob } from "./background-task";
 import { getSourceProvider } from "@keeper.sh/calendar";
@@ -238,6 +244,35 @@ interface CreateOAuthSourceOptions {
   excludeOutOfOffice?: boolean;
   excludeWorkingLocation?: boolean;
 }
+
+const createSourceProvisioningDispatcher = (input: {
+  mode: "create_single" | "import_bulk";
+  provider: "google" | "outlook";
+  requestId: string;
+  userId: string;
+}): ((event: SourceProvisioningEvent) => ReturnType<SourceProvisioningStateMachine["dispatch"]>) => {
+  const machine = new SourceProvisioningStateMachine(
+    {
+      mode: input.mode,
+      provider: input.provider,
+      requestId: input.requestId,
+      userId: input.userId,
+    },
+    { transitionPolicy: TransitionPolicy.REJECT },
+  );
+  let envelopeSequence = 0;
+  return (event) =>
+    machine.dispatch(
+      createEventEnvelope(
+        event,
+        { id: "api-oauth-sources", type: "system" },
+        {
+          id: `${input.requestId}:${++envelopeSequence}:${event.type}`,
+          occurredAt: new Date().toISOString(),
+        },
+      ),
+    );
+};
 
 interface CreateOAuthSourceDependencies {
   canAddAccount: (userId: string, currentCount: number) => Promise<boolean>;
@@ -491,12 +526,27 @@ const createOAuthSourceWithDependencies = async (
     excludeOutOfOffice = false,
     excludeWorkingLocation = false,
   } = options;
+  if (provider !== "google" && provider !== "outlook") {
+    throw new Error(`Invalid OAuth source provider for provisioning machine: ${provider}`);
+  }
+  const requestId = crypto.randomUUID();
+  const dispatchProvisioningEvent = createSourceProvisioningDispatcher({
+    mode: "create_single",
+    provider,
+    requestId,
+    userId,
+  });
 
   const credential = await dependencies.findCredentialEmail(userId, oauthCredentialId);
 
   if (!credential.exists) {
+    dispatchProvisioningEvent({
+      reason: "invalid_source",
+      type: "VALIDATION_FAILED",
+    });
     throw new Error("Source credential not found");
   }
+  dispatchProvisioningEvent({ type: "VALIDATION_PASSED" });
 
   const existingAccountId = await dependencies.findExistingAccountId({
     oauthCredentialId,
@@ -511,6 +561,8 @@ const createOAuthSourceWithDependencies = async (
   });
 
   if (existingCalendar) {
+    dispatchProvisioningEvent({ type: "QUOTA_ALLOWED" });
+    dispatchProvisioningEvent({ type: "DUPLICATE_DETECTED" });
     throw new DuplicateSourceError();
   }
 
@@ -520,9 +572,15 @@ const createOAuthSourceWithDependencies = async (
     const existingAccountCount = await dependencies.countUserAccounts(userId);
     const allowed = await dependencies.canAddAccount(userId, existingAccountCount);
     if (!allowed) {
+      dispatchProvisioningEvent({ type: "QUOTA_DENIED" });
       throw new OAuthSourceLimitError();
     }
+  }
 
+  dispatchProvisioningEvent({ type: "QUOTA_ALLOWED" });
+  dispatchProvisioningEvent({ type: "DEDUPLICATION_PASSED" });
+
+  if (!accountId) {
     const createdAccountId = await dependencies.createCalendarAccount({
       displayName: credential.email,
       email: credential.email,
@@ -536,6 +594,9 @@ const createOAuthSourceWithDependencies = async (
     }
 
     accountId = createdAccountId;
+    dispatchProvisioningEvent({ accountId, type: "ACCOUNT_CREATED" });
+  } else {
+    dispatchProvisioningEvent({ accountId, type: "ACCOUNT_REUSED" });
   }
 
   const source = await dependencies.createSource({
@@ -552,6 +613,21 @@ const createOAuthSourceWithDependencies = async (
 
   if (!source) {
     throw new Error("Failed to create OAuth calendar source");
+  }
+  dispatchProvisioningEvent({
+    sourceIds: [source.id],
+    type: "SOURCE_CREATED",
+  });
+  const completionTransition = dispatchProvisioningEvent({
+    mode: "create_single",
+    sourceIds: [source.id],
+    type: "BOOTSTRAP_SYNC_TRIGGERED",
+  });
+  const bootstrapRequested = completionTransition.outputs.some(
+    (output) => output.type === "BOOTSTRAP_REQUESTED",
+  );
+  if (!bootstrapRequested) {
+    throw new Error("Invariant violated: source provisioning did not request bootstrap sync");
   }
 
   dependencies.triggerSync(userId, provider);
@@ -730,26 +806,51 @@ const importOAuthAccountCalendarsWithDependencies = async (
   dependencies: ImportOAuthAccountDependencies,
 ): Promise<string> => {
   const { userId, provider, oauthCredentialId, accessToken, email } = options;
+  if (provider !== "google" && provider !== "outlook") {
+    throw new Error(`Invalid OAuth import provider for provisioning machine: ${provider}`);
+  }
+  const requestId = crypto.randomUUID();
+  const dispatchProvisioningEvent = createSourceProvisioningDispatcher({
+    mode: "import_bulk",
+    provider,
+    requestId,
+    userId,
+  });
 
   const existingAccountId = await dependencies.findExistingAccountId({
     oauthCredentialId,
     provider,
     userId,
   });
+  dispatchProvisioningEvent({ type: "VALIDATION_PASSED" });
   let accountId = existingAccountId;
 
   if (!accountId) {
     const existingAccountCount = await dependencies.countUserAccounts(userId);
     const allowed = await dependencies.canAddAccount(userId, existingAccountCount);
     if (!allowed) {
+      dispatchProvisioningEvent({ type: "QUOTA_DENIED" });
       throw new OAuthSourceLimitError();
     }
+  }
+  dispatchProvisioningEvent({ type: "QUOTA_ALLOWED" });
+  dispatchProvisioningEvent({ type: "DEDUPLICATION_PASSED" });
 
+  if (!accountId) {
     accountId = await dependencies.createAccountId({
       email,
       oauthCredentialId,
       provider,
       userId,
+    });
+    dispatchProvisioningEvent({
+      accountId,
+      type: "ACCOUNT_CREATED",
+    });
+  } else {
+    dispatchProvisioningEvent({
+      accountId,
+      type: "ACCOUNT_REUSED",
     });
   }
 
@@ -765,6 +866,22 @@ const importOAuthAccountCalendarsWithDependencies = async (
   }
 
   await dependencies.insertCalendars(userId, accountId, newCalendars);
+  const sourceIds = newCalendars.map((calendar) => calendar.externalId);
+  dispatchProvisioningEvent({
+    sourceIds,
+    type: "SOURCE_CREATED",
+  });
+  const completionTransition = dispatchProvisioningEvent({
+    mode: "import_bulk",
+    sourceIds,
+    type: "BOOTSTRAP_SYNC_TRIGGERED",
+  });
+  const bootstrapRequested = completionTransition.outputs.some(
+    (output) => output.type === "BOOTSTRAP_REQUESTED",
+  );
+  if (!bootstrapRequested) {
+    throw new Error("Invariant violated: source provisioning did not request bootstrap sync");
+  }
   dependencies.triggerSync(userId, provider);
 
   return accountId;

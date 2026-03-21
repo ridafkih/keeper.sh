@@ -66,8 +66,13 @@ This is a clean-cut decision: cron now always enqueues destination sync jobs.
   - `ICS create-source` path is now machine-wired at lifecycle level:
     - `services/api/src/utils/source-lifecycle.ts` dispatches `SourceProvisioningStateMachine` transitions.
     - bootstrap sync spawn is guarded by machine output (`BOOTSTRAP_REQUESTED`) invariant.
+  - `OAuth + CalDAV create/import` paths are now machine-wired:
+    - `services/api/src/utils/oauth-sources.ts`
+    - `services/api/src/utils/caldav-sources.ts`
+  - Runtime invariant now enforced on all provisioning create/import paths:
+    - bootstrap sync trigger must produce `BOOTSTRAP_REQUESTED` output.
   - Remaining work:
-    - Route OAuth + CalDAV create/import/mapping workflows through the same machine boundary.
+    - source-destination mapping mutation flow is still helper-driven and should be evaluated for machine boundary extraction in a separate slice.
 
 - **F7/F8:**
   - Delete now-orphaned helpers/tests once authoritative runtime slices land.

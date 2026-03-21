@@ -4,6 +4,12 @@ import {
   calendarsTable,
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
+import {
+  createEventEnvelope,
+  SourceProvisioningStateMachine,
+  TransitionPolicy,
+} from "@keeper.sh/state-machines";
+import type { SourceProvisioningEvent } from "@keeper.sh/state-machines";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { encryptPassword } from "@keeper.sh/database";
 import { database, premiumService, encryptionKey } from "@/context";
@@ -182,7 +188,34 @@ const createCalDAVSource = async (
   userId: string,
   data: CreateCalDAVSourceData,
 ): Promise<CalDAVSource> => {
+  const requestId = crypto.randomUUID();
+  const sourceProvisioningMachine = new SourceProvisioningStateMachine(
+    {
+      mode: "create_single",
+      provider: "caldav",
+      requestId,
+      userId,
+    },
+    { transitionPolicy: TransitionPolicy.REJECT },
+  );
+  let envelopeSequence = 0;
+  const dispatchProvisioningEvent = (event: SourceProvisioningEvent) =>
+    sourceProvisioningMachine.dispatch(
+      createEventEnvelope(
+        event,
+        { id: "api-caldav-sources", type: "system" },
+        {
+          id: `${requestId}:${++envelopeSequence}:${event.type}`,
+          occurredAt: new Date().toISOString(),
+        },
+      ),
+    );
+
   if (!encryptionKey) {
+    dispatchProvisioningEvent({
+      reason: "invalid_source",
+      type: "VALIDATION_FAILED",
+    });
     throw new Error("Encryption key not configured");
   }
 
@@ -206,9 +239,13 @@ const createCalDAVSource = async (
       .limit(FIRST_RESULT_LIMIT);
 
     if (existingSource) {
+      dispatchProvisioningEvent({ type: "VALIDATION_PASSED" });
+      dispatchProvisioningEvent({ type: "QUOTA_ALLOWED" });
+      dispatchProvisioningEvent({ type: "DUPLICATE_DETECTED" });
       throw new DuplicateCalDAVSourceError();
     }
 
+    dispatchProvisioningEvent({ type: "VALIDATION_PASSED" });
     const existingAccount = await findReusableCalDAVAccount(
       tx,
       userId,
@@ -222,12 +259,26 @@ const createCalDAVSource = async (
       const allowed = await premiumService.canAddAccount(userId, existingAccountCount);
 
       if (!allowed) {
+        dispatchProvisioningEvent({ type: "QUOTA_DENIED" });
         throw new CalDAVSourceLimitError();
       }
     }
+    dispatchProvisioningEvent({ type: "QUOTA_ALLOWED" });
+    dispatchProvisioningEvent({ type: "DEDUPLICATION_PASSED" });
 
     const accountId = existingAccount?.id ??
       await createCalDAVAccount(tx, userId, data, resolvedEncryptionKey);
+    if (existingAccount?.id) {
+      dispatchProvisioningEvent({
+        accountId: existingAccount.id,
+        type: "ACCOUNT_REUSED",
+      });
+    } else {
+      dispatchProvisioningEvent({
+        accountId,
+        type: "ACCOUNT_CREATED",
+      });
+    }
 
     const [source] = await tx
       .insert(calendarsTable)
@@ -244,6 +295,21 @@ const createCalDAVSource = async (
 
     if (!source) {
       throw new Error("Failed to create CalDAV source");
+    }
+    dispatchProvisioningEvent({
+      sourceIds: [source.id],
+      type: "SOURCE_CREATED",
+    });
+    const completionTransition = dispatchProvisioningEvent({
+      mode: "create_single",
+      sourceIds: [source.id],
+      type: "BOOTSTRAP_SYNC_TRIGGERED",
+    });
+    const bootstrapRequested = completionTransition.outputs.some(
+      (output) => output.type === "BOOTSTRAP_REQUESTED",
+    );
+    if (!bootstrapRequested) {
+      throw new Error("Invariant violated: source provisioning did not request bootstrap sync");
     }
 
     return {
