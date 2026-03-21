@@ -1,17 +1,5 @@
 #!/usr/bin/env bun
 
-/**
- * Reads pino JSON logs from stdin, forwards them to an OTEL collector,
- * and passes them through to stdout unchanged.
- *
- * Usage: app | otel-logger
- *
- * Reads OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_EXPORTER_OTLP_HEADERS from env.
- * If OTEL_EXPORTER_OTLP_ENDPOINT is not set, passes stdin through to stdout.
- *
- * Set OTEL_SERVICE_NAME to tag logs with a service name.
- */
-
 import { createInterface } from "node:readline";
 import { SeverityNumber } from "@opentelemetry/api-logs";
 import { BatchLogRecordProcessor, LoggerProvider } from "@opentelemetry/sdk-logs";
@@ -25,16 +13,59 @@ import {
   resourceFromAttributes,
 } from "@opentelemetry/resources";
 
+const PINO_SEVERITY: Record<number, SeverityNumber> = {
+  10: SeverityNumber.TRACE,
+  20: SeverityNumber.DEBUG,
+  30: SeverityNumber.INFO,
+  40: SeverityNumber.WARN,
+  50: SeverityNumber.ERROR,
+  60: SeverityNumber.FATAL,
+};
+
+const PINO_SEVERITY_TEXT: Record<number, string> = {
+  10: "TRACE",
+  20: "DEBUG",
+  30: "INFO",
+  40: "WARN",
+  50: "ERROR",
+  60: "FATAL",
+};
+
+function parseLogLine(line: string) {
+  const { msg: message, level, time, service, ...attributes } = JSON.parse(line);
+  return { message, level, time, service, attributes };
+}
+
+function forwardToCollector(
+  logger: ReturnType<LoggerProvider["getLogger"]>,
+  { message, level, time, attributes }: ReturnType<typeof parseLogLine>,
+) {
+  logger.emit({
+    body: message,
+    severityNumber: PINO_SEVERITY[level] ?? SeverityNumber.INFO,
+    severityText: PINO_SEVERITY_TEXT[level] ?? "INFO",
+    timestamp: time ? new Date(time) : undefined,
+    attributes,
+  });
+}
+
 if (!process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
   process.stdin.pipe(process.stdout);
 } else {
-  const serviceName = process.env.OTEL_SERVICE_NAME ?? "unknown";
+  const lineReader = createInterface({ input: process.stdin });
+  const lineIterator = lineReader[Symbol.asyncIterator]();
 
-  const detected = detectResources({
+  const firstResult = await lineIterator.next();
+  if (firstResult.done) process.exit(0);
+
+  process.stdout.write(firstResult.value + "\n");
+
+  const firstLogEntry = parseLogLine(firstResult.value);
+  const serviceName = firstLogEntry.service ?? "unknown";
+
+  const resource = detectResources({
     detectors: [envDetector, hostDetector, osDetector, processDetector],
-  });
-
-  const resource = detected.merge(
+  }).merge(
     resourceFromAttributes({
       "service.name": serviceName,
       "deployment.environment": process.env.ENV ?? "production",
@@ -48,44 +79,16 @@ if (!process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
 
   const logger = provider.getLogger(serviceName);
 
-  const severityMap: Record<number, SeverityNumber> = {
-    10: SeverityNumber.TRACE,
-    20: SeverityNumber.DEBUG,
-    30: SeverityNumber.INFO,
-    40: SeverityNumber.WARN,
-    50: SeverityNumber.ERROR,
-    60: SeverityNumber.FATAL,
-  };
+  forwardToCollector(logger, firstLogEntry);
 
-  const severityTextMap: Record<number, string> = {
-    10: "TRACE",
-    20: "DEBUG",
-    30: "INFO",
-    40: "WARN",
-    50: "ERROR",
-    60: "FATAL",
-  };
-
-  const rl = createInterface({ input: process.stdin });
-
-  rl.on("line", (line) => {
+  for await (const line of lineIterator) {
     process.stdout.write(line + "\n");
-
     try {
-      const { msg, level, time, ...attributes } = JSON.parse(line);
-      logger.emit({
-        body: msg,
-        severityNumber: severityMap[level] ?? SeverityNumber.INFO,
-        severityText: severityTextMap[level] ?? "INFO",
-        timestamp: time ? new Date(time) : undefined,
-        attributes,
-      });
+      forwardToCollector(logger, parseLogLine(line));
     } catch {
       // not JSON, pass through
     }
-  });
+  }
 
-  rl.on("close", async () => {
-    await provider.shutdown();
-  });
+  await provider.shutdown();
 }
