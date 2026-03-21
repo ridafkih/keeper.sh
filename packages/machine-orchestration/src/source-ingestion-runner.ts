@@ -44,7 +44,6 @@ interface SourceIngestionFailureDecision {
 interface SourceIngestionFailurePolicy {
   code: string;
   policy: ErrorPolicy;
-  retryable: boolean;
   requiresReauth: boolean;
 }
 
@@ -140,10 +139,10 @@ const runSourceIngestionUnit = async (
     input.logger.errorFields(error, {
       slug: failureDecision.logSlug,
       policy: failurePolicy.policy,
-      retriable: failurePolicy.retryable,
+      retriable: failurePolicy.policy === ErrorPolicy.RETRYABLE,
       requiresReauth: failurePolicy.requiresReauth,
     });
-    if (failurePolicy.retryable) {
+    if (failurePolicy.policy === ErrorPolicy.RETRYABLE) {
       throw error;
     }
     return ZERO_RESULT;

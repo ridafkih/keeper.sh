@@ -19,7 +19,6 @@ const resolveFailurePolicy: RunSourceIngestionUnitInput["resolveFailurePolicy"] 
       code: "unknown",
       policy: ErrorPolicy.RETRYABLE,
       requiresReauth: false,
-      retryable: true,
     };
   }
   if (input.state === "auth_blocked") {
@@ -27,7 +26,6 @@ const resolveFailurePolicy: RunSourceIngestionUnitInput["resolveFailurePolicy"] 
       code: failedOutput.code,
       policy: ErrorPolicy.REQUIRES_REAUTH,
       requiresReauth: true,
-      retryable: false,
     };
   }
   if (input.state === "not_found_disabled") {
@@ -35,14 +33,12 @@ const resolveFailurePolicy: RunSourceIngestionUnitInput["resolveFailurePolicy"] 
       code: failedOutput.code,
       policy: ErrorPolicy.TERMINAL,
       requiresReauth: false,
-      retryable: false,
     };
   }
   return {
     code: failedOutput.code,
     policy: ErrorPolicy.RETRYABLE,
     requiresReauth: false,
-    retryable: true,
   };
 };
 

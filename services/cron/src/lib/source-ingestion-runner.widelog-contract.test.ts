@@ -51,7 +51,6 @@ const resolveFailurePolicy: RunSourceIngestionUnitInput["resolveFailurePolicy"] 
   code: SourceIngestionErrorCode.TRANSIENT_FAILURE,
   policy: ErrorPolicy.RETRYABLE,
   requiresReauth: false,
-  retryable: true,
 });
 
 const createBaseTransition = (): SourceIngestionLifecycleTransitionResult => ({

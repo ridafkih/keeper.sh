@@ -12,7 +12,6 @@ import {
 interface SourceIngestionFailurePolicy {
   code: SourceIngestionErrorCode;
   policy: ErrorPolicy;
-  retryable: boolean;
   requiresReauth: boolean;
 }
 
@@ -61,7 +60,6 @@ const resolveSourceIngestionFailurePolicy = (
     return {
       code: parsedCode,
       policy: ErrorPolicy.RETRYABLE,
-      retryable: true,
       requiresReauth: false,
     };
   }
@@ -70,7 +68,6 @@ const resolveSourceIngestionFailurePolicy = (
     return {
       code: parsedCode,
       policy: ErrorPolicy.REQUIRES_REAUTH,
-      retryable: false,
       requiresReauth: true,
     };
   }
@@ -78,7 +75,6 @@ const resolveSourceIngestionFailurePolicy = (
   return {
     code: parsedCode,
     policy: ErrorPolicy.TERMINAL,
-    retryable: false,
     requiresReauth: false,
   };
 };

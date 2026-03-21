@@ -14,7 +14,6 @@ describe("resolveSourceIngestionFailurePolicy", () => {
     expect(policy).toEqual({
       code: SourceIngestionErrorCode.TRANSIENT_FAILURE,
       policy: ErrorPolicy.RETRYABLE,
-      retryable: true,
       requiresReauth: false,
     });
   });
@@ -28,7 +27,6 @@ describe("resolveSourceIngestionFailurePolicy", () => {
     expect(policy).toEqual({
       code: SourceIngestionErrorCode.AUTH_REQUIRED,
       policy: ErrorPolicy.REQUIRES_REAUTH,
-      retryable: false,
       requiresReauth: true,
     });
   });
@@ -42,7 +40,6 @@ describe("resolveSourceIngestionFailurePolicy", () => {
     expect(policy).toEqual({
       code: SourceIngestionErrorCode.NOT_FOUND,
       policy: ErrorPolicy.TERMINAL,
-      retryable: false,
       requiresReauth: false,
     });
   });
