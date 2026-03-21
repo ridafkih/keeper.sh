@@ -5,7 +5,7 @@ Scope: Phase F clean-cut migration
 
 ## Reachable Legacy Entrypoints
 
-- None.
+- Worker sync legacy entrypoints: none.
 - Worker sync runtime now resolves through `@keeper.sh/machine-orchestration` and no longer imports `@keeper.sh/sync`.
 - `packages/sync` package has been removed.
 
