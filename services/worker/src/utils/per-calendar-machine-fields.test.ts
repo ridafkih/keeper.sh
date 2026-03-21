@@ -67,4 +67,30 @@ describe("per-calendar machine field collector", () => {
     expect(first.get("machine.credential_health.processed_total")).toBe(1);
     expect(second.size).toBe(0);
   });
+
+  it("releases sink state per calendar after each consume cycle", () => {
+    const collector = createPerCalendarMachineFieldCollector();
+
+    for (let index = 0; index < 50; index += 1) {
+      const calendarId = `cal-${index}`;
+      collector.pushEvent("destination_execution", calendarId, {
+        aggregateId: calendarId,
+        outcome: "APPLIED",
+        envelope: { id: `env-${index}`, event: { type: "EXECUTION_STARTED" } },
+        snapshot: { state: "executing" },
+        transition: {
+          commands: [{ type: "EMIT_SYNC_EVENT" }],
+          outputs: [{ type: "DESTINATION_EXECUTION_CHANGED" }],
+        },
+        version: 1,
+      });
+
+      const fields = collector.consumeCalendarFields(calendarId);
+      expect(fields.get("machine.destination_execution.processed_total")).toBe(1);
+      expect(fields.get("machine.destination_execution.last_version")).toBe(1);
+      expect(fields.get("machine.destination_execution.aggregate_id")).toBe(calendarId);
+    }
+
+    expect(collector.consumeCalendarFields("cal-0").size).toBe(0);
+  });
 });

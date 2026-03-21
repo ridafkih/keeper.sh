@@ -100,14 +100,16 @@ Mode: `clean-break` (no compatibility bridge)
 - [x] G2. Run full repository test suite.
 - [ ] G3. Dry-run cron startup to validate job loading and recovery startup paths.
 - [ ] G4. Dry-run worker startup to validate recovery startup paths.
-- [ ] G5. Validate machine metrics/logging cardinality remains bounded.
-- [ ] G6. Validate no memory growth from per-calendar machine field accumulation.
+- [x] G5. Validate machine metrics/logging cardinality remains bounded.
+- [x] G6. Validate no memory growth from per-calendar machine field accumulation.
 - [ ] G7. Update `docs/StateMachineCleanCutoverChecklist.md` completion status.
 - [ ] G8. Publish final architecture + flow docs for handoff.
 
 ### Latest Validation Notes
 
 - `2026-03-21`: attempted startup dry-runs for `@keeper.sh/cron` and `@keeper.sh/worker`; both failed early with `PostgresError: Connection closed` while executing `SELECT 1` (environment dependency unavailable in this container run).
+- `2026-03-21`: added bounded-key cardinality coverage for runtime machine widelog sink in `packages/machine-orchestration/src/machine-runtime-widelog.test.ts`.
+- `2026-03-21`: added per-calendar collector lifecycle stress coverage in `services/worker/src/utils/per-calendar-machine-fields.test.ts` to enforce state release after consume.
 
 ## Immediate Execution Queue
 
