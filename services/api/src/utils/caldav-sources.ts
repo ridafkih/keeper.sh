@@ -5,11 +5,11 @@ import {
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import {
-  createEventEnvelope,
-  SourceProvisioningStateMachine,
+  createSourceProvisioningDispatcher,
+} from "@keeper.sh/machine-orchestration";
+import {
   TransitionPolicy,
 } from "@keeper.sh/state-machines";
-import type { SourceProvisioningEvent } from "@keeper.sh/state-machines";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { encryptPassword } from "@keeper.sh/database";
 import { database, premiumService, encryptionKey } from "@/context";
@@ -226,27 +226,15 @@ const createCalDAVSource = async (
   data: CreateCalDAVSourceData,
 ): Promise<CalDAVSource> => {
   const requestId = crypto.randomUUID();
-  const sourceProvisioningMachine = new SourceProvisioningStateMachine(
-    {
-      mode: "create_single",
-      provider: "caldav",
-      requestId,
-      userId,
-    },
-    { transitionPolicy: TransitionPolicy.REJECT },
-  );
-  let envelopeSequence = 0;
-  const dispatchProvisioningEvent = (event: SourceProvisioningEvent) =>
-    sourceProvisioningMachine.dispatch(
-      createEventEnvelope(
-        event,
-        { id: "api-caldav-sources", type: "system" },
-        {
-          id: `${requestId}:${++envelopeSequence}:${event.type}`,
-          occurredAt: new Date().toISOString(),
-        },
-      ),
-    );
+  const provisioningDispatcher = createSourceProvisioningDispatcher({
+    actorId: "api-caldav-sources",
+    mode: "create_single",
+    provider: "caldav",
+    requestId,
+    transitionPolicy: TransitionPolicy.REJECT,
+    userId,
+  });
+  const dispatchProvisioningEvent = provisioningDispatcher.dispatch;
 
   if (!encryptionKey) {
     dispatchProvisioningEvent({

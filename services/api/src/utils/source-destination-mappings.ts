@@ -1,4 +1,5 @@
 import {
+  createSequencedRuntimeEnvelopeFactory,
   createSourceDestinationMappingRuntime,
   DESTINATION_CALENDAR_NOT_FOUND_MESSAGE,
   getDestinationsForSource as getDestinationsForSourceInMachine,
@@ -64,22 +65,18 @@ const runMappingRuntime = async (input: {
   notFoundMessage: string;
 }): Promise<void> => {
   const dependencies = await resolveDependencies(input.userId);
-  let sequence = 0;
+  const createEnvelope = createSequencedRuntimeEnvelopeFactory({
+    actor: { id: "api-source-mapping", type: "system" },
+    aggregateId: input.aggregateId,
+    now: () => new Date().toISOString(),
+  });
   const runtime = createSourceDestinationMappingRuntime({
     aggregateId: input.aggregateId,
     classifyFailure: (error) =>
       classifyMappingFailure({
         error,
       }),
-    createEnvelope: (event) => {
-      sequence += 1;
-      return {
-        actor: { id: "api-source-mapping", type: "system" },
-        event,
-        id: `${input.aggregateId}:${sequence}:${event.type}`,
-        occurredAt: new Date().toISOString(),
-      };
-    },
+    createEnvelope,
     handlers: {
       applyUpdate: input.applyUpdate,
       requestSync: () => enqueuePushSync(input.userId, dependencies.plan),

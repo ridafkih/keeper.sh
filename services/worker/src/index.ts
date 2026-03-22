@@ -12,6 +12,7 @@ import env from "./env";
 import { createPushJobArbitrationRuntime } from "./push-job-arbitration-runtime";
 import { recoverCredentialHealthOutbox } from "./recovery/credential-health-outbox-recovery";
 import type { CredentialHealthCommand } from "@keeper.sh/state-machines";
+import { createPushArbitrationEnvelopeFactory } from "./utils/push-arbitration-envelope";
 
 const DEFAULT_CONCURRENCY = 5;
 const LOCK_DURATION_MS = 360_000;
@@ -68,11 +69,9 @@ await entry({
     );
 
     const pushArbitrationRuntime = createPushJobArbitrationRuntime({
-      createEnvelope: (event, jobId) => ({
-        actor: { id: "worker-bullmq", type: "system" },
-        event,
-        id: `${event.type}:${jobId}`,
-        occurredAt: new Date().toISOString(),
+      createEnvelope: createPushArbitrationEnvelopeFactory({
+        actorId: "worker-bullmq",
+        now: () => new Date().toISOString(),
       }),
       outboxStore: new RedisCommandOutboxStore({
         keyPrefix: "machine:outbox:push-arbitration",

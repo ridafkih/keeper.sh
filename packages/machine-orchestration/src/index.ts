@@ -18,6 +18,16 @@ export type {
   SourceProvisioningDomainEvent,
   SourceProvisioningOrchestratorDependencies,
 } from "./source-provisioning-orchestrator";
+export { createSourceProvisioningDispatcher } from "./source-provisioning-dispatcher";
+export type {
+  CreateSourceProvisioningDispatcherInput,
+  SourceProvisioningDispatcher,
+} from "./source-provisioning-dispatcher";
+export { createSequencedRuntimeEnvelopeFactory } from "./sequenced-runtime-envelope-factory";
+export type {
+  CreateSequencedRuntimeEnvelopeFactoryInput,
+  SequencedRuntimeEnvelopeEvent,
+} from "./sequenced-runtime-envelope-factory";
 
 export { PushJobArbitrationOrchestrator } from "./push-job-arbitration-orchestrator";
 export type {

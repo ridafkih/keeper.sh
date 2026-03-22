@@ -1,10 +1,10 @@
 import { CalendarFetchError } from "@keeper.sh/calendar";
 import {
-  createEventEnvelope,
-  SourceProvisioningStateMachine,
+  createSourceProvisioningDispatcher,
+} from "@keeper.sh/machine-orchestration";
+import {
   TransitionPolicy,
 } from "@keeper.sh/state-machines";
-import type { SourceProvisioningEvent } from "@keeper.sh/state-machines";
 
 interface SourceReference {
   id: string;
@@ -84,27 +84,15 @@ const runCreateSource = async <TSource extends SourceReference>(
   dependencies: CreateSourceDependencies<TSource>,
 ): Promise<TSource> => {
   const requestId = crypto.randomUUID();
-  const sourceProvisioningMachine = new SourceProvisioningStateMachine(
-    {
-      mode: "create_single",
-      provider: "ics",
-      requestId,
-      userId: input.userId,
-    },
-    { transitionPolicy: TransitionPolicy.REJECT },
-  );
-  let envelopeSequence = 0;
-  const dispatchProvisioningEvent = (event: SourceProvisioningEvent) =>
-    sourceProvisioningMachine.dispatch(
-      createEventEnvelope(
-        event,
-        { id: "api-source-lifecycle", type: "system" },
-        {
-          id: `${requestId}:${++envelopeSequence}:${event.type}`,
-          occurredAt: new Date().toISOString(),
-        },
-      ),
-    );
+  const provisioningDispatcher = createSourceProvisioningDispatcher({
+    actorId: "api-source-lifecycle",
+    mode: "create_single",
+    provider: "ics",
+    requestId,
+    transitionPolicy: TransitionPolicy.REJECT,
+    userId: input.userId,
+  });
+  const dispatchProvisioningEvent = provisioningDispatcher.dispatch;
 
   await dependencies.acquireAccountLock(input.userId);
   const existingAccountCount = await dependencies.countExistingAccounts(input.userId);

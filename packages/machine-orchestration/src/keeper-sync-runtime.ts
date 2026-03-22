@@ -43,6 +43,7 @@ import {
   createStartupDispatchSteps,
   isUnresolvedProviderStatus,
 } from "./keeper-sync-runtime-dispatch-table";
+import { createSequencedRuntimeEnvelopeFactory } from "./sequenced-runtime-envelope-factory";
 
 const GOOGLE_REQUESTS_PER_MINUTE = 500;
 
@@ -84,6 +85,11 @@ interface SyncDestination {
   failureCount: number;
   provider: string;
   userId: string;
+}
+
+interface SyncLockHandle {
+  isCurrent: () => Promise<boolean>;
+  release: () => Promise<void>;
 }
 
 interface SyncCallbacks {
@@ -229,13 +235,11 @@ const runStartupDispatchSteps = async (input: {
   return false;
 };
 
-const runKeeperSyncRuntimeForUser = async (
+const listSyncDestinations = async (
+  database: BunSQLDatabase,
   userId: string,
-  config: KeeperSyncRuntimeConfig,
-  callbacks?: SyncCallbacks,
-): Promise<KeeperSyncRuntimeResult> => {
-  const { database, redis } = config;
-  const destinations: SyncDestination[] = await database
+): Promise<SyncDestination[]> =>
+  database
     .select({
       accountId: calendarsTable.accountId,
       calendarId: calendarsTable.id,
@@ -257,6 +261,64 @@ const runKeeperSyncRuntimeForUser = async (
         ),
       ),
     );
+
+const createDestinationRuntimeForSync = (input: {
+  database: BunSQLDatabase;
+  destination: SyncDestination;
+  handle: SyncLockHandle;
+  redis: Redis;
+  callbacks?: SyncCallbacks;
+}): DestinationRuntimePort =>
+  createDestinationExecutionRuntime({
+    calendarId: input.destination.calendarId,
+    createEnvelope: createSequencedRuntimeEnvelopeFactory({
+      actor: { id: "sync-runtime", type: "system" },
+      aggregateId: input.destination.calendarId,
+      now: () => new Date().toISOString(),
+    }),
+    failureCount: input.destination.failureCount,
+    handlers: {
+      applyBackoff: async (nextAttemptAt) => {
+        await input.database
+          .update(calendarsTable)
+          .set({
+            failureCount: input.destination.failureCount + 1,
+            lastFailureAt: new Date(),
+            nextAttemptAt: new Date(nextAttemptAt),
+          })
+          .where(eq(calendarsTable.id, input.destination.calendarId));
+      },
+      disableDestination: async () => {
+        await input.database
+          .update(calendarsTable)
+          .set({
+            disabled: true,
+            failureCount: input.destination.failureCount + 1,
+            lastFailureAt: new Date(),
+            nextAttemptAt: null,
+          })
+          .where(eq(calendarsTable.id, input.destination.calendarId));
+      },
+      emitSyncEvent: () => Promise.resolve(),
+      releaseLock: async () => {
+        await input.handle.release();
+      },
+    },
+    onRuntimeEvent: (event) =>
+      input.callbacks?.onDestinationRuntimeEvent?.(input.destination.calendarId, event),
+    outboxStore: new RedisCommandOutboxStore({
+      keyPrefix: "machine:outbox:destination-execution",
+      redis: input.redis,
+    }),
+  });
+
+const runKeeperSyncRuntimeForUser = async (
+  userId: string,
+  config: KeeperSyncRuntimeConfig,
+  callbacks?: SyncCallbacks,
+): Promise<KeeperSyncRuntimeResult> => {
+  const { database, redis } = config;
+  const destinations = await listSyncDestinations(database, userId);
 
   if (destinations.length === 0) {
     return EMPTY_RESULT;
@@ -296,51 +358,12 @@ const runKeeperSyncRuntimeForUser = async (
     }
 
     const { handle } = lockResult;
-    let envelopeSequence = 0;
-    const destinationRuntime = createDestinationExecutionRuntime({
-      calendarId: destination.calendarId,
-      createEnvelope: (event) => {
-        envelopeSequence += 1;
-        return {
-          actor: { id: "sync-runtime", type: "system" },
-          event,
-          id: `${destination.calendarId}:${envelopeSequence}:${event.type}`,
-          occurredAt: new Date().toISOString(),
-        };
-      },
-      failureCount: destination.failureCount,
-      handlers: {
-        applyBackoff: async (nextAttemptAt) => {
-          await database
-            .update(calendarsTable)
-            .set({
-              failureCount: destination.failureCount + 1,
-              lastFailureAt: new Date(),
-              nextAttemptAt: new Date(nextAttemptAt),
-            })
-            .where(eq(calendarsTable.id, destination.calendarId));
-        },
-        disableDestination: async () => {
-          await database
-            .update(calendarsTable)
-            .set({
-              disabled: true,
-              failureCount: destination.failureCount + 1,
-              lastFailureAt: new Date(),
-              nextAttemptAt: null,
-            })
-            .where(eq(calendarsTable.id, destination.calendarId));
-        },
-        emitSyncEvent: () => Promise.resolve(),
-        releaseLock: async () => {
-          await handle.release();
-        },
-      },
-      onRuntimeEvent: (event) => callbacks?.onDestinationRuntimeEvent?.(destination.calendarId, event),
-      outboxStore: new RedisCommandOutboxStore({
-        keyPrefix: "machine:outbox:destination-execution",
-        redis,
-      }),
+    const destinationRuntime = createDestinationRuntimeForSync({
+      callbacks,
+      database,
+      destination,
+      handle,
+      redis,
     });
 
     try {

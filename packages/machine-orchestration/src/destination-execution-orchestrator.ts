@@ -34,34 +34,39 @@ interface DestinationExecutionOrchestratorDependencies {
 const mapDomainEventToMachineEvent = (
   domainEvent: DestinationExecutionDomainEvent,
 ): DestinationExecutionEvent => {
-  if (domainEvent.type === "LOCK_WAIT_STARTED" || domainEvent.type === "LOCK_ACQUIRED") {
-    return { type: domainEvent.type, holderId: domainEvent.holderId };
+  switch (domainEvent.type) {
+    case "LOCK_WAIT_STARTED":
+    case "LOCK_ACQUIRED": {
+      return { type: domainEvent.type, holderId: domainEvent.holderId };
+    }
+    case "EXECUTION_STARTED": {
+      return { type: "EXECUTION_STARTED" };
+    }
+    case "EXECUTION_SUCCEEDED": {
+      return {
+        type: "EXECUTION_SUCCEEDED",
+        eventsAdded: domainEvent.eventsAdded,
+        eventsRemoved: domainEvent.eventsRemoved,
+      };
+    }
+    case "INVALIDATION_DETECTED": {
+      return { type: "INVALIDATION_DETECTED", at: domainEvent.at };
+    }
+    case "EXECUTION_RETRYABLE_FAILED": {
+      return {
+        type: "EXECUTION_RETRYABLE_FAILED",
+        code: domainEvent.code,
+        nextAttemptAt: domainEvent.nextAttemptAt,
+      };
+    }
+    case "EXECUTION_FATAL_FAILED": {
+      return {
+        type: "EXECUTION_FATAL_FAILED",
+        code: domainEvent.code,
+        reason: domainEvent.reason,
+      };
+    }
   }
-  if (domainEvent.type === "EXECUTION_STARTED") {
-    return { type: "EXECUTION_STARTED" };
-  }
-  if (domainEvent.type === "EXECUTION_SUCCEEDED") {
-    return {
-      type: "EXECUTION_SUCCEEDED",
-      eventsAdded: domainEvent.eventsAdded,
-      eventsRemoved: domainEvent.eventsRemoved,
-    };
-  }
-  if (domainEvent.type === "INVALIDATION_DETECTED") {
-    return { type: "INVALIDATION_DETECTED", at: domainEvent.at };
-  }
-  if (domainEvent.type === "EXECUTION_RETRYABLE_FAILED") {
-    return {
-      type: "EXECUTION_RETRYABLE_FAILED",
-      code: domainEvent.code,
-      nextAttemptAt: domainEvent.nextAttemptAt,
-    };
-  }
-  return {
-    type: "EXECUTION_FATAL_FAILED",
-    code: domainEvent.code,
-    reason: domainEvent.reason,
-  };
 };
 
 const mapDomainActor = (domainEvent: DestinationExecutionDomainEvent): EventActor => ({ type: "worker", id: domainEvent.actorId });

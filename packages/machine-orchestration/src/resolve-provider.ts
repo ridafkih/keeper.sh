@@ -29,7 +29,6 @@ import {
   ProviderResolutionStatus,
   isCaldavProviderName,
   isOAuthProviderName,
-  resolveProviderSupportStatus,
 } from "./provider-resolution-policy";
 import type {
   OAuthConfig,
@@ -37,6 +36,7 @@ import type {
   ProviderResolutionStatus as ProviderResolutionStatusType,
 } from "./provider-resolution-policy";
 import { resolveOAuthClientConfig } from "./oauth-client-config";
+import { createSequencedRuntimeEnvelopeFactory } from "./sequenced-runtime-envelope-factory";
 
 type ProviderResolutionOutcome =
   | { status: typeof ProviderResolutionStatus.RESOLVED; provider: CalendarSyncProvider }
@@ -125,20 +125,16 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
     refreshLockStore,
     rawRefresh,
   } = options;
-  let envelopeSequence = 0;
+  const createEnvelope = createSequencedRuntimeEnvelopeFactory({
+    actor: { id: "sync-refresh", type: "system" },
+    aggregateId: oauthCredentialId,
+    now: () => new Date().toISOString(),
+  });
 
   const runtime = createCredentialHealthRuntime({
     accessTokenExpiresAt,
     calendarAccountId,
-    createEnvelope: (event) => {
-      envelopeSequence += 1;
-      return {
-        actor: { id: "sync-refresh", type: "system" },
-        event,
-        id: `${oauthCredentialId}:${envelopeSequence}:${event.type}`,
-        occurredAt: new Date().toISOString(),
-      };
-    },
+    createEnvelope,
     isReauthRequiredError: (error) => isOAuthReauthRequiredError(error),
     markNeedsReauthentication: async () => {
       await database
@@ -375,34 +371,52 @@ interface ResolveProviderOptions {
   ) => Promise<void> | void;
 }
 
+type ProviderKind = "oauth" | "caldav" | "unknown";
+
+const resolveProviderKind = (provider: string): ProviderKind => {
+  if (isOAuthProviderName(provider)) {
+    return "oauth";
+  }
+  if (isCaldavProviderName(provider)) {
+    return "caldav";
+  }
+  return "unknown";
+};
+
 const resolveSyncProviderOutcome = (options: ResolveProviderOptions): Promise<ProviderResolutionOutcome> => {
-  if (isOAuthProviderName(options.provider)) {
-    return resolveOAuthProvider({
-      database: options.database,
-      provider: options.provider,
-      calendarId: options.calendarId,
-      userId: options.userId,
-      accountId: options.accountId,
-      oauthConfig: options.oauthConfig,
-      refreshLockStore: options.refreshLockStore,
-      outboxRedis: options.outboxRedis,
-      onCredentialRuntimeEvent: options.onCredentialRuntimeEvent,
-      rateLimiter: options.rateLimiter,
-      signal: options.signal,
-    });
-  }
+  const providerKind = resolveProviderKind(options.provider);
 
-  if (isCaldavProviderName(options.provider) && options.encryptionKey) {
-    return resolveCalDAVProvider(
-      options.database,
-      options.calendarId,
-      options.encryptionKey,
-    );
+  switch (providerKind) {
+    case "oauth": {
+      return resolveOAuthProvider({
+        accountId: options.accountId,
+        calendarId: options.calendarId,
+        database: options.database,
+        oauthConfig: options.oauthConfig,
+        onCredentialRuntimeEvent: options.onCredentialRuntimeEvent,
+        outboxRedis: options.outboxRedis,
+        provider: options.provider,
+        rateLimiter: options.rateLimiter,
+        refreshLockStore: options.refreshLockStore,
+        signal: options.signal,
+        userId: options.userId,
+      });
+    }
+    case "caldav": {
+      const encryptionKey = options.encryptionKey;
+      if (!encryptionKey) {
+        return Promise.resolve(unresolvedProvider(ProviderResolutionStatus.MISCONFIGURED_PROVIDER));
+      }
+      return resolveCalDAVProvider(
+        options.database,
+        options.calendarId,
+        encryptionKey,
+      );
+    }
+    case "unknown": {
+      return Promise.resolve(unresolvedProvider(ProviderResolutionStatus.UNSUPPORTED_PROVIDER));
+    }
   }
-
-  return Promise.resolve(
-    unresolvedProvider(resolveProviderSupportStatus(options.provider, options.encryptionKey)),
-  );
 };
 
 const resolveSyncProvider = async (

@@ -94,6 +94,29 @@ interface ExistingAccount {
   caldavCredentialId: string | null;
 }
 
+const findMappedDestinationCalendarForAccountId = async (
+  databaseClient: DestinationDatabase,
+  accountId: string,
+): Promise<{ id: string } | undefined> => {
+  const [existingCalendar] = await databaseClient
+    .select({ id: calendarsTable.id })
+    .from(calendarsTable)
+    .where(
+      and(
+        eq(calendarsTable.accountId, accountId),
+        inArray(
+          calendarsTable.id,
+          databaseClient
+            .selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
+            .from(sourceDestinationMappingsTable),
+        ),
+      ),
+    )
+    .limit(FIRST_RESULT_LIMIT);
+
+  return existingCalendar;
+};
+
 const findExistingAccount = async (
   databaseClient: DestinationDatabase,
   provider: string,
@@ -167,10 +190,7 @@ const upsertAccountAndCalendarWithDatabase = async (
     setClause.caldavCredentialId = caldavCredentialId;
   }
 
-  let authType = "caldav";
-  if (oauthCredentialId) {
-    authType = "oauth";
-  }
+  const authType = oauthCredentialId ? "oauth" : "caldav";
 
   const [account] = await databaseClient
     .insert(calendarAccountsTable)
@@ -194,19 +214,7 @@ const upsertAccountAndCalendarWithDatabase = async (
     return;
   }
 
-  const [existingCalendar] = await databaseClient
-    .select({ id: calendarsTable.id })
-    .from(calendarsTable)
-    .where(
-      and(
-        eq(calendarsTable.accountId, account.id),
-        inArray(calendarsTable.id,
-          databaseClient.selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
-            .from(sourceDestinationMappingsTable)
-        ),
-      ),
-    )
-    .limit(FIRST_RESULT_LIMIT);
+  const existingCalendar = await findMappedDestinationCalendarForAccountId(databaseClient, account.id);
 
   if (existingCalendar) {
     return existingCalendar.id;
@@ -251,19 +259,10 @@ const saveCalendarDestinationWithDatabase = async (
       .set({ email, needsReauthentication })
       .where(eq(calendarAccountsTable.id, existingAccount.id));
 
-    const [existingCalendar] = await databaseClient
-      .select({ id: calendarsTable.id })
-      .from(calendarsTable)
-      .where(
-        and(
-          eq(calendarsTable.accountId, existingAccount.id),
-          inArray(calendarsTable.id,
-            databaseClient.selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
-              .from(sourceDestinationMappingsTable)
-          ),
-        ),
-      )
-      .limit(FIRST_RESULT_LIMIT);
+    const existingCalendar = await findMappedDestinationCalendarForAccountId(
+      databaseClient,
+      existingAccount.id,
+    );
 
     if (existingCalendar) {
       await initializeSyncStatusWithDatabase(databaseClient, existingCalendar.id);
@@ -401,19 +400,10 @@ const saveCalDAVDestinationWithDatabase = async (
       .set({ email })
       .where(eq(calendarAccountsTable.id, existingAccount.id));
 
-    const [existingCalendar] = await databaseClient
-      .select({ id: calendarsTable.id })
-      .from(calendarsTable)
-      .where(
-        and(
-          eq(calendarsTable.accountId, existingAccount.id),
-          inArray(calendarsTable.id,
-            databaseClient.selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
-              .from(sourceDestinationMappingsTable)
-          ),
-        ),
-      )
-      .limit(FIRST_RESULT_LIMIT);
+    const existingCalendar = await findMappedDestinationCalendarForAccountId(
+      databaseClient,
+      existingAccount.id,
+    );
 
     if (existingCalendar) {
       await databaseClient

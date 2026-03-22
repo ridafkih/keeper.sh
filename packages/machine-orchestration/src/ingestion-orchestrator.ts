@@ -23,39 +23,36 @@ interface IngestionOrchestratorDependencies {
 }
 
 const mapDomainEventToMachineEvent = (domainEvent: IngestionDomainEvent): IngestionEvent => {
-  if (domainEvent.type === "INGESTION_RUN_REQUESTED") {
-    return { type: "START" };
+  switch (domainEvent.type) {
+    case "INGESTION_RUN_REQUESTED": {
+      return { type: "START" };
+    }
+    case "REMOTE_FETCH_SUCCEEDED": {
+      return { type: "FETCH_OK" };
+    }
+    case "DIFF_SUCCEEDED": {
+      return { type: "DIFF_OK" };
+    }
+    case "APPLY_COMPLETED": {
+      return {
+        type: "APPLY_OK",
+        eventsAdded: domainEvent.eventsAdded,
+        eventsRemoved: domainEvent.eventsRemoved,
+      };
+    }
+    case "FETCH_AUTH_FAILED": {
+      return { type: "FETCH_AUTH_ERROR", code: domainEvent.code };
+    }
+    case "FETCH_NOT_FOUND": {
+      return { type: "FETCH_NOT_FOUND", code: domainEvent.code };
+    }
+    case "FETCH_TRANSIENT_FAILED": {
+      return { type: "FETCH_TRANSIENT_ERROR", code: domainEvent.code };
+    }
+    case "FETCH_TIMEOUT": {
+      return { type: "TIMEOUT", code: domainEvent.code };
+    }
   }
-
-  if (domainEvent.type === "REMOTE_FETCH_SUCCEEDED") {
-    return { type: "FETCH_OK" };
-  }
-
-  if (domainEvent.type === "DIFF_SUCCEEDED") {
-    return { type: "DIFF_OK" };
-  }
-
-  if (domainEvent.type === "APPLY_COMPLETED") {
-    return {
-      type: "APPLY_OK",
-      eventsAdded: domainEvent.eventsAdded,
-      eventsRemoved: domainEvent.eventsRemoved,
-    };
-  }
-
-  if (domainEvent.type === "FETCH_AUTH_FAILED") {
-    return { type: "FETCH_AUTH_ERROR", code: domainEvent.code };
-  }
-
-  if (domainEvent.type === "FETCH_NOT_FOUND") {
-    return { type: "FETCH_NOT_FOUND", code: domainEvent.code };
-  }
-
-  if (domainEvent.type === "FETCH_TRANSIENT_FAILED") {
-    return { type: "FETCH_TRANSIENT_ERROR", code: domainEvent.code };
-  }
-
-  return { type: "TIMEOUT", code: domainEvent.code };
 };
 
 const mapDomainActor = (domainEvent: IngestionDomainEvent): EventActor => ({ type: "worker", id: domainEvent.actorId });
