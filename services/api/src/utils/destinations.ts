@@ -1,18 +1,14 @@
-import type {
-  AuthorizationUrlOptions,
-  OAuthTokens,
-  NormalizedUserInfo as OAuthUserInfo,
-  ValidatedState,
-} from "@keeper.sh/calendar";
-import {
-  calendarAccountsTable,
-  calendarsTable,
-  sourceDestinationMappingsTable,
-} from "@keeper.sh/database/schema";
-import { and, eq, inArray } from "drizzle-orm";
-import { database, oauthProviders, redis } from "@/context";
-import { invalidateCalendarsForAccount } from "@/utils/invalidate-calendars";
+import { database } from "@/context";
 import { saveCalDAVDestinationWithDatabase } from "./caldav-destination-repository";
+import { deleteCalendarDestination } from "./destination-delete-service";
+import {
+  exchangeCodeForTokens,
+  fetchUserInfo,
+  getAuthorizationUrl,
+  hasRequiredScopes,
+  isOAuthProvider,
+  validateState,
+} from "./destination-oauth-provider-gateway";
 import {
   CalDAVCredentialCreateError,
   DestinationAccountCreateError,
@@ -20,47 +16,11 @@ import {
   OAuthCredentialCreateError,
   OAuthProviderNotFoundError,
 } from "./destination-errors";
+import {
+  getDestinationAccountExternalIdWithDatabase,
+  listCalendarDestinationsWithDatabase,
+} from "./destination-query-repository";
 import { saveCalendarDestinationWithDatabase } from "./oauth-destination-repository";
-
-const FIRST_RESULT_LIMIT = 1;
-const EMPTY_RESULT_COUNT = 0;
-
-interface CalendarDestination {
-  id: string;
-  provider: string;
-  email: string | null;
-  needsReauthentication: boolean;
-}
-
-const isOAuthProvider = (provider: string): boolean => oauthProviders.isOAuthProvider(provider);
-
-const hasRequiredScopes = (provider: string, grantedScopes: string): boolean =>
-  oauthProviders.hasRequiredScopes(provider, grantedScopes);
-
-const getOAuthProviderOrThrow = (provider: string) => {
-  const oauthProvider = oauthProviders.getProvider(provider);
-  if (!oauthProvider) {
-    throw new OAuthProviderNotFoundError(provider);
-  }
-  return oauthProvider;
-};
-
-const getAuthorizationUrl = (
-  provider: string,
-  userId: string,
-  options: AuthorizationUrlOptions,
-): Promise<string> => getOAuthProviderOrThrow(provider).getAuthorizationUrl(userId, options);
-
-const exchangeCodeForTokens = (
-  provider: string,
-  code: string,
-  callbackUrl: string,
-): Promise<OAuthTokens> => getOAuthProviderOrThrow(provider).exchangeCodeForTokens(code, callbackUrl);
-
-const fetchUserInfo = (provider: string, accessToken: string): Promise<OAuthUserInfo> =>
-  getOAuthProviderOrThrow(provider).fetchUserInfo(accessToken);
-
-const validateState = (state: string): Promise<ValidatedState | null> => oauthProviders.validateState(state);
 
 const saveCalendarDestination = (
   userId: string,
@@ -84,67 +44,11 @@ const saveCalendarDestination = (
     needsReauthentication,
   );
 
-const listCalendarDestinations = async (userId: string): Promise<CalendarDestination[]> => {
-  const accounts = await database
-    .select({
-      email: calendarAccountsTable.email,
-      id: calendarAccountsTable.id,
-      needsReauthentication: calendarAccountsTable.needsReauthentication,
-      provider: calendarAccountsTable.provider,
-    })
-    .from(calendarAccountsTable)
-    .innerJoin(calendarsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
-    .where(
-      and(
-        eq(calendarAccountsTable.userId, userId),
-        inArray(
-          calendarsTable.id,
-          database
-            .selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
-            .from(sourceDestinationMappingsTable),
-        ),
-      ),
-    );
+const listCalendarDestinations = (userId: string) =>
+  listCalendarDestinationsWithDatabase(database, userId);
 
-  return accounts;
-};
-
-const deleteCalendarDestination = async (
-  userId: string,
-  accountId: string,
-): Promise<boolean> => {
-  await invalidateCalendarsForAccount(database, redis, accountId);
-
-  const result = await database
-    .delete(calendarAccountsTable)
-    .where(
-      and(
-        eq(calendarAccountsTable.userId, userId),
-        eq(calendarAccountsTable.id, accountId),
-      ),
-    )
-    .returning({ id: calendarAccountsTable.id });
-
-  return result.length > EMPTY_RESULT_COUNT;
-};
-
-const getAccountExternalId = async (userId: string, accountId: string): Promise<string | null> => {
-  const [account] = await database
-    .select({ accountId: calendarAccountsTable.accountId })
-    .from(calendarAccountsTable)
-    .where(
-      and(
-        eq(calendarAccountsTable.id, accountId),
-        eq(calendarAccountsTable.userId, userId),
-      ),
-    )
-    .limit(FIRST_RESULT_LIMIT);
-
-  if (account?.accountId) {
-    return account.accountId;
-  }
-  return null;
-};
+const getDestinationAccountId = (userId: string, accountId: string) =>
+  getDestinationAccountExternalIdWithDatabase(database, userId, accountId);
 
 const saveCalDAVDestination = (
   userId: string,
@@ -178,7 +82,7 @@ export {
   saveCalendarDestination,
   listCalendarDestinations,
   deleteCalendarDestination,
-  getAccountExternalId as getDestinationAccountId,
+  getDestinationAccountId,
   saveCalDAVDestination,
   saveCalDAVDestinationWithDatabase,
   saveCalendarDestinationWithDatabase,
