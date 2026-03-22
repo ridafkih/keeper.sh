@@ -136,7 +136,10 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       const url = buildOutlookEventsUrl(lookbackStart, futureDate, nextLink);
 
       const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${tokenState.accessToken}` },
+        headers: {
+          Authorization: `Bearer ${tokenState.accessToken}`,
+          Prefer: 'outlook.timezone="UTC"',
+        },
         method: "GET",
       });
 

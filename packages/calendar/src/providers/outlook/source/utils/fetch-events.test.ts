@@ -255,4 +255,60 @@ describe("parseOutlookEvents", () => {
     expect(parsedEvents).toHaveLength(1);
     expect(parsedEvents[0]?.availability).toBe("free");
   });
+
+  it("converts non-UTC timezone events to correct UTC time", () => {
+    const vietnamEvent = createOutlookEvent({
+      iCalUId: "vietnam-event-1",
+      start: {
+        dateTime: "2026-03-22T11:00:00.0000000",
+        timeZone: "SE Asia Standard Time",
+      },
+      end: {
+        dateTime: "2026-03-22T12:00:00.0000000",
+        timeZone: "SE Asia Standard Time",
+      },
+    });
+
+    const parsedEvents = parseOutlookEvents([vietnamEvent]);
+
+    expect(parsedEvents).toHaveLength(1);
+
+    const [parsedEvent] = parsedEvents;
+    if (!parsedEvent) {
+      throw new Error("Expected parsed event");
+    }
+
+    // 11:00 AM Vietnam (GMT+7) = 04:00 UTC
+    expect(parsedEvent.startTime.toISOString()).toBe("2026-03-22T04:00:00.000Z");
+    // 12:00 PM Vietnam (GMT+7) = 05:00 UTC
+    expect(parsedEvent.endTime.toISOString()).toBe("2026-03-22T05:00:00.000Z");
+  });
+
+  it("converts IANA timezone events to correct UTC time", () => {
+    const tokyoEvent = createOutlookEvent({
+      iCalUId: "tokyo-event-1",
+      start: {
+        dateTime: "2026-03-22T09:00:00.0000000",
+        timeZone: "Asia/Tokyo",
+      },
+      end: {
+        dateTime: "2026-03-22T10:00:00.0000000",
+        timeZone: "Asia/Tokyo",
+      },
+    });
+
+    const parsedEvents = parseOutlookEvents([tokyoEvent]);
+
+    expect(parsedEvents).toHaveLength(1);
+
+    const [parsedEvent] = parsedEvents;
+    if (!parsedEvent) {
+      throw new Error("Expected parsed event");
+    }
+
+    // 9:00 AM Tokyo (GMT+9) = 00:00 UTC
+    expect(parsedEvent.startTime.toISOString()).toBe("2026-03-22T00:00:00.000Z");
+    // 10:00 AM Tokyo (GMT+9) = 01:00 UTC
+    expect(parsedEvent.endTime.toISOString()).toBe("2026-03-22T01:00:00.000Z");
+  });
 });
