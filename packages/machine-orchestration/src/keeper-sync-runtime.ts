@@ -121,6 +121,13 @@ interface DispatchWithConflictInput {
   startedAtMs: number;
 }
 
+interface SyncTotals {
+  addFailed: number;
+  added: number;
+  removeFailed: number;
+  removed: number;
+}
+
 const EMPTY_RESULT: KeeperSyncRuntimeResult = {
   addFailed: 0,
   added: 0,
@@ -128,6 +135,16 @@ const EMPTY_RESULT: KeeperSyncRuntimeResult = {
   removeFailed: 0,
   removed: 0,
   syncEvents: [],
+};
+
+const applySyncTotals = (
+  totals: SyncTotals,
+  result: Pick<KeeperSyncRuntimeResult, "addFailed" | "added" | "removeFailed" | "removed">,
+): void => {
+  totals.added += result.added;
+  totals.addFailed += result.addFailed;
+  totals.removed += result.removed;
+  totals.removeFailed += result.removeFailed;
 };
 
 const extractNumericField = (
@@ -235,6 +252,51 @@ const runStartupDispatchSteps = async (input: {
   return false;
 };
 
+const handleUnresolvedProviderOutcome = async (input: {
+  destination: SyncDestination;
+  notifyCalendarFailed: (failure: CalendarSyncFailure) => Promise<void>;
+  runtime: DestinationRuntimePort;
+  startedAtMs: number;
+  status: Exclude<ProviderResolutionStatus, typeof ProviderResolutionStatus.RESOLVED>;
+}): Promise<void> => {
+  const providerResolutionFailedStep = createProviderResolutionFailedStep(
+    input.status,
+  );
+  const providerResolutionDispatchResult = await dispatchWithConflictHandling({
+    conflictCode: providerResolutionFailedStep.conflictCode,
+    destination: input.destination,
+    event: providerResolutionFailedStep.event,
+    notifyCalendarFailed: input.notifyCalendarFailed,
+    runtime: input.runtime,
+    startedAtMs: input.startedAtMs,
+  });
+
+  if (providerResolutionDispatchResult.conflictHandled) {
+    return;
+  }
+
+  const { result: failedResult } = providerResolutionDispatchResult;
+  if (failedResult.outcome !== "TRANSITION_APPLIED") {
+    throw new RuntimeInvariantViolationError({
+      aggregateId: input.destination.calendarId,
+      code: "DESTINATION_FATAL_FAILURE_TRANSITION_MISSING",
+      reason: "fatal failure dispatch did not apply a transition",
+      surface: "keeper-sync-runtime",
+    });
+  }
+
+  const failedPolicy = resolveDestinationFailureOutput(failedResult.transition.outputs);
+  await input.notifyCalendarFailed(
+    buildCalendarFailure({
+      destination: input.destination,
+      disabled: failedPolicy.disabled,
+      error: input.status,
+      retryable: failedPolicy.retryable,
+      startedAtMs: input.startedAtMs,
+    }),
+  );
+};
+
 const listSyncDestinations = async (
   database: BunSQLDatabase,
   userId: string,
@@ -332,10 +394,12 @@ const runKeeperSyncRuntimeForUser = async (
     { requestsPerMinute: GOOGLE_REQUESTS_PER_MINUTE },
   );
 
-  let added = 0;
-  let addFailed = 0;
-  let removed = 0;
-  let removeFailed = 0;
+  const totals: SyncTotals = {
+    addFailed: 0,
+    added: 0,
+    removeFailed: 0,
+    removed: 0,
+  };
   const errors: string[] = [];
   const syncEvents: Record<string, unknown>[] = [];
 
@@ -403,42 +467,13 @@ const runKeeperSyncRuntimeForUser = async (
           });
         }
 
-        const providerResolutionFailedStep = createProviderResolutionFailedStep(
-          syncProviderOutcome.status,
-        );
-        const providerResolutionDispatchResult = await dispatchWithConflictHandling({
-          conflictCode: providerResolutionFailedStep.conflictCode,
+        await handleUnresolvedProviderOutcome({
           destination,
-          event: providerResolutionFailedStep.event,
           notifyCalendarFailed,
           runtime: destinationRuntime,
           startedAtMs: calendarSyncStartedAt,
+          status: syncProviderOutcome.status,
         });
-
-        if (providerResolutionDispatchResult.conflictHandled) {
-          continue;
-        }
-
-        const { result: failedResult } = providerResolutionDispatchResult;
-        if (failedResult.outcome !== "TRANSITION_APPLIED") {
-          throw new RuntimeInvariantViolationError({
-            aggregateId: destination.calendarId,
-            code: "DESTINATION_FATAL_FAILURE_TRANSITION_MISSING",
-            reason: "fatal failure dispatch did not apply a transition",
-            surface: "keeper-sync-runtime",
-          });
-        }
-
-        const failedPolicy = resolveDestinationFailureOutput(failedResult.transition.outputs);
-        await notifyCalendarFailed(
-          buildCalendarFailure({
-            destination,
-            disabled: failedPolicy.disabled,
-            error: syncProviderOutcome.status,
-            retryable: failedPolicy.retryable,
-            startedAtMs: calendarSyncStartedAt,
-          }),
-        );
         continue;
       }
 
@@ -507,10 +542,7 @@ const runKeeperSyncRuntimeForUser = async (
         continue;
       }
 
-      added += result.added;
-      addFailed += result.addFailed;
-      removed += result.removed;
-      removeFailed += result.removeFailed;
+      applySyncTotals(totals, result);
       errors.push(...result.errors);
 
       await notifyCalendarCompleteIfNeeded({
@@ -577,7 +609,14 @@ const runKeeperSyncRuntimeForUser = async (
     }
   }
 
-  return { addFailed, added, errors, removeFailed, removed, syncEvents };
+  return {
+    addFailed: totals.addFailed,
+    added: totals.added,
+    errors,
+    removeFailed: totals.removeFailed,
+    removed: totals.removed,
+    syncEvents,
+  };
 };
 
 export { runKeeperSyncRuntimeForUser };
