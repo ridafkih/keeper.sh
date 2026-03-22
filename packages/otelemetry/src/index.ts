@@ -38,10 +38,11 @@ const parseLogLine = (line: string) => {
 
 const forwardToCollector = (
   logger: ReturnType<LoggerProvider["getLogger"]>,
+  line: string,
   { message, level, time, attributes }: ReturnType<typeof parseLogLine>,
 ) => {
   logger.emit({
-    body: message,
+    body: message ?? line,
     severityNumber: PINO_SEVERITY[level] ?? SeverityNumber.INFO,
     severityText: PINO_SEVERITY_TEXT[level] ?? "INFO",
     ...(time && { timestamp: new Date(time) }),
@@ -80,12 +81,12 @@ if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
 
   const logger = provider.getLogger(serviceName);
 
-  forwardToCollector(logger, firstLogEntry);
+  forwardToCollector(logger, firstResult.value, firstLogEntry);
 
   for await (const line of lineIterator) {
     process.stdout.write(`${line}\n`);
     try {
-      forwardToCollector(logger, parseLogLine(line));
+      forwardToCollector(logger, line, parseLogLine(line));
     } catch {
       // Non-JSON line, pass through only
     }
