@@ -17,6 +17,7 @@
       "dependencies": {
         "@better-auth/passkey": "^1.5.5",
         "@keeper.sh/data-schemas": "workspace:*",
+        "@keeper.sh/otelemetry": "workspace:*",
         "@polar-sh/checkout": "^0.2.0",
         "@tanstack/react-router": "^1.163.3",
         "arktype": "^2.2.0",
@@ -159,6 +160,9 @@
     },
     "packages/otelemetry": {
       "name": "@keeper.sh/otelemetry",
+      "bin": {
+        "keeper-otelemetry": "src/index.ts",
+      },
       "dependencies": {
         "@opentelemetry/api-logs": "^0.213.0",
         "@opentelemetry/exporter-logs-otlp-http": "^0.213.0",

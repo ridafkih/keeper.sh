@@ -15,6 +15,7 @@
   "dependencies": {
     "@better-auth/passkey": "^1.5.5",
     "@keeper.sh/data-schemas": "workspace:*",
+    "@keeper.sh/otelemetry": "workspace:*",
     "@polar-sh/checkout": "^0.2.0",
     "@tanstack/react-router": "^1.163.3",
     "arktype": "^2.2.0",
