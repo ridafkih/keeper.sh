@@ -1,14 +1,7 @@
 import {
   calendarAccountsTable,
-  calendarsTable,
-  oauthCredentialsTable,
-  sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
-import { and, eq, inArray, sql } from "drizzle-orm";
-import {
-  listGoogleUserCalendars as listGoogleCalendars,
-  listOutlookUserCalendars as listOutlookCalendars,
-} from "@keeper.sh/calendar";
+import { sql } from "drizzle-orm";
 import { createSourceProvisioningDispatcher } from "@keeper.sh/machine-orchestration";
 import { TransitionPolicy } from "@keeper.sh/state-machines";
 import {
@@ -24,162 +17,47 @@ import {
   type OAuthSourceDatabase,
 } from "./oauth-source-repository";
 import { triggerOAuthSourceSync } from "./oauth-source-sync-trigger";
+import {
+  DestinationNotFoundError,
+  DestinationProviderMismatchError,
+  DuplicateSourceError,
+  OAuthImportAccountCreateError,
+  OAuthSourceAccountCreateError,
+  OAuthSourceCreateError,
+  OAuthSourceLimitError,
+  OAuthSourceProvisioningInvariantError,
+  SourceCredentialNotFoundError,
+  SourceCredentialProviderMismatchError,
+  UnsupportedOAuthProviderError,
+} from "./oauth-source-errors";
+import {
+  assertOAuthProviderId,
+  isOAuthProviderId,
+  listExternalOAuthCalendars,
+} from "./oauth-source-provider";
+import {
+  getOAuthDestinationCredentialsWithDatabase,
+  getOAuthSourceCredentialsWithDatabase,
+  getUserOAuthSourcesWithDatabase,
+  verifyOAuthSourceOwnershipWithDatabase,
+  type OAuthAccountWithCredentials,
+  type OAuthCalendarSource,
+  type OAuthSourceWithCredentials,
+} from "./oauth-source-query-repository";
 
-const FIRST_RESULT_LIMIT = 1;
-const OAUTH_CALENDAR_TYPE = "oauth";
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
-const SUPPORTED_OAUTH_PROVIDER_IDS = new Set(["google", "outlook"]);
-type OAuthProviderId = "google" | "outlook";
-
-class OAuthSourceLimitError extends Error {
-  constructor() {
-    super("Account limit reached. Upgrade to Pro for unlimited accounts.");
-  }
-}
-
-class DestinationNotFoundError extends Error {
-  constructor() {
-    super("Destination not found or not owned by user");
-  }
-}
-
-class DestinationProviderMismatchError extends Error {
-  constructor(provider: string) {
-    super(`Destination is not a ${provider} account`);
-  }
-}
-
-class DuplicateSourceError extends Error {
-  constructor() {
-    super("This calendar is already added as a source");
-  }
-}
-
-class UnsupportedOAuthProviderError extends Error {
-  constructor(operation: "source_create" | "account_import" | "calendar_listing", provider: string) {
-    super(`Unsupported OAuth provider for ${operation}: ${provider}`);
-  }
-}
-
-class OAuthSourceAccountCreateError extends Error {
-  constructor() {
-    super("Failed to create calendar account");
-  }
-}
-
-class OAuthSourceCreateError extends Error {
-  constructor() {
-    super("Failed to create OAuth calendar source");
-  }
-}
-
-class OAuthSourceProvisioningInvariantError extends Error {
-  constructor() {
-    super("Invariant violated: source provisioning did not request bootstrap sync");
-  }
-}
-
-class OAuthImportAccountCreateError extends Error {
-  constructor() {
-    super("Failed to find or create calendar account");
-  }
-}
-
-interface OAuthCalendarSource {
-  id: string;
-  name: string;
-  provider: string;
-  email: string | null;
-}
-
-interface OAuthAccountWithCredentials {
-  accountId: string;
-  email: string | null;
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: Date;
-}
-
-interface OAuthSourceWithCredentials {
-  credentialId: string;
-  email: string | null;
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: Date;
-}
-
-const isOAuthProviderId = (provider: string): provider is OAuthProviderId =>
-  SUPPORTED_OAUTH_PROVIDER_IDS.has(provider);
-
-function assertOAuthProviderId(
-  operation: "source_create" | "account_import" | "calendar_listing",
-  provider: string,
-): asserts provider is OAuthProviderId {
-  if (!isOAuthProviderId(provider)) {
-    throw new UnsupportedOAuthProviderError(operation, provider);
-  }
-}
 
 const getUserOAuthSources = async (
   userId: string,
   provider: string,
 ): Promise<OAuthCalendarSource[]> => {
   const { database } = await import("@/context");
-  const sources = await database
-    .select({
-      createdAt: calendarsTable.createdAt,
-      email: oauthCredentialsTable.email,
-      externalCalendarId: calendarsTable.externalCalendarId,
-      id: calendarsTable.id,
-      name: calendarsTable.name,
-      provider: calendarAccountsTable.provider,
-      userId: calendarsTable.userId,
-    })
-    .from(calendarsTable)
-    .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
-    .leftJoin(
-      oauthCredentialsTable,
-      eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id),
-    )
-    .where(
-      and(
-        eq(calendarsTable.userId, userId),
-        eq(calendarsTable.calendarType, OAUTH_CALENDAR_TYPE),
-        eq(calendarAccountsTable.provider, provider),
-        inArray(calendarsTable.id,
-          database.selectDistinct({ id: sourceDestinationMappingsTable.sourceCalendarId })
-            .from(sourceDestinationMappingsTable)
-        ),
-      ),
-    );
-
-  return sources.map((source) => ({
-    email: source.email,
-    id: source.id,
-    name: source.name,
-    provider: source.provider,
-  }));
+  return getUserOAuthSourcesWithDatabase(database, userId, provider);
 };
 
 const verifyOAuthSourceOwnership = async (userId: string, calendarId: string): Promise<boolean> => {
   const { database } = await import("@/context");
-  const [source] = await database
-    .select({ id: calendarsTable.id })
-    .from(calendarsTable)
-    .where(
-      and(
-        eq(calendarsTable.id, calendarId),
-        eq(calendarsTable.userId, userId),
-        eq(calendarsTable.calendarType, OAUTH_CALENDAR_TYPE),
-        inArray(calendarsTable.id,
-          database.selectDistinct({ id: sourceDestinationMappingsTable.sourceCalendarId })
-            .from(sourceDestinationMappingsTable)
-        ),
-      ),
-    )
-    .limit(FIRST_RESULT_LIMIT);
-
-  return Boolean(source);
+  return verifyOAuthSourceOwnershipWithDatabase(database, userId, calendarId);
 };
 
 const getOAuthDestinationCredentials = async (
@@ -188,56 +66,8 @@ const getOAuthDestinationCredentials = async (
   provider: string,
 ): Promise<OAuthAccountWithCredentials> => {
   const { database } = await import("@/context");
-  const [result] = await database
-    .select({
-      accessToken: oauthCredentialsTable.accessToken,
-      accountId: calendarAccountsTable.id,
-      email: calendarAccountsTable.email,
-      expiresAt: oauthCredentialsTable.expiresAt,
-      provider: calendarAccountsTable.provider,
-      refreshToken: oauthCredentialsTable.refreshToken,
-    })
-    .from(calendarAccountsTable)
-    .innerJoin(
-      oauthCredentialsTable,
-      eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id),
-    )
-    .where(
-      and(
-        eq(calendarAccountsTable.id, accountId),
-        eq(calendarAccountsTable.userId, userId),
-      ),
-    )
-    .limit(FIRST_RESULT_LIMIT);
-
-  if (!result) {
-    throw new DestinationNotFoundError();
-  }
-
-  if (result.provider !== provider) {
-    throw new DestinationProviderMismatchError(provider);
-  }
-
-  return {
-    accessToken: result.accessToken,
-    accountId: result.accountId,
-    email: result.email,
-    expiresAt: result.expiresAt,
-    refreshToken: result.refreshToken,
-  };
+  return getOAuthDestinationCredentialsWithDatabase(database, userId, accountId, provider);
 };
-
-class SourceCredentialNotFoundError extends Error {
-  constructor() {
-    super("Source credential not found or not owned by user");
-  }
-}
-
-class SourceCredentialProviderMismatchError extends Error {
-  constructor(provider: string) {
-    super(`Source credential is not a ${provider} account`);
-  }
-}
 
 const getOAuthSourceCredentials = async (
   userId: string,
@@ -245,39 +75,7 @@ const getOAuthSourceCredentials = async (
   provider: string,
 ): Promise<OAuthSourceWithCredentials> => {
   const { database } = await import("@/context");
-  const [result] = await database
-    .select({
-      accessToken: oauthCredentialsTable.accessToken,
-      credentialId: oauthCredentialsTable.id,
-      email: oauthCredentialsTable.email,
-      expiresAt: oauthCredentialsTable.expiresAt,
-      provider: oauthCredentialsTable.provider,
-      refreshToken: oauthCredentialsTable.refreshToken,
-    })
-    .from(oauthCredentialsTable)
-    .where(
-      and(
-        eq(oauthCredentialsTable.id, credentialId),
-        eq(oauthCredentialsTable.userId, userId),
-      ),
-    )
-    .limit(FIRST_RESULT_LIMIT);
-
-  if (!result) {
-    throw new SourceCredentialNotFoundError();
-  }
-
-  if (result.provider !== provider) {
-    throw new SourceCredentialProviderMismatchError(provider);
-  }
-
-  return {
-    accessToken: result.accessToken,
-    credentialId: result.credentialId,
-    email: result.email,
-    expiresAt: result.expiresAt,
-    refreshToken: result.refreshToken,
-  };
+  return getOAuthSourceCredentialsWithDatabase(database, userId, credentialId, provider);
 };
 
 interface CreateOAuthSourceOptions {
@@ -614,22 +412,7 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
     const { database } = await import("@/context");
     return insertOAuthCalendarsWithDatabase(database, userId, accountId, calendars);
   },
-  listCalendars: async (provider, accessToken) => {
-    assertOAuthProviderId("calendar_listing", provider);
-    try {
-      if (provider === "google") {
-        const calendars = await listGoogleCalendars(accessToken);
-        return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.summary }));
-      }
-      const calendars = await listOutlookCalendars(accessToken);
-      return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.name }));
-    } catch (error) {
-      if (error instanceof Error && "authRequired" in error && error.authRequired === true) {
-        return [];
-      }
-      throw error;
-    }
-  },
+  listCalendars: (provider, accessToken) => listExternalOAuthCalendars(provider, accessToken),
   triggerSync: (userId, provider) => {
     triggerOAuthSourceSync({ jobName: "oauth-account-import", provider, userId });
   },
