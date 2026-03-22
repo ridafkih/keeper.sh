@@ -2,7 +2,6 @@ import {
   caldavCredentialsTable,
   calendarAccountsTable,
   calendarsTable,
-  sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import {
   createSourceProvisioningDispatcher,
@@ -10,80 +9,34 @@ import {
 import {
   TransitionPolicy,
 } from "@keeper.sh/state-machines";
-import { and, count, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { encryptPassword } from "@keeper.sh/database";
 import { database, premiumService, encryptionKey } from "@/context";
 import { enqueuePushSync } from "./enqueue-push-sync";
 import { applySourceSyncDefaults } from "./source-sync-defaults";
 import { resolveSyncEnqueuePlan } from "./sync-enqueue-plan";
+import {
+  CalDAVEncryptionKeyMissingError,
+  CalDAVSourceAccountCreateError,
+  CalDAVSourceCreateError,
+  CalDAVSourceCredentialCreateError,
+  CalDAVSourceLimitError,
+  CalDAVSourceMissingCalendarUrlError,
+  CalDAVSourceProvisioningInvariantError,
+  DuplicateCalDAVSourceError,
+} from "./caldav-source-errors";
+import {
+  findReusableCalDAVAccountWithDatabase,
+  countUserAccountsWithDatabase as countUserCalDAVAccountsWithDatabase,
+  getUserCalDAVSourcesWithDatabase,
+  verifyCalDAVSourceOwnershipWithDatabase,
+  type CaldavSourceDatabase,
+  type CalDAVSource,
+} from "./caldav-source-query-repository";
 
 const FIRST_RESULT_LIMIT = 1;
 const CALDAV_CALENDAR_TYPE = "caldav";
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
-type CaldavSourceDatabase = Pick<
-  typeof database,
-  "insert" | "select" | "selectDistinct"
->;
-
-class CalDAVSourceLimitError extends Error {
-  constructor() {
-    super("Account limit reached. Upgrade to Pro for unlimited accounts.");
-  }
-}
-
-class DuplicateCalDAVSourceError extends Error {
-  constructor() {
-    super("This calendar is already added as a source");
-  }
-}
-
-class CalDAVSourceCredentialCreateError extends Error {
-  constructor() {
-    super("Failed to create CalDAV source credential");
-  }
-}
-
-class CalDAVSourceAccountCreateError extends Error {
-  constructor() {
-    super("Failed to create calendar account");
-  }
-}
-
-class CalDAVSourceMissingCalendarUrlError extends Error {
-  constructor(sourceId: string) {
-    super(`CalDAV source ${sourceId} is missing calendarUrl`);
-  }
-}
-
-class CalDAVEncryptionKeyMissingError extends Error {
-  constructor() {
-    super("Encryption key not configured");
-  }
-}
-
-class CalDAVSourceCreateError extends Error {
-  constructor() {
-    super("Failed to create CalDAV source");
-  }
-}
-
-class CalDAVSourceProvisioningInvariantError extends Error {
-  constructor() {
-    super("Invariant violated: source provisioning did not request bootstrap sync");
-  }
-}
-
-interface CalDAVSource {
-  id: string;
-  accountId: string;
-  userId: string;
-  name: string;
-  provider: string;
-  calendarUrl: string;
-  serverUrl: string;
-  username: string;
-  createdAt: Date;
-}
 
 interface CreateCalDAVSourceData {
   calendarUrl: string;
@@ -93,36 +46,6 @@ interface CreateCalDAVSourceData {
   serverUrl: string;
   username: string;
 }
-
-const findReusableCalDAVAccount = async (
-  databaseClient: CaldavSourceDatabase,
-  userId: string,
-  provider: string,
-  serverUrl: string,
-  username: string,
-): Promise<{ id: string; caldavCredentialId: string | null } | undefined> => {
-  const [account] = await databaseClient
-    .select({
-      id: calendarAccountsTable.id,
-      caldavCredentialId: calendarAccountsTable.caldavCredentialId,
-    })
-    .from(calendarAccountsTable)
-    .innerJoin(
-      caldavCredentialsTable,
-      eq(calendarAccountsTable.caldavCredentialId, caldavCredentialsTable.id),
-    )
-    .where(
-      and(
-        eq(calendarAccountsTable.userId, userId),
-        eq(calendarAccountsTable.provider, provider),
-        eq(caldavCredentialsTable.serverUrl, serverUrl),
-        eq(caldavCredentialsTable.username, username),
-      ),
-    )
-    .limit(FIRST_RESULT_LIMIT);
-
-  return account;
-};
 
 const createCalDAVAccount = async (
   databaseClient: CaldavSourceDatabase,
@@ -164,61 +87,7 @@ const createCalDAVAccount = async (
 };
 
 const getUserCalDAVSources = async (userId: string, provider?: string): Promise<CalDAVSource[]> => {
-  const conditions = [
-    eq(calendarsTable.userId, userId),
-    eq(calendarsTable.calendarType, CALDAV_CALENDAR_TYPE),
-    inArray(calendarsTable.id,
-      database.selectDistinct({ id: sourceDestinationMappingsTable.sourceCalendarId })
-        .from(sourceDestinationMappingsTable)
-    ),
-  ];
-
-  if (provider) {
-    conditions.push(eq(calendarAccountsTable.provider, provider));
-  }
-
-  const sources = await database
-    .select({
-      accountId: calendarAccountsTable.id,
-      calendarUrl: calendarsTable.calendarUrl,
-      createdAt: calendarsTable.createdAt,
-      id: calendarsTable.id,
-      name: calendarsTable.name,
-      provider: calendarAccountsTable.provider,
-      serverUrl: caldavCredentialsTable.serverUrl,
-      userId: calendarsTable.userId,
-      username: caldavCredentialsTable.username,
-    })
-    .from(calendarsTable)
-    .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
-    .innerJoin(
-      caldavCredentialsTable,
-      eq(calendarAccountsTable.caldavCredentialId, caldavCredentialsTable.id),
-    )
-    .where(and(...conditions));
-
-  return sources.map((source) => {
-    if (!source.calendarUrl) {
-      throw new CalDAVSourceMissingCalendarUrlError(source.id);
-    }
-    return {
-      ...source,
-      calendarUrl: source.calendarUrl,
-      provider: source.provider,
-    };
-  });
-};
-
-const countUserAccountsWithDatabase = async (
-  databaseClient: CaldavSourceDatabase,
-  userId: string,
-): Promise<number> => {
-  const [result] = await databaseClient
-    .select({ value: count() })
-    .from(calendarAccountsTable)
-    .where(eq(calendarAccountsTable.userId, userId));
-
-  return result?.value ?? 0;
+  return getUserCalDAVSourcesWithDatabase(database, userId, provider);
 };
 
 const createCalDAVSource = async (
@@ -271,7 +140,7 @@ const createCalDAVSource = async (
     }
 
     dispatchProvisioningEvent({ type: "VALIDATION_PASSED" });
-    const existingAccount = await findReusableCalDAVAccount(
+    const existingAccount = await findReusableCalDAVAccountWithDatabase(
       tx,
       userId,
       data.provider,
@@ -280,7 +149,7 @@ const createCalDAVSource = async (
     );
 
     if (!existingAccount) {
-      const existingAccountCount = await countUserAccountsWithDatabase(tx, userId);
+      const existingAccountCount = await countUserCalDAVAccountsWithDatabase(tx, userId);
       const allowed = await premiumService.canAddAccount(userId, existingAccountCount);
 
       if (!allowed) {
@@ -359,19 +228,7 @@ const createCalDAVSource = async (
 };
 
 const verifyCalDAVSourceOwnership = async (userId: string, calendarId: string): Promise<boolean> => {
-  const [source] = await database
-    .select({ id: calendarsTable.id })
-    .from(calendarsTable)
-    .where(
-      and(
-        eq(calendarsTable.id, calendarId),
-        eq(calendarsTable.userId, userId),
-        eq(calendarsTable.calendarType, CALDAV_CALENDAR_TYPE),
-      ),
-    )
-    .limit(FIRST_RESULT_LIMIT);
-
-  return Boolean(source);
+  return verifyCalDAVSourceOwnershipWithDatabase(database, userId, calendarId);
 };
 
 export {
