@@ -48,7 +48,6 @@ export interface CalendarDetail {
   excludeEventName: boolean;
   excludeFocusTime: boolean;
   excludeOutOfOffice: boolean;
-  excludeWorkingLocation: boolean;
   destinationIds: string[];
   sourceIds: string[];
   createdAt: string;

@@ -15,7 +15,6 @@ const sourcePatchBodySchema = type({
   "excludeEventName?": "boolean",
   "excludeFocusTime?": "boolean",
   "excludeOutOfOffice?": "boolean",
-  "excludeWorkingLocation?": "boolean",
   "includeInIcalFeed?": "boolean",
   "+": "reject",
 });

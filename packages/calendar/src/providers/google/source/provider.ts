@@ -35,7 +35,6 @@ interface GoogleSourceConfig extends OAuthSourceConfig {
   sourceName: string;
   excludeFocusTime: boolean;
   excludeOutOfOffice: boolean;
-  excludeWorkingLocation: boolean;
 }
 
 class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfig> {
@@ -227,7 +226,6 @@ interface GoogleSourceAccount {
   sourceName: string;
   excludeFocusTime: boolean;
   excludeOutOfOffice: boolean;
-  excludeWorkingLocation: boolean;
 }
 
 interface CreateGoogleSourceProviderConfig {
@@ -248,7 +246,6 @@ const getGoogleSourcesWithCredentials = async (
       credentialId: oauthCredentialsTable.id,
       excludeFocusTime: calendarsTable.excludeFocusTime,
       excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
-      excludeWorkingLocation: calendarsTable.excludeWorkingLocation,
       externalCalendarId: calendarsTable.externalCalendarId,
       oauthCredentialId: oauthCredentialsTable.id,
       originalName: calendarsTable.originalName,
@@ -297,7 +294,6 @@ const createGoogleCalendarSourceProvider = (
       database: db,
       excludeFocusTime: account.excludeFocusTime,
       excludeOutOfOffice: account.excludeOutOfOffice,
-      excludeWorkingLocation: account.excludeWorkingLocation,
       externalCalendarId: account.externalCalendarId,
       oauthCredentialId: account.oauthCredentialId,
       originalName: account.originalName,

@@ -72,13 +72,15 @@ const shouldExcludeSyncEvent = (event: {
   excludeAllDayEvents: boolean;
   excludeFocusTime: boolean;
   excludeOutOfOffice: boolean;
-  excludeWorkingLocation: boolean;
   availability: string | null;
   isAllDay: boolean | null;
   sourceEventType: string | null;
 }): boolean => {
   const sourceEventType = parseSourceEventType(event.sourceEventType, event.availability);
 
+  if (sourceEventType === "workingLocation") {
+    return true;
+  }
   if (event.excludeAllDayEvents && event.isAllDay) {
     return true;
   }
@@ -86,9 +88,6 @@ const shouldExcludeSyncEvent = (event: {
     return true;
   }
   if (event.excludeOutOfOffice && sourceEventType === "outOfOffice") {
-    return true;
-  }
-  if (event.excludeWorkingLocation && sourceEventType === "workingLocation") {
     return true;
   }
 
@@ -143,7 +142,6 @@ const fetchEventsForCalendars = async (
       excludeEventName: calendarsTable.excludeEventName,
       excludeFocusTime: calendarsTable.excludeFocusTime,
       excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
-      excludeWorkingLocation: calendarsTable.excludeWorkingLocation,
       availability: eventStatesTable.availability,
       description: eventStatesTable.description,
       endTime: eventStatesTable.endTime,

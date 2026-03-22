@@ -34,7 +34,6 @@ const POST = withWideEvent(
         oauthSourceCredentialId,
         syncFocusTime,
         syncOutOfOffice,
-        syncWorkingLocation,
       } = createOAuthSourceSchema.assert(body);
 
       const canFilter = await premiumService.canUseEventFilters(userId);
@@ -42,7 +41,6 @@ const POST = withWideEvent(
       const source = await createOAuthSource({
         ...(canFilter && !syncFocusTime && { excludeFocusTime: true }),
         ...(canFilter && !syncOutOfOffice && { excludeOutOfOffice: true }),
-        ...(canFilter && !syncWorkingLocation && { excludeWorkingLocation: true }),
         externalCalendarId,
         name,
         oauthCredentialId: oauthSourceCredentialId ?? "",

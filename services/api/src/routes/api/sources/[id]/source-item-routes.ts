@@ -10,7 +10,6 @@ const EVENT_FILTER_FIELDS = [
   "excludeEventName",
   "excludeFocusTime",
   "excludeOutOfOffice",
-  "excludeWorkingLocation",
 ] as const;
 
 const SOURCE_BOOLEAN_UPDATE_FIELDS = [

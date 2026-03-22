@@ -5,7 +5,6 @@ const createEvent = (overrides: Partial<{
   excludeAllDayEvents: boolean;
   excludeFocusTime: boolean;
   excludeOutOfOffice: boolean;
-  excludeWorkingLocation: boolean;
   availability: string | null;
   isAllDay: boolean | null;
   sourceEventType: string | null;
@@ -14,18 +13,16 @@ const createEvent = (overrides: Partial<{
   excludeAllDayEvents: false,
   excludeFocusTime: false,
   excludeOutOfOffice: false,
-  excludeWorkingLocation: false,
   isAllDay: false,
   sourceEventType: "default",
   ...overrides,
 });
 
 describe("shouldExcludeSyncEvent", () => {
-  it("excludes working location events when configured", () => {
+  it("always excludes working location events", () => {
     expect(
       shouldExcludeSyncEvent(
         createEvent({
-          excludeWorkingLocation: true,
           sourceEventType: "workingLocation",
         }),
       ),
@@ -74,7 +71,6 @@ describe("shouldExcludeSyncEvent", () => {
       shouldExcludeSyncEvent(
         createEvent({
           availability: "workingElsewhere",
-          excludeWorkingLocation: true,
           sourceEventType: null,
         }),
       ),

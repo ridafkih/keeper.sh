@@ -308,7 +308,6 @@ const createOAuthSourceSchema = type({
   "oauthSourceCredentialId?": "string",
   "syncFocusTime?": "boolean",
   "syncOutOfOffice?": "boolean",
-  "syncWorkingLocation?": "boolean",
   "+": "reject",
 });
 type CreateOAuthSource = typeof createOAuthSourceSchema.infer;

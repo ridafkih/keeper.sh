@@ -470,6 +470,13 @@
       "when": 1773867987450,
       "tag": "0066_nasty_bushwacker",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1774194474592,
+      "tag": "0067_curvy_mole_man",
+      "breakpoints": true
     }
   ]
 }

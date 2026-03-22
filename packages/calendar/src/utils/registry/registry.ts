@@ -24,11 +24,6 @@ const googleCalendarDefinition = {
       },
       {
         defaultValue: true,
-        id: "syncWorkingLocation",
-        label: "Working Location",
-      },
-      {
-        defaultValue: true,
         id: "syncOutOfOffice",
         label: "Out of Office",
       },

@@ -234,7 +234,6 @@ interface CreateOAuthSourceOptions {
   oauthCredentialId: string;
   excludeFocusTime?: boolean;
   excludeOutOfOffice?: boolean;
-  excludeWorkingLocation?: boolean;
 }
 
 interface CreateOAuthSourceDependencies {
@@ -249,7 +248,6 @@ interface CreateOAuthSourceDependencies {
     userId: string;
     excludeFocusTime: boolean;
     excludeOutOfOffice: boolean;
-    excludeWorkingLocation: boolean;
   }) => Promise<{ id: string; name: string } | null>;
   createCalendarAccount: (payload: {
     displayName: string | null;
@@ -390,7 +388,6 @@ const createOAuthSourceRecordWithDatabase = async (
       capabilities: ["pull", "push"],
       excludeFocusTime: payload.excludeFocusTime,
       excludeOutOfOffice: payload.excludeOutOfOffice,
-      excludeWorkingLocation: payload.excludeWorkingLocation,
       externalCalendarId: payload.externalCalendarId,
       name: payload.name,
       originalName: payload.originalName,
@@ -487,7 +484,6 @@ const createOAuthSourceWithDependencies = async (
     oauthCredentialId,
     excludeFocusTime = false,
     excludeOutOfOffice = false,
-    excludeWorkingLocation = false,
   } = options;
 
   const credential = await dependencies.findCredentialEmail(userId, oauthCredentialId);
@@ -540,7 +536,6 @@ const createOAuthSourceWithDependencies = async (
     accountId,
     excludeFocusTime,
     excludeOutOfOffice,
-    excludeWorkingLocation,
     externalCalendarId,
     name,
     originalName: name,

@@ -35,7 +35,6 @@ const GET = withWideEvent(
         excludeEventName: calendarsTable.excludeEventName,
         excludeFocusTime: calendarsTable.excludeFocusTime,
         excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
-        excludeWorkingLocation: calendarsTable.excludeWorkingLocation,
         createdAt: calendarsTable.createdAt,
         updatedAt: calendarsTable.updatedAt,
       })
