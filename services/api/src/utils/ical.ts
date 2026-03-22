@@ -1,5 +1,5 @@
 import { calendarsTable, eventStatesTable, icalFeedSettingsTable } from "@keeper.sh/database/schema";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, or, isNull } from "drizzle-orm";
 import { resolveUserIdentifier } from "./user";
 import { database } from "@/context";
 import { formatEventsAsIcal } from "./ical-format";
@@ -61,7 +61,19 @@ const generateUserCalendar = async (identifier: string): Promise<string | null> 
     })
     .from(eventStatesTable)
     .innerJoin(calendarsTable, eq(eventStatesTable.calendarId, calendarsTable.id))
-    .where(inArray(eventStatesTable.calendarId, calendarIds))
+    .where(
+      and(
+        inArray(eventStatesTable.calendarId, calendarIds),
+        or(
+          isNull(eventStatesTable.sourceEventType),
+          ne(eventStatesTable.sourceEventType, "workingLocation"),
+        ),
+        or(
+          isNull(eventStatesTable.availability),
+          ne(eventStatesTable.availability, "workingElsewhere"),
+        ),
+      ),
+    )
     .orderBy(asc(eventStatesTable.startTime));
 
   return formatEventsAsIcal(events, settings);

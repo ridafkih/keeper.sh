@@ -15,15 +15,24 @@
       "project": "src/**/*.{ts,tsx}"
     },
     "applications/*": {
-      "entry": ["src/{index.ts,main.tsx,server.tsx,**/*.test.ts,**/*.test.tsx}"],
+      "entry": [
+        "src/{index.ts,main.tsx,server.tsx,**/*.test.ts,**/*.test.tsx}"
+      ],
       "project": "src/**/*.{ts,tsx}"
     },
     "applications/web": {
-      "entry": ["src/main.tsx", "src/server.tsx", "plugins/**/*.ts", "scripts/**/*.ts", "src/**/*.test.ts", "src/**/*.test.tsx"],
+      "entry": [
+        "src/main.tsx",
+        "src/server.tsx",
+        "plugins/**/*.ts",
+        "scripts/**/*.ts",
+        "src/**/*.test.ts",
+        "src/**/*.test.tsx"
+      ],
       "project": ["src/**/*.{ts,tsx}", "plugins/**/*.ts", "scripts/**/*.ts"],
       "ignoreDependencies": ["@babel/preset-typescript"]
     },
-"services/*": {
+    "services/*": {
       "entry": ["src/{index.ts,**/*.test.ts}"],
       "project": "src/**/*.{ts,tsx}"
     },
