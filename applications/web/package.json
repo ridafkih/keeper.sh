@@ -8,7 +8,7 @@
     "build": "vite build --outDir dist/client && vite build --ssr src/server.tsx --outDir dist/server && bun scripts/build.ts",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "types": "tsc --noEmit",
-    "test": "bun test",
+    "test": "bun test ./tests",
     "preview": "vite preview",
     "start": "bun scripts/start.ts"
   },

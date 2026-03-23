@@ -9,7 +9,7 @@
     "build": "bun scripts/build",
     "start": "bun run dist/index.js",
     "types": "tsc --noEmit",
-    "test": "bun test",
+    "test": "bun test ./tests",
     "lint": "oxlint ."
   },
   "dependencies": {

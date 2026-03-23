@@ -19,7 +19,8 @@
     "types": "turbo run types --parallel",
     "build": "turbo run build",
     "start": "turbo run start",
-    "test": "turbo run test",
+    "test": "bun run check:test-layout && turbo run test",
+    "check:test-layout": "bun scripts/check-test-layout.mjs",
     "lint": "turbo run lint",
     "unused": "knip"
   },
