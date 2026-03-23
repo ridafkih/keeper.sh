@@ -98,6 +98,7 @@ beforeAll(async () => {
 });
 
 const capabilities: AuthCapabilities = {
+  commercialMode: true,
   credentialMode: "email",
   requiresEmailVerification: true,
   socialProviders: {

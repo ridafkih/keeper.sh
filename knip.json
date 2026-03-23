@@ -5,7 +5,7 @@
     "services/cron/src/jobs/**/*",
     "applications/web/src/generated/**/*"
   ],
-  "ignoreBinaries": ["tsc"],
+  "ignoreBinaries": [],
   "ignoreDependencies": ["@keeper.sh/otelemetry"],
   "ignoreWorkspaces": ["packages/typescript-config"],
   "ignoreExportsUsedInFile": true,

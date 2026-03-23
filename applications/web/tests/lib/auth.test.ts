@@ -16,6 +16,7 @@ let signInWithCredential: typeof import("../../src/lib/auth").signInWithCredenti
 let signUpWithCredential: typeof import("../../src/lib/auth").signUpWithCredential;
 
 const commercialCapabilities: AuthCapabilities = {
+  commercialMode: true,
   credentialMode: "email",
   requiresEmailVerification: true,
   socialProviders: {
@@ -38,9 +39,11 @@ beforeAll(async () => {
 beforeEach(() => {
   authClientMock.signIn.email.mockClear();
   authClientMock.signUp.email.mockClear();
-  globalThis.fetch = mock(() =>
-    Promise.resolve(new Response(JSON.stringify({}), { status: 200 })),
+  const fetchMock = Object.assign(
+    mock(() => Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))),
+    { preconnect: () => undefined },
   );
+  globalThis.fetch = fetchMock;
 });
 
 describe("signInWithCredential", () => {

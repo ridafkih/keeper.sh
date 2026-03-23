@@ -45,8 +45,12 @@ describe("resolvePublicRuntimeConfig", () => {
 describe("serializePublicRuntimeConfig", () => {
   it("serializes config for safe inline script injection", () => {
     const serialized = serializePublicRuntimeConfig({
+      commercialMode: false,
+      gdprApplies: false,
       googleAdsConversionLabel: "conversion",
       googleAdsId: "ads-123",
+      polarProMonthlyProductId: null,
+      polarProYearlyProductId: null,
       visitorsNowToken: "</script><script>alert(1)</script>",
     });
 

@@ -7,6 +7,7 @@ import {
 } from "../../src/lib/auth-capabilities";
 
 const emailCapabilities: AuthCapabilities = {
+  commercialMode: true,
   credentialMode: "email",
   requiresEmailVerification: true,
   socialProviders: {

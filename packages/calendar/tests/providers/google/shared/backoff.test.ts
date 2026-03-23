@@ -1,6 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test";
 import { withBackoff, abortableSleep, computeDelay } from "../../../../src/providers/google/shared/backoff";
 
+const flushAsync = async (): Promise<void> => {
+  for (let tick = 0; tick < 5; tick++) {
+    await Promise.resolve();
+  }
+};
+
+const advanceBackoff = async (): Promise<void> => {
+  jest.advanceTimersByTime(65_000);
+  await flushAsync();
+};
+
 describe("computeDelay", () => {
   it("returns a delay in the range [2^n * 1000, 2^n * 1000 + 1000] for each attempt", () => {
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -64,17 +75,6 @@ describe("withBackoff", () => {
   afterEach(() => {
     jest.useRealTimers();
   });
-
-  const flushAsync = async (): Promise<void> => {
-    for (let tick = 0; tick < 5; tick++) {
-      await Promise.resolve();
-    }
-  };
-
-  const advanceBackoff = async (): Promise<void> => {
-    jest.advanceTimersByTime(65_000);
-    await flushAsync();
-  };
 
   it("returns the result on first success", async () => {
     const result = await withBackoff(
