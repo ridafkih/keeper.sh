@@ -9,6 +9,7 @@ import { getCalDAVSyncWindow } from "../shared/sync-window";
 const YEARS_UNTIL_FUTURE = 2;
 
 interface CalDAVSourceFetcherConfig {
+  authMethod?: "basic" | "digest";
   calendarUrl: string;
   serverUrl: string;
   username: string;
@@ -22,6 +23,7 @@ interface CalDAVSourceFetcher {
 
 const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSourceFetcher => {
   const client = new CalDAVClient({
+    authMethod: config.authMethod,
     credentials: { password: config.password, username: config.username },
     serverUrl: config.serverUrl,
   }, config.safeFetchOptions);

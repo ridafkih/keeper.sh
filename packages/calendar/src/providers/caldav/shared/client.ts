@@ -1,6 +1,7 @@
 import { createDAVClient } from "tsdav";
 import { createSafeFetch } from "../../../utils/safe-fetch";
 import { createDigestAwareFetch } from "./digest-fetch";
+import type { CalDAVAuthMethod } from "./digest-fetch";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import type { CalDAVClientConfig, CalendarInfo } from "../types";
 
@@ -23,16 +24,26 @@ class CalDAVClient {
   private client: DAVClientInstance | null = null;
   private config: CalDAVClientConfig;
   private safeFetchOptions?: SafeFetchOptions;
+  private resolvedAuthMethod: (() => CalDAVAuthMethod | undefined) | null = null;
 
   constructor(config: CalDAVClientConfig, safeFetchOptions?: SafeFetchOptions) {
     this.config = config;
     this.safeFetchOptions = safeFetchOptions;
   }
 
+  getResolvedAuthMethod(): CalDAVAuthMethod | undefined {
+    return this.resolvedAuthMethod?.();
+  }
+
   private async getClient(): Promise<DAVClientInstance> {
     if (!this.client) {
       const safeFetch = createSafeFetch(this.safeFetchOptions);
-      const digestAwareFetch = createDigestAwareFetch(this.config.credentials, safeFetch);
+      const { fetch: digestAwareFetch, getResolvedMethod } = createDigestAwareFetch({
+        credentials: this.config.credentials,
+        baseFetch: safeFetch,
+        knownAuthMethod: this.config.authMethod,
+      });
+      this.resolvedAuthMethod = getResolvedMethod;
       this.client = await createDAVClient({
         authMethod: "Custom",
         authFunction: async () => ({}),

@@ -3,7 +3,7 @@ import type { IcsCalendar, IcsEvent } from "ts-ics";
 import { HTTP_STATUS, KEEPER_USER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { decryptPassword } from "@keeper.sh/database";
 import { createSafeFetch } from "@keeper.sh/calendar/safe-fetch";
-import { createDigestAwareFetch } from "@keeper.sh/calendar/digest-fetch";
+import { createDigestAwareFetch, resolveAuthMethod } from "@keeper.sh/calendar/digest-fetch";
 import { createDAVClient } from "tsdav";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "@/types";
@@ -14,12 +14,18 @@ interface CalDAVCredentials {
   username: string;
   encryptedPassword: string;
   encryptionKey: string;
+  authMethod: string;
 }
 
 const getClient = async (credentials: CalDAVCredentials) => {
   const password = decryptPassword(credentials.encryptedPassword, credentials.encryptionKey);
   const safeFetch = createSafeFetch(safeFetchOptions);
-  const digestAwareFetch = createDigestAwareFetch({ username: credentials.username, password }, safeFetch);
+  const knownAuthMethod = resolveAuthMethod(credentials.authMethod);
+  const { fetch: digestAwareFetch } = createDigestAwareFetch({
+    credentials: { username: credentials.username, password },
+    baseFetch: safeFetch,
+    knownAuthMethod,
+  });
   return createDAVClient({
     authMethod: "Custom",
     authFunction: async () => ({}),

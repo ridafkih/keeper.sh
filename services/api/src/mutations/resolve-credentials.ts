@@ -20,6 +20,7 @@ const credentialColumns = {
   oauthAccessToken: oauthCredentialsTable.accessToken,
   oauthRefreshToken: oauthCredentialsTable.refreshToken,
   oauthExpiresAt: oauthCredentialsTable.expiresAt,
+  caldavAuthMethod: caldavCredentialsTable.authMethod,
   caldavServerUrl: caldavCredentialsTable.serverUrl,
   caldavUsername: caldavCredentialsTable.username,
   caldavEncryptedPassword: caldavCredentialsTable.encryptedPassword,
@@ -35,6 +36,7 @@ interface CredentialRow {
   oauthAccessToken: string | null;
   oauthRefreshToken: string | null;
   oauthExpiresAt: Date | null;
+  caldavAuthMethod: string | null;
   caldavServerUrl: string | null;
   caldavUsername: string | null;
   caldavEncryptedPassword: string | null;
@@ -59,6 +61,7 @@ const rowToCredentials = (row: CredentialRow): ProviderCredentials => {
 
   if (row.caldavServerUrl && row.caldavUsername && row.caldavEncryptedPassword) {
     credentials.caldav = {
+      authMethod: row.caldavAuthMethod ?? "basic",
       serverUrl: row.caldavServerUrl,
       username: row.caldavUsername,
       encryptedPassword: row.caldavEncryptedPassword,

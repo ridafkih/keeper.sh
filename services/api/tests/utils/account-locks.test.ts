@@ -438,6 +438,7 @@ describe("Account locks", () => {
     };
 
     const source = await createCalDAVSource("user-1", {
+      authMethod: "basic",
       calendarUrl: "https://caldav.test/team",
       name: "Team CalDAV",
       password: "secret",

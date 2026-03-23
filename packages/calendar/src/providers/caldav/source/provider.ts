@@ -5,6 +5,7 @@ import type { SourceEvent } from "../../../core/types";
 import { calendarAccountsTable, calendarsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { CalDAVClient } from "../shared/client";
+import { resolveAuthMethod } from "../shared/digest-fetch";
 import { parseICalToRemoteEvent } from "../shared/ics";
 import { isCalDAVAuthenticationError } from "./auth-error-classification";
 import { createCalDAVSourceService } from "./sync";
@@ -47,6 +48,7 @@ const createCalDAVSourceProvider = (
   const fetchEventsFromCalDAV = async (account: CalDAVSourceAccount): Promise<SourceEvent[]> => {
     const password = sourceService.getDecryptedPassword(account.encryptedPassword);
     const client = new CalDAVClient({
+      authMethod: resolveAuthMethod(account.authMethod),
       credentials: {
         password,
         username: account.username,
@@ -171,6 +173,7 @@ const createCalDAVSourceProvider = (
 
     const password = sourceService.getDecryptedPassword(account.encryptedPassword);
     const client = new CalDAVClient({
+      authMethod: resolveAuthMethod(account.authMethod),
       credentials: { password, username: account.username },
       serverUrl: account.serverUrl,
     });

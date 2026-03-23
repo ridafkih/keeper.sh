@@ -12,12 +12,12 @@ const POST = withWideEvent(
     try {
       const { serverUrl, username, password } = caldavDiscoverRequestSchema.assert(body);
 
-      const calendars = await discoverCalendars(serverUrl, {
+      const result = await discoverCalendars(serverUrl, {
         password,
         username,
       });
 
-      return Response.json({ calendars });
+      return Response.json({ calendars: result.calendars, authMethod: result.authMethod });
     } catch (error) {
       if (error instanceof CalDAVConnectionError) {
         return ErrorResponse.badRequest(error.message).toResponse();

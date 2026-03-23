@@ -39,6 +39,7 @@ const oauthCredentialsTable = pgTable(
 );
 
 const caldavCredentialsTable = pgTable("caldav_credentials", {
+  authMethod: text().notNull().default("basic"),
   createdAt: timestamp().notNull().defaultNow(),
   encryptedPassword: text().notNull(),
   id: uuid().notNull().primaryKey().defaultRandom(),

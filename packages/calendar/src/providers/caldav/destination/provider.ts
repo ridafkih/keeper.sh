@@ -10,6 +10,7 @@ const CALDAV_RATE_LIMIT_CONCURRENCY = 5;
 const YEARS_UNTIL_FUTURE = 2;
 
 interface CalDAVSyncProviderConfig {
+  authMethod?: "basic" | "digest";
   calendarUrl: string;
   serverUrl: string;
   username: string;
@@ -18,6 +19,7 @@ interface CalDAVSyncProviderConfig {
 
 const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
   const client = new CalDAVClient({
+    authMethod: config.authMethod,
     credentials: { password: config.password, username: config.username },
     serverUrl: config.serverUrl,
   });
