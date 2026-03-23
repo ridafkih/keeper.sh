@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test";
 import { withBackoff, abortableSleep, computeDelay } from "../../../../src/providers/google/shared/backoff";
 
 describe("computeDelay", () => {
@@ -18,11 +18,18 @@ describe("computeDelay", () => {
 });
 
 describe("abortableSleep", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it("resolves after the specified delay", async () => {
-    const start = Date.now();
-    await abortableSleep(50);
-    const elapsed = Date.now() - start;
-    expect(elapsed).toBeGreaterThanOrEqual(40);
+    const promise = abortableSleep(50);
+    jest.advanceTimersByTime(50);
+    await promise;
   });
 
   it("rejects immediately if the signal is already aborted", async () => {
@@ -36,18 +43,39 @@ describe("abortableSleep", () => {
     const controller = new AbortController();
     const sleepPromise = abortableSleep(10_000, controller.signal);
 
-    setTimeout(() => controller.abort("cancelled"), 20);
+    controller.abort("cancelled");
 
     await expect(sleepPromise).rejects.toBe("cancelled");
   });
 
   it("resolves normally when signal is provided but not aborted", async () => {
     const controller = new AbortController();
-    await abortableSleep(10, controller.signal);
+    const promise = abortableSleep(10, controller.signal);
+    jest.advanceTimersByTime(10);
+    await promise;
   });
 });
 
 describe("withBackoff", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const flushAsync = async (): Promise<void> => {
+    for (let tick = 0; tick < 5; tick++) {
+      await Promise.resolve();
+    }
+  };
+
+  const advanceBackoff = async (): Promise<void> => {
+    jest.advanceTimersByTime(65_000);
+    await flushAsync();
+  };
+
   it("returns the result on first success", async () => {
     const result = await withBackoff(
       () => Promise.resolve("ok"),
@@ -67,10 +95,15 @@ describe("withBackoff", () => {
       return Promise.resolve("recovered");
     };
 
-    const result = await withBackoff(operation, {
+    const promise = withBackoff(operation, {
       maxRetries: 5,
       shouldRetry: (error) => error instanceof Error && error.message === "rate limited",
     });
+
+    await advanceBackoff();
+    await advanceBackoff();
+
+    const result = await promise;
 
     expect(result).toBe("recovered");
     expect(callCount).toBe(3);
@@ -99,12 +132,15 @@ describe("withBackoff", () => {
       return Promise.reject(new Error("rate limited"));
     };
 
-    await expect(
-      withBackoff(operation, {
-        maxRetries: 2,
-        shouldRetry: () => true,
-      }),
-    ).rejects.toThrow("rate limited");
+    const promise = withBackoff(operation, {
+      maxRetries: 2,
+      shouldRetry: () => true,
+    });
+
+    await advanceBackoff();
+    await advanceBackoff();
+
+    await expect(promise).rejects.toThrow("rate limited");
 
     expect(callCount).toBe(3);
   });
@@ -124,7 +160,8 @@ describe("withBackoff", () => {
       shouldRetry: () => true,
     });
 
-    setTimeout(() => controller.abort("job cancelled"), 50);
+    await flushAsync();
+    controller.abort("job cancelled");
 
     await expect(backoffPromise).rejects.toBe("job cancelled");
     expect(callCount).toBe(1);

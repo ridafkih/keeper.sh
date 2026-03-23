@@ -1,5 +1,5 @@
-import { describe, expect, it } from "bun:test";
-import { createSyncLock, LOCK_PREFIX, SIGNAL_PREFIX } from "../src/sync-lock";
+import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test";
+import { createSyncLock, LOCK_PREFIX, SIGNAL_PREFIX, POLL_INTERVAL_MS } from "../src/sync-lock";
 
 const createMockRedis = () => {
   const store = new Map<string, { value: string; expiresAt: number | null }>();
@@ -89,12 +89,26 @@ const createMockRedis = () => {
   return { get, set, del, eval: evalImpl };
 };
 
+const flushAsync = async (): Promise<void> => {
+  for (let tick = 0; tick < 10; tick++) {
+    await Promise.resolve();
+  }
+};
+
 describe("createSyncLock", () => {
   const makeSyncLock = () => {
     const redis = createMockRedis();
     const syncLock = createSyncLock(redis);
     return { redis, syncLock };
   };
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
 
   it("acquires the lock immediately when no one holds it", async () => {
     const { syncLock } = makeSyncLock();
@@ -195,11 +209,8 @@ describe("createSyncLock", () => {
         throw new Error("expected acquired");
       }
 
-      // Start second acquire — it will poll
       const secondPromise = syncLock.acquire("cal-1");
-
-      // Let the poller run once
-      await Bun.sleep(50);
+      await flushAsync();
 
       // Signal key should be set
       const signalValue = await redis.get(`${SIGNAL_PREFIX}cal-1`);
@@ -211,6 +222,9 @@ describe("createSyncLock", () => {
 
       // Release the lock so the waiter can acquire
       await firstResult.handle.release();
+
+      jest.advanceTimersByTime(POLL_INTERVAL_MS);
+      await flushAsync();
 
       const secondResult = await secondPromise;
       expect(secondResult.acquired).toBe(true);
@@ -226,23 +240,29 @@ describe("createSyncLock", () => {
 
       // Start second caller — will wait
       const secondPromise = syncLock.acquire("cal-1");
-      await Bun.sleep(50);
+      await flushAsync();
 
       const secondSignal = await redis.get(`${SIGNAL_PREFIX}cal-1`);
 
       // Start third caller — should replace second
       const thirdPromise = syncLock.acquire("cal-1");
-      await Bun.sleep(50);
+      await flushAsync();
 
       const thirdSignal = await redis.get(`${SIGNAL_PREFIX}cal-1`);
       expect(thirdSignal).not.toBe(secondSignal);
 
-      // Second should detect it was replaced and return acquired: false
+      // Advance so second detects replacement on next poll
+      jest.advanceTimersByTime(POLL_INTERVAL_MS);
+      await flushAsync();
+
       const secondResult = await secondPromise;
       expect(secondResult.acquired).toBe(false);
 
       // Release lock so third can acquire
       await firstResult.handle.release();
+
+      jest.advanceTimersByTime(POLL_INTERVAL_MS);
+      await flushAsync();
 
       const thirdResult = await thirdPromise;
       expect(thirdResult.acquired).toBe(true);
@@ -259,9 +279,12 @@ describe("createSyncLock", () => {
       const abortController = new AbortController();
 
       const secondPromise = syncLock.acquire("cal-1", abortController.signal);
-      await Bun.sleep(50);
+      await flushAsync();
 
       abortController.abort();
+
+      jest.advanceTimersByTime(POLL_INTERVAL_MS);
+      await flushAsync();
 
       const secondResult = await secondPromise;
       expect(secondResult.acquired).toBe(false);
@@ -319,15 +342,18 @@ describe("createSyncLock", () => {
 
       // Toggle 2: signals first, waits
       const secondPromise = syncLock.acquire("cal-1");
-      await Bun.sleep(50);
+      await flushAsync();
       executionOrder.push("second:waiting");
 
       // Toggle 3: replaces second, waits
       const thirdPromise = syncLock.acquire("cal-1");
-      await Bun.sleep(50);
+      await flushAsync();
       executionOrder.push("third:waiting");
 
-      // Second should be replaced
+      // Advance so second detects replacement
+      jest.advanceTimersByTime(POLL_INTERVAL_MS);
+      await flushAsync();
+
       const secondResult = await secondPromise;
       expect(secondResult.acquired).toBe(false);
       executionOrder.push("second:replaced");
@@ -339,7 +365,10 @@ describe("createSyncLock", () => {
       await first.handle.release();
       executionOrder.push("first:released");
 
-      // Third acquires
+      // Advance so third can acquire
+      jest.advanceTimersByTime(POLL_INTERVAL_MS);
+      await flushAsync();
+
       const thirdResult = await thirdPromise;
       expect(thirdResult.acquired).toBe(true);
       executionOrder.push("third:acquired");

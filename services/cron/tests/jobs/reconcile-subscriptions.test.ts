@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test";
 import { runReconcileSubscriptionsJob } from "../../src/jobs/reconcile-subscriptions";
 
 describe("runReconcileSubscriptionsJob", () => {
@@ -58,22 +58,40 @@ describe("runReconcileSubscriptionsJob", () => {
     expect(reconciledUserIds).toEqual([]);
   });
 
-  it("handles timed out reconciliation operations gracefully", async () => {
-    const reconciledUserIds: string[] = [];
-
-    await runReconcileSubscriptionsJob({
-      hasBillingClient: true,
-      reconcileUserSubscription: (userId) => {
-        reconciledUserIds.push(userId);
-        if (userId === "user-2") {
-          return Bun.sleep(10_000);
-        }
-        return Promise.resolve();
-      },
-      reconcileUserTimeoutMs: 1,
-      selectUserIds: () => Promise.resolve(["user-1", "user-2"]),
+  describe("timeout handling", () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
     });
 
-    expect(reconciledUserIds).toEqual(["user-1", "user-2"]);
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("handles timed out reconciliation operations gracefully", async () => {
+      const reconciledUserIds: string[] = [];
+
+      const promise = runReconcileSubscriptionsJob({
+        hasBillingClient: true,
+        reconcileUserSubscription: (userId) => {
+          reconciledUserIds.push(userId);
+          if (userId === "user-2") {
+            return Bun.sleep(10_000);
+          }
+          return Promise.resolve();
+        },
+        reconcileUserTimeoutMs: 1,
+        selectUserIds: () => Promise.resolve(["user-1", "user-2"]),
+      });
+
+      for (let tick = 0; tick < 10; tick++) {
+        await Promise.resolve();
+      }
+
+      jest.advanceTimersByTime(10_000);
+
+      await promise;
+
+      expect(reconciledUserIds).toEqual(["user-1", "user-2"]);
+    });
   });
 });

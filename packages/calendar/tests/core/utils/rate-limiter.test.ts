@@ -8,16 +8,18 @@ import {
 } from "bun:test";
 import { RateLimiter } from "../../../src/core/utils/rate-limiter";
 
-const sleep = (milliseconds: number): Promise<void> => Bun.sleep(milliseconds);
+const flushAsync = async (): Promise<void> => {
+  for (let tick = 0; tick < 10; tick++) {
+    await Promise.resolve();
+  }
+};
+
 const resolveValue = <TValue>(value: TValue): Promise<TValue> => {
   const { promise, resolve } = Promise.withResolvers<TValue>();
   resolve(value);
   return promise;
 };
-const flushMicrotasks = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-};
+
 const readNumericField = (target: object, fieldName: string): number => {
   const value = Reflect.get(target, fieldName);
   if (typeof value !== "number") {
@@ -28,6 +30,14 @@ const readNumericField = (target: object, fieldName: string): number => {
 
 describe("RateLimiter", () => {
   describe("execute", () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
     it("resolves with the operation result", async () => {
       const limiter = new RateLimiter();
       const result = await limiter.execute(() => Promise.resolve("hello"));
@@ -50,11 +60,18 @@ describe("RateLimiter", () => {
         limiter.execute(async () => {
           concurrentCount++;
           maxConcurrent = Math.max(maxConcurrent, concurrentCount);
-          await sleep(50);
+          await Bun.sleep(50);
           concurrentCount--;
         });
 
-      await Promise.all([createTask(), createTask(), createTask(), createTask()]);
+      const allDone = Promise.all([createTask(), createTask(), createTask(), createTask()]);
+
+      jest.advanceTimersByTime(50);
+      await flushAsync();
+      jest.advanceTimersByTime(50);
+      await flushAsync();
+
+      await allDone;
 
       expect(maxConcurrent).toBe(2);
     });
@@ -64,7 +81,7 @@ describe("RateLimiter", () => {
       const order: number[] = [];
 
       const task1 = limiter.execute(async () => {
-        await sleep(20);
+        await Bun.sleep(20);
         order.push(1);
       });
 
@@ -73,7 +90,12 @@ describe("RateLimiter", () => {
         return Promise.resolve();
       });
 
-      await Promise.all([task1, task2]);
+      const allDone = Promise.all([task1, task2]);
+
+      jest.advanceTimersByTime(20);
+      await flushAsync();
+
+      await allDone;
       expect(order).toEqual([1, 2]);
     });
   });
@@ -119,11 +141,11 @@ describe("RateLimiter", () => {
         return result;
       });
 
-      await flushMicrotasks();
+      await flushAsync();
       expect(didComplete).toBe(false);
 
       jest.advanceTimersByTime(999);
-      await flushMicrotasks();
+      await flushAsync();
       expect(didComplete).toBe(false);
 
       jest.advanceTimersByTime(1);
@@ -148,7 +170,7 @@ describe("RateLimiter", () => {
         return result;
       });
 
-      await flushMicrotasks();
+      await flushAsync();
       expect(didComplete).toBe(true);
       await trackedFastOperation;
     });

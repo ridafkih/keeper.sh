@@ -5,20 +5,22 @@
     "services/cron/src/jobs/**/*",
     "applications/web/src/generated/**/*"
   ],
-  "ignoreBinaries": [],
+  "ignoreBinaries": ["tsc"],
   "ignoreDependencies": ["@keeper.sh/otelemetry"],
   "ignoreWorkspaces": ["packages/typescript-config"],
   "ignoreExportsUsedInFile": true,
   "workspaces": {
     "packages/*": {
-      "entry": ["src/{index.ts,api.ts,cron.ts,**/*.test.ts}"],
-      "project": "src/**/*.{ts,tsx}"
+      "entry": ["src/{index.ts,api.ts,cron.ts}", "tests/**/*.test.ts"],
+      "project": ["src/**/*.{ts,tsx}", "tests/**/*.test.ts"]
     },
     "applications/*": {
       "entry": [
-        "src/{index.ts,main.tsx,server.tsx,**/*.test.ts,**/*.test.tsx}"
+        "src/{index.ts,main.tsx,server.tsx}",
+        "tests/**/*.test.ts",
+        "tests/**/*.test.tsx"
       ],
-      "project": "src/**/*.{ts,tsx}"
+      "project": ["src/**/*.{ts,tsx}", "tests/**/*.{ts,tsx}"]
     },
     "applications/web": {
       "entry": [
@@ -26,26 +28,57 @@
         "src/server.tsx",
         "plugins/**/*.ts",
         "scripts/**/*.ts",
-        "src/**/*.test.ts",
-        "src/**/*.test.tsx"
+        "tests/**/*.test.ts",
+        "tests/**/*.test.tsx"
       ],
-      "project": ["src/**/*.{ts,tsx}", "plugins/**/*.ts", "scripts/**/*.ts"],
+      "project": ["src/**/*.{ts,tsx}", "plugins/**/*.ts", "scripts/**/*.ts", "tests/**/*.{ts,tsx}"],
       "ignoreDependencies": ["@babel/preset-typescript"]
     },
     "services/*": {
-      "entry": ["src/{index.ts,**/*.test.ts}"],
-      "project": "src/**/*.{ts,tsx}"
+      "entry": ["src/index.ts", "tests/**/*.test.ts"],
+      "project": ["src/**/*.{ts,tsx}", "tests/**/*.test.ts"]
     },
     "services/api": {
-      "entry": ["src/routes/**/*.ts", "src/**/*.test.ts"],
-      "project": "src/**/*.{ts,tsx}"
+      "entry": ["src/routes/**/*.ts", "tests/**/*.test.ts"],
+      "project": ["src/**/*.{ts,tsx}", "tests/**/*.test.ts"]
     },
     "services/cron": {
-      "entry": ["src/jobs/*.ts", "src/**/*.test.ts"],
-      "project": "src/**/*.{ts,tsx}"
+      "entry": ["src/jobs/*.ts", "tests/**/*.test.ts"],
+      "project": ["src/**/*.{ts,tsx}", "tests/**/*.test.ts"]
     },
     "services/mcp": {
-      "entry": ["src/routes/**/*.ts", "src/**/*.test.ts"],
+      "entry": ["src/routes/**/*.ts", "tests/**/*.test.ts"],
+      "project": ["src/**/*.{ts,tsx}", "tests/**/*.test.ts"]
+    },
+    "services/worker": {
+      "project": "src/**/*.{ts,tsx}"
+    },
+    "packages/broadcast": {
+      "entry": ["src/{index.ts,api.ts,cron.ts}"],
+      "project": "src/**/*.{ts,tsx}"
+    },
+    "packages/premium": {
+      "entry": ["src/{index.ts,api.ts,cron.ts}"],
+      "project": "src/**/*.{ts,tsx}"
+    },
+    "packages/queue": {
+      "entry": ["src/{index.ts,api.ts,cron.ts}"],
+      "project": "src/**/*.{ts,tsx}"
+    },
+    "packages/data-schemas": {
+      "entry": ["src/{index.ts,api.ts,cron.ts}"],
+      "project": "src/**/*.{ts,tsx}"
+    },
+    "packages/otelemetry": {
+      "entry": ["src/{index.ts,api.ts,cron.ts}"],
+      "project": "src/**/*.{ts,tsx}"
+    },
+    "packages/constants": {
+      "entry": ["src/{index.ts,api.ts,cron.ts}"],
+      "project": "src/**/*.{ts,tsx}"
+    },
+    "packages/fixtures": {
+      "entry": ["src/{index.ts,api.ts,cron.ts}"],
       "project": "src/**/*.{ts,tsx}"
     }
   }

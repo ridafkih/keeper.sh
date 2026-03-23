@@ -4,7 +4,11 @@ import { SyncAggregateTracker } from "../../../src/core/sync/aggregate-tracker";
 import type { DestinationSyncResult, SyncProgressUpdate } from "../../../src/core/sync/types";
 import Redis from "ioredis";
 
-const sleep = (milliseconds: number): Promise<void> => Bun.sleep(milliseconds);
+const flushAsync = async (): Promise<void> => {
+  for (let tick = 0; tick < 10; tick++) {
+    await Promise.resolve();
+  }
+};
 
 const createMockRedis = (): Redis => {
   const store = new Map<string, string>();
@@ -110,7 +114,7 @@ describe("createSyncAggregateRuntime", () => {
         createProgressUpdate({ progress: { current: 0, total: 10 } }),
       );
 
-      await sleep(50);
+      await flushAsync();
 
       expect(broadcasts.length).toBeGreaterThanOrEqual(1);
       const [firstBroadcast] = broadcasts;
