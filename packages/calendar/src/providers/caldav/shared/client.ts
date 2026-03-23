@@ -1,5 +1,6 @@
 import { createDAVClient } from "tsdav";
-import { validateUrlSafety } from "../../../utils/safe-fetch";
+import { createSafeFetch } from "../../../utils/safe-fetch";
+import { createDigestAwareFetch } from "./digest-fetch";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import type { CalDAVClientConfig, CalendarInfo } from "../types";
 
@@ -30,11 +31,14 @@ class CalDAVClient {
 
   private async getClient(): Promise<DAVClientInstance> {
     if (!this.client) {
-      await validateUrlSafety(this.config.serverUrl, this.safeFetchOptions);
+      const safeFetch = createSafeFetch(this.safeFetchOptions);
+      const digestAwareFetch = createDigestAwareFetch(this.config.credentials, safeFetch);
       this.client = await createDAVClient({
-        authMethod: "Basic",
+        authMethod: "Custom",
+        authFunction: async () => ({}),
         credentials: this.config.credentials,
         defaultAccountType: "caldav",
+        fetch: digestAwareFetch,
         serverUrl: this.config.serverUrl,
       });
     }
