@@ -24,15 +24,15 @@ class CalDAVClient {
   private client: DAVClientInstance | null = null;
   private config: CalDAVClientConfig;
   private safeFetchOptions?: SafeFetchOptions;
-  private resolvedAuthMethod: (() => CalDAVAuthMethod | undefined) | null = null;
+  private resolvedAuthMethod: (() => CalDAVAuthMethod | null) | null = null;
 
   constructor(config: CalDAVClientConfig, safeFetchOptions?: SafeFetchOptions) {
     this.config = config;
     this.safeFetchOptions = safeFetchOptions;
   }
 
-  getResolvedAuthMethod(): CalDAVAuthMethod | undefined {
-    return this.resolvedAuthMethod?.();
+  getResolvedAuthMethod(): CalDAVAuthMethod | null {
+    return this.resolvedAuthMethod?.() ?? null;
   }
 
   private async getClient(): Promise<DAVClientInstance> {
@@ -46,7 +46,7 @@ class CalDAVClient {
       this.resolvedAuthMethod = getResolvedMethod;
       this.client = await createDAVClient({
         authMethod: "Custom",
-        authFunction: async () => ({}),
+        authFunction: () => Promise.resolve({}),
         credentials: this.config.credentials,
         defaultAccountType: "caldav",
         fetch: digestAwareFetch,

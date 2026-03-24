@@ -17,7 +17,7 @@ interface CalDAVCredentials {
   authMethod: string;
 }
 
-const getClient = async (credentials: CalDAVCredentials) => {
+const getClient = (credentials: CalDAVCredentials) => {
   const password = decryptPassword(credentials.encryptedPassword, credentials.encryptionKey);
   const safeFetch = createSafeFetch(safeFetchOptions);
   const knownAuthMethod = resolveAuthMethod(credentials.authMethod);
@@ -28,7 +28,7 @@ const getClient = async (credentials: CalDAVCredentials) => {
   });
   return createDAVClient({
     authMethod: "Custom",
-    authFunction: async () => ({}),
+    authFunction: () => Promise.resolve({}),
     credentials: { username: credentials.username, password },
     defaultAccountType: "caldav",
     fetch: digestAwareFetch,

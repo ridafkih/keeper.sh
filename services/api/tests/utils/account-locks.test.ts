@@ -181,6 +181,7 @@ beforeAll(async () => {
   mock.module("@keeper.sh/calendar/caldav", () => ({
     createCalDAVClient: () => ({
       discoverCalendars: () => Promise.resolve([]),
+      getResolvedAuthMethod: () => "basic",
     }),
     createCalDAVProvider: () => ({
       id: "icloud",

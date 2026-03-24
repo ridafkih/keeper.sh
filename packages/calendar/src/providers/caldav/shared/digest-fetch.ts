@@ -24,13 +24,12 @@ class SafeDigestClient extends DigestClient {
     this.safeFetch = safeFetch;
   }
 
-  override async getClient(): Promise<FetchFunction> {
-    return this.safeFetch;
+  override getClient(): Promise<FetchFunction> {
+    return Promise.resolve(this.safeFetch);
   }
 
   override addAuth(url: unknown, options: Record<string, unknown>): Record<string, unknown> {
-    const urlStr = typeof url === "string" ? url : String(url);
-    const pathOnly = extractUri(urlStr);
+    const pathOnly = extractUri(String(url));
     return super.addAuth(pathOnly, options);
   }
 }
@@ -71,7 +70,7 @@ interface DigestAwareFetchOptions {
 
 interface DigestAwareFetchResult {
   fetch: FetchFunction;
-  getResolvedMethod: () => CalDAVAuthMethod | undefined;
+  getResolvedMethod: () => CalDAVAuthMethod | null;
 }
 
 const createDigestAwareFetch = (options: DigestAwareFetchOptions): DigestAwareFetchResult => {
@@ -110,9 +109,9 @@ const createDigestAwareFetch = (options: DigestAwareFetchOptions): DigestAwareFe
     return digestClient.fetch(input, init);
   };
 
-  const getResolvedMethod = (): CalDAVAuthMethod | undefined => {
+  const getResolvedMethod = (): CalDAVAuthMethod | null => {
     if (state.method === "unknown") {
-      return undefined;
+      return null;
     }
     return state.method;
   };
