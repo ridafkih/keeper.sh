@@ -83,18 +83,12 @@ const createDigestAwareFetch = (options: DigestAwareFetchOptions): DigestAwareFe
   const state: { method: AuthMethod } = { method: knownAuthMethod ?? "unknown" };
 
   const performFetch: FetchFunction = async (input, init) => {
-    const url = typeof input === "string" ? input : input instanceof Request ? input.url : input.toString();
-    console.log(`[digest-fetch] method=${state.method} url=${url} httpMethod=${init?.method ?? "GET"}`);
-
     if (state.method === "digest") {
-      const digestResponse = await digestClient.fetch(input, init);
-      console.log(`[digest-fetch] digest response: ${digestResponse.status} ${digestResponse.statusText}`);
-      return digestResponse;
+      return digestClient.fetch(input, init);
     }
 
     const headers = mergeHeaders(init, { authorization: basicAuth });
     const response = await fetchFn(input, { ...init, headers });
-    console.log(`[digest-fetch] basic probe: ${response.status} www-auth=${response.headers.get("www-authenticate")?.substring(0, 80)}`);
 
     if (state.method === "basic") {
       return response;
