@@ -3,11 +3,29 @@ import { createGoogleOAuthService } from "../../../src/core/oauth/google";
 
 const originalFetch = globalThis.fetch;
 
+const createTestStateStore = () => {
+  const store = new Map<string, { value: string; expiresAt: number }>();
+  return {
+    set: (key: string, value: string, ttlSeconds: number) => {
+      store.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
+      return Promise.resolve();
+    },
+    consume: (key: string) => {
+      const entry = store.get(key);
+      if (!entry) {
+        return Promise.resolve(null);
+      }
+      store.delete(key);
+      return Promise.resolve(entry.value);
+    },
+  };
+};
+
 const createService = () =>
   createGoogleOAuthService({
     clientId: "google-client-id",
     clientSecret: "google-client-secret",
-  });
+  }, createTestStateStore());
 
 const createFetchMock = (
   handler: (input: unknown, init?: RequestInit) => Promise<Response>,

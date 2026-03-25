@@ -1,6 +1,5 @@
 export {
   createOAuthProviders,
-  configureStateStore,
   type ValidatedState,
   type AuthorizationUrlOptions,
   type NormalizedUserInfo,
@@ -110,18 +109,19 @@ export {
 } from "./core/oauth/accounts";
 export {
   createGoogleOAuthService,
+  createGoogleTokenRefresher,
   type GoogleOAuthCredentials,
   type GoogleOAuthService,
 } from "./core/oauth/google";
 export {
   createMicrosoftOAuthService,
+  createMicrosoftTokenRefresher,
   type MicrosoftOAuthCredentials,
   type MicrosoftOAuthService,
 } from "./core/oauth/microsoft";
 export {
   generateState,
   validateState,
-  createInMemoryStateStore,
 } from "./core/oauth/state";
 export type {
   AuthType,

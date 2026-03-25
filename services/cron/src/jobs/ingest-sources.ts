@@ -3,8 +3,8 @@ import {
   ingestSource,
   allSettledWithConcurrency,
   insertEventStatesWithConflictResolution,
-  createGoogleOAuthService,
-  createMicrosoftOAuthService,
+  createGoogleTokenRefresher,
+  createMicrosoftTokenRefresher,
   createRedisRateLimiter,
   ensureValidToken,
 } from "@keeper.sh/calendar";
@@ -110,19 +110,17 @@ const readExistingEvents = (calendarId: string) =>
 
 const resolveTokenRefresher = (provider: string) => {
   if (provider === "google" && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
-    const googleOAuth = createGoogleOAuthService({
+    return createGoogleTokenRefresher({
       clientId: env.GOOGLE_CLIENT_ID,
       clientSecret: env.GOOGLE_CLIENT_SECRET,
     });
-    return (refreshToken: string) => googleOAuth.refreshAccessToken(refreshToken);
   }
 
   if (provider === "outlook" && env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET) {
-    const microsoftOAuth = createMicrosoftOAuthService({
+    return createMicrosoftTokenRefresher({
       clientId: env.MICROSOFT_CLIENT_ID,
       clientSecret: env.MICROSOFT_CLIENT_SECRET,
     });
-    return (refreshToken: string) => microsoftOAuth.refreshAccessToken(refreshToken);
   }
 
   return null;

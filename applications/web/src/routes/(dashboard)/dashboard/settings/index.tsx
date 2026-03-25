@@ -14,6 +14,7 @@ import { BackButton } from "@/components/ui/primitives/back-button";
 import { useSession } from "@/hooks/use-session";
 import { useApiTokens } from "@/hooks/use-api-tokens";
 import { usePasskeys } from "@/hooks/use-passkeys";
+import { useHasPassword } from "@/hooks/use-has-password";
 import { Input } from "@/components/ui/primitives/input";
 import { deleteAccount } from "@/lib/auth";
 import {
@@ -66,6 +67,7 @@ function SettingsPage() {
   const { user } = useSession();
   const navigate = useNavigate();
   const passwordRef = useRef<HTMLInputElement>(null);
+  const { data: hasPassword = false } = useHasPassword();
   const accountLabel = authCapabilities.credentialMode === "username" ? "Username" : "Email";
   const accountValue =
     authCapabilities.credentialMode === "username"
@@ -104,9 +106,10 @@ function SettingsPage() {
     }
   };
 
+
   const handleDeleteAccount = async () => {
-    const password = passwordRef.current?.value;
-    if (!password) return;
+    const password = hasPassword ? passwordRef.current?.value : undefined;
+    if (hasPassword && !password) return;
     setDeleteError(null);
     setIsDeleting(true);
     try {
@@ -136,7 +139,7 @@ function SettingsPage() {
         </NavigationMenuItem>
       </NavigationMenu>
       <NavigationMenu>
-        {authCapabilities.supportsChangePassword && (
+        {hasPassword && (
           <NavigationMenuLinkItem to="/dashboard/settings/change-password">
             <NavigationMenuItemIcon>
               <Lock size={15} />
@@ -203,7 +206,9 @@ function SettingsPage() {
           <ModalDescription>
             This action is permanent and cannot be undone. All of your data, calendars, and connected accounts will be permanently deleted.
           </ModalDescription>
-          <Input ref={passwordRef} type="password" placeholder="Confirm your password" />
+          {hasPassword && (
+            <Input ref={passwordRef} type="password" placeholder="Confirm your password" />
+          )}
           {deleteError && <Text size="sm" tone="danger">{deleteError}</Text>}
           <ModalFooter>
             <Button variant="destructive" className="w-full justify-center" onClick={handleDeleteAccount} disabled={isDeleting}>

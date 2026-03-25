@@ -1,8 +1,8 @@
 import type { CalendarSyncProvider, RefreshLockStore } from "@keeper.sh/calendar";
 import type { RedisRateLimiter } from "@keeper.sh/calendar";
 import {
-  createGoogleOAuthService,
-  createMicrosoftOAuthService,
+  createGoogleTokenRefresher,
+  createMicrosoftTokenRefresher,
   runWithCredentialRefreshLock,
   isOAuthReauthRequiredError,
 } from "@keeper.sh/calendar";
@@ -113,7 +113,7 @@ const resolveOAuthProvider = async (
     if (!oauthCred.externalCalendarId) {
       return null;
     }
-    const googleOAuth = createGoogleOAuthService({
+    const refreshGoogleToken = createGoogleTokenRefresher({
       clientId: oauthConfig.googleClientId,
       clientSecret: oauthConfig.googleClientSecret,
     });
@@ -129,7 +129,7 @@ const resolveOAuthProvider = async (
         oauthCredentialId: oauthCred.oauthCredentialId,
         calendarAccountId: accountId,
         refreshLockStore,
-        rawRefresh: (refreshToken) => googleOAuth.refreshAccessToken(refreshToken),
+        rawRefresh: (refreshToken) => refreshGoogleToken(refreshToken),
       }),
       rateLimiter,
       signal,
@@ -140,7 +140,7 @@ const resolveOAuthProvider = async (
     if (!oauthCred.externalCalendarId) {
       return null;
     }
-    const microsoftOAuth = createMicrosoftOAuthService({
+    const refreshMicrosoftToken = createMicrosoftTokenRefresher({
       clientId: oauthConfig.microsoftClientId,
       clientSecret: oauthConfig.microsoftClientSecret,
     });
@@ -156,7 +156,7 @@ const resolveOAuthProvider = async (
         oauthCredentialId: oauthCred.oauthCredentialId,
         calendarAccountId: accountId,
         refreshLockStore,
-        rawRefresh: (refreshToken) => microsoftOAuth.refreshAccessToken(refreshToken),
+        rawRefresh: (refreshToken) => refreshMicrosoftToken(refreshToken),
       }),
     });
   }
