@@ -1,6 +1,6 @@
 import { googleTokenResponseSchema, googleUserInfoSchema } from "@keeper.sh/data-schemas";
 import type { GoogleTokenResponse, GoogleUserInfo } from "@keeper.sh/data-schemas";
-import { generateState, validateState, configureStateStore } from "./state";
+import { generateState } from "./state";
 import type { ValidatedState, OAuthStateStore } from "./state";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -109,11 +109,14 @@ const getRefreshErrorCode = (
   payload: GoogleTokenErrorPayload | null,
 ): string | undefined => payload?.error?.toLowerCase();
 
-const createGoogleOAuthService = (credentials: GoogleOAuthCredentials): GoogleOAuthService => {
+const createGoogleOAuthService = (
+  credentials: GoogleOAuthCredentials,
+  stateStore: OAuthStateStore,
+): GoogleOAuthService => {
   const { clientId, clientSecret } = credentials;
 
   const getAuthorizationUrl = async (userId: string, options: AuthorizationUrlOptions): Promise<string> => {
-    const state = await generateState(userId, {
+    const state = await generateState(stateStore, userId, {
       destinationId: options.destinationId,
       sourceCredentialId: options.sourceCredentialId,
     });
@@ -274,9 +277,6 @@ const hasRequiredScopes = (grantedScopes: string): boolean => {
 };
 
 export {
-  generateState,
-  validateState,
-  configureStateStore,
   GOOGLE_CALENDAR_SCOPE,
   GOOGLE_CALENDAR_LIST_SCOPE,
   GOOGLE_EMAIL_SCOPE,

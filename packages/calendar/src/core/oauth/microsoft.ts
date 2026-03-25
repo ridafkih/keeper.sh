@@ -1,7 +1,7 @@
 import { microsoftTokenResponseSchema, microsoftUserInfoSchema } from "@keeper.sh/data-schemas";
 import type { MicrosoftTokenResponse, MicrosoftUserInfo } from "@keeper.sh/data-schemas";
 import { generateState, validateState } from "./state";
-import type { ValidatedState } from "./state";
+import type { ValidatedState, OAuthStateStore } from "./state";
 
 const MICROSOFT_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
 const MICROSOFT_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
@@ -36,11 +36,12 @@ interface MicrosoftOAuthService {
 
 const createMicrosoftOAuthService = (
   credentials: MicrosoftOAuthCredentials,
+  stateStore: OAuthStateStore,
 ): MicrosoftOAuthService => {
   const { clientId, clientSecret } = credentials;
 
   const getAuthorizationUrl = async (userId: string, options: AuthorizationUrlOptions): Promise<string> => {
-    const state = await generateState(userId, {
+    const state = await generateState(stateStore, userId, {
       destinationId: options.destinationId,
       sourceCredentialId: options.sourceCredentialId,
     });
@@ -145,14 +146,13 @@ const hasRequiredScopes = (grantedScopes: string): boolean => {
 };
 
 export {
-  generateState,
-  validateState,
   MICROSOFT_CALENDAR_SCOPE,
   MICROSOFT_USER_SCOPE,
   MICROSOFT_OFFLINE_SCOPE,
   createMicrosoftOAuthService,
   fetchUserInfo,
   hasRequiredScopes,
+  validateState,
 };
 export type {
   ValidatedState,

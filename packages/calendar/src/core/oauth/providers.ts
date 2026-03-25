@@ -2,17 +2,15 @@ import {
   createGoogleOAuthService,
   fetchUserInfo as fetchGoogleUserInfo,
   hasRequiredScopes as hasRequiredGoogleScopes,
-  validateState as validateGoogleState,
-  configureStateStore,
 } from "./google";
 import type { GoogleOAuthCredentials, ValidatedState, OAuthStateStore } from "./google";
 import {
   createMicrosoftOAuthService,
   fetchUserInfo as fetchMicrosoftUserInfo,
   hasRequiredScopes as hasRequiredMicrosoftScopes,
-  validateState as validateMicrosoftState,
 } from "./microsoft";
 import type { MicrosoftOAuthCredentials } from "./microsoft";
+import { validateState } from "./state";
 
 interface AuthorizationUrlOptions {
   callbackUrl: string;
@@ -53,11 +51,14 @@ interface OAuthProviders {
   hasRequiredScopes: (providerId: string, grantedScopes: string) => boolean;
 }
 
-const createOAuthProviders = (config: OAuthProvidersConfig): OAuthProviders => {
+const createOAuthProviders = (
+  config: OAuthProvidersConfig,
+  stateStore: OAuthStateStore,
+): OAuthProviders => {
   const providers: Record<string, OAuthProvider> = {};
 
   if (config.google) {
-    const googleService = createGoogleOAuthService(config.google);
+    const googleService = createGoogleOAuthService(config.google, stateStore);
     providers.google = {
       exchangeCodeForTokens: googleService.exchangeCodeForTokens,
       fetchUserInfo: async (accessToken): Promise<NormalizedUserInfo> => {
@@ -71,7 +72,7 @@ const createOAuthProviders = (config: OAuthProvidersConfig): OAuthProviders => {
   }
 
   if (config.microsoft) {
-    const microsoftService = createMicrosoftOAuthService(config.microsoft);
+    const microsoftService = createMicrosoftOAuthService(config.microsoft, stateStore);
     providers.outlook = {
       exchangeCodeForTokens: microsoftService.exchangeCodeForTokens,
       fetchUserInfo: async (accessToken): Promise<NormalizedUserInfo> => {
@@ -88,19 +89,8 @@ const createOAuthProviders = (config: OAuthProvidersConfig): OAuthProviders => {
 
   const isOAuthProvider = (providerId: string): boolean => providerId in providers;
 
-  const validateState = async (state: string): Promise<ValidatedState | null> => {
-    const googleResult = await validateGoogleState(state);
-    if (googleResult) {
-      return googleResult;
-    }
-
-    const microsoftResult = await validateMicrosoftState(state);
-    if (microsoftResult) {
-      return microsoftResult;
-    }
-
-    return null;
-  };
+  const handleValidateState = (state: string): Promise<ValidatedState | null> =>
+    validateState(stateStore, state);
 
   const hasRequiredScopes = (providerId: string, grantedScopes: string): boolean => {
     const provider = providers[providerId];
@@ -110,10 +100,10 @@ const createOAuthProviders = (config: OAuthProvidersConfig): OAuthProviders => {
     return provider.hasRequiredScopes(grantedScopes);
   };
 
-  return { getProvider, hasRequiredScopes, isOAuthProvider, validateState };
+  return { getProvider, hasRequiredScopes, isOAuthProvider, validateState: handleValidateState };
 };
 
-export { createOAuthProviders, configureStateStore };
+export { createOAuthProviders };
 export type {
   ValidatedState,
   AuthorizationUrlOptions,

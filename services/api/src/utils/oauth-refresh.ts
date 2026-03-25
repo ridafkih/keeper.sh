@@ -5,7 +5,7 @@ import {
 import { createGoogleOAuthService } from "@keeper.sh/calendar";
 import { createMicrosoftOAuthService } from "@keeper.sh/calendar";
 import { eq } from "drizzle-orm";
-import { database, env } from "@/context";
+import { database, env, oauthStateStore } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;
 const MS_PER_SECOND = 1000;
@@ -26,7 +26,7 @@ const refreshGoogleAccessToken = async (
   const googleOAuth = createGoogleOAuthService({
     clientId: env.GOOGLE_CLIENT_ID,
     clientSecret: env.GOOGLE_CLIENT_SECRET,
-  });
+  }, oauthStateStore);
 
   const tokenData = await googleOAuth.refreshAccessToken(refreshToken);
   const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);
@@ -65,7 +65,7 @@ const refreshMicrosoftAccessToken = async (
   const microsoftOAuth = createMicrosoftOAuthService({
     clientId: env.MICROSOFT_CLIENT_ID,
     clientSecret: env.MICROSOFT_CLIENT_SECRET,
-  });
+  }, oauthStateStore);
 
   const tokenData = await microsoftOAuth.refreshAccessToken(refreshToken);
   const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);
@@ -104,7 +104,7 @@ const refreshGoogleSourceAccessToken = async (
   const googleOAuth = createGoogleOAuthService({
     clientId: env.GOOGLE_CLIENT_ID,
     clientSecret: env.GOOGLE_CLIENT_SECRET,
-  });
+  }, oauthStateStore);
 
   const tokenData = await googleOAuth.refreshAccessToken(refreshToken);
   const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);
@@ -135,7 +135,7 @@ const refreshMicrosoftSourceAccessToken = async (
   const microsoftOAuth = createMicrosoftOAuthService({
     clientId: env.MICROSOFT_CLIENT_ID,
     clientSecret: env.MICROSOFT_CLIENT_SECRET,
-  });
+  }, oauthStateStore);
 
   const tokenData = await microsoftOAuth.refreshAccessToken(refreshToken);
   const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);

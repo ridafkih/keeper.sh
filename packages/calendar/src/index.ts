@@ -1,6 +1,5 @@
 export {
   createOAuthProviders,
-  configureStateStore,
   type ValidatedState,
   type AuthorizationUrlOptions,
   type NormalizedUserInfo,
@@ -121,7 +120,6 @@ export {
 export {
   generateState,
   validateState,
-  createInMemoryStateStore,
 } from "./core/oauth/state";
 export type {
   AuthType,
