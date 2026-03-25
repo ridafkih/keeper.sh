@@ -34,6 +34,40 @@ interface MicrosoftOAuthService {
   refreshAccessToken: (refreshToken: string) => Promise<MicrosoftTokenResponse>;
 }
 
+const createMicrosoftTokenRefresher = (
+  credentials: MicrosoftOAuthCredentials,
+) => {
+  const { clientId, clientSecret } = credentials;
+
+  return async (refreshToken: string): Promise<MicrosoftTokenResponse> => {
+    const response = await fetch(MICROSOFT_TOKEN_URL, {
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      }),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      method: "POST",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    }).catch((error) => {
+      if (isRequestTimeoutError(error)) {
+        throw new Error(`Token refresh timed out after ${REQUEST_TIMEOUT_MS}ms`);
+      }
+
+      throw error;
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Token refresh failed (${response.status}): ${error}`);
+    }
+
+    const body = await response.json();
+    return microsoftTokenResponseSchema.assert(body);
+  };
+};
+
 const createMicrosoftOAuthService = (
   credentials: MicrosoftOAuthCredentials,
   stateStore: OAuthStateStore,
@@ -88,33 +122,7 @@ const createMicrosoftOAuthService = (
     return microsoftTokenResponseSchema.assert(body);
   };
 
-  const refreshAccessToken = async (refreshToken: string): Promise<MicrosoftTokenResponse> => {
-    const response = await fetch(MICROSOFT_TOKEN_URL, {
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-      }),
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      method: "POST",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    }).catch((error) => {
-      if (isRequestTimeoutError(error)) {
-        throw new Error(`Token refresh timed out after ${REQUEST_TIMEOUT_MS}ms`);
-      }
-
-      throw error;
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Token refresh failed (${response.status}): ${error}`);
-    }
-
-    const body = await response.json();
-    return microsoftTokenResponseSchema.assert(body);
-  };
+  const refreshAccessToken = createMicrosoftTokenRefresher(credentials);
 
   return {
     exchangeCodeForTokens,
@@ -146,6 +154,7 @@ const hasRequiredScopes = (grantedScopes: string): boolean => {
 };
 
 export {
+  createMicrosoftTokenRefresher,
   MICROSOFT_CALENDAR_SCOPE,
   MICROSOFT_USER_SCOPE,
   MICROSOFT_OFFLINE_SCOPE,

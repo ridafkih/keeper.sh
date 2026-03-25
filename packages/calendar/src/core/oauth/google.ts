@@ -109,61 +109,12 @@ const getRefreshErrorCode = (
   payload: GoogleTokenErrorPayload | null,
 ): string | undefined => payload?.error?.toLowerCase();
 
-const createGoogleOAuthService = (
+const createGoogleTokenRefresher = (
   credentials: GoogleOAuthCredentials,
-  stateStore: OAuthStateStore,
-): GoogleOAuthService => {
+) => {
   const { clientId, clientSecret } = credentials;
 
-  const getAuthorizationUrl = async (userId: string, options: AuthorizationUrlOptions): Promise<string> => {
-    const state = await generateState(stateStore, userId, {
-      destinationId: options.destinationId,
-      sourceCredentialId: options.sourceCredentialId,
-    });
-    const scopes = options.scopes ?? [
-      GOOGLE_CALENDAR_SCOPE,
-      GOOGLE_CALENDAR_LIST_SCOPE,
-      GOOGLE_EMAIL_SCOPE,
-    ];
-
-    const url = new URL(GOOGLE_AUTH_URL);
-    url.searchParams.set("client_id", clientId);
-    url.searchParams.set("redirect_uri", options.callbackUrl);
-    url.searchParams.set("response_type", "code");
-    url.searchParams.set("scope", scopes.join(" "));
-    url.searchParams.set("access_type", "offline");
-    url.searchParams.set("prompt", "consent");
-    url.searchParams.set("state", state);
-
-    return url.toString();
-  };
-
-  const exchangeCodeForTokens = async (
-    code: string,
-    callbackUrl: string,
-  ): Promise<GoogleTokenResponse> => {
-    const response = await fetch(GOOGLE_TOKEN_URL, {
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        code,
-        grant_type: "authorization_code",
-        redirect_uri: callbackUrl,
-      }),
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      method: "POST",
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Token exchange failed (${response.status}): ${error}`);
-    }
-
-    const body = await response.json();
-    return googleTokenResponseSchema.assert(body);
-  };
-
-  const refreshAccessToken = async (refreshToken: string): Promise<GoogleTokenResponse> => {
+  return async (refreshToken: string): Promise<GoogleTokenResponse> => {
     for (let attempt = 1; attempt <= REFRESH_MAX_ATTEMPTS; attempt++) {
       const response = await fetch(GOOGLE_TOKEN_URL, {
         body: new URLSearchParams({
@@ -246,6 +197,63 @@ const createGoogleOAuthService = (
       },
     );
   };
+};
+
+const createGoogleOAuthService = (
+  credentials: GoogleOAuthCredentials,
+  stateStore: OAuthStateStore,
+): GoogleOAuthService => {
+  const { clientId, clientSecret } = credentials;
+
+  const getAuthorizationUrl = async (userId: string, options: AuthorizationUrlOptions): Promise<string> => {
+    const state = await generateState(stateStore, userId, {
+      destinationId: options.destinationId,
+      sourceCredentialId: options.sourceCredentialId,
+    });
+    const scopes = options.scopes ?? [
+      GOOGLE_CALENDAR_SCOPE,
+      GOOGLE_CALENDAR_LIST_SCOPE,
+      GOOGLE_EMAIL_SCOPE,
+    ];
+
+    const url = new URL(GOOGLE_AUTH_URL);
+    url.searchParams.set("client_id", clientId);
+    url.searchParams.set("redirect_uri", options.callbackUrl);
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("scope", scopes.join(" "));
+    url.searchParams.set("access_type", "offline");
+    url.searchParams.set("prompt", "consent");
+    url.searchParams.set("state", state);
+
+    return url.toString();
+  };
+
+  const exchangeCodeForTokens = async (
+    code: string,
+    callbackUrl: string,
+  ): Promise<GoogleTokenResponse> => {
+    const response = await fetch(GOOGLE_TOKEN_URL, {
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code,
+        grant_type: "authorization_code",
+        redirect_uri: callbackUrl,
+      }),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Token exchange failed (${response.status}): ${error}`);
+    }
+
+    const body = await response.json();
+    return googleTokenResponseSchema.assert(body);
+  };
+
+  const refreshAccessToken = createGoogleTokenRefresher(credentials);
 
   return {
     exchangeCodeForTokens,
@@ -277,6 +285,7 @@ const hasRequiredScopes = (grantedScopes: string): boolean => {
 };
 
 export {
+  createGoogleTokenRefresher,
   GOOGLE_CALENDAR_SCOPE,
   GOOGLE_CALENDAR_LIST_SCOPE,
   GOOGLE_EMAIL_SCOPE,

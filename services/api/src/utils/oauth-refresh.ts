@@ -2,10 +2,10 @@ import {
   calendarAccountsTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
-import { createGoogleOAuthService } from "@keeper.sh/calendar";
-import { createMicrosoftOAuthService } from "@keeper.sh/calendar";
+import { createGoogleTokenRefresher } from "@keeper.sh/calendar";
+import { createMicrosoftTokenRefresher } from "@keeper.sh/calendar";
 import { eq } from "drizzle-orm";
-import { database, env, oauthStateStore } from "@/context";
+import { database, env } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;
 const MS_PER_SECOND = 1000;
@@ -23,12 +23,12 @@ const refreshGoogleAccessToken = async (
     throw new Error("Google OAuth not configured");
   }
 
-  const googleOAuth = createGoogleOAuthService({
+  const refreshGoogleToken = createGoogleTokenRefresher({
     clientId: env.GOOGLE_CLIENT_ID,
     clientSecret: env.GOOGLE_CLIENT_SECRET,
-  }, oauthStateStore);
+  });
 
-  const tokenData = await googleOAuth.refreshAccessToken(refreshToken);
+  const tokenData = await refreshGoogleToken(refreshToken);
   const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);
 
   const [account] = await database
@@ -62,12 +62,12 @@ const refreshMicrosoftAccessToken = async (
     throw new Error("Microsoft OAuth not configured");
   }
 
-  const microsoftOAuth = createMicrosoftOAuthService({
+  const refreshMicrosoftToken = createMicrosoftTokenRefresher({
     clientId: env.MICROSOFT_CLIENT_ID,
     clientSecret: env.MICROSOFT_CLIENT_SECRET,
-  }, oauthStateStore);
+  });
 
-  const tokenData = await microsoftOAuth.refreshAccessToken(refreshToken);
+  const tokenData = await refreshMicrosoftToken(refreshToken);
   const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);
 
   const [account] = await database
@@ -101,12 +101,12 @@ const refreshGoogleSourceAccessToken = async (
     throw new Error("Google OAuth not configured");
   }
 
-  const googleOAuth = createGoogleOAuthService({
+  const refreshGoogleToken = createGoogleTokenRefresher({
     clientId: env.GOOGLE_CLIENT_ID,
     clientSecret: env.GOOGLE_CLIENT_SECRET,
-  }, oauthStateStore);
+  });
 
-  const tokenData = await googleOAuth.refreshAccessToken(refreshToken);
+  const tokenData = await refreshGoogleToken(refreshToken);
   const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);
 
   await database
@@ -132,12 +132,12 @@ const refreshMicrosoftSourceAccessToken = async (
     throw new Error("Microsoft OAuth not configured");
   }
 
-  const microsoftOAuth = createMicrosoftOAuthService({
+  const refreshMicrosoftToken = createMicrosoftTokenRefresher({
     clientId: env.MICROSOFT_CLIENT_ID,
     clientSecret: env.MICROSOFT_CLIENT_SECRET,
-  }, oauthStateStore);
+  });
 
-  const tokenData = await microsoftOAuth.refreshAccessToken(refreshToken);
+  const tokenData = await refreshMicrosoftToken(refreshToken);
   const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);
 
   await database

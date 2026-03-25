@@ -104,13 +104,16 @@ function SettingsPage() {
     }
   };
 
+  const hasPassword = authCapabilities.supportsChangePassword;
+
   const handleDeleteAccount = async () => {
-    const password = passwordRef.current?.value;
-    if (!password) return;
+    const inputValue = passwordRef.current?.value;
+    if (hasPassword && !inputValue) return;
+    if (!hasPassword && inputValue !== "DELETE") return;
     setDeleteError(null);
     setIsDeleting(true);
     try {
-      await deleteAccount(password);
+      await deleteAccount(hasPassword ? inputValue : undefined);
       track(ANALYTICS_EVENTS.account_deleted);
       setDeleteOpen(false);
       navigate({ to: "/login" });
@@ -203,7 +206,10 @@ function SettingsPage() {
           <ModalDescription>
             This action is permanent and cannot be undone. All of your data, calendars, and connected accounts will be permanently deleted.
           </ModalDescription>
-          <Input ref={passwordRef} type="password" placeholder="Confirm your password" />
+          {hasPassword
+            ? <Input ref={passwordRef} type="password" placeholder="Confirm your password" />
+            : <Input ref={passwordRef} type="text" placeholder="Type DELETE to confirm" />
+          }
           {deleteError && <Text size="sm" tone="danger">{deleteError}</Text>}
           <ModalFooter>
             <Button variant="destructive" className="w-full justify-center" onClick={handleDeleteAccount} disabled={isDeleting}>
