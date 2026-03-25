@@ -14,6 +14,7 @@ import { BackButton } from "@/components/ui/primitives/back-button";
 import { useSession } from "@/hooks/use-session";
 import { useApiTokens } from "@/hooks/use-api-tokens";
 import { usePasskeys } from "@/hooks/use-passkeys";
+import { useHasPassword } from "@/hooks/use-has-password";
 import { Input } from "@/components/ui/primitives/input";
 import { deleteAccount } from "@/lib/auth";
 import {
@@ -66,6 +67,7 @@ function SettingsPage() {
   const { user } = useSession();
   const navigate = useNavigate();
   const passwordRef = useRef<HTMLInputElement>(null);
+  const { data: hasPassword = false } = useHasPassword();
   const accountLabel = authCapabilities.credentialMode === "username" ? "Username" : "Email";
   const accountValue =
     authCapabilities.credentialMode === "username"
@@ -104,16 +106,14 @@ function SettingsPage() {
     }
   };
 
-  const hasPassword = authCapabilities.supportsChangePassword;
 
   const handleDeleteAccount = async () => {
-    const inputValue = passwordRef.current?.value;
-    if (hasPassword && !inputValue) return;
-    if (!hasPassword && inputValue !== "DELETE") return;
+    const password = hasPassword ? passwordRef.current?.value : undefined;
+    if (hasPassword && !password) return;
     setDeleteError(null);
     setIsDeleting(true);
     try {
-      await deleteAccount(hasPassword ? inputValue : undefined);
+      await deleteAccount(password);
       track(ANALYTICS_EVENTS.account_deleted);
       setDeleteOpen(false);
       navigate({ to: "/login" });
@@ -139,7 +139,7 @@ function SettingsPage() {
         </NavigationMenuItem>
       </NavigationMenu>
       <NavigationMenu>
-        {authCapabilities.supportsChangePassword && (
+        {hasPassword && (
           <NavigationMenuLinkItem to="/dashboard/settings/change-password">
             <NavigationMenuItemIcon>
               <Lock size={15} />
@@ -206,10 +206,9 @@ function SettingsPage() {
           <ModalDescription>
             This action is permanent and cannot be undone. All of your data, calendars, and connected accounts will be permanently deleted.
           </ModalDescription>
-          {hasPassword
-            ? <Input ref={passwordRef} type="password" placeholder="Confirm your password" />
-            : <Input ref={passwordRef} type="text" placeholder="Type DELETE to confirm" />
-          }
+          {hasPassword && (
+            <Input ref={passwordRef} type="password" placeholder="Confirm your password" />
+          )}
           {deleteError && <Text size="sm" tone="danger">{deleteError}</Text>}
           <ModalFooter>
             <Button variant="destructive" className="w-full justify-center" onClick={handleDeleteAccount} disabled={isDeleting}>
