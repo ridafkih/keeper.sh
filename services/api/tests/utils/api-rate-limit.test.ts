@@ -38,7 +38,7 @@ describe("checkAndIncrementApiUsage", () => {
   });
 
   it("allows free users under the limit", async () => {
-    const result = await checkAndIncrementApiUsage(mockRedis as never, "user-1", "free");
+    const result = await checkAndIncrementApiUsage(mockRedis as never, "user-1", null);
 
     expect(result.allowed).toBe(true);
     expect(result.remaining).toBe(FREE_DAILY_LIMIT - 1);
@@ -46,7 +46,7 @@ describe("checkAndIncrementApiUsage", () => {
   });
 
   it("sets expiry on first call", async () => {
-    await checkAndIncrementApiUsage(mockRedis as never, "user-1", "free");
+    await checkAndIncrementApiUsage(mockRedis as never, "user-1", null);
 
     const expiryKeys = [...mockRedis.expiries.keys()];
     expect(expiryKeys).toHaveLength(1);
@@ -55,20 +55,20 @@ describe("checkAndIncrementApiUsage", () => {
   });
 
   it("does not reset expiry on subsequent calls", async () => {
-    await checkAndIncrementApiUsage(mockRedis as never, "user-1", "free");
+    await checkAndIncrementApiUsage(mockRedis as never, "user-1", null);
     mockRedis.expiries.clear();
 
-    await checkAndIncrementApiUsage(mockRedis as never, "user-1", "free");
+    await checkAndIncrementApiUsage(mockRedis as never, "user-1", null);
 
     expect(mockRedis.expiries.size).toBe(0);
   });
 
   it("tracks remaining count correctly", async () => {
     for (let call = 0; call < 10; call++) {
-      await checkAndIncrementApiUsage(mockRedis as never, "user-1", "free");
+      await checkAndIncrementApiUsage(mockRedis as never, "user-1", null);
     }
 
-    const result = await checkAndIncrementApiUsage(mockRedis as never, "user-1", "free");
+    const result = await checkAndIncrementApiUsage(mockRedis as never, "user-1", null);
 
     expect(result.allowed).toBe(true);
     expect(result.remaining).toBe(FREE_DAILY_LIMIT - 11);
@@ -76,10 +76,10 @@ describe("checkAndIncrementApiUsage", () => {
 
   it("blocks free users at the limit", async () => {
     for (let call = 0; call < FREE_DAILY_LIMIT; call++) {
-      await checkAndIncrementApiUsage(mockRedis as never, "user-1", "free");
+      await checkAndIncrementApiUsage(mockRedis as never, "user-1", null);
     }
 
-    const result = await checkAndIncrementApiUsage(mockRedis as never, "user-1", "free");
+    const result = await checkAndIncrementApiUsage(mockRedis as never, "user-1", null);
 
     expect(result.allowed).toBe(false);
     expect(result.remaining).toBe(0);
@@ -88,10 +88,10 @@ describe("checkAndIncrementApiUsage", () => {
 
   it("blocks free users over the limit", async () => {
     for (let call = 0; call < FREE_DAILY_LIMIT + 5; call++) {
-      await checkAndIncrementApiUsage(mockRedis as never, "user-1", "free");
+      await checkAndIncrementApiUsage(mockRedis as never, "user-1", null);
     }
 
-    const result = await checkAndIncrementApiUsage(mockRedis as never, "user-1", "free");
+    const result = await checkAndIncrementApiUsage(mockRedis as never, "user-1", null);
 
     expect(result.allowed).toBe(false);
     expect(result.remaining).toBe(0);
@@ -109,11 +109,11 @@ describe("checkAndIncrementApiUsage", () => {
 
   it("tracks users independently", async () => {
     for (let call = 0; call < FREE_DAILY_LIMIT; call++) {
-      await checkAndIncrementApiUsage(mockRedis as never, "user-1", "free");
+      await checkAndIncrementApiUsage(mockRedis as never, "user-1", null);
     }
 
-    const blockedResult = await checkAndIncrementApiUsage(mockRedis as never, "user-1", "free");
-    const allowedResult = await checkAndIncrementApiUsage(mockRedis as never, "user-2", "free");
+    const blockedResult = await checkAndIncrementApiUsage(mockRedis as never, "user-1", null);
+    const allowedResult = await checkAndIncrementApiUsage(mockRedis as never, "user-2", null);
 
     expect(blockedResult.allowed).toBe(false);
     expect(allowedResult.allowed).toBe(true);

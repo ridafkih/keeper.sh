@@ -80,6 +80,7 @@ export const ANALYTICS_EVENTS = {
   analytics_consent_changed: "analytics_consent_changed",
   account_deleted: "account_deleted",
   upgrade_billing_toggled: "upgrade_billing_toggled",
+  upgrade_plan_toggled: "upgrade_plan_toggled",
   upgrade_started: "upgrade_started",
   plan_managed: "plan_managed",
   feedback_submitted: "feedback_submitted",

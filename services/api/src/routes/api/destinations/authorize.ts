@@ -60,7 +60,7 @@ const GET = withWideEvent(
         const errorUrl = new URL("/dashboard/integrations", baseUrl);
         errorUrl.searchParams.set(
           "error",
-          "Account limit reached. Upgrade to Pro for unlimited accounts.",
+          "Account limit reached. Upgrade to Unlimited for unlimited accounts.",
         );
         return Response.redirect(errorUrl.toString());
       }

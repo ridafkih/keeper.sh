@@ -5,7 +5,6 @@ import KeyRound from "lucide-react/dist/esm/icons/key-round";
 import KeySquare from "lucide-react/dist/esm/icons/key-square";
 import Lock from "lucide-react/dist/esm/icons/lock";
 import Mail from "lucide-react/dist/esm/icons/mail";
-import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import Cookie from "lucide-react/dist/esm/icons/cookie";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import { pluralize } from "@/lib/pluralize";
@@ -78,7 +77,7 @@ function SettingsPage() {
   const { data: subscription, isLoading: subscriptionLoading } = useSubscription({
     fallbackData: loaderSubscription,
   });
-  const isPro = subscription?.plan === "pro";
+  const hasSubscription = subscription?.plan === "pro" || subscription?.plan === "unlimited";
   const [isManaging, setIsManaging] = useState(false);
   const { runtimeConfig } = Route.useRouteContext();
   const [analyticsConsent, setAnalyticsConsentState] = useState(() =>
@@ -94,10 +93,6 @@ function SettingsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleManagePlan = async () => {
-    if (!isPro) {
-      navigate({ to: "/dashboard/upgrade" });
-      return;
-    }
     setIsManaging(true);
     try {
       await openCustomerPortal();
@@ -125,7 +120,7 @@ function SettingsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       <BackButton />
       <NavigationMenu>
         <NavigationMenuItem>
@@ -181,13 +176,13 @@ function SettingsPage() {
           <NavigationMenuItemLabel>Analytics Cookies</NavigationMenuItemLabel>
         </NavigationMenuToggleItem>
       </NavigationMenu>
-      {getCommercialMode() && (
-        <NavigationMenu variant={isPro ? "default" : "highlight"}>
+      {getCommercialMode() && hasSubscription && (
+        <NavigationMenu>
           <NavigationMenuButtonItem onClick={handleManagePlan} disabled={isManaging || subscriptionLoading}>
             <NavigationMenuItemIcon>
-              {isPro ? <CreditCard size={15} /> : <Sparkles size={15} />}
+              <CreditCard size={15} />
             </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>{isPro ? "Manage Plan" : "Upgrade to Pro"}</NavigationMenuItemLabel>
+            <NavigationMenuItemLabel>Manage Plan</NavigationMenuItemLabel>
             <NavigationMenuItemTrailing />
           </NavigationMenuButtonItem>
         </NavigationMenu>

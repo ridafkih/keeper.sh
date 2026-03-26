@@ -90,7 +90,7 @@ function ICalPage() {
   const locked = entitlements ? !entitlements.canCustomizeIcalFeed : false;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       <BackButton />
       <ICalLinkSection />
       <SourceSelectionSection />

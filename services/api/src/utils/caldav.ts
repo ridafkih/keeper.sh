@@ -13,7 +13,7 @@ const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
 
 class DestinationLimitError extends Error {
   constructor() {
-    super("Account limit reached. Upgrade to Pro for unlimited accounts.");
+    super("Account limit reached. Upgrade to Unlimited for unlimited accounts.");
   }
 }
 

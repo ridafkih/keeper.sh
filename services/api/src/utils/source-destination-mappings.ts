@@ -7,7 +7,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import type { database as databaseInstance } from "@/context";
 const EMPTY_LIST_COUNT = 0;
 const USER_MAPPING_LOCK_NAMESPACE = 9001;
-const MAPPING_LIMIT_ERROR_MESSAGE = "Mapping limit reached. Upgrade to Pro for unlimited sync mappings.";
+const MAPPING_LIMIT_ERROR_MESSAGE = "Mapping limit reached. Upgrade to Unlimited for unlimited sync mappings.";
 
 type DatabaseClient = typeof databaseInstance;
 type DatabaseTransactionCallback = Parameters<DatabaseClient["transaction"]>[0];

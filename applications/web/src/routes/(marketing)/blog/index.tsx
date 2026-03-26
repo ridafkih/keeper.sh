@@ -31,7 +31,7 @@ export const Route = createFileRoute("/(marketing)/blog/")({
 function BlogDirectoryPage() {
   return (
     <div className="flex flex-col gap-8 py-16">
-      <header className="flex flex-col gap-1.5">
+      <header className="flex flex-col gap-1">
         <Heading1>Blog</Heading1>
         <Text size="base" tone="muted" className="leading-6">
           Product updates, engineering deep-dives, and calendar syncing tips from the Keeper.sh team.

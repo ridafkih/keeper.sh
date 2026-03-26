@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from "react";
+import { useCallback } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { useSubscription } from "./use-subscription";
@@ -8,8 +8,13 @@ interface EntitlementLimit {
   limit: number | null;
 }
 
+interface EntitlementTrial {
+  endsAt: string;
+}
+
 interface Entitlements {
-  plan: "free" | "pro";
+  plan: "pro" | "unlimited" | null;
+  trial: EntitlementTrial | null;
   accounts: EntitlementLimit;
   mappings: EntitlementLimit;
   canCustomizeIcalFeed: boolean;
@@ -27,23 +32,24 @@ function useEntitlements() {
     error,
   } = useSWR<Entitlements>(USAGE_CACHE_KEY, fetcher);
 
-  const data = useMemo<Entitlements | undefined>(() => {
+  const data = () => {
     if (serverEntitlements) {
       return serverEntitlements;
     }
 
-    if (subscription?.plan !== "pro") {
+    if (!subscription?.plan) {
       return undefined;
     }
 
     return {
-      plan: "pro",
+      plan: subscription.plan,
+      trial: null,
       accounts: { current: 0, limit: null },
       mappings: { current: 0, limit: null },
       canCustomizeIcalFeed: true,
       canUseEventFilters: true,
     };
-  }, [serverEntitlements, subscription?.plan]);
+  };
 
   return { data, mutate, isLoading, error };
 }
@@ -87,4 +93,4 @@ function canAddMore(entitlement: EntitlementLimit | undefined): boolean {
 }
 
 export { useEntitlements, useMutateEntitlements, canAddMore, USAGE_CACHE_KEY };
-export type { Entitlements, EntitlementLimit };
+export type { Entitlements, EntitlementLimit, EntitlementTrial };

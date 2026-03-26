@@ -206,8 +206,10 @@ const userEventsTable = pgTable(
 );
 
 const userSubscriptionsTable = pgTable("user_subscriptions", {
-  plan: text().notNull().default("free"),
+  grandfatheredPlan: text(),
+  plan: text(),
   polarSubscriptionId: text(),
+  trialEndsAt: timestamp(),
   updatedAt: timestamp()
     .notNull()
     .defaultNow()

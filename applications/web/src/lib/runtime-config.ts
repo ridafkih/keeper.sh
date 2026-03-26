@@ -7,6 +7,8 @@ interface PublicRuntimeConfig {
   googleAdsId: string | null;
   polarProMonthlyProductId: string | null;
   polarProYearlyProductId: string | null;
+  polarUnlimitedMonthlyProductId: string | null;
+  polarUnlimitedYearlyProductId: string | null;
   visitorsNowToken: string | null;
 }
 
@@ -17,6 +19,8 @@ interface RuntimeConfigSource {
   googleAdsId?: string | null;
   polarProMonthlyProductId?: string | null;
   polarProYearlyProductId?: string | null;
+  polarUnlimitedMonthlyProductId?: string | null;
+  polarUnlimitedYearlyProductId?: string | null;
   visitorsNowToken?: string | null;
 }
 
@@ -47,6 +51,8 @@ const getServerPublicRuntimeConfig = (
     googleAdsId: normalizeOptionalValue(environment.VITE_GOOGLE_ADS_ID),
     polarProMonthlyProductId: normalizeOptionalValue(environment.POLAR_PRO_MONTHLY_PRODUCT_ID),
     polarProYearlyProductId: normalizeOptionalValue(environment.POLAR_PRO_YEARLY_PRODUCT_ID),
+    polarUnlimitedMonthlyProductId: normalizeOptionalValue(environment.POLAR_UNLIMITED_MONTHLY_PRODUCT_ID),
+    polarUnlimitedYearlyProductId: normalizeOptionalValue(environment.POLAR_UNLIMITED_YEARLY_PRODUCT_ID),
     visitorsNowToken: normalizeOptionalValue(environment.VITE_VISITORS_NOW_TOKEN),
   };
 };
@@ -66,6 +72,8 @@ const resolvePublicRuntimeConfig = (source: RuntimeConfigSource): PublicRuntimeC
   googleAdsId: normalizeOptionalValue(source.googleAdsId),
   polarProMonthlyProductId: normalizeOptionalValue(source.polarProMonthlyProductId),
   polarProYearlyProductId: normalizeOptionalValue(source.polarProYearlyProductId),
+  polarUnlimitedMonthlyProductId: normalizeOptionalValue(source.polarUnlimitedMonthlyProductId),
+  polarUnlimitedYearlyProductId: normalizeOptionalValue(source.polarUnlimitedYearlyProductId),
   visitorsNowToken: normalizeOptionalValue(source.visitorsNowToken),
 });
 

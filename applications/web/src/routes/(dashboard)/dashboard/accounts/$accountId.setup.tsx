@@ -307,7 +307,7 @@ function AccountSetupPage() {
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       <BackButton fallback="/dashboard" />
       <SetupStepContent
         step={step}
@@ -375,7 +375,7 @@ function SelectSection({
           </NavigationMenuCheckboxItem>
         ))}
       </NavigationMenu>
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         <Button
           className="w-full justify-center"
           disabled={localSelectedIds.size === 0}

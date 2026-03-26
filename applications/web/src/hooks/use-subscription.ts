@@ -3,7 +3,7 @@ import { fetcher } from "@/lib/fetcher";
 import { getCommercialMode } from "@/config/commercial";
 
 export interface SubscriptionState {
-  plan: "free" | "pro";
+  plan: "pro" | "unlimited" | null;
   interval: "month" | "year" | null;
 }
 
@@ -23,7 +23,7 @@ export const resolveSubscriptionState = (
   const [active] = customerState.activeSubscriptions ?? [];
 
   if (!active) {
-    return { plan: "free", interval: null };
+    return { plan: null, interval: null };
   }
 
   return {

@@ -172,7 +172,7 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         {config.showServerUrlInput ? (
           <Input
             name="serverUrl"

@@ -4,8 +4,11 @@ const proxyableMethods = type("'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD' | 'OPT
 
 type ProxyableMethods = typeof proxyableMethods.infer;
 
-const planSchema = type("'free' | 'pro'");
+const planSchema = type("'pro' | 'unlimited'");
 type Plan = typeof planSchema.infer;
+
+const effectivePlanSchema = type("'pro' | 'unlimited' | null");
+type EffectivePlan = typeof effectivePlanSchema.infer;
 
 const billingPeriodSchema = type("'monthly' | 'yearly'");
 type BillingPeriod = typeof billingPeriodSchema.infer;
@@ -351,6 +354,7 @@ type UpdateOAuthSourceDestinations = typeof updateOAuthSourceDestinationsSchema.
 export {
   proxyableMethods,
   planSchema,
+  effectivePlanSchema,
   billingPeriodSchema,
   feedbackRequestSchema,
   createSourceSchema,
@@ -395,6 +399,7 @@ export {
 export type {
   ProxyableMethods,
   Plan,
+  EffectivePlan,
   BillingPeriod,
   FeedbackRequest,
   CreateSource,

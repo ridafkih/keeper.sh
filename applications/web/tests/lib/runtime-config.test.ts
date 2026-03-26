@@ -19,6 +19,8 @@ describe("resolvePublicRuntimeConfig", () => {
       googleAdsId: "runtime-google",
       polarProMonthlyProductId: null,
       polarProYearlyProductId: null,
+      polarUnlimitedMonthlyProductId: null,
+      polarUnlimitedYearlyProductId: null,
       visitorsNowToken: "runtime-visitors",
     });
   });
@@ -37,6 +39,8 @@ describe("resolvePublicRuntimeConfig", () => {
       googleAdsId: null,
       polarProMonthlyProductId: null,
       polarProYearlyProductId: null,
+      polarUnlimitedMonthlyProductId: null,
+      polarUnlimitedYearlyProductId: null,
       visitorsNowToken: null,
     });
   });
@@ -51,6 +55,8 @@ describe("serializePublicRuntimeConfig", () => {
       googleAdsId: "ads-123",
       polarProMonthlyProductId: null,
       polarProYearlyProductId: null,
+      polarUnlimitedMonthlyProductId: null,
+      polarUnlimitedYearlyProductId: null,
       visitorsNowToken: "</script><script>alert(1)</script>",
     });
 

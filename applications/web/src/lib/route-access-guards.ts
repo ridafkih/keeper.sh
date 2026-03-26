@@ -1,6 +1,6 @@
 export type RedirectTarget = "/dashboard" | "/login";
 
-export type SubscriptionPlan = "free" | "pro";
+export type SubscriptionPlan = "pro" | "unlimited";
 
 export const resolveDashboardRedirect = (
   hasSession: boolean,
@@ -30,7 +30,7 @@ export const resolveUpgradeRedirect = (
     return "/login";
   }
 
-  if (plan === "pro") {
+  if (plan === "unlimited") {
     return "/dashboard";
   }
 

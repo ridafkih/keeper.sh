@@ -112,8 +112,8 @@ const MARKETING_FEATURES: MarketingFeature[] = [
 
 type PricingFeature = {
   label: string
-  free: MarketingPricingFeatureValueKind
   pro: MarketingPricingFeatureValueKind
+  unlimited: MarketingPricingFeatureValueKind
 }
 
 type PricingPlan = {
@@ -128,35 +128,35 @@ type PricingPlan = {
 
 const PRICING_PLANS: PricingPlan[] = [
   {
-    id: 'free',
-    name: 'Free',
-    price: '$0',
+    id: 'pro',
+    name: 'Pro',
+    price: '$8',
     period: 'per month',
     description:
-      'For personal use and getting started with calendar sync.',
+      'For personal use with calendar sync, aggregated feeds, and event filters.',
     ctaLabel: 'Get Started',
   },
   {
-    id: 'pro',
-    name: 'Pro',
-    price: '$5',
+    id: 'unlimited',
+    name: 'Unlimited',
+    price: '$14',
     period: 'per month',
     description:
-      'For power users who need fast syncs, advanced feed controls, and unlimited syncing.',
+      'For power users who need fast syncs, unlimited accounts, and unlimited API access.',
     ctaLabel: 'Get Started',
-    tone: "inverse" as const,
+    tone: "inverse",
   },
 ]
 
 const PRICING_FEATURES: PricingFeature[] = [
-  { label: 'Sync Interval', free: 'Every 30 minutes', pro: 'Every 1 minute' },
-  { label: 'Linked Accounts', free: 'Up to 2', pro: 'infinity' },
-  { label: 'Sync Mappings', free: 'Up to 3', pro: 'infinity' },
-  { label: 'Aggregated iCal Feed', free: 'check', pro: 'check' },
-  { label: 'iCal Feed Customization', free: 'minus', pro: 'check' },
-  { label: 'Event Filters & Exclusions', free: 'minus', pro: 'check' },
-  { label: 'API & MCP Access', free: '25 calls/day', pro: 'infinity' },
-  { label: 'Priority Support', free: 'minus', pro: 'check' },
+  { label: 'Sync Interval', pro: 'Every 30 minutes', unlimited: 'Every 1 minute' },
+  { label: 'Linked Accounts', pro: 'Up to 2', unlimited: 'infinity' },
+  { label: 'Sync Mappings', pro: 'Up to 3', unlimited: 'infinity' },
+  { label: 'Aggregated iCal Feed', pro: 'check', unlimited: 'check' },
+  { label: 'iCal Feed Customization', pro: 'check', unlimited: 'check' },
+  { label: 'Event Filters & Exclusions', pro: 'check', unlimited: 'check' },
+  { label: 'Daily API & MCP Calls', pro: '25', unlimited: 'infinity' },
+  { label: 'Priority Support', pro: 'minus', unlimited: 'check' },
 ]
 
 type HowItWorksStep = {
@@ -309,7 +309,7 @@ function MarketingPage() {
             <MarketingPricingIntro>
               <Heading2 className="text-center">Hosted Pricing</Heading2>
               <Text size='sm' align="center">
-                Keeper.sh uses a low-cost freemium model to give you a solid range of choice. Check the GitHub repository for self-hosting options.
+                Simple, transparent pricing with a free trial. Check the GitHub repository for self-hosting options.
               </Text>
             </MarketingPricingIntro>
 
@@ -335,10 +335,10 @@ function MarketingPage() {
                       <Text size="sm" className="text-left text-nowrap">{feature.label}</Text>
                     </MarketingPricingFeatureLabel>
                     <MarketingPricingFeatureValue>
-                      <MarketingPricingFeatureDisplay value={feature.free} tone="muted" />
+                      <MarketingPricingFeatureDisplay value={feature.pro} tone="muted" />
                     </MarketingPricingFeatureValue>
                     <MarketingPricingFeatureValue>
-                      <MarketingPricingFeatureDisplay value={feature.pro} tone="muted" />
+                      <MarketingPricingFeatureDisplay value={feature.unlimited} tone="muted" />
                     </MarketingPricingFeatureValue>
                   </MarketingPricingFeatureRow>
                 ))}

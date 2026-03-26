@@ -18,6 +18,8 @@ const schema = {
   PASSKEY_RP_NAME: "string?",
   POLAR_ACCESS_TOKEN: "string?",
   POLAR_MODE: "'sandbox' | 'production' | undefined?",
+  POLAR_PRO_PRODUCT_IDS: "string?",
+  POLAR_UNLIMITED_PRODUCT_IDS: "string?",
   POLAR_WEBHOOK_SECRET: "string?",
   REDIS_URL: "string.url",
   RESEND_API_KEY: "string?",

@@ -59,7 +59,7 @@ class OAuthError extends Error {
   }
 }
 
-const ACCOUNT_LIMIT_ERROR_MESSAGE = "Account limit reached. Upgrade to Pro for unlimited accounts.";
+const ACCOUNT_LIMIT_ERROR_MESSAGE = "Account limit reached. Upgrade to Unlimited for unlimited accounts.";
 
 interface OAuthUserInfo {
   email: string | null;

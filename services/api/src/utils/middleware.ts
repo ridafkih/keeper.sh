@@ -32,7 +32,7 @@ const resolveOutcome = (statusCode: number): "success" | "error" => {
   return "success";
 };
 
-const fetchUserPlan = async (userId: string): Promise<"free" | "pro" | null> => {
+const fetchUserPlan = async (userId: string): Promise<"pro" | "unlimited" | null> => {
   try {
     return await premiumService.getUserPlan(userId);
   } catch {
@@ -57,7 +57,7 @@ const fetchAccountAgeDays = async (userId: string): Promise<number | null> => {
 };
 
 interface UserContext {
-  plan: "free" | "pro" | null;
+  plan: "pro" | "unlimited" | null;
 }
 
 const enrichWithUserContext = async (userId: string): Promise<UserContext> => {
@@ -166,14 +166,14 @@ const resolveApiTokenUserId = async (bearerToken: string): Promise<string | null
   return match.userId;
 };
 
-const enforceApiRateLimit = async (userId: string, plan: "free" | "pro" | null): Promise<Response | null> => {
+const enforceApiRateLimit = async (userId: string, plan: "pro" | "unlimited" | null): Promise<Response | null> => {
   const rateLimitResult = await checkAndIncrementApiUsage(redis, userId, plan);
   widelog.set("rate_limit.remaining", rateLimitResult.remaining);
   widelog.set("rate_limit.limit", rateLimitResult.limit);
 
   if (!rateLimitResult.allowed) {
     widelog.set("rate_limit.exceeded", true);
-    return ErrorResponse.tooManyRequests("Daily API limit exceeded. Upgrade to Pro for unlimited access.").toResponse();
+    return ErrorResponse.tooManyRequests("Daily API limit exceeded. Upgrade to Unlimited for unlimited access.").toResponse();
   }
 
   return null;

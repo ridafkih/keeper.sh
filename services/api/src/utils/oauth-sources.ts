@@ -21,7 +21,7 @@ type OAuthSourceDatabase = Pick<typeof contextDatabase, "insert" | "select" | "s
 
 class OAuthSourceLimitError extends Error {
   constructor() {
-    super("Account limit reached. Upgrade to Pro for unlimited accounts.");
+    super("Account limit reached. Upgrade to Unlimited for unlimited accounts.");
   }
 }
 

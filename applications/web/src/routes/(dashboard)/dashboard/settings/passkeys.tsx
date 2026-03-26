@@ -69,7 +69,7 @@ function PasskeysPage() {
   };
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       <BackButton fallback="/dashboard/settings" />
       {error && <ErrorState message="Failed to load passkeys." onRetry={() => mutate()} />}
       {mutationError && <Text size="sm" tone="danger">{mutationError}</Text>}

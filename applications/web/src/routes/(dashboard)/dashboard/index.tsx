@@ -51,7 +51,7 @@ function DashboardPage() {
     <div className="flex flex-col">
       <SyncStatus />
       <EventGraph />
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         <NavigationMenu>
           <NavigationMenuLinkItem to="/dashboard/connect">
             <NavigationMenuItemIcon>

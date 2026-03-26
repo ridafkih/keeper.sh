@@ -52,19 +52,14 @@ describe("route access guards", () => {
         plan: null,
       },
       {
-        expectedRedirect: "/login",
-        hasSession: false,
-        plan: "free",
-      },
-      {
         expectedRedirect: "/dashboard",
         hasSession: true,
-        plan: "pro",
+        plan: "unlimited",
       },
       {
         expectedRedirect: null,
         hasSession: true,
-        plan: "free",
+        plan: "pro",
       },
       {
         expectedRedirect: null,

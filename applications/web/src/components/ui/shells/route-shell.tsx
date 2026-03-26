@@ -13,7 +13,7 @@ type RouteShellProps = {
 export function RouteShell(props: RouteShellProps) {
   if (props.status === "error") {
     return (
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         <BackButton fallback={props.backFallback} />
         <ErrorState onRetry={props.onRetry} />
       </div>
@@ -22,7 +22,7 @@ export function RouteShell(props: RouteShellProps) {
 
   if (props.status === "loading") {
     return (
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         <BackButton fallback={props.backFallback} />
         <div className="flex justify-center py-6">
           <LoaderCircle size={20} className="animate-spin text-foreground-muted" />

@@ -12,6 +12,8 @@ const schema = {
   MICROSOFT_CLIENT_SECRET: "string?",
   POLAR_ACCESS_TOKEN: "string?",
   POLAR_MODE: "'sandbox' | 'production' | undefined?",
+  POLAR_PRO_PRODUCT_IDS: "string?",
+  POLAR_UNLIMITED_PRODUCT_IDS: "string?",
   REDIS_URL: "string.url",
   WORKER_JOB_QUEUE_ENABLED: "boolean?",
 } as const;

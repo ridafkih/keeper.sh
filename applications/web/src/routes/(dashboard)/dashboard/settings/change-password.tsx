@@ -63,10 +63,10 @@ function ChangePasswordPage() {
   const inputTone = resolveInputTone(error);
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       <BackButton fallback="/dashboard/settings" />
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1">
           <Input name="current" type="password" placeholder="Current password" tone={inputTone} />
           <Input name="new" type="password" placeholder="New password" tone={inputTone} />
           <Input name="confirm" type="password" placeholder="Confirm new password" tone={inputTone} />

@@ -1,17 +1,17 @@
-import type { Plan } from "@keeper.sh/data-schemas";
+import type { EffectivePlan } from "@keeper.sh/data-schemas";
 
 interface SourceWithUserId {
   userId: string;
 }
 
-type GetUserPlan = (userId: string) => Promise<Plan>;
+type GetUserPlan = (userId: string) => Promise<EffectivePlan>;
 
 const getUniqueUserIds = (userIds: string[]): string[] => [...new Set(userIds)];
 
 const resolveUserPlanMap = async (
   userIds: string[],
   getUserPlan: GetUserPlan,
-): Promise<Map<string, Plan>> => {
+): Promise<Map<string, EffectivePlan>> => {
   const uniqueUserIds = getUniqueUserIds(userIds);
   const userPlans = await Promise.all(
     uniqueUserIds.map(async (userId) => ({
@@ -25,7 +25,7 @@ const resolveUserPlanMap = async (
 
 const filterSourcesByPlan = async <TSource extends SourceWithUserId>(
   sources: TSource[],
-  targetPlan: Plan,
+  targetPlan: EffectivePlan,
   getUserPlan: GetUserPlan,
 ): Promise<TSource[]> => {
   const userPlanMap = await resolveUserPlanMap(
@@ -38,7 +38,7 @@ const filterSourcesByPlan = async <TSource extends SourceWithUserId>(
 
 const filterUserIdsByPlan = async (
   userIds: string[],
-  targetPlan: Plan,
+  targetPlan: EffectivePlan,
   getUserPlan: GetUserPlan,
 ): Promise<string[]> => {
   const uniqueUserIds = getUniqueUserIds(userIds);

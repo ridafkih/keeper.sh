@@ -1,17 +1,11 @@
 import type { CronOptions } from "cronbake";
 import { userSubscriptionsTable } from "@keeper.sh/database/schema";
 import { user } from "@keeper.sh/database/auth-schema";
+import { createProductPlanMapping } from "@keeper.sh/premium";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { widelog } from "@/utils/logging";
 
 const EMPTY_SUBSCRIPTIONS_COUNT = 0;
-
-const getPlanFromSubscriptionStatus = (hasActive: boolean): "pro" | "free" => {
-  if (hasActive) {
-    return "pro";
-  }
-  return "free";
-};
 
 interface ReconcileSubscriptionsDependencies {
   hasBillingClient: boolean;
@@ -65,6 +59,12 @@ const runReconcileSubscriptionsJob = async (
 
 const createDefaultDependencies = async (): Promise<ReconcileSubscriptionsDependencies> => {
   const { database, polarClient } = await import("@/context");
+  const env = (await import("@/env")).default;
+
+  const planMapping = createProductPlanMapping({
+    proProductIds: env.POLAR_PRO_PRODUCT_IDS,
+    unlimitedProductIds: env.POLAR_UNLIMITED_PRODUCT_IDS,
+  });
 
   return {
     hasBillingClient: Boolean(polarClient),
@@ -79,25 +79,40 @@ const createDefaultDependencies = async (): Promise<ReconcileSubscriptionsDepend
       });
 
       const hasActiveSubscription = subscriptions.result.items.length > EMPTY_SUBSCRIPTIONS_COUNT;
-      const plan = getPlanFromSubscriptionStatus(hasActiveSubscription);
-
       const [polarSubscription] = subscriptions.result.items;
-      const polarSubscriptionId = polarSubscription?.id ?? null;
 
-      await database
-        .insert(userSubscriptionsTable)
-        .values({
-          plan,
-          polarSubscriptionId,
-          userId,
-        })
-        .onConflictDoUpdate({
-          set: {
+      if (hasActiveSubscription && polarSubscription) {
+        const plan = planMapping.resolveProductPlan(polarSubscription.productId);
+        const polarSubscriptionId = polarSubscription.id;
+
+        await database
+          .insert(userSubscriptionsTable)
+          .values({
             plan,
             polarSubscriptionId,
-          },
-          target: userSubscriptionsTable.userId,
-        });
+            userId,
+          })
+          .onConflictDoUpdate({
+            set: {
+              plan,
+              polarSubscriptionId,
+            },
+            target: userSubscriptionsTable.userId,
+          });
+      } else {
+        await database
+          .insert(userSubscriptionsTable)
+          .values({
+            polarSubscriptionId: null,
+            userId,
+          })
+          .onConflictDoUpdate({
+            set: {
+              polarSubscriptionId: null,
+            },
+            target: userSubscriptionsTable.userId,
+          });
+      }
     },
     selectUserIds: async () => {
       const users = await database.select({ id: user.id }).from(user);

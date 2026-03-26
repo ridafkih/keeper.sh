@@ -1,7 +1,7 @@
 import type { PublicRuntimeConfig } from "@/lib/runtime-config";
 
 export interface PlanConfig {
-  id: "free" | "pro";
+  id: "pro" | "unlimited";
   name: string;
   description: string;
   monthlyPrice: number;
@@ -13,30 +13,34 @@ export interface PlanConfig {
 
 const basePlans: Omit<PlanConfig, "monthlyProductId" | "yearlyProductId">[] = [
   {
-    id: "free",
-    name: "Free",
-    description: "For personal use and getting started with calendar sync.",
-    monthlyPrice: 0,
-    yearlyPrice: 0,
+    id: "pro",
+    name: "Pro",
+    description: "For personal use with calendar sync, aggregated feeds, and event filters.",
+    monthlyPrice: 6,
+    yearlyPrice: 60,
     features: [
       "Up to 2 linked accounts",
       "Up to 3 sync mappings",
       "Aggregated iCal feed",
+      "iCal feed customization",
+      "Event filters & exclusions",
       "Syncing every 30 minutes",
       "API access (25 calls/day)",
     ],
   },
   {
-    id: "pro",
-    name: "Pro",
-    description: "For power users who need fast syncs, advanced feed controls, and unlimited syncing.",
-    monthlyPrice: 5,
-    yearlyPrice: 42,
+    id: "unlimited",
+    name: "Unlimited",
+    description: "For power users who need fast syncs, unlimited accounts, and unlimited API access.",
+    monthlyPrice: 12,
+    yearlyPrice: 120,
     features: [
       "Syncing every 1 minute",
       "Unlimited linked accounts",
       "Unlimited sync mappings",
-      "Event filters, exclusions, and iCal feed customization",
+      "Aggregated iCal feed",
+      "iCal feed customization",
+      "Event filters & exclusions",
       "Unlimited API & MCP access",
       "Priority support",
     ],
@@ -50,6 +54,14 @@ export const getPlans = (runtimeConfig: PublicRuntimeConfig): PlanConfig[] =>
         ...plan,
         monthlyProductId: runtimeConfig.polarProMonthlyProductId,
         yearlyProductId: runtimeConfig.polarProYearlyProductId,
+      };
+    }
+
+    if (plan.id === "unlimited") {
+      return {
+        ...plan,
+        monthlyProductId: runtimeConfig.polarUnlimitedMonthlyProductId,
+        yearlyProductId: runtimeConfig.polarUnlimitedYearlyProductId,
       };
     }
 

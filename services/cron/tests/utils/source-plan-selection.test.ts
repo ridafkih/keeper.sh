@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { filterSourcesByPlan, filterUserIdsByPlan } from "../../src/utils/source-plan-selection";
 
-type Plan = "free" | "pro";
+type EffectivePlan = "pro" | "unlimited" | null;
 
 interface SourceRecord {
   id: string;
@@ -22,14 +22,14 @@ describe("filterSourcesByPlan", () => {
 
     const filtered = await filterSourcesByPlan(sources, "pro", (userId) => {
       lookupCalls.push(userId);
-      const planByUser: Record<string, Plan> = {
-        "u-free": "free",
+      const planByUser: Record<string, EffectivePlan> = {
+        "u-free": null,
         "u-other-pro": "pro",
         "u-pro": "pro",
       };
 
       const plan = planByUser[userId];
-      if (!plan) {
+      if (plan === undefined) {
         throw new Error(`Missing test plan for ${userId}`);
       }
 
@@ -59,14 +59,14 @@ describe("filterUserIdsByPlan", () => {
 
     const filteredUserIds = await filterUserIdsByPlan(userIds, "pro", (userId) => {
       lookupCalls.push(userId);
-      const planByUser: Record<string, Plan> = {
-        "u-free": "free",
+      const planByUser: Record<string, EffectivePlan> = {
+        "u-free": null,
         "u-other-pro": "pro",
         "u-pro": "pro",
       };
 
       const plan = planByUser[userId];
-      if (!plan) {
+      if (plan === undefined) {
         throw new Error(`Missing test plan for ${userId}`);
       }
 

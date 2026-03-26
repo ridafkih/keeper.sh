@@ -1,7 +1,7 @@
 import { tv, type VariantProps } from "tailwind-variants/lite";
 
 export const navigationMenuStyle = tv({
-  base: "flex flex-col rounded-2xl p-0.5",
+  base: "flex flex-col gap-px rounded-2xl p-0.5",
   variants: {
     variant: {
       default: "bg-background-elevated border border-border-elevated shadow-xs",

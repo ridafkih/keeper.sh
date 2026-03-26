@@ -4,19 +4,19 @@ import { widelog } from "@/utils/logging";
 import { database } from "@/context";
 import env from "@/env";
 import { userSubscriptionsTable } from "@keeper.sh/database/schema";
+import { createProductPlanMapping } from "@keeper.sh/premium";
+import type { Plan } from "@keeper.sh/data-schemas";
 
 const HTTP_OK = 200;
 
-const getPlanFromActiveStatus = (active: boolean): "pro" | "free" => {
-  if (active) {
-    return "pro";
-  }
-  return "free";
-};
+const productPlanMapping = createProductPlanMapping({
+  proProductIds: env.POLAR_PRO_PRODUCT_IDS,
+  unlimitedProductIds: env.POLAR_UNLIMITED_PRODUCT_IDS,
+});
 
-const upsertSubscription = async (
+const upsertActiveSubscription = async (
   userId: string,
-  plan: "free" | "pro",
+  plan: Plan,
   polarSubscriptionId: string,
 ): Promise<void> => {
   await database
@@ -35,41 +35,63 @@ const upsertSubscription = async (
     });
 };
 
+const clearActiveSubscription = async (
+  userId: string,
+): Promise<void> => {
+  await database
+    .insert(userSubscriptionsTable)
+    .values({
+      polarSubscriptionId: null,
+      userId,
+    })
+    .onConflictDoUpdate({
+      set: {
+        polarSubscriptionId: null,
+      },
+      target: userSubscriptionsTable.userId,
+    });
+};
+
 const handleSubscriptionCreated = async (
   userId: string | null,
-  subscriptionId: string,
+  productId: string,
 ): Promise<Response> => {
   if (!userId) {
     return new Response(null, { status: HTTP_OK });
   }
 
-  await upsertSubscription(userId, "pro", subscriptionId);
+  const plan = productPlanMapping.resolveProductPlan(productId);
+  await upsertActiveSubscription(userId, plan, productId);
   return new Response(null, { status: HTTP_OK });
 };
 
 const handleSubscriptionUpdated = async (
   userId: string | null,
-  subscriptionId: string,
-  isActive: boolean,
+  productId: string,
+  status: string,
 ): Promise<Response> => {
   if (!userId) {
     return new Response(null, { status: HTTP_OK });
   }
 
-  const plan = getPlanFromActiveStatus(isActive);
-  await upsertSubscription(userId, plan, subscriptionId);
+  if (status === "active" || status === "trialing") {
+    const plan = productPlanMapping.resolveProductPlan(productId);
+    await upsertActiveSubscription(userId, plan, productId);
+  } else {
+    await clearActiveSubscription(userId);
+  }
+
   return new Response(null, { status: HTTP_OK });
 };
 
 const handleSubscriptionCanceled = async (
   userId: string | null,
-  subscriptionId: string,
 ): Promise<Response> => {
   if (!userId) {
     return new Response(null, { status: HTTP_OK });
   }
 
-  await upsertSubscription(userId, "free", subscriptionId);
+  await clearActiveSubscription(userId);
   return new Response(null, { status: HTTP_OK });
 };
 
@@ -100,7 +122,7 @@ const POST = async (request: Request): Promise<Response> => {
       }
       return handleSubscriptionCreated(
         createdUserId,
-        event.data.id,
+        event.data.productId,
       );
     }
 
@@ -109,12 +131,12 @@ const POST = async (request: Request): Promise<Response> => {
       if (updatedUserId) {
         widelog.set("user.id", updatedUserId);
       }
-      const plan = getPlanFromActiveStatus(event.data.status === "active");
+      const plan = productPlanMapping.resolveProductPlan(event.data.productId);
       widelog.set("webhook.resulting_plan", plan);
       return handleSubscriptionUpdated(
         updatedUserId,
-        event.data.id,
-        event.data.status === "active",
+        event.data.productId,
+        event.data.status,
       );
     }
 
@@ -125,7 +147,6 @@ const POST = async (request: Request): Promise<Response> => {
       }
       return handleSubscriptionCanceled(
         canceledUserId,
-        event.data.id,
       );
     }
 

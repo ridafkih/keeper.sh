@@ -55,16 +55,16 @@ describe("runEnqueuePushSync", () => {
     const mock = createMockQueue();
     const dependencies = createDependencies(mock.queue, "correlation-456");
 
-    await runEnqueuePushSync("user-1", "free", dependencies);
+    await runEnqueuePushSync("user-1", "pro", dependencies);
 
-    expect(mock.addedJobs[0]?.data.plan).toBe("free");
+    expect(mock.addedJobs[0]?.data.plan).toBe("pro");
   });
 
   it("closes the queue after enqueuing", async () => {
     const mock = createMockQueue();
     const dependencies = createDependencies(mock.queue, "correlation-789");
 
-    await runEnqueuePushSync("user-1", "free", dependencies);
+    await runEnqueuePushSync("user-1", "pro", dependencies);
 
     expect(mock.closed).toBe(true);
   });
@@ -80,7 +80,7 @@ describe("runEnqueuePushSync", () => {
       },
     };
     try {
-      await runEnqueuePushSync("user-1", "free", createDependencies(failingQueue, "id"));
+      await runEnqueuePushSync("user-1", "pro", createDependencies(failingQueue, "id"));
     } catch {
       // Expected
     }
@@ -95,7 +95,7 @@ describe("runEnqueuePushSync", () => {
     };
 
     expect(
-      runEnqueuePushSync("user-1", "free", createDependencies(failingQueue, "id")),
+      runEnqueuePushSync("user-1", "pro", createDependencies(failingQueue, "id")),
     ).rejects.toThrow("queue unavailable");
   });
 
@@ -110,8 +110,8 @@ describe("runEnqueuePushSync", () => {
       },
     };
 
-    await runEnqueuePushSync("user-1", "free", dependencies);
-    await runEnqueuePushSync("user-2", "pro", dependencies);
+    await runEnqueuePushSync("user-1", "pro", dependencies);
+    await runEnqueuePushSync("user-2", "unlimited", dependencies);
 
     expect(mock.addedJobs[0]?.data.correlationId).toBe("correlation-1");
     expect(mock.addedJobs[1]?.data.correlationId).toBe("correlation-2");
@@ -121,7 +121,7 @@ describe("runEnqueuePushSync", () => {
     const mock = createMockQueue();
     const dependencies = createDependencies(mock.queue, "id");
 
-    await runEnqueuePushSync("user-abc-123", "free", dependencies);
+    await runEnqueuePushSync("user-abc-123", "pro", dependencies);
 
     expect(mock.addedJobs[0]?.name).toBe("sync-user-abc-123");
   });

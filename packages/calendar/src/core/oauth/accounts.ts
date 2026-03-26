@@ -60,7 +60,7 @@ const getOAuthAccountsByPlan = async (
 
   for (const result of results) {
     const { plan, accessToken, refreshToken, accessTokenExpiresAt, accountId } = result;
-    const userPlan = plan ?? "free";
+    const userPlan = plan ?? "pro";
 
     if (userPlan !== targetPlan) {
       continue;

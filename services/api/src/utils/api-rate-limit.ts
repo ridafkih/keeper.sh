@@ -17,9 +17,9 @@ interface RateLimitResult {
 const checkAndIncrementApiUsage = async (
   redisClient: Redis,
   userId: string,
-  plan: "free" | "pro" | null,
+  plan: "pro" | "unlimited" | null,
 ): Promise<RateLimitResult> => {
-  if (plan === "pro") {
+  if (plan === "pro" || plan === "unlimited") {
     return { allowed: true, remaining: -1, limit: -1 };
   }
 

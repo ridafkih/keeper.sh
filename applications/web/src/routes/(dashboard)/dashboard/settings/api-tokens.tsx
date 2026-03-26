@@ -100,7 +100,7 @@ function ApiTokensPage() {
   };
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       <BackButton fallback="/dashboard/settings" />
       <NavigationMenu>
         <NavigationMenuItem>

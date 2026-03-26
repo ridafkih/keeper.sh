@@ -132,7 +132,7 @@ export function AuthForm({
         action={copy.action}
         authorizationSearch={authorizationSearch}
       />
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         <AuthError />
         <AuthSwitchPrompt>
           {copy.switchPrompt}{" "}

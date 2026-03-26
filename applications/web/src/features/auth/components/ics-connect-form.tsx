@@ -83,7 +83,7 @@ export function ICSFeedForm() {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         <Input
           id="feed-url"
           name="feed-url"

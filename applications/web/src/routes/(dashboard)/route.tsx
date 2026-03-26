@@ -33,7 +33,7 @@ function DashboardLayout() {
   const overlayActive = useAtomValue(popoverOverlayAtom);
 
   return (
-    <div className="relative flex flex-col items-center min-h-dvh px-4 pb-12 pt-4 xs:pt-[min(6rem,25vh)]">
+    <div className="relative flex flex-col items-center min-h-dvh sm:px-4 pb-12 pt-4 xs:pt-[min(6rem,25vh)]">
       <div className="relative flex flex-col gap-3 w-full max-w-sm">
         <LazyMotion features={loadMotionFeatures}>
           <AnimatePresence>
@@ -47,9 +47,9 @@ function DashboardLayout() {
               />
             )}
           </AnimatePresence>
+          <SyncProvider />
+          <Outlet />
         </LazyMotion>
-        <SyncProvider />
-        <Outlet />
       </div>
     </div>
   );

@@ -106,7 +106,7 @@ beforeAll(async () => {
     encryptionKey: "encryption-key",
     premiumService: {
       canAddAccount: () => Promise.resolve(canAddAccountResult),
-      getUserPlan: () => Promise.resolve("free"),
+      getUserPlan: () => Promise.resolve("pro"),
     },
   }));
 

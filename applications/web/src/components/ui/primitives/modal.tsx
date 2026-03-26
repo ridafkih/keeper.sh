@@ -89,5 +89,5 @@ export function ModalDescription({ children }: PropsWithChildren) {
 }
 
 export function ModalFooter({ children }: PropsWithChildren) {
-  return <div className="flex flex-col gap-1.5">{children}</div>;
+  return <div className="flex flex-col gap-1">{children}</div>;
 }

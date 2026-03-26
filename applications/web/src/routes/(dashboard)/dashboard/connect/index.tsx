@@ -22,7 +22,7 @@ function ConnectPage() {
   const atLimit = !canAddMore(entitlements?.accounts);
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       <BackButton />
       <PremiumFeatureGate locked={atLimit} hint="Account limit reached.">
         <NavigationMenu>
