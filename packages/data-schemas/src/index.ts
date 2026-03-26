@@ -119,7 +119,7 @@ type MicrosoftTokenResponse = typeof microsoftTokenResponseSchema.infer;
 const microsoftUserInfoSchema = type({
   "displayName?": "string",
   id: "string",
-  "mail?": "string",
+  "mail?": "string | null",
   "userPrincipalName?": "string",
 });
 type MicrosoftUserInfo = typeof microsoftUserInfoSchema.infer;
