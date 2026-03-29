@@ -32,7 +32,11 @@ import { Text } from "@/components/ui/primitives/text";
 import { ProviderIconStack } from "@/components/ui/primitives/provider-icon-stack";
 import { pluralize } from "@/lib/pluralize";
 import { useAnimatedSWR } from "@/hooks/use-animated-swr";
+import Zap from "lucide-react/dist/esm/icons/zap";
 import { SyncStatus } from "@/features/dashboard/components/sync-status";
+import { useEntitlements } from "@/hooks/use-entitlements";
+import { PremiumFeatureGate } from "@/components/ui/primitives/upgrade-hint";
+import { getCommercialMode } from "@/config/commercial";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/")({
   component: DashboardPage,
@@ -52,6 +56,7 @@ function DashboardPage() {
       <SyncStatus />
       <EventGraph />
       <div className="flex flex-col gap-1">
+        <SubscribeCTA />
         <NavigationMenu>
           <NavigationMenuLinkItem to="/dashboard/connect">
             <NavigationMenuItemIcon>
@@ -218,5 +223,52 @@ function AccountsPopover() {
         </NavigationMenuLinkItem>
       ))}
     </NavigationMenuPopover>
+  );
+}
+
+function getTrialDaysLeft(endsAt: string): number {
+  const msLeft = new Date(endsAt).getTime() - Date.now();
+  return Math.max(0, Math.ceil(msLeft / 86_400_000));
+}
+
+function pluralDay(count: number): string {
+  if (count === 1) {
+    return "Day";
+  }
+  return "Days";
+}
+
+function resolveSubscribeLabel(plan: string | null | undefined, trial: { endsAt: string } | null | undefined): string | null {
+  if (trial) {
+    const daysLeft = getTrialDaysLeft(trial.endsAt);
+    return `Click to Upgrade (${daysLeft} ${[pluralDay(daysLeft)]} Trial Left)`;
+  }
+  if (!plan) {
+    return "Click to Upgrade (Trial Expired)";
+  }
+  return null;
+}
+
+function SubscribeCTA() {
+  const { data: entitlements } = useEntitlements();
+
+  if (!getCommercialMode()) return null;
+
+  const label = resolveSubscribeLabel(entitlements?.plan, entitlements?.trial);
+
+  if (!label) return null;
+
+  return (
+    <PremiumFeatureGate interactive locked footer={<Text size="sm" align="center">Your free trial has ended. Click to upgrade!</Text>}>
+      <NavigationMenu variant="highlight">
+        <NavigationMenuLinkItem to="/dashboard/upgrade">
+          <NavigationMenuItemIcon>
+            <Zap size={15} />
+          </NavigationMenuItemIcon>
+          <NavigationMenuItemLabel>{label}</NavigationMenuItemLabel>
+          <NavigationMenuItemTrailing />
+        </NavigationMenuLinkItem>
+      </NavigationMenu>
+    </PremiumFeatureGate>
   );
 }

@@ -2,20 +2,19 @@ import { useState, useTransition } from "react";
 import type { ReactNode } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { BackButton } from "@/components/ui/primitives/back-button";
+import { AnimatedReveal } from "@/components/ui/primitives/animated-reveal";
 import { PremiumFeatureGate } from "@/components/ui/primitives/upgrade-hint";
-import { AnimatedSwap } from "@/components/ui/primitives/animated-swap";
+import { Button, ButtonText } from "@/components/ui/primitives/button";
 import { Heading1 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
 import {
   NavigationMenu,
-  NavigationMenuButtonItem,
   NavigationMenuItem,
   NavigationMenuToggleItem,
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
   NavigationMenuItemTrailing,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
-import ArrowRight from "lucide-react/dist/esm/icons/arrow-right";
 import Users from "lucide-react/dist/esm/icons/users";
 import Link2 from "lucide-react/dist/esm/icons/link-2";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
@@ -28,7 +27,6 @@ import Check from "lucide-react/dist/esm/icons/check";
 import Minus from "lucide-react/dist/esm/icons/minus";
 import Infinity from "lucide-react/dist/esm/icons/infinity";
 import CalendarClock from "lucide-react/dist/esm/icons/calendar-clock";
-import Zap from "lucide-react/dist/esm/icons/zap";
 import { NavigationMenuSegmented } from "@/components/ui/composites/navigation-menu/navigation-menu-segmented";
 import { track, ANALYTICS_EVENTS, reportPurchaseConversion } from "@/lib/analytics";
 import {
@@ -227,9 +225,7 @@ function UpgradePage() {
 
       <div className="flex flex-col gap-0.5 px-0.5 py-3">
         <div className="flex items-baseline gap-1">
-          <AnimatedSwap swapKey={`price-${price}`}>
-            <Heading1 as="span" className="tabular-nums">${price}</Heading1>
-          </AnimatedSwap>
+          <Heading1 as="span" className="tabular-nums">${price}</Heading1>
           <Text as="span" size="sm" tone="muted">{period}</Text>
         </div>
         <Text size="sm" tone="muted">{selectedPlan.description}</Text>
@@ -238,7 +234,18 @@ function UpgradePage() {
       <PremiumFeatureGate
         locked={true}
         interactive={true}
-        footer={<Text size="sm" tone="muted" align="center">Save {savingsPercent}% with annual billing.</Text>}
+        footer={
+          <div className="grid">
+            <div className="col-start-1 row-start-1">
+              {!yearly && <Text size="sm" tone="muted" align="center">Save {savingsPercent}% on {selectedPlan.name} with annual billing.</Text>}
+            </div>
+            <div className="col-start-1 row-start-1">
+              <AnimatedReveal show={yearly} skipInitial>
+                <Text size="sm" tone="emerald" align="center">You're saving {savingsPercent}% with annual billing!</Text>
+              </AnimatedReveal>
+            </div>
+          </div>
+        }
       >
         <NavigationMenu>
           <NavigationMenuToggleItem checked={yearly} onCheckedChange={(checked) => {
@@ -257,7 +264,6 @@ function UpgradePage() {
         {FEATURES.map((feature) => {
           const featureValue = feature[planKey];
           const dimmed = featureValue.kind === "minus";
-          const valueChanges = JSON.stringify(feature.pro) !== JSON.stringify(feature.unlimited);
           return (
             <NavigationMenuItem key={feature.label} className={dimmed ? "opacity-40" : ""}>
               <NavigationMenuItemIcon>
@@ -265,32 +271,18 @@ function UpgradePage() {
               </NavigationMenuItemIcon>
               <NavigationMenuItemLabel>{feature.label}</NavigationMenuItemLabel>
               <NavigationMenuItemTrailing>
-                {valueChanges ? (
-                  <AnimatedSwap swapKey={`${feature.label}-${planKey}`}>
-                    <FeatureValueIndicator value={featureValue} />
-                  </AnimatedSwap>
-                ) : (
-                  <FeatureValueIndicator value={featureValue} />
-                )}
+                <FeatureValueIndicator value={featureValue} />
               </NavigationMenuItemTrailing>
             </NavigationMenuItem>
           );
         })}
       </NavigationMenu>
 
-      <NavigationMenu variant="highlight">
-        <NavigationMenuButtonItem onClick={handler} disabled={busy}>
-          <NavigationMenuItemIcon>
-            <Zap size={15} />
-          </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>
-            Subscribe to <AnimatedSwap swapKey={`plan-${selectedPlan.id}`}>{selectedPlan.name}</AnimatedSwap>
-          </NavigationMenuItemLabel>
-          <NavigationMenuItemTrailing>
-            <ArrowRight size={15} className="text-white" />
-          </NavigationMenuItemTrailing>
-        </NavigationMenuButtonItem>
-      </NavigationMenu>
+      <Button className="w-full justify-center" onClick={handler} disabled={busy}>
+        <ButtonText>
+          Subscribe to {selectedPlan.name}
+        </ButtonText>
+      </Button>
     </div>
   );
 }

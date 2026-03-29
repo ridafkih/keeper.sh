@@ -1,4 +1,3 @@
-import { useCallback } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { useSubscription } from "./use-subscription";
@@ -32,16 +31,11 @@ function useEntitlements() {
     error,
   } = useSWR<Entitlements>(USAGE_CACHE_KEY, fetcher);
 
-  const data = () => {
-    if (serverEntitlements) {
-      return serverEntitlements;
-    }
-
-    if (!subscription?.plan) {
-      return undefined;
-    }
-
-    return {
+  let data: Entitlements | undefined;
+  if (serverEntitlements) {
+    data = serverEntitlements;
+  } else if (subscription?.plan) {
+    data = {
       plan: subscription.plan,
       trial: null,
       accounts: { current: 0, limit: null },
@@ -49,7 +43,7 @@ function useEntitlements() {
       canCustomizeIcalFeed: true,
       canUseEventFilters: true,
     };
-  };
+  }
 
   return { data, mutate, isLoading, error };
 }
@@ -57,31 +51,28 @@ function useEntitlements() {
 function useMutateEntitlements() {
   const { mutate } = useSWRConfig();
 
-  const adjustMappingCount = useCallback(
-    (delta: number) => {
-      mutate<Entitlements>(
-        USAGE_CACHE_KEY,
-        (current) => {
-          if (!current) return current;
+  const adjustMappingCount = (delta: number) => {
+    mutate<Entitlements>(
+      USAGE_CACHE_KEY,
+      (current) => {
+        if (!current) return current;
 
-          const nextCount = Math.max(0, current.mappings.current + delta);
-          return {
-            ...current,
-            mappings: {
-              ...current.mappings,
-              current: nextCount,
-            },
-          };
-        },
-        { revalidate: false },
-      );
-    },
-    [mutate],
-  );
+        const nextCount = Math.max(0, current.mappings.current + delta);
+        return {
+          ...current,
+          mappings: {
+            ...current.mappings,
+            current: nextCount,
+          },
+        };
+      },
+      { revalidate: false },
+    );
+  };
 
-  const revalidateEntitlements = useCallback(() => {
+  const revalidateEntitlements = () => {
     return mutate(USAGE_CACHE_KEY);
-  }, [mutate]);
+  };
 
   return { adjustMappingCount, revalidateEntitlements };
 }

@@ -73,6 +73,7 @@ function PreambleLayout({ provider, onSubmit, children }: PreambleLayoutProps) {
         />
       </ProviderIconPair>
       <Heading2 as="h1">Connect {PROVIDER_LABELS[provider]}</Heading2>
+      {children}
       <Text size="sm" tone="muted" align="left">
         Start importing your events and sync them across all your calendars.
       </Text>
@@ -86,7 +87,6 @@ function PreambleLayout({ provider, onSubmit, children }: PreambleLayoutProps) {
           </Button>
         </div>
       </form>
-      {children}
     </>
   );
 }
@@ -122,9 +122,10 @@ export function AuthOAuthPreamble({
 
 interface LinkOAuthPreambleProps {
   provider: Provider;
+  children?: ReactNode;
 }
 
-export function LinkOAuthPreamble({ provider }: LinkOAuthPreambleProps) {
+export function LinkOAuthPreamble({ provider, children }: LinkOAuthPreambleProps) {
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const apiProvider = PROVIDER_API_MAP[provider];
@@ -132,7 +133,9 @@ export function LinkOAuthPreamble({ provider }: LinkOAuthPreambleProps) {
   };
 
   return (
-    <PreambleLayout provider={provider} onSubmit={handleSubmit} />
+    <PreambleLayout provider={provider} onSubmit={handleSubmit}>
+      {children}
+    </PreambleLayout>
   );
 }
 
