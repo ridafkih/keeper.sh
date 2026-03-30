@@ -46,10 +46,14 @@ const parseUrlWithCredentials = (url: string): ParsedUrl => {
   return { headers, url: parsed.toString() };
 };
 
+const ICS_USER_AGENT = "Keeper/1.0 (+https://www.keeper.sh)";
+
 const fetchRemoteText = async (url: string, options?: SafeFetchOptions): Promise<string> => {
   const { url: cleanUrl, headers } = parseUrlWithCredentials(url);
   const safeFetch = createSafeFetch(options);
-  const response = await safeFetch(cleanUrl, { headers });
+  const response = await safeFetch(cleanUrl, {
+    headers: { "User-Agent": ICS_USER_AGENT, ...headers },
+  });
 
   if (!response.ok) {
     if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
