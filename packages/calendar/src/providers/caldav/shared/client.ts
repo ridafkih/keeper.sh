@@ -18,6 +18,40 @@ const getDisplayName = (name: unknown): string => {
   return "Unnamed Calendar";
 };
 
+// TODO: Some CalDAV servers (e.g. Lark) don't support the "expand" flag for
+// Recurring events. When expand is requested, they return objects with non-string
+// Data (e.g. `{}`) instead of expanded iCal strings. This fallback retries without
+// Expand so we still get the raw calendar data, but it means recurring events come
+// Back as a single master event with an RRULE instead of individual occurrences.
+// Since parseICalToRemoteEvent only extracts the first VEVENT per object, modified
+// Occurrences of recurring events will be lost for these servers. A proper fix would
+// Be to handle multi-VEVENT objects and/or forward RRULEs to destinations.
+const fetchCalendarObjectsWithExpandFallback = async (
+  client: DAVClientInstance,
+  params: { calendarUrl: string; timeRange?: { start: string; end: string } },
+): Promise<CalendarObject[]> => {
+  const expandedObjects = await client.fetchCalendarObjects({
+    calendar: { url: params.calendarUrl },
+    expand: true,
+    ...(params.timeRange && { timeRange: params.timeRange }),
+  });
+
+  const hasValidData = expandedObjects.some(
+    (object) => typeof object.data === "string",
+  );
+
+  if (hasValidData) {
+    return expandedObjects;
+  }
+
+  const unexpandedObjects = await client.fetchCalendarObjects({
+    calendar: { url: params.calendarUrl },
+    ...(params.timeRange && { timeRange: params.timeRange }),
+  });
+
+  return unexpandedObjects;
+};
+
 class CalDAVClient {
   private client: DAVClientInstance | null = null;
   private config: CalDAVClientConfig;
@@ -106,14 +140,7 @@ class CalDAVClient {
     timeRange?: { start: string; end: string };
   }): Promise<CalendarObject[]> {
     const client = await this.getClient();
-
-    const objects = await client.fetchCalendarObjects({
-      calendar: { url: params.calendarUrl },
-      expand: true,
-      ...(params.timeRange && { timeRange: params.timeRange }),
-    });
-
-    return objects;
+    return fetchCalendarObjectsWithExpandFallback(client, params);
   }
 
   private static ensureTrailingSlash(url: string): string {
