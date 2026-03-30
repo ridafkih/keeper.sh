@@ -20,39 +20,6 @@ const getDisplayName = (name: unknown): string => {
   return "Unnamed Calendar";
 };
 
-// TODO: Some CalDAV servers (e.g. Lark) don't support the "expand" flag for
-// Recurring events. When expand is requested, they return objects with non-string
-// Data (e.g. `{}`) instead of expanded iCal strings. This fallback retries without
-// Expand so we still get the raw calendar data. Without expand, recurring events
-// Come back as multi-VEVENT objects (master + modified occurrences) rather than
-// Individual expanded instances. A proper fix would be to detect server capabilities
-// Upfront rather than relying on this try/fallback approach.
-const fetchCalendarObjectsWithExpandFallback = async (
-  client: DAVClientInstance,
-  params: { calendarUrl: string; timeRange?: { start: string; end: string } },
-): Promise<CalendarObject[]> => {
-  const expandedObjects = await client.fetchCalendarObjects({
-    calendar: { url: params.calendarUrl },
-    expand: true,
-    ...(params.timeRange && { timeRange: params.timeRange }),
-  });
-
-  const hasValidData = expandedObjects.some(
-    (object) => typeof object.data === "string",
-  );
-
-  if (hasValidData) {
-    return expandedObjects;
-  }
-
-  const unexpandedObjects = await client.fetchCalendarObjects({
-    calendar: { url: params.calendarUrl },
-    ...(params.timeRange && { timeRange: params.timeRange }),
-  });
-
-  return unexpandedObjects;
-};
-
 class CalDAVClient {
   private client: DAVClientInstance | null = null;
   private config: CalDAVClientConfig;
@@ -156,7 +123,13 @@ class CalDAVClient {
     timeRange?: { start: string; end: string };
   }): Promise<CalendarObject[]> {
     const client = await this.getClient();
-    return fetchCalendarObjectsWithExpandFallback(client, params);
+
+    const objects = await client.fetchCalendarObjects({
+      calendar: { url: params.calendarUrl },
+      ...(params.timeRange && { timeRange: params.timeRange }),
+    });
+
+    return objects;
   }
 
   private static ensureTrailingSlash(url: string): string {
