@@ -6,7 +6,7 @@ import { calendarAccountsTable, calendarsTable, eventStatesTable } from "@keeper
 import { and, eq, inArray } from "drizzle-orm";
 import { CalDAVClient } from "../shared/client";
 import { resolveAuthMethod } from "../shared/digest-fetch";
-import { parseICalToRemoteEvent } from "../shared/ics";
+import { parseICalToRemoteEvents } from "../shared/ics";
 import { isCalDAVAuthenticationError } from "./auth-error-classification";
 import { createCalDAVSourceService } from "./sync";
 import { getCalDAVSyncWindow } from "./sync-window";
