@@ -107,7 +107,7 @@ describe("fetchCalendarEvents", () => {
     expect(firstRequestSearchParams.get("syncToken")).toBe("existing-sync-token");
     expect(firstRequestSearchParams.get("timeMin")).toBeNull();
     expect(firstRequestSearchParams.get("timeMax")).toBeNull();
-    expect(firstRequestSearchParams.get("maxResults")).toBe("2500");
+    expect(firstRequestSearchParams.get("maxResults")).toBe("250");
     expect(firstRequestSearchParams.get("pageToken")).toBeNull();
 
     const [, secondRequestUrl] = requestedUrls;
