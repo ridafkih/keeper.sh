@@ -93,11 +93,13 @@ class CalDAVClient {
     const client = await this.getClient();
     const calendars = await client.fetchCalendars();
 
-    return calendars.map(({ url, displayName, ctag }) => ({
-      ctag,
-      displayName: getDisplayName(displayName),
-      url,
-    }));
+    return calendars
+      .filter(({ components }) => components?.includes("VEVENT"))
+      .map(({ url, displayName, ctag }) => ({
+        ctag,
+        displayName: getDisplayName(displayName),
+        url,
+      }));
   }
 
   async fetchCalendarDisplayName(calendarUrl: string): Promise<string | null> {
