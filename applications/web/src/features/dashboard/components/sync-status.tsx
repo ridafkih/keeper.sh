@@ -57,10 +57,10 @@ function SyncStatusLabel() {
   const isSyncing = useAtomValue(syncStatusShimmerAtom);
 
   if (isSyncing) {
-    return <ShimmerText className="text-sm tracking-tight">{label}</ShimmerText>;
+    return <ShimmerText className="text-base tracking-tight">{label}</ShimmerText>;
   }
 
-  return <Text size="sm" tone="muted">{label}</Text>;
+  return <Text size="base" tone="muted">{label}</Text>;
 }
 
 function SyncTooltipContent() {
