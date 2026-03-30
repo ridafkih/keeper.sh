@@ -3,7 +3,7 @@ import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import { isKeeperEvent } from "../../../core/events/identity";
 import { CalDAVClient } from "../shared/client";
-import { parseICalToRemoteEvent } from "../shared/ics";
+import { parseICalToRemoteEvents } from "../shared/ics";
 import { getCalDAVSyncWindow } from "../shared/sync-window";
 
 const YEARS_UNTIL_FUTURE = 2;
@@ -45,25 +45,25 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
         continue;
       }
 
-      const parsed = parseICalToRemoteEvent(data);
+      for (const parsed of parseICalToRemoteEvents(data)) {
+        if (isKeeperEvent(parsed.uid) || parsed.endTime < syncWindow.start) {
+          continue;
+        }
 
-      if (!parsed || isKeeperEvent(parsed.uid) || parsed.endTime < syncWindow.start) {
-        continue;
+        events.push({
+          availability: parsed.availability,
+          description: parsed.description,
+          endTime: parsed.endTime,
+          exceptionDates: parsed.exceptionDates,
+          isAllDay: parsed.isAllDay,
+          location: parsed.location,
+          recurrenceRule: parsed.recurrenceRule,
+          startTime: parsed.startTime,
+          startTimeZone: parsed.startTimeZone,
+          title: parsed.title,
+          uid: parsed.uid,
+        });
       }
-
-      events.push({
-        availability: parsed.availability,
-        description: parsed.description,
-        endTime: parsed.endTime,
-        exceptionDates: parsed.exceptionDates,
-        isAllDay: parsed.isAllDay,
-        location: parsed.location,
-        recurrenceRule: parsed.recurrenceRule,
-        startTime: parsed.startTime,
-        startTimeZone: parsed.startTimeZone,
-        title: parsed.title,
-        uid: parsed.uid,
-      });
     }
 
     return { events };

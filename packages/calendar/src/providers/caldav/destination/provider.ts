@@ -3,7 +3,7 @@ import { generateEventUid, isKeeperEvent } from "../../../core/events/identity";
 import { getErrorMessage } from "../../../core/utils/error";
 import type { DeleteResult, PushResult, RemoteEvent, SyncableEvent } from "../../../core/types";
 import { CalDAVClient } from "../shared/client";
-import { eventToICalString, parseICalToRemoteEvent } from "../shared/ics";
+import { eventToICalString, parseICalToRemoteEvents } from "../shared/ics";
 import { getCalDAVSyncWindow } from "../shared/sync-window";
 
 const CALDAV_RATE_LIMIT_CONCURRENCY = 5;
@@ -86,12 +86,13 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
         continue;
       }
 
-      const parsed = parseICalToRemoteEvent(data);
-      if (!parsed || !isKeeperEvent(parsed.uid) || parsed.endTime < syncWindow.start) {
-        continue;
-      }
+      for (const parsed of parseICalToRemoteEvents(data)) {
+        if (!isKeeperEvent(parsed.uid) || parsed.endTime < syncWindow.start) {
+          continue;
+        }
 
-      remoteEvents.push(parsed);
+        remoteEvents.push(parsed);
+      }
     }
 
     return remoteEvents;

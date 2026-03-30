@@ -5,7 +5,7 @@ import type { SourceEvent } from "../../../core/types";
 import { calendarAccountsTable, calendarsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { CalDAVClient } from "../shared/client";
-import { parseICalToRemoteEvent } from "../shared/ics";
+import { parseICalToRemoteEvents } from "../shared/ics";
 import { isCalDAVAuthenticationError } from "./auth-error-classification";
 import { createCalDAVSourceService } from "./sync";
 import { getCalDAVSyncWindow } from "./sync-window";
@@ -73,33 +73,29 @@ const createCalDAVSourceProvider = (
         continue;
       }
 
-      const parsed = parseICalToRemoteEvent(data);
+      for (const parsed of parseICalToRemoteEvents(data)) {
+        if (isKeeperEvent(parsed.uid)) {
+          continue;
+        }
 
-      if (!parsed) {
-        continue;
+        if (parsed.endTime < syncWindow.start) {
+          continue;
+        }
+
+        events.push({
+          availability: parsed.availability,
+          description: parsed.description,
+          endTime: parsed.endTime,
+          exceptionDates: parsed.exceptionDates,
+          isAllDay: parsed.isAllDay,
+          location: parsed.location,
+          recurrenceRule: parsed.recurrenceRule,
+          startTime: parsed.startTime,
+          startTimeZone: parsed.startTimeZone,
+          title: parsed.title,
+          uid: parsed.uid,
+        });
       }
-
-      if (isKeeperEvent(parsed.uid)) {
-        continue;
-      }
-
-      if (parsed.endTime < syncWindow.start) {
-        continue;
-      }
-
-      events.push({
-        availability: parsed.availability,
-        description: parsed.description,
-        endTime: parsed.endTime,
-        exceptionDates: parsed.exceptionDates,
-        isAllDay: parsed.isAllDay,
-        location: parsed.location,
-        recurrenceRule: parsed.recurrenceRule,
-        startTime: parsed.startTime,
-        startTimeZone: parsed.startTimeZone,
-        title: parsed.title,
-        uid: parsed.uid,
-      });
     }
 
     return events;
