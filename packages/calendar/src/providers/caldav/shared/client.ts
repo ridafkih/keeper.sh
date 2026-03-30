@@ -19,12 +19,12 @@ const getDisplayName = (name: unknown): string => {
 };
 
 // TODO: Some CalDAV servers (e.g. Lark) don't support the "expand" flag for
-// recurring events. When expand is requested, they return objects with non-string
-// data (e.g. `{}`) instead of expanded iCal strings. This fallback retries without
-// expand so we still get the raw calendar data. Without expand, recurring events
-// come back as multi-VEVENT objects (master + modified occurrences) rather than
-// individual expanded instances. A proper fix would be to detect server capabilities
-// upfront rather than relying on this try/fallback approach.
+// Recurring events. When expand is requested, they return objects with non-string
+// Data (e.g. `{}`) instead of expanded iCal strings. This fallback retries without
+// Expand so we still get the raw calendar data. Without expand, recurring events
+// Come back as multi-VEVENT objects (master + modified occurrences) rather than
+// Individual expanded instances. A proper fix would be to detect server capabilities
+// Upfront rather than relying on this try/fallback approach.
 const fetchCalendarObjectsWithExpandFallback = async (
   client: DAVClientInstance,
   params: { calendarUrl: string; timeRange?: { start: string; end: string } },

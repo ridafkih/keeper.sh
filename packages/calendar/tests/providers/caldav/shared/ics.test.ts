@@ -82,10 +82,15 @@ describe("parseICalToRemoteEvents", () => {
     const events = parseICalToRemoteEvents(ics);
 
     expect(events).toHaveLength(2);
-    expect(events[0]!.title).toBe("Weekly Sync");
-    expect(events[0]!.recurrenceRule).toBeTruthy();
-    expect(events[1]!.title).toBe("Weekly Sync (rescheduled)");
-    expect(events[1]!.startTime).toEqual(new Date("2026-03-03T14:00:00.000Z"));
+
+    const [master, modified] = events;
+
+    expect(master).toBeDefined();
+    expect(master?.title).toBe("Weekly Sync");
+    expect(master?.recurrenceRule).toBeTruthy();
+    expect(modified).toBeDefined();
+    expect(modified?.title).toBe("Weekly Sync (rescheduled)");
+    expect(modified?.startTime).toEqual(new Date("2026-03-03T14:00:00.000Z"));
   });
 
   it("returns empty array for calendar with no events", () => {
@@ -110,7 +115,7 @@ describe("parseICalToRemoteEvents", () => {
 
     const events = parseICalToRemoteEvents(ics);
     expect(events).toHaveLength(1);
-    expect(events[0]!.uid).toBe("valid-uid");
+    expect(events[0]?.uid).toBe("valid-uid");
   });
 
   it("skips events missing DTSTART", () => {
@@ -130,7 +135,7 @@ describe("parseICalToRemoteEvents", () => {
 
     const events = parseICalToRemoteEvents(ics);
     expect(events).toHaveLength(1);
-    expect(events[0]!.uid).toBe("has-start");
+    expect(events[0]?.uid).toBe("has-start");
   });
 
   it("preserves availability independently per event", () => {
@@ -151,8 +156,8 @@ describe("parseICalToRemoteEvents", () => {
     ]);
 
     const events = parseICalToRemoteEvents(ics);
-    expect(events[0]!.availability).toBe("busy");
-    expect(events[1]!.availability).toBe("free");
+    expect(events[0]?.availability).toBe("busy");
+    expect(events[1]?.availability).toBe("free");
   });
 
   it("preserves all-day flag independently per event", () => {
@@ -172,8 +177,8 @@ describe("parseICalToRemoteEvents", () => {
     ]);
 
     const events = parseICalToRemoteEvents(ics);
-    expect(events[0]!.isAllDay).toBe(true);
-    expect(events[1]!.isAllDay).toBe(false);
+    expect(events[0]?.isAllDay).toBe(true);
+    expect(events[1]?.isAllDay).toBe(false);
   });
 });
 
@@ -204,7 +209,7 @@ describe("duplicate prevention with multi-VEVENT parsing", () => {
     ]);
 
     const events = parseICalToRemoteEvents(ics);
-    const sourceEvents = events.map(toSourceEvent);
+    const sourceEvents = events.map((event) => toSourceEvent(event));
     const eventsToAdd = buildSourceEventsToAdd([], sourceEvents);
 
     expect(eventsToAdd).toHaveLength(3);
@@ -229,7 +234,7 @@ describe("duplicate prevention with multi-VEVENT parsing", () => {
     ]);
 
     const events = parseICalToRemoteEvents(ics);
-    const sourceEvents = events.map(toSourceEvent);
+    const sourceEvents = events.map((event) => toSourceEvent(event));
 
     const firstIngest = buildSourceEventsToAdd([], sourceEvents);
     expect(firstIngest).toHaveLength(2);
@@ -302,11 +307,11 @@ describe("duplicate prevention with multi-VEVENT parsing", () => {
     ]);
 
     const reducedEvents = parseICalToRemoteEvents(withOneRemoved);
-    const reducedSourceEvents = reducedEvents.map(toSourceEvent);
-    const toRemove = buildSourceEventStateIdsToRemove(existingStates, reducedSourceEvents);
+    const reducedSourceEvents = reducedEvents.map((event) => toSourceEvent(event));
+    const idsToRemove = buildSourceEventStateIdsToRemove(existingStates, reducedSourceEvents);
 
-    expect(toRemove).toHaveLength(1);
-    expect(toRemove[0]).toBe("state-2");
+    expect(idsToRemove).toHaveLength(1);
+    expect(idsToRemove[0]).toBe("state-2");
   });
 });
 
@@ -332,22 +337,26 @@ describe("transition from old single-event to new multi-event parsing", () => {
     const oldCodeResult = parseICalToRemoteEvent(ics);
     expect(oldCodeResult).not.toBeNull();
 
+    if (!oldCodeResult) {
+      throw new Error("Expected parsed event");
+    }
+
     const existingFromOldCode = [{
       id: "old-state-1",
-      sourceEventUid: oldCodeResult!.uid,
-      startTime: oldCodeResult!.startTime,
-      endTime: oldCodeResult!.endTime,
-      availability: oldCodeResult!.availability,
-      isAllDay: oldCodeResult!.isAllDay,
+      sourceEventUid: oldCodeResult.uid,
+      startTime: oldCodeResult.startTime,
+      endTime: oldCodeResult.endTime,
+      availability: oldCodeResult.availability,
+      isAllDay: oldCodeResult.isAllDay,
       sourceEventType: "default" as const,
     }];
 
     const newCodeResults = parseICalToRemoteEvents(ics);
-    const newSourceEvents = newCodeResults.map(toSourceEvent);
+    const newSourceEvents = newCodeResults.map((event) => toSourceEvent(event));
     const eventsToAdd = buildSourceEventsToAdd(existingFromOldCode, newSourceEvents);
 
     expect(eventsToAdd).toHaveLength(1);
-    expect(eventsToAdd[0]!.title).toBe("Legacy Meeting (exception)");
+    expect(eventsToAdd[0]?.title).toBe("Legacy Meeting (exception)");
   });
 
   it("does not remove master event when transitioning to multi-event parsing", () => {
@@ -369,21 +378,26 @@ describe("transition from old single-event to new multi-event parsing", () => {
     ]);
 
     const oldCodeResult = parseICalToRemoteEvent(ics);
+
+    if (!oldCodeResult) {
+      throw new Error("Expected parsed event");
+    }
+
     const existingFromOldCode = [{
       id: "old-state-1",
-      sourceEventUid: oldCodeResult!.uid,
-      startTime: oldCodeResult!.startTime,
-      endTime: oldCodeResult!.endTime,
-      availability: oldCodeResult!.availability,
-      isAllDay: oldCodeResult!.isAllDay,
+      sourceEventUid: oldCodeResult.uid,
+      startTime: oldCodeResult.startTime,
+      endTime: oldCodeResult.endTime,
+      availability: oldCodeResult.availability,
+      isAllDay: oldCodeResult.isAllDay,
       sourceEventType: "default" as const,
     }];
 
     const newCodeResults = parseICalToRemoteEvents(ics);
-    const newSourceEvents = newCodeResults.map(toSourceEvent);
-    const toRemove = buildSourceEventStateIdsToRemove(existingFromOldCode, newSourceEvents);
+    const newSourceEvents = newCodeResults.map((event) => toSourceEvent(event));
+    const idsToRemove = buildSourceEventStateIdsToRemove(existingFromOldCode, newSourceEvents);
 
-    expect(toRemove).toHaveLength(0);
+    expect(idsToRemove).toHaveLength(0);
   });
 
   it("transitioning from expanded to unexpanded removes orphaned expanded occurrences", () => {
@@ -405,10 +419,14 @@ describe("transition from old single-event to new multi-event parsing", () => {
       }),
     ]);
 
-    const existingFromExpanded = [
-      parseICalToRemoteEvent(expandedOccurrence1)!,
-      parseICalToRemoteEvent(expandedOccurrence2)!,
-    ].map((event, index) => ({
+    const parsed1 = parseICalToRemoteEvent(expandedOccurrence1);
+    const parsed2 = parseICalToRemoteEvent(expandedOccurrence2);
+
+    if (!parsed1 || !parsed2) {
+      throw new Error("Expected parsed events");
+    }
+
+    const existingFromExpanded = [parsed1, parsed2].map((event, index) => ({
       id: `expanded-${index}`,
       sourceEventUid: event.uid,
       startTime: event.startTime,
@@ -429,11 +447,11 @@ describe("transition from old single-event to new multi-event parsing", () => {
     ]);
 
     const newResults = parseICalToRemoteEvents(unexpandedIcs);
-    const newSourceEvents = newResults.map(toSourceEvent);
+    const newSourceEvents = newResults.map((event) => toSourceEvent(event));
 
-    const toRemove = buildSourceEventStateIdsToRemove(existingFromExpanded, newSourceEvents);
+    const idsToRemove = buildSourceEventStateIdsToRemove(existingFromExpanded, newSourceEvents);
 
-    expect(toRemove).toHaveLength(1);
-    expect(toRemove[0]).toBe("expanded-1");
+    expect(idsToRemove).toHaveLength(1);
+    expect(idsToRemove[0]).toBe("expanded-1");
   });
 });
