@@ -43,6 +43,7 @@ interface CalDAVSource {
 }
 
 interface CreateCalDAVSourceData {
+  authMethod: string;
   calendarUrl: string;
   name: string;
   password: string;
@@ -92,6 +93,7 @@ const createCalDAVAccount = async (
   const [credential] = await databaseClient
     .insert(caldavCredentialsTable)
     .values({
+      authMethod: data.authMethod,
       encryptedPassword,
       serverUrl: data.serverUrl,
       username: data.username,

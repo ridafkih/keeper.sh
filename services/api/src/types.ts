@@ -123,6 +123,7 @@ interface ProviderCredentials {
     expiresAt: Date;
   };
   caldav?: {
+    authMethod: string;
     serverUrl: string;
     username: string;
     encryptedPassword: string;

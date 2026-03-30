@@ -181,6 +181,7 @@ beforeAll(async () => {
   mock.module("@keeper.sh/calendar/caldav", () => ({
     createCalDAVClient: () => ({
       discoverCalendars: () => Promise.resolve([]),
+      getResolvedAuthMethod: () => "basic",
     }),
     createCalDAVProvider: () => ({
       id: "icloud",
@@ -438,6 +439,7 @@ describe("Account locks", () => {
     };
 
     const source = await createCalDAVSource("user-1", {
+      authMethod: "basic",
       calendarUrl: "https://caldav.test/team",
       name: "Team CalDAV",
       password: "secret",

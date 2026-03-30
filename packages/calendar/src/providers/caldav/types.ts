@@ -24,6 +24,7 @@ interface CalDAVAccount {
 }
 
 interface CalDAVSourceAccount {
+  authMethod: string;
   calendarAccountId: string;
   calendarId: string;
   userId: string;
@@ -75,6 +76,7 @@ interface CalDAVClientConfig {
     username: string;
     password: string;
   };
+  authMethod?: "basic" | "digest";
 }
 
 interface CalendarInfo {

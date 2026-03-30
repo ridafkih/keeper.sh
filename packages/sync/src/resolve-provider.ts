@@ -9,6 +9,7 @@ import {
 import { createGoogleSyncProvider } from "@keeper.sh/calendar/google";
 import { createOutlookSyncProvider } from "@keeper.sh/calendar/outlook";
 import { createCalDAVSyncProvider } from "@keeper.sh/calendar/caldav";
+import { resolveAuthMethod } from "@keeper.sh/calendar/digest-fetch";
 import { decryptPassword } from "@keeper.sh/database";
 import {
   calendarAccountsTable,
@@ -170,6 +171,7 @@ const resolveCalDAVProvider = async (
 ): Promise<CalendarSyncProvider | null> => {
   const [caldavCred] = await database
     .select({
+      authMethod: caldavCredentialsTable.authMethod,
       username: caldavCredentialsTable.username,
       encryptedPassword: caldavCredentialsTable.encryptedPassword,
       serverUrl: caldavCredentialsTable.serverUrl,
@@ -188,6 +190,7 @@ const resolveCalDAVProvider = async (
   const password = decryptPassword(caldavCred.encryptedPassword, encryptionKey);
 
   return createCalDAVSyncProvider({
+    authMethod: resolveAuthMethod(caldavCred.authMethod),
     calendarUrl: caldavCred.calendarUrl ?? caldavCred.serverUrl,
     serverUrl: caldavCred.serverUrl,
     username: caldavCred.username,

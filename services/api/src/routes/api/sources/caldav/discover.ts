@@ -21,8 +21,9 @@ const POST = withWideEvent(
       }, safeFetchOptions);
 
       const calendars = await client.discoverCalendars();
+      const authMethod = client.getResolvedAuthMethod() ?? "basic";
 
-      return Response.json({ calendars });
+      return Response.json({ calendars, authMethod });
     } catch (error) {
       if (error instanceof Error && error.message.includes("401")) {
         widelog.errorFields(error, { slug: "caldav-auth-failed" });

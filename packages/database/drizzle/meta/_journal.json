@@ -484,6 +484,13 @@
       "when": 1774195622395,
       "tag": "0068_clumsy_starbolt",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1774308102091,
+      "tag": "0069_amazing_storm",
+      "breakpoints": true
     }
   ]
 }

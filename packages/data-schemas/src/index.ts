@@ -313,6 +313,7 @@ const createOAuthSourceSchema = type({
 type CreateOAuthSource = typeof createOAuthSourceSchema.infer;
 
 const createCalDAVSourceSchema = type({
+  authMethod: "'basic' | 'digest'",
   calendarUrl: "string",
   name: "string",
   password: "string",
