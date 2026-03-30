@@ -13,7 +13,6 @@ import { isRateLimitApiError, parseGoogleApiError } from "../shared/errors";
 import type { BatchSubRequest } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
 import { serializeGoogleEvent } from "./serialize-event";
-import { buildRecurrenceRule } from "./recurrence";
 
 interface GoogleSyncProviderConfig {
   accessToken: string;
@@ -89,7 +88,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       }
 
       const uid = generateEventUid();
-      const resource = serializeGoogleEvent(event, uid, buildRecurrenceRule(event));
+      const resource = serializeGoogleEvent(event, uid);
 
       if (!resource) {
         results[index] = { success: true };
