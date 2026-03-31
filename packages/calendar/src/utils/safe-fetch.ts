@@ -1,5 +1,6 @@
 import { resolve4, resolve6 } from "node:dns/promises";
 import ipaddr from "ipaddr.js";
+import { getDomain } from "tldts";
 
 const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
 const MAX_REDIRECTS = 10;
@@ -109,7 +110,19 @@ const resolveRedirectUrl = (response: Response, originalUrl: string): string | n
   }
 };
 
-const isCrossOrigin = (current: string, next: string): boolean => new URL(current).origin !== new URL(next).origin;
+const isCrossSite = (current: string, next: string): boolean => {
+  const currentUrl = new URL(current);
+  const nextUrl = new URL(next);
+  if (currentUrl.protocol !== nextUrl.protocol) {
+    return true;
+  }
+  const currentDomain = getDomain(currentUrl.hostname);
+  const nextDomain = getDomain(nextUrl.hostname);
+  if (!currentDomain || !nextDomain) {
+    return true;
+  }
+  return currentDomain !== nextDomain;
+};
 
 const toHeaderRecord = (headers: RequestInit["headers"]): Record<string, string> => {
   const normalized = new Headers(headers);
@@ -131,7 +144,7 @@ const getHeadersForRedirect = (
   currentUrl: string,
   redirectUrl: string,
 ): Record<string, string> => {
-  if (isCrossOrigin(currentUrl, redirectUrl)) {
+  if (isCrossSite(currentUrl, redirectUrl)) {
     return withoutAuthorization(headers);
   }
   return headers;
@@ -184,12 +197,14 @@ const createSafeFetch = (options?: SafeFetchOptions): SafeFetch => async (input,
     const url = extractUrl(input);
     await validateUrlSafety(url, options);
 
+    const callerWantsManual = init?.redirect === "manual";
+
     const response = await globalThis.fetch(input, {
       ...init,
       redirect: "manual",
     });
 
-    if (!isRedirect(response)) {
+    if (callerWantsManual || !isRedirect(response)) {
       return response;
     }
 
