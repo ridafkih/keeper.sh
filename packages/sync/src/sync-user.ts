@@ -10,10 +10,9 @@ import {
   calendarAccountsTable,
   calendarsTable,
 } from "@keeper.sh/database/schema";
-import { and, arrayContains, eq, isNull, lte, or } from "drizzle-orm";
+import { and, arrayContains, eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
-import { computeDestinationBackoff } from "./destination-backoff";
 import { getErrorMessage, isBackoffEligibleError } from "./destination-errors";
 import { resolveSyncProvider } from "./resolve-provider";
 import type { OAuthConfig } from "./resolve-provider";
@@ -36,28 +35,11 @@ const applyDestinationBackoff = async (
   calendarId: string,
   currentFailureCount: number,
 ): Promise<void> => {
-  const nextFailureCount = currentFailureCount + 1;
-  const { delayMs, shouldDisable } = computeDestinationBackoff(nextFailureCount);
-
-  if (shouldDisable) {
-    await database
-      .update(calendarsTable)
-      .set({
-        disabled: true,
-        failureCount: nextFailureCount,
-        lastFailureAt: new Date(),
-        nextAttemptAt: null,
-      })
-      .where(eq(calendarsTable.id, calendarId));
-    return;
-  }
-
   await database
     .update(calendarsTable)
     .set({
-      failureCount: nextFailureCount,
+      failureCount: currentFailureCount + 1,
       lastFailureAt: new Date(),
-      nextAttemptAt: new Date(Date.now() + delayMs),
     })
     .where(eq(calendarsTable.id, calendarId));
 };
@@ -144,10 +126,6 @@ const syncDestinationsForUser = async (
         eq(calendarsTable.disabled, false),
         arrayContains(calendarsTable.capabilities, ["push"]),
         eq(calendarAccountsTable.needsReauthentication, false),
-        or(
-          isNull(calendarsTable.nextAttemptAt),
-          lte(calendarsTable.nextAttemptAt, new Date()),
-        ),
       ),
     );
 
