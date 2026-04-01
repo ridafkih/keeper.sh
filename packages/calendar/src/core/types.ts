@@ -67,6 +67,7 @@ interface PushResult {
   deleteId?: string;
   error?: string;
   shouldContinue?: boolean;
+  conflictResolved?: boolean;
 }
 
 interface DeleteResult {

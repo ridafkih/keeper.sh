@@ -110,6 +110,7 @@ interface CalendarSyncCompletion {
   addFailed: number;
   removed: number;
   removeFailed: number;
+  conflictsResolved: number;
   errors: string[];
   durationMs: number;
 }
@@ -264,6 +265,7 @@ const syncDestinationsForUser = async (
           addFailed: result.addFailed,
           removed: result.removed,
           removeFailed: result.removeFailed,
+          conflictsResolved: result.conflictsResolved,
           errors: result.errors,
           durationMs,
         });
