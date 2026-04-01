@@ -1,9 +1,4 @@
-import { DigestClient } from "digest-fetch";
-
-interface DigestFetchCredentials {
-  username: string;
-  password: string;
-}
+import { createDigestClient } from "@keeper.sh/digest-fetch";
 
 type FetchFunction = (input: string | Request | URL, init?: RequestInit) => Promise<Response>;
 
@@ -11,27 +6,9 @@ type AuthMethod = "unknown" | "basic" | "digest";
 
 const HTTP_UNAUTHORIZED = 401;
 
-const extractUri = (url: string): string => {
-  const parsed = new URL(url);
-  return `${parsed.pathname}${parsed.search}`;
-};
-
-class SafeDigestClient extends DigestClient {
-  private safeFetch: FetchFunction;
-
-  constructor(username: string, password: string, safeFetch: FetchFunction) {
-    super(username, password);
-    this.safeFetch = safeFetch;
-  }
-
-  override getClient(): Promise<FetchFunction> {
-    return Promise.resolve(this.safeFetch);
-  }
-
-  override addAuth(url: unknown, options: Record<string, unknown>): Record<string, unknown> {
-    const pathOnly = extractUri(String(url));
-    return super.addAuth(pathOnly, options);
-  }
+interface DigestFetchCredentials {
+  username: string;
+  password: string;
 }
 
 const encodeBasicCredentials = (username: string, password: string): string => {
@@ -75,9 +52,12 @@ interface DigestAwareFetchResult {
 
 const createDigestAwareFetch = (options: DigestAwareFetchOptions): DigestAwareFetchResult => {
   const { credentials, baseFetch, knownAuthMethod } = options;
-  const fetchFn = baseFetch;
-  const digestClient = new SafeDigestClient(credentials.username, credentials.password, fetchFn);
   const basicAuth = encodeBasicCredentials(credentials.username, credentials.password);
+  const digestClient = createDigestClient({
+    user: credentials.username,
+    password: credentials.password,
+    fetch: baseFetch,
+  });
 
   const state: { method: AuthMethod } = { method: knownAuthMethod ?? "unknown" };
 
@@ -87,7 +67,7 @@ const createDigestAwareFetch = (options: DigestAwareFetchOptions): DigestAwareFe
     }
 
     const headers = mergeHeaders(init, { authorization: basicAuth });
-    const response = await fetchFn(input, { ...init, headers });
+    const response = await baseFetch(input, { ...init, headers });
 
     if (state.method === "basic") {
       return response;
