@@ -76,7 +76,7 @@ const createOutlookEvent = async (
   }
 
   const created = outlookEventSchema.assert(await response.json());
-  return { success: true, sourceEventUid: created.iCalUId };
+  return { success: true, sourceEventUid: created.iCalUId ?? created.id };
 };
 
 const findOutlookEventByUid = async (
