@@ -129,7 +129,7 @@ const outlookEventSchema = type({
   "body?": type({ "content?": "string", "contentType?": "string" }).or(type("null")),
   "categories?": "string[]",
   "end?": { "dateTime?": "string", "timeZone?": "string" },
-  "iCalUId?": "string",
+  "iCalUId?": "string | null",
   "id?": "string",
   "isAllDay?": "boolean",
   "location?": { "displayName?": "string" },
@@ -148,7 +148,7 @@ type OutlookEventList = typeof outlookEventListSchema.infer;
 
 const outlookCalendarViewEventSchema = type({
   "id?": "string",
-  "iCalUId?": "string",
+  "iCalUId?": "string | null",
   "subject?": "string",
   "bodyPreview?": "string",
   "location?": { "displayName?": "string" },
