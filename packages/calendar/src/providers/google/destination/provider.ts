@@ -114,7 +114,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
 
       if (!conflict || !googleEventId) {
         if (conflict) {
-          results[conflict.index] = { error: "Event already exists (conflict)", success: false };
+          results[conflict.index] = { error: "Conflict resolution failed: could not find existing event", success: false };
         }
         continue;
       }
@@ -143,11 +143,11 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       }
       const { conflict } = entry;
       const deleteResponse = deleteResponses[i];
-      const deleteSucceeded = deleteResponse
-        && (deleteResponse.statusCode >= 200 && deleteResponse.statusCode < 300 || deleteResponse.statusCode === HTTP_STATUS.NOT_FOUND);
+      const isDeleteSuccess = deleteResponse
+        && ((deleteResponse.statusCode >= 200 && deleteResponse.statusCode < 300) || deleteResponse.statusCode === HTTP_STATUS.NOT_FOUND);
 
-      if (!deleteSucceeded) {
-        results[conflict.index] = { error: "Failed to delete conflicting event", success: false };
+      if (!isDeleteSuccess) {
+        results[conflict.index] = { error: "Conflict resolution failed: could not delete existing event", success: false };
         continue;
       }
       const built = buildPushRequest(conflict.event);
@@ -174,7 +174,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
 
       if (!entry || !response) {
         if (entry) {
-          results[entry.conflict.index] = { error: "Missing batch response on retry", success: false };
+          results[entry.conflict.index] = { error: "Conflict resolution failed: missing retry response", success: false };
         }
         continue;
       }
@@ -182,7 +182,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         results[entry.conflict.index] = { remoteId: entry.conflict.uid, success: true, conflictResolved: true };
       } else {
-        results[entry.conflict.index] = { error: extractBatchErrorMessage(response.body, response.statusCode), success: false };
+        results[entry.conflict.index] = { error: `Conflict resolution failed: ${extractBatchErrorMessage(response.body, response.statusCode)}`, success: false };
       }
     }
   };
