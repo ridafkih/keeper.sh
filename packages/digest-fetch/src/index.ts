@@ -3,7 +3,11 @@ import { CryptoHasher } from "bun";
 const md5 = (data: string): string =>
   new CryptoHasher("md5").update(data).digest("hex");
 
-const parseField = (header: string, field: string, trim = true): string | null => {
+const parseField = (
+  header: string,
+  field: string,
+  trim = true,
+): string | null => {
   const regex = new RegExp(`${field}=("[^"]*"|[^,]*)`, "i");
   const match = regex.exec(header);
 
@@ -104,7 +108,12 @@ const buildAuthorizationHeader = (
   const hashA1 = md5(`${username}:${challenge.realm}:${password}`);
   const hashA2 = md5(`${method}:${uri}`);
   const nonceCount = String(challenge.nonceCount).padStart(8, "0");
-  const responseHash = computeResponseHash(challenge, hashA1, hashA2, nonceCount);
+  const responseHash = computeResponseHash(
+    challenge,
+    hashA1,
+    hashA2,
+    nonceCount,
+  );
 
   let opaqueDirective = "";
 
@@ -130,7 +139,10 @@ const buildAuthorizationHeader = (
   ].join(",");
 };
 
-type FetchFunction = (input: string | Request | URL, init?: RequestInit) => Promise<Response>;
+type FetchFunction = (
+  input: string | Request | URL,
+  init?: RequestInit,
+) => Promise<Response>;
 
 interface DigestClientOptions {
   user: string;
@@ -158,7 +170,13 @@ const createDigestClient = (options: DigestClientOptions) => {
     method: string,
     uri: string,
   ): Promise<Response> => {
-    const authorization = buildAuthorizationHeader(currentChallenge, user, password, method, uri);
+    const authorization = buildAuthorizationHeader(
+      currentChallenge,
+      user,
+      password,
+      method,
+      uri,
+    );
     const headers = new Headers(init?.headers);
     headers.set("authorization", authorization);
     return baseFetch(input, { ...init, headers });
@@ -171,7 +189,13 @@ const createDigestClient = (options: DigestClientOptions) => {
     const method = init?.method?.toUpperCase() ?? "GET";
 
     if (challenge) {
-      const response = await authenticatedFetch(challenge, input, init, method, uri);
+      const response = await authenticatedFetch(
+        challenge,
+        input,
+        init,
+        method,
+        uri,
+      );
 
       if (response.status !== 401) {
         challenge.nonceCount++;
@@ -186,7 +210,13 @@ const createDigestClient = (options: DigestClientOptions) => {
 
       await response.body?.cancel();
       challenge = parseChallenge(wwwAuthenticate);
-      const retryResponse = await authenticatedFetch(challenge, input, init, method, uri);
+      const retryResponse = await authenticatedFetch(
+        challenge,
+        input,
+        init,
+        method,
+        uri,
+      );
       challenge.nonceCount++;
       return retryResponse;
     }
@@ -205,7 +235,13 @@ const createDigestClient = (options: DigestClientOptions) => {
 
     await initialResponse.body?.cancel();
     challenge = parseChallenge(wwwAuthenticate);
-    const retryResponse = await authenticatedFetch(challenge, input, init, method, uri);
+    const retryResponse = await authenticatedFetch(
+      challenge,
+      input,
+      init,
+      method,
+      uri,
+    );
     challenge.nonceCount++;
     return retryResponse;
   };
