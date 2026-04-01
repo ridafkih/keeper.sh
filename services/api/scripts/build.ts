@@ -13,5 +13,5 @@ await build({
   root: "src",
   splitting: true,
   target: "bun",
-  external: ["msgpackr-extract", "pino-opentelemetry-transport", "js-sha256"],
+  external: ["msgpackr-extract", "pino-opentelemetry-transport", "digest-fetch"],
 });
