@@ -90,12 +90,13 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     };
   };
 
-  const resolveConflicts = async (
-    conflicts: { index: number; uid: string; event: SyncableEvent }[],
-    results: PushResult[],
-  ): Promise<void> => {
-    const batchOptions = { rateLimiter: config.rateLimiter, signal: config.signal };
+  interface ConflictEntry { index: number; uid: string; event: SyncableEvent }
 
+  const lookupConflictingEvents = async (
+    conflicts: ConflictEntry[],
+    results: PushResult[],
+    batchOptions: { rateLimiter?: RedisRateLimiter; signal?: AbortSignal },
+  ): Promise<{ conflict: ConflictEntry; googleEventId: string }[]> => {
     const lookupResponses = await executeBatchChunked(
       conflicts.map((conflict) => ({
         method: "GET",
@@ -105,27 +106,35 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       batchOptions,
     );
 
-    const deletable: { conflict: (typeof conflicts)[number]; googleEventId: string }[] = [];
+    const found: { conflict: ConflictEntry; googleEventId: string }[] = [];
 
-    for (let i = 0; i < conflicts.length; i++) {
-      const conflict = conflicts[i];
-      const response = lookupResponses[i];
-      const googleEventId = response?.statusCode === 200 ? extractEventIdFromLookup(response.body) : undefined;
-
-      if (!conflict || !googleEventId) {
-        if (conflict) {
-          results[conflict.index] = { error: "Conflict resolution failed: could not find existing event", success: false };
-        }
+    for (const [index, conflict] of conflicts.entries()) {
+      const response = lookupResponses[index];
+      if (!response || response.statusCode !== 200) {
+        results[conflict.index] = { error: "Conflict resolution failed: could not find existing event", success: false };
         continue;
       }
 
-      deletable.push({ conflict, googleEventId });
+      const googleEventId = extractEventIdFromLookup(response.body);
+      if (!googleEventId) {
+        results[conflict.index] = { error: "Conflict resolution failed: could not find existing event", success: false };
+        continue;
+      }
+
+      found.push({ conflict, googleEventId });
     }
 
-    if (deletable.length === 0) {
-      return;
-    }
+    return found;
+  };
 
+  const isSuccessOrNotFound = (statusCode: number): boolean =>
+    (statusCode >= 200 && statusCode < 300) || statusCode === HTTP_STATUS.NOT_FOUND;
+
+  const deleteConflictingEvents = async (
+    deletable: { conflict: ConflictEntry; googleEventId: string }[],
+    results: PushResult[],
+    batchOptions: { rateLimiter?: RedisRateLimiter; signal?: AbortSignal },
+  ): Promise<{ conflict: ConflictEntry; request: BatchSubRequest }[]> => {
     const deleteResponses = await executeBatchChunked(
       deletable.map(({ googleEventId }) => ({
         method: "DELETE",
@@ -135,56 +144,68 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       batchOptions,
     );
 
-    const retryable: { conflict: (typeof conflicts)[number]; request: BatchSubRequest }[] = [];
-    for (let i = 0; i < deletable.length; i++) {
-      const entry = deletable[i];
-      if (!entry) {
-        continue;
-      }
-      const { conflict } = entry;
-      const deleteResponse = deleteResponses[i];
-      const isDeleteSuccess = deleteResponse
-        && ((deleteResponse.statusCode >= 200 && deleteResponse.statusCode < 300) || deleteResponse.statusCode === HTTP_STATUS.NOT_FOUND);
+    const retryable: { conflict: ConflictEntry; request: BatchSubRequest }[] = [];
 
-      if (!isDeleteSuccess) {
+    for (const [index, { conflict }] of deletable.entries()) {
+      const deleteResponse = deleteResponses[index];
+      if (!deleteResponse || !isSuccessOrNotFound(deleteResponse.statusCode)) {
         results[conflict.index] = { error: "Conflict resolution failed: could not delete existing event", success: false };
         continue;
       }
+
       const built = buildPushRequest(conflict.event);
       if (!built) {
         results[conflict.index] = { success: true };
         continue;
       }
+
       retryable.push({ conflict, request: built.request });
     }
 
-    if (retryable.length === 0) {
-      return;
-    }
+    return retryable;
+  };
 
+  const retryConflictPushes = async (
+    retryable: { conflict: ConflictEntry; request: BatchSubRequest }[],
+    results: PushResult[],
+    batchOptions: { rateLimiter?: RedisRateLimiter; signal?: AbortSignal },
+  ): Promise<void> => {
     const retryResponses = await executeBatchChunked(
       retryable.map(({ request }) => request),
       tokenState.accessToken,
       batchOptions,
     );
 
-    for (let i = 0; i < retryable.length; i++) {
-      const entry = retryable[i];
-      const response = retryResponses[i];
-
-      if (!entry || !response) {
-        if (entry) {
-          results[entry.conflict.index] = { error: "Conflict resolution failed: missing retry response", success: false };
-        }
+    for (const [index, { conflict }] of retryable.entries()) {
+      const response = retryResponses[index];
+      if (!response) {
+        results[conflict.index] = { error: "Conflict resolution failed: missing retry response", success: false };
         continue;
       }
 
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        results[entry.conflict.index] = { remoteId: entry.conflict.uid, success: true, conflictResolved: true };
-      } else {
-        results[entry.conflict.index] = { error: `Conflict resolution failed: ${extractBatchErrorMessage(response.body, response.statusCode)}`, success: false };
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        results[conflict.index] = { error: `Conflict resolution failed: ${extractBatchErrorMessage(response.body, response.statusCode)}`, success: false };
+        continue;
       }
+
+      results[conflict.index] = { remoteId: conflict.uid, success: true, conflictResolved: true };
     }
+  };
+
+  const resolveConflicts = async (conflicts: ConflictEntry[], results: PushResult[]): Promise<void> => {
+    const batchOptions = { rateLimiter: config.rateLimiter, signal: config.signal };
+
+    const deletable = await lookupConflictingEvents(conflicts, results, batchOptions);
+    if (deletable.length === 0) {
+      return;
+    }
+
+    const retryable = await deleteConflictingEvents(deletable, results, batchOptions);
+    if (retryable.length === 0) {
+      return;
+    }
+
+    await retryConflictPushes(retryable, results, batchOptions);
   };
 
   const pushEvents = async (events: SyncableEvent[]): Promise<PushResult[]> => {
