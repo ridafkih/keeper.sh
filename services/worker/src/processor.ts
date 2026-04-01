@@ -141,6 +141,7 @@ const processJob = (
           widelog.set("sync.events_added", completion.added);
           widelog.set("sync.events_removed", completion.removed);
           widelog.set("sync.events_failed", completion.addFailed + completion.removeFailed);
+          widelog.set("sync.conflicts_resolved", completion.conflictsResolved);
           widelog.set("duration_ms", completion.durationMs);
 
           for (const syncError of completion.errors) {

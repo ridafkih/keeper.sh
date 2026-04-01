@@ -73,12 +73,147 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
 
   const eventsPath = `/calendar/v3/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
 
+  const buildPushRequest = (event: SyncableEvent): { uid: string; request: BatchSubRequest } | null => {
+    const uid = generateDeterministicEventUid(event.id);
+    const resource = serializeGoogleEvent(event, uid);
+    if (!resource) {
+      return null;
+    }
+    return {
+      uid,
+      request: {
+        method: "POST",
+        path: eventsPath,
+        headers: { "Content-Type": "application/json" },
+        body: resource,
+      },
+    };
+  };
+
+  interface ConflictEntry { index: number; uid: string; event: SyncableEvent }
+
+  const lookupConflictingEvents = async (
+    conflicts: ConflictEntry[],
+    results: PushResult[],
+    batchOptions: { rateLimiter?: RedisRateLimiter; signal?: AbortSignal },
+  ): Promise<{ conflict: ConflictEntry; googleEventId: string }[]> => {
+    const lookupResponses = await executeBatchChunked(
+      conflicts.map((conflict) => ({
+        method: "GET",
+        path: `${eventsPath}?iCalUID=${encodeURIComponent(conflict.uid)}`,
+      })),
+      tokenState.accessToken,
+      batchOptions,
+    );
+
+    const found: { conflict: ConflictEntry; googleEventId: string }[] = [];
+
+    for (const [index, conflict] of conflicts.entries()) {
+      const response = lookupResponses[index];
+      if (!response || response.statusCode !== 200) {
+        results[conflict.index] = { error: "Conflict resolution failed: could not find existing event", success: false };
+        continue;
+      }
+
+      const googleEventId = extractEventIdFromLookup(response.body);
+      if (!googleEventId) {
+        results[conflict.index] = { error: "Conflict resolution failed: could not find existing event", success: false };
+        continue;
+      }
+
+      found.push({ conflict, googleEventId });
+    }
+
+    return found;
+  };
+
+  const isSuccessOrNotFound = (statusCode: number): boolean =>
+    (statusCode >= 200 && statusCode < 300) || statusCode === HTTP_STATUS.NOT_FOUND;
+
+  const deleteConflictingEvents = async (
+    deletable: { conflict: ConflictEntry; googleEventId: string }[],
+    results: PushResult[],
+    batchOptions: { rateLimiter?: RedisRateLimiter; signal?: AbortSignal },
+  ): Promise<{ conflict: ConflictEntry; request: BatchSubRequest }[]> => {
+    const deleteResponses = await executeBatchChunked(
+      deletable.map(({ googleEventId }) => ({
+        method: "DELETE",
+        path: `${eventsPath}/${encodeURIComponent(googleEventId)}`,
+      })),
+      tokenState.accessToken,
+      batchOptions,
+    );
+
+    const retryable: { conflict: ConflictEntry; request: BatchSubRequest }[] = [];
+
+    for (const [index, { conflict }] of deletable.entries()) {
+      const deleteResponse = deleteResponses[index];
+      if (!deleteResponse || !isSuccessOrNotFound(deleteResponse.statusCode)) {
+        results[conflict.index] = { error: "Conflict resolution failed: could not delete existing event", success: false };
+        continue;
+      }
+
+      const built = buildPushRequest(conflict.event);
+      if (!built) {
+        results[conflict.index] = { success: true };
+        continue;
+      }
+
+      retryable.push({ conflict, request: built.request });
+    }
+
+    return retryable;
+  };
+
+  const retryConflictPushes = async (
+    retryable: { conflict: ConflictEntry; request: BatchSubRequest }[],
+    results: PushResult[],
+    batchOptions: { rateLimiter?: RedisRateLimiter; signal?: AbortSignal },
+  ): Promise<void> => {
+    const retryResponses = await executeBatchChunked(
+      retryable.map(({ request }) => request),
+      tokenState.accessToken,
+      batchOptions,
+    );
+
+    for (const [index, { conflict }] of retryable.entries()) {
+      const response = retryResponses[index];
+      if (!response) {
+        results[conflict.index] = { error: "Conflict resolution failed: missing retry response", success: false };
+        continue;
+      }
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        results[conflict.index] = { error: `Conflict resolution failed: ${extractBatchErrorMessage(response.body, response.statusCode)}`, success: false };
+        continue;
+      }
+
+      results[conflict.index] = { remoteId: conflict.uid, success: true, conflictResolved: true };
+    }
+  };
+
+  const resolveConflicts = async (conflicts: ConflictEntry[], results: PushResult[]): Promise<void> => {
+    const batchOptions = { rateLimiter: config.rateLimiter, signal: config.signal };
+
+    const deletable = await lookupConflictingEvents(conflicts, results, batchOptions);
+    if (deletable.length === 0) {
+      return;
+    }
+
+    const retryable = await deleteConflictingEvents(deletable, results, batchOptions);
+    if (retryable.length === 0) {
+      return;
+    }
+
+    await retryConflictPushes(retryable, results, batchOptions);
+  };
+
   const pushEvents = async (events: SyncableEvent[]): Promise<PushResult[]> => {
     await refreshIfNeeded();
 
     const results: PushResult[] = Array.from({ length: events.length });
-    const batchEntries: { batchIndex: number; originalIndex: number; uid: string }[] = [];
-    const subRequests: BatchSubRequest[] = [];
+    const pending: { index: number; uid: string; batchIndex: number }[] = [];
+    const requests: BatchSubRequest[] = [];
 
     for (let index = 0; index < events.length; index++) {
       const event = events[index];
@@ -87,44 +222,40 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         continue;
       }
 
-      const uid = generateDeterministicEventUid(event.id);
-      const resource = serializeGoogleEvent(event, uid);
-
-      if (!resource) {
+      const built = buildPushRequest(event);
+      if (!built) {
         results[index] = { success: true };
         continue;
       }
 
-      batchEntries.push({ batchIndex: subRequests.length, originalIndex: index, uid });
-      subRequests.push({
-        method: "POST",
-        path: eventsPath,
-        headers: { "Content-Type": "application/json" },
-        body: resource,
-      });
+      pending.push({ index, uid: built.uid, batchIndex: requests.length });
+      requests.push(built.request);
     }
 
-    if (subRequests.length === 0) {
+    if (requests.length === 0) {
       return results;
     }
 
-    const batchResponses = await executeBatchChunked(subRequests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal });
+    const responses = await executeBatchChunked(requests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal });
+    const conflicts: { index: number; uid: string; event: SyncableEvent }[] = [];
 
-    for (const entry of batchEntries) {
-      const response = batchResponses[entry.batchIndex];
+    for (const entry of pending) {
+      const response = responses[entry.batchIndex];
+      const event = events[entry.index];
+
       if (!response) {
-        results[entry.originalIndex] = { error: "Missing batch response", success: false };
-        continue;
-      }
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        results[entry.originalIndex] = { remoteId: entry.uid, success: true };
-      } else if (response.statusCode === 409) {
-        results[entry.originalIndex] = { remoteId: entry.uid, success: true };
+        results[entry.index] = { error: "Missing batch response", success: false };
+      } else if (response.statusCode >= 200 && response.statusCode < 300) {
+        results[entry.index] = { remoteId: entry.uid, success: true };
+      } else if (response.statusCode === 409 && event) {
+        conflicts.push({ index: entry.index, uid: entry.uid, event });
       } else {
-        const errorMessage = extractBatchErrorMessage(response.body, response.statusCode);
-        results[entry.originalIndex] = { error: errorMessage, success: false };
+        results[entry.index] = { error: extractBatchErrorMessage(response.body, response.statusCode), success: false };
       }
+    }
+
+    if (conflicts.length > 0) {
+      await resolveConflicts(conflicts, results);
     }
 
     return results;

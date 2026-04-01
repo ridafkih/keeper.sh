@@ -25,11 +25,12 @@ const processAddResults = (
   addOperations: Extract<SyncOperation, { type: "add" }>[],
   pushResults: PushResult[],
   calendarId: string,
-): { changes: PendingChanges; added: number; addFailed: number; errors: OperationError[] } => {
+): { changes: PendingChanges; added: number; addFailed: number; conflictsResolved: number; errors: OperationError[] } => {
   const changes: PendingChanges = { inserts: [], deletes: [] };
   const errors: OperationError[] = [];
   let added = 0;
   let addFailed = 0;
+  let conflictsResolved = 0;
 
   for (let index = 0; index < addOperations.length; index++) {
     const operation = addOperations[index];
@@ -48,6 +49,9 @@ const processAddResults = (
     }
 
     added += 1;
+    if (pushResult.conflictResolved) {
+      conflictsResolved += 1;
+    }
     changes.inserts.push({
       eventStateId: operation.event.id,
       calendarId,
@@ -59,7 +63,7 @@ const processAddResults = (
     });
   }
 
-  return { changes, added, addFailed, errors };
+  return { changes, added, addFailed, conflictsResolved, errors };
 };
 
 const processDeleteResults = (
@@ -97,6 +101,7 @@ const processDeleteResults = (
 interface ExecuteRemoteResult {
   changes: PendingChanges;
   result: SyncResult;
+  conflictsResolved: number;
   errors: OperationError[];
   superseded: boolean;
 }
@@ -130,6 +135,7 @@ const groupOperationRuns = (operations: SyncOperation[]): OperationRun[] => {
 interface RunResult {
   changes: PendingChanges;
   result: SyncResult;
+  conflictsResolved: number;
   errors: OperationError[];
 }
 
@@ -140,10 +146,11 @@ const executeAddRun = async (
 ): Promise<RunResult> => {
   const addEvents = adds.map((op) => op.event);
   const pushResults = await provider.pushEvents(addEvents);
-  const { added, addFailed, changes, errors } = processAddResults(adds, pushResults, calendarId);
+  const { added, addFailed, conflictsResolved, changes, errors } = processAddResults(adds, pushResults, calendarId);
   return {
     changes,
     result: { added, addFailed, removed: 0, removeFailed: 0 },
+    conflictsResolved,
     errors,
   };
 };
@@ -159,6 +166,7 @@ const executeRemoveRun = async (
   return {
     changes: { inserts: [], deletes: deleteIds },
     result: { added: 0, addFailed: 0, removed, removeFailed },
+    conflictsResolved: 0,
     errors,
   };
 };
@@ -172,6 +180,7 @@ const mergeRunResult = (state: ChunkedExecutionState, runResult: RunResult): voi
     removed: state.result.removed + runResult.result.removed,
     removeFailed: state.result.removeFailed + runResult.result.removeFailed,
   };
+  state.conflictsResolved += runResult.conflictsResolved;
   state.errors.push(...runResult.errors);
 };
 
@@ -190,6 +199,7 @@ const chunkOperations = <TOperation>(operations: TOperation[], size: number): TO
 interface ChunkedExecutionState {
   changes: PendingChanges;
   result: SyncResult;
+  conflictsResolved: number;
   errors: OperationError[];
   processed: number;
   superseded: boolean;
@@ -272,6 +282,7 @@ const executeRemoteOperations = async (
   const state: ChunkedExecutionState = {
     changes: { inserts: [], deletes: [] },
     result: { added: 0, addFailed: 0, removed: 0, removeFailed: 0 },
+    conflictsResolved: 0,
     errors: [],
     processed: 0,
     superseded: false,
@@ -291,7 +302,7 @@ const executeRemoteOperations = async (
     }
   }
 
-  return { changes: state.changes, result: state.result, errors: state.errors, superseded: state.superseded };
+  return { changes: state.changes, result: state.result, conflictsResolved: state.conflictsResolved, errors: state.errors, superseded: state.superseded };
 };
 
 interface SyncCalendarOptions {
@@ -311,10 +322,11 @@ interface SyncCalendarOptions {
 }
 
 interface SyncCalendarResult extends SyncResult {
+  conflictsResolved: number;
   errors: string[];
 }
 
-const EMPTY_RESULT: SyncCalendarResult = { added: 0, addFailed: 0, removed: 0, removeFailed: 0, errors: [] };
+const EMPTY_RESULT: SyncCalendarResult = { added: 0, addFailed: 0, removed: 0, removeFailed: 0, conflictsResolved: 0, errors: [] };
 
 const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarResult> => {
   const { userId, calendarId, provider, readState, isCurrent, isInvalidated, flush, onSyncEvent, onProgress } = options;
@@ -401,6 +413,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     wideEvent["events.add_failed"] = outcome.result.addFailed;
     wideEvent["events.removed"] = outcome.result.removed;
     wideEvent["events.remove_failed"] = outcome.result.removeFailed;
+    wideEvent["events.conflicts_resolved"] = outcome.conflictsResolved;
     wideEvent["superseded"] = outcome.superseded;
 
     if (outcome.errors.length > 0) {
@@ -422,7 +435,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     wideEvent["flush.deletes"] = outcome.changes.deletes.length;
 
     const errorMessages = outcome.errors.map((operationError) => operationError.error);
-    return { ...outcome.result, errors: errorMessages };
+    return { ...outcome.result, conflictsResolved: outcome.conflictsResolved, errors: errorMessages };
   } catch (error) {
     wideEvent["outcome"] = "error";
     wideEvent["flushed"] = flushed;
