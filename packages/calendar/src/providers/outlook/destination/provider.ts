@@ -67,7 +67,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
 
         const body = await response.json();
         const created = outlookEventSchema.assert(body);
-        results.push({ deleteId: created.id, remoteId: created.iCalUId ?? undefined, success: true });
+        results.push({ deleteId: created.id, remoteId: created.iCalUId ?? created.id, success: true });
       } catch (error) {
         results.push({ error: getErrorMessage(error), success: false });
       }
