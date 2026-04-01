@@ -148,6 +148,14 @@ const processJob = (
             widelog.error("sync.failures", syncError);
           }
 
+          const unclassifiedErrors = completion.errors
+            .filter((syncError) => classifySyncError(syncError) === "sync-push-failed")
+            .slice(0, 3);
+
+          for (const sample of unclassifiedErrors) {
+            widelog.append("sync.error_samples", sample.slice(0, 200));
+          }
+
           const totalFailed = completion.addFailed + completion.removeFailed;
           const totalAttempted = completion.added + completion.removed + totalFailed;
           widelog.set("outcome", resolveSyncOutcome(totalFailed, totalAttempted));
