@@ -1,5 +1,5 @@
 import { RateLimiter } from "../../../core/utils/rate-limiter";
-import { generateEventUid, isKeeperEvent } from "../../../core/events/identity";
+import { generateDeterministicEventUid, isKeeperEvent } from "../../../core/events/identity";
 import { getErrorMessage } from "../../../core/utils/error";
 import type { DeleteResult, PushResult, RemoteEvent, SyncableEvent } from "../../../core/types";
 import { CalDAVClient } from "../shared/client";
@@ -31,7 +31,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
       events.map((event) =>
         rateLimiter.execute(async (): Promise<PushResult> => {
           try {
-            const uid = generateEventUid();
+            const uid = generateDeterministicEventUid(event.id);
             const iCalString = eventToICalString(event, uid);
 
             await client.createCalendarObject({

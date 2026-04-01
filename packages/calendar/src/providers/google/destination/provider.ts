@@ -1,4 +1,4 @@
-import { generateEventUid, isKeeperEvent } from "../../../core/events/identity";
+import { generateDeterministicEventUid, isKeeperEvent } from "../../../core/events/identity";
 import { getOAuthSyncWindowStart } from "../../../core/oauth/sync-window";
 import { ensureValidToken } from "../../../core/oauth/ensure-valid-token";
 import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-valid-token";
@@ -87,7 +87,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         continue;
       }
 
-      const uid = generateEventUid();
+      const uid = generateDeterministicEventUid(event.id);
       const resource = serializeGoogleEvent(event, uid);
 
       if (!resource) {
@@ -120,7 +120,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         results[entry.originalIndex] = { remoteId: entry.uid, success: true };
       } else if (response.statusCode === 409) {
-        results[entry.originalIndex] = { error: "Event already exists (conflict)", success: false };
+        results[entry.originalIndex] = { remoteId: entry.uid, success: true };
       } else {
         const errorMessage = extractBatchErrorMessage(response.body, response.statusCode);
         results[entry.originalIndex] = { error: errorMessage, success: false };

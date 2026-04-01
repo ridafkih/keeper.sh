@@ -1,15 +1,21 @@
 import { describe, expect, it } from "bun:test";
-import { generateEventUid, isKeeperEvent } from "../../../src/core/events/identity";
+import { generateDeterministicEventUid, isKeeperEvent } from "../../../src/core/events/identity";
 
-describe("generateEventUid", () => {
+describe("generateDeterministicEventUid", () => {
   it("ends with the keeper event suffix", () => {
-    const uid = generateEventUid();
+    const uid = generateDeterministicEventUid("test-seed");
     expect(uid.endsWith("@keeper.sh")).toBe(true);
   });
 
-  it("generates unique UIDs on each call", () => {
-    const uid1 = generateEventUid();
-    const uid2 = generateEventUid();
+  it("produces the same UID for the same seed", () => {
+    const uid1 = generateDeterministicEventUid("same-seed");
+    const uid2 = generateDeterministicEventUid("same-seed");
+    expect(uid1).toBe(uid2);
+  });
+
+  it("produces different UIDs for different seeds", () => {
+    const uid1 = generateDeterministicEventUid("seed-a");
+    const uid2 = generateDeterministicEventUid("seed-b");
     expect(uid1).not.toBe(uid2);
   });
 });
