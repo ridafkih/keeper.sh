@@ -173,8 +173,9 @@ const processJob = (
     } catch (error) {
       widelog.set("outcome", "error");
       widelog.errorFields(error, { slug: "push-sync-failed" });
-      widelog.flush();
       throw error;
+    } finally {
+      widelog.flush();
     }
   });
 
