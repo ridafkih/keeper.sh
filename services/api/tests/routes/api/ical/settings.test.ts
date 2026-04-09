@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, mock } from "bun:test";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { handlePatchIcalSettingsRoute as handlePatchIcalSettingsRouteFn } from "../../../../src/routes/api/ical/settings";
 
 let handlePatchIcalSettingsRoute: typeof handlePatchIcalSettingsRouteFn = () =>
@@ -7,11 +7,11 @@ let handlePatchIcalSettingsRoute: typeof handlePatchIcalSettingsRouteFn = () =>
 const readJson = (response: Response): Promise<unknown> => response.json();
 
 beforeAll(async () => {
-  mock.module("../../../../src/utils/middleware", () => ({
+  vi.mock("../../../../src/utils/middleware", () => ({
     withAuth: (handler: unknown) => handler,
     withWideEvent: (handler: unknown) => handler,
   }));
-  mock.module("../../../../src/context", () => ({
+  vi.mock("../../../../src/context", () => ({
     database: {},
     premiumService: {},
   }));

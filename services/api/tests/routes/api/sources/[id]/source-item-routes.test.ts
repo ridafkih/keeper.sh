@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { handlePatchSourceRoute } from "../../../../../src/routes/api/sources/[id]/source-item-routes";
 
 const readJson = (response: Response): Promise<unknown> => response.json();

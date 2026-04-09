@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from "bun:test";
+import { describe, expect, it, beforeEach } from "vitest";
 import { checkAndIncrementApiUsage, FREE_DAILY_LIMIT } from "../../src/utils/api-rate-limit";
 
 const createMockRedis = () => {

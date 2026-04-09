@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { createCalDAVDestination as createCalDAVDestinationFn } from "../../src/utils/caldav";
 import type { createCalDAVSource as createCalDAVSourceFn } from "../../src/utils/caldav-sources";
 import type { handleOAuthCallback as handleOAuthCallbackFn } from "../../src/utils/oauth";
@@ -77,12 +77,12 @@ const createTxInstance = (): object => ({
 });
 
 beforeAll(async () => {
-  mock.module("../../src/env", () => ({
+  vi.mock("../../src/env", () => ({
     default: {},
     schema: {},
   }));
 
-  mock.module("../../src/context", () => ({
+  vi.mock("../../src/context", () => ({
     baseUrl: "https://keeper.test",
     database: {
       insert: () => {
@@ -110,13 +110,13 @@ beforeAll(async () => {
     },
   }));
 
-  mock.module("../../src/utils/background-task", () => ({
+  vi.mock("../../src/utils/background-task", () => ({
     spawnBackgroundJob: (_jobName: string, fields: { userId: string }, _callback: () => Promise<void>) => {
       triggerSyncCalls.push(fields.userId);
     },
   }));
 
-  mock.module("../../src/utils/destinations", () => ({
+  vi.mock("../../src/utils/destinations", () => ({
     exchangeCodeForTokens: () =>
       Promise.resolve((() => {
         let scope = "calendar.read";
@@ -168,17 +168,17 @@ beforeAll(async () => {
     },
   }));
 
-  mock.module("../../src/utils/enqueue-push-sync", () => ({
+  vi.mock("../../src/utils/enqueue-push-sync", () => ({
     enqueuePushSync: (userId: string) => {
       triggerSyncCalls.push(userId);
     },
   }));
 
-  mock.module("@keeper.sh/database", () => ({
+  vi.mock("@keeper.sh/database", () => ({
     encryptPassword: () => "encrypted-password",
   }));
 
-  mock.module("@keeper.sh/calendar/caldav", () => ({
+  vi.mock("@keeper.sh/calendar/caldav", () => ({
     createCalDAVClient: () => ({
       discoverCalendars: () => Promise.resolve([]),
       getResolvedAuthMethod: () => "basic",
@@ -191,7 +191,7 @@ beforeAll(async () => {
     }),
   }));
 
-  mock.module("@keeper.sh/calendar/google", () => ({
+  vi.mock("@keeper.sh/calendar/google", () => ({
     createGoogleCalendarProvider: () => ({
       id: "google",
     }),
@@ -201,7 +201,7 @@ beforeAll(async () => {
     listUserCalendars: () => Promise.resolve(googleCalendars),
   }));
 
-  mock.module("@keeper.sh/calendar/outlook", () => ({
+  vi.mock("@keeper.sh/calendar/outlook", () => ({
     createOutlookCalendarProvider: () => ({
       id: "outlook",
     }),
@@ -211,7 +211,7 @@ beforeAll(async () => {
     listUserCalendars: () => Promise.resolve([]),
   }));
 
-  mock.module("@keeper.sh/calendar", () => ({
+  vi.mock("@keeper.sh/calendar", () => ({
     PROVIDER_DEFINITIONS: [],
     getActiveProviders: () => [],
     getCalDAVProviders: () => [],
@@ -239,7 +239,7 @@ beforeAll(async () => {
 });
 
 afterAll(() => {
-  mock.restore();
+  vi.restoreAllMocks();
 });
 
 beforeEach(() => {

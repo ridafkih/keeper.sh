@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   createOAuthSourceWithDependencies,
   importOAuthAccountCalendarsWithDependencies,
@@ -23,10 +23,10 @@ beforeEach(() => {
 });
 
 describe("importOAuthAccountCalendarsWithDependencies", () => {
-  it("rejects creating a new OAuth account when the user is at the account limit", () => {
+  it("rejects creating a new OAuth account when the user is at the account limit", async () => {
     canAddAccountResult = false;
 
-    expect(
+    await expect(
       importOAuthAccountCalendarsWithDependencies(
         {
           accessToken: "token",
@@ -192,10 +192,10 @@ describe("createOAuthSourceWithDependencies", () => {
     expect(triggerSyncCalls).toEqual([{ provider: "google", userId: "user-1" }]);
   });
 
-  it("checks the account limit before creating a new OAuth account", () => {
+  it("checks the account limit before creating a new OAuth account", async () => {
     canAddAccountResult = false;
 
-    expect(
+    await expect(
       createOAuthSourceWithDependencies(
         {
           externalCalendarId: "external-1",

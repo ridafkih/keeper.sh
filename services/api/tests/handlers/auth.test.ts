@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 
 /**
  * The auth handler functions are not individually exported — only `handleAuthRequest` is.

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { runEnqueuePushSync } from "../../src/utils/enqueue-push-sync";
 import type { EnqueuePushSyncDependencies, PushSyncQueue } from "../../src/utils/enqueue-push-sync";
 import type { PushSyncJobPayload } from "@keeper.sh/queue";
