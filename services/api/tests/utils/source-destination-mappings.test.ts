@@ -207,7 +207,7 @@ describe("mapping transaction adversarial behavior", () => {
               }
             }
 
-            await new Promise((resolve) => setTimeout(resolve, 5));
+            await new Promise((resolve) => { setTimeout(resolve, 5); });
 
             for (const destinationCalendarId of destinationCalendarIds) {
               draftMappings.add(createMappingKey(sourceCalendarId, destinationCalendarId));
@@ -226,7 +226,7 @@ describe("mapping transaction adversarial behavior", () => {
     const firstWrite = runSetDestinationsForSource("user-1", "source-1", ["dest-1", "dest-2"], {
       withTransaction,
     });
-    await new Promise((resolve) => setTimeout(resolve, 1));
+    await new Promise((resolve) => { setTimeout(resolve, 1); });
     const secondWrite = runSetDestinationsForSource("user-1", "source-1", ["dest-3"], {
       withTransaction,
     });
@@ -333,7 +333,7 @@ describe("mapping transaction adversarial behavior", () => {
               }
             }
 
-            await new Promise((resolve) => setTimeout(resolve, 5));
+            await new Promise((resolve) => { setTimeout(resolve, 5); });
 
             for (const destinationCalendarId of destinationCalendarIds) {
               mappings.add(createMappingKey(sourceCalendarId, destinationCalendarId));
@@ -382,7 +382,7 @@ describe("mapping transaction adversarial behavior", () => {
               }
             }
 
-            await new Promise((resolve) => setTimeout(resolve, 5));
+            await new Promise((resolve) => { setTimeout(resolve, 5); });
 
             for (const sourceCalendarId of sourceCalendarIds) {
               mappings.add(createMappingKey(sourceCalendarId, destinationCalendarId));
@@ -403,7 +403,7 @@ describe("mapping transaction adversarial behavior", () => {
         withTransaction: withDestinationTransaction,
       },
     );
-    await new Promise((resolve) => setTimeout(resolve, 1));
+    await new Promise((resolve) => { setTimeout(resolve, 1); });
     const sourceWrite = runSetSourcesForDestination(
       "user-1",
       "dest-1",
