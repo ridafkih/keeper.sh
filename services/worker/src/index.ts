@@ -7,7 +7,7 @@ import { processJob } from "./processor";
 import { destroy } from "./utils/logging";
 import env from "./env";
 
-const DEFAULT_CONCURRENCY = 5;
+const DEFAULT_CONCURRENCY = 25;
 const LOCK_DURATION_MS = 360_000;
 const STALLED_INTERVAL_MS = 30_000;
 const MAX_STALLED_COUNT = 1;
