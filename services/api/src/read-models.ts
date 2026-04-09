@@ -13,11 +13,12 @@ import {
   getPendingInvitesMutation,
 } from "./mutations";
 import type { OAuthTokenRefresher } from "./mutations";
+import type { RefreshLockStore } from "@keeper.sh/calendar";
 import type { KeeperApi, KeeperDatabase } from "./types";
 
 interface KeeperApiOptions {
   oauthTokenRefresher?: OAuthTokenRefresher;
-  refreshLockStore?: import("@keeper.sh/calendar").RefreshLockStore | null;
+  refreshLockStore?: RefreshLockStore | null;
   encryptionKey?: string;
 }
 
