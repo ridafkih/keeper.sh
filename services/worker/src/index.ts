@@ -41,7 +41,7 @@ await entry({
         lockDuration: LOCK_DURATION_MS,
         stalledInterval: STALLED_INTERVAL_MS,
         maxStalledCount: MAX_STALLED_COUNT,
-        removeOnComplete: { count: 200 },
+        removeOnComplete: { count: 0 },
         removeOnFail: { count: 500 },
         metrics: { maxDataPoints: 1000 },
       },

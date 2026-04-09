@@ -32,6 +32,7 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
       usersWithDestinations.map((userId) => ({
         name: `sync-${userId}`,
         data: { userId, plan, correlationId } satisfies PushSyncJobPayload,
+        opts: { jobId: `sync-${userId}` },
       })),
     );
   } finally {
