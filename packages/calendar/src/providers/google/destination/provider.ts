@@ -74,7 +74,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   const eventsPath = `/calendar/v3/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
 
   const buildPushRequest = (event: SyncableEvent): { uid: string; request: BatchSubRequest } | null => {
-    const uid = generateDeterministicEventUid(event.id);
+    const uid = generateDeterministicEventUid(`${event.id}:${config.externalCalendarId}`);
     const resource = serializeGoogleEvent(event, uid);
     if (!resource) {
       return null;
@@ -100,7 +100,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     const lookupResponses = await executeBatchChunked(
       conflicts.map((conflict) => ({
         method: "GET",
-        path: `${eventsPath}?iCalUID=${encodeURIComponent(conflict.uid)}`,
+        path: `${eventsPath}?iCalUID=${encodeURIComponent(conflict.uid)}&showDeleted=true`,
       })),
       tokenState.accessToken,
       batchOptions,
