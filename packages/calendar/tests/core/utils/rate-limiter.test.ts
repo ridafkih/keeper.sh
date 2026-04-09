@@ -60,7 +60,7 @@ describe("RateLimiter", () => {
         limiter.execute(async () => {
           concurrentCount++;
           maxConcurrent = Math.max(maxConcurrent, concurrentCount);
-          await new Promise((r) => setTimeout(r, 50));
+          await new Promise((resolve) => { setTimeout(resolve, 50); });
           concurrentCount--;
         });
 
@@ -81,7 +81,7 @@ describe("RateLimiter", () => {
       const order: number[] = [];
 
       const task1 = limiter.execute(async () => {
-        await new Promise((r) => setTimeout(r, 20));
+        await new Promise((resolve) => { setTimeout(resolve, 20); });
         order.push(1);
       });
 
