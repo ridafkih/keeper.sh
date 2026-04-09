@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { isCalDAVAuthenticationError } from "../../../../src/providers/caldav/source/auth-error-classification";
 
 describe("isCalDAVAuthenticationError", () => {

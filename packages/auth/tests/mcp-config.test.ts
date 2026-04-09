@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import {
   KEEPER_API_DEFAULT_SCOPE,
   KEEPER_API_READ_SCOPE,

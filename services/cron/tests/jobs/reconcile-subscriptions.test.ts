@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runReconcileSubscriptionsJob } from "../../src/jobs/reconcile-subscriptions";
 
 describe("runReconcileSubscriptionsJob", () => {
@@ -60,11 +60,11 @@ describe("runReconcileSubscriptionsJob", () => {
 
   describe("timeout handling", () => {
     beforeEach(() => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
     });
 
     afterEach(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it("handles timed out reconciliation operations gracefully", async () => {
@@ -75,7 +75,7 @@ describe("runReconcileSubscriptionsJob", () => {
         reconcileUserSubscription: (userId) => {
           reconciledUserIds.push(userId);
           if (userId === "user-2") {
-            return Bun.sleep(10_000);
+            return new Promise((r) => setTimeout(r, 10_000));
           }
           return Promise.resolve();
         },
@@ -87,7 +87,7 @@ describe("runReconcileSubscriptionsJob", () => {
         await Promise.resolve();
       }
 
-      jest.advanceTimersByTime(10_000);
+      vi.advanceTimersByTime(10_000);
 
       await promise;
 

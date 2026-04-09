@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "vitest";
 import { EventsFetchError, fetchCalendarEvents, parseGoogleEvents } from "../../../../../src/providers/google/source/utils/fetch-events";
 import type { GoogleCalendarEvent } from "../../../../../src/providers/google/source/types";
 

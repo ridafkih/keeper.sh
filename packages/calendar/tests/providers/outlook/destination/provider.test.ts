@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 
 describe("createOutlookSyncProvider", () => {
   it("returns a provider with pushEvents, deleteEvents, and listRemoteEvents", async () => {

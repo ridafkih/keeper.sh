@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "vitest";
 import { EventsFetchError, fetchCalendarEvents, parseOutlookEvents } from "../../../../../src/providers/outlook/source/utils/fetch-events";
 import type { OutlookCalendarEvent } from "../../../../../src/providers/outlook/source/types";
 

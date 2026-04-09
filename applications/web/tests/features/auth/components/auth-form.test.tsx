@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, mock } from "bun:test";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -6,30 +6,34 @@ import { parseHTML } from "linkedom";
 import type { AuthCapabilities } from "@/lib/auth-capabilities";
 import type { AuthScreenCopy } from "../../../../src/features/auth/components/auth-form";
 
-const passkeySignInMock = mock(() => Promise.resolve({ error: null }));
+const { passkeySignInMock, omitMotionProps } = vi.hoisted(() => {
+  const passkeySignInMock = vi.fn(() => Promise.resolve({ error: null }));
 
-const omitMotionProps = <T extends Record<string, unknown>>(props: T) => {
-  const domProps = { ...props };
-  delete domProps.animate;
-  delete domProps.exit;
-  delete domProps.initial;
-  delete domProps.layout;
-  delete domProps.transition;
-  delete domProps.variants;
-  return domProps;
-};
+  const omitMotionProps = <T extends Record<string, unknown>>(props: T) => {
+    const domProps = { ...props };
+    delete domProps.animate;
+    delete domProps.exit;
+    delete domProps.initial;
+    delete domProps.layout;
+    delete domProps.transition;
+    delete domProps.variants;
+    return domProps;
+  };
 
-mock.module("@tanstack/react-router", () => ({
+  return { passkeySignInMock, omitMotionProps };
+});
+
+vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, ...props }: React.ComponentPropsWithoutRef<"a">) => <a {...props}>{children}</a>,
   useNavigate: () => () => undefined,
 }));
 
-mock.module("motion/react", () => ({
+vi.mock("motion/react", () => ({
   AnimatePresence: ({ children }: React.PropsWithChildren) => <>{children}</>,
   LazyMotion: ({ children }: React.PropsWithChildren) => <>{children}</>,
 }));
 
-mock.module("motion/react-m", () => ({
+vi.mock("motion/react-m", () => ({
   div: ({ children, ...props }: React.ComponentPropsWithoutRef<"div">) => (
     <div {...omitMotionProps(props)}>{children}</div>
   ),
@@ -38,11 +42,11 @@ mock.module("motion/react-m", () => ({
   ),
 }));
 
-mock.module("../../../../src/lib/motion-features", () => ({
+vi.mock("../../../../src/lib/motion-features", () => ({
   loadMotionFeatures: async () => ({}),
 }));
 
-mock.module("../../../../src/lib/auth-client", () => ({
+vi.mock("../../../../src/lib/auth-client", () => ({
   authClient: {
     signIn: {
       passkey: passkeySignInMock,
@@ -50,7 +54,7 @@ mock.module("../../../../src/lib/auth-client", () => ({
   },
 }));
 
-mock.module("../../../../src/components/ui/primitives/button", () => ({
+vi.mock("../../../../src/components/ui/primitives/button", () => ({
   Button: ({ children, ...props }: React.ComponentPropsWithoutRef<"button">) => <button {...props}>{children}</button>,
   LinkButton: ({ children, ...props }: React.ComponentPropsWithoutRef<"a">) => <a {...props}>{children}</a>,
   ExternalLinkButton: ({ children, ...props }: React.ComponentPropsWithoutRef<"a">) => <a {...props}>{children}</a>,
@@ -58,36 +62,36 @@ mock.module("../../../../src/components/ui/primitives/button", () => ({
   ButtonIcon: ({ children }: React.PropsWithChildren) => <>{children}</>,
 }));
 
-mock.module("../../../../src/components/ui/primitives/divider", () => ({
+vi.mock("../../../../src/components/ui/primitives/divider", () => ({
   Divider: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
 }));
 
-mock.module("../../../../src/components/ui/primitives/text-link", () => ({
+vi.mock("../../../../src/components/ui/primitives/text-link", () => ({
   TextLink: ({ children, ...props }: React.ComponentPropsWithoutRef<"a">) => <a {...props}>{children}</a>,
   ExternalTextLink: ({ children, ...props }: React.ComponentPropsWithoutRef<"a">) => <a {...props}>{children}</a>,
 }));
 
-mock.module("../../../../src/components/ui/primitives/heading", () => ({
+vi.mock("../../../../src/components/ui/primitives/heading", () => ({
   Heading2: ({ children }: React.PropsWithChildren) => <h2>{children}</h2>,
 }));
 
-mock.module("../../../../src/components/ui/primitives/input", () => ({
+vi.mock("../../../../src/components/ui/primitives/input", () => ({
   Input: (props: React.ComponentPropsWithoutRef<"input">) => <input {...props} />,
 }));
 
-mock.module("../../../../src/components/ui/primitives/text", () => ({
+vi.mock("../../../../src/components/ui/primitives/text", () => ({
   Text: ({ children }: React.PropsWithChildren) => <span>{children}</span>,
 }));
 
-mock.module("../../../../src/features/auth/components/auth-switch-prompt", () => ({
+vi.mock("../../../../src/features/auth/components/auth-switch-prompt", () => ({
   AuthSwitchPrompt: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
 }));
 
-mock.module("lucide-react/dist/esm/icons/arrow-left", () => ({
+vi.mock("lucide-react/dist/esm/icons/arrow-left", () => ({
   default: (props: React.ComponentPropsWithoutRef<"svg">) => <svg {...props} />,
 }));
 
-mock.module("lucide-react/dist/esm/icons/loader-circle", () => ({
+vi.mock("lucide-react/dist/esm/icons/loader-circle", () => ({
   default: (props: React.ComponentPropsWithoutRef<"svg">) => <svg {...props} />,
 }));
 
@@ -174,7 +178,7 @@ describe("AuthForm", () => {
 
     class FakePublicKeyCredential {}
     Object.assign(FakePublicKeyCredential, {
-      isConditionalMediationAvailable: mock(() => Promise.resolve(true)),
+      isConditionalMediationAvailable: vi.fn(() => Promise.resolve(true)),
     });
 
     Object.assign(globalThis, {
@@ -185,13 +189,13 @@ describe("AuthForm", () => {
       Node: window.Node,
       PublicKeyCredential: FakePublicKeyCredential,
       document,
-      navigator: window.navigator,
       requestAnimationFrame: (callback: FrameRequestCallback) => {
         callback(0);
         return 1;
       },
       window,
     });
+    Object.defineProperty(globalThis, "navigator", { value: window.navigator, configurable: true, writable: true });
 
     const container = document.getElementById("app");
     if (!container) throw new Error("Expected app container");
@@ -212,6 +216,7 @@ describe("AuthForm", () => {
       await act(async () => {
         root.unmount();
       });
+      Object.defineProperty(globalThis, "navigator", { value: previousGlobals.navigator, configurable: true, writable: true });
       Object.assign(globalThis, previousGlobals);
     }
   });

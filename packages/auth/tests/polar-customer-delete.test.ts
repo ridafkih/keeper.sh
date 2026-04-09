@@ -1,4 +1,4 @@
-import { describe, expect, it, mock } from "bun:test";
+import { describe, expect, it, vi } from "vitest";
 import { deletePolarCustomerByExternalId } from "../src/polar-customer-delete";
 
 describe("deletePolarCustomerByExternalId", () => {
@@ -7,7 +7,7 @@ describe("deletePolarCustomerByExternalId", () => {
       detail: "Not found",
       error: "ResourceNotFound",
     });
-    const deleteExternal = mock(() => Promise.reject(resourceNotFoundError));
+    const deleteExternal = vi.fn(() => Promise.reject(resourceNotFoundError));
 
     expect(
       deletePolarCustomerByExternalId(
@@ -21,7 +21,7 @@ describe("deletePolarCustomerByExternalId", () => {
   });
 
   it("does not throw when Polar deletion fails unexpectedly", () => {
-    const deleteExternal = mock(() => Promise.reject(new Error("polar unavailable")));
+    const deleteExternal = vi.fn(() => Promise.reject(new Error("polar unavailable")));
 
     expect(
       deletePolarCustomerByExternalId(
@@ -32,8 +32,8 @@ describe("deletePolarCustomerByExternalId", () => {
   });
 
   it("does not write to stderr during tests when deletion fails unexpectedly", () => {
-    const deleteExternal = mock(() => Promise.reject(new Error("polar unavailable")));
-    const stderrWrite = mock(() => true);
+    const deleteExternal = vi.fn(() => Promise.reject(new Error("polar unavailable")));
+    const stderrWrite = vi.fn(() => true);
     const originalNodeEnv = process.env.NODE_ENV;
     const originalStderrWrite = process.stderr.write.bind(process.stderr);
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import type { SourceEvent } from "../../../src/core/types";
 import type { ExistingSourceEventState } from "../../../src/core/source/event-diff";
 import {

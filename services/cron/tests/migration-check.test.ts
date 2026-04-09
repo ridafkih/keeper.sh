@@ -1,9 +1,9 @@
-import { describe, expect, it, spyOn } from "bun:test";
+import { describe, expect, it, vi } from "vitest";
 import { checkWorkerMigrationStatus } from "../src/migration-check";
 
 describe("checkWorkerMigrationStatus", () => {
   it("does not exit when WORKER_JOB_QUEUE_ENABLED is true", () => {
-    const exitSpy = spyOn(process, "exit").mockImplementation(() => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
       throw new Error("process.exit called");
     });
 
@@ -14,7 +14,7 @@ describe("checkWorkerMigrationStatus", () => {
   });
 
   it("does not exit when WORKER_JOB_QUEUE_ENABLED is false", () => {
-    const exitSpy = spyOn(process, "exit").mockImplementation(() => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
       throw new Error("process.exit called");
     });
 
@@ -25,10 +25,10 @@ describe("checkWorkerMigrationStatus", () => {
   });
 
   it("exits with code 1 when WORKER_JOB_QUEUE_ENABLED is undefined", () => {
-    const exitSpy = spyOn(process, "exit").mockImplementation(() => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
       throw new Error("process.exit called");
     });
-    const stderrSpy = spyOn(process.stderr, "write").mockImplementation(() => true);
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 
     try {
       // eslint-disable-next-line @eslint/no-undefined @eslint-plugin-unicorn/no-useless-undefined
@@ -43,10 +43,10 @@ describe("checkWorkerMigrationStatus", () => {
   });
 
   it("writes migration guide to stderr when WORKER_JOB_QUEUE_ENABLED is undefined", () => {
-    const exitSpy = spyOn(process, "exit").mockImplementation(() => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
       throw new Error("process.exit called");
     });
-    const stderrSpy = spyOn(process.stderr, "write").mockImplementation(() => true);
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 
     try {
       // eslint-disable-next-line @eslint/no-undefined @eslint-plugin-unicorn/no-useless-undefined

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { eventStatesTable } from "@keeper.sh/database/schema";
 import type { EventStateInsertRow } from "../../../src/core/source/write-event-states";
 import { insertEventStatesWithConflictResolution } from "../../../src/core/source/write-event-states";

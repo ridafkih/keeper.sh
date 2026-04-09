@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { resolveInternalProxyPath } from "../../src/server/internal-routes";
 
 describe("resolveInternalProxyPath", () => {

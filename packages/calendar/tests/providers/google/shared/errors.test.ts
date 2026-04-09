@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { isAuthError, isRateLimitApiError, isRateLimitResponseStatus } from "../../../../src/providers/google/shared/errors";
 
 describe("isAuthError", () => {

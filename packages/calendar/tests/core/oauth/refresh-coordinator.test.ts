@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { runWithCredentialRefreshLock } from "../../../src/core/oauth/refresh-coordinator";
 
 describe("runWithCredentialRefreshLock", () => {
@@ -30,7 +30,7 @@ describe("runWithCredentialRefreshLock", () => {
     expect(second).resolves.toMatchObject({ access_token: "access-token" });
   });
 
-  it("releases the lock after failures", () => {
+  it("releases the lock after failures", async () => {
     let calls = 0;
 
     const failingOperation = () => {
@@ -38,10 +38,10 @@ describe("runWithCredentialRefreshLock", () => {
       return Promise.reject(new Error("refresh failed"));
     };
 
-    expect(
+    await expect(
       runWithCredentialRefreshLock("credential-2", failingOperation),
     ).rejects.toThrow("refresh failed");
-    expect(
+    await expect(
       runWithCredentialRefreshLock("credential-2", failingOperation),
     ).rejects.toThrow("refresh failed");
 

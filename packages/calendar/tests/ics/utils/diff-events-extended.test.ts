@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { diffEvents } from "../../../src/ics/utils/diff-events";
 import type { EventTimeSlot, StoredEventTimeSlot } from "../../../src/ics/utils/types";
 

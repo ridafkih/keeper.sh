@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { filterSourcesByPlan, filterUserIdsByPlan } from "../../src/utils/source-plan-selection";
 
 type Plan = "free" | "pro";

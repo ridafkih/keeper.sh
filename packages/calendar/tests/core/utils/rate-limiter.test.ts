@@ -4,8 +4,8 @@ import {
   describe,
   expect,
   it,
-  jest,
-} from "bun:test";
+  vi,
+} from "vitest";
 import { RateLimiter } from "../../../src/core/utils/rate-limiter";
 
 const flushAsync = async (): Promise<void> => {
@@ -31,11 +31,11 @@ const readNumericField = (target: object, fieldName: string): number => {
 describe("RateLimiter", () => {
   describe("execute", () => {
     beforeEach(() => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
     });
 
     afterEach(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it("resolves with the operation result", async () => {
@@ -60,15 +60,15 @@ describe("RateLimiter", () => {
         limiter.execute(async () => {
           concurrentCount++;
           maxConcurrent = Math.max(maxConcurrent, concurrentCount);
-          await Bun.sleep(50);
+          await new Promise((r) => setTimeout(r, 50));
           concurrentCount--;
         });
 
       const allDone = Promise.all([createTask(), createTask(), createTask(), createTask()]);
 
-      jest.advanceTimersByTime(50);
+      vi.advanceTimersByTime(50);
       await flushAsync();
-      jest.advanceTimersByTime(50);
+      vi.advanceTimersByTime(50);
       await flushAsync();
 
       await allDone;
@@ -81,7 +81,7 @@ describe("RateLimiter", () => {
       const order: number[] = [];
 
       const task1 = limiter.execute(async () => {
-        await Bun.sleep(20);
+        await new Promise((r) => setTimeout(r, 20));
         order.push(1);
       });
 
@@ -92,7 +92,7 @@ describe("RateLimiter", () => {
 
       const allDone = Promise.all([task1, task2]);
 
-      jest.advanceTimersByTime(20);
+      vi.advanceTimersByTime(20);
       await flushAsync();
 
       await allDone;
@@ -119,12 +119,12 @@ describe("RateLimiter", () => {
 
   describe("reportRateLimit", () => {
     beforeEach(() => {
-      jest.useFakeTimers();
-      jest.setSystemTime(new Date("2025-01-01T00:00:00.000Z"));
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2025-01-01T00:00:00.000Z"));
     });
 
     afterEach(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it("delays subsequent requests after a rate limit is reported", async () => {
@@ -144,11 +144,11 @@ describe("RateLimiter", () => {
       await flushAsync();
       expect(didComplete).toBe(false);
 
-      jest.advanceTimersByTime(999);
+      vi.advanceTimersByTime(999);
       await flushAsync();
       expect(didComplete).toBe(false);
 
-      jest.advanceTimersByTime(1);
+      vi.advanceTimersByTime(1);
       await trackedSecondOperation;
       expect(didComplete).toBe(true);
     });
@@ -160,7 +160,7 @@ describe("RateLimiter", () => {
       limiter.reportRateLimit();
 
       const backoffOperation = limiter.execute(() => Promise.resolve("after-backoff"));
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
       await backoffOperation;
 
       let didComplete = false;

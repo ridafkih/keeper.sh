@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { fixtureManifest, getFixturePath } from "@keeper.sh/fixtures";
 import { parseICalToRemoteEvent } from "../../../../src/providers/caldav/shared/ics";
 

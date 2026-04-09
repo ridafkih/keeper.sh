@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { parseIcsCalendar } from "../../../src/ics/utils/parse-ics-calendar";
 import { parseIcsEvents } from "../../../src/ics/utils/parse-ics-events";
 

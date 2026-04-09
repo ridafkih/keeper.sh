@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { ProcessEventsOptions } from "../../../../src/core/oauth/source-provider";
 import type { SourceEvent, SourceSyncResult } from "../../../../src/core/types";

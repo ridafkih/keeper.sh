@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { serializeGoogleEvent } from "../../../../src/providers/google/destination/serialize-event";
 
 describe("serializeGoogleEvent", () => {

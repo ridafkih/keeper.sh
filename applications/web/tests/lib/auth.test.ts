@@ -1,16 +1,20 @@
-import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthCapabilities } from "../../src/lib/auth-capabilities";
 
-const authClientMock = {
+const authClientMock = vi.hoisted(() => ({
   signIn: {
-    email: mock(() => Promise.resolve({ error: null })),
+    email: vi.fn(() => Promise.resolve({ error: null })),
   },
   signUp: {
-    email: mock(() => Promise.resolve({ error: null })),
+    email: vi.fn(() => Promise.resolve({ error: null })),
   },
-  requestPasswordReset: mock(() => Promise.resolve({ error: null })),
-  resetPassword: mock(() => Promise.resolve({ error: null })),
-};
+  requestPasswordReset: vi.fn(() => Promise.resolve({ error: null })),
+  resetPassword: vi.fn(() => Promise.resolve({ error: null })),
+}));
+
+vi.mock("../../src/lib/auth-client", () => ({
+  authClient: authClientMock,
+}));
 
 let signInWithCredential: typeof import("../../src/lib/auth").signInWithCredential;
 let signUpWithCredential: typeof import("../../src/lib/auth").signUpWithCredential;
@@ -29,10 +33,6 @@ const commercialCapabilities: AuthCapabilities = {
 };
 
 beforeAll(async () => {
-  mock.module("../../src/lib/auth-client", () => ({
-    authClient: authClientMock,
-  }));
-
   ({ signInWithCredential, signUpWithCredential } = await import("../../src/lib/auth"));
 });
 
@@ -40,7 +40,7 @@ beforeEach(() => {
   authClientMock.signIn.email.mockClear();
   authClientMock.signUp.email.mockClear();
   const fetchMock = Object.assign(
-    mock(() => Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))),
+    vi.fn(() => Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))),
     { preconnect: () => undefined },
   );
   globalThis.fetch = fetchMock;

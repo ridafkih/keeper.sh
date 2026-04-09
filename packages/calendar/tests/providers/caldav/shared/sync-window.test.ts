@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { getCalDAVSyncWindow } from "../../../../src/providers/caldav/shared/sync-window";
 
 describe("caldav destination sync window", () => {

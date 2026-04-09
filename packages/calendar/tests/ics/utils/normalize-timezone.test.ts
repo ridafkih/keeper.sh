@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { normalizeTimezone } from "../../../src/ics/utils/normalize-timezone";
 
 describe("normalizeTimezone", () => {

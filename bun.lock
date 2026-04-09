@@ -56,6 +56,7 @@
         "typescript": "^5.9.3",
         "vite": "^8.0.0",
         "vite-plugin-svgr": "^4.5.0",
+        "vitest": "^4.1.4",
       },
     },
     "packages/auth": {
@@ -79,6 +80,7 @@
         "@keeper.sh/typescript-config": "workspace:*",
         "@types/bun": "latest",
         "typescript": "5.9.3",
+        "vitest": "^4.1.4",
       },
     },
     "packages/broadcast": {
@@ -112,6 +114,7 @@
         "@keeper.sh/typescript-config": "workspace:*",
         "@types/bun": "latest",
         "typescript": "5.9.3",
+        "vitest": "^4.1.4",
       },
     },
     "packages/constants": {
@@ -147,6 +150,7 @@
         "@types/pg": "8.16.0",
         "drizzle-kit": "0.31.8",
         "typescript": "5.9.3",
+        "vitest": "^4.1.4",
       },
     },
     "packages/digest-fetch": {
@@ -222,6 +226,7 @@
         "@keeper.sh/typescript-config": "workspace:*",
         "@types/bun": "latest",
         "typescript": "5.9.3",
+        "vitest": "^4.1.4",
       },
     },
     "packages/typescript-config": {
@@ -281,6 +286,7 @@
         "@keeper.sh/typescript-config": "workspace:*",
         "@types/bun": "latest",
         "typescript": "5.9.3",
+        "vitest": "^4.1.4",
       },
     },
     "services/mcp": {
@@ -299,6 +305,7 @@
         "@keeper.sh/typescript-config": "workspace:*",
         "@types/bun": "latest",
         "typescript": "5.9.3",
+        "vitest": "^4.1.4",
       },
     },
     "services/worker": {

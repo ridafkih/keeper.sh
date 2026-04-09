@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "bun:test";
+import { afterAll, describe, expect, it } from "vitest";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -73,7 +73,7 @@ describe("getAllJobs", () => {
     );
     await writeFile(
       join(workspaceRoot, "reconcile-subscriptions.test.ts"),
-      `import { describe } from "bun:test"; describe("ignored", () => {});`,
+      `import { describe } from "vitest"; describe("ignored", () => {});`,
       "utf8",
     );
     await writeFile(

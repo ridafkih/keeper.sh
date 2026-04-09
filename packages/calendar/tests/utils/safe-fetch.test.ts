@@ -1,11 +1,13 @@
-import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { validateUrlSafety, createSafeFetch, UrlSafetyError } from "../../src/utils/safe-fetch";
 import type { SafeFetchOptions } from "../../src/utils/safe-fetch";
 
-const mockResolve4 = mock<(hostname: string) => Promise<string[]>>();
-const mockResolve6 = mock<(hostname: string) => Promise<string[]>>();
+const { mockResolve4, mockResolve6 } = vi.hoisted(() => ({
+  mockResolve4: vi.fn<(hostname: string) => Promise<string[]>>(),
+  mockResolve6: vi.fn<(hostname: string) => Promise<string[]>>(),
+}));
 
-mock.module("node:dns/promises", () => ({
+vi.mock("node:dns/promises", () => ({
   resolve4: mockResolve4,
   resolve6: mockResolve6,
 }));
@@ -173,7 +175,7 @@ describe("validateUrlSafety", () => {
 
 type FetchFn = (input: string | Request | URL, init?: RequestInit) => Promise<Response>;
 
-const installMockFetch = (mockFn: ReturnType<typeof mock<FetchFn>>): void => {
+const installMockFetch = (mockFn: ReturnType<typeof vi.fn<FetchFn>>): void => {
   Object.assign(globalThis, { fetch: mockFn });
 };
 
@@ -187,7 +189,7 @@ describe("createSafeFetch", () => {
   it("sets redirect to manual", async () => {
     mockResolve4.mockResolvedValue(["93.184.216.34"]);
 
-    const mockFetch = mock<FetchFn>();
+    const mockFetch = vi.fn<FetchFn>();
     mockFetch.mockResolvedValue(new Response("ok", { status: 200 }));
     installMockFetch(mockFetch);
 
@@ -202,7 +204,7 @@ describe("createSafeFetch", () => {
   it("rejects redirects to private IPs", async () => {
     mockResolve4.mockResolvedValueOnce(["93.184.216.34"]);
 
-    const mockFetch = mock<FetchFn>();
+    const mockFetch = vi.fn<FetchFn>();
     mockFetch.mockResolvedValueOnce(
       new Response(null, {
         status: 302,
@@ -218,7 +220,7 @@ describe("createSafeFetch", () => {
   it("follows safe redirects", async () => {
     mockResolve4.mockResolvedValue(["93.184.216.34"]);
 
-    const mockFetch = mock<FetchFn>();
+    const mockFetch = vi.fn<FetchFn>();
     mockFetch.mockResolvedValueOnce(
       new Response(null, {
         status: 301,
@@ -238,7 +240,7 @@ describe("createSafeFetch", () => {
   it("enforces max redirect depth", async () => {
     mockResolve4.mockResolvedValue(["93.184.216.34"]);
 
-    const mockFetch = mock<FetchFn>();
+    const mockFetch = vi.fn<FetchFn>();
     mockFetch.mockImplementation(() =>
       Promise.resolve(
         new Response(null, {
@@ -259,7 +261,7 @@ describe("createSafeFetch", () => {
   });
 
   it("allows private IPs when blockPrivateResolution is false", async () => {
-    const mockFetch = mock<FetchFn>();
+    const mockFetch = vi.fn<FetchFn>();
     mockFetch.mockResolvedValue(new Response("ok", { status: 200 }));
     installMockFetch(mockFetch);
 
@@ -270,7 +272,7 @@ describe("createSafeFetch", () => {
   });
 
   it("allows whitelisted private hosts when enabled", async () => {
-    const mockFetch = mock<FetchFn>();
+    const mockFetch = vi.fn<FetchFn>();
     mockFetch.mockResolvedValue(new Response("ok", { status: 200 }));
     installMockFetch(mockFetch);
 

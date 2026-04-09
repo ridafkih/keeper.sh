@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { serializeOutlookEvent } from "../../../../src/providers/outlook/destination/serialize-event";
 
 describe("serializeOutlookEvent", () => {

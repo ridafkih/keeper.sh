@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { withBackoff, abortableSleep, computeDelay } from "../../../../src/providers/google/shared/backoff";
 
 const flushAsync = async (): Promise<void> => {
@@ -8,7 +8,7 @@ const flushAsync = async (): Promise<void> => {
 };
 
 const advanceBackoff = async (): Promise<void> => {
-  jest.advanceTimersByTime(65_000);
+  vi.advanceTimersByTime(65_000);
   await flushAsync();
 };
 
@@ -30,16 +30,16 @@ describe("computeDelay", () => {
 
 describe("abortableSleep", () => {
   beforeEach(() => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it("resolves after the specified delay", async () => {
     const promise = abortableSleep(50);
-    jest.advanceTimersByTime(50);
+    vi.advanceTimersByTime(50);
     await promise;
   });
 
@@ -62,18 +62,18 @@ describe("abortableSleep", () => {
   it("resolves normally when signal is provided but not aborted", async () => {
     const controller = new AbortController();
     const promise = abortableSleep(10, controller.signal);
-    jest.advanceTimersByTime(10);
+    vi.advanceTimersByTime(10);
     await promise;
   });
 });
 
 describe("withBackoff", () => {
   beforeEach(() => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it("returns the result on first success", async () => {

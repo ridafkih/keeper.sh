@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { getOAuthSyncWindow, getOAuthSyncWindowStart } from "../../../src/core/oauth/sync-window";
 
 describe("oauth sync window", () => {

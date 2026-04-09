@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { isOAuthReauthRequiredError } from "../../../src/core/oauth/error-classification";
 
 describe("isOAuthReauthRequiredError", () => {

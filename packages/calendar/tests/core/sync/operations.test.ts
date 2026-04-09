@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { buildRemoveOperations } from "../../../src/core/sync/operations";
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { RemoteEvent } from "../../../src/core/types";

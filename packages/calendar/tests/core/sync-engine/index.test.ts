@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { executeRemoteOperations } from "../../../src/core/sync-engine/index";
 import type { SyncOperation, PushResult, DeleteResult, SyncableEvent } from "../../../src/core/types";
 import type { EventMapping } from "../../../src/core/events/mappings";

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import {
   decodeStoredSyncToken,
   encodeStoredSyncToken,
@@ -28,13 +28,13 @@ describe("sync token versioning", () => {
   it("forces full sync when stored token version is stale", () => {
     const legacyResolution = resolveSyncTokenForWindow("legacy-token", 1);
     expect(legacyResolution.syncToken).toBeNull();
-    expect(legacyResolution.requiresBackfill).toBeTrue();
+    expect(legacyResolution.requiresBackfill).toBe(true);
   });
 
   it("uses token when stored version matches required version", () => {
     const encoded = encodeStoredSyncToken("valid-token", 1);
     const resolution = resolveSyncTokenForWindow(encoded, 1);
     expect(resolution.syncToken).toBe("valid-token");
-    expect(resolution.requiresBackfill).toBeFalse();
+    expect(resolution.requiresBackfill).toBe(false);
   });
 });

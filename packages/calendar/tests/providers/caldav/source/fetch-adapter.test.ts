@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 
 describe("createCalDAVSourceFetcher", () => {
   it("returns a fetchEvents function", async () => {

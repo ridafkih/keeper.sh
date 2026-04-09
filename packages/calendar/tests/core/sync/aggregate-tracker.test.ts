@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { SyncAggregateTracker } from "../../../src/core/sync/aggregate-tracker";
 import type { DestinationSyncResult, SyncProgressUpdate } from "../../../src/core/sync/types";
 

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "vitest";
 import { createGoogleOAuthService } from "../../../src/core/oauth/google";
 
 const originalFetch = globalThis.fetch;

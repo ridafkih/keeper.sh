@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 
 describe("createGoogleSourceFetcher", () => {
   it("returns a fetchEvents function that retrieves and parses Google Calendar events", async () => {

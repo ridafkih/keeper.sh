@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { eventToICalString, parseICalToRemoteEvent, parseICalToRemoteEvents } from "../../../../src/providers/caldav/shared/ics";
 import { buildSourceEventsToAdd, buildSourceEventStateIdsToRemove } from "../../../../src/core/source/event-diff";
 import type { SourceEvent } from "../../../../src/core/types";

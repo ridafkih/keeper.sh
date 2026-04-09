@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { fixtureManifest, getFixturePath } from "@keeper.sh/fixtures";
 import { diffEvents } from "../../../src/ics/utils/diff-events";
 import { parseIcsCalendar } from "../../../src/ics/utils/parse-ics-calendar";

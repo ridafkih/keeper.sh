@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { serializedPatch, serializedCall } from "../../src/lib/serialized-mutate";
 
 function deferred<T = void>() {

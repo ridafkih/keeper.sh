@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { ensureValidToken } from "../../../src/core/oauth/ensure-valid-token";
 import type { TokenState, TokenRefresher } from "../../../src/core/oauth/ensure-valid-token";
 

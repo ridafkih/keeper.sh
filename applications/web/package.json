@@ -8,7 +8,7 @@
     "build": "vite build --outDir dist/client && vite build --ssr src/server.tsx --outDir dist/server && bun scripts/build.ts",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "types": "tsc --noEmit",
-    "test": "bun test ./tests",
+    "test": "vitest run",
     "preview": "vite preview",
     "start": "bun scripts/start.ts"
   },
@@ -53,6 +53,7 @@
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
     "vite": "^8.0.0",
-    "vite-plugin-svgr": "^4.5.0"
+    "vite-plugin-svgr": "^4.5.0",
+    "vitest": "^4.1.4"
   }
 }

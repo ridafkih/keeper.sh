@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import type { CompositeSyncState } from "@/state/sync";
 import { resolveSyncPercent } from "../../../../src/features/dashboard/components/sync-status-helpers";
 

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSyncLock, LOCK_PREFIX, SIGNAL_PREFIX, POLL_INTERVAL_MS } from "../src/sync-lock";
 
 const createMockRedis = () => {
@@ -103,11 +103,11 @@ describe("createSyncLock", () => {
   };
 
   beforeEach(() => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it("acquires the lock immediately when no one holds it", async () => {
@@ -223,7 +223,7 @@ describe("createSyncLock", () => {
       // Release the lock so the waiter can acquire
       await firstResult.handle.release();
 
-      jest.advanceTimersByTime(POLL_INTERVAL_MS);
+      vi.advanceTimersByTime(POLL_INTERVAL_MS);
       await flushAsync();
 
       const secondResult = await secondPromise;
@@ -252,7 +252,7 @@ describe("createSyncLock", () => {
       expect(thirdSignal).not.toBe(secondSignal);
 
       // Advance so second detects replacement on next poll
-      jest.advanceTimersByTime(POLL_INTERVAL_MS);
+      vi.advanceTimersByTime(POLL_INTERVAL_MS);
       await flushAsync();
 
       const secondResult = await secondPromise;
@@ -261,7 +261,7 @@ describe("createSyncLock", () => {
       // Release lock so third can acquire
       await firstResult.handle.release();
 
-      jest.advanceTimersByTime(POLL_INTERVAL_MS);
+      vi.advanceTimersByTime(POLL_INTERVAL_MS);
       await flushAsync();
 
       const thirdResult = await thirdPromise;
@@ -283,7 +283,7 @@ describe("createSyncLock", () => {
 
       abortController.abort();
 
-      jest.advanceTimersByTime(POLL_INTERVAL_MS);
+      vi.advanceTimersByTime(POLL_INTERVAL_MS);
       await flushAsync();
 
       const secondResult = await secondPromise;
@@ -351,7 +351,7 @@ describe("createSyncLock", () => {
       executionOrder.push("third:waiting");
 
       // Advance so second detects replacement
-      jest.advanceTimersByTime(POLL_INTERVAL_MS);
+      vi.advanceTimersByTime(POLL_INTERVAL_MS);
       await flushAsync();
 
       const secondResult = await secondPromise;
@@ -366,7 +366,7 @@ describe("createSyncLock", () => {
       executionOrder.push("first:released");
 
       // Advance so third can acquire
-      jest.advanceTimersByTime(POLL_INTERVAL_MS);
+      vi.advanceTimersByTime(POLL_INTERVAL_MS);
       await flushAsync();
 
       const thirdResult = await thirdPromise;
