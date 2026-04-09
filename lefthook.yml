@@ -2,10 +2,10 @@ pre-push:
   parallel: true
   jobs:
     - name: lint
-      run: bun lint
+      run: bun run lint
     - name: types
-      run: bun types
+      run: bun run types
     - name: unused
-      run: bun unused
+      run: bun run unused
     - name: test
-      run: bun test
+      run: bun run test
