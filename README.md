@@ -28,7 +28,7 @@ The dev environment runs behind HTTPS at `https://keeper.localhost` using a [Cad
 
 ### Prerequisites
 
-- [Bun](https://bun.sh/) (v1.3.5+)
+- [Bun](https://bun.sh/) (v1.3.11+)
 - [Docker](https://docs.docker.com/get-started/) & Docker Compose
 
 ### Getting Started

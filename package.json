@@ -10,7 +10,7 @@
   "overrides": {
     "arktype": "^2.2.0"
   },
-  "packageManager": "bun@1.3.5",
+  "packageManager": "bun@1.3.11",
   "private": true,
   "scripts": {
     "clean": "rimraf --glob **/{.turbo,node_modules,.next/}/",
