@@ -75,7 +75,7 @@ describe("runReconcileSubscriptionsJob", () => {
         reconcileUserSubscription: (userId) => {
           reconciledUserIds.push(userId);
           if (userId === "user-2") {
-            return new Promise((r) => setTimeout(r, 10_000));
+            return new Promise((resolve) => { setTimeout(resolve, 10_000); });
           }
           return Promise.resolve();
         },

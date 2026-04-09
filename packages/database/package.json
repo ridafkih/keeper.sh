@@ -12,7 +12,7 @@
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
     "types": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "bun x --bun vitest run",
     "lint": "oxlint ."
   },
   "dependencies": {

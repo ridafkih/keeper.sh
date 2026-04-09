@@ -8,7 +8,7 @@
     "build": "bun scripts/build",
     "start": "bun run dist/index.js",
     "types": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "bun x --bun vitest run",
     "lint": "oxlint ."
   },
   "dependencies": {

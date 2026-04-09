@@ -9,7 +9,7 @@
   "scripts": {
     "types": "tsc --noEmit",
     "lint": "oxlint .",
-    "test": "bunx --bun vitest run"
+    "test": "bun x --bun vitest run"
   },
   "dependencies": {
     "@keeper.sh/calendar": "workspace:*",
