@@ -30,6 +30,10 @@ export {
 } from "./core/oauth/refresh-coordinator";
 export { isOAuthReauthRequiredError } from "./core/oauth/error-classification";
 export {
+  createCoordinatedRefresher,
+  type CoordinatedRefresherOptions,
+} from "./core/oauth/coordinated-refresher";
+export {
   OAuthSourceProvider,
   type FetchEventsResult,
   type ProcessEventsOptions,

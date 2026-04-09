@@ -3,8 +3,7 @@ import type { RedisRateLimiter } from "@keeper.sh/calendar";
 import {
   createGoogleTokenRefresher,
   createMicrosoftTokenRefresher,
-  runWithCredentialRefreshLock,
-  isOAuthReauthRequiredError,
+  createCoordinatedRefresher,
 } from "@keeper.sh/calendar";
 import { createGoogleSyncProvider } from "@keeper.sh/calendar/google";
 import { createOutlookSyncProvider } from "@keeper.sh/calendar/outlook";
@@ -23,62 +22,12 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 const OAUTH_PROVIDERS = new Set(["google", "outlook"]);
 const CALDAV_PROVIDERS = new Set(["caldav", "fastmail", "icloud"]);
 
-const MS_PER_SECOND = 1000;
-
 interface OAuthConfig {
   googleClientId?: string;
   googleClientSecret?: string;
   microsoftClientId?: string;
   microsoftClientSecret?: string;
 }
-
-interface CoordinatedRefresherOptions {
-  database: BunSQLDatabase;
-  oauthCredentialId: string;
-  calendarAccountId: string;
-  refreshLockStore: RefreshLockStore | null;
-  rawRefresh: (refreshToken: string) => Promise<{
-    access_token: string;
-    expires_in: number;
-    refresh_token?: string;
-  }>;
-}
-
-const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
-  const { database, oauthCredentialId, calendarAccountId, refreshLockStore, rawRefresh } = options;
-
-  return (refreshToken: string) =>
-    runWithCredentialRefreshLock(
-      oauthCredentialId,
-      async () => {
-        try {
-          const result = await rawRefresh(refreshToken);
-
-          const newExpiresAt = new Date(Date.now() + result.expires_in * MS_PER_SECOND);
-
-          await database
-            .update(oauthCredentialsTable)
-            .set({
-              accessToken: result.access_token,
-              expiresAt: newExpiresAt,
-              refreshToken: result.refresh_token ?? refreshToken,
-            })
-            .where(eq(oauthCredentialsTable.id, oauthCredentialId));
-
-          return result;
-        } catch (error) {
-          if (isOAuthReauthRequiredError(error)) {
-            await database
-              .update(calendarAccountsTable)
-              .set({ needsReauthentication: true })
-              .where(eq(calendarAccountsTable.id, calendarAccountId));
-          }
-          throw error;
-        }
-      },
-      refreshLockStore,
-    );
-};
 
 const resolveOAuthProvider = async (
   database: BunSQLDatabase,

@@ -5,6 +5,7 @@ import {
   insertEventStatesWithConflictResolution,
   createGoogleTokenRefresher,
   createMicrosoftTokenRefresher,
+  createCoordinatedRefresher,
   createRedisRateLimiter,
   ensureValidToken,
 } from "@keeper.sh/calendar";
@@ -24,7 +25,7 @@ import {
 import { and, arrayContains, eq, inArray } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
-import { database, refreshLockRedis } from "@/context";
+import { database, refreshLockRedis, refreshLockStore } from "@/context";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 
@@ -172,6 +173,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
       provider: calendarAccountsTable.provider,
       externalCalendarId: calendarsTable.externalCalendarId,
       syncToken: calendarsTable.syncToken,
+      oauthCredentialId: oauthCredentialsTable.id,
       accessToken: oauthCredentialsTable.accessToken,
       refreshToken: oauthCredentialsTable.refreshToken,
       expiresAt: oauthCredentialsTable.expiresAt,
@@ -216,14 +218,21 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
               return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
             }
 
-            const tokenRefresher = resolveTokenRefresher(source.provider);
+            const rawRefresher = resolveTokenRefresher(source.provider);
             const tokenState: TokenState = {
               accessToken: source.accessToken,
               accessTokenExpiresAt: source.expiresAt,
               refreshToken: source.refreshToken,
             };
 
-            if (tokenRefresher) {
+            if (rawRefresher) {
+              const tokenRefresher = createCoordinatedRefresher({
+                database,
+                oauthCredentialId: source.oauthCredentialId,
+                calendarAccountId: source.accountId,
+                refreshLockStore,
+                rawRefresh: rawRefresher,
+              });
               await ensureValidToken(tokenState, tokenRefresher);
             }
 
