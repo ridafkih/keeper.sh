@@ -12,11 +12,13 @@ import type { ProviderCredentials } from "@/types";
 
 const credentialColumns = {
   calendarId: calendarsTable.id,
+  accountId: calendarAccountsTable.id,
   externalCalendarId: calendarsTable.externalCalendarId,
   calendarUrl: calendarsTable.calendarUrl,
   provider: calendarAccountsTable.provider,
   email: calendarAccountsTable.email,
   needsReauthentication: calendarAccountsTable.needsReauthentication,
+  oauthCredentialId: oauthCredentialsTable.id,
   oauthAccessToken: oauthCredentialsTable.accessToken,
   oauthRefreshToken: oauthCredentialsTable.refreshToken,
   oauthExpiresAt: oauthCredentialsTable.expiresAt,
@@ -28,11 +30,13 @@ const credentialColumns = {
 
 interface CredentialRow {
   calendarId: string;
+  accountId: string;
   externalCalendarId: string | null;
   calendarUrl: string | null;
   provider: string;
   email: string | null;
   needsReauthentication: boolean;
+  oauthCredentialId: string | null;
   oauthAccessToken: string | null;
   oauthRefreshToken: string | null;
   oauthExpiresAt: Date | null;
@@ -46,13 +50,15 @@ const rowToCredentials = (row: CredentialRow): ProviderCredentials => {
   const credentials: ProviderCredentials = {
     provider: row.provider,
     calendarId: row.calendarId,
+    accountId: row.accountId,
     externalCalendarId: row.externalCalendarId,
     calendarUrl: row.calendarUrl,
     email: row.email,
   };
 
-  if (row.oauthAccessToken && row.oauthRefreshToken && row.oauthExpiresAt) {
+  if (row.oauthCredentialId && row.oauthAccessToken && row.oauthRefreshToken && row.oauthExpiresAt) {
     credentials.oauth = {
+      credentialId: row.oauthCredentialId,
       accessToken: row.oauthAccessToken,
       refreshToken: row.oauthRefreshToken,
       expiresAt: row.oauthExpiresAt,

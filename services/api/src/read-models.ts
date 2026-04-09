@@ -17,6 +17,7 @@ import type { KeeperApi, KeeperDatabase } from "./types";
 
 interface KeeperApiOptions {
   oauthTokenRefresher?: OAuthTokenRefresher;
+  refreshLockStore?: import("@keeper.sh/calendar").RefreshLockStore | null;
   encryptionKey?: string;
 }
 
@@ -24,6 +25,7 @@ const createKeeperApi = (database: KeeperDatabase, options?: KeeperApiOptions): 
   const deps = {
     database,
     oauthTokenRefresher: options?.oauthTokenRefresher,
+    refreshLockStore: options?.refreshLockStore,
     encryptionKey: options?.encryptionKey,
   };
 

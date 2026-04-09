@@ -10,6 +10,8 @@ import type {
   ProviderCredentials,
   RsvpStatus,
 } from "@/types";
+import { createCoordinatedRefresher } from "@keeper.sh/calendar";
+import type { RefreshLockStore } from "@keeper.sh/calendar";
 import { resolveCredentialsByCalendarId, resolveCredentialsByEventId } from "./resolve-credentials";
 import { getEvent } from "@/queries/get-event";
 import {
@@ -41,6 +43,7 @@ interface OAuthTokenRefresher {
 interface MutationDependencies {
   database: KeeperDatabase;
   oauthTokenRefresher?: OAuthTokenRefresher;
+  refreshLockStore?: RefreshLockStore | null;
   encryptionKey?: string;
 }
 
@@ -50,23 +53,32 @@ const CALDAV_PROVIDERS = new Set(["caldav", "fastmail", "icloud"]);
 
 const ensureValidAccessToken = async (
   provider: string,
-  oauth: { accessToken: string; refreshToken: string; expiresAt: Date },
-  refresher?: OAuthTokenRefresher,
+  oauth: { credentialId: string; accessToken: string; refreshToken: string; expiresAt: Date },
+  accountId: string,
+  deps: MutationDependencies,
 ): Promise<string> => {
   if (oauth.expiresAt.getTime() > Date.now() + TOKEN_REFRESH_BUFFER_MS) {
     return oauth.accessToken;
   }
 
-  if (!refresher) {
+  if (!deps.oauthTokenRefresher) {
     return oauth.accessToken;
   }
 
-  const oauthProvider = refresher.getProvider(provider);
+  const oauthProvider = deps.oauthTokenRefresher.getProvider(provider);
   if (!oauthProvider) {
     return oauth.accessToken;
   }
 
-  const result = await oauthProvider.refreshAccessToken(oauth.refreshToken);
+  const refresher = createCoordinatedRefresher({
+    database: deps.database,
+    oauthCredentialId: oauth.credentialId,
+    calendarAccountId: accountId,
+    refreshLockStore: deps.refreshLockStore ?? null,
+    rawRefresh: (refreshToken) => oauthProvider.refreshAccessToken(refreshToken),
+  });
+
+  const result = await refresher(oauth.refreshToken);
   return result.access_token;
 };
 
@@ -94,7 +106,8 @@ const createEventViaOAuth = async (
   const accessToken = await ensureValidAccessToken(
     credentials.provider,
     credentials.oauth,
-    deps.oauthTokenRefresher,
+    credentials.accountId,
+    deps,
   );
 
   if (credentials.provider === "google") {
@@ -216,7 +229,8 @@ const dispatchUpdateEvent = async (
     const accessToken = await ensureValidAccessToken(
       credentials.provider,
       credentials.oauth,
-      deps.oauthTokenRefresher,
+      credentials.accountId,
+      deps,
     );
 
     if (credentials.provider === "google") {
@@ -338,7 +352,8 @@ const deleteEventMutation = async (
       const accessToken = await ensureValidAccessToken(
         credentials.provider,
         credentials.oauth,
-        deps.oauthTokenRefresher,
+        credentials.accountId,
+        deps,
       );
 
       if (credentials.provider === "google") {
@@ -403,7 +418,8 @@ const rsvpEventMutation = async (
     const accessToken = await ensureValidAccessToken(
       credentials.provider,
       credentials.oauth,
-      deps.oauthTokenRefresher,
+      credentials.accountId,
+      deps,
     );
 
     if (credentials.provider === "google") {
@@ -440,7 +456,7 @@ const fetchOAuthPendingInvites = async (
   credentials: ProviderCredentials,
   from: string,
   to: string,
-  refresher?: OAuthTokenRefresher,
+  deps: MutationDependencies,
 ): Promise<PendingInvite[]> => {
   if (!credentials.oauth) {
     return [];
@@ -449,7 +465,8 @@ const fetchOAuthPendingInvites = async (
   const accessToken = await ensureValidAccessToken(
     credentials.provider,
     credentials.oauth,
-    refresher,
+    credentials.accountId,
+    deps,
   );
 
   if (credentials.provider === "google") {
@@ -515,7 +532,7 @@ const fetchPendingInvitesForCalendar = (
   deps: MutationDependencies,
 ): Promise<PendingInvite[]> => {
   if (credentials.oauth) {
-    return fetchOAuthPendingInvites(credentials, from, to, deps.oauthTokenRefresher);
+    return fetchOAuthPendingInvites(credentials, from, to, deps);
   }
 
   if (credentials.caldav && deps.encryptionKey) {

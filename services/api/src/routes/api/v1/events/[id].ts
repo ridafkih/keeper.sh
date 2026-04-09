@@ -3,10 +3,11 @@ import { createKeeperApi } from "@/read-models";
 import { withV1Auth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { eventPatchBodySchema } from "@/utils/request-body";
-import { database, oauthProviders, encryptionKey } from "@/context";
+import { database, oauthProviders, refreshLockStore, encryptionKey } from "@/context";
 
 const keeperApi = createKeeperApi(database, {
   oauthTokenRefresher: oauthProviders,
+  refreshLockStore,
   encryptionKey,
 });
 
