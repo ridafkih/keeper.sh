@@ -28,7 +28,8 @@ class EventsFetchError extends Error {
   }
 }
 
-const REQUEST_TIMEOUT_MS = 15_000;
+const REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_PAGE_SIZE = 50;
 
 const isRequestTimeoutError = (error: unknown): boolean =>
   error instanceof Error
@@ -85,6 +86,7 @@ const buildInitialUrl = (calendarId: string, timeMin: Date, timeMax: Date): URL 
     "$select",
     "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
   );
+  url.searchParams.set("$top", String(DEFAULT_PAGE_SIZE));
 
   return url;
 };
