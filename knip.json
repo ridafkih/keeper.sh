@@ -5,6 +5,7 @@
     "**/*.test.ts",
     "**/*.test.tsx",
     "tests/**/*",
+    "scripts/**/*",
     "services/cron/src/jobs/**/*",
     "applications/web/src/generated/**/*"
   ],
