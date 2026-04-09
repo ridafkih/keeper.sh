@@ -28,8 +28,8 @@ const missingSourceLifecycleCallback = (): Promise<void> =>
   Promise.reject(new Error("Expected background callback"));
 
 describe("runCreateSource", () => {
-  it("rejects source creation when plan limit is exceeded", () => {
-    expect(
+  it("rejects source creation when plan limit is exceeded", async () => {
+    await expect(
       runCreateSource(
         {
           name: "Team Feed",
@@ -51,10 +51,10 @@ describe("runCreateSource", () => {
     ).rejects.toBeInstanceOf(SourceLimitError);
   });
 
-  it("wraps CalendarFetchError details in InvalidSourceUrlError", () => {
+  it("wraps CalendarFetchError details in InvalidSourceUrlError", async () => {
     const rejection = new CalendarFetchError("auth needed", 401);
 
-    expect(
+    await expect(
       runCreateSource(
         {
           name: "Team Feed",
@@ -135,8 +135,8 @@ describe("runCreateSource", () => {
     expect(syncedUserIds).toEqual(["user-42"]);
   });
 
-  it("throws when calendar account creation fails", () => {
-    expect(
+  it("throws when calendar account creation fails", async () => {
+    await expect(
       runCreateSource(
         {
           name: "Team Feed",
@@ -158,8 +158,8 @@ describe("runCreateSource", () => {
     ).rejects.toThrow("Failed to create calendar account");
   });
 
-  it("throws when source calendar creation fails", () => {
-    expect(
+  it("throws when source calendar creation fails", async () => {
+    await expect(
       runCreateSource(
         {
           name: "Team Feed",

@@ -15,7 +15,7 @@
   },
   "scripts": {
     "types": "tsc --noEmit",
-    "test": "bunx --bun vitest run",
+    "test": "TZ=UTC bunx --bun vitest run",
     "lint": "oxlint ."
   },
   "dependencies": {

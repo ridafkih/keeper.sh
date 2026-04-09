@@ -257,14 +257,14 @@ beforeEach(() => {
 });
 
 describe("Account locks", () => {
-  it("rechecks the OAuth destination cap inside the locked transaction", () => {
+  it("rechecks the OAuth destination cap inside the locked transaction", async () => {
     canAddAccountResult = false;
     selectResults = [
       [],
       [{ id: "existing-account" }],
     ];
 
-    expect(
+    await expect(
       handleOAuthCallback({
         code: "oauth-code",
         error: null,

@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 describe("createGoogleOAuthService.refreshAccessToken", () => {
-  it("flags invalid_grant failures as requiring reauthentication", () => {
+  it("flags invalid_grant failures as requiring reauthentication", async () => {
     globalThis.fetch = createFetchMock(() =>
       Promise.resolve(
         Response.json(
@@ -54,7 +54,7 @@ describe("createGoogleOAuthService.refreshAccessToken", () => {
 
     const service = createService();
 
-    expect(service.refreshAccessToken("refresh-token")).rejects.toMatchObject({
+    await expect(service.refreshAccessToken("refresh-token")).rejects.toMatchObject({
       oauthErrorCode: "invalid_grant",
       oauthReauthRequired: true,
     });
@@ -94,13 +94,13 @@ describe("createGoogleOAuthService.refreshAccessToken", () => {
     expect(token.access_token).toBe("new-access-token");
   });
 
-  it("marks timeout failures as transient", () => {
+  it("marks timeout failures as transient", async () => {
     globalThis.fetch = createFetchMock(() =>
       Promise.reject(new DOMException("The operation was aborted.", "AbortError")));
 
     const service = createService();
 
-    expect(service.refreshAccessToken("refresh-token")).rejects.toMatchObject({
+    await expect(service.refreshAccessToken("refresh-token")).rejects.toMatchObject({
       oauthReauthRequired: false,
       oauthRetriable: true,
     });
