@@ -95,6 +95,8 @@ const processJob = (
 
     const deadlineMs = Date.now() + USER_TIMEOUT_MS;
 
+    let flushed = false;
+
     try {
       const result = await syncDestinationsForUser(userId, {
         database,
@@ -160,6 +162,7 @@ const processJob = (
           const totalAttempted = completion.added + completion.removed + totalFailed;
           widelog.set("outcome", resolveSyncOutcome(totalFailed, totalAttempted));
           widelog.flush();
+          flushed = true;
         },
       });
 
@@ -175,7 +178,9 @@ const processJob = (
       widelog.errorFields(error, { slug: "push-sync-failed" });
       throw error;
     } finally {
-      widelog.flush();
+      if (!flushed) {
+        widelog.flush();
+      }
     }
   });
 

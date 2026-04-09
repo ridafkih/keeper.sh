@@ -38,7 +38,7 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
     const { changed } = await createSnapshot(config.database, config.calendarId, ical);
 
     if (!changed) {
-      return { events: [] };
+      return { events: [], unchanged: true };
     }
 
     const calendar = parseIcsCalendar({ icsString: ical });

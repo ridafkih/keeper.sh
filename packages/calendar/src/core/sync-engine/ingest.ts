@@ -17,6 +17,7 @@ interface FetchEventsResult {
   cancelledEventUids?: string[];
   isDeltaSync?: boolean;
   fullSyncRequired?: boolean;
+  unchanged?: boolean;
 }
 
 interface IngestionChanges {
@@ -60,6 +61,12 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
 
     wideEvent["source_events.count"] = fetchResult.events.length;
     wideEvent["existing_events.count"] = existingEvents.length;
+
+    if (fetchResult.unchanged) {
+      wideEvent["outcome"] = "unchanged";
+      wideEvent["flushed"] = false;
+      return EMPTY_RESULT;
+    }
 
     if (fetchResult.fullSyncRequired) {
       wideEvent["outcome"] = "full-sync-required";
