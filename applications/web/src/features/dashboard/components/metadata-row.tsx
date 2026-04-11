@@ -19,10 +19,10 @@ interface MetadataRowProps {
 export function MetadataRow({ label, value, icon, truncate = false, to }: MetadataRowProps) {
   const content = (
     <>
-      <Text size="sm" tone="muted" className="shrink-0">{label}</Text>
+      <Text size="base" tone="muted" className="shrink-0">{label}</Text>
       {value && (
         <div className={cn("ml-auto overflow-hidden", truncate && "min-w-0")}>
-          <Text size="sm" tone="muted" className={cn(truncate && "truncate")}>{value}</Text>
+          <Text size="base" tone="muted" className={cn(truncate && "truncate")}>{value}</Text>
         </div>
       )}
       {icon && <div className="ml-auto shrink-0"><NavigationMenuItemIcon>{icon}</NavigationMenuItemIcon></div>}
