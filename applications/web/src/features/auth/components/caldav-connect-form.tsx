@@ -97,6 +97,12 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
 
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [directMode, setDirectMode] = useState(false);
+
+  // Direct-URL mode is exposed only for the generic CalDAV provider. The
+  // dedicated icloud/fastmail flows already know their server's principal
+  // structure and benefit from discovery.
+  const supportsDirectMode = provider === "caldav";
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -112,60 +118,104 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
       return;
     }
 
+    const directCalendarUrl = directMode
+      ? readFormFieldValue(formData, "calendarUrl")
+      : "";
+    const directName = directMode ? readFormFieldValue(formData, "name") : "";
+
+    if (directMode && (!directCalendarUrl || !directName)) {
+      setError("Missing required calendar URL or display name");
+      return;
+    }
+
     startTransition(async () => {
-      let discoverResponse: Response;
-      try {
-        discoverResponse = await apiFetch("/api/sources/caldav/discover", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ serverUrl, username, password }),
-        });
-      } catch (err) {
-        setError(resolveErrorMessage(err, "Failed to discover calendars"));
-        return;
-      }
-
-      const discoverPayload = await discoverResponse.json();
-      const calendars = parseCalendarOptions(discoverPayload);
-      const authMethod = parseAuthMethod(discoverPayload);
-      if (!calendars) {
-        setError("Failed to parse discovered calendars");
-        return;
-      }
-
-      if (calendars.length === 0) {
-        setError("No calendars found");
-        return;
-      }
-
       let accountId: string | undefined;
 
-      try {
-        const responses = await Promise.all(
-          calendars.map((calendar) =>
-            apiFetch("/api/sources/caldav", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                authMethod,
-                calendarUrl: calendar.url,
-                name: calendar.displayName,
-                password,
-                provider,
-                serverUrl,
-                username,
-              }),
+      if (directMode) {
+        // Direct-URL mode: skip discovery, create one source pointing to the
+        // user-supplied calendar URL. Useful for servers like Zoho that
+        // surface per-calendar CalDAV URLs but don't expose a walkable
+        // principal/home-set to the CalDAV client.
+        let response: Response;
+        try {
+          response = await apiFetch("/api/sources/caldav", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              authMethod: "basic",
+              calendarUrl: directCalendarUrl,
+              name: directName,
+              password,
+              provider,
+              serverUrl,
+              username,
             }),
-          ),
-        );
-
-        const firstResponse = responses[0];
-        if (firstResponse) {
-          accountId = parseAccountId(await firstResponse.json());
+          });
+        } catch (err) {
+          setError(resolveErrorMessage(err, "Failed to create CalDAV source"));
+          return;
         }
-      } catch {
-        setError("Failed to import calendars");
-        return;
+
+        if (!response.ok) {
+          const message = await response.text().catch(() => "");
+          setError(message || "Failed to create CalDAV source");
+          return;
+        }
+
+        accountId = parseAccountId(await response.json().catch(() => null));
+      } else {
+        let discoverResponse: Response;
+        try {
+          discoverResponse = await apiFetch("/api/sources/caldav/discover", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ serverUrl, username, password }),
+          });
+        } catch (err) {
+          setError(resolveErrorMessage(err, "Failed to discover calendars"));
+          return;
+        }
+
+        const discoverPayload = await discoverResponse.json();
+        const calendars = parseCalendarOptions(discoverPayload);
+        const authMethod = parseAuthMethod(discoverPayload);
+        if (!calendars) {
+          setError("Failed to parse discovered calendars");
+          return;
+        }
+
+        if (calendars.length === 0) {
+          setError("No calendars found");
+          return;
+        }
+
+        try {
+          const responses = await Promise.all(
+            calendars.map((calendar) =>
+              apiFetch("/api/sources/caldav", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  authMethod,
+                  calendarUrl: calendar.url,
+                  name: calendar.displayName,
+                  password,
+                  provider,
+                  serverUrl,
+                  username,
+                }),
+              }),
+            ),
+          );
+
+          const firstResponse = responses[0];
+          if (firstResponse) {
+            accountId = parseAccountId(await firstResponse.json());
+          }
+        } catch {
+          setError("Failed to import calendars");
+          return;
+        }
       }
 
       await invalidateAccountsAndSources(globalMutate);
@@ -192,6 +242,22 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
         ) : (
           <Input type="hidden" name="serverUrl" defaultValue={config.serverUrl} />
         )}
+        {directMode && (
+          <>
+            <Input
+              name="calendarUrl"
+              type="url"
+              placeholder="Direct CalDAV calendar URL"
+              required
+            />
+            <Input
+              name="name"
+              type="text"
+              placeholder="Display name"
+              required
+            />
+          </>
+        )}
         <Input
           name="username"
           type={config.usernameInputType}
@@ -205,6 +271,19 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
           required
         />
       </div>
+      {supportsDirectMode && (
+        <label className="flex cursor-pointer select-none items-center gap-2">
+          <input
+            type="checkbox"
+            checked={directMode}
+            onChange={(event) => setDirectMode(event.target.checked)}
+            className="size-4"
+          />
+          <Text size="sm">
+            I have a direct calendar URL (skip discovery)
+          </Text>
+        </label>
+      )}
       {error && <Text size="sm" tone="danger">{error}</Text>}
       <Divider />
       <div className="flex items-stretch gap-2">

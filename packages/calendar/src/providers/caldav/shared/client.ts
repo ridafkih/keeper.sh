@@ -70,7 +70,15 @@ class CalDAVClient {
   }
 
   async fetchCalendarDisplayName(calendarUrl: string): Promise<string | null> {
-    const calendars = await this.discoverCalendars();
+    // Falls back to null when discovery is unsupported by the server (e.g. some
+    // providers expose direct calendar URLs without a walkable principal/home),
+    // letting callers keep the user-supplied name.
+    let calendars: CalendarInfo[];
+    try {
+      calendars = await this.discoverCalendars();
+    } catch {
+      return null;
+    }
     const storedPath = new URL(calendarUrl).pathname;
 
     const matchingCalendar = calendars.find(
@@ -81,7 +89,15 @@ class CalDAVClient {
   }
 
   async resolveCalendarUrl(storedUrl: string): Promise<string> {
-    const calendars = await this.discoverCalendars();
+    // Falls back to the stored URL when discovery fails. This supports sources
+    // added by a direct calendar URL on servers (like Zoho group calendars)
+    // whose principal/home-set walk is not exposed to CalDAV clients.
+    let calendars: CalendarInfo[];
+    try {
+      calendars = await this.discoverCalendars();
+    } catch {
+      return storedUrl;
+    }
     const storedPath = new URL(storedUrl).pathname;
 
     const matchingCalendar = calendars.find(
