@@ -103,14 +103,25 @@ const isEventRangeInput = (
 ): input is Record<string, unknown> & { from: string; to: string; timezone: string } =>
   typeof input.from === "string" && typeof input.to === "string" && typeof input.timezone === "string";
 
+const TIMEZONE_OFFSET_PATTERN = /^([+-]?)(\d{1,2})(?::?(\d{2}))?$/;
+const UTC_OFFSET = "+00:00";
+const DEFAULT_MINUTES = "00";
+
 const normalizeTimezoneOffset = (raw: string): string => {
   if (raw === "") {
-    return "+00:00";
+    return UTC_OFFSET;
   }
-  if (raw.includes(":")) {
-    return raw.padStart(6, "+0");
+  const match = TIMEZONE_OFFSET_PATTERN.exec(raw);
+  if (!match) {
+    return raw;
   }
-  return `${raw.padStart(3, "+0")}:00`;
+  let sign: "+" | "-" = "+";
+  if (match[1] === "-") {
+    sign = "-";
+  }
+  const hours = (match[2] ?? "00").padStart(2, "0");
+  const minutes = (match[3] ?? DEFAULT_MINUTES).padStart(2, "0");
+  return `${sign}${hours}:${minutes}`;
 };
 
 const toLocalizedTime = (utcIso: string, timeZone: string): string => {
@@ -324,5 +335,5 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
   },
 });
 
-export { createKeeperMcpToolset };
+export { createKeeperMcpToolset, normalizeTimezoneOffset, toLocalizedTime };
 export type { KeeperCalendar, KeeperMcpToolDefinition, KeeperMcpToolset, KeeperToolContext };
