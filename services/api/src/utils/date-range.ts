@@ -1,14 +1,5 @@
 import { MS_PER_WEEK } from "@keeper.sh/constants";
 
-const HOURS_START_OF_DAY = 0;
-const MINUTES_START = 0;
-const SECONDS_START = 0;
-const MILLISECONDS_START = 0;
-const HOURS_END_OF_DAY = 23;
-const MINUTES_END = 59;
-const SECONDS_END = 59;
-const MILLISECONDS_END = 999;
-
 interface DateRange {
   from: Date;
   to: Date;
@@ -44,15 +35,18 @@ const parseDateRangeParams = (url: URL): DateRange => {
   return { from, to };
 };
 
-const normalizeDateRange = (from: Date, to: Date): NormalizedDateRange => {
-  const start = new Date(from);
-  start.setHours(HOURS_START_OF_DAY, MINUTES_START, SECONDS_START, MILLISECONDS_START);
-
-  const end = new Date(to);
-  end.setHours(HOURS_END_OF_DAY, MINUTES_END, SECONDS_END, MILLISECONDS_END);
-
-  return { end, start };
-};
+/**
+ * Honour the exact instants supplied by the caller. Previously this snapped
+ * `from` to start-of-day and `to` to end-of-day in server-local time, which
+ * silently widened queries whose bounds carried a meaningful time component
+ * (e.g. MCP callers passing precise UTC instants). The web frontend already
+ * supplies day-shaped bounds (see hooks/use-events.ts), so removing the
+ * snap is a no-op for it.
+ */
+const normalizeDateRange = (from: Date, to: Date): NormalizedDateRange => ({
+  start: new Date(from),
+  end: new Date(to),
+});
 
 export { parseDateRangeParams, normalizeDateRange };
 export type { DateRange, NormalizedDateRange };
