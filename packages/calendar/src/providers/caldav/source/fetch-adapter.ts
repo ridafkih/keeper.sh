@@ -48,7 +48,14 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
       }
 
       for (const parsed of parseICalToRemoteEvents(data)) {
-        if (isKeeperEvent(parsed.uid) || parsed.endTime < syncWindow.start) {
+        if (isKeeperEvent(parsed.uid)) {
+          continue;
+        }
+        // Non-recurring events that ended before the sync window are out of scope.
+        // Recurring events with a master DTSTART before the window are kept: their
+        // occurrences within the window were already returned by the CalDAV
+        // time-range filter, and downstream RRULE expansion handles the rest.
+        if (!parsed.recurrenceRule && parsed.endTime < syncWindow.start) {
           continue;
         }
 
