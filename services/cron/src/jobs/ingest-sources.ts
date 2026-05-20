@@ -77,6 +77,7 @@ const createIngestionFlush = (calendarId: string) =>
             isAllDay: event.isAllDay,
             location: event.location,
             recurrenceRule: serializeOptionalJson(event.recurrenceRule),
+            recurrenceId: event.recurrenceId,
             sourceEventType: event.sourceEventType,
             sourceEventUid: event.uid,
             startTime: event.startTime,
