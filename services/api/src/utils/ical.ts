@@ -1,9 +1,56 @@
 import { calendarsTable, eventStatesTable, icalFeedSettingsTable } from "@keeper.sh/database/schema";
 import { and, asc, eq, inArray, ne, or, isNull } from "drizzle-orm";
+import type { IcsDateObject, IcsRecurrenceRule } from "ts-ics";
 import { resolveUserIdentifier } from "./user";
 import { database } from "@/context";
 import { formatEventsAsIcal } from "./ical-format";
-import type { FeedSettings } from "./ical-format";
+import type { CalendarEvent, FeedSettings } from "./ical-format";
+
+const parseJsonField = <T>(value: string | null): T | null => {
+  if (!value) {
+    return null;
+  }
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+};
+
+const reviveDates = (value: unknown): unknown => {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)) {
+    return new Date(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => reviveDates(item));
+  }
+  if (value && typeof value === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value)) {
+      result[key] = reviveDates(val);
+    }
+    return result;
+  }
+  return value;
+};
+
+const parseRecurrenceRule = (value: string | null): IcsRecurrenceRule | null => {
+  const parsed = parseJsonField<IcsRecurrenceRule>(value);
+  if (!parsed) {
+    return null;
+  }
+  // ts-ics expects Date objects on the in-memory shape (e.g. UNTIL is a {date: Date}).
+  // JSON.parse leaves these as ISO strings, so revive them before re-serializing.
+  return reviveDates(parsed) as IcsRecurrenceRule;
+};
+
+const parseExceptionDates = (value: string | null): IcsDateObject[] | null => {
+  const parsed = parseJsonField<IcsDateObject[]>(value);
+  if (!parsed) {
+    return null;
+  }
+  return reviveDates(parsed) as IcsDateObject[];
+};
 
 const DEFAULT_FEED_SETTINGS: FeedSettings = {
   includeEventName: false,
@@ -48,7 +95,7 @@ const generateUserCalendar = async (identifier: string): Promise<string | null> 
   }
 
   const calendarIds = sources.map(({ id }) => id);
-  const events = await database
+  const rows = await database
     .select({
       id: eventStatesTable.id,
       title: eventStatesTable.title,
@@ -57,6 +104,8 @@ const generateUserCalendar = async (identifier: string): Promise<string | null> 
       startTime: eventStatesTable.startTime,
       endTime: eventStatesTable.endTime,
       isAllDay: eventStatesTable.isAllDay,
+      recurrenceRule: eventStatesTable.recurrenceRule,
+      exceptionDates: eventStatesTable.exceptionDates,
       calendarName: calendarsTable.name,
     })
     .from(eventStatesTable)
@@ -75,6 +124,12 @@ const generateUserCalendar = async (identifier: string): Promise<string | null> 
       ),
     )
     .orderBy(asc(eventStatesTable.startTime));
+
+  const events: CalendarEvent[] = rows.map((row) => ({
+    ...row,
+    recurrenceRule: parseRecurrenceRule(row.recurrenceRule),
+    exceptionDates: parseExceptionDates(row.exceptionDates),
+  }));
 
   return formatEventsAsIcal(events, settings);
 };
