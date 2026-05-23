@@ -62,6 +62,10 @@ export { allSettledWithConcurrency, type AllSettledWithConcurrencyOptions } from
 export { getErrorMessage } from "./core/utils/error";
 export { getEventsForDestination } from "./core/events/events";
 export {
+  parseExceptionDatesFromJson,
+  parseRecurrenceRuleFromJson,
+} from "./core/events/recurrence";
+export {
   buildSourceEventIdentityKey,
   buildSourceEventsToAdd,
   buildSourceEventStateIdsToRemove,
