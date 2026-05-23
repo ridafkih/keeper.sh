@@ -5,19 +5,21 @@ import {
   userEventsTable,
 } from "@keeper.sh/database/schema";
 import { normalizeDateRange } from "@/utils/date-range";
-import { and, arrayContains, asc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, arrayContains, asc, eq, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
+
+import { expandRecurringEvent } from "./expand-recurring-event";
+import type { RecurringOccurrence } from "./expand-recurring-event";
+
 import type { KeeperDatabase, KeeperEvent, KeeperEventFilters, KeeperEventRangeInput } from "@/types";
 
 const EMPTY_RESULT_COUNT = 0;
 
 const toRequiredDate = (value: Date | string, label: "from" | "to"): Date => {
   const parsedDate = new Date(value);
-
   if (Number.isNaN(parsedDate.getTime())) {
     throw new TypeError(`Invalid ${label} date`);
   }
-
   return parsedDate;
 };
 
@@ -75,6 +77,84 @@ const getSourcesForUser = async (
   return { calendarIds, sourceMap };
 };
 
+interface SyncedEventRow {
+  calendarId: string;
+  description: string | null;
+  endTime: Date;
+  exceptionDates: string | null;
+  id: string;
+  location: string | null;
+  recurrenceRule: string | null;
+  startTime: Date;
+  title: string | null;
+}
+
+interface UserEventRow {
+  calendarId: string;
+  description: string | null;
+  endTime: Date;
+  id: string;
+  location: string | null;
+  startTime: Date;
+  title: string | null;
+}
+
+type FlattenedEvent = UserEventRow;
+
+const flattenSyncedEvent = (
+  row: SyncedEventRow,
+  windowStart: Date,
+  windowEnd: Date,
+): FlattenedEvent[] => {
+  if (!row.recurrenceRule) {
+    return [
+      {
+        calendarId: row.calendarId,
+        description: row.description,
+        endTime: row.endTime,
+        id: row.id,
+        location: row.location,
+        startTime: row.startTime,
+        title: row.title,
+      },
+    ];
+  }
+  const occurrences: RecurringOccurrence[] = expandRecurringEvent(
+    row,
+    windowStart,
+    windowEnd,
+  );
+  return occurrences.map((occurrence) => ({
+    calendarId: occurrence.calendarId,
+    description: occurrence.description,
+    endTime: occurrence.endTime,
+    id: occurrence.id,
+    location: occurrence.location,
+    startTime: occurrence.startTime,
+    title: occurrence.title,
+  }));
+};
+
+/**
+ * Build the WHERE clause for fetching synced rows that may contribute events
+ * to [start, end]: one-offs whose startTime is in-window, plus recurring
+ * masters whose first occurrence is at-or-before the window end (later
+ * occurrences may still land inside the window even if the master is far in
+ * the past).
+ */
+const buildSyncedRangeCondition = (start: Date, end: Date): SQL | undefined =>
+  or(
+    and(
+      isNull(eventStatesTable.recurrenceRule),
+      gte(eventStatesTable.startTime, start),
+      lte(eventStatesTable.startTime, end),
+    ),
+    and(
+      isNotNull(eventStatesTable.recurrenceRule),
+      lte(eventStatesTable.startTime, end),
+    ),
+  );
+
 const getEventsInRange = async (
   database: KeeperDatabase,
   userId: string,
@@ -90,31 +170,38 @@ const getEventsInRange = async (
 
   const syncedConditions: SQL[] = [
     inArray(eventStatesTable.calendarId, calendarIds),
-    gte(eventStatesTable.startTime, start),
-    lte(eventStatesTable.startTime, end),
   ];
+  const syncedRangeCondition = buildSyncedRangeCondition(start, end);
+  if (syncedRangeCondition) {
+    syncedConditions.push(syncedRangeCondition);
+  }
 
   if (filters?.availability && filters.availability.length > 0) {
     syncedConditions.push(inArray(eventStatesTable.availability, filters.availability));
   }
-
   if (filters && "isAllDay" in filters && typeof filters.isAllDay === "boolean") {
     syncedConditions.push(eq(eventStatesTable.isAllDay, filters.isAllDay));
   }
 
-  const syncedEvents = await database
+  const syncedRows: SyncedEventRow[] = await database
     .select({
       calendarId: eventStatesTable.calendarId,
       description: eventStatesTable.description,
       endTime: eventStatesTable.endTime,
+      exceptionDates: eventStatesTable.exceptionDates,
       id: eventStatesTable.id,
       location: eventStatesTable.location,
+      recurrenceRule: eventStatesTable.recurrenceRule,
       startTime: eventStatesTable.startTime,
       title: eventStatesTable.title,
     })
     .from(eventStatesTable)
     .where(and(...syncedConditions))
     .orderBy(asc(eventStatesTable.startTime));
+
+  const syncedEvents: FlattenedEvent[] = syncedRows.flatMap((row) =>
+    flattenSyncedEvent(row, start, end),
+  );
 
   const userConditions: SQL[] = [
     inArray(userEventsTable.calendarId, calendarIds),
@@ -126,12 +213,11 @@ const getEventsInRange = async (
   if (filters?.availability && filters.availability.length > 0) {
     userConditions.push(inArray(userEventsTable.availability, filters.availability));
   }
-
   if (filters && "isAllDay" in filters && typeof filters.isAllDay === "boolean") {
     userConditions.push(eq(userEventsTable.isAllDay, filters.isAllDay));
   }
 
-  const userEvents = await database
+  const userEvents: UserEventRow[] = await database
     .select({
       calendarId: userEventsTable.calendarId,
       description: userEventsTable.description,
@@ -145,16 +231,14 @@ const getEventsInRange = async (
     .where(and(...userConditions))
     .orderBy(asc(userEventsTable.startTime));
 
-  const allEvents = [...syncedEvents, ...userEvents];
+  const allEvents: FlattenedEvent[] = [...syncedEvents, ...userEvents];
   allEvents.sort((left, right) => left.startTime.getTime() - right.startTime.getTime());
 
   return allEvents.map((event) => {
     const source = sourceMap.get(event.calendarId);
-
     if (!source) {
       throw new Error(`No source calendar found for event calendar ID: ${event.calendarId}`);
     }
-
     return {
       calendarId: event.calendarId,
       calendarName: source.name,
