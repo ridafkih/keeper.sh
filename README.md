@@ -186,13 +186,13 @@ The following environment variables are baked into the web image at **build time
 
 | Tag                        | Description                                                                                                                                              | Included Services                                                                        |
 | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `keeper-standalone:2.9`    | The "standalone" image is everything you need to get up and running with Keeper with as little configuration as possible.                                | `keeper-web`, `keeper-api`, `keeper-cron`, `keeper-worker`, `redis`, `postgresql`, `caddy` |
-| `keeper-services:2.9`      | If you'd like for the Redis & Database to exist outside of the container, you can use the "services" image to launch without them included in the image. | `keeper-web`, `keeper-api`, `keeper-cron`, `keeper-worker`                                 |
-| `keeper-web:2.9`           | An image containing the Vite SSR web interface.                                                                                                          | `keeper-web`                                                                              |
-| `keeper-api:2.9`           | An image containing the Bun API service.                                                                                                                 | `keeper-api`                                                                              |
-| `keeper-cron:2.9`          | An image containing the Bun cron service. Requires `keeper-worker` for destination syncing.                                                              | `keeper-cron`                                                                             |
-| `keeper-worker:2.9`        | An image containing the BullMQ worker that processes calendar sync jobs enqueued by `keeper-cron`.                                                       | `keeper-worker`                                                                           |
-| `keeper-mcp:2.9`           | An image containing the MCP server for AI agent calendar access. Optional — only needed if using MCP clients.                                            | `keeper-mcp`                                                                              |
+| `keeper-standalone:2.10`    | The "standalone" image is everything you need to get up and running with Keeper with as little configuration as possible.                                | `keeper-web`, `keeper-api`, `keeper-cron`, `keeper-worker`, `redis`, `postgresql`, `caddy` |
+| `keeper-services:2.10`      | If you'd like for the Redis & Database to exist outside of the container, you can use the "services" image to launch without them included in the image. | `keeper-web`, `keeper-api`, `keeper-cron`, `keeper-worker`                                 |
+| `keeper-web:2.10`           | An image containing the Vite SSR web interface.                                                                                                          | `keeper-web`                                                                              |
+| `keeper-api:2.10`           | An image containing the Bun API service.                                                                                                                 | `keeper-api`                                                                              |
+| `keeper-cron:2.10`          | An image containing the Bun cron service. Requires `keeper-worker` for destination syncing.                                                              | `keeper-cron`                                                                             |
+| `keeper-worker:2.10`        | An image containing the BullMQ worker that processes calendar sync jobs enqueued by `keeper-cron`.                                                       | `keeper-worker`                                                                           |
+| `keeper-mcp:2.10`           | An image containing the MCP server for AI agent calendar access. Optional — only needed if using MCP clients.                                            | `keeper-mcp`                                                                              |
 
 > [!TIP]
 >
@@ -224,7 +224,7 @@ Microsoft does not appear to do documentation well, the best I could find for no
 
 ## Standalone Container
 
-While you'd typically want to run containers granularly, if you just want to get up and running, a convenience image `keeper-standalone:2.9` has been provided. This container contains the `cron`, `worker`, `web`, `api` services as well as a configured `redis`, `database`, and `caddy` instance that puts everything behind the same port. While this is the easiest way to spin up Keeper, it is not recognized as best-practice.
+While you'd typically want to run containers granularly, if you just want to get up and running, a convenience image `keeper-standalone:2.10` has been provided. This container contains the `cron`, `worker`, `web`, `api` services as well as a configured `redis`, `database`, and `caddy` instance that puts everything behind the same port. While this is the easiest way to spin up Keeper, it is not recognized as best-practice.
 
 ### Generate `keeper-standalone` Environment Variables
 
@@ -269,7 +269,7 @@ docker run -d \
   -p 80:80 \
   -v keeper-data:/var/lib/postgresql/data \
   --env-file .env \
-  ghcr.io/ridafkih/keeper-standalone:2.9
+  ghcr.io/ridafkih/keeper-standalone:2.10
 ```
 
 ### Run `keeper-standalone` with Docker Compose
@@ -279,7 +279,7 @@ If you'd prefer to use a `compose.yaml` file, the following is an example. Remem
 ```yaml
 services:
   keeper:
-    image: ghcr.io/ridafkih/keeper-standalone:2.9
+    image: ghcr.io/ridafkih/keeper-standalone:2.10
     ports:
       - "80:80"
     volumes:
