@@ -42,10 +42,8 @@ describe("parseIcsCalendarLenient", () => {
       throw new TypeError("Expected all-day event");
     }
     expect(allDay.isAllDay).toBe(true);
-    expect(Number.isNaN(allDay.startTime.getTime())).toBe(false);
-    expect(Number.isNaN(allDay.endTime.getTime())).toBe(false);
-    expect(allDay.startTime.toISOString().startsWith("2026-05-15")).toBe(true);
-    expect(allDay.endTime.toISOString().startsWith("2026-05-18")).toBe(true);
+    expect(allDay.startTime.getTime()).toBe(Date.UTC(2026, 4, 15));
+    expect(allDay.endTime.getTime()).toBe(Date.UTC(2026, 4, 18));
 
     const timed = events.find((event) => event.uid === "timed-event");
     if (!timed) {

@@ -15,23 +15,53 @@ import type { IcsPatch } from "../utils/apply-patches";
  *
  * The fix only fires when the property has no parameters at all, so we never
  * overwrite an existing `TZID=...` or any other parameter the feed set.
+ *
+ * We also reject inputs whose digits don't form a real calendar date
+ * (`20261301`, `20260230`, `00000000`, ...). Without this guard, ts-ics's
+ * `new Date(Date.UTC(...))` would silently roll them over to plausible-looking
+ * but wrong dates — turning a previously-dropped event into a phantom event on
+ * the wrong day.
  */
 
-const BARE_DATE_VALUE_PATTERN = /^\d{8}$/;
+const BARE_DATE_VALUE_PATTERN = /^(\d{4})(\d{2})(\d{2})$/;
+
+const isRealCalendarDate = (year: number, month: number, day: number): boolean => {
+  if (month < 1 || month > 12 || day < 1) {
+    return false;
+  }
+  const utcMs = Date.UTC(year, month - 1, day);
+  const reconstructed = new Date(utcMs);
+  return (
+    reconstructed.getUTCFullYear() === year &&
+    reconstructed.getUTCMonth() === month - 1 &&
+    reconstructed.getUTCDate() === day
+  );
+};
 
 const coerceCompliantDate: IcsPatch = {
   coerce(params, value) {
     if (params.length > 0) {
       return null;
     }
-    if (!BARE_DATE_VALUE_PATTERN.test(value)) {
+    const match = BARE_DATE_VALUE_PATTERN.exec(value);
+    if (!match) {
+      return null;
+    }
+    const [, yearStr, monthStr, dayStr] = match;
+    if (
+      typeof yearStr !== "string" ||
+      typeof monthStr !== "string" ||
+      typeof dayStr !== "string"
+    ) {
+      return null;
+    }
+    if (!isRealCalendarDate(Number(yearStr), Number(monthStr), Number(dayStr))) {
       return null;
     }
     return { params: ";VALUE=DATE", value };
   },
   name: "coerce-compliant-date",
-  properties: ["DTSTART", "DTEND", "EXDATE", "RDATE"],
-  spec: "RFC 5545 §3.3.4 / §3.8.2.4 — DATE values require the VALUE=DATE parameter",
+  properties: ["DTSTART", "DTEND", "EXDATE"],
 };
 
 export { coerceCompliantDate };

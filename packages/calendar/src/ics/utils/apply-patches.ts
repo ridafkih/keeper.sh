@@ -16,7 +16,6 @@ interface IcsPatchCoercion {
 
 interface IcsPatch {
   readonly name: string;
-  readonly spec: string;
   readonly properties: readonly string[];
   coerce(params: string, value: string): IcsPatchCoercion | null;
 }
@@ -29,7 +28,7 @@ interface ParsedPropertyLine {
 
 const LINE_BREAK_PATTERN = /\r?\n/;
 const CONTINUATION_PATTERN = /^[ \t]/;
-const PROPERTY_LINE_PATTERN = /^([A-Z][A-Z0-9-]*)((?:;[^:]*)?):(.*)$/;
+const PROPERTY_LINE_PATTERN = /^([A-Za-z][A-Za-z0-9-]*)((?:;[^:]*)?):(.*)$/;
 
 const unfoldLines = (ics: string): string[] => {
   const unfolded: string[] = [];
@@ -53,7 +52,7 @@ const parsePropertyLine = (line: string): ParsedPropertyLine | null => {
   if (typeof property !== "string" || typeof params !== "string" || typeof value !== "string") {
     return null;
   }
-  return { params, property, value };
+  return { params, property: property.toUpperCase(), value };
 };
 
 const coercePropertyLine = (

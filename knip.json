@@ -10,7 +10,7 @@
     "applications/web/src/generated/**/*"
   ],
   "ignoreBinaries": [],
-  "ignoreDependencies": ["@keeper.sh/otelemetry"],
+  "ignoreDependencies": ["@keeper.sh/otelemetry", "@keeper.sh/fixtures"],
   "ignoreWorkspaces": ["packages/typescript-config"],
   "ignoreExportsUsedInFile": true,
   "workspaces": {

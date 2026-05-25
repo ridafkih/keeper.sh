@@ -8,7 +8,6 @@ const uppercaseSummary: IcsPatch = {
   },
   name: "uppercase-summary",
   properties: ["SUMMARY"],
-  spec: "test only",
 };
 
 const declareValueDate: IcsPatch = {
@@ -23,7 +22,6 @@ const declareValueDate: IcsPatch = {
   },
   name: "declare-value-date",
   properties: ["DTSTART", "DTEND"],
-  spec: "test only",
 };
 
 describe("applyIcsPatches", () => {
@@ -69,8 +67,7 @@ describe("applyIcsPatches", () => {
       },
       name: "append-sentinel",
       properties: ["SUMMARY"],
-      spec: "test only",
-    };
+        };
     const ics = ["BEGIN:VEVENT", "SUMMARY:hello", "END:VEVENT"].join("\r\n");
     const result = applyIcsPatches(ics, [uppercaseSummary, appendSentinel]);
     expect(result).toContain("SUMMARY:HELLO!");

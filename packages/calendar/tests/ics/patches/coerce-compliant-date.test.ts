@@ -2,12 +2,11 @@ import { describe, expect, it } from "vitest";
 import { coerceCompliantDate } from "../../../src/ics/patches/coerce-compliant-date";
 
 describe("coerceCompliantDate", () => {
-  it("targets the four date-typed properties", () => {
+  it("targets the date-typed properties whose VALUE=DATE shape downstream consumers read", () => {
     expect(coerceCompliantDate.properties).toEqual([
       "DTSTART",
       "DTEND",
       "EXDATE",
-      "RDATE",
     ]);
   });
 
@@ -33,5 +32,25 @@ describe("coerceCompliantDate", () => {
     expect(coerceCompliantDate.coerce("", "")).toBeNull();
     expect(coerceCompliantDate.coerce("", "1234567")).toBeNull();
     expect(coerceCompliantDate.coerce("", "123456789")).toBeNull();
+  });
+
+  it("rejects 8-digit strings whose components don't form a real calendar date", () => {
+    expect(coerceCompliantDate.coerce("", "20261301")).toBeNull();
+    expect(coerceCompliantDate.coerce("", "20260230")).toBeNull();
+    expect(coerceCompliantDate.coerce("", "20260000")).toBeNull();
+    expect(coerceCompliantDate.coerce("", "20260132")).toBeNull();
+    expect(coerceCompliantDate.coerce("", "00000000")).toBeNull();
+    expect(coerceCompliantDate.coerce("", "99999999")).toBeNull();
+  });
+
+  it("accepts edge-of-month dates that are real", () => {
+    expect(coerceCompliantDate.coerce("", "20240229")).toEqual({
+      params: ";VALUE=DATE",
+      value: "20240229",
+    });
+    expect(coerceCompliantDate.coerce("", "20260131")).toEqual({
+      params: ";VALUE=DATE",
+      value: "20260131",
+    });
   });
 });
