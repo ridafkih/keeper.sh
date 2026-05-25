@@ -245,8 +245,11 @@ describe("duplicate prevention with multi-VEVENT parsing", () => {
       startTime: event.startTime,
       endTime: event.endTime,
       availability: event.availability,
+      description: event.description,
       isAllDay: event.isAllDay,
+      location: event.location,
       sourceEventType: "default" as const,
+      title: event.title,
     }));
 
     const secondIngest = buildSourceEventsToAdd(existingAfterFirstIngest, sourceEvents);
@@ -347,8 +350,11 @@ describe("transition from old single-event to new multi-event parsing", () => {
       startTime: oldCodeResult.startTime,
       endTime: oldCodeResult.endTime,
       availability: oldCodeResult.availability,
+      description: oldCodeResult.description,
       isAllDay: oldCodeResult.isAllDay,
+      location: oldCodeResult.location,
       sourceEventType: "default" as const,
+      title: oldCodeResult.title,
     }];
 
     const newCodeResults = parseICalToRemoteEvents(ics);
@@ -389,8 +395,11 @@ describe("transition from old single-event to new multi-event parsing", () => {
       startTime: oldCodeResult.startTime,
       endTime: oldCodeResult.endTime,
       availability: oldCodeResult.availability,
+      description: oldCodeResult.description,
       isAllDay: oldCodeResult.isAllDay,
+      location: oldCodeResult.location,
       sourceEventType: "default" as const,
+      title: oldCodeResult.title,
     }];
 
     const newCodeResults = parseICalToRemoteEvents(ics);

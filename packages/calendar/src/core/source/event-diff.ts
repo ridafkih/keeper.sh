@@ -2,12 +2,15 @@ import type { SourceEvent } from "../types";
 
 interface ExistingSourceEventState {
   availability?: string | null;
+  description?: string | null;
   id: string;
   isAllDay?: boolean | null;
+  location?: string | null;
   sourceEventType?: string | null;
   sourceEventUid: string | null;
   startTime: Date;
   endTime: Date;
+  title?: string | null;
 }
 
 interface SourceEventDiffOptions {
@@ -30,18 +33,36 @@ const normalizeIdentityIsAllDay = (
   return String(isAllDay);
 };
 
+const normalizeIdentityContent = (value: string | null | undefined): string =>
+  value?.trim() ?? "";
+
+interface SourceEventIdentityInput {
+  sourceEventUid: string;
+  startTime: Date;
+  endTime: Date;
+  isAllDay?: boolean | null;
+  availability?: string | null;
+  sourceEventType?: string | null;
+  title?: string | null;
+  description?: string | null;
+  location?: string | null;
+}
+
 const buildSourceEventIdentityKey = (
-  sourceEventUid: string,
-  startTime: Date,
-  endTime: Date,
-  isAllDay?: boolean | null,
-  availability?: string | null,
-  sourceEventType?: string | null,
+  input: SourceEventIdentityInput,
   options: SourceEventIdentityOptions = {},
 ): string =>
-  `${sourceEventUid}|${startTime.toISOString()}|${endTime.toISOString()}|${
-    normalizeIdentityIsAllDay(isAllDay, options)
-  }|${availability ?? ""}|${sourceEventType ?? "default"}`;
+  [
+    input.sourceEventUid,
+    input.startTime.toISOString(),
+    input.endTime.toISOString(),
+    normalizeIdentityIsAllDay(input.isAllDay, options),
+    input.availability ?? "",
+    input.sourceEventType ?? "default",
+    normalizeIdentityContent(input.title),
+    normalizeIdentityContent(input.description),
+    normalizeIdentityContent(input.location),
+  ].join("|");
 
 const buildSourceEventStorageIdentityKey = (
   sourceEventUid: string,
@@ -77,12 +98,17 @@ const buildExistingEventIdentitySet = (
 
     identities.add(
       buildSourceEventIdentityKey(
-        existingEvent.sourceEventUid,
-        existingEvent.startTime,
-        existingEvent.endTime,
-        existingEvent.isAllDay,
-        existingEvent.availability,
-        existingEvent.sourceEventType,
+        {
+          availability: existingEvent.availability,
+          description: existingEvent.description,
+          endTime: existingEvent.endTime,
+          isAllDay: existingEvent.isAllDay,
+          location: existingEvent.location,
+          sourceEventType: existingEvent.sourceEventType,
+          sourceEventUid: existingEvent.sourceEventUid,
+          startTime: existingEvent.startTime,
+          title: existingEvent.title,
+        },
         options,
       ),
     );
@@ -105,12 +131,17 @@ const buildSourceEventsToAdd = (
     (incomingEvent) =>
       !existingIdentities.has(
         buildSourceEventIdentityKey(
-          incomingEvent.uid,
-          incomingEvent.startTime,
-          incomingEvent.endTime,
-          incomingEvent.isAllDay,
-          incomingEvent.availability,
-          incomingEvent.sourceEventType,
+          {
+            availability: incomingEvent.availability,
+            description: incomingEvent.description,
+            endTime: incomingEvent.endTime,
+            isAllDay: incomingEvent.isAllDay,
+            location: incomingEvent.location,
+            sourceEventType: incomingEvent.sourceEventType,
+            sourceEventUid: incomingEvent.uid,
+            startTime: incomingEvent.startTime,
+            title: incomingEvent.title,
+          },
           { normalizeMissingMetadata: options.isDeltaSync ?? false },
         ),
       ),

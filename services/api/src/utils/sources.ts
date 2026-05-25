@@ -84,12 +84,15 @@ const ingestIcsSource = async (source: Source): Promise<void> => {
       database
         .select({
           availability: eventStatesTable.availability,
+          description: eventStatesTable.description,
           endTime: eventStatesTable.endTime,
           id: eventStatesTable.id,
           isAllDay: eventStatesTable.isAllDay,
+          location: eventStatesTable.location,
           sourceEventType: eventStatesTable.sourceEventType,
           sourceEventUid: eventStatesTable.sourceEventUid,
           startTime: eventStatesTable.startTime,
+          title: eventStatesTable.title,
         })
         .from(eventStatesTable)
         .where(eq(eventStatesTable.calendarId, source.id)),

@@ -185,6 +185,76 @@ describe("source event diff", () => {
     expect(idsToRemove).toEqual([]);
   });
 
+  it("re-adds events when the description changes so the upsert updates content", () => {
+    const existingEvents = [
+      createExistingEvent({
+        description: "Original notes",
+        id: "existing-desc",
+        sourceEventUid: "desc-uid",
+      }),
+    ];
+
+    const incomingEvents = [
+      createIncomingEvent({
+        description: "Updated notes",
+        uid: "desc-uid",
+      }),
+    ];
+
+    const eventsToAdd = buildSourceEventsToAdd(existingEvents, incomingEvents);
+    const idsToRemove = buildSourceEventStateIdsToRemove(existingEvents, incomingEvents);
+
+    expect(eventsToAdd).toHaveLength(1);
+    expect(eventsToAdd[0]?.description).toBe("Updated notes");
+    expect(idsToRemove).toEqual([]);
+  });
+
+  it("re-adds events when the title or location changes", () => {
+    const existingEvents = [
+      createExistingEvent({
+        id: "existing-content",
+        location: "Room A",
+        sourceEventUid: "content-uid",
+        title: "Sync",
+      }),
+    ];
+
+    const incomingEvents = [
+      createIncomingEvent({
+        location: "Room B",
+        title: "Sync (rescheduled)",
+        uid: "content-uid",
+      }),
+    ];
+
+    const eventsToAdd = buildSourceEventsToAdd(existingEvents, incomingEvents);
+
+    expect(eventsToAdd).toHaveLength(1);
+    expect(eventsToAdd[0]?.title).toBe("Sync (rescheduled)");
+    expect(eventsToAdd[0]?.location).toBe("Room B");
+  });
+
+  it("treats whitespace-only description differences as identical", () => {
+    const existingEvents = [
+      createExistingEvent({
+        description: "Notes",
+        id: "existing-trim",
+        sourceEventUid: "trim-uid",
+      }),
+    ];
+
+    const incomingEvents = [
+      createIncomingEvent({
+        description: "  Notes  ",
+        uid: "trim-uid",
+      }),
+    ];
+
+    const eventsToAdd = buildSourceEventsToAdd(existingEvents, incomingEvents);
+
+    expect(eventsToAdd).toEqual([]);
+  });
+
   it("deduplicates incoming events that share the same storage identity", () => {
     const incomingEvents = [
       createIncomingEvent({
