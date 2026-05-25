@@ -1,9 +1,10 @@
 import type { SourceEvent } from "../../core/types";
 import type { FetchEventsResult } from "../../core/sync-engine/ingest";
 import type { SafeFetchOptions } from "../../utils/safe-fetch";
-import { pullRemoteCalendar } from "./pull-remote-calendar";
-import { parseIcsCalendar } from "./parse-ics-calendar";
+import { coerceCompliantDate } from "../patches/coerce-compliant-date";
+import { parseIcsCalendarLenient } from "./lenient-parser";
 import { parseIcsEvents } from "./parse-ics-events";
+import { pullRemoteCalendar } from "./pull-remote-calendar";
 import { createSnapshot } from "./create-snapshot";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
@@ -18,10 +19,16 @@ interface IcsSourceFetcher {
   fetchEvents: () => Promise<FetchEventsResult>;
 }
 
-const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetcher => {
+const createIcsSourceFetcher = (
+  config: IcsSourceFetcherConfig,
+): IcsSourceFetcher => {
   const fetchRemoteIcal = async (): Promise<string | null> => {
     try {
-      const { ical } = await pullRemoteCalendar("ical", config.url, config.safeFetchOptions);
+      const { ical } = await pullRemoteCalendar(
+        "ical",
+        config.url,
+        config.safeFetchOptions,
+      );
       return ical;
     } catch {
       return null;
@@ -35,13 +42,21 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
       return { events: [] };
     }
 
-    const { changed } = await createSnapshot(config.database, config.calendarId, ical);
+    const { changed } = await createSnapshot(
+      config.database,
+      config.calendarId,
+      ical,
+    );
 
     if (!changed) {
       return { events: [], unchanged: true };
     }
 
-    const calendar = parseIcsCalendar({ icsString: ical });
+    const calendar = parseIcsCalendarLenient({
+      icsString: ical,
+      patches: [coerceCompliantDate],
+    });
+
     const parsed = parseIcsEvents(calendar);
 
     const events: SourceEvent[] = parsed.map((event) => ({
