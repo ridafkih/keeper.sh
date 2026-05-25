@@ -9,6 +9,9 @@ interface ExistingEventState {
   availability: string | null;
   isAllDay: boolean | null;
   sourceEventType: string | null;
+  title: string | null;
+  description: string | null;
+  location: string | null;
 }
 
 interface FetchEventsResult {
