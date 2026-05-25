@@ -6,7 +6,6 @@ const uppercaseSummary: IcsPatch = {
   coerce(params, value) {
     return { params, value: value.toUpperCase() };
   },
-  name: "uppercase-summary",
   properties: ["SUMMARY"],
 };
 
@@ -20,7 +19,6 @@ const declareValueDate: IcsPatch = {
     }
     return { params: ";VALUE=DATE", value };
   },
-  name: "declare-value-date",
   properties: ["DTSTART", "DTEND"],
 };
 
@@ -53,6 +51,11 @@ describe("applyIcsPatches", () => {
     expect(result).toContain("SUMMARY:HELLO WORLD");
   });
 
+  it("preserves the folded form of properties no patch modifies", () => {
+    const folded = ["BEGIN:VEVENT", "DESCRIPTION:hello", "  world", "END:VEVENT"].join("\r\n");
+    expect(applyIcsPatches(folded, [uppercaseSummary])).toBe(folded);
+  });
+
   it("accepts LF line endings and emits CRLF", () => {
     const ics = "BEGIN:VEVENT\nSUMMARY:hello\nEND:VEVENT";
     expect(applyIcsPatches(ics, [uppercaseSummary])).toBe(
@@ -60,16 +63,35 @@ describe("applyIcsPatches", () => {
     );
   });
 
+  it("returns blank lines and lines without a colon verbatim", () => {
+    const ics = ["BEGIN:VEVENT", "", "garbage-without-a-colon", "SUMMARY:hello", "END:VEVENT"].join("\r\n");
+    const result = applyIcsPatches(ics, [uppercaseSummary]);
+    expect(result).toContain("\r\n\r\n");
+    expect(result).toContain("garbage-without-a-colon");
+    expect(result).toContain("SUMMARY:HELLO");
+  });
+
   it("chains multiple patches that target the same property", () => {
     const appendSentinel: IcsPatch = {
       coerce(params, value) {
         return { params, value: `${value}!` };
       },
-      name: "append-sentinel",
       properties: ["SUMMARY"],
-        };
+    };
     const ics = ["BEGIN:VEVENT", "SUMMARY:hello", "END:VEVENT"].join("\r\n");
     const result = applyIcsPatches(ics, [uppercaseSummary, appendSentinel]);
     expect(result).toContain("SUMMARY:HELLO!");
+  });
+
+  it("preserves an earlier patch's rewrite when a later patch returns null", () => {
+    const optOut: IcsPatch = {
+      coerce() {
+        return null;
+      },
+      properties: ["SUMMARY"],
+    };
+    const ics = ["BEGIN:VEVENT", "SUMMARY:hello", "END:VEVENT"].join("\r\n");
+    const result = applyIcsPatches(ics, [uppercaseSummary, optOut]);
+    expect(result).toContain("SUMMARY:HELLO");
   });
 });

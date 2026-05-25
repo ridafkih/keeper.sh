@@ -6,7 +6,3 @@ export { diffEvents } from "./utils/diff-events";
 export { createSnapshot } from "./utils/create-snapshot";
 export { createIcsSourceFetcher } from "./utils/fetch-adapter";
 export type { IcsSourceFetcherConfig, IcsSourceFetcher } from "./utils/fetch-adapter";
-export { parseIcsCalendarLenient } from "./utils/lenient-parser";
-export { applyIcsPatches } from "./utils/apply-patches";
-export type { IcsPatch, IcsPatchCoercion } from "./utils/apply-patches";
-export { coerceCompliantDate } from "./patches/coerce-compliant-date";

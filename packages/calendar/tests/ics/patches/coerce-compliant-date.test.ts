@@ -53,4 +53,19 @@ describe("coerceCompliantDate", () => {
       value: "20260131",
     });
   });
+
+  it("rewrites a comma-separated list of bare dates (RFC 5545 §3.8.5.1 EXDATE shape)", () => {
+    expect(coerceCompliantDate.coerce("", "20260515,20260522,20260529")).toEqual({
+      params: ";VALUE=DATE",
+      value: "20260515,20260522,20260529",
+    });
+  });
+
+  it("rejects mixed lists where any token is not a real bare date", () => {
+    expect(coerceCompliantDate.coerce("", "20260515,20260515T090000Z")).toBeNull();
+    expect(coerceCompliantDate.coerce("", "20260515,not-a-date")).toBeNull();
+    expect(coerceCompliantDate.coerce("", "20260515,20260230")).toBeNull();
+    expect(coerceCompliantDate.coerce("", "20260515,")).toBeNull();
+    expect(coerceCompliantDate.coerce("", ",20260515")).toBeNull();
+  });
 });

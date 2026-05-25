@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { IcsExceptionDates } from "ts-ics";
 import { parseIcsCalendarLenient } from "../../../src/ics/utils/lenient-parser";
 import { coerceCompliantDate } from "../../../src/ics/patches/coerce-compliant-date";
 import { parseIcsEvents } from "../../../src/ics/utils/parse-ics-events";
@@ -52,6 +53,41 @@ describe("parseIcsCalendarLenient", () => {
     expect(timed.isAllDay).toBe(false);
     expect(timed.startTime.toISOString()).toBe("2026-04-11T18:30:00.000Z");
     expect(timed.endTime.toISOString()).toBe("2026-04-11T20:00:00.000Z");
+  });
+
+  it("recovers a recurring all-day event whose EXDATE list omits VALUE=DATE", () => {
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Synthetic Test Provider//EN",
+      "BEGIN:VEVENT",
+      "UID:recurring-all-day",
+      "DTSTART:20260601",
+      "DTEND:20260602",
+      "SUMMARY:Weekly Stand-up",
+      "RRULE:FREQ=WEEKLY;COUNT=4",
+      "EXDATE:20260615,20260622",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+
+    const calendar = parseIcsCalendarLenient({
+      icsString: ics,
+      patches: [coerceCompliantDate],
+    });
+    const events = parseIcsEvents(calendar);
+
+    expect(events).toHaveLength(1);
+    const [event] = events;
+    if (!event) {
+      throw new TypeError("Expected recurring event");
+    }
+    expect(event.isAllDay).toBe(true);
+    expect(event.exceptionDates).toBeDefined();
+    const exceptionDates = (event.exceptionDates ?? []) as IcsExceptionDates;
+    const exceptionTimes = exceptionDates.map((entry) => entry.date.getTime());
+    expect(exceptionTimes).toContain(Date.UTC(2026, 5, 15));
+    expect(exceptionTimes).toContain(Date.UTC(2026, 5, 22));
   });
 
   it("leaves spec-compliant feeds untouched", () => {
