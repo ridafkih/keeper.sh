@@ -82,49 +82,34 @@ const groupEventsBySourceUid = (events: CalendarEvent[]): EventGroup[] => {
 
 const buildBaseIcsEvent = (event: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => {
   const isAllDay = resolveIsAllDayEvent(toAllDayShape(event));
-  const icsEvent: IcsEvent = {
+  return {
     end: { date: event.endTime, ...(isAllDay && { type: "DATE" as const }) },
     stamp: { date: new Date() },
     start: { date: event.startTime, ...(isAllDay && { type: "DATE" as const }) },
     summary: resolveEventSummary(event, settings),
     uid,
+    ...(settings.includeEventDescription && event.description && { description: event.description }),
+    ...(settings.includeEventLocation && event.location && { location: event.location }),
   };
-
-  if (settings.includeEventDescription && event.description) {
-    icsEvent.description = event.description;
-  }
-
-  if (settings.includeEventLocation && event.location) {
-    icsEvent.location = event.location;
-  }
-
-  return icsEvent;
 };
 
-const applyMasterRecurrence = (ics: IcsEvent, master: CalendarEvent): IcsEvent => {
-  if (master.recurrenceRule) {
-    ics.recurrenceRule = master.recurrenceRule;
-  }
-  if (master.exceptionDates && master.exceptionDates.length > 0) {
-    ics.exceptionDates = master.exceptionDates;
-  }
-  return ics;
-};
+const buildMasterIcsEvent = (master: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => ({
+  ...buildBaseIcsEvent(master, uid, settings),
+  ...(master.recurrenceRule && { recurrenceRule: master.recurrenceRule }),
+  ...(master.exceptionDates?.length && { exceptionDates: master.exceptionDates }),
+});
 
-const applyOverrideRecurrence = (ics: IcsEvent, override: CalendarEvent): IcsEvent => {
-  if (override.recurrenceId) {
-    ics.recurrenceId = { value: { date: override.recurrenceId } };
-  }
-  return ics;
-};
+const buildOverrideIcsEvent = (override: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => ({
+  ...buildBaseIcsEvent(override, uid, settings),
+  ...(override.recurrenceId && { recurrenceId: { value: { date: override.recurrenceId } } }),
+});
 
 const buildIcsEventsForGroup = (group: EventGroup, settings: FeedSettings): IcsEvent[] => {
   const uid = `${group.master.id}${KEEPER_EVENT_SUFFIX}`;
-  const master = applyMasterRecurrence(buildBaseIcsEvent(group.master, uid, settings), group.master);
-  const overrides = group.overrides.map((override) =>
-    applyOverrideRecurrence(buildBaseIcsEvent(override, uid, settings), override),
-  );
-  return [master, ...overrides];
+  return [
+    buildMasterIcsEvent(group.master, uid, settings),
+    ...group.overrides.map((override) => buildOverrideIcsEvent(override, uid, settings)),
+  ];
 };
 
 const shouldIncludeEvent = (event: CalendarEvent, settings: FeedSettings): boolean => {
