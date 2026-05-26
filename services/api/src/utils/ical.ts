@@ -6,12 +6,12 @@ import { database } from "@/context";
 import { formatEventsAsIcal } from "./ical-format";
 import type { CalendarEvent, FeedSettings } from "./ical-format";
 
-const parseJsonField = <T>(value: string | null): T | null => {
+const parseJsonField = <TValue>(value: string | null): TValue | null => {
   if (!value) {
     return null;
   }
   try {
-    return JSON.parse(value) as T;
+    return JSON.parse(value) as TValue;
   } catch {
     return null;
   }
@@ -39,8 +39,7 @@ const parseRecurrenceRule = (value: string | null): IcsRecurrenceRule | null => 
   if (!parsed) {
     return null;
   }
-  // ts-ics expects Date objects on the in-memory shape (e.g. UNTIL is a {date: Date}).
-  // JSON.parse leaves these as ISO strings, so revive them before re-serializing.
+  // Restore Date instances stripped by JSON.parse — ts-ics requires Date objects on the in-memory shape.
   return reviveDates(parsed) as IcsRecurrenceRule;
 };
 

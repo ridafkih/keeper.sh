@@ -165,10 +165,11 @@ describe("resolveEventSummary", () => {
 });
 
 describe("recurring events", () => {
-  // Regression: previously the formatter dropped recurrenceRule and emitted
-  // each recurring event as a single one-off VEVENT (matching the master's
-  // DTSTART only). Calendar clients would then show one occurrence in the
-  // distant past instead of the expected weekly/yearly/etc. recurrences.
+  /*
+   * Regression: previously the formatter dropped recurrenceRule and emitted each recurring event
+   * as a single one-off VEVENT (matching the master's DTSTART only). Calendar clients would then
+   * show one occurrence in the distant past instead of the expected weekly/yearly/etc. recurrences.
+   */
   it("emits RRULE for events with a recurrenceRule", () => {
     const ics = formatEventsAsIcal(
       [makeEvent({
