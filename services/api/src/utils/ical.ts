@@ -7,37 +7,34 @@ import { database } from "@/context";
 import { formatEventsAsIcal } from "./ical-format";
 import type { CalendarEvent, FeedSettings } from "./ical-format";
 
-const parseStoredJson = (value: string | null): unknown => {
-  if (!value) {
-    return null;
-  }
+const parseStoredJson = (value: string, field: string, eventId: string): unknown => {
   try {
     return JSON.parse(value);
-  } catch {
-    return null;
+  } catch (error) {
+    throw new Error(`Failed to JSON.parse ${field} for event ${eventId}`, { cause: error });
   }
 };
 
-const parseRecurrenceRule = (value: string | null) => {
-  const parsed = parseStoredJson(value);
-  if (parsed === null) {
+const parseRecurrenceRule = (value: string | null, eventId: string) => {
+  if (value === null) {
     return null;
   }
+  const parsed = parseStoredJson(value, "recurrenceRule", eventId);
   const result = icsRecurrenceRuleSchema(parsed);
   if (result instanceof type.errors) {
-    return null;
+    throw new TypeError(`Invalid recurrenceRule shape for event ${eventId}: ${result.summary}`);
   }
   return result;
 };
 
-const parseExceptionDates = (value: string | null) => {
-  const parsed = parseStoredJson(value);
-  if (parsed === null) {
+const parseExceptionDates = (value: string | null, eventId: string) => {
+  if (value === null) {
     return null;
   }
+  const parsed = parseStoredJson(value, "exceptionDates", eventId);
   const result = icsExceptionDatesSchema(parsed);
   if (result instanceof type.errors) {
-    return null;
+    throw new TypeError(`Invalid exceptionDates shape for event ${eventId}: ${result.summary}`);
   }
   return result;
 };
@@ -119,8 +116,8 @@ const generateUserCalendar = async (identifier: string): Promise<string | null> 
 
   const events: CalendarEvent[] = rows.map((row) => ({
     ...row,
-    recurrenceRule: parseRecurrenceRule(row.recurrenceRule),
-    exceptionDates: parseExceptionDates(row.exceptionDates),
+    recurrenceRule: parseRecurrenceRule(row.recurrenceRule, row.id),
+    exceptionDates: parseExceptionDates(row.exceptionDates, row.id),
   }));
 
   return formatEventsAsIcal(events, settings);
