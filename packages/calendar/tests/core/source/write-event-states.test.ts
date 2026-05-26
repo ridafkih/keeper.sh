@@ -79,6 +79,7 @@ describe("insertEventStatesWithConflictResolution", () => {
       "exceptionDates",
       "isAllDay",
       "location",
+      "recurrenceId",
       "recurrenceRule",
       "sourceEventType",
       "startTimeZone",

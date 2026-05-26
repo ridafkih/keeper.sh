@@ -81,7 +81,6 @@ interface ParsedCalendarEvent {
   recurrenceRule?: object;
   exceptionDates?: object;
   recurrenceId?: Date;
-  recurrenceId?: Date;
 }
 
 const mapAvailability = (transparency: "TRANSPARENT" | "OPAQUE" | undefined) => {

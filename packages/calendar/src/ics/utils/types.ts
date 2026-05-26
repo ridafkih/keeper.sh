@@ -10,7 +10,6 @@ interface EventTimeSlot {
   recurrenceRule?: object;
   exceptionDates?: object;
   recurrenceId?: Date;
-  recurrenceId?: Date;
   title?: string;
   description?: string;
   location?: string;

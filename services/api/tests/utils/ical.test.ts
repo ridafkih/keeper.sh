@@ -211,17 +211,18 @@ describe("recurring events", () => {
     expect(ics).not.toContain("EXDATE");
   });
 
-  // Regression: when a recurring event has modified instances (e.g. an Outlook
-  // weekly meeting where one occurrence is moved to a different time), each
-  // override arrives as a VEVENT with the same UID as the master plus a
-  // RECURRENCE-ID pointing at the occurrence it replaces. Previously each
-  // override landed in event_states as its own row but its RECURRENCE-ID was
-  // discarded, and the feed emitted every row with its own UID. Calendar
-  // clients then showed BOTH the master's RRULE-expanded occurrence AND the
-  // override as a separate event — visible duplicate.
-  //
-  // Now: group rows by sourceEventUid, emit the master with its own UID, and
-  // emit each override under the master's UID with RECURRENCE-ID linking back.
+  /*
+   * Regression: when a recurring event has modified instances (e.g. an Outlook weekly meeting
+   * where one occurrence is moved to a different time), each override arrives as a VEVENT with
+   * the same UID as the master plus a RECURRENCE-ID pointing at the occurrence it replaces.
+   * Previously each override landed in event_states as its own row but its RECURRENCE-ID was
+   * discarded, and the feed emitted every row with its own UID. Calendar clients then showed
+   * BOTH the master's RRULE-expanded occurrence AND the override as a separate event — visible
+   * duplicate.
+   *
+   * Now: group rows by sourceEventUid, emit the master with its own UID, and emit each override
+   * under the master's UID with RECURRENCE-ID linking back.
+   */
   it("groups master + overrides under a single UID with RECURRENCE-ID", () => {
     const sourceUid = "outlook-meeting-123";
     const ics = formatEventsAsIcal(
@@ -246,7 +247,7 @@ describe("recurring events", () => {
 
     // Master is emitted with its own UID and RRULE.
     expect(ics).toContain("UID:master-id@keeper.sh");
-    expect(ics).toContain("RRULE:FREQ=WEEKLY");
+    expect(ics).toMatch(/RRULE:[^\n]*FREQ=WEEKLY/);
 
     // Override reuses the master's UID and carries RECURRENCE-ID.
     expect(ics).toContain("RECURRENCE-ID");
