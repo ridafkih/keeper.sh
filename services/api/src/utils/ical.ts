@@ -1,54 +1,45 @@
 import { calendarsTable, eventStatesTable, icalFeedSettingsTable } from "@keeper.sh/database/schema";
+import { icsExceptionDatesSchema, icsRecurrenceRuleSchema } from "@keeper.sh/data-schemas";
 import { and, asc, eq, inArray, ne, or, isNull } from "drizzle-orm";
-import type { IcsDateObject, IcsRecurrenceRule } from "ts-ics";
+import { type } from "arktype";
 import { resolveUserIdentifier } from "./user";
 import { database } from "@/context";
 import { formatEventsAsIcal } from "./ical-format";
 import type { CalendarEvent, FeedSettings } from "./ical-format";
 
-const parseJsonField = <TValue>(value: string | null): TValue | null => {
+const parseStoredJson = (value: string | null): unknown => {
   if (!value) {
     return null;
   }
   try {
-    return JSON.parse(value) as TValue;
+    return JSON.parse(value);
   } catch {
     return null;
   }
 };
 
-const reviveDates = (value: unknown): unknown => {
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)) {
-    return new Date(value);
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => reviveDates(item));
-  }
-  if (value && typeof value === "object") {
-    const result: Record<string, unknown> = {};
-    for (const [key, val] of Object.entries(value)) {
-      result[key] = reviveDates(val);
-    }
-    return result;
-  }
-  return value;
-};
-
-const parseRecurrenceRule = (value: string | null): IcsRecurrenceRule | null => {
-  const parsed = parseJsonField<IcsRecurrenceRule>(value);
-  if (!parsed) {
+const parseRecurrenceRule = (value: string | null) => {
+  const parsed = parseStoredJson(value);
+  if (parsed === null) {
     return null;
   }
-  // Restore Date instances stripped by JSON.parse — ts-ics requires Date objects on the in-memory shape.
-  return reviveDates(parsed) as IcsRecurrenceRule;
-};
-
-const parseExceptionDates = (value: string | null): IcsDateObject[] | null => {
-  const parsed = parseJsonField<IcsDateObject[]>(value);
-  if (!parsed) {
+  const result = icsRecurrenceRuleSchema(parsed);
+  if (result instanceof type.errors) {
     return null;
   }
-  return reviveDates(parsed) as IcsDateObject[];
+  return result;
+};
+
+const parseExceptionDates = (value: string | null) => {
+  const parsed = parseStoredJson(value);
+  if (parsed === null) {
+    return null;
+  }
+  const result = icsExceptionDatesSchema(parsed);
+  if (result instanceof type.errors) {
+    return null;
+  }
+  return result;
 };
 
 const DEFAULT_FEED_SETTINGS: FeedSettings = {
