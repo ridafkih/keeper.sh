@@ -1,6 +1,7 @@
 import { createSafeFetch } from "../../utils/safe-fetch";
 import type { SafeFetchOptions } from "../../utils/safe-fetch";
-import { parseIcsCalendar } from "./parse-ics-calendar";
+import { coerceCompliantDate } from "../patches/coerce-compliant-date";
+import { parseIcsCalendarLenient } from "./lenient-parser";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 
 const normalizeCalendarUrl = (url: string): string => {
@@ -79,7 +80,7 @@ const fetchRemoteText = async (url: string, options?: SafeFetchOptions): Promise
   return response.text();
 };
 
-type ParsedCalendarResult = ReturnType<typeof parseIcsCalendar>;
+type ParsedCalendarResult = ReturnType<typeof parseIcsCalendarLenient>;
 
 type OutputICal = "ical" | ["ical"];
 type OutputJSON = "json" | ["json"];
@@ -119,7 +120,7 @@ async function pullRemoteCalendar(
   const outputs = normalizeOutputToArray(output);
   const normalizedUrl = normalizeCalendarUrl(url);
   const ical = await fetchRemoteText(normalizedUrl, options);
-  const json = parseIcsCalendar({ icsString: ical });
+  const json = parseIcsCalendarLenient({ icsString: ical, patches: [coerceCompliantDate] });
 
   if (!json.version || !json.prodId) {
     throw new CalendarFetchError(
