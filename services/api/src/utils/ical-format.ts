@@ -47,47 +47,37 @@ const resolveEventSummary = (event: CalendarEvent, settings: FeedSettings): stri
   });
 };
 
-/**
- * Group rows by sourceEventUid so we can emit a recurring master with its
- * modified-occurrence overrides under a single UID. Within a group, the master
- * is the row with `recurrenceRule != null` and `recurrenceId == null`; the rest
- * are overrides that need `RECURRENCE-ID` linking back to the master.
- *
- * Returns groups with the master at index 0 (or the only/first row if there is
- * no clear master). Events without a sourceEventUid can't be reliably linked
- * and are returned as singleton groups.
- */
-const groupRecurringEvents = (events: CalendarEvent[]): CalendarEvent[][] => {
-  const groups = new Map<string, CalendarEvent[]>();
-  const singletons: CalendarEvent[][] = [];
+interface EventGroup {
+  master: CalendarEvent;
+  overrides: CalendarEvent[];
+}
+
+const isRecurringMaster = (event: CalendarEvent): boolean =>
+  event.recurrenceRule !== null && event.recurrenceId === null;
+
+const groupEventsBySourceUid = (events: CalendarEvent[]): EventGroup[] => {
+  const groups = new Map<string, EventGroup>();
+  const ungrouped: EventGroup[] = [];
 
   for (const event of events) {
     if (!event.sourceEventUid) {
-      singletons.push([event]);
+      ungrouped.push({ master: event, overrides: [] });
       continue;
     }
     const existing = groups.get(event.sourceEventUid);
-    if (existing) {
-      existing.push(event);
+    if (!existing) {
+      groups.set(event.sourceEventUid, { master: event, overrides: [] });
+      continue;
+    }
+    if (isRecurringMaster(event) && !isRecurringMaster(existing.master)) {
+      existing.overrides.push(existing.master);
+      existing.master = event;
     } else {
-      groups.set(event.sourceEventUid, [event]);
+      existing.overrides.push(event);
     }
   }
 
-  const result: CalendarEvent[][] = [];
-  for (const group of groups.values()) {
-    if (group.length === 1) {
-      result.push(group);
-      continue;
-    }
-    const masterIdx = group.findIndex((e) => e.recurrenceRule !== null && e.recurrenceId === null);
-    if (masterIdx > 0) {
-      const [master] = group.splice(masterIdx, 1);
-      group.unshift(master);
-    }
-    result.push(group);
-  }
-  return [...result, ...singletons];
+  return [...groups.values(), ...ungrouped];
 };
 
 const buildBaseIcsEvent = (event: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => {
@@ -111,40 +101,43 @@ const buildBaseIcsEvent = (event: CalendarEvent, uid: string, settings: FeedSett
   return icsEvent;
 };
 
-const formatEventsAsIcal = (events: CalendarEvent[], settings: FeedSettings): string => {
-  const filteredEvents = events.filter((event) => {
-    if (!settings.excludeAllDayEvents) {
-      return true;
-    }
-    return !resolveIsAllDayEvent(toAllDayShape(event));
-  });
-
-  const icsEvents: IcsEvent[] = [];
-
-  for (const group of groupRecurringEvents(filteredEvents)) {
-    const master = group[0]!;
-    const uid = `${master.id}${KEEPER_EVENT_SUFFIX}`;
-
-    for (const event of group) {
-      // Overrides reuse the master's UID; the master uses its own.
-      const ics = buildBaseIcsEvent(event, uid, settings);
-
-      if (event !== master && event.recurrenceId) {
-        // ts-ics IcsRecurrenceId shape: { value: { date: Date } }.
-        ics.recurrenceId = { value: { date: event.recurrenceId } };
-      }
-
-      // RRULE + EXDATE only belong on the master itself, not on overrides.
-      if (event.recurrenceRule && !event.recurrenceId) {
-        ics.recurrenceRule = event.recurrenceRule;
-      }
-      if (event.exceptionDates && event.exceptionDates.length > 0 && !event.recurrenceId) {
-        ics.exceptionDates = event.exceptionDates;
-      }
-
-      icsEvents.push(ics);
-    }
+const applyMasterRecurrence = (ics: IcsEvent, master: CalendarEvent): IcsEvent => {
+  if (master.recurrenceRule) {
+    ics.recurrenceRule = master.recurrenceRule;
   }
+  if (master.exceptionDates && master.exceptionDates.length > 0) {
+    ics.exceptionDates = master.exceptionDates;
+  }
+  return ics;
+};
+
+const applyOverrideRecurrence = (ics: IcsEvent, override: CalendarEvent): IcsEvent => {
+  if (override.recurrenceId) {
+    ics.recurrenceId = { value: { date: override.recurrenceId } };
+  }
+  return ics;
+};
+
+const buildIcsEventsForGroup = (group: EventGroup, settings: FeedSettings): IcsEvent[] => {
+  const uid = `${group.master.id}${KEEPER_EVENT_SUFFIX}`;
+  const master = applyMasterRecurrence(buildBaseIcsEvent(group.master, uid, settings), group.master);
+  const overrides = group.overrides.map((override) =>
+    applyOverrideRecurrence(buildBaseIcsEvent(override, uid, settings), override),
+  );
+  return [master, ...overrides];
+};
+
+const shouldIncludeEvent = (event: CalendarEvent, settings: FeedSettings): boolean => {
+  if (!settings.excludeAllDayEvents) {
+    return true;
+  }
+  return !resolveIsAllDayEvent(toAllDayShape(event));
+};
+
+const formatEventsAsIcal = (events: CalendarEvent[], settings: FeedSettings): string => {
+  const filteredEvents = events.filter((event) => shouldIncludeEvent(event, settings));
+  const groups = groupEventsBySourceUid(filteredEvents);
+  const icsEvents = groups.flatMap((group) => buildIcsEventsForGroup(group, settings));
 
   const calendar: IcsCalendar = {
     events: icsEvents,
