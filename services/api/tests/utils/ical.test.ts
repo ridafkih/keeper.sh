@@ -205,6 +205,63 @@ describe("recurring events", () => {
     expect(ics).toContain("20260402T180000Z");
   });
 
+  // Regression: the feed emits DTSTART as bare UTC, but source-parsed
+  // exceptions carry a TZID (the `local` block). Emitting EXDATE with an IANA
+  // TZID against a UTC DTSTART is an RFC 5545 value-type mismatch that makes
+  // Apple Calendar drop the whole recurring event. EXDATE must be UTC too.
+  it("emits EXDATE in UTC even when the source exception carries a TZID", () => {
+    const ics = formatEventsAsIcal(
+      [makeEvent({
+        isAllDay: false,
+        startTime: new Date("2025-09-24T23:00:00Z"),
+        endTime: new Date("2025-09-25T02:00:00Z"),
+        recurrenceRule: { frequency: "WEEKLY", byDay: [{ day: "WE" }] } as never,
+        exceptionDates: [{
+          date: new Date("2025-11-19T23:00:00Z"),
+          type: "DATE-TIME",
+          local: {
+            date: new Date("2025-11-19T20:00:00Z"),
+            timezone: "America/Montevideo",
+            tzoffset: "-03:00",
+          },
+        }] as never,
+      })],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(ics).toContain("DTSTART:20250924T230000Z");
+    expect(ics).toContain("EXDATE");
+    // Instant preserved, emitted as UTC, with no TZID parameter.
+    expect(ics).toContain("20251119T230000Z");
+    expect(ics).not.toContain("TZID=America/Montevideo");
+  });
+
+  it("emits RRULE UNTIL in UTC even when the source rule carries a TZID", () => {
+    const ics = formatEventsAsIcal(
+      [makeEvent({
+        isAllDay: false,
+        startTime: new Date("2025-06-02T14:00:00Z"),
+        endTime: new Date("2025-06-02T16:00:00Z"),
+        recurrenceRule: {
+          frequency: "WEEKLY",
+          until: {
+            date: new Date("2027-05-24T14:00:00Z"),
+            type: "DATE-TIME",
+            local: {
+              date: new Date("2027-05-24T11:00:00Z"),
+              timezone: "America/Montevideo",
+              tzoffset: "-03:00",
+            },
+          },
+        } as never,
+      })],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(ics).toContain("UNTIL=20270524T140000Z");
+    expect(ics).not.toContain("UNTIL=20270524T110000");
+  });
+
   it("does not emit RRULE for one-off events", () => {
     const ics = formatEventsAsIcal([makeEvent()], DEFAULT_SETTINGS);
     expect(ics).not.toContain("RRULE:");
