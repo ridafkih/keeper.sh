@@ -39,6 +39,7 @@ const eventCreateBodySchema = type({
   endTime: "string",
   "isAllDay?": "boolean",
   "availability?": "'busy' | 'free'",
+  "timezone?": "string",
   "+": "reject",
 });
 type EventCreateBody = typeof eventCreateBodySchema.infer;
@@ -51,6 +52,7 @@ const eventPatchBodySchema = type({
   "endTime?": "string",
   "isAllDay?": "boolean",
   "availability?": "'busy' | 'free'",
+  "timezone?": "string",
   "rsvpStatus?": "'accepted' | 'declined' | 'tentative'",
   "+": "reject",
 });

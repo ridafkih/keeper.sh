@@ -1,5 +1,5 @@
 import { generateIcsCalendar } from "ts-ics";
-import { parseIcsCalendar } from "../../../ics";
+import { parseIcsCalendar, buildZonedIcsDate } from "../../../ics";
 import type { IcsCalendar, IcsDuration, IcsEvent } from "ts-ics";
 import type { SyncableEvent } from "../../../core/types";
 import { isKeeperEvent } from "../../../core/events/identity";
@@ -48,10 +48,10 @@ const eventToICalString = (event: SyncableEvent, uid: string): string => {
   const isAllDay = resolveIsAllDayEvent(event);
   const icsEvent: IcsEvent = {
     description: event.description,
-    end: { date: event.endTime, ...(isAllDay && { type: "DATE" }) },
+    end: buildZonedIcsDate(event.endTime, event.startTimeZone, isAllDay),
     location: event.location,
     stamp: { date: new Date() },
-    start: { date: event.startTime, ...(isAllDay && { type: "DATE" }) },
+    start: buildZonedIcsDate(event.startTime, event.startTimeZone, isAllDay),
     summary: event.summary,
     ...(event.availability === "free" && { timeTransparent: "TRANSPARENT" }),
     uid,

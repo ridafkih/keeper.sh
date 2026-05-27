@@ -201,6 +201,7 @@ const createEventMutation = async (
       location: input.location ?? null,
       startTime: new Date(input.startTime),
       endTime: new Date(input.endTime),
+      startTimeZone: input.startTimeZone ?? null,
       isAllDay: input.isAllDay ?? false,
       availability: input.availability ?? "busy",
     })
@@ -279,6 +280,9 @@ const buildDbUpdates = (updates: EventUpdateInput): Record<string, unknown> => {
   }
   if ("endTime" in updates && updates.endTime) {
     dbUpdates.endTime = new Date(updates.endTime);
+  }
+  if ("startTimeZone" in updates) {
+    dbUpdates.startTimeZone = updates.startTimeZone ?? null;
   }
   if ("isAllDay" in updates) {
     dbUpdates.isAllDay = updates.isAllDay;
