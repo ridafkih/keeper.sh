@@ -63,9 +63,9 @@ const POST = withWideEvent(
     const body = await request.json();
 
     try {
-      const input = eventCreateBodySchema.assert(body);
+      const { timezone, ...input } = eventCreateBodySchema.assert(body);
 
-      const result = await keeperApi.createEvent(userId, input);
+      const result = await keeperApi.createEvent(userId, { ...input, startTimeZone: timezone });
 
       if (!result.success) {
         return ErrorResponse.badRequest(result.error ?? "Failed to create event.").toResponse();

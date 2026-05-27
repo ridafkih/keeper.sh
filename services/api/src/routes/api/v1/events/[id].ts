@@ -57,6 +57,7 @@ const PATCH = withWideEvent(
         endTime: validated.endTime,
         isAllDay: validated.isAllDay,
         availability: validated.availability,
+        startTimeZone: validated.timezone,
       });
 
       if (!result.success) {

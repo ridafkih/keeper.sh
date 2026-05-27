@@ -75,6 +75,7 @@ interface EventInput {
   endTime: string;
   isAllDay?: boolean;
   availability?: "busy" | "free";
+  startTimeZone?: string;
 }
 
 interface EventUpdateInput {
@@ -85,6 +86,7 @@ interface EventUpdateInput {
   endTime?: string;
   isAllDay?: boolean;
   availability?: "busy" | "free";
+  startTimeZone?: string;
 }
 
 type RsvpStatus = "accepted" | "declined" | "tentative";
