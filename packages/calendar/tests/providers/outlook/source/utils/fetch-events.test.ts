@@ -152,7 +152,12 @@ describe("fetchCalendarEvents", () => {
   });
 
   it("throws auth-required error details on forbidden response", async () => {
-    globalThis.fetch = createFetchQueue([new Response(null, { status: 403 })], []);
+    globalThis.fetch = createFetchQueue([
+      Response.json(
+        { error: { code: "ErrorAccessDenied", message: "Access denied" } },
+        { status: 403 },
+      ),
+    ], []);
 
     try {
       await fetchCalendarEvents({
@@ -171,6 +176,8 @@ describe("fetchCalendarEvents", () => {
       expect(error.status).toBe(403);
       expect(error.authRequired).toBe(true);
       expect(error.message).toContain("Failed to fetch events: 403");
+      expect(error.message).toContain("Access denied");
+      expect(error.apiError.code).toBe("ErrorAccessDenied");
     }
   });
 });

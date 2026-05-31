@@ -4,27 +4,31 @@ import type {
   OutlookCalendarEvent,
   OutlookEventsListResponse,
   EventTimeSlot,
+  MicrosoftApiError,
 } from "../types";
 import { MICROSOFT_GRAPH_API, GONE_STATUS } from "../../shared/api";
-import { isSimpleAuthError } from "../../shared/errors";
+import { isAuthError, isSimpleAuthError } from "../../shared/errors";
 import { parseEventDateTime } from "../../shared/date-time";
-import { outlookEventListSchema } from "@keeper.sh/data-schemas";
+import { microsoftApiErrorSchema, outlookEventListSchema } from "@keeper.sh/data-schemas";
 import { KEEPER_CATEGORY } from "@keeper.sh/constants";
 import { isKeeperEvent } from "../../../../core/events/identity";
 
 class EventsFetchError extends Error {
   public readonly status: number;
   public readonly authRequired: boolean;
+  public readonly apiError: MicrosoftApiError;
 
   constructor(
     message: string,
     status: number,
     authRequired = false,
+    apiError: MicrosoftApiError = {},
   ) {
     super(message);
     this.name = "EventsFetchError";
     this.status = status;
     this.authRequired = authRequired;
+    this.apiError = apiError;
   }
 }
 
@@ -61,6 +65,20 @@ interface FetchCalendarNameOptions {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
+const parseMicrosoftApiErrorFromText = (text: string): MicrosoftApiError => {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!microsoftApiErrorSchema.allows(parsed)) {
+      return {};
+    }
+
+    const { error } = microsoftApiErrorSchema.assert(parsed);
+    return error ?? {};
+  } catch {
+    return {};
+  }
+};
+
 const parseCalendarName = (value: unknown): string | null => {
   if (!isRecord(value) || typeof value.name !== "string") {
     return null;
@@ -86,7 +104,6 @@ const buildInitialUrl = (calendarId: string, timeMin: Date, timeMax: Date): URL 
     "$select",
     "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
   );
-  url.searchParams.set("$top", String(DEFAULT_PAGE_SIZE));
 
   return url;
 };
@@ -118,6 +135,7 @@ const fetchEventsPage = async (
   const response = await fetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${accessToken}`,
+      Prefer: `odata.maxpagesize=${DEFAULT_PAGE_SIZE}`,
     },
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   }).catch((error) => {
@@ -137,11 +155,15 @@ const fetchEventsPage = async (
   }
 
   if (!response.ok) {
-    const authRequired = isSimpleAuthError(response.status);
+    const responseText = await response.text();
+    const apiError = parseMicrosoftApiErrorFromText(responseText);
+    const authRequired = isAuthError(response.status, apiError);
+
     throw new EventsFetchError(
-      `Failed to fetch events: ${response.status}`,
+      `Failed to fetch events: ${response.status}: ${responseText}`,
       response.status,
       authRequired,
+      apiError,
     );
   }
 
