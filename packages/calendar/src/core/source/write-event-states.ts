@@ -26,6 +26,7 @@ const EVENT_STATE_CONFLICT_SET = {
   isAllDay: excludedColumn(eventStatesTable.isAllDay.name),
   location: excludedColumn(eventStatesTable.location.name),
   recurrenceRule: excludedColumn(eventStatesTable.recurrenceRule.name),
+  recurrenceId: excludedColumn(eventStatesTable.recurrenceId.name),
   sourceEventType: excludedColumn(eventStatesTable.sourceEventType.name),
   startTimeZone: excludedColumn(eventStatesTable.startTimeZone.name),
   title: excludedColumn(eventStatesTable.title.name),

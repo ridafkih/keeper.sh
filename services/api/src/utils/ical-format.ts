@@ -1,7 +1,7 @@
 import { KEEPER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { resolveIsAllDayEvent } from "@keeper.sh/calendar";
 import { generateIcsCalendar } from "ts-ics";
-import type { IcsCalendar, IcsEvent } from "ts-ics";
+import type { IcsCalendar, IcsDateObject, IcsEvent, IcsRecurrenceRule } from "ts-ics";
 
 interface FeedSettings {
   includeEventName: boolean;
@@ -20,6 +20,10 @@ interface CalendarEvent {
   endTime: Date;
   isAllDay: boolean | null;
   calendarName: string;
+  recurrenceRule: IcsRecurrenceRule | null;
+  exceptionDates: IcsDateObject[] | null;
+  recurrenceId: Date | null;
+  sourceEventUid: string | null;
 }
 
 const toAllDayShape = (event: CalendarEvent) => ({
@@ -43,34 +47,82 @@ const resolveEventSummary = (event: CalendarEvent, settings: FeedSettings): stri
   });
 };
 
+interface EventGroup {
+  master: CalendarEvent;
+  overrides: CalendarEvent[];
+}
+
+const isRecurringMaster = (event: CalendarEvent): boolean =>
+  event.recurrenceRule !== null && event.recurrenceId === null;
+
+const groupEventsBySourceUid = (events: CalendarEvent[]): EventGroup[] => {
+  const groups = new Map<string, EventGroup>();
+  const ungrouped: EventGroup[] = [];
+
+  for (const event of events) {
+    if (!event.sourceEventUid) {
+      ungrouped.push({ master: event, overrides: [] });
+      continue;
+    }
+    const existing = groups.get(event.sourceEventUid);
+    if (!existing) {
+      groups.set(event.sourceEventUid, { master: event, overrides: [] });
+      continue;
+    }
+    if (isRecurringMaster(event) && !isRecurringMaster(existing.master)) {
+      existing.overrides.push(existing.master);
+      existing.master = event;
+    } else {
+      existing.overrides.push(event);
+    }
+  }
+
+  return [...groups.values(), ...ungrouped];
+};
+
+const buildBaseIcsEvent = (event: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => {
+  const isAllDay = resolveIsAllDayEvent(toAllDayShape(event));
+  return {
+    end: { date: event.endTime, ...(isAllDay && { type: "DATE" as const }) },
+    stamp: { date: new Date() },
+    start: { date: event.startTime, ...(isAllDay && { type: "DATE" as const }) },
+    summary: resolveEventSummary(event, settings),
+    uid,
+    ...(settings.includeEventDescription && event.description && { description: event.description }),
+    ...(settings.includeEventLocation && event.location && { location: event.location }),
+  };
+};
+
+const buildMasterIcsEvent = (master: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => ({
+  ...buildBaseIcsEvent(master, uid, settings),
+  ...(master.recurrenceRule && { recurrenceRule: master.recurrenceRule }),
+  ...(master.exceptionDates?.length && { exceptionDates: master.exceptionDates }),
+});
+
+const buildOverrideIcsEvent = (override: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => ({
+  ...buildBaseIcsEvent(override, uid, settings),
+  ...(override.recurrenceId && { recurrenceId: { value: { date: override.recurrenceId } } }),
+});
+
+const buildIcsEventsForGroup = (group: EventGroup, settings: FeedSettings): IcsEvent[] => {
+  const uid = `${group.master.id}${KEEPER_EVENT_SUFFIX}`;
+  return [
+    buildMasterIcsEvent(group.master, uid, settings),
+    ...group.overrides.map((override) => buildOverrideIcsEvent(override, uid, settings)),
+  ];
+};
+
+const shouldIncludeEvent = (event: CalendarEvent, settings: FeedSettings): boolean => {
+  if (!settings.excludeAllDayEvents) {
+    return true;
+  }
+  return !resolveIsAllDayEvent(toAllDayShape(event));
+};
+
 const formatEventsAsIcal = (events: CalendarEvent[], settings: FeedSettings): string => {
-  const filteredEvents = events.filter((event) => {
-    if (!settings.excludeAllDayEvents) {
-      return true;
-    }
-    return !resolveIsAllDayEvent(toAllDayShape(event));
-  });
-
-  const icsEvents: IcsEvent[] = filteredEvents.map((event) => {
-    const isAllDay = resolveIsAllDayEvent(toAllDayShape(event));
-    const icsEvent: IcsEvent = {
-      end: { date: event.endTime, ...(isAllDay && { type: "DATE" as const }) },
-      stamp: { date: new Date() },
-      start: { date: event.startTime, ...(isAllDay && { type: "DATE" as const }) },
-      summary: resolveEventSummary(event, settings),
-      uid: `${event.id}${KEEPER_EVENT_SUFFIX}`,
-    };
-
-    if (settings.includeEventDescription && event.description) {
-      icsEvent.description = event.description;
-    }
-
-    if (settings.includeEventLocation && event.location) {
-      icsEvent.location = event.location;
-    }
-
-    return icsEvent;
-  });
+  const filteredEvents = events.filter((event) => shouldIncludeEvent(event, settings));
+  const groups = groupEventsBySourceUid(filteredEvents);
+  const icsEvents = groups.flatMap((group) => buildIcsEventsForGroup(group, settings));
 
   const calendar: IcsCalendar = {
     events: icsEvents,

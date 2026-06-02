@@ -6,6 +6,7 @@ import {
   createRedisRateLimiter,
 } from "@keeper.sh/calendar";
 import type { SyncProgressUpdate, RefreshLockStore } from "@keeper.sh/calendar";
+import type { ConflictLookupDiagnostic } from "@keeper.sh/calendar/google";
 import {
   calendarAccountsTable,
   calendarsTable,
@@ -101,6 +102,7 @@ interface SyncCallbacks {
   onSyncEvent?: (event: Record<string, unknown>) => void;
   onProgress?: (update: SyncProgressUpdate) => void;
   onCalendarComplete?: (completion: CalendarSyncCompletion) => void;
+  onConflictDiagnostic?: (diagnostic: ConflictLookupDiagnostic) => void;
 }
 
 const syncDestinationsForUser = async (
@@ -173,6 +175,7 @@ const syncDestinationsForUser = async (
         refreshLockStore: config.refreshLockStore,
         rateLimiter,
         signal: config.abortSignal,
+        onConflictDiagnostic: callbacks?.onConflictDiagnostic,
       });
 
       if (!syncProvider) {

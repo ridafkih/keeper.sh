@@ -16,6 +16,9 @@ interface ExistingEvent {
   availability: string | null;
   isAllDay: boolean | null;
   sourceEventType: string | null;
+  title: string | null;
+  description: string | null;
+  location: string | null;
 }
 
 describe("ingestSource", () => {
@@ -50,6 +53,9 @@ describe("ingestSource", () => {
       availability: null,
       isAllDay: null,
       sourceEventType: null,
+      title: null,
+      description: null,
+      location: null,
     };
 
     const flushCapture: { inserts: unknown[]; deletes: string[] }[] = [];
@@ -134,6 +140,9 @@ describe("ingestSource", () => {
       availability: null,
       isAllDay: null,
       sourceEventType: null,
+      title: null,
+      description: null,
+      location: null,
     };
 
     const flushCapture: { inserts: unknown[]; deletes: string[]; syncToken?: string | null }[] = [];

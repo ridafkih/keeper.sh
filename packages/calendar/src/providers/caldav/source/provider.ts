@@ -89,6 +89,7 @@ const createCalDAVSourceProvider = (
           description: parsed.description,
           endTime: parsed.endTime,
           exceptionDates: parsed.exceptionDates,
+          recurrenceId: parsed.recurrenceId,
           isAllDay: parsed.isAllDay,
           location: parsed.location,
           recurrenceRule: parsed.recurrenceRule,
@@ -110,12 +111,15 @@ const createCalDAVSourceProvider = (
     const existingEvents = await database
       .select({
         availability: eventStatesTable.availability,
+        description: eventStatesTable.description,
         endTime: eventStatesTable.endTime,
         id: eventStatesTable.id,
         isAllDay: eventStatesTable.isAllDay,
+        location: eventStatesTable.location,
         sourceEventType: eventStatesTable.sourceEventType,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
+        title: eventStatesTable.title,
       })
       .from(eventStatesTable)
       .where(eq(eventStatesTable.calendarId, calendarId));
@@ -146,6 +150,7 @@ const createCalDAVSourceProvider = (
           isAllDay: event.isAllDay,
           location: event.location,
           recurrenceRule: stringifyIfPresent(event.recurrenceRule),
+          recurrenceId: event.recurrenceId,
           sourceEventType: event.sourceEventType ?? "default",
           sourceEventUid: event.uid,
           startTime: event.startTime,

@@ -77,6 +77,7 @@ const createIngestionFlush = (calendarId: string) =>
             isAllDay: event.isAllDay,
             location: event.location,
             recurrenceRule: serializeOptionalJson(event.recurrenceRule),
+            recurrenceId: event.recurrenceId,
             sourceEventType: event.sourceEventType,
             sourceEventUid: event.uid,
             startTime: event.startTime,
@@ -99,12 +100,15 @@ const readExistingEvents = (calendarId: string) =>
   database
     .select({
       availability: eventStatesTable.availability,
+      description: eventStatesTable.description,
       endTime: eventStatesTable.endTime,
       id: eventStatesTable.id,
       isAllDay: eventStatesTable.isAllDay,
+      location: eventStatesTable.location,
       sourceEventType: eventStatesTable.sourceEventType,
       sourceEventUid: eventStatesTable.sourceEventUid,
       startTime: eventStatesTable.startTime,
+      title: eventStatesTable.title,
     })
     .from(eventStatesTable)
     .where(eq(eventStatesTable.calendarId, calendarId));
