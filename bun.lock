@@ -253,7 +253,7 @@
         "entrykit": "^0.1.3",
         "ioredis": "^5.10.0",
         "resend": "^6.9.3",
-        "ts-ics": "^2.4.3",
+        "ts-ics": "2.4.3",
         "tsdav": "^2.1.8",
         "widelogger": "^0.7.0",
       },
