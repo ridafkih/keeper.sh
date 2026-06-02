@@ -19,46 +19,38 @@ interface IcsSourceFetcher {
   fetchEvents: () => Promise<FetchEventsResult>;
 }
 
-const createIcsSourceFetcher = (
-  config: IcsSourceFetcherConfig,
-): IcsSourceFetcher => {
-  const fetchRemoteIcal = async (): Promise<string | null> => {
-    try {
-      const { ical } = await pullRemoteCalendar(
-        "ical",
-        config.url,
-        config.safeFetchOptions,
-      );
-      return ical;
-    } catch {
-      return null;
-    }
+const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetcher => {
+  /**
+   * Lets pullRemoteCalendar errors propagate. The previous behavior swallowed
+   * them and returned null, which caused ingestSource to treat the empty result
+   * as "the source authoritatively has zero events" and delete every existing
+   * event_state for the calendar on the next tick. Surfacing the error lets the
+   * cron mark the run as failed and leave existing events intact for retry.
+   */
+  const fetchRemoteIcal = async (): Promise<string> => {
+    const { ical } = await pullRemoteCalendar("ical", config.url, config.safeFetchOptions);
+    return ical;
   };
 
   const fetchEvents = async (): Promise<FetchEventsResult> => {
     const ical = await fetchRemoteIcal();
-
     if (!ical) {
-      return { events: [] };
+      /*
+       * Defensive: pullRemoteCalendar already throws on invalid/empty bodies,
+       * but if a future change ever returns an empty string here, treat it as
+       * unchanged rather than authoritative-empty to keep the no-wipe invariant.
+       */
+      return { events: [], unchanged: true };
     }
-
-    const { changed } = await createSnapshot(
-      config.database,
-      config.calendarId,
-      ical,
-    );
-
+    const { changed } = await createSnapshot(config.database, config.calendarId, ical);
     if (!changed) {
       return { events: [], unchanged: true };
     }
-
     const calendar = parseIcsCalendarLenient({
       icsString: ical,
       patches: [coerceCompliantDate],
     });
-
     const parsed = parseIcsEvents(calendar);
-
     const events: SourceEvent[] = parsed.map((event) => ({
       availability: event.availability,
       description: event.description,
@@ -73,7 +65,6 @@ const createIcsSourceFetcher = (
       title: event.title,
       uid: event.uid,
     }));
-
     return { events };
   };
 
