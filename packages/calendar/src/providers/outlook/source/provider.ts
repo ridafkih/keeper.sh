@@ -289,7 +289,6 @@ const getOutlookSourcesWithCredentials = async (
         eq(calendarsTable.calendarType, "oauth"),
         arrayContains(calendarsTable.capabilities, ["pull"]),
         eq(calendarAccountsTable.provider, OUTLOOK_PROVIDER_ID),
-        eq(calendarAccountsTable.needsReauthentication, false),
       ),
     );
 

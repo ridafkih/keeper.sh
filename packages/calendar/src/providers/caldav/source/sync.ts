@@ -65,7 +65,6 @@ const createCalDAVSourceService = (config: CalDAVSourceProviderConfig): CalDAVSo
       .where(
         and(
           eq(calendarsTable.calendarType, CALDAV_CALENDAR_TYPE),
-          eq(calendarAccountsTable.needsReauthentication, false),
         ),
       );
 
@@ -98,7 +97,6 @@ const createCalDAVSourceService = (config: CalDAVSourceProviderConfig): CalDAVSo
         and(
           eq(calendarsTable.calendarType, CALDAV_CALENDAR_TYPE),
           eq(calendarAccountsTable.provider, provider),
-          eq(calendarAccountsTable.needsReauthentication, false),
         ),
       );
 
@@ -131,7 +129,6 @@ const createCalDAVSourceService = (config: CalDAVSourceProviderConfig): CalDAVSo
         and(
           eq(calendarsTable.calendarType, CALDAV_CALENDAR_TYPE),
           eq(calendarsTable.userId, userId),
-          eq(calendarAccountsTable.needsReauthentication, false),
         ),
       );
 

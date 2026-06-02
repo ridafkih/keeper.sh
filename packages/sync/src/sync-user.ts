@@ -125,7 +125,6 @@ const syncDestinationsForUser = async (
         eq(calendarsTable.userId, userId),
         eq(calendarsTable.disabled, false),
         arrayContains(calendarsTable.capabilities, ["push"]),
-        eq(calendarAccountsTable.needsReauthentication, false),
       ),
     );
 

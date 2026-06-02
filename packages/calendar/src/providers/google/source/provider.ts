@@ -269,7 +269,6 @@ const getGoogleSourcesWithCredentials = async (
         eq(calendarsTable.calendarType, "oauth"),
         arrayContains(calendarsTable.capabilities, ["pull"]),
         eq(calendarAccountsTable.provider, GOOGLE_PROVIDER_ID),
-        eq(calendarAccountsTable.needsReauthentication, false),
       ),
     );
 

@@ -100,10 +100,6 @@ const resolveCredentialsByCalendarId = async (
     return null;
   }
 
-  if (result.needsReauthentication) {
-    return null;
-  }
-
   return rowToCredentials(result);
 };
 
@@ -204,7 +200,6 @@ const resolveAllSourceCredentials = async (
       and(
         eq(calendarsTable.userId, userId),
         arrayContains(calendarsTable.capabilities, ["pull"]),
-        eq(calendarAccountsTable.needsReauthentication, false),
       ),
     );
 
