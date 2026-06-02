@@ -188,11 +188,13 @@ describe("recurring events", () => {
     expect(ics).toMatch(/BYDAY=MO,TU,WE,TH,FR|BYDAY=MO;BYDAY=TU/);
   });
 
-  // Regression: RFC 5545 §3.3.10 requires FREQ to be the first rule part in an
-  // RRULE. ts-ics < 2.4.3 emitted BY* parts before FREQ (e.g.
-  // RRULE:BYDAY=WE;FREQ=WEEKLY), which Apple Calendar silently fails to expand —
-  // the recurring event then shows only at its master DTSTART and disappears
-  // from current views.
+  /*
+   * Regression: RFC 5545 §3.3.10 requires FREQ to be the first rule part in an
+   * RRULE. ts-ics < 2.4.3 emitted BY* parts before FREQ (e.g.
+   * RRULE:BYDAY=WE;FREQ=WEEKLY), which Apple Calendar silently fails to expand —
+   * the recurring event then shows only at its master DTSTART and disappears
+   * from current views.
+   */
   it("emits RRULE with FREQ as the first rule part (RFC 5545)", () => {
     const ics = formatEventsAsIcal(
       [makeEvent({
