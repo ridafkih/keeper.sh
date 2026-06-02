@@ -205,10 +205,12 @@ describe("recurring events", () => {
     expect(ics).toContain("20260402T180000Z");
   });
 
-  // Regression: the feed emits DTSTART as bare UTC, but source-parsed
-  // exceptions carry a TZID (the `local` block). Emitting EXDATE with an IANA
-  // TZID against a UTC DTSTART is an RFC 5545 value-type mismatch that makes
-  // Apple Calendar drop the whole recurring event. EXDATE must be UTC too.
+  /*
+   * Regression: the feed emits DTSTART as bare UTC, but source-parsed
+   * exceptions carry a TZID (the `local` block). Emitting EXDATE with an IANA
+   * TZID against a UTC DTSTART is an RFC 5545 value-type mismatch that makes
+   * Apple Calendar drop the whole recurring event. EXDATE must be UTC too.
+   */
   it("emits EXDATE in UTC even when the source exception carries a TZID", () => {
     const ics = formatEventsAsIcal(
       [makeEvent({
