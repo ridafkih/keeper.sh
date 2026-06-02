@@ -6,7 +6,6 @@ import {
   createCoordinatedRefresher,
 } from "@keeper.sh/calendar";
 import { createGoogleSyncProvider } from "@keeper.sh/calendar/google";
-import type { ConflictLookupDiagnostic } from "@keeper.sh/calendar/google";
 import { createOutlookSyncProvider } from "@keeper.sh/calendar/outlook";
 import { createCalDAVSyncProvider } from "@keeper.sh/calendar/caldav";
 import { resolveAuthMethod } from "@keeper.sh/calendar/digest-fetch";
@@ -40,7 +39,6 @@ const resolveOAuthProvider = async (
   refreshLockStore: RefreshLockStore | null,
   rateLimiter?: RedisRateLimiter,
   signal?: AbortSignal,
-  onConflictDiagnostic?: (diagnostic: ConflictLookupDiagnostic) => void,
 ): Promise<CalendarSyncProvider | null> => {
   const [oauthCred] = await database
     .select({
@@ -84,7 +82,6 @@ const resolveOAuthProvider = async (
       }),
       rateLimiter,
       signal,
-      onConflictDiagnostic,
     });
   }
 
@@ -161,7 +158,6 @@ interface ResolveProviderOptions {
   refreshLockStore?: RefreshLockStore | null;
   rateLimiter?: RedisRateLimiter;
   signal?: AbortSignal;
-  onConflictDiagnostic?: (diagnostic: ConflictLookupDiagnostic) => void;
 }
 
 const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarSyncProvider | null> => {
@@ -176,7 +172,6 @@ const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarS
       options.refreshLockStore ?? null,
       options.rateLimiter,
       options.signal,
-      options.onConflictDiagnostic,
     );
   }
 

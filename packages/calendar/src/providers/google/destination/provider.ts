@@ -6,21 +6,13 @@ import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import type { DeleteResult, PushResult, RemoteEvent, SyncableEvent } from "../../../core/types";
 import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS } from "../shared/api";
+import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS, GONE_STATUS } from "../shared/api";
 import { withBackoff } from "../shared/backoff";
 import { executeBatchChunked } from "../shared/batch";
 import { isRateLimitApiError, parseGoogleApiError } from "../shared/errors";
-import type { BatchSubRequest, BatchSubResponse } from "../shared/batch";
+import type { BatchSubRequest } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
 import { serializeGoogleEvent } from "./serialize-event";
-
-interface ConflictLookupDiagnostic {
-  stage: "lookup" | "delete";
-  uid: string;
-  statusCode: number | null;
-  schemaAllowed: boolean;
-  bodySnippet: string;
-}
 
 interface GoogleSyncProviderConfig {
   accessToken: string;
@@ -32,7 +24,6 @@ interface GoogleSyncProviderConfig {
   refreshAccessToken?: TokenRefresher;
   rateLimiter?: RedisRateLimiter;
   signal?: AbortSignal;
-  onConflictDiagnostic?: (diagnostic: ConflictLookupDiagnostic) => void;
 }
 
 class GoogleCalendarApiError extends Error {
@@ -67,20 +58,6 @@ const extractEventIdFromLookup = (body: unknown): string | undefined => {
   return firstItem.id;
 };
 
-const diagSnippet = (body: unknown): string => {
-  if (typeof body === "string") {
-    return body.slice(0, 300);
-  }
-  return (JSON.stringify(body) ?? "").slice(0, 300);
-};
-
-const lookupSchemaAllowed = (response: BatchSubResponse | undefined): boolean => {
-  if (!response) {
-    return false;
-  }
-  return googleEventListSchema.allows(response.body);
-};
-
 const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   const tokenState: TokenState = {
     accessToken: config.accessToken,
@@ -96,6 +73,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
 
   const eventsPath = `/calendar/v3/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
 
+  // Writes go through events.import, which upserts by iCalUID: re-pushing an existing event updates it rather than 409ing.
   const buildPushRequest = (event: SyncableEvent): { uid: string; request: BatchSubRequest } | null => {
     const uid = generateDeterministicEventUid(`${event.id}:${config.externalCalendarId}`);
     const resource = serializeGoogleEvent(event, uid);
@@ -106,150 +84,11 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       uid,
       request: {
         method: "POST",
-        path: eventsPath,
+        path: `${eventsPath}/import`,
         headers: { "Content-Type": "application/json" },
         body: resource,
       },
     };
-  };
-
-  interface ConflictEntry { index: number; uid: string; event: SyncableEvent }
-
-  const lookupConflictingEvents = async (
-    conflicts: ConflictEntry[],
-    results: PushResult[],
-    batchOptions: { rateLimiter?: RedisRateLimiter; signal?: AbortSignal },
-  ): Promise<{ conflict: ConflictEntry; googleEventId: string }[]> => {
-    const lookupResponses = await executeBatchChunked(
-      conflicts.map((conflict) => ({
-        method: "GET",
-        path: `${eventsPath}?iCalUID=${encodeURIComponent(conflict.uid)}&showDeleted=true`,
-      })),
-      tokenState.accessToken,
-      batchOptions,
-    );
-
-    const found: { conflict: ConflictEntry; googleEventId: string }[] = [];
-
-    for (const [index, conflict] of conflicts.entries()) {
-      const response = lookupResponses[index];
-      if (!response || response.statusCode !== 200) {
-        config.onConflictDiagnostic?.({
-          stage: "lookup",
-          uid: conflict.uid,
-          statusCode: response?.statusCode ?? null,
-          schemaAllowed: lookupSchemaAllowed(response),
-          bodySnippet: diagSnippet(response?.body),
-        });
-        results[conflict.index] = { error: "Conflict resolution failed: could not find existing event", success: false };
-        continue;
-      }
-
-      const googleEventId = extractEventIdFromLookup(response.body);
-      if (!googleEventId) {
-        config.onConflictDiagnostic?.({
-          stage: "lookup",
-          uid: conflict.uid,
-          statusCode: response.statusCode,
-          schemaAllowed: googleEventListSchema.allows(response.body),
-          bodySnippet: diagSnippet(response.body),
-        });
-        results[conflict.index] = { error: "Conflict resolution failed: could not find existing event", success: false };
-        continue;
-      }
-
-      found.push({ conflict, googleEventId });
-    }
-
-    return found;
-  };
-
-  const isSuccessOrNotFound = (statusCode: number): boolean =>
-    (statusCode >= 200 && statusCode < 300) || statusCode === HTTP_STATUS.NOT_FOUND;
-
-  const deleteConflictingEvents = async (
-    deletable: { conflict: ConflictEntry; googleEventId: string }[],
-    results: PushResult[],
-    batchOptions: { rateLimiter?: RedisRateLimiter; signal?: AbortSignal },
-  ): Promise<{ conflict: ConflictEntry; request: BatchSubRequest }[]> => {
-    const deleteResponses = await executeBatchChunked(
-      deletable.map(({ googleEventId }) => ({
-        method: "DELETE",
-        path: `${eventsPath}/${encodeURIComponent(googleEventId)}`,
-      })),
-      tokenState.accessToken,
-      batchOptions,
-    );
-
-    const retryable: { conflict: ConflictEntry; request: BatchSubRequest }[] = [];
-
-    for (const [index, { conflict }] of deletable.entries()) {
-      const deleteResponse = deleteResponses[index];
-      if (!deleteResponse || !isSuccessOrNotFound(deleteResponse.statusCode)) {
-        config.onConflictDiagnostic?.({
-          stage: "delete",
-          uid: conflict.uid,
-          statusCode: deleteResponse?.statusCode ?? null,
-          schemaAllowed: false,
-          bodySnippet: diagSnippet(deleteResponse?.body),
-        });
-        results[conflict.index] = { error: "Conflict resolution failed: could not delete existing event", success: false };
-        continue;
-      }
-
-      const built = buildPushRequest(conflict.event);
-      if (!built) {
-        results[conflict.index] = { success: true };
-        continue;
-      }
-
-      retryable.push({ conflict, request: built.request });
-    }
-
-    return retryable;
-  };
-
-  const retryConflictPushes = async (
-    retryable: { conflict: ConflictEntry; request: BatchSubRequest }[],
-    results: PushResult[],
-    batchOptions: { rateLimiter?: RedisRateLimiter; signal?: AbortSignal },
-  ): Promise<void> => {
-    const retryResponses = await executeBatchChunked(
-      retryable.map(({ request }) => request),
-      tokenState.accessToken,
-      batchOptions,
-    );
-
-    for (const [index, { conflict }] of retryable.entries()) {
-      const response = retryResponses[index];
-      if (!response) {
-        results[conflict.index] = { error: "Conflict resolution failed: missing retry response", success: false };
-        continue;
-      }
-
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        results[conflict.index] = { error: `Conflict resolution failed: ${extractBatchErrorMessage(response.body, response.statusCode)}`, success: false };
-        continue;
-      }
-
-      results[conflict.index] = { remoteId: conflict.uid, success: true, conflictResolved: true };
-    }
-  };
-
-  const resolveConflicts = async (conflicts: ConflictEntry[], results: PushResult[]): Promise<void> => {
-    const batchOptions = { rateLimiter: config.rateLimiter, signal: config.signal };
-
-    const deletable = await lookupConflictingEvents(conflicts, results, batchOptions);
-    if (deletable.length === 0) {
-      return;
-    }
-
-    const retryable = await deleteConflictingEvents(deletable, results, batchOptions);
-    if (retryable.length === 0) {
-      return;
-    }
-
-    await retryConflictPushes(retryable, results, batchOptions);
   };
 
   const pushEvents = async (events: SyncableEvent[]): Promise<PushResult[]> => {
@@ -281,25 +120,16 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     }
 
     const responses = await executeBatchChunked(requests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal });
-    const conflicts: { index: number; uid: string; event: SyncableEvent }[] = [];
 
     for (const entry of pending) {
       const response = responses[entry.batchIndex];
-      const event = events[entry.index];
-
       if (!response) {
         results[entry.index] = { error: "Missing batch response", success: false };
       } else if (response.statusCode >= 200 && response.statusCode < 300) {
         results[entry.index] = { remoteId: entry.uid, success: true };
-      } else if (response.statusCode === 409 && event) {
-        conflicts.push({ index: entry.index, uid: entry.uid, event });
       } else {
         results[entry.index] = { error: extractBatchErrorMessage(response.body, response.statusCode), success: false };
       }
-    }
-
-    if (conflicts.length > 0) {
-      await resolveConflicts(conflicts, results);
     }
 
     return results;
@@ -402,7 +232,8 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
 
       if (deleteResponse.statusCode >= 200 && deleteResponse.statusCode < 300) {
         results[originalIndex] = { success: true };
-      } else if (deleteResponse.statusCode === HTTP_STATUS.NOT_FOUND) {
+      } else if (deleteResponse.statusCode === HTTP_STATUS.NOT_FOUND || deleteResponse.statusCode === GONE_STATUS) {
+        // 404 (never existed) and 410 (already deleted) both mean the event is gone — the desired end state.
         results[originalIndex] = { success: true };
       } else {
         const errorMessage = extractBatchErrorMessage(deleteResponse.body, deleteResponse.statusCode);
@@ -495,4 +326,4 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
 };
 
 export { createGoogleSyncProvider };
-export type { GoogleSyncProviderConfig, ConflictLookupDiagnostic };
+export type { GoogleSyncProviderConfig };

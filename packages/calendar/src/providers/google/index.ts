@@ -26,7 +26,6 @@ export type {
 export {
   createGoogleSyncProvider,
   type GoogleSyncProviderConfig,
-  type ConflictLookupDiagnostic,
 } from "./destination/provider";
 export {
   getGoogleAccountsByPlan,
