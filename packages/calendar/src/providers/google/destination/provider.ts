@@ -10,9 +10,17 @@ import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS } from "../shared/api"
 import { withBackoff } from "../shared/backoff";
 import { executeBatchChunked } from "../shared/batch";
 import { isRateLimitApiError, parseGoogleApiError } from "../shared/errors";
-import type { BatchSubRequest } from "../shared/batch";
+import type { BatchSubRequest, BatchSubResponse } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
 import { serializeGoogleEvent } from "./serialize-event";
+
+interface ConflictLookupDiagnostic {
+  stage: "lookup" | "delete";
+  uid: string;
+  statusCode: number | null;
+  schemaAllowed: boolean;
+  bodySnippet: string;
+}
 
 interface GoogleSyncProviderConfig {
   accessToken: string;
@@ -24,6 +32,7 @@ interface GoogleSyncProviderConfig {
   refreshAccessToken?: TokenRefresher;
   rateLimiter?: RedisRateLimiter;
   signal?: AbortSignal;
+  onConflictDiagnostic?: (diagnostic: ConflictLookupDiagnostic) => void;
 }
 
 class GoogleCalendarApiError extends Error {
@@ -56,6 +65,20 @@ const extractEventIdFromLookup = (body: unknown): string | undefined => {
     return;
   }
   return firstItem.id;
+};
+
+const diagSnippet = (body: unknown): string => {
+  if (typeof body === "string") {
+    return body.slice(0, 300);
+  }
+  return (JSON.stringify(body) ?? "").slice(0, 300);
+};
+
+const lookupSchemaAllowed = (response: BatchSubResponse | undefined): boolean => {
+  if (!response) {
+    return false;
+  }
+  return googleEventListSchema.allows(response.body);
 };
 
 const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
@@ -111,12 +134,26 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     for (const [index, conflict] of conflicts.entries()) {
       const response = lookupResponses[index];
       if (!response || response.statusCode !== 200) {
+        config.onConflictDiagnostic?.({
+          stage: "lookup",
+          uid: conflict.uid,
+          statusCode: response?.statusCode ?? null,
+          schemaAllowed: lookupSchemaAllowed(response),
+          bodySnippet: diagSnippet(response?.body),
+        });
         results[conflict.index] = { error: "Conflict resolution failed: could not find existing event", success: false };
         continue;
       }
 
       const googleEventId = extractEventIdFromLookup(response.body);
       if (!googleEventId) {
+        config.onConflictDiagnostic?.({
+          stage: "lookup",
+          uid: conflict.uid,
+          statusCode: response.statusCode,
+          schemaAllowed: googleEventListSchema.allows(response.body),
+          bodySnippet: diagSnippet(response.body),
+        });
         results[conflict.index] = { error: "Conflict resolution failed: could not find existing event", success: false };
         continue;
       }
@@ -149,6 +186,13 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     for (const [index, { conflict }] of deletable.entries()) {
       const deleteResponse = deleteResponses[index];
       if (!deleteResponse || !isSuccessOrNotFound(deleteResponse.statusCode)) {
+        config.onConflictDiagnostic?.({
+          stage: "delete",
+          uid: conflict.uid,
+          statusCode: deleteResponse?.statusCode ?? null,
+          schemaAllowed: false,
+          bodySnippet: diagSnippet(deleteResponse?.body),
+        });
         results[conflict.index] = { error: "Conflict resolution failed: could not delete existing event", success: false };
         continue;
       }
@@ -451,4 +495,4 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
 };
 
 export { createGoogleSyncProvider };
-export type { GoogleSyncProviderConfig };
+export type { GoogleSyncProviderConfig, ConflictLookupDiagnostic };

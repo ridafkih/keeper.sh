@@ -136,6 +136,12 @@ const processJob = (
             remoteEventCount: resolveCount(remoteCount),
           });
         },
+        onConflictDiagnostic: (diagnostic) => {
+          widelog.append(
+            "sync.conflict_diagnostics",
+            `stage=${diagnostic.stage} status=${diagnostic.statusCode ?? "none"} schemaOk=${diagnostic.schemaAllowed} uid=${diagnostic.uid} body=${diagnostic.bodySnippet}`,
+          );
+        },
         onCalendarComplete: (completion) => {
           widelog.set("provider.name", completion.provider);
           widelog.set("provider.account_id", completion.accountId);
