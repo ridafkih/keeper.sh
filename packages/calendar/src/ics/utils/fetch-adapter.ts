@@ -34,9 +34,11 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
   const fetchEvents = async (): Promise<FetchEventsResult> => {
     const ical = await fetchRemoteIcal();
     if (!ical) {
-      // Defensive: pullRemoteCalendar already throws on invalid/empty bodies,
-      // but if a future change ever returns an empty string here, treat it as
-      // unchanged rather than authoritative-empty to keep the no-wipe invariant.
+      /*
+       * Defensive: pullRemoteCalendar already throws on invalid/empty bodies,
+       * but if a future change ever returns an empty string here, treat it as
+       * unchanged rather than authoritative-empty to keep the no-wipe invariant.
+       */
       return { events: [], unchanged: true };
     }
     const { changed } = await createSnapshot(config.database, config.calendarId, ical);

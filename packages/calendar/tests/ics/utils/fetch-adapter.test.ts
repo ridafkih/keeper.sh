@@ -41,8 +41,10 @@ describe("createIcsSourceFetcher", () => {
   });
 
   it("propagates fetch errors instead of returning empty events", async () => {
-    // Regression: previously this path returned {events: []}, which caused
-    // ingestSource to delete every existing event_state on a transient hiccup.
+    /*
+     * Regression: previously this path returned {events: []}, which caused
+     * ingestSource to delete every existing event_state on a transient hiccup.
+     */
     const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
     mockPullRemoteCalendar.mockRejectedValueOnce(new Error("network unreachable"));
 
