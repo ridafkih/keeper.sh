@@ -1,8 +1,8 @@
 import { createCalDAVSourceSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { withAuth, withWideEvent } from "@/utils/middleware";
-import { respondWithLoggedError, widelog } from "@/utils/logging";
 import { ErrorResponse } from "@/utils/responses";
+import { widelog } from "@/utils/logging";
 import { caldavSourcesQuerySchema } from "@/utils/request-query";
 import {
   CalDAVSourceLimitError,
@@ -10,7 +10,6 @@ import {
   getUserCalDAVSources,
   createCalDAVSource,
 } from "@/utils/caldav-sources";
-import { extractServerHost } from "@/utils/caldav";
 
 const GET = withWideEvent(
   withAuth(async ({ request, userId }) => {
@@ -39,38 +38,27 @@ const POST = withWideEvent(
     try {
       const data = createCalDAVSourceSchema.assert(body);
 
-      const serverHost = extractServerHost(data.serverUrl);
-
-      widelog.set("caldav.provider", data.provider);
-      widelog.set("caldav.server_url", data.serverUrl);
-      widelog.set("caldav.calendar_url", data.calendarUrl);
-      if (serverHost) {
-        widelog.set("caldav.server_host", serverHost);
-      }
+      widelog.set("provider.name", data.provider);
 
       const source = await createCalDAVSource(userId, data);
-
-      widelog.set("caldav.source_id", source.id);
-      widelog.set("caldav.account_id", source.accountId);
 
       return Response.json(source, { status: HTTP_STATUS.CREATED });
     } catch (error) {
       if (error instanceof CalDAVSourceLimitError) {
-        return respondWithLoggedError(error, ErrorResponse.paymentRequired(error.message).toResponse());
+        widelog.errorFields(error, { slug: "account-limit-reached" });
+        return ErrorResponse.paymentRequired(error.message).toResponse();
       }
       if (error instanceof DuplicateCalDAVSourceError) {
-        return respondWithLoggedError(
-          error,
-          Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT }),
-        );
+        widelog.errorFields(error, { slug: "duplicate-source" });
+        return Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT });
       }
 
-      let message = "Invalid request body";
+      widelog.errorFields(error, { slug: "caldav-connection-failed" });
+      const fallbackMessage = "Invalid request body";
       if (error instanceof Error) {
-        const { message: errorMessage } = error;
-        message = errorMessage;
+        return ErrorResponse.badRequest(error.message).toResponse();
       }
-      return respondWithLoggedError(error, ErrorResponse.badRequest(message).toResponse());
+      return ErrorResponse.badRequest(fallbackMessage).toResponse();
     }
   }),
 );

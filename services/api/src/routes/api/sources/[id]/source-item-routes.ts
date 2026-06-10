@@ -2,7 +2,6 @@ import type { SourcePatchBody } from "@/utils/request-body";
 import { sourcePatchBodySchema } from "@/utils/request-body";
 import { idParamSchema } from "@/utils/request-query";
 import { ErrorResponse } from "@/utils/responses";
-import { widelog } from "@/utils/logging";
 
 const EVENT_FILTER_FIELDS = [
   "excludeAllDayEvents",
@@ -11,7 +10,6 @@ const EVENT_FILTER_FIELDS = [
   "excludeEventName",
   "excludeFocusTime",
   "excludeOutOfOffice",
-  "excludeWorkingLocation",
 ] as const;
 
 const SOURCE_BOOLEAN_UPDATE_FIELDS = [
@@ -35,7 +33,6 @@ interface PatchSourceDependencies {
     updates: Record<string, string | boolean>,
   ) => Promise<Record<string, unknown> | null>;
   canUseEventFilters: (userId: string) => Promise<boolean>;
-  triggerDestinationSync: (userId: string) => void;
 }
 
 const buildSourceUpdates = (
@@ -102,12 +99,6 @@ const handlePatchSourceRoute = async (
   const updated = await dependencies.updateSource(context.userId, resolvedId.id, updates);
   if (!updated) {
     return ErrorResponse.notFound().toResponse();
-  }
-
-  try {
-    dependencies.triggerDestinationSync(context.userId);
-  } catch (error) {
-    widelog.errorFields(error);
   }
 
   return Response.json(updated);

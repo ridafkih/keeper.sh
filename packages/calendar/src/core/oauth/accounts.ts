@@ -51,7 +51,6 @@ const getOAuthAccountsByPlan = async (
     .where(
       and(
         eq(calendarAccountsTable.provider, provider),
-        eq(calendarAccountsTable.needsReauthentication, false),
         getDestinationScopeFilter(database),
       ),
     );
@@ -103,7 +102,6 @@ const getOAuthAccountsForUser = async (
       and(
         eq(calendarAccountsTable.provider, provider),
         eq(calendarsTable.userId, userId),
-        eq(calendarAccountsTable.needsReauthentication, false),
         getDestinationScopeFilter(database),
       ),
     );

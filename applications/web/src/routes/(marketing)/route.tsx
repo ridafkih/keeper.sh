@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
-import { jsonLdMeta, organizationSchema } from '../../lib/seo'
+import { jsonLdScript, organizationSchema } from '../../lib/seo'
 import { Layout, LayoutItem } from '../../components/ui/shells/layout'
 import { MarketingHeader, MarketingHeaderActions, MarketingHeaderBranding } from '../../features/marketing/components/marketing-header'
 import { MarketingFooter, MarketingFooterTagline, MarketingFooterNav, MarketingFooterNavGroup, MarketingFooterNavGroupLabel, MarketingFooterNavItem } from '../../features/marketing/components/marketing-footer'
@@ -9,6 +9,7 @@ import { GithubStarButton } from '../../components/ui/primitives/github-star-but
 import { SessionSlot } from '../../components/ui/shells/session-slot';
 import HeartIcon from "lucide-react/dist/esm/icons/heart";
 import { ExternalTextLink } from "@/components/ui/primitives/text-link";
+import { CookieConsent } from "@/components/cookie-consent";
 
 interface GithubStarsLoaderData {
   count: number | null;
@@ -33,13 +34,14 @@ export const Route = createFileRoute('/(marketing)')({
     }
   },
   head: () => ({
-    meta: [jsonLdMeta(organizationSchema)],
+    scripts: [jsonLdScript(organizationSchema)],
   }),
   component: MarketingLayout,
 })
 
 function MarketingLayout() {
   const githubStars = Route.useLoaderData();
+  const { runtimeConfig } = Route.useRouteContext();
 
   return (
     <>
@@ -111,6 +113,7 @@ function MarketingLayout() {
         </MarketingFooter>
       </LayoutItem>
     </Layout>
+    {runtimeConfig.gdprApplies && <CookieConsent />}
     </>
   )
 }

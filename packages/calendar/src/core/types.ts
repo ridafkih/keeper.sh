@@ -53,6 +53,7 @@ interface SyncableEvent {
   startTimeZone?: string;
   recurrenceRule?: object;
   exceptionDates?: object;
+  recurrenceId?: Date;
   summary: string;
   description?: string;
   location?: string;
@@ -67,6 +68,7 @@ interface PushResult {
   deleteId?: string;
   error?: string;
   shouldContinue?: boolean;
+  conflictResolved?: boolean;
 }
 
 interface DeleteResult {
@@ -141,6 +143,7 @@ interface SourceEvent {
   startTimeZone?: string;
   recurrenceRule?: object;
   exceptionDates?: object;
+  recurrenceId?: Date;
   title?: string;
   description?: string;
   location?: string;

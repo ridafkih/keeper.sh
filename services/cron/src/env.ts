@@ -1,6 +1,8 @@
 import arkenv from "arkenv";
 
 const schema = {
+  PRIVATE_RESOLUTION_WHITELIST: "string?",
+  BLOCK_PRIVATE_RESOLUTION: "boolean?",
   COMMERCIAL_MODE: "boolean?",
   DATABASE_URL: "string.url",
   ENCRYPTION_KEY: "string?",
@@ -11,6 +13,7 @@ const schema = {
   POLAR_ACCESS_TOKEN: "string?",
   POLAR_MODE: "'sandbox' | 'production' | undefined?",
   REDIS_URL: "string.url",
+  WORKER_JOB_QUEUE_ENABLED: "boolean?",
 } as const;
 
 export { schema };

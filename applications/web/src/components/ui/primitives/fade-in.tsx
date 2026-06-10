@@ -3,7 +3,7 @@ import { LazyMotion, type HTMLMotionProps, type TargetAndTransition } from "moti
 import { loadMotionFeatures } from "@/lib/motion-features";
 import * as m from "motion/react-m";
 
-type Direction = "from-right" | "from-top";
+type Direction = "from-right" | "from-top" | "from-bottom";
 
 const variants: Record<Direction, { hidden: TargetAndTransition; visible: TargetAndTransition }> = {
   "from-right": {
@@ -12,6 +12,10 @@ const variants: Record<Direction, { hidden: TargetAndTransition; visible: Target
   },
   "from-top": {
     hidden: { opacity: 0, y: -10, filter: "blur(4px)" },
+    visible: { opacity: 1, y: 0, filter: "blur(0px)" },
+  },
+  "from-bottom": {
+    hidden: { opacity: 0, y: 10, filter: "blur(4px)" },
     visible: { opacity: 1, y: 0, filter: "blur(0px)" },
   },
 };

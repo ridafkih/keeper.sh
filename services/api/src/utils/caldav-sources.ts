@@ -7,7 +7,7 @@ import {
 import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { encryptPassword } from "@keeper.sh/database";
 import { database, premiumService, encryptionKey } from "@/context";
-import { triggerDestinationSync } from "./sync";
+import { enqueuePushSync } from "./enqueue-push-sync";
 import { applySourceSyncDefaults } from "./source-sync-defaults";
 
 const FIRST_RESULT_LIMIT = 1;
@@ -43,6 +43,7 @@ interface CalDAVSource {
 }
 
 interface CreateCalDAVSourceData {
+  authMethod: string;
   calendarUrl: string;
   name: string;
   password: string;
@@ -92,6 +93,7 @@ const createCalDAVAccount = async (
   const [credential] = await databaseClient
     .insert(caldavCredentialsTable)
     .values({
+      authMethod: data.authMethod,
       encryptedPassword,
       serverUrl: data.serverUrl,
       username: data.username,
@@ -259,7 +261,11 @@ const createCalDAVSource = async (
     };
   });
 
-  triggerDestinationSync(userId);
+  const plan = await premiumService.getUserPlan(userId);
+  if (!plan) {
+    throw new Error("Unable to resolve user plan for sync enqueue");
+  }
+  await enqueuePushSync(userId, plan);
 
   return result;
 };

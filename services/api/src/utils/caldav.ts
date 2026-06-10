@@ -5,7 +5,8 @@ import { isCalDAVProvider } from "@keeper.sh/calendar";
 import type { CalDAVProviderId } from "@keeper.sh/calendar";
 import { and, eq, sql } from "drizzle-orm";
 import { saveCalDAVDestinationWithDatabase } from "./destinations";
-import { triggerDestinationSync } from "./sync";
+import { enqueuePushSync } from "./enqueue-push-sync";
+import { safeFetchOptions } from "./safe-fetch-options";
 import { database, encryptionKey, premiumService } from "@/context";
 
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
@@ -33,25 +34,33 @@ interface DiscoveredCalendar {
   displayName: string | undefined;
 }
 
+interface DiscoveryResult {
+  calendars: DiscoveredCalendar[];
+  authMethod: string;
+}
+
 const isValidProvider = (provider: string): provider is CalDAVProviderId =>
   isCalDAVProvider(provider);
 
 const discoverCalendars = async (
   serverUrl: string,
   credentials: CalDAVCredentials,
-): Promise<DiscoveredCalendar[]> => {
+): Promise<DiscoveryResult> => {
   try {
     const client = createCalDAVClient({
       credentials,
       serverUrl,
-    });
+    }, safeFetchOptions);
 
     const calendars = await client.discoverCalendars();
 
-    return calendars.map((calendar) => ({
-      displayName: calendar.displayName,
-      url: calendar.url,
-    }));
+    return {
+      calendars: calendars.map((calendar) => ({
+        displayName: calendar.displayName,
+        url: calendar.url,
+      })),
+      authMethod: client.getResolvedAuthMethod() ?? "basic",
+    };
   } catch (error) {
     throw new CalDAVConnectionError(error);
   }
@@ -60,13 +69,14 @@ const discoverCalendars = async (
 const validateCredentials = async (
   serverUrl: string,
   credentials: CalDAVCredentials,
-): Promise<void> => {
+): Promise<string> => {
   const client = createCalDAVClient({
     credentials,
     serverUrl,
   });
 
   await client.discoverCalendars();
+  return client.getResolvedAuthMethod() ?? "basic";
 };
 
 const createCalDAVDestination = async (
@@ -76,11 +86,9 @@ const createCalDAVDestination = async (
   credentials: CalDAVCredentials,
   calendarUrl: string,
 ): Promise<void> => {
-  try {
-    await validateCredentials(serverUrl, credentials);
-  } catch (error) {
+  const authMethod = await validateCredentials(serverUrl, credentials).catch((error) => {
     throw new CalDAVConnectionError(error);
-  }
+  });
 
   if (!encryptionKey) {
     throw new Error("ENCRYPTION_KEY must be set to use CalDAV destinations");
@@ -129,10 +137,15 @@ const createCalDAVDestination = async (
       calendarUrl,
       credentials.username,
       encrypted,
+      authMethod,
     );
   });
 
-  triggerDestinationSync(userId);
+  const plan = await premiumService.getUserPlan(userId);
+  if (!plan) {
+    throw new Error("Unable to resolve user plan for sync enqueue");
+  }
+  await enqueuePushSync(userId, plan);
 };
 
 const extractServerHost = (serverUrl: string): string | null => {

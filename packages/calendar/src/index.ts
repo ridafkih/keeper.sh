@@ -1,6 +1,5 @@
 export {
   createOAuthProviders,
-  configureStateStore,
   type ValidatedState,
   type AuthorizationUrlOptions,
   type NormalizedUserInfo,
@@ -26,8 +25,14 @@ export {
   type TokenRefresher,
 } from "./core/oauth/ensure-valid-token";
 export {
+  runWithCredentialRefreshLock,
   type RefreshLockStore,
 } from "./core/oauth/refresh-coordinator";
+export { isOAuthReauthRequiredError } from "./core/oauth/error-classification";
+export {
+  createCoordinatedRefresher,
+  type CoordinatedRefresherOptions,
+} from "./core/oauth/coordinated-refresher";
 export {
   OAuthSourceProvider,
   type FetchEventsResult,
@@ -49,15 +54,17 @@ export {
   type OAuthSourceAccount,
   type SourceProvider,
 } from "./core/oauth/create-source-provider";
-export { generateEventUid, isKeeperEvent } from "./core/events/identity";
+export { generateDeterministicEventUid, isKeeperEvent } from "./core/events/identity";
 export { inferAllDayEvent, resolveIsAllDayEvent } from "./core/events/all-day";
 export { RateLimiter, type RateLimiterConfig } from "./core/utils/rate-limiter";
 export { createRedisRateLimiter, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
 export { allSettledWithConcurrency, type AllSettledWithConcurrencyOptions } from "./core/utils/concurrency";
 export { getErrorMessage } from "./core/utils/error";
-export { widelogger } from "widelogger";
-export type { WideloggerOptions } from "widelogger";
 export { getEventsForDestination } from "./core/events/events";
+export {
+  parseExceptionDatesFromJson,
+  parseRecurrenceRuleFromJson,
+} from "./core/events/recurrence";
 export {
   buildSourceEventIdentityKey,
   buildSourceEventsToAdd,
@@ -110,18 +117,19 @@ export {
 } from "./core/oauth/accounts";
 export {
   createGoogleOAuthService,
+  createGoogleTokenRefresher,
   type GoogleOAuthCredentials,
   type GoogleOAuthService,
 } from "./core/oauth/google";
 export {
   createMicrosoftOAuthService,
+  createMicrosoftTokenRefresher,
   type MicrosoftOAuthCredentials,
   type MicrosoftOAuthService,
 } from "./core/oauth/microsoft";
 export {
   generateState,
   validateState,
-  createInMemoryStateStore,
 } from "./core/oauth/state";
 export type {
   AuthType,

@@ -15,23 +15,32 @@ const fetchCalendars = (calendarType?: string) => {
       .where(
         and(
           eq(calendarsTable.calendarType, calendarType),
+          eq(calendarsTable.disabled, false),
           inArray(calendarsTable.id,
-          database.selectDistinct({ id: sourceDestinationMappingsTable.sourceCalendarId })
-            .from(sourceDestinationMappingsTable)
-        ),
+            database.selectDistinct({ id: sourceDestinationMappingsTable.sourceCalendarId })
+              .from(sourceDestinationMappingsTable),
+          ),
         ),
       );
   }
   return database
     .select()
     .from(calendarsTable)
-    .where(inArray(calendarsTable.id,
+    .where(
+      and(
+        eq(calendarsTable.disabled, false),
+        inArray(calendarsTable.id,
           database.selectDistinct({ id: sourceDestinationMappingsTable.sourceCalendarId })
-            .from(sourceDestinationMappingsTable)
-        ));
+            .from(sourceDestinationMappingsTable),
+        ),
+      ),
+    );
 };
 
-const getDestinationScopeFilter = () => arrayContains(calendarsTable.capabilities, ["push"]);
+const getDestinationScopeFilter = () => and(
+  arrayContains(calendarsTable.capabilities, ["push"]),
+  eq(calendarsTable.disabled, false),
+);
 
 const getSourcesByPlan = async (
   targetPlan: Plan,

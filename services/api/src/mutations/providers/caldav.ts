@@ -2,7 +2,10 @@ import { convertIcsCalendar, generateIcsCalendar } from "ts-ics";
 import type { IcsCalendar, IcsEvent } from "ts-ics";
 import { HTTP_STATUS, KEEPER_USER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { decryptPassword } from "@keeper.sh/database";
+import { createSafeFetch } from "@keeper.sh/calendar/safe-fetch";
+import { createDigestAwareFetch, resolveAuthMethod } from "@keeper.sh/calendar/digest-fetch";
 import { createDAVClient } from "tsdav";
+import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "@/types";
 
 interface CalDAVCredentials {
@@ -11,14 +14,24 @@ interface CalDAVCredentials {
   username: string;
   encryptedPassword: string;
   encryptionKey: string;
+  authMethod: string;
 }
 
 const getClient = (credentials: CalDAVCredentials) => {
   const password = decryptPassword(credentials.encryptedPassword, credentials.encryptionKey);
+  const safeFetch = createSafeFetch(safeFetchOptions);
+  const knownAuthMethod = resolveAuthMethod(credentials.authMethod);
+  const { fetch: digestAwareFetch } = createDigestAwareFetch({
+    credentials: { username: credentials.username, password },
+    baseFetch: safeFetch,
+    knownAuthMethod,
+  });
   return createDAVClient({
-    authMethod: "Basic",
+    authMethod: "Custom",
+    authFunction: () => Promise.resolve({}),
     credentials: { username: credentials.username, password },
     defaultAccountType: "caldav",
+    fetch: digestAwareFetch,
     serverUrl: credentials.serverUrl,
   });
 };
@@ -230,10 +243,14 @@ const deleteCalDAVEvent = async (
         calendarObject: { url: objectUrl },
       });
     } catch (error) {
-      const { status } = error as { status?: number };
-      if (status !== HTTP_STATUS.NOT_FOUND) {
-        throw error;
+      if (error instanceof Error && "status" in error) {
+        const { status } = error;
+        if (status !== HTTP_STATUS.NOT_FOUND) {
+          throw error;
+        }
       }
+
+      throw error;
     }
 
     return { success: true };

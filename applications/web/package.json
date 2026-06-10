@@ -8,13 +8,14 @@
     "build": "vite build --outDir dist/client && vite build --ssr src/server.tsx --outDir dist/server && bun scripts/build.ts",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "types": "tsc --noEmit",
-    "test": "bun test",
+    "test": "bun x --bun vitest run",
     "preview": "vite preview",
     "start": "bun scripts/start.ts"
   },
   "dependencies": {
     "@better-auth/passkey": "^1.5.5",
     "@keeper.sh/data-schemas": "workspace:*",
+    "@keeper.sh/otelemetry": "workspace:*",
     "@polar-sh/checkout": "^0.2.0",
     "@tanstack/react-router": "^1.163.3",
     "arktype": "^2.2.0",
@@ -31,7 +32,7 @@
     "streamdown": "^2.4.0",
     "swr": "^2.4.1",
     "tailwind-variants": "^3.2.2",
-    "widelogger": "^0.4.0",
+    "widelogger": "^0.7.0",
     "yaml": "^2.8.2"
   },
   "devDependencies": {
@@ -52,6 +53,7 @@
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
     "vite": "^8.0.0",
-    "vite-plugin-svgr": "^4.5.0"
+    "vite-plugin-svgr": "^4.5.0",
+    "vitest": "^4.1.4"
   }
 }

@@ -1,71 +1,44 @@
-import {
-  runMcpWideEventContext,
-  setWideEventFields,
-  trackStatusError,
-  widelog,
-} from "./logging";
-
-const HTTP_ERROR_THRESHOLD = 400;
-const HTTP_INTERNAL_SERVER_ERROR = 500;
+import { context, widelog } from "./logging";
 
 type RouteHandler = (request: Request) => Response | Promise<Response>;
 
-const extractHttpContext = (request: Request): Record<string, unknown> => {
-  const url = new URL(request.url);
-  const origin = request.headers.get("origin");
-  const userAgent = request.headers.get("user-agent");
-  const fields: Record<string, unknown> = {
-    http: {
-      method: request.method,
-      path: url.pathname,
-      ...(origin && { origin }),
-      ...(userAgent && { user_agent: userAgent }),
-    },
-    operation: {
-      name: `${request.method} ${url.pathname}`,
-      type: "http",
-    },
-    request: {
-      id: request.headers.get("x-request-id") ?? crypto.randomUUID(),
-    },
-  };
-  return fields;
-};
-
-const mapHttpStatusToOutcome = (status: number): "success" | "error" =>
-{
-  if (status >= HTTP_ERROR_THRESHOLD) {
+const resolveOutcome = (statusCode: number): "success" | "error" => {
+  if (statusCode >= 400) {
     return "error";
   }
   return "success";
 };
 
-const handleResponseStatus = (status: number): void => {
-  widelog.set("status_code", status);
-  widelog.set("outcome", mapHttpStatusToOutcome(status));
-  if (status >= HTTP_ERROR_THRESHOLD) {
-    trackStatusError(status, "HttpError");
-  }
-};
-
 const withWideEvent =
   (handler: (request: Request) => Response | Promise<Response>): RouteHandler =>
   (request) =>
-    runMcpWideEventContext(async () => {
-      setWideEventFields(extractHttpContext(request));
+    context(async () => {
+      const url = new URL(request.url);
+      const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
+
+      widelog.set("operation.name", `${request.method} ${url.pathname}`);
+      widelog.set("operation.type", "http");
+      widelog.set("request.id", requestId);
+      widelog.set("http.method", request.method);
+      widelog.set("http.path", url.pathname);
+
+      const userAgent = request.headers.get("user-agent");
+      if (userAgent) {
+        widelog.set("http.user_agent", userAgent);
+      }
+
       try {
         return await widelog.time.measure("duration_ms", async () => {
-          try {
-            const response = await handler(request);
-            handleResponseStatus(response.status);
-            return response;
-          } catch (error) {
-            widelog.set("status_code", HTTP_INTERNAL_SERVER_ERROR);
-            widelog.set("outcome", "error");
-            widelog.errorFields(error);
-            throw error;
-          }
+          const response = await handler(request);
+          widelog.set("status_code", response.status);
+          widelog.set("outcome", resolveOutcome(response.status));
+          return response;
         });
+      } catch (error) {
+        widelog.set("status_code", 500);
+        widelog.set("outcome", "error");
+        widelog.errorFields(error, { slug: "unclassified" });
+        throw error;
       } finally {
         widelog.flush();
       }

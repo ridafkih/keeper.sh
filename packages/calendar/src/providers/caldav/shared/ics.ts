@@ -80,6 +80,7 @@ interface ParsedCalendarEvent {
   startTimeZone?: string;
   recurrenceRule?: object;
   exceptionDates?: object;
+  recurrenceId?: Date;
 }
 
 const mapAvailability = (transparency: "TRANSPARENT" | "OPAQUE" | undefined) => {
@@ -89,11 +90,8 @@ const mapAvailability = (transparency: "TRANSPARENT" | "OPAQUE" | undefined) => 
   return "busy";
 };
 
-const parseICalToRemoteEvent = (icsString: string): ParsedCalendarEvent | null => {
-  const calendar = parseIcsCalendar({ icsString });
-  const [event] = calendar.events ?? [];
-
-  if (!event?.uid || !event.start?.date) {
+const mapIcsEventToParsedEvent = (event: IcsEvent): ParsedCalendarEvent | null => {
+  if (!event.uid || !event.start?.date) {
     return null;
   }
 
@@ -106,6 +104,7 @@ const parseICalToRemoteEvent = (icsString: string): ParsedCalendarEvent | null =
     description: event.description,
     endTime,
     exceptionDates: event.exceptionDates,
+    recurrenceId: event.recurrenceId?.value?.date,
     isKeeperEvent: isKeeperEvent(event.uid),
     isAllDay: event.start.type === "DATE",
     location: event.location,
@@ -117,4 +116,24 @@ const parseICalToRemoteEvent = (icsString: string): ParsedCalendarEvent | null =
   };
 };
 
-export { eventToICalString, parseICalToRemoteEvent };
+const parseICalToRemoteEvents = (icsString: string): ParsedCalendarEvent[] => {
+  const calendar = parseIcsCalendar({ icsString });
+  const events = calendar.events ?? [];
+  const parsed: ParsedCalendarEvent[] = [];
+
+  for (const event of events) {
+    const result = mapIcsEventToParsedEvent(event);
+    if (result) {
+      parsed.push(result);
+    }
+  }
+
+  return parsed;
+};
+
+const parseICalToRemoteEvent = (icsString: string): ParsedCalendarEvent | null => {
+  const [event] = parseICalToRemoteEvents(icsString);
+  return event ?? null;
+};
+
+export { eventToICalString, parseICalToRemoteEvent, parseICalToRemoteEvents };

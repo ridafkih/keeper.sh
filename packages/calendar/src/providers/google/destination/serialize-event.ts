@@ -3,31 +3,30 @@ import type { SyncableEvent } from "../../../core/types";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
 
 const formatDateOnly = (value: Date): string => value.toISOString().slice(0, 10);
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-const isSingleDayAllDayEvent = (event: SyncableEvent): boolean => event.endTime.getTime() - event.startTime.getTime() === MS_PER_DAY;
+const buildDateField = (
+  time: Date,
+  isAllDay: boolean,
+  startTimeZone: string | undefined,
+  recurrenceRule: string | null | undefined,
+): NonNullable<GoogleEvent["start"]> => {
+  if (isAllDay) {
+    return { date: formatDateOnly(time) };
+  }
 
-const buildWorkingLocationProperties = (
-  event: Pick<SyncableEvent, "location" | "summary">,
-): NonNullable<GoogleEvent["workingLocationProperties"]> => {
-  const label = event.location?.trim() || event.summary.trim();
-
+  const timeZone = startTimeZone ?? "UTC";
   return {
-    customLocation: { label },
-    type: "customLocation",
+    dateTime: time.toISOString(),
+    ...(recurrenceRule && { timeZone }),
   };
 };
 
 const canSerializeGoogleEvent = (event: SyncableEvent): boolean => {
-  if (event.availability !== "workingElsewhere") {
-    return true;
+  if (event.availability === "workingElsewhere") {
+    return false;
   }
 
-  if (!resolveIsAllDayEvent(event)) {
-    return true;
-  }
-
-  return isSingleDayAllDayEvent(event);
+  return true;
 };
 
 const serializeGoogleEvent = (
@@ -41,44 +40,16 @@ const serializeGoogleEvent = (
 
   const isAllDay = resolveIsAllDayEvent(event);
 
-  const googleEvent: GoogleEvent = {
+  return {
     description: event.description,
+    end: buildDateField(event.endTime, isAllDay, event.startTimeZone, recurrenceRule),
     iCalUID: uid,
+    location: event.location,
+    start: buildDateField(event.startTime, isAllDay, event.startTimeZone, recurrenceRule),
     summary: event.summary,
+    ...(event.availability === "free" && { transparency: "transparent" }),
+    ...(recurrenceRule && { recurrence: [`RRULE:${recurrenceRule}`] }),
   };
-
-  if (event.availability === "workingElsewhere") {
-    googleEvent.eventType = "workingLocation";
-    googleEvent.transparency = "transparent";
-    googleEvent.visibility = "public";
-    googleEvent.workingLocationProperties = buildWorkingLocationProperties(event);
-  } else {
-    googleEvent.location = event.location;
-    if (event.availability === "free") {
-      googleEvent.transparency = "transparent";
-    }
-  }
-
-  if (isAllDay) {
-    googleEvent.start = { date: formatDateOnly(event.startTime) };
-    googleEvent.end = { date: formatDateOnly(event.endTime) };
-  } else {
-    const recurrenceTimeZone = event.startTimeZone ?? "UTC";
-    googleEvent.start = {
-      dateTime: event.startTime.toISOString(),
-      ...(recurrenceRule && { timeZone: recurrenceTimeZone }),
-    };
-    googleEvent.end = {
-      dateTime: event.endTime.toISOString(),
-      ...(recurrenceRule && { timeZone: recurrenceTimeZone }),
-    };
-  }
-
-  if (recurrenceRule) {
-    googleEvent.recurrence = [`RRULE:${recurrenceRule}`];
-  }
-
-  return googleEvent;
 };
 
 export { canSerializeGoogleEvent, serializeGoogleEvent };

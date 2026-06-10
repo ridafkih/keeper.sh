@@ -1,8 +1,8 @@
 import { KEEPER_API_READ_SCOPE } from "@keeper.sh/auth";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { runMcpWideEventContext, setWideEventFields, widelog } from "./utils/logging";
 import type { KeeperMcpToolDefinition, KeeperMcpToolset, KeeperToolContext } from "./toolset";
+import { widelog } from "./utils/logging";
 
 const JSON_RPC_VERSION = "2.0";
 const JSON_RPC_ERROR_UNAUTHORIZED = -32_001;
@@ -156,42 +156,12 @@ const registerToolset = (
         inputSchema: tool.inputSchema,
         title: tool.title,
       },
-      (input: Record<string, unknown>) =>
-        runMcpWideEventContext(async () => {
-          setWideEventFields({
-            mcp: {
-              tool: name,
-            },
-            operation: {
-              name: `mcp:tool:${name}`,
-              type: "mcp",
-            },
-            request: {
-              id: crypto.randomUUID(),
-            },
-            user: {
-              id: userId,
-            },
-          });
-
-          try {
-            return await widelog.time.measure("duration_ms", async () => {
-              try {
-                const result = await tool.execute(toolContext, input);
-                widelog.set("outcome", "success");
-                widelog.set("status_code", 200);
-                return createToolResponse(result);
-              } catch (error) {
-                widelog.set("outcome", "error");
-                widelog.set("status_code", 500);
-                widelog.errorFields(error);
-                throw error;
-              }
-            });
-          } finally {
-            widelog.flush();
-          }
-        }),
+      async (input: Record<string, unknown>) => {
+        widelog.set("mcp.tool", name);
+        widelog.set("user.id", userId);
+        const result = await tool.execute(toolContext, input);
+        return createToolResponse(result);
+      },
     );
   }
 };

@@ -9,7 +9,7 @@ COPY . .
 FROM base AS prune
 RUN bun install --global turbo
 COPY --from=source /app .
-RUN turbo prune @keeper.sh/api @keeper.sh/cron @keeper.sh/web --docker
+RUN turbo prune @keeper.sh/api @keeper.sh/cron @keeper.sh/worker @keeper.sh/web --docker
 
 FROM base AS build
 COPY --from=prune /app/out/json/ .
@@ -17,6 +17,7 @@ RUN bun install --frozen-lockfile
 COPY --from=prune /app/out/full/ .
 RUN bun run --cwd services/api build && \
     bun run --cwd services/cron build && \
+    bun run --cwd services/worker build && \
     bun run --cwd applications/web build
 
 FROM debian:bookworm-slim AS runtime
@@ -66,6 +67,7 @@ RUN bun install --frozen-lockfile --production
 
 COPY --from=build /app/services/api/dist ./services/api/dist
 COPY --from=build /app/services/cron/dist ./services/cron/dist
+COPY --from=build /app/services/worker/dist ./services/worker/dist
 COPY --from=build /app/packages/database/src ./packages/database/src
 COPY --from=source /app/packages/database/scripts ./packages/database/scripts
 COPY --from=source /app/packages/database/drizzle ./packages/database/drizzle
@@ -87,6 +89,7 @@ ENV DATABASE_URL=postgresql://keeper:keeper@localhost:5432/keeper
 ENV REDIS_URL=redis://localhost:6379
 ENV API_PORT=3001
 ENV COMMERCIAL_MODE=false
+ENV WORKER_JOB_QUEUE_ENABLED=true
 ENV BETTER_AUTH_URL=http://localhost
 ENV VITE_API_URL=http://127.0.0.1:3001
 

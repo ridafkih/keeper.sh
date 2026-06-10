@@ -5,9 +5,6 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { database as databaseInstance } from "@/context";
-import { triggerDestinationSync } from "./sync";
-import { widelog } from "./logging";
-
 const EMPTY_LIST_COUNT = 0;
 const USER_MAPPING_LOCK_NAMESPACE = 9001;
 const MAPPING_LIMIT_ERROR_MESSAGE = "Mapping limit reached. Upgrade to Pro for unlimited sync mappings.";
@@ -45,7 +42,6 @@ interface SetDestinationsDependencies {
     callback: (transaction: SetDestinationsTransaction) => Promise<TResult>,
   ) => Promise<TResult>;
   isMappingCountAllowed?: (userId: string, nextMappingCount: number) => Promise<boolean>;
-  triggerDestinationSync: (userId: string) => void;
 }
 
 interface SetSourcesTransaction {
@@ -66,7 +62,6 @@ interface SetSourcesDependencies {
     callback: (transaction: SetSourcesTransaction) => Promise<TResult>,
   ) => Promise<TResult>;
   isMappingCountAllowed?: (userId: string, nextMappingCount: number) => Promise<boolean>;
-  triggerDestinationSync: (userId: string) => void;
 }
 
 const assertAllIdsOwned = (
@@ -268,7 +263,6 @@ const createSetDestinationsDependencies = async (): Promise<SetDestinationsDepen
       const mappingLimit = premiumService.getMappingLimit(userPlan);
       return nextMappingCount <= mappingLimit;
     },
-    triggerDestinationSync,
     withTransaction: (callback) =>
       database.transaction((transactionClient) =>
         callback(createSetDestinationsTransaction(transactionClient))),
@@ -284,7 +278,6 @@ const createSetSourcesDependencies = async (): Promise<SetSourcesDependencies> =
       const mappingLimit = premiumService.getMappingLimit(userPlan);
       return nextMappingCount <= mappingLimit;
     },
-    triggerDestinationSync,
     withTransaction: (callback) =>
       database.transaction((transactionClient) =>
         callback(createSetSourcesTransaction(transactionClient))),
@@ -344,12 +337,6 @@ const runSetDestinationsForSource = async (
       await transaction.ensureDestinationSyncStatuses(uniqueDestinationCalendarIds);
     }
   });
-
-  try {
-    dependencies.triggerDestinationSync(userId);
-  } catch (error) {
-    widelog.errorFields(error);
-  }
 };
 
 const runSetSourcesForDestination = async (
@@ -401,12 +388,6 @@ const runSetSourcesForDestination = async (
       await transaction.ensureDestinationSyncStatus(destinationCalendarId);
     }
   });
-
-  try {
-    dependencies.triggerDestinationSync(userId);
-  } catch (error) {
-    widelog.errorFields(error);
-  }
 };
 
 const getUserMappings = async (userId: string): Promise<SourceDestinationMapping[]> => {

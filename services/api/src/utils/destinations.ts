@@ -13,7 +13,8 @@ import type {
   NormalizedUserInfo as OAuthUserInfo,
   ValidatedState,
 } from "@keeper.sh/calendar";
-import { database, oauthProviders } from "@/context";
+import { database, oauthProviders, redis } from "@/context";
+import { invalidateCalendarsForAccount } from "@/utils/invalidate-calendars";
 
 const FIRST_RESULT_LIMIT = 1;
 const EMPTY_RESULT_COUNT = 0;
@@ -312,6 +313,8 @@ const deleteCalendarDestination = async (
   userId: string,
   accountId: string,
 ): Promise<boolean> => {
+  await invalidateCalendarsForAccount(database, redis, accountId);
+
   const result = await database
     .delete(calendarAccountsTable)
     .where(
@@ -353,6 +356,7 @@ const saveCalDAVDestinationWithDatabase = async (
   calendarUrl: string,
   username: string,
   encryptedPassword: string,
+  authMethod: string,
 ): Promise<void> => {
   const existingAccount = await findExistingAccount(databaseClient, provider, accountId);
   validateAccountOwnership(existingAccount, userId);
@@ -360,7 +364,7 @@ const saveCalDAVDestinationWithDatabase = async (
   if (existingAccount?.caldavCredentialId) {
     await databaseClient
       .update(caldavCredentialsTable)
-      .set({ encryptedPassword, serverUrl, username })
+      .set({ authMethod, encryptedPassword, serverUrl, username })
       .where(eq(caldavCredentialsTable.id, existingAccount.caldavCredentialId));
 
     await databaseClient
@@ -394,7 +398,7 @@ const saveCalDAVDestinationWithDatabase = async (
 
   const [credential] = await databaseClient
     .insert(caldavCredentialsTable)
-    .values({ encryptedPassword, serverUrl, username })
+    .values({ authMethod, encryptedPassword, serverUrl, username })
     .returning({ id: caldavCredentialsTable.id });
 
   if (!credential) {
@@ -443,6 +447,7 @@ const saveCalDAVDestination = (
   calendarUrl: string,
   username: string,
   encryptedPassword: string,
+  authMethod: string,
 ): Promise<void> =>
   saveCalDAVDestinationWithDatabase(
     database,
@@ -454,6 +459,7 @@ const saveCalDAVDestination = (
     calendarUrl,
     username,
     encryptedPassword,
+    authMethod,
   );
 
 export {

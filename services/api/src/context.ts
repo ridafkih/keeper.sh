@@ -10,7 +10,6 @@ import {
   createOAuthProviders,
   buildOAuthConfigs,
   createSyncAggregateRuntime,
-  configureStateStore,
 } from "@keeper.sh/calendar";
 import type { OAuthStateStore, RefreshLockStore, DestinationSyncResult } from "@keeper.sh/calendar";
 
@@ -40,7 +39,7 @@ const createRedisStateStore = (redisClient: Redis): OAuthStateStore => ({
   },
 });
 
-configureStateStore(createRedisStateStore(redis));
+const oauthStateStore = createRedisStateStore(redis);
 
 const createRedisRefreshLockStore = (redisClient: Redis): RefreshLockStore => ({
   async tryAcquire(key, ttlSeconds) {
@@ -89,7 +88,7 @@ const premiumService = createPremiumService({
 });
 
 const oauthConfigs = buildOAuthConfigs(env);
-const oauthProviders = createOAuthProviders(oauthConfigs);
+const oauthProviders = createOAuthProviders(oauthConfigs, oauthStateStore);
 
 const persistSyncStatus = async (
   result: DestinationSyncResult,
@@ -135,8 +134,6 @@ const getCurrentSyncAggregate = (
 const getCachedSyncAggregate = (userId: string) =>
   syncAggregateRuntime.getCachedSyncAggregate(userId);
 
-const getSyncAggregateRuntime = () => syncAggregateRuntime;
-
 const createResendClient = (): Resend | null => {
   if (!env.RESEND_API_KEY) {
     return null;
@@ -168,5 +165,4 @@ export {
   encryptionKey,
   getCurrentSyncAggregate,
   getCachedSyncAggregate,
-  getSyncAggregateRuntime,
 };

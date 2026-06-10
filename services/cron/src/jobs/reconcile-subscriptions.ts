@@ -1,11 +1,10 @@
 import type { CronOptions } from "cronbake";
 import { userSubscriptionsTable } from "@keeper.sh/database/schema";
 import { user } from "@keeper.sh/database/auth-schema";
-import { setCronEventFields, withCronWideEvent } from "@/utils/with-wide-event";
-import { countSettledResults } from "@/utils/count-settled-results";
+import { withCronWideEvent } from "@/utils/with-wide-event";
+import { widelog } from "@/utils/logging";
 
 const EMPTY_SUBSCRIPTIONS_COUNT = 0;
-const INITIAL_PROCESSED_COUNT = 0;
 
 const getPlanFromSubscriptionStatus = (hasActive: boolean): "pro" | "free" => {
   if (hasActive) {
@@ -18,7 +17,6 @@ interface ReconcileSubscriptionsDependencies {
   hasBillingClient: boolean;
   selectUserIds: () => Promise<string[]>;
   reconcileUserSubscription: (userId: string) => Promise<void>;
-  setCronEventFields: (fields: Record<string, unknown>) => void;
   reconcileUserTimeoutMs?: number;
 }
 
@@ -44,12 +42,10 @@ const runReconcileSubscriptionsJob = async (
   dependencies: ReconcileSubscriptionsDependencies,
 ): Promise<void> => {
   if (!dependencies.hasBillingClient) {
-    dependencies.setCronEventFields({ "processed.count": INITIAL_PROCESSED_COUNT });
     return;
   }
 
   const userIds = await dependencies.selectUserIds();
-  dependencies.setCronEventFields({ "processed.count": userIds.length });
   const reconcileUserTimeoutMs = dependencies.reconcileUserTimeoutMs ?? RECONCILE_USER_TIMEOUT_MS;
 
   const settlements = await Promise.allSettled(
@@ -61,8 +57,10 @@ const runReconcileSubscriptionsJob = async (
       )),
   );
 
-  const { failed } = countSettledResults(settlements);
-  dependencies.setCronEventFields({ "failed.count": failed });
+  const failedCount = settlements.filter((settlement) => settlement.status === "rejected").length;
+
+  widelog.set("batch.processed_count", userIds.length);
+  widelog.set("batch.failed_count", failedCount);
 };
 
 const createDefaultDependencies = async (): Promise<ReconcileSubscriptionsDependencies> => {
@@ -105,7 +103,6 @@ const createDefaultDependencies = async (): Promise<ReconcileSubscriptionsDepend
       const users = await database.select({ id: user.id }).from(user);
       return users.map((userRecord) => userRecord.id);
     },
-    setCronEventFields,
   };
 };
 

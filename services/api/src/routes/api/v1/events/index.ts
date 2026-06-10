@@ -4,12 +4,12 @@ import { createKeeperApi } from "@/read-models";
 import type { KeeperEventFilters } from "@/types";
 import { withV1Auth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
-import { respondWithLoggedError } from "@/utils/logging";
 import { eventCreateBodySchema } from "@/utils/request-body";
-import { database, oauthProviders, encryptionKey } from "@/context";
+import { database, oauthProviders, refreshLockStore, encryptionKey } from "@/context";
 
 const keeperApi = createKeeperApi(database, {
   oauthTokenRefresher: oauthProviders,
+  refreshLockStore,
   encryptionKey,
 });
 
@@ -72,11 +72,8 @@ const POST = withWideEvent(
       }
 
       return Response.json(result.event ?? { created: true }, { status: HTTP_STATUS.CREATED });
-    } catch (error) {
-      return respondWithLoggedError(
-        error,
-        ErrorResponse.badRequest("Invalid event data. calendarId, title, startTime, and endTime are required.").toResponse(),
-      );
+    } catch {
+      return ErrorResponse.badRequest("Invalid event data. calendarId, title, startTime, and endTime are required.").toResponse();
     }
   }),
 );

@@ -1,11 +1,13 @@
-import { widelog, widelogger } from "widelogger";
+import { widelogger, widelog } from "widelogger";
 
-const { context: runCronWideEventContext, destroy: destroyWideLogger } = widelogger({
+const environment = process.env.ENV ?? "production";
+
+const { context, destroy } = widelogger({
   service: "keeper-cron",
   defaultEventName: "wide_event",
   commitHash: process.env.COMMIT_SHA,
-  environment: process.env.ENV ?? "production",
+  environment,
   version: process.env.npm_package_version,
 });
 
-export { widelog, runCronWideEventContext, destroyWideLogger };
+export { context, destroy, widelog };

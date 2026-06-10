@@ -12,14 +12,17 @@ import type { ProviderCredentials } from "@/types";
 
 const credentialColumns = {
   calendarId: calendarsTable.id,
+  accountId: calendarAccountsTable.id,
   externalCalendarId: calendarsTable.externalCalendarId,
   calendarUrl: calendarsTable.calendarUrl,
   provider: calendarAccountsTable.provider,
   email: calendarAccountsTable.email,
   needsReauthentication: calendarAccountsTable.needsReauthentication,
+  oauthCredentialId: oauthCredentialsTable.id,
   oauthAccessToken: oauthCredentialsTable.accessToken,
   oauthRefreshToken: oauthCredentialsTable.refreshToken,
   oauthExpiresAt: oauthCredentialsTable.expiresAt,
+  caldavAuthMethod: caldavCredentialsTable.authMethod,
   caldavServerUrl: caldavCredentialsTable.serverUrl,
   caldavUsername: caldavCredentialsTable.username,
   caldavEncryptedPassword: caldavCredentialsTable.encryptedPassword,
@@ -27,14 +30,17 @@ const credentialColumns = {
 
 interface CredentialRow {
   calendarId: string;
+  accountId: string;
   externalCalendarId: string | null;
   calendarUrl: string | null;
   provider: string;
   email: string | null;
   needsReauthentication: boolean;
+  oauthCredentialId: string | null;
   oauthAccessToken: string | null;
   oauthRefreshToken: string | null;
   oauthExpiresAt: Date | null;
+  caldavAuthMethod: string | null;
   caldavServerUrl: string | null;
   caldavUsername: string | null;
   caldavEncryptedPassword: string | null;
@@ -44,13 +50,15 @@ const rowToCredentials = (row: CredentialRow): ProviderCredentials => {
   const credentials: ProviderCredentials = {
     provider: row.provider,
     calendarId: row.calendarId,
+    accountId: row.accountId,
     externalCalendarId: row.externalCalendarId,
     calendarUrl: row.calendarUrl,
     email: row.email,
   };
 
-  if (row.oauthAccessToken && row.oauthRefreshToken && row.oauthExpiresAt) {
+  if (row.oauthCredentialId && row.oauthAccessToken && row.oauthRefreshToken && row.oauthExpiresAt) {
     credentials.oauth = {
+      credentialId: row.oauthCredentialId,
       accessToken: row.oauthAccessToken,
       refreshToken: row.oauthRefreshToken,
       expiresAt: row.oauthExpiresAt,
@@ -59,6 +67,7 @@ const rowToCredentials = (row: CredentialRow): ProviderCredentials => {
 
   if (row.caldavServerUrl && row.caldavUsername && row.caldavEncryptedPassword) {
     credentials.caldav = {
+      authMethod: row.caldavAuthMethod ?? "basic",
       serverUrl: row.caldavServerUrl,
       username: row.caldavUsername,
       encryptedPassword: row.caldavEncryptedPassword,
@@ -88,10 +97,6 @@ const resolveCredentialsByCalendarId = async (
     .limit(1);
 
   if (!result) {
-    return null;
-  }
-
-  if (result.needsReauthentication) {
     return null;
   }
 
@@ -195,7 +200,6 @@ const resolveAllSourceCredentials = async (
       and(
         eq(calendarsTable.userId, userId),
         arrayContains(calendarsTable.capabilities, ["pull"]),
-        eq(calendarAccountsTable.needsReauthentication, false),
       ),
     );
 

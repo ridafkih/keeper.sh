@@ -39,6 +39,7 @@ const oauthCredentialsTable = pgTable(
 );
 
 const caldavCredentialsTable = pgTable("caldav_credentials", {
+  authMethod: text().notNull().default("basic"),
   createdAt: timestamp().notNull().defaultNow(),
   encryptedPassword: text().notNull(),
   id: uuid().notNull().primaryKey().defaultRandom(),
@@ -97,9 +98,12 @@ const calendarsTable = pgTable(
     excludeEventName: boolean().notNull().default(false),
     excludeFocusTime: boolean().notNull().default(false),
     excludeOutOfOffice: boolean().notNull().default(false),
-    excludeWorkingLocation: boolean().notNull().default(false),
     includeInIcalFeed: boolean().notNull().default(false),
     customEventName: text().notNull().default(""),
+    disabled: boolean().notNull().default(false),
+    failureCount: integer().notNull().default(0),
+    lastFailureAt: timestamp(),
+    nextAttemptAt: timestamp(),
     externalCalendarId: text(),
     id: uuid().notNull().primaryKey().defaultRandom(),
     capabilities: text().array().notNull().default(["pull"]),
@@ -149,6 +153,7 @@ const eventStatesTable = pgTable(
     location: text(),
     recurrenceRule: text(),
     exceptionDates: text(),
+    recurrenceId: timestamp(),
     isAllDay: boolean(),
     sourceEventType: text(),
     sourceEventUid: text(),

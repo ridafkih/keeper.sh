@@ -13,4 +13,5 @@ await build({
   root: "src",
   splitting: true,
   target: "bun",
+  external: ["pino-opentelemetry-transport"],
 });

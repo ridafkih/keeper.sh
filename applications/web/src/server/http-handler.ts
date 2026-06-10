@@ -1,6 +1,8 @@
 import { withCompression } from "./compression";
 import { isApiRequest, isMcpRequest, proxyRequest } from "./proxy/http";
 import { handleInternalRoute } from "./internal-routes";
+import { GDPR_COUNTRIES } from "@/config/gdpr";
+import { hasSessionCookie } from "@/lib/session-cookie";
 import type { Runtime, ServerConfig } from "./types";
 
 const CACHEABLE_PATHS = new Set(["/", "/blog", "/privacy", "/terms"]);
@@ -36,7 +38,7 @@ const baseSecurityHeaders: Record<string, string> = {
 };
 
 const cspHeader =
-  "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://cdn.visitors.now; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://pagead2.googlesyndication.com; font-src 'self'; connect-src 'self' https://www.google-analytics.com https://cdn.visitors.now https://e.visitors.now https://pagead2.googlesyndication.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+  "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://cdn.visitors.now; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://pagead2.googlesyndication.com; font-src 'self'; connect-src 'self' https://www.google-analytics.com https://cdn.visitors.now https://e.visitors.now https://pagead2.googlesyndication.com; frame-src https://polar.sh; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
 function withSecurityHeaders(response: Response, config: ServerConfig): Response {
   const headers = new Headers(response.headers);
@@ -53,6 +55,11 @@ function withSecurityHeaders(response: Response, config: ServerConfig): Response
     headers,
     status: response.status,
   });
+}
+
+function resolveGdprCacheSegment(countryCode: string): string {
+  if (GDPR_COUNTRIES.has(countryCode)) return "gdpr";
+  return "default";
 }
 
 export async function handleApplicationRequest(
@@ -80,9 +87,14 @@ export async function handleApplicationRequest(
   }
 
   const pathname = requestUrl.pathname;
+  const countryCode = request.headers.get("cf-ipcountry") ?? "";
+  const gdprSegment = resolveGdprCacheSegment(countryCode);
+  const cookieHeader = request.headers.get("cookie") ?? undefined;
+  const authSegment = hasSessionCookie(cookieHeader) ? "authed" : "anon";
+  const cacheKey = `${pathname}:${gdprSegment}:${authSegment}`;
 
   if (config.isProduction && CACHEABLE_PATHS.has(pathname)) {
-    const cached = getCachedHtml(pathname);
+    const cached = getCachedHtml(cacheKey);
     if (cached) {
       const cachedResponse = new Response(cached, {
         headers: { "content-type": "text/html; charset=utf-8" },
@@ -102,7 +114,7 @@ export async function handleApplicationRequest(
 
   if (config.isProduction && CACHEABLE_PATHS.has(pathname)) {
     const body = await routerResponse.text();
-    setCachedHtml(pathname, body);
+    setCachedHtml(cacheKey, body);
     const freshResponse = new Response(body, {
       headers: routerResponse.headers,
       status: routerResponse.status,

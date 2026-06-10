@@ -9,27 +9,32 @@
     "./outlook": "./src/providers/outlook/index.ts",
     "./fastmail": "./src/providers/fastmail/index.ts",
     "./icloud": "./src/providers/icloud/index.ts",
-    "./ics": "./src/ics/index.ts"
+    "./ics": "./src/ics/index.ts",
+    "./safe-fetch": "./src/utils/safe-fetch.ts",
+    "./digest-fetch": "./src/providers/caldav/shared/digest-fetch.ts"
   },
   "scripts": {
     "types": "tsc --noEmit",
-    "test": "bun test",
+    "test": "TZ=UTC bun x --bun vitest run",
     "lint": "oxlint ."
   },
   "dependencies": {
     "@keeper.sh/constants": "workspace:*",
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/database": "workspace:*",
-"drizzle-orm": "^0.45.1",
+    "@keeper.sh/digest-fetch": "workspace:*",
+    "drizzle-orm": "^0.45.1",
     "ioredis": "^5.10.0",
+    "ipaddr.js": "^2.3.0",
+    "tldts": "^7.0.27",
     "ts-ics": "^2.4.3",
-    "tsdav": "^2.1.8",
-    "widelogger": "^0.4.0"
+    "tsdav": "^2.1.8"
   },
   "devDependencies": {
     "@keeper.sh/fixtures": "workspace:*",
     "@keeper.sh/typescript-config": "workspace:*",
     "@types/bun": "latest",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "^4.1.4"
   }
 }

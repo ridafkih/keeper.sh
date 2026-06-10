@@ -3,8 +3,9 @@ import { and, count, eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { idParamSchema } from "@/utils/request-query";
-import { database } from "@/context";
+import { database, redis } from "@/context";
 import { withAccountDisplay } from "@/utils/provider-display";
+import { invalidateCalendarsForAccount } from "@/utils/invalidate-calendars";
 
 const GET = withWideEvent(
   withAuth(async ({ params, userId }) => {
@@ -50,6 +51,8 @@ const DELETE = withWideEvent(
       return ErrorResponse.badRequest("Account ID is required").toResponse();
     }
     const { id } = params;
+
+    await invalidateCalendarsForAccount(database, redis, id);
 
     const [deleted] = await database
       .delete(calendarAccountsTable)

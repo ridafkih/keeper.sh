@@ -1,4 +1,8 @@
 import { createDAVClient } from "tsdav";
+import { createSafeFetch } from "../../../utils/safe-fetch";
+import { createDigestAwareFetch } from "./digest-fetch";
+import type { CalDAVAuthMethod } from "./digest-fetch";
+import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import type { CalDAVClientConfig, CalendarInfo } from "../types";
 
 interface CalendarObject {
@@ -19,17 +23,33 @@ const getDisplayName = (name: unknown): string => {
 class CalDAVClient {
   private client: DAVClientInstance | null = null;
   private config: CalDAVClientConfig;
+  private safeFetchOptions?: SafeFetchOptions;
+  private resolvedAuthMethod: (() => CalDAVAuthMethod | null) | null = null;
 
-  constructor(config: CalDAVClientConfig) {
+  constructor(config: CalDAVClientConfig, safeFetchOptions?: SafeFetchOptions) {
     this.config = config;
+    this.safeFetchOptions = safeFetchOptions;
+  }
+
+  getResolvedAuthMethod(): CalDAVAuthMethod | null {
+    return this.resolvedAuthMethod?.() ?? null;
   }
 
   private async getClient(): Promise<DAVClientInstance> {
     if (!this.client) {
+      const safeFetch = createSafeFetch(this.safeFetchOptions);
+      const { fetch: digestAwareFetch, getResolvedMethod } = createDigestAwareFetch({
+        credentials: this.config.credentials,
+        baseFetch: safeFetch,
+        knownAuthMethod: this.config.authMethod,
+      });
+      this.resolvedAuthMethod = getResolvedMethod;
       this.client = await createDAVClient({
-        authMethod: "Basic",
+        authMethod: "Custom",
+        authFunction: () => Promise.resolve({}),
         credentials: this.config.credentials,
         defaultAccountType: "caldav",
+        fetch: digestAwareFetch,
         serverUrl: this.config.serverUrl,
       });
     }
@@ -40,11 +60,13 @@ class CalDAVClient {
     const client = await this.getClient();
     const calendars = await client.fetchCalendars();
 
-    return calendars.map(({ url, displayName, ctag }) => ({
-      ctag,
-      displayName: getDisplayName(displayName),
-      url,
-    }));
+    return calendars
+      .filter(({ components }) => components?.includes("VEVENT"))
+      .map(({ url, displayName, ctag }) => ({
+        ctag,
+        displayName: getDisplayName(displayName),
+        url,
+      }));
   }
 
   async fetchCalendarDisplayName(calendarUrl: string): Promise<string | null> {
@@ -104,7 +126,6 @@ class CalDAVClient {
 
     const objects = await client.fetchCalendarObjects({
       calendar: { url: params.calendarUrl },
-      expand: true,
       ...(params.timeRange && { timeRange: params.timeRange }),
     });
 
@@ -125,6 +146,7 @@ class CalDAVClient {
   }
 }
 
-const createCalDAVClient = (config: CalDAVClientConfig): CalDAVClient => new CalDAVClient(config);
+const createCalDAVClient = (config: CalDAVClientConfig, safeFetchOptions?: SafeFetchOptions): CalDAVClient =>
+  new CalDAVClient(config, safeFetchOptions);
 
 export { CalDAVClient, createCalDAVClient };

@@ -1,11 +1,12 @@
 export { createCalDAVSourceFetcher, type CalDAVSourceFetcherConfig } from "./source/fetch-adapter";
+export { isCalDAVAuthenticationError } from "./source/auth-error-classification";
 export { createCalDAVSyncProvider, type CalDAVSyncProviderConfig } from "./destination/provider";
 
 export { createCalDAVSourceProvider } from "./source/provider";
 export { createCalDAVSourceService } from "./source/sync";
 
 export { CalDAVClient, createCalDAVClient } from "./shared/client";
-export { eventToICalString, parseICalToRemoteEvent } from "./shared/ics";
+export { eventToICalString, parseICalToRemoteEvent, parseICalToRemoteEvents } from "./shared/ics";
 
 export type {
   CalDAVProviderOptions,

@@ -1,5 +1,6 @@
 import { listUserCalendars, CalendarListError } from "@keeper.sh/calendar/outlook";
 import { withAuth, withWideEvent } from "@/utils/middleware";
+import { widelog } from "@/utils/logging";
 import { listOAuthCalendars } from "@/utils/oauth-calendar-listing";
 import {
   refreshMicrosoftAccessToken,
@@ -8,28 +9,25 @@ import {
 
 const OUTLOOK_PROVIDER = "outlook";
 
-interface NormalizedOutlookCalendar {
-  id: string;
-  summary: string;
-  primary: boolean;
-}
-
 const GET = withWideEvent(
-  withAuth(({ request, userId }) =>
-    listOAuthCalendars(request, userId, {
+  withAuth(({ request, userId }) => {
+    widelog.set("provider.name", "outlook");
+    return listOAuthCalendars(request, userId, {
       isCalendarListError: (error): error is CalendarListError =>
         error instanceof CalendarListError,
-      listCalendars: listUserCalendars,
-      normalizeCalendars: (outlookCalendars): NormalizedOutlookCalendar[] =>
-        outlookCalendars.map(({ id, name, isDefaultCalendar }) => ({
+      listCalendars: async (accessToken) => {
+        const calendars = await listUserCalendars(accessToken);
+        return calendars.map(({ id, name, isDefaultCalendar }) => ({
           id,
           primary: Boolean(isDefaultCalendar),
           summary: name,
-        })),
+        }));
+      },
       provider: OUTLOOK_PROVIDER,
       refreshDestinationAccessToken: refreshMicrosoftAccessToken,
       refreshSourceAccessToken: refreshMicrosoftSourceAccessToken,
-    })),
+    });
+  }),
 );
 
 export { GET };

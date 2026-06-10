@@ -6,7 +6,7 @@ import { and, eq, inArray, max } from "drizzle-orm";
 import { database, getCachedSyncAggregate, getCurrentSyncAggregate } from "@/context";
 import { resolveSyncAggregatePayload } from "./websocket-payload";
 import { runSendInitialSyncStatus } from "./websocket-initial-status";
-import { runApiWideEventContext, setWideEventFields, widelog } from "@/utils/logging";
+import { context, widelog } from "@/utils/logging";
 
 const selectLatestDestinationSyncedAt = async (userId: string): Promise<Date | null> => {
   const [aggregate] = await database
@@ -52,43 +52,27 @@ const runWebsocketBoundary = (
   operationName: "websocket:open" | "websocket:close",
   callback: () => void | Promise<void>,
 ): Promise<void> =>
-  runApiWideEventContext(async () => {
-    setWideEventFields({
-      operation: {
-        name: operationName,
-        type: "connection",
-      },
-      request: {
-        id: crypto.randomUUID(),
-      },
-      user: {
-        id: socket.data.userId,
-      },
-    });
+  context(async () => {
+    widelog.set("operation.name", operationName);
+    widelog.set("operation.type", "connection");
+    widelog.set("request.id", crypto.randomUUID());
+    widelog.set("user.id", socket.data.userId);
 
     try {
-      await widelog.time.measure("duration_ms", async () => {
-        try {
-          await callback();
-          widelog.set("status_code", 200);
-          widelog.set("outcome", "success");
-        } catch (error) {
-          widelog.set("status_code", 500);
-          widelog.set("outcome", "error");
-          widelog.errorFields(error);
-          throw error;
-        }
-      });
+      await widelog.time.measure("duration_ms", () => callback());
+    } catch (error) {
+      widelog.errorFields(error, { slug: "unclassified" });
+      throw error;
     } finally {
       widelog.flush();
     }
   });
 
 const websocketHandler = {
-  close(socket: Socket): void {
-    runWebsocketBoundary(socket, "websocket:close", () => {
+  close(socket: Socket) {
+    return runWebsocketBoundary(socket, "websocket:close", () => {
       baseWebsocketHandler.close(socket);
-    }).catch(() => null);
+    });
   },
   idleTimeout: baseWebsocketHandler.idleTimeout,
   message: baseWebsocketHandler.message,

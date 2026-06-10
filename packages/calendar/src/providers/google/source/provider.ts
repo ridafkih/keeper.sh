@@ -35,7 +35,6 @@ interface GoogleSourceConfig extends OAuthSourceConfig {
   sourceName: string;
   excludeFocusTime: boolean;
   excludeOutOfOffice: boolean;
-  excludeWorkingLocation: boolean;
 }
 
 class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfig> {
@@ -113,12 +112,15 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
     const existingEvents = await database
       .select({
         availability: eventStatesTable.availability,
+        description: eventStatesTable.description,
         id: eventStatesTable.id,
         endTime: eventStatesTable.endTime,
         isAllDay: eventStatesTable.isAllDay,
+        location: eventStatesTable.location,
         sourceEventType: eventStatesTable.sourceEventType,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
+        title: eventStatesTable.title,
       })
       .from(eventStatesTable)
       .where(eq(eventStatesTable.calendarId, calendarId));
@@ -227,7 +229,6 @@ interface GoogleSourceAccount {
   sourceName: string;
   excludeFocusTime: boolean;
   excludeOutOfOffice: boolean;
-  excludeWorkingLocation: boolean;
 }
 
 interface CreateGoogleSourceProviderConfig {
@@ -248,7 +249,6 @@ const getGoogleSourcesWithCredentials = async (
       credentialId: oauthCredentialsTable.id,
       excludeFocusTime: calendarsTable.excludeFocusTime,
       excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
-      excludeWorkingLocation: calendarsTable.excludeWorkingLocation,
       externalCalendarId: calendarsTable.externalCalendarId,
       oauthCredentialId: oauthCredentialsTable.id,
       originalName: calendarsTable.originalName,
@@ -269,7 +269,6 @@ const getGoogleSourcesWithCredentials = async (
         eq(calendarsTable.calendarType, "oauth"),
         arrayContains(calendarsTable.capabilities, ["pull"]),
         eq(calendarAccountsTable.provider, GOOGLE_PROVIDER_ID),
-        eq(calendarAccountsTable.needsReauthentication, false),
       ),
     );
 
@@ -297,7 +296,6 @@ const createGoogleCalendarSourceProvider = (
       database: db,
       excludeFocusTime: account.excludeFocusTime,
       excludeOutOfOffice: account.excludeOutOfOffice,
-      excludeWorkingLocation: account.excludeWorkingLocation,
       externalCalendarId: account.externalCalendarId,
       oauthCredentialId: account.oauthCredentialId,
       originalName: account.originalName,

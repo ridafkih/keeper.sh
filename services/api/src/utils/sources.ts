@@ -3,13 +3,14 @@ import { pullRemoteCalendar, createIcsSourceFetcher } from "@keeper.sh/calendar/
 import { ingestSource, insertEventStatesWithConflictResolution } from "@keeper.sh/calendar";
 import type { IngestionChanges } from "@keeper.sh/calendar";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
-import { triggerDestinationSync } from "./sync";
+import { enqueuePushSync } from "./enqueue-push-sync";
 import {
   SourceLimitError,
   InvalidSourceUrlError,
   runCreateSource,
 } from "./source-lifecycle";
 import { applySourceSyncDefaults } from "./source-sync-defaults";
+import { safeFetchOptions } from "./safe-fetch-options";
 
 import { spawnBackgroundJob } from "./background-task";
 import { database, premiumService } from "@/context";
@@ -73,6 +74,7 @@ const ingestIcsSource = async (source: Source): Promise<void> => {
     calendarId: source.id,
     url: source.url,
     database,
+    safeFetchOptions,
   });
 
   await ingestSource({
@@ -82,12 +84,15 @@ const ingestIcsSource = async (source: Source): Promise<void> => {
       database
         .select({
           availability: eventStatesTable.availability,
+          description: eventStatesTable.description,
           endTime: eventStatesTable.endTime,
           id: eventStatesTable.id,
           isAllDay: eventStatesTable.isAllDay,
+          location: eventStatesTable.location,
           sourceEventType: eventStatesTable.sourceEventType,
           sourceEventUid: eventStatesTable.sourceEventUid,
           startTime: eventStatesTable.startTime,
+          title: eventStatesTable.title,
         })
         .from(eventStatesTable)
         .where(eq(eventStatesTable.calendarId, source.id)),
@@ -126,7 +131,7 @@ const verifySourceOwnership = async (userId: string, calendarId: string): Promis
 };
 
 const validateSourceUrl = async (url: string): Promise<void> => {
-  await pullRemoteCalendar("json", url);
+  await pullRemoteCalendar("json", url, safeFetchOptions);
 };
 
 const createSource = (userId: string, name: string, url: string): Promise<Source> =>
@@ -177,7 +182,13 @@ const createSource = (userId: string, name: string, url: string): Promise<Source
           await ingestIcsSource(source);
         },
         spawnBackgroundJob,
-        triggerDestinationSync,
+        enqueuePushSync: async (enqueuedUserId) => {
+          const plan = await premiumService.getUserPlan(enqueuedUserId);
+          if (!plan) {
+            throw new Error("Unable to resolve user plan for sync enqueue");
+          }
+          await enqueuePushSync(enqueuedUserId, plan);
+        },
         validateSourceUrl,
       },
     ),

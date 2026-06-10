@@ -8,6 +8,7 @@ import { RouteShell } from "@/components/ui/shells/route-shell";
 import { Text } from "@/components/ui/primitives/text";
 import { MetadataRow } from "@/features/dashboard/components/metadata-row";
 import { fetcher, apiFetch } from "@/lib/fetcher";
+import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { formatDate } from "@/lib/time";
 import { invalidateAccountsAndSources } from "@/lib/swr";
 import type { CalendarAccount, CalendarSource } from "@/types/api";
@@ -76,6 +77,9 @@ function AccountDetailPage() {
     startDeleteTransition(async () => {
       try {
         await apiFetch(`/api/accounts/${accountId}`, { method: "DELETE" });
+        if (account) {
+          track(ANALYTICS_EVENTS.calendar_account_deleted, { provider: account.provider });
+        }
         await invalidateAccountsAndSources(globalMutate, `/api/accounts/${accountId}`);
         navigate({ to: "/dashboard" });
       } catch (err) {

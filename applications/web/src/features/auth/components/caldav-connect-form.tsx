@@ -77,6 +77,12 @@ function parseCalendarOptions(value: unknown): CalendarOption[] | null {
   return calendars;
 }
 
+function parseAuthMethod(value: unknown): "basic" | "digest" {
+  if (!isRecord(value)) return "basic";
+  if (value.authMethod === "digest") return "digest";
+  return "basic";
+}
+
 function parseAccountId(value: unknown): string | undefined {
   if (!isRecord(value)) return undefined;
   if (typeof value.accountId === "string") return value.accountId;
@@ -121,6 +127,7 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
 
       const discoverPayload = await discoverResponse.json();
       const calendars = parseCalendarOptions(discoverPayload);
+      const authMethod = parseAuthMethod(discoverPayload);
       if (!calendars) {
         setError("Failed to parse discovered calendars");
         return;
@@ -140,6 +147,7 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
+                authMethod,
                 calendarUrl: calendar.url,
                 name: calendar.displayName,
                 password,

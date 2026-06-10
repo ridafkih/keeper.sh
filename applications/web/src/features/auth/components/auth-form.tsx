@@ -19,6 +19,7 @@ import {
   type AuthCapabilities,
 } from "@/lib/auth-capabilities";
 import { signInWithCredential, signUpWithCredential } from "@/lib/auth";
+import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import {
   Button,
   LinkButton,
@@ -333,6 +334,12 @@ function CredentialForm({
         active: true,
       });
       return;
+    }
+
+    if (action === "signUp") {
+      track(ANALYTICS_EVENTS.signup_completed);
+    } else if (action === "signIn") {
+      track(ANALYTICS_EVENTS.login_completed);
     }
 
     if (action === "signUp" && capabilities.requiresEmailVerification) {

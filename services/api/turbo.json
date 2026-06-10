@@ -1,5 +1,5 @@
 {
-  "$schema": "https://turborepo.com/schema.json",
+  "$schema": "https://v2-9-0.turborepo.dev/schema.json",
   "extends": ["//"],
   "tasks": {
     "dev": {
@@ -24,7 +24,9 @@
         "PASSKEY_ORIGIN",
         "ENCRYPTION_KEY",
         "WEBSOCKET_URL",
-        "TRUSTED_ORIGINS"
+        "TRUSTED_ORIGINS",
+        "BLOCK_PRIVATE_RESOLUTION",
+        "PRIVATE_RESOLUTION_WHITELIST"
       ]
     },
     "start": {
@@ -49,7 +51,9 @@
         "PASSKEY_ORIGIN",
         "ENCRYPTION_KEY",
         "WEBSOCKET_URL",
-        "TRUSTED_ORIGINS"
+        "TRUSTED_ORIGINS",
+        "BLOCK_PRIVATE_RESOLUTION",
+        "PRIVATE_RESOLUTION_WHITELIST"
       ]
     }
   }

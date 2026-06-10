@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import CreditCard from "lucide-react/dist/esm/icons/credit-card";
 import KeyRound from "lucide-react/dist/esm/icons/key-round";
@@ -6,6 +6,7 @@ import KeySquare from "lucide-react/dist/esm/icons/key-square";
 import Lock from "lucide-react/dist/esm/icons/lock";
 import Mail from "lucide-react/dist/esm/icons/mail";
 import Sparkles from "lucide-react/dist/esm/icons/sparkles";
+import Cookie from "lucide-react/dist/esm/icons/cookie";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import { pluralize } from "@/lib/pluralize";
 import { Button, ButtonText } from "@/components/ui/primitives/button";
@@ -13,6 +14,7 @@ import { BackButton } from "@/components/ui/primitives/back-button";
 import { useSession } from "@/hooks/use-session";
 import { useApiTokens } from "@/hooks/use-api-tokens";
 import { usePasskeys } from "@/hooks/use-passkeys";
+import { useHasPassword } from "@/hooks/use-has-password";
 import { Input } from "@/components/ui/primitives/input";
 import { deleteAccount } from "@/lib/auth";
 import {
@@ -27,10 +29,12 @@ import {
   NavigationMenuButtonItem,
   NavigationMenuItem,
   NavigationMenuLinkItem,
+  NavigationMenuToggleItem,
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
   NavigationMenuItemTrailing,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
+import { resolveEffectiveConsent, setAnalyticsConsent, track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { Text } from "@/components/ui/primitives/text";
 import { resolveErrorMessage } from "@/utils/errors";
 import { fetchAuthCapabilitiesWithApi } from "@/lib/auth-capabilities";
@@ -63,6 +67,7 @@ function SettingsPage() {
   const { user } = useSession();
   const navigate = useNavigate();
   const passwordRef = useRef<HTMLInputElement>(null);
+  const { data: hasPassword = false } = useHasPassword();
   const accountLabel = authCapabilities.credentialMode === "username" ? "Username" : "Email";
   const accountValue =
     authCapabilities.credentialMode === "username"
@@ -75,6 +80,15 @@ function SettingsPage() {
   });
   const isPro = subscription?.plan === "pro";
   const [isManaging, setIsManaging] = useState(false);
+  const { runtimeConfig } = Route.useRouteContext();
+  const [analyticsConsent, setAnalyticsConsentState] = useState(() =>
+    resolveEffectiveConsent(runtimeConfig.gdprApplies),
+  );
+  const handleAnalyticsToggle = useCallback((checked: boolean) => {
+    track(ANALYTICS_EVENTS.analytics_consent_changed, { granted: checked });
+    setAnalyticsConsent(checked);
+    setAnalyticsConsentState(checked);
+  }, []);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -92,13 +106,15 @@ function SettingsPage() {
     }
   };
 
+
   const handleDeleteAccount = async () => {
-    const password = passwordRef.current?.value;
-    if (!password) return;
+    const password = hasPassword ? passwordRef.current?.value : undefined;
+    if (hasPassword && !password) return;
     setDeleteError(null);
     setIsDeleting(true);
     try {
       await deleteAccount(password);
+      track(ANALYTICS_EVENTS.account_deleted);
       setDeleteOpen(false);
       navigate({ to: "/login" });
     } catch (err) {
@@ -123,7 +139,7 @@ function SettingsPage() {
         </NavigationMenuItem>
       </NavigationMenu>
       <NavigationMenu>
-        {authCapabilities.supportsChangePassword && (
+        {hasPassword && (
           <NavigationMenuLinkItem to="/dashboard/settings/change-password">
             <NavigationMenuItemIcon>
               <Lock size={15} />
@@ -157,6 +173,14 @@ function SettingsPage() {
           </NavigationMenuItemTrailing>
         </NavigationMenuLinkItem>
       </NavigationMenu>
+      <NavigationMenu>
+        <NavigationMenuToggleItem checked={analyticsConsent} onCheckedChange={handleAnalyticsToggle}>
+          <NavigationMenuItemIcon>
+            <Cookie size={15} />
+          </NavigationMenuItemIcon>
+          <NavigationMenuItemLabel>Analytics Cookies</NavigationMenuItemLabel>
+        </NavigationMenuToggleItem>
+      </NavigationMenu>
       {getCommercialMode() && (
         <NavigationMenu variant={isPro ? "default" : "highlight"}>
           <NavigationMenuButtonItem onClick={handleManagePlan} disabled={isManaging || subscriptionLoading}>
@@ -182,7 +206,9 @@ function SettingsPage() {
           <ModalDescription>
             This action is permanent and cannot be undone. All of your data, calendars, and connected accounts will be permanently deleted.
           </ModalDescription>
-          <Input ref={passwordRef} type="password" placeholder="Confirm your password" />
+          {hasPassword && (
+            <Input ref={passwordRef} type="password" placeholder="Confirm your password" />
+          )}
           {deleteError && <Text size="sm" tone="danger">{deleteError}</Text>}
           <ModalFooter>
             <Button variant="destructive" className="w-full justify-center" onClick={handleDeleteAccount} disabled={isDeleting}>

@@ -1,15 +1,16 @@
 import { RateLimiter } from "../../../core/utils/rate-limiter";
-import { generateEventUid, isKeeperEvent } from "../../../core/events/identity";
+import { generateDeterministicEventUid, isKeeperEvent } from "../../../core/events/identity";
 import { getErrorMessage } from "../../../core/utils/error";
 import type { DeleteResult, PushResult, RemoteEvent, SyncableEvent } from "../../../core/types";
 import { CalDAVClient } from "../shared/client";
-import { eventToICalString, parseICalToRemoteEvent } from "../shared/ics";
+import { eventToICalString, parseICalToRemoteEvents } from "../shared/ics";
 import { getCalDAVSyncWindow } from "../shared/sync-window";
 
 const CALDAV_RATE_LIMIT_CONCURRENCY = 5;
 const YEARS_UNTIL_FUTURE = 2;
 
 interface CalDAVSyncProviderConfig {
+  authMethod?: "basic" | "digest";
   calendarUrl: string;
   serverUrl: string;
   username: string;
@@ -18,6 +19,7 @@ interface CalDAVSyncProviderConfig {
 
 const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
   const client = new CalDAVClient({
+    authMethod: config.authMethod,
     credentials: { password: config.password, username: config.username },
     serverUrl: config.serverUrl,
   });
@@ -29,7 +31,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
       events.map((event) =>
         rateLimiter.execute(async (): Promise<PushResult> => {
           try {
-            const uid = generateEventUid();
+            const uid = generateDeterministicEventUid(event.id);
             const iCalString = eventToICalString(event, uid);
 
             await client.createCalendarObject({
@@ -86,12 +88,13 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
         continue;
       }
 
-      const parsed = parseICalToRemoteEvent(data);
-      if (!parsed || !isKeeperEvent(parsed.uid) || parsed.endTime < syncWindow.start) {
-        continue;
-      }
+      for (const parsed of parseICalToRemoteEvents(data)) {
+        if (!isKeeperEvent(parsed.uid) || parsed.endTime < syncWindow.start) {
+          continue;
+        }
 
-      remoteEvents.push(parsed);
+        remoteEvents.push(parsed);
+      }
     }
 
     return remoteEvents;

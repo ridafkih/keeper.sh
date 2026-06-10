@@ -13,6 +13,7 @@ import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
 import User from "lucide-react/dist/esm/icons/user";
 import { ErrorState } from "@/components/ui/primitives/error-state";
 import { signOut } from "@/lib/auth";
+import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { fetcher } from "@/lib/fetcher";
 import KeeperLogo from "@/assets/keeper.svg?react";
 import { EventGraph } from "@/features/dashboard/components/event-graph";
@@ -41,6 +42,7 @@ function DashboardPage() {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
+    track(ANALYTICS_EVENTS.logout);
     await signOut();
     navigate({ to: "/" });
   };

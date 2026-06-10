@@ -12,5 +12,6 @@ await build({
     "vite",
     "yaml",
     "widelogger",
+    "pino-opentelemetry-transport",
   ],
 });

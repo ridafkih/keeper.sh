@@ -1,6 +1,6 @@
 import { useSetAtom } from 'jotai'
 import { createFileRoute } from '@tanstack/react-router'
-import { canonicalUrl, jsonLdMeta, seoMeta, softwareApplicationSchema } from '../../lib/seo'
+import { canonicalUrl, jsonLdScript, seoMeta, softwareApplicationSchema } from '../../lib/seo'
 import { Heading1, Heading2, Heading3 } from '../../components/ui/primitives/heading'
 import { Text } from '../../components/ui/primitives/text'
 import {
@@ -43,6 +43,7 @@ import {
   MarketingPricingSection,
 } from '../../features/marketing/components/marketing-pricing-section'
 import { calendarEmphasizedAtom } from '../../state/calendar-emphasized'
+import { ANALYTICS_EVENTS } from '../../lib/analytics'
 import ArrowRightIcon from "lucide-react/dist/esm/icons/arrow-right";
 import ArrowUpRightIcon from "lucide-react/dist/esm/icons/arrow-up-right";
 
@@ -230,16 +231,14 @@ export const Route = createFileRoute('/(marketing)/')({
   component: MarketingPage,
   head: () => ({
     links: [{ rel: "canonical", href: canonicalUrl("/") }],
-    meta: [
-      ...seoMeta({
-        title: "Open-Source Calendar Syncing for Google, Outlook & iCloud",
-        description:
-          "Keep your personal, work, and school calendars in sync automatically. Open-source (AGPL-3.0) calendar syncing for Google Calendar, Outlook, iCloud, FastMail, and CalDAV.",
-        path: "/",
-        brandPosition: "before",
-      }),
-      jsonLdMeta(softwareApplicationSchema()),
-    ],
+    meta: seoMeta({
+      title: "Open-Source Calendar Syncing for Google, Outlook & iCloud",
+      description:
+        "Keep your personal, work, and school calendars in sync automatically. Open-source (AGPL-3.0) calendar syncing for Google Calendar, Outlook, iCloud, FastMail, and CalDAV.",
+      path: "/",
+      brandPosition: "before",
+    }),
+    scripts: [jsonLdScript(softwareApplicationSchema())],
   }),
 })
 
@@ -259,6 +258,8 @@ function MarketingPage() {
             size="compact"
             onMouseEnter={() => setEmphasized(true)}
             onMouseLeave={() => setEmphasized(false)}
+            data-visitors-event={ANALYTICS_EVENTS.marketing_cta_clicked}
+            data-visitors-cta="hero"
           >
             <ButtonText>Sync Calendars</ButtonText>
             <ButtonIcon>
@@ -409,7 +410,7 @@ function MarketingPage() {
                 Start syncing your calendars in seconds. Free to use, no credit card required.
               </Text>
               <div className="flex items-center gap-2 mt-2">
-                <LinkButton to="/register" size="compact" variant="inverse">
+                <LinkButton to="/register" size="compact" variant="inverse" data-visitors-event={ANALYTICS_EVENTS.marketing_cta_clicked} data-visitors-cta="bottom">
                   <ButtonText>Get Started</ButtonText>
                   <ButtonIcon>
                     <ArrowRightIcon size={16} />

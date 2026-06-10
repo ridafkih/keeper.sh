@@ -1,12 +1,14 @@
-import type { CalendarSyncProvider } from "@keeper.sh/calendar";
+import type { CalendarSyncProvider, RefreshLockStore } from "@keeper.sh/calendar";
 import type { RedisRateLimiter } from "@keeper.sh/calendar";
 import {
-  createGoogleOAuthService,
-  createMicrosoftOAuthService,
+  createGoogleTokenRefresher,
+  createMicrosoftTokenRefresher,
+  createCoordinatedRefresher,
 } from "@keeper.sh/calendar";
 import { createGoogleSyncProvider } from "@keeper.sh/calendar/google";
 import { createOutlookSyncProvider } from "@keeper.sh/calendar/outlook";
 import { createCalDAVSyncProvider } from "@keeper.sh/calendar/caldav";
+import { resolveAuthMethod } from "@keeper.sh/calendar/digest-fetch";
 import { decryptPassword } from "@keeper.sh/database";
 import {
   calendarAccountsTable,
@@ -34,17 +36,22 @@ const resolveOAuthProvider = async (
   userId: string,
   accountId: string,
   oauthConfig: OAuthConfig,
+  refreshLockStore: RefreshLockStore | null,
   rateLimiter?: RedisRateLimiter,
+  signal?: AbortSignal,
 ): Promise<CalendarSyncProvider | null> => {
   const [oauthCred] = await database
     .select({
       accessToken: oauthCredentialsTable.accessToken,
       refreshToken: oauthCredentialsTable.refreshToken,
       expiresAt: oauthCredentialsTable.expiresAt,
+      externalCalendarId: calendarsTable.externalCalendarId,
+      oauthCredentialId: oauthCredentialsTable.id,
     })
     .from(oauthCredentialsTable)
     .innerJoin(calendarAccountsTable, eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id))
-    .where(eq(calendarAccountsTable.id, accountId))
+    .innerJoin(calendarsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
+    .where(eq(calendarsTable.id, calendarId))
     .limit(1);
 
   if (!oauthCred) {
@@ -52,7 +59,10 @@ const resolveOAuthProvider = async (
   }
 
   if (provider === "google" && oauthConfig.googleClientId && oauthConfig.googleClientSecret) {
-    const googleOAuth = createGoogleOAuthService({
+    if (!oauthCred.externalCalendarId) {
+      return null;
+    }
+    const refreshGoogleToken = createGoogleTokenRefresher({
       clientId: oauthConfig.googleClientId,
       clientSecret: oauthConfig.googleClientSecret,
     });
@@ -60,16 +70,26 @@ const resolveOAuthProvider = async (
       accessToken: oauthCred.accessToken,
       refreshToken: oauthCred.refreshToken,
       accessTokenExpiresAt: oauthCred.expiresAt,
-      externalCalendarId: "primary",
+      externalCalendarId: oauthCred.externalCalendarId,
       calendarId,
       userId,
-      refreshAccessToken: (refreshToken) => googleOAuth.refreshAccessToken(refreshToken),
+      refreshAccessToken: createCoordinatedRefresher({
+        database,
+        oauthCredentialId: oauthCred.oauthCredentialId,
+        calendarAccountId: accountId,
+        refreshLockStore,
+        rawRefresh: (refreshToken) => refreshGoogleToken(refreshToken),
+      }),
       rateLimiter,
+      signal,
     });
   }
 
   if (provider === "outlook" && oauthConfig.microsoftClientId && oauthConfig.microsoftClientSecret) {
-    const microsoftOAuth = createMicrosoftOAuthService({
+    if (!oauthCred.externalCalendarId) {
+      return null;
+    }
+    const refreshMicrosoftToken = createMicrosoftTokenRefresher({
       clientId: oauthConfig.microsoftClientId,
       clientSecret: oauthConfig.microsoftClientSecret,
     });
@@ -77,9 +97,16 @@ const resolveOAuthProvider = async (
       accessToken: oauthCred.accessToken,
       refreshToken: oauthCred.refreshToken,
       accessTokenExpiresAt: oauthCred.expiresAt,
+      externalCalendarId: oauthCred.externalCalendarId,
       calendarId,
       userId,
-      refreshAccessToken: (refreshToken) => microsoftOAuth.refreshAccessToken(refreshToken),
+      refreshAccessToken: createCoordinatedRefresher({
+        database,
+        oauthCredentialId: oauthCred.oauthCredentialId,
+        calendarAccountId: accountId,
+        refreshLockStore,
+        rawRefresh: (refreshToken) => refreshMicrosoftToken(refreshToken),
+      }),
     });
   }
 
@@ -93,6 +120,7 @@ const resolveCalDAVProvider = async (
 ): Promise<CalendarSyncProvider | null> => {
   const [caldavCred] = await database
     .select({
+      authMethod: caldavCredentialsTable.authMethod,
       username: caldavCredentialsTable.username,
       encryptedPassword: caldavCredentialsTable.encryptedPassword,
       serverUrl: caldavCredentialsTable.serverUrl,
@@ -111,6 +139,7 @@ const resolveCalDAVProvider = async (
   const password = decryptPassword(caldavCred.encryptedPassword, encryptionKey);
 
   return createCalDAVSyncProvider({
+    authMethod: resolveAuthMethod(caldavCred.authMethod),
     calendarUrl: caldavCred.calendarUrl ?? caldavCred.serverUrl,
     serverUrl: caldavCred.serverUrl,
     username: caldavCred.username,
@@ -126,7 +155,9 @@ interface ResolveProviderOptions {
   accountId: string;
   oauthConfig: OAuthConfig;
   encryptionKey?: string;
+  refreshLockStore?: RefreshLockStore | null;
   rateLimiter?: RedisRateLimiter;
+  signal?: AbortSignal;
 }
 
 const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarSyncProvider | null> => {
@@ -138,7 +169,9 @@ const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarS
       options.userId,
       options.accountId,
       options.oauthConfig,
+      options.refreshLockStore ?? null,
       options.rateLimiter,
+      options.signal,
     );
   }
 

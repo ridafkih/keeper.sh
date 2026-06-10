@@ -4,47 +4,27 @@ import { getAllJobs } from "./utils/get-jobs";
 import { injectJobs } from "./utils/inject-jobs";
 import { registerJobs } from "./utils/register-jobs";
 import { closeDatabase } from "@keeper.sh/database";
-import { widelog, destroyWideLogger, runCronWideEventContext } from "./utils/logging";
+import { destroy } from "./utils/logging";
+import { checkWorkerMigrationStatus } from "./migration-check";
 import env from "./env";
+
+checkWorkerMigrationStatus(env.WORKER_JOB_QUEUE_ENABLED);
 
 const jobsFolderPathname = join(import.meta.dirname, "jobs");
 
 await entry({
-  main: () =>
-    runCronWideEventContext(async () => {
-      widelog.set("operation.name", "cron:start");
-      widelog.set("operation.type", "lifecycle");
-      widelog.set("request.id", crypto.randomUUID());
-      widelog.set("commercial.mode", env.COMMERCIAL_MODE ?? false);
-      widelog.set("database.url.configured", Boolean(env.DATABASE_URL));
+  main: async () => {
+    const { database, shutdownRefreshLockRedis } = await import("./context");
 
-      const { database, shutdownRefreshLockRedis } = await import("./context");
+    const jobs = await getAllJobs(jobsFolderPathname);
+    const injectedJobs = injectJobs(jobs);
+    registerJobs(injectedJobs);
 
-      try {
-        return await widelog.time.measure("duration_ms", async () => {
-
-          const jobs = await getAllJobs(jobsFolderPathname);
-          const injectedJobs = injectJobs(jobs);
-          registerJobs(injectedJobs);
-
-          widelog.set("job.count", injectedJobs.length);
-          widelog.set("outcome", "success");
-          widelog.set("status_code", 200);
-
-          return () => {
-            shutdownRefreshLockRedis();
-            closeDatabase(database);
-            destroyWideLogger();
-          };
-        });
-      } catch (error) {
-        widelog.set("outcome", "error");
-        widelog.set("status_code", 500);
-        widelog.errorFields(error);
-        throw error;
-      } finally {
-        widelog.flush();
-      }
-    }),
+    return () => {
+      destroy();
+      shutdownRefreshLockRedis();
+      closeDatabase(database);
+    };
+  },
   name: "cron",
 });

@@ -27,45 +27,15 @@ interface OAuthStateStore {
   consume(key: string): Promise<string | null>;
 }
 
-const createInMemoryStateStore = (): OAuthStateStore => {
-  const pendingStates = new Map<string, { value: string; expiresAt: number }>();
-
-  return {
-    set(key, value, ttlSeconds) {
-      pendingStates.set(key, {
-        expiresAt: Date.now() + ttlSeconds * MS_PER_SECOND,
-        value,
-      });
-      return Promise.resolve();
-    },
-    consume(key) {
-      const entry = pendingStates.get(key);
-      if (!entry) {
-        return Promise.resolve(null);
-      }
-
-      pendingStates.delete(key);
-
-      if (Date.now() > entry.expiresAt) {
-        return Promise.resolve(null);
-      }
-
-      return Promise.resolve(entry.value);
-    },
-  };
-};
-
-let stateStore: OAuthStateStore = createInMemoryStateStore();
-
-const configureStateStore = (store: OAuthStateStore): void => {
-  stateStore = store;
-};
-
 const getStateKey = (state: string): string => `${STATE_PREFIX}${state}`;
 
 const STATE_EXPIRY_SECONDS = STATE_EXPIRY_MINUTES * MS_PER_MINUTE / MS_PER_SECOND;
 
-const generateState = async (userId: string, options?: GenerateStateOptions): Promise<string> => {
+const generateState = async (
+  store: OAuthStateStore,
+  userId: string,
+  options?: GenerateStateOptions,
+): Promise<string> => {
   const state = crypto.randomUUID();
   const pendingState: PendingState = {
     destinationId: options?.destinationId ?? null,
@@ -74,12 +44,15 @@ const generateState = async (userId: string, options?: GenerateStateOptions): Pr
     userId,
   };
 
-  await stateStore.set(getStateKey(state), JSON.stringify(pendingState), STATE_EXPIRY_SECONDS);
+  await store.set(getStateKey(state), JSON.stringify(pendingState), STATE_EXPIRY_SECONDS);
   return state;
 };
 
-const validateState = async (state: string): Promise<ValidatedState | null> => {
-  const raw = await stateStore.consume(getStateKey(state));
+const validateState = async (
+  store: OAuthStateStore,
+  state: string,
+): Promise<ValidatedState | null> => {
+  const raw = await store.consume(getStateKey(state));
   if (!raw) {
     return null;
   }
@@ -97,5 +70,5 @@ const validateState = async (state: string): Promise<ValidatedState | null> => {
   };
 };
 
-export { generateState, validateState, configureStateStore, createInMemoryStateStore };
+export { generateState, validateState };
 export type { ValidatedState, GenerateStateOptions, OAuthStateStore };

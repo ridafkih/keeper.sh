@@ -20,9 +20,9 @@ const staticEntries: SitemapEntry[] = [
 ];
 
 function parseFrontmatter(raw: string): Record<string, unknown> {
-  const match = raw.match(FRONTMATTER_PATTERN);
+  const [, match] = raw.match(FRONTMATTER_PATTERN);
   if (!match) return {};
-  return parseYaml(match[1]) as Record<string, unknown>;
+  return parseYaml(match);
 }
 
 function discoverBlogEntries(blogDir: string): SitemapEntry[] {

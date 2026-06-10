@@ -14,6 +14,7 @@ interface CalDAVSourceService {
 }
 
 const mapSourceToAccount = (source: {
+  authMethod: string;
   calendarAccountId: string;
   calendarUrl: string | null;
   encryptedPassword: string;
@@ -42,6 +43,7 @@ const createCalDAVSourceService = (config: CalDAVSourceProviderConfig): CalDAVSo
   const getAllCalDAVSources = async (): Promise<CalDAVSourceAccount[]> => {
     const sources = await database
       .select({
+        authMethod: caldavCredentialsTable.authMethod,
         calendarAccountId: calendarAccountsTable.id,
         calendarId: calendarsTable.id,
         calendarUrl: calendarsTable.calendarUrl,
@@ -63,7 +65,6 @@ const createCalDAVSourceService = (config: CalDAVSourceProviderConfig): CalDAVSo
       .where(
         and(
           eq(calendarsTable.calendarType, CALDAV_CALENDAR_TYPE),
-          eq(calendarAccountsTable.needsReauthentication, false),
         ),
       );
 
@@ -73,6 +74,7 @@ const createCalDAVSourceService = (config: CalDAVSourceProviderConfig): CalDAVSo
   const getCalDAVSourcesByProvider = async (provider: string): Promise<CalDAVSourceAccount[]> => {
     const sources = await database
       .select({
+        authMethod: caldavCredentialsTable.authMethod,
         calendarAccountId: calendarAccountsTable.id,
         calendarId: calendarsTable.id,
         calendarUrl: calendarsTable.calendarUrl,
@@ -95,7 +97,6 @@ const createCalDAVSourceService = (config: CalDAVSourceProviderConfig): CalDAVSo
         and(
           eq(calendarsTable.calendarType, CALDAV_CALENDAR_TYPE),
           eq(calendarAccountsTable.provider, provider),
-          eq(calendarAccountsTable.needsReauthentication, false),
         ),
       );
 
@@ -105,6 +106,7 @@ const createCalDAVSourceService = (config: CalDAVSourceProviderConfig): CalDAVSo
   const getCalDAVSourcesForUser = async (userId: string): Promise<CalDAVSourceAccount[]> => {
     const sources = await database
       .select({
+        authMethod: caldavCredentialsTable.authMethod,
         calendarAccountId: calendarAccountsTable.id,
         calendarId: calendarsTable.id,
         calendarUrl: calendarsTable.calendarUrl,
@@ -127,7 +129,6 @@ const createCalDAVSourceService = (config: CalDAVSourceProviderConfig): CalDAVSo
         and(
           eq(calendarsTable.calendarType, CALDAV_CALENDAR_TYPE),
           eq(calendarsTable.userId, userId),
-          eq(calendarAccountsTable.needsReauthentication, false),
         ),
       );
 

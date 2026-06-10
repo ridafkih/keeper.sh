@@ -9,6 +9,7 @@ interface EventTimeSlot {
   startTimeZone?: string;
   recurrenceRule?: object;
   exceptionDates?: object;
+  recurrenceId?: Date;
   title?: string;
   description?: string;
   location?: string;

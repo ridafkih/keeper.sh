@@ -1,5 +1,8 @@
+import { HTTP_STATUS } from "@keeper.sh/constants";
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import { GOOGLE_BATCH_API, GOOGLE_BATCH_MAX_SIZE } from "./api";
+import { withBackoff, abortableSleep, computeDelay, DEFAULT_MAX_RETRIES } from "./backoff";
+import { isRateLimitApiError, parseGoogleApiError, parseGoogleApiErrorFromBody } from "./errors";
 
 interface BatchSubRequest {
   method: string;
@@ -210,36 +213,54 @@ const extractResponseBoundary = (contentType: string | null): string | null => {
   return match[1];
 };
 
-const executeBatch = async (
+class GoogleBatchApiError extends Error {
+  public readonly status: number;
+  public readonly apiError: ReturnType<typeof parseGoogleApiError>;
+  constructor(status: number, body: string) {
+    super(`Google Batch API ${status}: ${body}`);
+    this.name = "GoogleBatchApiError";
+    this.status = status;
+    this.apiError = parseGoogleApiError(body);
+  }
+}
+
+const executeBatch = (
   subRequests: BatchSubRequest[],
   accessToken: string,
-): Promise<BatchSubResponse[]> => {
-  const boundary = generateBoundary();
-  const requestBody = buildBatchRequestBody(subRequests, boundary);
+): Promise<BatchSubResponse[]> =>
+  withBackoff(
+    async () => {
+      const boundary = generateBoundary();
+      const requestBody = buildBatchRequestBody(subRequests, boundary);
 
-  const response = await fetch(GOOGLE_BATCH_API, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": `multipart/mixed; boundary=${boundary}`,
+      const response = await fetch(GOOGLE_BATCH_API, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": `multipart/mixed; boundary=${boundary}`,
+        },
+        body: requestBody,
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new GoogleBatchApiError(response.status, errorBody);
+      }
+
+      const responseText = await response.text();
+
+      const responseBoundary = extractResponseBoundary(response.headers.get("Content-Type"));
+      if (!responseBoundary) {
+        throw new Error(`Batch response missing boundary in Content-Type`);
+      }
+
+      return parseBatchResponseBody(responseText, responseBoundary);
     },
-    body: requestBody,
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`Google Batch API ${response.status}: ${errorBody}`);
-  }
-
-  const responseText = await response.text();
-
-  const responseBoundary = extractResponseBoundary(response.headers.get("Content-Type"));
-  if (!responseBoundary) {
-    throw new Error(`Batch response missing boundary in Content-Type`);
-  }
-
-  return parseBatchResponseBody(responseText, responseBoundary);
-};
+    {
+      shouldRetry: (error) =>
+        error instanceof GoogleBatchApiError && isRateLimitApiError(error.status, error.apiError),
+    },
+  );
 
 const chunkArray = <TItem>(items: TItem[], size: number): TItem[][] => {
   const chunks: TItem[][] = [];
@@ -249,10 +270,76 @@ const chunkArray = <TItem>(items: TItem[], size: number): TItem[][] => {
   return chunks;
 };
 
+const collectRateLimitedIndices = (responses: BatchSubResponse[]): number[] => {
+  const indices: number[] = [];
+  for (let index = 0; index < responses.length; index++) {
+    const response = responses[index];
+    if (response && isRateLimitApiError(response.statusCode, parseGoogleApiErrorFromBody(response.body))) {
+      indices.push(index);
+    }
+  }
+  return indices;
+};
+
+interface BatchChunkedOptions {
+  rateLimiter?: RedisRateLimiter;
+  signal?: AbortSignal;
+}
+
+const retryRateLimitedSubRequests = async (
+  subRequests: BatchSubRequest[],
+  accessToken: string,
+  options?: BatchChunkedOptions,
+): Promise<BatchSubResponse[]> => {
+  const results: BatchSubResponse[] = Array.from(
+    { length: subRequests.length },
+    () => ({ statusCode: 0, headers: {}, body: null }),
+  );
+
+  const pending = subRequests.map((request, index) => ({ request, index }));
+
+  for (let attempt = 0; attempt < DEFAULT_MAX_RETRIES; attempt++) {
+    if (pending.length === 0) {
+      break;
+    }
+
+    await abortableSleep(computeDelay(attempt), options?.signal);
+
+    const retryBatch = pending.map((entry) => entry.request);
+    if (options?.rateLimiter) {
+      await options.rateLimiter.acquire(retryBatch.length);
+    }
+    const responses = await executeBatch(retryBatch, accessToken);
+
+    const stillPending: typeof pending = [];
+    for (let responseIndex = 0; responseIndex < pending.length; responseIndex++) {
+      const entry = pending[responseIndex];
+      if (!entry) {
+        continue;
+      }
+      const response = responses[responseIndex];
+      if (response && isRateLimitApiError(response.statusCode, parseGoogleApiErrorFromBody(response.body))) {
+        stillPending.push(entry);
+      } else if (response) {
+        results[entry.index] = response;
+      }
+    }
+
+    pending.length = 0;
+    pending.push(...stillPending);
+  }
+
+  for (const entry of pending) {
+    results[entry.index] = { statusCode: HTTP_STATUS.TOO_MANY_REQUESTS, headers: {}, body: null };
+  }
+
+  return results;
+};
+
 const executeBatchChunked = async (
   subRequests: BatchSubRequest[],
   accessToken: string,
-  rateLimiter?: RedisRateLimiter,
+  options?: BatchChunkedOptions,
 ): Promise<BatchSubResponse[]> => {
   if (subRequests.length === 0) {
     return [];
@@ -262,10 +349,39 @@ const executeBatchChunked = async (
   const allResponses: BatchSubResponse[] = [];
 
   for (const chunk of chunks) {
-    if (rateLimiter) {
-      await rateLimiter.acquire(chunk.length);
+    if (options?.rateLimiter) {
+      await options.rateLimiter.acquire(chunk.length);
     }
     const responses = await executeBatch(chunk, accessToken);
+
+    const rateLimitedIndices = collectRateLimitedIndices(responses);
+    if (rateLimitedIndices.length === 0) {
+      allResponses.push(...responses);
+      continue;
+    }
+
+    const rateLimitedRequests: BatchSubRequest[] = [];
+    for (const index of rateLimitedIndices) {
+      const request = chunk[index];
+      if (!request) {
+        throw new Error(`Missing batch sub-request at index ${index}`);
+      }
+      rateLimitedRequests.push(request);
+    }
+    const retryResponses = await retryRateLimitedSubRequests(
+      rateLimitedRequests,
+      accessToken,
+      options,
+    );
+
+    for (let retryIndex = 0; retryIndex < rateLimitedIndices.length; retryIndex++) {
+      const originalIndex = rateLimitedIndices[retryIndex];
+      const retryResponse = retryResponses[retryIndex];
+      if (typeof originalIndex === "number" && retryResponse) {
+        responses[originalIndex] = retryResponse;
+      }
+    }
+
     allResponses.push(...responses);
   }
 

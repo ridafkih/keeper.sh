@@ -9,6 +9,9 @@ interface ExistingEventState {
   availability: string | null;
   isAllDay: boolean | null;
   sourceEventType: string | null;
+  title: string | null;
+  description: string | null;
+  location: string | null;
 }
 
 interface FetchEventsResult {
@@ -17,6 +20,7 @@ interface FetchEventsResult {
   cancelledEventUids?: string[];
   isDeltaSync?: boolean;
   fullSyncRequired?: boolean;
+  unchanged?: boolean;
 }
 
 interface IngestionChanges {
@@ -61,6 +65,12 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     wideEvent["source_events.count"] = fetchResult.events.length;
     wideEvent["existing_events.count"] = existingEvents.length;
 
+    if (fetchResult.unchanged) {
+      wideEvent["outcome"] = "unchanged";
+      wideEvent["flushed"] = false;
+      return EMPTY_RESULT;
+    }
+
     if (fetchResult.fullSyncRequired) {
       wideEvent["outcome"] = "full-sync-required";
       wideEvent["flushed"] = true;
@@ -99,11 +109,16 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       return EMPTY_RESULT;
     }
 
-    await flush({
+    const changes: IngestionChanges = {
       inserts: eventsToAdd,
       deletes: eventStateIdsToRemove,
-      syncToken: fetchResult.nextSyncToken,
-    });
+    };
+
+    if (typeof fetchResult.nextSyncToken === "string") {
+      changes.syncToken = fetchResult.nextSyncToken;
+    }
+
+    await flush(changes);
 
     flushed = true;
     wideEvent["outcome"] = "success";

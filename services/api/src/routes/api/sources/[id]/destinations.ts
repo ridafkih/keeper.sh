@@ -12,7 +12,8 @@ import {
 } from "./mapping-routes";
 
 const GET = withWideEvent(
-  withAuth(({ params, userId }) => handleGetSourceDestinationsRoute(
+  withAuth(({ params, userId }) =>
+    handleGetSourceDestinationsRoute(
       { params, userId },
       {
         getDestinationsForSource,
@@ -31,7 +32,8 @@ const GET = withWideEvent(
           return Boolean(source);
         },
       },
-    )),
+    ),
+  ),
 );
 
 const PUT = withWideEvent(

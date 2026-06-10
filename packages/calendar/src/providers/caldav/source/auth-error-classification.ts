@@ -1,8 +1,8 @@
-const AUTH_ERROR_STATUS_CODES = new Set([401, 403]);
+const AUTH_ERROR_STATUS_CODES = new Set([401]);
 
 const AUTH_ERROR_PATTERNS = [
   /\binvalid credentials\b/i,
-  /\bunauthorized\b/i,
+  /\b(?:401|authentication)\s+unauthorized\b/i,
   /\bauthentication required\b/i,
   /\bauthentication failed\b/i,
   /\bnot authenticated\b/i,

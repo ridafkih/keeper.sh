@@ -4,9 +4,9 @@ import { isKeeperEvent } from "../../../core/events/identity";
 import type { SourceEvent } from "../../../core/types";
 import { calendarAccountsTable, calendarsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { and, eq, inArray } from "drizzle-orm";
-import { widelog } from "widelogger";
 import { CalDAVClient } from "../shared/client";
-import { parseICalToRemoteEvent } from "../shared/ics";
+import { resolveAuthMethod } from "../shared/digest-fetch";
+import { parseICalToRemoteEvents } from "../shared/ics";
 import { isCalDAVAuthenticationError } from "./auth-error-classification";
 import { createCalDAVSourceService } from "./sync";
 import { getCalDAVSyncWindow } from "./sync-window";
@@ -48,6 +48,7 @@ const createCalDAVSourceProvider = (
   const fetchEventsFromCalDAV = async (account: CalDAVSourceAccount): Promise<SourceEvent[]> => {
     const password = sourceService.getDecryptedPassword(account.encryptedPassword);
     const client = new CalDAVClient({
+      authMethod: resolveAuthMethod(account.authMethod),
       credentials: {
         password,
         username: account.username,
@@ -74,33 +75,30 @@ const createCalDAVSourceProvider = (
         continue;
       }
 
-      const parsed = parseICalToRemoteEvent(data);
+      for (const parsed of parseICalToRemoteEvents(data)) {
+        if (isKeeperEvent(parsed.uid)) {
+          continue;
+        }
 
-      if (!parsed) {
-        continue;
+        if (parsed.endTime < syncWindow.start) {
+          continue;
+        }
+
+        events.push({
+          availability: parsed.availability,
+          description: parsed.description,
+          endTime: parsed.endTime,
+          exceptionDates: parsed.exceptionDates,
+          recurrenceId: parsed.recurrenceId,
+          isAllDay: parsed.isAllDay,
+          location: parsed.location,
+          recurrenceRule: parsed.recurrenceRule,
+          startTime: parsed.startTime,
+          startTimeZone: parsed.startTimeZone,
+          title: parsed.title,
+          uid: parsed.uid,
+        });
       }
-
-      if (isKeeperEvent(parsed.uid)) {
-        continue;
-      }
-
-      if (parsed.endTime < syncWindow.start) {
-        continue;
-      }
-
-      events.push({
-        availability: parsed.availability,
-        description: parsed.description,
-        endTime: parsed.endTime,
-        exceptionDates: parsed.exceptionDates,
-        isAllDay: parsed.isAllDay,
-        location: parsed.location,
-        recurrenceRule: parsed.recurrenceRule,
-        startTime: parsed.startTime,
-        startTimeZone: parsed.startTimeZone,
-        title: parsed.title,
-        uid: parsed.uid,
-      });
     }
 
     return events;
@@ -113,12 +111,15 @@ const createCalDAVSourceProvider = (
     const existingEvents = await database
       .select({
         availability: eventStatesTable.availability,
+        description: eventStatesTable.description,
         endTime: eventStatesTable.endTime,
         id: eventStatesTable.id,
         isAllDay: eventStatesTable.isAllDay,
+        location: eventStatesTable.location,
         sourceEventType: eventStatesTable.sourceEventType,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
+        title: eventStatesTable.title,
       })
       .from(eventStatesTable)
       .where(eq(eventStatesTable.calendarId, calendarId));
@@ -149,6 +150,7 @@ const createCalDAVSourceProvider = (
           isAllDay: event.isAllDay,
           location: event.location,
           recurrenceRule: stringifyIfPresent(event.recurrenceRule),
+          recurrenceId: event.recurrenceId,
           sourceEventType: event.sourceEventType ?? "default",
           sourceEventUid: event.uid,
           startTime: event.startTime,
@@ -172,6 +174,7 @@ const createCalDAVSourceProvider = (
 
     const password = sourceService.getDecryptedPassword(account.encryptedPassword);
     const client = new CalDAVClient({
+      authMethod: resolveAuthMethod(account.authMethod),
       credentials: { password, username: account.username },
       serverUrl: account.serverUrl,
     });
@@ -191,11 +194,6 @@ const createCalDAVSourceProvider = (
   const syncSingleSource = async (
     account: CalDAVSourceAccount,
   ): Promise<CalDAVSourceSyncResult> => {
-    widelog.set("operation.name", "caldav-source:sync");
-    widelog.set("source.calendar_id", account.calendarId);
-    widelog.set("source.provider", options.providerId);
-    widelog.set("user.id", account.userId);
-
     try {
       await refreshOriginalName(account);
       const events = await fetchEventsFromCalDAV(account);
@@ -208,7 +206,6 @@ const createCalDAVSourceProvider = (
           .where(eq(calendarAccountsTable.id, account.calendarAccountId));
       }
 
-      widelog.errorFields(error);
       return {
         eventsAdded: EMPTY_COUNT,
         eventsRemoved: EMPTY_COUNT,

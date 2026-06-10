@@ -29,8 +29,7 @@ function toIsoDate(value: string): string {
 
 function normalizeMetadataInput(value: unknown): unknown {
   if (typeof value !== "object" || value === null) return value;
-  const record = value as Record<string, unknown>;
-  const normalized: Record<string, unknown> = { ...record };
+  const normalized: Record<string, unknown> = { ...value };
 
   if (normalized.createdAt instanceof Date) {
     normalized.createdAt = normalized.createdAt.toISOString();

@@ -101,6 +101,16 @@ const fixtureManifest: FixtureManifest = fixtureManifestSchema.assert([
     sourceUrl: "https://events.stanford.edu/calendar/featured-events.ics",
     tags: ["large_feed", "timed", "all_day", "stress_test"],
   },
+  {
+    description: "Microsoft Exchange/Outlook ICS export with Windows timezone IDs instead of IANA",
+    expected: {
+      containsRecurrence: true,
+      containsTimeZone: true,
+    },
+    fileName: "outlook-exchange-windows-timezones.ics",
+    id: "outlook-exchange-windows-timezones",
+    tags: ["timed", "outlook", "windows_timezone", "rrule", "vtimezone"],
+  },
 ]);
 
 export { fixtureManifest };

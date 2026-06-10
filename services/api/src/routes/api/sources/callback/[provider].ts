@@ -1,6 +1,6 @@
 import { withWideEvent } from "@/utils/middleware";
-import { respondWithLoggedError } from "@/utils/logging";
 import { ErrorResponse } from "@/utils/responses";
+import { widelog } from "@/utils/logging";
 import { buildRedirectUrl, OAuthError } from "@/utils/oauth";
 import { oauthCallbackQuerySchema, providerParamSchema } from "@/utils/request-query";
 import {
@@ -18,6 +18,8 @@ const GET = withWideEvent(async ({ request, params }) => {
   if (!params.provider || !providerParamSchema.allows(params)) {
     return ErrorResponse.notFound().toResponse();
   }
+
+  widelog.set("provider.name", params.provider);
 
   const { provider } = params;
 
@@ -82,10 +84,12 @@ const GET = withWideEvent(async ({ request, params }) => {
     return Response.redirect(successUrl.toString());
   } catch (error) {
     if (error instanceof OAuthError) {
-      return respondWithLoggedError(error, Response.redirect(error.redirectUrl.toString()));
+      widelog.errorFields(error, { slug: "oauth-callback-failed" });
+      return Response.redirect(error.redirectUrl.toString());
     }
 
-    return respondWithLoggedError(error, Response.redirect(errorUrl.toString()));
+    widelog.errorFields(error, { slug: "unclassified" });
+    return Response.redirect(errorUrl.toString());
   }
 });
 

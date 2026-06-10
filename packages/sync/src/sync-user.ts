@@ -5,7 +5,7 @@ import {
   createDatabaseFlush,
   createRedisRateLimiter,
 } from "@keeper.sh/calendar";
-import type { SyncProgressUpdate } from "@keeper.sh/calendar";
+import type { SyncProgressUpdate, RefreshLockStore } from "@keeper.sh/calendar";
 import {
   calendarAccountsTable,
   calendarsTable,
@@ -13,17 +13,54 @@ import {
 import { and, arrayContains, eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
+import { getErrorMessage, isBackoffEligibleError } from "./destination-errors";
 import { resolveSyncProvider } from "./resolve-provider";
 import type { OAuthConfig } from "./resolve-provider";
-import { createSyncLock } from "./sync-lock";
+import { createSyncLock, isCalendarInvalidated } from "./sync-lock";
 
 const GOOGLE_REQUESTS_PER_MINUTE = 500;
+
+const resetDestinationBackoff = async (
+  database: BunSQLDatabase,
+  calendarId: string,
+): Promise<void> => {
+  await database
+    .update(calendarsTable)
+    .set({ failureCount: 0, lastFailureAt: null, nextAttemptAt: null })
+    .where(eq(calendarsTable.id, calendarId));
+};
+
+const applyDestinationBackoff = async (
+  database: BunSQLDatabase,
+  calendarId: string,
+  currentFailureCount: number,
+): Promise<void> => {
+  await database
+    .update(calendarsTable)
+    .set({
+      failureCount: currentFailureCount + 1,
+      lastFailureAt: new Date(),
+    })
+    .where(eq(calendarsTable.id, calendarId));
+};
+
+const extractNumericField = (event: Record<string, unknown> | undefined, key: string): number => {
+  if (!event) {
+    return 0;
+  }
+  const value = event[key];
+  if (typeof value === "number") {
+    return value;
+  }
+  return 0;
+};
 
 interface SyncConfig {
   database: BunSQLDatabase;
   redis: Redis;
   encryptionKey?: string;
   oauthConfig: OAuthConfig;
+  refreshLockStore?: RefreshLockStore | null;
   deadlineMs?: number;
   abortSignal?: AbortSignal;
 }
@@ -33,6 +70,7 @@ interface SyncDestinationsResult {
   addFailed: number;
   removed: number;
   removeFailed: number;
+  errors: string[];
   syncEvents: Record<string, unknown>[];
 }
 
@@ -41,12 +79,28 @@ const EMPTY_RESULT: SyncDestinationsResult = {
   addFailed: 0,
   removed: 0,
   removeFailed: 0,
+  errors: [],
   syncEvents: [],
 };
+
+interface CalendarSyncCompletion {
+  provider: string;
+  accountId: string;
+  calendarId: string;
+  userId: string;
+  added: number;
+  addFailed: number;
+  removed: number;
+  removeFailed: number;
+  conflictsResolved: number;
+  errors: string[];
+  durationMs: number;
+}
 
 interface SyncCallbacks {
   onSyncEvent?: (event: Record<string, unknown>) => void;
   onProgress?: (update: SyncProgressUpdate) => void;
+  onCalendarComplete?: (completion: CalendarSyncCompletion) => void;
 }
 
 const syncDestinationsForUser = async (
@@ -62,12 +116,14 @@ const syncDestinationsForUser = async (
       provider: calendarAccountsTable.provider,
       userId: calendarsTable.userId,
       accountId: calendarsTable.accountId,
+      failureCount: calendarsTable.failureCount,
     })
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
     .where(
       and(
         eq(calendarsTable.userId, userId),
+        eq(calendarsTable.disabled, false),
         arrayContains(calendarsTable.capabilities, ["push"]),
       ),
     );
@@ -83,6 +139,7 @@ const syncDestinationsForUser = async (
   let addFailed = 0;
   let removed = 0;
   let removeFailed = 0;
+  const errors: string[] = [];
   const syncEvents: Record<string, unknown>[] = [];
 
   const rateLimiter = createRedisRateLimiter(
@@ -112,7 +169,9 @@ const syncDestinationsForUser = async (
         accountId: destination.accountId,
         oauthConfig: config.oauthConfig,
         encryptionKey: config.encryptionKey,
+        refreshLockStore: config.refreshLockStore,
         rateLimiter,
+        signal: config.abortSignal,
       });
 
       if (!syncProvider) {
@@ -139,6 +198,7 @@ const syncDestinationsForUser = async (
           }
           return handle.isCurrent();
         },
+        isInvalidated: () => isCalendarInvalidated(redis, destination.calendarId),
         flush,
         onProgress: callbacks?.onProgress,
         onSyncEvent: (event) => {
@@ -154,17 +214,53 @@ const syncDestinationsForUser = async (
         },
       });
 
+      const invalidated = await isCalendarInvalidated(redis, destination.calendarId);
+      if (invalidated) {
+        continue;
+      }
+
+      if (destination.failureCount > 0) {
+        await resetDestinationBackoff(database, destination.calendarId);
+      }
+
       added += result.added;
       addFailed += result.addFailed;
       removed += result.removed;
       removeFailed += result.removeFailed;
+      errors.push(...result.errors);
+
+      if (callbacks?.onCalendarComplete) {
+        const syncEvent = syncEvents.at(-1);
+        const durationMs = extractNumericField(syncEvent, "duration_ms");
+
+        callbacks.onCalendarComplete({
+          provider: destination.provider,
+          accountId: destination.accountId,
+          calendarId: destination.calendarId,
+          userId: destination.userId,
+          added: result.added,
+          addFailed: result.addFailed,
+          removed: result.removed,
+          removeFailed: result.removeFailed,
+          conflictsResolved: result.conflictsResolved,
+          errors: result.errors,
+          durationMs,
+        });
+      }
+    } catch (error) {
+      if (!isBackoffEligibleError(error)) {
+        throw error;
+      }
+
+      await applyDestinationBackoff(database, destination.calendarId, destination.failureCount);
+      errors.push(getErrorMessage(error));
     } finally {
       await handle.release();
     }
   }
 
-  return { added, addFailed, removed, removeFailed, syncEvents };
+  return { added, addFailed, removed, removeFailed, errors, syncEvents };
 };
 
 export { syncDestinationsForUser };
-export type { SyncConfig, SyncDestinationsResult };
+export type { CalendarSyncCompletion, SyncConfig, SyncDestinationsResult };

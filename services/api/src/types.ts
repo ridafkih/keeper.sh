@@ -114,15 +114,18 @@ interface PendingInvite {
 interface ProviderCredentials {
   provider: string;
   calendarId: string;
+  accountId: string;
   externalCalendarId: string | null;
   calendarUrl: string | null;
   email: string | null;
   oauth?: {
+    credentialId: string;
     accessToken: string;
     refreshToken: string;
     expiresAt: Date;
   };
   caldav?: {
+    authMethod: string;
     serverUrl: string;
     username: string;
     encryptedPassword: string;

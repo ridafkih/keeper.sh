@@ -14,6 +14,7 @@ import {
   toStringSearchParams,
 } from "@/lib/mcp-auth-flow";
 import { resolveErrorMessage } from "@/utils/errors";
+import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 
 type SearchParams = Record<string, string>;
 
@@ -112,6 +113,11 @@ function McpConsentPage() {
       }
 
       const payload = await response.json();
+      if (accept) {
+        track(ANALYTICS_EVENTS.oauth_consent_granted);
+      } else {
+        track(ANALYTICS_EVENTS.oauth_consent_denied);
+      }
       window.location.assign(extractConsentRedirectUrl(payload));
     } catch (requestError) {
       setError(resolveErrorMessage(requestError, "Failed to complete consent"));

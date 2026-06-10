@@ -3,7 +3,6 @@ import { and, eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { database, premiumService } from "@/context";
-import { triggerDestinationSync } from "@/utils/sync";
 import { idParamSchema } from "@/utils/request-query";
 import {
   getDestinationsForSource,
@@ -36,7 +35,6 @@ const GET = withWideEvent(
         excludeEventName: calendarsTable.excludeEventName,
         excludeFocusTime: calendarsTable.excludeFocusTime,
         excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
-        excludeWorkingLocation: calendarsTable.excludeWorkingLocation,
         createdAt: calendarsTable.createdAt,
         updatedAt: calendarsTable.updatedAt,
       })
@@ -74,7 +72,6 @@ const PATCH = withWideEvent(
       { body: payload, params, userId },
       {
         canUseEventFilters: (candidateUserId) => premiumService.canUseEventFilters(candidateUserId),
-        triggerDestinationSync,
         updateSource: async (userIdToUpdate, sourceCalendarId, updates) => {
           const [updated] = await database
             .update(calendarsTable)

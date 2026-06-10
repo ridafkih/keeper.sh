@@ -57,6 +57,25 @@ const googleEventListSchema = type({
 });
 type GoogleEventList = typeof googleEventListSchema.infer;
 
+const googleAttendeeSchema = type({
+  "email?": "string",
+  "responseStatus?": "string",
+  "self?": "boolean",
+});
+type GoogleAttendee = typeof googleAttendeeSchema.infer;
+
+const googleEventWithAttendeesSchema = googleEventSchema.and({
+  "attendees?": googleAttendeeSchema.array(),
+  "organizer?": { "email?": "string", "displayName?": "string" },
+});
+type GoogleEventWithAttendees = typeof googleEventWithAttendeesSchema.infer;
+
+const googleEventWithAttendeesListSchema = type({
+  "items?": googleEventWithAttendeesSchema.array(),
+  "nextPageToken?": "string",
+});
+type GoogleEventWithAttendeesList = typeof googleEventWithAttendeesListSchema.infer;
+
 const googleApiErrorSchema = type({
   "error?": {
     "code?": "number",
@@ -100,7 +119,7 @@ type MicrosoftTokenResponse = typeof microsoftTokenResponseSchema.infer;
 const microsoftUserInfoSchema = type({
   "displayName?": "string",
   id: "string",
-  "mail?": "string",
+  "mail?": "string | null",
   "userPrincipalName?": "string",
 });
 type MicrosoftUserInfo = typeof microsoftUserInfoSchema.infer;
@@ -110,7 +129,7 @@ const outlookEventSchema = type({
   "body?": type({ "content?": "string", "contentType?": "string" }).or(type("null")),
   "categories?": "string[]",
   "end?": { "dateTime?": "string", "timeZone?": "string" },
-  "iCalUId?": "string",
+  "iCalUId?": "string | null",
   "id?": "string",
   "isAllDay?": "boolean",
   "location?": { "displayName?": "string" },
@@ -126,6 +145,26 @@ const outlookEventListSchema = type({
   "value?": outlookEventSchema.array(),
 });
 type OutlookEventList = typeof outlookEventListSchema.infer;
+
+const outlookCalendarViewEventSchema = type({
+  "id?": "string",
+  "iCalUId?": "string | null",
+  "subject?": "string",
+  "bodyPreview?": "string",
+  "location?": { "displayName?": "string" },
+  "start?": { "dateTime?": "string", "timeZone?": "string" },
+  "end?": { "dateTime?": "string", "timeZone?": "string" },
+  "isAllDay?": "boolean",
+  "responseStatus?": { "response?": "string" },
+  "organizer?": { "emailAddress?": { "address?": "string", "name?": "string" } },
+});
+type OutlookCalendarViewEvent = typeof outlookCalendarViewEventSchema.infer;
+
+const outlookCalendarViewListSchema = type({
+  "value?": outlookCalendarViewEventSchema.array(),
+  "@odata.nextLink?": "string",
+});
+type OutlookCalendarViewList = typeof outlookCalendarViewListSchema.infer;
 
 const microsoftApiErrorSchema = type({
   "error?": { "code?": "string", "message?": "string" },
@@ -269,12 +308,12 @@ const createOAuthSourceSchema = type({
   "oauthSourceCredentialId?": "string",
   "syncFocusTime?": "boolean",
   "syncOutOfOffice?": "boolean",
-  "syncWorkingLocation?": "boolean",
   "+": "reject",
 });
 type CreateOAuthSource = typeof createOAuthSourceSchema.infer;
 
 const createCalDAVSourceSchema = type({
+  authMethod: "'basic' | 'digest'",
   calendarUrl: "string",
   name: "string",
   password: "string",
@@ -310,6 +349,46 @@ const updateOAuthSourceDestinationsSchema = type({
 });
 type UpdateOAuthSourceDestinations = typeof updateOAuthSourceDestinationsSchema.infer;
 
+/*
+ * ICS recurrence-related shapes mirroring ts-ics's IcsDateObject and IcsRecurrenceRule.
+ * Date fields use `string.date.iso.parse` so values stored as ISO strings in JSONB columns
+ * are validated and morphed back into Date instances on read — ts-ics requires real Date
+ * objects on its in-memory shape.
+ */
+const icsWeekDaySchema = type("'SU' | 'MO' | 'TU' | 'WE' | 'TH' | 'FR' | 'SA'");
+
+const icsDateObjectSchema = type({
+  date: "string.date.iso.parse",
+  "type?": "'DATE' | 'DATE-TIME'",
+  "local?": {
+    date: "string.date.iso.parse",
+    timezone: "string",
+    tzoffset: "string",
+  },
+});
+type StoredIcsDateObject = typeof icsDateObjectSchema.infer;
+
+const icsRecurrenceRuleSchema = type({
+  frequency: "'SECONDLY' | 'MINUTELY' | 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'",
+  "until?": icsDateObjectSchema,
+  "count?": "number",
+  "interval?": "number",
+  "bySecond?": "number[]",
+  "byMinute?": "number[]",
+  "byHour?": "number[]",
+  "byDay?": type({ day: icsWeekDaySchema, "occurrence?": "number" }).array(),
+  "byMonthday?": "number[]",
+  "byYearday?": "number[]",
+  "byWeekNo?": "number[]",
+  "byMonth?": "number[]",
+  "bySetPos?": "number[]",
+  "workweekStart?": icsWeekDaySchema,
+});
+type StoredIcsRecurrenceRule = typeof icsRecurrenceRuleSchema.infer;
+
+const icsExceptionDatesSchema = icsDateObjectSchema.array();
+type StoredIcsExceptionDates = typeof icsExceptionDatesSchema.infer;
+
 export {
   proxyableMethods,
   planSchema,
@@ -319,6 +398,9 @@ export {
   stringSchema,
   googleEventSchema,
   googleEventListSchema,
+  googleAttendeeSchema,
+  googleEventWithAttendeesSchema,
+  googleEventWithAttendeesListSchema,
   googleApiErrorSchema,
   googleTokenResponseSchema,
   googleUserInfoSchema,
@@ -326,6 +408,8 @@ export {
   microsoftUserInfoSchema,
   outlookEventSchema,
   outlookEventListSchema,
+  outlookCalendarViewEventSchema,
+  outlookCalendarViewListSchema,
   microsoftApiErrorSchema,
   authSocialProvidersSchema,
   authCapabilitiesSchema,
@@ -347,6 +431,10 @@ export {
   caldavDiscoverSourceSchema,
   oauthCalendarSourceSchema,
   updateOAuthSourceDestinationsSchema,
+  icsWeekDaySchema,
+  icsDateObjectSchema,
+  icsRecurrenceRuleSchema,
+  icsExceptionDatesSchema,
 };
 
 export type {
@@ -357,6 +445,9 @@ export type {
   CreateSource,
   GoogleEvent,
   GoogleEventList,
+  GoogleAttendee,
+  GoogleEventWithAttendees,
+  GoogleEventWithAttendeesList,
   GoogleApiError,
   GoogleTokenResponse,
   GoogleUserInfo,
@@ -364,6 +455,8 @@ export type {
   MicrosoftUserInfo,
   OutlookEvent,
   OutlookEventList,
+  OutlookCalendarViewEvent,
+  OutlookCalendarViewList,
   MicrosoftApiError,
   AuthSocialProviders,
   AuthCapabilities,
@@ -385,4 +478,7 @@ export type {
   CalDAVDiscoverSource,
   OAuthCalendarSource,
   UpdateOAuthSourceDestinations,
+  StoredIcsDateObject,
+  StoredIcsRecurrenceRule,
+  StoredIcsExceptionDates,
 };

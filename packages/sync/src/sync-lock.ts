@@ -1,11 +1,18 @@
 const LOCK_PREFIX = "sync:lock:";
 const SIGNAL_PREFIX = "sync:signal:";
+const INVALIDATION_PREFIX = "sync:invalidated:";
 const LOCK_TTL_SECONDS = 120;
+const INVALIDATION_TTL_SECONDS = 300;
 const POLL_INTERVAL_MS = 250;
+const POLL_TIMEOUT_MS = (LOCK_TTL_SECONDS * 1000) + 10_000;
 
 interface SyncLockRedis {
   get: (key: string) => Promise<string | null>;
   eval: (script: string, keyCount: number, ...args: string[]) => Promise<unknown>;
+}
+
+interface InvalidationRedis {
+  set: (...args: [string, string, string, number]) => Promise<unknown>;
 }
 
 interface SyncLockHandle {
@@ -71,10 +78,19 @@ const createLockHandle = (
   redis: SyncLockRedis,
   lockKey: string,
   signalKey: string,
+  invalidationKey: string,
   holderId: string,
 ): SyncLockHandle => {
   const isCurrent = async (): Promise<boolean> => {
-    const pendingWaiter = await redis.get(signalKey);
+    const [pendingWaiter, invalidated] = await Promise.all([
+      redis.get(signalKey),
+      redis.get(invalidationKey),
+    ]);
+
+    if (invalidated !== null) {
+      return false;
+    }
+
     return pendingWaiter === null;
   };
 
@@ -92,6 +108,7 @@ const createSyncLock = (redis: SyncLockRedis) => {
   ): Promise<AcquireSyncLockResult | SyncLockSkippedResult> => {
     const lockKey = `${LOCK_PREFIX}${calendarId}`;
     const signalKey = `${SIGNAL_PREFIX}${calendarId}`;
+    const invalidationKey = `${INVALIDATION_PREFIX}${calendarId}`;
     const holderId = crypto.randomUUID();
 
     const result = await redis.eval(
@@ -101,14 +118,16 @@ const createSyncLock = (redis: SyncLockRedis) => {
       signalKey,
       holderId,
       String(LOCK_TTL_SECONDS),
-    ) as string;
+    );
 
     if (result === "acquired") {
-      const handle = createLockHandle(redis, lockKey, signalKey, holderId);
+      const handle = createLockHandle(redis, lockKey, signalKey, invalidationKey, holderId);
       return { acquired: true, handle };
     }
 
-    while (true) {
+    const pollDeadline = Date.now() + POLL_TIMEOUT_MS;
+
+    while (Date.now() < pollDeadline) {
       if (abortSignal?.aborted) {
         return { acquired: false };
       }
@@ -127,20 +146,33 @@ const createSyncLock = (redis: SyncLockRedis) => {
           signalKey,
           holderId,
           String(LOCK_TTL_SECONDS),
-        ) as string;
+        );
 
         if (retryResult === "acquired") {
-          const handle = createLockHandle(redis, lockKey, signalKey, holderId);
+          const handle = createLockHandle(redis, lockKey, signalKey, invalidationKey, holderId);
           return { acquired: true, handle };
         }
       }
 
       await Bun.sleep(POLL_INTERVAL_MS);
     }
+
+    return { acquired: false };
   };
 
   return { acquire };
 };
 
-export { createSyncLock, LOCK_PREFIX, SIGNAL_PREFIX, LOCK_TTL_SECONDS, POLL_INTERVAL_MS };
-export type { SyncLockHandle, AcquireSyncLockResult, SyncLockSkippedResult };
+const invalidateCalendar = async (redis: InvalidationRedis, calendarId: string): Promise<void> => {
+  const key = `${INVALIDATION_PREFIX}${calendarId}`;
+  await redis.set(key, "1", "EX", INVALIDATION_TTL_SECONDS);
+};
+
+const isCalendarInvalidated = async (redis: SyncLockRedis, calendarId: string): Promise<boolean> => {
+  const key = `${INVALIDATION_PREFIX}${calendarId}`;
+  const value = await redis.get(key);
+  return value !== null;
+};
+
+export { createSyncLock, invalidateCalendar, isCalendarInvalidated, LOCK_PREFIX, SIGNAL_PREFIX, INVALIDATION_PREFIX, LOCK_TTL_SECONDS, INVALIDATION_TTL_SECONDS, POLL_INTERVAL_MS };
+export type { SyncLockHandle, SyncLockRedis, InvalidationRedis, AcquireSyncLockResult, SyncLockSkippedResult };

@@ -1,10 +1,9 @@
-import type { MaybePromise } from "bun";
 import { WebhookVerificationError, validateEvent } from "@polar-sh/sdk/webhooks";
 import { ErrorResponse } from "@/utils/responses";
+import { widelog } from "@/utils/logging";
 import { database } from "@/context";
 import env from "@/env";
 import { userSubscriptionsTable } from "@keeper.sh/database/schema";
-import { respondWithLoggedError, runApiWideEventContext, setWideEventFields, widelog } from "@/utils/logging";
 
 const HTTP_OK = 200;
 
@@ -44,7 +43,6 @@ const handleSubscriptionCreated = async (
     return new Response(null, { status: HTTP_OK });
   }
 
-  widelog.set("user.id", userId);
   await upsertSubscription(userId, "pro", subscriptionId);
   return new Response(null, { status: HTTP_OK });
 };
@@ -59,8 +57,6 @@ const handleSubscriptionUpdated = async (
   }
 
   const plan = getPlanFromActiveStatus(isActive);
-  widelog.set("subscription.plan", plan);
-  widelog.set("user.id", userId);
   await upsertSubscription(userId, plan, subscriptionId);
   return new Response(null, { status: HTTP_OK });
 };
@@ -73,93 +69,74 @@ const handleSubscriptionCanceled = async (
     return new Response(null, { status: HTTP_OK });
   }
 
-  widelog.set("subscription.plan", "free");
-  widelog.set("user.id", userId);
   await upsertSubscription(userId, "free", subscriptionId);
   return new Response(null, { status: HTTP_OK });
 };
 
-const POST = (request: Request): MaybePromise<Response> => {
+const POST = async (request: Request): Promise<Response> => {
   const webhookSecret = env.POLAR_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
     return ErrorResponse.notImplemented().toResponse();
   }
 
-  return runApiWideEventContext(async () => {
-    setWideEventFields({
-      operation: {
-        name: "polar",
-        type: "webhook",
-      },
-      request: {
-        id: request.headers.get("x-request-id") ?? crypto.randomUUID(),
-      },
-    });
-    let response: Response | null = null;
-    try {
-      return await widelog.time.measure("duration_ms", async () => {
-        try {
-          const body = await request.text();
-          const headers: Record<string, string> = {};
-          for (const [key, value] of request.headers.entries()) {
-            headers[key] = value;
-          }
+  const body = await request.text();
+  const headers: Record<string, string> = {};
+  for (const [key, value] of request.headers.entries()) {
+    headers[key] = value;
+  }
 
-          const event = validateEvent(body, headers, webhookSecret);
-          widelog.set("operation.name", `polar:${event.type}`);
+  try {
+    const event = validateEvent(body, headers, webhookSecret);
 
-          if (event.type === "subscription.created") {
-            response = await handleSubscriptionCreated(
-              event.data.customer.externalId ?? null,
-              event.data.id,
-            );
-            return response;
-          }
+    widelog.set("operation.type", "webhook");
+    widelog.set("webhook.event_type", event.type);
+    widelog.set("webhook.subscription_id", event.data.id);
 
-          if (event.type === "subscription.updated") {
-            response = await handleSubscriptionUpdated(
-              event.data.customer.externalId ?? null,
-              event.data.id,
-              event.data.status === "active",
-            );
-            return response;
-          }
-
-          if (event.type === "subscription.canceled") {
-            response = await handleSubscriptionCanceled(
-              event.data.customer.externalId ?? null,
-              event.data.id,
-            );
-            return response;
-          }
-
-          response = new Response(null, { status: HTTP_OK });
-          return response;
-        } catch (error) {
-          if (error instanceof WebhookVerificationError) {
-            response = respondWithLoggedError(error, ErrorResponse.unauthorized().toResponse());
-            return response;
-          }
-          widelog.set("status_code", 500);
-          widelog.set("outcome", "error");
-          widelog.errorFields(error);
-          throw error;
-        }
-      });
-    } finally {
-      if (response) {
-        const { status } = response;
-        widelog.set("status_code", status);
-        if (status >= 400) {
-          widelog.set("outcome", "error");
-        } else {
-          widelog.set("outcome", "success");
-        }
+    if (event.type === "subscription.created") {
+      const createdUserId = event.data.customer.externalId ?? null;
+      if (createdUserId) {
+        widelog.set("user.id", createdUserId);
       }
-      widelog.flush();
+      return handleSubscriptionCreated(
+        createdUserId,
+        event.data.id,
+      );
     }
-  });
+
+    if (event.type === "subscription.updated") {
+      const updatedUserId = event.data.customer.externalId ?? null;
+      if (updatedUserId) {
+        widelog.set("user.id", updatedUserId);
+      }
+      const plan = getPlanFromActiveStatus(event.data.status === "active");
+      widelog.set("webhook.resulting_plan", plan);
+      return handleSubscriptionUpdated(
+        updatedUserId,
+        event.data.id,
+        event.data.status === "active",
+      );
+    }
+
+    if (event.type === "subscription.canceled") {
+      const canceledUserId = event.data.customer.externalId ?? null;
+      if (canceledUserId) {
+        widelog.set("user.id", canceledUserId);
+      }
+      return handleSubscriptionCanceled(
+        canceledUserId,
+        event.data.id,
+      );
+    }
+
+    return new Response(null, { status: HTTP_OK });
+  } catch (error) {
+    if (error instanceof WebhookVerificationError) {
+      widelog.errorFields(error, { slug: "webhook-signature-invalid", retriable: false });
+      return ErrorResponse.unauthorized().toResponse();
+    }
+    throw error;
+  }
 };
 
 export { POST };

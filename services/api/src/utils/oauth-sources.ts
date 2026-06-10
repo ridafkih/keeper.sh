@@ -12,7 +12,7 @@ import { spawnBackgroundJob } from "./background-task";
 import { getSourceProvider } from "@keeper.sh/calendar";
 import { applySourceSyncDefaults } from "./source-sync-defaults";
 
-import { triggerDestinationSync } from "./sync";
+import { enqueuePushSync } from "./enqueue-push-sync";
 
 const FIRST_RESULT_LIMIT = 1;
 const OAUTH_CALENDAR_TYPE = "oauth";
@@ -234,7 +234,6 @@ interface CreateOAuthSourceOptions {
   oauthCredentialId: string;
   excludeFocusTime?: boolean;
   excludeOutOfOffice?: boolean;
-  excludeWorkingLocation?: boolean;
 }
 
 interface CreateOAuthSourceDependencies {
@@ -249,7 +248,6 @@ interface CreateOAuthSourceDependencies {
     userId: string;
     excludeFocusTime: boolean;
     excludeOutOfOffice: boolean;
-    excludeWorkingLocation: boolean;
   }) => Promise<{ id: string; name: string } | null>;
   createCalendarAccount: (payload: {
     displayName: string | null;
@@ -390,7 +388,6 @@ const createOAuthSourceRecordWithDatabase = async (
       capabilities: ["pull", "push"],
       excludeFocusTime: payload.excludeFocusTime,
       excludeOutOfOffice: payload.excludeOutOfOffice,
-      excludeWorkingLocation: payload.excludeWorkingLocation,
       externalCalendarId: payload.externalCalendarId,
       name: payload.name,
       originalName: payload.originalName,
@@ -465,7 +462,12 @@ const createDefaultCreateOAuthSourceDependencies = (): CreateOAuthSourceDependen
   triggerSync: (userId, provider) => {
     spawnBackgroundJob("oauth-source-sync", { userId, provider }, async () => {
       await syncOAuthSourcesByProvider(provider);
-      triggerDestinationSync(userId);
+      const { premiumService } = await import("@/context");
+      const plan = await premiumService.getUserPlan(userId);
+      if (!plan) {
+        throw new Error("Unable to resolve user plan for sync enqueue");
+      }
+      await enqueuePushSync(userId, plan);
     });
   },
 });
@@ -482,7 +484,6 @@ const createOAuthSourceWithDependencies = async (
     oauthCredentialId,
     excludeFocusTime = false,
     excludeOutOfOffice = false,
-    excludeWorkingLocation = false,
   } = options;
 
   const credential = await dependencies.findCredentialEmail(userId, oauthCredentialId);
@@ -535,7 +536,6 @@ const createOAuthSourceWithDependencies = async (
     accountId,
     excludeFocusTime,
     excludeOutOfOffice,
-    excludeWorkingLocation,
     externalCalendarId,
     name,
     originalName: name,
@@ -687,23 +687,33 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
         })),
       );
   },
-  listCalendars: (provider, accessToken) => {
-    if (provider === "google") {
-      return listGoogleCalendars(accessToken).then((calendars) =>
-        calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.summary })),
-      );
+  listCalendars: async (provider, accessToken) => {
+    try {
+      if (provider === "google") {
+        const calendars = await listGoogleCalendars(accessToken);
+        return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.summary }));
+      }
+      if (provider === "outlook") {
+        const calendars = await listOutlookCalendars(accessToken);
+        return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.name }));
+      }
+      throw new Error(`No calendar listing support for provider: ${provider}`);
+    } catch (error) {
+      if (error instanceof Error && "authRequired" in error && error.authRequired === true) {
+        return [];
+      }
+      throw error;
     }
-    if (provider === "outlook") {
-      return listOutlookCalendars(accessToken).then((calendars) =>
-        calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.name })),
-      );
-    }
-    throw new Error(`No calendar listing support for provider: ${provider}`);
   },
   triggerSync: (userId, provider) => {
     spawnBackgroundJob("oauth-account-import", { userId, provider }, async () => {
       await syncOAuthSourcesByProvider(provider);
-      triggerDestinationSync(userId);
+      const { premiumService } = await import("@/context");
+      const plan = await premiumService.getUserPlan(userId);
+      if (!plan) {
+        throw new Error("Unable to resolve user plan for sync enqueue");
+      }
+      await enqueuePushSync(userId, plan);
     });
   },
 });

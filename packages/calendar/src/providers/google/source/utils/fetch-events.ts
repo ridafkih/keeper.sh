@@ -10,24 +10,44 @@ import {
   GOOGLE_CALENDAR_MAX_RESULTS,
   GONE_STATUS,
 } from "../../shared/api";
-import { isSimpleAuthError } from "../../shared/errors";
+import { isAuthError } from "../../shared/errors";
+import type { GoogleApiError } from "../../types";
+import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
 import { parseEventDateTime } from "../../shared/date-time";
-import { googleEventListSchema } from "@keeper.sh/data-schemas";
 import { isKeeperEvent } from "../../../../core/events/identity";
+import { withBackoff } from "../../shared/backoff";
+import { isRateLimitApiError } from "../../shared/errors";
+
+const EMPTY_API_ERROR: GoogleApiError = {};
+
+const parseApiErrorFromText = (text: string): GoogleApiError => {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!googleApiErrorSchema.allows(parsed)) {
+      return EMPTY_API_ERROR;
+    }
+    return googleApiErrorSchema.assert(parsed).error ?? EMPTY_API_ERROR;
+  } catch {
+    return EMPTY_API_ERROR;
+  }
+};
 
 class EventsFetchError extends Error {
   public readonly status: number;
   public readonly authRequired: boolean;
+  public readonly apiError: GoogleApiError;
 
   constructor(
     message: string,
     status: number,
     authRequired = false,
+    apiError: GoogleApiError = {},
   ) {
     super(message);
     this.name = "EventsFetchError";
     this.status = status;
     this.authRequired = authRequired;
+    this.apiError = apiError;
   }
 }
 
@@ -102,11 +122,15 @@ const fetchEventsPage = async (
   }
 
   if (!response.ok) {
-    const authRequired = isSimpleAuthError(response.status);
+    const responseText = await response.text();
+    const apiError = parseApiErrorFromText(responseText);
+    const authRequired = isAuthError(response.status, apiError);
+
     throw new EventsFetchError(
-      `Failed to fetch events: ${response.status}`,
+      `Failed to fetch events: ${response.status}: ${responseText}`,
       response.status,
       authRequired,
+      apiError,
     );
   }
 
@@ -131,11 +155,20 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
   const cancelledEventUids: string[] = [];
   const isDeltaSync = Boolean(syncToken);
 
+  const fetchPageWithBackoff = (pageOptions: PageFetchOptions): Promise<PageFetchResult | FullSyncRequiredResult> =>
+    withBackoff(
+      () => fetchEventsPage(pageOptions),
+      {
+        shouldRetry: (error) =>
+          error instanceof EventsFetchError && isRateLimitApiError(error.status, error.apiError),
+      },
+    );
+
   if (rateLimiter) {
     await rateLimiter.acquire(1);
   }
 
-  let result = await fetchEventsPage({
+  let result = await fetchPageWithBackoff({
     accessToken,
     baseUrl,
     maxResults,
@@ -166,7 +199,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
       await rateLimiter.acquire(1);
     }
 
-    result = await fetchEventsPage({
+    result = await fetchPageWithBackoff({
       accessToken,
       baseUrl,
       maxResults,

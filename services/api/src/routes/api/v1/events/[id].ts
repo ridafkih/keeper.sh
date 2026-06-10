@@ -1,14 +1,13 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { createKeeperApi } from "@/read-models";
-import type { RsvpStatus } from "@/types";
 import { withV1Auth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
-import { respondWithLoggedError } from "@/utils/logging";
 import { eventPatchBodySchema } from "@/utils/request-body";
-import { database, oauthProviders, encryptionKey } from "@/context";
+import { database, oauthProviders, refreshLockStore, encryptionKey } from "@/context";
 
 const keeperApi = createKeeperApi(database, {
   oauthTokenRefresher: oauthProviders,
+  refreshLockStore,
   encryptionKey,
 });
 
@@ -41,7 +40,7 @@ const PATCH = withWideEvent(
       const validated = eventPatchBodySchema.assert(body);
 
       if (validated.rsvpStatus) {
-        const result = await keeperApi.rsvpEvent(userId, eventId, validated.rsvpStatus as RsvpStatus);
+        const result = await keeperApi.rsvpEvent(userId, eventId, validated.rsvpStatus);
 
         if (!result.success) {
           return ErrorResponse.badRequest(result.error ?? "Failed to update RSVP status.").toResponse();
@@ -66,11 +65,8 @@ const PATCH = withWideEvent(
 
       const updated = await keeperApi.getEvent(userId, eventId);
       return Response.json(updated);
-    } catch (error) {
-      return respondWithLoggedError(
-        error,
-        ErrorResponse.badRequest("Invalid update data.").toResponse(),
-      );
+    } catch {
+      return ErrorResponse.badRequest("Invalid update data.").toResponse();
     }
   }),
 );

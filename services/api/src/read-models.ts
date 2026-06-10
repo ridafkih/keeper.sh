@@ -13,10 +13,12 @@ import {
   getPendingInvitesMutation,
 } from "./mutations";
 import type { OAuthTokenRefresher } from "./mutations";
+import type { RefreshLockStore } from "@keeper.sh/calendar";
 import type { KeeperApi, KeeperDatabase } from "./types";
 
 interface KeeperApiOptions {
   oauthTokenRefresher?: OAuthTokenRefresher;
+  refreshLockStore?: RefreshLockStore | null;
   encryptionKey?: string;
 }
 
@@ -24,6 +26,7 @@ const createKeeperApi = (database: KeeperDatabase, options?: KeeperApiOptions): 
   const deps = {
     database,
     oauthTokenRefresher: options?.oauthTokenRefresher,
+    refreshLockStore: options?.refreshLockStore,
     encryptionKey: options?.encryptionKey,
   };
 

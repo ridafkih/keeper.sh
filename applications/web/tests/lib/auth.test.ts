@@ -1,0 +1,98 @@
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AuthCapabilities } from "../../src/lib/auth-capabilities";
+
+const authClientMock = vi.hoisted(() => ({
+  signIn: {
+    email: vi.fn(() => Promise.resolve({ error: null })),
+  },
+  signUp: {
+    email: vi.fn(() => Promise.resolve({ error: null })),
+  },
+  requestPasswordReset: vi.fn(() => Promise.resolve({ error: null })),
+  resetPassword: vi.fn(() => Promise.resolve({ error: null })),
+}));
+
+vi.mock("../../src/lib/auth-client", () => ({
+  authClient: authClientMock,
+}));
+
+let signInWithCredential: typeof import("../../src/lib/auth").signInWithCredential;
+let signUpWithCredential: typeof import("../../src/lib/auth").signUpWithCredential;
+
+const commercialCapabilities: AuthCapabilities = {
+  commercialMode: true,
+  credentialMode: "email",
+  requiresEmailVerification: true,
+  socialProviders: {
+    google: false,
+    microsoft: false,
+  },
+  supportsChangePassword: true,
+  supportsPasskeys: true,
+  supportsPasswordReset: true,
+};
+
+beforeAll(async () => {
+  ({ signInWithCredential, signUpWithCredential } = await import("../../src/lib/auth"));
+});
+
+beforeEach(() => {
+  authClientMock.signIn.email.mockClear();
+  authClientMock.signUp.email.mockClear();
+  const fetchMock = Object.assign(
+    vi.fn(() => Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))),
+    { preconnect: () => undefined },
+  );
+  globalThis.fetch = fetchMock;
+});
+
+describe("signInWithCredential", () => {
+  it("uses Better Auth email sign-in for commercial auth", async () => {
+    await signInWithCredential("person@example.com", "password", commercialCapabilities);
+
+    expect(authClientMock.signIn.email).toHaveBeenCalledWith({
+      email: "person@example.com",
+      password: "password",
+    });
+  });
+
+  it("uses the username-only endpoint for non-commercial auth", async () => {
+    await signInWithCredential("keeper-user", "password", {
+      ...commercialCapabilities,
+      credentialMode: "username",
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith("/api/auth/username-only/sign-in", {
+      body: JSON.stringify({
+        password: "password",
+        username: "keeper-user",
+      }),
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    });
+  });
+});
+
+describe("signUpWithCredential", () => {
+  it("uses the username-only endpoint for non-commercial auth", async () => {
+    await signUpWithCredential("keeper-user", "password", {
+      ...commercialCapabilities,
+      credentialMode: "username",
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith("/api/auth/username-only/sign-up", {
+      body: JSON.stringify({
+        password: "password",
+        username: "keeper-user",
+      }),
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    });
+  });
+});

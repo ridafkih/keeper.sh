@@ -1,5 +1,7 @@
-import { fetch } from "bun";
-import { parseIcsCalendar } from "./parse-ics-calendar";
+import { createSafeFetch } from "../../utils/safe-fetch";
+import type { SafeFetchOptions } from "../../utils/safe-fetch";
+import { coerceCompliantDate } from "../patches/coerce-compliant-date";
+import { parseIcsCalendarLenient } from "./lenient-parser";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 
 const normalizeCalendarUrl = (url: string): string => {
@@ -45,9 +47,14 @@ const parseUrlWithCredentials = (url: string): ParsedUrl => {
   return { headers, url: parsed.toString() };
 };
 
-const fetchRemoteText = async (url: string): Promise<string> => {
+const ICS_USER_AGENT = "Keeper/1.0 (+https://www.keeper.sh)";
+
+const fetchRemoteText = async (url: string, options?: SafeFetchOptions): Promise<string> => {
   const { url: cleanUrl, headers } = parseUrlWithCredentials(url);
-  const response = await fetch(cleanUrl, { headers });
+  const safeFetch = createSafeFetch(options);
+  const response = await safeFetch(cleanUrl, {
+    headers: { "User-Agent": ICS_USER_AGENT, ...headers },
+  });
 
   if (!response.ok) {
     if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
@@ -73,7 +80,7 @@ const fetchRemoteText = async (url: string): Promise<string> => {
   return response.text();
 };
 
-type ParsedCalendarResult = ReturnType<typeof parseIcsCalendar>;
+type ParsedCalendarResult = ReturnType<typeof parseIcsCalendarLenient>;
 
 type OutputICal = "ical" | ["ical"];
 type OutputJSON = "json" | ["json"];
@@ -96,11 +103,11 @@ const normalizeOutputToArray = (output: OutputJSON | OutputICal | OutputICALOrJS
   return output;
 };
 
-async function pullRemoteCalendar(output: OutputICal, url: string): Promise<JustICal>;
+async function pullRemoteCalendar(output: OutputICal, url: string, options?: SafeFetchOptions): Promise<JustICal>;
 
-async function pullRemoteCalendar(output: OutputJSON, url: string): Promise<JustJSON>;
+async function pullRemoteCalendar(output: OutputJSON, url: string, options?: SafeFetchOptions): Promise<JustJSON>;
 
-async function pullRemoteCalendar(output: OutputICALOrJSON, url: string): Promise<ICalOrJSON>;
+async function pullRemoteCalendar(output: OutputICALOrJSON, url: string, options?: SafeFetchOptions): Promise<ICalOrJSON>;
 
 /**
  * @throws
@@ -108,11 +115,12 @@ async function pullRemoteCalendar(output: OutputICALOrJSON, url: string): Promis
 async function pullRemoteCalendar(
   output: OutputJSON | OutputICal | OutputICALOrJSON,
   url: string,
+  options?: SafeFetchOptions,
 ): Promise<JustICal | JustJSON | ICalOrJSON> {
   const outputs = normalizeOutputToArray(output);
   const normalizedUrl = normalizeCalendarUrl(url);
-  const ical = await fetchRemoteText(normalizedUrl);
-  const json = parseIcsCalendar({ icsString: ical });
+  const ical = await fetchRemoteText(normalizedUrl, options);
+  const json = parseIcsCalendarLenient({ icsString: ical, patches: [coerceCompliantDate] });
 
   if (!json.version || !json.prodId) {
     throw new CalendarFetchError(
