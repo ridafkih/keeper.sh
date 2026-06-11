@@ -66,6 +66,12 @@ describe("sourcePatchBodySchema", () => {
     expect(result instanceof type.errors).toBe(true);
   });
 
+  it("accepts markEventsAsPrivate as boolean", () => {
+    const result = sourcePatchBodySchema({ markEventsAsPrivate: true });
+    expect(result instanceof type.errors).toBe(false);
+  });
+
+
   it("rejects extra properties", () => {
     const result = sourcePatchBodySchema({ name: "ok", hacker: true });
     expect(result instanceof type.errors).toBe(true);
