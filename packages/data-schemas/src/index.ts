@@ -133,9 +133,11 @@ const outlookEventSchema = type({
   "id?": "string",
   "isAllDay?": "boolean",
   "location?": { "displayName?": "string" },
+  "seriesMasterId?": "string | null",
   "showAs?": "string",
   "start?": { "dateTime?": "string", "timeZone?": "string" },
   "subject?": "string",
+  "type?": "string | null",
 });
 type OutlookEvent = typeof outlookEventSchema.infer;
 

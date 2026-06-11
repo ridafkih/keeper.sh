@@ -9,8 +9,12 @@ import type { MicrosoftApiError } from "../../types";
 import { MICROSOFT_GRAPH_API, GONE_STATUS } from "../../shared/api";
 import { isAuthError, isSimpleAuthError } from "../../shared/errors";
 import { parseEventDateTime } from "../../shared/date-time";
-import { microsoftApiErrorSchema, outlookEventListSchema } from "@keeper.sh/data-schemas";
-import { KEEPER_CATEGORY } from "@keeper.sh/constants";
+import {
+  microsoftApiErrorSchema,
+  outlookEventListSchema,
+  outlookEventSchema,
+} from "@keeper.sh/data-schemas";
+import { HTTP_STATUS, KEEPER_CATEGORY } from "@keeper.sh/constants";
 import { isKeeperEvent } from "../../../../core/events/identity";
 
 class EventsFetchError extends Error {
@@ -34,6 +38,8 @@ class EventsFetchError extends Error {
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_PAGE_SIZE = 50;
+const EVENT_SELECT_FIELDS =
+  "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories,type,seriesMasterId";
 
 const isRequestTimeoutError = (error: unknown): boolean =>
   error instanceof Error
@@ -100,10 +106,7 @@ const buildInitialUrl = (calendarId: string, timeMin: Date, timeMax: Date): URL 
 
   url.searchParams.set("startDateTime", timeMin.toISOString());
   url.searchParams.set("endDateTime", timeMax.toISOString());
-  url.searchParams.set(
-    "$select",
-    "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
-  );
+  url.searchParams.set("$select", EVENT_SELECT_FIELDS);
 
   return url;
 };
@@ -172,6 +175,111 @@ const fetchEventsPage = async (
   return { data, fullSyncRequired: false };
 };
 
+// Graph's calendarView delta expands recurring series, but each expanded
+// "occurrence" item carries only id, type, seriesMasterId, start, and end.
+// All other properties (iCalUId, subject, showAs, ...) live on the master.
+// Graph lists the master itself with the series' first start/end.
+const isSeriesMaster = (event: OutlookCalendarEvent): boolean => event.type === "seriesMaster";
+
+const isUnhydratedInstance = (
+  event: OutlookCalendarEvent,
+): event is OutlookCalendarEvent & { seriesMasterId: string } =>
+  Boolean(event.seriesMasterId) && !event.iCalUId;
+
+const fetchSeriesMaster = async (
+  accessToken: string,
+  seriesMasterId: string,
+): Promise<OutlookCalendarEvent | null> => {
+  const url = `${MICROSOFT_GRAPH_API}/me/events/${encodeURIComponent(seriesMasterId)}?$select=${EVENT_SELECT_FIELDS}`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  }).catch((error) => {
+    if (isRequestTimeoutError(error)) {
+      throw new EventsFetchError(
+        `Failed to fetch series master: timeout after ${REQUEST_TIMEOUT_MS}ms`,
+        408,
+        false,
+      );
+    }
+
+    throw error;
+  });
+
+  if (response.status === HTTP_STATUS.NOT_FOUND) {
+    await response.body?.cancel?.();
+    return null;
+  }
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    const apiError = parseMicrosoftApiErrorFromText(responseText);
+    const authRequired = isAuthError(response.status, apiError);
+
+    throw new EventsFetchError(
+      `Failed to fetch series master: ${response.status}: ${responseText}`,
+      response.status,
+      authRequired,
+      apiError,
+    );
+  }
+
+  const responseBody = await response.json();
+  return outlookEventSchema.assert(responseBody);
+};
+
+const hydrateRecurringInstances = async (
+  accessToken: string,
+  events: OutlookCalendarEvent[],
+): Promise<OutlookCalendarEvent[]> => {
+  const mastersById = new Map<string, OutlookCalendarEvent>();
+  for (const event of events) {
+    if (isSeriesMaster(event) && event.id) {
+      mastersById.set(event.id, event);
+    }
+  }
+
+  const missingMasterIds = new Set<string>();
+  for (const event of events) {
+    if (isUnhydratedInstance(event) && !mastersById.has(event.seriesMasterId)) {
+      missingMasterIds.add(event.seriesMasterId);
+    }
+  }
+
+  for (const masterId of missingMasterIds) {
+    const master = await fetchSeriesMaster(accessToken, masterId);
+    if (master) {
+      mastersById.set(masterId, master);
+    }
+  }
+
+  const hydrated: OutlookCalendarEvent[] = [];
+  for (const event of events) {
+    if (isSeriesMaster(event)) {
+      // The master's own start/end duplicates its first occurrence
+      continue;
+    }
+
+    if (!isUnhydratedInstance(event)) {
+      hydrated.push(event);
+      continue;
+    }
+
+    const master = mastersById.get(event.seriesMasterId);
+    if (!master) {
+      // Master deleted between expansion and lookup; instance is orphaned
+      continue;
+    }
+
+    hydrated.push({ ...master, ...event });
+  }
+
+  return hydrated;
+};
+
 const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEventsResult> => {
   const { accessToken, calendarId, deltaLink, timeMin, timeMax } = options;
 
@@ -236,7 +344,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
   }
 
   const result: FetchEventsResult = {
-    events,
+    events: await hydrateRecurringInstances(accessToken, events),
     fullSyncRequired: false,
     isDeltaSync,
     nextDeltaLink: lastDeltaLink,
