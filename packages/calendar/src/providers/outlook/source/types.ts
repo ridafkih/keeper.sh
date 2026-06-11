@@ -35,6 +35,8 @@ interface OutlookCalendarEvent {
   showAs?: string;
   start?: OutlookEventDateTime;
   end?: OutlookEventDateTime;
+  type?: string | null;
+  seriesMasterId?: string | null;
   createdDateTime?: string;
   lastModifiedDateTime?: string;
   "@removed"?: OutlookRemovedInfo;

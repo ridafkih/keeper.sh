@@ -135,8 +135,185 @@ describe("fetchCalendarEvents", () => {
     expect(parsedUrl.searchParams.get("startDateTime")).toBe("2026-06-01T00:00:00.000Z");
     expect(parsedUrl.searchParams.get("endDateTime")).toBe("2026-06-02T00:00:00.000Z");
     expect(parsedUrl.searchParams.get("$select")).toBe(
-      "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
+      "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories,type,seriesMasterId",
     );
+  });
+
+  it("hydrates recurring occurrences from a series master in the payload", async () => {
+    const requestedUrls: string[] = [];
+
+    globalThis.fetch = createFetchQueue(
+      [
+        createJsonResponse({
+          "@odata.deltaLink": "https://graph.microsoft.com/v1.0/me/calendars/cal-1/calendarView/delta?$deltatoken=final",
+          value: [
+            createOutlookEvent({
+              iCalUId: "series-uid-1",
+              id: "master-1",
+              showAs: "busy",
+              subject: "Daily Standup",
+              type: "seriesMaster",
+            }),
+            {
+              end: { dateTime: "2026-06-09T10:15:00", timeZone: "UTC" },
+              id: "occurrence-1",
+              seriesMasterId: "master-1",
+              start: { dateTime: "2026-06-09T10:00:00", timeZone: "UTC" },
+              type: "occurrence",
+            },
+            {
+              end: { dateTime: "2026-06-10T10:15:00", timeZone: "UTC" },
+              id: "occurrence-2",
+              seriesMasterId: "master-1",
+              start: { dateTime: "2026-06-10T10:00:00", timeZone: "UTC" },
+              type: "occurrence",
+            },
+            createOutlookEvent({
+              iCalUId: "single-uid-1",
+              id: "single-1",
+              seriesMasterId: null,
+              type: "singleInstance",
+            }),
+          ],
+        }),
+      ],
+      requestedUrls,
+    );
+
+    const fetchResult = await fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      timeMax: new Date("2026-06-16T00:00:00.000Z"),
+      timeMin: new Date("2026-06-08T00:00:00.000Z"),
+    });
+
+    expect(fetchResult.fullSyncRequired).toBe(false);
+    expect(requestedUrls).toHaveLength(1);
+    expect(fetchResult.events.map((event) => event.id)).toEqual([
+      "occurrence-1",
+      "occurrence-2",
+      "single-1",
+    ]);
+
+    const [firstOccurrence] = fetchResult.events;
+    expect(firstOccurrence?.iCalUId).toBe("series-uid-1");
+    expect(firstOccurrence?.subject).toBe("Daily Standup");
+    expect(firstOccurrence?.showAs).toBe("busy");
+    expect(firstOccurrence?.start?.dateTime).toBe("2026-06-09T10:00:00");
+    expect(firstOccurrence?.end?.dateTime).toBe("2026-06-09T10:15:00");
+  });
+
+  it("fetches series masters missing from a delta payload", async () => {
+    const requestedUrls: string[] = [];
+
+    globalThis.fetch = createFetchQueue(
+      [
+        createJsonResponse({
+          "@odata.deltaLink": "https://graph.microsoft.com/v1.0/me/calendars/cal-1/calendarView/delta?$deltatoken=final",
+          value: [
+            {
+              end: { dateTime: "2026-06-09T10:15:00", timeZone: "UTC" },
+              id: "occurrence-1",
+              seriesMasterId: "master-1",
+              start: { dateTime: "2026-06-09T10:00:00", timeZone: "UTC" },
+              type: "occurrence",
+            },
+          ],
+        }),
+        createJsonResponse(
+          createOutlookEvent({
+            iCalUId: "series-uid-1",
+            id: "master-1",
+            subject: "Daily Standup",
+            type: "seriesMaster",
+          }),
+        ),
+      ],
+      requestedUrls,
+    );
+
+    const fetchResult = await fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      deltaLink: "https://graph.microsoft.com/v1.0/me/calendars/cal-1/calendarView/delta?$deltatoken=original",
+    });
+
+    expect(requestedUrls).toHaveLength(2);
+    expect(requestedUrls[1]).toContain("/me/events/master-1");
+    expect(fetchResult.events).toHaveLength(1);
+    expect(fetchResult.events[0]?.id).toBe("occurrence-1");
+    expect(fetchResult.events[0]?.iCalUId).toBe("series-uid-1");
+    expect(fetchResult.events[0]?.subject).toBe("Daily Standup");
+    expect(fetchResult.events[0]?.start?.dateTime).toBe("2026-06-09T10:00:00");
+  });
+
+  it("skips occurrences whose series master no longer exists", async () => {
+    globalThis.fetch = createFetchQueue(
+      [
+        createJsonResponse({
+          "@odata.deltaLink": "https://graph.microsoft.com/v1.0/me/calendars/cal-1/calendarView/delta?$deltatoken=final",
+          value: [
+            {
+              end: { dateTime: "2026-06-09T10:15:00", timeZone: "UTC" },
+              id: "occurrence-1",
+              seriesMasterId: "master-1",
+              start: { dateTime: "2026-06-09T10:00:00", timeZone: "UTC" },
+              type: "occurrence",
+            },
+          ],
+        }),
+        new Response(null, { status: 404 }),
+      ],
+      [],
+    );
+
+    const fetchResult = await fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      deltaLink: "https://graph.microsoft.com/v1.0/me/calendars/cal-1/calendarView/delta?$deltatoken=original",
+    });
+
+    expect(fetchResult.events).toEqual([]);
+  });
+
+  it("keeps exception instances that already carry full properties", async () => {
+    globalThis.fetch = createFetchQueue(
+      [
+        createJsonResponse({
+          "@odata.deltaLink": "https://graph.microsoft.com/v1.0/me/calendars/cal-1/calendarView/delta?$deltatoken=final",
+          value: [
+            createOutlookEvent({
+              iCalUId: "series-uid-1",
+              id: "master-1",
+              subject: "Daily Standup",
+              type: "seriesMaster",
+            }),
+            createOutlookEvent({
+              end: { dateTime: "2026-06-09T12:30:00", timeZone: "UTC" },
+              iCalUId: "series-uid-1",
+              id: "exception-1",
+              seriesMasterId: "master-1",
+              start: { dateTime: "2026-06-09T12:00:00", timeZone: "UTC" },
+              subject: "Daily Standup (moved)",
+              type: "exception",
+            }),
+          ],
+        }),
+      ],
+      [],
+    );
+
+    const fetchResult = await fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      timeMax: new Date("2026-06-16T00:00:00.000Z"),
+      timeMin: new Date("2026-06-08T00:00:00.000Z"),
+    });
+
+    expect(fetchResult.events).toHaveLength(1);
+    expect(fetchResult.events[0]?.id).toBe("exception-1");
+    expect(fetchResult.events[0]?.subject).toBe("Daily Standup (moved)");
+    expect(fetchResult.events[0]?.start?.dateTime).toBe("2026-06-09T12:00:00");
   });
 
   it("returns full-sync-required when Microsoft responds with gone", async () => {
