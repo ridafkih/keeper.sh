@@ -36,6 +36,13 @@ const orAbsentBoolean = (value: boolean | null): boolean | undefined => {
   return value;
 };
 
+const trueOrAbsent = (value: boolean): true | undefined => {
+  if (!value) {
+    return;
+  }
+  return true;
+};
+
 const isEventAvailability = (value: string | null): value is EventAvailability =>
   value === "busy"
   || value === "free"
@@ -142,6 +149,7 @@ const fetchEventsForCalendars = async (
       excludeEventName: calendarsTable.excludeEventName,
       excludeFocusTime: calendarsTable.excludeFocusTime,
       excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
+      markEventsAsPrivate: calendarsTable.markEventsAsPrivate,
       availability: eventStatesTable.availability,
       description: eventStatesTable.description,
       endTime: eventStatesTable.endTime,
@@ -215,6 +223,7 @@ const fetchEventsForCalendars = async (
       endTime: result.endTime,
       id: result.id,
       isAllDay: orAbsentBoolean(result.isAllDay),
+      isPrivate: trueOrAbsent(result.markEventsAsPrivate),
       location: excludeOrAbsent(result.excludeEventLocation, result.location),
       exceptionDates: parsedExceptionDates,
       recurrenceRule: orAbsent(parsedRecurrenceRule),

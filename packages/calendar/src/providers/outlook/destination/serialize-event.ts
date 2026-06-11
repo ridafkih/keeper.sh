@@ -59,6 +59,7 @@ const serializeOutlookEvent = (event: SyncableEvent): OutlookEvent => {
   return {
     ...(body && { body }),
     ...(location && { location }),
+    ...(event.isPrivate && { sensitivity: "private" }),
     categories: [KEEPER_CATEGORY],
     end: {
       dateTime: formatOutlookDateTime(event.endTime, isAllDay),

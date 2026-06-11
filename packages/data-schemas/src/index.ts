@@ -133,6 +133,7 @@ const outlookEventSchema = type({
   "id?": "string",
   "isAllDay?": "boolean",
   "location?": { "displayName?": "string" },
+  "sensitivity?": "string",
   "showAs?": "string",
   "start?": { "dateTime?": "string", "timeZone?": "string" },
   "subject?": "string",

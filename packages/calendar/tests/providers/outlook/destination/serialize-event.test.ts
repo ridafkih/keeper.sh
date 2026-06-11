@@ -21,4 +21,37 @@ describe("serializeOutlookEvent", () => {
     expect(event.start).toEqual({ dateTime: "2026-03-08T00:00:00.000", timeZone: "UTC" });
     expect(event.end).toEqual({ dateTime: "2026-03-09T00:00:00.000", timeZone: "UTC" });
   });
+
+  it("sets sensitivity to private when isPrivate is true", () => {
+    const event = serializeOutlookEvent({
+      calendarId: "calendar-id",
+      calendarName: "Calendar",
+      calendarUrl: null,
+      endTime: new Date("2026-03-09T17:00:00.000Z"),
+      id: "event-id",
+      isPrivate: true,
+      sourceEventUid: "source-uid",
+      startTime: new Date("2026-03-09T16:00:00.000Z"),
+      startTimeZone: "UTC",
+      summary: "Doctor appointment",
+    });
+
+    expect(event.sensitivity).toBe("private");
+  });
+
+  it("omits sensitivity when isPrivate is not set", () => {
+    const event = serializeOutlookEvent({
+      calendarId: "calendar-id",
+      calendarName: "Calendar",
+      calendarUrl: null,
+      endTime: new Date("2026-03-09T17:00:00.000Z"),
+      id: "event-id",
+      sourceEventUid: "source-uid",
+      startTime: new Date("2026-03-09T16:00:00.000Z"),
+      startTimeZone: "UTC",
+      summary: "Doctor appointment",
+    });
+
+    expect(event.sensitivity).toBeUndefined();
+  });
 });
