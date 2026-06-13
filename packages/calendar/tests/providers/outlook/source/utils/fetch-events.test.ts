@@ -135,7 +135,7 @@ describe("fetchCalendarEvents", () => {
     expect(parsedUrl.searchParams.get("startDateTime")).toBe("2026-06-01T00:00:00.000Z");
     expect(parsedUrl.searchParams.get("endDateTime")).toBe("2026-06-02T00:00:00.000Z");
     expect(parsedUrl.searchParams.get("$select")).toBe(
-      "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
+      "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories,recurrence",
     );
   });
 

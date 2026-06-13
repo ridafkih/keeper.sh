@@ -24,6 +24,28 @@ interface OutlookRemovedInfo {
   reason?: "deleted" | "changed";
 }
 
+interface OutlookRecurrencePattern {
+  type?: string;
+  interval?: number;
+  daysOfWeek?: string[];
+  dayOfMonth?: number;
+  index?: string;
+  month?: number;
+  firstDayOfWeek?: string;
+}
+
+interface OutlookRecurrenceRange {
+  type?: string;
+  endDate?: string;
+  numberOfOccurrences?: number;
+  startDate?: string;
+}
+
+interface OutlookRecurrence {
+  pattern?: OutlookRecurrencePattern | null;
+  range?: OutlookRecurrenceRange | null;
+}
+
 interface OutlookCalendarEvent {
   id?: string;
   iCalUId?: string | null;
@@ -32,6 +54,7 @@ interface OutlookCalendarEvent {
   subject?: string;
   body?: { contentType?: string; content?: string } | null;
   location?: { displayName?: string };
+  recurrence?: OutlookRecurrence | null;
   showAs?: string;
   start?: OutlookEventDateTime;
   end?: OutlookEventDateTime;
@@ -69,6 +92,7 @@ interface EventTimeSlot {
   availability?: "busy" | "free" | "oof" | "workingElsewhere";
   isAllDay?: boolean;
   startTimeZone?: string;
+  recurrenceRule?: object;
   title?: string;
   description?: string;
   location?: string;
