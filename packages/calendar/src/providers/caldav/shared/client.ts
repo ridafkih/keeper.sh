@@ -104,6 +104,13 @@ class CalDAVClient {
       iCalString: params.iCalString,
     });
 
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(
+        `CalDAV PUT failed ${response.status} ${response.statusText} url=${response.url}: ${body.slice(0, 200)}`,
+      );
+    }
+
     await response.body?.cancel?.();
   }
 
