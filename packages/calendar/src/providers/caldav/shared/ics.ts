@@ -1,9 +1,10 @@
 import { generateIcsCalendar } from "ts-ics";
 import { parseIcsCalendar } from "../../../ics";
-import type { IcsCalendar, IcsDuration, IcsEvent } from "ts-ics";
+import type { IcsCalendar, IcsDuration, IcsEvent, IcsRecurrenceRule } from "ts-ics";
 import type { SyncableEvent } from "../../../core/types";
 import { isKeeperEvent } from "../../../core/events/identity";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
+import { parseRecurrenceRuleFromJson } from "../../../core/events/recurrence";
 import {
   MS_PER_DAY,
   MS_PER_HOUR,
@@ -46,6 +47,9 @@ const getEventEndTime = (event: IcsEvent, startTime: Date): Date => {
 
 const eventToICalString = (event: SyncableEvent, uid: string): string => {
   const isAllDay = resolveIsAllDayEvent(event);
+  const recurrenceRule: IcsRecurrenceRule | null = event.recurrenceRule
+    ? parseRecurrenceRuleFromJson(JSON.stringify(event.recurrenceRule))
+    : null;
   const icsEvent: IcsEvent = {
     description: event.description,
     end: { date: event.endTime, ...(isAllDay && { type: "DATE" }) },
@@ -54,6 +58,7 @@ const eventToICalString = (event: SyncableEvent, uid: string): string => {
     start: { date: event.startTime, ...(isAllDay && { type: "DATE" }) },
     summary: event.summary,
     ...(event.availability === "free" && { timeTransparent: "TRANSPARENT" }),
+    ...(recurrenceRule && { recurrenceRule }),
     uid,
   };
 
