@@ -44,10 +44,61 @@ const getEventEndTime = (event: IcsEvent, startTime: Date): Date => {
   return startTime;
 };
 
+const HTML_TAG_PATTERN = /<[^>]*>/g;
+const HTML_ENTITIES: Record<string, string> = {
+  "&nbsp;": " ",
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": "\"",
+  "&apos;": "'",
+  "&#39;": "'",
+};
+const ANCHOR_PATTERN = /<a\b[^>]*?href="([^"]*)"[^>]*?>([\s\S]*?)<\/a>/gi;
+const ICS_LINE_MAX_OCTETS = 75;
+
+const isHtmlDescription = (text: string): boolean => /<\/?\w+[^>]*>/.test(text);
+
+const htmlToPlainText = (html: string): string => {
+  const withAnchorsConverted = html.replace(ANCHOR_PATTERN, (_match, href: string, text: string) => {
+    const plainText = text.replace(HTML_TAG_PATTERN, "").replace(/[\r\n\t ]+/g, " ").trim();
+    if (!plainText || plainText === href) {
+      return href;
+    }
+    return `${plainText} (${href})`;
+  });
+  const withoutTags = withAnchorsConverted.replace(HTML_TAG_PATTERN, "");
+  const decoded = withoutTags.replace(/&(?:nbsp|amp|lt|gt|quot|apos|#39);/g, (m) => HTML_ENTITIES[m] ?? m);
+  return decoded.replace(/[\r\n\t ]+/g, " ").trim();
+};
+
+const foldIcsLine = (line: string): string => {
+  if (Buffer.byteLength(line, "utf8") <= ICS_LINE_MAX_OCTETS) {
+    return line;
+  }
+  const parts: string[] = [];
+  let remaining = line;
+  while (Buffer.byteLength(remaining, "utf8") > ICS_LINE_MAX_OCTETS) {
+    let cut = ICS_LINE_MAX_OCTETS;
+    while (cut > 0 && Buffer.byteLength(remaining.slice(0, cut), "utf8") > ICS_LINE_MAX_OCTETS) {
+      cut--;
+    }
+    parts.push(remaining.slice(0, cut));
+    remaining = remaining.slice(cut);
+  }
+  parts.push(remaining);
+  return parts.join("\r\n ");
+};
+
 const eventToICalString = (event: SyncableEvent, uid: string): string => {
   const isAllDay = resolveIsAllDayEvent(event);
+
+  const rawDescription = event.description;
+  const descriptionIsHtml = rawDescription ? isHtmlDescription(rawDescription) : false;
+  const plainDescription = descriptionIsHtml ? htmlToPlainText(rawDescription!) : rawDescription;
+
   const icsEvent: IcsEvent = {
-    description: event.description,
+    description: plainDescription,
     end: { date: event.endTime, ...(isAllDay && { type: "DATE" }) },
     location: event.location,
     stamp: { date: new Date() },
@@ -57,13 +108,25 @@ const eventToICalString = (event: SyncableEvent, uid: string): string => {
     uid,
   };
 
-  const calendar: IcsCalendar = {
+  const baseIcs = generateIcsCalendar({
     events: [icsEvent],
     prodId: "-//Keeper//Keeper Calendar//EN",
     version: "2.0",
-  };
+  });
 
-  return generateIcsCalendar(calendar);
+  if (!descriptionIsHtml || !rawDescription) {
+    return baseIcs;
+  }
+
+  // Inject X-ALT-DESC with the original HTML before END:VEVENT for clients that support rich descriptions.
+  const escapedHtml = rawDescription
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\r?\n/g, "\\n");
+  const altDescLine = `X-ALT-DESC;FMTTYPE=text/html:${escapedHtml}`;
+  const folded = foldIcsLine(altDescLine);
+  return baseIcs.replace(/END:VEVENT\r\n/, `${folded}\r\nEND:VEVENT\r\n`);
 };
 
 interface ParsedCalendarEvent {
