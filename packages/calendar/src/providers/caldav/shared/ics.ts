@@ -46,11 +46,67 @@ const resolveEventTimezones = (
   return [timezone];
 };
 
+const HTML_TAG_PATTERN = /<[^>]*>/g;
+const HTML_ENTITIES: Record<string, string> = {
+  "&nbsp;": " ",
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": "\"",
+  "&apos;": "'",
+  "&#39;": "'",
+};
+const ANCHOR_PATTERN = /<a\b[^>]*?href="([^"]*)"[^>]*?>([\s\S]*?)<\/a>/gi;
+const ICS_LINE_MAX_OCTETS = 75;
+
+const isHtmlDescription = (text: string): boolean => /<\/?\w+[^>]*>/.test(text);
+
+const htmlToPlainText = (html: string): string => {
+  const withAnchorsConverted = html.replace(ANCHOR_PATTERN, (_match, href: string, text: string) => {
+    const plainText = text.replaceAll(HTML_TAG_PATTERN, "").replaceAll(/[\r\n\t ]+/g, " ").trim();
+    if (!plainText || plainText === href) {
+      return href;
+    }
+    return `${plainText} (${href})`;
+  });
+  const withoutTags = withAnchorsConverted.replaceAll(HTML_TAG_PATTERN, "");
+  const decoded = withoutTags.replaceAll(
+    /&(?:nbsp|amp|lt|gt|quot|apos|#39);/g,
+    (entity) => HTML_ENTITIES[entity] ?? entity,
+  );
+  return decoded.replaceAll(/[\r\n\t ]+/g, " ").trim();
+};
+
+const foldIcsLine = (line: string): string => {
+  if (Buffer.byteLength(line, "utf8") <= ICS_LINE_MAX_OCTETS) {
+    return line;
+  }
+  const parts: string[] = [];
+  let remaining = line;
+  while (Buffer.byteLength(remaining, "utf8") > ICS_LINE_MAX_OCTETS) {
+    let cut = ICS_LINE_MAX_OCTETS;
+    while (cut > 0 && Buffer.byteLength(remaining.slice(0, cut), "utf8") > ICS_LINE_MAX_OCTETS) {
+      cut--;
+    }
+    parts.push(remaining.slice(0, cut));
+    remaining = remaining.slice(cut);
+  }
+  parts.push(remaining);
+  return parts.join("\r\n ");
+};
+
 const eventToICalString = (event: MaterializedSyncableEvent, uid: string): string => {
   const isAllDay = resolveIsAllDayEvent(event);
   const timezones = resolveEventTimezones(event, isAllDay);
+
+  const rawDescription = event.description;
+  const descriptionIsHtml = Boolean(rawDescription) && isHtmlDescription(rawDescription ?? "");
+  const plainDescription = descriptionIsHtml && rawDescription
+    ? htmlToPlainText(rawDescription)
+    : normalizeIcsText(rawDescription);
+
   const icsEvent: IcsEvent = {
-    description: normalizeIcsText(event.description),
+    description: plainDescription,
     end: buildZonedIcsDate(event.endTime, event.startTimeZone, isAllDay),
     location: normalizeIcsText(event.location),
     stamp: { date: new Date() },
@@ -67,7 +123,21 @@ const eventToICalString = (event: MaterializedSyncableEvent, uid: string): strin
     ...(timezones.length > 0 && { timezones }),
   };
 
-  return generateIcsCalendar(calendar);
+  const baseIcs = generateIcsCalendar(calendar);
+
+  if (!descriptionIsHtml || !rawDescription) {
+    return baseIcs;
+  }
+
+  // Inject X-ALT-DESC with the original HTML before END:VEVENT for clients that support rich descriptions.
+  const escapedHtml = rawDescription
+    .replaceAll("\\", String.raw`\\`)
+    .replaceAll(";", String.raw`\;`)
+    .replaceAll(",", String.raw`\,`)
+    .replaceAll(/\r?\n/g, String.raw`\n`);
+  const altDescLine = `X-ALT-DESC;FMTTYPE=text/html:${escapedHtml}`;
+  const folded = foldIcsLine(altDescLine);
+  return baseIcs.replace(/END:VEVENT\r\n/, `${folded}\r\nEND:VEVENT\r\n`);
 };
 
 interface ParsedCalendarEvent {
