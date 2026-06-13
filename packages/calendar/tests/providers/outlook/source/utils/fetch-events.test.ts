@@ -262,4 +262,20 @@ describe("parseOutlookEvents", () => {
     expect(parsedEvents).toHaveLength(1);
     expect(parsedEvents[0]?.availability).toBe("free");
   });
+
+  it("keeps Outlook HTML bodies canonical and derives plaintext", () => {
+    const parsedEvents = parseOutlookEvents([
+      createOutlookEvent({
+        body: {
+          content: '<div>Join <a href="https://example.com">call</a></div>',
+          contentType: "html",
+        },
+        iCalUId: "external-uid-8",
+      }),
+    ]);
+
+    expect(parsedEvents).toHaveLength(1);
+    expect(parsedEvents[0]?.description).toBe('<div>Join <a href="https://example.com">call</a></div>');
+    expect(parsedEvents[0]?.plaintextDescription).toBe("Join call (https://example.com)");
+  });
 });

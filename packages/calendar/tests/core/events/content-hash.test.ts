@@ -25,6 +25,21 @@ describe("createSyncEventContentHash", () => {
     expect(hash1).not.toBe(hash2);
   });
 
+  it("returns different hashes for different plaintext descriptions", () => {
+    const hash1 = createSyncEventContentHash({
+      description: "<p>Join</p>",
+      plaintextDescription: "Join",
+      summary: "Same",
+    });
+    const hash2 = createSyncEventContentHash({
+      description: "<p>Join</p>",
+      plaintextDescription: "Join call",
+      summary: "Same",
+    });
+
+    expect(hash1).not.toBe(hash2);
+  });
+
   it("returns different hashes for different locations", () => {
     const hash1 = createSyncEventContentHash({ summary: "Same", location: "Room A" });
     const hash2 = createSyncEventContentHash({ summary: "Same", location: "Room B" });

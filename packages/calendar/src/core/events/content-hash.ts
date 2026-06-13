@@ -2,6 +2,7 @@ import type { SyncableEvent } from "../types";
 import { resolveIsAllDayEvent } from "./all-day";
 
 type SyncableEventContent = Pick<SyncableEvent, "summary" | "description" | "location">
+  & Partial<Pick<SyncableEvent, "plaintextDescription">>
   & Partial<Pick<SyncableEvent, "availability" | "isAllDay" | "startTime" | "endTime">>;
 
 const normalizeText = (value?: string): string => value?.trim() ?? "";
@@ -22,6 +23,7 @@ const createSyncEventContentHash = (event: SyncableEventContent): string => {
   const payload = JSON.stringify([
     normalizeText(event.summary),
     normalizeText(event.description),
+    normalizeText(event.plaintextDescription),
     normalizeText(event.location),
     normalizeAvailability(event.availability),
     resolveHashedAllDay(event),

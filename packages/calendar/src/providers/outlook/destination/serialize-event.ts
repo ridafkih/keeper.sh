@@ -1,6 +1,7 @@
 import { KEEPER_CATEGORY } from "@keeper.sh/constants";
 import type { OutlookEvent } from "@keeper.sh/data-schemas";
 import type { SyncableEvent } from "../../../core/types";
+import { isHtmlDescription } from "../../../core/events/description";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
 
 const formatOutlookDateTime = (value: Date, isAllDay: boolean): string => {
@@ -18,9 +19,14 @@ const getOutlookBody = (event: SyncableEvent): OutlookEvent["body"] => {
     return null;
   }
 
+  let contentType = "text";
+  if (isHtmlDescription(event.description)) {
+    contentType = "html";
+  }
+
   return {
     content: event.description,
-    contentType: "text",
+    contentType,
   };
 };
 

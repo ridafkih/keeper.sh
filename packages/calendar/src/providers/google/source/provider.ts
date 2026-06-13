@@ -113,6 +113,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
       .select({
         availability: eventStatesTable.availability,
         description: eventStatesTable.description,
+        plaintextDescription: eventStatesTable.plaintextDescription,
         id: eventStatesTable.id,
         endTime: eventStatesTable.endTime,
         isAllDay: eventStatesTable.isAllDay,
@@ -156,6 +157,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
               availability: event.availability,
               calendarId,
               description: event.description,
+              plaintextDescription: event.plaintextDescription,
               endTime: event.endTime,
               exceptionDates: stringifyIfPresent(event.exceptionDates),
               isAllDay: event.isAllDay,

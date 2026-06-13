@@ -1,4 +1,5 @@
 import type { SourceEvent } from "../types";
+import { countPlaintextDescriptionDerivationFailures } from "../events/description";
 import { buildSourceEventsToAdd, buildSourceEventStateIdsToRemove } from "../source/event-diff";
 
 interface ExistingEventState {
@@ -11,6 +12,7 @@ interface ExistingEventState {
   sourceEventType: string | null;
   title: string | null;
   description: string | null;
+  plaintextDescription?: string | null;
   location: string | null;
 }
 
@@ -63,6 +65,8 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     ]);
 
     wideEvent["source_events.count"] = fetchResult.events.length;
+    wideEvent["source_events.plaintext_description_derivation_failed"] =
+      countPlaintextDescriptionDerivationFailures(fetchResult.events);
     wideEvent["existing_events.count"] = existingEvents.length;
 
     if (fetchResult.unchanged) {

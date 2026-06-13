@@ -92,4 +92,29 @@ describe("parseIcsEvents", () => {
       parsedEvents[1]?.startTime.getTime() ?? Number.POSITIVE_INFINITY,
     );
   });
+
+  it("uses X-ALT-DESC as canonical description and DESCRIPTION as plaintext", () => {
+    const calendar = parseIcsCalendar({
+      icsString: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Keeper Test//EN",
+        "BEGIN:VEVENT",
+        "UID:event-with-alt-desc",
+        "DTSTART:20260310T090000Z",
+        "DTEND:20260310T100000Z",
+        "SUMMARY:Meeting",
+        "DESCRIPTION:Join call",
+        "X-ALT-DESC;FMTTYPE=text/html:<p>Join <strong>call</strong></p>",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    });
+
+    const parsedEvents = parseIcsEvents(calendar);
+
+    expect(parsedEvents).toHaveLength(1);
+    expect(parsedEvents[0]?.description).toBe("<p>Join <strong>call</strong></p>");
+    expect(parsedEvents[0]?.plaintextDescription).toBe("Join call");
+  });
 });

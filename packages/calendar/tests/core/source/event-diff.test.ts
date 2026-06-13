@@ -209,6 +209,32 @@ describe("source event diff", () => {
     expect(idsToRemove).toEqual([]);
   });
 
+  it("re-adds events when only the plaintext description changes", () => {
+    const existingEvents = [
+      createExistingEvent({
+        description: "<p>Join</p>",
+        plaintextDescription: "Join",
+        id: "existing-plaintext-desc",
+        sourceEventUid: "plaintext-desc-uid",
+      }),
+    ];
+
+    const incomingEvents = [
+      createIncomingEvent({
+        description: "<p>Join</p>",
+        plaintextDescription: "Join call",
+        uid: "plaintext-desc-uid",
+      }),
+    ];
+
+    const eventsToAdd = buildSourceEventsToAdd(existingEvents, incomingEvents);
+    const idsToRemove = buildSourceEventStateIdsToRemove(existingEvents, incomingEvents);
+
+    expect(eventsToAdd).toHaveLength(1);
+    expect(eventsToAdd[0]?.plaintextDescription).toBe("Join call");
+    expect(idsToRemove).toEqual([]);
+  });
+
   it("re-adds events when the title or location changes", () => {
     const existingEvents = [
       createExistingEvent({

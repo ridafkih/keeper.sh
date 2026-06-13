@@ -3,6 +3,7 @@ import type { SourceEvent } from "../types";
 interface ExistingSourceEventState {
   availability?: string | null;
   description?: string | null;
+  plaintextDescription?: string | null;
   id: string;
   isAllDay?: boolean | null;
   location?: string | null;
@@ -45,6 +46,7 @@ interface SourceEventIdentityInput {
   sourceEventType?: string | null;
   title?: string | null;
   description?: string | null;
+  plaintextDescription?: string | null;
   location?: string | null;
 }
 
@@ -61,6 +63,7 @@ const buildSourceEventIdentityKey = (
     input.sourceEventType ?? "default",
     normalizeIdentityContent(input.title),
     normalizeIdentityContent(input.description),
+    normalizeIdentityContent(input.plaintextDescription),
     normalizeIdentityContent(input.location),
   ].join("|");
 
@@ -101,6 +104,7 @@ const buildExistingEventIdentitySet = (
         {
           availability: existingEvent.availability,
           description: existingEvent.description,
+          plaintextDescription: existingEvent.plaintextDescription,
           endTime: existingEvent.endTime,
           isAllDay: existingEvent.isAllDay,
           location: existingEvent.location,
@@ -134,6 +138,7 @@ const buildSourceEventsToAdd = (
           {
             availability: incomingEvent.availability,
             description: incomingEvent.description,
+            plaintextDescription: incomingEvent.plaintextDescription,
             endTime: incomingEvent.endTime,
             isAllDay: incomingEvent.isAllDay,
             location: incomingEvent.location,

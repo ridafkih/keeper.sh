@@ -120,6 +120,7 @@ const createIngestionFlush = (calendarId: string) =>
             availability: event.availability,
             calendarId,
             description: event.description,
+            plaintextDescription: event.plaintextDescription,
             endTime: event.endTime,
             exceptionDates: serializeOptionalJson(event.exceptionDates),
             isAllDay: event.isAllDay,
@@ -149,6 +150,7 @@ const readExistingEvents = (calendarId: string) =>
     .select({
       availability: eventStatesTable.availability,
       description: eventStatesTable.description,
+      plaintextDescription: eventStatesTable.plaintextDescription,
       endTime: eventStatesTable.endTime,
       id: eventStatesTable.id,
       isAllDay: eventStatesTable.isAllDay,
@@ -216,6 +218,25 @@ interface IngestionSourceResult {
   eventsRemoved: number;
   ingestEvents: Record<string, unknown>[];
 }
+
+const PLAINTEXT_DESCRIPTION_DERIVATION_FAILURE_FIELD =
+  "source_events.plaintext_description_derivation_failed";
+
+const appendIngestEvent = (
+  ingestEvents: Record<string, unknown>[],
+  provider: string,
+  event: Record<string, unknown>,
+): void => {
+  const failureCount = event[PLAINTEXT_DESCRIPTION_DERIVATION_FAILURE_FIELD];
+  if (typeof failureCount === "number") {
+    widelog.set(PLAINTEXT_DESCRIPTION_DERIVATION_FAILURE_FIELD, failureCount);
+  }
+
+  ingestEvents.push({
+    ...event,
+    "source.provider": provider,
+  });
+};
 
 const ingestOAuthSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
   const oauthSources = await database
@@ -320,10 +341,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
                 readExistingEvents: () => readExistingEvents(source.calendarId),
                 flush: createIngestionFlush(source.calendarId),
                 onIngestEvent: (event) => {
-                  ingestEvents.push({
-                    ...event,
-                    "source.provider": source.provider,
-                  });
+                  appendIngestEvent(ingestEvents, source.provider, event);
                 },
               }),
             );
@@ -473,10 +491,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
                 readExistingEvents: () => readExistingEvents(source.calendarId),
                 flush: createIngestionFlush(source.calendarId),
                 onIngestEvent: (event) => {
-                  ingestEvents.push({
-                    ...event,
-                    "source.provider": source.provider,
-                  });
+                  appendIngestEvent(ingestEvents, source.provider, event);
                 },
               }),
             );
@@ -604,10 +619,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
                 readExistingEvents: () => readExistingEvents(source.calendarId),
                 flush: createIngestionFlush(source.calendarId),
                 onIngestEvent: (event) => {
-                  ingestEvents.push({
-                    ...event,
-                    "source.provider": "ical",
-                  });
+                  appendIngestEvent(ingestEvents, "ical", event);
                 },
               }),
             );

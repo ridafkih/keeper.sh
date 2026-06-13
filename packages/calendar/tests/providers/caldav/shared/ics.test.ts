@@ -143,6 +143,71 @@ describe("eventToICalString", () => {
     expect(icsString).toContain("DTSTART;VALUE=DATE:20260308");
     expect(icsString).not.toContain("TZID=");
   });
+
+  it("converts HTML descriptions to plain text and preserves the original HTML", () => {
+    const icsString = eventToICalString(
+      {
+        calendarId: "calendar-id",
+        calendarName: "Calendar",
+        calendarUrl: null,
+        description: '<a href="https://x.y">Join</a>&nbsp;&amp; notes',
+        endTime: new Date("2026-06-17T11:45:00.000Z"),
+        id: "event-id",
+        sourceEventUid: "source-uid",
+        startTime: new Date("2026-06-17T10:45:00.000Z"),
+        summary: "Appointment",
+      },
+      "destination-uid",
+    );
+
+    const unfoldedIcsString = icsString.replaceAll("\r\n ", "");
+
+    expect(icsString).toContain("DESCRIPTION:Join (https://x.y) & notes");
+    expect(unfoldedIcsString).toContain(
+      String.raw`X-ALT-DESC;FMTTYPE=text/html:<a href="https://x.y">Join</a>&nbsp\;&amp\; notes`,
+    );
+  });
+
+  it("uses pre-derived plaintext descriptions for CalDAV DESCRIPTION", () => {
+    const icsString = eventToICalString(
+      {
+        calendarId: "calendar-id",
+        calendarName: "Calendar",
+        calendarUrl: null,
+        description: '<p>Join <a href="https://x.y">call</a></p>',
+        plaintextDescription: "Join call (https://x.y)",
+        endTime: new Date("2026-06-17T11:45:00.000Z"),
+        id: "event-id",
+        sourceEventUid: "source-uid",
+        startTime: new Date("2026-06-17T10:45:00.000Z"),
+        summary: "Appointment",
+      },
+      "destination-uid",
+    );
+
+    expect(icsString).toContain("DESCRIPTION:Join call (https://x.y)");
+    expect(icsString).not.toContain("DESCRIPTION:<p>");
+  });
+
+  it("does not add an alternate description for plain text descriptions", () => {
+    const icsString = eventToICalString(
+      {
+        calendarId: "calendar-id",
+        calendarName: "Calendar",
+        calendarUrl: null,
+        description: "Plain text notes",
+        endTime: new Date("2026-06-17T11:45:00.000Z"),
+        id: "event-id",
+        sourceEventUid: "source-uid",
+        startTime: new Date("2026-06-17T10:45:00.000Z"),
+        summary: "Appointment",
+      },
+      "destination-uid",
+    );
+
+    expect(icsString).toContain("DESCRIPTION:Plain text notes");
+    expect(icsString).not.toContain("X-ALT-DESC");
+  });
 });
 
 describe("parseICalToRemoteEvents", () => {
@@ -264,6 +329,25 @@ describe("parseICalToRemoteEvents", () => {
     const events = parseICalToRemoteEvents(ics);
     expect(events[0]?.isAllDay).toBe(true);
     expect(events[1]?.isAllDay).toBe(false);
+  });
+
+  it("parses X-ALT-DESC as the canonical description and DESCRIPTION as plaintext", () => {
+    const ics = buildIcs([
+      buildVevent({
+        UID: "html-description",
+        SUMMARY: "HTML Description",
+        DTSTART: "20260101T100000Z",
+        DTEND: "20260101T110000Z",
+        DESCRIPTION: "Join call",
+        "X-ALT-DESC;FMTTYPE=text/html": "<p>Join <strong>call</strong></p>",
+      }),
+    ]);
+
+    const events = parseICalToRemoteEvents(ics);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.description).toBe("<p>Join <strong>call</strong></p>");
+    expect(events[0]?.plaintextDescription).toBe("Join call");
   });
 });
 

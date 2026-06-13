@@ -12,6 +12,8 @@ interface EventTimeSlot {
   recurrenceId?: Date;
   title?: string;
   description?: string;
+  plaintextDescription?: string;
+  plaintextDescriptionDerivationError?: string;
   location?: string;
 }
 

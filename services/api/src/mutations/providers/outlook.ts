@@ -1,5 +1,6 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { microsoftApiErrorSchema, outlookCalendarViewListSchema, outlookEventListSchema, outlookEventSchema } from "@keeper.sh/data-schemas";
+import { isHtmlDescription } from "@keeper.sh/calendar";
 import type { OutlookEvent } from "@keeper.sh/data-schemas";
 import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "@/types";
 
@@ -57,7 +58,14 @@ const createOutlookEvent = async (
   };
 
   if (input.description) {
-    resource.body = { content: input.description, contentType: "text" };
+    let contentType = "text";
+    if (isHtmlDescription(input.description)) {
+      contentType = "html";
+    }
+    resource.body = {
+      content: input.description,
+      contentType,
+    };
   }
 
   if (input.location) {
@@ -119,7 +127,11 @@ const updateOutlookEvent = async (
     patch.subject = updates.title;
   }
   if ("description" in updates) {
-    patch.body = { content: updates.description, contentType: "text" };
+    let contentType = "text";
+    if (updates.description && isHtmlDescription(updates.description)) {
+      contentType = "html";
+    }
+    patch.body = { content: updates.description, contentType };
   }
   if ("location" in updates) {
     patch.location = { displayName: updates.location };

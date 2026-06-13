@@ -512,6 +512,13 @@
       "when": 1782843765741,
       "tag": "0072_directional_calendar_health",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1782851801324,
+      "tag": "0073_event_state_plaintext_description",
+      "breakpoints": true
     }
   ]
 }

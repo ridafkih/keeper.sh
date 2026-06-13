@@ -77,6 +77,8 @@ interface EventTimeSlot {
   startTimeZone?: string;
   title?: string;
   description?: string;
+  plaintextDescription?: string;
+  plaintextDescriptionDerivationError?: string;
   location?: string;
 }
 

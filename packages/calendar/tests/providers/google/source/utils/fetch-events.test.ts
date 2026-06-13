@@ -244,4 +244,17 @@ describe("parseGoogleEvents", () => {
     expect(parsedEvents).toHaveLength(1);
     expect(parsedEvents[0]?.availability).toBe("busy");
   });
+
+  it("keeps Google descriptions canonical and derives plaintext for HTML content", () => {
+    const googleEvent = createGoogleEvent({
+      description: '<p>Join <a href="https://example.com">call</a></p>',
+      iCalUID: "external-uid-8",
+    });
+
+    const parsedEvents = parseGoogleEvents([googleEvent]);
+
+    expect(parsedEvents).toHaveLength(1);
+    expect(parsedEvents[0]?.description).toBe('<p>Join <a href="https://example.com">call</a></p>');
+    expect(parsedEvents[0]?.plaintextDescription).toBe("Join call (https://example.com)");
+  });
 });
