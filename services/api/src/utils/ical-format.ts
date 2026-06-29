@@ -1,7 +1,8 @@
 import { KEEPER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { resolveIsAllDayEvent } from "@keeper.sh/calendar";
+import { buildVtimezone, buildZonedIcsDate } from "@keeper.sh/calendar/ics";
 import { generateIcsCalendar } from "ts-ics";
-import type { IcsCalendar, IcsDateObject, IcsEvent, IcsRecurrenceRule } from "ts-ics";
+import type { IcsCalendar, IcsDateObject, IcsEvent, IcsRecurrenceRule, IcsTimezone } from "ts-ics";
 
 interface FeedSettings {
   includeEventName: boolean;
@@ -24,14 +25,19 @@ interface CalendarEvent {
   exceptionDates: IcsDateObject[] | null;
   recurrenceId: Date | null;
   sourceEventUid: string | null;
+  startTimeZone?: string | null;
 }
 
-// The feed emits DTSTART/DTEND as bare UTC ("...Z"). Per RFC 5545, EXDATE and
-// RRULE UNTIL must use the same value type as DTSTART, so they must be UTC too.
-// Source-parsed dates can carry a TZID (the `local` block); strict clients like
-// Apple Calendar drop the whole recurring event when EXDATE has an IANA TZID but
-// DTSTART is UTC. Strip `local` so these serialize as UTC, preserving the instant.
-// All-day exceptions (VALUE=DATE) keep their date-only type.
+const resolveEventTimeZone = (event: CalendarEvent): string | undefined =>
+  buildZonedIcsDate(event.startTime, event.startTimeZone ?? "", false).local?.timezone;
+
+const buildExceptionDate = (value: IcsDateObject, timezone: string | undefined): IcsDateObject => {
+  if (value.type === "DATE") {
+    return { date: value.date, type: "DATE" };
+  }
+  return buildZonedIcsDate(value.date, timezone, false);
+};
+
 const toUtcDateObject = (value: IcsDateObject): IcsDateObject => {
   if (value.type === "DATE") {
     return { date: value.date, type: "DATE" };
@@ -102,10 +108,11 @@ const groupEventsBySourceUid = (events: CalendarEvent[]): EventGroup[] => {
 
 const buildBaseIcsEvent = (event: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => {
   const isAllDay = resolveIsAllDayEvent(toAllDayShape(event));
+  const timezone = event.startTimeZone ?? "";
   return {
-    end: { date: event.endTime, ...(isAllDay && { type: "DATE" as const }) },
+    end: buildZonedIcsDate(event.endTime, timezone, isAllDay),
     stamp: { date: new Date() },
-    start: { date: event.startTime, ...(isAllDay && { type: "DATE" as const }) },
+    start: buildZonedIcsDate(event.startTime, timezone, isAllDay),
     summary: resolveEventSummary(event, settings),
     uid,
     ...(settings.includeEventDescription && event.description && { description: event.description }),
@@ -113,23 +120,62 @@ const buildBaseIcsEvent = (event: CalendarEvent, uid: string, settings: FeedSett
   };
 };
 
-const buildMasterIcsEvent = (master: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => ({
-  ...buildBaseIcsEvent(master, uid, settings),
-  ...(master.recurrenceRule && { recurrenceRule: normalizeRecurrenceRuleToUtc(master.recurrenceRule) }),
-  ...(master.exceptionDates?.length && { exceptionDates: master.exceptionDates.map(toUtcDateObject) }),
-});
+const buildMasterIcsEvent = (master: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => {
+  const timezone = resolveEventTimeZone(master);
+  return {
+    ...buildBaseIcsEvent(master, uid, settings),
+    ...(master.recurrenceRule && { recurrenceRule: normalizeRecurrenceRuleToUtc(master.recurrenceRule) }),
+    ...(master.exceptionDates?.length && {
+      exceptionDates: master.exceptionDates.map((value) => buildExceptionDate(value, timezone)),
+    }),
+  };
+};
 
-const buildOverrideIcsEvent = (override: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => ({
+const buildOverrideIcsEvent = (
+  override: CalendarEvent,
+  uid: string,
+  settings: FeedSettings,
+  masterTimeZone: string | undefined,
+  masterIsAllDay: boolean,
+): IcsEvent => ({
   ...buildBaseIcsEvent(override, uid, settings),
-  ...(override.recurrenceId && { recurrenceId: { value: { date: override.recurrenceId } } }),
+  ...(override.recurrenceId && {
+    recurrenceId: { value: buildZonedIcsDate(override.recurrenceId, masterTimeZone, masterIsAllDay) },
+  }),
 });
 
 const buildIcsEventsForGroup = (group: EventGroup, settings: FeedSettings): IcsEvent[] => {
   const uid = `${group.master.id}${KEEPER_EVENT_SUFFIX}`;
+  const masterTimeZone = resolveEventTimeZone(group.master);
+  const masterIsAllDay = resolveIsAllDayEvent(toAllDayShape(group.master));
   return [
     buildMasterIcsEvent(group.master, uid, settings),
-    ...group.overrides.map((override) => buildOverrideIcsEvent(override, uid, settings)),
+    ...group.overrides.map((override) =>
+      buildOverrideIcsEvent(override, uid, settings, masterTimeZone, masterIsAllDay),
+    ),
   ];
+};
+
+const collectTimezones = (events: CalendarEvent[]): IcsTimezone[] => {
+  const referenceByZone = new Map<string, Date>();
+  for (const event of events) {
+    if (resolveIsAllDayEvent(toAllDayShape(event))) {
+      continue;
+    }
+    const zone = resolveEventTimeZone(event);
+    if (zone && !referenceByZone.has(zone)) {
+      referenceByZone.set(zone, event.startTime);
+    }
+  }
+
+  const timezones: IcsTimezone[] = [];
+  for (const [zone, reference] of referenceByZone) {
+    const timezone = buildVtimezone(zone, reference);
+    if (timezone) {
+      timezones.push(timezone);
+    }
+  }
+  return timezones;
 };
 
 const shouldIncludeEvent = (event: CalendarEvent, settings: FeedSettings): boolean => {
@@ -143,11 +189,13 @@ const formatEventsAsIcal = (events: CalendarEvent[], settings: FeedSettings): st
   const filteredEvents = events.filter((event) => shouldIncludeEvent(event, settings));
   const groups = groupEventsBySourceUid(filteredEvents);
   const icsEvents = groups.flatMap((group) => buildIcsEventsForGroup(group, settings));
+  const timezones = collectTimezones(filteredEvents);
 
   const calendar: IcsCalendar = {
     events: icsEvents,
     prodId: "-//Keeper//Keeper Calendar//EN",
     version: "2.0",
+    ...(timezones.length > 0 && { timezones }),
   };
 
   return generateIcsCalendar(calendar);

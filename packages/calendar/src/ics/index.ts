@@ -7,4 +7,5 @@ export { createSnapshot } from "./utils/create-snapshot";
 export { createIcsSourceFetcher } from "./utils/fetch-adapter";
 export type { IcsSourceFetcherConfig, IcsSourceFetcher } from "./utils/fetch-adapter";
 export { buildZonedIcsDate, formatTzOffset } from "./utils/build-zoned-date";
+export { buildVtimezone } from "./utils/build-vtimezone";
 export { normalizeTimezone } from "./utils/normalize-timezone";

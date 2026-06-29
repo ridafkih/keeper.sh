@@ -65,7 +65,7 @@ describe("buildZonedIcsDate", () => {
   });
 
   it("falls back to a bare UTC datetime without a timezone", () => {
-    const result = buildZonedIcsDate(new Date("2026-06-17T10:45:00.000Z"), undefined, false);
+    const result = buildZonedIcsDate(new Date("2026-06-17T10:45:00.000Z"), "", false);
     expect(result.local).toBeUndefined();
     expect(result.type).toBeUndefined();
   });

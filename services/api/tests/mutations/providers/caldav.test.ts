@@ -183,7 +183,8 @@ describe("caldav provider mutations", () => {
   describe("getPendingCalDAVInvites", () => {
     it("returns pending invites", async () => {
       const invites = await getPendingCalDAVInvites(mockCredentials, "2026-01-01", "2026-01-02", "test@example.com");
-      expect(invites).toHaveLength(0); // My mock doesn't have the right data shape for successful parse yet
+      // The mock does not provide a parseable invite shape, so none are returned.
+      expect(invites).toHaveLength(0);
     });
   });
 });
