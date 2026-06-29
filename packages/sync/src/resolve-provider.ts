@@ -9,6 +9,7 @@ import { createGoogleSyncProvider } from "@keeper.sh/calendar/google";
 import { createOutlookSyncProvider } from "@keeper.sh/calendar/outlook";
 import { createCalDAVSyncProvider } from "@keeper.sh/calendar/caldav";
 import { resolveAuthMethod } from "@keeper.sh/calendar/digest-fetch";
+import { PROVIDER_PUSH_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
 import { decryptPassword } from "@keeper.sh/database";
 import {
   calendarAccountsTable,
@@ -144,6 +145,7 @@ const resolveCalDAVProvider = async (
     serverUrl: caldavCred.serverUrl,
     username: caldavCred.username,
     password,
+    safeFetchOptions: { timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS },
   });
 };
 

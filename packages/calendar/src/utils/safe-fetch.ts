@@ -1,6 +1,8 @@
 import { resolve4, resolve6 } from "node:dns/promises";
 import ipaddr from "ipaddr.js";
 import { getDomain } from "tldts";
+import { RequestTimeoutError, buildTimeoutSignal } from "../core/utils/fetch-with-timeout";
+import type { TimeoutSignal } from "../core/utils/fetch-with-timeout";
 
 const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
 const MAX_REDIRECTS = 10;
@@ -9,6 +11,7 @@ const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
 interface SafeFetchOptions {
   blockPrivateResolution?: boolean;
   allowedPrivateHosts?: Set<string>;
+  timeoutMs?: number;
 }
 
 class UrlSafetyError extends Error {
@@ -155,6 +158,7 @@ const followRedirects = async (
   initialResponse: Response,
   init: RequestInit | undefined,
   options: SafeFetchOptions | undefined,
+  signal: AbortSignal | null | undefined,
 ): Promise<Response> => {
   const headers = toHeaderRecord(init?.headers);
   let currentUrl = initialUrl;
@@ -176,6 +180,7 @@ const followRedirects = async (
       ...init,
       headers: currentHeaders,
       redirect: "manual",
+      signal,
     });
 
     if (!isRedirect(currentResponse)) {
@@ -193,22 +198,49 @@ const extractUrl = (input: string | Request | URL): string => {
   return input.toString();
 };
 
+const resolveTimeoutSignal = (
+  options: SafeFetchOptions | undefined,
+  externalSignal: AbortSignal | null | undefined,
+): TimeoutSignal | null => {
+  if (!options?.timeoutMs) {
+    return null;
+  }
+  return buildTimeoutSignal(options.timeoutMs, externalSignal);
+};
+
+const resolveRequestSignal = (
+  timeout: TimeoutSignal | null,
+  externalSignal: AbortSignal | null | undefined,
+): AbortSignal | null | undefined => timeout?.signal ?? externalSignal;
+
 const createSafeFetch = (options?: SafeFetchOptions): SafeFetch => async (input, init) => {
     const url = extractUrl(input);
     await validateUrlSafety(url, options);
 
     const callerWantsManual = init?.redirect === "manual";
 
-    const response = await globalThis.fetch(input, {
-      ...init,
-      redirect: "manual",
-    });
+    const externalSignal = init?.signal;
+    const timeout = resolveTimeoutSignal(options, externalSignal);
+    const signal = resolveRequestSignal(timeout, externalSignal);
 
-    if (callerWantsManual || !isRedirect(response)) {
-      return response;
+    try {
+      const response = await globalThis.fetch(input, {
+        ...init,
+        redirect: "manual",
+        signal,
+      });
+
+      if (callerWantsManual || !isRedirect(response)) {
+        return response;
+      }
+
+      return await followRedirects(url, response, init, options, signal);
+    } catch (error) {
+      if (timeout?.isTimeout() && options?.timeoutMs) {
+        throw new RequestTimeoutError(options.timeoutMs);
+      }
+      throw error;
     }
-
-    return followRedirects(url, response, init, options);
   };
 
 export { createSafeFetch, UrlSafetyError, validateUrlSafety };

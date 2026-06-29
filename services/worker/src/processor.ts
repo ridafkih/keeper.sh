@@ -2,7 +2,7 @@ import type { Job } from "bullmq";
 import type { PushSyncJobPayload, PushSyncJobResult } from "@keeper.sh/queue";
 import { USER_TIMEOUT_MS } from "@keeper.sh/queue";
 import type { DestinationSyncResult } from "@keeper.sh/calendar";
-import { createSyncAggregateRuntime } from "@keeper.sh/calendar";
+import { createSyncAggregateRuntime, mergeAbortSignals } from "@keeper.sh/calendar";
 import { syncDestinationsForUser } from "@keeper.sh/sync";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { syncStatusTable } from "@keeper.sh/database/schema";
@@ -95,6 +95,10 @@ const processJob = (
 
     const deadlineMs = Date.now() + USER_TIMEOUT_MS;
 
+    const deadlineController = new AbortController();
+    const deadlineTimer = setTimeout(() => deadlineController.abort(), USER_TIMEOUT_MS);
+    const abortSignal = mergeAbortSignals(deadlineController.signal, signal);
+
     let flushed = false;
 
     try {
@@ -103,7 +107,7 @@ const processJob = (
         redis: refreshLockRedis,
         refreshLockStore,
         deadlineMs,
-        abortSignal: signal,
+        abortSignal,
         encryptionKey: env.ENCRYPTION_KEY,
         oauthConfig: {
           googleClientId: env.GOOGLE_CLIENT_ID,
@@ -178,6 +182,13 @@ const processJob = (
       widelog.errorFields(error, { slug: "push-sync-failed" });
       throw error;
     } finally {
+      clearTimeout(deadlineTimer);
+      if (deadlineController.signal.aborted) {
+        widelog.set("timeout.fired", true);
+        widelog.set("timeout.kind", "job_deadline");
+        widelog.set("timeout.limit_ms", USER_TIMEOUT_MS);
+        widelog.set("error.slug", "sync-deadline-exceeded");
+      }
       if (!flushed) {
         widelog.flush();
       }

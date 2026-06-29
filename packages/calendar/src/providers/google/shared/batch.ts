@@ -1,5 +1,6 @@
-import { HTTP_STATUS } from "@keeper.sh/constants";
+import { HTTP_STATUS, PROVIDER_PUSH_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
+import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
 import { GOOGLE_BATCH_API, GOOGLE_BATCH_MAX_SIZE } from "./api";
 import { withBackoff, abortableSleep, computeDelay, DEFAULT_MAX_RETRIES } from "./backoff";
 import { isRateLimitApiError, parseGoogleApiError, parseGoogleApiErrorFromBody } from "./errors";
@@ -227,20 +228,26 @@ class GoogleBatchApiError extends Error {
 const executeBatch = (
   subRequests: BatchSubRequest[],
   accessToken: string,
+  options?: { signal?: AbortSignal; timeoutMs?: number },
 ): Promise<BatchSubResponse[]> =>
   withBackoff(
     async () => {
       const boundary = generateBoundary();
       const requestBody = buildBatchRequestBody(subRequests, boundary);
 
-      const response = await fetch(GOOGLE_BATCH_API, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": `multipart/mixed; boundary=${boundary}`,
+      const response = await fetchWithTimeout(
+        GOOGLE_BATCH_API,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": `multipart/mixed; boundary=${boundary}`,
+          },
+          body: requestBody,
         },
-        body: requestBody,
-      });
+        options?.timeoutMs ?? PROVIDER_PUSH_REQUEST_TIMEOUT_MS,
+        options?.signal,
+      );
 
       if (!response.ok) {
         const errorBody = await response.text();
@@ -257,6 +264,7 @@ const executeBatch = (
       return parseBatchResponseBody(responseText, responseBoundary);
     },
     {
+      signal: options?.signal,
       shouldRetry: (error) =>
         error instanceof GoogleBatchApiError && isRateLimitApiError(error.status, error.apiError),
     },
@@ -284,6 +292,7 @@ const collectRateLimitedIndices = (responses: BatchSubResponse[]): number[] => {
 interface BatchChunkedOptions {
   rateLimiter?: RedisRateLimiter;
   signal?: AbortSignal;
+  timeoutMs?: number;
 }
 
 const retryRateLimitedSubRequests = async (
@@ -309,7 +318,10 @@ const retryRateLimitedSubRequests = async (
     if (options?.rateLimiter) {
       await options.rateLimiter.acquire(retryBatch.length);
     }
-    const responses = await executeBatch(retryBatch, accessToken);
+    const responses = await executeBatch(retryBatch, accessToken, {
+      signal: options?.signal,
+      timeoutMs: options?.timeoutMs,
+    });
 
     const stillPending: typeof pending = [];
     for (let responseIndex = 0; responseIndex < pending.length; responseIndex++) {
@@ -352,7 +364,10 @@ const executeBatchChunked = async (
     if (options?.rateLimiter) {
       await options.rateLimiter.acquire(chunk.length);
     }
-    const responses = await executeBatch(chunk, accessToken);
+    const responses = await executeBatch(chunk, accessToken, {
+      signal: options?.signal,
+      timeoutMs: options?.timeoutMs,
+    });
 
     const rateLimitedIndices = collectRateLimitedIndices(responses);
     if (rateLimitedIndices.length === 0) {
