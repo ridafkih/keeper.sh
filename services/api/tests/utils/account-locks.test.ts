@@ -107,6 +107,18 @@ beforeAll(async () => {
     premiumService: {
       canAddAccount: () => Promise.resolve(canAddAccountResult),
       getUserPlan: () => Promise.resolve("free"),
+      getAccountLimit: () => {
+        if (canAddAccountResult) {
+          return Number.MAX_SAFE_INTEGER;
+        }
+        return 0;
+      },
+      getMappingLimit: () => {
+        if (canAddAccountResult) {
+          return Number.MAX_SAFE_INTEGER;
+        }
+        return 0;
+      },
     },
   }));
 

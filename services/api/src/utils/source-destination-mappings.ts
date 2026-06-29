@@ -37,11 +37,13 @@ interface SetDestinationsTransaction {
   ensureDestinationSyncStatuses: (destinationCalendarIds: string[]) => Promise<void>;
 }
 
+type ResolveMappingLimit = (userId: string) => Promise<number>;
+
 interface SetDestinationsDependencies {
   withTransaction: <TResult>(
     callback: (transaction: SetDestinationsTransaction) => Promise<TResult>,
   ) => Promise<TResult>;
-  isMappingCountAllowed?: (userId: string, nextMappingCount: number) => Promise<boolean>;
+  resolveMappingLimit?: ResolveMappingLimit;
 }
 
 interface SetSourcesTransaction {
@@ -61,7 +63,7 @@ interface SetSourcesDependencies {
   withTransaction: <TResult>(
     callback: (transaction: SetSourcesTransaction) => Promise<TResult>,
   ) => Promise<TResult>;
-  isMappingCountAllowed?: (userId: string, nextMappingCount: number) => Promise<boolean>;
+  resolveMappingLimit?: ResolveMappingLimit;
 }
 
 const assertAllIdsOwned = (
@@ -258,10 +260,9 @@ const createSetDestinationsDependencies = async (): Promise<SetDestinationsDepen
   const { database, premiumService } = await import("@/context");
 
   return {
-    isMappingCountAllowed: async (userId, nextMappingCount) => {
+    resolveMappingLimit: async (userId) => {
       const userPlan = await premiumService.getUserPlan(userId);
-      const mappingLimit = premiumService.getMappingLimit(userPlan);
-      return nextMappingCount <= mappingLimit;
+      return premiumService.getMappingLimit(userPlan);
     },
     withTransaction: (callback) =>
       database.transaction((transactionClient) =>
@@ -273,15 +274,24 @@ const createSetSourcesDependencies = async (): Promise<SetSourcesDependencies> =
   const { database, premiumService } = await import("@/context");
 
   return {
-    isMappingCountAllowed: async (userId, nextMappingCount) => {
+    resolveMappingLimit: async (userId) => {
       const userPlan = await premiumService.getUserPlan(userId);
-      const mappingLimit = premiumService.getMappingLimit(userPlan);
-      return nextMappingCount <= mappingLimit;
+      return premiumService.getMappingLimit(userPlan);
     },
     withTransaction: (callback) =>
       database.transaction((transactionClient) =>
         callback(createSetSourcesTransaction(transactionClient))),
   };
+};
+
+const resolveMappingLimitOrNull = (
+  userId: string,
+  resolve?: ResolveMappingLimit,
+): Promise<number | null> => {
+  if (!resolve) {
+    return Promise.resolve(null);
+  }
+  return resolve(userId);
 };
 
 const runSetDestinationsForSource = async (
@@ -291,6 +301,8 @@ const runSetDestinationsForSource = async (
   dependencies: SetDestinationsDependencies,
 ): Promise<void> => {
   const uniqueDestinationCalendarIds = [...new Set(destinationCalendarIds)];
+
+  const mappingLimit = await resolveMappingLimitOrNull(userId, dependencies.resolveMappingLimit);
 
   await dependencies.withTransaction(async (transaction) => {
     await transaction.acquireUserLock(userId);
@@ -313,7 +325,7 @@ const runSetDestinationsForSource = async (
     }
 
     if (
-      dependencies.isMappingCountAllowed
+      mappingLimit !== null
       && transaction.countUserMappings
       && transaction.countMappingsForSource
     ) {
@@ -325,8 +337,7 @@ const runSetDestinationsForSource = async (
         - currentSourceMappingCount
         + uniqueDestinationCalendarIds.length;
 
-      const allowed = await dependencies.isMappingCountAllowed(userId, nextMappingCount);
-      if (!allowed) {
+      if (nextMappingCount > mappingLimit) {
         throw new Error(MAPPING_LIMIT_ERROR_MESSAGE);
       }
     }
@@ -347,6 +358,8 @@ const runSetSourcesForDestination = async (
 ): Promise<void> => {
   const uniqueSourceCalendarIds = [...new Set(sourceCalendarIds)];
 
+  const mappingLimit = await resolveMappingLimitOrNull(userId, dependencies.resolveMappingLimit);
+
   await dependencies.withTransaction(async (transaction) => {
     await transaction.acquireUserLock(userId);
 
@@ -364,7 +377,7 @@ const runSetSourcesForDestination = async (
     }
 
     if (
-      dependencies.isMappingCountAllowed
+      mappingLimit !== null
       && transaction.countUserMappings
       && transaction.countMappingsForDestination
     ) {
@@ -376,8 +389,7 @@ const runSetSourcesForDestination = async (
         - currentDestinationMappingCount
         + uniqueSourceCalendarIds.length;
 
-      const allowed = await dependencies.isMappingCountAllowed(userId, nextMappingCount);
-      if (!allowed) {
+      if (nextMappingCount > mappingLimit) {
         throw new Error(MAPPING_LIMIT_ERROR_MESSAGE);
       }
     }

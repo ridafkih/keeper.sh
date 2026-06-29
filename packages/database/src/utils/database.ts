@@ -4,13 +4,25 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 interface DatabasePoolOptions {
   statementTimeoutMs?: number;
+  idleInTransactionTimeoutMs?: number;
 }
 
 const DEFAULT_STATEMENT_TIMEOUT_MS = 30_000;
+const DEFAULT_IDLE_IN_TRANSACTION_TIMEOUT_MS = 30_000;
+const POOL_MAX_CONNECTIONS = 10;
+const POOL_IDLE_TIMEOUT_SECONDS = 30;
+const POOL_MAX_LIFETIME_SECONDS = 1800;
 
-const appendStatementTimeout = (url: string, timeoutMs: number): string => {
+const appendServerSettings = (
+  url: string,
+  statementTimeoutMs: number,
+  idleInTransactionTimeoutMs: number,
+): string => {
   const parsed = new URL(url);
-  parsed.searchParams.set("options", `-c statement_timeout=${timeoutMs}`);
+  parsed.searchParams.set(
+    "options",
+    `-c statement_timeout=${statementTimeoutMs} -c idle_in_transaction_session_timeout=${idleInTransactionTimeoutMs}`,
+  );
   return parsed.toString();
 };
 
@@ -37,8 +49,17 @@ const waitForConnection = async (database: DatabaseInstance): Promise<void> => {
 
 const createDatabase = async (url: string, options?: DatabasePoolOptions): Promise<DatabaseInstance> => {
   const statementTimeoutMs = options?.statementTimeoutMs ?? DEFAULT_STATEMENT_TIMEOUT_MS;
-  const connectionUrl = appendStatementTimeout(url, statementTimeoutMs);
-  const database = drizzle(connectionUrl);
+  const idleInTransactionTimeoutMs =
+    options?.idleInTransactionTimeoutMs ?? DEFAULT_IDLE_IN_TRANSACTION_TIMEOUT_MS;
+  const connectionUrl = appendServerSettings(url, statementTimeoutMs, idleInTransactionTimeoutMs);
+  const database = drizzle({
+    connection: {
+      url: connectionUrl,
+      max: POOL_MAX_CONNECTIONS,
+      idleTimeout: POOL_IDLE_TIMEOUT_SECONDS,
+      maxLifetime: POOL_MAX_LIFETIME_SECONDS,
+    },
+  });
   await waitForConnection(database);
   return database;
 };
