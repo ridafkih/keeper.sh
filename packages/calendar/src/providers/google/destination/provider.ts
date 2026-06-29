@@ -76,7 +76,10 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   // Writes go through events.import, which upserts by iCalUID: re-pushing an existing event updates it rather than 409ing.
   const buildPushRequest = (event: SyncableEvent): { uid: string; request: BatchSubRequest } | null => {
     const uid = generateDeterministicEventUid(`${event.id}:${config.externalCalendarId}`);
-    const resource = serializeGoogleEvent(event, uid);
+    const recurrenceRule = event.recurrenceRule
+      ? JSON.stringify(event.recurrenceRule)
+      : undefined;
+    const resource = serializeGoogleEvent(event, uid, recurrenceRule);
     if (!resource) {
       return null;
     }
