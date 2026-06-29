@@ -854,17 +854,23 @@ const insertOAuthCalendarsWithDatabase = async (
 const importOAuthAccountCalendars = async (
   options: ImportOAuthAccountOptions,
 ): Promise<string> => {
-  const { database } = await import("@/context");
+  const { database, premiumService } = await import("@/context");
+
+  const dependencies = createDefaultImportOAuthAccountDependencies();
+
+  const plan = await premiumService.getUserPlan(options.userId);
+  const externalCalendars = await dependencies.listCalendars(options.provider, options.accessToken);
 
   return database.transaction(async (tx) => {
     await tx.execute(
       sql`select pg_advisory_xact_lock(${USER_ACCOUNT_LOCK_NAMESPACE}, hashtext(${options.userId}))`,
     );
 
-    const dependencies = createDefaultImportOAuthAccountDependencies();
-
     return importOAuthAccountCalendarsWithDependencies(options, {
       ...dependencies,
+      canAddAccount: (_userId, currentCount) =>
+        Promise.resolve(currentCount < premiumService.getAccountLimit(plan)),
+      listCalendars: () => Promise.resolve(externalCalendars),
       countUserAccounts: (userId) => countUserAccountsWithDatabase(tx, userId),
       createAccountId: (accountOptions) => createOAuthAccountIdWithDatabase(tx, accountOptions),
       findExistingAccountId: (accountOptions) => findOAuthAccountIdWithDatabase(tx, accountOptions),

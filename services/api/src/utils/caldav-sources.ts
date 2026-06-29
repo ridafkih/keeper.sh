@@ -190,6 +190,11 @@ const createCalDAVSource = async (
 
   const resolvedEncryptionKey = encryptionKey;
 
+  const plan = await premiumService.getUserPlan(userId);
+  if (!plan) {
+    throw new Error("Unable to resolve user plan for sync enqueue");
+  }
+
   const result = await database.transaction(async (tx) => {
     await tx.execute(
       sql`select pg_advisory_xact_lock(${USER_ACCOUNT_LOCK_NAMESPACE}, hashtext(${userId}))`,
@@ -221,7 +226,7 @@ const createCalDAVSource = async (
 
     if (!existingAccount) {
       const existingAccountCount = await countUserAccountsWithDatabase(tx, userId);
-      const allowed = await premiumService.canAddAccount(userId, existingAccountCount);
+      const allowed = existingAccountCount < premiumService.getAccountLimit(plan);
 
       if (!allowed) {
         throw new CalDAVSourceLimitError();
@@ -261,10 +266,6 @@ const createCalDAVSource = async (
     };
   });
 
-  const plan = await premiumService.getUserPlan(userId);
-  if (!plan) {
-    throw new Error("Unable to resolve user plan for sync enqueue");
-  }
   await enqueuePushSync(userId, plan);
 
   return result;

@@ -214,6 +214,7 @@ const handleOAuthCallback = async (
     refreshToken: string;
     userId: string;
   }): Promise<void> => {
+    const plan = await premiumService.getUserPlan(payload.userId);
     await database.transaction(async (tx) => {
       await tx.execute(
         sql`select pg_advisory_xact_lock(${USER_ACCOUNT_LOCK_NAMESPACE}, hashtext(${payload.userId}))`,
@@ -227,7 +228,7 @@ const handleOAuthCallback = async (
             .from(calendarAccountsTable)
             .where(eq(calendarAccountsTable.userId, payload.userId));
 
-          const allowed = await premiumService.canAddAccount(payload.userId, accountCount?.value ?? 0);
+          const allowed = (accountCount?.value ?? 0) < premiumService.getAccountLimit(plan);
           if (!allowed) {
             throw new OAuthError(
               "Account limit reached",

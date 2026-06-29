@@ -98,6 +98,11 @@ const createCalDAVDestination = async (
   const serverHost = new URL(serverUrl).host;
   const accountId = `${credentials.username}@${serverHost}`;
 
+  const plan = await premiumService.getUserPlan(userId);
+  if (!plan) {
+    throw new Error("Unable to resolve user plan for sync enqueue");
+  }
+
   await database.transaction(async (tx) => {
     await tx.execute(
       sql`select pg_advisory_xact_lock(${USER_ACCOUNT_LOCK_NAMESPACE}, hashtext(${userId}))`,
@@ -121,7 +126,7 @@ const createCalDAVDestination = async (
         .from(calendarAccountsTable)
         .where(eq(calendarAccountsTable.userId, userId));
 
-      const allowed = await premiumService.canAddAccount(userId, existingAccounts.length);
+      const allowed = existingAccounts.length < premiumService.getAccountLimit(plan);
       if (!allowed) {
         throw new DestinationLimitError();
       }
@@ -141,10 +146,6 @@ const createCalDAVDestination = async (
     );
   });
 
-  const plan = await premiumService.getUserPlan(userId);
-  if (!plan) {
-    throw new Error("Unable to resolve user plan for sync enqueue");
-  }
   await enqueuePushSync(userId, plan);
 };
 
