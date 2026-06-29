@@ -143,7 +143,7 @@ describe("runSetDestinationsForSource", () => {
     let replaceCalled = false;
     expect(
       runSetDestinationsForSource("user-1", "source-1", ["dest-1", "dest-2", "dest-3"], {
-        isMappingCountAllowed: () => Promise.resolve(false),
+        resolveMappingLimit: () => Promise.resolve(0),
         withTransaction: (transactionCallback) =>
           transactionCallback({
             acquireUserLock: () => Promise.resolve(),
@@ -510,7 +510,7 @@ describe("runSetSourcesForDestination", () => {
     let replaceCalled = false;
     expect(
       runSetSourcesForDestination("user-1", "dest-1", ["source-1", "source-2"], {
-        isMappingCountAllowed: () => Promise.resolve(false),
+        resolveMappingLimit: () => Promise.resolve(0),
         withTransaction: (transactionCallback) =>
           transactionCallback({
             acquireUserLock: () => Promise.resolve(),
