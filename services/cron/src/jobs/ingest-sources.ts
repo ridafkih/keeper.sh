@@ -13,7 +13,10 @@ import {
 } from "@keeper.sh/calendar";
 import { INGEST_SOURCE_TIMEOUT_MS, PROVIDER_INGEST_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
 import type { CalendarBackoffState, IngestionChanges, IngestionFetchEventsResult, RedisRateLimiter, TokenState } from "@keeper.sh/calendar";
-import { createIcsSourceFetcher } from "@keeper.sh/calendar/ics";
+import {
+  createIcsSourceFetcher,
+  interpretFullDayTimedEventsAsAllDay,
+} from "@keeper.sh/calendar/ics";
 import { createGoogleSourceFetcher } from "@keeper.sh/calendar/google";
 import { createOutlookSourceFetcher } from "@keeper.sh/calendar/outlook";
 import { createCalDAVSourceFetcher, isCalDAVAuthenticationError } from "@keeper.sh/calendar/caldav";
@@ -548,6 +551,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
     .select({
       calendarId: calendarsTable.id,
       url: calendarsTable.url,
+      treatFullDayTimedEventsAsAllDay: calendarsTable.treatFullDayTimedEventsAsAllDay,
       userId: calendarsTable.userId,
       ingestFailureCount: calendarsTable.ingestFailureCount,
     })
@@ -600,7 +604,14 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
             const result = await widelog.time.measure("duration_ms", () =>
               ingestSource({
                 calendarId: source.calendarId,
-                fetchEvents: () => fetcher.fetchEvents(),
+                fetchEvents: () =>
+                  fetcher.fetchEvents({
+                    interpretEvents: (events, fetchContext) =>
+                      interpretFullDayTimedEventsAsAllDay(events, {
+                        calendarTimeZone: fetchContext.calendarTimeZone,
+                        enabled: source.treatFullDayTimedEventsAsAllDay,
+                      }),
+                  }),
                 readExistingEvents: () => readExistingEvents(source.calendarId),
                 flush: createIngestionFlush(source.calendarId),
                 onIngestEvent: (event) => {

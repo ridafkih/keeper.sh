@@ -16,6 +16,7 @@ const sourcePatchBodySchema = type({
   "excludeFocusTime?": "boolean",
   "excludeOutOfOffice?": "boolean",
   "includeInIcalFeed?": "boolean",
+  "treatFullDayTimedEventsAsAllDay?": "boolean",
   "+": "reject",
 });
 type SourcePatchBody = typeof sourcePatchBodySchema.infer;

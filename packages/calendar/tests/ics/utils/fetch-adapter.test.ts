@@ -67,6 +67,39 @@ describe("createIcsSourceFetcher", () => {
     expect(result.unchanged).toBeUndefined();
   });
 
+  it("passes calendar timezone metadata to event interpretation", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    mockPullRemoteCalendar.mockResolvedValueOnce({
+      ical: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//test//test//EN",
+        "X-WR-TIMEZONE:America/Toronto",
+        "BEGIN:VEVENT",
+        "UID:event-1@test",
+        "DTSTAMP:20260630T000000Z",
+        "DTSTART:20260630T040000Z",
+        "DTEND:20260701T040000Z",
+        "SUMMARY:Busy",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    });
+    mockCreateSnapshot.mockResolvedValueOnce({ changed: true });
+
+    const fetcher = createIcsSourceFetcher(buildConfig());
+    let calendarTimeZone: string | null = null;
+    const result = await fetcher.fetchEvents({
+      interpretEvents: (events, { calendarTimeZone: parsedCalendarTimeZone }) => {
+        calendarTimeZone = parsedCalendarTimeZone ?? null;
+        return events;
+      },
+    });
+
+    expect(result.events).toHaveLength(1);
+    expect(calendarTimeZone).toBe("America/Toronto");
+  });
+
   it("returns unchanged when snapshot content has not changed", async () => {
     const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
     mockPullRemoteCalendar.mockResolvedValueOnce({ ical: MINIMAL_ICS });

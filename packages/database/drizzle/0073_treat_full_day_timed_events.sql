@@ -1,0 +1,1 @@
+ALTER TABLE "calendars" ADD COLUMN "treatFullDayTimedEventsAsAllDay" boolean DEFAULT false NOT NULL;
