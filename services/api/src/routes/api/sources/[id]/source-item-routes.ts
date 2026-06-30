@@ -15,6 +15,13 @@ const EVENT_FILTER_FIELDS = [
 const SOURCE_BOOLEAN_UPDATE_FIELDS = [
   ...EVENT_FILTER_FIELDS,
   "includeInIcalFeed",
+  "treatFullDayTimedEventsAsAllDay",
+] as const;
+
+const PRO_GATED_SOURCE_FIELDS = [
+  ...EVENT_FILTER_FIELDS,
+  "customEventName",
+  "treatFullDayTimedEventsAsAllDay",
 ] as const;
 
 interface SourceRouteContext {
@@ -79,14 +86,14 @@ const handlePatchSourceRoute = async (
     parsedBody = context.body;
   }
 
-  const hasEventFilterUpdates = EVENT_FILTER_FIELDS.some(
-    (field) => typeof parsedBody[field] === "boolean",
-  );
-  const isUpdatingEventNameTemplate = typeof parsedBody.customEventName === "string";
-  if (hasEventFilterUpdates || isUpdatingEventNameTemplate) {
+  const hasProGatedUpdates = PRO_GATED_SOURCE_FIELDS.some((field) => {
+    const value = parsedBody[field];
+    return typeof value === "boolean" || typeof value === "string";
+  });
+  if (hasProGatedUpdates) {
     const allowed = await dependencies.canUseEventFilters(context.userId);
     if (!allowed) {
-      return ErrorResponse.forbidden("Event filters require a Pro plan.").toResponse();
+      return ErrorResponse.forbidden("This setting requires a Pro plan.").toResponse();
     }
   }
 

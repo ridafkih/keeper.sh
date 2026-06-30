@@ -48,4 +48,24 @@ describe("parseIcsCalendar", () => {
       }))
       .toThrow();
   });
+
+  it("parses Google calendar timezone metadata", () => {
+    const parsedCalendar = parseIcsCalendar({
+      icsString: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Keeper Test//EN",
+        "X-WR-TIMEZONE:America/Toronto",
+        "BEGIN:VEVENT",
+        "UID:event-1",
+        "DTSTART:20260630T040000Z",
+        "DTEND:20260701T040000Z",
+        "SUMMARY:Busy",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    });
+
+    expect(parsedCalendar.nonStandard?.wrTimezone).toBe("America/Toronto");
+  });
 });

@@ -15,8 +15,16 @@ interface IcsSourceFetcherConfig {
   safeFetchOptions?: SafeFetchOptions;
 }
 
+interface IcsSourceEventContext {
+  calendarTimeZone?: string;
+}
+
+interface FetchIcsSourceEventsOptions {
+  interpretEvents?: (events: SourceEvent[], context: IcsSourceEventContext) => SourceEvent[];
+}
+
 interface IcsSourceFetcher {
-  fetchEvents: () => Promise<FetchEventsResult>;
+  fetchEvents: (options?: FetchIcsSourceEventsOptions) => Promise<FetchEventsResult>;
 }
 
 const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetcher => {
@@ -32,7 +40,7 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
     return ical;
   };
 
-  const fetchEvents = async (): Promise<FetchEventsResult> => {
+  const fetchEvents = async (options: FetchIcsSourceEventsOptions = {}): Promise<FetchEventsResult> => {
     const ical = await fetchRemoteIcal();
     if (!ical) {
       /*
@@ -65,6 +73,13 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
       title: event.title,
       uid: event.uid,
     }));
+    if (options.interpretEvents) {
+      return {
+        events: options.interpretEvents(events, {
+          calendarTimeZone: calendar.nonStandard?.wrTimezone,
+        }),
+      };
+    }
     return { events };
   };
 
@@ -72,4 +87,9 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
 };
 
 export { createIcsSourceFetcher };
-export type { IcsSourceFetcherConfig, IcsSourceFetcher };
+export type {
+  FetchIcsSourceEventsOptions,
+  IcsSourceEventContext,
+  IcsSourceFetcher,
+  IcsSourceFetcherConfig,
+};
