@@ -4,6 +4,7 @@ import { HTTP_STATUS, KEEPER_USER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { decryptPassword } from "@keeper.sh/database";
 import { createSafeFetch } from "@keeper.sh/calendar/safe-fetch";
 import { createDigestAwareFetch, resolveAuthMethod } from "@keeper.sh/calendar/digest-fetch";
+import { buildZonedIcsDate } from "@keeper.sh/calendar/ics";
 import { createDAVClient } from "tsdav";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "@/types";
@@ -60,14 +61,8 @@ const buildIcsEvent = (uid: string, input: EventInput): IcsEvent => {
     summary: input.title,
     description: input.description,
     location: input.location,
-    start: {
-      date: new Date(input.startTime),
-      ...(isAllDay && { type: "DATE" as const }),
-    },
-    end: {
-      date: new Date(input.endTime),
-      ...(isAllDay && { type: "DATE" as const }),
-    },
+    start: buildZonedIcsDate(new Date(input.startTime), input.startTimeZone, isAllDay),
+    end: buildZonedIcsDate(new Date(input.endTime), input.startTimeZone, isAllDay),
     stamp: { date: new Date() },
   };
 
@@ -161,6 +156,9 @@ const resolveTransparency = (availability: string): "TRANSPARENT" | "OPAQUE" => 
 const applyUpdatesToEvent = (event: IcsEvent, updates: EventUpdateInput): IcsEvent => {
   const updated = { ...event };
 
+  // Preserve the event's existing timezone unless the update overrides it.
+  const timezone = updates.startTimeZone ?? event.start?.local?.timezone;
+
   if ("title" in updates && typeof updates.title === "string") {
     updated.summary = updates.title;
   }
@@ -172,17 +170,11 @@ const applyUpdatesToEvent = (event: IcsEvent, updates: EventUpdateInput): IcsEve
   }
   if ("startTime" in updates && typeof updates.startTime === "string") {
     const isAllDay = resolveEventIsAllDay(updates, event);
-    updated.start = {
-      date: new Date(updates.startTime),
-      ...(isAllDay && { type: "DATE" as const }),
-    };
+    updated.start = buildZonedIcsDate(new Date(updates.startTime), timezone, isAllDay);
   }
   if ("endTime" in updates && typeof updates.endTime === "string") {
     const isAllDay = resolveEventIsAllDay(updates, event);
-    updated.end = {
-      date: new Date(updates.endTime),
-      ...(isAllDay && { type: "DATE" as const }),
-    };
+    updated.end = buildZonedIcsDate(new Date(updates.endTime), timezone, isAllDay);
   }
   if ("availability" in updates && typeof updates.availability === "string") {
     updated.timeTransparent = resolveTransparency(updates.availability);
