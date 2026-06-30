@@ -15,6 +15,7 @@ import type {
 } from "@keeper.sh/calendar";
 import { database, oauthProviders, redis } from "@/context";
 import { invalidateCalendarsForAccount } from "@/utils/invalidate-calendars";
+import { buildReconnectedCalendarState } from "@/utils/calendar-state";
 
 const FIRST_RESULT_LIMIT = 1;
 const EMPTY_RESULT_COUNT = 0;
@@ -389,7 +390,7 @@ const saveCalDAVDestinationWithDatabase = async (
     if (existingCalendar) {
       await databaseClient
         .update(calendarsTable)
-        .set({ calendarUrl })
+        .set(buildReconnectedCalendarState(calendarUrl))
         .where(eq(calendarsTable.id, existingCalendar.id));
       await initializeSyncStatusWithDatabase(databaseClient, existingCalendar.id);
     }

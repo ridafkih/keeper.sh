@@ -30,6 +30,7 @@ import { context, widelog } from "@/utils/logging";
 import { database, refreshLockRedis, refreshLockStore } from "@/context";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
+import { resolveMissingCalendarFailure } from "@/utils/provider-ingest-failure";
 
 const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
 const SOURCE_CONCURRENCY = 5;
@@ -297,15 +298,10 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
 
             widelog.set("outcome", "error");
 
-            if (error instanceof Error && "status" in error && error.status === 404) {
-              widelog.errorFields(error, { slug: "provider-calendar-not-found", retriable: false });
-
-              await database
-                .update(calendarsTable)
-                .set({ disabled: true })
-                .where(eq(calendarsTable.id, source.calendarId));
-
-              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
+            const missingCalendarFailure = resolveMissingCalendarFailure(error);
+            if (missingCalendarFailure) {
+              widelog.errorFields(error, missingCalendarFailure);
+              throw error;
             }
 
             if (error instanceof Error && "authRequired" in error && error.authRequired === true) {
@@ -451,13 +447,9 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
               return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
             }
 
-            if (error instanceof Error && error.message.includes("404")) {
-              widelog.errorFields(error, { slug: "provider-calendar-not-found", retriable: false });
-
-              await database
-                .update(calendarsTable)
-                .set({ disabled: true })
-                .where(eq(calendarsTable.id, source.calendarId));
+            const missingCalendarFailure = resolveMissingCalendarFailure(error);
+            if (missingCalendarFailure) {
+              widelog.errorFields(error, missingCalendarFailure);
             } else {
               widelog.errorFields(error, {
                 slug: resolveIngestErrorSlug(error),
