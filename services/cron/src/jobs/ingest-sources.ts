@@ -8,7 +8,9 @@ import {
   createCoordinatedRefresher,
   createRedisRateLimiter,
   ensureValidToken,
+  isTimeoutError,
 } from "@keeper.sh/calendar";
+import { INGEST_SOURCE_TIMEOUT_MS, PROVIDER_INGEST_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
 import type { IngestionChanges, IngestionFetchEventsResult, RedisRateLimiter, TokenState } from "@keeper.sh/calendar";
 import { createIcsSourceFetcher } from "@keeper.sh/calendar/ics";
 import { createGoogleSourceFetcher } from "@keeper.sh/calendar/google";
@@ -29,8 +31,18 @@ import { database, refreshLockRedis, refreshLockStore } from "@/context";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 
-const SOURCE_TIMEOUT_MS = 60_000;
+const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
 const SOURCE_CONCURRENCY = 5;
+
+const resolveIngestErrorSlug = (error: unknown): string => {
+  if (!isTimeoutError(error)) {
+    return "provider-api-error";
+  }
+  widelog.set("timeout.fired", true);
+  widelog.set("timeout.kind", "request");
+  widelog.set("timeout.limit_ms", PROVIDER_INGEST_REQUEST_TIMEOUT_MS);
+  return "provider-request-timeout";
+};
 const GOOGLE_REQUESTS_PER_MINUTE = 500;
 
 const serializeOptionalJson = (value: unknown): string | null => {
@@ -318,7 +330,10 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
               return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
             }
 
-            widelog.errorFields(error, { slug: "provider-api-error", retriable: true });
+            widelog.errorFields(error, {
+              slug: resolveIngestErrorSlug(error),
+              retriable: true,
+            });
             throw error;
           } finally {
             widelog.flush();
@@ -444,7 +459,10 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
                 .set({ disabled: true })
                 .where(eq(calendarsTable.id, source.calendarId));
             } else {
-              widelog.errorFields(error, { slug: "provider-api-error", retriable: true });
+              widelog.errorFields(error, {
+                slug: resolveIngestErrorSlug(error),
+                retriable: true,
+              });
             }
 
             throw error;
@@ -543,7 +561,10 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
           } catch (error) {
 
             widelog.set("outcome", "error");
-            widelog.errorFields(error, { slug: "provider-api-error", retriable: true });
+            widelog.errorFields(error, {
+              slug: resolveIngestErrorSlug(error),
+              retriable: true,
+            });
             throw error;
           } finally {
             widelog.flush();
