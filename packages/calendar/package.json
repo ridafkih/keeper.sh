@@ -24,9 +24,9 @@
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/digest-fetch": "workspace:*",
     "drizzle-orm": "^0.45.1",
+    "html-to-text": "^10.0.0",
     "ioredis": "^5.10.0",
     "ipaddr.js": "^2.3.0",
-    "linkedom": "^0.18.12",
     "tldts": "^7.0.27",
     "ts-ics": "^2.4.3",
     "tsdav": "^2.1.8"
@@ -35,6 +35,7 @@
     "@keeper.sh/fixtures": "workspace:*",
     "@keeper.sh/typescript-config": "workspace:*",
     "@types/bun": "latest",
+    "@types/html-to-text": "^9.0.4",
     "typescript": "5.9.3",
     "vitest": "^4.1.4"
   }

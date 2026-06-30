@@ -3,6 +3,7 @@ import type { Line, ParseNonStandardValues } from "ts-ics";
 
 interface CalendarNonStandardValues {
   altDescription?: string;
+  wrTimezone?: string;
 }
 
 interface ParseIcsCalendarOptions {
@@ -14,6 +15,10 @@ const parseTextLine = (line: Line): string => line.value;
 const CALENDAR_NON_STANDARD_VALUES: ParseNonStandardValues<CalendarNonStandardValues> = {
   altDescription: {
     name: "X-ALT-DESC",
+    convert: parseTextLine,
+  },
+  wrTimezone: {
+    name: "X-WR-TIMEZONE",
     convert: parseTextLine,
   },
 };

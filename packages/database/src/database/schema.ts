@@ -99,6 +99,7 @@ const calendarsTable = pgTable(
     excludeFocusTime: boolean().notNull().default(false),
     excludeOutOfOffice: boolean().notNull().default(false),
     includeInIcalFeed: boolean().notNull().default(false),
+    treatFullDayTimedEventsAsAllDay: boolean().notNull().default(false),
     customEventName: text().notNull().default(""),
     disabled: boolean().notNull().default(false),
     failureCount: integer().notNull().default(0),

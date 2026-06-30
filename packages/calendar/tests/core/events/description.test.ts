@@ -21,6 +21,32 @@ describe("derivePlaintextDescription", () => {
       plaintextDescription: "https://example.com/meet",
     });
   });
+
+  it("preserves meaningful line breaks in partial HTML fragments", () => {
+    const result = derivePlaintextDescription(
+      'Line one\n<a href="https://example.com/meet">Join call</a>\nLine three',
+    );
+
+    expect(result).toEqual({
+      plaintextDescription: "Line one\nJoin call (https://example.com/meet)\nLine three",
+    });
+  });
+
+  it("normalizes br and block elements as line breaks", () => {
+    const withBreaks = derivePlaintextDescription(
+      'Line one<br><a href="https://example.com/meet">Join call</a><br>Line three',
+    );
+    const withBlocks = derivePlaintextDescription(
+      '<p>Line one</p><p><a href="https://example.com/meet">Join call</a></p><p>Line three</p>',
+    );
+
+    expect(withBreaks).toEqual({
+      plaintextDescription: "Line one\nJoin call (https://example.com/meet)\nLine three",
+    });
+    expect(withBlocks).toEqual({
+      plaintextDescription: "Line one\nJoin call (https://example.com/meet)\nLine three",
+    });
+  });
 });
 
 describe("parseDescriptionFields", () => {

@@ -59,8 +59,10 @@ export { inferAllDayEvent, resolveIsAllDayEvent } from "./core/events/all-day";
 export {
   countPlaintextDescriptionDerivationFailures,
   derivePlaintextDescription,
+  getDescriptionContentType,
   isHtmlDescription,
   parseDescriptionFields,
+  type DescriptionContentType,
   type DescriptionFields,
   type PlaintextDescriptionResult,
 } from "./core/events/description";

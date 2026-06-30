@@ -49,6 +49,7 @@ import {
   customEventNameAtom,
   excludeEventNameAtom,
   excludeFieldAtoms,
+  treatFullDayTimedEventsAsAllDayAtom,
 } from "@/state/calendar-detail";
 import type { ExcludeField } from "@/state/calendar-detail";
 import {
@@ -405,7 +406,8 @@ function DestinationCheckboxIndicator({ destinationId }: { destinationId: string
 
 function SyncSettingsSection({ calendarId }: { calendarId: string }) {
   const { data: entitlements } = useEntitlements();
-  const locked = entitlements ? !entitlements.canUseEventFilters : false;
+  const locked = Boolean(entitlements && !entitlements.canUseEventFilters);
+  const calendarType = useAtomValue(calendarTypeAtom);
 
   return (
     <>
@@ -413,10 +415,11 @@ function SyncSettingsSection({ calendarId }: { calendarId: string }) {
         title="Sync Settings"
         description={<>Choose which event details are synced to destination calendars. Use <Text as="span" size="sm" className="text-template inline">{"{{calendar_name}}"}</Text> or <Text as="span" size="sm" className="text-template inline">{"{{event_name}}"}</Text> in text fields for dynamic values.</>}
       />
-      <PremiumFeatureGate locked={locked} hint="Event filters are a Pro feature.">
+      <PremiumFeatureGate locked={locked} hint="Advanced sync settings are a Pro feature.">
         <NavigationMenu>
           <SyncEventNameTemplateItem calendarId={calendarId} locked={locked} />
           <SyncEventNameToggle calendarId={calendarId} locked={locked} />
+          <ProviderSyncSettings calendarId={calendarId} calendarType={calendarType} locked={locked} />
           {SYNC_SETTINGS.map((setting) => (
             <ExcludeFieldToggle
               key={setting.field}
@@ -430,6 +433,75 @@ function SyncSettingsSection({ calendarId }: { calendarId: string }) {
         </NavigationMenu>
       </PremiumFeatureGate>
     </>
+  );
+}
+
+function ProviderSyncSettings({
+  calendarId,
+  calendarType,
+  locked,
+}: {
+  calendarId: string;
+  calendarType: string;
+  locked: boolean;
+}) {
+  switch (calendarType) {
+    case "ical":
+      return <TreatFullDayTimedEventsToggle calendarId={calendarId} locked={locked} />;
+    default:
+      return null;
+  }
+}
+
+function TreatFullDayTimedEventsToggle({ calendarId, locked }: { calendarId: string; locked: boolean }) {
+  const store = useStore();
+  const variant = use(MenuVariantContext);
+
+  const handleClick = () => {
+    if (locked) return;
+    const current = store.get(calendarDetailAtom);
+    if (!current) return;
+
+    const treatFullDayTimedEventsAsAllDay = !current.treatFullDayTimedEventsAsAllDay;
+    track(ANALYTICS_EVENTS.calendar_setting_toggled, {
+      field: "treatFullDayTimedEventsAsAllDay",
+      enabled: treatFullDayTimedEventsAsAllDay,
+    });
+    store.set(calendarDetailAtom, (prev) => {
+      if (!prev) {
+        return prev;
+      }
+      return { ...prev, treatFullDayTimedEventsAsAllDay };
+    });
+    patchSource(store, calendarId, { treatFullDayTimedEventsAsAllDay });
+  };
+
+  return (
+    <li>
+      <ItemDisabledContext value={locked}>
+        <button
+          type="button"
+          role="switch"
+          disabled={locked}
+          onClick={handleClick}
+          className={navigationMenuItemStyle({ variant, interactive: !locked })}
+        >
+          <NavigationMenuItemLabel>Sync Full-Day Events as All-Day</NavigationMenuItemLabel>
+          <TreatFullDayTimedEventsToggleIndicator disabled={locked} />
+        </button>
+      </ItemDisabledContext>
+    </li>
+  );
+}
+
+function TreatFullDayTimedEventsToggleIndicator({ disabled }: { disabled: boolean }) {
+  const checked = useAtomValue(treatFullDayTimedEventsAsAllDayAtom);
+  const variant = use(MenuVariantContext);
+
+  return (
+    <div className={navigationMenuToggleTrack({ variant, checked, disabled, className: "ml-auto" })}>
+      <div className={navigationMenuToggleThumb({ variant, checked })} />
+    </div>
   );
 }
 

@@ -1,5 +1,9 @@
 import { calendarAccountsTable, calendarsTable, eventStatesTable } from "@keeper.sh/database/schema";
-import { pullRemoteCalendar, createIcsSourceFetcher } from "@keeper.sh/calendar/ics";
+import {
+  pullRemoteCalendar,
+  createIcsSourceFetcher,
+  interpretFullDayTimedEventsAsAllDay,
+} from "@keeper.sh/calendar/ics";
 import { ingestSource, insertEventStatesWithConflictResolution } from "@keeper.sh/calendar";
 import type { IngestionChanges } from "@keeper.sh/calendar";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
@@ -80,7 +84,14 @@ const ingestIcsSource = async (source: Source): Promise<void> => {
 
   await ingestSource({
     calendarId: source.id,
-    fetchEvents: () => fetcher.fetchEvents(),
+    fetchEvents: () =>
+      fetcher.fetchEvents({
+        interpretEvents: (events, context) =>
+          interpretFullDayTimedEventsAsAllDay(events, {
+            calendarTimeZone: context.calendarTimeZone,
+            enabled: source.treatFullDayTimedEventsAsAllDay,
+          }),
+      }),
     readExistingEvents: () =>
       database
         .select({

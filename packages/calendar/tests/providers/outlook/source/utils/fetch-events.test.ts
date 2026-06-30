@@ -278,4 +278,24 @@ describe("parseOutlookEvents", () => {
     expect(parsedEvents[0]?.description).toBe('<div>Join <a href="https://example.com">call</a></div>');
     expect(parsedEvents[0]?.plaintextDescription).toBe("Join call (https://example.com)");
   });
+
+  it("derives plaintext from partial HTML bodies with line breaks", () => {
+    const description =
+      'Line one\n<a href="https://example.com/meet">Join call</a>\nLine three';
+    const parsedEvents = parseOutlookEvents([
+      createOutlookEvent({
+        body: {
+          content: description,
+          contentType: "html",
+        },
+        iCalUId: "external-uid-9",
+      }),
+    ]);
+
+    expect(parsedEvents).toHaveLength(1);
+    expect(parsedEvents[0]?.description).toBe(description);
+    expect(parsedEvents[0]?.plaintextDescription).toBe(
+      "Line one\nJoin call (https://example.com/meet)\nLine three",
+    );
+  });
 });

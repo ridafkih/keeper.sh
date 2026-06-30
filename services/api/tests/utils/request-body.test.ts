@@ -46,6 +46,7 @@ describe("sourcePatchBodySchema", () => {
     const result = sourcePatchBodySchema({
       excludeAllDayEvents: true,
       excludeEventDescription: false,
+      treatFullDayTimedEventsAsAllDay: true,
     });
     expect(result instanceof type.errors).toBe(false);
   });
@@ -182,4 +183,3 @@ describe("tokenCreateBodySchema", () => {
     expect(result instanceof type.errors).toBe(true);
   });
 });
-
