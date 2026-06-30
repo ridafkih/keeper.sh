@@ -9,9 +9,10 @@ import {
   createRedisRateLimiter,
   ensureValidToken,
   isTimeoutError,
+  buildCalendarBackoffState,
 } from "@keeper.sh/calendar";
 import { INGEST_SOURCE_TIMEOUT_MS, PROVIDER_INGEST_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
-import type { IngestionChanges, IngestionFetchEventsResult, RedisRateLimiter, TokenState } from "@keeper.sh/calendar";
+import type { CalendarBackoffState, IngestionChanges, IngestionFetchEventsResult, RedisRateLimiter, TokenState } from "@keeper.sh/calendar";
 import { createIcsSourceFetcher } from "@keeper.sh/calendar/ics";
 import { createGoogleSourceFetcher } from "@keeper.sh/calendar/google";
 import { createOutlookSourceFetcher } from "@keeper.sh/calendar/outlook";
@@ -24,7 +25,7 @@ import {
   eventStatesTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
-import { and, arrayContains, eq, inArray } from "drizzle-orm";
+import { and, arrayContains, eq, inArray, isNull, lte, or } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import { database, refreshLockRedis, refreshLockStore } from "@/context";
@@ -45,6 +46,40 @@ const resolveIngestErrorSlug = (error: unknown): string => {
   return "provider-request-timeout";
 };
 const GOOGLE_REQUESTS_PER_MINUTE = 500;
+
+const resetIngestBackoff = async (calendarId: string): Promise<void> => {
+  await database
+    .update(calendarsTable)
+    .set({
+      ingestFailureCount: 0,
+      ingestLastFailureAt: null,
+      ingestNextAttemptAt: null,
+    })
+    .where(eq(calendarsTable.id, calendarId));
+};
+
+const applyIngestBackoff = async (
+  calendarId: string,
+  currentFailureCount: number,
+): Promise<CalendarBackoffState> => {
+  const state = buildCalendarBackoffState(currentFailureCount);
+  await database
+    .update(calendarsTable)
+    .set({
+      ingestFailureCount: state.failureCount,
+      ingestLastFailureAt: state.lastFailureAt,
+      ingestNextAttemptAt: state.nextAttemptAt,
+    })
+    .where(eq(calendarsTable.id, calendarId));
+  return state;
+};
+
+const logIngestBackoff = (state: CalendarBackoffState): void => {
+  widelog.set("retry.failure_count", state.failureCount);
+  if (state.nextAttemptAt) {
+    widelog.set("retry.next_attempt_at", state.nextAttemptAt.toISOString());
+  }
+};
 
 const serializeOptionalJson = (value: unknown): string | null => {
   if (!value) {
@@ -195,6 +230,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
       refreshToken: oauthCredentialsTable.refreshToken,
       expiresAt: oauthCredentialsTable.expiresAt,
       userId: calendarsTable.userId,
+      ingestFailureCount: calendarsTable.ingestFailureCount,
     })
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
@@ -203,6 +239,10 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
       and(
         arrayContains(calendarsTable.capabilities, ["pull"]),
         eq(calendarsTable.disabled, false),
+        or(
+          isNull(calendarsTable.ingestNextAttemptAt),
+          lte(calendarsTable.ingestNextAttemptAt, new Date()),
+        ),
       ),
     );
 
@@ -288,6 +328,10 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
               }),
             );
 
+            if (source.ingestFailureCount > 0) {
+              await resetIngestBackoff(source.calendarId);
+            }
+
             widelog.set("sync.events_added", result.eventsAdded);
             widelog.set("sync.events_removed", result.eventsRemoved);
 
@@ -301,6 +345,9 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
             const missingCalendarFailure = resolveMissingCalendarFailure(error);
             if (missingCalendarFailure) {
               widelog.errorFields(error, missingCalendarFailure);
+              logIngestBackoff(
+                await applyIngestBackoff(source.calendarId, source.ingestFailureCount),
+              );
               throw error;
             }
 
@@ -330,6 +377,9 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
               slug: resolveIngestErrorSlug(error),
               retriable: true,
             });
+            logIngestBackoff(
+              await applyIngestBackoff(source.calendarId, source.ingestFailureCount),
+            );
             throw error;
           } finally {
             widelog.flush();
@@ -370,6 +420,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
       encryptedPassword: caldavCredentialsTable.encryptedPassword,
       serverUrl: caldavCredentialsTable.serverUrl,
       userId: calendarsTable.userId,
+      ingestFailureCount: calendarsTable.ingestFailureCount,
     })
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
@@ -378,6 +429,10 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
       and(
         arrayContains(calendarsTable.capabilities, ["pull"]),
         eq(calendarsTable.disabled, false),
+        or(
+          isNull(calendarsTable.ingestNextAttemptAt),
+          lte(calendarsTable.ingestNextAttemptAt, new Date()),
+        ),
       ),
     );
 
@@ -426,6 +481,10 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
               }),
             );
 
+            if (source.ingestFailureCount > 0) {
+              await resetIngestBackoff(source.calendarId);
+            }
+
             widelog.set("sync.events_added", result.eventsAdded);
             widelog.set("sync.events_removed", result.eventsRemoved);
 
@@ -457,6 +516,10 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
               });
             }
 
+            logIngestBackoff(
+              await applyIngestBackoff(source.calendarId, source.ingestFailureCount),
+            );
+
             throw error;
           } finally {
             widelog.flush();
@@ -486,12 +549,17 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
       calendarId: calendarsTable.id,
       url: calendarsTable.url,
       userId: calendarsTable.userId,
+      ingestFailureCount: calendarsTable.ingestFailureCount,
     })
     .from(calendarsTable)
     .where(
       and(
         eq(calendarsTable.calendarType, "ical"),
         eq(calendarsTable.disabled, false),
+        or(
+          isNull(calendarsTable.ingestNextAttemptAt),
+          lte(calendarsTable.ingestNextAttemptAt, new Date()),
+        ),
       ),
     );
 
@@ -544,6 +612,10 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
               }),
             );
 
+            if (source.ingestFailureCount > 0) {
+              await resetIngestBackoff(source.calendarId);
+            }
+
             widelog.set("sync.events_added", result.eventsAdded);
             widelog.set("sync.events_removed", result.eventsRemoved);
 
@@ -557,6 +629,9 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
               slug: resolveIngestErrorSlug(error),
               retriable: true,
             });
+            logIngestBackoff(
+              await applyIngestBackoff(source.calendarId, source.ingestFailureCount),
+            );
             throw error;
           } finally {
             widelog.flush();

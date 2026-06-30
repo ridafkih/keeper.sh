@@ -505,6 +505,13 @@
       "when": 1782843549762,
       "tag": "0071_reset_disabled_calendars",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1782843765741,
+      "tag": "0072_directional_calendar_health",
+      "breakpoints": true
     }
   ]
 }
