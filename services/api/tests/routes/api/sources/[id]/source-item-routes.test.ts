@@ -59,7 +59,7 @@ describe("handlePatchSourceRoute", () => {
 
     expect(response.status).toBe(403);
     expect(await readJson(response)).toEqual({
-      error: "Event filters require a Pro plan.",
+      error: "This setting requires a Pro plan.",
     });
   });
 
@@ -99,5 +99,27 @@ describe("handlePatchSourceRoute", () => {
     );
 
     expect(response.status).toBe(200);
+  });
+
+  it("returns 403 when free users update full-day timed event interpretation", async () => {
+    const response = await handlePatchSourceRoute(
+      {
+        body: { treatFullDayTimedEventsAsAllDay: true },
+        params: { id: "source-1" },
+        userId: "user-1",
+      },
+      {
+        canUseEventFilters: () => Promise.resolve(false),
+        updateSource: (_userId, _sourceId, updates) => Promise.resolve({
+          id: "source-1",
+          ...updates,
+        }),
+      },
+    );
+
+    expect(response.status).toBe(403);
+    expect(await readJson(response)).toEqual({
+      error: "This setting requires a Pro plan.",
+    });
   });
 });
