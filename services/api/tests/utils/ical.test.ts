@@ -468,6 +468,41 @@ describe("timezone-aware feed (Outlook)", () => {
     expect(ics).toContain("TZID:America/New_York");
   });
 
+  it("renders a January event before the year's first New York DST transition", () => {
+    const ics = formatEventsAsIcal(
+      [makeEvent({
+        startTime: new Date("2026-01-15T15:00:00Z"),
+        endTime: new Date("2026-01-15T16:00:00Z"),
+        startTimeZone: "America/New_York",
+      })],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(ics).toContain("DTSTART;TZID=America/New_York:20260115T100000");
+  });
+
+  it("renders events after the VTIMEZONE reference year without empty observances", () => {
+    const ics = formatEventsAsIcal(
+      [
+        makeEvent({
+          id: "reference-year",
+          startTime: new Date("2026-06-17T10:45:00Z"),
+          endTime: new Date("2026-06-17T11:45:00Z"),
+          startTimeZone: "Europe/Berlin",
+        }),
+        makeEvent({
+          id: "following-year",
+          startTime: new Date("2027-01-15T10:45:00Z"),
+          endTime: new Date("2027-01-15T11:45:00Z"),
+          startTimeZone: "Europe/Berlin",
+        }),
+      ],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(ics).toContain("DTSTART;TZID=Europe/Berlin:20270115T114500");
+  });
+
   it("falls back to bare UTC for an unresolvable timezone", () => {
     const ics = formatEventsAsIcal(
       [makeEvent({
