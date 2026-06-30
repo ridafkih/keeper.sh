@@ -453,6 +453,41 @@ describe("timezone-aware feed (Outlook)", () => {
     expect(ics).toContain("RECURRENCE-ID;TZID=Europe/Berlin:20260624T124500");
   });
 
+  it("preserves Apple recurrence invariants with the Outlook-compatible VTIMEZONE", () => {
+    const sourceUid = "cross-client-recurring-event";
+    const ics = formatEventsAsIcal(
+      [
+        makeEvent({
+          id: "master-id",
+          sourceEventUid: sourceUid,
+          startTime: new Date("2026-06-17T10:45:00Z"),
+          endTime: new Date("2026-06-17T11:45:00Z"),
+          startTimeZone: "Europe/Berlin",
+          recurrenceRule: {
+            frequency: "WEEKLY",
+            until: { date: new Date("2026-12-30T10:45:00Z"), type: "DATE-TIME" },
+          } as never,
+          exceptionDates: [{ date: new Date("2026-07-01T10:45:00Z"), type: "DATE-TIME" }] as never,
+        }),
+        makeEvent({
+          id: "override-id",
+          sourceEventUid: sourceUid,
+          startTime: new Date("2026-06-24T12:45:00Z"),
+          endTime: new Date("2026-06-24T13:45:00Z"),
+          startTimeZone: "Europe/Berlin",
+          recurrenceId: new Date("2026-06-24T10:45:00Z"),
+        }),
+      ],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(occurrences(ics, "BEGIN:STANDARD")).toBe(1);
+    expect(ics).toContain("DTSTART;TZID=Europe/Berlin:20260617T124500");
+    expect(ics).toContain("EXDATE;TZID=Europe/Berlin:20260701T124500");
+    expect(ics).toContain("RECURRENCE-ID;TZID=Europe/Berlin:20260624T124500");
+    expect(ics).toMatch(/RRULE:FREQ=WEEKLY;UNTIL=20261230T104500Z/);
+  });
+
   it("emits a single VTIMEZONE per distinct zone", () => {
     const ics = formatEventsAsIcal(
       [

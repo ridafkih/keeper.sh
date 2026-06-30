@@ -35,14 +35,15 @@ describe("buildVtimezone", () => {
     expect(ics).toContain("TZOFFSETFROM:+0100");
     expect(ics).toContain("TZOFFSETTO:+0200");
     expect(ics).toContain("RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3");
-    expect(ics).toContain("DTSTART:20260329T020000");
+    expect(ics).toContain("DTSTART:19700329T020000");
 
     // Standard onset: last Sunday of October, +02:00 -> +01:00.
     expect(ics).toContain("BEGIN:STANDARD");
     expect(ics).toContain("TZOFFSETFROM:+0200");
     expect(ics).toContain("TZOFFSETTO:+0100");
     expect(ics).toContain("RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10");
-    expect(ics).toContain("DTSTART:20261025T030000");
+    expect(ics).toContain("DTSTART:19701025T030000");
+    expect(ics.match(/BEGIN:STANDARD/g)).toHaveLength(1);
   });
 
   it("emits nth-Sunday rules for America/New_York", () => {
@@ -53,10 +54,17 @@ describe("buildVtimezone", () => {
     expect(ics).toContain("TZOFFSETFROM:-0500");
     expect(ics).toContain("TZOFFSETTO:-0400");
     expect(ics).toContain("RRULE:FREQ=YEARLY;BYDAY=2SU;BYMONTH=3");
-    expect(ics).toContain("DTSTART:20260308T020000");
+    expect(ics).toContain("DTSTART:19700308T020000");
     // Standard: 1st Sunday of November, -04:00 -> -05:00.
     expect(ics).toContain("RRULE:FREQ=YEARLY;BYDAY=1SU;BYMONTH=11");
-    expect(ics).toContain("DTSTART:20261101T020000");
+    expect(ics).toContain("DTSTART:19701101T020000");
+  });
+
+  it("recomputes the anchored onset date from the recurrence rule", () => {
+    const ics = renderVtimezone("Europe/Berlin", new Date("2025-06-17T12:00:00.000Z"));
+
+    expect(ics).toContain("DTSTART:19700329T020000");
+    expect(ics).not.toContain("DTSTART:19700330T020000");
   });
 
   it("classifies southern-hemisphere transitions by offset direction, not calendar order (Australia/Sydney)", () => {
