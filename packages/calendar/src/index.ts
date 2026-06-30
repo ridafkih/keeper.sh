@@ -60,6 +60,18 @@ export { RateLimiter, type RateLimiterConfig } from "./core/utils/rate-limiter";
 export { createRedisRateLimiter, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
 export { allSettledWithConcurrency, type AllSettledWithConcurrencyOptions } from "./core/utils/concurrency";
 export { getErrorMessage } from "./core/utils/error";
+export {
+  buildCalendarBackoffState,
+  RESET_CALENDAR_BACKOFF_STATE,
+  type CalendarBackoffState,
+} from "./core/utils/calendar-backoff";
+export {
+  RequestTimeoutError,
+  fetchWithTimeout,
+  buildTimeoutSignal,
+  isTimeoutError,
+  mergeAbortSignals,
+} from "./core/utils/fetch-with-timeout";
 export { getEventsForDestination } from "./core/events/events";
 export {
   parseExceptionDatesFromJson,

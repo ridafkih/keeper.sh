@@ -4,13 +4,15 @@ import {
   getEventMappingsForDestination,
   createDatabaseFlush,
   createRedisRateLimiter,
+  buildCalendarBackoffState,
+  RESET_CALENDAR_BACKOFF_STATE,
 } from "@keeper.sh/calendar";
 import type { SyncProgressUpdate, RefreshLockStore } from "@keeper.sh/calendar";
 import {
   calendarAccountsTable,
   calendarsTable,
 } from "@keeper.sh/database/schema";
-import { and, arrayContains, eq } from "drizzle-orm";
+import { and, arrayContains, eq, isNull, lte, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
 import { getErrorMessage, isBackoffEligibleError } from "./destination-errors";
@@ -26,7 +28,7 @@ const resetDestinationBackoff = async (
 ): Promise<void> => {
   await database
     .update(calendarsTable)
-    .set({ failureCount: 0, lastFailureAt: null, nextAttemptAt: null })
+    .set(RESET_CALENDAR_BACKOFF_STATE)
     .where(eq(calendarsTable.id, calendarId));
 };
 
@@ -35,12 +37,11 @@ const applyDestinationBackoff = async (
   calendarId: string,
   currentFailureCount: number,
 ): Promise<void> => {
+  const backoffState = buildCalendarBackoffState(currentFailureCount);
+
   await database
     .update(calendarsTable)
-    .set({
-      failureCount: currentFailureCount + 1,
-      lastFailureAt: new Date(),
-    })
+    .set(backoffState)
     .where(eq(calendarsTable.id, calendarId));
 };
 
@@ -125,6 +126,10 @@ const syncDestinationsForUser = async (
         eq(calendarsTable.userId, userId),
         eq(calendarsTable.disabled, false),
         arrayContains(calendarsTable.capabilities, ["push"]),
+        or(
+          isNull(calendarsTable.nextAttemptAt),
+          lte(calendarsTable.nextAttemptAt, new Date()),
+        ),
       ),
     );
 

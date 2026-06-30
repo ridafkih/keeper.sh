@@ -352,3 +352,203 @@ describe("recurring events", () => {
     expect(ics).not.toContain("RECURRENCE-ID");
   });
 });
+
+/*
+ * Issue #413: Outlook classic renders bare-UTC feed events in "Coordinated
+ * Universal Time" in the detail view. Per RFC 5545 a TZID must reference a
+ * VTIMEZONE present in the object; emitting DTSTART;TZID=... alongside a real
+ * VTIMEZONE makes Outlook show the correct local time.
+ */
+const occurrences = (haystack: string, needle: string): number => haystack.split(needle).length - 1;
+
+describe("timezone-aware feed (Outlook)", () => {
+  it("emits DTSTART/DTEND with a TZID and a matching VTIMEZONE when startTimeZone is set", () => {
+    const ics = formatEventsAsIcal(
+      [makeEvent({
+        startTime: new Date("2026-06-17T10:45:00Z"),
+        endTime: new Date("2026-06-17T11:45:00Z"),
+        startTimeZone: "Europe/Berlin",
+      })],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(ics).toContain("BEGIN:VTIMEZONE");
+    expect(ics).toContain("TZID:Europe/Berlin");
+    // Berlin is +02:00 in June, so 10:45Z renders as 12:45 local.
+    expect(ics).toContain("DTSTART;TZID=Europe/Berlin:20260617T124500");
+    expect(ics).toContain("DTEND;TZID=Europe/Berlin:20260617T134500");
+    expect(ics).not.toContain("DTSTART:20260617T104500Z");
+  });
+
+  it("keeps all-day events timezone-less even when startTimeZone is set", () => {
+    const ics = formatEventsAsIcal(
+      [makeEvent({ isAllDay: true, startTimeZone: "Europe/Berlin" })],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(ics).toContain("DTSTART;VALUE=DATE:20260328");
+    expect(ics).not.toContain("TZID=");
+    expect(ics).not.toContain("BEGIN:VTIMEZONE");
+  });
+
+  it("does not emit a VTIMEZONE when no event carries a timezone (UTC unchanged)", () => {
+    const ics = formatEventsAsIcal(
+      [makeEvent({
+        startTime: new Date("2026-06-17T10:45:00Z"),
+        endTime: new Date("2026-06-17T11:45:00Z"),
+      })],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(ics).not.toContain("BEGIN:VTIMEZONE");
+    expect(ics).not.toContain("TZID=");
+    expect(ics).toContain("DTSTART:20260617T104500Z");
+  });
+
+  it("zones EXDATE to match DTSTART while keeping RRULE UNTIL in UTC", () => {
+    const ics = formatEventsAsIcal(
+      [makeEvent({
+        startTime: new Date("2026-06-17T10:45:00Z"),
+        endTime: new Date("2026-06-17T11:45:00Z"),
+        startTimeZone: "Europe/Berlin",
+        recurrenceRule: {
+          frequency: "WEEKLY",
+          until: { date: new Date("2026-12-30T10:45:00Z"), type: "DATE-TIME" },
+        } as never,
+        exceptionDates: [{ date: new Date("2026-07-01T10:45:00Z"), type: "DATE-TIME" }] as never,
+      })],
+      DEFAULT_SETTINGS,
+    );
+
+    // EXDATE carries the same TZID as DTSTART (RFC 5545 value-type match → Apple-safe).
+    expect(ics).toContain("EXDATE;TZID=Europe/Berlin:20260701T124500");
+    // UNTIL must stay UTC regardless of the event timezone.
+    expect(ics).toContain("UNTIL=20261230T104500Z");
+  });
+
+  it("zones an override's RECURRENCE-ID to match the master's TZID", () => {
+    const sourceUid = "berlin-meeting";
+    const ics = formatEventsAsIcal(
+      [
+        makeEvent({
+          id: "master-id",
+          sourceEventUid: sourceUid,
+          startTime: new Date("2026-06-17T10:45:00Z"),
+          endTime: new Date("2026-06-17T11:45:00Z"),
+          startTimeZone: "Europe/Berlin",
+          recurrenceRule: { frequency: "WEEKLY" } as never,
+        }),
+        makeEvent({
+          id: "override-id",
+          sourceEventUid: sourceUid,
+          startTime: new Date("2026-06-24T12:45:00Z"),
+          endTime: new Date("2026-06-24T13:45:00Z"),
+          startTimeZone: "Europe/Berlin",
+          recurrenceId: new Date("2026-06-24T10:45:00Z"),
+        }),
+      ],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(ics).toContain("RECURRENCE-ID;TZID=Europe/Berlin:20260624T124500");
+  });
+
+  it("preserves Apple recurrence invariants with the Outlook-compatible VTIMEZONE", () => {
+    const sourceUid = "cross-client-recurring-event";
+    const ics = formatEventsAsIcal(
+      [
+        makeEvent({
+          id: "master-id",
+          sourceEventUid: sourceUid,
+          startTime: new Date("2026-06-17T10:45:00Z"),
+          endTime: new Date("2026-06-17T11:45:00Z"),
+          startTimeZone: "Europe/Berlin",
+          recurrenceRule: {
+            frequency: "WEEKLY",
+            until: { date: new Date("2026-12-30T10:45:00Z"), type: "DATE-TIME" },
+          } as never,
+          exceptionDates: [{ date: new Date("2026-07-01T10:45:00Z"), type: "DATE-TIME" }] as never,
+        }),
+        makeEvent({
+          id: "override-id",
+          sourceEventUid: sourceUid,
+          startTime: new Date("2026-06-24T12:45:00Z"),
+          endTime: new Date("2026-06-24T13:45:00Z"),
+          startTimeZone: "Europe/Berlin",
+          recurrenceId: new Date("2026-06-24T10:45:00Z"),
+        }),
+      ],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(occurrences(ics, "BEGIN:STANDARD")).toBe(1);
+    expect(ics).toContain("DTSTART;TZID=Europe/Berlin:20260617T124500");
+    expect(ics).toContain("EXDATE;TZID=Europe/Berlin:20260701T124500");
+    expect(ics).toContain("RECURRENCE-ID;TZID=Europe/Berlin:20260624T124500");
+    expect(ics).toMatch(/RRULE:FREQ=WEEKLY;UNTIL=20261230T104500Z/);
+  });
+
+  it("emits a single VTIMEZONE per distinct zone", () => {
+    const ics = formatEventsAsIcal(
+      [
+        makeEvent({ id: "a", startTime: new Date("2026-06-17T10:45:00Z"), endTime: new Date("2026-06-17T11:45:00Z"), startTimeZone: "Europe/Berlin" }),
+        makeEvent({ id: "b", startTime: new Date("2026-06-18T10:45:00Z"), endTime: new Date("2026-06-18T11:45:00Z"), startTimeZone: "Europe/Berlin" }),
+        makeEvent({ id: "c", startTime: new Date("2026-06-19T15:00:00Z"), endTime: new Date("2026-06-19T16:00:00Z"), startTimeZone: "America/New_York" }),
+      ],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(occurrences(ics, "BEGIN:VTIMEZONE")).toBe(2);
+    expect(ics).toContain("TZID:Europe/Berlin");
+    expect(ics).toContain("TZID:America/New_York");
+  });
+
+  it("renders a January event before the year's first New York DST transition", () => {
+    const ics = formatEventsAsIcal(
+      [makeEvent({
+        startTime: new Date("2026-01-15T15:00:00Z"),
+        endTime: new Date("2026-01-15T16:00:00Z"),
+        startTimeZone: "America/New_York",
+      })],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(ics).toContain("DTSTART;TZID=America/New_York:20260115T100000");
+  });
+
+  it("renders events after the VTIMEZONE reference year without empty observances", () => {
+    const ics = formatEventsAsIcal(
+      [
+        makeEvent({
+          id: "reference-year",
+          startTime: new Date("2026-06-17T10:45:00Z"),
+          endTime: new Date("2026-06-17T11:45:00Z"),
+          startTimeZone: "Europe/Berlin",
+        }),
+        makeEvent({
+          id: "following-year",
+          startTime: new Date("2027-01-15T10:45:00Z"),
+          endTime: new Date("2027-01-15T11:45:00Z"),
+          startTimeZone: "Europe/Berlin",
+        }),
+      ],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(ics).toContain("DTSTART;TZID=Europe/Berlin:20270115T114500");
+  });
+
+  it("falls back to bare UTC for an unresolvable timezone", () => {
+    const ics = formatEventsAsIcal(
+      [makeEvent({
+        startTime: new Date("2026-06-17T10:45:00Z"),
+        endTime: new Date("2026-06-17T11:45:00Z"),
+        startTimeZone: "Not/AZone",
+      })],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(ics).not.toContain("BEGIN:VTIMEZONE");
+    expect(ics).toContain("DTSTART:20260617T104500Z");
+  });
+});

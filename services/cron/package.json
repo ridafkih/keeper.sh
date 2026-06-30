@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@keeper.sh/calendar": "workspace:*",
+    "@keeper.sh/constants": "workspace:*",
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/otelemetry": "workspace:*",

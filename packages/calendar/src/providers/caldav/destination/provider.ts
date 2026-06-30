@@ -5,6 +5,7 @@ import type { DeleteResult, PushResult, RemoteEvent, SyncableEvent } from "../..
 import { CalDAVClient } from "../shared/client";
 import { eventToICalString, parseICalToRemoteEvents } from "../shared/ics";
 import { getCalDAVSyncWindow } from "../shared/sync-window";
+import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 
 const CALDAV_RATE_LIMIT_CONCURRENCY = 5;
 const YEARS_UNTIL_FUTURE = 2;
@@ -15,6 +16,7 @@ interface CalDAVSyncProviderConfig {
   serverUrl: string;
   username: string;
   password: string;
+  safeFetchOptions?: SafeFetchOptions;
 }
 
 const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
@@ -22,7 +24,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     authMethod: config.authMethod,
     credentials: { password: config.password, username: config.username },
     serverUrl: config.serverUrl,
-  });
+  }, config.safeFetchOptions);
 
   const rateLimiter = new RateLimiter({ concurrency: CALDAV_RATE_LIMIT_CONCURRENCY });
 

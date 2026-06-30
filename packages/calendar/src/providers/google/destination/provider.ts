@@ -5,7 +5,8 @@ import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-vali
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import type { DeleteResult, PushResult, RemoteEvent, SyncableEvent } from "../../../core/types";
 import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
-import { HTTP_STATUS } from "@keeper.sh/constants";
+import { HTTP_STATUS, PROVIDER_PUSH_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
+import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
 import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS, GONE_STATUS } from "../shared/api";
 import { withBackoff } from "../shared/backoff";
 import { executeBatchChunked } from "../shared/batch";
@@ -119,7 +120,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       return results;
     }
 
-    const responses = await executeBatchChunked(requests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal });
+    const responses = await executeBatchChunked(requests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });
 
     for (const entry of pending) {
       const response = responses[entry.batchIndex];
@@ -172,7 +173,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       path: `${eventsPath}?iCalUID=${encodeURIComponent(uid)}`,
     }));
 
-    const findResponses = await executeBatchChunked(findSubRequests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal });
+    const findResponses = await executeBatchChunked(findSubRequests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });
 
     for (let findIndex = 0; findIndex < lookupIds.length; findIndex++) {
       const originalIndex = lookupOriginalIndices[findIndex];
@@ -216,7 +217,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       return results;
     }
 
-    const deleteResponses = await executeBatchChunked(subRequests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal });
+    const deleteResponses = await executeBatchChunked(subRequests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });
 
     for (let deleteIndex = 0; deleteIndex < deleteResponses.length; deleteIndex++) {
       const originalIndex = indexMap[deleteIndex];
@@ -265,10 +266,15 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       url.searchParams.set("pageToken", pageToken);
     }
 
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${tokenState.accessToken}` },
-      method: "GET",
-    });
+    const response = await fetchWithTimeout(
+      url,
+      {
+        headers: { Authorization: `Bearer ${tokenState.accessToken}` },
+        method: "GET",
+      },
+      PROVIDER_PUSH_REQUEST_TIMEOUT_MS,
+      config.signal,
+    );
 
     if (!response.ok) {
       const errorBody = await response.text();

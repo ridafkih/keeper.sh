@@ -58,6 +58,91 @@ describe("eventToICalString", () => {
     expect(parsedEvent?.startTime.toISOString()).toBe("2026-03-08T00:00:00.000Z");
     expect(parsedEvent?.endTime.toISOString()).toBe("2026-03-09T00:00:00.000Z");
   });
+
+  it("emits a TZID-qualified local datetime when startTimeZone is set", () => {
+    const icsString = eventToICalString(
+      {
+        calendarId: "calendar-id",
+        calendarName: "Calendar",
+        calendarUrl: null,
+        endTime: new Date("2026-06-17T11:45:00.000Z"),
+        id: "event-id",
+        sourceEventUid: "source-uid",
+        startTime: new Date("2026-06-17T10:45:00.000Z"),
+        startTimeZone: "America/Montevideo",
+        summary: "Appointment",
+      },
+      "destination-uid",
+    );
+
+    // Montevideo is UTC-3 year-round, so 10:45Z renders as 07:45 local.
+    expect(icsString).toContain("DTSTART;TZID=America/Montevideo:20260617T074500");
+    expect(icsString).toContain("DTEND;TZID=America/Montevideo:20260617T084500");
+    expect(icsString).not.toContain("DTSTART:20260617T104500Z");
+  });
+
+  it("round-trips the timezone and the underlying instant", () => {
+    const icsString = eventToICalString(
+      {
+        calendarId: "calendar-id",
+        calendarName: "Calendar",
+        calendarUrl: null,
+        endTime: new Date("2026-06-17T11:45:00.000Z"),
+        id: "event-id",
+        sourceEventUid: "source-uid",
+        startTime: new Date("2026-06-17T10:45:00.000Z"),
+        startTimeZone: "America/Montevideo",
+        summary: "Appointment",
+      },
+      "destination-uid",
+    );
+
+    const parsedEvent = parseICalToRemoteEvent(icsString);
+
+    expect(parsedEvent?.startTimeZone).toBe("America/Montevideo");
+    expect(parsedEvent?.startTime.toISOString()).toBe("2026-06-17T10:45:00.000Z");
+    expect(parsedEvent?.endTime.toISOString()).toBe("2026-06-17T11:45:00.000Z");
+  });
+
+  it("falls back to a bare UTC datetime when no timezone is known", () => {
+    const icsString = eventToICalString(
+      {
+        calendarId: "calendar-id",
+        calendarName: "Calendar",
+        calendarUrl: null,
+        endTime: new Date("2026-06-17T11:45:00.000Z"),
+        id: "event-id",
+        sourceEventUid: "source-uid",
+        startTime: new Date("2026-06-17T10:45:00.000Z"),
+        summary: "Appointment",
+      },
+      "destination-uid",
+    );
+
+    expect(icsString).toContain("DTSTART:20260617T104500Z");
+    expect(icsString).not.toContain("TZID=");
+  });
+
+  it("keeps all-day events timezone-less even when a timezone is supplied", () => {
+    const icsString = eventToICalString(
+      {
+        calendarId: "calendar-id",
+        calendarName: "Calendar",
+        calendarUrl: null,
+        endTime: new Date("2026-03-09T00:00:00.000Z"),
+        id: "event-id",
+        isAllDay: true,
+        sourceEventUid: "source-uid",
+        startTime: new Date("2026-03-08T00:00:00.000Z"),
+        startTimeZone: "America/Montevideo",
+        summary: "Holiday",
+      },
+      "destination-uid",
+    );
+
+    expect(icsString).toContain("DTSTART;VALUE=DATE:20260308");
+    expect(icsString).not.toContain("TZID=");
+  });
 });
 
 describe("parseICalToRemoteEvents", () => {
