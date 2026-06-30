@@ -97,11 +97,10 @@ const processJob = (
 
     const deadlineController = new AbortController();
     const deadlineTimer = setTimeout(() => deadlineController.abort(), USER_TIMEOUT_MS);
-    const abortSignal = mergeAbortSignals(deadlineController.signal, signal);
-
     let flushed = false;
 
     try {
+      const abortSignal = mergeAbortSignals(deadlineController.signal, signal);
       const result = await syncDestinationsForUser(userId, {
         database,
         redis: refreshLockRedis,
