@@ -150,7 +150,11 @@ const buildVtimezone = (timezone: string | undefined, referenceInstant: Date): I
 
   const transitions = findTransitions(resolved, referenceInstant);
   if (transitions.length === 2) {
-    return { id: resolved, props: transitions.map((transition) => buildObservance(transition)) };
+    const recurringObservances = transitions.map((transition) => buildObservance(transition));
+    // Ts-ics can expand both recurrence rules to an empty list.
+    // Keep a baseline offset available for dates before the first matching onset.
+    const baselineObservance = buildFixedObservance(transitions[0]?.offsetFrom ?? 0);
+    return { id: resolved, props: [...recurringObservances, baselineObservance] };
   }
 
   const offset = offsetMinutesAt(referenceInstant.getTime(), resolved);
