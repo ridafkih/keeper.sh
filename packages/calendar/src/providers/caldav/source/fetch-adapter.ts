@@ -64,6 +64,8 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
         events.push({
           availability: parsed.availability,
           description: parsed.description,
+          plaintextDescription: parsed.plaintextDescription,
+          plaintextDescriptionDerivationError: parsed.plaintextDescriptionDerivationError,
           endTime: parsed.endTime,
           exceptionDates: parsed.exceptionDates,
           recurrenceId: parsed.recurrenceId,

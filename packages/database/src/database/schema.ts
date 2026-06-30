@@ -152,6 +152,7 @@ const eventStatesTable = pgTable(
       .references(() => calendarsTable.id, { onDelete: "cascade" }),
     createdAt: timestamp().notNull().defaultNow(),
     description: text(),
+    plaintextDescription: text(),
     endTime: timestamp().notNull(),
     id: uuid().notNull().primaryKey().defaultRandom(),
     location: text(),

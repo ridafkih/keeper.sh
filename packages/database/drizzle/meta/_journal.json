@@ -519,6 +519,13 @@
       "when": 1782849346106,
       "tag": "0073_treat_full_day_timed_events",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1782852493715,
+      "tag": "0074_event_state_plaintext_description",
+      "breakpoints": true
     }
   ]
 }

@@ -9,6 +9,7 @@ import type { MicrosoftApiError } from "../../types";
 import { MICROSOFT_GRAPH_API, GONE_STATUS } from "../../shared/api";
 import { isAuthError, isSimpleAuthError } from "../../shared/errors";
 import { parseEventDateTime } from "../../shared/date-time";
+import { parseDescriptionFields } from "../../../../core/events/description";
 import { microsoftApiErrorSchema, outlookEventListSchema } from "@keeper.sh/data-schemas";
 import { KEEPER_CATEGORY } from "@keeper.sh/constants";
 import { isKeeperEvent } from "../../../../core/events/identity";
@@ -333,10 +334,13 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
     };
 
     const availability = parseAvailability(event.showAs);
+    const descriptionFields = parseDescriptionFields(event.body?.content, {
+      contentType: event.body?.contentType,
+    });
 
     result.push({
       ...availability && { availability },
-      description: event.body?.content,
+      ...descriptionFields,
       endTime: parseEventDateTime(end),
       isAllDay: event.isAllDay ?? false,
       location: event.location?.displayName,

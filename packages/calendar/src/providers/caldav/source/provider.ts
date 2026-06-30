@@ -87,6 +87,8 @@ const createCalDAVSourceProvider = (
         events.push({
           availability: parsed.availability,
           description: parsed.description,
+          plaintextDescription: parsed.plaintextDescription,
+          plaintextDescriptionDerivationError: parsed.plaintextDescriptionDerivationError,
           endTime: parsed.endTime,
           exceptionDates: parsed.exceptionDates,
           recurrenceId: parsed.recurrenceId,
@@ -112,6 +114,7 @@ const createCalDAVSourceProvider = (
       .select({
         availability: eventStatesTable.availability,
         description: eventStatesTable.description,
+        plaintextDescription: eventStatesTable.plaintextDescription,
         endTime: eventStatesTable.endTime,
         id: eventStatesTable.id,
         isAllDay: eventStatesTable.isAllDay,
@@ -145,6 +148,7 @@ const createCalDAVSourceProvider = (
           availability: event.availability,
           calendarId,
           description: event.description,
+          plaintextDescription: event.plaintextDescription,
           endTime: event.endTime,
           exceptionDates: stringifyIfPresent(event.exceptionDates),
           isAllDay: event.isAllDay,

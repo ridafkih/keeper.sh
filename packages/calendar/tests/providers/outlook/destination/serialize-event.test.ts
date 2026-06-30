@@ -21,4 +21,24 @@ describe("serializeOutlookEvent", () => {
     expect(event.start).toEqual({ dateTime: "2026-03-08T00:00:00.000", timeZone: "UTC" });
     expect(event.end).toEqual({ dateTime: "2026-03-09T00:00:00.000", timeZone: "UTC" });
   });
+
+  it("serializes HTML descriptions as HTML Outlook bodies", () => {
+    const event = serializeOutlookEvent({
+      calendarId: "calendar-id",
+      calendarName: "Calendar",
+      calendarUrl: null,
+      description: "<p>Join call</p>",
+      endTime: new Date("2026-03-08T15:00:00.000Z"),
+      id: "event-id",
+      sourceEventUid: "source-uid",
+      startTime: new Date("2026-03-08T14:00:00.000Z"),
+      startTimeZone: "UTC",
+      summary: "Meeting",
+    });
+
+    expect(event.body).toEqual({
+      content: "<p>Join call</p>",
+      contentType: "html",
+    });
+  });
 });

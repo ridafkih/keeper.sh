@@ -115,6 +115,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       .select({
         availability: eventStatesTable.availability,
         description: eventStatesTable.description,
+        plaintextDescription: eventStatesTable.plaintextDescription,
         id: eventStatesTable.id,
         endTime: eventStatesTable.endTime,
         isAllDay: eventStatesTable.isAllDay,
@@ -158,6 +159,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
               availability: event.availability,
               calendarId,
               description: event.description,
+              plaintextDescription: event.plaintextDescription,
               endTime: event.endTime,
               exceptionDates: stringifyIfPresent(event.exceptionDates),
               isAllDay: event.isAllDay,

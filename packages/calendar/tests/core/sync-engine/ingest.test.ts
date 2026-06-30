@@ -18,6 +18,7 @@ interface ExistingEvent {
   sourceEventType: string | null;
   title: string | null;
   description: string | null;
+  plaintextDescription?: string | null;
   location: string | null;
 }
 
@@ -125,6 +126,7 @@ describe("ingestSource", () => {
     expect(emittedEvents).toHaveLength(1);
     expect(emittedEvents[0]?.["calendar.id"]).toBe("cal-1");
     expect(emittedEvents[0]?.["events.added"]).toBe(1);
+    expect(emittedEvents[0]?.["source_events.plaintext_description_derivation_failed"]).toBe(0);
     expect(emittedEvents[0]?.["outcome"]).toBe("success");
     expect(typeof emittedEvents[0]?.["duration_ms"]).toBe("number");
   });

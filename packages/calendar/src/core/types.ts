@@ -56,6 +56,7 @@ interface SyncableEvent {
   recurrenceId?: Date;
   summary: string;
   description?: string;
+  plaintextDescription?: string;
   location?: string;
   calendarId: string;
   calendarName: string | null;
@@ -146,6 +147,8 @@ interface SourceEvent {
   recurrenceId?: Date;
   title?: string;
   description?: string;
+  plaintextDescription?: string;
+  plaintextDescriptionDerivationError?: string;
   location?: string;
 }
 

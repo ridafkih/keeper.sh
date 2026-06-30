@@ -53,6 +53,7 @@ const createIngestionFlush = (calendarId: string) =>
             availability: event.availability,
             calendarId,
             description: event.description,
+            plaintextDescription: event.plaintextDescription,
             endTime: event.endTime,
             exceptionDates: serializeOptionalJson(event.exceptionDates),
             isAllDay: event.isAllDay,
@@ -96,6 +97,7 @@ const ingestIcsSource = async (source: Source): Promise<void> => {
         .select({
           availability: eventStatesTable.availability,
           description: eventStatesTable.description,
+          plaintextDescription: eventStatesTable.plaintextDescription,
           endTime: eventStatesTable.endTime,
           id: eventStatesTable.id,
           isAllDay: eventStatesTable.isAllDay,

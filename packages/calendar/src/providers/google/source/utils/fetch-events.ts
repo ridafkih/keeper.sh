@@ -14,6 +14,7 @@ import { isAuthError } from "../../shared/errors";
 import type { GoogleApiError } from "../../types";
 import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
 import { parseEventDateTime } from "../../shared/date-time";
+import { parseDescriptionFields } from "../../../../core/events/description";
 import { isKeeperEvent } from "../../../../core/events/identity";
 import { withBackoff } from "../../shared/backoff";
 import { isRateLimitApiError } from "../../shared/errors";
@@ -305,9 +306,10 @@ const parseGoogleEvents = (events: GoogleCalendarEvent[]): EventTimeSlot[] => {
     if (isKeeperEvent(event.iCalUID)) {
       continue;
     }
+    const descriptionFields = parseDescriptionFields(event.description);
     result.push({
       availability: resolveGoogleAvailability(event),
-      description: event.description,
+      ...descriptionFields,
       endTime: parseEventDateTime(event.end),
       isAllDay: isAllDayGoogleEvent(event),
       location: resolveGoogleLocation(event),

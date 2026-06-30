@@ -1,5 +1,7 @@
 import type { IcsCalendar, IcsDuration, IcsEvent } from "ts-ics";
+import type { CalendarNonStandardValues } from "./parse-ics-calendar";
 import type { EventTimeSlot } from "./types";
+import { parseDescriptionFields } from "../../core/events/description";
 import {
   KEEPER_EVENT_SUFFIX,
   MS_PER_DAY,
@@ -59,7 +61,7 @@ const getEventAvailability = (event: IcsEvent) => {
   return null;
 };
 
-const parseIcsEvents = (calendar: IcsCalendar): EventTimeSlot[] => {
+const parseIcsEvents = (calendar: IcsCalendar<CalendarNonStandardValues>): EventTimeSlot[] => {
   const result: EventTimeSlot[] = [];
 
   for (const event of calendar.events ?? []) {
@@ -72,10 +74,18 @@ const parseIcsEvents = (calendar: IcsCalendar): EventTimeSlot[] => {
 
     const startTime = event.start.date;
     const availability = getEventAvailability(event);
+    let plaintextDescription: string | null = null;
+    if (event.nonStandard?.altDescription) {
+      plaintextDescription = event.description ?? null;
+    }
+    const descriptionFields = parseDescriptionFields(
+      event.nonStandard?.altDescription ?? event.description,
+      { plaintextDescription },
+    );
 
     result.push({
       ...availability && { availability },
-      description: event.description,
+      ...descriptionFields,
       endTime: getEventEndTime(event, startTime),
       exceptionDates: event.exceptionDates,
       recurrenceId: event.recurrenceId?.value?.date,

@@ -62,6 +62,8 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
     const events: SourceEvent[] = parsed.map((event) => ({
       availability: event.availability,
       description: event.description,
+      plaintextDescription: event.plaintextDescription,
+      plaintextDescriptionDerivationError: event.plaintextDescriptionDerivationError,
       endTime: event.endTime,
       exceptionDates: event.exceptionDates,
       recurrenceId: event.recurrenceId,

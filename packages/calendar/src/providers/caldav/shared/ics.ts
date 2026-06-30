@@ -1,7 +1,8 @@
 import { generateIcsCalendar } from "ts-ics";
 import { parseIcsCalendar, buildZonedIcsDate } from "../../../ics";
-import type { IcsCalendar, IcsDuration, IcsEvent } from "ts-ics";
+import type { IcsDuration, IcsEvent } from "ts-ics";
 import type { SyncableEvent } from "../../../core/types";
+import { isHtmlDescription, parseDescriptionFields } from "../../../core/events/description";
 import { isKeeperEvent } from "../../../core/events/identity";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
 import {
@@ -44,10 +45,56 @@ const getEventEndTime = (event: IcsEvent, startTime: Date): Date => {
   return startTime;
 };
 
+const ICS_LINE_MAX_OCTETS = 75;
+const BACKSLASH = String.fromCodePoint(92);
+const CARRIAGE_RETURN = String.fromCodePoint(13);
+const LINE_FEED = String.fromCodePoint(10);
+const CRLF = `${CARRIAGE_RETURN}${LINE_FEED}`;
+const ICS_ESCAPED_LINE_BREAK = `${BACKSLASH}n`;
+const ICS_ESCAPED_BACKSLASH = `${BACKSLASH}${BACKSLASH}`;
+
+const foldIcsLine = (line: string): string => {
+  if (Buffer.byteLength(line, "utf8") <= ICS_LINE_MAX_OCTETS) {
+    return line;
+  }
+  const parts: string[] = [];
+  let remaining = line;
+  while (Buffer.byteLength(remaining, "utf8") > ICS_LINE_MAX_OCTETS) {
+    let cut = ICS_LINE_MAX_OCTETS;
+    while (cut > 0 && Buffer.byteLength(remaining.slice(0, cut), "utf8") > ICS_LINE_MAX_OCTETS) {
+      cut--;
+    }
+    parts.push(remaining.slice(0, cut));
+    remaining = remaining.slice(cut);
+  }
+  parts.push(remaining);
+  return parts.join("\r\n ");
+};
+
+const escapeIcsText = (text: string): string =>
+  text
+    .replaceAll(BACKSLASH, ICS_ESCAPED_BACKSLASH)
+    .replaceAll(";", `${BACKSLASH};`)
+    .replaceAll(",", `${BACKSLASH},`)
+    .replaceAll(CRLF, ICS_ESCAPED_LINE_BREAK)
+    .replaceAll(CARRIAGE_RETURN, ICS_ESCAPED_LINE_BREAK)
+    .replaceAll(LINE_FEED, ICS_ESCAPED_LINE_BREAK);
+
 const eventToICalString = (event: SyncableEvent, uid: string): string => {
   const isAllDay = resolveIsAllDayEvent(event);
+
+  const rawDescription = event.description;
+  let description = event.plaintextDescription ?? rawDescription;
+  let descriptionIsHtml = false;
+  if (rawDescription && isHtmlDescription(rawDescription)) {
+    descriptionIsHtml = true;
+  }
+  if (!event.plaintextDescription && descriptionIsHtml && rawDescription) {
+    description = parseDescriptionFields(rawDescription).plaintextDescription ?? rawDescription;
+  }
+
   const icsEvent: IcsEvent = {
-    description: event.description,
+    description,
     end: buildZonedIcsDate(event.endTime, event.startTimeZone, isAllDay),
     location: event.location,
     stamp: { date: new Date() },
@@ -57,13 +104,21 @@ const eventToICalString = (event: SyncableEvent, uid: string): string => {
     uid,
   };
 
-  const calendar: IcsCalendar = {
+  const baseIcs = generateIcsCalendar({
     events: [icsEvent],
     prodId: "-//Keeper//Keeper Calendar//EN",
     version: "2.0",
-  };
+  });
 
-  return generateIcsCalendar(calendar);
+  if (!descriptionIsHtml || !rawDescription) {
+    return baseIcs;
+  }
+
+  // Inject X-ALT-DESC with the original HTML before END:VEVENT for clients that support rich descriptions.
+  const escapedHtml = escapeIcsText(rawDescription);
+  const altDescLine = `X-ALT-DESC;FMTTYPE=text/html:${escapedHtml}`;
+  const folded = foldIcsLine(altDescLine);
+  return baseIcs.replace(/END:VEVENT\r\n/, `${folded}\r\nEND:VEVENT\r\n`);
 };
 
 interface ParsedCalendarEvent {
@@ -76,6 +131,8 @@ interface ParsedCalendarEvent {
   uid: string;
   title?: string;
   description?: string;
+  plaintextDescription?: string;
+  plaintextDescriptionDerivationError?: string;
   location?: string;
   startTimeZone?: string;
   recurrenceRule?: object;
@@ -97,11 +154,19 @@ const mapIcsEventToParsedEvent = (event: IcsEvent): ParsedCalendarEvent | null =
 
   const startTime = event.start.date;
   const endTime = getEventEndTime(event, startTime);
+  const { description: eventDescription } = event;
+  let description = eventDescription;
+  let plaintextDescription: string | null = null;
+  if (event.nonStandard?.altDescription) {
+    description = event.nonStandard.altDescription;
+    plaintextDescription = eventDescription ?? null;
+  }
+  const descriptionFields = parseDescriptionFields(description, { plaintextDescription });
 
   return {
     availability: mapAvailability(event.timeTransparent),
     deleteId: event.uid,
-    description: event.description,
+    ...descriptionFields,
     endTime,
     exceptionDates: event.exceptionDates,
     recurrenceId: event.recurrenceId?.value?.date,
