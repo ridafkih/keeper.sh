@@ -100,4 +100,39 @@ describe("handlePatchSourceRoute", () => {
 
     expect(response.status).toBe(200);
   });
+
+  it("returns 403 when free users try to set markEventsAsPrivate", async () => {
+    const response = await handlePatchSourceRoute(
+      {
+        body: { markEventsAsPrivate: true },
+        params: { id: "source-1" },
+        userId: "user-1",
+      },
+      {
+        canUseEventFilters: () => Promise.resolve(false),
+        updateSource: () => Promise.resolve(null),
+      },
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it("returns updated source when pro user sets markEventsAsPrivate", async () => {
+    const response = await handlePatchSourceRoute(
+      {
+        body: { markEventsAsPrivate: true },
+        params: { id: "source-1" },
+        userId: "user-1",
+      },
+      {
+        canUseEventFilters: () => Promise.resolve(true),
+        updateSource: (_userId, _sourceId, updates) => Promise.resolve({
+          id: "source-1",
+          ...updates,
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+  });
 });

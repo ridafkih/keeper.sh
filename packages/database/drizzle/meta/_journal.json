@@ -498,6 +498,13 @@
       "when": 1779280295321,
       "tag": "0070_event_states_recurrence_id",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1781000000000,
+      "tag": "0071_mark_events_as_private",
+      "breakpoints": true
     }
   ]
 }

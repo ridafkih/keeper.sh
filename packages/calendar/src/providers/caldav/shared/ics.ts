@@ -54,6 +54,7 @@ const eventToICalString = (event: SyncableEvent, uid: string): string => {
     start: { date: event.startTime, ...(isAllDay && { type: "DATE" }) },
     summary: event.summary,
     ...(event.availability === "free" && { timeTransparent: "TRANSPARENT" }),
+    ...(event.isPrivate && { class: "PRIVATE" }),
     uid,
   };
 

@@ -48,6 +48,7 @@ const serializeGoogleEvent = (
     start: buildDateField(event.startTime, isAllDay, event.startTimeZone, recurrenceRule),
     summary: event.summary,
     ...(event.availability === "free" && { transparency: "transparent" }),
+    ...(event.isPrivate && { visibility: "private" }),
     ...(recurrenceRule && { recurrence: [`RRULE:${recurrenceRule}`] }),
   };
 };
