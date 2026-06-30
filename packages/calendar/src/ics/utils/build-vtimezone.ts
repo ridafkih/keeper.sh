@@ -6,6 +6,7 @@ const MINUTES_PER_HOUR = 60;
 const HOURS_IN_DAY = 24;
 const MS_PER_DAY = HOURS_IN_DAY * MINUTES_PER_HOUR * MS_PER_MINUTE;
 const DAYS_OF_WEEK = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const;
+const OBSERVANCE_ANCHOR_YEAR = 1970;
 
 interface Transition {
   instant: number;
@@ -86,17 +87,60 @@ const formatOffset = (minutes: number): string => {
   return `${sign}${padTwo(Math.floor(absolute / MINUTES_PER_HOUR))}${padTwo(absolute % MINUTES_PER_HOUR)}`;
 };
 
+const minutesToMs = (minutes: number): number => minutes * MS_PER_MINUTE;
+
+const getDaysInMonth = (year: number, month: number): number =>
+  new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+
+const getFirstWeekdayOfMonth = (year: number, month: number): number =>
+  new Date(Date.UTC(year, month, 1)).getUTCDay();
+
+const getLastWeekdayOfMonth = (year: number, month: number): number =>
+  new Date(Date.UTC(year, month + 1, 0)).getUTCDay();
+
+const wrapWeekdayDistance = (distance: number): number =>
+  (distance + DAYS_OF_WEEK.length) % DAYS_OF_WEEK.length;
+
+const getWeekdayOccurrence = (dayOfMonth: number): number =>
+  Math.floor((dayOfMonth - 1) / DAYS_OF_WEEK.length) + 1;
+
+const isFinalWeekdayOccurrence = (dayOfMonth: number, daysInMonth: number): boolean =>
+  dayOfMonth + DAYS_OF_WEEK.length > daysInMonth;
+
+const resolveOccurrence = (dayOfMonth: number, daysInMonth: number): number => {
+  if (isFinalWeekdayOccurrence(dayOfMonth, daysInMonth)) {
+    return -1;
+  }
+  return getWeekdayOccurrence(dayOfMonth);
+};
+
+const resolveNthWeekdayDayOfMonth = (year: number, month: number, weekday: number, occurrence: number): number => {
+  const firstWeekday = getFirstWeekdayOfMonth(year, month);
+  const offsetToWeekday = wrapWeekdayDistance(weekday - firstWeekday);
+  const offsetToOccurrence = (occurrence - 1) * DAYS_OF_WEEK.length;
+  return 1 + offsetToWeekday + offsetToOccurrence;
+};
+
+const resolveLastWeekdayDayOfMonth = (year: number, month: number, weekday: number): number => {
+  const daysInMonth = getDaysInMonth(year, month);
+  const lastWeekday = getLastWeekdayOfMonth(year, month);
+  const offsetFromLastDay = wrapWeekdayDistance(lastWeekday - weekday);
+  return daysInMonth - offsetFromLastDay;
+};
+
+const resolveDayOfMonthForOccurrence = (year: number, month: number, weekday: number, occurrence: number): number => {
+  if (occurrence === -1) {
+    return resolveLastWeekdayDayOfMonth(year, month, weekday);
+  }
+  return resolveNthWeekdayDayOfMonth(year, month, weekday, occurrence);
+};
+
 const buildRecurrenceRule = (localOnset: Date): IcsRecurrenceRule => {
   const month = localOnset.getUTCMonth();
   const dayOfMonth = localOnset.getUTCDate();
   const weekday = DAYS_OF_WEEK[localOnset.getUTCDay()];
-  const daysInMonth = new Date(Date.UTC(localOnset.getUTCFullYear(), month + 1, 0)).getUTCDate();
-  const isLastWeekday = dayOfMonth + DAYS_OF_WEEK.length > daysInMonth;
-
-  let occurrence = Math.floor((dayOfMonth - 1) / DAYS_OF_WEEK.length) + 1;
-  if (isLastWeekday) {
-    occurrence = -1;
-  }
+  const daysInMonth = getDaysInMonth(localOnset.getUTCFullYear(), month);
+  const occurrence = resolveOccurrence(dayOfMonth, daysInMonth);
 
   return {
     frequency: "YEARLY",
@@ -105,9 +149,29 @@ const buildRecurrenceRule = (localOnset: Date): IcsRecurrenceRule => {
   } as IcsRecurrenceRule;
 };
 
+const buildAnchoredLocalOnset = (localOnset: Date): Date => {
+  const month = localOnset.getUTCMonth();
+  const weekday = localOnset.getUTCDay();
+  const dayOfMonth = localOnset.getUTCDate();
+  const daysInMonth = getDaysInMonth(localOnset.getUTCFullYear(), month);
+  const occurrence = resolveOccurrence(dayOfMonth, daysInMonth);
+  const anchoredDay = resolveDayOfMonthForOccurrence(OBSERVANCE_ANCHOR_YEAR, month, weekday, occurrence);
+
+  return new Date(Date.UTC(
+    OBSERVANCE_ANCHOR_YEAR,
+    month,
+    anchoredDay,
+    localOnset.getUTCHours(),
+    localOnset.getUTCMinutes(),
+    localOnset.getUTCSeconds(),
+  ));
+};
+
 const buildObservance = (transition: Transition): IcsTimezoneProp => {
-  const localOnsetMs = transition.instant + transition.offsetFrom * MS_PER_MINUTE;
-  const start = new Date(localOnsetMs - transition.offsetTo * MS_PER_MINUTE);
+  const localOnsetMs = transition.instant + minutesToMs(transition.offsetFrom);
+  const localOnset = new Date(localOnsetMs);
+  const anchoredLocalOnset = buildAnchoredLocalOnset(localOnset);
+  const start = new Date(anchoredLocalOnset.getTime() - minutesToMs(transition.offsetTo));
 
   let type: IcsTimezoneProp["type"] = "STANDARD";
   if (transition.offsetTo > transition.offsetFrom) {
@@ -119,7 +183,7 @@ const buildObservance = (transition: Transition): IcsTimezoneProp => {
     start,
     offsetFrom: formatOffset(transition.offsetFrom),
     offsetTo: formatOffset(transition.offsetTo),
-    recurrenceRule: buildRecurrenceRule(new Date(localOnsetMs)),
+    recurrenceRule: buildRecurrenceRule(localOnset),
   };
 };
 
@@ -150,11 +214,7 @@ const buildVtimezone = (timezone: string | undefined, referenceInstant: Date): I
 
   const transitions = findTransitions(resolved, referenceInstant);
   if (transitions.length === 2) {
-    const recurringObservances = transitions.map((transition) => buildObservance(transition));
-    // Ts-ics can expand both recurrence rules to an empty list.
-    // Keep a baseline offset available for dates before the first matching onset.
-    const baselineObservance = buildFixedObservance(transitions[0]?.offsetFrom ?? 0);
-    return { id: resolved, props: [...recurringObservances, baselineObservance] };
+    return { id: resolved, props: transitions.map((transition) => buildObservance(transition)) };
   }
 
   const offset = offsetMinutesAt(referenceInstant.getTime(), resolved);
