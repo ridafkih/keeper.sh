@@ -61,6 +61,11 @@ export { createRedisRateLimiter, type RedisRateLimiter, type RedisRateLimiterCon
 export { allSettledWithConcurrency, type AllSettledWithConcurrencyOptions } from "./core/utils/concurrency";
 export { getErrorMessage } from "./core/utils/error";
 export {
+  buildCalendarBackoffState,
+  RESET_CALENDAR_BACKOFF_STATE,
+  type CalendarBackoffState,
+} from "./core/utils/calendar-backoff";
+export {
   RequestTimeoutError,
   fetchWithTimeout,
   buildTimeoutSignal,
