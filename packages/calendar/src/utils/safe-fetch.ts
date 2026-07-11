@@ -7,6 +7,7 @@ import type { TimeoutSignal } from "../core/utils/fetch-with-timeout";
 const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
 const MAX_REDIRECTS = 10;
 const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
+const STALE_SOCKET_ERROR_CODE = "ECONNRESET";
 
 interface SafeFetchOptions {
   blockPrivateResolution?: boolean;
@@ -153,6 +154,37 @@ const getHeadersForRedirect = (
   return headers;
 };
 
+const isStaleSocketError = (error: unknown): boolean => error instanceof Error && "code" in error && error.code === STALE_SOCKET_ERROR_CODE;
+
+const isReplayableBody = (body: RequestInit["body"]): boolean => !body || typeof body === "string" || body instanceof URLSearchParams || body instanceof Blob || body instanceof ArrayBuffer || ArrayBuffer.isView(body);
+
+const isReplayableRequest = (input: string | Request | URL, init: RequestInit | undefined): boolean => {
+  if (input instanceof Request && input.body) {
+    return false;
+  }
+  return isReplayableBody(init?.body);
+};
+
+/*
+ * Bun keeps pooled sockets alive past a server's `Connection: close` and fails
+ * the next request on that host with ECONNRESET (oven-sh/bun#9881). CalDAV
+ * servers such as mailbox.org close the connection on well-known redirects,
+ * so a single retry on a fresh socket is required for discovery to work.
+ */
+const fetchWithStaleSocketRetry = async (
+  input: string | Request | URL,
+  init: RequestInit | undefined,
+): Promise<Response> => {
+  try {
+    return await globalThis.fetch(input, init);
+  } catch (error) {
+    if (!isStaleSocketError(error) || !isReplayableRequest(input, init)) {
+      throw error;
+    }
+    return globalThis.fetch(input, init);
+  }
+};
+
 const followRedirects = async (
   initialUrl: string,
   initialResponse: Response,
@@ -176,7 +208,7 @@ const followRedirects = async (
     currentHeaders = getHeadersForRedirect(currentHeaders, currentUrl, redirectUrl);
     currentUrl = redirectUrl;
 
-    currentResponse = await globalThis.fetch(currentUrl, {
+    currentResponse = await fetchWithStaleSocketRetry(currentUrl, {
       ...init,
       headers: currentHeaders,
       redirect: "manual",
@@ -224,7 +256,7 @@ const createSafeFetch = (options?: SafeFetchOptions): SafeFetch => async (input,
     const signal = resolveRequestSignal(timeout, externalSignal);
 
     try {
-      const response = await globalThis.fetch(input, {
+      const response = await fetchWithStaleSocketRetry(input, {
         ...init,
         redirect: "manual",
         signal,
