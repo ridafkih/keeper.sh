@@ -179,6 +179,8 @@ const installMockFetch = (mockFn: ReturnType<typeof vi.fn<FetchFn>>): void => {
   Object.assign(globalThis, { fetch: mockFn });
 };
 
+const staleSocketError = (): Error => Object.assign(new Error("The socket connection was closed unexpectedly."), { code: "ECONNRESET" });
+
 describe("createSafeFetch", () => {
   const originalFetch = globalThis.fetch;
 
@@ -272,8 +274,6 @@ describe("createSafeFetch", () => {
   });
 
   describe("stale socket retry", () => {
-    const staleSocketError = (): Error => Object.assign(new Error("The socket connection was closed unexpectedly."), { code: "ECONNRESET" });
-
     it("retries once when a pooled socket was closed by the server", async () => {
       const mockFetch = vi.fn<FetchFn>();
       mockFetch.mockRejectedValueOnce(staleSocketError());
