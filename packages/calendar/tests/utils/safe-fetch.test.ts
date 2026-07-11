@@ -271,6 +271,73 @@ describe("createSafeFetch", () => {
     expect(response.status).toBe(200);
   });
 
+  describe("stale socket retry", () => {
+    const staleSocketError = (): Error => Object.assign(new Error("The socket connection was closed unexpectedly."), { code: "ECONNRESET" });
+
+    it("retries once when a pooled socket was closed by the server", async () => {
+      const mockFetch = vi.fn<FetchFn>();
+      mockFetch.mockRejectedValueOnce(staleSocketError());
+      mockFetch.mockResolvedValueOnce(new Response("ok", { status: 200 }));
+      installMockFetch(mockFetch);
+
+      const safeFetch = createSafeFetch();
+      const response = await safeFetch("https://example.com/cal.ics", { body: "<propfind/>", method: "PROPFIND" });
+
+      expect(response.status).toBe(200);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("retries stale sockets on redirect follow-ups", async () => {
+      const mockFetch = vi.fn<FetchFn>();
+      mockFetch.mockResolvedValueOnce(
+        new Response(null, {
+          status: 301,
+          headers: { location: "https://example.com/caldav/" },
+        }),
+      );
+      mockFetch.mockRejectedValueOnce(staleSocketError());
+      mockFetch.mockResolvedValueOnce(new Response("ok", { status: 207 }));
+      installMockFetch(mockFetch);
+
+      const safeFetch = createSafeFetch();
+      const response = await safeFetch("https://example.com/.well-known/caldav", { body: "<propfind/>", method: "PROPFIND" });
+
+      expect(response.status).toBe(207);
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+
+    it("does not retry more than once", async () => {
+      const mockFetch = vi.fn<FetchFn>();
+      mockFetch.mockRejectedValue(staleSocketError());
+      installMockFetch(mockFetch);
+
+      const safeFetch = createSafeFetch();
+      await expect(safeFetch("https://example.com/cal.ics")).rejects.toThrow("closed unexpectedly");
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not retry errors without the ECONNRESET code", async () => {
+      const mockFetch = vi.fn<FetchFn>();
+      mockFetch.mockRejectedValue(new Error("Unable to connect."));
+      installMockFetch(mockFetch);
+
+      const safeFetch = createSafeFetch();
+      await expect(safeFetch("https://example.com/cal.ics")).rejects.toThrow("Unable to connect");
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not retry when the request body is a stream", async () => {
+      const mockFetch = vi.fn<FetchFn>();
+      mockFetch.mockRejectedValue(staleSocketError());
+      installMockFetch(mockFetch);
+
+      const safeFetch = createSafeFetch();
+      const body = new ReadableStream({ start: (controller) => controller.close() });
+      await expect(safeFetch("https://example.com/cal.ics", { body, method: "PUT" })).rejects.toThrow("closed unexpectedly");
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("allows whitelisted private hosts when enabled", async () => {
     const mockFetch = vi.fn<FetchFn>();
     mockFetch.mockResolvedValue(new Response("ok", { status: 200 }));
