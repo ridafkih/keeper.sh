@@ -101,7 +101,7 @@ describe("shouldAcceptAggregatePayload", () => {
     expect(decision.nextSeq).toBe(8);
   });
 
-  it("accepts lower sequence when a new sync cycle starts", () => {
+  it("rejects lower sequence syncing payload after idle completion", () => {
     const current = createCurrentState({
       progressPercent: 100,
       seq: 25,
@@ -116,16 +116,16 @@ describe("shouldAcceptAggregatePayload", () => {
       25,
       createAggregate({
         lastSyncedAt: current.lastSyncedAt,
-        progressPercent: 0,
+        progressPercent: 4.77,
         seq: 1,
         syncing: true,
         syncEventsProcessed: 0,
-        syncEventsRemaining: 12,
-        syncEventsTotal: 12,
+        syncEventsRemaining: 3513,
+        syncEventsTotal: 3689,
       }),
     );
 
-    expect(decision.accepted).toBe(true);
+    expect(decision.accepted).toBe(false);
     expect(decision.nextSeq).toBe(25);
   });
 

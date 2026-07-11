@@ -17,6 +17,7 @@ interface SyncAggregateSnapshot {
 
 interface SyncAggregateMessage extends SyncAggregateSnapshot {
   seq: number;
+  emittedAt?: string;
 }
 
 interface SyncAggregateTrackerConfig {
@@ -76,8 +77,12 @@ class SyncAggregateTracker {
     current: CalendarOperationProgress | undefined,
     update: SyncProgressUpdate,
   ): CalendarOperationProgress {
-    const currentProcessed = current?.processed ?? INITIAL_COUNT;
-    const currentTotal = current?.total ?? INITIAL_COUNT;
+    let currentProcessed = INITIAL_COUNT;
+    let currentTotal = INITIAL_COUNT;
+    if (current && current.status !== "idle") {
+      currentProcessed = current.processed;
+      currentTotal = current.total;
+    }
 
     const nextTotal = update.progress?.total ?? currentTotal;
     const nextProcessedRaw = update.progress?.current ?? currentProcessed;
@@ -251,6 +256,13 @@ class SyncAggregateTracker {
 
   holdSyncing(userId: string): void {
     this.syncingHeldByUser.add(userId);
+  }
+
+  resetUser(userId: string): void {
+    this.progressByUser.delete(userId);
+    this.highWaterPercentByUser.delete(userId);
+    this.lastPayloadKeyByUser.delete(userId);
+    this.lastProgressEmitAtByUser.delete(userId);
   }
 
   releaseSyncing(userId: string): void {

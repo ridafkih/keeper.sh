@@ -17,6 +17,13 @@ const resolveCount = (value: unknown): number => {
   return 0;
 };
 
+const toError = (value: unknown): Error => {
+  if (value instanceof Error) {
+    return value;
+  }
+  return new Error(String(value));
+};
+
 const classifySyncError = (error: unknown): string => {
   if (typeof error === "string") {
     if (error.includes("conflict") || error.includes("409")) {
@@ -53,10 +60,15 @@ const persistSyncStatus = async (result: DestinationSyncResult, syncedAt: Date):
     });
 };
 
+const reportAggregateError = (scope: string, error: Error): void => {
+  widelog.error(`sync_aggregate.${scope}`, error);
+};
+
 const syncAggregateRuntime = createSyncAggregateRuntime({
   broadcast: (broadcastUserId, eventName, payload) => {
     broadcastService.emit(broadcastUserId, eventName, payload);
   },
+  onError: reportAggregateError,
   persistSyncStatus,
   redis: refreshLockRedis,
 });
@@ -98,6 +110,7 @@ const processJob = (
     const deadlineController = new AbortController();
     const deadlineTimer = setTimeout(() => deadlineController.abort(), USER_TIMEOUT_MS);
     let flushed = false;
+    const pendingDestinationSyncs: Promise<void>[] = [];
 
     try {
       const abortSignal = mergeAbortSignals(deadlineController.signal, signal);
@@ -132,12 +145,18 @@ const processJob = (
             return;
           }
 
-          syncAggregateRuntime.onDestinationSync({
-            userId,
-            calendarId,
-            localEventCount: resolveCount(localCount),
-            remoteEventCount: resolveCount(remoteCount),
-          });
+          pendingDestinationSyncs.push(
+            syncAggregateRuntime
+              .onDestinationSync({
+                userId,
+                calendarId,
+                localEventCount: resolveCount(localCount),
+                remoteEventCount: resolveCount(remoteCount),
+              })
+              .catch((error: unknown) => {
+                reportAggregateError("destination-sync", toError(error));
+              }),
+          );
         },
         onCalendarComplete: (completion) => {
           widelog.set("provider.name", completion.provider);
@@ -181,6 +200,7 @@ const processJob = (
       widelog.errorFields(error, { slug: "push-sync-failed" });
       throw error;
     } finally {
+      await Promise.all(pendingDestinationSyncs);
       clearTimeout(deadlineTimer);
       if (deadlineController.signal.aborted) {
         widelog.set("timeout.fired", true);

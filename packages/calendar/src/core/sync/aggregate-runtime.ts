@@ -7,10 +7,32 @@ import type { SyncAggregateMessage, SyncAggregateSnapshot } from "./aggregate-tr
 const SYNC_AGGREGATE_LATEST_KEY_PREFIX = "sync:aggregate:latest:";
 const SYNC_AGGREGATE_SEQUENCE_KEY_PREFIX = "sync:aggregate:seq:";
 
+const MILLISECONDS_PER_MINUTE = 60_000;
+const STALE_SYNCING_THRESHOLD_MINUTES = 10;
+const STALE_SYNCING_THRESHOLD_MS = STALE_SYNCING_THRESHOLD_MINUTES * MILLISECONDS_PER_MINUTE;
+
+const SET_LATEST_IF_NEWER_LUA = `
+local current = redis.call('GET', KEYS[1])
+if current then
+  local ok, decoded = pcall(cjson.decode, current)
+  if ok and type(decoded) == 'table' then
+    local currentSeq = tonumber(decoded.seq)
+    if currentSeq and currentSeq >= tonumber(ARGV[2]) then
+      return 0
+    end
+  end
+end
+redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[3])
+return 1
+`;
+
+type SyncAggregateErrorScope = "emit" | "emit-queue" | "cache-read";
+
 interface SyncAggregateRuntimeConfig {
   redis: Redis;
   broadcast: (userId: string, eventName: string, data: unknown) => void;
   persistSyncStatus: (result: DestinationSyncResult, syncedAt: Date) => Promise<void>;
+  onError: (scope: SyncAggregateErrorScope, error: Error) => void;
   tracker?: SyncAggregateTracker;
 }
 
@@ -18,7 +40,7 @@ interface SyncAggregateRuntime {
   emitSyncAggregate: (userId: string, aggregate: SyncAggregateMessage) => Promise<void>;
   onDestinationSync: (result: DestinationSyncResult) => Promise<void>;
   onSyncProgress: (update: SyncProgressUpdate) => void;
-  holdSyncing: (userId: string) => void;
+  beginSyncRun: (userId: string) => void;
   releaseSyncing: (userId: string) => Promise<void>;
   getCurrentSyncAggregate: (
     userId: string,
@@ -38,6 +60,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const isNumberField = (value: unknown): value is number => typeof value === "number";
 
+const toError = (value: unknown): Error => {
+  if (value instanceof Error) {
+    return value;
+  }
+  return new Error(String(value));
+};
+
 const isSyncAggregateMessage = (value: unknown): value is SyncAggregateMessage => {
   if (!isRecord(value)) {
     return false;
@@ -50,6 +79,10 @@ const isSyncAggregateMessage = (value: unknown): value is SyncAggregateMessage =
     }
   }
 
+  if ("emittedAt" in value && typeof value.emittedAt !== "string") {
+    return false;
+  }
+
   return (
     isNumberField(value.progressPercent) &&
     isNumberField(value.seq) &&
@@ -60,10 +93,28 @@ const isSyncAggregateMessage = (value: unknown): value is SyncAggregateMessage =
   );
 };
 
+const isStaleSyncingAggregate = (aggregate: SyncAggregateMessage): boolean => {
+  if (!aggregate.syncing) {
+    return false;
+  }
+
+  if (typeof aggregate.emittedAt !== "string") {
+    return true;
+  }
+
+  const emittedAtMs = Date.parse(aggregate.emittedAt);
+  if (!Number.isFinite(emittedAtMs)) {
+    return true;
+  }
+
+  return Date.now() - emittedAtMs > STALE_SYNCING_THRESHOLD_MS;
+};
+
 const createSyncAggregateRuntime = (config: SyncAggregateRuntimeConfig): SyncAggregateRuntime => {
   const tracker = config.tracker ?? new SyncAggregateTracker();
+  const emitQueueByUser = new Map<string, Promise<void>>();
 
-  const emitSyncAggregate = async (
+  const performEmit = async (
     userId: string,
     aggregate: SyncAggregateMessage,
   ): Promise<void> => {
@@ -72,16 +123,40 @@ const createSyncAggregateRuntime = (config: SyncAggregateRuntimeConfig): SyncAgg
       const sequence = await config.redis.incr(sequenceKey);
       await config.redis.expire(sequenceKey, SYNC_TTL_SECONDS);
 
-      const payload: SyncAggregateMessage = { ...aggregate, seq: sequence };
+      const payload: SyncAggregateMessage = {
+        ...aggregate,
+        emittedAt: new Date().toISOString(),
+        seq: sequence,
+      };
 
-      const latestKey = getSyncAggregateLatestKey(userId);
-      await config.redis.set(latestKey, JSON.stringify(payload));
-      await config.redis.expire(latestKey, SYNC_TTL_SECONDS);
+      await config.redis.eval(
+        SET_LATEST_IF_NEWER_LUA,
+        1,
+        getSyncAggregateLatestKey(userId),
+        JSON.stringify(payload),
+        String(sequence),
+        String(SYNC_TTL_SECONDS),
+      );
 
       config.broadcast(userId, "sync:aggregate", payload);
-    } catch {
+    } catch (error) {
+      config.onError("emit", toError(error));
       config.broadcast(userId, "sync:aggregate", aggregate);
     }
+  };
+
+  const emitSyncAggregate = (
+    userId: string,
+    aggregate: SyncAggregateMessage,
+  ): Promise<void> => {
+    const previous = emitQueueByUser.get(userId) ?? Promise.resolve();
+    const next = previous.then(() => performEmit(userId, aggregate));
+    const settled = next.catch((error: unknown) => {
+      config.onError("emit-queue", toError(error));
+    });
+    emitQueueByUser.set(userId, settled);
+
+    return next;
   };
 
   const onDestinationSync = async (result: DestinationSyncResult): Promise<void> => {
@@ -90,11 +165,14 @@ const createSyncAggregateRuntime = (config: SyncAggregateRuntimeConfig): SyncAgg
     }
 
     const syncedAt = new Date();
-    await config.persistSyncStatus(result, syncedAt);
 
-    const aggregate = tracker.trackDestinationSync(result, syncedAt.toISOString());
-    if (aggregate) {
-      await emitSyncAggregate(result.userId, aggregate);
+    try {
+      await config.persistSyncStatus(result, syncedAt);
+    } finally {
+      const aggregate = tracker.trackDestinationSync(result, syncedAt.toISOString());
+      if (aggregate) {
+        await emitSyncAggregate(result.userId, aggregate);
+      }
     }
   };
 
@@ -121,16 +199,23 @@ const createSyncAggregateRuntime = (config: SyncAggregateRuntimeConfig): SyncAgg
       }
 
       const parsed: unknown = JSON.parse(value);
-      if (isSyncAggregateMessage(parsed)) {
-        return parsed;
+      if (!isSyncAggregateMessage(parsed)) {
+        return null;
       }
-      return null;
-    } catch {
+
+      if (isStaleSyncingAggregate(parsed)) {
+        return null;
+      }
+
+      return parsed;
+    } catch (error) {
+      config.onError("cache-read", toError(error));
       return null;
     }
   };
 
-  const holdSyncing = (userId: string): void => {
+  const beginSyncRun = (userId: string): void => {
+    tracker.resetUser(userId);
     tracker.holdSyncing(userId);
   };
 
@@ -145,7 +230,7 @@ const createSyncAggregateRuntime = (config: SyncAggregateRuntimeConfig): SyncAgg
     emitSyncAggregate,
     onDestinationSync,
     onSyncProgress,
-    holdSyncing,
+    beginSyncRun,
     releaseSyncing,
     getCurrentSyncAggregate,
     getCachedSyncAggregate,
