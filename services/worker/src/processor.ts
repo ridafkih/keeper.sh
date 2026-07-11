@@ -61,14 +61,7 @@ const persistSyncStatus = async (result: DestinationSyncResult, syncedAt: Date):
 };
 
 const reportAggregateError = (scope: string, error: Error): void => {
-  context(() => {
-    widelog.set("operation.name", "sync-aggregate");
-    widelog.set("operation.type", "background");
-    widelog.set("aggregate.scope", scope);
-    widelog.set("outcome", "error");
-    widelog.errorFields(error, { slug: "sync-aggregate-failed" });
-    widelog.flush();
-  });
+  widelog.error(`sync_aggregate.${scope}`, error);
 };
 
 const syncAggregateRuntime = createSyncAggregateRuntime({
