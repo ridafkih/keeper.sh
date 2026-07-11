@@ -11,6 +11,7 @@ import {
   buildOAuthConfigs,
   createSyncAggregateRuntime,
 } from "@keeper.sh/calendar";
+import { context, widelog } from "@/utils/logging";
 import type { OAuthStateStore, RefreshLockStore, DestinationSyncResult } from "@keeper.sh/calendar";
 
 const MIN_TRUSTED_ORIGINS_COUNT = 0;
@@ -112,10 +113,22 @@ const persistSyncStatus = async (
     });
 };
 
+const reportSyncAggregateError = (scope: string, error: Error): void => {
+  context(() => {
+    widelog.set("operation.name", "sync-aggregate");
+    widelog.set("operation.type", "background");
+    widelog.set("aggregate.scope", scope);
+    widelog.set("outcome", "error");
+    widelog.errorFields(error, { slug: "sync-aggregate-failed" });
+    widelog.flush();
+  });
+};
+
 const syncAggregateRuntime = createSyncAggregateRuntime({
   broadcast: (userId, eventName, payload): void => {
     broadcastService.emit(userId, eventName, payload);
   },
+  onError: reportSyncAggregateError,
   persistSyncStatus,
   redis,
 });

@@ -218,6 +218,7 @@ const syncStatusSchema = type({
 type SyncStatus = typeof syncStatusSchema.infer;
 
 const syncAggregateSchema = type({
+  "emittedAt?": "string",
   progressPercent: "number",
   seq: "number",
   syncEventsProcessed: "number",

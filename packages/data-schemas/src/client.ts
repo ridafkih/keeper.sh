@@ -4,6 +4,7 @@ interface SocketMessage {
 }
 
 interface SyncAggregate {
+  emittedAt?: string;
   progressPercent: number;
   seq: number;
   syncEventsProcessed: number;

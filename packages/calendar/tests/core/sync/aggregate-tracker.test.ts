@@ -284,6 +284,59 @@ describe("SyncAggregateTracker", () => {
     });
   });
 
+  describe("resetUser", () => {
+    it("clears accumulated progress so totals do not carry across runs", () => {
+      const tracker = new SyncAggregateTracker({ progressThrottleMs: 0 });
+
+      tracker.trackProgress(
+        createProgressUpdate({ progress: { current: 176, total: 3689 } }),
+      );
+
+      tracker.resetUser("user-1");
+
+      const aggregate = tracker.getCurrentAggregate("user-1");
+      expect(aggregate.syncEventsTotal).toBe(0);
+      expect(aggregate.syncEventsProcessed).toBe(0);
+      expect(aggregate.syncing).toBe(false);
+      expect(aggregate.progressPercent).toBe(100);
+    });
+
+    it("does not affect other users", () => {
+      const tracker = new SyncAggregateTracker({ progressThrottleMs: 0 });
+
+      tracker.trackProgress(
+        createProgressUpdate({ progress: { current: 3, total: 10 }, userId: "user-2" }),
+      );
+
+      tracker.resetUser("user-1");
+
+      const aggregate = tracker.getCurrentAggregate("user-2");
+      expect(aggregate.syncEventsTotal).toBe(10);
+    });
+  });
+
+  describe("stale count resurrection", () => {
+    it("does not revive finalized counts when a new run starts without progress", () => {
+      const tracker = new SyncAggregateTracker({ progressThrottleMs: 0 });
+
+      tracker.trackProgress(
+        createProgressUpdate({ progress: { current: 5, total: 10 } }),
+      );
+      tracker.trackDestinationSync(
+        createDestinationResult(),
+        "2026-03-08T12:00:00.000Z",
+      );
+
+      const result = tracker.trackProgress(
+        createProgressUpdate({ stage: "fetching" }),
+      );
+
+      const aggregateMessage = requireAggregateMessage(result);
+      expect(aggregateMessage.syncEventsTotal).toBe(0);
+      expect(aggregateMessage.syncEventsProcessed).toBe(0);
+    });
+  });
+
   describe("calculatePercent", () => {
     it("returns 100% when not syncing and total is zero", () => {
       const tracker = new SyncAggregateTracker({ progressThrottleMs: 0 });

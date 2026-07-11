@@ -56,7 +56,7 @@ await entry({
       }
 
       activeJobsByUser.set(userId, job.id ?? "");
-      syncAggregateRuntime.holdSyncing(userId);
+      syncAggregateRuntime.beginSyncRun(userId);
     });
 
     worker.on("completed", (job) => {
