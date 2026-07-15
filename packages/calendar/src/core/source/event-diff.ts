@@ -157,18 +157,34 @@ const buildSourceEventStateIdsToRemove = (
   const { isDeltaSync = false, cancelledEventUids } = options;
 
   if (isDeltaSync) {
-    if (!cancelledEventUids || cancelledEventUids.length === 0) {
-      return [];
-    }
-
     const cancelledUidSet = new Set(cancelledEventUids);
+    const changedUidSet = new Set(normalizedIncomingEvents.map((event) => event.uid));
+    const incomingStorageIdentitySet = new Set(
+      normalizedIncomingEvents.map((event) =>
+        buildSourceEventStorageIdentityKey(event.uid, event.startTime, event.endTime)),
+    );
 
     return existingEvents
-      .filter(
-        (existingEvent) =>
-          existingEvent.sourceEventUid !== null
-          && cancelledUidSet.has(existingEvent.sourceEventUid),
-      )
+      .filter((existingEvent) => {
+        if (existingEvent.sourceEventUid === null) {
+          return false;
+        }
+
+        if (cancelledUidSet.has(existingEvent.sourceEventUid)) {
+          return true;
+        }
+
+        if (!changedUidSet.has(existingEvent.sourceEventUid)) {
+          return false;
+        }
+
+        const existingStorageIdentity = buildSourceEventStorageIdentityKey(
+          existingEvent.sourceEventUid,
+          existingEvent.startTime,
+          existingEvent.endTime,
+        );
+        return !incomingStorageIdentitySet.has(existingStorageIdentity);
+      })
       .map((existingEvent) => existingEvent.id);
   }
 

@@ -74,6 +74,43 @@ describe("ingestSource", () => {
     expect(flushCapture[0]?.deletes[0]).toBe("state-1");
   });
 
+  it("deletes the stale event state when a delta event moves", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const existingEvent: ExistingEvent = {
+      availability: null,
+      description: null,
+      endTime: new Date("2026-03-15T10:00:00Z"),
+      id: "state-old-time",
+      isAllDay: null,
+      location: null,
+      sourceEventType: null,
+      sourceEventUid: "uid-moved",
+      startTime: new Date("2026-03-15T09:00:00Z"),
+      title: null,
+    };
+    const movedEvent = makeSourceEvent(
+      "uid-moved",
+      new Date("2026-03-15T11:00:00Z"),
+      new Date("2026-03-15T12:00:00Z"),
+    );
+    const flushCapture: { inserts: SourceEvent[]; deletes: string[] }[] = [];
+
+    const result = await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({ events: [movedEvent], isDeltaSync: true }),
+      flush: (changes) => {
+        flushCapture.push(changes);
+        return Promise.resolve();
+      },
+      readExistingEvents: () => Promise.resolve([existingEvent]),
+    });
+
+    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 1 });
+    expect(flushCapture).toHaveLength(1);
+    expect(flushCapture[0]?.deletes).toEqual(["state-old-time"]);
+    expect(flushCapture[0]?.inserts).toEqual([movedEvent]);
+  });
+
   it("does not flush when there are no changes", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
 
