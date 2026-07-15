@@ -2,6 +2,7 @@ const LOCK_PREFIX = "sync:lock:";
 const SIGNAL_PREFIX = "sync:signal:";
 const INVALIDATION_PREFIX = "sync:invalidated:";
 const LOCK_TTL_SECONDS = 120;
+const LOCK_RENEW_INTERVAL_MS = (LOCK_TTL_SECONDS * 1000) / 3;
 const INVALIDATION_TTL_SECONDS = 300;
 const POLL_INTERVAL_MS = 250;
 const POLL_TIMEOUT_MS = (LOCK_TTL_SECONDS * 1000) + 10_000;
@@ -74,6 +75,15 @@ const RELEASE_SCRIPT = `
   return 0
 `;
 
+const RENEW_SCRIPT = `
+  local holder = redis.call('GET', KEYS[1])
+  if holder == ARGV[1] then
+    redis.call('EXPIRE', KEYS[1], ARGV[2])
+    return 1
+  end
+  return 0
+`;
+
 const createLockHandle = (
   redis: SyncLockRedis,
   lockKey: string,
@@ -81,13 +91,20 @@ const createLockHandle = (
   invalidationKey: string,
   holderId: string,
 ): SyncLockHandle => {
+  const renewalTimer = setInterval(() => {
+    redis
+      .eval(RENEW_SCRIPT, 1, lockKey, holderId, String(LOCK_TTL_SECONDS))
+      .catch(() => false);
+  }, LOCK_RENEW_INTERVAL_MS);
+
   const isCurrent = async (): Promise<boolean> => {
-    const [pendingWaiter, invalidated] = await Promise.all([
+    const [lockHolder, pendingWaiter, invalidated] = await Promise.all([
+      redis.get(lockKey),
       redis.get(signalKey),
       redis.get(invalidationKey),
     ]);
 
-    if (invalidated !== null) {
+    if (lockHolder !== holderId || invalidated !== null) {
       return false;
     }
 
@@ -95,6 +112,7 @@ const createLockHandle = (
   };
 
   const release = async (): Promise<void> => {
+    clearInterval(renewalTimer);
     await redis.eval(RELEASE_SCRIPT, 1, lockKey, holderId);
   };
 
@@ -174,5 +192,5 @@ const isCalendarInvalidated = async (redis: SyncLockRedis, calendarId: string): 
   return value !== null;
 };
 
-export { createSyncLock, invalidateCalendar, isCalendarInvalidated, LOCK_PREFIX, SIGNAL_PREFIX, INVALIDATION_PREFIX, LOCK_TTL_SECONDS, INVALIDATION_TTL_SECONDS, POLL_INTERVAL_MS };
+export { createSyncLock, invalidateCalendar, isCalendarInvalidated, LOCK_PREFIX, SIGNAL_PREFIX, INVALIDATION_PREFIX, LOCK_TTL_SECONDS, LOCK_RENEW_INTERVAL_MS, INVALIDATION_TTL_SECONDS, POLL_INTERVAL_MS };
 export type { SyncLockHandle, SyncLockRedis, InvalidationRedis, AcquireSyncLockResult, SyncLockSkippedResult };

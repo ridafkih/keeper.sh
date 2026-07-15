@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createSyncLock, LOCK_PREFIX, SIGNAL_PREFIX, POLL_INTERVAL_MS } from "../src/sync-lock";
+import {
+  createSyncLock,
+  LOCK_PREFIX,
+  LOCK_RENEW_INTERVAL_MS,
+  LOCK_TTL_SECONDS,
+  SIGNAL_PREFIX,
+  POLL_INTERVAL_MS,
+} from "../src/sync-lock";
 
 const createMockRedis = () => {
   const store = new Map<string, { value: string; expiresAt: number | null }>();
@@ -74,6 +81,17 @@ const createMockRedis = () => {
         return Promise.resolve("replaced");
       }
       return Promise.resolve("queued");
+    }
+
+    if (script.includes("EXPIRE")) {
+      const holderId = args[1] ?? "";
+      const ttlSeconds = Number(args[2]);
+      const holder = readValue(lockKey);
+      if (holder === holderId) {
+        set(lockKey, holderId, "EX", ttlSeconds);
+        return Promise.resolve(1);
+      }
+      return Promise.resolve(0);
     }
 
     // RELEASE_SCRIPT (has one key)
@@ -164,6 +182,50 @@ describe("createSyncLock", () => {
 
       const current = await firstResult.handle.isCurrent();
       expect(current).toBe(false);
+    });
+
+    it("returns false when the holder no longer owns the lock key", async () => {
+      const { redis, syncLock } = makeSyncLock();
+      const result = await syncLock.acquire("cal-1");
+
+      if (!result.acquired) {
+        throw new Error("expected acquired");
+      }
+
+      redis.del(`${LOCK_PREFIX}cal-1`);
+
+      expect(await result.handle.isCurrent()).toBe(false);
+    });
+
+    it("returns false when another holder owns the lock key", async () => {
+      const { redis, syncLock } = makeSyncLock();
+      const result = await syncLock.acquire("cal-1");
+
+      if (!result.acquired) {
+        throw new Error("expected acquired");
+      }
+
+      redis.set(`${LOCK_PREFIX}cal-1`, "replacement-holder");
+
+      expect(await result.handle.isCurrent()).toBe(false);
+    });
+  });
+
+  describe("renewal", () => {
+    it("renews the lock before its original TTL expires", async () => {
+      const { redis, syncLock } = makeSyncLock();
+      const result = await syncLock.acquire("cal-1");
+
+      if (!result.acquired) {
+        throw new Error("expected acquired");
+      }
+
+      vi.advanceTimersByTime((LOCK_TTL_SECONDS * 1000) + LOCK_RENEW_INTERVAL_MS);
+      await flushAsync();
+
+      expect(await redis.get(`${LOCK_PREFIX}cal-1`)).not.toBeNull();
+      expect(await result.handle.isCurrent()).toBe(true);
+      await result.handle.release();
     });
   });
 
