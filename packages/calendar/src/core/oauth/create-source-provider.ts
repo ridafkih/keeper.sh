@@ -37,6 +37,7 @@ interface OAuthSourceAccount {
 
 interface SourceProvider {
   syncAllSources(): Promise<SourceSyncResult>;
+  syncSourcesForUser(userId: string): Promise<SourceSyncResult>;
 }
 
 interface CreateOAuthSourceProviderOptions<
@@ -47,6 +48,7 @@ interface CreateOAuthSourceProviderOptions<
   oauthProvider: OAuthTokenProvider;
   refreshLockStore?: RefreshLockStore | null;
   getAllSources: (database: BunSQLDatabase) => Promise<TAccount[]>;
+  getSourcesForUser?: (database: BunSQLDatabase, userId: string) => Promise<TAccount[]>;
   createProviderInstance: (
     config: TConfig,
     oauthProvider: OAuthTokenProvider,
@@ -60,11 +62,17 @@ const createOAuthSourceProvider = <
 >(
   options: CreateOAuthSourceProviderOptions<TAccount, TConfig>,
 ): SourceProvider => {
-  const { database, oauthProvider, refreshLockStore, getAllSources, createProviderInstance, buildConfig } = options;
+  const {
+    database,
+    oauthProvider,
+    refreshLockStore,
+    getAllSources,
+    getSourcesForUser,
+    createProviderInstance,
+    buildConfig,
+  } = options;
 
-  const syncAllSources = async (): Promise<SourceSyncResult> => {
-    const sources = await getAllSources(database);
-
+  const syncSources = async (sources: TAccount[]): Promise<SourceSyncResult> => {
     if (sources.length === EMPTY_SOURCES_COUNT) {
       return { eventsAdded: INITIAL_ADDED_COUNT, eventsRemoved: INITIAL_REMOVED_COUNT };
     }
@@ -123,7 +131,12 @@ const createOAuthSourceProvider = <
     return combined;
   };
 
-  return { syncAllSources };
+  const syncAllSources = async (): Promise<SourceSyncResult> =>
+    syncSources(await getAllSources(database));
+  const syncSourcesForUser = async (userId: string): Promise<SourceSyncResult> =>
+    syncSources(await (getSourcesForUser?.(database, userId) ?? getAllSources(database)));
+
+  return { syncAllSources, syncSourcesForUser };
 };
 
 export { createOAuthSourceProvider };

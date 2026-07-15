@@ -239,7 +239,16 @@ interface CreateGoogleSourceProviderConfig {
 
 const getGoogleSourcesWithCredentials = async (
   database: BunSQLDatabase,
+  userId?: string,
 ): Promise<GoogleSourceAccount[]> => {
+  const sourceConditions = [
+    eq(calendarsTable.calendarType, "oauth"),
+    arrayContains(calendarsTable.capabilities, ["pull"]),
+    eq(calendarAccountsTable.provider, GOOGLE_PROVIDER_ID),
+  ];
+  if (userId) {
+    sourceConditions.push(eq(calendarsTable.userId, userId));
+  }
   const sources = await database
     .select({
       accessToken: oauthCredentialsTable.accessToken,
@@ -264,13 +273,7 @@ const getGoogleSourcesWithCredentials = async (
       oauthCredentialsTable,
       eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id),
     )
-    .where(
-      and(
-        eq(calendarsTable.calendarType, "oauth"),
-        arrayContains(calendarsTable.capabilities, ["pull"]),
-        eq(calendarAccountsTable.provider, GOOGLE_PROVIDER_ID),
-      ),
-    );
+    .where(and(...sourceConditions));
 
   return sources.flatMap((source) => {
     if (!source.externalCalendarId) {return [];}
@@ -307,7 +310,8 @@ const createGoogleCalendarSourceProvider = (
     createProviderInstance: (providerConfig, oauth) =>
       new GoogleCalendarSourceProvider(providerConfig, oauth),
     database,
-    getAllSources: getGoogleSourcesWithCredentials,
+    getAllSources: (db) => getGoogleSourcesWithCredentials(db),
+    getSourcesForUser: getGoogleSourcesWithCredentials,
     oauthProvider,
     refreshLockStore,
   });

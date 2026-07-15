@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import type { ProcessEventsOptions } from "../../../../src/core/oauth/source-provider";
 import type { SourceEvent, SourceSyncResult } from "../../../../src/core/types";
-import { GoogleCalendarSourceProvider } from "../../../../src/providers/google/source/provider";
+import {
+  createGoogleCalendarSourceProvider,
+  GoogleCalendarSourceProvider,
+} from "../../../../src/providers/google/source/provider";
 
 const originalFetch = globalThis.fetch;
 
@@ -30,6 +35,33 @@ class TestableGoogleCalendarSourceProvider extends GoogleCalendarSourceProvider 
 describe("GoogleCalendarSourceProvider", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
+  });
+
+  it("scopes user-triggered source queries to the requested user", async () => {
+    const captured: { query: { sql: string; params: unknown[] } | null } = { query: null };
+    const selectBuilder = {
+      innerJoin: () => selectBuilder,
+      where: (condition: SQL) => {
+        captured.query = new PgDialect().sqlToQuery(condition);
+        return Promise.resolve([]);
+      },
+    };
+    const mockDatabase = {
+      select: () => ({
+        from: () => selectBuilder,
+      }),
+    } as unknown as BunSQLDatabase;
+    const provider = createGoogleCalendarSourceProvider({
+      database: mockDatabase,
+      oauthProvider: {
+        refreshAccessToken: () => Promise.reject(new Error("No sources should be synced")),
+      },
+    });
+
+    await provider.syncSourcesForUser("user-1");
+
+    expect(captured.query?.sql).toContain('"calendars"."userId" =');
+    expect(captured.query?.params).toContain("user-1");
   });
 
   it("removes out-of-range events directly without triggering full resync", async () => {
