@@ -519,6 +519,13 @@
       "when": 1782849346106,
       "tag": "0073_treat_full_day_timed_events",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1784109119010,
+      "tag": "0074_conscious_absorbing_man",
+      "breakpoints": true
     }
   ]
 }
