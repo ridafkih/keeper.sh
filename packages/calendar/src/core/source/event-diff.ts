@@ -6,10 +6,14 @@ interface ExistingSourceEventState {
   id: string;
   isAllDay?: boolean | null;
   location?: string | null;
+  exceptionDates?: object | string | null;
+  recurrenceId?: Date | null;
+  recurrenceRule?: object | string | null;
   sourceEventType?: string | null;
   sourceEventId?: string | null;
   sourceEventUid: string | null;
   startTime: Date;
+  startTimeZone?: string | null;
   endTime: Date;
   title?: string | null;
 }
@@ -38,6 +42,48 @@ const normalizeIdentityIsAllDay = (
 const normalizeIdentityContent = (value: string | null | undefined): string =>
   value?.trim() ?? "";
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
+const toStableComparableValue = (value: unknown): unknown => {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => toStableComparableValue(entry));
+  }
+
+  if (isRecord(value)) {
+    const entries = Object.entries(value)
+      .toSorted(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+      .map(([key, nestedValue]) => [key, toStableComparableValue(nestedValue)]);
+    return Object.fromEntries(entries);
+  }
+
+  return value;
+};
+
+const parseStoredStructuredValue = (value: unknown): unknown => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+};
+
+const serializeIdentityValue = (value: unknown): string => {
+  if (value === null || value === globalThis.undefined) {
+    return "";
+  }
+
+  return JSON.stringify(toStableComparableValue(parseStoredStructuredValue(value)));
+};
+
 interface SourceEventIdentityInput {
   sourceEventId?: string | null;
   sourceEventUid: string;
@@ -49,6 +95,10 @@ interface SourceEventIdentityInput {
   title?: string | null;
   description?: string | null;
   location?: string | null;
+  exceptionDates?: object | string | null;
+  recurrenceId?: Date | null;
+  recurrenceRule?: object | string | null;
+  startTimeZone?: string | null;
 }
 
 const buildSourceEventIdentityKey = (
@@ -66,6 +116,10 @@ const buildSourceEventIdentityKey = (
     normalizeIdentityContent(input.title),
     normalizeIdentityContent(input.description),
     normalizeIdentityContent(input.location),
+    normalizeIdentityContent(input.startTimeZone),
+    serializeIdentityValue(input.recurrenceRule),
+    serializeIdentityValue(input.exceptionDates),
+    input.recurrenceId?.toISOString() ?? "",
   ].join("|");
 
 const buildSourceEventStorageIdentityKey = (
@@ -111,12 +165,16 @@ const buildExistingEventIdentitySet = (
           availability: existingEvent.availability,
           description: existingEvent.description,
           endTime: existingEvent.endTime,
+          exceptionDates: existingEvent.exceptionDates,
           isAllDay: existingEvent.isAllDay,
           location: existingEvent.location,
+          recurrenceId: existingEvent.recurrenceId,
+          recurrenceRule: existingEvent.recurrenceRule,
           sourceEventType: existingEvent.sourceEventType,
           sourceEventId: existingEvent.sourceEventId,
           sourceEventUid: existingEvent.sourceEventUid,
           startTime: existingEvent.startTime,
+          startTimeZone: existingEvent.startTimeZone,
           title: existingEvent.title,
         },
         options,
@@ -145,12 +203,16 @@ const buildSourceEventsToAdd = (
             availability: incomingEvent.availability,
             description: incomingEvent.description,
             endTime: incomingEvent.endTime,
+            exceptionDates: incomingEvent.exceptionDates,
             isAllDay: incomingEvent.isAllDay,
             location: incomingEvent.location,
+            recurrenceId: incomingEvent.recurrenceId,
+            recurrenceRule: incomingEvent.recurrenceRule,
             sourceEventType: incomingEvent.sourceEventType,
             sourceEventId: incomingEvent.sourceEventId,
             sourceEventUid: incomingEvent.uid,
             startTime: incomingEvent.startTime,
+            startTimeZone: incomingEvent.startTimeZone,
             title: incomingEvent.title,
           },
           { normalizeMissingMetadata: options.isDeltaSync ?? false },

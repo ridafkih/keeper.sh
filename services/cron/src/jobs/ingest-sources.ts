@@ -154,13 +154,17 @@ const readExistingEvents = (calendarId: string) =>
       availability: eventStatesTable.availability,
       description: eventStatesTable.description,
       endTime: eventStatesTable.endTime,
+      exceptionDates: eventStatesTable.exceptionDates,
       id: eventStatesTable.id,
       isAllDay: eventStatesTable.isAllDay,
       location: eventStatesTable.location,
+      recurrenceId: eventStatesTable.recurrenceId,
+      recurrenceRule: eventStatesTable.recurrenceRule,
       sourceEventType: eventStatesTable.sourceEventType,
       sourceEventId: eventStatesTable.sourceEventId,
       sourceEventUid: eventStatesTable.sourceEventUid,
       startTime: eventStatesTable.startTime,
+      startTimeZone: eventStatesTable.startTimeZone,
       title: eventStatesTable.title,
     })
     .from(eventStatesTable)

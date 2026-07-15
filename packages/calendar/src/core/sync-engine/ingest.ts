@@ -13,6 +13,10 @@ interface ExistingEventState {
   title: string | null;
   description: string | null;
   location: string | null;
+  exceptionDates?: string | null;
+  recurrenceId?: Date | null;
+  recurrenceRule?: string | null;
+  startTimeZone?: string | null;
 }
 
 interface FetchEventsResult {

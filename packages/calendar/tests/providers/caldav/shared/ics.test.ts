@@ -17,6 +17,13 @@ const buildVevent = (fields: Record<string, string>): string => [
   "END:VEVENT",
 ].join("\r\n");
 
+const serializeOptionalStructuredValue = (value: object | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+  return JSON.stringify(value);
+};
+
 const toSourceEvent = (parsed: ReturnType<typeof parseICalToRemoteEvents>[number]): SourceEvent => ({
   availability: parsed.availability,
   description: parsed.description,
@@ -24,6 +31,7 @@ const toSourceEvent = (parsed: ReturnType<typeof parseICalToRemoteEvents>[number
   exceptionDates: parsed.exceptionDates,
   isAllDay: parsed.isAllDay,
   location: parsed.location,
+  recurrenceId: parsed.recurrenceId,
   recurrenceRule: parsed.recurrenceRule,
   startTime: parsed.startTime,
   startTimeZone: parsed.startTimeZone,
@@ -331,9 +339,13 @@ describe("duplicate prevention with multi-VEVENT parsing", () => {
       endTime: event.endTime,
       availability: event.availability,
       description: event.description,
+      exceptionDates: serializeOptionalStructuredValue(event.exceptionDates),
       isAllDay: event.isAllDay,
       location: event.location,
+      recurrenceId: event.recurrenceId,
+      recurrenceRule: serializeOptionalStructuredValue(event.recurrenceRule),
       sourceEventType: "default" as const,
+      startTimeZone: event.startTimeZone,
       title: event.title,
     }));
 
@@ -436,9 +448,13 @@ describe("transition from old single-event to new multi-event parsing", () => {
       endTime: oldCodeResult.endTime,
       availability: oldCodeResult.availability,
       description: oldCodeResult.description,
+      exceptionDates: serializeOptionalStructuredValue(oldCodeResult.exceptionDates),
       isAllDay: oldCodeResult.isAllDay,
       location: oldCodeResult.location,
+      recurrenceId: oldCodeResult.recurrenceId,
+      recurrenceRule: serializeOptionalStructuredValue(oldCodeResult.recurrenceRule),
       sourceEventType: "default" as const,
+      startTimeZone: oldCodeResult.startTimeZone,
       title: oldCodeResult.title,
     }];
 
