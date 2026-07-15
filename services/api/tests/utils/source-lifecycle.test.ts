@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { CalendarFetchError } from "@keeper.sh/calendar/ics";
 import {
   SourceLimitError,
+  runSourceCreationPreflight,
   runCreateSource,
 } from "../../src/utils/source-lifecycle";
+import type { InvalidSourceUrlError } from "../../src/utils/source-lifecycle";
 
 interface TestSource {
   id: string;
@@ -27,6 +29,74 @@ const createSourceRecord = (overrides: Partial<TestSource> = {}): TestSource => 
 const missingSourceLifecycleCallback = (): Promise<void> =>
   Promise.reject(new Error("Expected background callback"));
 
+describe("runSourceCreationPreflight", () => {
+  it("rejects source creation before validation when the plan limit is exceeded", async () => {
+    let validationCalls = 0;
+
+    await expect(
+      runSourceCreationPreflight(
+        {
+          name: "Team Feed",
+          url: "https://example.com/team.ics",
+          userId: "user-1",
+        },
+        {
+          canAddAccount: () => Promise.resolve(false),
+          countExistingAccounts: () => Promise.resolve(3),
+          validateSourceUrl: () => {
+            validationCalls += 1;
+            return Promise.resolve();
+          },
+        },
+      ),
+    ).rejects.toBeInstanceOf(SourceLimitError);
+
+    expect(validationCalls).toBe(0);
+  });
+
+  it("wraps CalendarFetchError details in InvalidSourceUrlError", async () => {
+    const rejection = new CalendarFetchError("auth needed", 401);
+
+    await expect(
+      runSourceCreationPreflight(
+        {
+          name: "Team Feed",
+          url: "https://example.com/private.ics",
+          userId: "user-1",
+        },
+        {
+          canAddAccount: () => Promise.resolve(true),
+          countExistingAccounts: () => Promise.resolve(0),
+          validateSourceUrl: () => Promise.reject(rejection),
+        },
+      ),
+    ).rejects.toMatchObject({
+      authRequired: true,
+      message: "auth needed",
+    });
+  });
+
+  it("wraps unknown validation failures without exposing their details", async () => {
+    await expect(
+      runSourceCreationPreflight(
+        {
+          name: "Team Feed",
+          url: "https://example.com/broken.ics",
+          userId: "user-1",
+        },
+        {
+          canAddAccount: () => Promise.resolve(true),
+          countExistingAccounts: () => Promise.resolve(0),
+          validateSourceUrl: () => Promise.reject(new Error("internal detail")),
+        },
+      ),
+    ).rejects.toEqual(expect.objectContaining<Partial<InvalidSourceUrlError>>({
+      authRequired: false,
+      message: "Invalid calendar URL",
+    }));
+  });
+});
+
 describe("runCreateSource", () => {
   it("rejects source creation when plan limit is exceeded", async () => {
     await expect(
@@ -45,38 +115,9 @@ describe("runCreateSource", () => {
           fetchAndSyncSource: () => Promise.resolve(),
           spawnBackgroundJob: Boolean,
           enqueuePushSync: () => Promise.resolve(),
-          validateSourceUrl: () => Promise.resolve(),
         },
       ),
     ).rejects.toBeInstanceOf(SourceLimitError);
-  });
-
-  it("wraps CalendarFetchError details in InvalidSourceUrlError", async () => {
-    const rejection = new CalendarFetchError("auth needed", 401);
-
-    await expect(
-      runCreateSource(
-        {
-          name: "Team Feed",
-          url: "https://example.com/private.ics",
-          userId: "user-1",
-        },
-        {
-          acquireAccountLock: () => Promise.resolve(),
-          canAddAccount: () => Promise.resolve(true),
-          countExistingAccounts: () => Promise.resolve(0),
-          createCalendarAccount: () => Promise.resolve("account-1"),
-          createSourceCalendar: () => Promise.resolve(createSourceRecord()),
-          fetchAndSyncSource: () => Promise.resolve(),
-          spawnBackgroundJob: Boolean,
-          enqueuePushSync: () => Promise.resolve(),
-          validateSourceUrl: () => Promise.reject(rejection),
-        },
-      ),
-    ).rejects.toMatchObject({
-      authRequired: true,
-      message: "auth needed",
-    });
   });
 
   it("creates source and schedules background fetch-sync callback", async () => {
@@ -122,7 +163,6 @@ describe("runCreateSource", () => {
           syncedUserIds.push(userId);
           return Promise.resolve();
         },
-        validateSourceUrl: () => Promise.resolve(),
       },
     );
 
@@ -152,7 +192,6 @@ describe("runCreateSource", () => {
           fetchAndSyncSource: () => Promise.resolve(),
           spawnBackgroundJob: Boolean,
           enqueuePushSync: () => Promise.resolve(),
-          validateSourceUrl: () => Promise.resolve(),
         },
       ),
     ).rejects.toThrow("Failed to create calendar account");
@@ -176,7 +215,6 @@ describe("runCreateSource", () => {
           fetchAndSyncSource: () => Promise.resolve(),
           spawnBackgroundJob: Boolean,
           enqueuePushSync: () => Promise.resolve(),
-          validateSourceUrl: () => Promise.resolve(),
         },
       ),
     ).rejects.toThrow("Failed to create source");
