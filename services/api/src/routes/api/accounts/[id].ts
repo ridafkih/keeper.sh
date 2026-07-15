@@ -52,7 +52,10 @@ const DELETE = withWideEvent(
     }
     const { id } = params;
 
-    await invalidateCalendarsForAccount(database, redis, id);
+    const owned = await invalidateCalendarsForAccount(database, redis, userId, id);
+    if (!owned) {
+      return ErrorResponse.notFound("Account not found").toResponse();
+    }
 
     const [deleted] = await database
       .delete(calendarAccountsTable)
