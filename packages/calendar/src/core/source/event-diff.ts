@@ -7,6 +7,7 @@ interface ExistingSourceEventState {
   isAllDay?: boolean | null;
   location?: string | null;
   sourceEventType?: string | null;
+  sourceEventId?: string | null;
   sourceEventUid: string | null;
   startTime: Date;
   endTime: Date;
@@ -14,8 +15,9 @@ interface ExistingSourceEventState {
 }
 
 interface SourceEventDiffOptions {
+  changedEventIds?: string[];
   isDeltaSync?: boolean;
-  cancelledEventUids?: string[];
+  cancelledEventIds?: string[];
 }
 
 interface SourceEventIdentityOptions {
@@ -37,6 +39,7 @@ const normalizeIdentityContent = (value: string | null | undefined): string =>
   value?.trim() ?? "";
 
 interface SourceEventIdentityInput {
+  sourceEventId?: string | null;
   sourceEventUid: string;
   startTime: Date;
   endTime: Date;
@@ -53,6 +56,7 @@ const buildSourceEventIdentityKey = (
   options: SourceEventIdentityOptions = {},
 ): string =>
   [
+    input.sourceEventId ?? "",
     input.sourceEventUid,
     input.startTime.toISOString(),
     input.endTime.toISOString(),
@@ -70,19 +74,27 @@ const buildSourceEventStorageIdentityKey = (
   endTime: Date,
 ): string => `${sourceEventUid}|${startTime.toISOString()}|${endTime.toISOString()}`;
 
-const deduplicateIncomingEvents = (incomingEvents: SourceEvent[]): SourceEvent[] => {
-  const dedupedByStorageIdentity = new Map<string, SourceEvent>();
+const deduplicateIncomingEvents = (
+  incomingEvents: SourceEvent[],
+  options: SourceEventDiffOptions,
+): SourceEvent[] => {
+  const dedupedEvents = new Map<string, SourceEvent>();
 
   for (const incomingEvent of incomingEvents) {
-    const storageIdentity = buildSourceEventStorageIdentityKey(
+    if (options.isDeltaSync && incomingEvent.sourceEventId) {
+      dedupedEvents.set(`provider:${incomingEvent.sourceEventId}`, incomingEvent);
+      continue;
+    }
+
+    const storageIdentity = `storage:${buildSourceEventStorageIdentityKey(
       incomingEvent.uid,
       incomingEvent.startTime,
       incomingEvent.endTime,
-    );
-    dedupedByStorageIdentity.set(storageIdentity, incomingEvent);
+    )}`;
+    dedupedEvents.set(storageIdentity, incomingEvent);
   }
 
-  return [...dedupedByStorageIdentity.values()];
+  return [...dedupedEvents.values()];
 };
 
 const buildExistingEventIdentitySet = (
@@ -105,6 +117,7 @@ const buildExistingEventIdentitySet = (
           isAllDay: existingEvent.isAllDay,
           location: existingEvent.location,
           sourceEventType: existingEvent.sourceEventType,
+          sourceEventId: existingEvent.sourceEventId,
           sourceEventUid: existingEvent.sourceEventUid,
           startTime: existingEvent.startTime,
           title: existingEvent.title,
@@ -122,7 +135,7 @@ const buildSourceEventsToAdd = (
   incomingEvents: SourceEvent[],
   options: SourceEventDiffOptions = {},
 ): SourceEvent[] => {
-  const normalizedIncomingEvents = deduplicateIncomingEvents(incomingEvents);
+  const normalizedIncomingEvents = deduplicateIncomingEvents(incomingEvents, options);
   const existingIdentities = buildExistingEventIdentitySet(existingEvents, {
     normalizeMissingMetadata: options.isDeltaSync ?? false,
   });
@@ -138,6 +151,7 @@ const buildSourceEventsToAdd = (
             isAllDay: incomingEvent.isAllDay,
             location: incomingEvent.location,
             sourceEventType: incomingEvent.sourceEventType,
+            sourceEventId: incomingEvent.sourceEventId,
             sourceEventUid: incomingEvent.uid,
             startTime: incomingEvent.startTime,
             title: incomingEvent.title,
@@ -153,29 +167,38 @@ const buildSourceEventStateIdsToRemove = (
   incomingEvents: SourceEvent[],
   options: SourceEventDiffOptions = {},
 ): string[] => {
-  const normalizedIncomingEvents = deduplicateIncomingEvents(incomingEvents);
-  const { isDeltaSync = false, cancelledEventUids } = options;
+  const normalizedIncomingEvents = deduplicateIncomingEvents(incomingEvents, options);
+  const { changedEventIds, isDeltaSync = false, cancelledEventIds } = options;
 
   if (isDeltaSync) {
-    const cancelledUidSet = new Set(cancelledEventUids);
-    const changedUidSet = new Set(normalizedIncomingEvents.map((event) => event.uid));
-    const incomingStorageIdentitySet = new Set(
-      normalizedIncomingEvents.map((event) =>
-        buildSourceEventStorageIdentityKey(event.uid, event.startTime, event.endTime)),
+    const changedEventIdSet = new Set(changedEventIds);
+    const cancelledEventIdSet = new Set(cancelledEventIds);
+    const changedEventsById = new Map(
+      normalizedIncomingEvents.flatMap((event) => {
+        if (!event.sourceEventId) {
+          return [];
+        }
+        return [[event.sourceEventId, event] as const];
+      }),
     );
 
     return existingEvents
       .filter((existingEvent) => {
-        if (existingEvent.sourceEventUid === null) {
+        if (!existingEvent.sourceEventId || existingEvent.sourceEventUid === null) {
           return false;
         }
 
-        if (cancelledUidSet.has(existingEvent.sourceEventUid)) {
+        if (cancelledEventIdSet.has(existingEvent.sourceEventId)) {
           return true;
         }
 
-        if (!changedUidSet.has(existingEvent.sourceEventUid)) {
+        if (!changedEventIdSet.has(existingEvent.sourceEventId)) {
           return false;
+        }
+
+        const changedEvent = changedEventsById.get(existingEvent.sourceEventId);
+        if (!changedEvent) {
+          return true;
         }
 
         const existingStorageIdentity = buildSourceEventStorageIdentityKey(
@@ -183,7 +206,12 @@ const buildSourceEventStateIdsToRemove = (
           existingEvent.startTime,
           existingEvent.endTime,
         );
-        return !incomingStorageIdentitySet.has(existingStorageIdentity);
+        const changedStorageIdentity = buildSourceEventStorageIdentityKey(
+          changedEvent.uid,
+          changedEvent.startTime,
+          changedEvent.endTime,
+        );
+        return existingStorageIdentity !== changedStorageIdentity;
       })
       .map((existingEvent) => existingEvent.id);
   }

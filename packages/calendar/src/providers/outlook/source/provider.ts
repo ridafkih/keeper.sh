@@ -86,8 +86,8 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       nextSyncToken: result.nextDeltaLink,
     };
 
-    if (result.cancelledEventUids) {
-      fetchResult.cancelledEventUids = result.cancelledEventUids;
+    if (result.cancelledEventIds) {
+      fetchResult.cancelledEventIds = result.cancelledEventIds;
     }
 
     return fetchResult;
@@ -98,7 +98,8 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
     options: ProcessEventsOptions,
   ): Promise<SourceSyncResult> {
     const { database, calendarId } = this.config;
-    const { nextSyncToken, isDeltaSync, cancelledEventUids } = options;
+    const { nextSyncToken, isDeltaSync, cancelledEventIds } = options;
+    const changedEventIds = events.flatMap((event) => event.sourceEventId ?? []);
     const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
     const {
       events: eventsInWindow,
@@ -120,6 +121,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
         isAllDay: eventStatesTable.isAllDay,
         location: eventStatesTable.location,
         sourceEventType: eventStatesTable.sourceEventType,
+        sourceEventId: eventStatesTable.sourceEventId,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
         title: eventStatesTable.title,
@@ -131,7 +133,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
     const eventStateIdsToRemove = buildSourceEventStateIdsToRemove(
       existingEvents,
       eventsInWindow,
-      { cancelledEventUids, isDeltaSync },
+      { cancelledEventIds, changedEventIds, isDeltaSync },
     );
     const { eventsToInsert, eventsToUpdate } = splitSourceEventsByStorageIdentity(
       existingEvents,
@@ -164,6 +166,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
               location: event.location,
               recurrenceRule: stringifyIfPresent(event.recurrenceRule),
               sourceEventType: event.sourceEventType ?? "default",
+              sourceEventId: event.sourceEventId,
               sourceEventUid: event.uid,
               startTime: event.startTime,
               startTimeZone: event.startTimeZone,

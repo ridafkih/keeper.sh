@@ -84,8 +84,8 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
       nextSyncToken: result.nextSyncToken,
     };
 
-    if (result.cancelledEventUids) {
-      fetchResult.cancelledEventUids = result.cancelledEventUids;
+    if (result.cancelledEventIds) {
+      fetchResult.cancelledEventIds = result.cancelledEventIds;
     }
 
     return fetchResult;
@@ -96,7 +96,8 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
     options: ProcessEventsOptions,
   ): Promise<SourceSyncResult> {
     const { database, calendarId } = this.config;
-    const { nextSyncToken, isDeltaSync, cancelledEventUids } = options;
+    const { nextSyncToken, isDeltaSync, cancelledEventIds } = options;
+    const changedEventIds = events.flatMap((event) => event.sourceEventId ?? []);
     const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
     const {
       events: eventsInWindow,
@@ -118,6 +119,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
         isAllDay: eventStatesTable.isAllDay,
         location: eventStatesTable.location,
         sourceEventType: eventStatesTable.sourceEventType,
+        sourceEventId: eventStatesTable.sourceEventId,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
         title: eventStatesTable.title,
@@ -129,7 +131,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
     const eventStateIdsToRemove = buildSourceEventStateIdsToRemove(
       existingEvents,
       eventsInWindow,
-      { cancelledEventUids, isDeltaSync },
+      { cancelledEventIds, changedEventIds, isDeltaSync },
     );
     const { eventsToInsert, eventsToUpdate } = splitSourceEventsByStorageIdentity(
       existingEvents,
@@ -162,6 +164,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
               location: event.location,
               recurrenceRule: stringifyIfPresent(event.recurrenceRule),
               sourceEventType: event.sourceEventType,
+              sourceEventId: event.sourceEventId,
               sourceEventUid: event.uid,
               startTime: event.startTime,
               startTimeZone: event.startTimeZone,

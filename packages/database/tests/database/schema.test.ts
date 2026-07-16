@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getTableConfig } from "drizzle-orm/pg-core";
-import { calendarAccountsTable } from "../../src/database/schema";
+import { calendarAccountsTable, eventStatesTable } from "../../src/database/schema";
 
 describe("calendar account schema", () => {
   it("enforces provider account identity for OAuth upserts", () => {
@@ -19,6 +19,28 @@ describe("calendar account schema", () => {
     expect(columnNames).toEqual([
       "provider",
       "accountId",
+    ]);
+  });
+});
+
+describe("event state schema", () => {
+  it("enforces one provider occurrence per source calendar", () => {
+    const tableConfig = getTableConfig(eventStatesTable);
+    const sourceEventIndex = tableConfig.indexes.find(
+      (index) => index.config.name === "event_states_source_event_idx",
+    );
+
+    expect(sourceEventIndex?.config.unique).toBe(true);
+    expect(sourceEventIndex?.config.where).toBeDefined();
+    const columnNames = sourceEventIndex?.config.columns.map((column) => {
+      if ("name" in column && typeof column.name === "string") {
+        return column.name;
+      }
+      return null;
+    });
+    expect(columnNames).toEqual([
+      "calendarId",
+      "sourceEventId",
     ]);
   });
 });

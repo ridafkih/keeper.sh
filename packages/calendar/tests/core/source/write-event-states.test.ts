@@ -81,6 +81,7 @@ describe("insertEventStatesWithConflictResolution", () => {
       "location",
       "recurrenceId",
       "recurrenceRule",
+      "sourceEventId",
       "sourceEventType",
       "startTimeZone",
       "title",

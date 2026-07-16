@@ -4,6 +4,7 @@ import {
   encodeStoredSyncToken,
   resolveSyncTokenForWindow,
 } from "../../../src/core/oauth/sync-token";
+import { OAUTH_SYNC_WINDOW_VERSION } from "../../../src/core/oauth/sync-window";
 
 describe("sync token versioning", () => {
   it("treats legacy plain token as version zero", () => {
@@ -29,6 +30,21 @@ describe("sync token versioning", () => {
     const legacyResolution = resolveSyncTokenForWindow("legacy-token", 1);
     expect(legacyResolution.syncToken).toBeNull();
     expect(legacyResolution.requiresBackfill).toBe(true);
+  });
+
+  it("forces a full sync to backfill provider occurrence identity", () => {
+    const tokenBeforeOccurrenceIdentity = encodeStoredSyncToken(
+      "pre-occurrence-identity-token",
+      OAUTH_SYNC_WINDOW_VERSION - 1,
+    );
+
+    expect(resolveSyncTokenForWindow(
+      tokenBeforeOccurrenceIdentity,
+      OAUTH_SYNC_WINDOW_VERSION,
+    )).toEqual({
+      requiresBackfill: true,
+      syncToken: null,
+    });
   });
 
   it("uses token when stored version matches required version", () => {

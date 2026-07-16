@@ -3,6 +3,7 @@ import { buildSourceEventsToAdd, buildSourceEventStateIdsToRemove } from "../sou
 
 interface ExistingEventState {
   id: string;
+  sourceEventId?: string | null;
   sourceEventUid: string | null;
   startTime: Date;
   endTime: Date;
@@ -16,8 +17,9 @@ interface ExistingEventState {
 
 interface FetchEventsResult {
   events: SourceEvent[];
+  changedEventIds?: string[];
   nextSyncToken?: string;
-  cancelledEventUids?: string[];
+  cancelledEventIds?: string[];
   isDeltaSync?: boolean;
   fullSyncRequired?: boolean;
   unchanged?: boolean;
@@ -87,7 +89,8 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       existingEvents,
       fetchResult.events,
       {
-        cancelledEventUids: fetchResult.cancelledEventUids,
+        changedEventIds: fetchResult.changedEventIds,
+        cancelledEventIds: fetchResult.cancelledEventIds,
         isDeltaSync: fetchResult.isDeltaSync ?? false,
       },
     );

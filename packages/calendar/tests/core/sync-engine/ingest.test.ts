@@ -10,6 +10,7 @@ const makeSourceEvent = (uid: string, startTime: Date, endTime: Date): SourceEve
 
 interface ExistingEvent {
   id: string;
+  sourceEventId?: string | null;
   sourceEventUid: string | null;
   startTime: Date;
   endTime: Date;
@@ -20,6 +21,85 @@ interface ExistingEvent {
   description: string | null;
   location: string | null;
 }
+
+interface StatefulIngestion {
+  events: ExistingEvent[];
+  flushes: { inserts: SourceEvent[]; deletes: string[] }[];
+  nextId: number;
+}
+
+const toExistingEvent = (id: string, event: SourceEvent): ExistingEvent => ({
+  availability: event.availability ?? null,
+  description: event.description ?? null,
+  endTime: event.endTime,
+  id,
+  isAllDay: event.isAllDay ?? null,
+  location: event.location ?? null,
+  sourceEventId: event.sourceEventId ?? null,
+  sourceEventType: event.sourceEventType ?? null,
+  sourceEventUid: event.uid,
+  startTime: event.startTime,
+  title: event.title ?? null,
+});
+
+const eventStorageIdentity = (
+  event: Pick<ExistingEvent, "endTime" | "sourceEventUid" | "startTime">,
+): string =>
+  `${event.sourceEventUid}|${event.startTime.toISOString()}|${event.endTime.toISOString()}`;
+
+const createStatefulIngestion = async (initialEvents: SourceEvent[]) => {
+  const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+  const state: StatefulIngestion = {
+    events: initialEvents.map((event, index) => toExistingEvent(`state-${index + 1}`, event)),
+    flushes: [],
+    nextId: initialEvents.length + 1,
+  };
+
+  const ingestDelta = (
+    events: SourceEvent[],
+    cancelledEventIds: string[] = [],
+    changedEventIds: string[] = events.flatMap((event) => event.sourceEventId ?? []),
+  ) => ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({
+        cancelledEventIds,
+        changedEventIds,
+        events,
+        isDeltaSync: true,
+      }),
+      flush: (changes) => {
+        state.flushes.push(changes);
+        const deletedIds = new Set(changes.deletes);
+        state.events = state.events.filter((event) => !deletedIds.has(event.id));
+
+        for (const event of changes.inserts) {
+          const storageIdentity = eventStorageIdentity({
+            endTime: event.endTime,
+            sourceEventUid: event.uid,
+            startTime: event.startTime,
+          });
+          const existingIndex = state.events.findIndex(
+            (existingEvent) => eventStorageIdentity(existingEvent) === storageIdentity,
+          );
+          const existingId = state.events[existingIndex]?.id;
+          const eventStateId = existingId ?? `state-${state.nextId}`;
+          const storedEvent = toExistingEvent(eventStateId, event);
+
+          if (existingIndex === -1) {
+            state.events.push(storedEvent);
+            state.nextId += 1;
+          } else {
+            state.events[existingIndex] = storedEvent;
+          }
+        }
+
+        return Promise.resolve();
+      },
+      readExistingEvents: () => Promise.resolve(state.events),
+    });
+
+  return { ingestDelta, state };
+};
 
 describe("ingestSource", () => {
   it("accumulates event inserts from new source events and flushes at the end", async () => {
@@ -84,20 +164,28 @@ describe("ingestSource", () => {
       isAllDay: null,
       location: null,
       sourceEventType: null,
+      sourceEventId: "provider-event-moved",
       sourceEventUid: "uid-moved",
       startTime: new Date("2026-03-15T09:00:00Z"),
       title: null,
     };
-    const movedEvent = makeSourceEvent(
-      "uid-moved",
-      new Date("2026-03-15T11:00:00Z"),
-      new Date("2026-03-15T12:00:00Z"),
-    );
+    const movedEvent = {
+      ...makeSourceEvent(
+        "uid-moved",
+        new Date("2026-03-15T11:00:00Z"),
+        new Date("2026-03-15T12:00:00Z"),
+      ),
+      sourceEventId: "provider-event-moved",
+    };
     const flushCapture: { inserts: SourceEvent[]; deletes: string[] }[] = [];
 
     const result = await ingestSource({
       calendarId: "cal-1",
-      fetchEvents: () => Promise.resolve({ events: [movedEvent], isDeltaSync: true }),
+      fetchEvents: () => Promise.resolve({
+        changedEventIds: ["provider-event-moved"],
+        events: [movedEvent],
+        isDeltaSync: true,
+      }),
       flush: (changes) => {
         flushCapture.push(changes);
         return Promise.resolve();
@@ -109,6 +197,141 @@ describe("ingestSource", () => {
     expect(flushCapture).toHaveLength(1);
     expect(flushCapture[0]?.deletes).toEqual(["state-old-time"]);
     expect(flushCapture[0]?.inserts).toEqual([movedEvent]);
+  });
+
+  it("keeps recurring siblings while one provider occurrence changes and moves", async () => {
+    const recurringEvents = [
+      {
+        ...makeSourceEvent(
+          "shared-series-uid",
+          new Date("2026-03-02T09:00:00Z"),
+          new Date("2026-03-02T10:00:00Z"),
+        ),
+        sourceEventId: "provider-instance-1",
+      },
+      {
+        ...makeSourceEvent(
+          "shared-series-uid",
+          new Date("2026-03-04T09:00:00Z"),
+          new Date("2026-03-04T10:00:00Z"),
+        ),
+        sourceEventId: "provider-instance-2",
+      },
+      {
+        ...makeSourceEvent(
+          "shared-series-uid",
+          new Date("2026-03-06T09:00:00Z"),
+          new Date("2026-03-06T10:00:00Z"),
+        ),
+        sourceEventId: "provider-instance-3",
+      },
+    ];
+    const { ingestDelta, state } = await createStatefulIngestion(recurringEvents);
+
+    const unchangedResult = await ingestDelta([recurringEvents[1] as SourceEvent]);
+    expect(unchangedResult).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+    expect(state.events).toHaveLength(3);
+
+    const changedOccurrence = {
+      ...recurringEvents[1] as SourceEvent,
+      title: "Changed title",
+    };
+    const changedResult = await ingestDelta([changedOccurrence]);
+    expect(changedResult).toEqual({ eventsAdded: 1, eventsRemoved: 0 });
+    expect(state.events).toHaveLength(3);
+    expect(state.events.find(
+      (event) => event.sourceEventId === "provider-instance-2",
+    )?.title).toBe("Changed title");
+
+    const movedOccurrence = {
+      ...changedOccurrence,
+      endTime: new Date("2026-03-04T12:00:00Z"),
+      startTime: new Date("2026-03-04T11:00:00Z"),
+    };
+    const movedResult = await ingestDelta([movedOccurrence]);
+    expect(movedResult).toEqual({ eventsAdded: 1, eventsRemoved: 1 });
+    expect(state.events).toHaveLength(3);
+    expect(state.events.find(
+      (event) => event.sourceEventId === "provider-instance-2",
+    )?.startTime).toEqual(new Date("2026-03-04T11:00:00Z"));
+
+    const replayResult = await ingestDelta([movedOccurrence]);
+    expect(replayResult).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+    expect(state.events).toHaveLength(3);
+  });
+
+  it("cancels one recurring provider occurrence without deleting its siblings", async () => {
+    const recurringEvents = [
+      {
+        ...makeSourceEvent(
+          "shared-series-uid",
+          new Date("2026-03-02T09:00:00Z"),
+          new Date("2026-03-02T10:00:00Z"),
+        ),
+        sourceEventId: "provider-instance-1",
+      },
+      {
+        ...makeSourceEvent(
+          "shared-series-uid",
+          new Date("2026-03-04T09:00:00Z"),
+          new Date("2026-03-04T10:00:00Z"),
+        ),
+        sourceEventId: "provider-instance-2",
+      },
+    ];
+    const { ingestDelta, state } = await createStatefulIngestion(recurringEvents);
+
+    const result = await ingestDelta([], ["provider-instance-1"]);
+
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 1 });
+    expect(state.events.map((event) => event.sourceEventId)).toEqual([
+      "provider-instance-2",
+    ]);
+  });
+
+  it("removes the old state without inserting an occurrence filtered out of the sync window", async () => {
+    const sourceEvent = {
+      ...makeSourceEvent(
+        "event-uid",
+        new Date("2026-03-02T09:00:00Z"),
+        new Date("2026-03-02T10:00:00Z"),
+      ),
+      sourceEventId: "provider-event-1",
+    };
+    const { ingestDelta, state } = await createStatefulIngestion([sourceEvent]);
+
+    const result = await ingestDelta([], [], ["provider-event-1"]);
+
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 1 });
+    expect(state.events).toEqual([]);
+  });
+
+  it("applies only the final version when a provider occurrence changes repeatedly in one delta", async () => {
+    const sourceEvent = {
+      ...makeSourceEvent(
+        "event-uid",
+        new Date("2026-03-02T09:00:00Z"),
+        new Date("2026-03-02T10:00:00Z"),
+      ),
+      sourceEventId: "provider-event-1",
+    };
+    const intermediateVersion = {
+      ...sourceEvent,
+      endTime: new Date("2026-03-02T11:00:00Z"),
+      startTime: new Date("2026-03-02T10:00:00Z"),
+    };
+    const finalVersion = {
+      ...sourceEvent,
+      endTime: new Date("2026-03-02T12:00:00Z"),
+      startTime: new Date("2026-03-02T11:00:00Z"),
+    };
+    const { ingestDelta, state } = await createStatefulIngestion([sourceEvent]);
+
+    const result = await ingestDelta([intermediateVersion, finalVersion]);
+
+    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 1 });
+    expect(state.events).toHaveLength(1);
+    expect(state.events[0]?.startTime).toEqual(new Date("2026-03-02T11:00:00Z"));
   });
 
   it("does not flush when there are no changes", async () => {

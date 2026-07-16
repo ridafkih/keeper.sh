@@ -135,6 +135,7 @@ interface CalDAVConfig extends ProviderConfig {
 
 interface SourceEvent {
   uid: string;
+  sourceEventId?: string;
   startTime: Date;
   endTime: Date;
   sourceEventType?: SourceEventType;

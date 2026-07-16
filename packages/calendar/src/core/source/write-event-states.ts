@@ -27,6 +27,7 @@ const EVENT_STATE_CONFLICT_SET = {
   location: excludedColumn(eventStatesTable.location.name),
   recurrenceRule: excludedColumn(eventStatesTable.recurrenceRule.name),
   recurrenceId: excludedColumn(eventStatesTable.recurrenceId.name),
+  sourceEventId: excludedColumn(eventStatesTable.sourceEventId.name),
   sourceEventType: excludedColumn(eventStatesTable.sourceEventType.name),
   startTimeZone: excludedColumn(eventStatesTable.startTimeZone.name),
   title: excludedColumn(eventStatesTable.title.name),

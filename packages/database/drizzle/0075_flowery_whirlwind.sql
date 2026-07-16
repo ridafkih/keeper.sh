@@ -1,0 +1,2 @@
+ALTER TABLE "event_states" ADD COLUMN "sourceEventId" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "event_states_source_event_idx" ON "event_states" USING btree ("calendarId","sourceEventId") WHERE "event_states"."sourceEventId" is not null;

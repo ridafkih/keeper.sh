@@ -84,28 +84,31 @@ describe("source event diff", () => {
     expect(idsToRemove).toEqual(["instance-old"]);
   });
 
-  it("removes all matching UIDs during delta cancellation", () => {
+  it("removes only the cancelled provider occurrence during delta sync", () => {
     const existingEvents = [
       createExistingEvent({
         id: "instance-1",
+        sourceEventId: "provider-instance-1",
         sourceEventUid: "cancelled-uid",
       }),
       createExistingEvent({
         id: "instance-2",
+        sourceEventId: "provider-instance-2",
         sourceEventUid: "cancelled-uid",
       }),
       createExistingEvent({
         id: "instance-3",
+        sourceEventId: "provider-instance-3",
         sourceEventUid: "other-uid",
       }),
     ];
 
     const idsToRemove = buildSourceEventStateIdsToRemove(existingEvents, [], {
-      cancelledEventUids: ["cancelled-uid"],
+      cancelledEventIds: ["provider-instance-2"],
       isDeltaSync: true,
     });
 
-    expect(idsToRemove).toEqual(["instance-1", "instance-2"]);
+    expect(idsToRemove).toEqual(["instance-2"]);
   });
 
   it("updates stored events when the source event type changes", () => {
@@ -154,6 +157,24 @@ describe("source event diff", () => {
 
     expect(eventsToAdd).toHaveLength(1);
     expect(idsToRemove).toEqual([]);
+  });
+
+  it("backfills provider event identity during the forced full sync", () => {
+    const existingEvents = [
+      createExistingEvent({
+        sourceEventId: null,
+        sourceEventUid: "event-uid-1",
+      }),
+    ];
+    const incomingEvents = [
+      createIncomingEvent({
+        sourceEventId: "provider-event-1",
+        uid: "event-uid-1",
+      }),
+    ];
+
+    expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toEqual(incomingEvents);
+    expect(buildSourceEventStateIdsToRemove(existingEvents, incomingEvents)).toEqual([]);
   });
 
   it("does not duplicate missing source metadata during delta sync", () => {

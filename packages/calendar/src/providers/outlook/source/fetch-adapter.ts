@@ -1,6 +1,7 @@
 import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
 import { encodeStoredSyncToken, resolveSyncTokenForWindow } from "../../../core/oauth/sync-token";
 import { getOAuthSyncWindow, OAUTH_SYNC_WINDOW_VERSION } from "../../../core/oauth/sync-window";
+import { filterSourceEventsToSyncWindow } from "../../../core/source/sync-diagnostics";
 import { fetchCalendarEvents, parseOutlookEvents } from "./utils/fetch-events";
 
 const YEARS_UNTIL_FUTURE = 2;
@@ -22,6 +23,7 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
       accessToken: config.accessToken,
       calendarId: config.externalCalendarId,
     };
+    const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
 
     const syncTokenResolution = resolveSyncTokenForWindow(
       config.syncToken,
@@ -29,7 +31,6 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
     );
 
     if (syncTokenResolution.syncToken === null) {
-      const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
       fetchOptions.timeMin = syncWindow.timeMin;
       fetchOptions.timeMax = syncWindow.timeMax;
     } else {
@@ -42,11 +43,15 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
       return { events: [], fullSyncRequired: true };
     }
 
-    const events = parseOutlookEvents(result.events);
+    const parsedEvents = parseOutlookEvents(result.events);
+    const { events } = filterSourceEventsToSyncWindow(parsedEvents, syncWindow);
 
     const fetchResult: FetchEventsResult = {
       events,
-      cancelledEventUids: result.cancelledEventUids,
+      ...(result.isDeltaSync && {
+        changedEventIds: parsedEvents.flatMap((event) => event.sourceEventId ?? []),
+      }),
+      cancelledEventIds: result.cancelledEventIds,
       isDeltaSync: result.isDeltaSync,
     };
     if (result.nextDeltaLink) {
