@@ -1,4 +1,5 @@
 import type { SourceEvent } from "../types";
+import stringify from "fast-json-stable-stringify";
 
 interface ExistingSourceEventState {
   availability?: string | null;
@@ -42,28 +43,6 @@ const normalizeIdentityIsAllDay = (
 const normalizeIdentityContent = (value: string | null | undefined): string =>
   value?.trim() ?? "";
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
-
-const toStableComparableValue = (value: unknown): unknown => {
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((entry) => toStableComparableValue(entry));
-  }
-
-  if (isRecord(value)) {
-    const entries = Object.entries(value)
-      .toSorted(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
-      .map(([key, nestedValue]) => [key, toStableComparableValue(nestedValue)]);
-    return Object.fromEntries(entries);
-  }
-
-  return value;
-};
-
 const parseStoredStructuredValue = (value: unknown): unknown => {
   if (typeof value !== "string") {
     return value;
@@ -81,7 +60,7 @@ const serializeIdentityValue = (value: unknown): string => {
     return "";
   }
 
-  return JSON.stringify(toStableComparableValue(parseStoredStructuredValue(value)));
+  return stringify(parseStoredStructuredValue(value));
 };
 
 interface SourceEventIdentityInput {

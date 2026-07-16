@@ -24,6 +24,7 @@
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/digest-fetch": "workspace:*",
     "drizzle-orm": "^0.45.1",
+    "fast-json-stable-stringify": "^2.1.0",
     "ioredis": "^5.10.0",
     "ipaddr.js": "^2.3.0",
     "tldts": "^7.0.27",
