@@ -36,10 +36,10 @@ const createDatabase = (
 
 const createRedis = () => {
   const writes: [string, string, string, number][] = [];
-  let execCalls = 0;
+  const execCalls: string[] = [];
   const pipeline = {
     exec: () => {
-      execCalls += 1;
+      execCalls.push("executed");
       return Promise.resolve([]);
     },
     set: (...args: [string, string, string, number]) => {
@@ -49,7 +49,7 @@ const createRedis = () => {
   };
 
   return {
-    execCalls: () => execCalls,
+    execCalls,
     redis: { pipeline: () => pipeline } as unknown as Redis,
     writes,
   };
@@ -69,7 +69,7 @@ describe("invalidateCalendarsForAccount", () => {
 
     expect(owned).toBe(false);
     expect(writes).toEqual([]);
-    expect(execCalls()).toBe(0);
+    expect(execCalls).toEqual([]);
     expect(captured.query?.sql).toContain('"calendar_accounts"."userId" =');
     expect(captured.query?.params).toEqual(["victim-account", "attacker-user"]);
   });
@@ -89,7 +89,7 @@ describe("invalidateCalendarsForAccount", () => {
       ["sync:invalidated:calendar-1", "1", "EX", 300],
       ["sync:invalidated:calendar-2", "1", "EX", 300],
     ]);
-    expect(execCalls()).toBe(1);
+    expect(execCalls).toEqual(["executed"]);
   });
 
   it("allows deleting an owned account that has no calendars", async () => {
@@ -104,6 +104,6 @@ describe("invalidateCalendarsForAccount", () => {
 
     expect(owned).toBe(true);
     expect(writes).toEqual([]);
-    expect(execCalls()).toBe(0);
+    expect(execCalls).toEqual([]);
   });
 });
