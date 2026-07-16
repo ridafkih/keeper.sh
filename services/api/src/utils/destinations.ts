@@ -322,7 +322,10 @@ const deleteCalendarDestination = async (
   userId: string,
   accountId: string,
 ): Promise<boolean> => {
-  await invalidateCalendarsForAccount(database, redis, accountId);
+  const owned = await invalidateCalendarsForAccount(database, redis, userId, accountId);
+  if (!owned) {
+    return false;
+  }
 
   const result = await database
     .delete(calendarAccountsTable)
