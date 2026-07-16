@@ -11,7 +11,7 @@ const database = {} as BunSQLDatabase;
 const createTestProvider = (
   options: {
     getAllSources: (database: BunSQLDatabase) => Promise<OAuthSourceAccount[]>;
-    getSourcesForUser?: (database: BunSQLDatabase, userId: string) => Promise<OAuthSourceAccount[]>;
+    getSourcesForUser: (database: BunSQLDatabase, userId: string) => Promise<OAuthSourceAccount[]>;
   },
 ) =>
   createOAuthSourceProvider<OAuthSourceAccount, OAuthSourceConfig>({
@@ -51,6 +51,7 @@ describe("createOAuthSourceProvider", () => {
         globalQueries.push("queried");
         return Promise.resolve([]);
       },
+      getSourcesForUser: () => Promise.reject(new Error("Scoped query should not run")),
     });
 
     await provider.syncAllSources();
