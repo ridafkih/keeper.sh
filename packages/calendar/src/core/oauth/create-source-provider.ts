@@ -48,7 +48,7 @@ interface CreateOAuthSourceProviderOptions<
   oauthProvider: OAuthTokenProvider;
   refreshLockStore?: RefreshLockStore | null;
   getAllSources: (database: BunSQLDatabase) => Promise<TAccount[]>;
-  getSourcesForUser?: (database: BunSQLDatabase, userId: string) => Promise<TAccount[]>;
+  getSourcesForUser: (database: BunSQLDatabase, userId: string) => Promise<TAccount[]>;
   createProviderInstance: (
     config: TConfig,
     oauthProvider: OAuthTokenProvider,
@@ -134,7 +134,7 @@ const createOAuthSourceProvider = <
   const syncAllSources = async (): Promise<SourceSyncResult> =>
     syncSources(await getAllSources(database));
   const syncSourcesForUser = async (userId: string): Promise<SourceSyncResult> =>
-    syncSources(await (getSourcesForUser?.(database, userId) ?? getAllSources(database)));
+    syncSources(await getSourcesForUser(database, userId));
 
   return { syncAllSources, syncSourcesForUser };
 };

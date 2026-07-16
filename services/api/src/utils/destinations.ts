@@ -160,12 +160,13 @@ const upsertAccountAndCalendarWithDatabase = async (
     })
     .onConflictDoUpdate({
       set: setClause,
+      setWhere: eq(calendarAccountsTable.userId, base.userId),
       target: [calendarAccountsTable.provider, calendarAccountsTable.accountId],
     })
     .returning({ id: calendarAccountsTable.id });
 
   if (!account) {
-    return;
+    throw new Error("This account is already linked to another user");
   }
 
   const [existingCalendar] = await databaseClient
@@ -484,4 +485,5 @@ export {
   saveCalDAVDestination,
   saveCalDAVDestinationWithDatabase,
   saveCalendarDestinationWithDatabase,
+  upsertAccountAndCalendarWithDatabase,
 };

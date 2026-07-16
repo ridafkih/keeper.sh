@@ -1,5 +1,5 @@
 import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
-import { resolveSyncTokenForWindow } from "../../../core/oauth/sync-token";
+import { encodeStoredSyncToken, resolveSyncTokenForWindow } from "../../../core/oauth/sync-token";
 import { getOAuthSyncWindow, OAUTH_SYNC_WINDOW_VERSION } from "../../../core/oauth/sync-window";
 import { fetchCalendarEvents, parseOutlookEvents } from "./utils/fetch-events";
 
@@ -44,12 +44,19 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
 
     const events = parseOutlookEvents(result.events);
 
-    return {
+    const fetchResult: FetchEventsResult = {
       events,
-      nextSyncToken: result.nextDeltaLink,
       cancelledEventUids: result.cancelledEventUids,
       isDeltaSync: result.isDeltaSync,
     };
+    if (result.nextDeltaLink) {
+      fetchResult.nextSyncToken = encodeStoredSyncToken(
+        result.nextDeltaLink,
+        OUTLOOK_SYNC_TOKEN_VERSION,
+      );
+    }
+
+    return fetchResult;
   };
 
   return { fetchEvents };
