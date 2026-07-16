@@ -1,8 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createSyncLock, LOCK_PREFIX, SIGNAL_PREFIX, POLL_INTERVAL_MS } from "../src/sync-lock";
+import {
+  createSyncLock,
+  LOCK_PREFIX,
+  LOCK_RENEW_INTERVAL_MS,
+  LOCK_TTL_SECONDS,
+  SyncLockRenewalError,
+  SIGNAL_PREFIX,
+  POLL_INTERVAL_MS,
+} from "../src/sync-lock";
 
 const createMockRedis = () => {
   const store = new Map<string, { value: string; expiresAt: number | null }>();
+  const evalFailures: Error[] = [];
 
   const isExpired = (key: string): boolean => {
     const entry = store.get(key);
@@ -48,14 +57,18 @@ const createMockRedis = () => {
   };
 
   const evalImpl = (
-    script: string,
-    _keyCount: number,
+    _script: string,
+    keyCount: number,
     ...args: string[]
   ): Promise<unknown> => {
+    const evalFailure = evalFailures.shift();
+    if (evalFailure) {
+      return Promise.reject(new Error(evalFailure.message, { cause: evalFailure }));
+    }
+
     const lockKey = args[0] ?? "";
 
-    // ACQUIRE_OR_SIGNAL_SCRIPT (has two keys)
-    if (script.includes("KEYS[2]") && script.includes("return 'acquired'")) {
+    if (keyCount === 2 && args.length === 4) {
       const signalKey = args[1] ?? "";
       const holderId = args[2] ?? "";
       const ttlSeconds = Number(args[3]);
@@ -76,17 +89,37 @@ const createMockRedis = () => {
       return Promise.resolve("queued");
     }
 
-    // RELEASE_SCRIPT (has one key)
-    const holderId = args[1] ?? "";
-    const holder = readValue(lockKey);
-    if (holder === holderId) {
-      del(lockKey);
-      return Promise.resolve(1);
+    if (keyCount === 1 && args.length === 3) {
+      const holderId = args[1] ?? "";
+      const ttlSeconds = Number(args[2]);
+      const holder = readValue(lockKey);
+      if (holder === holderId) {
+        set(lockKey, holderId, "EX", ttlSeconds);
+        return Promise.resolve(1);
+      }
+      return Promise.resolve(0);
     }
-    return Promise.resolve(0);
+
+    if (keyCount === 1 && args.length === 2) {
+      const holderId = args[1] ?? "";
+      const holder = readValue(lockKey);
+      if (holder === holderId) {
+        del(lockKey);
+        return Promise.resolve(1);
+      }
+      return Promise.resolve(0);
+    }
+
+    return Promise.reject(
+      new Error(`Unexpected EVAL call with ${keyCount} keys and ${args.length} arguments`),
+    );
   };
 
-  return { get, set, del, eval: evalImpl };
+  const rejectNextEval = (error: Error): void => {
+    evalFailures.push(error);
+  };
+
+  return { get, set, del, eval: evalImpl, rejectNextEval };
 };
 
 const flushAsync = async (): Promise<void> => {
@@ -164,6 +197,75 @@ describe("createSyncLock", () => {
 
       const current = await firstResult.handle.isCurrent();
       expect(current).toBe(false);
+    });
+
+    it("returns false when the holder no longer owns the lock key", async () => {
+      const { redis, syncLock } = makeSyncLock();
+      const result = await syncLock.acquire("cal-1");
+
+      if (!result.acquired) {
+        throw new Error("expected acquired");
+      }
+
+      redis.del(`${LOCK_PREFIX}cal-1`);
+
+      expect(await result.handle.isCurrent()).toBe(false);
+    });
+
+    it("returns false when another holder owns the lock key", async () => {
+      const { redis, syncLock } = makeSyncLock();
+      const result = await syncLock.acquire("cal-1");
+
+      if (!result.acquired) {
+        throw new Error("expected acquired");
+      }
+
+      redis.set(`${LOCK_PREFIX}cal-1`, "replacement-holder");
+
+      expect(await result.handle.isCurrent()).toBe(false);
+    });
+  });
+
+  describe("renewal", () => {
+    it("renews the lock before its original TTL expires", async () => {
+      const { redis, syncLock } = makeSyncLock();
+      const result = await syncLock.acquire("cal-1");
+
+      if (!result.acquired) {
+        throw new Error("expected acquired");
+      }
+
+      vi.advanceTimersByTime((LOCK_TTL_SECONDS * 1000) + LOCK_RENEW_INTERVAL_MS);
+      await flushAsync();
+
+      expect(await redis.get(`${LOCK_PREFIX}cal-1`)).not.toBeNull();
+      expect(await result.handle.isCurrent()).toBe(true);
+      await result.handle.release();
+    });
+
+    it("surfaces Redis renewal failures through the lock handle", async () => {
+      const redis = createMockRedis();
+      const syncLock = createSyncLock(redis);
+      const result = await syncLock.acquire("cal-1");
+
+      if (!result.acquired) {
+        throw new Error("expected acquired");
+      }
+
+      const renewalFailure = new Error("Redis unavailable");
+      redis.rejectNextEval(renewalFailure);
+      vi.advanceTimersByTime(LOCK_RENEW_INTERVAL_MS);
+      await flushAsync();
+
+      await expect(result.handle.isCurrent()).rejects.toBeInstanceOf(SyncLockRenewalError);
+      await expect(result.handle.isCurrent()).rejects.toEqual(
+        expect.objectContaining({
+          calendarId: "cal-1",
+          cause: expect.objectContaining({ cause: renewalFailure }),
+          name: "SyncLockRenewalError",
+        }),
+      );
+      await result.handle.release();
     });
   });
 
@@ -360,8 +462,7 @@ describe("createSyncLock", () => {
 
       // First detects supersession, does its work, flushes, releases
       expect(await first.handle.isCurrent()).toBe(false);
-      executionOrder.push("first:superseded");
-      executionOrder.push("first:flushed");
+      executionOrder.push("first:superseded", "first:flushed");
       await first.handle.release();
       executionOrder.push("first:released");
 
