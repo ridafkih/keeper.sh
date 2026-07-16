@@ -31,7 +31,7 @@ const missingSourceLifecycleCallback = (): Promise<void> =>
 
 describe("runSourceCreationPreflight", () => {
   it("rejects source creation before validation when the plan limit is exceeded", async () => {
-    let validationCalls = 0;
+    const validationCalls: string[] = [];
 
     await expect(
       runSourceCreationPreflight(
@@ -44,14 +44,14 @@ describe("runSourceCreationPreflight", () => {
           canAddAccount: () => Promise.resolve(false),
           countExistingAccounts: () => Promise.resolve(3),
           validateSourceUrl: () => {
-            validationCalls += 1;
+            validationCalls.push("validated");
             return Promise.resolve();
           },
         },
       ),
     ).rejects.toBeInstanceOf(SourceLimitError);
 
-    expect(validationCalls).toBe(0);
+    expect(validationCalls).toEqual([]);
   });
 
   it("wraps CalendarFetchError details in InvalidSourceUrlError", async () => {
