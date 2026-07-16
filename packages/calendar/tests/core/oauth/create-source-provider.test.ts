@@ -45,16 +45,16 @@ describe("createOAuthSourceProvider", () => {
   });
 
   it("keeps an explicit unscoped method for intentional global syncs", async () => {
-    let globalQueries = 0;
+    const globalQueries: string[] = [];
     const provider = createTestProvider({
       getAllSources: () => {
-        globalQueries += 1;
+        globalQueries.push("queried");
         return Promise.resolve([]);
       },
     });
 
     await provider.syncAllSources();
 
-    expect(globalQueries).toBe(1);
+    expect(globalQueries).toEqual(["queried"]);
   });
 });
