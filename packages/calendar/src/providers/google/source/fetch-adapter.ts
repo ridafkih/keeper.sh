@@ -1,6 +1,6 @@
 import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
-import { resolveSyncTokenForWindow } from "../../../core/oauth/sync-token";
+import { encodeStoredSyncToken, resolveSyncTokenForWindow } from "../../../core/oauth/sync-token";
 import { getOAuthSyncWindow, OAUTH_SYNC_WINDOW_VERSION } from "../../../core/oauth/sync-window";
 import { fetchCalendarEvents, parseGoogleEvents } from "./utils/fetch-events";
 
@@ -46,12 +46,19 @@ const createGoogleSourceFetcher = (config: GoogleSourceFetcherConfig): GoogleSou
 
     const events = parseGoogleEvents(result.events);
 
-    return {
+    const fetchResult: FetchEventsResult = {
       events,
-      nextSyncToken: result.nextSyncToken,
       cancelledEventUids: result.cancelledEventUids,
       isDeltaSync: result.isDeltaSync,
     };
+    if (result.nextSyncToken) {
+      fetchResult.nextSyncToken = encodeStoredSyncToken(
+        result.nextSyncToken,
+        OAUTH_SYNC_WINDOW_VERSION,
+      );
+    }
+
+    return fetchResult;
   };
 
   return { fetchEvents };

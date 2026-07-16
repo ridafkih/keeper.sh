@@ -160,12 +160,13 @@ const upsertAccountAndCalendarWithDatabase = async (
     })
     .onConflictDoUpdate({
       set: setClause,
+      setWhere: eq(calendarAccountsTable.userId, base.userId),
       target: [calendarAccountsTable.provider, calendarAccountsTable.accountId],
     })
     .returning({ id: calendarAccountsTable.id });
 
   if (!account) {
-    return;
+    throw new Error("This account is already linked to another user");
   }
 
   const [existingCalendar] = await databaseClient
@@ -321,7 +322,10 @@ const deleteCalendarDestination = async (
   userId: string,
   accountId: string,
 ): Promise<boolean> => {
-  await invalidateCalendarsForAccount(database, redis, accountId);
+  const owned = await invalidateCalendarsForAccount(database, redis, userId, accountId);
+  if (!owned) {
+    return false;
+  }
 
   const result = await database
     .delete(calendarAccountsTable)
@@ -484,4 +488,5 @@ export {
   saveCalDAVDestination,
   saveCalDAVDestinationWithDatabase,
   saveCalendarDestinationWithDatabase,
+  upsertAccountAndCalendarWithDatabase,
 };

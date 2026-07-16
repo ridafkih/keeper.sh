@@ -11,6 +11,7 @@ import { enqueuePushSync } from "./enqueue-push-sync";
 import {
   SourceLimitError,
   InvalidSourceUrlError,
+  runSourceCreationPreflight,
   runCreateSource,
 } from "./source-lifecycle";
 import { applySourceSyncDefaults } from "./source-sync-defaults";
@@ -145,10 +146,27 @@ const validateSourceUrl = async (url: string): Promise<void> => {
   await pullRemoteCalendar("json", url, safeFetchOptions);
 };
 
-const createSource = (userId: string, name: string, url: string): Promise<Source> =>
-  database.transaction((tx) =>
+const countExistingAccounts = async (userId: string): Promise<number> => {
+  const [result] = await database
+    .select({ value: count() })
+    .from(calendarAccountsTable)
+    .where(eq(calendarAccountsTable.userId, userId));
+  return result?.value ?? 0;
+};
+
+const createSource = async (userId: string, name: string, url: string): Promise<Source> => {
+  const input = { userId, name, url };
+
+  await runSourceCreationPreflight(input, {
+    canAddAccount: (userIdToCheck, existingAccountCount) =>
+      premiumService.canAddAccount(userIdToCheck, existingAccountCount),
+    countExistingAccounts,
+    validateSourceUrl,
+  });
+
+  return database.transaction((tx) =>
     runCreateSource(
-      { userId, name, url },
+      input,
       {
         acquireAccountLock: async (userIdToLock) => {
           await tx.execute(
@@ -200,10 +218,10 @@ const createSource = (userId: string, name: string, url: string): Promise<Source
           }
           await enqueuePushSync(enqueuedUserId, plan);
         },
-        validateSourceUrl,
       },
     ),
   );
+};
 
 export {
   SourceLimitError,

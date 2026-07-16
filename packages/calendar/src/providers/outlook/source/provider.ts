@@ -261,7 +261,16 @@ interface CreateOutlookSourceProviderConfig {
 
 const getOutlookSourcesWithCredentials = async (
   database: BunSQLDatabase,
+  userId: string | null,
 ): Promise<OutlookSourceAccount[]> => {
+  const sourceConditions = [
+    eq(calendarsTable.calendarType, "oauth"),
+    arrayContains(calendarsTable.capabilities, ["pull"]),
+    eq(calendarAccountsTable.provider, OUTLOOK_PROVIDER_ID),
+  ];
+  if (userId !== null) {
+    sourceConditions.push(eq(calendarsTable.userId, userId));
+  }
   const sources = await database
     .select({
       accessToken: oauthCredentialsTable.accessToken,
@@ -284,13 +293,7 @@ const getOutlookSourcesWithCredentials = async (
       oauthCredentialsTable,
       eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id),
     )
-    .where(
-      and(
-        eq(calendarsTable.calendarType, "oauth"),
-        arrayContains(calendarsTable.capabilities, ["pull"]),
-        eq(calendarAccountsTable.provider, OUTLOOK_PROVIDER_ID),
-      ),
-    );
+    .where(and(...sourceConditions));
 
   return sources.flatMap((source) => {
     if (!source.externalCalendarId) {return [];}
@@ -324,7 +327,8 @@ const createOutlookSourceProvider = (config: CreateOutlookSourceProviderConfig):
     createProviderInstance: (providerConfig, oauth) =>
       new OutlookSourceProvider(providerConfig, oauth),
     database,
-    getAllSources: getOutlookSourcesWithCredentials,
+    getAllSources: (db) => getOutlookSourcesWithCredentials(db, null),
+    getSourcesForUser: getOutlookSourcesWithCredentials,
     oauthProvider,
     refreshLockStore,
   });

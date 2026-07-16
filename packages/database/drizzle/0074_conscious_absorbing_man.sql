@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "calendar_accounts_provider_account_idx" ON "calendar_accounts" USING btree ("provider","accountId");
