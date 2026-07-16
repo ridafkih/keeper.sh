@@ -261,14 +261,14 @@ interface CreateOutlookSourceProviderConfig {
 
 const getOutlookSourcesWithCredentials = async (
   database: BunSQLDatabase,
-  userId?: string,
+  userId: string | null,
 ): Promise<OutlookSourceAccount[]> => {
   const sourceConditions = [
     eq(calendarsTable.calendarType, "oauth"),
     arrayContains(calendarsTable.capabilities, ["pull"]),
     eq(calendarAccountsTable.provider, OUTLOOK_PROVIDER_ID),
   ];
-  if (userId) {
+  if (userId !== null) {
     sourceConditions.push(eq(calendarsTable.userId, userId));
   }
   const sources = await database
@@ -327,7 +327,7 @@ const createOutlookSourceProvider = (config: CreateOutlookSourceProviderConfig):
     createProviderInstance: (providerConfig, oauth) =>
       new OutlookSourceProvider(providerConfig, oauth),
     database,
-    getAllSources: (db) => getOutlookSourcesWithCredentials(db),
+    getAllSources: (db) => getOutlookSourcesWithCredentials(db, null),
     getSourcesForUser: getOutlookSourcesWithCredentials,
     oauthProvider,
     refreshLockStore,
