@@ -3,7 +3,7 @@ import type { PushSyncJobPayload, PushSyncJobResult } from "@keeper.sh/queue";
 import { USER_TIMEOUT_MS } from "@keeper.sh/queue";
 import type { DestinationSyncResult } from "@keeper.sh/calendar";
 import { createSyncAggregateRuntime, mergeAbortSignals } from "@keeper.sh/calendar";
-import { syncDestinationsForUser } from "@keeper.sh/sync";
+import { syncDestinationsForUser, SyncLockRenewalError } from "@keeper.sh/sync";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { syncStatusTable } from "@keeper.sh/database/schema";
 import { database, refreshLockRedis, refreshLockStore } from "./context";
@@ -25,6 +25,9 @@ const toError = (value: unknown): Error => {
 };
 
 const classifySyncError = (error: unknown): string => {
+  if (error instanceof SyncLockRenewalError) {
+    return "sync-lock-renewal-failed";
+  }
   if (typeof error === "string") {
     if (error.includes("conflict") || error.includes("409")) {
       return "sync-push-conflict";
@@ -197,7 +200,7 @@ const processJob = (
       };
     } catch (error) {
       widelog.set("outcome", "error");
-      widelog.errorFields(error, { slug: "push-sync-failed" });
+      widelog.errorFields(error, { slug: classifySyncError(error) });
       throw error;
     } finally {
       await Promise.all(pendingDestinationSyncs);

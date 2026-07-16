@@ -219,6 +219,10 @@ const syncDestinationsForUser = async (
         },
       });
 
+      if (!(await handle.isCurrent())) {
+        continue;
+      }
+
       const invalidated = await isCalendarInvalidated(redis, destination.calendarId);
       if (invalidated) {
         continue;

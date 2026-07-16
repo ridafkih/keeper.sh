@@ -21,6 +21,16 @@ interface SyncLockHandle {
   release: () => Promise<void>;
 }
 
+class SyncLockRenewalError extends Error {
+  public readonly calendarId: string;
+
+  public constructor(calendarId: string, cause: unknown) {
+    super(`Failed to renew sync lock for calendar ${calendarId}`, { cause });
+    this.name = "SyncLockRenewalError";
+    this.calendarId = calendarId;
+  }
+}
+
 interface AcquireSyncLockResult {
   acquired: true;
   handle: SyncLockHandle;
@@ -86,18 +96,26 @@ const RENEW_SCRIPT = `
 
 const createLockHandle = (
   redis: SyncLockRedis,
+  calendarId: string,
   lockKey: string,
   signalKey: string,
   invalidationKey: string,
   holderId: string,
 ): SyncLockHandle => {
-  const renewalTimer = setInterval(() => {
-    redis
-      .eval(RENEW_SCRIPT, 1, lockKey, holderId, String(LOCK_TTL_SECONDS))
-      .catch(() => false);
+  const renewalState: { error?: unknown } = {};
+  const renewalTimer = setInterval(async () => {
+    try {
+      await redis.eval(RENEW_SCRIPT, 1, lockKey, holderId, String(LOCK_TTL_SECONDS));
+    } catch (error) {
+      renewalState.error = error;
+    }
   }, LOCK_RENEW_INTERVAL_MS);
 
   const isCurrent = async (): Promise<boolean> => {
+    if ("error" in renewalState) {
+      throw new SyncLockRenewalError(calendarId, renewalState.error);
+    }
+
     const [lockHolder, pendingWaiter, invalidated] = await Promise.all([
       redis.get(lockKey),
       redis.get(signalKey),
@@ -139,7 +157,14 @@ const createSyncLock = (redis: SyncLockRedis) => {
     );
 
     if (result === "acquired") {
-      const handle = createLockHandle(redis, lockKey, signalKey, invalidationKey, holderId);
+      const handle = createLockHandle(
+        redis,
+        calendarId,
+        lockKey,
+        signalKey,
+        invalidationKey,
+        holderId,
+      );
       return { acquired: true, handle };
     }
 
@@ -167,7 +192,14 @@ const createSyncLock = (redis: SyncLockRedis) => {
         );
 
         if (retryResult === "acquired") {
-          const handle = createLockHandle(redis, lockKey, signalKey, invalidationKey, holderId);
+          const handle = createLockHandle(
+            redis,
+            calendarId,
+            lockKey,
+            signalKey,
+            invalidationKey,
+            holderId,
+          );
           return { acquired: true, handle };
         }
       }
@@ -192,5 +224,5 @@ const isCalendarInvalidated = async (redis: SyncLockRedis, calendarId: string): 
   return value !== null;
 };
 
-export { createSyncLock, invalidateCalendar, isCalendarInvalidated, LOCK_PREFIX, SIGNAL_PREFIX, INVALIDATION_PREFIX, LOCK_TTL_SECONDS, LOCK_RENEW_INTERVAL_MS, INVALIDATION_TTL_SECONDS, POLL_INTERVAL_MS };
+export { createSyncLock, invalidateCalendar, isCalendarInvalidated, SyncLockRenewalError, LOCK_PREFIX, SIGNAL_PREFIX, INVALIDATION_PREFIX, LOCK_TTL_SECONDS, LOCK_RENEW_INTERVAL_MS, INVALIDATION_TTL_SECONDS, POLL_INTERVAL_MS };
 export type { SyncLockHandle, SyncLockRedis, InvalidationRedis, AcquireSyncLockResult, SyncLockSkippedResult };
