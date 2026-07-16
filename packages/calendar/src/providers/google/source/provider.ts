@@ -239,14 +239,14 @@ interface CreateGoogleSourceProviderConfig {
 
 const getGoogleSourcesWithCredentials = async (
   database: BunSQLDatabase,
-  userId?: string,
+  userId: string | null,
 ): Promise<GoogleSourceAccount[]> => {
   const sourceConditions = [
     eq(calendarsTable.calendarType, "oauth"),
     arrayContains(calendarsTable.capabilities, ["pull"]),
     eq(calendarAccountsTable.provider, GOOGLE_PROVIDER_ID),
   ];
-  if (userId) {
+  if (userId !== null) {
     sourceConditions.push(eq(calendarsTable.userId, userId));
   }
   const sources = await database
@@ -310,7 +310,7 @@ const createGoogleCalendarSourceProvider = (
     createProviderInstance: (providerConfig, oauth) =>
       new GoogleCalendarSourceProvider(providerConfig, oauth),
     database,
-    getAllSources: (db) => getGoogleSourcesWithCredentials(db),
+    getAllSources: (db) => getGoogleSourcesWithCredentials(db, null),
     getSourcesForUser: getGoogleSourcesWithCredentials,
     oauthProvider,
     refreshLockStore,
