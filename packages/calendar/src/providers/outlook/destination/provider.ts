@@ -315,7 +315,8 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     const baseUrl = new URL(calendarEventsUrl);
     baseUrl.searchParams.set(
       "$filter",
-      `end/dateTime ge '${lookbackStart.toISOString()}'`
+      `categories/any(c:c eq '${KEEPER_CATEGORY}')`
+      + ` and end/dateTime ge '${lookbackStart.toISOString()}'`
       + ` and start/dateTime le '${lookaheadEnd.toISOString()}'`,
     );
     baseUrl.searchParams.set("$top", String(OUTLOOK_PAGE_SIZE));
@@ -326,6 +327,14 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     return baseUrl;
   };
 
+  /**
+   * Best-effort discovery of keeper-tagged events not tracked by any mapping, so they can be
+   * cleaned up as orphans. This is intentionally bounded to a time window: a recurring series'
+   * own start/dateTime is its first (possibly long-past) occurrence, so a series that started
+   * before the window can be missed here. That's an acceptable gap for orphan discovery (a
+   * stray duplicate lingers a bit longer) - it must NOT be relied on to confirm whether an
+   * *existing* mapping's event still exists, which is what verifyEventsExist is for.
+   */
   const listRemoteEvents = async (
     options: ListRemoteEventsOptions,
   ): Promise<RemoteEvent[]> => {
@@ -403,6 +412,60 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
 
   const getThrottleMetrics = (): ProviderThrottleMetrics => ({ ...throttleMetrics });
 
+  /**
+   * Authoritative existence check for events we already track a mapping for for: a direct
+   * GET by the destination's own event id, independent of any time window, category
+   * inheritance on recurring instances, or pagination. This is what determines whether an
+   * already-pushed event should be treated as still existing - listRemoteEvents' bounded
+   * window is not reliable enough for that call for a long-running recurring series.
+   */
+  const verifyEventsExist = async (deleteIds: string[]): Promise<RemoteEvent[]> => {
+    await refreshIfNeeded();
+    const verified: RemoteEvent[] = [];
+
+    for (const deleteId of deleteIds) {
+      try {
+        const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${deleteId}`);
+        url.searchParams.set("$select", "id,iCalUId,start,end,categories");
+
+        const response = await fetch(url, {
+          headers: { Authorization: `Bearer ${tokenState.accessToken}` },
+          method: "GET",
+        });
+
+        if (response.status === HTTP_STATUS.NOT_FOUND) {
+          await response.body?.cancel?.();
+          continue;
+        }
+
+        if (!response.ok) {
+          continue;
+        }
+
+        const body = await response.json();
+        const event = outlookEventSchema.assert(body);
+        const startTime = parseEventTime(event.start);
+        const endTime = parseEventTime(event.end);
+
+        if (!event.iCalUId || !startTime || !endTime) {
+          continue;
+        }
+
+        verified.push({
+          deleteId,
+          endTime,
+          isKeeperEvent: event.categories?.includes(KEEPER_CATEGORY) ?? false,
+          startTime,
+          uid: event.iCalUId,
+        });
+      } catch {
+        continue;
+      }
+    }
+
+    return verified;
+  };
+
   return {
     deleteEvents,
     getRemoteEventsByIds,
@@ -410,6 +473,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     listRemoteEvents,
     normalizeEvent: normalizeOutlookEvent,
     pushEvents,
+    verifyEventsExist,
   };
 };
 
