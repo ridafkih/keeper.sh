@@ -130,6 +130,7 @@ const persistenceIdentityMatches = (
 const toCalendarEvent = (
   event: ReturnType<typeof parseStoredSourceEventStates>[number],
 ): CalendarEvent => ({
+  availability: event.availability ?? null,
   calendarName: CALENDAR_NAME,
   description: event.description ?? null,
   endTime: event.endTime,

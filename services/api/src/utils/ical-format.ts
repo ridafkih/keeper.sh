@@ -14,6 +14,7 @@ interface FeedSettings {
 
 interface CalendarEvent {
   id: string;
+  availability: string | null;
   title: string | null;
   description: string | null;
   location: string | null;
@@ -129,6 +130,7 @@ const buildBaseIcsEvent = (event: CalendarEvent, uid: string, settings: FeedSett
     start: buildZonedIcsDate(event.startTime, timezone, isAllDay),
     summary: resolveEventSummary(event, settings),
     uid,
+    ...(event.availability === "free" && { timeTransparent: "TRANSPARENT" }),
     ...(settings.includeEventDescription && event.description && { description: event.description }),
     ...(settings.includeEventLocation && event.location && { location: event.location }),
   };

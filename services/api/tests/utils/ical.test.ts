@@ -37,6 +37,7 @@ const DEFAULT_SETTINGS = {
 
 const makeEvent = (overrides: Partial<CalendarEvent> = {}): CalendarEvent => ({
   id: "test-event-id",
+  availability: "busy",
   title: "Test Event",
   description: null,
   location: null,
@@ -52,6 +53,26 @@ const makeEvent = (overrides: Partial<CalendarEvent> = {}): CalendarEvent => ({
 });
 
 describe("formatEventsAsIcal", () => {
+  describe("availability", () => {
+    it("exports free events as transparent", () => {
+      const ics = formatEventsAsIcal(
+        [makeEvent({ availability: "free" })],
+        DEFAULT_SETTINGS,
+      );
+
+      expect(ics).toContain("TRANSP:TRANSPARENT");
+    });
+
+    it("does not export busy events as transparent", () => {
+      const ics = formatEventsAsIcal(
+        [makeEvent({ availability: "busy" })],
+        DEFAULT_SETTINGS,
+      );
+
+      expect(ics).not.toContain("TRANSP:TRANSPARENT");
+    });
+  });
+
   describe("all-day events", () => {
     it("emits VALUE=DATE for all-day events instead of datetime", () => {
       const ics = formatEventsAsIcal(

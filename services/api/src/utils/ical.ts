@@ -60,6 +60,7 @@ const generateUserCalendar = async (identifier: string): Promise<string | null> 
       location: eventStatesTable.location,
       startTime: eventStatesTable.startTime,
       endTime: eventStatesTable.endTime,
+      availability: eventStatesTable.availability,
       startTimeZone: eventStatesTable.startTimeZone,
       isAllDay: eventStatesTable.isAllDay,
       recurrenceRule: eventStatesTable.recurrenceRule,
