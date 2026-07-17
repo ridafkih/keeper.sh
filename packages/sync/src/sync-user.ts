@@ -151,7 +151,6 @@ const syncDestinationsForUser = async (
     return EMPTY_RESULT;
   }
 
-  const flush = createDatabaseFlush(database);
   const syncLock = createSyncLock(redis);
 
   let added = 0;
@@ -204,13 +203,16 @@ const syncDestinationsForUser = async (
         database,
         destination.calendarId,
       );
-      const result = await withSourceIngestLocks(database, sourceCalendarIds, () => syncCalendar({
+      const result = await withSourceIngestLocks(database, sourceCalendarIds, (lockedDatabase) => syncCalendar({
         userId: destination.userId,
         calendarId: destination.calendarId,
         provider: providerRef,
         readState: async () => ({
-          localEvents: await getEventsForDestination(database, destination.calendarId),
-          existingMappings: await getEventMappingsForDestination(database, destination.calendarId),
+          localEvents: await getEventsForDestination(lockedDatabase, destination.calendarId),
+          existingMappings: await getEventMappingsForDestination(
+            lockedDatabase,
+            destination.calendarId,
+          ),
           remoteEvents: await providerRef.listRemoteEvents(),
         }),
         isCurrent: () => {
@@ -223,7 +225,7 @@ const syncDestinationsForUser = async (
           return handle.isCurrent();
         },
         isInvalidated: () => isCalendarInvalidated(redis, destination.calendarId),
-        flush,
+        flush: createDatabaseFlush(lockedDatabase),
         onProgress: callbacks?.onProgress,
         onSyncEvent: (event) => {
           const enrichedEvent = {

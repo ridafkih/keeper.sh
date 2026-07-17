@@ -191,6 +191,46 @@ describe("eventToICalString", () => {
   });
 });
 
+describe("unsupported recurrence input", () => {
+  it("rejects RDATE instead of silently truncating a CalDAV recurrence", () => {
+    const calendar = buildIcs([buildVevent({
+      DTEND: "20260701T100000Z",
+      DTSTART: "20260701T090000Z",
+      RDATE: "20260703T090000Z",
+      UID: "rdate-caldav",
+    })]);
+
+    expect(() => parseICalToRemoteEvents(calendar))
+      .toThrow("ICS RDATE recurrence is not supported");
+  });
+
+  it("rejects custom-timezone CalDAV recurrence before persistence", () => {
+    const calendar = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Test//Test//EN",
+      "BEGIN:VTIMEZONE",
+      "TZID:Custom/Eastern",
+      "BEGIN:STANDARD",
+      "DTSTART:19700101T000000",
+      "TZOFFSETFROM:-0500",
+      "TZOFFSETTO:-0500",
+      "END:STANDARD",
+      "END:VTIMEZONE",
+      "BEGIN:VEVENT",
+      "UID:custom-caldav",
+      "DTSTART;TZID=Custom/Eastern:20260701T090000",
+      "DTEND;TZID=Custom/Eastern:20260701T100000",
+      "RRULE:FREQ=DAILY;COUNT=2",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+
+    expect(() => parseICalToRemoteEvents(calendar))
+      .toThrow("Unsupported calendar timezone: Custom/Eastern");
+  });
+});
+
 describe("parseICalToRemoteEvents", () => {
   it("resolves revisions and cancellations across separate CalDAV resources", () => {
     const active = buildIcs([buildVevent({

@@ -6,11 +6,11 @@ const SOURCE_INGEST_LOCK_NAMESPACE = 9003;
 const withSourceIngestLocks = <TResult>(
   database: BunSQLDatabase,
   calendarIds: string[],
-  work: () => Promise<TResult>,
+  work: (lockedDatabase: BunSQLDatabase) => Promise<TResult>,
 ): Promise<TResult> => {
   const orderedCalendarIds = [...new Set(calendarIds)].toSorted();
   if (orderedCalendarIds.length === 0) {
-    return work();
+    return work(database);
   }
   return database.transaction(async (transaction) => {
     // Provider I/O can legitimately exceed the pool's 30-second idle transaction timeout.
@@ -21,14 +21,14 @@ const withSourceIngestLocks = <TResult>(
         sql`select pg_advisory_xact_lock(${SOURCE_INGEST_LOCK_NAMESPACE}, hashtext(${calendarId}))`,
       );
     }
-    return work();
+    return work(transaction as unknown as BunSQLDatabase);
   });
 };
 
 const withSourceIngestLock = <TResult>(
   database: BunSQLDatabase,
   calendarId: string,
-  work: () => Promise<TResult>,
+  work: (lockedDatabase: BunSQLDatabase) => Promise<TResult>,
 ): Promise<TResult> => withSourceIngestLocks(database, [calendarId], work);
 
 export { SOURCE_INGEST_LOCK_NAMESPACE, withSourceIngestLock, withSourceIngestLocks };

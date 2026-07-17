@@ -8,7 +8,10 @@ import { pullRemoteCalendar } from "./pull-remote-calendar";
 import { prepareCalendarSnapshot } from "./create-snapshot";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { normalizeTimezone } from "./normalize-timezone";
-import { resolveTimeZone } from "./timezone-instant";
+import {
+  assertNoUnsupportedRecurrenceDates,
+  assertSupportedRecurrenceTimeZones,
+} from "./validate-recurrence-input";
 
 interface IcsSourceFetcherConfig {
   calendarId: string;
@@ -36,29 +39,6 @@ const FLOATING_DATE_PROPERTIES = new Set([
   "RDATE",
   "RECURRENCE-ID",
 ]);
-
-const assertNoUnsupportedRecurrenceDates = (ical: string): void => {
-  const unfolded = ical.replaceAll(/\r?\n[\t ]/g, "");
-  let insideEvent = false;
-  for (const line of unfolded.split(/\r?\n/)) {
-    const normalizedLine = line.toUpperCase();
-    if (normalizedLine === "BEGIN:VEVENT") {
-      insideEvent = true;
-      continue;
-    }
-    if (normalizedLine === "END:VEVENT") {
-      insideEvent = false;
-      continue;
-    }
-    if (!insideEvent) {
-      continue;
-    }
-    const [propertyName] = normalizedLine.split(/[:;]/, 1);
-    if (propertyName === "RDATE") {
-      throw new RangeError("ICS RDATE recurrence is not supported");
-    }
-  }
-};
 
 const applyCalendarTimeZoneToFloatingEventDates = (
   ical: string,
@@ -145,11 +125,7 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
       });
     }
     const parsed = parseIcsEvents(calendar);
-    for (const event of parsed) {
-      if (event.recurrenceRule) {
-        resolveTimeZone(event.startTimeZone);
-      }
-    }
+    assertSupportedRecurrenceTimeZones(parsed);
     const events: SourceEvent[] = parsed.map((event) => ({
       availability: event.availability,
       description: event.description,

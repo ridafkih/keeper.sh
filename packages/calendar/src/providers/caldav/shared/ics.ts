@@ -15,6 +15,10 @@ import type {
 import type { SyncableEvent } from "../../../core/types";
 import { isKeeperEvent } from "../../../core/events/identity";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
+import {
+  assertNoUnsupportedRecurrenceDates,
+  assertSupportedRecurrenceTimeZones,
+} from "../../../ics/utils/validate-recurrence-input";
 
 const normalizeIcsText = (value: string | undefined): string | undefined =>
   value?.replaceAll(/\r\n?/g, "\n");
@@ -60,6 +64,7 @@ interface ParsedCalendarEvent {
 
 const parseICalCalendarsToRemoteEvents = (icsStrings: string[]): ParsedCalendarEvent[] => {
   const calendars = icsStrings.map((icsString) => {
+    assertNoUnsupportedRecurrenceDates(icsString);
     const initialCalendar = parseIcsCalendar({ icsString });
     const normalizedIcs = applyCalendarTimeZoneToFloatingEventDates(
       icsString,
@@ -78,7 +83,9 @@ const parseICalCalendarsToRemoteEvents = (icsStrings: string[]): ParsedCalendarE
     ...firstCalendar,
     events: calendars.flatMap((entry) => entry.events ?? []),
   };
-  return parseIcsEvents(calendar, { includeKeeperEvents: true }).map((event) => ({
+  const events = parseIcsEvents(calendar, { includeKeeperEvents: true });
+  assertSupportedRecurrenceTimeZones(events);
+  return events.map((event) => ({
     availability: event.availability ?? "busy",
     deleteId: event.uid,
     description: event.description,

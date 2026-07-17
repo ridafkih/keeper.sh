@@ -14,6 +14,7 @@ import { isKeeperEvent } from "../../../core/events/identity";
 import type { SourceEvent } from "../../../core/types";
 import { calendarAccountsTable, calendarsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { and, eq, inArray } from "drizzle-orm";
+import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { CalDAVClient } from "../shared/client";
 import { resolveAuthMethod } from "../shared/digest-fetch";
 import { parseICalCalendarsToRemoteEvents } from "../shared/ics";
@@ -113,8 +114,9 @@ const createCalDAVSourceProvider = (
   const processEvents = async (
     calendarId: string,
     events: SourceEvent[],
+    persistenceDatabase: BunSQLDatabase = database,
   ): Promise<CalDAVSourceSyncResult> => {
-    const storedEvents = await database
+    const storedEvents = await persistenceDatabase
       .select({
         availability: eventStatesTable.availability,
         description: eventStatesTable.description,
@@ -147,7 +149,7 @@ const createCalDAVSourceProvider = (
       eventStateIdsToRemove.length > EMPTY_COUNT
       || eventsToAdd.length > EMPTY_COUNT
     ) {
-      await database.transaction(async (transaction) => {
+      await persistenceDatabase.transaction(async (transaction) => {
         if (eventStateIdsToRemove.length > EMPTY_COUNT) {
           await transaction
             .delete(eventStatesTable)
@@ -175,7 +177,10 @@ const createCalDAVSourceProvider = (
     };
   };
 
-  const refreshOriginalName = async (account: CalDAVSourceAccount): Promise<void> => {
+  const refreshOriginalName = async (
+    account: CalDAVSourceAccount,
+    persistenceDatabase: BunSQLDatabase = database,
+  ): Promise<void> => {
     if (account.originalName !== null) {
       return;
     }
@@ -193,7 +198,7 @@ const createCalDAVSourceProvider = (
       return;
     }
 
-    await database
+    await persistenceDatabase
       .update(calendarsTable)
       .set({ originalName: displayName })
       .where(eq(calendarsTable.id, account.calendarId));
@@ -203,10 +208,10 @@ const createCalDAVSourceProvider = (
     account: CalDAVSourceAccount,
   ): Promise<CalDAVSourceSyncResult> => {
     try {
-      return await withSourceIngestLock(database, account.calendarId, async () => {
-        await refreshOriginalName(account);
+      return await withSourceIngestLock(database, account.calendarId, async (lockedDatabase) => {
+        await refreshOriginalName(account, lockedDatabase);
         const events = await fetchEventsFromCalDAV(account);
-        return processEvents(account.calendarId, events);
+        return processEvents(account.calendarId, events, lockedDatabase);
       });
     } catch (error) {
       if (isCalDAVAuthenticationError(error)) {

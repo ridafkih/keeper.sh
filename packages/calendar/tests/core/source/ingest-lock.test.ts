@@ -9,9 +9,10 @@ describe("withSourceIngestLocks", () => {
       order.push("lock");
       return Promise.resolve();
     });
-    const transaction = vi.fn(async (callback: (transaction: { execute: typeof execute }) => Promise<string>) => {
+    const transactionClient = { execute };
+    const transaction = vi.fn(async (callback: (transaction: typeof transactionClient) => Promise<string>) => {
       order.push("transaction-start");
-      const result = await callback({ execute });
+      const result = await callback(transactionClient);
       order.push("transaction-end");
       return result;
     });
@@ -20,7 +21,8 @@ describe("withSourceIngestLocks", () => {
     const result = await withSourceIngestLocks(
       database,
       ["source-b", "source-a", "source-b"],
-      () => {
+      (lockedDatabase) => {
+        expect(lockedDatabase).toBe(transactionClient);
         order.push("work");
         return Promise.resolve("complete");
       },
@@ -44,6 +46,7 @@ describe("withSourceIngestLocks", () => {
     const work = vi.fn(() => Promise.resolve("complete"));
 
     await expect(withSourceIngestLocks(database, [], work)).resolves.toBe("complete");
+    expect(work).toHaveBeenCalledWith(database);
     expect(work).toHaveBeenCalledOnce();
     expect(transaction).not.toHaveBeenCalled();
   });

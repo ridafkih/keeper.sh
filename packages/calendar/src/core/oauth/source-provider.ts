@@ -48,11 +48,21 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
     return withSourceIngestLock(
       this.config.database,
       this.config.calendarId,
-      () => this.syncWithLockHeld(),
+      (lockedDatabase) => this.syncWithLockHeld(lockedDatabase),
     );
   }
 
-  private async syncWithLockHeld(): Promise<SourceSyncResult> {
+  private async syncWithLockHeld(lockedDatabase: OAuthSourceConfig["database"]): Promise<SourceSyncResult> {
+    const originalDatabase = this.config.database;
+    this.config.database = lockedDatabase;
+    try {
+      return await this.runSyncWithLockHeld();
+    } finally {
+      this.config.database = originalDatabase;
+    }
+  }
+
+  private async runSyncWithLockHeld(): Promise<SourceSyncResult> {
     await this.ensureValidToken();
 
     const result = await this.fetchEvents(this.config.syncToken);
