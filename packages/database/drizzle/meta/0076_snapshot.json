@@ -1,5 +1,5 @@
 {
-  "id": "8121e234-18a9-446d-9d4c-593d0cc3e02a",
+  "id": "bd7bf981-3886-428a-9923-42c7c3be5af4",
   "prevId": "2f41536e-131f-4bdc-b580-c5ed37855b68",
   "version": "7",
   "dialect": "postgresql",
@@ -788,6 +788,12 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
+        "syncEventId": {
+          "name": "syncEventId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "syncEventHash": {
           "name": "syncEventHash",
           "type": "text",
@@ -802,23 +808,24 @@
         }
       },
       "indexes": {
-        "event_mappings_event_cal_idx": {
-          "name": "event_mappings_event_cal_idx",
+        "event_mappings_sync_event_cal_idx": {
+          "name": "event_mappings_sync_event_cal_idx",
           "columns": [
             {
-              "expression": "eventStateId",
+              "expression": "calendarId",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             },
             {
-              "expression": "calendarId",
+              "expression": "syncEventId",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": true,
+          "where": "\"event_mappings\".\"syncEventId\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -976,7 +983,11 @@
           "name": "sourceEventInstanceKey",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "generated": {
+            "as": "\n      case\n        when \"recurrenceId\" is not null then\n          'recurrence|' || coalesce(\"sourceEventUid\", '') || '|' || extract(epoch from \"recurrenceId\")\n        else\n          'slot|' || coalesce(\"sourceEventUid\", '') || '|' || extract(epoch from \"startTime\") || '|' || extract(epoch from \"endTime\")\n      end\n    ",
+            "type": "stored"
+          }
         },
         "sourceEventUid": {
           "name": "sourceEventUid",

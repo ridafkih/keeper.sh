@@ -53,7 +53,7 @@ const splitSourceEventsByPersistenceIdentity = (
       if (event.sourceEventId || event.sourceEventUid === null) {
         return [];
       }
-      return [event.sourceEventInstanceKey ?? buildSourceEventInstanceKey({
+      return [buildSourceEventInstanceKey({
         endTime: event.endTime,
         recurrenceId: event.recurrenceId,
         startTime: event.startTime,

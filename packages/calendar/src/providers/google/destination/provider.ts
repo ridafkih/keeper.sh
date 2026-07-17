@@ -14,6 +14,7 @@ import { isRateLimitApiError, parseGoogleApiError } from "../shared/errors";
 import type { BatchSubRequest, BatchSubResponse } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
 import { serializeGoogleEvent } from "./serialize-event";
+import { createEditableEventContentHash } from "../../../core/events/content-hash";
 
 interface GoogleSyncProviderConfig {
   accessToken: string;
@@ -46,6 +47,32 @@ const extractBatchErrorMessage = (body: unknown, fallbackStatus: number): string
     return fallback;
   }
   return googleApiErrorSchema.assert(body).error?.message ?? fallback;
+};
+
+const getImportedEventId = (body: unknown): string | null => {
+  if (typeof body !== "object" || body === null || !("id" in body)) {
+    return null;
+  }
+  if (typeof body.id !== "string" || body.id.length === 0) {
+    return null;
+  }
+  return body.id;
+};
+
+const createImportResult = (
+  deleteId: string | null,
+  remoteId: string,
+  statusCode: number,
+): PushResult => {
+  if (deleteId) {
+    return { deleteId, remoteId, success: true };
+  }
+  return {
+    error: "Google import response is missing the event ID",
+    errorType: "GoogleBatchProtocolError",
+    statusCode,
+    success: false,
+  };
 };
 
 type DeleteLookupResolution =
@@ -185,7 +212,12 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
           success: false,
         };
       } else if (response.statusCode >= 200 && response.statusCode < 300) {
-        results[entry.index] = { remoteId: entry.uid, success: true };
+        const deleteId = getImportedEventId(response.body);
+        results[entry.index] = createImportResult(
+          deleteId,
+          entry.uid,
+          response.statusCode,
+        );
       } else {
         results[entry.index] = {
           error: extractBatchErrorMessage(response.body, response.statusCode),
@@ -364,10 +396,25 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       if (!startTime || !endTime) {
         continue;
       }
+      let availability: SyncableEvent["availability"] = "busy";
+      if (event.transparency === "transparent") {
+        availability = "free";
+      }
       items.push({
         deleteId: event.id ?? event.iCalUID,
+        editableAvailability: availability,
+        editableContentHash: createEditableEventContentHash({
+          availability,
+          description: event.description,
+          endTime,
+          isAllDay: Boolean(event.start?.date),
+          location: event.location,
+          startTime,
+          summary: event.summary ?? "",
+        }),
         endTime,
         isKeeperEvent: true,
+        supportedAvailabilities: ["busy", "free"],
         startTime,
         uid: event.iCalUID,
       });

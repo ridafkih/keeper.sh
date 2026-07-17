@@ -9,6 +9,7 @@ import type { OAuthSourceConfig, SourceEvent, SourceSyncResult } from "../types"
 import type { OAuthTokenProvider } from "./token-provider";
 import { isOAuthReauthRequiredError } from "./error-classification";
 import { runWithCredentialRefreshLock } from "./refresh-coordinator";
+import { withSourceIngestLock } from "../source/ingest-lock";
 
 const MS_PER_SECOND = 1000;
 
@@ -43,7 +44,15 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
 
   abstract fetchEvents(syncToken: string | null): Promise<FetchEventsResult>;
 
-  async sync(): Promise<SourceSyncResult> {
+  sync(): Promise<SourceSyncResult> {
+    return withSourceIngestLock(
+      this.config.database,
+      this.config.calendarId,
+      () => this.syncWithLockHeld(),
+    );
+  }
+
+  private async syncWithLockHeld(): Promise<SourceSyncResult> {
     await this.ensureValidToken();
 
     const result = await this.fetchEvents(this.config.syncToken);

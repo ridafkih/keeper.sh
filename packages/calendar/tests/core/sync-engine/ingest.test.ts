@@ -29,7 +29,6 @@ interface ExistingEvent {
   exceptionDates: string | null;
   recurrenceId: Date | null;
   recurrenceRule: string | null;
-  sourceEventInstanceKey: string | null;
   startTimeZone: string | null;
 }
 
@@ -44,13 +43,6 @@ const serializeOptionalJson = (value: unknown): string | null => {
     return null;
   }
   return JSON.stringify(value);
-};
-
-const buildTestInstanceKey = (event: SourceEvent): string => {
-  if (event.recurrenceId) {
-    return `recurrence|${event.uid}|${event.recurrenceId.toISOString()}`;
-  }
-  return `slot|${event.uid}|${event.startTime.toISOString()}|${event.endTime.toISOString()}`;
 };
 
 const failUninitializedBarrier = (): never => {
@@ -68,7 +60,6 @@ const toExistingEvent = (id: string, event: SourceEvent): ExistingEvent => ({
   recurrenceId: event.recurrenceId ?? null,
   recurrenceRule: serializeOptionalJson(event.recurrenceRule),
   sourceEventId: event.sourceEventId ?? null,
-  sourceEventInstanceKey: buildTestInstanceKey(event),
   sourceEventType: event.sourceEventType ?? null,
   sourceEventUid: event.uid,
   startTime: event.startTime,
@@ -88,6 +79,12 @@ const matchesPersistenceIdentity = (
 ): boolean => {
   if (incomingEvent.sourceEventId) {
     return existingEvent.sourceEventId === incomingEvent.sourceEventId;
+  }
+
+  if (incomingEvent.recurrenceId) {
+    return existingEvent.sourceEventId === null
+      && existingEvent.sourceEventUid === incomingEvent.uid
+      && existingEvent.recurrenceId?.getTime() === incomingEvent.recurrenceId.getTime();
   }
 
   return !existingEvent.sourceEventId
@@ -118,14 +115,6 @@ const createStatefulIngestion = async (initialEvents: SourceEvent[]) => {
         state.flushes.push(changes);
         const deletedIds = new Set(changes.deletes);
         state.events = state.events.filter((event) => !deletedIds.has(event.id));
-
-        for (const update of changes.updates) {
-          const existingIndex = state.events.findIndex((event) => event.id === update.id);
-          if (existingIndex === -1) {
-            throw new Error(`Cannot update missing event state: ${update.id}`);
-          }
-          state.events[existingIndex] = toExistingEvent(update.id, update.event);
-        }
 
         for (const event of changes.inserts) {
           const storageIdentity = eventStorageIdentity({
@@ -264,7 +253,6 @@ describe("ingestSource", () => {
       location: null,
       recurrenceId: null,
       recurrenceRule: null,
-      sourceEventInstanceKey: "slot|uid-1|2026-03-15T09:00:00.000Z|2026-03-15T10:00:00.000Z",
       startTimeZone: null,
     };
 
@@ -298,7 +286,6 @@ describe("ingestSource", () => {
       recurrenceRule: null,
       sourceEventType: null,
       sourceEventId: "provider-event-moved",
-      sourceEventInstanceKey: "slot|uid-moved|2026-03-15T09:00:00.000Z|2026-03-15T10:00:00.000Z",
       sourceEventUid: "uid-moved",
       startTime: new Date("2026-03-15T09:00:00Z"),
       startTimeZone: null,
@@ -334,7 +321,7 @@ describe("ingestSource", () => {
     expect(flushCapture[0]?.inserts).toEqual([movedEvent]);
   });
 
-  it("upgrades a legacy null instance key in place instead of cascading its mappings", async () => {
+  it("upserts a moved recurrence override through the normal conflict path", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
     const incomingEvent = {
       ...makeSourceEvent(
@@ -345,11 +332,7 @@ describe("ingestSource", () => {
       recurrenceId: new Date("2026-03-15T09:00:00Z"),
       title: "Moved override",
     };
-    const existingEvent = {
-      ...toExistingEvent("mapped-state-id", incomingEvent),
-      sourceEventInstanceKey: null,
-      title: "Old override",
-    };
+    const existingEvent = { ...toExistingEvent("mapped-state-id", incomingEvent), title: "Old override" };
     const flushes: IngestionChanges[] = [];
 
     const result = await ingestSource({
@@ -365,8 +348,7 @@ describe("ingestSource", () => {
     expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 0 });
     expect(flushes).toEqual([{
       deletes: [],
-      inserts: [],
-      updates: [{ event: incomingEvent, id: "mapped-state-id" }],
+      inserts: [incomingEvent],
     }]);
   });
 
@@ -577,14 +559,15 @@ describe("ingestSource", () => {
     expect(flushedSnapshots).toEqual([snapshot]);
   });
 
-  it("serializes persistence after fetching concurrent full snapshots", async () => {
+  it("locks before fetching so a slow older request cannot overwrite a newer snapshot", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
-    let fetchesCompleted = 0;
-    let releaseFetchBarrier: () => void = failUninitializedBarrier;
-    const fetchBarrier = new Promise<void>((resolve) => {
-      releaseFetchBarrier = resolve;
+    let transactionAttempts = 0;
+    let releaseSecondAttempt: () => void = failUninitializedBarrier;
+    const secondAttempt = new Promise<void>((resolve) => {
+      releaseSecondAttempt = resolve;
     });
     let transactionTail = Promise.resolve();
+    const fetchOrder: string[] = [];
     const storedEvents: ExistingEvent[] = [];
     const storedSnapshot: { value: { contentHash: string; ical: string } | null } = {
       value: null,
@@ -593,13 +576,16 @@ describe("ingestSource", () => {
     const withPersistenceTransaction = async (
       work: IngestionPersistenceWork,
     ) => {
+      transactionAttempts += 1;
+      if (transactionAttempts === 2) {
+        releaseSecondAttempt();
+      }
       const previousTransaction = transactionTail;
       let releaseTransaction: () => void = failUninitializedBarrier;
       transactionTail = new Promise<void>((resolve) => {
         releaseTransaction = resolve;
       });
       await previousTransaction;
-      expect(fetchesCompleted).toBe(2);
 
       try {
         return await work({
@@ -608,13 +594,6 @@ describe("ingestSource", () => {
             const deletedIds = new Set(changes.deletes);
             const retainedEvents = storedEvents.filter((event) => !deletedIds.has(event.id));
             storedEvents.splice(0, storedEvents.length, ...retainedEvents);
-            for (const update of changes.updates) {
-              const existingIndex = storedEvents.findIndex((event) => event.id === update.id);
-              if (existingIndex === -1) {
-                throw new Error(`Cannot update missing event state: ${update.id}`);
-              }
-              storedEvents[existingIndex] = toExistingEvent(update.id, update.event);
-            }
             for (const event of changes.inserts) {
               storedEvents.push(toExistingEvent(`state-${event.uid}`, event));
             }
@@ -629,14 +608,13 @@ describe("ingestSource", () => {
       }
     };
 
-    const runIngest = (identity: string) => ingestSource({
+    const runIngest = (identity: string, waitForConcurrentAttempt = false) => ingestSource({
       calendarId: "cal-concurrent",
       fetchEvents: async () => {
-        fetchesCompleted += 1;
-        if (fetchesCompleted === 2) {
-          releaseFetchBarrier();
+        if (waitForConcurrentAttempt) {
+          await secondAttempt;
         }
-        await fetchBarrier;
+        fetchOrder.push(identity);
         return {
           events: [makeSourceEvent(
             identity,
@@ -649,28 +627,43 @@ describe("ingestSource", () => {
       withPersistenceTransaction,
     });
 
-    await Promise.all([runIngest("snapshot-a"), runIngest("snapshot-b")]);
+    await Promise.all([
+      runIngest("older-snapshot", true),
+      runIngest("newer-snapshot"),
+    ]);
 
     expect(storedEvents).toHaveLength(1);
-    expect(storedSnapshot.value).toBeDefined();
-    expect(storedEvents[0]?.sourceEventUid).toBe(storedSnapshot.value?.contentHash);
+    expect(fetchOrder).toEqual(["older-snapshot", "newer-snapshot"]);
+    expect(storedEvents[0]?.sourceEventUid).toBe("newer-snapshot");
+    expect(storedSnapshot.value?.contentHash).toBe("newer-snapshot");
   });
 
-  it("does not enter persistence when the fetched source is unchanged", async () => {
+  it("locks an unchanged fetch but does not read or flush persistence", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
     let transactionEntered = false;
+    let persistenceUsed = false;
 
     const result = await ingestSource({
       calendarId: "cal-unchanged",
       fetchEvents: () => Promise.resolve({ events: [], unchanged: true }),
-      withPersistenceTransaction: () => {
+      withPersistenceTransaction: (work) => {
         transactionEntered = true;
-        return Promise.resolve({ eventsAdded: 0, eventsRemoved: 0 });
+        return work({
+          flush: () => {
+            persistenceUsed = true;
+            return Promise.resolve();
+          },
+          readExistingEvents: () => {
+            persistenceUsed = true;
+            return Promise.resolve([]);
+          },
+        });
       },
     });
 
     expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
-    expect(transactionEntered).toBe(false);
+    expect(transactionEntered).toBe(true);
+    expect(persistenceUsed).toBe(false);
   });
 
   it("includes sync token in flush when provided by fetchEvents", async () => {
@@ -711,7 +704,7 @@ describe("ingestSource", () => {
     expect(typeof emittedEvents[0]?.["duration_ms"]).toBe("number");
   });
 
-  it("replaces corrupt stored recurrence rows during a changed full sync", async () => {
+  it("repairs a matching corrupt stored recurrence row without deleting its stable ID", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
     const sourceEvent = makeSourceEvent(
       "uid-corrupt",
@@ -736,11 +729,10 @@ describe("ingestSource", () => {
       onIngestEvent: (event) => { emittedEvents.push(event); },
     });
 
-    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 1 });
+    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 0 });
     expect(flushes).toEqual([{
-      deletes: ["state-corrupt"],
+      deletes: [],
       inserts: [sourceEvent],
-      updates: [],
     }]);
     expect(emittedEvents[0]?.["stored_events.invalid_count"]).toBe(1);
     expect(emittedEvents[0]?.["stored_events.invalid_ids"]).toEqual(["state-corrupt"]);
@@ -774,7 +766,7 @@ describe("ingestSource", () => {
     });
 
     expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
-    expect(flushes).toEqual([{ deletes: [], inserts: [], syncToken: null, updates: [] }]);
+    expect(flushes).toEqual([{ deletes: [], inserts: [], syncToken: null }]);
   });
 
   it("does not parse corrupt stored rows when the fetched source is unchanged", async () => {
@@ -821,7 +813,6 @@ describe("ingestSource", () => {
       location: null,
       recurrenceId: null,
       recurrenceRule: "not-json",
-      sourceEventInstanceKey: "slot|uid-1|2026-03-15T09:00:00.000Z|2026-03-15T10:00:00.000Z",
       startTimeZone: null,
     };
 

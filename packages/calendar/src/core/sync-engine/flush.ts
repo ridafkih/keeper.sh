@@ -35,6 +35,7 @@ const createDatabaseFlush = (database: BunSQLDatabase): (changes: PendingChanges
           await transaction.insert(eventMappingsTable).values(
             batch.map((insert) => ({
               eventStateId: insert.eventStateId,
+              syncEventId: insert.syncEventId,
               calendarId: insert.calendarId,
               destinationEventUid: insert.destinationEventUid,
               deleteIdentifier: insert.deleteIdentifier,

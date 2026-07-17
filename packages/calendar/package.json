@@ -27,6 +27,7 @@
     "fast-json-stable-stringify": "^2.1.0",
     "ioredis": "^5.10.0",
     "ipaddr.js": "^2.3.0",
+    "rrule": "^2.8.1",
     "tldts": "^7.0.27",
     "ts-ics": "^2.4.3",
     "tsdav": "^2.1.8"

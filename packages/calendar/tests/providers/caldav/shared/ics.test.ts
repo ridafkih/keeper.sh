@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { eventToICalString, parseICalToRemoteEvent, parseICalToRemoteEvents } from "../../../../src/providers/caldav/shared/ics";
+import {
+  eventToICalString,
+  parseICalCalendarsToRemoteEvents,
+  parseICalToRemoteEvent,
+  parseICalToRemoteEvents,
+} from "../../../../src/providers/caldav/shared/ics";
 import { buildSourceEventsToAdd, buildSourceEventStateIdsToRemove } from "../../../../src/core/source/event-diff";
 import type { ExistingSourceEventState } from "../../../../src/core/source/event-diff";
-import { buildSourceEventInstanceKey } from "../../../../src/core/source/event-instance";
 import type { SourceEvent } from "../../../../src/core/types";
 
 const buildIcs = (vevents: string[]): string => [
@@ -47,7 +51,6 @@ const toExistingSourceEventState = (
   location: event.location,
   recurrenceId: event.recurrenceId ?? null,
   recurrenceRule: event.recurrenceRule ?? null,
-  sourceEventInstanceKey: buildSourceEventInstanceKey(event),
   sourceEventType: event.sourceEventType ?? "default",
   sourceEventUid: event.uid,
   startTime: event.startTime,
@@ -128,6 +131,25 @@ describe("eventToICalString", () => {
     expect(parsedEvent?.endTime.toISOString()).toBe("2026-06-17T11:45:00.000Z");
   });
 
+  it("canonicalizes CRLF text before serialization so replay hashes converge", () => {
+    const icsString = eventToICalString(
+      {
+        calendarId: "calendar-id",
+        calendarName: "Calendar",
+        calendarUrl: null,
+        description: "first line\r\nsecond line",
+        endTime: new Date("2026-06-17T11:45:00.000Z"),
+        id: "event-id",
+        sourceEventUid: "source-uid",
+        startTime: new Date("2026-06-17T10:45:00.000Z"),
+        summary: "Appointment",
+      },
+      "destination-uid",
+    );
+
+    expect(parseICalToRemoteEvent(icsString)?.description).toBe("first line\nsecond line");
+  });
+
   it("falls back to a bare UTC datetime when no timezone is known", () => {
     const icsString = eventToICalString(
       {
@@ -170,6 +192,26 @@ describe("eventToICalString", () => {
 });
 
 describe("parseICalToRemoteEvents", () => {
+  it("resolves revisions and cancellations across separate CalDAV resources", () => {
+    const active = buildIcs([buildVevent({
+      UID: "cross-resource-revision",
+      SEQUENCE: "1",
+      DTSTART: "20260101T100000Z",
+      DTEND: "20260101T110000Z",
+      SUMMARY: "Stale active",
+    })]);
+    const cancellation = buildIcs([buildVevent({
+      UID: "cross-resource-revision",
+      SEQUENCE: "2",
+      DTSTART: "20260101T100000Z",
+      DTEND: "20260101T110000Z",
+      STATUS: "CANCELLED",
+    })]);
+
+    expect(parseICalCalendarsToRemoteEvents([active, cancellation])).toEqual([]);
+    expect(parseICalCalendarsToRemoteEvents([cancellation, active])).toEqual([]);
+  });
+
   it("returns both master and modified occurrence from a recurring event", () => {
     const ics = buildIcs([
       buildVevent({
@@ -527,7 +569,6 @@ describe("transition from old single-event to new multi-event parsing", () => {
 
     const idsToRemove = buildSourceEventStateIdsToRemove(existingFromExpanded, newSourceEvents);
 
-    expect(idsToRemove).toHaveLength(1);
-    expect(idsToRemove[0]).toBe("expanded-1");
+    expect(idsToRemove).toEqual(["expanded-1"]);
   });
 });

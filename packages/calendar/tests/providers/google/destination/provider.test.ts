@@ -1,5 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createGoogleSyncProvider } from "../../../../src/providers/google/destination/provider";
+import { computeSyncOperations } from "../../../../src/core/sync/operations";
+import { createSyncEventContentHash } from "../../../../src/core/events/content-hash";
+import type { SyncableEvent } from "../../../../src/core/types";
 
 const batchMocks = vi.hoisted(() => ({
   executeBatchChunked: vi.fn(),
@@ -29,12 +32,110 @@ describe("createGoogleSyncProvider", () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("returns a provider with pushEvents, deleteEvents, and listRemoteEvents", () => {
     const provider = createProvider();
 
     expect(typeof provider.pushEvents).toBe("function");
     expect(typeof provider.deleteEvents).toBe("function");
     expect(typeof provider.listRemoteEvents).toBe("function");
+  });
+
+  it("checkpoints the iCalUID and Google event ID returned by import", async () => {
+    batchMocks.executeBatchChunked.mockResolvedValueOnce([
+      batchResponse(200, { id: "google-event-id" }),
+    ]);
+
+    const [result] = await createProvider().pushEvents([{
+      calendarId: "source-calendar",
+      calendarName: "Source",
+      calendarUrl: null,
+      endTime: new Date("2026-03-15T10:00:00Z"),
+      id: "event-state-id",
+      sourceEventUid: "source-event-uid",
+      startTime: new Date("2026-03-15T09:00:00Z"),
+      summary: "Meeting",
+    }]);
+
+    expect(result).toMatchObject({
+      deleteId: "google-event-id",
+      remoteId: expect.stringContaining("@keeper.sh"),
+      success: true,
+    });
+  });
+
+  it("converges when import and listing use Google's two different identifiers", async () => {
+    const event: SyncableEvent = {
+      calendarId: "source-calendar",
+      calendarName: "Source",
+      calendarUrl: null,
+      endTime: new Date("2026-03-15T10:00:00Z"),
+      id: "event-state-id",
+      sourceEventUid: "source-event-uid",
+      startTime: new Date("2026-03-15T09:00:00Z"),
+      summary: "Meeting",
+    };
+    batchMocks.executeBatchChunked.mockResolvedValueOnce([
+      batchResponse(200, { id: "google-event-id" }),
+    ]);
+    const provider = createProvider();
+    const [pushResult] = await provider.pushEvents([event]);
+    if (!pushResult?.success || !pushResult.remoteId || !pushResult.deleteId) {
+      throw new Error("Expected a successful Google import");
+    }
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(Response.json({
+      items: [{
+        end: { dateTime: event.endTime.toISOString() },
+        iCalUID: pushResult.remoteId,
+        id: pushResult.deleteId,
+        start: { dateTime: event.startTime.toISOString() },
+        summary: event.summary,
+      }],
+    }, { status: 200 }))));
+
+    const remoteEvents = await provider.listRemoteEvents();
+    const mapping = {
+      calendarId: "cal-1",
+      deleteIdentifier: pushResult.deleteId,
+      destinationEventUid: pushResult.remoteId,
+      endTime: event.endTime,
+      eventStateId: event.id,
+      id: "mapping-id",
+      startTime: event.startTime,
+      syncEventHash: createSyncEventContentHash(event),
+      syncEventId: event.id,
+    };
+
+    expect(computeSyncOperations([event], [mapping], remoteEvents)).toEqual({
+      mappingIdsToPrune: [],
+      operations: [],
+      staleMappingIds: [],
+    });
+  });
+
+  it("does not checkpoint an import response without its Google event ID", async () => {
+    batchMocks.executeBatchChunked.mockResolvedValueOnce([
+      batchResponse(200, {}),
+    ]);
+
+    await expect(createProvider().pushEvents([{
+      calendarId: "source-calendar",
+      calendarName: "Source",
+      calendarUrl: null,
+      endTime: new Date("2026-03-15T10:00:00Z"),
+      id: "event-state-id",
+      sourceEventUid: "source-event-uid",
+      startTime: new Date("2026-03-15T09:00:00Z"),
+      summary: "Meeting",
+    }])).resolves.toEqual([{
+      error: "Google import response is missing the event ID",
+      errorType: "GoogleBatchProtocolError",
+      statusCode: 200,
+      success: false,
+    }]);
   });
 
   it.each([{ items: [] }, {}])(

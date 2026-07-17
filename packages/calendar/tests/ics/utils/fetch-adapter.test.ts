@@ -74,6 +74,83 @@ describe("createIcsSourceFetcher", () => {
     expect(result.unchanged).toBeUndefined();
   });
 
+  it("interprets floating event times using X-WR-TIMEZONE", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const floatingIcs = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//test//test//EN",
+      "X-WR-TIMEZONE:America/Edmonton",
+      "BEGIN:VEVENT",
+      "UID:floating-event@test",
+      "DTSTART:20260310T090000",
+      "DTEND:20260310T100000",
+      "RRULE:FREQ=WEEKLY;COUNT=2",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: floatingIcs });
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({
+      changed: true,
+      snapshot: { contentHash: "hash-floating", ical: floatingIcs },
+    });
+
+    const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+    expect(result.events[0]).toMatchObject({
+      startTime: new Date("2026-03-10T15:00:00.000Z"),
+      startTimeZone: "America/Edmonton",
+    });
+  });
+
+  it("treats VALUE=DATE-TIME as floating rather than all-day", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const floatingIcs = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//test//test//EN",
+      "X-WR-TIMEZONE:America/Edmonton",
+      "BEGIN:VEVENT",
+      "UID:explicit-date-time@test",
+      "DTSTART;VALUE=DATE-TIME:20260310T090000",
+      "DTEND;VALUE=DATE-TIME:20260310T100000",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: floatingIcs });
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({
+      changed: true,
+      snapshot: { contentHash: "hash-date-time", ical: floatingIcs },
+    });
+
+    const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+    expect(result.events[0]?.startTime).toEqual(new Date("2026-03-10T15:00:00.000Z"));
+  });
+
+  it("rejects floating event times without calendar timezone context", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const floatingIcs = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//test//test//EN",
+      "BEGIN:VEVENT",
+      "UID:ambiguous-floating-event@test",
+      "DTSTART:20260310T090000",
+      "DTEND:20260310T100000",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: floatingIcs });
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({
+      changed: true,
+      snapshot: { contentHash: "hash-ambiguous", ical: floatingIcs },
+    });
+
+    await expect(createIcsSourceFetcher(buildConfig()).fetchEvents())
+      .rejects.toThrow("Floating ICS DTSTART requires an explicit TZID or X-WR-TIMEZONE");
+  });
+
   it("passes calendar timezone metadata to event interpretation", async () => {
     const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
     mockPullRemoteCalendar.mockResolvedValueOnce({

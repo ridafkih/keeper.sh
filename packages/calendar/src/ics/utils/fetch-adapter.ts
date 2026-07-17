@@ -7,6 +7,7 @@ import { parseIcsEvents } from "./parse-ics-events";
 import { pullRemoteCalendar } from "./pull-remote-calendar";
 import { prepareCalendarSnapshot } from "./create-snapshot";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { normalizeTimezone } from "./normalize-timezone";
 
 interface IcsSourceFetcherConfig {
   calendarId: string;
@@ -26,6 +27,60 @@ interface FetchIcsSourceEventsOptions {
 interface IcsSourceFetcher {
   fetchEvents: (options?: FetchIcsSourceEventsOptions) => Promise<FetchEventsResult>;
 }
+
+const FLOATING_DATE_PROPERTIES = new Set([
+  "DTEND",
+  "DTSTART",
+  "EXDATE",
+  "RDATE",
+  "RECURRENCE-ID",
+]);
+
+const applyCalendarTimeZoneToFloatingEventDates = (
+  ical: string,
+  calendarTimeZone: string | undefined,
+): string => {
+  const unfolded = ical.replaceAll(/\r?\n[\t ]/g, "");
+  let insideEvent = false;
+
+  return unfolded.split(/\r?\n/).map((line) => {
+    if (line.toUpperCase() === "BEGIN:VEVENT") {
+      insideEvent = true;
+      return line;
+    }
+    if (line.toUpperCase() === "END:VEVENT") {
+      insideEvent = false;
+      return line;
+    }
+    if (!insideEvent) {
+      return line;
+    }
+
+    const separatorIndex = line.indexOf(":");
+    if (separatorIndex === -1) {
+      return line;
+    }
+    const property = line.slice(0, separatorIndex);
+    const [propertyName, ...parameters] = property.toUpperCase().split(";");
+    const value = line.slice(separatorIndex + 1);
+    if (
+      !propertyName
+      || !FLOATING_DATE_PROPERTIES.has(propertyName)
+      || property.toUpperCase().includes("TZID=")
+      || parameters.includes("VALUE=DATE")
+      || value.split(",").every((entry) => entry.endsWith("Z") || /^\d{8}$/.test(entry))
+    ) {
+      return line;
+    }
+
+    if (!calendarTimeZone) {
+      throw new RangeError(
+        `Floating ICS ${propertyName} requires an explicit TZID or X-WR-TIMEZONE`,
+      );
+    }
+    return `${property};TZID=${calendarTimeZone}:${value}`;
+  }).join("\r\n");
+};
 
 const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetcher => {
   /**
@@ -54,10 +109,19 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
     if (!snapshotResult.changed || !snapshotResult.snapshot) {
       return { events: [], unchanged: true };
     }
-    const calendar = parseIcsCalendarLenient({
+    const initialCalendar = parseIcsCalendarLenient({
       icsString: ical,
       patches: [coerceCompliantDate],
     });
+    const calendarTimeZone = normalizeTimezone(initialCalendar.nonStandard?.wrTimezone);
+    const normalizedIcal = applyCalendarTimeZoneToFloatingEventDates(ical, calendarTimeZone);
+    let calendar = initialCalendar;
+    if (normalizedIcal !== ical) {
+      calendar = parseIcsCalendarLenient({
+        icsString: normalizedIcal,
+        patches: [coerceCompliantDate],
+      });
+    }
     const parsed = parseIcsEvents(calendar);
     const events: SourceEvent[] = parsed.map((event) => ({
       availability: event.availability,
@@ -76,7 +140,7 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
     if (options.interpretEvents) {
       return {
         events: options.interpretEvents(events, {
-          calendarTimeZone: calendar.nonStandard?.wrTimezone,
+          calendarTimeZone,
         }),
         snapshot: snapshotResult.snapshot,
       };
@@ -87,7 +151,7 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
   return { fetchEvents };
 };
 
-export { createIcsSourceFetcher };
+export { applyCalendarTimeZoneToFloatingEventDates, createIcsSourceFetcher };
 export type {
   FetchIcsSourceEventsOptions,
   IcsSourceEventContext,

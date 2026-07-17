@@ -11,6 +11,7 @@ import {
   ensureValidToken,
   isTimeoutError,
   buildCalendarBackoffState,
+  SOURCE_INGEST_LOCK_NAMESPACE,
 } from "@keeper.sh/calendar";
 import { INGEST_SOURCE_TIMEOUT_MS, PROVIDER_INGEST_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
 import type { CalendarBackoffState, IngestionFetchEventsResult, IngestionPersistenceWork, RedisRateLimiter, TokenState } from "@keeper.sh/calendar";
@@ -40,8 +41,6 @@ import { resolveMissingCalendarFailure } from "@/utils/provider-ingest-failure";
 
 const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
 const SOURCE_CONCURRENCY = 5;
-const SOURCE_INGEST_LOCK_NAMESPACE = 9003;
-
 const resolveIngestErrorSlug = (error: unknown): string => {
   if (!isTimeoutError(error)) {
     return "provider-api-error";
@@ -117,7 +116,6 @@ const createIngestionPersistenceTransaction = (calendarId: string) =>
           recurrenceId: eventStatesTable.recurrenceId,
           recurrenceRule: eventStatesTable.recurrenceRule,
           sourceEventId: eventStatesTable.sourceEventId,
-          sourceEventInstanceKey: eventStatesTable.sourceEventInstanceKey,
           sourceEventType: eventStatesTable.sourceEventType,
           sourceEventUid: eventStatesTable.sourceEventUid,
           startTime: eventStatesTable.startTime,
@@ -134,18 +132,6 @@ const createIngestionPersistenceTransaction = (calendarId: string) =>
               and(
                 eq(eventStatesTable.calendarId, calendarId),
                 inArray(eventStatesTable.id, changes.deletes),
-              ),
-            );
-        }
-
-        for (const update of changes.updates) {
-          await transaction
-            .update(eventStatesTable)
-            .set(buildEventStateInsertRow(calendarId, update.event))
-            .where(
-              and(
-                eq(eventStatesTable.calendarId, calendarId),
-                eq(eventStatesTable.id, update.id),
               ),
             );
         }

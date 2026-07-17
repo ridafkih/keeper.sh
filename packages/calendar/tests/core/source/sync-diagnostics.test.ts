@@ -6,7 +6,6 @@ import {
   resolveSourceSyncTokenAction,
   splitSourceEventsByPersistenceIdentity,
 } from "../../../src/core/source/sync-diagnostics";
-import { buildSourceEventInstanceKey } from "../../../src/core/source/event-instance";
 
 const createSourceEvent = (overrides: Partial<SourceEvent>): SourceEvent => ({
   endTime: new Date("2026-03-12T11:00:00.000Z"),
@@ -30,14 +29,7 @@ const createExistingEvent = (
     startTimeZone: null,
     ...overrides,
   };
-  const sourceEventInstanceKey = overrides.sourceEventInstanceKey
-    ?? buildSourceEventInstanceKey({
-      endTime: event.endTime,
-      recurrenceId: event.recurrenceId,
-      startTime: event.startTime,
-      uid: event.sourceEventUid ?? "missing-uid",
-    });
-  return { ...event, sourceEventInstanceKey };
+  return event;
 };
 
 describe("filterSourceEventsToSyncWindow", () => {

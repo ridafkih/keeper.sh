@@ -3,6 +3,8 @@ import {
   parseStoredIcsExceptionDates,
   parseStoredIcsRecurrenceRule,
 } from "../events/stored-recurrence";
+import type { SourceEvent } from "../types";
+import { buildSourceEventInstanceKey } from "./event-instance";
 
 interface StoredSourceEventState {
   availability?: string | null;
@@ -15,7 +17,6 @@ interface StoredSourceEventState {
   recurrenceId: Date | null;
   recurrenceRule: string | null;
   sourceEventId?: string | null;
-  sourceEventInstanceKey: string | null;
   sourceEventType?: string | null;
   sourceEventUid: string | null;
   startTime: Date;
@@ -82,7 +83,47 @@ const parseStoredSourceEventStatesRecoveringInvalid = (
   return { events, failures };
 };
 
+const buildInvalidStoredEventIdsToRemove = (
+  failures: StoredSourceEventParseFailure[],
+  incomingEvents: SourceEvent[],
+): string[] => {
+  const incomingProviderIds = new Set<string>();
+  const incomingFallbackKeys = new Set<string>();
+  for (const event of incomingEvents) {
+    if (event.sourceEventId) {
+      incomingProviderIds.add(event.sourceEventId);
+      continue;
+    }
+    incomingFallbackKeys.add(buildSourceEventInstanceKey(event));
+  }
+
+  return failures.flatMap(({ event, eventId }) => {
+    if (event.sourceEventId) {
+      if (incomingProviderIds.has(event.sourceEventId)) {
+        return [];
+      }
+      return [eventId];
+    }
+
+    if (event.sourceEventUid === null) {
+      return [eventId];
+    }
+
+    const instanceKey = buildSourceEventInstanceKey({
+      endTime: event.endTime,
+      recurrenceId: event.recurrenceId,
+      startTime: event.startTime,
+      uid: event.sourceEventUid,
+    });
+    if (incomingFallbackKeys.has(instanceKey)) {
+      return [];
+    }
+    return [eventId];
+  });
+};
+
 export {
+  buildInvalidStoredEventIdsToRemove,
   parseStoredSourceEventState,
   parseStoredSourceEventStates,
   parseStoredSourceEventStatesRecoveringInvalid,

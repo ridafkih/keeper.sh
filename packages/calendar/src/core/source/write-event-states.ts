@@ -3,7 +3,6 @@ import { isNotNull, isNull, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
 import type { SourceEvent } from "../types";
-import { buildSourceEventInstanceKey } from "./event-instance";
 
 const EMPTY_ROW_COUNT = 0;
 
@@ -32,7 +31,6 @@ const buildEventStateInsertRow = (
   recurrenceId: event.recurrenceId,
   recurrenceRule: serializeOptionalJson(event.recurrenceRule),
   sourceEventId: event.sourceEventId,
-  sourceEventInstanceKey: buildSourceEventInstanceKey(event),
   sourceEventType: event.sourceEventType ?? "default",
   sourceEventUid: event.uid,
   startTime: event.startTime,
@@ -75,10 +73,7 @@ const EVENT_STATE_CONFLICT_SET = {
   title: excludedColumn(eventStatesTable.title.name),
 };
 
-const PROVIDER_EVENT_STATE_CONFLICT_SET = {
-  ...EVENT_STATE_CONFLICT_SET,
-  sourceEventInstanceKey: excludedColumn(eventStatesTable.sourceEventInstanceKey.name),
-};
+const PROVIDER_EVENT_STATE_CONFLICT_SET = EVENT_STATE_CONFLICT_SET;
 
 type EventStateConflictTarget =
   | typeof LEGACY_EVENT_STATE_CONFLICT_TARGET
@@ -92,8 +87,13 @@ interface EventStateConflictConfig {
 
 interface EventStateInsertClient {
   insert: (table: typeof eventStatesTable) => {
-    values: (rows: EventStateInsertRow[]) => {
+    values: {
+      (row: EventStateInsertRow): {
+        onConflictDoUpdate: (config: EventStateConflictConfig) => Promise<unknown>;
+      };
+      (rows: EventStateInsertRow[]): {
       onConflictDoUpdate: (config: EventStateConflictConfig) => Promise<unknown>;
+      };
     };
   };
 }

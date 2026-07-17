@@ -87,4 +87,19 @@ describe("createOutlookSyncProvider", () => {
 
     await expect(pending).rejects.toBe(abortError);
   });
+
+  it("requests plain-text bodies when listing events for content reconciliation", async () => {
+    const fetchMock = vi.fn((_input: string | URL | Request, _init?: RequestInit) =>
+      Promise.resolve(Response.json({ value: [] })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createProvider().listRemoteEvents();
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      headers: {
+        Prefer: `outlook.body-content-type="text"`,
+      },
+    });
+  });
 });

@@ -93,6 +93,34 @@ describe("parseIcsEvents", () => {
     );
   });
 
+  it("does not merge recurring masters that reuse a UID at different slots", () => {
+    const calendar = parseIcsCalendar({
+      icsString: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Keeper Test//EN",
+        "BEGIN:VEVENT",
+        "UID:reused-master@zoho.com",
+        "DTSTART:20230727T180000Z",
+        "DTEND:20230727T183000Z",
+        "RRULE:FREQ=WEEKLY;COUNT=2",
+        "END:VEVENT",
+        "BEGIN:VEVENT",
+        "UID:reused-master@zoho.com",
+        "DTSTART:20241127T190000Z",
+        "DTEND:20241127T193000Z",
+        "RRULE:FREQ=WEEKLY;COUNT=2",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    });
+
+    expect(parseIcsEvents(calendar).map((event) => event.startTime.toISOString())).toEqual([
+      "2023-07-27T18:00:00.000Z",
+      "2024-11-27T19:00:00.000Z",
+    ]);
+  });
+
   it("turns a cancelled recurrence override into a master exception", () => {
     const calendar = parseIcsCalendar({
       icsString: [
@@ -148,5 +176,179 @@ describe("parseIcsEvents", () => {
     });
 
     expect(parseIcsEvents(calendar)).toEqual([]);
+  });
+
+  it("rejects THISANDFUTURE instead of silently changing its meaning", () => {
+    const calendar = parseIcsCalendar({
+      icsString: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Keeper Test//EN",
+        "BEGIN:VEVENT",
+        "UID:ranged-series",
+        "RECURRENCE-ID;RANGE=THISANDFUTURE:20260309T100000Z",
+        "DTSTART:20260309T120000Z",
+        "DTEND:20260309T130000Z",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    });
+
+    expect(() => parseIcsEvents(calendar)).toThrow(
+      "RECURRENCE-ID;RANGE=THISANDFUTURE is not supported for event ranged-series",
+    );
+  });
+
+  it.each([
+    ["cancelled first", ["cancelled", "confirmed"]],
+    ["confirmed first", ["confirmed", "cancelled"]],
+  ])("uses SEQUENCE instead of input order when a stale cancellation is %s", (description, order) => {
+    expect(description).toBeTypeOf("string");
+    const revisions = {
+      cancelled: [
+        "BEGIN:VEVENT",
+        "UID:revision-order",
+        "DTSTAMP:20260301T000000Z",
+        "DTSTART:20260302T100000Z",
+        "DTEND:20260302T110000Z",
+        "SEQUENCE:1",
+        "STATUS:CANCELLED",
+        "END:VEVENT",
+      ].join("\r\n"),
+      confirmed: [
+        "BEGIN:VEVENT",
+        "UID:revision-order",
+        "DTSTAMP:20260302T000000Z",
+        "DTSTART:20260302T120000Z",
+        "DTEND:20260302T130000Z",
+        "SEQUENCE:2",
+        "SUMMARY:Current revision",
+        "END:VEVENT",
+      ].join("\r\n"),
+    };
+    const calendar = parseIcsCalendar({
+      icsString: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Keeper Test//EN",
+        ...order.map((revision) => revisions[revision as keyof typeof revisions]),
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    });
+
+    const events = parseIcsEvents(calendar);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.title).toBe("Current revision");
+    expect(events[0]?.startTime.toISOString()).toBe("2026-03-02T12:00:00.000Z");
+  });
+
+  it.each([
+    ["cancelled first", ["cancelled", "confirmed"]],
+    ["confirmed first", ["confirmed", "cancelled"]],
+  ])("uses revision timestamps when a stale cancellation without SEQUENCE is %s", (_description, order) => {
+    const revisions = {
+      cancelled: [
+        "BEGIN:VEVENT",
+        "UID:timestamp-revision-order",
+        "DTSTAMP:20260301T000000Z",
+        "DTSTART:20260302T100000Z",
+        "DTEND:20260302T110000Z",
+        "STATUS:CANCELLED",
+        "END:VEVENT",
+      ].join("\r\n"),
+      confirmed: [
+        "BEGIN:VEVENT",
+        "UID:timestamp-revision-order",
+        "DTSTAMP:20260302T000000Z",
+        "DTSTART:20260302T120000Z",
+        "DTEND:20260302T130000Z",
+        "SUMMARY:Current timestamp revision",
+        "END:VEVENT",
+      ].join("\r\n"),
+    };
+    const calendar = parseIcsCalendar({
+      icsString: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Keeper Test//EN",
+        ...order.map((revision) => revisions[revision as keyof typeof revisions]),
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    });
+
+    expect(parseIcsEvents(calendar)).toMatchObject([{
+      startTime: new Date("2026-03-02T12:00:00.000Z"),
+      title: "Current timestamp revision",
+    }]);
+  });
+
+  it.each([
+    ["older first", ["older", "newer"]],
+    ["newer first", ["newer", "older"]],
+  ])("keeps only the newest moved revision without SEQUENCE when %s", (_description, order) => {
+    const revisions = {
+      older: [
+        "BEGIN:VEVENT",
+        "UID:moved-without-sequence",
+        "LAST-MODIFIED:20260301T000000Z",
+        "DTSTART:20260302T100000Z",
+        "DTEND:20260302T110000Z",
+        "SUMMARY:Old slot",
+        "END:VEVENT",
+      ].join("\r\n"),
+      newer: [
+        "BEGIN:VEVENT",
+        "UID:moved-without-sequence",
+        "LAST-MODIFIED:20260302T000000Z",
+        "DTSTART:20260302T120000Z",
+        "DTEND:20260302T130000Z",
+        "SUMMARY:New slot",
+        "END:VEVENT",
+      ].join("\r\n"),
+    };
+    const calendar = parseIcsCalendar({
+      icsString: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Keeper Test//EN",
+        ...order.map((revision) => revisions[revision as keyof typeof revisions]),
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    });
+
+    expect(parseIcsEvents(calendar)).toMatchObject([{
+      startTime: new Date("2026-03-02T12:00:00.000Z"),
+      title: "New slot",
+    }]);
+  });
+
+  it("does not resurrect an unversioned slot beside a later versioned restore", () => {
+    const calendar = parseIcsCalendar({
+      icsString: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Keeper Test//EN",
+        "BEGIN:VEVENT",
+        "UID:mixed-revision-metadata",
+        "DTSTART:20260310T100000Z",
+        "DTEND:20260310T110000Z",
+        "SUMMARY:Old unversioned slot",
+        "END:VEVENT",
+        "BEGIN:VEVENT",
+        "UID:mixed-revision-metadata",
+        "SEQUENCE:2",
+        "DTSTART:20260310T150000Z",
+        "DTEND:20260310T160000Z",
+        "SUMMARY:Restored current slot",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    });
+
+    expect(parseIcsEvents(calendar)).toMatchObject([{
+      startTime: new Date("2026-03-10T15:00:00.000Z"),
+      title: "Restored current slot",
+    }]);
   });
 });

@@ -13,6 +13,7 @@ import { MICROSOFT_GRAPH_API, OUTLOOK_PAGE_SIZE } from "../shared/api";
 import { parseEventTime } from "../shared/date-time";
 import { serializeOutlookEvent } from "./serialize-event";
 import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
+import { createEditableEventContentHash } from "../../../core/events/content-hash";
 
 interface OutlookSyncProviderConfig {
   accessToken: string;
@@ -31,6 +32,13 @@ const createCaughtFailure = (error: unknown): PushResult | DeleteResult => {
     errorType = error.name;
   }
   return { error: getErrorMessage(error), errorType, success: false };
+};
+
+const parseRemoteAvailability = (showAs: string | undefined): SyncableEvent["availability"] => {
+  if (showAs === "free" || showAs === "oof" || showAs === "workingElsewhere") {
+    return showAs;
+  }
+  return "busy";
 };
 
 const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
@@ -146,7 +154,10 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       `categories/any(c:c eq '${KEEPER_CATEGORY}') and start/dateTime ge '${lookbackStart.toISOString()}' and start/dateTime le '${futureDate.toISOString()}'`,
     );
     baseUrl.searchParams.set("$top", String(OUTLOOK_PAGE_SIZE));
-    baseUrl.searchParams.set("$select", "id,iCalUId,subject,start,end,categories");
+    baseUrl.searchParams.set(
+      "$select",
+      "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
+    );
     return baseUrl;
   };
 
@@ -162,7 +173,10 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       const url = buildOutlookEventsUrl(lookbackStart, futureDate, nextLink);
 
       const response = await fetchWithTimeout(url, {
-        headers: { Authorization: `Bearer ${tokenState.accessToken}` },
+        headers: {
+          Authorization: `Bearer ${tokenState.accessToken}`,
+          Prefer: `outlook.body-content-type="text"`,
+        },
         method: "GET",
       }, PROVIDER_PUSH_REQUEST_TIMEOUT_MS, config.signal);
 
@@ -183,10 +197,22 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
           continue;
         }
 
+        const availability = parseRemoteAvailability(event.showAs);
         remoteEvents.push({
           deleteId: event.id,
+          editableAvailability: availability,
+          editableContentHash: createEditableEventContentHash({
+            availability,
+            description: event.body?.content,
+            endTime,
+            isAllDay: event.isAllDay,
+            location: event.location?.displayName,
+            startTime,
+            summary: event.subject ?? "",
+          }),
           endTime,
           isKeeperEvent: event.categories?.includes(KEEPER_CATEGORY) ?? false,
+          supportedAvailabilities: ["busy", "free", "oof", "workingElsewhere"],
           startTime,
           uid: event.iCalUId,
         });

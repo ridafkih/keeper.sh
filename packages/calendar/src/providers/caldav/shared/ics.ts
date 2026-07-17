@@ -1,8 +1,13 @@
 import { generateIcsCalendar } from "ts-ics";
-import { parseIcsCalendar, buildZonedIcsDate } from "../../../ics";
+import {
+  applyCalendarTimeZoneToFloatingEventDates,
+  buildZonedIcsDate,
+  normalizeTimezone,
+  parseIcsCalendar,
+  parseIcsEvents,
+} from "../../../ics";
 import type {
   IcsCalendar,
-  IcsDuration,
   IcsEvent,
   IcsExceptionDates,
   IcsRecurrenceRule,
@@ -10,55 +15,19 @@ import type {
 import type { SyncableEvent } from "../../../core/types";
 import { isKeeperEvent } from "../../../core/events/identity";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
-import {
-  MS_PER_DAY,
-  MS_PER_HOUR,
-  MS_PER_MINUTE,
-  MS_PER_SECOND,
-  MS_PER_WEEK,
-} from "@keeper.sh/constants";
 
-const DEFAULT_DURATION_VALUE = 0;
-
-const durationToMs = (duration: IcsDuration): number => {
-  const {
-    weeks = DEFAULT_DURATION_VALUE,
-    days = DEFAULT_DURATION_VALUE,
-    hours = DEFAULT_DURATION_VALUE,
-    minutes = DEFAULT_DURATION_VALUE,
-    seconds = DEFAULT_DURATION_VALUE,
-  } = duration;
-
-  return (
-    weeks * MS_PER_WEEK
-    + days * MS_PER_DAY
-    + hours * MS_PER_HOUR
-    + minutes * MS_PER_MINUTE
-    + seconds * MS_PER_SECOND
-  );
-};
-
-const getEventEndTime = (event: IcsEvent, startTime: Date): Date => {
-  if ("end" in event && event.end) {
-    return event.end.date;
-  }
-
-  if ("duration" in event && event.duration) {
-    return new Date(startTime.getTime() + durationToMs(event.duration));
-  }
-
-  return startTime;
-};
+const normalizeIcsText = (value: string | undefined): string | undefined =>
+  value?.replaceAll(/\r\n?/g, "\n");
 
 const eventToICalString = (event: SyncableEvent, uid: string): string => {
   const isAllDay = resolveIsAllDayEvent(event);
   const icsEvent: IcsEvent = {
-    description: event.description,
+    description: normalizeIcsText(event.description),
     end: buildZonedIcsDate(event.endTime, event.startTimeZone, isAllDay),
-    location: event.location,
+    location: normalizeIcsText(event.location),
     stamp: { date: new Date() },
     start: buildZonedIcsDate(event.startTime, event.startTimeZone, isAllDay),
-    summary: event.summary,
+    summary: event.summary.replaceAll(/\r\n?/g, "\n"),
     ...(event.availability === "free" && { timeTransparent: "TRANSPARENT" }),
     uid,
   };
@@ -89,57 +58,55 @@ interface ParsedCalendarEvent {
   recurrenceId?: Date;
 }
 
-const mapAvailability = (transparency: "TRANSPARENT" | "OPAQUE" | undefined) => {
-  if (transparency === "TRANSPARENT") {
-    return "free";
+const parseICalCalendarsToRemoteEvents = (icsStrings: string[]): ParsedCalendarEvent[] => {
+  const calendars = icsStrings.map((icsString) => {
+    const initialCalendar = parseIcsCalendar({ icsString });
+    const normalizedIcs = applyCalendarTimeZoneToFloatingEventDates(
+      icsString,
+      normalizeTimezone(initialCalendar.nonStandard?.wrTimezone),
+    );
+    if (normalizedIcs === icsString) {
+      return initialCalendar;
+    }
+    return parseIcsCalendar({ icsString: normalizedIcs });
+  });
+  const [firstCalendar] = calendars;
+  if (!firstCalendar) {
+    return [];
   }
-  return "busy";
-};
-
-const mapIcsEventToParsedEvent = (event: IcsEvent): ParsedCalendarEvent | null => {
-  if (!event.uid || !event.start?.date) {
-    return null;
-  }
-
-  const startTime = event.start.date;
-  const endTime = getEventEndTime(event, startTime);
-
-  return {
-    availability: mapAvailability(event.timeTransparent),
+  const calendar = {
+    ...firstCalendar,
+    events: calendars.flatMap((entry) => entry.events ?? []),
+  };
+  return parseIcsEvents(calendar, { includeKeeperEvents: true }).map((event) => ({
+    availability: event.availability ?? "busy",
     deleteId: event.uid,
     description: event.description,
-    endTime,
+    endTime: event.endTime,
     exceptionDates: event.exceptionDates,
-    recurrenceId: event.recurrenceId?.value?.date,
+    recurrenceId: event.recurrenceId,
     isKeeperEvent: isKeeperEvent(event.uid),
-    isAllDay: event.start.type === "DATE",
+    isAllDay: event.isAllDay,
     location: event.location,
     recurrenceRule: event.recurrenceRule,
-    startTime,
-    startTimeZone: event.start.local?.timezone,
-    title: event.summary,
+    startTime: event.startTime,
+    startTimeZone: event.startTimeZone,
+    title: event.title,
     uid: event.uid,
-  };
+  }));
 };
 
-const parseICalToRemoteEvents = (icsString: string): ParsedCalendarEvent[] => {
-  const calendar = parseIcsCalendar({ icsString });
-  const events = calendar.events ?? [];
-  const parsed: ParsedCalendarEvent[] = [];
-
-  for (const event of events) {
-    const result = mapIcsEventToParsedEvent(event);
-    if (result) {
-      parsed.push(result);
-    }
-  }
-
-  return parsed;
-};
+const parseICalToRemoteEvents = (icsString: string): ParsedCalendarEvent[] =>
+  parseICalCalendarsToRemoteEvents([icsString]);
 
 const parseICalToRemoteEvent = (icsString: string): ParsedCalendarEvent | null => {
   const [event] = parseICalToRemoteEvents(icsString);
   return event ?? null;
 };
 
-export { eventToICalString, parseICalToRemoteEvent, parseICalToRemoteEvents };
+export {
+  eventToICalString,
+  parseICalCalendarsToRemoteEvents,
+  parseICalToRemoteEvent,
+  parseICalToRemoteEvents,
+};

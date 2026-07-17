@@ -157,6 +157,45 @@ describe("fetchCalendarEvents", () => {
     expect(result.cancelledEventIds).toEqual(expectedCancelledIds);
   });
 
+  it.each([
+    ["older page first", ["older", "newer"]],
+    ["newer page first", ["newer", "older"]],
+  ])("uses Outlook revision timestamps instead of page order when %s", async (_label, order) => {
+    const revisions = {
+      newer: {
+        iCalUId: "event-uid",
+        id: "event-1",
+        lastModifiedDateTime: "2026-03-02T00:00:00.000Z",
+        subject: "Newest",
+      },
+      older: {
+        iCalUId: "event-uid",
+        id: "event-1",
+        lastModifiedDateTime: "2026-03-01T00:00:00.000Z",
+        subject: "Stale",
+      },
+    };
+    const nextPageLink = "https://graph.microsoft.com/delta?$skiptoken=next";
+    globalThis.fetch = createFetchQueue([
+      createJsonResponse({
+        "@odata.nextLink": nextPageLink,
+        value: [revisions[order[0] as keyof typeof revisions]],
+      }),
+      createJsonResponse({
+        "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
+        value: [revisions[order[1] as keyof typeof revisions]],
+      }),
+    ], []);
+
+    const result = await fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      deltaLink: "https://graph.microsoft.com/delta?$deltatoken=current",
+    });
+
+    expect(result.events).toMatchObject([{ id: "event-1", subject: "Newest" }]);
+  });
+
   it("builds initial range URL when running full sync", async () => {
     const requestedUrls: string[] = [];
 
@@ -189,7 +228,7 @@ describe("fetchCalendarEvents", () => {
     expect(parsedUrl.searchParams.get("startDateTime")).toBe("2026-06-01T00:00:00.000Z");
     expect(parsedUrl.searchParams.get("endDateTime")).toBe("2026-06-02T00:00:00.000Z");
     expect(parsedUrl.searchParams.get("$select")).toBe(
-      "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
+      "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories,createdDateTime,lastModifiedDateTime",
     );
   });
 
@@ -251,7 +290,24 @@ describe("parseOutlookEvents", () => {
     expect(parsedEvent.sourceEventId).toBe("outlook-event-id-1");
     expect(parsedEvent.startTime.toISOString()).toBe("2026-03-08T14:00:00.000Z");
     expect(parsedEvent.endTime.toISOString()).toBe("2026-03-08T15:00:00.000Z");
-    expect(parsedEvent.startTimeZone).toBe("UTC");
+    expect(parsedEvent.startTimeZone).toBe("Etc/UTC");
+  });
+
+  it("interprets Microsoft wall times in their Windows timezone", () => {
+    const parsedEvents = parseOutlookEvents([createOutlookEvent({
+      end: {
+        dateTime: "2026-03-02T10:00:00",
+        timeZone: "Mountain Standard Time",
+      },
+      start: {
+        dateTime: "2026-03-02T09:00:00",
+        timeZone: "Mountain Standard Time",
+      },
+    })]);
+
+    expect(parsedEvents[0]?.startTime.toISOString()).toBe("2026-03-02T16:00:00.000Z");
+    expect(parsedEvents[0]?.endTime.toISOString()).toBe("2026-03-02T17:00:00.000Z");
+    expect(parsedEvents[0]?.startTimeZone).toBe("America/Denver");
   });
 
   it("skips keeper-managed and malformed events", () => {

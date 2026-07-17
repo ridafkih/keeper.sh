@@ -72,7 +72,14 @@ export {
   isTimeoutError,
   mergeAbortSignals,
 } from "./core/utils/fetch-with-timeout";
-export { getEventsForDestination } from "./core/events/events";
+export {
+  getEventsForDestination,
+  getMappedSourceCalendarIds,
+} from "./core/events/events";
+export {
+  materializeRecurrenceEvents,
+  type RecurrenceMaterializationWindow,
+} from "./core/events/recurrence-materializer";
 export {
   parseExceptionDatesFromJson,
   parseRecurrenceRuleFromJson,
@@ -85,11 +92,13 @@ export {
   buildSourceEventIdentityKey,
   buildSourceEventsToAdd,
   buildSourceEventStateIdsToRemove,
-  buildSourceEventStateUpdates,
   type ExistingSourceEventState,
   type SourceEventDiffOptions,
-  type SourceEventStateUpdate,
 } from "./core/source/event-diff";
+export {
+  SOURCE_INGEST_LOCK_NAMESPACE,
+  withSourceIngestLocks,
+} from "./core/source/ingest-lock";
 export {
   parseStoredSourceEventState,
   parseStoredSourceEventStates,

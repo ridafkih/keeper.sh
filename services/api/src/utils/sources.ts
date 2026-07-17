@@ -51,7 +51,6 @@ const createIngestionPersistenceTransaction = (calendarId: string) =>
           recurrenceId: eventStatesTable.recurrenceId,
           recurrenceRule: eventStatesTable.recurrenceRule,
           sourceEventId: eventStatesTable.sourceEventId,
-          sourceEventInstanceKey: eventStatesTable.sourceEventInstanceKey,
           sourceEventType: eventStatesTable.sourceEventType,
           sourceEventUid: eventStatesTable.sourceEventUid,
           startTime: eventStatesTable.startTime,
@@ -68,18 +67,6 @@ const createIngestionPersistenceTransaction = (calendarId: string) =>
               and(
                 eq(eventStatesTable.calendarId, calendarId),
                 inArray(eventStatesTable.id, changes.deletes),
-              ),
-            );
-        }
-
-        for (const update of changes.updates) {
-          await transaction
-            .update(eventStatesTable)
-            .set(buildEventStateInsertRow(calendarId, update.event))
-            .where(
-              and(
-                eq(eventStatesTable.calendarId, calendarId),
-                eq(eventStatesTable.id, update.id),
               ),
             );
         }

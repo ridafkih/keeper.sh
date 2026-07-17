@@ -7,6 +7,7 @@ const DEFAULT_COUNT = 0;
 interface EventMapping {
   id: string;
   eventStateId: string;
+  syncEventId?: string;
   calendarId: string;
   destinationEventUid: string;
   deleteIdentifier: string;
@@ -27,6 +28,7 @@ const getEventMappingsForDestination = async (
       endTime: eventMappingsTable.endTime,
       eventStateId: eventMappingsTable.eventStateId,
       id: eventMappingsTable.id,
+      syncEventId: eventMappingsTable.syncEventId,
       syncEventHash: eventMappingsTable.syncEventHash,
       startTime: eventMappingsTable.startTime,
     })
@@ -36,6 +38,7 @@ const getEventMappingsForDestination = async (
   return mappings.map((mapping) => ({
     ...mapping,
     deleteIdentifier: mapping.deleteIdentifier ?? mapping.destinationEventUid,
+    syncEventId: mapping.syncEventId ?? mapping.eventStateId,
   }));
 };
 
@@ -43,6 +46,7 @@ const createEventMapping = async (
   database: BunSQLDatabase,
   params: {
     eventStateId: string;
+    syncEventId: string;
     calendarId: string;
     destinationEventUid: string;
     deleteIdentifier?: string;
@@ -59,6 +63,7 @@ const createEventMapping = async (
       destinationEventUid: params.destinationEventUid,
       endTime: params.endTime,
       eventStateId: params.eventStateId,
+      syncEventId: params.syncEventId,
       syncEventHash: params.syncEventHash,
       startTime: params.startTime,
     })

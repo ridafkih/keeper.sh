@@ -19,6 +19,7 @@ const makeEvent = (id: string, startTime: Date, endTime: Date): SyncableEvent =>
 const makeMapping = (id: string, eventStateId: string, destinationEventUid: string): EventMapping => ({
   id,
   eventStateId,
+  syncEventId: eventStateId,
   calendarId: "dest-cal-1",
   destinationEventUid,
   deleteIdentifier: destinationEventUid,
@@ -50,8 +51,39 @@ describe("executeRemoteOperations", () => {
     expect(outcome.result.addFailed).toBe(0);
     expect(outcome.changes.inserts).toHaveLength(1);
     expect(outcome.changes.inserts[0]?.eventStateId).toBe("ev-1");
+    expect(outcome.changes.inserts[0]?.syncEventId).toBe("ev-1");
     expect(outcome.changes.inserts[0]?.destinationEventUid).toBe("remote-1");
     expect(outcome.changes.deletes).toHaveLength(0);
+  });
+
+  it("checkpoints a materialized occurrence against its real owning event-state row", async () => {
+    const occurrence = {
+      ...makeEvent(
+        "recurrence-synthetic-id",
+        new Date("2026-03-15T09:00:00Z"),
+        new Date("2026-03-15T10:00:00Z"),
+      ),
+      eventStateId: "019c0000-0000-7000-8000-000000000001",
+    };
+    const provider = makeProvider({
+      pushEvents: () => Promise.resolve([{
+        deleteId: "provider-delete-id",
+        remoteId: "provider-uid",
+        success: true,
+      }]),
+    });
+
+    const outcome = await executeRemoteOperations(
+      [{ event: occurrence, type: "add" }],
+      [],
+      "dest-cal-1",
+      provider,
+    );
+
+    expect(outcome.changes.inserts).toMatchObject([{
+      eventStateId: "019c0000-0000-7000-8000-000000000001",
+      syncEventId: "recurrence-synthetic-id",
+    }]);
   });
 
   it("accumulates mapping deletes from successful removes", async () => {
@@ -723,6 +755,7 @@ describe("createDatabaseFlush", () => {
     await flush({
       inserts: [{
         eventStateId: "ev-1", calendarId: "cal-1", destinationEventUid: "remote-1",
+        syncEventId: "ev-1",
         deleteIdentifier: "remote-1", syncEventHash: null,
         startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
       }],
@@ -749,6 +782,7 @@ describe("createDatabaseFlush", () => {
     await flush({
       inserts: [{
         eventStateId: "ev-1", calendarId: "cal-1", destinationEventUid: "remote-1",
+        syncEventId: "ev-1",
         deleteIdentifier: "remote-1", syncEventHash: null,
         startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
       }],
@@ -831,6 +865,7 @@ describe("createDatabaseFlush", () => {
 
     const inserts = Array.from({ length: FLUSH_BATCH_SIZE + 10 }, (_entry, idx) => ({
       eventStateId: `ev-${idx}`, calendarId: "cal-1", destinationEventUid: `remote-${idx}`,
+      syncEventId: `ev-${idx}`,
       deleteIdentifier: `remote-${idx}`, syncEventHash: null,
       startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
     }));
@@ -866,11 +901,13 @@ describe("createDatabaseFlush", () => {
       inserts: [
         {
           eventStateId: "ev-1", calendarId: "cal-1", destinationEventUid: "remote-1",
+          syncEventId: "ev-1",
           deleteIdentifier: "remote-1", syncEventHash: null,
           startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
         },
         {
           eventStateId: "ev-2", calendarId: "cal-1", destinationEventUid: "remote-2",
+          syncEventId: "ev-2",
           deleteIdentifier: "remote-2", syncEventHash: null,
           startTime: new Date("2026-03-16T09:00:00Z"), endTime: new Date("2026-03-16T10:00:00Z"),
         },

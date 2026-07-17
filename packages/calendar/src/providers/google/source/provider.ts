@@ -1,9 +1,9 @@
 import {
   buildSourceEventStateIdsToRemove,
-  buildSourceEventStateUpdates,
   buildSourceEventsToAdd,
 } from "../../../core/source/event-diff";
 import {
+  buildInvalidStoredEventIdsToRemove,
   parseStoredSourceEventStatesRecoveringInvalid,
 } from "../../../core/source/stored-event-state";
 import { filterSourceEventsToSyncWindow, resolveSourceSyncTokenAction, splitSourceEventsByPersistenceIdentity } from "../../../core/source/sync-diagnostics";
@@ -127,7 +127,6 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
         recurrenceRule: eventStatesTable.recurrenceRule,
         sourceEventType: eventStatesTable.sourceEventType,
         sourceEventId: eventStatesTable.sourceEventId,
-        sourceEventInstanceKey: eventStatesTable.sourceEventInstanceKey,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
         startTimeZone: eventStatesTable.startTimeZone,
@@ -149,9 +148,8 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
     }
 
     const eventsToAdd = buildSourceEventsToAdd(existingEvents, eventsInWindow, { isDeltaSync });
-    const legacyStateUpdates = buildSourceEventStateUpdates(existingEvents, eventsInWindow);
     const eventStateIdsToRemove = [...new Set([
-      ...parseResult.failures.map((failure) => failure.eventId),
+      ...buildInvalidStoredEventIdsToRemove(parseResult.failures, eventsInWindow),
       ...buildSourceEventStateIdsToRemove(
         existingEvents,
         eventsInWindow,
@@ -166,7 +164,6 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
     if (
       eventStateIdsToRemove.length > EMPTY_COUNT
       || eventsToAdd.length > EMPTY_COUNT
-      || legacyStateUpdates.length > EMPTY_COUNT
     ) {
       await database.transaction(async (transactionDatabase) => {
         if (eventStateIdsToRemove.length > EMPTY_COUNT) {
@@ -176,18 +173,6 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
               and(
                 eq(eventStatesTable.calendarId, calendarId),
                 inArray(eventStatesTable.id, eventStateIdsToRemove),
-              ),
-            );
-        }
-
-        for (const update of legacyStateUpdates) {
-          await transactionDatabase
-            .update(eventStatesTable)
-            .set(buildEventStateInsertRow(calendarId, update.event))
-            .where(
-              and(
-                eq(eventStatesTable.calendarId, calendarId),
-                eq(eventStatesTable.id, update.id),
               ),
             );
         }
@@ -217,7 +202,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
       eventsFilteredOutOfWindow,
       eventsInserted: eventsToInsert.length,
       eventsRemoved: eventStateIdsToRemove.length,
-      eventsUpdated: eventsToUpdate.length + legacyStateUpdates.length,
+      eventsUpdated: eventsToUpdate.length,
       syncTokenResetCount: Number(syncTokenAction.shouldResetSyncToken),
       syncToken: nextSyncToken,
     };

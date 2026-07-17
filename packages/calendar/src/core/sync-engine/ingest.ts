@@ -2,10 +2,9 @@ import type { SourceEvent } from "../types";
 import {
   buildSourceEventsToAdd,
   buildSourceEventStateIdsToRemove,
-  buildSourceEventStateUpdates,
-  type SourceEventStateUpdate,
 } from "../source/event-diff";
 import {
+  buildInvalidStoredEventIdsToRemove,
   parseStoredSourceEventStatesRecoveringInvalid,
   type StoredSourceEventState,
 } from "../source/stored-event-state";
@@ -24,7 +23,6 @@ interface FetchEventsResult {
 interface IngestionChanges {
   inserts: SourceEvent[];
   deletes: string[];
-  updates: SourceEventStateUpdate[];
   snapshot?: CalendarSnapshotChange;
   syncToken?: string | null;
 }
@@ -94,23 +92,22 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
   let flushed = false;
 
   try {
-    const fetchResult = await fetchEvents();
-
-    wideEvent["source_events.count"] = fetchResult.events.length;
-
-    if (fetchResult.unchanged) {
-      wideEvent["outcome"] = "unchanged";
-      wideEvent["flushed"] = false;
-      return EMPTY_RESULT;
-    }
-
     const withPersistenceTransaction = resolvePersistenceTransaction(options);
 
     return await withPersistenceTransaction(async ({ readExistingEvents, flush }) => {
+      const fetchResult = await fetchEvents();
+      wideEvent["source_events.count"] = fetchResult.events.length;
+
+      if (fetchResult.unchanged) {
+        wideEvent["outcome"] = "unchanged";
+        wideEvent["flushed"] = false;
+        return EMPTY_RESULT;
+      }
+
       if (fetchResult.fullSyncRequired) {
         wideEvent["outcome"] = "full-sync-required";
         wideEvent["flushed"] = true;
-        await flush({ inserts: [], deletes: [], updates: [], syncToken: null });
+        await flush({ inserts: [], deletes: [], syncToken: null });
         flushed = true;
         return EMPTY_RESULT;
       }
@@ -131,7 +128,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       }
 
       if (isDeltaSync && parseResult.failures.length > 0) {
-        await flush({ inserts: [], deletes: [], updates: [], syncToken: null });
+        await flush({ inserts: [], deletes: [], syncToken: null });
         flushed = true;
         wideEvent["outcome"] = "full-sync-required";
         wideEvent["flushed"] = true;
@@ -141,13 +138,12 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       const eventsToAdd = buildSourceEventsToAdd(existingEvents, fetchResult.events, {
         isDeltaSync,
       });
-      const eventStatesToUpdate = buildSourceEventStateUpdates(
-        existingEvents,
+      const invalidStoredEventIdsToRemove = buildInvalidStoredEventIdsToRemove(
+        parseResult.failures,
         fetchResult.events,
       );
-
       const eventStateIdsToRemove = [...new Set([
-        ...invalidStoredEventIds,
+        ...invalidStoredEventIdsToRemove,
         ...buildSourceEventStateIdsToRemove(
           existingEvents,
           fetchResult.events,
@@ -161,15 +157,10 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
 
       wideEvent["events.added"] = eventsToAdd.length;
       wideEvent["events.removed"] = eventStateIdsToRemove.length;
-      wideEvent["events.updated"] = eventStatesToUpdate.length;
 
-      if (
-        eventsToAdd.length === 0
-        && eventStateIdsToRemove.length === 0
-        && eventStatesToUpdate.length === 0
-      ) {
+      if (eventsToAdd.length === 0 && eventStateIdsToRemove.length === 0) {
         if (fetchResult.nextSyncToken || fetchResult.snapshot) {
-          const changes: IngestionChanges = { inserts: [], deletes: [], updates: [] };
+          const changes: IngestionChanges = { inserts: [], deletes: [] };
           if (fetchResult.nextSyncToken) {
             changes.syncToken = fetchResult.nextSyncToken;
           }
@@ -191,7 +182,6 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       const changes: IngestionChanges = {
         inserts: eventsToAdd,
         deletes: eventStateIdsToRemove,
-        updates: eventStatesToUpdate,
       };
 
       if (typeof fetchResult.nextSyncToken === "string") {
@@ -208,7 +198,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       wideEvent["flushed"] = true;
 
       return {
-        eventsAdded: eventsToAdd.length + eventStatesToUpdate.length,
+        eventsAdded: eventsToAdd.length,
         eventsRemoved: eventStateIdsToRemove.length,
       };
     });

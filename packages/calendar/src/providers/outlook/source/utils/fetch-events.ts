@@ -12,6 +12,7 @@ import { parseEventDateTime } from "../../shared/date-time";
 import { microsoftApiErrorSchema, outlookEventListSchema } from "@keeper.sh/data-schemas";
 import { KEEPER_CATEGORY } from "@keeper.sh/constants";
 import { isKeeperEvent } from "../../../../core/events/identity";
+import { normalizeTimezone } from "../../../../ics/utils/normalize-timezone";
 
 class EventsFetchError extends Error {
   public readonly status: number;
@@ -56,6 +57,30 @@ interface PageFetchResult {
 interface FullSyncRequiredResult {
   fullSyncRequired: true;
 }
+
+const getOutlookRevisionTime = (event: OutlookCalendarEvent): number | null => {
+  const value = event.lastModifiedDateTime ?? event.createdDateTime;
+  if (!value) {
+    return null;
+  }
+  const revisionTime = new Date(value).getTime();
+  if (Number.isNaN(revisionTime)) {
+    return null;
+  }
+  return revisionTime;
+};
+
+const shouldReplaceOutlookRevision = (
+  current: OutlookCalendarEvent,
+  candidate: OutlookCalendarEvent,
+): boolean => {
+  const currentTime = getOutlookRevisionTime(current);
+  const candidateTime = getOutlookRevisionTime(candidate);
+  if (currentTime !== null && candidateTime !== null && currentTime !== candidateTime) {
+    return candidateTime > currentTime;
+  }
+  return true;
+};
 
 interface FetchCalendarNameOptions {
   accessToken: string;
@@ -102,7 +127,7 @@ const buildInitialUrl = (calendarId: string, timeMin: Date, timeMax: Date): URL 
   url.searchParams.set("endDateTime", timeMax.toISOString());
   url.searchParams.set(
     "$select",
-    "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
+    "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories,createdDateTime,lastModifiedDateTime",
   );
 
   return url;
@@ -135,7 +160,7 @@ const fetchEventsPage = async (
   const response = await fetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      Prefer: `odata.maxpagesize=${DEFAULT_PAGE_SIZE}`,
+      Prefer: `odata.maxpagesize=${DEFAULT_PAGE_SIZE}, outlook.timezone="UTC"`,
     },
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   }).catch((error) => {
@@ -181,6 +206,10 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
   const collectEvents = (pageEvents: OutlookCalendarEvent[]): void => {
     for (const event of pageEvents) {
       if (event.id) {
+        const current = changedEventsById.get(event.id);
+        if (current && !shouldReplaceOutlookRevision(current, event)) {
+          continue;
+        }
         changedEventsById.set(event.id, event);
       } else if (!event["@removed"]) {
         changedEventsWithoutId.push(event);
@@ -348,7 +377,7 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
       location: event.location?.displayName,
       sourceEventId: event.id,
       startTime: parseEventDateTime(start),
-      startTimeZone: start.timeZone,
+      startTimeZone: normalizeTimezone(start.timeZone),
       title: event.subject,
       uid: event.iCalUId,
     });

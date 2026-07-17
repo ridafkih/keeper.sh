@@ -7,13 +7,23 @@ import {
 import { normalizeDateRange } from "@/utils/date-range";
 import { and, arrayContains, asc, eq, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-
-import { expandRecurringEvent } from "./expand-recurring-event";
-import type { RecurringOccurrence } from "./expand-recurring-event";
+import {
+  materializeRecurrenceEvents,
+  parseStoredIcsExceptionDates,
+  parseStoredIcsRecurrenceRule,
+} from "@keeper.sh/calendar";
+import type { SyncableEvent } from "@keeper.sh/calendar";
 
 import type { KeeperDatabase, KeeperEvent, KeeperEventFilters, KeeperEventRangeInput } from "@/types";
 
 const EMPTY_RESULT_COUNT = 0;
+
+const orAbsent = <TValue>(value: TValue | null): TValue | undefined => {
+  if (value === null) {
+    return;
+  }
+  return value;
+};
 
 const toRequiredDate = (value: Date | string, label: "from" | "to"): Date => {
   const parsedDate = new Date(value);
@@ -84,8 +94,11 @@ interface SyncedEventRow {
   exceptionDates: string | null;
   id: string;
   location: string | null;
+  recurrenceId: Date | null;
   recurrenceRule: string | null;
+  sourceEventUid: string | null;
   startTime: Date;
+  startTimeZone: string | null;
   title: string | null;
 }
 
@@ -101,37 +114,47 @@ interface UserEventRow {
 
 type FlattenedEvent = UserEventRow;
 
-const flattenSyncedEvent = (
-  row: SyncedEventRow,
+const flattenSyncedEvents = (
+  rows: SyncedEventRow[],
+  sourceMap: Map<string, SourceInfo>,
   windowStart: Date,
   windowEnd: Date,
 ): FlattenedEvent[] => {
-  if (!row.recurrenceRule) {
-    return [
-      {
-        calendarId: row.calendarId,
-        description: row.description,
-        endTime: row.endTime,
-        id: row.id,
-        location: row.location,
-        startTime: row.startTime,
-        title: row.title,
-      },
-    ];
-  }
-  const occurrences: RecurringOccurrence[] = expandRecurringEvent(
-    row,
-    windowStart,
-    windowEnd,
-  );
-  return occurrences.map((occurrence) => ({
+  const events: SyncableEvent[] = rows.flatMap((row) => {
+    const source = sourceMap.get(row.calendarId);
+    if (!source) {
+      return [];
+    }
+    return [{
+      calendarId: row.calendarId,
+      calendarName: source.name,
+      calendarUrl: source.url,
+      description: orAbsent(row.description),
+      endTime: row.endTime,
+      exceptionDates: parseStoredIcsExceptionDates(row.exceptionDates, row.id)
+        ?.map((exceptionDate) => exceptionDate.date),
+      id: row.id,
+      location: orAbsent(row.location),
+      recurrenceId: orAbsent(row.recurrenceId),
+      recurrenceRule: orAbsent(parseStoredIcsRecurrenceRule(row.recurrenceRule, row.id)),
+      sourceEventUid: row.sourceEventUid ?? row.id,
+      startTime: row.startTime,
+      startTimeZone: orAbsent(row.startTimeZone),
+      summary: row.title ?? "",
+    }];
+  });
+  const exclusiveWindowEnd = new Date(windowEnd.getTime() + 1);
+  return materializeRecurrenceEvents(events, {
+    end: exclusiveWindowEnd,
+    start: windowStart,
+  }).map((occurrence) => ({
     calendarId: occurrence.calendarId,
-    description: occurrence.description,
+    description: occurrence.description ?? null,
     endTime: occurrence.endTime,
     id: occurrence.id,
-    location: occurrence.location,
+    location: occurrence.location ?? null,
     startTime: occurrence.startTime,
-    title: occurrence.title,
+    title: occurrence.summary || null,
   }));
 };
 
@@ -146,6 +169,7 @@ const buildSyncedRangeCondition = (start: Date, end: Date): SQL | undefined =>
   or(
     and(
       isNull(eventStatesTable.recurrenceRule),
+      isNull(eventStatesTable.recurrenceId),
       gte(eventStatesTable.startTime, start),
       lte(eventStatesTable.startTime, end),
     ),
@@ -153,6 +177,7 @@ const buildSyncedRangeCondition = (start: Date, end: Date): SQL | undefined =>
       isNotNull(eventStatesTable.recurrenceRule),
       lte(eventStatesTable.startTime, end),
     ),
+    isNotNull(eventStatesTable.recurrenceId),
   );
 
 const getEventsInRange = async (
@@ -191,17 +216,18 @@ const getEventsInRange = async (
       exceptionDates: eventStatesTable.exceptionDates,
       id: eventStatesTable.id,
       location: eventStatesTable.location,
+      recurrenceId: eventStatesTable.recurrenceId,
       recurrenceRule: eventStatesTable.recurrenceRule,
+      sourceEventUid: eventStatesTable.sourceEventUid,
       startTime: eventStatesTable.startTime,
+      startTimeZone: eventStatesTable.startTimeZone,
       title: eventStatesTable.title,
     })
     .from(eventStatesTable)
     .where(and(...syncedConditions))
     .orderBy(asc(eventStatesTable.startTime));
 
-  const syncedEvents: FlattenedEvent[] = syncedRows.flatMap((row) =>
-    flattenSyncedEvent(row, start, end),
-  );
+  const syncedEvents = flattenSyncedEvents(syncedRows, sourceMap, start, end);
 
   const userConditions: SQL[] = [
     inArray(userEventsTable.calendarId, calendarIds),

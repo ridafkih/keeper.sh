@@ -6,6 +6,8 @@ import {
   createRedisRateLimiter,
   buildCalendarBackoffState,
   RESET_CALENDAR_BACKOFF_STATE,
+  getMappedSourceCalendarIds,
+  withSourceIngestLocks,
 } from "@keeper.sh/calendar";
 import type { SyncProgressUpdate, RefreshLockStore } from "@keeper.sh/calendar";
 import {
@@ -198,7 +200,11 @@ const syncDestinationsForUser = async (
 
       const providerRef = syncProvider;
 
-      const result = await syncCalendar({
+      const sourceCalendarIds = await getMappedSourceCalendarIds(
+        database,
+        destination.calendarId,
+      );
+      const result = await withSourceIngestLocks(database, sourceCalendarIds, () => syncCalendar({
         userId: destination.userId,
         calendarId: destination.calendarId,
         provider: providerRef,
@@ -233,7 +239,7 @@ const syncDestinationsForUser = async (
             callbacks.onSyncEvent(enrichedEvent);
           }
         },
-      });
+      }));
 
       if (callbacks?.onCalendarComplete) {
         callbacks.onCalendarComplete({

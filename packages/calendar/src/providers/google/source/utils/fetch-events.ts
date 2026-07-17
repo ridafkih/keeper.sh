@@ -76,6 +76,30 @@ interface FullSyncRequiredResult {
   fullSyncRequired: true;
 }
 
+const getGoogleRevisionTime = (event: GoogleCalendarEvent): number | null => {
+  const value = event.updated ?? event.created;
+  if (!value) {
+    return null;
+  }
+  const revisionTime = new Date(value).getTime();
+  if (Number.isNaN(revisionTime)) {
+    return null;
+  }
+  return revisionTime;
+};
+
+const shouldReplaceGoogleRevision = (
+  current: GoogleCalendarEvent,
+  candidate: GoogleCalendarEvent,
+): boolean => {
+  const currentTime = getGoogleRevisionTime(current);
+  const candidateTime = getGoogleRevisionTime(candidate);
+  if (currentTime !== null && candidateTime !== null && currentTime !== candidateTime) {
+    return candidateTime > currentTime;
+  }
+  return true;
+};
+
 const fetchEventsPage = async (
   options: PageFetchOptions,
 ): Promise<PageFetchResult | FullSyncRequiredResult> => {
@@ -157,6 +181,10 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
   const collectEvents = (pageEvents: GoogleCalendarEvent[]): void => {
     for (const event of pageEvents) {
       if (event.id) {
+        const current = changedEventsById.get(event.id);
+        if (current && !shouldReplaceGoogleRevision(current, event)) {
+          continue;
+        }
         changedEventsById.set(event.id, event);
       } else if (event.status !== "cancelled") {
         changedEventsWithoutId.push(event);

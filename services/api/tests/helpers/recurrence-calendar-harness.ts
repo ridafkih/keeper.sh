@@ -1,5 +1,6 @@
 import {
   buildEventStateInsertRow,
+  buildSourceEventInstanceKey,
   ingestSource,
   parseStoredSourceEventStates,
   type IngestionResult,
@@ -15,6 +16,13 @@ import type { CalendarEvent } from "../../src/utils/ical-format";
 const CALENDAR_ID = "00000000-0000-4000-8000-000000000001";
 const CALENDAR_NAME = "Recurrence contract";
 const MILLISECONDS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
+
+const parseOptionalDate = (value: string | null): Date | null => {
+  if (!value) {
+    return null;
+  }
+  return new Date(value);
+};
 
 interface PersistedEventState extends StoredSourceEventState {
   calendarId: string;
@@ -78,7 +86,6 @@ const toPersistedEventState = (
   recurrenceId: row.recurrenceId ?? null,
   recurrenceRule: row.recurrenceRule ?? null,
   sourceEventId: row.sourceEventId ?? null,
-  sourceEventInstanceKey: row.sourceEventInstanceKey ?? null,
   sourceEventType: row.sourceEventType ?? null,
   sourceEventUid: row.sourceEventUid ?? null,
   startTime: row.startTime,
@@ -94,8 +101,22 @@ const persistenceIdentityMatches = (
     return existing.sourceEventId === incoming.sourceEventId;
   }
 
+  if (incoming.recurrenceId) {
+    return existing.sourceEventId === null
+      && existing.sourceEventUid === incoming.sourceEventUid
+      && existing.recurrenceId?.getTime() === incoming.recurrenceId.getTime();
+  }
+
+  if (incoming.recurrenceRule) {
+    return existing.sourceEventId === null
+      && existing.sourceEventUid === incoming.sourceEventUid
+      && existing.recurrenceRule !== null;
+  }
+
   return existing.sourceEventId === null
-    && existing.sourceEventInstanceKey === incoming.sourceEventInstanceKey;
+    && existing.sourceEventUid === incoming.sourceEventUid
+    && existing.startTime.getTime() === incoming.startTime.getTime()
+    && existing.endTime.getTime() === incoming.endTime.getTime();
 };
 
 const toCalendarEvent = (
@@ -234,17 +255,6 @@ class RecurrenceCalendarHarness {
         const deletedIds = new Set(changes.deletes);
         this.events = this.events.filter((event) => !deletedIds.has(event.id));
 
-        for (const update of changes.updates) {
-          const existingIndex = this.events.findIndex((event) => event.id === update.id);
-          if (existingIndex === -1) {
-            throw new Error(`Cannot update missing event state: ${update.id}`);
-          }
-          this.events[existingIndex] = toPersistedEventState(
-            update.id,
-            buildEventStateInsertRow(CALENDAR_ID, update.event),
-          );
-        }
-
         for (const event of changes.inserts) {
           const insertRow = buildEventStateInsertRow(CALENDAR_ID, event);
           const existingIndex = this.events.findIndex((existing) =>
@@ -286,7 +296,17 @@ class RecurrenceCalendarHarness {
         startTime: event.startTime.toISOString(),
       }))
       .toSorted((left, right) =>
-        String(left.sourceEventInstanceKey).localeCompare(String(right.sourceEventInstanceKey)),
+        buildSourceEventInstanceKey({
+          endTime: new Date(left.endTime),
+          recurrenceId: parseOptionalDate(left.recurrenceId),
+          startTime: new Date(left.startTime),
+          uid: left.sourceEventUid ?? "",
+        }).localeCompare(buildSourceEventInstanceKey({
+          endTime: new Date(right.endTime),
+          recurrenceId: parseOptionalDate(right.recurrenceId),
+          startTime: new Date(right.startTime),
+          uid: right.sourceEventUid ?? "",
+        })),
       );
   }
 

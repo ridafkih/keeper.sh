@@ -7,7 +7,7 @@ import {
 } from "../../../src/core/source/write-event-states";
 
 describe("insertEventStatesWithConflictResolution", () => {
-  it("persists recurrence metadata and derives a stable instance key", () => {
+  it("persists recurrence metadata", () => {
     const recurrenceId = new Date("2026-03-05T10:00:00.000Z");
     const row = buildEventStateInsertRow("calendar-1", {
       endTime: new Date("2026-03-12T11:00:00.000Z"),
@@ -21,9 +21,6 @@ describe("insertEventStatesWithConflictResolution", () => {
     expect(row.recurrenceId).toBe(recurrenceId);
     expect(row.recurrenceRule).toBe('{"frequency":"WEEKLY"}');
     expect(row.exceptionDates).toBe('[{"date":"2026-03-19T10:00:00.000Z"}]');
-    expect(row.sourceEventInstanceKey).toBe(
-      "recurrence|uid-1|2026-03-05T10:00:00.000Z",
-    );
   });
 
   it("skips database writes when there are no rows", async () => {
@@ -33,7 +30,7 @@ describe("insertEventStatesWithConflictResolution", () => {
       insert: () => {
         insertCalled = true;
         return {
-          values: () => ({
+        values: () => ({
             onConflictDoUpdate: () => Promise.resolve(),
           }),
         };
@@ -53,7 +50,6 @@ describe("insertEventStatesWithConflictResolution", () => {
         endTime: new Date("2026-03-12T11:00:00.000Z"),
         sourceEventId: "provider-event-1",
         sourceEventType: "default",
-        sourceEventInstanceKey: "slot|uid-1|2026-03-12T10:00:00.000Z|2026-03-12T11:00:00.000Z",
         sourceEventUid: "uid-1",
         startTime: new Date("2026-03-12T10:00:00.000Z"),
         title: "Focus Block",
@@ -78,15 +74,19 @@ describe("insertEventStatesWithConflictResolution", () => {
 
     const database = {
       insert: (table: typeof eventStatesTable) => ({
-        values: (values: EventStateInsertRow[]) => ({
+        values: (value: EventStateInsertRow | EventStateInsertRow[]) => ({
           onConflictDoUpdate: (config: {
             set: Record<string, unknown>;
             target: unknown[];
             targetWhere: unknown;
           }) => {
+            let insertedRows = value;
+            if (!Array.isArray(insertedRows)) {
+              insertedRows = [insertedRows];
+            }
             calls.push({
               conflictConfig: config,
-              insertedRows: values,
+              insertedRows,
               insertTable: table,
             });
             return Promise.resolve();
@@ -116,7 +116,6 @@ describe("insertEventStatesWithConflictResolution", () => {
       "recurrenceId",
       "recurrenceRule",
       "sourceEventId",
-      "sourceEventInstanceKey",
       "sourceEventType",
       "sourceEventUid",
       "startTime",
@@ -125,10 +124,9 @@ describe("insertEventStatesWithConflictResolution", () => {
     ]);
     expect(legacyCall?.insertTable).toBe(eventStatesTable);
     expect(legacyCall?.insertedRows).toEqual([rows[1]]);
-    expect(legacyCall?.conflictConfig.target).toEqual([
-      eventStatesTable.calendarId,
-      eventStatesTable.sourceEventInstanceKey,
-    ]);
+    expect(legacyCall?.conflictConfig.target[0]).toBe(eventStatesTable.calendarId);
+    expect(legacyCall?.conflictConfig.target[1]).toBe(eventStatesTable.sourceEventInstanceKey);
+    expect(legacyCall?.conflictConfig.target).toHaveLength(2);
     expect(legacyCall?.conflictConfig.targetWhere).toBeDefined();
   });
 });

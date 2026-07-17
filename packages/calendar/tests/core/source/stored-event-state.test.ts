@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildSourceEventsToAdd } from "../../../src/core/source/event-diff";
 import {
+  buildInvalidStoredEventIdsToRemove,
   parseStoredSourceEventState,
   parseStoredSourceEventStatesRecoveringInvalid,
 } from "../../../src/core/source/stored-event-state";
@@ -11,7 +12,6 @@ const createStoredEvent = () => ({
   id: "event-state-1",
   recurrenceId: null,
   recurrenceRule: '{"frequency":"WEEKLY","interval":1}',
-  sourceEventInstanceKey: "slot|uid-1|2026-03-12T10:00:00.000Z|2026-03-12T11:00:00.000Z",
   sourceEventUid: "uid-1",
   startTime: new Date("2026-03-12T10:00:00.000Z"),
   startTimeZone: null,
@@ -51,6 +51,54 @@ describe("parseStoredSourceEventState", () => {
     expect(result.failures[0]?.error.message).toBe(
       "Failed to JSON.parse recurrenceRule for event event-state-corrupt",
     );
+  });
+
+  it("repairs matching corrupt rows by upsert and deletes only absent corrupt rows", () => {
+    const { failures: [matchingFailure] } = parseStoredSourceEventStatesRecoveringInvalid([{
+      ...createStoredEvent(),
+      id: "matching-corrupt",
+      recurrenceRule: "not-json",
+    }]);
+    const { failures: [absentFailure] } = parseStoredSourceEventStatesRecoveringInvalid([{
+      ...createStoredEvent(),
+      id: "absent-corrupt",
+      recurrenceRule: "not-json",
+      sourceEventUid: "absent-uid",
+    }]);
+    if (!matchingFailure || !absentFailure) {
+      throw new Error("Expected corrupt rows to fail recurrence parsing");
+    }
+
+    expect(buildInvalidStoredEventIdsToRemove(
+      [matchingFailure, absentFailure],
+      [{
+        endTime: new Date("2026-03-12T11:00:00.000Z"),
+        recurrenceRule: { frequency: "WEEKLY" },
+        startTime: new Date("2026-03-12T10:00:00.000Z"),
+        uid: "uid-1",
+      }],
+    )).toEqual(["absent-corrupt"]);
+  });
+
+  it("never transfers a corrupt provider row to a different provider identity", () => {
+    const { failures: [failure] } = parseStoredSourceEventStatesRecoveringInvalid([{
+      ...createStoredEvent(),
+      recurrenceRule: "not-json",
+      sourceEventId: "provider-old",
+    }]);
+    if (!failure) {
+      throw new Error("Expected corrupt provider row to fail recurrence parsing");
+    }
+
+    expect(buildInvalidStoredEventIdsToRemove(
+      [failure],
+      [{
+        endTime: new Date("2026-03-12T11:00:00.000Z"),
+        sourceEventId: "provider-new",
+        startTime: new Date("2026-03-12T10:00:00.000Z"),
+        uid: "uid-1",
+      }],
+    )).toEqual(["event-state-1"]);
   });
 
   it("compares parsed storage and incoming recurrence values in one domain shape", () => {

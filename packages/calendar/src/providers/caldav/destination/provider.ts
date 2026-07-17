@@ -1,10 +1,17 @@
 import { RateLimiter } from "../../../core/utils/rate-limiter";
 import { generateDeterministicEventUid, isKeeperEvent } from "../../../core/events/identity";
-import { createSyncEventContentHash } from "../../../core/events/content-hash";
+import {
+  createEditableEventContentHash,
+  createSyncEventContentHash,
+} from "../../../core/events/content-hash";
 import { getErrorMessage } from "../../../core/utils/error";
 import type { DeleteResult, PushResult, RemoteEvent, SyncableEvent } from "../../../core/types";
 import { CalDAVClient, CalDAVCreateConflictError, CalDAVHttpError } from "../shared/client";
-import { eventToICalString, parseICalToRemoteEvent, parseICalToRemoteEvents } from "../shared/ics";
+import {
+  eventToICalString,
+  parseICalCalendarsToRemoteEvents,
+  parseICalToRemoteEvent,
+} from "../shared/ics";
 import { getCalDAVSyncWindow } from "../shared/sync-window";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 
@@ -199,18 +206,33 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
     const remoteEvents: RemoteEvent[] = [];
 
-    for (const { data } of objects) {
-      if (!data) {
+    const parsedEvents = parseICalCalendarsToRemoteEvents(
+      objects.flatMap(({ data }) => {
+        if (!data) {
+          return [];
+        }
+        return [data];
+      }),
+    );
+    for (const parsed of parsedEvents) {
+      if (!isKeeperEvent(parsed.uid) || parsed.endTime < syncWindow.start) {
         continue;
       }
 
-      for (const parsed of parseICalToRemoteEvents(data)) {
-        if (!isKeeperEvent(parsed.uid) || parsed.endTime < syncWindow.start) {
-          continue;
-        }
-
-        remoteEvents.push(parsed);
-      }
+      remoteEvents.push({
+        ...parsed,
+        editableAvailability: parsed.availability,
+        editableContentHash: createEditableEventContentHash({
+          availability: parsed.availability,
+          description: parsed.description,
+          endTime: parsed.endTime,
+          isAllDay: parsed.isAllDay,
+          location: parsed.location,
+          startTime: parsed.startTime,
+          summary: parsed.title ?? "",
+        }),
+        supportedAvailabilities: ["busy", "free"],
+      });
     }
 
     return remoteEvents;

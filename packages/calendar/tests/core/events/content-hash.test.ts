@@ -112,4 +112,43 @@ describe("createSyncEventContentHash", () => {
 
     expect(hash1).not.toBe(hash2);
   });
+
+  it("returns different hashes when recurrence semantics change", () => {
+    const event = {
+      endTime: new Date("2026-03-07T10:00:00.000Z"),
+      startTime: new Date("2026-03-07T09:00:00.000Z"),
+      summary: "Recurring meeting",
+    };
+
+    const weekly = createSyncEventContentHash({
+      ...event,
+      recurrenceRule: { count: 4, frequency: "WEEKLY" },
+    });
+    const daily = createSyncEventContentHash({
+      ...event,
+      recurrenceRule: { count: 4, frequency: "DAILY" },
+    });
+    const excluded = createSyncEventContentHash({
+      ...event,
+      exceptionDates: [new Date("2026-03-14T09:00:00.000Z")],
+      recurrenceRule: { count: 4, frequency: "WEEKLY" },
+    });
+
+    expect(weekly).not.toBe(daily);
+    expect(weekly).not.toBe(excluded);
+  });
+
+  it("ignores exception-date ordering", () => {
+    const first = new Date("2026-03-14T09:00:00.000Z");
+    const second = new Date("2026-03-21T09:00:00.000Z");
+    const event = { summary: "Recurring meeting" };
+
+    expect(createSyncEventContentHash({
+      ...event,
+      exceptionDates: [first, second],
+    })).toBe(createSyncEventContentHash({
+      ...event,
+      exceptionDates: [second, first],
+    }));
+  });
 });

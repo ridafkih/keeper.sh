@@ -6,14 +6,15 @@ import {
 import { and, asc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { EventAvailability, SourceEventType, SyncableEvent } from "../types";
-import { getOAuthSyncWindowStart } from "../oauth/sync-window";
+import { getOAuthSyncWindow } from "../oauth/sync-window";
 import {
-  hasActiveFutureOccurrence,
-  parseExceptionDatesFromJson,
-  parseRecurrenceRuleFromJson,
-} from "./recurrence";
+  parseStoredIcsExceptionDates,
+  parseStoredIcsRecurrenceRule,
+} from "./stored-recurrence";
+import { materializeRecurrenceEvents } from "./recurrence-materializer";
 
 const EMPTY_SOURCES_COUNT = 0;
+const YEARS_UNTIL_FUTURE = 2;
 
 const orAbsent = <TValue>(value: TValue | null): TValue | undefined => {
   if (value === null) {
@@ -128,7 +129,7 @@ const fetchEventsForCalendars = async (
     return [];
   }
 
-  const syncWindowStart = getOAuthSyncWindowStart();
+  const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
 
   const results = await database
     .select({
@@ -150,6 +151,7 @@ const fetchEventsForCalendars = async (
       isAllDay: eventStatesTable.isAllDay,
       location: eventStatesTable.location,
       recurrenceRule: eventStatesTable.recurrenceRule,
+      recurrenceId: eventStatesTable.recurrenceId,
       sourceEventType: eventStatesTable.sourceEventType,
       sourceEventUid: eventStatesTable.sourceEventUid,
       startTime: eventStatesTable.startTime,
@@ -162,8 +164,9 @@ const fetchEventsForCalendars = async (
       and(
         inArray(eventStatesTable.calendarId, calendarIds),
         or(
-          gte(eventStatesTable.startTime, syncWindowStart),
+          gte(eventStatesTable.startTime, syncWindow.timeMin),
           isNotNull(eventStatesTable.recurrenceRule),
+          isNotNull(eventStatesTable.recurrenceId),
         ),
       ),
     )
@@ -179,17 +182,14 @@ const fetchEventsForCalendars = async (
       continue;
     }
 
-    const parsedRecurrenceRule = parseRecurrenceRuleFromJson(result.recurrenceRule);
-    const parsedExceptionDates = parseExceptionDatesFromJson(result.exceptionDates);
+    const parsedRecurrenceRule = parseStoredIcsRecurrenceRule(result.recurrenceRule, result.id);
+    const parsedExceptionDates = parseStoredIcsExceptionDates(result.exceptionDates, result.id)
+      ?.map((exceptionDate) => exceptionDate.date);
 
     if (
-      result.startTime < syncWindowStart
-      && !hasActiveFutureOccurrence(
-        result.startTime,
-        parsedRecurrenceRule,
-        parsedExceptionDates,
-        syncWindowStart,
-      )
+      result.startTime < syncWindow.timeMin
+      && !result.recurrenceId
+      && !parsedRecurrenceRule
     ) {
       continue;
     }
@@ -218,6 +218,7 @@ const fetchEventsForCalendars = async (
       location: excludeOrAbsent(result.excludeEventLocation, result.location),
       exceptionDates: parsedExceptionDates,
       recurrenceRule: orAbsent(parsedRecurrenceRule),
+      recurrenceId: orAbsent(result.recurrenceId),
       sourceEventUid: result.sourceEventUid,
       startTime: result.startTime,
       startTimeZone: orAbsent(result.startTimeZone),
@@ -225,7 +226,10 @@ const fetchEventsForCalendars = async (
     });
   }
 
-  return syncableEvents;
+  return materializeRecurrenceEvents(syncableEvents, {
+    end: syncWindow.timeMax,
+    start: syncWindow.timeMin,
+  });
 };
 
 const getEventsForDestination = async (
@@ -241,4 +245,4 @@ const getEventsForDestination = async (
   return fetchEventsForCalendars(database, sourceCalendarIds);
 };
 
-export { getEventsForDestination, shouldExcludeSyncEvent };
+export { getEventsForDestination, getMappedSourceCalendarIds, shouldExcludeSyncEvent };

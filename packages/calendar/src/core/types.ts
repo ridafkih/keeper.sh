@@ -46,6 +46,8 @@ interface ProviderDefinition {
 
 interface SyncableEvent {
   id: string;
+  /** The persisted event_states row that owns this logical event. */
+  eventStateId?: string;
   sourceEventUid: string;
   startTime: Date;
   endTime: Date;
@@ -95,6 +97,9 @@ interface RemoteEvent {
   startTime: Date;
   endTime: Date;
   isKeeperEvent: boolean;
+  editableContentHash?: string;
+  editableAvailability?: EventAvailability;
+  supportedAvailabilities?: EventAvailability[];
 }
 
 type SyncOperation =

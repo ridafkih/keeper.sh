@@ -14,17 +14,6 @@ interface SourceEventIdentityOptions {
   normalizeMissingMetadata?: boolean;
 }
 
-interface SourceEventStateUpdate {
-  event: SourceEvent;
-  id: string;
-}
-
-interface LegacyStateTransition {
-  matchedExistingIds: Set<string>;
-  matchedIncomingEvents: Set<SourceEvent>;
-  updates: SourceEventStateUpdate[];
-}
-
 const normalizeIdentityIsAllDay = (
   isAllDay: boolean | null | undefined,
   options: SourceEventIdentityOptions,
@@ -39,6 +28,26 @@ const normalizeIdentityIsAllDay = (
 const normalizeIdentityContent = (value: string | null | undefined): string =>
   value?.trim() ?? "";
 
+const canonicalizeStructuredIdentityValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => canonicalizeStructuredIdentityValue(entry))
+      .toSorted((first, second) => stringify(first).localeCompare(stringify(second)));
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [
+        key,
+        canonicalizeStructuredIdentityValue(entry),
+      ]),
+    );
+  }
+  return value;
+};
+
 const serializeStructuredIdentityValue = (
   value: IcsExceptionDates | IcsRecurrenceRule | null | undefined,
 ): string => {
@@ -46,12 +55,12 @@ const serializeStructuredIdentityValue = (
     return "";
   }
 
-  return stringify(value);
+  return stringify(canonicalizeStructuredIdentityValue(value));
 };
 
 const resolveExistingSourceEventInstanceKey = (
   event: ExistingSourceEventState,
-): string => event.sourceEventInstanceKey ?? buildSourceEventInstanceKey({
+): string => buildSourceEventInstanceKey({
   endTime: event.endTime,
   recurrenceId: event.recurrenceId,
   startTime: event.startTime,
@@ -114,57 +123,6 @@ const deduplicateIncomingEvents = (incomingEvents: SourceEvent[]): SourceEvent[]
   return [...dedupedEvents.values()];
 };
 
-const buildLegacyStateTransition = (
-  existingEvents: ExistingSourceEventState[],
-  incomingEvents: SourceEvent[],
-): LegacyStateTransition => {
-  const normalizedIncomingEvents = deduplicateIncomingEvents(incomingEvents);
-  const incomingByProviderId = new Map<string, SourceEvent>();
-  const incomingByInstanceKey = new Map<string, SourceEvent[]>();
-
-  for (const event of normalizedIncomingEvents) {
-    if (event.sourceEventId) {
-      incomingByProviderId.set(event.sourceEventId, event);
-    }
-    const instanceKey = buildSourceEventInstanceKey(event);
-    const matchingEvents = incomingByInstanceKey.get(instanceKey) ?? [];
-    matchingEvents.push(event);
-    incomingByInstanceKey.set(instanceKey, matchingEvents);
-  }
-
-  const matchedExistingIds = new Set<string>();
-  const matchedIncomingEvents = new Set<SourceEvent>();
-  const updates: SourceEventStateUpdate[] = [];
-
-  for (const existingEvent of existingEvents) {
-    if (existingEvent.sourceEventInstanceKey !== null || existingEvent.sourceEventUid === null) {
-      continue;
-    }
-
-    let providerMatch: SourceEvent | null = null;
-    if (existingEvent.sourceEventId) {
-      providerMatch = incomingByProviderId.get(existingEvent.sourceEventId) ?? null;
-    }
-    const instanceMatches = incomingByInstanceKey.get(
-      resolveExistingSourceEventInstanceKey(existingEvent),
-    ) ?? [];
-    let matchingEvent = instanceMatches.find((event) => !matchedIncomingEvents.has(event));
-    if (providerMatch && !matchedIncomingEvents.has(providerMatch)) {
-      matchingEvent = providerMatch;
-    }
-
-    if (!matchingEvent) {
-      continue;
-    }
-
-    matchedExistingIds.add(existingEvent.id);
-    matchedIncomingEvents.add(matchingEvent);
-    updates.push({ event: matchingEvent, id: existingEvent.id });
-  }
-
-  return { matchedExistingIds, matchedIncomingEvents, updates };
-};
-
 const buildExistingEventIdentitySet = (
   existingEvents: ExistingSourceEventState[],
   options: SourceEventIdentityOptions = {},
@@ -172,7 +130,7 @@ const buildExistingEventIdentitySet = (
   const identities = new Set<string>();
 
   for (const existingEvent of existingEvents) {
-    if (existingEvent.sourceEventUid === null || existingEvent.sourceEventInstanceKey === null) {
+    if (existingEvent.sourceEventUid === null) {
       continue;
     }
 
@@ -209,15 +167,13 @@ const buildSourceEventsToAdd = (
   options: SourceEventDiffOptions = {},
 ): SourceEvent[] => {
   const normalizedIncomingEvents = deduplicateIncomingEvents(incomingEvents);
-  const transition = buildLegacyStateTransition(existingEvents, normalizedIncomingEvents);
   const existingIdentities = buildExistingEventIdentitySet(existingEvents, {
     normalizeMissingMetadata: options.isDeltaSync ?? false,
   });
 
   return normalizedIncomingEvents.filter(
     (incomingEvent) =>
-      !transition.matchedIncomingEvents.has(incomingEvent)
-      && !existingIdentities.has(
+      !existingIdentities.has(
         buildSourceEventIdentityKey(
           {
             availability: incomingEvent.availability,
@@ -248,7 +204,6 @@ const buildSourceEventStateIdsToRemove = (
   options: SourceEventDiffOptions = {},
 ): string[] => {
   const normalizedIncomingEvents = deduplicateIncomingEvents(incomingEvents);
-  const transition = buildLegacyStateTransition(existingEvents, normalizedIncomingEvents);
   const { changedEventIds, isDeltaSync = false, cancelledEventIds } = options;
   const incomingProviderIdSet = new Set(
     normalizedIncomingEvents.flatMap((incomingEvent) => {
@@ -282,10 +237,6 @@ const buildSourceEventStateIdsToRemove = (
 
     return existingEvents
       .filter((existingEvent) => {
-        if (transition.matchedExistingIds.has(existingEvent.id)) {
-          return false;
-        }
-
         if (!existingEvent.sourceEventId) {
           if (existingEvent.sourceEventUid === null) {
             return false;
@@ -316,10 +267,6 @@ const buildSourceEventStateIdsToRemove = (
 
   return existingEvents
     .filter((existingEvent) => {
-      if (transition.matchedExistingIds.has(existingEvent.id)) {
-        return false;
-      }
-
       if (existingEvent.sourceEventId) {
         return !incomingProviderIdSet.has(existingEvent.sourceEventId);
       }
@@ -339,16 +286,10 @@ const buildSourceEventStateIdsToRemove = (
     .map((existingEvent) => existingEvent.id);
 };
 
-const buildSourceEventStateUpdates = (
-  existingEvents: ExistingSourceEventState[],
-  incomingEvents: SourceEvent[],
-): SourceEventStateUpdate[] => buildLegacyStateTransition(existingEvents, incomingEvents).updates;
-
 export {
   buildSourceEventIdentityKey,
-  buildSourceEventStateUpdates,
   buildSourceEventsToAdd,
   buildSourceEventStateIdsToRemove,
 };
-export type { SourceEventDiffOptions, SourceEventStateUpdate };
+export type { SourceEventDiffOptions };
 export type { ExistingSourceEventState } from "./stored-event-state";

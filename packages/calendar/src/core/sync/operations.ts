@@ -1,6 +1,9 @@
 import type { EventMapping } from "../events/mappings";
 import type { RemoteEvent, SyncableEvent, SyncOperation } from "../types";
-import { createSyncEventContentHash } from "../events/content-hash";
+import {
+  createEditableEventContentHash,
+  createSyncEventContentHash,
+} from "../events/content-hash";
 import { getOAuthSyncWindowStart } from "../oauth/sync-window";
 
 interface RemoveOperationTimeBoundary {
@@ -15,6 +18,7 @@ interface StaleMappingResult {
 }
 
 interface ComputeSyncOperationsResult {
+  mappingIdsToPrune: string[];
   operations: SyncOperation[];
   staleMappingIds: string[];
 }
@@ -24,10 +28,37 @@ const getDefaultTimeBoundary = (): RemoveOperationTimeBoundary => ({
   syncWindowStart: getOAuthSyncWindowStart(),
 });
 
+const getMappingSyncEventId = (mapping: EventMapping): string =>
+  mapping.syncEventId ?? mapping.eventStateId;
+
+const isSameSerializedSecond = (first: Date, second: Date): boolean =>
+  Math.trunc(first.getTime() / 1000) === Math.trunc(second.getTime() / 1000);
+
+const hasRemoteStateChanged = (
+  mapping: EventMapping,
+  localEvent: SyncableEvent,
+  remoteEvent: RemoteEvent,
+): boolean => {
+  const remoteContentChanged = typeof remoteEvent.editableContentHash === "string"
+    && remoteEvent.editableContentHash !== createEditableEventContentHash(localEvent);
+  const localAvailability = localEvent.availability ?? "busy";
+  const supportedAvailabilities = remoteEvent.supportedAvailabilities ?? [];
+  let expectedRemoteAvailability: SyncableEvent["availability"] = "busy";
+  if (supportedAvailabilities.includes(localAvailability)) {
+    expectedRemoteAvailability = localAvailability;
+  }
+  const remoteAvailabilityChanged = typeof remoteEvent.editableAvailability === "string"
+    && remoteEvent.editableAvailability !== expectedRemoteAvailability;
+  const remoteTimeChanged = !isSameSerializedSecond(remoteEvent.startTime, mapping.startTime)
+    || !isSameSerializedSecond(remoteEvent.endTime, mapping.endTime);
+
+  return remoteAvailabilityChanged || remoteContentChanged || remoteTimeChanged;
+};
+
 const identifyStaleMappings = (
   mappings: EventMapping[],
   localEventIds: Set<string>,
-  remoteEventUids: Set<string>,
+  remoteEventsByIdentity: Map<string, RemoteEvent>,
   localEventsById: Map<string, SyncableEvent>,
 ): StaleMappingResult => {
   const staleMappingIds: string[] = [];
@@ -35,20 +66,22 @@ const identifyStaleMappings = (
   const staleRemoteMappings: EventMapping[] = [];
 
   for (const mapping of mappings) {
-    const localEventExists = localEventIds.has(mapping.eventStateId);
-    const remoteEventExists = remoteEventUids.has(mapping.destinationEventUid);
-
-    if (localEventExists && !remoteEventExists) {
+    const syncEventId = getMappingSyncEventId(mapping);
+    const localEventExists = localEventIds.has(syncEventId);
+    const remoteEvent = remoteEventsByIdentity.get(
+      `${mapping.destinationEventUid}\u0000${mapping.deleteIdentifier}`,
+    );
+    if (localEventExists && !remoteEvent) {
       staleMappingIds.push(mapping.id);
-      staleMappedEventIds.add(mapping.eventStateId);
+      staleMappedEventIds.add(syncEventId);
       continue;
     }
 
-    if (!localEventExists || !remoteEventExists) {
+    if (!localEventExists || !remoteEvent) {
       continue;
     }
 
-    const localEvent = localEventsById.get(mapping.eventStateId);
+    const localEvent = localEventsById.get(syncEventId);
     if (!localEvent) {
       continue;
     }
@@ -56,9 +89,9 @@ const identifyStaleMappings = (
     const localEventHash = createSyncEventContentHash(localEvent);
     const eventContentChanged = mapping.syncEventHash !== localEventHash;
 
-    if (eventContentChanged) {
+    if (eventContentChanged || hasRemoteStateChanged(mapping, localEvent, remoteEvent)) {
       staleMappingIds.push(mapping.id);
-      staleMappedEventIds.add(mapping.eventStateId);
+      staleMappedEventIds.add(syncEventId);
       staleRemoteMappings.push(mapping);
     }
   }
@@ -74,7 +107,9 @@ const buildAddOperations = (
   const operations: SyncOperation[] = [];
 
   for (const event of localEvents) {
-    const existingMapping = existingMappings.find((mapping) => mapping.eventStateId === event.id);
+    const existingMapping = existingMappings.find(
+      (mapping) => getMappingSyncEventId(mapping) === event.id,
+    );
     const hasMapping = Boolean(existingMapping);
     const hasStaleMapping = staleMappedEventIds.has(event.id);
 
@@ -104,7 +139,7 @@ const buildReplacementOperations = (
 ): SyncOperation[] => {
   const operations: SyncOperation[] = [];
   for (const mapping of mappings) {
-    const event = localEventsById.get(mapping.eventStateId);
+    const event = localEventsById.get(getMappingSyncEventId(mapping));
     if (!event) {
       continue;
     }
@@ -146,7 +181,7 @@ const buildRemoveOperations = (
   existingMappings: EventMapping[],
   remoteEvents: RemoteEvent[],
   localEventIds: Set<string>,
-  mappedDestinationUids: Set<string>,
+  mappedRemoteIdentities: Set<string>,
   timeBoundary: RemoveOperationTimeBoundary = getDefaultTimeBoundary(),
 ): SyncOperation[] => {
   const operations: SyncOperation[] = [];
@@ -156,7 +191,7 @@ const buildRemoveOperations = (
       continue;
     }
 
-    if (!localEventIds.has(mapping.eventStateId)) {
+    if (!localEventIds.has(getMappingSyncEventId(mapping))) {
       operations.push({
         deleteId: mapping.deleteIdentifier,
         startTime: mapping.startTime,
@@ -167,7 +202,7 @@ const buildRemoveOperations = (
   }
 
   for (const remoteEvent of remoteEvents) {
-    if (mappedDestinationUids.has(remoteEvent.uid)) {
+    if (mappedRemoteIdentities.has(`${remoteEvent.uid}\u0000${remoteEvent.deleteId}`)) {
       continue;
     }
 
@@ -197,15 +232,32 @@ const computeSyncOperations = (
 ): ComputeSyncOperationsResult => {
   const localEventIds = new Set(localEvents.map((event) => event.id));
   const localEventsById = new Map(localEvents.map((event) => [event.id, event]));
-  const remoteEventUids = new Set(remoteEvents.map((event) => event.uid));
-  const mappedDestinationUids = new Set(
-    existingMappings.map(({ destinationEventUid }) => destinationEventUid),
+  const remoteEventsByIdentity = new Map(
+    remoteEvents.map((event) => [`${event.uid}\u0000${event.deleteId}`, event]),
   );
+  const mappedRemoteIdentities = new Set(
+    existingMappings.map((mapping) =>
+      `${mapping.destinationEventUid}\u0000${mapping.deleteIdentifier}`),
+  );
+  const mappingIdsToPrune = existingMappings.flatMap((mapping) => {
+    if (localEventIds.has(getMappingSyncEventId(mapping))) {
+      return [];
+    }
+    const remoteExists = remoteEventsByIdentity.has(
+      `${mapping.destinationEventUid}\u0000${mapping.deleteIdentifier}`,
+    );
+    if (mapping.startTime < timeBoundary.syncWindowStart || !remoteExists) {
+      return [mapping.id];
+    }
+    return [];
+  });
 
   const { staleMappingIds, staleMappedEventIds, staleRemoteMappings } =
-    identifyStaleMappings(existingMappings, localEventIds, remoteEventUids, localEventsById);
+    identifyStaleMappings(existingMappings, localEventIds, remoteEventsByIdentity, localEventsById);
 
-  const replacedEventIds = new Set(staleRemoteMappings.map((mapping) => mapping.eventStateId));
+  const replacedEventIds = new Set(
+    staleRemoteMappings.map((mapping) => getMappingSyncEventId(mapping)),
+  );
   const addOperations = buildAddOperations(localEvents, existingMappings, staleMappedEventIds)
     .filter((operation) => operation.type !== "add" || !replacedEventIds.has(operation.event.id));
   const replacementOperations = buildReplacementOperations(staleRemoteMappings, localEventsById);
@@ -214,11 +266,12 @@ const computeSyncOperations = (
     existingMappings,
     remoteEvents,
     localEventIds,
-    mappedDestinationUids,
+    mappedRemoteIdentities,
     timeBoundary,
   );
 
   return {
+    mappingIdsToPrune,
     operations: sortOperationsByTime([
       ...addOperations,
       ...removeOperations,
