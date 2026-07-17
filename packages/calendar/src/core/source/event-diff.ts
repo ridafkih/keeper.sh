@@ -28,7 +28,7 @@ const normalizeIdentityIsAllDay = (
 const normalizeIdentityContent = (value: string | null | undefined): string =>
   value?.trim() ?? "";
 
-const serializeIdentityValue = (
+const serializeStructuredIdentityValue = (
   value: IcsExceptionDates | IcsRecurrenceRule | null | undefined,
 ): string => {
   if (value === null || value === globalThis.undefined) {
@@ -82,8 +82,8 @@ const buildSourceEventIdentityKey = (
     normalizeIdentityContent(input.description),
     normalizeIdentityContent(input.location),
     normalizeIdentityContent(input.startTimeZone),
-    serializeIdentityValue(input.recurrenceRule),
-    serializeIdentityValue(input.exceptionDates),
+    serializeStructuredIdentityValue(input.recurrenceRule),
+    serializeStructuredIdentityValue(input.exceptionDates),
     input.recurrenceId?.toISOString() ?? "",
   ].join("|");
 

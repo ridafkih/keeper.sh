@@ -3,6 +3,7 @@ import {
   icsRecurrenceRuleSchema,
 } from "@keeper.sh/data-schemas";
 import type { IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
+import { getErrorMessage } from "../utils/error";
 
 const parseStoredJson = (
   value: string,
@@ -29,7 +30,10 @@ const parseStoredIcsRecurrenceRule = (
   try {
     return icsRecurrenceRuleSchema.assert(parsed);
   } catch (error) {
-    throw new TypeError(`Invalid recurrenceRule shape for event ${eventId}`, { cause: error });
+    throw new TypeError(
+      `Invalid recurrenceRule shape for event ${eventId}: ${getErrorMessage(error)}`,
+      { cause: error },
+    );
   }
 };
 
@@ -46,7 +50,10 @@ const parseStoredIcsExceptionDates = (
   try {
     return icsExceptionDatesSchema.assert(parsed);
   } catch (error) {
-    throw new TypeError(`Invalid exceptionDates shape for event ${eventId}`, { cause: error });
+    throw new TypeError(
+      `Invalid exceptionDates shape for event ${eventId}: ${getErrorMessage(error)}`,
+      { cause: error },
+    );
   }
 };
 

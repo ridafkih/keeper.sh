@@ -39,6 +39,8 @@ describe("stored recurrence parsing", () => {
 
   it("rejects valid JSON with an invalid recurrence shape", () => {
     expect(() => parseStoredIcsExceptionDates('{"dates":[]}', "event-bad-shape"))
-      .toThrow("Invalid exceptionDates shape for event event-bad-shape");
+      .toThrow(
+        "Invalid exceptionDates shape for event event-bad-shape: must be an array (was object)",
+      );
   });
 });
