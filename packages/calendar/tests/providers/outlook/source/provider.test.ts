@@ -91,6 +91,86 @@ describe("OutlookSourceProvider", () => {
     expect(outOfRangeDeleteCalled).toBe(true);
   });
 
+  it("removes the old state when a delta occurrence moves outside the sync window", async () => {
+    const transactionDeletes: string[] = [];
+    const transactionInserts: string[] = [];
+    const transactionDatabase = {
+      delete: () => ({
+        where: () => {
+          transactionDeletes.push("deleted");
+          return Promise.resolve();
+        },
+      }),
+      insert: () => ({
+        values: () => ({
+          onConflictDoUpdate: () => {
+            transactionInserts.push("inserted");
+            return Promise.resolve();
+          },
+        }),
+      }),
+    };
+    const mockDatabase = {
+      delete: () => ({ where: () => Promise.resolve() }),
+      select: () => ({
+        from: () => ({
+          where: () => Promise.resolve([{
+            availability: "busy",
+            endTime: new Date("2026-03-12T15:00:00.000Z"),
+            id: "event-state-1",
+            isAllDay: false,
+            sourceEventId: "provider-event-1",
+            sourceEventType: "default",
+            sourceEventUid: "source-uid-1",
+            startTime: new Date("2026-03-12T14:00:00.000Z"),
+          }]),
+        }),
+      }),
+      transaction: (
+        callback: (database: typeof transactionDatabase) => Promise<void>,
+      ) => callback(transactionDatabase),
+      update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
+    };
+    const provider = new TestableOutlookSourceProvider(
+      {
+        accessToken: "access-token",
+        accessTokenExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
+        calendarAccountId: "account-1",
+        calendarId: "calendar-1",
+        database: mockDatabase as unknown as BunSQLDatabase,
+        deltaLink: "delta-link-token",
+        externalCalendarId: "calendar@example.com",
+        oauthCredentialId: "credential-1",
+        originalName: "Original Calendar",
+        refreshToken: "refresh-token",
+        sourceName: "Calendar",
+        syncToken: "delta-link-token",
+        userId: "user-1",
+      },
+      {
+        refreshAccessToken: () => Promise.reject(
+          new Error("refreshAccessToken should not be called"),
+        ),
+      },
+    );
+    const movedOutOfWindow = {
+      endTime: new Date("2098-03-12T15:00:00.000Z"),
+      sourceEventId: "provider-event-1",
+      startTime: new Date("2098-03-12T14:00:00.000Z"),
+      uid: "source-uid-1",
+    };
+
+    const result = await provider.runProcessEvents(
+      [movedOutOfWindow],
+      { changedEventIds: ["provider-event-1"], isDeltaSync: true },
+    );
+
+    expect(result.eventsFilteredOutOfWindow).toBe(1);
+    expect(result.eventsRemoved).toBe(1);
+    expect(transactionDeletes).toEqual(["deleted"]);
+    expect(transactionInserts).toEqual([]);
+  });
+
   it("applies source-state removals inside a transaction during full sync", async () => {
     let outOfRangeDeleteCalls = 0;
     let transactionCalls = 0;

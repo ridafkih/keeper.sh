@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { isNotNull, isNull } from "drizzle-orm";
 import { user } from "./auth-schema";
 
 const DEFAULT_EVENT_COUNT = 0;
@@ -160,6 +161,7 @@ const eventStatesTable = pgTable(
     exceptionDates: text(),
     recurrenceId: timestamp(),
     isAllDay: boolean(),
+    sourceEventId: text(),
     sourceEventType: text(),
     sourceEventUid: text(),
     startTime: timestamp().notNull(),
@@ -170,12 +172,15 @@ const eventStatesTable = pgTable(
     index("event_states_start_time_idx").on(table.startTime),
     index("event_states_end_time_idx").on(table.endTime),
     index("event_states_calendar_idx").on(table.calendarId),
+    uniqueIndex("event_states_source_event_idx")
+      .on(table.calendarId, table.sourceEventId)
+      .where(isNotNull(table.sourceEventId)),
     uniqueIndex("event_states_identity_idx").on(
       table.calendarId,
       table.sourceEventUid,
       table.startTime,
       table.endTime,
-    ),
+    ).where(isNull(table.sourceEventId)),
   ],
 );
 

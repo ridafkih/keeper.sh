@@ -64,11 +64,13 @@ interface FetchEventsResult {
   nextSyncToken?: string;
   fullSyncRequired: boolean;
   isDeltaSync?: boolean;
-  cancelledEventUids?: string[];
+  changedEventIds?: string[];
+  cancelledEventIds?: string[];
 }
 
 interface EventTimeSlot {
   uid: string;
+  sourceEventId?: string;
   startTime: Date;
   endTime: Date;
   sourceEventType?: "default" | "focusTime" | "outOfOffice" | "workingLocation";

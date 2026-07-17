@@ -61,7 +61,7 @@ afterEach(() => {
 });
 
 describe("fetchCalendarEvents", () => {
-  it("collects paged events and cancelled UIDs during delta sync", async () => {
+  it("collects paged events and cancelled provider IDs during delta sync", async () => {
     const requestedUrls: string[] = [];
 
     globalThis.fetch = createFetchQueue(
@@ -95,7 +95,13 @@ describe("fetchCalendarEvents", () => {
     expect(fetchResult.isDeltaSync).toBe(true);
     expect(fetchResult.nextSyncToken).toBe("sync-token-2");
     expect(fetchResult.events.map((event) => event.id)).toEqual(["event-1", "event-3"]);
-    expect(fetchResult.cancelledEventUids).toEqual(["cancelled-uid", "cancelled-by-id"]);
+    expect(fetchResult.changedEventIds).toEqual([
+      "event-1",
+      "event-2",
+      "cancelled-by-id",
+      "event-3",
+    ]);
+    expect(fetchResult.cancelledEventIds).toEqual(["event-2", "cancelled-by-id"]);
     expect(requestedUrls).toHaveLength(2);
 
     const [firstRequestUrl] = requestedUrls;
@@ -117,6 +123,47 @@ describe("fetchCalendarEvents", () => {
 
     const secondRequestSearchParams = new URL(secondRequestUrl).searchParams;
     expect(secondRequestSearchParams.get("pageToken")).toBe("next-page-token");
+  });
+
+  it.each([
+    {
+      expectedCancelledIds: ["event-1"],
+      expectedEventIds: [],
+      firstStatus: "confirmed" as const,
+      lastStatus: "cancelled" as const,
+    },
+    {
+      expectedCancelledIds: [],
+      expectedEventIds: ["event-1"],
+      firstStatus: "cancelled" as const,
+      lastStatus: "confirmed" as const,
+    },
+  ])("uses the final paged state when one provider event changes repeatedly", async ({
+    expectedCancelledIds,
+    expectedEventIds,
+    firstStatus,
+    lastStatus,
+  }) => {
+    globalThis.fetch = createFetchQueue([
+      createJsonResponse({
+        items: [{ iCalUID: "event-uid", id: "event-1", status: firstStatus }],
+        nextPageToken: "next-page-token",
+      }),
+      createJsonResponse({
+        items: [{ iCalUID: "event-uid", id: "event-1", status: lastStatus }],
+        nextSyncToken: "next-sync-token",
+      }),
+    ], []);
+
+    const result = await fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      syncToken: "current-sync-token",
+    });
+
+    expect(result.events.map((event) => event.id)).toEqual(expectedEventIds);
+    expect(result.changedEventIds).toEqual(["event-1"]);
+    expect(result.cancelledEventIds).toEqual(expectedCancelledIds);
   });
 
   it("returns full-sync-required when Google responds with gone", async () => {
@@ -188,6 +235,7 @@ describe("parseGoogleEvents", () => {
 
     expect(parsedEvents).toHaveLength(2);
     expect(parsedEvents[0]?.uid).toBe("external-uid-1");
+    expect(parsedEvents[0]?.sourceEventId).toBe("google-event-id-1");
     expect(parsedEvents[1]?.sourceEventType).toBe("focusTime");
   });
 

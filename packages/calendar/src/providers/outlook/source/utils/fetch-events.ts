@@ -175,9 +175,18 @@ const fetchEventsPage = async (
 const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEventsResult> => {
   const { accessToken, calendarId, deltaLink, timeMin, timeMax } = options;
 
-  const events: OutlookCalendarEvent[] = [];
-  const cancelledEventUids: string[] = [];
+  const changedEventsById = new Map<string, OutlookCalendarEvent>();
+  const changedEventsWithoutId: OutlookCalendarEvent[] = [];
   const isDeltaSync = Boolean(deltaLink);
+  const collectEvents = (pageEvents: OutlookCalendarEvent[]): void => {
+    for (const event of pageEvents) {
+      if (event.id) {
+        changedEventsById.set(event.id, event);
+      } else if (!event["@removed"]) {
+        changedEventsWithoutId.push(event);
+      }
+    }
+  };
 
   const initialResult = await fetchEventsPage({
     accessToken,
@@ -191,16 +200,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
     return { events: [], fullSyncRequired: true };
   }
 
-  for (const event of initialResult.data.value ?? []) {
-    if (event["@removed"]) {
-      const uid = event.iCalUId ?? event.id;
-      if (uid) {
-        cancelledEventUids.push(uid);
-      }
-    } else {
-      events.push(event);
-    }
-  }
+  collectEvents(initialResult.data.value ?? []);
 
   let lastDeltaLink = initialResult.data["@odata.deltaLink"];
   let nextLink = initialResult.data["@odata.nextLink"];
@@ -218,16 +218,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
       return { events: [], fullSyncRequired: true };
     }
 
-    for (const event of pageResult.data.value ?? []) {
-      if (event["@removed"]) {
-        const uid = event.iCalUId ?? event.id;
-        if (uid) {
-          cancelledEventUids.push(uid);
-        }
-      } else {
-        events.push(event);
-      }
-    }
+    collectEvents(pageResult.data.value ?? []);
 
     if (pageResult.data["@odata.deltaLink"]) {
       lastDeltaLink = pageResult.data["@odata.deltaLink"];
@@ -235,15 +226,30 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
     nextLink = pageResult.data["@odata.nextLink"];
   }
 
+  const latestChangedEvents = [
+    ...changedEventsWithoutId,
+    ...changedEventsById.values(),
+  ];
   const result: FetchEventsResult = {
-    events,
+    events: latestChangedEvents.filter((event) => !event["@removed"]),
     fullSyncRequired: false,
     isDeltaSync,
     nextDeltaLink: lastDeltaLink,
   };
 
   if (isDeltaSync) {
-    result.cancelledEventUids = cancelledEventUids;
+    result.changedEventIds = latestChangedEvents.flatMap((event) => {
+      if (!event.id) {
+        return [];
+      }
+      return [event.id];
+    });
+    result.cancelledEventIds = latestChangedEvents.flatMap((event) => {
+      if (event["@removed"] && event.id) {
+        return [event.id];
+      }
+      return [];
+    });
   }
 
   return result;
@@ -340,6 +346,7 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
       endTime: parseEventDateTime(end),
       isAllDay: event.isAllDay ?? false,
       location: event.location?.displayName,
+      sourceEventId: event.id,
       startTime: parseEventDateTime(start),
       startTimeZone: start.timeZone,
       title: event.subject,

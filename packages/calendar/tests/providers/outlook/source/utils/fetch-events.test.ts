@@ -21,6 +21,12 @@ const createOutlookEvent = (
 
 const originalFetch = globalThis.fetch;
 
+const createOutlookEventVersion = (removed: boolean): OutlookCalendarEvent => ({
+  ...(removed && { "@removed": { reason: "deleted" } }),
+  iCalUId: "event-uid",
+  id: "event-1",
+});
+
 const resolveInputUrl = (input: Request | URL | string): string => {
   if (input instanceof URL) {
     return input.toString();
@@ -99,8 +105,56 @@ describe("fetchCalendarEvents", () => {
     expect(fetchResult.isDeltaSync).toBe(true);
     expect(fetchResult.nextDeltaLink).toContain("deltatoken=final");
     expect(fetchResult.events.map((event) => event.id)).toEqual(["event-1", "event-3"]);
-    expect(fetchResult.cancelledEventUids).toEqual(["removed-uid", "removed-by-id"]);
+    expect(fetchResult.changedEventIds).toEqual([
+      "event-1",
+      "event-2",
+      "removed-by-id",
+      "event-3",
+    ]);
+    expect(fetchResult.cancelledEventIds).toEqual(["event-2", "removed-by-id"]);
     expect(requestedUrls).toEqual([initialDeltaLink, nextPageLink]);
+  });
+
+  it.each([
+    {
+      expectedCancelledIds: ["event-1"],
+      expectedEventIds: [],
+      firstRemoved: false,
+      lastRemoved: true,
+    },
+    {
+      expectedCancelledIds: [],
+      expectedEventIds: ["event-1"],
+      firstRemoved: true,
+      lastRemoved: false,
+    },
+  ])("uses the final paged state when one provider event changes repeatedly", async ({
+    expectedCancelledIds,
+    expectedEventIds,
+    firstRemoved,
+    lastRemoved,
+  }) => {
+    const nextPageLink = "https://graph.microsoft.com/delta?$skiptoken=next";
+    globalThis.fetch = createFetchQueue([
+      createJsonResponse({
+        "@odata.nextLink": nextPageLink,
+        value: [createOutlookEventVersion(firstRemoved)],
+      }),
+      createJsonResponse({
+        "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
+        value: [createOutlookEventVersion(lastRemoved)],
+      }),
+    ], []);
+
+    const result = await fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      deltaLink: "https://graph.microsoft.com/delta?$deltatoken=current",
+    });
+
+    expect(result.events.map((event) => event.id)).toEqual(expectedEventIds);
+    expect(result.changedEventIds).toEqual(["event-1"]);
+    expect(result.cancelledEventIds).toEqual(expectedCancelledIds);
   });
 
   it("builds initial range URL when running full sync", async () => {
@@ -194,6 +248,7 @@ describe("parseOutlookEvents", () => {
     }
 
     expect(parsedEvent.uid).toBe("external-uid-1");
+    expect(parsedEvent.sourceEventId).toBe("outlook-event-id-1");
     expect(parsedEvent.startTime.toISOString()).toBe("2026-03-08T14:00:00.000Z");
     expect(parsedEvent.endTime.toISOString()).toBe("2026-03-08T15:00:00.000Z");
     expect(parsedEvent.startTimeZone).toBe("UTC");

@@ -151,9 +151,18 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
   } = options;
 
   const baseUrl = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events`;
-  const events: GoogleCalendarEvent[] = [];
-  const cancelledEventUids: string[] = [];
+  const changedEventsById = new Map<string, GoogleCalendarEvent>();
+  const changedEventsWithoutId: GoogleCalendarEvent[] = [];
   const isDeltaSync = Boolean(syncToken);
+  const collectEvents = (pageEvents: GoogleCalendarEvent[]): void => {
+    for (const event of pageEvents) {
+      if (event.id) {
+        changedEventsById.set(event.id, event);
+      } else if (event.status !== "cancelled") {
+        changedEventsWithoutId.push(event);
+      }
+    }
+  };
 
   const fetchPageWithBackoff = (pageOptions: PageFetchOptions): Promise<PageFetchResult | FullSyncRequiredResult> =>
     withBackoff(
@@ -181,16 +190,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
     return { events: [], fullSyncRequired: true };
   }
 
-  for (const event of result.data.items ?? []) {
-    if (event.status === "cancelled") {
-      const uid = event.iCalUID ?? event.id;
-      if (uid) {
-        cancelledEventUids.push(uid);
-      }
-    } else {
-      events.push(event);
-    }
-  }
+  collectEvents(result.data.items ?? []);
 
   let lastSyncToken = result.data.nextSyncToken;
 
@@ -213,31 +213,37 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
       return { events: [], fullSyncRequired: true };
     }
 
-    for (const event of result.data.items ?? []) {
-      if (event.status === "cancelled") {
-        const uid = event.iCalUID ?? event.id;
-        if (uid) {
-          cancelledEventUids.push(uid);
-        }
-      } else {
-        events.push(event);
-      }
-    }
+    collectEvents(result.data.items ?? []);
 
     if (result.data.nextSyncToken) {
       lastSyncToken = result.data.nextSyncToken;
     }
   }
 
+  const latestChangedEvents = [
+    ...changedEventsWithoutId,
+    ...changedEventsById.values(),
+  ];
   const fetchResult: FetchEventsResult = {
-    events,
+    events: latestChangedEvents.filter((event) => event.status !== "cancelled"),
     fullSyncRequired: false,
     isDeltaSync,
     nextSyncToken: lastSyncToken,
   };
 
   if (isDeltaSync) {
-    fetchResult.cancelledEventUids = cancelledEventUids;
+    fetchResult.changedEventIds = latestChangedEvents.flatMap((event) => {
+      if (!event.id) {
+        return [];
+      }
+      return [event.id];
+    });
+    fetchResult.cancelledEventIds = latestChangedEvents.flatMap((event) => {
+      if (event.status === "cancelled" && event.id) {
+        return [event.id];
+      }
+      return [];
+    });
   }
 
   return fetchResult;
@@ -314,6 +320,7 @@ const parseGoogleEvents = (events: GoogleCalendarEvent[]): EventTimeSlot[] => {
       sourceEventType: resolveSourceEventType(event.eventType),
       startTime: parseEventDateTime(event.start),
       startTimeZone: event.start.timeZone ?? event.end.timeZone,
+      sourceEventId: event.id,
       title: event.summary,
       uid: event.iCalUID,
     });

@@ -1,5 +1,5 @@
 import { buildSourceEventStateIdsToRemove, buildSourceEventsToAdd } from "../../../core/source/event-diff";
-import { filterSourceEventsToSyncWindow, resolveSourceSyncTokenAction, splitSourceEventsByStorageIdentity } from "../../../core/source/sync-diagnostics";
+import { filterSourceEventsToSyncWindow, resolveSourceSyncTokenAction, splitSourceEventsByPersistenceIdentity } from "../../../core/source/sync-diagnostics";
 import { insertEventStatesWithConflictResolution } from "../../../core/source/write-event-states";
 import { OAuthSourceProvider, type ProcessEventsOptions } from "../../../core/oauth/source-provider";
 import type { FetchEventsResult as BaseFetchEventsResult } from "../../../core/oauth/source-provider";
@@ -80,14 +80,15 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
 
     const events = parseOutlookEvents(result.events);
     const fetchResult: BaseFetchEventsResult = {
+      changedEventIds: result.changedEventIds,
       events,
       fullSyncRequired: false,
       isDeltaSync: result.isDeltaSync,
       nextSyncToken: result.nextDeltaLink,
     };
 
-    if (result.cancelledEventUids) {
-      fetchResult.cancelledEventUids = result.cancelledEventUids;
+    if (result.cancelledEventIds) {
+      fetchResult.cancelledEventIds = result.cancelledEventIds;
     }
 
     return fetchResult;
@@ -98,7 +99,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
     options: ProcessEventsOptions,
   ): Promise<SourceSyncResult> {
     const { database, calendarId } = this.config;
-    const { nextSyncToken, isDeltaSync, cancelledEventUids } = options;
+    const { changedEventIds, nextSyncToken, isDeltaSync, cancelledEventIds } = options;
     const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
     const {
       events: eventsInWindow,
@@ -120,6 +121,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
         isAllDay: eventStatesTable.isAllDay,
         location: eventStatesTable.location,
         sourceEventType: eventStatesTable.sourceEventType,
+        sourceEventId: eventStatesTable.sourceEventId,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
         title: eventStatesTable.title,
@@ -131,9 +133,9 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
     const eventStateIdsToRemove = buildSourceEventStateIdsToRemove(
       existingEvents,
       eventsInWindow,
-      { cancelledEventUids, isDeltaSync },
+      { cancelledEventIds, changedEventIds, isDeltaSync },
     );
-    const { eventsToInsert, eventsToUpdate } = splitSourceEventsByStorageIdentity(
+    const { eventsToInsert, eventsToUpdate } = splitSourceEventsByPersistenceIdentity(
       existingEvents,
       eventsToAdd,
     );
@@ -164,6 +166,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
               location: event.location,
               recurrenceRule: stringifyIfPresent(event.recurrenceRule),
               sourceEventType: event.sourceEventType ?? "default",
+              sourceEventId: event.sourceEventId,
               sourceEventUid: event.uid,
               startTime: event.startTime,
               startTimeZone: event.startTimeZone,

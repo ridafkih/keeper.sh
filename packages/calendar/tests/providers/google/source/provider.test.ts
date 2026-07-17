@@ -3,6 +3,8 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { ProcessEventsOptions } from "../../../../src/core/oauth/source-provider";
+import { encodeStoredSyncToken } from "../../../../src/core/oauth/sync-token";
+import { OAUTH_SYNC_WINDOW_VERSION } from "../../../../src/core/oauth/sync-window";
 import type { SourceEvent, SourceSyncResult } from "../../../../src/core/types";
 import {
   createGoogleCalendarSourceProvider,
@@ -111,6 +113,87 @@ describe("GoogleCalendarSourceProvider", () => {
 
     expect(result.fullSyncRequired).toBeUndefined();
     expect(outOfRangeDeleteCalled).toBe(true);
+  });
+
+  it("removes the old state when a delta occurrence moves outside the sync window", async () => {
+    const transactionDeletes: string[] = [];
+    const transactionInserts: string[] = [];
+    const transactionDatabase = {
+      delete: () => ({
+        where: () => {
+          transactionDeletes.push("deleted");
+          return Promise.resolve();
+        },
+      }),
+      insert: () => ({
+        values: () => ({
+          onConflictDoUpdate: () => {
+            transactionInserts.push("inserted");
+            return Promise.resolve();
+          },
+        }),
+      }),
+    };
+    const mockDatabase = {
+      delete: () => ({ where: () => Promise.resolve() }),
+      select: () => ({
+        from: () => ({
+          where: () => Promise.resolve([{
+            availability: "busy",
+            endTime: new Date("2026-03-12T15:00:00.000Z"),
+            id: "event-state-1",
+            isAllDay: false,
+            sourceEventId: "provider-event-1",
+            sourceEventType: "default",
+            sourceEventUid: "source-uid-1",
+            startTime: new Date("2026-03-12T14:00:00.000Z"),
+          }]),
+        }),
+      }),
+      transaction: (
+        callback: (database: typeof transactionDatabase) => Promise<void>,
+      ) => callback(transactionDatabase),
+      update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
+    };
+    const provider = new TestableGoogleCalendarSourceProvider(
+      {
+        accessToken: "access-token",
+        accessTokenExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
+        calendarAccountId: "account-1",
+        calendarId: "calendar-1",
+        database: mockDatabase as unknown as BunSQLDatabase,
+        excludeFocusTime: false,
+        excludeOutOfOffice: false,
+        externalCalendarId: "calendar@example.com",
+        oauthCredentialId: "credential-1",
+        originalName: "Original Calendar",
+        refreshToken: "refresh-token",
+        sourceName: "Calendar",
+        syncToken: "delta-sync-token",
+        userId: "user-1",
+      },
+      {
+        refreshAccessToken: () => Promise.reject(
+          new Error("refreshAccessToken should not be called"),
+        ),
+      },
+    );
+    const movedOutOfWindow = {
+      endTime: new Date("2098-03-12T15:00:00.000Z"),
+      sourceEventId: "provider-event-1",
+      startTime: new Date("2098-03-12T14:00:00.000Z"),
+      uid: "source-uid-1",
+    };
+
+    const result = await provider.runProcessEvents(
+      [movedOutOfWindow],
+      { changedEventIds: ["provider-event-1"], isDeltaSync: true },
+    );
+
+    expect(result.eventsFilteredOutOfWindow).toBe(1);
+    expect(result.eventsRemoved).toBe(1);
+    expect(transactionDeletes).toEqual(["deleted"]);
+    expect(transactionInserts).toEqual([]);
   });
 
   it("applies source-state removals inside a transaction during full sync", async () => {
@@ -254,5 +337,57 @@ describe("GoogleCalendarSourceProvider", () => {
     expect(result.nextSyncToken).toBe("next-sync-token");
     expect(requestedUrls).toHaveLength(1);
     expect(requestedUrls[0]).toContain("/events");
+  });
+
+  it("preserves raw changed IDs when direct-provider parsing excludes a delta event", async () => {
+    const queuedFetch = (): Promise<Response> => Promise.resolve(createJsonResponse({
+      items: [{
+        end: {
+          dateTime: "2027-03-08T15:00:00.000Z",
+          timeZone: "UTC",
+        },
+        iCalUID: "event@keeper.sh",
+        id: "google-event-id-1",
+        start: {
+          dateTime: "2027-03-08T14:00:00.000Z",
+          timeZone: "UTC",
+        },
+        status: "confirmed",
+      }],
+      nextSyncToken: "next-sync-token",
+    }));
+    queuedFetch.preconnect = originalFetch.preconnect;
+    globalThis.fetch = queuedFetch;
+    const provider = new GoogleCalendarSourceProvider(
+      {
+        accessToken: "access-token",
+        accessTokenExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
+        calendarAccountId: "account-1",
+        calendarId: "calendar-1",
+        database: {} as never,
+        excludeFocusTime: false,
+        excludeOutOfOffice: false,
+        externalCalendarId: "calendar@example.com",
+        oauthCredentialId: "credential-1",
+        originalName: "Original Calendar",
+        refreshToken: "refresh-token",
+        sourceName: "Calendar",
+        syncToken: null,
+        userId: "user-1",
+      },
+      {
+        refreshAccessToken: () => Promise.reject(
+          new Error("refreshAccessToken should not be called"),
+        ),
+      },
+    );
+
+    const result = await provider.fetchEvents(encodeStoredSyncToken(
+      "current-sync-token",
+      OAUTH_SYNC_WINDOW_VERSION,
+    ));
+
+    expect(result.events).toEqual([]);
+    expect(result.changedEventIds).toEqual(["google-event-id-1"]);
   });
 });

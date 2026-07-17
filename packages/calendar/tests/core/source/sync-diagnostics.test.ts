@@ -4,7 +4,7 @@ import type { ExistingSourceEventState } from "../../../src/core/source/event-di
 import {
   filterSourceEventsToSyncWindow,
   resolveSourceSyncTokenAction,
-  splitSourceEventsByStorageIdentity,
+  splitSourceEventsByPersistenceIdentity,
 } from "../../../src/core/source/sync-diagnostics";
 
 const createSourceEvent = (overrides: Partial<SourceEvent>): SourceEvent => ({
@@ -56,7 +56,7 @@ describe("filterSourceEventsToSyncWindow", () => {
   });
 });
 
-describe("splitSourceEventsByStorageIdentity", () => {
+describe("splitSourceEventsByPersistenceIdentity", () => {
   it("separates true inserts from upserts on existing storage identity", () => {
     const existingEvents = [
       createExistingEvent({
@@ -79,12 +79,30 @@ describe("splitSourceEventsByStorageIdentity", () => {
       }),
     ];
 
-    const result = splitSourceEventsByStorageIdentity(existingEvents, eventsToAdd);
+    const result = splitSourceEventsByPersistenceIdentity(existingEvents, eventsToAdd);
 
     expect(result.eventsToInsert).toHaveLength(1);
     expect(result.eventsToInsert[0]?.uid).toBe("event-2");
     expect(result.eventsToUpdate).toHaveLength(1);
     expect(result.eventsToUpdate[0]?.uid).toBe("event-1");
+  });
+
+  it("classifies a moved provider occurrence as an update by provider identity", () => {
+    const existingEvents = [
+      createExistingEvent({
+        sourceEventId: "provider-event-1",
+      }),
+    ];
+    const movedEvent = createSourceEvent({
+      endTime: new Date("2026-03-14T11:00:00.000Z"),
+      sourceEventId: "provider-event-1",
+      startTime: new Date("2026-03-14T10:00:00.000Z"),
+    });
+
+    const result = splitSourceEventsByPersistenceIdentity(existingEvents, [movedEvent]);
+
+    expect(result.eventsToInsert).toEqual([]);
+    expect(result.eventsToUpdate).toEqual([movedEvent]);
   });
 });
 

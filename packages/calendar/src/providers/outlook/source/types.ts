@@ -59,11 +59,13 @@ interface FetchEventsResult {
   nextDeltaLink?: string;
   fullSyncRequired: boolean;
   isDeltaSync?: boolean;
-  cancelledEventUids?: string[];
+  changedEventIds?: string[];
+  cancelledEventIds?: string[];
 }
 
 interface EventTimeSlot {
   uid: string;
+  sourceEventId?: string;
   startTime: Date;
   endTime: Date;
   availability?: "busy" | "free" | "oof" | "workingElsewhere";

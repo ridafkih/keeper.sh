@@ -41,13 +41,21 @@ const buildSourceEventStorageIdentityKey = (
   endTime: Date,
 ): string => `${uid}|${startTime.toISOString()}|${endTime.toISOString()}`;
 
-const splitSourceEventsByStorageIdentity = (
+const splitSourceEventsByPersistenceIdentity = (
   existingEvents: ExistingSourceEventState[],
   eventsToAdd: SourceEvent[],
 ): SourceEventStoragePartition => {
+  const existingProviderIds = new Set(
+    existingEvents.flatMap((event) => {
+      if (!event.sourceEventId) {
+        return [];
+      }
+      return [event.sourceEventId];
+    }),
+  );
   const existingStorageIdentities = new Set(
     existingEvents.flatMap((event) => {
-      if (event.sourceEventUid === null) {
+      if (event.sourceEventId || event.sourceEventUid === null) {
         return [];
       }
       return [
@@ -64,6 +72,15 @@ const splitSourceEventsByStorageIdentity = (
   const eventsToUpdate: SourceEvent[] = [];
 
   for (const event of eventsToAdd) {
+    if (event.sourceEventId) {
+      if (existingProviderIds.has(event.sourceEventId)) {
+        eventsToUpdate.push(event);
+      } else {
+        eventsToInsert.push(event);
+      }
+      continue;
+    }
+
     const storageIdentity = buildSourceEventStorageIdentityKey(
       event.uid,
       event.startTime,
@@ -99,7 +116,7 @@ const resolveSourceSyncTokenAction = (
 export {
   filterSourceEventsToSyncWindow,
   resolveSourceSyncTokenAction,
-  splitSourceEventsByStorageIdentity,
+  splitSourceEventsByPersistenceIdentity,
 };
 export type {
   OAuthSyncWindow,

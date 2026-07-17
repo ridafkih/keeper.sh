@@ -7,7 +7,7 @@ const getStartOfToday = (): Date => {
 };
 
 const OAUTH_SYNC_LOOKBACK_DAYS = 7;
-const OAUTH_SYNC_WINDOW_VERSION = 3;
+const OAUTH_SYNC_WINDOW_VERSION = 4;
 const OAUTH_SYNC_LOOKBACK_MS = OAUTH_SYNC_LOOKBACK_DAYS * MS_PER_DAY;
 
 interface OAuthSyncWindow {
