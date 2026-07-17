@@ -154,6 +154,7 @@ const flattenSyncedEvents = (
       calendarUrl: source.url,
       description: orAbsent(row.description),
       endTime: row.endTime,
+      eventStateId: row.id,
       ...recurrence,
       id: row.id,
       isAllDay: orAbsent(row.isAllDay),
@@ -198,7 +199,7 @@ const flattenSyncedEvents = (
 
 /**
  * Build the WHERE clause for fetching synced rows that may contribute events
- * to [start, end]: one-offs whose startTime is in-window, plus recurring
+ * to [start, end]: one-offs and detached overrides that overlap the range, plus recurring
  * masters whose first occurrence is at-or-before the window end (later
  * occurrences may still land inside the window even if the master is far in
  * the past).

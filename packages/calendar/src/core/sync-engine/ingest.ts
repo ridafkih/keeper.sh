@@ -1,4 +1,9 @@
 import type { SourceEvent } from "../types";
+import { getOAuthSyncWindow } from "../oauth/sync-window";
+import {
+  assertSourceRecurrenceMaterializationWithinBudget,
+  RecurrenceMaterializationLimitError,
+} from "../events/recurrence-materializer";
 import {
   buildSourceEventsToAdd,
   buildSourceEventStateIdsToRemove,
@@ -78,6 +83,7 @@ interface IngestionResult {
 }
 
 const EMPTY_RESULT: IngestionResult = { eventsAdded: 0, eventsRemoved: 0 };
+const RECURRENCE_VALIDATION_YEARS = 2;
 
 const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResult> => {
   const { calendarId, fetchEvents, onIngestEvent } = options;
@@ -97,6 +103,16 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     return await withPersistenceTransaction(async ({ readExistingEvents, flush }) => {
       const fetchResult = await fetchEvents();
       wideEvent["source_events.count"] = fetchResult.events.length;
+      const recurrenceValidationWindow = getOAuthSyncWindow(RECURRENCE_VALIDATION_YEARS);
+
+      assertSourceRecurrenceMaterializationWithinBudget(
+        calendarId,
+        fetchResult.events,
+        {
+          end: recurrenceValidationWindow.timeMax,
+          start: recurrenceValidationWindow.timeMin,
+        },
+      );
 
       if (fetchResult.unchanged) {
         wideEvent["outcome"] = "unchanged";
@@ -209,6 +225,13 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     if (error instanceof Error) {
       wideEvent["error.message"] = error.message;
       wideEvent["error.type"] = error.constructor.name;
+    }
+    if (error instanceof RecurrenceMaterializationLimitError) {
+      wideEvent["recurrence.calendar_id"] = error.calendarId;
+      wideEvent["recurrence.event_id"] = error.eventId;
+      wideEvent["recurrence.event_state_id"] = error.eventStateId;
+      wideEvent["recurrence.limit"] = error.limit;
+      wideEvent["recurrence.source_event_uid"] = error.sourceEventUid;
     }
 
     throw error;

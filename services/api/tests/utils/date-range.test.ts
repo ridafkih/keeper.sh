@@ -23,6 +23,27 @@ describe("normalizeDateRange", () => {
     expect(start).not.toBe(from);
     expect(end).not.toBe(to);
   });
+
+  it("rejects an invalid bound", () => {
+    expect(() => normalizeDateRange(
+      new Date("invalid"),
+      new Date("2026-05-25T00:00:00.000Z"),
+    )).toThrow("Event range requires valid from and to dates");
+  });
+
+  it("rejects an empty or reversed range", () => {
+    expect(() => normalizeDateRange(
+      new Date("2026-05-25T00:00:00.000Z"),
+      new Date("2026-05-18T00:00:00.000Z"),
+    )).toThrow("Event range requires from to be before to");
+  });
+
+  it("rejects a range longer than the materialization budget", () => {
+    expect(() => normalizeDateRange(
+      new Date("2026-01-01T00:00:00.000Z"),
+      new Date("2028-01-04T00:00:00.000Z"),
+    )).toThrow("Event range cannot exceed 732 days");
+  });
 });
 
 describe("parseDateRangeParams", () => {

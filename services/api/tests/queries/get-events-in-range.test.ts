@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { RecurrenceMaterializationLimitError } from "@keeper.sh/calendar";
 import { flattenSyncedEvents } from "../../src/queries/get-events-in-range";
 
 const sourceMap = new Map([
@@ -66,5 +67,27 @@ describe("flattenSyncedEvents", () => {
   it("reconciles detached overrides before applying all-day filters", () => {
     expect(flatten({ isAllDay: false }).map((event) => event.title)).toEqual(["Master"]);
     expect(flatten({ isAllDay: true }).map((event) => event.title)).toEqual(["Override"]);
+  });
+
+  it("surfaces an explicit recurrence limit error instead of returning a partial range", () => {
+    const [baseMaster] = rows;
+    if (!baseMaster) {
+      throw new Error("Expected the recurring master fixture");
+    }
+    const pathologicalMaster = {
+      ...baseMaster,
+      endTime: new Date("2026-03-01T00:00:01.000Z"),
+      id: "pathological-master",
+      recurrenceRule: JSON.stringify({ frequency: "SECONDLY" }),
+      sourceEventUid: "pathological-series",
+      startTime: new Date("2026-03-01T00:00:00.000Z"),
+    };
+
+    expect(() => flattenSyncedEvents(
+      [pathologicalMaster],
+      sourceMap,
+      new Date("2026-03-01T00:00:00.000Z"),
+      new Date("2026-03-02T00:00:00.000Z"),
+    )).toThrow(RecurrenceMaterializationLimitError);
   });
 });

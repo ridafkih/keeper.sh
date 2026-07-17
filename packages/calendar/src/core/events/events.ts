@@ -223,6 +223,7 @@ const getEventsForCalendars = async (
       availability: parseAvailability(result.availability),
       description: excludeOrAbsent(result.excludeEventDescription, result.description),
       endTime: result.endTime,
+      eventStateId: result.id,
       id: result.id,
       isAllDay: orAbsentBoolean(result.isAllDay),
       location: excludeOrAbsent(result.excludeEventLocation, result.location),

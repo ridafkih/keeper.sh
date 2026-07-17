@@ -9,6 +9,7 @@ import type {
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { PendingChanges } from "../../../src/core/sync-engine/types";
 import { createSyncEventContentHash } from "../../../src/core/events/content-hash";
+import { RecurrenceMaterializationLimitError } from "../../../src/core/events/recurrence-materializer";
 
 const makeEvent = (
   id: string,
@@ -450,6 +451,47 @@ describe("executeRemoteOperations", () => {
 });
 
 describe("syncCalendar", () => {
+  it("does not call providers or flush reconciliation state when local materialization fails", async () => {
+    const { syncCalendar } = await import("../../../src/core/sync-engine/index");
+    const materializationError = new RecurrenceMaterializationLimitError({
+      calendarId: "source-calendar-id",
+      eventId: "event-state-id",
+      eventStateId: "event-state-id",
+      sourceEventUid: "pathological-series",
+    }, 10_000);
+    let providerCalled = false;
+    let flushed = false;
+    const provider = makeProvider({
+      deleteEvents: () => {
+        providerCalled = true;
+        return Promise.resolve([]);
+      },
+      listRemoteEvents: () => {
+        providerCalled = true;
+        return Promise.resolve([]);
+      },
+      pushEvents: () => {
+        providerCalled = true;
+        return Promise.resolve([]);
+      },
+    });
+
+    await expect(syncCalendar({
+      userId: "user-1",
+      calendarId: "dest-cal-1",
+      provider,
+      readState: () => Promise.reject(materializationError),
+      isCurrent: () => Promise.resolve(true),
+      flush: () => {
+        flushed = true;
+        return Promise.resolve();
+      },
+    })).rejects.toBe(materializationError);
+
+    expect(providerCalled).toBe(false);
+    expect(flushed).toBe(false);
+  });
+
   it("uses a stable weighted progress total for replacements", async () => {
     const { syncCalendar } = await import("../../../src/core/sync-engine/index");
     const previousEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));

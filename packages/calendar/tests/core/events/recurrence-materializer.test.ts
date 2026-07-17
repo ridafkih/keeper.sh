@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { materializeRecurrenceEvents } from "../../../src/core/events/recurrence-materializer";
-import type { SyncableEvent } from "../../../src/core/types";
+import {
+  assertSourceRecurrenceMaterializationWithinBudget,
+  materializeRecurrenceEvents,
+  RecurrenceMaterializationLimitError,
+} from "../../../src/core/events/recurrence-materializer";
+import type { SourceEvent, SyncableEvent } from "../../../src/core/types";
 
 const WINDOW = {
   end: new Date("2026-02-01T00:00:00.000Z"),
@@ -323,16 +327,52 @@ describe("materializeRecurrenceEvents", () => {
   });
 
   it("rejects recurrence series that exceed the materialization budget", () => {
-    expect(() => materializeRecurrenceEvents([
-      createEvent({
-        endTime: new Date("2026-01-01T00:00:01.000Z"),
-        recurrenceRule: { frequency: "SECONDLY" },
-        startTime: new Date("2026-01-01T00:00:00.000Z"),
-      }),
-    ], {
+    const master = createEvent({
+      endTime: new Date("2026-01-01T00:00:01.000Z"),
+      eventStateId: "persisted-master-row",
+      recurrenceRule: { frequency: "SECONDLY" },
+      startTime: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    let thrown: unknown = null;
+    try {
+      materializeRecurrenceEvents([master], {
+        end: new Date("2026-01-02T00:00:00.000Z"),
+        start: new Date("2026-01-01T00:00:00.000Z"),
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(RecurrenceMaterializationLimitError);
+    if (!(thrown instanceof RecurrenceMaterializationLimitError)) {
+      throw new Error("Expected a recurrence materialization limit error");
+    }
+    expect(thrown).toMatchObject({
+      calendarId: master.calendarId,
+      eventId: master.id,
+      eventStateId: master.eventStateId,
+      limit: 10_000,
+      sourceEventUid: master.sourceEventUid,
+    });
+  });
+
+  it("rejects a future source master before it can be persisted", () => {
+    const sourceMaster: SourceEvent = {
+      endTime: new Date("2040-01-01T00:00:01.000Z"),
+      recurrenceRule: { frequency: "SECONDLY" },
+      sourceEventId: "provider-master-id",
+      startTime: new Date("2040-01-01T00:00:00.000Z"),
+      uid: "future-pathological-series",
+    };
+
+    expect(() => assertSourceRecurrenceMaterializationWithinBudget(
+      "source-calendar-id",
+      [sourceMaster],
+      {
       end: new Date("2026-01-02T00:00:00.000Z"),
       start: new Date("2026-01-01T00:00:00.000Z"),
-    })).toThrow("exceeds the 10000 occurrence materialization limit");
+      },
+    )).toThrow(RecurrenceMaterializationLimitError);
   });
 
   it("rejects a pathological high-frequency series before scanning years of history", () => {

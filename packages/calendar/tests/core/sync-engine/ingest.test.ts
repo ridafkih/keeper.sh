@@ -878,6 +878,39 @@ describe("ingestSource", () => {
     expect(flushCalled).toBe(false);
   });
 
+  it("rejects an over-budget recurrence before reading or mutating persistence", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const sourceMaster: SourceEvent = {
+      endTime: new Date("2040-01-01T00:00:01.000Z"),
+      recurrenceRule: { frequency: "SECONDLY" },
+      sourceEventId: "provider-master-id",
+      startTime: new Date("2040-01-01T00:00:00.000Z"),
+      uid: "pathological-series",
+    };
+    let persistenceRead = false;
+    let persistenceFlushed = false;
+
+    await expect(ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({
+        events: [sourceMaster],
+        nextSyncToken: "must-not-be-persisted",
+        snapshot: { contentHash: "must-not-be-persisted", ical: "BEGIN:VCALENDAR" },
+      }),
+      flush: () => {
+        persistenceFlushed = true;
+        return Promise.resolve();
+      },
+      readExistingEvents: () => {
+        persistenceRead = true;
+        return Promise.resolve([]);
+      },
+    })).rejects.toThrow("exceeds the 10000 occurrence materialization limit");
+
+    expect(persistenceRead).toBe(false);
+    expect(persistenceFlushed).toBe(false);
+  });
+
   it("emits wide event with flushed: false in error path", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
 

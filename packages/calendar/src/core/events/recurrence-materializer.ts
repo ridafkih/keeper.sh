@@ -1,7 +1,7 @@
 import type { IcsRecurrenceRule } from "ts-ics";
 import { RRule } from "rrule";
 import type { Frequency, Options, Weekday } from "rrule";
-import type { MaterializedSyncableEvent, SyncableEvent } from "../types";
+import type { MaterializedSyncableEvent, SourceEvent, SyncableEvent } from "../types";
 import {
   instantToWallTime,
   resolveTimeZone,
@@ -15,6 +15,33 @@ interface RecurrenceMaterializationWindow {
 
 interface RecurrenceMaterializationOptions {
   retainOneOffEventsAfterWindowEnd?: boolean;
+}
+
+interface RecurrenceSeriesIdentity {
+  calendarId: string;
+  eventId: string;
+  eventStateId?: string;
+  sourceEventUid: string;
+}
+
+class RecurrenceMaterializationLimitError extends RangeError {
+  readonly calendarId: string;
+  readonly eventId: string;
+  readonly eventStateId: string | undefined;
+  readonly limit: number;
+  readonly sourceEventUid: string;
+
+  constructor(identity: RecurrenceSeriesIdentity, limit: number) {
+    super(
+      `Recurrence series ${identity.sourceEventUid} exceeds the ${limit} occurrence materialization limit`,
+    );
+    this.name = "RecurrenceMaterializationLimitError";
+    this.calendarId = identity.calendarId;
+    this.eventId = identity.eventId;
+    this.eventStateId = identity.eventStateId;
+    this.limit = limit;
+    this.sourceEventUid = identity.sourceEventUid;
+  }
 }
 
 const MAX_OCCURRENCES_PER_SERIES = 10_000;
@@ -46,9 +73,12 @@ const assertHighFrequencyRuleWithinBudget = (
   );
   const potentialOccurrences = rule.count ?? occurrencesBySpan;
   if (potentialOccurrences > MAX_OCCURRENCES_PER_SERIES) {
-    throw new RangeError(
-      `Recurrence series ${master.sourceEventUid} exceeds the ${MAX_OCCURRENCES_PER_SERIES} occurrence materialization limit`,
-    );
+    throw new RecurrenceMaterializationLimitError({
+      calendarId: master.calendarId,
+      eventId: master.id,
+      eventStateId: master.eventStateId,
+      sourceEventUid: master.sourceEventUid,
+    }, MAX_OCCURRENCES_PER_SERIES);
   }
 };
 
@@ -313,9 +343,12 @@ const materializeMaster = (
     },
   );
   if (occurrenceLimitExceeded) {
-    throw new RangeError(
-      `Recurrence series ${master.sourceEventUid} exceeds the ${MAX_OCCURRENCES_PER_SERIES} occurrence materialization limit`,
-    );
+    throw new RecurrenceMaterializationLimitError({
+      calendarId: master.calendarId,
+      eventId: master.id,
+      eventStateId: master.eventStateId,
+      sourceEventUid: master.sourceEventUid,
+    }, MAX_OCCURRENCES_PER_SERIES);
   }
 
   return occurrenceStarts.flatMap((occurrenceStartWallTime) => {
@@ -368,7 +401,49 @@ const materializeRecurrenceEvents = (
   return materializedEvents.toSorted(compareEvents);
 };
 
-export { materializeRecurrenceEvents };
+const assertSourceRecurrenceMaterializationWithinBudget = (
+  calendarId: string,
+  events: SourceEvent[],
+  window: RecurrenceMaterializationWindow,
+): void => {
+  assertValidWindow(window);
+  const windowDuration = window.end.getTime() - window.start.getTime();
+
+  for (const event of events) {
+    if (!event.recurrenceRule || event.recurrenceId) {
+      continue;
+    }
+
+    let validationStart = window.start;
+    if (event.startTime > window.start) {
+      validationStart = event.startTime;
+    }
+    const validationEnd = new Date(validationStart.getTime() + windowDuration);
+    const master: SyncableEvent = {
+      calendarId,
+      calendarName: null,
+      calendarUrl: null,
+      endTime: event.endTime,
+      id: event.sourceEventId ?? event.uid,
+      recurrenceRule: event.recurrenceRule,
+      sourceEventUid: event.uid,
+      startTime: event.startTime,
+      summary: event.title ?? "",
+      ...(event.startTimeZone && { startTimeZone: event.startTimeZone }),
+    };
+
+    materializeMaster(master, new Set<number>(), {
+      end: validationEnd,
+      start: validationStart,
+    });
+  }
+};
+
+export {
+  assertSourceRecurrenceMaterializationWithinBudget,
+  materializeRecurrenceEvents,
+  RecurrenceMaterializationLimitError,
+};
 export type {
   RecurrenceMaterializationOptions,
   RecurrenceMaterializationWindow,

@@ -690,11 +690,28 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
 
 export default withCronWideEvent({
   async callback() {
-    await Promise.allSettled([
+    const settlements = await Promise.allSettled([
       ingestOAuthSources(),
       ingestCalDAVSources(),
       ingestIcsSources(),
     ]);
+    const failures: unknown[] = [];
+    let failedSourceCount = 0;
+
+    for (const settlement of settlements) {
+      if (settlement.status === "rejected") {
+        failures.push(settlement.reason);
+        continue;
+      }
+      failedSourceCount += settlement.value.errors;
+    }
+
+    if (failedSourceCount > 0) {
+      failures.push(new Error(`${failedSourceCount} calendar source ingestions failed`));
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(failures, "Calendar source ingestion completed with failures");
+    }
   },
   cron: "@every_1_minutes",
   immediate: true,

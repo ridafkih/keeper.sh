@@ -80,7 +80,9 @@ export {
   getMappedSourceCalendarIds,
 } from "./core/events/events";
 export {
+  assertSourceRecurrenceMaterializationWithinBudget,
   materializeRecurrenceEvents,
+  RecurrenceMaterializationLimitError,
   type RecurrenceMaterializationOptions,
   type RecurrenceMaterializationWindow,
 } from "./core/events/recurrence-materializer";
