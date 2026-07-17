@@ -101,52 +101,6 @@ describe("handlePatchSourceRoute", () => {
     expect(response.status).toBe(200);
   });
 
-  it("disables a source without requiring a Pro plan", async () => {
-    const response = await handlePatchSourceRoute(
-      {
-        body: { disabled: true },
-        params: { id: "source-1" },
-        userId: "user-1",
-      },
-      {
-        canUseEventFilters: () => Promise.resolve(false),
-        updateSource: (_userId, _sourceId, updates) => Promise.resolve({
-          id: "source-1",
-          ...updates,
-        }),
-      },
-    );
-
-    expect(response.status).toBe(200);
-    expect(await readJson(response)).toEqual({ id: "source-1", disabled: true });
-  });
-
-  it("clears ingest backoff state when a source is re-enabled", async () => {
-    const response = await handlePatchSourceRoute(
-      {
-        body: { disabled: false },
-        params: { id: "source-1" },
-        userId: "user-1",
-      },
-      {
-        canUseEventFilters: () => Promise.resolve(true),
-        updateSource: (_userId, _sourceId, updates) => Promise.resolve({
-          id: "source-1",
-          ...updates,
-        }),
-      },
-    );
-
-    expect(response.status).toBe(200);
-    expect(await readJson(response)).toEqual({
-      id: "source-1",
-      disabled: false,
-      ingestFailureCount: 0,
-      ingestLastFailureAt: null,
-      ingestNextAttemptAt: null,
-    });
-  });
-
   it("returns 403 when free users update full-day timed event interpretation", async () => {
     const response = await handlePatchSourceRoute(
       {

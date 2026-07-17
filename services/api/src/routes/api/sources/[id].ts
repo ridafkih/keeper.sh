@@ -14,6 +14,7 @@ import {
 import { withProviderMetadata } from "@/utils/provider-display";
 import { syncDefaultFeedMembership } from "@/utils/ical-feeds";
 import type { FeedMembershipClient } from "@/utils/ical-feeds";
+import { deleteSourceCalendar } from "@/utils/source-calendars";
 import { handlePatchSourceRoute } from "./[id]/source-item-routes";
 
 const GET = withWideEvent(
@@ -160,4 +161,20 @@ const PATCH = withWideEvent(
   }),
 );
 
-export { GET, PATCH };
+const DELETE = withWideEvent(
+  withAuth(async ({ params, userId }) => {
+    if (!params.id || !idParamSchema.allows(params)) {
+      return ErrorResponse.badRequest("ID is required").toResponse();
+    }
+    const { id } = params;
+
+    const deleted = await deleteSourceCalendar(userId, id);
+    if (!deleted) {
+      return ErrorResponse.notFound().toResponse();
+    }
+
+    return Response.json({ success: true });
+  }),
+);
+
+export { GET, PATCH, DELETE };

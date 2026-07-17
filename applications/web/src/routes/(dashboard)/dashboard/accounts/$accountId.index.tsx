@@ -48,9 +48,6 @@ function CalendarList({ calendars, accountId }: { calendars: CalendarSource[]; a
       </NavigationMenuItemIcon>
       <NavigationMenuItemLabel>
         {calendar.name}
-        {calendar.disabled && (
-          <Text as="span" size="sm" tone="muted"> (sync off)</Text>
-        )}
         {calendar.providerMissingSince && (
           <Text as="span" size="sm" tone="danger"> (not found at provider)</Text>
         )}
@@ -174,7 +171,7 @@ function AccountDetailPage() {
       </NavigationMenu>
       <DashboardSection
         title="Account Calendars"
-        description={<>This account has {pluralize(calendars.length, "calendar")} attached to it, choose a calendar below to view more details and configure it. Calendars with syncing turned off or no longer found at the provider are noted below.</>}
+        description={<>This account has {pluralize(calendars.length, "calendar")} attached to it, choose a calendar below to view more details and configure it. Calendars no longer found at the provider are noted below.</>}
       />
       <NavigationMenu>
         <CalendarList calendars={calendars} accountId={accountId} />

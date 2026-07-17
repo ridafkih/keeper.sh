@@ -14,7 +14,6 @@ const EVENT_FILTER_FIELDS = [
 
 const SOURCE_BOOLEAN_UPDATE_FIELDS = [
   ...EVENT_FILTER_FIELDS,
-  "disabled",
   "includeInIcalFeed",
   "treatFullDayTimedEventsAsAllDay",
 ] as const;
@@ -69,14 +68,6 @@ const buildSourceUpdates = (
     if (typeof body[field] === "boolean") {
       updates[field] = body[field];
     }
-  }
-
-  // Re-enabling is a deliberate action after fixing the underlying problem.
-  // Clear the stale ingest backoff too, so the next cron run retries immediately.
-  if (body.disabled === false) {
-    updates.ingestFailureCount = 0;
-    updates.ingestLastFailureAt = null;
-    updates.ingestNextAttemptAt = null;
   }
 
   return updates;
