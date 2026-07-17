@@ -4,6 +4,7 @@ interface DestinationSyncResult {
   localEventCount: number;
   remoteEventCount: number;
   broadcast?: boolean;
+  completedSuccessfully?: boolean;
 }
 
 type SyncStage = "fetching" | "comparing" | "processing" | "error";

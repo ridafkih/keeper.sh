@@ -11,6 +11,41 @@ interface CalendarObject {
   data?: string;
 }
 
+type CalDAVWriteOperation = "create" | "delete";
+
+class CalDAVHttpError extends Error {
+  readonly operation: CalDAVWriteOperation;
+  readonly status: number;
+
+  constructor(response: Response, operation: CalDAVWriteOperation) {
+    super(`CalDAV ${operation} failed: ${response.status} ${response.statusText}`.trim());
+    this.name = "CalDAVHttpError";
+    this.operation = operation;
+    this.status = response.status;
+  }
+}
+
+class CalDAVCreateConflictError extends CalDAVHttpError {
+  constructor(response: Response) {
+    super(response, "create");
+    this.name = "CalDAVCreateConflictError";
+  }
+}
+
+const releaseResponseBody = async (response: Response): Promise<void> => {
+  await response.body?.cancel();
+};
+
+const assertSuccessfulResponse = async (
+  response: Response,
+  operation: CalDAVWriteOperation,
+): Promise<void> => {
+  await releaseResponseBody(response);
+  if (!response.ok) {
+    throw new CalDAVHttpError(response, operation);
+  }
+};
+
 type DAVClientInstance = Awaited<ReturnType<typeof createDAVClient>>;
 
 const getDisplayName = (name: unknown): string => {
@@ -104,18 +139,40 @@ class CalDAVClient {
       iCalString: params.iCalString,
     });
 
-    await response.body?.cancel?.();
+    if (response.status === 412) {
+      await releaseResponseBody(response);
+      throw new CalDAVCreateConflictError(response);
+    }
+    await assertSuccessfulResponse(response, "create");
   }
 
-  async deleteCalendarObject(params: { calendarUrl: string; filename: string }): Promise<void> {
+  async deleteCalendarObject(params: {
+    calendarUrl: string;
+    filename: string;
+    etag?: string;
+  }): Promise<void> {
     const client = await this.getClient();
     const objectUrl = CalDAVClient.normalizeUrl(params.calendarUrl, params.filename);
 
     const response = await client.deleteCalendarObject({
-      calendarObject: { url: objectUrl },
+      calendarObject: { url: objectUrl, etag: params.etag },
     });
 
-    await response.body?.cancel?.();
+    await assertSuccessfulResponse(response, "delete");
+  }
+
+  async fetchCalendarObject(params: {
+    calendarUrl: string;
+    filename: string;
+  }): Promise<CalendarObject | null> {
+    const client = await this.getClient();
+    const objectUrl = CalDAVClient.normalizeUrl(params.calendarUrl, params.filename);
+    const objects = await client.fetchCalendarObjects({
+      calendar: { url: params.calendarUrl },
+      objectUrls: [objectUrl],
+    });
+
+    return objects[0] ?? null;
   }
 
   async fetchCalendarObjects(params: {
@@ -149,4 +206,4 @@ class CalDAVClient {
 const createCalDAVClient = (config: CalDAVClientConfig, safeFetchOptions?: SafeFetchOptions): CalDAVClient =>
   new CalDAVClient(config, safeFetchOptions);
 
-export { CalDAVClient, createCalDAVClient };
+export { CalDAVClient, CalDAVCreateConflictError, CalDAVHttpError, createCalDAVClient };

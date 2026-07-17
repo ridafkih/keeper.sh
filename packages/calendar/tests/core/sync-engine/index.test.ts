@@ -3,6 +3,7 @@ import { executeRemoteOperations } from "../../../src/core/sync-engine/index";
 import type { SyncOperation, PushResult, DeleteResult, SyncableEvent } from "../../../src/core/types";
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { PendingChanges } from "../../../src/core/sync-engine/types";
+import { createSyncEventContentHash } from "../../../src/core/events/content-hash";
 
 const makeEvent = (id: string, startTime: Date, endTime: Date): SyncableEvent => ({
   id,
@@ -71,7 +72,14 @@ describe("executeRemoteOperations", () => {
   it("counts failed pushes without accumulating changes", async () => {
     const event = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
     const operations: SyncOperation[] = [{ type: "add", event }];
-    const provider = makeProvider({ pushEvents: () => Promise.resolve([{ success: false, error: "rate limited" }]) });
+    const provider = makeProvider({
+      pushEvents: () => Promise.resolve([{
+        success: false,
+        error: "CalDAV create failed: 503 Service Unavailable",
+        errorType: "CalDAVHttpError",
+        statusCode: 503,
+      }]),
+    });
 
     const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider);
 
@@ -79,6 +87,12 @@ describe("executeRemoteOperations", () => {
     expect(outcome.result.added).toBe(0);
     expect(outcome.result.addFailed).toBe(1);
     expect(outcome.changes.inserts).toHaveLength(0);
+    expect(outcome.errors).toEqual([{
+      type: "add",
+      error: "CalDAV create failed: 503 Service Unavailable",
+      errorType: "CalDAVHttpError",
+      statusCode: 503,
+    }]);
   });
 
   it("treats success without remoteId as a skip, not a failure", async () => {
@@ -91,6 +105,29 @@ describe("executeRemoteOperations", () => {
 
     expect(outcome.result.added).toBe(0);
     expect(outcome.result.addFailed).toBe(0);
+    expect(outcome.changes.inserts).toHaveLength(0);
+  });
+
+  it("removes the stale mapping when a replacement is intentionally skipped", async () => {
+    const event = makeEvent("ev-1", new Date("2026-03-15T11:00:00Z"), new Date("2026-03-15T12:00:00Z"));
+    const mapping = makeMapping("map-1", "ev-1", "remote-1");
+    const operations: SyncOperation[] = [{
+      deleteId: "remote-1",
+      event,
+      staleMappingId: mapping.id,
+      type: "replace",
+      uid: "remote-1",
+    }];
+    const provider = makeProvider({
+      deleteEvents: () => Promise.resolve([{ success: true }]),
+      pushEvents: () => Promise.resolve([{ success: true }]),
+    });
+
+    const outcome = await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider);
+
+    expect(outcome.result.removed).toBe(1);
+    expect(outcome.result.addFailed).toBe(0);
+    expect(outcome.changes.deletes).toEqual([mapping.id]);
     expect(outcome.changes.inserts).toHaveLength(0);
   });
 
@@ -126,6 +163,44 @@ describe("executeRemoteOperations", () => {
     expect(outcome.result.removed).toBe(1);
     expect(outcome.changes.inserts).toHaveLength(1);
     expect(outcome.changes.deletes).toHaveLength(1);
+  });
+
+  it("does not delete a remote UID that was recovered by an earlier add", async () => {
+    const event = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
+    const addOperations: SyncOperation[] = [
+      { event, type: "add" },
+      ...Array.from({ length: 49 }, (_value, index): SyncOperation => ({
+        event: makeEvent(
+          `ev-extra-${index}`,
+          new Date(Date.UTC(2026, 2, 15, 11, index)),
+          new Date(Date.UTC(2026, 2, 15, 12, index)),
+        ),
+        type: "add",
+      })),
+    ];
+    const operations: SyncOperation[] = [
+      ...addOperations,
+      { type: "remove", uid: "remote-1", deleteId: "remote-1", startTime: event.startTime },
+    ];
+    let deleteCalled = false;
+    const provider = makeProvider({
+      pushEvents: (events) => Promise.resolve(events.map((pushedEvent) => {
+        let remoteId = `remote-${pushedEvent.id}`;
+        if (pushedEvent.id === event.id) {
+          remoteId = "remote-1";
+        }
+        return { remoteId, success: true };
+      })),
+      deleteEvents: () => {
+        deleteCalled = true;
+        return Promise.resolve([{ success: true }]);
+      },
+    });
+
+    const outcome = await executeRemoteOperations(operations, [], "dest-cal-1", provider);
+
+    expect(outcome.result.added).toBe(50);
+    expect(deleteCalled).toBe(false);
   });
 
   it("uses remoteId as deleteIdentifier fallback when pushResult has no deleteId", async () => {
@@ -181,7 +256,7 @@ describe("executeRemoteOperations", () => {
     expect(outcome.changes.inserts).toHaveLength(1);
   });
 
-  it("skips deletes but returns partial add changes when superseded between adds and deletes", async () => {
+  it("checkpoints removals before adds and skips adds when superseded", async () => {
     const event1 = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
     const mapping = makeMapping("map-1", "ev-1", "remote-1");
     const operations: SyncOperation[] = [
@@ -201,9 +276,120 @@ describe("executeRemoteOperations", () => {
     const outcome = await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider, () => Promise.resolve(false));
 
     expect(outcome.superseded).toBe(true);
+    expect(outcome.changes.inserts).toHaveLength(0);
+    expect(outcome.changes.deletes).toEqual([mapping.id]);
+    expect(deleteCount).toBe(1);
+  });
+
+  it("finishes a replacement before observing that the generation is stale", async () => {
+    const event = makeEvent("ev-1", new Date("2026-03-15T11:00:00Z"), new Date("2026-03-15T12:00:00Z"));
+    const mapping = makeMapping("map-1", "ev-1", "remote-1");
+    const operations: SyncOperation[] = [{
+      deleteId: "remote-1",
+      event,
+      staleMappingId: mapping.id,
+      type: "replace",
+      uid: "remote-1",
+    }];
+    const calls: string[] = [];
+    const provider = makeProvider({
+      deleteEvents: () => {
+        calls.push("delete");
+        return Promise.resolve([{ success: true }]);
+      },
+      pushEvents: () => {
+        calls.push("add");
+        return Promise.resolve([{ remoteId: "remote-new", success: true }]);
+      },
+    });
+
+    const outcome = await executeRemoteOperations(
+      operations,
+      [mapping],
+      "dest-cal-1",
+      provider,
+      () => {
+        calls.push("current");
+        return Promise.resolve(false);
+      },
+    );
+
+    expect(calls).toEqual(["delete", "add", "current"]);
+    expect(outcome.superseded).toBe(true);
+    expect(outcome.changes.deletes).toEqual([mapping.id]);
     expect(outcome.changes.inserts).toHaveLength(1);
+  });
+
+  it("keeps the stale mapping when recreation fails after a successful delete", async () => {
+    const event = makeEvent("ev-1", new Date("2026-03-15T11:00:00Z"), new Date("2026-03-15T12:00:00Z"));
+    const mapping = makeMapping("map-1", "ev-1", "remote-1");
+    const operations: SyncOperation[] = [{
+      deleteId: "remote-1",
+      event,
+      staleMappingId: mapping.id,
+      type: "replace",
+      uid: "remote-1",
+    }];
+    const provider = makeProvider({
+      deleteEvents: () => Promise.resolve([{ success: true }]),
+      pushEvents: () => Promise.resolve([{ error: "provider unavailable", success: false }]),
+    });
+    const checkpoints: PendingChanges[] = [];
+    let progressUpdates = 0;
+
+    const outcome = await executeRemoteOperations(
+      operations,
+      [mapping],
+      "dest-cal-1",
+      provider,
+      () => Promise.resolve(true),
+      () => { progressUpdates += 1; },
+      (changes) => {
+        checkpoints.push(changes);
+        return Promise.resolve(true);
+      },
+    );
+
+    expect(outcome.result.removed).toBe(1);
+    expect(outcome.result.addFailed).toBe(1);
     expect(outcome.changes.deletes).toHaveLength(0);
-    expect(deleteCount).toBe(0);
+    expect(outcome.changes.inserts).toHaveLength(0);
+    expect(checkpoints).toHaveLength(0);
+    expect(progressUpdates).toBe(1);
+  });
+
+  it("does not checkpoint the stale mapping when recreation aborts after deletion", async () => {
+    const event = makeEvent("ev-1", new Date("2026-03-15T11:00:00Z"), new Date("2026-03-15T12:00:00Z"));
+    const mapping = makeMapping("map-1", "ev-1", "remote-1");
+    const operations: SyncOperation[] = [{
+      deleteId: "remote-1",
+      event,
+      staleMappingId: mapping.id,
+      type: "replace",
+      uid: "remote-1",
+    }];
+    const abortError = new Error("job deadline exceeded");
+    abortError.name = "AbortError";
+    const provider = makeProvider({
+      deleteEvents: () => Promise.resolve([{ success: true }]),
+      pushEvents: () => Promise.reject(abortError),
+    });
+    const checkpoints: PendingChanges[] = [];
+
+    await expect(executeRemoteOperations(
+      operations,
+      [mapping],
+      "dest-cal-1",
+      provider,
+      () => Promise.resolve(true),
+      (processed, total) => { expect(processed).toBeLessThanOrEqual(total); },
+      (changes) => {
+        checkpoints.push(changes);
+        return Promise.resolve(true);
+      },
+    )).rejects.toBe(abortError);
+
+    expect(checkpoints).toHaveLength(0);
   });
 
   it("processes all operations when generation stays current", async () => {
@@ -223,6 +409,47 @@ describe("executeRemoteOperations", () => {
 });
 
 describe("syncCalendar", () => {
+  it("uses a stable weighted progress total for replacements", async () => {
+    const { syncCalendar } = await import("../../../src/core/sync-engine/index");
+    const previousEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
+    const movedEvent = makeEvent("ev-1", new Date("2026-03-15T11:00:00Z"), new Date("2026-03-15T12:00:00Z"));
+    const mapping = {
+      ...makeMapping("map-1", "ev-1", "remote-1"),
+      syncEventHash: createSyncEventContentHash(previousEvent),
+    };
+    const provider = makeProvider({
+      deleteEvents: () => Promise.resolve([{ success: true }]),
+      pushEvents: () => Promise.resolve([{ remoteId: "remote-new", success: true }]),
+    });
+    const progressTotals: number[] = [];
+
+    await syncCalendar({
+      userId: "user-1",
+      calendarId: "dest-cal-1",
+      provider,
+      readState: () => Promise.resolve({
+        localEvents: [movedEvent],
+        existingMappings: [mapping],
+        remoteEvents: [{
+          deleteId: "remote-1",
+          endTime: previousEvent.endTime,
+          isKeeperEvent: true,
+          startTime: previousEvent.startTime,
+          uid: "remote-1",
+        }],
+      }),
+      isCurrent: () => Promise.resolve(true),
+      flush: () => Promise.resolve(),
+      onProgress: (update) => {
+        if (update.stage === "processing" && update.progress) {
+          progressTotals.push(update.progress.total);
+        }
+      },
+    });
+
+    expect(progressTotals).toEqual([2, 2]);
+  });
+
   it("pushes new events and flushes accumulated changes at the end", async () => {
     const { syncCalendar } = await import("../../../src/core/sync-engine/index");
     const localEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
@@ -265,6 +492,41 @@ describe("syncCalendar", () => {
 
     expect(result.added).toBe(1);
     expect(flushCalled).toBe(true);
+  });
+
+  it("checkpoints a successful chunk before a later chunk fails", async () => {
+    const { syncCalendar } = await import("../../../src/core/sync-engine/index");
+    const localEvents = Array.from({ length: 51 }, (_value, index) => makeEvent(
+      `ev-${index}`,
+      new Date(Date.UTC(2026, 2, 15, 9, index)),
+      new Date(Date.UTC(2026, 2, 15, 10, index)),
+    ));
+    let pushCount = 0;
+    const provider = makeProvider({
+      pushEvents: (events) => {
+        pushCount += 1;
+        if (pushCount === 2) {
+          return Promise.reject(new Error("provider stopped responding"));
+        }
+        return Promise.resolve(events.map((event) => ({ success: true, remoteId: `remote-${event.id}` })));
+      },
+    });
+    const checkpoints: PendingChanges[] = [];
+
+    await expect(syncCalendar({
+      userId: "user-1",
+      calendarId: "dest-cal-1",
+      provider,
+      readState: () => Promise.resolve({ localEvents, existingMappings: [], remoteEvents: [] }),
+      isCurrent: () => Promise.resolve(true),
+      flush: (changes) => {
+        checkpoints.push(changes);
+        return Promise.resolve();
+      },
+    })).rejects.toThrow("provider stopped responding");
+
+    expect(checkpoints).toHaveLength(1);
+    expect(checkpoints[0]?.inserts).toHaveLength(50);
   });
 
   it("returns empty result when there are no operations", async () => {

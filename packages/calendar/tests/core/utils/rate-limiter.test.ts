@@ -98,6 +98,26 @@ describe("RateLimiter", () => {
       await allDone;
       expect(order).toEqual([1, 2]);
     });
+
+    it("rejects an aborted queued task without starting it", async () => {
+      const limiter = new RateLimiter({ concurrency: 1 });
+      const first = Promise.withResolvers<boolean>();
+      const firstTask = limiter.execute(() => first.promise);
+      const controller = new AbortController();
+      let secondStarted = false;
+      const secondTask = limiter.execute(() => {
+        secondStarted = true;
+        return Promise.resolve();
+      }, controller.signal);
+
+      controller.abort(new Error("job deadline exceeded"));
+
+      await expect(secondTask).rejects.toThrow("job deadline exceeded");
+      expect(secondStarted).toBe(false);
+
+      first.resolve(true);
+      await firstTask;
+    });
   });
 
   describe("rate limiting", () => {

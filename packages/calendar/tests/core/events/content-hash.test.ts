@@ -84,4 +84,32 @@ describe("createSyncEventContentHash", () => {
 
     expect(hash1).not.toBe(hash2);
   });
+
+  it("returns different hashes when event times change", () => {
+    const hash1 = createSyncEventContentHash({
+      endTime: new Date("2026-03-07T10:00:00.000Z"),
+      startTime: new Date("2026-03-07T09:00:00.000Z"),
+      summary: "Meeting",
+    });
+    const hash2 = createSyncEventContentHash({
+      endTime: new Date("2026-03-07T11:00:00.000Z"),
+      startTime: new Date("2026-03-07T10:00:00.000Z"),
+      summary: "Meeting",
+    });
+
+    expect(hash1).not.toBe(hash2);
+  });
+
+  it("returns different hashes when the serialized timezone changes", () => {
+    const event = {
+      endTime: new Date("2026-03-07T10:00:00.000Z"),
+      startTime: new Date("2026-03-07T09:00:00.000Z"),
+      summary: "Meeting",
+    };
+
+    const hash1 = createSyncEventContentHash({ ...event, startTimeZone: "America/Edmonton" });
+    const hash2 = createSyncEventContentHash({ ...event, startTimeZone: "America/Toronto" });
+
+    expect(hash1).not.toBe(hash2);
+  });
 });

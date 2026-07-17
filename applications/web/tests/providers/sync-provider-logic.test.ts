@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CompositeSyncState, SyncAggregateData } from "@/state/sync";
 import {
   parseIncomingSocketAction,
+  resolveAggregateLastSyncedAt,
   shouldAcceptAggregatePayload,
 } from "../../src/providers/sync-provider-logic";
 
@@ -207,5 +208,23 @@ describe("shouldAcceptAggregatePayload", () => {
 
     expect(decision.accepted).toBe(false);
     expect(decision.nextSeq).toBe(50);
+  });
+});
+
+describe("resolveAggregateLastSyncedAt", () => {
+  it("preserves the current timestamp when an aggregate omits it", () => {
+    const next = createAggregate();
+    Reflect.deleteProperty(next, "lastSyncedAt");
+
+    expect(resolveAggregateLastSyncedAt("2026-03-08T12:00:00.000Z", next)).toBe(
+      "2026-03-08T12:00:00.000Z",
+    );
+  });
+
+  it("applies an explicit null timestamp", () => {
+    expect(resolveAggregateLastSyncedAt(
+      "2026-03-08T12:00:00.000Z",
+      createAggregate({ lastSyncedAt: null }),
+    )).toBeNull();
   });
 });
