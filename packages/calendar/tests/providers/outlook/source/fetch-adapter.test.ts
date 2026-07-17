@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { OAUTH_SYNC_WINDOW_VERSION } from "../../../../src/core/oauth/sync-window";
+import { getOAuthSyncTokenVersion } from "../../../../src/core/oauth/sync-window";
 import {
   encodeStoredSyncToken,
   resolveSyncTokenForWindow,
 } from "../../../../src/core/oauth/sync-token";
 import { createOutlookSourceFetcher } from "../../../../src/providers/outlook/source/fetch-adapter";
 
-const OUTLOOK_SYNC_TOKEN_VERSION = OAUTH_SYNC_WINDOW_VERSION + 1;
+const OUTLOOK_SYNC_TOKEN_VERSION = getOAuthSyncTokenVersion(1);
 const originalFetch = globalThis.fetch;
 const fetchKeeperCategoryDelta = (): Promise<Response> => Promise.resolve(Response.json({
   "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
@@ -19,6 +19,11 @@ const fetchKeeperCategoryDelta = (): Promise<Response> => Promise.resolve(Respon
   }],
 }));
 fetchKeeperCategoryDelta.preconnect = originalFetch.preconnect;
+const fetchSeriesMasterDelta = (): Promise<Response> => Promise.resolve(Response.json({
+  "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
+  value: [{ id: "series-master-1", type: "seriesMaster" }],
+}));
+fetchSeriesMasterDelta.preconnect = originalFetch.preconnect;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -104,5 +109,22 @@ describe("createOutlookSourceFetcher", () => {
 
     expect(result.events).toEqual([]);
     expect(result.changedEventIds).toEqual(["outlook-event-id-1"]);
+  });
+
+  it("requests a full backfill when Graph returns a series master during delta sync", async () => {
+    globalThis.fetch = fetchSeriesMasterDelta;
+    const fetcher = createOutlookSourceFetcher({
+      accessToken: "test-token",
+      externalCalendarId: "calendar-id",
+      syncToken: encodeStoredSyncToken(
+        "https://graph.microsoft.com/delta?$deltatoken=current",
+        OUTLOOK_SYNC_TOKEN_VERSION,
+      ),
+    });
+
+    await expect(fetcher.fetchEvents()).resolves.toEqual({
+      events: [],
+      fullSyncRequired: true,
+    });
   });
 });

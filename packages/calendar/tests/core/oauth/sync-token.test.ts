@@ -4,7 +4,10 @@ import {
   encodeStoredSyncToken,
   resolveSyncTokenForWindow,
 } from "../../../src/core/oauth/sync-token";
-import { OAUTH_SYNC_WINDOW_VERSION } from "../../../src/core/oauth/sync-window";
+import {
+  getOAuthSyncTokenVersion,
+  OAUTH_SYNC_WINDOW_VERSION,
+} from "../../../src/core/oauth/sync-window";
 
 describe("sync token versioning", () => {
   it("treats legacy plain token as version zero", () => {
@@ -52,5 +55,17 @@ describe("sync token versioning", () => {
     const resolution = resolveSyncTokenForWindow(encoded, 1);
     expect(resolution.syncToken).toBe("valid-token");
     expect(resolution.requiresBackfill).toBe(false);
+  });
+
+  it("expires provider tokens when the absolute sync window advances", () => {
+    const firstWindowVersion = getOAuthSyncTokenVersion(0, new Date("2026-07-01T00:00:00Z"));
+    const nextWindowVersion = getOAuthSyncTokenVersion(0, new Date("2026-07-08T00:00:00Z"));
+    const encoded = encodeStoredSyncToken("window-bound-token", firstWindowVersion);
+
+    expect(nextWindowVersion).toBeGreaterThan(firstWindowVersion);
+    expect(resolveSyncTokenForWindow(encoded, nextWindowVersion)).toEqual({
+      requiresBackfill: true,
+      syncToken: null,
+    });
   });
 });

@@ -4,7 +4,7 @@ import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { ProcessEventsOptions } from "../../../../src/core/oauth/source-provider";
 import { encodeStoredSyncToken } from "../../../../src/core/oauth/sync-token";
-import { OAUTH_SYNC_WINDOW_VERSION } from "../../../../src/core/oauth/sync-window";
+import { getOAuthSyncTokenVersion } from "../../../../src/core/oauth/sync-window";
 import type { SourceEvent, SourceSyncResult } from "../../../../src/core/types";
 import {
   createGoogleCalendarSourceProvider,
@@ -398,7 +398,7 @@ describe("GoogleCalendarSourceProvider", () => {
 
     const result = await provider.fetchEvents(encodeStoredSyncToken(
       "current-sync-token",
-      OAUTH_SYNC_WINDOW_VERSION,
+      getOAuthSyncTokenVersion(),
     ));
 
     expect(result.events).toEqual([]);

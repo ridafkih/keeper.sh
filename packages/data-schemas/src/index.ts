@@ -133,11 +133,14 @@ const outlookEventSchema = type({
   "iCalUId?": "string | null",
   "id?": "string",
   "isAllDay?": "boolean",
+  "isCancelled?": "boolean",
   "lastModifiedDateTime?": "string",
   "location?": { "displayName?": "string" },
   "showAs?": "string",
   "start?": { "dateTime?": "string", "timeZone?": "string" },
   "subject?": "string",
+  "seriesMasterId?": "string",
+  "type?": "string",
 });
 type OutlookEvent = typeof outlookEventSchema.infer;
 

@@ -29,6 +29,7 @@ interface OutlookCalendarEvent {
   iCalUId?: string | null;
   categories?: string[];
   isAllDay?: boolean;
+  isCancelled?: boolean;
   subject?: string;
   body?: { contentType?: string; content?: string } | null;
   location?: { displayName?: string };
@@ -37,6 +38,8 @@ interface OutlookCalendarEvent {
   end?: OutlookEventDateTime;
   createdDateTime?: string;
   lastModifiedDateTime?: string;
+  seriesMasterId?: string;
+  type?: string;
   "@removed"?: OutlookRemovedInfo;
 }
 

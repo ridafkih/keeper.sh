@@ -1,11 +1,11 @@
 import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
 import { encodeStoredSyncToken, resolveSyncTokenForWindow } from "../../../core/oauth/sync-token";
-import { getOAuthSyncWindow, OAUTH_SYNC_WINDOW_VERSION } from "../../../core/oauth/sync-window";
+import { getOAuthSyncTokenVersion, getOAuthSyncWindow } from "../../../core/oauth/sync-window";
 import { filterSourceEventsToSyncWindow } from "../../../core/source/sync-diagnostics";
 import { fetchCalendarEvents, parseOutlookEvents } from "./utils/fetch-events";
 
 const YEARS_UNTIL_FUTURE = 2;
-const OUTLOOK_SYNC_TOKEN_VERSION = OAUTH_SYNC_WINDOW_VERSION + 1;
+const OUTLOOK_ADAPTER_VERSION = 1;
 
 interface OutlookSourceFetcherConfig {
   accessToken: string;
@@ -24,10 +24,11 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
       calendarId: config.externalCalendarId,
     };
     const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
+    const syncTokenVersion = getOAuthSyncTokenVersion(OUTLOOK_ADAPTER_VERSION);
 
     const syncTokenResolution = resolveSyncTokenForWindow(
       config.syncToken,
-      OUTLOOK_SYNC_TOKEN_VERSION,
+      syncTokenVersion,
     );
 
     if (syncTokenResolution.syncToken === null) {
@@ -55,7 +56,7 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
     if (result.nextDeltaLink) {
       fetchResult.nextSyncToken = encodeStoredSyncToken(
         result.nextDeltaLink,
-        OUTLOOK_SYNC_TOKEN_VERSION,
+        syncTokenVersion,
       );
     }
 

@@ -151,7 +151,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     const baseUrl = new URL(calendarEventsUrl);
     baseUrl.searchParams.set(
       "$filter",
-      `categories/any(c:c eq '${KEEPER_CATEGORY}') and start/dateTime ge '${lookbackStart.toISOString()}' and start/dateTime le '${futureDate.toISOString()}'`,
+      `categories/any(c:c eq '${KEEPER_CATEGORY}') and end/dateTime ge '${lookbackStart.toISOString()}' and start/dateTime le '${futureDate.toISOString()}'`,
     );
     baseUrl.searchParams.set("$top", String(OUTLOOK_PAGE_SIZE));
     baseUrl.searchParams.set(

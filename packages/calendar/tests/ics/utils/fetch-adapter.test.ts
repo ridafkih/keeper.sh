@@ -187,7 +187,7 @@ describe("createIcsSourceFetcher", () => {
     expect(calendarTimeZone).toBe("America/Toronto");
   });
 
-  it("returns unchanged when snapshot content has not changed", async () => {
+  it("reparses unchanged snapshot content so stored-state validation can recover", async () => {
     const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
     mockPullRemoteCalendar.mockResolvedValueOnce({ ical: MINIMAL_ICS });
     mockPrepareCalendarSnapshot.mockResolvedValueOnce({ changed: false });
@@ -195,7 +195,54 @@ describe("createIcsSourceFetcher", () => {
     const fetcher = createIcsSourceFetcher(buildConfig());
     const result = await fetcher.fetchEvents();
 
-    expect(result.events).toEqual([]);
-    expect(result.unchanged).toBe(true);
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0]?.uid).toBe("event-1@test");
+    expect(result.snapshot).toBeUndefined();
+    expect(result.unchanged).toBeUndefined();
+  });
+
+  it("rejects RDATE instead of silently dropping additional occurrences", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const rdateIcs = MINIMAL_ICS.replace(
+      "DTEND:20260517T130000Z",
+      "DTEND:20260517T130000Z\r\nRDATE:20260519T120000Z",
+    );
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: rdateIcs });
+
+    await expect(createIcsSourceFetcher(buildConfig()).fetchEvents())
+      .rejects.toThrow("ICS RDATE recurrence is not supported");
+    expect(mockPrepareCalendarSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("rejects custom-timezone recurrence before it can poison destination sync", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const customTimezoneIcs = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//test//test//EN",
+      "BEGIN:VTIMEZONE",
+      "TZID:Custom/Eastern",
+      "BEGIN:STANDARD",
+      "DTSTART:19700101T000000",
+      "TZOFFSETFROM:-0500",
+      "TZOFFSETTO:-0500",
+      "END:STANDARD",
+      "END:VTIMEZONE",
+      "BEGIN:VEVENT",
+      "UID:custom-timezone@test",
+      "DTSTART;TZID=Custom/Eastern:20260701T090000",
+      "DTEND;TZID=Custom/Eastern:20260701T100000",
+      "RRULE:FREQ=DAILY;COUNT=2",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: customTimezoneIcs });
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({
+      changed: true,
+      snapshot: { contentHash: "custom-timezone", ical: customTimezoneIcs },
+    });
+
+    await expect(createIcsSourceFetcher(buildConfig()).fetchEvents())
+      .rejects.toThrow("Unsupported calendar timezone: Custom/Eastern");
   });
 });

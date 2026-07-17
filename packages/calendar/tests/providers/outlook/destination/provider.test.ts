@@ -101,5 +101,8 @@ describe("createOutlookSyncProvider", () => {
         Prefer: `outlook.body-content-type="text"`,
       },
     });
+    const requestUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));
+    expect(requestUrl.searchParams.get("$filter")).toContain("end/dateTime ge");
+    expect(requestUrl.searchParams.get("$filter")).not.toContain("start/dateTime ge");
   });
 });

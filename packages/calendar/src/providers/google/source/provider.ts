@@ -15,7 +15,7 @@ import { OAuthSourceProvider, type ProcessEventsOptions } from "../../../core/oa
 import type { FetchEventsResult as BaseFetchEventsResult } from "../../../core/oauth/source-provider";
 import { createOAuthSourceProvider, type SourceProvider } from "../../../core/oauth/create-source-provider";
 import { encodeStoredSyncToken, resolveSyncTokenForWindow } from "../../../core/oauth/sync-token";
-import { getOAuthSyncWindow, OAUTH_SYNC_WINDOW_VERSION } from "../../../core/oauth/sync-window";
+import { getOAuthSyncTokenVersion, getOAuthSyncWindow } from "../../../core/oauth/sync-window";
 import type { OAuthTokenProvider } from "../../../core/oauth/token-provider";
 import type { RefreshLockStore } from "../../../core/oauth/refresh-coordinator";
 import type { OAuthSourceConfig, SourceEvent, SourceSyncResult } from "../../../core/types";
@@ -57,9 +57,10 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
       accessToken: this.currentAccessToken,
       calendarId: this.config.externalCalendarId,
     };
+    const syncTokenVersion = getOAuthSyncTokenVersion();
     const syncTokenResolution = resolveSyncTokenForWindow(
       syncToken,
-      OAUTH_SYNC_WINDOW_VERSION,
+      syncTokenVersion,
     );
 
     if (syncTokenResolution.requiresBackfill && syncToken !== null) {
@@ -193,7 +194,10 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
 
     if (syncTokenAction.nextSyncTokenToPersist) {
       await this.updateSyncToken(
-        encodeStoredSyncToken(syncTokenAction.nextSyncTokenToPersist, OAUTH_SYNC_WINDOW_VERSION),
+        encodeStoredSyncToken(
+          syncTokenAction.nextSyncTokenToPersist,
+          getOAuthSyncTokenVersion(),
+        ),
       );
     }
 

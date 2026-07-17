@@ -13,6 +13,9 @@ const withSourceIngestLocks = <TResult>(
     return work();
   }
   return database.transaction(async (transaction) => {
+    // Provider I/O can legitimately exceed the pool's 30-second idle transaction timeout.
+    // PostgreSQL must retain the transaction-owned advisory locks during remote work.
+    await transaction.execute(sql`set local idle_in_transaction_session_timeout = 0`);
     for (const calendarId of orderedCalendarIds) {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(${SOURCE_INGEST_LOCK_NAMESPACE}, hashtext(${calendarId}))`,

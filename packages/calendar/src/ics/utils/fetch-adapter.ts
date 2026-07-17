@@ -8,6 +8,7 @@ import { pullRemoteCalendar } from "./pull-remote-calendar";
 import { prepareCalendarSnapshot } from "./create-snapshot";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { normalizeTimezone } from "./normalize-timezone";
+import { resolveTimeZone } from "./timezone-instant";
 
 interface IcsSourceFetcherConfig {
   calendarId: string;
@@ -35,6 +36,29 @@ const FLOATING_DATE_PROPERTIES = new Set([
   "RDATE",
   "RECURRENCE-ID",
 ]);
+
+const assertNoUnsupportedRecurrenceDates = (ical: string): void => {
+  const unfolded = ical.replaceAll(/\r?\n[\t ]/g, "");
+  let insideEvent = false;
+  for (const line of unfolded.split(/\r?\n/)) {
+    const normalizedLine = line.toUpperCase();
+    if (normalizedLine === "BEGIN:VEVENT") {
+      insideEvent = true;
+      continue;
+    }
+    if (normalizedLine === "END:VEVENT") {
+      insideEvent = false;
+      continue;
+    }
+    if (!insideEvent) {
+      continue;
+    }
+    const [propertyName] = normalizedLine.split(/[:;]/, 1);
+    if (propertyName === "RDATE") {
+      throw new RangeError("ICS RDATE recurrence is not supported");
+    }
+  }
+};
 
 const applyCalendarTimeZoneToFloatingEventDates = (
   ical: string,
@@ -105,10 +129,8 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
        */
       return { events: [], unchanged: true };
     }
+    assertNoUnsupportedRecurrenceDates(ical);
     const snapshotResult = await prepareCalendarSnapshot(config.database, config.calendarId, ical);
-    if (!snapshotResult.changed || !snapshotResult.snapshot) {
-      return { events: [], unchanged: true };
-    }
     const initialCalendar = parseIcsCalendarLenient({
       icsString: ical,
       patches: [coerceCompliantDate],
@@ -123,6 +145,11 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
       });
     }
     const parsed = parseIcsEvents(calendar);
+    for (const event of parsed) {
+      if (event.recurrenceRule) {
+        resolveTimeZone(event.startTimeZone);
+      }
+    }
     const events: SourceEvent[] = parsed.map((event) => ({
       availability: event.availability,
       description: event.description,
@@ -138,14 +165,21 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
       uid: event.uid,
     }));
     if (options.interpretEvents) {
-      return {
+      const result: FetchEventsResult = {
         events: options.interpretEvents(events, {
           calendarTimeZone,
         }),
-        snapshot: snapshotResult.snapshot,
       };
+      if (snapshotResult.changed && snapshotResult.snapshot) {
+        result.snapshot = snapshotResult.snapshot;
+      }
+      return result;
     }
-    return { events, snapshot: snapshotResult.snapshot };
+    const result: FetchEventsResult = { events };
+    if (snapshotResult.changed && snapshotResult.snapshot) {
+      result.snapshot = snapshotResult.snapshot;
+    }
+    return result;
   };
 
   return { fetchEvents };

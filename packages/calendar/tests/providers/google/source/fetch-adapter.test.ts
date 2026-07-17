@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { OAUTH_SYNC_WINDOW_VERSION } from "../../../../src/core/oauth/sync-window";
+import { getOAuthSyncTokenVersion } from "../../../../src/core/oauth/sync-window";
 import {
   encodeStoredSyncToken,
   resolveSyncTokenForWindow,
 } from "../../../../src/core/oauth/sync-token";
 import { createGoogleSourceFetcher } from "../../../../src/providers/google/source/fetch-adapter";
+
+const SYNC_TOKEN_VERSION = getOAuthSyncTokenVersion();
 
 const originalFetch = globalThis.fetch;
 
@@ -54,7 +56,7 @@ describe("createGoogleSourceFetcher", () => {
     expect(result.nextSyncToken).not.toBe(rawSyncToken);
     expect(resolveSyncTokenForWindow(
       result.nextSyncToken ?? null,
-      OAUTH_SYNC_WINDOW_VERSION,
+      SYNC_TOKEN_VERSION,
     )).toEqual({
       requiresBackfill: false,
       syncToken: rawSyncToken,
@@ -66,7 +68,7 @@ describe("createGoogleSourceFetcher", () => {
     const fetcher = createGoogleSourceFetcher({
       accessToken: "test-token",
       externalCalendarId: "primary",
-      syncToken: encodeStoredSyncToken("current-google-token", OAUTH_SYNC_WINDOW_VERSION),
+      syncToken: encodeStoredSyncToken("current-google-token", SYNC_TOKEN_VERSION),
     });
 
     const result = await fetcher.fetchEvents();

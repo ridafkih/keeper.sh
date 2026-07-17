@@ -99,6 +99,7 @@ const withTimeout = <TResult>(
 
 const createIngestionPersistenceTransaction = (calendarId: string) =>
   (work: IngestionPersistenceWork) => database.transaction(async (transaction) => {
+    await transaction.execute(sql`set local idle_in_transaction_session_timeout = 0`);
     await transaction.execute(
       sql`select pg_advisory_xact_lock(${SOURCE_INGEST_LOCK_NAMESPACE}, hashtext(${calendarId}))`,
     );

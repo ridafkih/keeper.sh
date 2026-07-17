@@ -43,11 +43,13 @@ const createJsonResponse = (body: unknown, status = 200): Response =>
 const createFetchQueue = (
   queuedResponses: Response[],
   requestedUrls: string[],
+  requestedInits: RequestInit[] = [],
 ): typeof fetch => {
   let requestCount = 0;
 
-  const queuedFetch = (input: Request | URL | string): Promise<Response> => {
+  const queuedFetch = (input: Request | URL | string, init?: RequestInit): Promise<Response> => {
     requestedUrls.push(resolveInputUrl(input));
+    requestedInits.push(init ?? {});
 
     const nextResponse = queuedResponses[requestCount];
     requestCount += 1;
@@ -198,6 +200,7 @@ describe("fetchCalendarEvents", () => {
 
   it("builds initial range URL when running full sync", async () => {
     const requestedUrls: string[] = [];
+    const requestedInits: RequestInit[] = [];
 
     globalThis.fetch = createFetchQueue(
       [
@@ -207,6 +210,7 @@ describe("fetchCalendarEvents", () => {
         }),
       ],
       requestedUrls,
+      requestedInits,
     );
 
     await fetchCalendarEvents({
@@ -227,9 +231,92 @@ describe("fetchCalendarEvents", () => {
     );
     expect(parsedUrl.searchParams.get("startDateTime")).toBe("2026-06-01T00:00:00.000Z");
     expect(parsedUrl.searchParams.get("endDateTime")).toBe("2026-06-02T00:00:00.000Z");
-    expect(parsedUrl.searchParams.get("$select")).toBe(
-      "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories,createdDateTime,lastModifiedDateTime",
+    expect(parsedUrl.searchParams.get("$select")).toBeNull();
+    expect(requestedInits[0]?.headers).toMatchObject({
+      Prefer: expect.stringContaining(`outlook.body-content-type="text"`),
+    });
+  });
+
+  it("expands an Outlook series master into all paged instances during full sync", async () => {
+    const requestedUrls: string[] = [];
+    const instancesNextLink = "https://graph.microsoft.com/v1.0/instances?$skiptoken=next";
+    globalThis.fetch = createFetchQueue([
+      createJsonResponse({
+        "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
+        value: [createOutlookEvent({
+          end: { dateTime: "2024-01-01T11:00:00", timeZone: "UTC" },
+          id: "master/id",
+          start: { dateTime: "2024-01-01T10:00:00", timeZone: "UTC" },
+          type: "seriesMaster",
+        })],
+      }),
+      createJsonResponse({
+        "@odata.nextLink": instancesNextLink,
+        value: [createOutlookEvent({ id: "occurrence-1", type: "occurrence" })],
+      }),
+      createJsonResponse({
+        value: [createOutlookEvent({ id: "occurrence-2", type: "exception" })],
+      }),
+    ], requestedUrls);
+
+    const result = await fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar/id",
+      timeMax: new Date("2026-07-31T00:00:00.000Z"),
+      timeMin: new Date("2026-07-01T00:00:00.000Z"),
+    });
+
+    expect(result.events.map((event) => event.id)).toEqual(["occurrence-1", "occurrence-2"]);
+    const instancesUrl = new URL(requestedUrls[1] ?? "");
+    expect(instancesUrl.pathname).toContain(
+      "/me/calendars/calendar%2Fid/events/master%2Fid/instances",
     );
+    expect(instancesUrl.searchParams.get("startDateTime")).toBe("2026-07-01T00:00:00.000Z");
+    expect(requestedUrls[2]).toBe(instancesNextLink);
+  });
+
+  it("forces an authoritative full sync when a delta page contains a series master", async () => {
+    globalThis.fetch = createFetchQueue([createJsonResponse({
+      "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
+      value: [createOutlookEvent({ id: "master-1", type: "seriesMaster" })],
+    })], []);
+
+    await expect(fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      deltaLink: "https://graph.microsoft.com/delta?$deltatoken=current",
+    })).resolves.toEqual({ events: [], fullSyncRequired: true });
+  });
+
+  it("treats isCancelled delta events as deletions", async () => {
+    globalThis.fetch = createFetchQueue([createJsonResponse({
+      "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
+      value: [createOutlookEvent({ id: "cancelled-1", isCancelled: true })],
+    })], []);
+
+    const result = await fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      deltaLink: "https://graph.microsoft.com/delta?$deltatoken=current",
+    });
+
+    expect(result.events).toEqual([]);
+    expect(result.changedEventIds).toEqual(["cancelled-1"]);
+    expect(result.cancelledEventIds).toEqual(["cancelled-1"]);
+  });
+
+  it("fails the full sync instead of silently dropping a series whose instances fail", async () => {
+    globalThis.fetch = createFetchQueue([
+      createJsonResponse({ value: [createOutlookEvent({ id: "master-1", type: "seriesMaster" })] }),
+      new Response("instance failure", { status: 500 }),
+    ], []);
+
+    await expect(fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      timeMax: new Date("2026-07-31T00:00:00.000Z"),
+      timeMin: new Date("2026-07-01T00:00:00.000Z"),
+    })).rejects.toThrow("Failed to fetch events: 500: instance failure");
   });
 
   it("returns full-sync-required when Microsoft responds with gone", async () => {

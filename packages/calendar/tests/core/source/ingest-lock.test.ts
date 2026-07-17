@@ -27,9 +27,10 @@ describe("withSourceIngestLocks", () => {
     );
 
     expect(result).toBe("complete");
-    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledTimes(3);
     expect(order).toEqual([
       "transaction-start",
+      "lock",
       "lock",
       "lock",
       "work",

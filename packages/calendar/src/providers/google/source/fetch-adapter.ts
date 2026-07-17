@@ -1,7 +1,7 @@
 import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import { encodeStoredSyncToken, resolveSyncTokenForWindow } from "../../../core/oauth/sync-token";
-import { getOAuthSyncWindow, OAUTH_SYNC_WINDOW_VERSION } from "../../../core/oauth/sync-window";
+import { getOAuthSyncTokenVersion, getOAuthSyncWindow } from "../../../core/oauth/sync-window";
 import { filterSourceEventsToSyncWindow } from "../../../core/source/sync-diagnostics";
 import { fetchCalendarEvents, parseGoogleEvents } from "./utils/fetch-events";
 
@@ -26,10 +26,11 @@ const createGoogleSourceFetcher = (config: GoogleSourceFetcherConfig): GoogleSou
       rateLimiter: config.rateLimiter,
     };
     const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
+    const syncTokenVersion = getOAuthSyncTokenVersion();
 
     const syncTokenResolution = resolveSyncTokenForWindow(
       config.syncToken,
-      OAUTH_SYNC_WINDOW_VERSION,
+      syncTokenVersion,
     );
 
     if (syncTokenResolution.syncToken === null) {
@@ -57,7 +58,7 @@ const createGoogleSourceFetcher = (config: GoogleSourceFetcherConfig): GoogleSou
     if (result.nextSyncToken) {
       fetchResult.nextSyncToken = encodeStoredSyncToken(
         result.nextSyncToken,
-        OAUTH_SYNC_WINDOW_VERSION,
+        syncTokenVersion,
       );
     }
 

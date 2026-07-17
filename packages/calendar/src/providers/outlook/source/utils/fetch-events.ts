@@ -35,6 +35,24 @@ class EventsFetchError extends Error {
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_PAGE_SIZE = 50;
+const SERIES_MASTER_TYPE = "seriesMaster";
+const INSTANCES_SELECT = [
+  "id",
+  "iCalUId",
+  "subject",
+  "body",
+  "location",
+  "start",
+  "end",
+  "isAllDay",
+  "isCancelled",
+  "showAs",
+  "categories",
+  "createdDateTime",
+  "lastModifiedDateTime",
+  "seriesMasterId",
+  "type",
+].join(",");
 
 const isRequestTimeoutError = (error: unknown): boolean =>
   error instanceof Error
@@ -125,11 +143,6 @@ const buildInitialUrl = (calendarId: string, timeMin: Date, timeMax: Date): URL 
 
   url.searchParams.set("startDateTime", timeMin.toISOString());
   url.searchParams.set("endDateTime", timeMax.toISOString());
-  url.searchParams.set(
-    "$select",
-    "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories,createdDateTime,lastModifiedDateTime",
-  );
-
   return url;
 };
 
@@ -160,7 +173,7 @@ const fetchEventsPage = async (
   const response = await fetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      Prefer: `odata.maxpagesize=${DEFAULT_PAGE_SIZE}, outlook.timezone="UTC"`,
+      Prefer: `odata.maxpagesize=${DEFAULT_PAGE_SIZE}, outlook.timezone="UTC", outlook.body-content-type="text"`,
     },
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   }).catch((error) => {
@@ -195,6 +208,82 @@ const fetchEventsPage = async (
   const responseBody = await response.json();
   const data = outlookEventListSchema.assert(responseBody);
   return { data, fullSyncRequired: false };
+};
+
+const fetchSeriesMasterInstances = async (
+  accessToken: string,
+  calendarId: string,
+  masterId: string,
+  timeMin: Date,
+  timeMax: Date,
+): Promise<OutlookCalendarEvent[]> => {
+  const calendarPath = encodeURIComponent(calendarId);
+  const masterPath = encodeURIComponent(masterId);
+  const initialUrl = new URL(
+    `${MICROSOFT_GRAPH_API}/me/calendars/${calendarPath}/events/${masterPath}/instances`,
+  );
+  initialUrl.searchParams.set("startDateTime", timeMin.toISOString());
+  initialUrl.searchParams.set("endDateTime", timeMax.toISOString());
+  initialUrl.searchParams.set("$select", INSTANCES_SELECT);
+
+  const instances: OutlookCalendarEvent[] = [];
+  let nextLink: string | undefined = initialUrl.toString();
+  while (nextLink) {
+    const pageResult = await fetchEventsPage({
+      accessToken,
+      calendarId,
+      nextLink,
+    });
+    if (pageResult.fullSyncRequired) {
+      throw new EventsFetchError(
+        `Failed to expand Outlook series master ${masterId}: event instances are gone`,
+        GONE_STATUS,
+      );
+    }
+    instances.push(...pageResult.data.value ?? []);
+    nextLink = pageResult.data["@odata.nextLink"];
+  }
+  return instances;
+};
+
+const expandSeriesMasters = async (
+  accessToken: string,
+  calendarId: string,
+  events: OutlookCalendarEvent[],
+  timeMin: Date,
+  timeMax: Date,
+): Promise<OutlookCalendarEvent[]> => {
+  const expanded: OutlookCalendarEvent[] = [];
+  for (const event of events) {
+    if (event.type !== SERIES_MASTER_TYPE || !event.id) {
+      expanded.push(event);
+      continue;
+    }
+    expanded.push(...await fetchSeriesMasterInstances(
+      accessToken,
+      calendarId,
+      event.id,
+      timeMin,
+      timeMax,
+    ));
+  }
+  return expanded;
+};
+
+const deduplicateOutlookEvents = (events: OutlookCalendarEvent[]): OutlookCalendarEvent[] => {
+  const eventsById = new Map<string, OutlookCalendarEvent>();
+  const eventsWithoutId: OutlookCalendarEvent[] = [];
+  for (const event of events) {
+    if (!event.id) {
+      eventsWithoutId.push(event);
+      continue;
+    }
+    const current = eventsById.get(event.id);
+    if (!current || shouldReplaceOutlookRevision(current, event)) {
+      eventsById.set(event.id, event);
+    }
+  }
+  return [...eventsWithoutId, ...eventsById.values()];
 };
 
 const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEventsResult> => {
@@ -255,12 +344,24 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
     nextLink = pageResult.data["@odata.nextLink"];
   }
 
-  const latestChangedEvents = [
+  let latestChangedEvents = [
     ...changedEventsWithoutId,
     ...changedEventsById.values(),
   ];
+  if (isDeltaSync && latestChangedEvents.some((event) => event.type === SERIES_MASTER_TYPE)) {
+    return { events: [], fullSyncRequired: true };
+  }
+  if (timeMin && timeMax) {
+    latestChangedEvents = deduplicateOutlookEvents(await expandSeriesMasters(
+      accessToken,
+      calendarId,
+      latestChangedEvents,
+      timeMin,
+      timeMax,
+    ));
+  }
   const result: FetchEventsResult = {
-    events: latestChangedEvents.filter((event) => !event["@removed"]),
+    events: latestChangedEvents.filter((event) => !event["@removed"] && !event.isCancelled),
     fullSyncRequired: false,
     isDeltaSync,
     nextDeltaLink: lastDeltaLink,
@@ -274,7 +375,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
       return [event.id];
     });
     result.cancelledEventIds = latestChangedEvents.flatMap((event) => {
-      if (event["@removed"] && event.id) {
+      if ((event["@removed"] || event.isCancelled) && event.id) {
         return [event.id];
       }
       return [];

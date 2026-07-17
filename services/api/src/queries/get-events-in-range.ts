@@ -25,6 +25,20 @@ const orAbsent = <TValue>(value: TValue | null): TValue | undefined => {
   return value;
 };
 
+const parseAvailability = (
+  value: string | null,
+): NonNullable<SyncableEvent["availability"]> | null => {
+  if (
+    value === "busy"
+    || value === "free"
+    || value === "oof"
+    || value === "workingElsewhere"
+  ) {
+    return value;
+  }
+  return null;
+};
+
 const toRequiredDate = (value: Date | string, label: "from" | "to"): Date => {
   const parsedDate = new Date(value);
   if (Number.isNaN(parsedDate.getTime())) {
@@ -88,11 +102,13 @@ const getSourcesForUser = async (
 };
 
 interface SyncedEventRow {
+  availability: string | null;
   calendarId: string;
   description: string | null;
   endTime: Date;
   exceptionDates: string | null;
   id: string;
+  isAllDay: boolean | null;
   location: string | null;
   recurrenceId: Date | null;
   recurrenceRule: string | null;
@@ -119,6 +135,7 @@ const flattenSyncedEvents = (
   sourceMap: Map<string, SourceInfo>,
   windowStart: Date,
   windowEnd: Date,
+  filters?: KeeperEventFilters,
 ): FlattenedEvent[] => {
   const events: SyncableEvent[] = rows.flatMap((row) => {
     const source = sourceMap.get(row.calendarId);
@@ -126,6 +143,7 @@ const flattenSyncedEvents = (
       return [];
     }
     return [{
+      availability: orAbsent(parseAvailability(row.availability)),
       calendarId: row.calendarId,
       calendarName: source.name,
       calendarUrl: source.url,
@@ -134,6 +152,7 @@ const flattenSyncedEvents = (
       exceptionDates: parseStoredIcsExceptionDates(row.exceptionDates, row.id)
         ?.map((exceptionDate) => exceptionDate.date),
       id: row.id,
+      isAllDay: orAbsent(row.isAllDay),
       location: orAbsent(row.location),
       recurrenceId: orAbsent(row.recurrenceId),
       recurrenceRule: orAbsent(parseStoredIcsRecurrenceRule(row.recurrenceRule, row.id)),
@@ -147,6 +166,23 @@ const flattenSyncedEvents = (
   return materializeRecurrenceEvents(events, {
     end: exclusiveWindowEnd,
     start: windowStart,
+  }).filter((occurrence) => {
+    if (
+      filters?.availability
+      && filters.availability.length > 0
+      && !filters.availability.includes(occurrence.availability ?? "")
+    ) {
+      return false;
+    }
+    if (
+      filters
+      && "isAllDay" in filters
+      && typeof filters.isAllDay === "boolean"
+      && occurrence.isAllDay !== filters.isAllDay
+    ) {
+      return false;
+    }
+    return true;
   }).map((occurrence) => ({
     calendarId: occurrence.calendarId,
     description: occurrence.description ?? null,
@@ -201,20 +237,15 @@ const getEventsInRange = async (
     syncedConditions.push(syncedRangeCondition);
   }
 
-  if (filters?.availability && filters.availability.length > 0) {
-    syncedConditions.push(inArray(eventStatesTable.availability, filters.availability));
-  }
-  if (filters && "isAllDay" in filters && typeof filters.isAllDay === "boolean") {
-    syncedConditions.push(eq(eventStatesTable.isAllDay, filters.isAllDay));
-  }
-
   const syncedRows: SyncedEventRow[] = await database
     .select({
+      availability: eventStatesTable.availability,
       calendarId: eventStatesTable.calendarId,
       description: eventStatesTable.description,
       endTime: eventStatesTable.endTime,
       exceptionDates: eventStatesTable.exceptionDates,
       id: eventStatesTable.id,
+      isAllDay: eventStatesTable.isAllDay,
       location: eventStatesTable.location,
       recurrenceId: eventStatesTable.recurrenceId,
       recurrenceRule: eventStatesTable.recurrenceRule,
@@ -227,7 +258,7 @@ const getEventsInRange = async (
     .where(and(...syncedConditions))
     .orderBy(asc(eventStatesTable.startTime));
 
-  const syncedEvents = flattenSyncedEvents(syncedRows, sourceMap, start, end);
+  const syncedEvents = flattenSyncedEvents(syncedRows, sourceMap, start, end, filters);
 
   const userConditions: SQL[] = [
     inArray(userEventsTable.calendarId, calendarIds),
@@ -280,4 +311,4 @@ const getEventsInRange = async (
   });
 };
 
-export { getEventsInRange, normalizeEventRange };
+export { flattenSyncedEvents, getEventsInRange, normalizeEventRange };

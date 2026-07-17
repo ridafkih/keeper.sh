@@ -15,7 +15,7 @@ import { OAuthSourceProvider, type ProcessEventsOptions } from "../../../core/oa
 import type { FetchEventsResult as BaseFetchEventsResult } from "../../../core/oauth/source-provider";
 import { createOAuthSourceProvider, type SourceProvider } from "../../../core/oauth/create-source-provider";
 import { encodeStoredSyncToken, resolveSyncTokenForWindow } from "../../../core/oauth/sync-token";
-import { getOAuthSyncWindow, OAUTH_SYNC_WINDOW_VERSION } from "../../../core/oauth/sync-window";
+import { getOAuthSyncTokenVersion, getOAuthSyncWindow } from "../../../core/oauth/sync-window";
 import type { OAuthTokenProvider } from "../../../core/oauth/token-provider";
 import type { RefreshLockStore } from "../../../core/oauth/refresh-coordinator";
 import type { OAuthSourceConfig, SourceEvent, SourceSyncResult } from "../../../core/types";
@@ -31,7 +31,7 @@ import { fetchCalendarEvents, fetchCalendarName, parseOutlookEvents } from "./ut
 
 const OUTLOOK_PROVIDER_ID = "outlook";
 const EMPTY_COUNT = 0;
-const OUTLOOK_SYNC_TOKEN_VERSION = OAUTH_SYNC_WINDOW_VERSION + 1;
+const OUTLOOK_ADAPTER_VERSION = 1;
 
 const YEARS_UNTIL_FUTURE = 2;
 
@@ -59,9 +59,10 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       accessToken: this.currentAccessToken,
       calendarId: this.config.externalCalendarId,
     };
+    const syncTokenVersion = getOAuthSyncTokenVersion(OUTLOOK_ADAPTER_VERSION);
     const syncTokenResolution = resolveSyncTokenForWindow(
       syncToken,
-      OUTLOOK_SYNC_TOKEN_VERSION,
+      syncTokenVersion,
     );
 
     if (syncTokenResolution.requiresBackfill && syncToken !== null) {
@@ -197,7 +198,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       await this.updateSyncToken(
         encodeStoredSyncToken(
           syncTokenAction.nextSyncTokenToPersist,
-          OUTLOOK_SYNC_TOKEN_VERSION,
+          getOAuthSyncTokenVersion(OUTLOOK_ADAPTER_VERSION),
         ),
       );
     }
