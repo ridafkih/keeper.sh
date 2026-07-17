@@ -51,6 +51,14 @@ type WeeklyMaster = IcsEvent & {
   uid: string;
 };
 
+const isWeeklyMaster = (event: IcsEvent): event is WeeklyMaster =>
+  Boolean(
+    event.uid
+    && event.end
+    && event.recurrenceRule?.frequency === "WEEKLY"
+    && typeof event.recurrenceRule.count === "number",
+  );
+
 const toSourceEvent = (
   event: ReturnType<typeof parseIcsEvents>[number],
 ): SourceEvent => ({
@@ -156,7 +164,10 @@ const findWeeklyMaster = (events: IcsEvent[]): WeeklyMaster => {
   if (typeof master.recurrenceRule.count !== "number") {
     throw new TypeError("The test oracle requires an explicit recurrence count");
   }
-  return master as WeeklyMaster;
+  if (!isWeeklyMaster(master)) {
+    throw new TypeError("Expected a complete weekly master");
+  }
+  return master;
 };
 
 const collectOverrides = (events: IcsEvent[], master: IcsEvent): Map<string, IcsEvent> => {

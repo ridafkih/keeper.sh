@@ -13,6 +13,7 @@ import { microsoftApiErrorSchema, outlookEventListSchema } from "@keeper.sh/data
 import { KEEPER_CATEGORY } from "@keeper.sh/constants";
 import { isKeeperEvent } from "../../../../core/events/identity";
 import { normalizeTimezone } from "../../../../ics/utils/normalize-timezone";
+import { buildTimeoutSignal } from "../../../../core/utils/fetch-with-timeout";
 
 class EventsFetchError extends Error {
   public readonly status: number;
@@ -65,6 +66,7 @@ interface PageFetchOptions {
   timeMin?: Date;
   timeMax?: Date;
   nextLink?: string;
+  signal?: AbortSignal;
 }
 
 interface PageFetchResult {
@@ -169,15 +171,16 @@ const fetchEventsPage = async (
 ): Promise<PageFetchResult | FullSyncRequiredResult> => {
   const { accessToken } = options;
   const url = getRequestUrl(options);
+  const timeout = buildTimeoutSignal(REQUEST_TIMEOUT_MS, options.signal);
 
   const response = await fetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Prefer: `odata.maxpagesize=${DEFAULT_PAGE_SIZE}, outlook.timezone="UTC", outlook.body-content-type="text"`,
     },
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    signal: timeout.signal,
   }).catch((error) => {
-    if (isRequestTimeoutError(error)) {
+    if (timeout.isTimeout() || isRequestTimeoutError(error) && !options.signal?.aborted) {
       throw new EventsFetchError(
         `Failed to fetch events: timeout after ${REQUEST_TIMEOUT_MS}ms`,
         408,
@@ -216,6 +219,7 @@ const fetchSeriesMasterInstances = async (
   masterId: string,
   timeMin: Date,
   timeMax: Date,
+  signal?: AbortSignal,
 ): Promise<OutlookCalendarEvent[]> => {
   const calendarPath = encodeURIComponent(calendarId);
   const masterPath = encodeURIComponent(masterId);
@@ -233,6 +237,7 @@ const fetchSeriesMasterInstances = async (
       accessToken,
       calendarId,
       nextLink,
+      signal,
     });
     if (pageResult.fullSyncRequired) {
       throw new EventsFetchError(
@@ -252,6 +257,7 @@ const expandSeriesMasters = async (
   events: OutlookCalendarEvent[],
   timeMin: Date,
   timeMax: Date,
+  signal?: AbortSignal,
 ): Promise<OutlookCalendarEvent[]> => {
   const expanded: OutlookCalendarEvent[] = [];
   for (const event of events) {
@@ -265,6 +271,7 @@ const expandSeriesMasters = async (
       event.id,
       timeMin,
       timeMax,
+      signal,
     ));
   }
   return expanded;
@@ -287,7 +294,7 @@ const deduplicateOutlookEvents = (events: OutlookCalendarEvent[]): OutlookCalend
 };
 
 const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEventsResult> => {
-  const { accessToken, calendarId, deltaLink, timeMin, timeMax } = options;
+  const { accessToken, calendarId, deltaLink, timeMin, timeMax, signal } = options;
 
   const changedEventsById = new Map<string, OutlookCalendarEvent>();
   const changedEventsWithoutId: OutlookCalendarEvent[] = [];
@@ -312,6 +319,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
     deltaLink,
     timeMax,
     timeMin,
+    signal,
   });
 
   if (initialResult.fullSyncRequired) {
@@ -330,6 +338,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
       nextLink,
       timeMax,
       timeMin,
+      signal,
     });
 
     if (pageResult.fullSyncRequired) {
@@ -351,6 +360,16 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
   if (isDeltaSync && latestChangedEvents.some((event) => event.type === SERIES_MASTER_TYPE)) {
     return { events: [], fullSyncRequired: true };
   }
+  if (isDeltaSync && latestChangedEvents.some((event) =>
+    event["@removed"] && !event.type
+  )) {
+    /*
+     * Graph's deletion tombstones can omit the deleted event type.
+     * A sparse ID may identify a series master while local state contains only expanded instances.
+     * Advancing the delta token could therefore strand every occurrence of that series.
+     */
+    return { events: [], fullSyncRequired: true };
+  }
   if (timeMin && timeMax) {
     latestChangedEvents = deduplicateOutlookEvents(await expandSeriesMasters(
       accessToken,
@@ -358,6 +377,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
       latestChangedEvents,
       timeMin,
       timeMax,
+      signal,
     ));
   }
   const result: FetchEventsResult = {

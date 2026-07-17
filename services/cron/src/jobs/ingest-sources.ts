@@ -38,8 +38,10 @@ import { database, refreshLockRedis, refreshLockStore } from "@/context";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import { resolveMissingCalendarFailure } from "@/utils/provider-ingest-failure";
+import { withAbortTimeout } from "@/utils/with-abort-timeout";
 
 const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
+const SOURCE_TIMEOUT_DATABASE_GRACE_MS = 5000;
 const SOURCE_CONCURRENCY = 5;
 const resolveIngestErrorSlug = (error: unknown): string => {
   if (!isTimeoutError(error)) {
@@ -86,27 +88,37 @@ const logIngestBackoff = (state: CalendarBackoffState): void => {
   }
 };
 
-const withTimeout = <TResult>(
-  operation: () => Promise<TResult>,
-  timeoutMs: number,
-): Promise<TResult> =>
-  Promise.race([
-    Promise.resolve().then(operation),
-    Bun.sleep(timeoutMs).then((): never => {
-      throw new Error(`Source ingestion timed out after ${timeoutMs}ms`);
-    }),
-  ]);
-
-const createIngestionPersistenceTransaction = (calendarId: string) =>
+const createIngestionPersistenceTransaction = (
+  calendarId: string,
+  signal: AbortSignal,
+  deadlineAt: number,
+) =>
   (work: IngestionPersistenceWork) => database.transaction(async (transaction) => {
-    await transaction.execute(sql`set local idle_in_transaction_session_timeout = 0`);
+    const setRemainingStatementTimeout = async (): Promise<void> => {
+      signal.throwIfAborted();
+      const remainingMs = Math.max(1, Math.ceil(deadlineAt - Date.now()));
+      await transaction.execute(
+        sql`select set_config('statement_timeout', ${String(remainingMs)}, true)`,
+      );
+      signal.throwIfAborted();
+    };
+
+    const initialRemainingMs = Math.max(1, Math.ceil(deadlineAt - Date.now()));
+    await transaction.execute(sql`select set_config(
+      'idle_in_transaction_session_timeout',
+      ${String(initialRemainingMs + SOURCE_TIMEOUT_DATABASE_GRACE_MS)},
+      true
+    )`);
+    await setRemainingStatementTimeout();
     await transaction.execute(
       sql`select pg_advisory_xact_lock(${SOURCE_INGEST_LOCK_NAMESPACE}, hashtext(${calendarId}))`,
     );
+    signal.throwIfAborted();
 
-    return work({
-      readExistingEvents: () => transaction
-        .select({
+    const result = await work({
+      readExistingEvents: async () => {
+        await setRemainingStatementTimeout();
+        const events = await transaction.select({
           availability: eventStatesTable.availability,
           description: eventStatesTable.description,
           endTime: eventStatesTable.endTime,
@@ -124,9 +136,14 @@ const createIngestionPersistenceTransaction = (calendarId: string) =>
           title: eventStatesTable.title,
         })
         .from(eventStatesTable)
-        .where(eq(eventStatesTable.calendarId, calendarId)),
+          .where(eq(eventStatesTable.calendarId, calendarId));
+        signal.throwIfAborted();
+        return events;
+      },
       flush: async (changes) => {
+        signal.throwIfAborted();
         if (changes.deletes.length > 0) {
+          await setRemainingStatementTimeout();
           await transaction
             .delete(eventStatesTable)
             .where(
@@ -135,27 +152,36 @@ const createIngestionPersistenceTransaction = (calendarId: string) =>
                 inArray(eventStatesTable.id, changes.deletes),
               ),
             );
+          signal.throwIfAborted();
         }
 
         if (changes.inserts.length > 0) {
+          await setRemainingStatementTimeout();
           await insertEventStatesWithConflictResolution(
             transaction,
             changes.inserts.map((event) => buildEventStateInsertRow(calendarId, event)),
           );
+          signal.throwIfAborted();
         }
 
         if ("syncToken" in changes) {
+          await setRemainingStatementTimeout();
           await transaction
             .update(calendarsTable)
             .set({ syncToken: changes.syncToken })
             .where(eq(calendarsTable.id, calendarId));
+          signal.throwIfAborted();
         }
 
         if (changes.snapshot) {
+          await setRemainingStatementTimeout();
           await persistCalendarSnapshot(transaction, calendarId, changes.snapshot);
+          signal.throwIfAborted();
         }
       },
     });
+    signal.throwIfAborted();
+    return result;
   });
 
 const resolveTokenRefresher = (provider: string) => {
@@ -193,6 +219,7 @@ interface OAuthFetcherParams {
   externalCalendarId: string;
   syncToken: string | null;
   rateLimiter?: RedisRateLimiter;
+  signal?: AbortSignal;
 }
 
 const resolveOAuthFetcher = (
@@ -250,7 +277,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
 
   const settlements = await allSettledWithConcurrency(
     oauthSources.map((source) => () =>
-      withTimeout((): Promise<IngestionSourceResult> =>
+      withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
         context(async () => {
           widelog.set("operation.name", "ingest-source");
           widelog.set("operation.type", "job");
@@ -297,6 +324,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
               externalCalendarId: source.externalCalendarId,
               syncToken: source.syncToken,
               rateLimiter,
+              signal,
             });
 
             if (!resolvedFetcher) {
@@ -315,7 +343,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
                 calendarId: source.calendarId,
                 fetchEvents: () => fetcher.fetchEvents(),
                 withPersistenceTransaction:
-                  createIngestionPersistenceTransaction(source.calendarId),
+                  createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),
                 onIngestEvent: (event) => {
                   ingestEvents.push({
                     ...event,
@@ -440,7 +468,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
 
   const settlements = await allSettledWithConcurrency(
     caldavSources.map((source) => () =>
-      withTimeout((): Promise<IngestionSourceResult> =>
+      withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
         context(async () => {
           widelog.set("operation.name", "ingest-source");
           widelog.set("operation.type", "job");
@@ -458,7 +486,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
               serverUrl: source.serverUrl,
               username: source.username,
               password,
-              safeFetchOptions,
+              safeFetchOptions: { ...safeFetchOptions, signal },
             });
 
             const ingestEvents: Record<string, unknown>[] = [];
@@ -468,7 +496,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
                 calendarId: source.calendarId,
                 fetchEvents: () => fetcher.fetchEvents(),
                 withPersistenceTransaction:
-                  createIngestionPersistenceTransaction(source.calendarId),
+                  createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),
                 onIngestEvent: (event) => {
                   ingestEvents.push({
                     ...event,
@@ -568,7 +596,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
 
   const settlements = await allSettledWithConcurrency(
     icsSources.map((source) => () =>
-      withTimeout((): Promise<IngestionSourceResult> =>
+      withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
         context(async () => {
           widelog.set("operation.name", "ingest-source");
           widelog.set("operation.type", "job");
@@ -590,7 +618,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
               calendarId: source.calendarId,
               url: source.url,
               database,
-              safeFetchOptions,
+              safeFetchOptions: { ...safeFetchOptions, signal },
             });
 
             const ingestEvents: Record<string, unknown>[] = [];
@@ -607,7 +635,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
                       }),
                   }),
                 withPersistenceTransaction:
-                  createIngestionPersistenceTransaction(source.calendarId),
+                  createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),
                 onIngestEvent: (event) => {
                   ingestEvents.push({
                     ...event,

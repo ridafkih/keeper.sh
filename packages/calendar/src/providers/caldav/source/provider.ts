@@ -14,7 +14,7 @@ import { isKeeperEvent } from "../../../core/events/identity";
 import type { SourceEvent } from "../../../core/types";
 import { calendarAccountsTable, calendarsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { and, eq, inArray } from "drizzle-orm";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { BunSQLClient } from "../../../core/database-client";
 import { CalDAVClient } from "../shared/client";
 import { resolveAuthMethod } from "../shared/digest-fetch";
 import { parseICalCalendarsToRemoteEvents } from "../shared/ics";
@@ -114,7 +114,7 @@ const createCalDAVSourceProvider = (
   const processEvents = async (
     calendarId: string,
     events: SourceEvent[],
-    persistenceDatabase: BunSQLDatabase = database,
+    persistenceDatabase: BunSQLClient = database,
   ): Promise<CalDAVSourceSyncResult> => {
     const storedEvents = await persistenceDatabase
       .select({
@@ -179,7 +179,7 @@ const createCalDAVSourceProvider = (
 
   const refreshOriginalName = async (
     account: CalDAVSourceAccount,
-    persistenceDatabase: BunSQLDatabase = database,
+    persistenceDatabase: BunSQLClient = database,
   ): Promise<void> => {
     if (account.originalName !== null) {
       return;

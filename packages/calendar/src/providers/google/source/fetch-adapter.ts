@@ -12,6 +12,7 @@ interface GoogleSourceFetcherConfig {
   externalCalendarId: string;
   syncToken: string | null;
   rateLimiter?: RedisRateLimiter;
+  signal?: AbortSignal;
 }
 
 interface GoogleSourceFetcher {
@@ -24,6 +25,7 @@ const createGoogleSourceFetcher = (config: GoogleSourceFetcherConfig): GoogleSou
       accessToken: config.accessToken,
       calendarId: config.externalCalendarId,
       rateLimiter: config.rateLimiter,
+      signal: config.signal,
     };
     const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
     const syncTokenVersion = getOAuthSyncTokenVersion();

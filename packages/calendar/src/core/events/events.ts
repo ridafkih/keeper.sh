@@ -4,7 +4,7 @@ import {
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import { and, asc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { BunSQLClient } from "../database-client";
 import type { EventAvailability, SourceEventType, SyncableEvent } from "../types";
 import { getOAuthSyncWindow } from "../oauth/sync-window";
 import {
@@ -110,7 +110,7 @@ const resolveEventNameTemplate = (
 };
 
 const getMappedSourceCalendarIds = async (
-  database: BunSQLDatabase,
+  database: BunSQLClient,
   destinationCalendarId: string,
 ): Promise<string[]> => {
   const mappings = await database
@@ -122,7 +122,7 @@ const getMappedSourceCalendarIds = async (
 };
 
 const fetchEventsForCalendars = async (
-  database: BunSQLDatabase,
+  database: BunSQLClient,
   calendarIds: string[],
 ): Promise<SyncableEvent[]> => {
   if (calendarIds.length === EMPTY_SOURCES_COUNT) {
@@ -233,7 +233,7 @@ const fetchEventsForCalendars = async (
 };
 
 const getEventsForDestination = async (
-  database: BunSQLDatabase,
+  database: BunSQLClient,
   destinationCalendarId: string,
 ): Promise<SyncableEvent[]> => {
   const sourceCalendarIds = await getMappedSourceCalendarIds(database, destinationCalendarId);

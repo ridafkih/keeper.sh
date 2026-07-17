@@ -11,6 +11,7 @@ interface OutlookSourceFetcherConfig {
   accessToken: string;
   externalCalendarId: string;
   syncToken: string | null;
+  signal?: AbortSignal;
 }
 
 interface OutlookSourceFetcher {
@@ -22,6 +23,7 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
     const fetchOptions: Parameters<typeof fetchCalendarEvents>[0] = {
       accessToken: config.accessToken,
       calendarId: config.externalCalendarId,
+      signal: config.signal,
     };
     const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
     const syncTokenVersion = getOAuthSyncTokenVersion(OUTLOOK_ADAPTER_VERSION);

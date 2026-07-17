@@ -27,6 +27,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq, gt, inArray, lt, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { BunSQLClient } from "../../../core/database-client";
 import { fetchCalendarEvents, parseGoogleEvents } from "./utils/fetch-events";
 
 const GOOGLE_PROVIDER_ID = "google";
@@ -88,6 +89,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
       fullSyncRequired: false,
       isDeltaSync: result.isDeltaSync,
       nextSyncToken: result.nextSyncToken,
+      syncTokenVersion,
     };
 
     if (result.cancelledEventIds) {
@@ -102,7 +104,13 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
     options: ProcessEventsOptions,
   ): Promise<SourceSyncResult> {
     const { database, calendarId } = this.config;
-    const { changedEventIds, nextSyncToken, isDeltaSync, cancelledEventIds } = options;
+    const {
+      cancelledEventIds,
+      changedEventIds,
+      isDeltaSync,
+      nextSyncToken,
+      syncTokenVersion,
+    } = options;
     const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
     const {
       events: eventsInWindow,
@@ -196,7 +204,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
       await this.updateSyncToken(
         encodeStoredSyncToken(
           syncTokenAction.nextSyncTokenToPersist,
-          getOAuthSyncTokenVersion(),
+          syncTokenVersion ?? getOAuthSyncTokenVersion(),
         ),
       );
     }
@@ -212,7 +220,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
     };
   }
   private static async removeOutOfRangeEvents(
-    database: BunSQLDatabase,
+    database: BunSQLClient,
     calendarId: string,
     syncWindow: { timeMin: Date; timeMax: Date },
   ): Promise<void> {

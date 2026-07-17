@@ -1,14 +1,16 @@
-import type Redis from "ioredis";
-
 const MS_PER_MINUTE = 60_000;
 const RETRY_POLL_MS = 100;
 
 interface RedisRateLimiter {
-  acquire(count: number): Promise<void>;
+  acquire(count: number, signal?: AbortSignal): Promise<void>;
 }
 
 interface RedisRateLimiterConfig {
   requestsPerMinute: number;
+}
+
+interface RedisScriptClient {
+  eval(script: string, numberOfKeys: number, ...arguments_: string[]): Promise<unknown>;
 }
 
 /**
@@ -48,15 +50,37 @@ const ACQUIRE_SCRIPT = `
   return 1000
 `;
 
+const waitForRetry = (delayMs: number, signal?: AbortSignal): Promise<void> => {
+  if (!signal) {
+    return Bun.sleep(delayMs);
+  }
+  if (signal.aborted) {
+    return Promise.reject(signal.reason);
+  }
+  return new Promise((resolve, reject) => {
+    const timeoutSignal = AbortSignal.timeout(delayMs);
+    const onAbort = (): void => {
+      reject(signal.reason);
+    };
+    const onTimeout = (): void => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    timeoutSignal.addEventListener("abort", onTimeout, { once: true });
+  });
+};
+
 const createRedisRateLimiter = (
-  redis: Redis,
+  redis: RedisScriptClient,
   key: string,
   config: RedisRateLimiterConfig,
 ): RedisRateLimiter => {
   const { requestsPerMinute } = config;
 
-  const acquire = async (count: number): Promise<void> => {
+  const acquire = async (count: number, signal?: AbortSignal): Promise<void> => {
     while (true) {
+      signal?.throwIfAborted();
       const now = Date.now();
       const windowStart = now - MS_PER_MINUTE;
 
@@ -75,7 +99,7 @@ const createRedisRateLimiter = (
       }
 
       const sleepMs = Math.max(RETRY_POLL_MS, Math.min(waitTime, MS_PER_MINUTE));
-      await Bun.sleep(sleepMs);
+      await waitForRetry(sleepMs, signal);
     }
   };
 
@@ -83,4 +107,4 @@ const createRedisRateLimiter = (
 };
 
 export { createRedisRateLimiter };
-export type { RedisRateLimiter, RedisRateLimiterConfig };
+export type { RedisRateLimiter, RedisRateLimiterConfig, RedisScriptClient };

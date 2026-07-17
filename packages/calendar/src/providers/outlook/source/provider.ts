@@ -27,6 +27,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq, gt, inArray, lt, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { BunSQLClient } from "../../../core/database-client";
 import { fetchCalendarEvents, fetchCalendarName, parseOutlookEvents } from "./utils/fetch-events";
 
 const OUTLOOK_PROVIDER_ID = "outlook";
@@ -90,6 +91,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       fullSyncRequired: false,
       isDeltaSync: result.isDeltaSync,
       nextSyncToken: result.nextDeltaLink,
+      syncTokenVersion,
     };
 
     if (result.cancelledEventIds) {
@@ -104,7 +106,13 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
     options: ProcessEventsOptions,
   ): Promise<SourceSyncResult> {
     const { database, calendarId } = this.config;
-    const { changedEventIds, nextSyncToken, isDeltaSync, cancelledEventIds } = options;
+    const {
+      cancelledEventIds,
+      changedEventIds,
+      isDeltaSync,
+      nextSyncToken,
+      syncTokenVersion,
+    } = options;
     const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
     const {
       events: eventsInWindow,
@@ -198,7 +206,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       await this.updateSyncToken(
         encodeStoredSyncToken(
           syncTokenAction.nextSyncTokenToPersist,
-          getOAuthSyncTokenVersion(OUTLOOK_ADAPTER_VERSION),
+          syncTokenVersion ?? getOAuthSyncTokenVersion(OUTLOOK_ADAPTER_VERSION),
         ),
       );
     }
@@ -233,7 +241,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
   }
 
   private static async removeOutOfRangeEvents(
-    database: BunSQLDatabase,
+    database: BunSQLClient,
     calendarId: string,
     syncWindow: { timeMin: Date; timeMax: Date },
   ): Promise<void> {

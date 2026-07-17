@@ -55,6 +55,7 @@ interface FetchEventsOptions {
   deltaLink?: string;
   timeMin?: Date;
   timeMax?: Date;
+  signal?: AbortSignal;
 }
 
 interface FetchEventsResult {

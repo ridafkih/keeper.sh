@@ -170,18 +170,21 @@ describe("ingestSource", () => {
       name: "Outlook expanded instances",
     },
   ])("converges $name after move, cancellation, restore, and replay", async ({ createEvents }) => {
-    const originalStarts = [
+    const originalStarts: [string, string, string] = [
       "2026-05-04T14:00:00.000Z",
       "2026-05-11T14:00:00.000Z",
       "2026-05-18T14:00:00.000Z",
     ];
     const initialEvents = createEvents(originalStarts);
     const { ingestDelta, state } = await createStatefulIngestion(initialEvents);
-    const movedEvent = createEvents([
-      originalStarts[0] as string,
+    const [, movedEvent] = createEvents([
+      originalStarts[0],
       "2026-05-11T17:30:00.000Z",
-      originalStarts[2] as string,
-    ])[1] as SourceEvent;
+      originalStarts[2],
+    ]);
+    if (!movedEvent) {
+      throw new Error("Expected the moved occurrence");
+    }
 
     await ingestDelta([movedEvent]);
     expect(state.events.map((event) => event.startTime.toISOString()).toSorted()).toEqual([
@@ -191,14 +194,19 @@ describe("ingestSource", () => {
     ]);
 
     const cancelledEventId = initialEvents[0]?.sourceEventId;
-    expect(cancelledEventId).toBeDefined();
-    await ingestDelta([], [cancelledEventId as string], [cancelledEventId as string]);
+    if (!cancelledEventId) {
+      throw new Error("Expected the cancelled occurrence ID");
+    }
+    await ingestDelta([], [cancelledEventId], [cancelledEventId]);
     expect(state.events.map((event) => event.sourceEventId).toSorted()).toEqual([
       initialEvents[1]?.sourceEventId,
       initialEvents[2]?.sourceEventId,
     ].toSorted());
 
-    const restoredEvent = initialEvents[0] as SourceEvent;
+    const [restoredEvent] = initialEvents;
+    if (!restoredEvent) {
+      throw new Error("Expected the restored occurrence");
+    }
     await ingestDelta([restoredEvent]);
     const stateAfterRestore = state.events.map((event) => ({
       id: event.sourceEventId,

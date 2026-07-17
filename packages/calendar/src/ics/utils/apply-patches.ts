@@ -30,6 +30,12 @@ interface ParsedPropertyLine {
   value: string;
 }
 
+interface IcsPropertyContext extends ParsedPropertyLine {
+  componentPath: readonly string[];
+}
+
+type IcsPropertyVisitor = (context: IcsPropertyContext) => void;
+
 const LINE_BREAK_PATTERN = /\r?\n/;
 const CONTINUATION_PATTERN = /^[ \t]/;
 const PROPERTY_LINE_PATTERN = /^([A-Za-z][A-Za-z0-9-]*)((?:;[^:]*)?):(.*)$/;
@@ -76,6 +82,38 @@ const parsePropertyLine = (line: string): ParsedPropertyLine | null => {
   return { params, property: property.toUpperCase(), value };
 };
 
+const visitIcsProperties = (ics: string, visitor: IcsPropertyVisitor): void => {
+  const rawLines = ics.split(LINE_BREAK_PATTERN);
+  const componentPath: string[] = [];
+  for (const indices of groupContinuations(rawLines)) {
+    const parsed = parsePropertyLine(unfoldGroup(rawLines, indices));
+    if (!parsed) {
+      continue;
+    }
+    if (parsed.property === "BEGIN") {
+      componentPath.push(parsed.value.toUpperCase());
+      continue;
+    }
+    if (parsed.property === "END") {
+      const endedComponent = parsed.value.toUpperCase();
+      const activeComponent = componentPath.at(-1);
+      if (activeComponent !== endedComponent) {
+        throw new RangeError(
+          `Malformed ICS component boundary: expected END:${activeComponent ?? "<none>"}, received END:${endedComponent}`,
+        );
+      }
+      componentPath.pop();
+      continue;
+    }
+    visitor({ ...parsed, componentPath: [...componentPath] });
+  }
+  if (componentPath.length > 0) {
+    throw new RangeError(
+      `Malformed ICS component boundary: missing END:${componentPath.at(-1) ?? "<unknown>"}`,
+    );
+  }
+};
+
 const coercePropertyLine = (
   parsed: ParsedPropertyLine,
   patches: readonly IcsPatch[],
@@ -117,5 +155,11 @@ const applyIcsPatches = (
   return output.join("\r\n");
 };
 
-export { applyIcsPatches };
-export type { IcsPatch, IcsPatchCoercion };
+export {
+  applyIcsPatches,
+  visitIcsProperties,
+  type IcsPatch,
+  type IcsPatchCoercion,
+  type IcsPropertyContext,
+  type IcsPropertyVisitor,
+};

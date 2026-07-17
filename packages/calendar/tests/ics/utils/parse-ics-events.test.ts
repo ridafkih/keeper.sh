@@ -226,12 +226,21 @@ describe("parseIcsEvents", () => {
         "END:VEVENT",
       ].join("\r\n"),
     };
+    const resolveRevision = (revision: string): string => {
+      if (revision === "cancelled") {
+        return revisions.cancelled;
+      }
+      if (revision === "confirmed") {
+        return revisions.confirmed;
+      }
+      throw new Error(`Unknown revision: ${revision}`);
+    };
     const calendar = parseIcsCalendar({
       icsString: [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
         "PRODID:-//Keeper Test//EN",
-        ...order.map((revision) => revisions[revision as keyof typeof revisions]),
+        ...order.map((revision) => resolveRevision(revision)),
         "END:VCALENDAR",
       ].join("\r\n"),
     });
@@ -267,12 +276,21 @@ describe("parseIcsEvents", () => {
         "END:VEVENT",
       ].join("\r\n"),
     };
+    const resolveRevision = (revision: string): string => {
+      if (revision === "cancelled") {
+        return revisions.cancelled;
+      }
+      if (revision === "confirmed") {
+        return revisions.confirmed;
+      }
+      throw new Error(`Unknown revision: ${revision}`);
+    };
     const calendar = parseIcsCalendar({
       icsString: [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
         "PRODID:-//Keeper Test//EN",
-        ...order.map((revision) => revisions[revision as keyof typeof revisions]),
+        ...order.map((revision) => resolveRevision(revision)),
         "END:VCALENDAR",
       ].join("\r\n"),
     });
@@ -307,12 +325,21 @@ describe("parseIcsEvents", () => {
         "END:VEVENT",
       ].join("\r\n"),
     };
+    const resolveRevision = (revision: string): string => {
+      if (revision === "older") {
+        return revisions.older;
+      }
+      if (revision === "newer") {
+        return revisions.newer;
+      }
+      throw new Error(`Unknown revision: ${revision}`);
+    };
     const calendar = parseIcsCalendar({
       icsString: [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
         "PRODID:-//Keeper Test//EN",
-        ...order.map((revision) => revisions[revision as keyof typeof revisions]),
+        ...order.map((revision) => resolveRevision(revision)),
         "END:VCALENDAR",
       ].join("\r\n"),
     });

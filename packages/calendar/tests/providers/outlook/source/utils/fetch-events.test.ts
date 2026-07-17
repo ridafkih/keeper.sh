@@ -25,6 +25,7 @@ const createOutlookEventVersion = (removed: boolean): OutlookCalendarEvent => ({
   ...(removed && { "@removed": { reason: "deleted" } }),
   iCalUId: "event-uid",
   id: "event-1",
+  type: "singleInstance",
 });
 
 const resolveInputUrl = (input: Request | URL | string): string => {
@@ -70,7 +71,7 @@ afterEach(() => {
 });
 
 describe("fetchCalendarEvents", () => {
-  it("collects paged events and removals during delta sync", async () => {
+  it("forces a full sync when paged delta data includes a sparse deletion tombstone", async () => {
     const requestedUrls: string[] = [];
 
     const initialDeltaLink = "https://graph.microsoft.com/v1.0/me/calendars/cal-1/calendarView/delta?$deltatoken=original";
@@ -103,17 +104,7 @@ describe("fetchCalendarEvents", () => {
       deltaLink: initialDeltaLink,
     });
 
-    expect(fetchResult.fullSyncRequired).toBe(false);
-    expect(fetchResult.isDeltaSync).toBe(true);
-    expect(fetchResult.nextDeltaLink).toContain("deltatoken=final");
-    expect(fetchResult.events.map((event) => event.id)).toEqual(["event-1", "event-3"]);
-    expect(fetchResult.changedEventIds).toEqual([
-      "event-1",
-      "event-2",
-      "removed-by-id",
-      "event-3",
-    ]);
-    expect(fetchResult.cancelledEventIds).toEqual(["event-2", "removed-by-id"]);
+    expect(fetchResult).toEqual({ events: [], fullSyncRequired: true });
     expect(requestedUrls).toEqual([initialDeltaLink, nextPageLink]);
   });
 
@@ -177,15 +168,28 @@ describe("fetchCalendarEvents", () => {
         subject: "Stale",
       },
     };
+    const orderedEvents = order.map((revision) => {
+      if (revision === "older") {
+        return revisions.older;
+      }
+      if (revision === "newer") {
+        return revisions.newer;
+      }
+      throw new Error(`Unknown revision: ${revision}`);
+    });
+    const [firstEvent, secondEvent] = orderedEvents;
+    if (!firstEvent || !secondEvent) {
+      throw new Error("Expected two ordered revisions");
+    }
     const nextPageLink = "https://graph.microsoft.com/delta?$skiptoken=next";
     globalThis.fetch = createFetchQueue([
       createJsonResponse({
         "@odata.nextLink": nextPageLink,
-        value: [revisions[order[0] as keyof typeof revisions]],
+        value: [firstEvent],
       }),
       createJsonResponse({
         "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
-        value: [revisions[order[1] as keyof typeof revisions]],
+        value: [secondEvent],
       }),
     ], []);
 

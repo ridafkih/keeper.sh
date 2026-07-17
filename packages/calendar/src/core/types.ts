@@ -1,4 +1,5 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { BunSQLClient } from "./database-client";
 import type { IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
 import type { RefreshLockStore } from "./oauth/refresh-coordinator";
 
@@ -180,7 +181,7 @@ interface SourceSyncResult {
 }
 
 interface OAuthSourceConfig {
-  database: BunSQLDatabase;
+  database: BunSQLClient;
   userId: string;
   calendarId: string;
   externalCalendarId: string;

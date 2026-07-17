@@ -186,13 +186,26 @@ describe("fetchCalendarEvents", () => {
         updated: "2026-03-01T00:00:00.000Z",
       },
     };
+    const orderedEvents = order.map((revision) => {
+      if (revision === "older") {
+        return revisions.older;
+      }
+      if (revision === "newer") {
+        return revisions.newer;
+      }
+      throw new Error(`Unknown revision: ${revision}`);
+    });
+    const [firstEvent, secondEvent] = orderedEvents;
+    if (!firstEvent || !secondEvent) {
+      throw new Error("Expected two ordered revisions");
+    }
     globalThis.fetch = createFetchQueue([
       createJsonResponse({
-        items: [revisions[order[0] as keyof typeof revisions]],
+        items: [firstEvent],
         nextPageToken: "next-page-token",
       }),
       createJsonResponse({
-        items: [revisions[order[1] as keyof typeof revisions]],
+        items: [secondEvent],
         nextSyncToken: "next-sync-token",
       }),
     ], []);

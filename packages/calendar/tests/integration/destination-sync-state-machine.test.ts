@@ -121,7 +121,10 @@ class InMemoryEventStateStore {
 
 class StatefulDestinationProvider implements CalendarSyncProvider {
   public readonly remoteEvents = new Map<string, SyncableEvent>();
-  public readonly calls = { deletes: [] as string[][], pushes: [] as SyncableEvent[][] };
+  public readonly calls: { deletes: string[][]; pushes: SyncableEvent[][] } = {
+    deletes: [],
+    pushes: [],
+  };
   public failNextDelete = false;
   private nextRemoteId = 1;
 

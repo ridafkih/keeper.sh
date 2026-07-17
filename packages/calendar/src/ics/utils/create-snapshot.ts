@@ -21,6 +21,24 @@ interface PrepareSnapshotResult {
   snapshot?: CalendarSnapshotChange;
 }
 
+const prepareCalendarSnapshotChange = async (
+  ical: string,
+  calendarExists: boolean,
+  existingContentHash?: string | null,
+): Promise<PrepareSnapshotResult> => {
+  if (!calendarExists) {
+    return { changed: false };
+  }
+  const contentHash = await computeContentHash(ical);
+  if (existingContentHash === contentHash) {
+    return { changed: false };
+  }
+  return {
+    changed: true,
+    snapshot: { ical, contentHash },
+  };
+};
+
 const prepareCalendarSnapshot = async (
   database: BunSQLDatabase,
   calendarId: string,
@@ -32,24 +50,15 @@ const prepareCalendarSnapshot = async (
     .where(eq(calendarsTable.id, calendarId));
 
   if (!calendar) {
-    return { changed: false };
+    return prepareCalendarSnapshotChange(ical, false);
   }
-
-  const contentHash = await computeContentHash(ical);
 
   const [existing] = await database
     .select({ contentHash: calendarSnapshotsTable.contentHash })
     .from(calendarSnapshotsTable)
     .where(eq(calendarSnapshotsTable.calendarId, calendarId));
 
-  if (existing && existing.contentHash === contentHash) {
-    return { changed: false };
-  }
-
-  return {
-    changed: true,
-    snapshot: { ical, contentHash },
-  };
+  return prepareCalendarSnapshotChange(ical, true, existing?.contentHash);
 };
 
 const persistCalendarSnapshot = async (
@@ -74,4 +83,8 @@ const persistCalendarSnapshot = async (
     });
 };
 
-export { persistCalendarSnapshot, prepareCalendarSnapshot };
+export {
+  persistCalendarSnapshot,
+  prepareCalendarSnapshot,
+  prepareCalendarSnapshotChange,
+};

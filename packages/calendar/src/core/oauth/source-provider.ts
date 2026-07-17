@@ -20,6 +20,7 @@ interface FetchEventsResult {
   isDeltaSync?: boolean;
   changedEventIds?: string[];
   cancelledEventIds?: string[];
+  syncTokenVersion?: number;
 }
 
 interface ProcessEventsOptions {
@@ -27,6 +28,7 @@ interface ProcessEventsOptions {
   isDeltaSync?: boolean;
   changedEventIds?: string[];
   cancelledEventIds?: string[];
+  syncTokenVersion?: number;
 }
 
 abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSourceConfig> {
@@ -75,6 +77,7 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
         cancelledEventIds: fullResult.cancelledEventIds,
         isDeltaSync: fullResult.isDeltaSync,
         nextSyncToken: fullResult.nextSyncToken,
+        syncTokenVersion: fullResult.syncTokenVersion,
       });
     }
 
@@ -83,6 +86,7 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
       cancelledEventIds: result.cancelledEventIds,
       isDeltaSync: result.isDeltaSync,
       nextSyncToken: result.nextSyncToken,
+      syncTokenVersion: result.syncTokenVersion,
     });
 
     if (processResult.fullSyncRequired) {
@@ -92,6 +96,7 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
         cancelledEventIds: fullResult.cancelledEventIds,
         isDeltaSync: false,
         nextSyncToken: fullResult.nextSyncToken,
+        syncTokenVersion: fullResult.syncTokenVersion,
       });
     }
 

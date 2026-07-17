@@ -1,4 +1,4 @@
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { BunSQLClient } from "../database-client";
 import { eventMappingsTable } from "@keeper.sh/database/schema";
 import { inArray } from "drizzle-orm";
 import type { PendingChanges } from "./types";
@@ -13,7 +13,7 @@ const chunk = <TItem>(items: TItem[], size: number): TItem[][] => {
   return chunks;
 };
 
-const createDatabaseFlush = (database: BunSQLDatabase): (changes: PendingChanges) => Promise<void> =>
+const createDatabaseFlush = (database: BunSQLClient): (changes: PendingChanges) => Promise<void> =>
   async (changes: PendingChanges): Promise<void> => {
     if (changes.inserts.length === 0 && changes.deletes.length === 0) {
       return;
