@@ -33,7 +33,7 @@ describe("buildOutlookRecurrence", () => {
   it("maps a DAILY rule with an until date to Outlook's endDate range", () => {
     const recurrence = buildOutlookRecurrence({
       ...baseEvent,
-      recurrenceRule: { frequency: "DAILY", interval: 1, until: { date: "2026-02-01T00:00:00.000Z" } },
+      recurrenceRule: { frequency: "DAILY", interval: 1, until: { date: new Date("2026-02-01T00:00:00.000Z") } },
     });
 
     expect(recurrence).toEqual({

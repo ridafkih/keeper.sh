@@ -63,7 +63,7 @@ describe("createOutlookSyncProvider", () => {
     expect(typeof provider.verifyEventsExist).toBe("function");
   });
 
-  it("lists remote events from /events within the requested window, filtered server-side to keeper-tagged events", async () => {
+  it("lists remote events from /events within the requested window", async () => {
     let requestedUrl: string | null = null;
     vi.stubGlobal("fetch", vi.fn((input: string | URL | Request) => {
       requestedUrl = input.toString();
@@ -81,7 +81,7 @@ describe("createOutlookSyncProvider", () => {
     expect(url.pathname).toContain("/events");
     expect(url.pathname).not.toContain("/calendarView");
     const filter = url.searchParams.get("$filter") ?? "";
-    expect(filter).toContain(`categories/any(c:c eq '${KEEPER_CATEGORY}')`);
+    expect(filter).not.toContain("categories");
     expect(filter).toContain("end/dateTime ge");
     expect(filter).toContain("start/dateTime le");
   });

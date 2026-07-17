@@ -1,6 +1,5 @@
 import type { IcsRecurrenceRule } from "ts-ics";
 import type { OutlookEvent } from "@keeper.sh/data-schemas";
-import { parseRecurrenceRuleFromJson } from "../../../core/events/recurrence";
 import type { SyncableEvent } from "../../../core/types";
 
 type OutlookRecurrence = NonNullable<OutlookEvent["recurrence"]>;
@@ -44,10 +43,14 @@ const buildRange = (rule: IcsRecurrenceRule, startTime: Date): OutlookRecurrence
 const WEEK_DAYS_BY_INDEX = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const;
 
 const buildWeeklyPattern = (rule: IcsRecurrenceRule, startTime: Date): OutlookRecurrencePattern | null => {
-  const days = rule.byDay?.map((entry) => ICS_DAY_TO_OUTLOOK_DAY[entry.day]).filter((day): day is string => Boolean(day));
+  const days = rule.byDay?.map((entry) => ICS_DAY_TO_OUTLOOK_DAY[entry.day]).filter((day): day is string => typeof day === "string");
   const fallbackIcsDay = WEEK_DAYS_BY_INDEX[startTime.getUTCDay()] ?? "MO";
   const fallbackDay = ICS_DAY_TO_OUTLOOK_DAY[fallbackIcsDay] ?? "monday";
-  const daysOfWeek = days && days.length > 0 ? days : [fallbackDay];
+
+  let daysOfWeek = [fallbackDay];
+  if (days && days.length > 0) {
+    daysOfWeek = days;
+  }
 
   return { daysOfWeek, interval: rule.interval ?? 1, type: "weekly" };
 };
@@ -87,16 +90,21 @@ const buildYearlyPattern = (rule: IcsRecurrenceRule, startTime: Date): OutlookRe
 
 const buildPattern = (rule: IcsRecurrenceRule, startTime: Date): OutlookRecurrencePattern | null => {
   switch (rule.frequency) {
-    case "DAILY":
+    case "DAILY": {
       return { interval: rule.interval ?? 1, type: "daily" };
-    case "WEEKLY":
+    }
+    case "WEEKLY": {
       return buildWeeklyPattern(rule, startTime);
-    case "MONTHLY":
+    }
+    case "MONTHLY": {
       return buildMonthlyPattern(rule, startTime);
-    case "YEARLY":
+    }
+    case "YEARLY": {
       return buildYearlyPattern(rule, startTime);
-    default:
+    }
+    default: {
       return null;
+    }
   }
 };
 
@@ -106,17 +114,14 @@ const buildPattern = (rule: IcsRecurrenceRule, startTime: Date): OutlookRecurren
  */
 const buildOutlookRecurrence = (event: SyncableEvent): OutlookRecurrence | undefined => {
   if (!event.recurrenceRule) {
-    return undefined;
+    return;
   }
 
-  const rule = parseRecurrenceRuleFromJson(JSON.stringify(event.recurrenceRule));
-  if (!rule) {
-    return undefined;
-  }
+  const rule = event.recurrenceRule;
 
   const pattern = buildPattern(rule, event.startTime);
   if (!pattern) {
-    return undefined;
+    return;
   }
 
   return { pattern, range: buildRange(rule, event.startTime) };
