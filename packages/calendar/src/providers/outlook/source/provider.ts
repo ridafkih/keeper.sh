@@ -21,7 +21,9 @@ import { fetchCalendarEvents, fetchCalendarName, parseOutlookEvents } from "./ut
 
 const OUTLOOK_PROVIDER_ID = "outlook";
 const EMPTY_COUNT = 0;
-const OUTLOOK_SYNC_TOKEN_VERSION = OAUTH_SYNC_WINDOW_VERSION + 1;
+// Bumped to + 2 because recurring-series occurrences were previously dropped.
+// The bump forces a full re-sync that backfills them and removes master rows.
+const OUTLOOK_SYNC_TOKEN_VERSION = OAUTH_SYNC_WINDOW_VERSION + 2;
 
 const stringifyIfPresent = (value: unknown) => {
   if (!value) {
