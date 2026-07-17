@@ -1,4 +1,4 @@
-import { HTTP_STATUS, KEEPER_CATEGORY } from "@keeper.sh/constants";
+import { HTTP_STATUS, KEEPER_CATEGORY, PROVIDER_PUSH_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
 import {
   microsoftApiErrorSchema,
   outlookEventListSchema,
@@ -12,6 +12,7 @@ import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-vali
 import { MICROSOFT_GRAPH_API, OUTLOOK_PAGE_SIZE } from "../shared/api";
 import { parseEventTime } from "../shared/date-time";
 import { serializeOutlookEvent } from "./serialize-event";
+import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
 
 interface OutlookSyncProviderConfig {
   accessToken: string;
@@ -21,6 +22,7 @@ interface OutlookSyncProviderConfig {
   calendarId: string;
   userId: string;
   refreshAccessToken?: TokenRefresher;
+  signal?: AbortSignal;
 }
 
 const createCaughtFailure = (error: unknown): PushResult | DeleteResult => {
@@ -60,11 +62,11 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
         const resource = serializeOutlookEvent(event);
         const url = new URL(calendarEventsUrl);
 
-        const response = await fetch(url, {
+        const response = await fetchWithTimeout(url, {
           body: JSON.stringify(resource),
           headers: getHeaders(),
           method: "POST",
-        });
+        }, PROVIDER_PUSH_REQUEST_TIMEOUT_MS, config.signal);
 
         if (!response.ok) {
           const body = await response.json();
@@ -82,6 +84,9 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
         const created = outlookEventSchema.assert(body);
         results.push({ deleteId: created.id, remoteId: created.iCalUId ?? created.id, success: true });
       } catch (error) {
+        if (config.signal?.aborted) {
+          throw error;
+        }
         results.push(createCaughtFailure(error));
       }
     }
@@ -97,10 +102,10 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       try {
         const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${eventId}`);
 
-        const response = await fetch(url, {
+        const response = await fetchWithTimeout(url, {
           headers: { Authorization: `Bearer ${tokenState.accessToken}` },
           method: "DELETE",
-        });
+        }, PROVIDER_PUSH_REQUEST_TIMEOUT_MS, config.signal);
 
         if (!response.ok && response.status !== HTTP_STATUS.NOT_FOUND) {
           const body = await response.json();
@@ -117,6 +122,9 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
         await response.body?.cancel?.();
         results.push({ success: true });
       } catch (error) {
+        if (config.signal?.aborted) {
+          throw error;
+        }
         results.push(createCaughtFailure(error));
       }
     }
@@ -153,10 +161,10 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     do {
       const url = buildOutlookEventsUrl(lookbackStart, futureDate, nextLink);
 
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         headers: { Authorization: `Bearer ${tokenState.accessToken}` },
         method: "GET",
-      });
+      }, PROVIDER_PUSH_REQUEST_TIMEOUT_MS, config.signal);
 
       if (!response.ok) {
         const body = await response.json();

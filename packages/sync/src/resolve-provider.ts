@@ -108,6 +108,7 @@ const resolveOAuthProvider = async (
         refreshLockStore,
         rawRefresh: (refreshToken) => refreshMicrosoftToken(refreshToken),
       }),
+      signal,
     });
   }
 
