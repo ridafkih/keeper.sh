@@ -11,7 +11,7 @@ import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS, GONE_STATUS } from ".
 import { withBackoff } from "../shared/backoff";
 import { executeBatchChunked } from "../shared/batch";
 import { isRateLimitApiError, parseGoogleApiError } from "../shared/errors";
-import type { BatchSubRequest } from "../shared/batch";
+import type { BatchSubRequest, BatchSubResponse } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
 import { serializeGoogleEvent } from "./serialize-event";
 
@@ -48,15 +48,69 @@ const extractBatchErrorMessage = (body: unknown, fallbackStatus: number): string
   return googleApiErrorSchema.assert(body).error?.message ?? fallback;
 };
 
-const extractEventIdFromLookup = (body: unknown): string | undefined => {
-  if (!googleEventListSchema.allows(body)) {
-    return;
+type DeleteLookupResolution =
+  | { kind: "absent" }
+  | { eventId: string; kind: "found" }
+  | { kind: "failed"; result: DeleteResult };
+
+const resolveDeleteLookup = (response: BatchSubResponse | undefined): DeleteLookupResolution => {
+  if (!response) {
+    return {
+      kind: "failed",
+      result: {
+        error: "Missing batch response for Google event lookup",
+        errorType: "GoogleBatchProtocolError",
+        success: false,
+      },
+    };
   }
-  const firstItem = googleEventListSchema.assert(body).items?.[0];
-  if (!firstItem) {
-    return;
+
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    return {
+      kind: "failed",
+      result: {
+        error: extractBatchErrorMessage(response.body, response.statusCode),
+        errorType: "GoogleCalendarApiError",
+        statusCode: response.statusCode,
+        success: false,
+      },
+    };
   }
-  return firstItem.id;
+
+  if (!googleEventListSchema.allows(response.body)) {
+    return {
+      kind: "failed",
+      result: {
+        error: "Invalid Google event lookup response",
+        errorType: "GoogleBatchProtocolError",
+        statusCode: response.statusCode,
+        success: false,
+      },
+    };
+  }
+
+  const items = googleEventListSchema.assert(response.body).items ?? [];
+  if (items.length === 0) {
+    return { kind: "absent" };
+  }
+
+  if (items.length !== 1 || !items[0]?.id) {
+    let error = `Google event lookup returned ${items.length} matching events`;
+    if (items.length === 1) {
+      error = "Google event lookup response is missing the event ID";
+    }
+    return {
+      kind: "failed",
+      result: {
+        error,
+        errorType: "GoogleBatchProtocolError",
+        statusCode: response.statusCode,
+        success: false,
+      },
+    };
+  }
+
+  return { eventId: items[0].id, kind: "found" };
 };
 
 const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
@@ -190,14 +244,12 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         continue;
       }
 
-      const findResponse = findResponses[findIndex];
-      if (!findResponse || findResponse.statusCode !== 200) {
-        results[originalIndex] = { success: true };
+      const resolution = resolveDeleteLookup(findResponses[findIndex]);
+      if (resolution.kind === "failed") {
+        results[originalIndex] = resolution.result;
         continue;
       }
-
-      const eventId = extractEventIdFromLookup(findResponse.body);
-      if (!eventId) {
+      if (resolution.kind === "absent") {
         results[originalIndex] = { success: true };
         continue;
       }
@@ -205,7 +257,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       directIndexMap.push(originalIndex);
       directSubRequests.push({
         method: "DELETE",
-        path: `${eventsPath}/${encodeURIComponent(eventId)}`,
+        path: `${eventsPath}/${encodeURIComponent(resolution.eventId)}`,
       });
     }
 
