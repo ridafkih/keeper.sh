@@ -366,7 +366,7 @@ describe("source event diff", () => {
 
   it("re-adds an event when its recurrence rule changes", () => {
     const existingEvents = [createExistingEvent({
-      recurrenceRule: JSON.stringify({ frequency: "WEEKLY", interval: 1 }),
+      recurrenceRule: { frequency: "WEEKLY", interval: 1 },
     })];
     const incomingEvents = [createIncomingEvent({
       recurrenceRule: { frequency: "DAILY", interval: 1 },
@@ -377,10 +377,10 @@ describe("source event diff", () => {
 
   it("re-adds an event when its exception dates change", () => {
     const existingEvents = [createExistingEvent({
-      exceptionDates: JSON.stringify({ dates: ["2026-03-18T19:00:00.000Z"] }),
+      exceptionDates: [{ date: new Date("2026-03-18T19:00:00.000Z") }],
     })];
     const incomingEvents = [createIncomingEvent({
-      exceptionDates: { dates: ["2026-03-25T19:00:00.000Z"] },
+      exceptionDates: [{ date: new Date("2026-03-25T19:00:00.000Z") }],
     })];
 
     expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toHaveLength(1);
@@ -406,10 +406,10 @@ describe("source event diff", () => {
 
   it("compares structured recurrence fields independently of object key order", () => {
     const existingEvents = [createExistingEvent({
-      recurrenceRule: JSON.stringify({ byDay: ["MO"], frequency: "WEEKLY" }),
+      recurrenceRule: { byDay: [{ day: "MO" }], frequency: "WEEKLY" },
     })];
     const incomingEvents = [createIncomingEvent({
-      recurrenceRule: { frequency: "WEEKLY", byDay: ["MO"] },
+      recurrenceRule: { frequency: "WEEKLY", byDay: [{ day: "MO" }] },
     })];
 
     expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toEqual([]);

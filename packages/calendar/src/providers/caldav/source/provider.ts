@@ -1,4 +1,5 @@
 import { buildSourceEventStateIdsToRemove, buildSourceEventsToAdd } from "../../../core/source/event-diff";
+import { parseStoredSourceEventStates } from "../../../core/source/stored-event-state";
 import {
   buildEventStateInsertRow,
   insertEventStatesWithConflictResolution,
@@ -104,7 +105,7 @@ const createCalDAVSourceProvider = (
     calendarId: string,
     events: SourceEvent[],
   ): Promise<CalDAVSourceSyncResult> => {
-    const existingEvents = await database
+    const storedEvents = await database
       .select({
         availability: eventStatesTable.availability,
         description: eventStatesTable.description,
@@ -124,6 +125,7 @@ const createCalDAVSourceProvider = (
       })
       .from(eventStatesTable)
       .where(eq(eventStatesTable.calendarId, calendarId));
+    const existingEvents = parseStoredSourceEventStates(storedEvents);
 
     const eventsToAdd = buildSourceEventsToAdd(existingEvents, events, { isDeltaSync: false });
     const eventStateIdsToRemove = buildSourceEventStateIdsToRemove(existingEvents, events);

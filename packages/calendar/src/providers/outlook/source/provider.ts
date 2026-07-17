@@ -1,4 +1,5 @@
 import { buildSourceEventStateIdsToRemove, buildSourceEventsToAdd } from "../../../core/source/event-diff";
+import { parseStoredSourceEventStates } from "../../../core/source/stored-event-state";
 import { filterSourceEventsToSyncWindow, resolveSourceSyncTokenAction, splitSourceEventsByPersistenceIdentity } from "../../../core/source/sync-diagnostics";
 import {
   buildEventStateInsertRow,
@@ -109,7 +110,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       syncWindow,
     );
 
-    const existingEvents = await database
+    const storedEvents = await database
       .select({
         availability: eventStatesTable.availability,
         description: eventStatesTable.description,
@@ -130,6 +131,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       })
       .from(eventStatesTable)
       .where(eq(eventStatesTable.calendarId, calendarId));
+    const existingEvents = parseStoredSourceEventStates(storedEvents);
 
     const eventsToAdd = buildSourceEventsToAdd(existingEvents, eventsInWindow, { isDeltaSync });
     const eventStateIdsToRemove = buildSourceEventStateIdsToRemove(

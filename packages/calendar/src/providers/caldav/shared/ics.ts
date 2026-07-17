@@ -1,6 +1,12 @@
 import { generateIcsCalendar } from "ts-ics";
 import { parseIcsCalendar, buildZonedIcsDate } from "../../../ics";
-import type { IcsCalendar, IcsDuration, IcsEvent } from "ts-ics";
+import type {
+  IcsCalendar,
+  IcsDuration,
+  IcsEvent,
+  IcsExceptionDates,
+  IcsRecurrenceRule,
+} from "ts-ics";
 import type { SyncableEvent } from "../../../core/types";
 import { isKeeperEvent } from "../../../core/events/identity";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
@@ -78,8 +84,8 @@ interface ParsedCalendarEvent {
   description?: string;
   location?: string;
   startTimeZone?: string;
-  recurrenceRule?: object;
-  exceptionDates?: object;
+  recurrenceRule?: IcsRecurrenceRule;
+  exceptionDates?: IcsExceptionDates;
   recurrenceId?: Date;
 }
 

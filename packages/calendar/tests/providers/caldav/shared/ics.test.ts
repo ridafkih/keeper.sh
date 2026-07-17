@@ -19,13 +19,6 @@ const buildVevent = (fields: Record<string, string>): string => [
   "END:VEVENT",
 ].join("\r\n");
 
-const serializeOptionalStructuredValue = (value: object | undefined): string | null => {
-  if (!value) {
-    return null;
-  }
-  return JSON.stringify(value);
-};
-
 const toSourceEvent = (parsed: ReturnType<typeof parseICalToRemoteEvents>[number]): SourceEvent => ({
   availability: parsed.availability,
   description: parsed.description,
@@ -48,12 +41,12 @@ const toExistingSourceEventState = (
   availability: event.availability,
   description: event.description,
   endTime: event.endTime,
-  exceptionDates: serializeOptionalStructuredValue(event.exceptionDates),
+  exceptionDates: event.exceptionDates ?? null,
   id,
   isAllDay: event.isAllDay,
   location: event.location,
   recurrenceId: event.recurrenceId ?? null,
-  recurrenceRule: serializeOptionalStructuredValue(event.recurrenceRule),
+  recurrenceRule: event.recurrenceRule ?? null,
   sourceEventInstanceKey: buildSourceEventInstanceKey(event),
   sourceEventType: event.sourceEventType ?? "default",
   sourceEventUid: event.uid,

@@ -78,12 +78,21 @@ export {
   parseRecurrenceRuleFromJson,
 } from "./core/events/recurrence";
 export {
+  parseStoredIcsExceptionDates,
+  parseStoredIcsRecurrenceRule,
+} from "./core/events/stored-recurrence";
+export {
   buildSourceEventIdentityKey,
   buildSourceEventsToAdd,
   buildSourceEventStateIdsToRemove,
   type ExistingSourceEventState,
   type SourceEventDiffOptions,
 } from "./core/source/event-diff";
+export {
+  parseStoredSourceEventState,
+  parseStoredSourceEventStates,
+  type StoredSourceEventState,
+} from "./core/source/stored-event-state";
 export {
   filterSourceEventsToSyncWindow,
   resolveSourceSyncTokenAction,
@@ -213,6 +222,5 @@ export type {
   IngestionResult,
   IngestionChanges,
   CalendarSnapshotChange,
-  ExistingEventState,
   FetchEventsResult as IngestionFetchEventsResult,
 } from "./core/sync-engine/ingest";

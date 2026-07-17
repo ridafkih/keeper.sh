@@ -29,7 +29,7 @@ describe("diffEvents", () => {
       ...createBaseEvent(),
       recurrenceRule: {
         frequency: "WEEKLY",
-        until: { date: "2026-12-31T00:00:00.000Z" },
+        until: { date: new Date("2026-12-31T00:00:00.000Z") },
         byDay: [{ occurrence: 1, day: "MO" }],
       },
     });
@@ -84,7 +84,7 @@ describe("diffEvents", () => {
 
     const storedEvent = createStoredEvent({
       ...createBaseEvent(),
-      exceptionDates: [{ date: "2026-03-22T14:00:00.000Z" }],
+      exceptionDates: [{ date: new Date("2026-03-22T14:00:00.000Z") }],
     });
 
     const result = diffEvents([remoteEvent], [storedEvent]);

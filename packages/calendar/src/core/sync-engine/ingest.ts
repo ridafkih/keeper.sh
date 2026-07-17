@@ -1,24 +1,9 @@
 import type { SourceEvent } from "../types";
 import { buildSourceEventsToAdd, buildSourceEventStateIdsToRemove } from "../source/event-diff";
-
-interface ExistingEventState {
-  id: string;
-  sourceEventId?: string | null;
-  sourceEventUid: string | null;
-  startTime: Date;
-  endTime: Date;
-  availability: string | null;
-  isAllDay: boolean | null;
-  sourceEventType: string | null;
-  title: string | null;
-  description: string | null;
-  location: string | null;
-  exceptionDates: string | null;
-  recurrenceId: Date | null;
-  recurrenceRule: string | null;
-  sourceEventInstanceKey: string | null;
-  startTimeZone: string | null;
-}
+import {
+  parseStoredSourceEventStates,
+  type StoredSourceEventState,
+} from "../source/stored-event-state";
 
 interface FetchEventsResult {
   events: SourceEvent[];
@@ -46,7 +31,7 @@ interface CalendarSnapshotChange {
 interface IngestSourceOptions {
   calendarId: string;
   fetchEvents: () => Promise<FetchEventsResult>;
-  readExistingEvents: () => Promise<ExistingEventState[]>;
+  readExistingEvents: () => Promise<StoredSourceEventState[]>;
   flush: (changes: IngestionChanges) => Promise<void>;
   onIngestEvent?: (event: Record<string, unknown>) => void;
 }
@@ -71,13 +56,13 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
   let flushed = false;
 
   try {
-    const [fetchResult, existingEvents] = await Promise.all([
+    const [fetchResult, storedEvents] = await Promise.all([
       fetchEvents(),
       readExistingEvents(),
     ]);
 
     wideEvent["source_events.count"] = fetchResult.events.length;
-    wideEvent["existing_events.count"] = existingEvents.length;
+    wideEvent["existing_events.count"] = storedEvents.length;
 
     if (fetchResult.unchanged) {
       wideEvent["outcome"] = "unchanged";
@@ -92,6 +77,8 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       flushed = true;
       return EMPTY_RESULT;
     }
+
+    const existingEvents = parseStoredSourceEventStates(storedEvents);
 
     const eventsToAdd = buildSourceEventsToAdd(existingEvents, fetchResult.events, {
       isDeltaSync: fetchResult.isDeltaSync ?? false,
@@ -175,6 +162,5 @@ export type {
   IngestSourceOptions,
   IngestionResult,
   IngestionChanges,
-  ExistingEventState,
   FetchEventsResult,
 };

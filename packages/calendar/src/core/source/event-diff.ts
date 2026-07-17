@@ -1,25 +1,8 @@
 import type { SourceEvent } from "../types";
+import type { IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
 import stringify from "fast-json-stable-stringify";
 import { buildSourceEventInstanceKey } from "./event-instance";
-
-interface ExistingSourceEventState {
-  availability?: string | null;
-  description?: string | null;
-  id: string;
-  isAllDay?: boolean | null;
-  location?: string | null;
-  exceptionDates: object | string | null;
-  recurrenceId: Date | null;
-  recurrenceRule: object | string | null;
-  sourceEventInstanceKey: string | null;
-  sourceEventType?: string | null;
-  sourceEventId?: string | null;
-  sourceEventUid: string | null;
-  startTime: Date;
-  startTimeZone: string | null;
-  endTime: Date;
-  title?: string | null;
-}
+import type { ExistingSourceEventState } from "./stored-event-state";
 
 interface SourceEventDiffOptions {
   changedEventIds?: string[];
@@ -45,24 +28,14 @@ const normalizeIdentityIsAllDay = (
 const normalizeIdentityContent = (value: string | null | undefined): string =>
   value?.trim() ?? "";
 
-const parseStoredStructuredValue = (value: unknown): unknown => {
-  if (typeof value !== "string") {
-    return value;
-  }
-
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-};
-
-const serializeIdentityValue = (value: unknown): string => {
+const serializeIdentityValue = (
+  value: IcsExceptionDates | IcsRecurrenceRule | null | undefined,
+): string => {
   if (value === null || value === globalThis.undefined) {
     return "";
   }
 
-  return stringify(parseStoredStructuredValue(value));
+  return stringify(value);
 };
 
 const resolveExistingSourceEventInstanceKey = (
@@ -86,9 +59,9 @@ interface SourceEventIdentityInput {
   title?: string | null;
   description?: string | null;
   location?: string | null;
-  exceptionDates?: object | string | null;
+  exceptionDates?: IcsExceptionDates | null;
   recurrenceId?: Date | null;
-  recurrenceRule?: object | string | null;
+  recurrenceRule?: IcsRecurrenceRule | null;
   startTimeZone?: string | null;
 }
 
@@ -298,4 +271,5 @@ export {
   buildSourceEventsToAdd,
   buildSourceEventStateIdsToRemove,
 };
-export type { ExistingSourceEventState, SourceEventDiffOptions };
+export type { SourceEventDiffOptions };
+export type { ExistingSourceEventState } from "./stored-event-state";

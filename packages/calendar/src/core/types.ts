@@ -1,4 +1,5 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
 import type { RefreshLockStore } from "./oauth/refresh-coordinator";
 
 type AuthType = "oauth" | "caldav" | "none";
@@ -51,8 +52,8 @@ interface SyncableEvent {
   availability?: EventAvailability;
   isAllDay?: boolean;
   startTimeZone?: string;
-  recurrenceRule?: object;
-  exceptionDates?: object;
+  recurrenceRule?: IcsRecurrenceRule;
+  exceptionDates?: Date[];
   recurrenceId?: Date;
   summary: string;
   description?: string;
@@ -153,8 +154,8 @@ interface SourceEvent {
   availability?: EventAvailability;
   isAllDay?: boolean;
   startTimeZone?: string;
-  recurrenceRule?: object;
-  exceptionDates?: object;
+  recurrenceRule?: IcsRecurrenceRule;
+  exceptionDates?: IcsExceptionDates;
   recurrenceId?: Date;
   title?: string;
   description?: string;

@@ -352,7 +352,7 @@ type UpdateOAuthSourceDestinations = typeof updateOAuthSourceDestinationsSchema.
 
 /*
  * ICS recurrence-related shapes mirroring ts-ics's IcsDateObject and IcsRecurrenceRule.
- * Date fields use `string.date.iso.parse` so values stored as ISO strings in JSONB columns
+ * Date fields use `string.date.iso.parse` so values stored as ISO strings in JSON text
  * are validated and morphed back into Date instances on read — ts-ics requires real Date
  * objects on its in-memory shape.
  */

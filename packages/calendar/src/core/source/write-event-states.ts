@@ -1,6 +1,7 @@
 import { eventStatesTable } from "@keeper.sh/database/schema";
 import { isNotNull, isNull, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
+import type { IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
 import type { SourceEvent } from "../types";
 import { buildSourceEventInstanceKey } from "./event-instance";
 
@@ -8,7 +9,9 @@ const EMPTY_ROW_COUNT = 0;
 
 type EventStateInsertRow = typeof eventStatesTable.$inferInsert;
 
-const serializeOptionalJson = (value: unknown): string | null => {
+const serializeOptionalJson = (
+  value: IcsExceptionDates | IcsRecurrenceRule | undefined,
+): string | null => {
   if (!value) {
     return null;
   }
