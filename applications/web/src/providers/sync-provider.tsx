@@ -3,6 +3,7 @@ import { useSetAtom } from "jotai";
 import { syncStateAtom, type CompositeSyncState } from "@/state/sync";
 import {
   parseIncomingSocketAction,
+  resolveAggregateLastSyncedAt,
   shouldAcceptAggregatePayload,
 } from "./sync-provider-logic";
 
@@ -145,10 +146,15 @@ const handleMessage = (
   clearInitialAggregateTimer(connectionState);
   connectionState.lastSeq = decision.nextSeq;
 
+  const lastSyncedAt = resolveAggregateLastSyncedAt(
+    connectionState.currentState.lastSyncedAt,
+    action.data,
+  );
+
   applyState(connectionState, setSyncState, {
     connected: true,
     hasReceivedAggregate: true,
-    lastSyncedAt: action.data.lastSyncedAt ?? null,
+    lastSyncedAt,
     progressPercent: resolveProgressPercent(action.data),
     seq: action.data.seq,
     syncEventsProcessed: action.data.syncEventsProcessed,

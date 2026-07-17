@@ -228,6 +228,36 @@ describe("createSyncAggregateRuntime", () => {
       expect(persisted).toHaveLength(0);
     });
 
+    it("finalizes failed attempts without advancing lastSyncedAt", async () => {
+      const broadcasts: { data: unknown }[] = [];
+      const persisted: unknown[] = [];
+      const tracker = new SyncAggregateTracker({ progressThrottleMs: 0 });
+      const runtime = createSyncAggregateRuntime(createRuntimeConfig({
+        broadcast: (_userId, _eventName, data) => {
+          broadcasts.push({ data });
+        },
+        persistSyncStatus: () => {
+          persisted.push(true);
+          return Promise.resolve();
+        },
+        tracker,
+      }));
+      tracker.trackProgress(
+        createProgressUpdate({ calendarId: "cal-1", progress: { current: 5, total: 10 } }),
+      );
+
+      await runtime.onDestinationSync(createDestinationResult({ completedSuccessfully: false }));
+
+      expect(persisted).toHaveLength(0);
+      const lastBroadcast = broadcasts.at(-1);
+      expect(lastBroadcast).toBeDefined();
+      if (!lastBroadcast || !isRecord(lastBroadcast.data)) {
+        throw new TypeError("Expected broadcast data object");
+      }
+      expect(lastBroadcast.data.syncing).toBe(false);
+      expect(lastBroadcast.data).not.toHaveProperty("lastSyncedAt");
+    });
+
     it("finalizes and broadcasts completion even when persistence fails", async () => {
       const broadcasts: { data: unknown }[] = [];
       const tracker = new SyncAggregateTracker({ progressThrottleMs: 0 });
@@ -256,6 +286,7 @@ describe("createSyncAggregateRuntime", () => {
       }
       expect(lastBroadcast.data.syncing).toBe(false);
       expect(lastBroadcast.data.syncEventsRemaining).toBe(0);
+      expect(lastBroadcast.data).not.toHaveProperty("lastSyncedAt");
     });
   });
 

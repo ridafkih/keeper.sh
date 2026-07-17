@@ -45,7 +45,7 @@ const applyDestinationBackoff = async (
     .where(eq(calendarsTable.id, calendarId));
 };
 
-const extractNumericField = (event: Record<string, unknown> | undefined, key: string): number => {
+const extractNumericField = (event: Record<string, unknown> | null | undefined, key: string): number => {
   if (!event) {
     return 0;
   }
@@ -96,12 +96,24 @@ interface CalendarSyncCompletion {
   conflictsResolved: number;
   errors: string[];
   durationMs: number;
+  syncEvent?: Record<string, unknown>;
+}
+
+interface CalendarSyncFailure {
+  provider: string;
+  accountId: string;
+  calendarId: string;
+  userId: string;
+  error: unknown;
+  durationMs: number;
+  syncEvent?: Record<string, unknown>;
 }
 
 interface SyncCallbacks {
   onSyncEvent?: (event: Record<string, unknown>) => void;
   onProgress?: (update: SyncProgressUpdate) => void;
   onCalendarComplete?: (completion: CalendarSyncCompletion) => void;
+  onCalendarError?: (failure: CalendarSyncFailure) => void;
 }
 
 const syncDestinationsForUser = async (
@@ -164,6 +176,7 @@ const syncDestinationsForUser = async (
     }
 
     const { handle } = lockResult;
+    const calendarAttempt: { syncEvent: Record<string, unknown> | null } = { syncEvent: null };
 
     try {
       const syncProvider = await resolveSyncProvider({
@@ -209,15 +222,35 @@ const syncDestinationsForUser = async (
         onSyncEvent: (event) => {
           const enrichedEvent = {
             ...event,
-            "destination.provider": destination.provider,
+            "provider.name": destination.provider,
+            "provider.account_id": destination.accountId,
+            "provider.calendar_id": destination.calendarId,
             "user.id": destination.userId,
           };
+          calendarAttempt.syncEvent = enrichedEvent;
           syncEvents.push(enrichedEvent);
           if (callbacks?.onSyncEvent) {
             callbacks.onSyncEvent(enrichedEvent);
           }
         },
       });
+
+      if (callbacks?.onCalendarComplete) {
+        callbacks.onCalendarComplete({
+          provider: destination.provider,
+          accountId: destination.accountId,
+          calendarId: destination.calendarId,
+          userId: destination.userId,
+          added: result.added,
+          addFailed: result.addFailed,
+          removed: result.removed,
+          removeFailed: result.removeFailed,
+          conflictsResolved: result.conflictsResolved,
+          errors: result.errors,
+          durationMs: extractNumericField(calendarAttempt.syncEvent, "duration_ms"),
+          ...(calendarAttempt.syncEvent && { syncEvent: calendarAttempt.syncEvent }),
+        });
+      }
 
       if (!(await handle.isCurrent())) {
         continue;
@@ -237,25 +270,6 @@ const syncDestinationsForUser = async (
       removed += result.removed;
       removeFailed += result.removeFailed;
       errors.push(...result.errors);
-
-      if (callbacks?.onCalendarComplete) {
-        const syncEvent = syncEvents.at(-1);
-        const durationMs = extractNumericField(syncEvent, "duration_ms");
-
-        callbacks.onCalendarComplete({
-          provider: destination.provider,
-          accountId: destination.accountId,
-          calendarId: destination.calendarId,
-          userId: destination.userId,
-          added: result.added,
-          addFailed: result.addFailed,
-          removed: result.removed,
-          removeFailed: result.removeFailed,
-          conflictsResolved: result.conflictsResolved,
-          errors: result.errors,
-          durationMs,
-        });
-      }
     } catch (error) {
       if (!isBackoffEligibleError(error)) {
         throw error;
@@ -263,6 +277,15 @@ const syncDestinationsForUser = async (
 
       await applyDestinationBackoff(database, destination.calendarId, destination.failureCount);
       errors.push(getErrorMessage(error));
+      callbacks?.onCalendarError?.({
+        provider: destination.provider,
+        accountId: destination.accountId,
+        calendarId: destination.calendarId,
+        userId: destination.userId,
+        error,
+        durationMs: extractNumericField(calendarAttempt.syncEvent, "duration_ms"),
+        ...(calendarAttempt.syncEvent && { syncEvent: calendarAttempt.syncEvent }),
+      });
     } finally {
       await handle.release();
     }
@@ -272,4 +295,4 @@ const syncDestinationsForUser = async (
 };
 
 export { syncDestinationsForUser };
-export type { CalendarSyncCompletion, SyncConfig, SyncDestinationsResult };
+export type { CalendarSyncCompletion, CalendarSyncFailure, SyncConfig, SyncDestinationsResult };

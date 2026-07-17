@@ -13,6 +13,7 @@ interface SafeFetchOptions {
   blockPrivateResolution?: boolean;
   allowedPrivateHosts?: Set<string>;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 class UrlSafetyError extends Error {
@@ -245,13 +246,39 @@ const resolveRequestSignal = (
   externalSignal: AbortSignal | null | undefined,
 ): AbortSignal | null | undefined => timeout?.signal ?? externalSignal;
 
+const resolveExternalSignal = (
+  input: string | Request | URL,
+  init: RequestInit | undefined,
+  options: SafeFetchOptions | undefined,
+): AbortSignal | null => {
+  const signals: AbortSignal[] = [];
+  if (options?.signal) {
+    signals.push(options.signal);
+  }
+  if (init?.signal) {
+    signals.push(init.signal);
+  }
+  if (input instanceof Request) {
+    signals.push(input.signal);
+  }
+  const uniqueSignals = [...new Set(signals)];
+
+  if (uniqueSignals.length === 0) {
+    return null;
+  }
+  if (uniqueSignals.length === 1) {
+    return uniqueSignals.at(0) ?? null;
+  }
+  return AbortSignal.any(uniqueSignals);
+};
+
 const createSafeFetch = (options?: SafeFetchOptions): SafeFetch => async (input, init) => {
     const url = extractUrl(input);
     await validateUrlSafety(url, options);
 
     const callerWantsManual = init?.redirect === "manual";
 
-    const externalSignal = init?.signal;
+    const externalSignal = resolveExternalSignal(input, init, options);
     const timeout = resolveTimeoutSignal(options, externalSignal);
     const signal = resolveRequestSignal(timeout, externalSignal);
 

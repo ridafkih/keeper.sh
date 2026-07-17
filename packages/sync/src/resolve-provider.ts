@@ -108,6 +108,7 @@ const resolveOAuthProvider = async (
         refreshLockStore,
         rawRefresh: (refreshToken) => refreshMicrosoftToken(refreshToken),
       }),
+      signal,
     });
   }
 
@@ -118,6 +119,7 @@ const resolveCalDAVProvider = async (
   database: BunSQLDatabase,
   calendarId: string,
   encryptionKey: string,
+  signal?: AbortSignal,
 ): Promise<CalendarSyncProvider | null> => {
   const [caldavCred] = await database
     .select({
@@ -145,7 +147,7 @@ const resolveCalDAVProvider = async (
     serverUrl: caldavCred.serverUrl,
     username: caldavCred.username,
     password,
-    safeFetchOptions: { timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS },
+    safeFetchOptions: { timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS, signal },
   });
 };
 
@@ -182,6 +184,7 @@ const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarS
       options.database,
       options.calendarId,
       options.encryptionKey,
+      options.signal,
     );
   }
 

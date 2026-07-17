@@ -67,6 +67,8 @@ interface PushResult {
   remoteId?: string;
   deleteId?: string;
   error?: string;
+  errorType?: string;
+  statusCode?: number;
   shouldContinue?: boolean;
   conflictResolved?: boolean;
 }
@@ -74,6 +76,8 @@ interface PushResult {
 interface DeleteResult {
   success: boolean;
   error?: string;
+  errorType?: string;
+  statusCode?: number;
   shouldContinue?: boolean;
 }
 
@@ -93,8 +97,15 @@ interface RemoteEvent {
 }
 
 type SyncOperation =
-  | { type: "add"; event: SyncableEvent }
-  | { type: "remove"; uid: string; deleteId: string; startTime: Date };
+  | { type: "add"; event: SyncableEvent; staleMappingId?: string }
+  | { type: "remove"; uid: string; deleteId: string; startTime: Date }
+  | {
+    type: "replace";
+    event: SyncableEvent;
+    staleMappingId: string;
+    uid: string;
+    deleteId: string;
+  };
 
 interface ListRemoteEventsOptions {
   until: Date;
