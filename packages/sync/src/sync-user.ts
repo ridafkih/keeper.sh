@@ -41,7 +41,6 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
 import {
   getErrorMessage,
-  isBackoffEligibleError,
   resolveDestinationAttemptVerdict,
 } from "./destination-errors";
 import type { DestinationAttemptVerdict } from "./destination-errors";
@@ -1057,7 +1056,7 @@ const syncDestinationsForUser = async (
         errors.push(...result.errors);
       } catch (error) {
         const destination = attemptedDestination;
-        if (!destination || !isBackoffEligibleError(error)) {
+        if (!destination) {
           throw error;
         }
 
