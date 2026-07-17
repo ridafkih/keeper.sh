@@ -164,12 +164,16 @@ const createSyncAggregateRuntime = (config: SyncAggregateRuntimeConfig): SyncAgg
       return;
     }
 
-    const syncedAt = new Date();
+    let syncedAt: Date | null = null;
 
     try {
-      await config.persistSyncStatus(result, syncedAt);
+      if (result.completedSuccessfully !== false) {
+        const completedAt = new Date();
+        await config.persistSyncStatus(result, completedAt);
+        syncedAt = completedAt;
+      }
     } finally {
-      const aggregate = tracker.trackDestinationSync(result, syncedAt.toISOString());
+      const aggregate = tracker.trackDestinationSync(result, syncedAt?.toISOString());
       if (aggregate) {
         await emitSyncAggregate(result.userId, aggregate);
       }

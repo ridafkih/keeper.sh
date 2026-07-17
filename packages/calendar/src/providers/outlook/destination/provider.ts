@@ -23,6 +23,14 @@ interface OutlookSyncProviderConfig {
   refreshAccessToken?: TokenRefresher;
 }
 
+const createCaughtFailure = (error: unknown): PushResult | DeleteResult => {
+  let errorType = "UnknownError";
+  if (error instanceof Error) {
+    errorType = error.name;
+  }
+  return { error: getErrorMessage(error), errorType, success: false };
+};
+
 const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
   const tokenState: TokenState = {
     accessToken: config.accessToken,
@@ -61,7 +69,12 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
         if (!response.ok) {
           const body = await response.json();
           const { error } = microsoftApiErrorSchema.assert(body);
-          results.push({ error: error?.message ?? response.statusText, success: false });
+          results.push({
+            error: error?.message ?? response.statusText,
+            errorType: "MicrosoftGraphHttpError",
+            statusCode: response.status,
+            success: false,
+          });
           continue;
         }
 
@@ -69,7 +82,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
         const created = outlookEventSchema.assert(body);
         results.push({ deleteId: created.id, remoteId: created.iCalUId ?? created.id, success: true });
       } catch (error) {
-        results.push({ error: getErrorMessage(error), success: false });
+        results.push(createCaughtFailure(error));
       }
     }
 
@@ -92,14 +105,19 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
         if (!response.ok && response.status !== HTTP_STATUS.NOT_FOUND) {
           const body = await response.json();
           const { error } = microsoftApiErrorSchema.assert(body);
-          results.push({ error: error?.message ?? response.statusText, success: false });
+          results.push({
+            error: error?.message ?? response.statusText,
+            errorType: "MicrosoftGraphHttpError",
+            statusCode: response.status,
+            success: false,
+          });
           continue;
         }
 
         await response.body?.cancel?.();
         results.push({ success: true });
       } catch (error) {
-        results.push({ error: getErrorMessage(error), success: false });
+        results.push(createCaughtFailure(error));
       }
     }
 

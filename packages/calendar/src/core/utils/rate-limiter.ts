@@ -1,4 +1,7 @@
-type QueuedTask = () => Promise<void>;
+interface QueuedTask {
+  start: () => Promise<void>;
+  cancel: () => void;
+}
 
 const INITIAL_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 60_000;
@@ -16,6 +19,17 @@ interface RateLimiterConfig {
   concurrency?: number;
   requestsPerMinute?: number;
 }
+
+const createAbortError = (signal: AbortSignal): Error => {
+  let message = "The operation was aborted";
+  const { reason } = signal;
+  if (reason instanceof Error) {
+    ({ message } = reason);
+  }
+  const error = new Error(message);
+  error.name = "AbortError";
+  return error;
+};
 
 class RateLimiter {
   private readonly concurrency: number;
@@ -36,18 +50,61 @@ class RateLimiter {
     this.backoffMs = this.initialBackoffMs;
   }
 
-  execute<TResult>(operation: () => Promise<TResult>): Promise<TResult> {
-    const { promise, resolve, reject } = Promise.withResolvers<TResult>();
+  execute<TResult>(operation: () => Promise<TResult>, signal?: AbortSignal): Promise<TResult> {
+    if (signal?.aborted) {
+      return Promise.reject(createAbortError(signal));
+    }
 
-    const task: QueuedTask = async (): Promise<void> => {
-      try {
-        const result = await operation();
-        this.resetBackoff();
-        resolve(result);
-      } catch (error) {
-        reject(error);
+    const { promise, resolve, reject } = Promise.withResolvers<TResult>();
+    let status: "queued" | "active" | "settled" = "queued";
+    let abortListener: (() => void) | null = null;
+
+    const cleanup = (): void => {
+      if (abortListener) {
+        signal?.removeEventListener("abort", abortListener);
+        abortListener = null;
       }
     };
+
+    const task: QueuedTask = {
+      start: async (): Promise<void> => {
+        if (status !== "queued") {
+          return;
+        }
+        status = "active";
+        cleanup();
+
+        try {
+          const result = await operation();
+          this.resetBackoff();
+          status = "settled";
+          resolve(result);
+        } catch (error) {
+          status = "settled";
+          reject(error);
+        }
+      },
+      cancel: (): void => {
+        if (status !== "queued") {
+          return;
+        }
+        status = "settled";
+        cleanup();
+        const index = this.queue.indexOf(task);
+        if (index !== -1) {
+          this.queue.splice(index, 1);
+        }
+        if (signal) {
+          reject(createAbortError(signal));
+        } else {
+          reject(new Error("The operation was aborted"));
+        }
+        this.processQueue();
+      },
+    };
+
+    abortListener = (): void => task.cancel();
+    signal?.addEventListener("abort", abortListener, { once: true });
 
     this.queue.push(task);
     this.processQueue();
@@ -151,7 +208,7 @@ class RateLimiter {
 
   private async executeTask(task: QueuedTask): Promise<void> {
     try {
-      await task();
+      await task.start();
     } finally {
       this.activeCount--;
       this.processQueue();

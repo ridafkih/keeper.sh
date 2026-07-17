@@ -348,4 +348,23 @@ describe("createSafeFetch", () => {
 
     expect(response.status).toBe(200);
   });
+
+  it("propagates a configured abort signal to requests", async () => {
+    const controller = new AbortController();
+    const mockFetch = vi.fn<FetchFn>();
+    mockFetch.mockImplementation((_input, init) => new Promise((_resolve, reject) => {
+      if (init?.signal?.aborted) {
+        reject(init.signal.reason);
+        return;
+      }
+      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+    }));
+    installMockFetch(mockFetch);
+
+    const safeFetch = createSafeFetch({ signal: controller.signal });
+    const request = safeFetch("https://example.com/calendar");
+    controller.abort(new Error("job deadline exceeded"));
+
+    await expect(request).rejects.toThrow("job deadline exceeded");
+  });
 });

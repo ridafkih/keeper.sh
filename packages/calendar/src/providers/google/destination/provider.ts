@@ -125,11 +125,20 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     for (const entry of pending) {
       const response = responses[entry.batchIndex];
       if (!response) {
-        results[entry.index] = { error: "Missing batch response", success: false };
+        results[entry.index] = {
+          error: "Missing batch response",
+          errorType: "GoogleBatchProtocolError",
+          success: false,
+        };
       } else if (response.statusCode >= 200 && response.statusCode < 300) {
         results[entry.index] = { remoteId: entry.uid, success: true };
       } else {
-        results[entry.index] = { error: extractBatchErrorMessage(response.body, response.statusCode), success: false };
+        results[entry.index] = {
+          error: extractBatchErrorMessage(response.body, response.statusCode),
+          errorType: "GoogleCalendarApiError",
+          statusCode: response.statusCode,
+          success: false,
+        };
       }
     }
 
@@ -227,7 +236,11 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
 
       const deleteResponse = deleteResponses[deleteIndex];
       if (!deleteResponse) {
-        results[originalIndex] = { error: "Missing batch response", success: false };
+        results[originalIndex] = {
+          error: "Missing batch response",
+          errorType: "GoogleBatchProtocolError",
+          success: false,
+        };
         continue;
       }
 
@@ -238,7 +251,12 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         results[originalIndex] = { success: true };
       } else {
         const errorMessage = extractBatchErrorMessage(deleteResponse.body, deleteResponse.statusCode);
-        results[originalIndex] = { error: errorMessage, success: false };
+        results[originalIndex] = {
+          error: errorMessage,
+          errorType: "GoogleCalendarApiError",
+          statusCode: deleteResponse.statusCode,
+          success: false,
+        };
       }
     }
 
