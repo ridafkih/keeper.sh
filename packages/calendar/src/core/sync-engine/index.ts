@@ -1,4 +1,11 @@
-import type { SyncResult, SyncOperation, SyncableEvent, RemoteEvent, PushResult, DeleteResult } from "../types";
+import type {
+  DeleteResult,
+  MaterializedSyncableEvent,
+  PushResult,
+  RemoteEvent,
+  SyncOperation,
+  SyncResult,
+} from "../types";
 import type { EventMapping } from "../events/mappings";
 import type { SyncProgressUpdate } from "../sync/types";
 import { createSyncEventContentHash } from "../events/content-hash";
@@ -470,7 +477,7 @@ interface SyncCalendarOptions {
   calendarId: string;
   provider: CalendarSyncProvider;
   readState: () => Promise<{
-    localEvents: SyncableEvent[];
+    localEvents: MaterializedSyncableEvent[];
     existingMappings: EventMapping[];
     remoteEvents: RemoteEvent[];
   }>;

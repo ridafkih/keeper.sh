@@ -1,7 +1,7 @@
 import type { IcsRecurrenceRule } from "ts-ics";
 import { RRule } from "rrule";
 import type { Frequency, Options, Weekday } from "rrule";
-import type { SyncableEvent } from "../types";
+import type { MaterializedSyncableEvent, SyncableEvent } from "../types";
 import {
   instantToWallTime,
   resolveTimeZone,
@@ -11,6 +11,10 @@ import {
 interface RecurrenceMaterializationWindow {
   start: Date;
   end: Date;
+}
+
+interface RecurrenceMaterializationOptions {
+  retainOneOffEventsAfterWindowEnd?: boolean;
 }
 
 const MAX_OCCURRENCES_PER_SERIES = 10_000;
@@ -62,6 +66,16 @@ const overlapsWindow = (
   event: Pick<SyncableEvent, "startTime" | "endTime">,
   window: RecurrenceMaterializationWindow,
 ): boolean => event.endTime > window.start && event.startTime < window.end;
+
+const overlapsOneOffDomain = (
+  event: Pick<SyncableEvent, "startTime" | "endTime">,
+  window: RecurrenceMaterializationWindow,
+  options: RecurrenceMaterializationOptions,
+): boolean => event.endTime > window.start
+  && (
+    options.retainOneOffEventsAfterWindowEnd
+    || event.startTime < window.end
+  );
 
 const toRecurrenceWallTime = (date: Date, timeZone: string | undefined): Date => {
   if (!timeZone) {
@@ -130,7 +144,7 @@ const toRRuleOptions = (
   ...(rule.workweekStart && { wkst: WEEKDAYS[rule.workweekStart] }),
 });
 
-const asOneOffEvent = (event: SyncableEvent): SyncableEvent => {
+const asOneOffEvent = (event: SyncableEvent): MaterializedSyncableEvent => {
   const {
     exceptionDates: _exceptionDates,
     recurrenceId: _recurrenceId,
@@ -163,7 +177,7 @@ const createMaterializedOccurrence = (
   master: SyncableEvent,
   occurrenceStartWallTime: Date,
   timeZone: string | undefined,
-): SyncableEvent => {
+): MaterializedSyncableEvent => {
   const masterStartWallTime = toRecurrenceWallTime(master.startTime, timeZone);
   const masterEndWallTime = toRecurrenceWallTime(master.endTime, timeZone);
   const wallDuration = masterEndWallTime.getTime() - masterStartWallTime.getTime();
@@ -264,7 +278,7 @@ const materializeMaster = (
   master: SyncableEvent,
   overriddenSlots: Set<number>,
   window: RecurrenceMaterializationWindow,
-): SyncableEvent[] => {
+): MaterializedSyncableEvent[] => {
   if (!master.recurrenceRule || master.startTime >= window.end) {
     return [];
   }
@@ -327,12 +341,13 @@ const materializeMaster = (
 const materializeRecurrenceEvents = (
   events: SyncableEvent[],
   window: RecurrenceMaterializationWindow,
-): SyncableEvent[] => {
+  options: RecurrenceMaterializationOptions = {},
+): MaterializedSyncableEvent[] => {
   assertValidWindow(window);
 
   const uniqueMastersBySeries = getUniqueMastersBySeries(events);
   const overriddenSlotsByMaster = getOverriddenSlotsByMaster(events, uniqueMastersBySeries);
-  const materializedEvents: SyncableEvent[] = [];
+  const materializedEvents: MaterializedSyncableEvent[] = [];
 
   for (const event of events) {
     if (event.recurrenceRule && !event.recurrenceId) {
@@ -345,7 +360,7 @@ const materializeRecurrenceEvents = (
     }
 
     const oneOffEvent = asOneOffEvent(event);
-    if (overlapsWindow(oneOffEvent, window)) {
+    if (overlapsOneOffDomain(oneOffEvent, window, options)) {
       materializedEvents.push(oneOffEvent);
     }
   }
@@ -354,4 +369,7 @@ const materializeRecurrenceEvents = (
 };
 
 export { materializeRecurrenceEvents };
-export type { RecurrenceMaterializationWindow };
+export type {
+  RecurrenceMaterializationOptions,
+  RecurrenceMaterializationWindow,
+};

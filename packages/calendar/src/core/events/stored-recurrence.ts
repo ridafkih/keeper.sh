@@ -57,4 +57,44 @@ const parseStoredIcsExceptionDates = (
   }
 };
 
-export { parseStoredIcsExceptionDates, parseStoredIcsRecurrenceRule };
+interface StoredRecurrenceMaterializationInput {
+  eventId: string;
+  exceptionDates: string | null;
+  recurrenceId: Date | null;
+  recurrenceRule: string | null;
+}
+
+interface MaterializedRecurrenceFields {
+  exceptionDates?: Date[];
+  recurrenceId?: Date;
+  recurrenceRule?: IcsRecurrenceRule;
+}
+
+const parseStoredRecurrenceForMaterialization = (
+  input: StoredRecurrenceMaterializationInput,
+): MaterializedRecurrenceFields => {
+  const exceptionDates = parseStoredIcsExceptionDates(
+    input.exceptionDates,
+    input.eventId,
+  )?.map((exceptionDate) => exceptionDate.date);
+  const recurrenceRule = parseStoredIcsRecurrenceRule(
+    input.recurrenceRule,
+    input.eventId,
+  );
+
+  return {
+    ...(exceptionDates && { exceptionDates }),
+    ...(input.recurrenceId && { recurrenceId: input.recurrenceId }),
+    ...(recurrenceRule && { recurrenceRule }),
+  };
+};
+
+export {
+  parseStoredIcsExceptionDates,
+  parseStoredIcsRecurrenceRule,
+  parseStoredRecurrenceForMaterialization,
+};
+export type {
+  MaterializedRecurrenceFields,
+  StoredRecurrenceMaterializationInput,
+};

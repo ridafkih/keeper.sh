@@ -1,6 +1,6 @@
 import { KEEPER_CATEGORY } from "@keeper.sh/constants";
 import type { OutlookEvent } from "@keeper.sh/data-schemas";
-import type { SyncableEvent } from "../../../core/types";
+import type { MaterializedSyncableEvent } from "../../../core/types";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
 
 const formatOutlookDateTime = (value: Date, isAllDay: boolean): string => {
@@ -13,7 +13,7 @@ const formatOutlookDateTime = (value: Date, isAllDay: boolean): string => {
   return isoString.replace("Z", "");
 };
 
-const getOutlookBody = (event: SyncableEvent): OutlookEvent["body"] => {
+const getOutlookBody = (event: MaterializedSyncableEvent): OutlookEvent["body"] => {
   if (!event.description) {
     return null;
   }
@@ -24,7 +24,7 @@ const getOutlookBody = (event: SyncableEvent): OutlookEvent["body"] => {
   };
 };
 
-const getOutlookLocation = (event: SyncableEvent): OutlookEvent["location"] => {
+const getOutlookLocation = (event: MaterializedSyncableEvent): OutlookEvent["location"] => {
   if (!event.location) {
     return;
   }
@@ -34,7 +34,7 @@ const getOutlookLocation = (event: SyncableEvent): OutlookEvent["location"] => {
   };
 };
 
-const getShowAs = (availability: SyncableEvent["availability"]): string => {
+const getShowAs = (availability: MaterializedSyncableEvent["availability"]): string => {
   if (availability === "free") {
     return "free";
   }
@@ -50,7 +50,7 @@ const getShowAs = (availability: SyncableEvent["availability"]): string => {
   return "busy";
 };
 
-const serializeOutlookEvent = (event: SyncableEvent): OutlookEvent => {
+const serializeOutlookEvent = (event: MaterializedSyncableEvent): OutlookEvent => {
   const body = getOutlookBody(event);
   const isAllDay = resolveIsAllDayEvent(event);
   const location = getOutlookLocation(event);

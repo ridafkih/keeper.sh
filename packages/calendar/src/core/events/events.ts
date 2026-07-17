@@ -5,13 +5,15 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, asc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
 import type { BunSQLClient } from "../database-client";
-import type { EventAvailability, SourceEventType, SyncableEvent } from "../types";
+import type {
+  EventAvailability,
+  MaterializedSyncableEvent,
+  SourceEventType,
+  SyncableEvent,
+} from "../types";
 import { getOAuthSyncWindow } from "../oauth/sync-window";
 import type { OAuthSyncWindow } from "../oauth/sync-window";
-import {
-  parseStoredIcsExceptionDates,
-  parseStoredIcsRecurrenceRule,
-} from "./stored-recurrence";
+import { parseStoredRecurrenceForMaterialization } from "./stored-recurrence";
 import { materializeRecurrenceEvents } from "./recurrence-materializer";
 
 const EMPTY_SOURCES_COUNT = 0;
@@ -131,7 +133,7 @@ const getEventsForCalendars = async (
   database: BunSQLClient,
   calendarIds: string[],
   syncWindow: OAuthSyncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE),
-): Promise<SyncableEvent[]> => {
+): Promise<MaterializedSyncableEvent[]> => {
   if (calendarIds.length === EMPTY_SOURCES_COUNT) {
     return [];
   }
@@ -187,14 +189,17 @@ const getEventsForCalendars = async (
       continue;
     }
 
-    const parsedRecurrenceRule = parseStoredIcsRecurrenceRule(result.recurrenceRule, result.id);
-    const parsedExceptionDates = parseStoredIcsExceptionDates(result.exceptionDates, result.id)
-      ?.map((exceptionDate) => exceptionDate.date);
+    const recurrence = parseStoredRecurrenceForMaterialization({
+      eventId: result.id,
+      exceptionDates: result.exceptionDates,
+      recurrenceId: result.recurrenceId,
+      recurrenceRule: result.recurrenceRule,
+    });
 
     if (
       !isEventInDestinationReconciliationWindow(result, syncWindow.timeMin)
-      && !result.recurrenceId
-      && !parsedRecurrenceRule
+      && !recurrence.recurrenceId
+      && !recurrence.recurrenceRule
     ) {
       continue;
     }
@@ -221,9 +226,7 @@ const getEventsForCalendars = async (
       id: result.id,
       isAllDay: orAbsentBoolean(result.isAllDay),
       location: excludeOrAbsent(result.excludeEventLocation, result.location),
-      exceptionDates: parsedExceptionDates,
-      recurrenceRule: orAbsent(parsedRecurrenceRule),
-      recurrenceId: orAbsent(result.recurrenceId),
+      ...recurrence,
       sourceEventUid: result.sourceEventUid,
       startTime: result.startTime,
       startTimeZone: orAbsent(result.startTimeZone),
@@ -234,6 +237,8 @@ const getEventsForCalendars = async (
   return materializeRecurrenceEvents(syncableEvents, {
     end: syncWindow.timeMax,
     start: syncWindow.timeMin,
+  }, {
+    retainOneOffEventsAfterWindowEnd: true,
   });
 };
 
@@ -241,7 +246,7 @@ const getEventsForDestination = async (
   database: BunSQLClient,
   destinationCalendarId: string,
   syncWindow: OAuthSyncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE),
-): Promise<SyncableEvent[]> => {
+): Promise<MaterializedSyncableEvent[]> => {
   const sourceCalendarIds = await getMappedSourceCalendarIds(database, destinationCalendarId);
 
   if (sourceCalendarIds.length === EMPTY_SOURCES_COUNT) {

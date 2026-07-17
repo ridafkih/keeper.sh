@@ -12,7 +12,7 @@ import type {
   IcsExceptionDates,
   IcsRecurrenceRule,
 } from "ts-ics";
-import type { SyncableEvent } from "../../../core/types";
+import type { MaterializedSyncableEvent, SyncableEvent } from "../../../core/types";
 import { isKeeperEvent } from "../../../core/events/identity";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
 import {
@@ -23,7 +23,7 @@ import {
 const normalizeIcsText = (value: string | undefined): string | undefined =>
   value?.replaceAll(/\r\n?/g, "\n");
 
-const eventToICalString = (event: SyncableEvent, uid: string): string => {
+const eventToICalString = (event: MaterializedSyncableEvent, uid: string): string => {
   const isAllDay = resolveIsAllDayEvent(event);
   const icsEvent: IcsEvent = {
     description: normalizeIcsText(event.description),

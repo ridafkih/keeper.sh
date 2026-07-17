@@ -8,9 +8,9 @@ import { getErrorMessage } from "../../../core/utils/error";
 import type {
   DeleteResult,
   ListRemoteEventsOptions,
+  MaterializedSyncableEvent,
   PushResult,
   RemoteEvent,
-  SyncableEvent,
 } from "../../../core/types";
 import { CalDAVClient, CalDAVCreateConflictError, CalDAVHttpError } from "../shared/client";
 import {
@@ -79,7 +79,7 @@ const recoverCreateConflict = async (
   calendarUrl: string,
   uid: string,
   iCalString: string,
-  event: SyncableEvent,
+  event: MaterializedSyncableEvent,
 ): Promise<void> => {
   const existing = await client.fetchCalendarObject({
     calendarUrl,
@@ -134,7 +134,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
   const rateLimiter = new RateLimiter({ concurrency: CALDAV_RATE_LIMIT_CONCURRENCY });
 
-  const pushEvents = (events: SyncableEvent[]): Promise<PushResult[]> =>
+  const pushEvents = (events: MaterializedSyncableEvent[]): Promise<PushResult[]> =>
     Promise.all(
       events.map((event) =>
         rateLimiter.execute(async (): Promise<PushResult> => {

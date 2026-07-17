@@ -66,6 +66,15 @@ interface SyncableEvent {
   calendarUrl: string | null;
 }
 
+type MaterializedSyncableEvent = Omit<
+  SyncableEvent,
+  "exceptionDates" | "recurrenceId" | "recurrenceRule"
+> & {
+  exceptionDates?: never;
+  recurrenceId?: never;
+  recurrenceRule?: never;
+};
+
 interface PushResult {
   success: boolean;
   remoteId?: string;
@@ -104,11 +113,11 @@ interface RemoteEvent {
 }
 
 type SyncOperation =
-  | { type: "add"; event: SyncableEvent; staleMappingId?: string }
+  | { type: "add"; event: MaterializedSyncableEvent; staleMappingId?: string }
   | { type: "remove"; uid: string; deleteId: string; startTime: Date }
   | {
     type: "replace";
-    event: SyncableEvent;
+    event: MaterializedSyncableEvent;
     staleMappingId: string;
     uid: string;
     deleteId: string;
@@ -204,6 +213,7 @@ export type {
   SourcePreferenceOption,
   SourcePreferencesConfig,
   SyncableEvent,
+  MaterializedSyncableEvent,
   PushResult,
   DeleteResult,
   SyncResult,

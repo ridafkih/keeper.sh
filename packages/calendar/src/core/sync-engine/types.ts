@@ -1,13 +1,13 @@
 import type {
   DeleteResult,
   ListRemoteEventsOptions,
+  MaterializedSyncableEvent,
   PushResult,
   RemoteEvent,
-  SyncableEvent,
 } from "../types";
 
 interface CalendarSyncProvider {
-  pushEvents: (events: SyncableEvent[]) => Promise<PushResult[]>;
+  pushEvents: (events: MaterializedSyncableEvent[]) => Promise<PushResult[]>;
   deleteEvents: (eventIds: string[]) => Promise<DeleteResult[]>;
   listRemoteEvents: (options: ListRemoteEventsOptions) => Promise<RemoteEvent[]>;
 }

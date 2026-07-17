@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { generateDeterministicEventUid } from "../../../../src/core/events/identity";
-import type { SyncableEvent } from "../../../../src/core/types";
+import type { MaterializedSyncableEvent } from "../../../../src/core/types";
 import { createCalDAVSyncProvider } from "../../../../src/providers/caldav/destination/provider";
 import { CalDAVCreateConflictError, CalDAVHttpError } from "../../../../src/providers/caldav/shared/client";
 import { eventToICalString } from "../../../../src/providers/caldav/shared/ics";
@@ -46,7 +46,9 @@ vi.mock("../../../../src/providers/caldav/shared/client", () => {
   };
 });
 
-const createEvent = (overrides: Partial<SyncableEvent> = {}): SyncableEvent => ({
+const createEvent = (
+  overrides: Partial<MaterializedSyncableEvent> = {},
+): MaterializedSyncableEvent => ({
   calendarId: "source-calendar-id",
   calendarName: "Source",
   calendarUrl: null,

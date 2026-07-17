@@ -7,9 +7,9 @@ import {
 import type {
   DeleteResult,
   ListRemoteEventsOptions,
+  MaterializedSyncableEvent,
   PushResult,
   RemoteEvent,
-  SyncableEvent,
 } from "../../../core/types";
 import { getErrorMessage } from "../../../core/utils/error";
 import { ensureValidToken } from "../../../core/oauth/ensure-valid-token";
@@ -39,7 +39,9 @@ const createCaughtFailure = (error: unknown): PushResult | DeleteResult => {
   return { error: getErrorMessage(error), errorType, success: false };
 };
 
-const parseRemoteAvailability = (showAs: string | undefined): SyncableEvent["availability"] => {
+const parseRemoteAvailability = (
+  showAs: string | undefined,
+): MaterializedSyncableEvent["availability"] => {
   if (showAs === "free" || showAs === "oof" || showAs === "workingElsewhere") {
     return showAs;
   }
@@ -66,7 +68,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
 
   const calendarEventsUrl = `${MICROSOFT_GRAPH_API}/me/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
 
-  const pushEvents = async (events: SyncableEvent[]): Promise<PushResult[]> => {
+  const pushEvents = async (events: MaterializedSyncableEvent[]): Promise<PushResult[]> => {
     await refreshIfNeeded();
     const results: PushResult[] = [];
 

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createGoogleSyncProvider } from "../../../../src/providers/google/destination/provider";
 import { computeSyncOperations } from "../../../../src/core/sync/operations";
 import { createSyncEventContentHash } from "../../../../src/core/events/content-hash";
-import type { SyncableEvent } from "../../../../src/core/types";
+import type { MaterializedSyncableEvent } from "../../../../src/core/types";
 import type { RedisRateLimiter } from "../../../../src/core/utils/redis-rate-limiter";
 
 const batchMocks = vi.hoisted(() => ({
@@ -74,7 +74,7 @@ describe("createGoogleSyncProvider", () => {
   });
 
   it("converges when import and listing use Google's two different identifiers", async () => {
-    const event: SyncableEvent = {
+    const event: MaterializedSyncableEvent = {
       calendarId: "source-calendar",
       calendarName: "Source",
       calendarUrl: null,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildEventStateInsertRow,
   ingestSource,
+  materializeRecurrenceEvents,
   parseStoredSourceEventStates,
   syncCalendar,
 } from "../../src/index";
@@ -9,11 +10,11 @@ import type {
   CalendarSyncProvider,
   EventMapping,
   IngestionChanges,
+  MaterializedSyncableEvent,
   PendingChanges,
   RemoteEvent,
   SourceEvent,
   StoredSourceEventState,
-  SyncableEvent,
 } from "../../src/index";
 import { createSyncEventContentHash } from "../../src/core/events/content-hash";
 
@@ -99,8 +100,9 @@ class InMemoryEventStateStore {
     return Promise.resolve();
   };
 
-  public syncableEvents = (): SyncableEvent[] =>
-    parseStoredSourceEventStates([...this.rows.values()]).map((row) => ({
+  public syncableEvents = (): MaterializedSyncableEvent[] =>
+    materializeRecurrenceEvents(
+      parseStoredSourceEventStates([...this.rows.values()]).map((row) => ({
       calendarId: SOURCE_CALENDAR_ID,
       calendarName: "Source calendar",
       calendarUrl: null,
@@ -116,13 +118,22 @@ class InMemoryEventStateStore {
       ...(row.recurrenceId && { recurrenceId: row.recurrenceId }),
       ...(row.recurrenceRule && { recurrenceRule: row.recurrenceRule }),
       ...(row.startTimeZone && { startTimeZone: row.startTimeZone }),
-    }));
+      })),
+      {
+        end: new Date("2029-01-01T00:00:00.000Z"),
+        start: new Date("2026-01-01T00:00:00.000Z"),
+      },
+      { retainOneOffEventsAfterWindowEnd: true },
+    );
 }
 
 class StatefulDestinationProvider implements CalendarSyncProvider {
-  public readonly remoteEvents = new Map<string, SyncableEvent>();
+  public readonly remoteEvents = new Map<string, MaterializedSyncableEvent>();
   public readonly nonKeeperRemoteIds = new Set<string>();
-  public readonly calls: { deletes: string[][]; pushes: SyncableEvent[][] } = {
+  public readonly calls: {
+    deletes: string[][];
+    pushes: MaterializedSyncableEvent[][];
+  } = {
     deletes: [],
     pushes: [],
   };
@@ -156,7 +167,7 @@ class StatefulDestinationProvider implements CalendarSyncProvider {
     })),
   );
 
-  public pushEvents = (events: SyncableEvent[]) => {
+  public pushEvents = (events: MaterializedSyncableEvent[]) => {
     this.calls.pushes.push(events.map((event) => ({ ...event })));
     return Promise.resolve(events.map((event) => {
       const remoteId = `remote-${this.nextRemoteId++}`;
@@ -172,7 +183,7 @@ class StatefulDestinationProvider implements CalendarSyncProvider {
 
   public seedRemote = (
     remoteId: string,
-    event: SyncableEvent,
+    event: MaterializedSyncableEvent,
     isKeeperEvent: boolean,
   ): void => {
     this.remoteEvents.set(remoteId, { ...event });
@@ -222,6 +233,10 @@ describe.each<ScenarioKind>([
     const eventStates = new InMemoryEventStateStore();
     const mappings = new InMemoryMappingStore();
     const provider = new StatefulDestinationProvider();
+    let expectedEventCount = 1;
+    if (kind === "recurring master") {
+      expectedEventCount = 6;
+    }
 
     const runSync = () => syncCalendar({
       calendarId: DESTINATION_CALENDAR_ID,
@@ -241,9 +256,9 @@ describe.each<ScenarioKind>([
     expect(originalEventStateId).toBeDefined();
 
     const initialResult = await runSync();
-    expect(initialResult).toMatchObject({ added: 1, removed: 0 });
-    expect(provider.remoteEvents).toHaveLength(1);
-    expect(mappings.mappings).toHaveLength(1);
+    expect(initialResult).toMatchObject({ added: expectedEventCount, removed: 0 });
+    expect(provider.remoteEvents).toHaveLength(expectedEventCount);
+    expect(mappings.mappings).toHaveLength(expectedEventCount);
     const [initialMapping] = [...mappings.mappings.values()];
     const [initialLocalEvent] = eventStates.syncableEvents();
     expect(initialMapping?.eventStateId).toBe(originalEventStateId);
@@ -258,20 +273,28 @@ describe.each<ScenarioKind>([
     provider.resetCalls();
     provider.failNextDelete = true;
     const failedMove = await runSync();
-    expect(failedMove).toMatchObject({ added: 0, removeFailed: 1, removed: 0 });
+    expect(failedMove).toMatchObject({
+      added: 0,
+      removeFailed: expectedEventCount,
+      removed: 0,
+    });
     expect(provider.calls.deletes).toHaveLength(1);
     expect(provider.calls.pushes).toHaveLength(0);
-    expect(provider.remoteEvents).toHaveLength(1);
-    expect(mappings.mappings).toHaveLength(1);
+    expect(provider.remoteEvents).toHaveLength(expectedEventCount);
+    expect(mappings.mappings).toHaveLength(expectedEventCount);
     expect([...mappings.mappings.values()][0]?.id).toBe(initialMapping?.id);
 
     provider.resetCalls();
     const retry = await runSync();
-    expect(retry).toMatchObject({ added: 1, removeFailed: 0, removed: 1 });
+    expect(retry).toMatchObject({
+      added: expectedEventCount,
+      removeFailed: 0,
+      removed: expectedEventCount,
+    });
     expect(provider.calls.deletes).toHaveLength(1);
     expect(provider.calls.pushes).toHaveLength(1);
-    expect(provider.remoteEvents).toHaveLength(1);
-    expect(mappings.mappings).toHaveLength(1);
+    expect(provider.remoteEvents).toHaveLength(expectedEventCount);
+    expect(mappings.mappings).toHaveLength(expectedEventCount);
     expect([...provider.remoteEvents.values()][0]?.startTime).toEqual(MOVED_START);
     expect([...mappings.mappings.values()][0]?.eventStateId).toBe(originalEventStateId);
 
@@ -292,12 +315,12 @@ describe.each<ScenarioKind>([
     expect(tamperRepair).toMatchObject({ added: 1, removed: 1 });
     expect(provider.calls.deletes).toHaveLength(1);
     expect(provider.calls.pushes).toHaveLength(1);
-    expect(provider.remoteEvents).toHaveLength(1);
-    expect(mappings.mappings).toHaveLength(1);
-    expect([...provider.remoteEvents.values()][0]).toMatchObject({
-      endTime: MOVED_END,
-      startTime: MOVED_START,
-    });
+    expect(provider.remoteEvents).toHaveLength(expectedEventCount);
+    expect(mappings.mappings).toHaveLength(expectedEventCount);
+    expect([...provider.remoteEvents.values()].some((event) =>
+      event.startTime.getTime() === MOVED_START.getTime()
+      && event.endTime.getTime() === MOVED_END.getTime()
+    )).toBe(true);
 
     provider.resetCalls();
     await runSync();

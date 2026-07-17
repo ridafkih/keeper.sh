@@ -5,7 +5,10 @@ import {
   createSyncEventContentHash,
 } from "../../../src/core/events/content-hash";
 import type { EventMapping } from "../../../src/core/events/mappings";
-import type { RemoteEvent, SyncableEvent } from "../../../src/core/types";
+import type {
+  MaterializedSyncableEvent,
+  RemoteEvent,
+} from "../../../src/core/types";
 
 const createEventMapping = (overrides: Partial<EventMapping>): EventMapping => ({
   calendarId: "destination-calendar-id",
@@ -29,7 +32,9 @@ const createRemoteEvent = (overrides: Partial<RemoteEvent>): RemoteEvent => ({
   ...overrides,
 });
 
-const createLocalEvent = (overrides: Partial<SyncableEvent>): SyncableEvent => ({
+const createLocalEvent = (
+  overrides: Partial<MaterializedSyncableEvent>,
+): MaterializedSyncableEvent => ({
   calendarId: "source-calendar-id",
   calendarName: "Source",
   calendarUrl: null,

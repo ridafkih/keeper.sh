@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { SyncableEvent } from "../../../../src/core/types";
+import type { MaterializedSyncableEvent } from "../../../../src/core/types";
 import { createOutlookSyncProvider } from "../../../../src/providers/outlook/destination/provider";
 import { KEEPER_CATEGORY } from "@keeper.sh/constants";
 
@@ -14,7 +14,7 @@ const createProvider = (signal?: AbortSignal) =>
     signal,
   });
 
-const createEvent = (): SyncableEvent => ({
+const createEvent = (): MaterializedSyncableEvent => ({
   calendarId: "source-calendar-id",
   calendarName: "Source",
   calendarUrl: null,

@@ -81,11 +81,15 @@ export {
 } from "./core/events/events";
 export {
   materializeRecurrenceEvents,
+  type RecurrenceMaterializationOptions,
   type RecurrenceMaterializationWindow,
 } from "./core/events/recurrence-materializer";
 export {
   parseStoredIcsExceptionDates,
   parseStoredIcsRecurrenceRule,
+  parseStoredRecurrenceForMaterialization,
+  type MaterializedRecurrenceFields,
+  type StoredRecurrenceMaterializationInput,
 } from "./core/events/stored-recurrence";
 export {
   buildSourceEventIdentityKey,
@@ -169,6 +173,7 @@ export type {
   ProviderDefinition,
   SourcePreferenceOption,
   SourcePreferencesConfig,
+  MaterializedSyncableEvent,
   SyncableEvent,
   PushResult,
   DeleteResult,

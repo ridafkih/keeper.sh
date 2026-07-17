@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { executeRemoteOperations } from "../../../src/core/sync-engine/index";
-import type { SyncOperation, PushResult, DeleteResult, SyncableEvent } from "../../../src/core/types";
+import type {
+  DeleteResult,
+  MaterializedSyncableEvent,
+  PushResult,
+  SyncOperation,
+} from "../../../src/core/types";
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { PendingChanges } from "../../../src/core/sync-engine/types";
 import { createSyncEventContentHash } from "../../../src/core/events/content-hash";
 
-const makeEvent = (id: string, startTime: Date, endTime: Date): SyncableEvent => ({
+const makeEvent = (
+  id: string,
+  startTime: Date,
+  endTime: Date,
+): MaterializedSyncableEvent => ({
   id,
   sourceEventUid: `uid-${id}`,
   startTime,
@@ -29,7 +38,7 @@ const makeMapping = (id: string, eventStateId: string, destinationEventUid: stri
 });
 
 const makeProvider = (overrides: Partial<{
-  pushEvents: (events: SyncableEvent[]) => Promise<PushResult[]>;
+  pushEvents: (events: MaterializedSyncableEvent[]) => Promise<PushResult[]>;
   deleteEvents: (eventIds: string[]) => Promise<DeleteResult[]>;
   listRemoteEvents: () => Promise<never[]>;
 }> = {}) => ({

@@ -5,9 +5,9 @@ import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import type {
   DeleteResult,
   ListRemoteEventsOptions,
+  MaterializedSyncableEvent,
   PushResult,
   RemoteEvent,
-  SyncableEvent,
 } from "../../../core/types";
 import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS, PROVIDER_PUSH_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
@@ -161,7 +161,9 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   const eventsPath = `/calendar/v3/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
 
   // Writes go through events.import, which upserts by iCalUID: re-pushing an existing event updates it rather than 409ing.
-  const buildPushRequest = (event: SyncableEvent): { uid: string; request: BatchSubRequest } | null => {
+  const buildPushRequest = (
+    event: MaterializedSyncableEvent,
+  ): { uid: string; request: BatchSubRequest } | null => {
     const uid = generateDeterministicEventUid(`${event.id}:${config.externalCalendarId}`);
     const resource = serializeGoogleEvent(event, uid);
     if (!resource) {
@@ -178,7 +180,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     };
   };
 
-  const pushEvents = async (events: SyncableEvent[]): Promise<PushResult[]> => {
+  const pushEvents = async (events: MaterializedSyncableEvent[]): Promise<PushResult[]> => {
     await refreshIfNeeded();
 
     const results: PushResult[] = Array.from({ length: events.length });
@@ -401,7 +403,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       if (!startTime || !endTime) {
         continue;
       }
-      let availability: SyncableEvent["availability"] = "busy";
+      let availability: MaterializedSyncableEvent["availability"] = "busy";
       if (event.transparency === "transparent") {
         availability = "free";
       }
