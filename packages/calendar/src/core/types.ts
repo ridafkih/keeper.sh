@@ -57,6 +57,7 @@ interface SyncableEvent {
   summary: string;
   description?: string;
   location?: string;
+  isPrivate?: boolean;
   calendarId: string;
   calendarName: string | null;
   calendarUrl: string | null;

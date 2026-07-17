@@ -54,6 +54,7 @@ const eventToICalString = (event: SyncableEvent, uid: string): string => {
     start: buildZonedIcsDate(event.startTime, event.startTimeZone, isAllDay),
     summary: event.summary,
     ...(event.availability === "free" && { timeTransparent: "TRANSPARENT" }),
+    ...(event.isPrivate && { class: "PRIVATE" }),
     uid,
   };
 

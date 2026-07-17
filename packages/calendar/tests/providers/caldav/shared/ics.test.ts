@@ -143,6 +143,43 @@ describe("eventToICalString", () => {
     expect(icsString).toContain("DTSTART;VALUE=DATE:20260308");
     expect(icsString).not.toContain("TZID=");
   });
+
+  it("includes CLASS:PRIVATE when isPrivate is true", () => {
+    const icsString = eventToICalString(
+      {
+        calendarId: "calendar-id",
+        calendarName: "Calendar",
+        calendarUrl: null,
+        endTime: new Date("2026-03-09T17:00:00.000Z"),
+        id: "event-id",
+        isPrivate: true,
+        sourceEventUid: "source-uid",
+        startTime: new Date("2026-03-09T16:00:00.000Z"),
+        summary: "Doctor appointment",
+      },
+      "destination-uid",
+    );
+
+    expect(icsString).toContain("CLASS:PRIVATE");
+  });
+
+  it("omits CLASS when isPrivate is not set", () => {
+    const icsString = eventToICalString(
+      {
+        calendarId: "calendar-id",
+        calendarName: "Calendar",
+        calendarUrl: null,
+        endTime: new Date("2026-03-09T17:00:00.000Z"),
+        id: "event-id",
+        sourceEventUid: "source-uid",
+        startTime: new Date("2026-03-09T16:00:00.000Z"),
+        summary: "Team lunch",
+      },
+      "destination-uid",
+    );
+
+    expect(icsString).not.toContain("CLASS:");
+  });
 });
 
 describe("parseICalToRemoteEvents", () => {

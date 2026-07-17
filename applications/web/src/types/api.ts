@@ -49,6 +49,7 @@ export interface CalendarDetail {
   excludeFocusTime: boolean;
   excludeOutOfOffice: boolean;
   treatFullDayTimedEventsAsAllDay: boolean;
+  markEventsAsPrivate: boolean;
   destinationIds: string[];
   sourceIds: string[];
   createdAt: string;
