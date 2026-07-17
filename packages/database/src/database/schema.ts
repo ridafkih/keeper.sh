@@ -134,6 +134,7 @@ const calendarsTable = pgTable(
     ingestWindowEnd: timestamp({ withTimezone: true }),
     ingestWindowRecordedAt: timestamp({ withTimezone: true }),
     ingestWindowStart: timestamp({ withTimezone: true }),
+    providerMissingSince: timestamp({ withTimezone: true }),
     externalCalendarId: text(),
     id: uuid().notNull().primaryKey().defaultRandom(),
     capabilities: text().array().notNull().default(["pull"]),

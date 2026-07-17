@@ -14,6 +14,7 @@ const EVENT_FILTER_FIELDS = [
 
 const SOURCE_BOOLEAN_UPDATE_FIELDS = [
   ...EVENT_FILTER_FIELDS,
+  "disabled",
   "includeInIcalFeed",
   "treatFullDayTimedEventsAsAllDay",
 ] as const;
@@ -35,19 +36,21 @@ interface PatchSourceRouteContext extends SourceRouteContext {
   body: unknown;
 }
 
+type SourceUpdateValue = string | boolean | number | null;
+
 interface PatchSourceDependencies {
   updateSource: (
     userId: string,
     sourceCalendarId: string,
-    updates: Record<string, string | boolean>,
+    updates: Record<string, SourceUpdateValue>,
   ) => Promise<Record<string, unknown> | null>;
   canUseEventFilters: (userId: string) => Promise<boolean>;
 }
 
 const buildSourceUpdates = (
   body: SourcePatchBody,
-): Record<string, string | boolean> => {
-  const updates: Record<string, string | boolean> = {};
+): Record<string, SourceUpdateValue> => {
+  const updates: Record<string, SourceUpdateValue> = {};
 
   if (body.name) {
     updates.name = body.name;
@@ -66,6 +69,14 @@ const buildSourceUpdates = (
     if (typeof body[field] === "boolean") {
       updates[field] = body[field];
     }
+  }
+
+  // Re-enabling is a deliberate action after fixing the underlying problem.
+  // Clear the stale ingest backoff too, so the next cron run retries immediately.
+  if (body.disabled === false) {
+    updates.ingestFailureCount = 0;
+    updates.ingestLastFailureAt = null;
+    updates.ingestNextAttemptAt = null;
   }
 
   return updates;

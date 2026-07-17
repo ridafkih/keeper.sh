@@ -1,0 +1,1 @@
+ALTER TABLE "calendars" ADD COLUMN "providerMissingSince" timestamp with time zone;

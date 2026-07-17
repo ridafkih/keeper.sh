@@ -44,6 +44,10 @@ const GET = withWideEvent(
         syncHistoricRange: calendarsTable.syncHistoricRange,
         treatFullDayTimedEventsAsAllDay: calendarsTable.treatFullDayTimedEventsAsAllDay,
         unavailableSince: calendarsTable.unavailableSince,
+        disabled: calendarsTable.disabled,
+        ingestFailureCount: calendarsTable.ingestFailureCount,
+        ingestLastFailureAt: calendarsTable.ingestLastFailureAt,
+        providerMissingSince: calendarsTable.providerMissingSince,
         createdAt: calendarsTable.createdAt,
         updatedAt: calendarsTable.updatedAt,
       })

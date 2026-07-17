@@ -21,13 +21,18 @@ const listSources = async (database: KeeperDatabase, userId: string): Promise<Ke
       needsReauthentication: calendarAccountsTable.needsReauthentication,
       includeInIcalFeed: calendarsTable.includeInIcalFeed,
       unavailableSince: calendarsTable.unavailableSince,
+      disabled: calendarsTable.disabled,
+      providerMissingSince: calendarsTable.providerMissingSince,
     })
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
     .where(eq(calendarsTable.userId, userId))
     .orderBy(asc(calendarsTable.createdAt));
 
-  return calendars.map((calendar) => withAccountDisplay(calendar));
+  return calendars.map((calendar) => withAccountDisplay({
+    ...calendar,
+    providerMissingSince: calendar.providerMissingSince?.toISOString() ?? null,
+  }));
 };
 
 export { listSources };

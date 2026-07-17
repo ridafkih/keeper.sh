@@ -47,8 +47,10 @@ import {
   calendarDetailAtom,
   calendarDetailLoadedAtom,
   calendarDetailErrorAtom,
+  calendarDisabledAtom,
   calendarNameAtom,
   calendarProviderAtom,
+  calendarProviderMissingSinceAtom,
   calendarTypeAtom,
   customEventNameAtom,
   excludeEventNameAtom,
@@ -157,7 +159,9 @@ function CalendarDetailPage() {
         <CalendarPrevNext calendarId={calendarId} />
       </div>
       <CalendarHeader account={account} />
+      <ProviderMissingNotice />
       <RenameSection calendarId={calendarId} />
+      <SyncStatusSection calendarId={calendarId} />
       {isPullCapable && (
         <>
           <DashboardSection
@@ -381,6 +385,65 @@ function RenameItemValue() {
     >
       {name}
     </Text>
+  );
+}
+
+function ProviderMissingNotice() {
+  const providerMissingSince = useAtomValue(calendarProviderMissingSinceAtom);
+  if (!providerMissingSince) return null;
+
+  return (
+    <Text size="sm" tone="danger" className="px-0.5">
+      This calendar was not found the last time its connection was refreshed
+      (since {formatDate(providerMissingSince)}) - it may have been deleted or renamed at the
+      provider. Refresh the connection again to confirm, or disable syncing for it below.
+    </Text>
+  );
+}
+
+function SyncStatusSection({ calendarId }: { calendarId: string }) {
+  return (
+    <>
+      <DashboardSection
+        title="Sync Status"
+        description="Turn syncing off for this calendar without disconnecting the whole account."
+      />
+      <NavigationMenu>
+        <SyncEnabledToggle calendarId={calendarId} />
+      </NavigationMenu>
+    </>
+  );
+}
+
+function SyncEnabledToggle({ calendarId }: { calendarId: string }) {
+  const store = useStore();
+  const variant = use(MenuVariantContext);
+  const disabled = useAtomValue(calendarDisabledAtom);
+
+  const handleClick = () => {
+    const current = store.get(calendarDetailAtom);
+    if (!current) return;
+
+    const nextDisabled = !current.disabled;
+    track(ANALYTICS_EVENTS.calendar_setting_toggled, { enabled: !nextDisabled, field: "disabled" });
+    store.set(calendarDetailAtom, (prev) => (prev ? { ...prev, disabled: nextDisabled } : prev));
+    patchSource(store, calendarId, { disabled: nextDisabled });
+  };
+
+  return (
+    <li>
+      <button
+        type="button"
+        role="switch"
+        onClick={handleClick}
+        className={navigationMenuItemStyle({ variant, interactive: true })}
+      >
+        <NavigationMenuItemLabel>Sync Enabled</NavigationMenuItemLabel>
+        <div className={navigationMenuToggleTrack({ variant, checked: !disabled, disabled: false, className: "ml-auto" })}>
+          <div className={navigationMenuToggleThumb({ variant, checked: !disabled })} />
+        </div>
+      </button>
+    </li>
   );
 }
 
