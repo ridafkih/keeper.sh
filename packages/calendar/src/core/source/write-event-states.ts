@@ -1,21 +1,48 @@
 import { eventStatesTable } from "@keeper.sh/database/schema";
 import { isNotNull, isNull, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
+import type { SourceEvent } from "../types";
+import { buildSourceEventInstanceKey } from "./event-instance";
 
 const EMPTY_ROW_COUNT = 0;
 
 type EventStateInsertRow = typeof eventStatesTable.$inferInsert;
 
+const serializeOptionalJson = (value: unknown): string | null => {
+  if (!value) {
+    return null;
+  }
+  return JSON.stringify(value);
+};
+
+const buildEventStateInsertRow = (
+  calendarId: string,
+  event: SourceEvent,
+): EventStateInsertRow => ({
+  availability: event.availability,
+  calendarId,
+  description: event.description,
+  endTime: event.endTime,
+  exceptionDates: serializeOptionalJson(event.exceptionDates),
+  isAllDay: event.isAllDay,
+  location: event.location,
+  recurrenceId: event.recurrenceId,
+  recurrenceRule: serializeOptionalJson(event.recurrenceRule),
+  sourceEventId: event.sourceEventId,
+  sourceEventInstanceKey: buildSourceEventInstanceKey(event),
+  sourceEventType: event.sourceEventType ?? "default",
+  sourceEventUid: event.uid,
+  startTime: event.startTime,
+  startTimeZone: event.startTimeZone,
+  title: event.title,
+});
+
 const LEGACY_EVENT_STATE_CONFLICT_TARGET: [
   typeof eventStatesTable.calendarId,
-  typeof eventStatesTable.sourceEventUid,
-  typeof eventStatesTable.startTime,
-  typeof eventStatesTable.endTime,
+  typeof eventStatesTable.sourceEventInstanceKey,
 ] = [
   eventStatesTable.calendarId,
-  eventStatesTable.sourceEventUid,
-  eventStatesTable.startTime,
-  eventStatesTable.endTime,
+  eventStatesTable.sourceEventInstanceKey,
 ];
 
 const PROVIDER_EVENT_STATE_CONFLICT_TARGET: [
@@ -38,15 +65,16 @@ const EVENT_STATE_CONFLICT_SET = {
   recurrenceId: excludedColumn(eventStatesTable.recurrenceId.name),
   sourceEventId: excludedColumn(eventStatesTable.sourceEventId.name),
   sourceEventType: excludedColumn(eventStatesTable.sourceEventType.name),
+  sourceEventUid: excludedColumn(eventStatesTable.sourceEventUid.name),
+  startTime: excludedColumn(eventStatesTable.startTime.name),
   startTimeZone: excludedColumn(eventStatesTable.startTimeZone.name),
+  endTime: excludedColumn(eventStatesTable.endTime.name),
   title: excludedColumn(eventStatesTable.title.name),
 };
 
 const PROVIDER_EVENT_STATE_CONFLICT_SET = {
   ...EVENT_STATE_CONFLICT_SET,
-  endTime: excludedColumn(eventStatesTable.endTime.name),
-  sourceEventUid: excludedColumn(eventStatesTable.sourceEventUid.name),
-  startTime: excludedColumn(eventStatesTable.startTime.name),
+  sourceEventInstanceKey: excludedColumn(eventStatesTable.sourceEventInstanceKey.name),
 };
 
 type EventStateConflictTarget =
@@ -109,5 +137,5 @@ const insertEventStatesWithConflictResolution = async (
   });
 };
 
-export { insertEventStatesWithConflictResolution };
+export { buildEventStateInsertRow, insertEventStatesWithConflictResolution };
 export type { EventStateInsertRow, EventStateInsertClient };

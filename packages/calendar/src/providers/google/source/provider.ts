@@ -1,6 +1,9 @@
 import { buildSourceEventStateIdsToRemove, buildSourceEventsToAdd } from "../../../core/source/event-diff";
 import { filterSourceEventsToSyncWindow, resolveSourceSyncTokenAction, splitSourceEventsByPersistenceIdentity } from "../../../core/source/sync-diagnostics";
-import { insertEventStatesWithConflictResolution } from "../../../core/source/write-event-states";
+import {
+  buildEventStateInsertRow,
+  insertEventStatesWithConflictResolution,
+} from "../../../core/source/write-event-states";
 import { OAuthSourceProvider, type ProcessEventsOptions } from "../../../core/oauth/source-provider";
 import type { FetchEventsResult as BaseFetchEventsResult } from "../../../core/oauth/source-provider";
 import { createOAuthSourceProvider, type SourceProvider } from "../../../core/oauth/create-source-provider";
@@ -22,12 +25,6 @@ import { fetchCalendarEvents, parseGoogleEvents } from "./utils/fetch-events";
 const GOOGLE_PROVIDER_ID = "google";
 const EMPTY_COUNT = 0;
 
-const stringifyIfPresent = (value: unknown) => {
-  if (!value) {
-    return;
-  }
-  return JSON.stringify(value);
-};
 const YEARS_UNTIL_FUTURE = 2;
 
 interface GoogleSourceConfig extends OAuthSourceConfig {
@@ -123,6 +120,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
         recurrenceRule: eventStatesTable.recurrenceRule,
         sourceEventType: eventStatesTable.sourceEventType,
         sourceEventId: eventStatesTable.sourceEventId,
+        sourceEventInstanceKey: eventStatesTable.sourceEventInstanceKey,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
         startTimeZone: eventStatesTable.startTimeZone,
@@ -158,22 +156,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
         if (eventsToAdd.length > EMPTY_COUNT) {
           await insertEventStatesWithConflictResolution(
             transactionDatabase,
-            eventsToAdd.map((event) => ({
-              availability: event.availability,
-              calendarId,
-              description: event.description,
-              endTime: event.endTime,
-              exceptionDates: stringifyIfPresent(event.exceptionDates),
-              isAllDay: event.isAllDay,
-              location: event.location,
-              recurrenceRule: stringifyIfPresent(event.recurrenceRule),
-              sourceEventType: event.sourceEventType,
-              sourceEventId: event.sourceEventId,
-              sourceEventUid: event.uid,
-              startTime: event.startTime,
-              startTimeZone: event.startTimeZone,
-              title: event.title,
-            })),
+            eventsToAdd.map((event) => buildEventStateInsertRow(calendarId, event)),
           );
         }
       });

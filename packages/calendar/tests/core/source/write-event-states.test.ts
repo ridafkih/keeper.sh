@@ -1,9 +1,31 @@
 import { describe, expect, it } from "vitest";
 import { eventStatesTable } from "@keeper.sh/database/schema";
 import type { EventStateInsertRow } from "../../../src/core/source/write-event-states";
-import { insertEventStatesWithConflictResolution } from "../../../src/core/source/write-event-states";
+import {
+  buildEventStateInsertRow,
+  insertEventStatesWithConflictResolution,
+} from "../../../src/core/source/write-event-states";
 
 describe("insertEventStatesWithConflictResolution", () => {
+  it("persists recurrence metadata and derives a stable instance key", () => {
+    const recurrenceId = new Date("2026-03-05T10:00:00.000Z");
+    const row = buildEventStateInsertRow("calendar-1", {
+      endTime: new Date("2026-03-12T11:00:00.000Z"),
+      exceptionDates: [new Date("2026-03-19T10:00:00.000Z")],
+      recurrenceId,
+      recurrenceRule: { frequency: "WEEKLY" },
+      startTime: new Date("2026-03-12T10:00:00.000Z"),
+      uid: "uid-1",
+    });
+
+    expect(row.recurrenceId).toBe(recurrenceId);
+    expect(row.recurrenceRule).toBe('{"frequency":"WEEKLY"}');
+    expect(row.exceptionDates).toBe('["2026-03-19T10:00:00.000Z"]');
+    expect(row.sourceEventInstanceKey).toBe(
+      "recurrence|uid-1|2026-03-05T10:00:00.000Z",
+    );
+  });
+
   it("skips database writes when there are no rows", async () => {
     let insertCalled = false;
 
@@ -31,6 +53,7 @@ describe("insertEventStatesWithConflictResolution", () => {
         endTime: new Date("2026-03-12T11:00:00.000Z"),
         sourceEventId: "provider-event-1",
         sourceEventType: "default",
+        sourceEventInstanceKey: "slot|uid-1|2026-03-12T10:00:00.000Z|2026-03-12T11:00:00.000Z",
         sourceEventUid: "uid-1",
         startTime: new Date("2026-03-12T10:00:00.000Z"),
         title: "Focus Block",
@@ -93,6 +116,7 @@ describe("insertEventStatesWithConflictResolution", () => {
       "recurrenceId",
       "recurrenceRule",
       "sourceEventId",
+      "sourceEventInstanceKey",
       "sourceEventType",
       "sourceEventUid",
       "startTime",
@@ -103,9 +127,7 @@ describe("insertEventStatesWithConflictResolution", () => {
     expect(legacyCall?.insertedRows).toEqual([rows[1]]);
     expect(legacyCall?.conflictConfig.target).toEqual([
       eventStatesTable.calendarId,
-      eventStatesTable.sourceEventUid,
-      eventStatesTable.startTime,
-      eventStatesTable.endTime,
+      eventStatesTable.sourceEventInstanceKey,
     ]);
     expect(legacyCall?.conflictConfig.targetWhere).toBeDefined();
   });

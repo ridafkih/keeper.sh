@@ -13,15 +13,17 @@ interface ExistingEventState {
   title: string | null;
   description: string | null;
   location: string | null;
-  exceptionDates?: string | null;
-  recurrenceId?: Date | null;
-  recurrenceRule?: string | null;
-  startTimeZone?: string | null;
+  exceptionDates: string | null;
+  recurrenceId: Date | null;
+  recurrenceRule: string | null;
+  sourceEventInstanceKey: string | null;
+  startTimeZone: string | null;
 }
 
 interface FetchEventsResult {
   events: SourceEvent[];
   changedEventIds?: string[];
+  snapshot?: CalendarSnapshotChange;
   nextSyncToken?: string;
   cancelledEventIds?: string[];
   isDeltaSync?: boolean;
@@ -32,7 +34,13 @@ interface FetchEventsResult {
 interface IngestionChanges {
   inserts: SourceEvent[];
   deletes: string[];
+  snapshot?: CalendarSnapshotChange;
   syncToken?: string | null;
+}
+
+interface CalendarSnapshotChange {
+  contentHash: string;
+  ical: string;
 }
 
 interface IngestSourceOptions {
@@ -103,8 +111,15 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     wideEvent["events.removed"] = eventStateIdsToRemove.length;
 
     if (eventsToAdd.length === 0 && eventStateIdsToRemove.length === 0) {
-      if (fetchResult.nextSyncToken) {
-        await flush({ inserts: [], deletes: [], syncToken: fetchResult.nextSyncToken });
+      if (fetchResult.nextSyncToken || fetchResult.snapshot) {
+        const changes: IngestionChanges = { inserts: [], deletes: [] };
+        if (fetchResult.nextSyncToken) {
+          changes.syncToken = fetchResult.nextSyncToken;
+        }
+        if (fetchResult.snapshot) {
+          changes.snapshot = fetchResult.snapshot;
+        }
+        await flush(changes);
         flushed = true;
         wideEvent["outcome"] = "in-sync";
         wideEvent["flushed"] = true;
@@ -123,6 +138,9 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
 
     if (typeof fetchResult.nextSyncToken === "string") {
       changes.syncToken = fetchResult.nextSyncToken;
+    }
+    if (fetchResult.snapshot) {
+      changes.snapshot = fetchResult.snapshot;
     }
 
     await flush(changes);
@@ -152,4 +170,11 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
 };
 
 export { ingestSource };
-export type { IngestSourceOptions, IngestionResult, IngestionChanges, ExistingEventState, FetchEventsResult };
+export type {
+  CalendarSnapshotChange,
+  IngestSourceOptions,
+  IngestionResult,
+  IngestionChanges,
+  ExistingEventState,
+  FetchEventsResult,
+};

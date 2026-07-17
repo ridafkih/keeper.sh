@@ -20,6 +20,11 @@ interface ExistingEvent {
   title: string | null;
   description: string | null;
   location: string | null;
+  exceptionDates: string | null;
+  recurrenceId: Date | null;
+  recurrenceRule: string | null;
+  sourceEventInstanceKey: string | null;
+  startTimeZone: string | null;
 }
 
 interface StatefulIngestion {
@@ -32,13 +37,20 @@ const toExistingEvent = (id: string, event: SourceEvent): ExistingEvent => ({
   availability: event.availability ?? null,
   description: event.description ?? null,
   endTime: event.endTime,
+  exceptionDates: event.exceptionDates ? JSON.stringify(event.exceptionDates) : null,
   id,
   isAllDay: event.isAllDay ?? null,
   location: event.location ?? null,
+  recurrenceId: event.recurrenceId ?? null,
+  recurrenceRule: event.recurrenceRule ? JSON.stringify(event.recurrenceRule) : null,
   sourceEventId: event.sourceEventId ?? null,
+  sourceEventInstanceKey: event.recurrenceId
+    ? `recurrence|${event.uid}|${event.recurrenceId.toISOString()}`
+    : `slot|${event.uid}|${event.startTime.toISOString()}|${event.endTime.toISOString()}`,
   sourceEventType: event.sourceEventType ?? null,
   sourceEventUid: event.uid,
   startTime: event.startTime,
+  startTimeZone: event.startTimeZone ?? null,
   title: event.title ?? null,
 });
 
@@ -152,7 +164,12 @@ describe("ingestSource", () => {
       sourceEventType: null,
       title: null,
       description: null,
+      exceptionDates: null,
       location: null,
+      recurrenceId: null,
+      recurrenceRule: null,
+      sourceEventInstanceKey: "slot|uid-1|2026-03-15T09:00:00.000Z|2026-03-15T10:00:00.000Z",
+      startTimeZone: null,
     };
 
     const flushCapture: { inserts: unknown[]; deletes: string[] }[] = [];
@@ -180,10 +197,15 @@ describe("ingestSource", () => {
       id: "state-old-time",
       isAllDay: null,
       location: null,
+      exceptionDates: null,
+      recurrenceId: null,
+      recurrenceRule: null,
       sourceEventType: null,
       sourceEventId: "provider-event-moved",
+      sourceEventInstanceKey: "slot|uid-moved|2026-03-15T09:00:00.000Z|2026-03-15T10:00:00.000Z",
       sourceEventUid: "uid-moved",
       startTime: new Date("2026-03-15T09:00:00Z"),
+      startTimeZone: null,
       title: null,
     };
     const movedEvent = {
@@ -405,6 +427,24 @@ describe("ingestSource", () => {
     expect(flushCalled).toBe(false);
   });
 
+  it("flushes a changed snapshot even when the event set is already in sync", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const snapshot = { contentHash: "new-hash", ical: "BEGIN:VCALENDAR" };
+    const flushedSnapshots: unknown[] = [];
+
+    await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({ events: [], snapshot }),
+      readExistingEvents: () => Promise.resolve([]),
+      flush: (changes) => {
+        flushedSnapshots.push(changes.snapshot);
+        return Promise.resolve();
+      },
+    });
+
+    expect(flushedSnapshots).toEqual([snapshot]);
+  });
+
   it("includes sync token in flush when provided by fetchEvents", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
 
@@ -456,7 +496,12 @@ describe("ingestSource", () => {
       sourceEventType: null,
       title: null,
       description: null,
+      exceptionDates: null,
       location: null,
+      recurrenceId: null,
+      recurrenceRule: null,
+      sourceEventInstanceKey: "slot|uid-1|2026-03-15T09:00:00.000Z|2026-03-15T10:00:00.000Z",
+      startTimeZone: null,
     };
 
     const flushCapture: { inserts: unknown[]; deletes: string[]; syncToken?: string | null }[] = [];

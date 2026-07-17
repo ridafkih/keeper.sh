@@ -1,6 +1,7 @@
 import { calendarSnapshotsTable, calendarsTable } from "@keeper.sh/database/schema";
 import { eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { CalendarSnapshotChange } from "../../core/sync-engine/ingest";
 
 const computeContentHash = async (content: string): Promise<string> => {
   const encoded = new TextEncoder().encode(content);
@@ -15,15 +16,16 @@ const computeContentHash = async (content: string): Promise<string> => {
   return hexParts.join("");
 };
 
-interface CreateSnapshotResult {
+interface PrepareSnapshotResult {
   changed: boolean;
+  snapshot?: CalendarSnapshotChange;
 }
 
-const createSnapshot = async (
+const prepareCalendarSnapshot = async (
   database: BunSQLDatabase,
   calendarId: string,
   ical: string,
-): Promise<CreateSnapshotResult> => {
+): Promise<PrepareSnapshotResult> => {
   const [calendar] = await database
     .select({ id: calendarsTable.id })
     .from(calendarsTable)
@@ -44,15 +46,32 @@ const createSnapshot = async (
     return { changed: false };
   }
 
-  await database
-    .insert(calendarSnapshotsTable)
-    .values({ ical, calendarId, contentHash })
-    .onConflictDoUpdate({
-      target: calendarSnapshotsTable.calendarId,
-      set: { ical, contentHash, createdAt: new Date() },
-    });
-
-  return { changed: true };
+  return {
+    changed: true,
+    snapshot: { ical, contentHash },
+  };
 };
 
-export { createSnapshot };
+const persistCalendarSnapshot = async (
+  database: Pick<BunSQLDatabase, "insert">,
+  calendarId: string,
+  snapshot: CalendarSnapshotChange,
+): Promise<void> => {
+  await database
+    .insert(calendarSnapshotsTable)
+    .values({
+      calendarId,
+      contentHash: snapshot.contentHash,
+      ical: snapshot.ical,
+    })
+    .onConflictDoUpdate({
+      target: calendarSnapshotsTable.calendarId,
+      set: {
+        contentHash: snapshot.contentHash,
+        createdAt: new Date(),
+        ical: snapshot.ical,
+      },
+    });
+};
+
+export { persistCalendarSnapshot, prepareCalendarSnapshot };

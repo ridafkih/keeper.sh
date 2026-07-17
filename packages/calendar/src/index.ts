@@ -94,6 +94,7 @@ export {
   type SourceSyncTokenAction,
 } from "./core/source/sync-diagnostics";
 export {
+  buildEventStateInsertRow,
   insertEventStatesWithConflictResolution,
   type EventStateInsertRow,
   type EventStateInsertClient,
@@ -206,10 +207,12 @@ export { createRedisGenerationCheck } from "./core/sync-engine/generation";
 export type { GenerationStore } from "./core/sync-engine/generation";
 export { createDatabaseFlush } from "./core/sync-engine/flush";
 export { ingestSource } from "./core/sync-engine/ingest";
+export { buildSourceEventInstanceKey } from "./core/source/event-instance";
 export type {
   IngestSourceOptions,
   IngestionResult,
   IngestionChanges,
+  CalendarSnapshotChange,
   ExistingEventState,
   FetchEventsResult as IngestionFetchEventsResult,
 } from "./core/sync-engine/ingest";

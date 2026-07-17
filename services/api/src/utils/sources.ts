@@ -3,8 +3,13 @@ import {
   pullRemoteCalendar,
   createIcsSourceFetcher,
   interpretFullDayTimedEventsAsAllDay,
+  persistCalendarSnapshot,
 } from "@keeper.sh/calendar/ics";
-import { ingestSource, insertEventStatesWithConflictResolution } from "@keeper.sh/calendar";
+import {
+  buildEventStateInsertRow,
+  ingestSource,
+  insertEventStatesWithConflictResolution,
+} from "@keeper.sh/calendar";
 import type { IngestionChanges } from "@keeper.sh/calendar";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { enqueuePushSync } from "./enqueue-push-sync";
@@ -26,13 +31,6 @@ const FIRST_RESULT_LIMIT = 1;
 const ICAL_CALENDAR_TYPE = "ical";
 type Source = typeof calendarsTable.$inferSelect;
 
-const serializeOptionalJson = (value: unknown): string | null => {
-  if (!value) {
-    return null;
-  }
-  return JSON.stringify(value);
-};
-
 const createIngestionFlush = (calendarId: string) =>
   async (changes: IngestionChanges): Promise<void> => {
     await database.transaction(async (transaction) => {
@@ -50,23 +48,12 @@ const createIngestionFlush = (calendarId: string) =>
       if (changes.inserts.length > 0) {
         await insertEventStatesWithConflictResolution(
           transaction,
-          changes.inserts.map((event) => ({
-            availability: event.availability,
-            calendarId,
-            description: event.description,
-            endTime: event.endTime,
-            exceptionDates: serializeOptionalJson(event.exceptionDates),
-            isAllDay: event.isAllDay,
-            location: event.location,
-            recurrenceRule: serializeOptionalJson(event.recurrenceRule),
-            sourceEventId: event.sourceEventId,
-            sourceEventType: event.sourceEventType,
-            sourceEventUid: event.uid,
-            startTime: event.startTime,
-            startTimeZone: event.startTimeZone,
-            title: event.title,
-          })),
+          changes.inserts.map((event) => buildEventStateInsertRow(calendarId, event)),
         );
+      }
+
+      if (changes.snapshot) {
+        await persistCalendarSnapshot(transaction, calendarId, changes.snapshot);
       }
     });
   };
@@ -99,13 +86,18 @@ const ingestIcsSource = async (source: Source): Promise<void> => {
           availability: eventStatesTable.availability,
           description: eventStatesTable.description,
           endTime: eventStatesTable.endTime,
+          exceptionDates: eventStatesTable.exceptionDates,
           id: eventStatesTable.id,
           isAllDay: eventStatesTable.isAllDay,
           location: eventStatesTable.location,
+          recurrenceId: eventStatesTable.recurrenceId,
+          recurrenceRule: eventStatesTable.recurrenceRule,
           sourceEventType: eventStatesTable.sourceEventType,
           sourceEventId: eventStatesTable.sourceEventId,
+          sourceEventInstanceKey: eventStatesTable.sourceEventInstanceKey,
           sourceEventUid: eventStatesTable.sourceEventUid,
           startTime: eventStatesTable.startTime,
+          startTimeZone: eventStatesTable.startTimeZone,
           title: eventStatesTable.title,
         })
         .from(eventStatesTable)

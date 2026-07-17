@@ -3,6 +3,7 @@ import {
   ingestSource,
   allSettledWithConcurrency,
   insertEventStatesWithConflictResolution,
+  buildEventStateInsertRow,
   createGoogleTokenRefresher,
   createMicrosoftTokenRefresher,
   createCoordinatedRefresher,
@@ -16,6 +17,7 @@ import type { CalendarBackoffState, IngestionChanges, IngestionFetchEventsResult
 import {
   createIcsSourceFetcher,
   interpretFullDayTimedEventsAsAllDay,
+  persistCalendarSnapshot,
 } from "@keeper.sh/calendar/ics";
 import { createGoogleSourceFetcher } from "@keeper.sh/calendar/google";
 import { createOutlookSourceFetcher } from "@keeper.sh/calendar/outlook";
@@ -84,13 +86,6 @@ const logIngestBackoff = (state: CalendarBackoffState): void => {
   }
 };
 
-const serializeOptionalJson = (value: unknown): string | null => {
-  if (!value) {
-    return null;
-  }
-  return JSON.stringify(value);
-};
-
 const withTimeout = <TResult>(
   operation: () => Promise<TResult>,
   timeoutMs: number,
@@ -119,23 +114,7 @@ const createIngestionFlush = (calendarId: string) =>
       if (changes.inserts.length > 0) {
         await insertEventStatesWithConflictResolution(
           transaction,
-          changes.inserts.map((event) => ({
-            availability: event.availability,
-            calendarId,
-            description: event.description,
-            endTime: event.endTime,
-            exceptionDates: serializeOptionalJson(event.exceptionDates),
-            isAllDay: event.isAllDay,
-            location: event.location,
-            recurrenceRule: serializeOptionalJson(event.recurrenceRule),
-            recurrenceId: event.recurrenceId,
-            sourceEventId: event.sourceEventId,
-            sourceEventType: event.sourceEventType,
-            sourceEventUid: event.uid,
-            startTime: event.startTime,
-            startTimeZone: event.startTimeZone,
-            title: event.title,
-          })),
+          changes.inserts.map((event) => buildEventStateInsertRow(calendarId, event)),
         );
       }
 
@@ -144,6 +123,10 @@ const createIngestionFlush = (calendarId: string) =>
           .update(calendarsTable)
           .set({ syncToken: changes.syncToken })
           .where(eq(calendarsTable.id, calendarId));
+      }
+
+      if (changes.snapshot) {
+        await persistCalendarSnapshot(transaction, calendarId, changes.snapshot);
       }
     });
   };
@@ -162,6 +145,7 @@ const readExistingEvents = (calendarId: string) =>
       recurrenceRule: eventStatesTable.recurrenceRule,
       sourceEventType: eventStatesTable.sourceEventType,
       sourceEventId: eventStatesTable.sourceEventId,
+      sourceEventInstanceKey: eventStatesTable.sourceEventInstanceKey,
       sourceEventUid: eventStatesTable.sourceEventUid,
       startTime: eventStatesTable.startTime,
       startTimeZone: eventStatesTable.startTimeZone,

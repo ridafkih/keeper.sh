@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { eventToICalString, parseICalToRemoteEvent, parseICalToRemoteEvents } from "../../../../src/providers/caldav/shared/ics";
 import { buildSourceEventsToAdd, buildSourceEventStateIdsToRemove } from "../../../../src/core/source/event-diff";
+import type { ExistingSourceEventState } from "../../../../src/core/source/event-diff";
+import { buildSourceEventInstanceKey } from "../../../../src/core/source/event-instance";
 import type { SourceEvent } from "../../../../src/core/types";
 
 const buildIcs = (vevents: string[]): string => [
@@ -37,6 +39,27 @@ const toSourceEvent = (parsed: ReturnType<typeof parseICalToRemoteEvents>[number
   startTimeZone: parsed.startTimeZone,
   title: parsed.title,
   uid: parsed.uid,
+});
+
+const toExistingSourceEventState = (
+  event: SourceEvent,
+  id: string,
+): ExistingSourceEventState => ({
+  availability: event.availability,
+  description: event.description,
+  endTime: event.endTime,
+  exceptionDates: serializeOptionalStructuredValue(event.exceptionDates),
+  id,
+  isAllDay: event.isAllDay,
+  location: event.location,
+  recurrenceId: event.recurrenceId ?? null,
+  recurrenceRule: serializeOptionalStructuredValue(event.recurrenceRule),
+  sourceEventInstanceKey: buildSourceEventInstanceKey(event),
+  sourceEventType: event.sourceEventType ?? "default",
+  sourceEventUid: event.uid,
+  startTime: event.startTime,
+  startTimeZone: event.startTimeZone ?? null,
+  title: event.title,
 });
 
 describe("eventToICalString", () => {
@@ -332,22 +355,8 @@ describe("duplicate prevention with multi-VEVENT parsing", () => {
     const firstIngest = buildSourceEventsToAdd([], sourceEvents);
     expect(firstIngest).toHaveLength(2);
 
-    const existingAfterFirstIngest = firstIngest.map((event, index) => ({
-      id: `state-${index}`,
-      sourceEventUid: event.uid,
-      startTime: event.startTime,
-      endTime: event.endTime,
-      availability: event.availability,
-      description: event.description,
-      exceptionDates: serializeOptionalStructuredValue(event.exceptionDates),
-      isAllDay: event.isAllDay,
-      location: event.location,
-      recurrenceId: event.recurrenceId,
-      recurrenceRule: serializeOptionalStructuredValue(event.recurrenceRule),
-      sourceEventType: "default" as const,
-      startTimeZone: event.startTimeZone,
-      title: event.title,
-    }));
+    const existingAfterFirstIngest = firstIngest.map((event, index) =>
+      toExistingSourceEventState(event, `state-${index}`));
 
     const secondIngest = buildSourceEventsToAdd(existingAfterFirstIngest, sourceEvents);
     expect(secondIngest).toHaveLength(0);
@@ -379,15 +388,8 @@ describe("duplicate prevention with multi-VEVENT parsing", () => {
     ]);
 
     const allEvents = parseICalToRemoteEvents(allThree);
-    const existingStates = allEvents.map((event, index) => ({
-      id: `state-${index}`,
-      sourceEventUid: event.uid,
-      startTime: event.startTime,
-      endTime: event.endTime,
-      availability: event.availability,
-      isAllDay: event.isAllDay,
-      sourceEventType: "default" as const,
-    }));
+    const existingStates = allEvents.map((event, index) =>
+      toExistingSourceEventState(toSourceEvent(event), `state-${index}`));
 
     const withOneRemoved = buildIcs([
       buildVevent({
@@ -441,22 +443,9 @@ describe("transition from old single-event to new multi-event parsing", () => {
       throw new Error("Expected parsed event");
     }
 
-    const existingFromOldCode = [{
-      id: "old-state-1",
-      sourceEventUid: oldCodeResult.uid,
-      startTime: oldCodeResult.startTime,
-      endTime: oldCodeResult.endTime,
-      availability: oldCodeResult.availability,
-      description: oldCodeResult.description,
-      exceptionDates: serializeOptionalStructuredValue(oldCodeResult.exceptionDates),
-      isAllDay: oldCodeResult.isAllDay,
-      location: oldCodeResult.location,
-      recurrenceId: oldCodeResult.recurrenceId,
-      recurrenceRule: serializeOptionalStructuredValue(oldCodeResult.recurrenceRule),
-      sourceEventType: "default" as const,
-      startTimeZone: oldCodeResult.startTimeZone,
-      title: oldCodeResult.title,
-    }];
+    const existingFromOldCode = [
+      toExistingSourceEventState(toSourceEvent(oldCodeResult), "old-state-1"),
+    ];
 
     const newCodeResults = parseICalToRemoteEvents(ics);
     const newSourceEvents = newCodeResults.map((event) => toSourceEvent(event));
@@ -490,18 +479,9 @@ describe("transition from old single-event to new multi-event parsing", () => {
       throw new Error("Expected parsed event");
     }
 
-    const existingFromOldCode = [{
-      id: "old-state-1",
-      sourceEventUid: oldCodeResult.uid,
-      startTime: oldCodeResult.startTime,
-      endTime: oldCodeResult.endTime,
-      availability: oldCodeResult.availability,
-      description: oldCodeResult.description,
-      isAllDay: oldCodeResult.isAllDay,
-      location: oldCodeResult.location,
-      sourceEventType: "default" as const,
-      title: oldCodeResult.title,
-    }];
+    const existingFromOldCode = [
+      toExistingSourceEventState(toSourceEvent(oldCodeResult), "old-state-1"),
+    ];
 
     const newCodeResults = parseICalToRemoteEvents(ics);
     const newSourceEvents = newCodeResults.map((event) => toSourceEvent(event));
@@ -536,15 +516,8 @@ describe("transition from old single-event to new multi-event parsing", () => {
       throw new Error("Expected parsed events");
     }
 
-    const existingFromExpanded = [parsed1, parsed2].map((event, index) => ({
-      id: `expanded-${index}`,
-      sourceEventUid: event.uid,
-      startTime: event.startTime,
-      endTime: event.endTime,
-      availability: event.availability,
-      isAllDay: event.isAllDay,
-      sourceEventType: "default" as const,
-    }));
+    const existingFromExpanded = [parsed1, parsed2].map((event, index) =>
+      toExistingSourceEventState(toSourceEvent(event), `expanded-${index}`));
 
     const unexpandedIcs = buildIcs([
       buildVevent({

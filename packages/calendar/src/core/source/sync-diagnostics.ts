@@ -1,5 +1,6 @@
 import type { SourceEvent } from "../types";
 import type { ExistingSourceEventState } from "./event-diff";
+import { buildSourceEventInstanceKey } from "./event-instance";
 
 interface OAuthSyncWindow {
   timeMin: Date;
@@ -35,12 +36,6 @@ const filterSourceEventsToSyncWindow = (
   };
 };
 
-const buildSourceEventStorageIdentityKey = (
-  uid: string,
-  startTime: Date,
-  endTime: Date,
-): string => `${uid}|${startTime.toISOString()}|${endTime.toISOString()}`;
-
 const splitSourceEventsByPersistenceIdentity = (
   existingEvents: ExistingSourceEventState[],
   eventsToAdd: SourceEvent[],
@@ -58,13 +53,12 @@ const splitSourceEventsByPersistenceIdentity = (
       if (event.sourceEventId || event.sourceEventUid === null) {
         return [];
       }
-      return [
-        buildSourceEventStorageIdentityKey(
-          event.sourceEventUid,
-          event.startTime,
-          event.endTime,
-        ),
-      ];
+      return [event.sourceEventInstanceKey ?? buildSourceEventInstanceKey({
+        endTime: event.endTime,
+        recurrenceId: event.recurrenceId,
+        startTime: event.startTime,
+        uid: event.sourceEventUid,
+      })];
     }),
   );
 
@@ -81,11 +75,7 @@ const splitSourceEventsByPersistenceIdentity = (
       continue;
     }
 
-    const storageIdentity = buildSourceEventStorageIdentityKey(
-      event.uid,
-      event.startTime,
-      event.endTime,
-    );
+    const storageIdentity = buildSourceEventInstanceKey(event);
 
     if (existingStorageIdentities.has(storageIdentity)) {
       eventsToUpdate.push(event);

@@ -1,5 +1,8 @@
 import { buildSourceEventStateIdsToRemove, buildSourceEventsToAdd } from "../../../core/source/event-diff";
-import { insertEventStatesWithConflictResolution } from "../../../core/source/write-event-states";
+import {
+  buildEventStateInsertRow,
+  insertEventStatesWithConflictResolution,
+} from "../../../core/source/write-event-states";
 import { isKeeperEvent } from "../../../core/events/identity";
 import type { SourceEvent } from "../../../core/types";
 import { calendarAccountsTable, calendarsTable, eventStatesTable } from "@keeper.sh/database/schema";
@@ -16,13 +19,6 @@ import type {
   CalDAVSourceProviderConfig,
   CalDAVSourceSyncResult,
 } from "../types";
-
-const stringifyIfPresent = (value: unknown) => {
-  if (!value) {
-    return;
-  }
-  return JSON.stringify(value);
-};
 
 const EMPTY_COUNT = 0;
 const YEARS_UNTIL_FUTURE = 2;
@@ -120,6 +116,7 @@ const createCalDAVSourceProvider = (
         recurrenceId: eventStatesTable.recurrenceId,
         recurrenceRule: eventStatesTable.recurrenceRule,
         sourceEventType: eventStatesTable.sourceEventType,
+        sourceEventInstanceKey: eventStatesTable.sourceEventInstanceKey,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
         startTimeZone: eventStatesTable.startTimeZone,
@@ -145,22 +142,7 @@ const createCalDAVSourceProvider = (
     if (eventsToAdd.length > EMPTY_COUNT) {
       await insertEventStatesWithConflictResolution(
         database,
-        eventsToAdd.map((event) => ({
-          availability: event.availability,
-          calendarId,
-          description: event.description,
-          endTime: event.endTime,
-          exceptionDates: stringifyIfPresent(event.exceptionDates),
-          isAllDay: event.isAllDay,
-          location: event.location,
-          recurrenceRule: stringifyIfPresent(event.recurrenceRule),
-          recurrenceId: event.recurrenceId,
-          sourceEventType: event.sourceEventType ?? "default",
-          sourceEventUid: event.uid,
-          startTime: event.startTime,
-          startTimeZone: event.startTimeZone,
-          title: event.title,
-        })),
+        eventsToAdd.map((event) => buildEventStateInsertRow(calendarId, event)),
       );
     }
 

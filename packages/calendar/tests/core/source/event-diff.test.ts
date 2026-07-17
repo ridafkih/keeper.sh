@@ -5,17 +5,41 @@ import {
   buildSourceEventStateIdsToRemove,
   type ExistingSourceEventState,
 } from "../../../src/core/source/event-diff";
+import { buildSourceEventInstanceKey } from "../../../src/core/source/event-instance";
 
 const createExistingEvent = (
   overrides: Partial<ExistingSourceEventState>,
-): ExistingSourceEventState => ({
-  endTime: new Date("2026-03-11T20:00:00.000Z"),
-  id: "existing-id-1",
-  sourceEventUid: "event-uid-1",
-  sourceEventType: "default",
-  startTime: new Date("2026-03-11T19:00:00.000Z"),
-  ...overrides,
-});
+): ExistingSourceEventState => {
+  const event = {
+    endTime: new Date("2026-03-11T20:00:00.000Z"),
+    exceptionDates: null,
+    id: "existing-id-1",
+    recurrenceId: null,
+    recurrenceRule: null,
+    sourceEventUid: "event-uid-1",
+    sourceEventType: "default",
+    startTime: new Date("2026-03-11T19:00:00.000Z"),
+    startTimeZone: null,
+    ...overrides,
+  };
+  const { sourceEventInstanceKey: overriddenInstanceKey } = overrides;
+  const resolveInstanceKey = (): string => {
+    if (overriddenInstanceKey) {
+      return overriddenInstanceKey;
+    }
+    if (!event.sourceEventUid) {
+      return `legacy|${event.id}`;
+    }
+    return buildSourceEventInstanceKey({
+      endTime: event.endTime,
+      recurrenceId: event.recurrenceId,
+      startTime: event.startTime,
+      uid: event.sourceEventUid,
+    });
+  };
+  const sourceEventInstanceKey = resolveInstanceKey();
+  return { ...event, sourceEventInstanceKey };
+};
 
 const createIncomingEvent = (overrides: Partial<SourceEvent>): SourceEvent => ({
   endTime: new Date("2026-03-11T20:00:00.000Z"),
@@ -389,6 +413,40 @@ describe("source event diff", () => {
     })];
 
     expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toEqual([]);
+  });
+
+  it("preserves overrides with different recurrence IDs after they move to the same slot", () => {
+    const incomingEvents = [
+      createIncomingEvent({
+        recurrenceId: new Date("2026-03-11T19:00:00.000Z"),
+        uid: "recurring-uid",
+      }),
+      createIncomingEvent({
+        recurrenceId: new Date("2026-03-18T19:00:00.000Z"),
+        uid: "recurring-uid",
+      }),
+    ];
+
+    expect(buildSourceEventsToAdd([], incomingEvents)).toHaveLength(2);
+  });
+
+  it("updates a moved override without removing its stable recurrence instance", () => {
+    const existingEvents = [createExistingEvent({
+      endTime: new Date("2026-03-11T20:00:00.000Z"),
+      recurrenceId: new Date("2026-03-11T19:00:00.000Z"),
+      sourceEventInstanceKey: "recurrence|recurring-uid|2026-03-11T19:00:00.000Z",
+      sourceEventUid: "recurring-uid",
+      startTime: new Date("2026-03-11T19:00:00.000Z"),
+    })];
+    const incomingEvents = [createIncomingEvent({
+      endTime: new Date("2026-03-11T22:00:00.000Z"),
+      recurrenceId: new Date("2026-03-11T19:00:00.000Z"),
+      startTime: new Date("2026-03-11T21:00:00.000Z"),
+      uid: "recurring-uid",
+    })];
+
+    expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toHaveLength(1);
+    expect(buildSourceEventStateIdsToRemove(existingEvents, incomingEvents)).toEqual([]);
   });
 
   it("deduplicates incoming events that share the same storage identity", () => {

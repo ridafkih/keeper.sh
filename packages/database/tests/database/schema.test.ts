@@ -24,28 +24,38 @@ describe("calendar account schema", () => {
 });
 
 describe("event state schema", () => {
-  it("enforces one provider occurrence per source calendar", () => {
+  it("enforces provider and fallback instance identities", () => {
     const tableConfig = getTableConfig(eventStatesTable);
     const sourceEventIndex = tableConfig.indexes.find(
       (index) => index.config.name === "event_states_source_event_idx",
     );
-    const legacyIdentityIndex = tableConfig.indexes.find(
-      (index) => index.config.name === "event_states_identity_idx",
+    const instanceIdentityIndex = tableConfig.indexes.find(
+      (index) => index.config.name === "event_states_instance_idx",
     );
 
     expect(sourceEventIndex?.config.unique).toBe(true);
     expect(sourceEventIndex?.config.where).toBeDefined();
-    expect(legacyIdentityIndex?.config.unique).toBe(true);
-    expect(legacyIdentityIndex?.config.where).toBeDefined();
-    const columnNames = sourceEventIndex?.config.columns.map((column) => {
+    expect(instanceIdentityIndex?.config.unique).toBe(true);
+    expect(instanceIdentityIndex?.config.where).toBeDefined();
+    const sourceColumnNames = sourceEventIndex?.config.columns.map((column) => {
       if ("name" in column && typeof column.name === "string") {
         return column.name;
       }
       return null;
     });
-    expect(columnNames).toEqual([
+    expect(sourceColumnNames).toEqual([
       "calendarId",
       "sourceEventId",
+    ]);
+    const instanceColumnNames = instanceIdentityIndex?.config.columns.map((column) => {
+      if ("name" in column && typeof column.name === "string") {
+        return column.name;
+      }
+      return null;
+    });
+    expect(instanceColumnNames).toEqual([
+      "calendarId",
+      "sourceEventInstanceKey",
     ]);
   });
 });

@@ -5,7 +5,7 @@ import { coerceCompliantDate } from "../patches/coerce-compliant-date";
 import { parseIcsCalendarLenient } from "./lenient-parser";
 import { parseIcsEvents } from "./parse-ics-events";
 import { pullRemoteCalendar } from "./pull-remote-calendar";
-import { createSnapshot } from "./create-snapshot";
+import { prepareCalendarSnapshot } from "./create-snapshot";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 interface IcsSourceFetcherConfig {
@@ -50,8 +50,8 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
        */
       return { events: [], unchanged: true };
     }
-    const { changed } = await createSnapshot(config.database, config.calendarId, ical);
-    if (!changed) {
+    const snapshotResult = await prepareCalendarSnapshot(config.database, config.calendarId, ical);
+    if (!snapshotResult.changed || !snapshotResult.snapshot) {
       return { events: [], unchanged: true };
     }
     const calendar = parseIcsCalendarLenient({
@@ -78,9 +78,10 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
         events: options.interpretEvents(events, {
           calendarTimeZone: calendar.nonStandard?.wrTimezone,
         }),
+        snapshot: snapshotResult.snapshot,
       };
     }
-    return { events };
+    return { events, snapshot: snapshotResult.snapshot };
   };
 
   return { fetchEvents };

@@ -163,6 +163,7 @@ const eventStatesTable = pgTable(
     isAllDay: boolean(),
     sourceEventId: text(),
     sourceEventType: text(),
+    sourceEventInstanceKey: text(),
     sourceEventUid: text(),
     startTime: timestamp().notNull(),
     startTimeZone: text(),
@@ -175,11 +176,9 @@ const eventStatesTable = pgTable(
     uniqueIndex("event_states_source_event_idx")
       .on(table.calendarId, table.sourceEventId)
       .where(isNotNull(table.sourceEventId)),
-    uniqueIndex("event_states_identity_idx").on(
+    uniqueIndex("event_states_instance_idx").on(
       table.calendarId,
-      table.sourceEventUid,
-      table.startTime,
-      table.endTime,
+      table.sourceEventInstanceKey,
     ).where(isNull(table.sourceEventId)),
   ],
 );
