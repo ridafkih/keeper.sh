@@ -102,7 +102,7 @@ const buildInitialUrl = (calendarId: string, timeMin: Date, timeMax: Date): URL 
   url.searchParams.set("endDateTime", timeMax.toISOString());
   url.searchParams.set(
     "$select",
-    "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
+    "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories,recurrence",
   );
 
   return url;
@@ -172,6 +172,96 @@ const fetchEventsPage = async (
   return { data, fullSyncRequired: false };
 };
 
+const INSTANCES_SELECT = "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories";
+
+const isSeriesMasterBeforeWindow = (event: OutlookCalendarEvent, windowStart: Date): boolean => {
+  const startDateTime = event.start?.dateTime;
+  const endDateTime = event.end?.dateTime;
+  if (!startDateTime || !endDateTime) {
+    return false;
+  }
+  return new Date(startDateTime) < windowStart && new Date(endDateTime) < windowStart;
+};
+
+const fetchSeriesMasterInstances = async (
+  accessToken: string,
+  eventId: string,
+  timeMin: Date,
+  timeMax: Date,
+): Promise<OutlookCalendarEvent[]> => {
+  const instances: OutlookCalendarEvent[] = [];
+  const encodedEventId = encodeURIComponent(eventId);
+  const baseUrl = `${MICROSOFT_GRAPH_API}/me/events/${encodedEventId}/instances`;
+
+  let nextLink: string | undefined = (() => {
+    const url = new URL(baseUrl);
+    url.searchParams.set("startDateTime", timeMin.toISOString());
+    url.searchParams.set("endDateTime", timeMax.toISOString());
+    url.searchParams.set("$select", INSTANCES_SELECT);
+    return url.toString();
+  })();
+
+  while (nextLink) {
+    const response = await fetch(nextLink, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    }).catch(() => null);
+
+    if (!response || !response.ok) {
+      break;
+    }
+
+    const body = await response.json();
+    if (!outlookEventListSchema.allows(body)) {
+      break;
+    }
+    const data = outlookEventListSchema.assert(body);
+    for (const event of data.value ?? []) {
+      if (!event["@removed"]) {
+        instances.push(event);
+      }
+    }
+    nextLink = data["@odata.nextLink"];
+  }
+
+  return instances;
+};
+
+const partitionPageEvents = (
+  pageEvents: OutlookCalendarEvent[],
+  events: OutlookCalendarEvent[],
+  cancelledEventUids: string[],
+): void => {
+  for (const event of pageEvents) {
+    if (!event["@removed"]) {
+      events.push(event);
+      continue;
+    }
+    const uid = event.iCalUId ?? event.id;
+    if (uid) {
+      cancelledEventUids.push(uid);
+    }
+  }
+};
+
+const expandSeriesMasters = async (
+  accessToken: string,
+  events: OutlookCalendarEvent[],
+  timeMin: Date,
+  timeMax: Date,
+): Promise<OutlookCalendarEvent[]> => {
+  const expandedEvents: OutlookCalendarEvent[] = [];
+  for (const event of events) {
+    if (event.id && isSeriesMasterBeforeWindow(event, timeMin)) {
+      const instances = await fetchSeriesMasterInstances(accessToken, event.id, timeMin, timeMax);
+      expandedEvents.push(...instances);
+    } else {
+      expandedEvents.push(event);
+    }
+  }
+  return expandedEvents;
+};
+
 const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEventsResult> => {
   const { accessToken, calendarId, deltaLink, timeMin, timeMax } = options;
 
@@ -191,16 +281,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
     return { events: [], fullSyncRequired: true };
   }
 
-  for (const event of initialResult.data.value ?? []) {
-    if (event["@removed"]) {
-      const uid = event.iCalUId ?? event.id;
-      if (uid) {
-        cancelledEventUids.push(uid);
-      }
-    } else {
-      events.push(event);
-    }
-  }
+  partitionPageEvents(initialResult.data.value ?? [], events, cancelledEventUids);
 
   let lastDeltaLink = initialResult.data["@odata.deltaLink"];
   let nextLink = initialResult.data["@odata.nextLink"];
@@ -218,16 +299,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
       return { events: [], fullSyncRequired: true };
     }
 
-    for (const event of pageResult.data.value ?? []) {
-      if (event["@removed"]) {
-        const uid = event.iCalUId ?? event.id;
-        if (uid) {
-          cancelledEventUids.push(uid);
-        }
-      } else {
-        events.push(event);
-      }
-    }
+    partitionPageEvents(pageResult.data.value ?? [], events, cancelledEventUids);
 
     if (pageResult.data["@odata.deltaLink"]) {
       lastDeltaLink = pageResult.data["@odata.deltaLink"];
@@ -235,8 +307,15 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
     nextLink = pageResult.data["@odata.nextLink"];
   }
 
+  // Series masters returned by calendarView (startTime before window) cannot be synced as-is.
+  // Fetch their actual instances within the window instead.
+  let resultEvents = events;
+  if (timeMin && timeMax) {
+    resultEvents = await expandSeriesMasters(accessToken, events, timeMin, timeMax);
+  }
+
   const result: FetchEventsResult = {
-    events,
+    events: resultEvents,
     fullSyncRequired: false,
     isDeltaSync,
     nextDeltaLink: lastDeltaLink,
@@ -280,6 +359,136 @@ const fetchCalendarName = async (options: FetchCalendarNameOptions): Promise<str
 
   const responseBody = await response.json();
   return parseCalendarName(responseBody);
+};
+
+const OUTLOOK_DAY_MAP: Record<string, string> = {
+  sunday: "SU",
+  monday: "MO",
+  tuesday: "TU",
+  wednesday: "WE",
+  thursday: "TH",
+  friday: "FR",
+  saturday: "SA",
+};
+
+const OUTLOOK_FREQUENCY_MAP: Record<string, string> = {
+  daily: "DAILY",
+  weekly: "WEEKLY",
+  absoluteMonthly: "MONTHLY",
+  relativeMonthly: "MONTHLY",
+  absoluteYearly: "YEARLY",
+  relativeYearly: "YEARLY",
+};
+
+const OUTLOOK_INDEX_MAP: Record<string, number> = {
+  first: 1,
+  second: 2,
+  third: 3,
+  fourth: 4,
+  last: -1,
+};
+
+const buildByDayEntry = (
+  dayName: string,
+  patternType: string,
+  patternIndex: string | undefined,
+): { day: string; occurrence?: number }[] => {
+  const day = OUTLOOK_DAY_MAP[dayName.toLowerCase()];
+  if (!day) {
+    return [];
+  }
+
+  const isRelative = patternType === "relativeMonthly" || patternType === "relativeYearly";
+  if (!isRelative || !patternIndex) {
+    return [{ day }];
+  }
+
+  const occurrence = OUTLOOK_INDEX_MAP[patternIndex.toLowerCase()];
+  if (!occurrence) {
+    return [{ day }];
+  }
+
+  return [{ day, occurrence }];
+};
+
+const applyByDayRule = (
+  rule: Record<string, unknown>,
+  pattern: NonNullable<NonNullable<OutlookCalendarEvent["recurrence"]>["pattern"]>,
+): void => {
+  const supportsByDay = pattern.type === "weekly"
+    || pattern.type === "relativeMonthly"
+    || pattern.type === "relativeYearly";
+  if (!supportsByDay || !Array.isArray(pattern.daysOfWeek)) {
+    return;
+  }
+
+  const byDay = pattern.daysOfWeek.flatMap((dayName) =>
+    buildByDayEntry(dayName, pattern.type ?? "", pattern.index));
+  if (byDay.length > 0) {
+    rule.byDay = byDay;
+  }
+};
+
+const applyRangeRule = (
+  rule: Record<string, unknown>,
+  range: NonNullable<OutlookCalendarEvent["recurrence"]>["range"],
+): void => {
+  if (range?.type === "numbered" && typeof range.numberOfOccurrences === "number" && range.numberOfOccurrences > 0) {
+    rule.count = range.numberOfOccurrences;
+    return;
+  }
+
+  if (range?.type !== "endDate" || !range.endDate || range.endDate <= "1970-01-01") {
+    return;
+  }
+
+  const endDate = new Date(range.endDate);
+  if (!Number.isNaN(endDate.getTime())) {
+    rule.until = { date: endDate };
+  }
+};
+
+const parseOutlookRecurrence = (
+  recurrence: OutlookCalendarEvent["recurrence"],
+): object | undefined => {
+  const pattern = recurrence?.pattern;
+  const range = recurrence?.range;
+  if (!pattern?.type) {
+    return;
+  }
+
+  const frequency = OUTLOOK_FREQUENCY_MAP[pattern.type];
+  if (!frequency) {
+    return;
+  }
+
+  const rule: Record<string, unknown> = { frequency };
+
+  if (typeof pattern.interval === "number" && pattern.interval > 1) {
+    rule.interval = pattern.interval;
+  }
+
+  applyByDayRule(rule, pattern);
+
+  if (
+    (pattern.type === "absoluteMonthly" || pattern.type === "absoluteYearly")
+    && typeof pattern.dayOfMonth === "number"
+    && pattern.dayOfMonth > 0
+  ) {
+    rule.byMonthday = [pattern.dayOfMonth];
+  }
+
+  if (
+    (pattern.type === "absoluteYearly" || pattern.type === "relativeYearly")
+    && typeof pattern.month === "number"
+    && pattern.month > 0
+  ) {
+    rule.byMonth = [pattern.month];
+  }
+
+  applyRangeRule(rule, range);
+
+  return rule;
 };
 
 const parseAvailability = (value: string | undefined): EventTimeSlot["availability"] | null => {
@@ -333,6 +542,7 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
     };
 
     const availability = parseAvailability(event.showAs);
+    const recurrenceRule = parseOutlookRecurrence(event.recurrence);
 
     result.push({
       ...availability && { availability },
@@ -340,6 +550,7 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
       endTime: parseEventDateTime(end),
       isAllDay: event.isAllDay ?? false,
       location: event.location?.displayName,
+      ...recurrenceRule && { recurrenceRule },
       startTime: parseEventDateTime(start),
       startTimeZone: start.timeZone,
       title: event.subject,

@@ -59,6 +59,13 @@ const extractEventIdFromLookup = (body: unknown): string | undefined => {
   return firstItem.id;
 };
 
+const stringifyRecurrenceRule = (recurrenceRule: SyncableEvent["recurrenceRule"]): string | undefined => {
+  if (!recurrenceRule) {
+    return;
+  }
+  return JSON.stringify(recurrenceRule);
+};
+
 const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   const tokenState: TokenState = {
     accessToken: config.accessToken,
@@ -77,7 +84,8 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   // Writes go through events.import, which upserts by iCalUID: re-pushing an existing event updates it rather than 409ing.
   const buildPushRequest = (event: SyncableEvent): { uid: string; request: BatchSubRequest } | null => {
     const uid = generateDeterministicEventUid(`${event.id}:${config.externalCalendarId}`);
-    const resource = serializeGoogleEvent(event, uid);
+    const recurrenceRule = stringifyRecurrenceRule(event.recurrenceRule);
+    const resource = serializeGoogleEvent(event, uid, recurrenceRule);
     if (!resource) {
       return null;
     }
