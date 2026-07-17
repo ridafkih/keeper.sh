@@ -1,5 +1,9 @@
-import { buildSourceEventStateIdsToRemove, buildSourceEventsToAdd } from "../../../core/source/event-diff";
-import { parseStoredSourceEventStates } from "../../../core/source/stored-event-state";
+import {
+  buildSourceEventStateIdsToRemove,
+  buildSourceEventStateUpdates,
+  buildSourceEventsToAdd,
+} from "../../../core/source/event-diff";
+import { parseStoredSourceEventStatesRecoveringInvalid } from "../../../core/source/stored-event-state";
 import {
   buildEventStateInsertRow,
   insertEventStatesWithConflictResolution,
@@ -116,6 +120,7 @@ const createCalDAVSourceProvider = (
         location: eventStatesTable.location,
         recurrenceId: eventStatesTable.recurrenceId,
         recurrenceRule: eventStatesTable.recurrenceRule,
+        sourceEventId: eventStatesTable.sourceEventId,
         sourceEventType: eventStatesTable.sourceEventType,
         sourceEventInstanceKey: eventStatesTable.sourceEventInstanceKey,
         sourceEventUid: eventStatesTable.sourceEventUid,
@@ -125,31 +130,56 @@ const createCalDAVSourceProvider = (
       })
       .from(eventStatesTable)
       .where(eq(eventStatesTable.calendarId, calendarId));
-    const existingEvents = parseStoredSourceEventStates(storedEvents);
+    const parseResult = parseStoredSourceEventStatesRecoveringInvalid(storedEvents);
+    const existingEvents = parseResult.events;
 
     const eventsToAdd = buildSourceEventsToAdd(existingEvents, events, { isDeltaSync: false });
-    const eventStateIdsToRemove = buildSourceEventStateIdsToRemove(existingEvents, events);
+    const legacyStateUpdates = buildSourceEventStateUpdates(existingEvents, events);
+    const eventStateIdsToRemove = [...new Set([
+      ...parseResult.failures.map((failure) => failure.eventId),
+      ...buildSourceEventStateIdsToRemove(existingEvents, events),
+    ])];
 
-    if (eventStateIdsToRemove.length > EMPTY_COUNT) {
-      await database
-        .delete(eventStatesTable)
-        .where(
-          and(
-            eq(eventStatesTable.calendarId, calendarId),
-            inArray(eventStatesTable.id, eventStateIdsToRemove),
-          ),
-        );
-    }
+    if (
+      eventStateIdsToRemove.length > EMPTY_COUNT
+      || eventsToAdd.length > EMPTY_COUNT
+      || legacyStateUpdates.length > EMPTY_COUNT
+    ) {
+      await database.transaction(async (transaction) => {
+        if (eventStateIdsToRemove.length > EMPTY_COUNT) {
+          await transaction
+            .delete(eventStatesTable)
+            .where(
+              and(
+                eq(eventStatesTable.calendarId, calendarId),
+                inArray(eventStatesTable.id, eventStateIdsToRemove),
+              ),
+            );
+        }
 
-    if (eventsToAdd.length > EMPTY_COUNT) {
-      await insertEventStatesWithConflictResolution(
-        database,
-        eventsToAdd.map((event) => buildEventStateInsertRow(calendarId, event)),
-      );
+        for (const update of legacyStateUpdates) {
+          await transaction
+            .update(eventStatesTable)
+            .set(buildEventStateInsertRow(calendarId, update.event))
+            .where(
+              and(
+                eq(eventStatesTable.calendarId, calendarId),
+                eq(eventStatesTable.id, update.id),
+              ),
+            );
+        }
+
+        if (eventsToAdd.length > EMPTY_COUNT) {
+          await insertEventStatesWithConflictResolution(
+            transaction,
+            eventsToAdd.map((event) => buildEventStateInsertRow(calendarId, event)),
+          );
+        }
+      });
     }
 
     return {
-      eventsAdded: eventsToAdd.length,
+      eventsAdded: eventsToAdd.length + legacyStateUpdates.length,
       eventsRemoved: eventStateIdsToRemove.length,
       syncToken: null,
     };

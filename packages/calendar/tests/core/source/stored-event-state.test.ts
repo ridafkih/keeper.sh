@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildSourceEventsToAdd } from "../../../src/core/source/event-diff";
-import { parseStoredSourceEventState } from "../../../src/core/source/stored-event-state";
+import {
+  parseStoredSourceEventState,
+  parseStoredSourceEventStatesRecoveringInvalid,
+} from "../../../src/core/source/stored-event-state";
 
 const createStoredEvent = () => ({
   endTime: new Date("2026-03-12T11:00:00.000Z"),
@@ -27,6 +30,27 @@ describe("parseStoredSourceEventState", () => {
       ...createStoredEvent(),
       recurrenceRule: "not-json",
     })).toThrow("Failed to JSON.parse recurrenceRule for event event-state-1");
+  });
+
+  it("partitions corrupt rows for full-sync recovery without hiding validation details", () => {
+    const validEvent = createStoredEvent();
+    const corruptEvent = {
+      ...createStoredEvent(),
+      id: "event-state-corrupt",
+      recurrenceRule: "not-json",
+    };
+
+    const result = parseStoredSourceEventStatesRecoveringInvalid([
+      validEvent,
+      corruptEvent,
+    ]);
+
+    expect(result.events.map((event) => event.id)).toEqual(["event-state-1"]);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0]?.eventId).toBe("event-state-corrupt");
+    expect(result.failures[0]?.error.message).toBe(
+      "Failed to JSON.parse recurrenceRule for event event-state-corrupt",
+    );
   });
 
   it("compares parsed storage and incoming recurrence values in one domain shape", () => {

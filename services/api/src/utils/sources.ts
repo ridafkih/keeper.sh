@@ -10,7 +10,7 @@ import {
   ingestSource,
   insertEventStatesWithConflictResolution,
 } from "@keeper.sh/calendar";
-import type { IngestionChanges } from "@keeper.sh/calendar";
+import type { IngestionPersistenceWork } from "@keeper.sh/calendar";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { enqueuePushSync } from "./enqueue-push-sync";
 import {
@@ -26,37 +26,77 @@ import { spawnBackgroundJob } from "./background-task";
 import { database, premiumService } from "@/context";
 
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
+const SOURCE_INGEST_LOCK_NAMESPACE = 9003;
 
 const FIRST_RESULT_LIMIT = 1;
 const ICAL_CALENDAR_TYPE = "ical";
 type Source = typeof calendarsTable.$inferSelect;
 
-const createIngestionFlush = (calendarId: string) =>
-  async (changes: IngestionChanges): Promise<void> => {
-    await database.transaction(async (transaction) => {
-      if (changes.deletes.length > 0) {
-        await transaction
-          .delete(eventStatesTable)
-          .where(
-            and(
-              eq(eventStatesTable.calendarId, calendarId),
-              inArray(eventStatesTable.id, changes.deletes),
-            ),
+const createIngestionPersistenceTransaction = (calendarId: string) =>
+  (work: IngestionPersistenceWork) => database.transaction(async (transaction) => {
+    await transaction.execute(
+      sql`select pg_advisory_xact_lock(${SOURCE_INGEST_LOCK_NAMESPACE}, hashtext(${calendarId}))`,
+    );
+
+    return work({
+      readExistingEvents: () => transaction
+        .select({
+          availability: eventStatesTable.availability,
+          description: eventStatesTable.description,
+          endTime: eventStatesTable.endTime,
+          exceptionDates: eventStatesTable.exceptionDates,
+          id: eventStatesTable.id,
+          isAllDay: eventStatesTable.isAllDay,
+          location: eventStatesTable.location,
+          recurrenceId: eventStatesTable.recurrenceId,
+          recurrenceRule: eventStatesTable.recurrenceRule,
+          sourceEventId: eventStatesTable.sourceEventId,
+          sourceEventInstanceKey: eventStatesTable.sourceEventInstanceKey,
+          sourceEventType: eventStatesTable.sourceEventType,
+          sourceEventUid: eventStatesTable.sourceEventUid,
+          startTime: eventStatesTable.startTime,
+          startTimeZone: eventStatesTable.startTimeZone,
+          title: eventStatesTable.title,
+        })
+        .from(eventStatesTable)
+        .where(eq(eventStatesTable.calendarId, calendarId)),
+      flush: async (changes) => {
+        if (changes.deletes.length > 0) {
+          await transaction
+            .delete(eventStatesTable)
+            .where(
+              and(
+                eq(eventStatesTable.calendarId, calendarId),
+                inArray(eventStatesTable.id, changes.deletes),
+              ),
+            );
+        }
+
+        for (const update of changes.updates) {
+          await transaction
+            .update(eventStatesTable)
+            .set(buildEventStateInsertRow(calendarId, update.event))
+            .where(
+              and(
+                eq(eventStatesTable.calendarId, calendarId),
+                eq(eventStatesTable.id, update.id),
+              ),
+            );
+        }
+
+        if (changes.inserts.length > 0) {
+          await insertEventStatesWithConflictResolution(
+            transaction,
+            changes.inserts.map((event) => buildEventStateInsertRow(calendarId, event)),
           );
-      }
+        }
 
-      if (changes.inserts.length > 0) {
-        await insertEventStatesWithConflictResolution(
-          transaction,
-          changes.inserts.map((event) => buildEventStateInsertRow(calendarId, event)),
-        );
-      }
-
-      if (changes.snapshot) {
-        await persistCalendarSnapshot(transaction, calendarId, changes.snapshot);
-      }
+        if (changes.snapshot) {
+          await persistCalendarSnapshot(transaction, calendarId, changes.snapshot);
+        }
+      },
     });
-  };
+  });
 
 const ingestIcsSource = async (source: Source): Promise<void> => {
   if (!source.url) {
@@ -80,29 +120,7 @@ const ingestIcsSource = async (source: Source): Promise<void> => {
             enabled: source.treatFullDayTimedEventsAsAllDay,
           }),
       }),
-    readExistingEvents: () =>
-      database
-        .select({
-          availability: eventStatesTable.availability,
-          description: eventStatesTable.description,
-          endTime: eventStatesTable.endTime,
-          exceptionDates: eventStatesTable.exceptionDates,
-          id: eventStatesTable.id,
-          isAllDay: eventStatesTable.isAllDay,
-          location: eventStatesTable.location,
-          recurrenceId: eventStatesTable.recurrenceId,
-          recurrenceRule: eventStatesTable.recurrenceRule,
-          sourceEventType: eventStatesTable.sourceEventType,
-          sourceEventId: eventStatesTable.sourceEventId,
-          sourceEventInstanceKey: eventStatesTable.sourceEventInstanceKey,
-          sourceEventUid: eventStatesTable.sourceEventUid,
-          startTime: eventStatesTable.startTime,
-          startTimeZone: eventStatesTable.startTimeZone,
-          title: eventStatesTable.title,
-        })
-        .from(eventStatesTable)
-        .where(eq(eventStatesTable.calendarId, source.id)),
-    flush: createIngestionFlush(source.id),
+    withPersistenceTransaction: createIngestionPersistenceTransaction(source.id),
   });
 };
 

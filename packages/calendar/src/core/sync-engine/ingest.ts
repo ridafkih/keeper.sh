@@ -1,7 +1,12 @@
 import type { SourceEvent } from "../types";
-import { buildSourceEventsToAdd, buildSourceEventStateIdsToRemove } from "../source/event-diff";
 import {
-  parseStoredSourceEventStates,
+  buildSourceEventsToAdd,
+  buildSourceEventStateIdsToRemove,
+  buildSourceEventStateUpdates,
+  type SourceEventStateUpdate,
+} from "../source/event-diff";
+import {
+  parseStoredSourceEventStatesRecoveringInvalid,
   type StoredSourceEventState,
 } from "../source/stored-event-state";
 
@@ -19,6 +24,7 @@ interface FetchEventsResult {
 interface IngestionChanges {
   inserts: SourceEvent[];
   deletes: string[];
+  updates: SourceEventStateUpdate[];
   snapshot?: CalendarSnapshotChange;
   syncToken?: string | null;
 }
@@ -28,13 +34,45 @@ interface CalendarSnapshotChange {
   ical: string;
 }
 
-interface IngestSourceOptions {
-  calendarId: string;
-  fetchEvents: () => Promise<FetchEventsResult>;
+interface IngestionPersistence {
   readExistingEvents: () => Promise<StoredSourceEventState[]>;
   flush: (changes: IngestionChanges) => Promise<void>;
+}
+
+type IngestionPersistenceWork = (
+  persistence: IngestionPersistence,
+) => Promise<IngestionResult>;
+
+interface BaseIngestSourceOptions {
+  calendarId: string;
+  fetchEvents: () => Promise<FetchEventsResult>;
   onIngestEvent?: (event: Record<string, unknown>) => void;
 }
+
+interface DirectIngestSourceOptions extends BaseIngestSourceOptions {
+  readExistingEvents: () => Promise<StoredSourceEventState[]>;
+  flush: (changes: IngestionChanges) => Promise<void>;
+  withPersistenceTransaction?: never;
+}
+
+interface TransactionalIngestSourceOptions extends BaseIngestSourceOptions {
+  withPersistenceTransaction: (
+    work: IngestionPersistenceWork,
+  ) => Promise<IngestionResult>;
+}
+
+type IngestSourceOptions = DirectIngestSourceOptions | TransactionalIngestSourceOptions;
+
+const resolvePersistenceTransaction = (
+  options: IngestSourceOptions,
+): TransactionalIngestSourceOptions["withPersistenceTransaction"] => {
+  if ("readExistingEvents" in options) {
+    const { flush, readExistingEvents } = options;
+    return (work: IngestionPersistenceWork) => work({ flush, readExistingEvents });
+  }
+  const { withPersistenceTransaction } = options;
+  return withPersistenceTransaction;
+};
 
 interface IngestionResult {
   eventsAdded: number;
@@ -44,7 +82,7 @@ interface IngestionResult {
 const EMPTY_RESULT: IngestionResult = { eventsAdded: 0, eventsRemoved: 0 };
 
 const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResult> => {
-  const { calendarId, fetchEvents, readExistingEvents, flush, onIngestEvent } = options;
+  const { calendarId, fetchEvents, onIngestEvent } = options;
 
   const wideEvent: Record<string, unknown> = {
     "calendar.id": calendarId,
@@ -56,13 +94,9 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
   let flushed = false;
 
   try {
-    const [fetchResult, storedEvents] = await Promise.all([
-      fetchEvents(),
-      readExistingEvents(),
-    ]);
+    const fetchResult = await fetchEvents();
 
     wideEvent["source_events.count"] = fetchResult.events.length;
-    wideEvent["existing_events.count"] = storedEvents.length;
 
     if (fetchResult.unchanged) {
       wideEvent["outcome"] = "unchanged";
@@ -70,76 +104,114 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       return EMPTY_RESULT;
     }
 
-    if (fetchResult.fullSyncRequired) {
-      wideEvent["outcome"] = "full-sync-required";
-      wideEvent["flushed"] = true;
-      await flush({ inserts: [], deletes: [], syncToken: null });
-      flushed = true;
-      return EMPTY_RESULT;
-    }
+    const withPersistenceTransaction = resolvePersistenceTransaction(options);
 
-    const existingEvents = parseStoredSourceEventStates(storedEvents);
-
-    const eventsToAdd = buildSourceEventsToAdd(existingEvents, fetchResult.events, {
-      isDeltaSync: fetchResult.isDeltaSync ?? false,
-    });
-
-    const eventStateIdsToRemove = buildSourceEventStateIdsToRemove(
-      existingEvents,
-      fetchResult.events,
-      {
-        changedEventIds: fetchResult.changedEventIds,
-        cancelledEventIds: fetchResult.cancelledEventIds,
-        isDeltaSync: fetchResult.isDeltaSync ?? false,
-      },
-    );
-
-    wideEvent["events.added"] = eventsToAdd.length;
-    wideEvent["events.removed"] = eventStateIdsToRemove.length;
-
-    if (eventsToAdd.length === 0 && eventStateIdsToRemove.length === 0) {
-      if (fetchResult.nextSyncToken || fetchResult.snapshot) {
-        const changes: IngestionChanges = { inserts: [], deletes: [] };
-        if (fetchResult.nextSyncToken) {
-          changes.syncToken = fetchResult.nextSyncToken;
-        }
-        if (fetchResult.snapshot) {
-          changes.snapshot = fetchResult.snapshot;
-        }
-        await flush(changes);
+    return await withPersistenceTransaction(async ({ readExistingEvents, flush }) => {
+      if (fetchResult.fullSyncRequired) {
+        wideEvent["outcome"] = "full-sync-required";
+        wideEvent["flushed"] = true;
+        await flush({ inserts: [], deletes: [], updates: [], syncToken: null });
         flushed = true;
-        wideEvent["outcome"] = "in-sync";
+        return EMPTY_RESULT;
+      }
+
+      const storedEvents = await readExistingEvents();
+      wideEvent["existing_events.count"] = storedEvents.length;
+
+      const isDeltaSync = fetchResult.isDeltaSync ?? false;
+      const parseResult = parseStoredSourceEventStatesRecoveringInvalid(storedEvents);
+      const existingEvents = parseResult.events;
+      const invalidStoredEventIds = parseResult.failures.map((failure) => failure.eventId);
+      if (parseResult.failures.length > 0) {
+        wideEvent["stored_events.invalid_count"] = parseResult.failures.length;
+        wideEvent["stored_events.invalid_ids"] = invalidStoredEventIds;
+        wideEvent["stored_events.validation_errors"] = parseResult.failures.map(
+          (failure) => failure.error.message,
+        );
+      }
+
+      if (isDeltaSync && parseResult.failures.length > 0) {
+        await flush({ inserts: [], deletes: [], updates: [], syncToken: null });
+        flushed = true;
+        wideEvent["outcome"] = "full-sync-required";
         wideEvent["flushed"] = true;
         return EMPTY_RESULT;
       }
 
-      wideEvent["outcome"] = "in-sync";
-      wideEvent["flushed"] = false;
-      return EMPTY_RESULT;
-    }
+      const eventsToAdd = buildSourceEventsToAdd(existingEvents, fetchResult.events, {
+        isDeltaSync,
+      });
+      const eventStatesToUpdate = buildSourceEventStateUpdates(
+        existingEvents,
+        fetchResult.events,
+      );
 
-    const changes: IngestionChanges = {
-      inserts: eventsToAdd,
-      deletes: eventStateIdsToRemove,
-    };
+      const eventStateIdsToRemove = [...new Set([
+        ...invalidStoredEventIds,
+        ...buildSourceEventStateIdsToRemove(
+          existingEvents,
+          fetchResult.events,
+          {
+            changedEventIds: fetchResult.changedEventIds,
+            cancelledEventIds: fetchResult.cancelledEventIds,
+            isDeltaSync,
+          },
+        ),
+      ])];
 
-    if (typeof fetchResult.nextSyncToken === "string") {
-      changes.syncToken = fetchResult.nextSyncToken;
-    }
-    if (fetchResult.snapshot) {
-      changes.snapshot = fetchResult.snapshot;
-    }
+      wideEvent["events.added"] = eventsToAdd.length;
+      wideEvent["events.removed"] = eventStateIdsToRemove.length;
+      wideEvent["events.updated"] = eventStatesToUpdate.length;
 
-    await flush(changes);
+      if (
+        eventsToAdd.length === 0
+        && eventStateIdsToRemove.length === 0
+        && eventStatesToUpdate.length === 0
+      ) {
+        if (fetchResult.nextSyncToken || fetchResult.snapshot) {
+          const changes: IngestionChanges = { inserts: [], deletes: [], updates: [] };
+          if (fetchResult.nextSyncToken) {
+            changes.syncToken = fetchResult.nextSyncToken;
+          }
+          if (fetchResult.snapshot) {
+            changes.snapshot = fetchResult.snapshot;
+          }
+          await flush(changes);
+          flushed = true;
+          wideEvent["outcome"] = "in-sync";
+          wideEvent["flushed"] = true;
+          return EMPTY_RESULT;
+        }
 
-    flushed = true;
-    wideEvent["outcome"] = "success";
-    wideEvent["flushed"] = true;
+        wideEvent["outcome"] = "in-sync";
+        wideEvent["flushed"] = false;
+        return EMPTY_RESULT;
+      }
 
-    return {
-      eventsAdded: eventsToAdd.length,
-      eventsRemoved: eventStateIdsToRemove.length,
-    };
+      const changes: IngestionChanges = {
+        inserts: eventsToAdd,
+        deletes: eventStateIdsToRemove,
+        updates: eventStatesToUpdate,
+      };
+
+      if (typeof fetchResult.nextSyncToken === "string") {
+        changes.syncToken = fetchResult.nextSyncToken;
+      }
+      if (fetchResult.snapshot) {
+        changes.snapshot = fetchResult.snapshot;
+      }
+
+      await flush(changes);
+
+      flushed = true;
+      wideEvent["outcome"] = "success";
+      wideEvent["flushed"] = true;
+
+      return {
+        eventsAdded: eventsToAdd.length + eventStatesToUpdate.length,
+        eventsRemoved: eventStateIdsToRemove.length,
+      };
+    });
   } catch (error) {
     wideEvent["outcome"] = "error";
     wideEvent["flushed"] = flushed;
@@ -160,6 +232,8 @@ export { ingestSource };
 export type {
   CalendarSnapshotChange,
   IngestSourceOptions,
+  IngestionPersistence,
+  IngestionPersistenceWork,
   IngestionResult,
   IngestionChanges,
   FetchEventsResult,

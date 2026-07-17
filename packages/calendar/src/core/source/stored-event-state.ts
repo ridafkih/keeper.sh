@@ -31,6 +31,24 @@ interface ExistingSourceEventState extends Omit<
   recurrenceRule: IcsRecurrenceRule | null;
 }
 
+interface StoredSourceEventParseFailure {
+  error: Error;
+  event: StoredSourceEventState;
+  eventId: string;
+}
+
+interface StoredSourceEventParseResult {
+  events: ExistingSourceEventState[];
+  failures: StoredSourceEventParseFailure[];
+}
+
+const normalizeStoredSourceEventParseError = (error: unknown): Error => {
+  if (error instanceof Error) {
+    return error;
+  }
+  return new Error(String(error));
+};
+
 const parseStoredSourceEventState = (
   event: StoredSourceEventState,
 ): ExistingSourceEventState => ({
@@ -43,5 +61,35 @@ const parseStoredSourceEventStates = (
   events: StoredSourceEventState[],
 ): ExistingSourceEventState[] => events.map((event) => parseStoredSourceEventState(event));
 
-export { parseStoredSourceEventState, parseStoredSourceEventStates };
-export type { ExistingSourceEventState, StoredSourceEventState };
+const parseStoredSourceEventStatesRecoveringInvalid = (
+  storedEvents: StoredSourceEventState[],
+): StoredSourceEventParseResult => {
+  const events: ExistingSourceEventState[] = [];
+  const failures: StoredSourceEventParseFailure[] = [];
+
+  for (const storedEvent of storedEvents) {
+    try {
+      events.push(parseStoredSourceEventState(storedEvent));
+    } catch (error) {
+      failures.push({
+        error: normalizeStoredSourceEventParseError(error),
+        event: storedEvent,
+        eventId: storedEvent.id,
+      });
+    }
+  }
+
+  return { events, failures };
+};
+
+export {
+  parseStoredSourceEventState,
+  parseStoredSourceEventStates,
+  parseStoredSourceEventStatesRecoveringInvalid,
+};
+export type {
+  ExistingSourceEventState,
+  StoredSourceEventParseFailure,
+  StoredSourceEventParseResult,
+  StoredSourceEventState,
+};

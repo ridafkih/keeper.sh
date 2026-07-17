@@ -1,4 +1,10 @@
-import type { IcsCalendar, IcsDuration, IcsEvent } from "ts-ics";
+import type {
+  IcsCalendar,
+  IcsDateObject,
+  IcsDuration,
+  IcsEvent,
+  IcsExceptionDates,
+} from "ts-ics";
 import type { EventTimeSlot } from "./types";
 import {
   KEEPER_EVENT_SUFFIX,
@@ -59,8 +65,45 @@ const getEventAvailability = (event: IcsEvent) => {
   return null;
 };
 
+const buildRecurrenceIdentity = (uid: string, recurrenceDate: Date): string =>
+  `${uid}|${recurrenceDate.toISOString()}`;
+
+const mergeExceptionDates = (
+  exceptionDates: IcsExceptionDates | undefined,
+  cancelledDates: IcsDateObject[],
+): IcsExceptionDates | undefined => {
+  const merged = new Map<string, IcsDateObject>();
+  for (const exceptionDate of [...exceptionDates ?? [], ...cancelledDates]) {
+    merged.set(exceptionDate.date.toISOString(), exceptionDate);
+  }
+  if (merged.size === 0) {
+    return;
+  }
+  return [...merged.values()];
+};
+
 const parseIcsEvents = (calendar: IcsCalendar): EventTimeSlot[] => {
   const result: EventTimeSlot[] = [];
+  const cancelledMasterUids = new Set<string>();
+  const cancelledRecurrences = new Map<string, IcsDateObject[]>();
+
+  for (const event of calendar.events ?? []) {
+    if (event.status !== "CANCELLED" || !event.uid) {
+      continue;
+    }
+    if (!event.recurrenceId) {
+      cancelledMasterUids.add(event.uid);
+      continue;
+    }
+    const dates = cancelledRecurrences.get(event.uid) ?? [];
+    dates.push(event.recurrenceId.value);
+    cancelledRecurrences.set(event.uid, dates);
+  }
+
+  const cancelledRecurrenceIdentities = new Set(
+    [...cancelledRecurrences].flatMap(([uid, dates]) =>
+      dates.map((date) => buildRecurrenceIdentity(uid, date.date))),
+  );
 
   for (const event of calendar.events ?? []) {
     if (isKeeperEvent(event.uid)) {
@@ -69,15 +112,33 @@ const parseIcsEvents = (calendar: IcsCalendar): EventTimeSlot[] => {
     if (!event.uid) {
       continue;
     }
+    if (event.status === "CANCELLED" || cancelledMasterUids.has(event.uid)) {
+      continue;
+    }
+    if (
+      event.recurrenceId
+      && cancelledRecurrenceIdentities.has(
+        buildRecurrenceIdentity(event.uid, event.recurrenceId.value.date),
+      )
+    ) {
+      continue;
+    }
 
     const startTime = event.start.date;
     const availability = getEventAvailability(event);
+    let { exceptionDates } = event;
+    if (event.recurrenceRule) {
+      exceptionDates = mergeExceptionDates(
+        event.exceptionDates,
+        cancelledRecurrences.get(event.uid) ?? [],
+      );
+    }
 
     result.push({
       ...availability && { availability },
       description: event.description,
       endTime: getEventEndTime(event, startTime),
-      exceptionDates: event.exceptionDates,
+      exceptionDates,
       recurrenceId: event.recurrenceId?.value?.date,
       isAllDay: event.start.type === "DATE",
       location: event.location,

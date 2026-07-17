@@ -14,6 +14,17 @@ interface SourceEventIdentityOptions {
   normalizeMissingMetadata?: boolean;
 }
 
+interface SourceEventStateUpdate {
+  event: SourceEvent;
+  id: string;
+}
+
+interface LegacyStateTransition {
+  matchedExistingIds: Set<string>;
+  matchedIncomingEvents: Set<SourceEvent>;
+  updates: SourceEventStateUpdate[];
+}
+
 const normalizeIdentityIsAllDay = (
   isAllDay: boolean | null | undefined,
   options: SourceEventIdentityOptions,
@@ -69,7 +80,7 @@ const buildSourceEventIdentityKey = (
   input: SourceEventIdentityInput,
   options: SourceEventIdentityOptions = {},
 ): string =>
-  [
+  stringify([
     input.sourceEventId ?? "",
     input.sourceEventUid,
     input.sourceEventInstanceKey,
@@ -85,7 +96,7 @@ const buildSourceEventIdentityKey = (
     serializeStructuredIdentityValue(input.recurrenceRule),
     serializeStructuredIdentityValue(input.exceptionDates),
     input.recurrenceId?.toISOString() ?? "",
-  ].join("|");
+  ]);
 
 const deduplicateIncomingEvents = (incomingEvents: SourceEvent[]): SourceEvent[] => {
   const dedupedEvents = new Map<string, SourceEvent>();
@@ -103,6 +114,57 @@ const deduplicateIncomingEvents = (incomingEvents: SourceEvent[]): SourceEvent[]
   return [...dedupedEvents.values()];
 };
 
+const buildLegacyStateTransition = (
+  existingEvents: ExistingSourceEventState[],
+  incomingEvents: SourceEvent[],
+): LegacyStateTransition => {
+  const normalizedIncomingEvents = deduplicateIncomingEvents(incomingEvents);
+  const incomingByProviderId = new Map<string, SourceEvent>();
+  const incomingByInstanceKey = new Map<string, SourceEvent[]>();
+
+  for (const event of normalizedIncomingEvents) {
+    if (event.sourceEventId) {
+      incomingByProviderId.set(event.sourceEventId, event);
+    }
+    const instanceKey = buildSourceEventInstanceKey(event);
+    const matchingEvents = incomingByInstanceKey.get(instanceKey) ?? [];
+    matchingEvents.push(event);
+    incomingByInstanceKey.set(instanceKey, matchingEvents);
+  }
+
+  const matchedExistingIds = new Set<string>();
+  const matchedIncomingEvents = new Set<SourceEvent>();
+  const updates: SourceEventStateUpdate[] = [];
+
+  for (const existingEvent of existingEvents) {
+    if (existingEvent.sourceEventInstanceKey !== null || existingEvent.sourceEventUid === null) {
+      continue;
+    }
+
+    let providerMatch: SourceEvent | null = null;
+    if (existingEvent.sourceEventId) {
+      providerMatch = incomingByProviderId.get(existingEvent.sourceEventId) ?? null;
+    }
+    const instanceMatches = incomingByInstanceKey.get(
+      resolveExistingSourceEventInstanceKey(existingEvent),
+    ) ?? [];
+    let matchingEvent = instanceMatches.find((event) => !matchedIncomingEvents.has(event));
+    if (providerMatch && !matchedIncomingEvents.has(providerMatch)) {
+      matchingEvent = providerMatch;
+    }
+
+    if (!matchingEvent) {
+      continue;
+    }
+
+    matchedExistingIds.add(existingEvent.id);
+    matchedIncomingEvents.add(matchingEvent);
+    updates.push({ event: matchingEvent, id: existingEvent.id });
+  }
+
+  return { matchedExistingIds, matchedIncomingEvents, updates };
+};
+
 const buildExistingEventIdentitySet = (
   existingEvents: ExistingSourceEventState[],
   options: SourceEventIdentityOptions = {},
@@ -110,7 +172,7 @@ const buildExistingEventIdentitySet = (
   const identities = new Set<string>();
 
   for (const existingEvent of existingEvents) {
-    if (existingEvent.sourceEventUid === null) {
+    if (existingEvent.sourceEventUid === null || existingEvent.sourceEventInstanceKey === null) {
       continue;
     }
 
@@ -147,13 +209,15 @@ const buildSourceEventsToAdd = (
   options: SourceEventDiffOptions = {},
 ): SourceEvent[] => {
   const normalizedIncomingEvents = deduplicateIncomingEvents(incomingEvents);
+  const transition = buildLegacyStateTransition(existingEvents, normalizedIncomingEvents);
   const existingIdentities = buildExistingEventIdentitySet(existingEvents, {
     normalizeMissingMetadata: options.isDeltaSync ?? false,
   });
 
   return normalizedIncomingEvents.filter(
     (incomingEvent) =>
-      !existingIdentities.has(
+      !transition.matchedIncomingEvents.has(incomingEvent)
+      && !existingIdentities.has(
         buildSourceEventIdentityKey(
           {
             availability: incomingEvent.availability,
@@ -184,6 +248,7 @@ const buildSourceEventStateIdsToRemove = (
   options: SourceEventDiffOptions = {},
 ): string[] => {
   const normalizedIncomingEvents = deduplicateIncomingEvents(incomingEvents);
+  const transition = buildLegacyStateTransition(existingEvents, normalizedIncomingEvents);
   const { changedEventIds, isDeltaSync = false, cancelledEventIds } = options;
   const incomingProviderIdSet = new Set(
     normalizedIncomingEvents.flatMap((incomingEvent) => {
@@ -217,6 +282,10 @@ const buildSourceEventStateIdsToRemove = (
 
     return existingEvents
       .filter((existingEvent) => {
+        if (transition.matchedExistingIds.has(existingEvent.id)) {
+          return false;
+        }
+
         if (!existingEvent.sourceEventId) {
           if (existingEvent.sourceEventUid === null) {
             return false;
@@ -247,6 +316,10 @@ const buildSourceEventStateIdsToRemove = (
 
   return existingEvents
     .filter((existingEvent) => {
+      if (transition.matchedExistingIds.has(existingEvent.id)) {
+        return false;
+      }
+
       if (existingEvent.sourceEventId) {
         return !incomingProviderIdSet.has(existingEvent.sourceEventId);
       }
@@ -266,10 +339,16 @@ const buildSourceEventStateIdsToRemove = (
     .map((existingEvent) => existingEvent.id);
 };
 
+const buildSourceEventStateUpdates = (
+  existingEvents: ExistingSourceEventState[],
+  incomingEvents: SourceEvent[],
+): SourceEventStateUpdate[] => buildLegacyStateTransition(existingEvents, incomingEvents).updates;
+
 export {
   buildSourceEventIdentityKey,
+  buildSourceEventStateUpdates,
   buildSourceEventsToAdd,
   buildSourceEventStateIdsToRemove,
 };
-export type { SourceEventDiffOptions };
+export type { SourceEventDiffOptions, SourceEventStateUpdate };
 export type { ExistingSourceEventState } from "./stored-event-state";

@@ -1,5 +1,11 @@
-import { buildSourceEventStateIdsToRemove, buildSourceEventsToAdd } from "../../../core/source/event-diff";
-import { parseStoredSourceEventStates } from "../../../core/source/stored-event-state";
+import {
+  buildSourceEventStateIdsToRemove,
+  buildSourceEventStateUpdates,
+  buildSourceEventsToAdd,
+} from "../../../core/source/event-diff";
+import {
+  parseStoredSourceEventStatesRecoveringInvalid,
+} from "../../../core/source/stored-event-state";
 import { filterSourceEventsToSyncWindow, resolveSourceSyncTokenAction, splitSourceEventsByPersistenceIdentity } from "../../../core/source/sync-diagnostics";
 import {
   buildEventStateInsertRow,
@@ -131,20 +137,39 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       })
       .from(eventStatesTable)
       .where(eq(eventStatesTable.calendarId, calendarId));
-    const existingEvents = parseStoredSourceEventStates(storedEvents);
+    const parseResult = parseStoredSourceEventStatesRecoveringInvalid(storedEvents);
+    const existingEvents = parseResult.events;
+    if (isDeltaSync && parseResult.failures.length > 0) {
+      await this.clearSyncToken();
+      return {
+        eventsAdded: 0,
+        eventsFilteredOutOfWindow,
+        eventsRemoved: 0,
+        fullSyncRequired: true,
+        syncTokenResetCount: 1,
+      };
+    }
 
     const eventsToAdd = buildSourceEventsToAdd(existingEvents, eventsInWindow, { isDeltaSync });
-    const eventStateIdsToRemove = buildSourceEventStateIdsToRemove(
-      existingEvents,
-      eventsInWindow,
-      { cancelledEventIds, changedEventIds, isDeltaSync },
-    );
+    const legacyStateUpdates = buildSourceEventStateUpdates(existingEvents, eventsInWindow);
+    const eventStateIdsToRemove = [...new Set([
+      ...parseResult.failures.map((failure) => failure.eventId),
+      ...buildSourceEventStateIdsToRemove(
+        existingEvents,
+        eventsInWindow,
+        { cancelledEventIds, changedEventIds, isDeltaSync },
+      ),
+    ])];
     const { eventsToInsert, eventsToUpdate } = splitSourceEventsByPersistenceIdentity(
       existingEvents,
       eventsToAdd,
     );
 
-    if (eventStateIdsToRemove.length > EMPTY_COUNT || eventsToAdd.length > EMPTY_COUNT) {
+    if (
+      eventStateIdsToRemove.length > EMPTY_COUNT
+      || eventsToAdd.length > EMPTY_COUNT
+      || legacyStateUpdates.length > EMPTY_COUNT
+    ) {
       await database.transaction(async (transactionDatabase) => {
         if (eventStateIdsToRemove.length > EMPTY_COUNT) {
           await transactionDatabase
@@ -153,6 +178,18 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
               and(
                 eq(eventStatesTable.calendarId, calendarId),
                 inArray(eventStatesTable.id, eventStateIdsToRemove),
+              ),
+            );
+        }
+
+        for (const update of legacyStateUpdates) {
+          await transactionDatabase
+            .update(eventStatesTable)
+            .set(buildEventStateInsertRow(calendarId, update.event))
+            .where(
+              and(
+                eq(eventStatesTable.calendarId, calendarId),
+                eq(eventStatesTable.id, update.id),
               ),
             );
         }
@@ -185,7 +222,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       eventsFilteredOutOfWindow,
       eventsInserted: eventsToInsert.length,
       eventsRemoved: eventStateIdsToRemove.length,
-      eventsUpdated: eventsToUpdate.length,
+      eventsUpdated: eventsToUpdate.length + legacyStateUpdates.length,
       syncTokenResetCount: Number(syncTokenAction.shouldResetSyncToken),
       syncToken: nextSyncToken,
     };

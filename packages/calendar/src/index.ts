@@ -85,8 +85,10 @@ export {
   buildSourceEventIdentityKey,
   buildSourceEventsToAdd,
   buildSourceEventStateIdsToRemove,
+  buildSourceEventStateUpdates,
   type ExistingSourceEventState,
   type SourceEventDiffOptions,
+  type SourceEventStateUpdate,
 } from "./core/source/event-diff";
 export {
   parseStoredSourceEventState,
@@ -221,6 +223,8 @@ export type {
   IngestSourceOptions,
   IngestionResult,
   IngestionChanges,
+  IngestionPersistence,
+  IngestionPersistenceWork,
   CalendarSnapshotChange,
   FetchEventsResult as IngestionFetchEventsResult,
 } from "./core/sync-engine/ingest";

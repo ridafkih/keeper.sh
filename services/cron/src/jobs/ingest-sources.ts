@@ -13,7 +13,7 @@ import {
   buildCalendarBackoffState,
 } from "@keeper.sh/calendar";
 import { INGEST_SOURCE_TIMEOUT_MS, PROVIDER_INGEST_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
-import type { CalendarBackoffState, IngestionChanges, IngestionFetchEventsResult, RedisRateLimiter, TokenState } from "@keeper.sh/calendar";
+import type { CalendarBackoffState, IngestionFetchEventsResult, IngestionPersistenceWork, RedisRateLimiter, TokenState } from "@keeper.sh/calendar";
 import {
   createIcsSourceFetcher,
   interpretFullDayTimedEventsAsAllDay,
@@ -30,7 +30,7 @@ import {
   eventStatesTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
-import { and, arrayContains, eq, inArray, isNull, lte, or } from "drizzle-orm";
+import { and, arrayContains, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import { database, refreshLockRedis, refreshLockStore } from "@/context";
@@ -40,6 +40,7 @@ import { resolveMissingCalendarFailure } from "@/utils/provider-ingest-failure";
 
 const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
 const SOURCE_CONCURRENCY = 5;
+const SOURCE_INGEST_LOCK_NAMESPACE = 9003;
 
 const resolveIngestErrorSlug = (error: unknown): string => {
   if (!isTimeoutError(error)) {
@@ -97,62 +98,78 @@ const withTimeout = <TResult>(
     }),
   ]);
 
-const createIngestionFlush = (calendarId: string) =>
-  async (changes: IngestionChanges): Promise<void> => {
-    await database.transaction(async (transaction) => {
-      if (changes.deletes.length > 0) {
-        await transaction
-          .delete(eventStatesTable)
-          .where(
-            and(
-              eq(eventStatesTable.calendarId, calendarId),
-              inArray(eventStatesTable.id, changes.deletes),
-            ),
+const createIngestionPersistenceTransaction = (calendarId: string) =>
+  (work: IngestionPersistenceWork) => database.transaction(async (transaction) => {
+    await transaction.execute(
+      sql`select pg_advisory_xact_lock(${SOURCE_INGEST_LOCK_NAMESPACE}, hashtext(${calendarId}))`,
+    );
+
+    return work({
+      readExistingEvents: () => transaction
+        .select({
+          availability: eventStatesTable.availability,
+          description: eventStatesTable.description,
+          endTime: eventStatesTable.endTime,
+          exceptionDates: eventStatesTable.exceptionDates,
+          id: eventStatesTable.id,
+          isAllDay: eventStatesTable.isAllDay,
+          location: eventStatesTable.location,
+          recurrenceId: eventStatesTable.recurrenceId,
+          recurrenceRule: eventStatesTable.recurrenceRule,
+          sourceEventId: eventStatesTable.sourceEventId,
+          sourceEventInstanceKey: eventStatesTable.sourceEventInstanceKey,
+          sourceEventType: eventStatesTable.sourceEventType,
+          sourceEventUid: eventStatesTable.sourceEventUid,
+          startTime: eventStatesTable.startTime,
+          startTimeZone: eventStatesTable.startTimeZone,
+          title: eventStatesTable.title,
+        })
+        .from(eventStatesTable)
+        .where(eq(eventStatesTable.calendarId, calendarId)),
+      flush: async (changes) => {
+        if (changes.deletes.length > 0) {
+          await transaction
+            .delete(eventStatesTable)
+            .where(
+              and(
+                eq(eventStatesTable.calendarId, calendarId),
+                inArray(eventStatesTable.id, changes.deletes),
+              ),
+            );
+        }
+
+        for (const update of changes.updates) {
+          await transaction
+            .update(eventStatesTable)
+            .set(buildEventStateInsertRow(calendarId, update.event))
+            .where(
+              and(
+                eq(eventStatesTable.calendarId, calendarId),
+                eq(eventStatesTable.id, update.id),
+              ),
+            );
+        }
+
+        if (changes.inserts.length > 0) {
+          await insertEventStatesWithConflictResolution(
+            transaction,
+            changes.inserts.map((event) => buildEventStateInsertRow(calendarId, event)),
           );
-      }
+        }
 
-      if (changes.inserts.length > 0) {
-        await insertEventStatesWithConflictResolution(
-          transaction,
-          changes.inserts.map((event) => buildEventStateInsertRow(calendarId, event)),
-        );
-      }
+        if ("syncToken" in changes) {
+          await transaction
+            .update(calendarsTable)
+            .set({ syncToken: changes.syncToken })
+            .where(eq(calendarsTable.id, calendarId));
+        }
 
-      if ("syncToken" in changes) {
-        await transaction
-          .update(calendarsTable)
-          .set({ syncToken: changes.syncToken })
-          .where(eq(calendarsTable.id, calendarId));
-      }
-
-      if (changes.snapshot) {
-        await persistCalendarSnapshot(transaction, calendarId, changes.snapshot);
-      }
+        if (changes.snapshot) {
+          await persistCalendarSnapshot(transaction, calendarId, changes.snapshot);
+        }
+      },
     });
-  };
-
-const readExistingEvents = (calendarId: string) =>
-  database
-    .select({
-      availability: eventStatesTable.availability,
-      description: eventStatesTable.description,
-      endTime: eventStatesTable.endTime,
-      exceptionDates: eventStatesTable.exceptionDates,
-      id: eventStatesTable.id,
-      isAllDay: eventStatesTable.isAllDay,
-      location: eventStatesTable.location,
-      recurrenceId: eventStatesTable.recurrenceId,
-      recurrenceRule: eventStatesTable.recurrenceRule,
-      sourceEventType: eventStatesTable.sourceEventType,
-      sourceEventId: eventStatesTable.sourceEventId,
-      sourceEventInstanceKey: eventStatesTable.sourceEventInstanceKey,
-      sourceEventUid: eventStatesTable.sourceEventUid,
-      startTime: eventStatesTable.startTime,
-      startTimeZone: eventStatesTable.startTimeZone,
-      title: eventStatesTable.title,
-    })
-    .from(eventStatesTable)
-    .where(eq(eventStatesTable.calendarId, calendarId));
+  });
 
 const resolveTokenRefresher = (provider: string) => {
   if (provider === "google" && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
@@ -310,8 +327,8 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
               ingestSource({
                 calendarId: source.calendarId,
                 fetchEvents: () => fetcher.fetchEvents(),
-                readExistingEvents: () => readExistingEvents(source.calendarId),
-                flush: createIngestionFlush(source.calendarId),
+                withPersistenceTransaction:
+                  createIngestionPersistenceTransaction(source.calendarId),
                 onIngestEvent: (event) => {
                   ingestEvents.push({
                     ...event,
@@ -463,8 +480,8 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
               ingestSource({
                 calendarId: source.calendarId,
                 fetchEvents: () => fetcher.fetchEvents(),
-                readExistingEvents: () => readExistingEvents(source.calendarId),
-                flush: createIngestionFlush(source.calendarId),
+                withPersistenceTransaction:
+                  createIngestionPersistenceTransaction(source.calendarId),
                 onIngestEvent: (event) => {
                   ingestEvents.push({
                     ...event,
@@ -602,8 +619,8 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
                         enabled: source.treatFullDayTimedEventsAsAllDay,
                       }),
                   }),
-                readExistingEvents: () => readExistingEvents(source.calendarId),
-                flush: createIngestionFlush(source.calendarId),
+                withPersistenceTransaction:
+                  createIngestionPersistenceTransaction(source.calendarId),
                 onIngestEvent: (event) => {
                   ingestEvents.push({
                     ...event,

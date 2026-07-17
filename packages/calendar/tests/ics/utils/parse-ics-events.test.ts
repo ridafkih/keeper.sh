@@ -92,4 +92,61 @@ describe("parseIcsEvents", () => {
       parsedEvents[1]?.startTime.getTime() ?? Number.POSITIVE_INFINITY,
     );
   });
+
+  it("turns a cancelled recurrence override into a master exception", () => {
+    const calendar = parseIcsCalendar({
+      icsString: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Keeper Test//EN",
+        "BEGIN:VEVENT",
+        "UID:cancelled-instance",
+        "DTSTART:20260302T100000Z",
+        "DTEND:20260302T110000Z",
+        "RRULE:FREQ=WEEKLY;COUNT=3",
+        "END:VEVENT",
+        "BEGIN:VEVENT",
+        "UID:cancelled-instance",
+        "RECURRENCE-ID:20260309T100000Z",
+        "DTSTART:20260309T100000Z",
+        "DTEND:20260309T110000Z",
+        "STATUS:CANCELLED",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    });
+
+    const parsedEvents = parseIcsEvents(calendar);
+
+    expect(parsedEvents).toHaveLength(1);
+    expect(parsedEvents[0]?.exceptionDates?.map((date) => date.date.toISOString())).toEqual([
+      "2026-03-09T10:00:00.000Z",
+    ]);
+  });
+
+  it("drops a cancelled master and all of its detached overrides", () => {
+    const calendar = parseIcsCalendar({
+      icsString: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Keeper Test//EN",
+        "BEGIN:VEVENT",
+        "UID:cancelled-series",
+        "DTSTART:20260302T100000Z",
+        "DTEND:20260302T110000Z",
+        "RRULE:FREQ=WEEKLY;COUNT=3",
+        "STATUS:CANCELLED",
+        "END:VEVENT",
+        "BEGIN:VEVENT",
+        "UID:cancelled-series",
+        "RECURRENCE-ID:20260309T100000Z",
+        "DTSTART:20260310T100000Z",
+        "DTEND:20260310T110000Z",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    });
+
+    expect(parseIcsEvents(calendar)).toEqual([]);
+  });
 });

@@ -339,6 +339,32 @@ describe("recurring events", () => {
     expect(ics).not.toContain("UID:override-id@keeper.sh");
   });
 
+  it("keeps expanded provider instances standalone when no recurring master exists", () => {
+    const sourceUid = "google-expanded-series";
+    const ics = formatEventsAsIcal(
+      [
+        makeEvent({
+          id: "provider-instance-1",
+          sourceEventUid: sourceUid,
+          startTime: new Date("2026-05-18T13:00:00Z"),
+          endTime: new Date("2026-05-18T13:30:00Z"),
+        }),
+        makeEvent({
+          id: "provider-instance-2",
+          sourceEventUid: sourceUid,
+          startTime: new Date("2026-05-19T13:00:00Z"),
+          endTime: new Date("2026-05-19T13:30:00Z"),
+        }),
+      ],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(ics).toContain("UID:provider-instance-1@keeper.sh");
+    expect(ics).toContain("UID:provider-instance-2@keeper.sh");
+    expect(ics).not.toContain("RECURRENCE-ID");
+    expect(ics.match(/UID:/g)).toHaveLength(2);
+  });
+
   it("emits standalone UIDs for events lacking sourceEventUid", () => {
     const ics = formatEventsAsIcal(
       [

@@ -3,6 +3,7 @@ import type { SourceEvent } from "../../../src/core/types";
 import {
   buildSourceEventsToAdd,
   buildSourceEventStateIdsToRemove,
+  buildSourceEventStateUpdates,
   type ExistingSourceEventState,
 } from "../../../src/core/source/event-diff";
 import { buildSourceEventInstanceKey } from "../../../src/core/source/event-instance";
@@ -23,9 +24,9 @@ const createExistingEvent = (
     ...overrides,
   };
   const { sourceEventInstanceKey: overriddenInstanceKey } = overrides;
-  const resolveInstanceKey = (): string => {
-    if (overriddenInstanceKey) {
-      return overriddenInstanceKey;
+  const resolveInstanceKey = (): string | null => {
+    if ("sourceEventInstanceKey" in overrides) {
+      return overriddenInstanceKey ?? null;
     }
     if (!event.sourceEventUid) {
       return `legacy|${event.id}`;
@@ -227,10 +228,11 @@ describe("source event diff", () => {
     expect(idsToRemove).toEqual([]);
   });
 
-  it("backfills provider event identity during the forced full sync", () => {
+  it("backfills provider identity in place so destination mappings keep their event state id", () => {
     const existingEvents = [
       createExistingEvent({
         sourceEventId: null,
+        sourceEventInstanceKey: null,
         sourceEventUid: "event-uid-1",
       }),
     ];
@@ -241,9 +243,35 @@ describe("source event diff", () => {
       }),
     ];
 
-    expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toEqual(incomingEvents);
-    expect(buildSourceEventStateIdsToRemove(existingEvents, incomingEvents)).toEqual([
-      "existing-id-1",
+    expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toEqual([]);
+    expect(buildSourceEventStateIdsToRemove(existingEvents, incomingEvents)).toEqual([]);
+    expect(buildSourceEventStateUpdates(existingEvents, incomingEvents)).toEqual([
+      { event: incomingEvents[0], id: "existing-id-1" },
+    ]);
+  });
+
+  it("backfills a recurrence instance key without replacing the stored row", () => {
+    const existingEvents = [
+      createExistingEvent({
+        id: "mapped-override-state",
+        recurrenceId: new Date("2026-03-11T19:00:00.000Z"),
+        sourceEventInstanceKey: null,
+        sourceEventUid: "recurring-uid",
+        title: "Old title",
+      }),
+    ];
+    const incomingEvents = [
+      createIncomingEvent({
+        recurrenceId: new Date("2026-03-11T19:00:00.000Z"),
+        title: "Updated title",
+        uid: "recurring-uid",
+      }),
+    ];
+
+    expect(buildSourceEventStateIdsToRemove(existingEvents, incomingEvents)).toEqual([]);
+    expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toEqual([]);
+    expect(buildSourceEventStateUpdates(existingEvents, incomingEvents)).toEqual([
+      { event: incomingEvents[0], id: "mapped-override-state" },
     ]);
   });
 
@@ -404,6 +432,20 @@ describe("source event diff", () => {
     expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toHaveLength(1);
   });
 
+  it("updates legacy rows whose instance key predates the generated migration", () => {
+    const existingEvents = [createExistingEvent({
+      sourceEventInstanceKey: null,
+      title: "Old title",
+    })];
+    const incomingEvents = [createIncomingEvent({ title: "New title" })];
+
+    expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toEqual([]);
+    expect(buildSourceEventStateIdsToRemove(existingEvents, incomingEvents)).toEqual([]);
+    expect(buildSourceEventStateUpdates(existingEvents, incomingEvents)).toEqual([
+      { event: incomingEvents[0], id: "existing-id-1" },
+    ]);
+  });
+
   it("compares structured recurrence fields independently of object key order", () => {
     const existingEvents = [createExistingEvent({
       recurrenceRule: { byDay: [{ day: "MO" }], frequency: "WEEKLY" },
@@ -413,6 +455,19 @@ describe("source event diff", () => {
     })];
 
     expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toEqual([]);
+  });
+
+  it("does not confuse field boundaries when event text contains identity delimiters", () => {
+    const existingEvents = [createExistingEvent({
+      description: "C",
+      title: "A|B",
+    })];
+    const incomingEvents = [createIncomingEvent({
+      description: "B|C",
+      title: "A",
+    })];
+
+    expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toEqual(incomingEvents);
   });
 
   it("preserves overrides with different recurrence IDs after they move to the same slot", () => {

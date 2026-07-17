@@ -82,7 +82,7 @@ const isRecurringMaster = (event: CalendarEvent): boolean =>
   event.recurrenceRule !== null && event.recurrenceId === null;
 
 const groupEventsBySourceUid = (events: CalendarEvent[]): EventGroup[] => {
-  const groups = new Map<string, EventGroup>();
+  const eventsBySourceUid = new Map<string, CalendarEvent[]>();
   const ungrouped: EventGroup[] = [];
 
   for (const event of events) {
@@ -90,20 +90,34 @@ const groupEventsBySourceUid = (events: CalendarEvent[]): EventGroup[] => {
       ungrouped.push({ master: event, overrides: [] });
       continue;
     }
-    const existing = groups.get(event.sourceEventUid);
-    if (!existing) {
-      groups.set(event.sourceEventUid, { master: event, overrides: [] });
-      continue;
-    }
-    if (isRecurringMaster(event) && !isRecurringMaster(existing.master)) {
-      existing.overrides.push(existing.master);
-      existing.master = event;
-    } else {
-      existing.overrides.push(event);
-    }
+    const sourceEvents = eventsBySourceUid.get(event.sourceEventUid) ?? [];
+    sourceEvents.push(event);
+    eventsBySourceUid.set(event.sourceEventUid, sourceEvents);
   }
 
-  return [...groups.values(), ...ungrouped];
+  const groups: EventGroup[] = [];
+  for (const sourceEvents of eventsBySourceUid.values()) {
+    const masters = sourceEvents.filter((event) => isRecurringMaster(event));
+    if (masters.length !== 1) {
+      ungrouped.push(...sourceEvents.map((event) => ({ master: event, overrides: [] })));
+      continue;
+    }
+
+    const [master] = masters;
+    if (!master) {
+      continue;
+    }
+    const overrides = sourceEvents.filter(
+      (event) => event !== master && event.recurrenceId !== null,
+    );
+    groups.push({ master, overrides });
+    const standaloneEvents = sourceEvents.filter(
+      (event) => event !== master && event.recurrenceId === null,
+    );
+    ungrouped.push(...standaloneEvents.map((event) => ({ master: event, overrides: [] })));
+  }
+
+  return [...groups, ...ungrouped];
 };
 
 const buildBaseIcsEvent = (event: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => {

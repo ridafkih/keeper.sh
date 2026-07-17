@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { SourceEvent } from "../../../src/core/types";
+import type {
+  IngestionChanges,
+  IngestionPersistenceWork,
+} from "../../../src/core/sync-engine/ingest";
+import { parseGoogleEvents } from "../../../src/providers/google/source/utils/fetch-events";
+import { parseOutlookEvents } from "../../../src/providers/outlook/source/utils/fetch-events";
 
 const makeSourceEvent = (uid: string, startTime: Date, endTime: Date): SourceEvent => ({
   uid,
@@ -33,20 +39,36 @@ interface StatefulIngestion {
   nextId: number;
 }
 
+const serializeOptionalJson = (value: unknown): string | null => {
+  if (!value) {
+    return null;
+  }
+  return JSON.stringify(value);
+};
+
+const buildTestInstanceKey = (event: SourceEvent): string => {
+  if (event.recurrenceId) {
+    return `recurrence|${event.uid}|${event.recurrenceId.toISOString()}`;
+  }
+  return `slot|${event.uid}|${event.startTime.toISOString()}|${event.endTime.toISOString()}`;
+};
+
+const failUninitializedBarrier = (): never => {
+  throw new Error("Test barrier was not initialized");
+};
+
 const toExistingEvent = (id: string, event: SourceEvent): ExistingEvent => ({
   availability: event.availability ?? null,
   description: event.description ?? null,
   endTime: event.endTime,
-  exceptionDates: event.exceptionDates ? JSON.stringify(event.exceptionDates) : null,
+  exceptionDates: serializeOptionalJson(event.exceptionDates),
   id,
   isAllDay: event.isAllDay ?? null,
   location: event.location ?? null,
   recurrenceId: event.recurrenceId ?? null,
-  recurrenceRule: event.recurrenceRule ? JSON.stringify(event.recurrenceRule) : null,
+  recurrenceRule: serializeOptionalJson(event.recurrenceRule),
   sourceEventId: event.sourceEventId ?? null,
-  sourceEventInstanceKey: event.recurrenceId
-    ? `recurrence|${event.uid}|${event.recurrenceId.toISOString()}`
-    : `slot|${event.uid}|${event.startTime.toISOString()}|${event.endTime.toISOString()}`,
+  sourceEventInstanceKey: buildTestInstanceKey(event),
   sourceEventType: event.sourceEventType ?? null,
   sourceEventUid: event.uid,
   startTime: event.startTime,
@@ -97,6 +119,14 @@ const createStatefulIngestion = async (initialEvents: SourceEvent[]) => {
         const deletedIds = new Set(changes.deletes);
         state.events = state.events.filter((event) => !deletedIds.has(event.id));
 
+        for (const update of changes.updates) {
+          const existingIndex = state.events.findIndex((event) => event.id === update.id);
+          if (existingIndex === -1) {
+            throw new Error(`Cannot update missing event state: ${update.id}`);
+          }
+          state.events[existingIndex] = toExistingEvent(update.id, update.event);
+        }
+
         for (const event of changes.inserts) {
           const storageIdentity = eventStorageIdentity({
             endTime: event.endTime,
@@ -131,6 +161,72 @@ const createStatefulIngestion = async (initialEvents: SourceEvent[]) => {
 };
 
 describe("ingestSource", () => {
+  it.each([
+    {
+      createEvents: (starts: string[]) => parseGoogleEvents(starts.map((start, index) => ({
+        end: { dateTime: new Date(new Date(start).getTime() + 3_600_000).toISOString() },
+        iCalUID: "expanded-series@google",
+        id: `google-instance-${index + 1}`,
+        start: { dateTime: start },
+      }))),
+      name: "Google expanded instances",
+    },
+    {
+      createEvents: (starts: string[]) => parseOutlookEvents(starts.map((start, index) => ({
+        end: { dateTime: new Date(new Date(start).getTime() + 3_600_000).toISOString(), timeZone: "UTC" },
+        iCalUId: `outlook-instance-${index + 1}`,
+        id: `outlook-instance-${index + 1}`,
+        start: { dateTime: start, timeZone: "UTC" },
+      }))),
+      name: "Outlook expanded instances",
+    },
+  ])("converges $name after move, cancellation, restore, and replay", async ({ createEvents }) => {
+    const originalStarts = [
+      "2026-05-04T14:00:00.000Z",
+      "2026-05-11T14:00:00.000Z",
+      "2026-05-18T14:00:00.000Z",
+    ];
+    const initialEvents = createEvents(originalStarts);
+    const { ingestDelta, state } = await createStatefulIngestion(initialEvents);
+    const movedEvent = createEvents([
+      originalStarts[0] as string,
+      "2026-05-11T17:30:00.000Z",
+      originalStarts[2] as string,
+    ])[1] as SourceEvent;
+
+    await ingestDelta([movedEvent]);
+    expect(state.events.map((event) => event.startTime.toISOString()).toSorted()).toEqual([
+      "2026-05-04T14:00:00.000Z",
+      "2026-05-11T17:30:00.000Z",
+      "2026-05-18T14:00:00.000Z",
+    ]);
+
+    const cancelledEventId = initialEvents[0]?.sourceEventId;
+    expect(cancelledEventId).toBeDefined();
+    await ingestDelta([], [cancelledEventId as string], [cancelledEventId as string]);
+    expect(state.events.map((event) => event.sourceEventId).toSorted()).toEqual([
+      initialEvents[1]?.sourceEventId,
+      initialEvents[2]?.sourceEventId,
+    ].toSorted());
+
+    const restoredEvent = initialEvents[0] as SourceEvent;
+    await ingestDelta([restoredEvent]);
+    const stateAfterRestore = state.events.map((event) => ({
+      id: event.sourceEventId,
+      start: event.startTime.toISOString(),
+    })).toSorted((left, right) => (left.id ?? "").localeCompare(right.id ?? ""));
+    expect(stateAfterRestore).toHaveLength(3);
+
+    const replayResult = await ingestDelta([restoredEvent]);
+    expect(replayResult).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+    expect(state.events.map((event) => ({
+      id: event.sourceEventId,
+      start: event.startTime.toISOString(),
+    })).toSorted((left, right) => (left.id ?? "").localeCompare(right.id ?? ""))).toEqual(
+      stateAfterRestore,
+    );
+  });
+
   it("accumulates event inserts from new source events and flushes at the end", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
 
@@ -236,6 +332,42 @@ describe("ingestSource", () => {
     expect(flushCapture).toHaveLength(1);
     expect(flushCapture[0]?.deletes).toEqual([]);
     expect(flushCapture[0]?.inserts).toEqual([movedEvent]);
+  });
+
+  it("upgrades a legacy null instance key in place instead of cascading its mappings", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const incomingEvent = {
+      ...makeSourceEvent(
+        "mapped-recurring-uid",
+        new Date("2026-03-15T11:00:00Z"),
+        new Date("2026-03-15T12:00:00Z"),
+      ),
+      recurrenceId: new Date("2026-03-15T09:00:00Z"),
+      title: "Moved override",
+    };
+    const existingEvent = {
+      ...toExistingEvent("mapped-state-id", incomingEvent),
+      sourceEventInstanceKey: null,
+      title: "Old override",
+    };
+    const flushes: IngestionChanges[] = [];
+
+    const result = await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({ events: [incomingEvent] }),
+      flush: (changes) => {
+        flushes.push(changes);
+        return Promise.resolve();
+      },
+      readExistingEvents: () => Promise.resolve([existingEvent]),
+    });
+
+    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 0 });
+    expect(flushes).toEqual([{
+      deletes: [],
+      inserts: [],
+      updates: [{ event: incomingEvent, id: "mapped-state-id" }],
+    }]);
   });
 
   it("keeps recurring siblings while one provider occurrence changes and moves", async () => {
@@ -445,6 +577,102 @@ describe("ingestSource", () => {
     expect(flushedSnapshots).toEqual([snapshot]);
   });
 
+  it("serializes persistence after fetching concurrent full snapshots", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    let fetchesCompleted = 0;
+    let releaseFetchBarrier: () => void = failUninitializedBarrier;
+    const fetchBarrier = new Promise<void>((resolve) => {
+      releaseFetchBarrier = resolve;
+    });
+    let transactionTail = Promise.resolve();
+    const storedEvents: ExistingEvent[] = [];
+    const storedSnapshot: { value: { contentHash: string; ical: string } | null } = {
+      value: null,
+    };
+
+    const withPersistenceTransaction = async (
+      work: IngestionPersistenceWork,
+    ) => {
+      const previousTransaction = transactionTail;
+      let releaseTransaction: () => void = failUninitializedBarrier;
+      transactionTail = new Promise<void>((resolve) => {
+        releaseTransaction = resolve;
+      });
+      await previousTransaction;
+      expect(fetchesCompleted).toBe(2);
+
+      try {
+        return await work({
+          readExistingEvents: () => Promise.resolve([...storedEvents]),
+          flush: (changes) => {
+            const deletedIds = new Set(changes.deletes);
+            const retainedEvents = storedEvents.filter((event) => !deletedIds.has(event.id));
+            storedEvents.splice(0, storedEvents.length, ...retainedEvents);
+            for (const update of changes.updates) {
+              const existingIndex = storedEvents.findIndex((event) => event.id === update.id);
+              if (existingIndex === -1) {
+                throw new Error(`Cannot update missing event state: ${update.id}`);
+              }
+              storedEvents[existingIndex] = toExistingEvent(update.id, update.event);
+            }
+            for (const event of changes.inserts) {
+              storedEvents.push(toExistingEvent(`state-${event.uid}`, event));
+            }
+            if (changes.snapshot) {
+              storedSnapshot.value = changes.snapshot;
+            }
+            return Promise.resolve();
+          },
+        });
+      } finally {
+        releaseTransaction();
+      }
+    };
+
+    const runIngest = (identity: string) => ingestSource({
+      calendarId: "cal-concurrent",
+      fetchEvents: async () => {
+        fetchesCompleted += 1;
+        if (fetchesCompleted === 2) {
+          releaseFetchBarrier();
+        }
+        await fetchBarrier;
+        return {
+          events: [makeSourceEvent(
+            identity,
+            new Date("2026-03-15T09:00:00Z"),
+            new Date("2026-03-15T10:00:00Z"),
+          )],
+          snapshot: { contentHash: identity, ical: `BEGIN:${identity}` },
+        };
+      },
+      withPersistenceTransaction,
+    });
+
+    await Promise.all([runIngest("snapshot-a"), runIngest("snapshot-b")]);
+
+    expect(storedEvents).toHaveLength(1);
+    expect(storedSnapshot.value).toBeDefined();
+    expect(storedEvents[0]?.sourceEventUid).toBe(storedSnapshot.value?.contentHash);
+  });
+
+  it("does not enter persistence when the fetched source is unchanged", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    let transactionEntered = false;
+
+    const result = await ingestSource({
+      calendarId: "cal-unchanged",
+      fetchEvents: () => Promise.resolve({ events: [], unchanged: true }),
+      withPersistenceTransaction: () => {
+        transactionEntered = true;
+        return Promise.resolve({ eventsAdded: 0, eventsRemoved: 0 });
+      },
+    });
+
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+    expect(transactionEntered).toBe(false);
+  });
+
   it("includes sync token in flush when provided by fetchEvents", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
 
@@ -483,6 +711,99 @@ describe("ingestSource", () => {
     expect(typeof emittedEvents[0]?.["duration_ms"]).toBe("number");
   });
 
+  it("replaces corrupt stored recurrence rows during a changed full sync", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const sourceEvent = makeSourceEvent(
+      "uid-corrupt",
+      new Date("2026-03-15T09:00:00Z"),
+      new Date("2026-03-15T10:00:00Z"),
+    );
+    const corruptStoredEvent = {
+      ...toExistingEvent("state-corrupt", sourceEvent),
+      recurrenceRule: "not-json",
+    };
+    const flushes: { inserts: SourceEvent[]; deletes: string[] }[] = [];
+    const emittedEvents: Record<string, unknown>[] = [];
+
+    const result = await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({ events: [sourceEvent] }),
+      readExistingEvents: () => Promise.resolve([corruptStoredEvent]),
+      flush: (changes) => {
+        flushes.push(changes);
+        return Promise.resolve();
+      },
+      onIngestEvent: (event) => { emittedEvents.push(event); },
+    });
+
+    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 1 });
+    expect(flushes).toEqual([{
+      deletes: ["state-corrupt"],
+      inserts: [sourceEvent],
+      updates: [],
+    }]);
+    expect(emittedEvents[0]?.["stored_events.invalid_count"]).toBe(1);
+    expect(emittedEvents[0]?.["stored_events.invalid_ids"]).toEqual(["state-corrupt"]);
+    expect(emittedEvents[0]?.["stored_events.validation_errors"]).toEqual([
+      "Failed to JSON.parse recurrenceRule for event state-corrupt",
+    ]);
+  });
+
+  it("resets delta sync when a corrupt stored row requires full-sync recovery", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const sourceEvent = makeSourceEvent(
+      "uid-corrupt",
+      new Date("2026-03-15T09:00:00Z"),
+      new Date("2026-03-15T10:00:00Z"),
+    );
+    const corruptStoredEvent = {
+      ...toExistingEvent("state-corrupt", sourceEvent),
+      recurrenceRule: "not-json",
+    };
+
+    const flushes: { inserts: SourceEvent[]; deletes: string[]; syncToken?: string | null }[] = [];
+
+    const result = await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({ events: [], isDeltaSync: true }),
+      readExistingEvents: () => Promise.resolve([corruptStoredEvent]),
+      flush: (changes) => {
+        flushes.push(changes);
+        return Promise.resolve();
+      },
+    });
+
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+    expect(flushes).toEqual([{ deletes: [], inserts: [], syncToken: null, updates: [] }]);
+  });
+
+  it("does not parse corrupt stored rows when the fetched source is unchanged", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const sourceEvent = makeSourceEvent(
+      "uid-corrupt",
+      new Date("2026-03-15T09:00:00Z"),
+      new Date("2026-03-15T10:00:00Z"),
+    );
+    const corruptStoredEvent = {
+      ...toExistingEvent("state-corrupt", sourceEvent),
+      recurrenceRule: "not-json",
+    };
+    let flushed = false;
+
+    const result = await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({ events: [], unchanged: true }),
+      readExistingEvents: () => Promise.resolve([corruptStoredEvent]),
+      flush: () => {
+        flushed = true;
+        return Promise.resolve();
+      },
+    });
+
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+    expect(flushed).toBe(false);
+  });
+
   it("clears sync token and returns empty result when fullSyncRequired is true", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
 
@@ -499,7 +820,7 @@ describe("ingestSource", () => {
       exceptionDates: null,
       location: null,
       recurrenceId: null,
-      recurrenceRule: null,
+      recurrenceRule: "not-json",
       sourceEventInstanceKey: "slot|uid-1|2026-03-15T09:00:00.000Z|2026-03-15T10:00:00.000Z",
       startTimeZone: null,
     };
