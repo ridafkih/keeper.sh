@@ -64,6 +64,7 @@ interface FetchEventsResult {
   nextSyncToken?: string;
   fullSyncRequired: boolean;
   isDeltaSync?: boolean;
+  changedEventIds?: string[];
   cancelledEventIds?: string[];
 }
 

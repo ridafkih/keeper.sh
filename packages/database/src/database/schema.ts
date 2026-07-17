@@ -8,7 +8,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { isNotNull } from "drizzle-orm";
+import { isNotNull, isNull } from "drizzle-orm";
 import { user } from "./auth-schema";
 
 const DEFAULT_EVENT_COUNT = 0;
@@ -180,7 +180,7 @@ const eventStatesTable = pgTable(
       table.sourceEventUid,
       table.startTime,
       table.endTime,
-    ),
+    ).where(isNull(table.sourceEventId)),
   ],
 );
 

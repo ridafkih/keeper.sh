@@ -29,9 +29,14 @@ describe("event state schema", () => {
     const sourceEventIndex = tableConfig.indexes.find(
       (index) => index.config.name === "event_states_source_event_idx",
     );
+    const legacyIdentityIndex = tableConfig.indexes.find(
+      (index) => index.config.name === "event_states_identity_idx",
+    );
 
     expect(sourceEventIndex?.config.unique).toBe(true);
     expect(sourceEventIndex?.config.where).toBeDefined();
+    expect(legacyIdentityIndex?.config.unique).toBe(true);
+    expect(legacyIdentityIndex?.config.where).toBeDefined();
     const columnNames = sourceEventIndex?.config.columns.map((column) => {
       if ("name" in column && typeof column.name === "string") {
         return column.name;

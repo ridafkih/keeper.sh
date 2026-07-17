@@ -1,5 +1,5 @@
 import { buildSourceEventStateIdsToRemove, buildSourceEventsToAdd } from "../../../core/source/event-diff";
-import { filterSourceEventsToSyncWindow, resolveSourceSyncTokenAction, splitSourceEventsByStorageIdentity } from "../../../core/source/sync-diagnostics";
+import { filterSourceEventsToSyncWindow, resolveSourceSyncTokenAction, splitSourceEventsByPersistenceIdentity } from "../../../core/source/sync-diagnostics";
 import { insertEventStatesWithConflictResolution } from "../../../core/source/write-event-states";
 import { OAuthSourceProvider, type ProcessEventsOptions } from "../../../core/oauth/source-provider";
 import type { FetchEventsResult as BaseFetchEventsResult } from "../../../core/oauth/source-provider";
@@ -80,6 +80,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
 
     const events = parseOutlookEvents(result.events);
     const fetchResult: BaseFetchEventsResult = {
+      changedEventIds: result.changedEventIds,
       events,
       fullSyncRequired: false,
       isDeltaSync: result.isDeltaSync,
@@ -98,8 +99,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
     options: ProcessEventsOptions,
   ): Promise<SourceSyncResult> {
     const { database, calendarId } = this.config;
-    const { nextSyncToken, isDeltaSync, cancelledEventIds } = options;
-    const changedEventIds = events.flatMap((event) => event.sourceEventId ?? []);
+    const { changedEventIds, nextSyncToken, isDeltaSync, cancelledEventIds } = options;
     const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
     const {
       events: eventsInWindow,
@@ -135,7 +135,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       eventsInWindow,
       { cancelledEventIds, changedEventIds, isDeltaSync },
     );
-    const { eventsToInsert, eventsToUpdate } = splitSourceEventsByStorageIdentity(
+    const { eventsToInsert, eventsToUpdate } = splitSourceEventsByPersistenceIdentity(
       existingEvents,
       eventsToAdd,
     );

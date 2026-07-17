@@ -162,7 +162,7 @@ describe("OutlookSourceProvider", () => {
 
     const result = await provider.runProcessEvents(
       [movedOutOfWindow],
-      { isDeltaSync: true },
+      { changedEventIds: ["provider-event-1"], isDeltaSync: true },
     );
 
     expect(result.eventsFilteredOutOfWindow).toBe(1);

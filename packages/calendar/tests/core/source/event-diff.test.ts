@@ -55,6 +55,50 @@ describe("source event diff", () => {
     expect(eventsToAdd[0]?.startTime.toISOString()).toBe("2026-03-04T23:00:00.000Z");
   });
 
+  it("keeps provider occurrences distinct when their UID and interval are identical", () => {
+    const incomingEvents = [
+      createIncomingEvent({
+        sourceEventId: "provider-instance-1",
+        uid: "recurring-uid",
+      }),
+      createIncomingEvent({
+        sourceEventId: "provider-instance-2",
+        uid: "recurring-uid",
+      }),
+    ];
+
+    expect(buildSourceEventsToAdd([], incomingEvents)).toEqual(incomingEvents);
+  });
+
+  it("updates a moved provider occurrence without removing its stable row", () => {
+    const existingEvents = [
+      createExistingEvent({
+        id: "instance-1",
+        sourceEventId: "provider-instance-1",
+        sourceEventUid: "recurring-uid",
+      }),
+      createExistingEvent({
+        endTime: new Date("2026-03-12T22:00:00.000Z"),
+        id: "instance-2",
+        sourceEventId: "provider-instance-2",
+        sourceEventUid: "recurring-uid",
+        startTime: new Date("2026-03-12T21:00:00.000Z"),
+      }),
+    ];
+    const movedEvent = createIncomingEvent({
+      sourceEventId: "provider-instance-2",
+      uid: "recurring-uid",
+    });
+
+    expect(buildSourceEventsToAdd(existingEvents, [movedEvent], {
+      isDeltaSync: true,
+    })).toEqual([movedEvent]);
+    expect(buildSourceEventStateIdsToRemove(existingEvents, [movedEvent], {
+      changedEventIds: ["provider-instance-2"],
+      isDeltaSync: true,
+    })).toEqual([]);
+  });
+
   it("removes only missing recurring instances during full sync", () => {
     const existingEvents = [
       createExistingEvent({
@@ -174,7 +218,27 @@ describe("source event diff", () => {
     ];
 
     expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toEqual(incomingEvents);
-    expect(buildSourceEventStateIdsToRemove(existingEvents, incomingEvents)).toEqual([]);
+    expect(buildSourceEventStateIdsToRemove(existingEvents, incomingEvents)).toEqual([
+      "existing-id-1",
+    ]);
+  });
+
+  it("removes provider rows by provider identity during full sync", () => {
+    const existingEvents = [
+      createExistingEvent({
+        id: "stale-provider-row",
+        sourceEventId: "provider-event-old",
+      }),
+    ];
+    const incomingEvents = [
+      createIncomingEvent({
+        sourceEventId: "provider-event-current",
+      }),
+    ];
+
+    expect(buildSourceEventStateIdsToRemove(existingEvents, incomingEvents)).toEqual([
+      "stale-provider-row",
+    ]);
   });
 
   it("does not duplicate missing source metadata during delta sync", () => {

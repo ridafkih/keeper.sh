@@ -87,7 +87,7 @@ export {
 export {
   filterSourceEventsToSyncWindow,
   resolveSourceSyncTokenAction,
-  splitSourceEventsByStorageIdentity,
+  splitSourceEventsByPersistenceIdentity,
   type OAuthSyncWindow,
   type SourceEventsInWindowResult,
   type SourceEventStoragePartition,

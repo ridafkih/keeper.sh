@@ -17,12 +17,14 @@ interface FetchEventsResult {
   nextSyncToken?: string;
   fullSyncRequired?: boolean;
   isDeltaSync?: boolean;
+  changedEventIds?: string[];
   cancelledEventIds?: string[];
 }
 
 interface ProcessEventsOptions {
   nextSyncToken?: string;
   isDeltaSync?: boolean;
+  changedEventIds?: string[];
   cancelledEventIds?: string[];
 }
 
@@ -50,6 +52,7 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
       await this.clearSyncToken();
       const fullResult = await this.fetchEvents(null);
       return this.processEvents(fullResult.events, {
+        changedEventIds: fullResult.changedEventIds,
         cancelledEventIds: fullResult.cancelledEventIds,
         isDeltaSync: fullResult.isDeltaSync,
         nextSyncToken: fullResult.nextSyncToken,
@@ -57,6 +60,7 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
     }
 
     const processResult = await this.processEvents(result.events, {
+      changedEventIds: result.changedEventIds,
       cancelledEventIds: result.cancelledEventIds,
       isDeltaSync: result.isDeltaSync,
       nextSyncToken: result.nextSyncToken,
@@ -65,6 +69,7 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
     if (processResult.fullSyncRequired) {
       const fullResult = await this.fetchEvents(null);
       return this.processEvents(fullResult.events, {
+        changedEventIds: fullResult.changedEventIds,
         cancelledEventIds: fullResult.cancelledEventIds,
         isDeltaSync: false,
         nextSyncToken: fullResult.nextSyncToken,

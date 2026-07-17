@@ -47,6 +47,19 @@ const eventStorageIdentity = (
 ): string =>
   `${event.sourceEventUid}|${event.startTime.toISOString()}|${event.endTime.toISOString()}`;
 
+const matchesPersistenceIdentity = (
+  existingEvent: ExistingEvent,
+  incomingEvent: SourceEvent,
+  incomingStorageIdentity: string,
+): boolean => {
+  if (incomingEvent.sourceEventId) {
+    return existingEvent.sourceEventId === incomingEvent.sourceEventId;
+  }
+
+  return !existingEvent.sourceEventId
+    && eventStorageIdentity(existingEvent) === incomingStorageIdentity;
+};
+
 const createStatefulIngestion = async (initialEvents: SourceEvent[]) => {
   const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
   const state: StatefulIngestion = {
@@ -79,7 +92,11 @@ const createStatefulIngestion = async (initialEvents: SourceEvent[]) => {
             startTime: event.startTime,
           });
           const existingIndex = state.events.findIndex(
-            (existingEvent) => eventStorageIdentity(existingEvent) === storageIdentity,
+            (existingEvent) => matchesPersistenceIdentity(
+              existingEvent,
+              event,
+              storageIdentity,
+            ),
           );
           const existingId = state.events[existingIndex]?.id;
           const eventStateId = existingId ?? `state-${state.nextId}`;
@@ -154,7 +171,7 @@ describe("ingestSource", () => {
     expect(flushCapture[0]?.deletes[0]).toBe("state-1");
   });
 
-  it("deletes the stale event state when a delta event moves", async () => {
+  it("upserts a moved delta event without deleting its stable provider row", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
     const existingEvent: ExistingEvent = {
       availability: null,
@@ -193,9 +210,9 @@ describe("ingestSource", () => {
       readExistingEvents: () => Promise.resolve([existingEvent]),
     });
 
-    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 1 });
+    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 0 });
     expect(flushCapture).toHaveLength(1);
-    expect(flushCapture[0]?.deletes).toEqual(["state-old-time"]);
+    expect(flushCapture[0]?.deletes).toEqual([]);
     expect(flushCapture[0]?.inserts).toEqual([movedEvent]);
   });
 
@@ -249,7 +266,7 @@ describe("ingestSource", () => {
       startTime: new Date("2026-03-04T11:00:00Z"),
     };
     const movedResult = await ingestDelta([movedOccurrence]);
-    expect(movedResult).toEqual({ eventsAdded: 1, eventsRemoved: 1 });
+    expect(movedResult).toEqual({ eventsAdded: 1, eventsRemoved: 0 });
     expect(state.events).toHaveLength(3);
     expect(state.events.find(
       (event) => event.sourceEventId === "provider-instance-2",
@@ -258,6 +275,43 @@ describe("ingestSource", () => {
     const replayResult = await ingestDelta([movedOccurrence]);
     expect(replayResult).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
     expect(state.events).toHaveLength(3);
+  });
+
+  it("keeps both recurring siblings when one moves onto the other's interval", async () => {
+    const sharedStart = new Date("2026-03-02T09:00:00Z");
+    const sharedEnd = new Date("2026-03-02T10:00:00Z");
+    const recurringEvents = [
+      {
+        ...makeSourceEvent("shared-series-uid", sharedStart, sharedEnd),
+        sourceEventId: "provider-instance-1",
+      },
+      {
+        ...makeSourceEvent(
+          "shared-series-uid",
+          new Date("2026-03-09T09:00:00Z"),
+          new Date("2026-03-09T10:00:00Z"),
+        ),
+        sourceEventId: "provider-instance-2",
+      },
+    ];
+    const { ingestDelta, state } = await createStatefulIngestion(recurringEvents);
+    const movedOccurrence = {
+      ...recurringEvents[1] as SourceEvent,
+      endTime: sharedEnd,
+      startTime: sharedStart,
+    };
+
+    const result = await ingestDelta([movedOccurrence]);
+
+    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 0 });
+    expect(state.events).toHaveLength(2);
+    expect(state.events.map((event) => event.sourceEventId).toSorted()).toEqual([
+      "provider-instance-1",
+      "provider-instance-2",
+    ]);
+    expect(state.events.every(
+      (event) => event.startTime.getTime() === sharedStart.getTime(),
+    )).toBe(true);
   });
 
   it("cancels one recurring provider occurrence without deleting its siblings", async () => {
@@ -329,7 +383,7 @@ describe("ingestSource", () => {
 
     const result = await ingestDelta([intermediateVersion, finalVersion]);
 
-    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 1 });
+    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 0 });
     expect(state.events).toHaveLength(1);
     expect(state.events[0]?.startTime).toEqual(new Date("2026-03-02T11:00:00Z"));
   });

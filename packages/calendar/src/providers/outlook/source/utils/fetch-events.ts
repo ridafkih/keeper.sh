@@ -238,6 +238,12 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
   };
 
   if (isDeltaSync) {
+    result.changedEventIds = latestChangedEvents.flatMap((event) => {
+      if (!event.id) {
+        return [];
+      }
+      return [event.id];
+    });
     result.cancelledEventIds = latestChangedEvents.flatMap((event) => {
       if (event["@removed"] && event.id) {
         return [event.id];

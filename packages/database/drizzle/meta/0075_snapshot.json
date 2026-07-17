@@ -1094,6 +1094,7 @@
             }
           ],
           "isUnique": true,
+          "where": "\"event_states\".\"sourceEventId\" is null",
           "concurrently": false,
           "method": "btree",
           "with": {}

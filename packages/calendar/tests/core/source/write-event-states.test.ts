@@ -23,59 +23,70 @@ describe("insertEventStatesWithConflictResolution", () => {
     expect(insertCalled).toBe(false);
   });
 
-  it("uses event identity conflict target when inserting rows", async () => {
+  it("uses provider identity for provider rows and storage identity for legacy rows", async () => {
     const rows: EventStateInsertRow[] = [
       {
         availability: "busy",
         calendarId: "calendar-1",
         endTime: new Date("2026-03-12T11:00:00.000Z"),
+        sourceEventId: "provider-event-1",
         sourceEventType: "default",
         sourceEventUid: "uid-1",
         startTime: new Date("2026-03-12T10:00:00.000Z"),
         title: "Focus Block",
       },
+      {
+        calendarId: "calendar-1",
+        endTime: new Date("2026-03-13T11:00:00.000Z"),
+        sourceEventUid: "legacy-uid-1",
+        startTime: new Date("2026-03-13T10:00:00.000Z"),
+      },
     ];
 
     const calls: {
-      conflictConfig?: {
+      conflictConfig: {
         set: Record<string, unknown>;
         target: unknown[];
+        targetWhere: unknown;
       };
-      insertedRows?: EventStateInsertRow[];
-      insertTable?: typeof eventStatesTable;
-    } = {};
+      insertedRows: EventStateInsertRow[];
+      insertTable: typeof eventStatesTable;
+    }[] = [];
 
     const database = {
-      insert: (table: typeof eventStatesTable) => {
-        calls.insertTable = table;
-        return {
-          values: (values: EventStateInsertRow[]) => {
-            calls.insertedRows = values;
-            return {
-              onConflictDoUpdate: (config: {
-                set: Record<string, unknown>;
-                target: unknown[];
-              }) => {
-                calls.conflictConfig = config;
-                return Promise.resolve();
-              },
-            };
+      insert: (table: typeof eventStatesTable) => ({
+        values: (values: EventStateInsertRow[]) => ({
+          onConflictDoUpdate: (config: {
+            set: Record<string, unknown>;
+            target: unknown[];
+            targetWhere: unknown;
+          }) => {
+            calls.push({
+              conflictConfig: config,
+              insertedRows: values,
+              insertTable: table,
+            });
+            return Promise.resolve();
           },
-        };
-      },
+        }),
+      }),
     };
 
     await insertEventStatesWithConflictResolution(database, rows);
 
-    expect(calls.insertTable).toBe(eventStatesTable);
-    expect(calls.insertedRows).toEqual(rows);
-    expect(calls.conflictConfig?.target[0]).toBe(eventStatesTable.calendarId);
-    expect(calls.conflictConfig?.target[1]).toBe(eventStatesTable.sourceEventUid);
-    expect(calls.conflictConfig?.target[2]).toBe(eventStatesTable.startTime);
-    expect(calls.conflictConfig?.target[3]).toBe(eventStatesTable.endTime);
-    expect(Object.keys(calls.conflictConfig?.set ?? {}).toSorted()).toEqual([
+    expect(calls).toHaveLength(2);
+    const [providerCall, legacyCall] = calls;
+    expect(providerCall?.insertTable).toBe(eventStatesTable);
+    expect(providerCall?.insertedRows).toEqual([rows[0]]);
+    expect(providerCall?.conflictConfig.target).toEqual([
+      eventStatesTable.calendarId,
+      eventStatesTable.sourceEventId,
+    ]);
+    expect(providerCall?.conflictConfig.targetWhere).toBeDefined();
+    expect(Object.keys(providerCall?.conflictConfig.set ?? {}).toSorted()).toEqual([
       "availability",
       "description",
+      "endTime",
       "exceptionDates",
       "isAllDay",
       "location",
@@ -83,8 +94,19 @@ describe("insertEventStatesWithConflictResolution", () => {
       "recurrenceRule",
       "sourceEventId",
       "sourceEventType",
+      "sourceEventUid",
+      "startTime",
       "startTimeZone",
       "title",
     ]);
+    expect(legacyCall?.insertTable).toBe(eventStatesTable);
+    expect(legacyCall?.insertedRows).toEqual([rows[1]]);
+    expect(legacyCall?.conflictConfig.target).toEqual([
+      eventStatesTable.calendarId,
+      eventStatesTable.sourceEventUid,
+      eventStatesTable.startTime,
+      eventStatesTable.endTime,
+    ]);
+    expect(legacyCall?.conflictConfig.targetWhere).toBeDefined();
   });
 });

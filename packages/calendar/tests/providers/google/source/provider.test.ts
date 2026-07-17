@@ -3,6 +3,8 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { ProcessEventsOptions } from "../../../../src/core/oauth/source-provider";
+import { encodeStoredSyncToken } from "../../../../src/core/oauth/sync-token";
+import { OAUTH_SYNC_WINDOW_VERSION } from "../../../../src/core/oauth/sync-window";
 import type { SourceEvent, SourceSyncResult } from "../../../../src/core/types";
 import {
   createGoogleCalendarSourceProvider,
@@ -185,7 +187,7 @@ describe("GoogleCalendarSourceProvider", () => {
 
     const result = await provider.runProcessEvents(
       [movedOutOfWindow],
-      { isDeltaSync: true },
+      { changedEventIds: ["provider-event-1"], isDeltaSync: true },
     );
 
     expect(result.eventsFilteredOutOfWindow).toBe(1);
@@ -335,5 +337,57 @@ describe("GoogleCalendarSourceProvider", () => {
     expect(result.nextSyncToken).toBe("next-sync-token");
     expect(requestedUrls).toHaveLength(1);
     expect(requestedUrls[0]).toContain("/events");
+  });
+
+  it("preserves raw changed IDs when direct-provider parsing excludes a delta event", async () => {
+    const queuedFetch = (): Promise<Response> => Promise.resolve(createJsonResponse({
+      items: [{
+        end: {
+          dateTime: "2027-03-08T15:00:00.000Z",
+          timeZone: "UTC",
+        },
+        iCalUID: "event@keeper.sh",
+        id: "google-event-id-1",
+        start: {
+          dateTime: "2027-03-08T14:00:00.000Z",
+          timeZone: "UTC",
+        },
+        status: "confirmed",
+      }],
+      nextSyncToken: "next-sync-token",
+    }));
+    queuedFetch.preconnect = originalFetch.preconnect;
+    globalThis.fetch = queuedFetch;
+    const provider = new GoogleCalendarSourceProvider(
+      {
+        accessToken: "access-token",
+        accessTokenExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
+        calendarAccountId: "account-1",
+        calendarId: "calendar-1",
+        database: {} as never,
+        excludeFocusTime: false,
+        excludeOutOfOffice: false,
+        externalCalendarId: "calendar@example.com",
+        oauthCredentialId: "credential-1",
+        originalName: "Original Calendar",
+        refreshToken: "refresh-token",
+        sourceName: "Calendar",
+        syncToken: null,
+        userId: "user-1",
+      },
+      {
+        refreshAccessToken: () => Promise.reject(
+          new Error("refreshAccessToken should not be called"),
+        ),
+      },
+    );
+
+    const result = await provider.fetchEvents(encodeStoredSyncToken(
+      "current-sync-token",
+      OAUTH_SYNC_WINDOW_VERSION,
+    ));
+
+    expect(result.events).toEqual([]);
+    expect(result.changedEventIds).toEqual(["google-event-id-1"]);
   });
 });

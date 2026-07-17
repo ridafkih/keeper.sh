@@ -50,9 +50,7 @@ const createGoogleSourceFetcher = (config: GoogleSourceFetcherConfig): GoogleSou
 
     const fetchResult: FetchEventsResult = {
       events,
-      ...(result.isDeltaSync && {
-        changedEventIds: parsedEvents.flatMap((event) => event.sourceEventId ?? []),
-      }),
+      changedEventIds: result.changedEventIds,
       cancelledEventIds: result.cancelledEventIds,
       isDeltaSync: result.isDeltaSync,
     };

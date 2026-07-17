@@ -95,6 +95,12 @@ describe("fetchCalendarEvents", () => {
     expect(fetchResult.isDeltaSync).toBe(true);
     expect(fetchResult.nextSyncToken).toBe("sync-token-2");
     expect(fetchResult.events.map((event) => event.id)).toEqual(["event-1", "event-3"]);
+    expect(fetchResult.changedEventIds).toEqual([
+      "event-1",
+      "event-2",
+      "cancelled-by-id",
+      "event-3",
+    ]);
     expect(fetchResult.cancelledEventIds).toEqual(["event-2", "cancelled-by-id"]);
     expect(requestedUrls).toHaveLength(2);
 
@@ -156,6 +162,7 @@ describe("fetchCalendarEvents", () => {
     });
 
     expect(result.events.map((event) => event.id)).toEqual(expectedEventIds);
+    expect(result.changedEventIds).toEqual(["event-1"]);
     expect(result.cancelledEventIds).toEqual(expectedCancelledIds);
   });
 

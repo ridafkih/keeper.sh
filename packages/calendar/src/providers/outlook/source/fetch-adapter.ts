@@ -48,9 +48,7 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
 
     const fetchResult: FetchEventsResult = {
       events,
-      ...(result.isDeltaSync && {
-        changedEventIds: parsedEvents.flatMap((event) => event.sourceEventId ?? []),
-      }),
+      changedEventIds: result.changedEventIds,
       cancelledEventIds: result.cancelledEventIds,
       isDeltaSync: result.isDeltaSync,
     };
