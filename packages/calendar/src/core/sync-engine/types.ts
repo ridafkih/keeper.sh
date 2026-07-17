@@ -1,9 +1,15 @@
-import type { SyncableEvent, PushResult, DeleteResult, RemoteEvent } from "../types";
+import type {
+  DeleteResult,
+  ListRemoteEventsOptions,
+  PushResult,
+  RemoteEvent,
+  SyncableEvent,
+} from "../types";
 
 interface CalendarSyncProvider {
   pushEvents: (events: SyncableEvent[]) => Promise<PushResult[]>;
   deleteEvents: (eventIds: string[]) => Promise<DeleteResult[]>;
-  listRemoteEvents: () => Promise<RemoteEvent[]>;
+  listRemoteEvents: (options: ListRemoteEventsOptions) => Promise<RemoteEvent[]>;
 }
 
 interface PendingInsert {

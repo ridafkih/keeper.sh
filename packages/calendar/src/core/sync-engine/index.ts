@@ -3,6 +3,7 @@ import type { EventMapping } from "../events/mappings";
 import type { SyncProgressUpdate } from "../sync/types";
 import { createSyncEventContentHash } from "../events/content-hash";
 import { computeSyncOperations } from "../sync/operations";
+import type { RemoveOperationTimeBoundary } from "../sync/operations";
 import type { CalendarSyncProvider, PendingChanges } from "./types";
 
 const resolveOutcome = (superseded: boolean, invalidated: boolean): string => {
@@ -478,6 +479,7 @@ interface SyncCalendarOptions {
   flush: (changes: PendingChanges) => Promise<void>;
   onSyncEvent?: (event: Record<string, unknown>) => void;
   onProgress?: (update: SyncProgressUpdate) => void;
+  timeBoundary?: RemoveOperationTimeBoundary;
 }
 
 interface SyncCalendarResult extends SyncResult {
@@ -488,7 +490,18 @@ interface SyncCalendarResult extends SyncResult {
 const EMPTY_RESULT: SyncCalendarResult = { added: 0, addFailed: 0, removed: 0, removeFailed: 0, conflictsResolved: 0, errors: [] };
 
 const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarResult> => {
-  const { userId, calendarId, provider, readState, isCurrent, isInvalidated, flush, onSyncEvent, onProgress } = options;
+  const {
+    userId,
+    calendarId,
+    provider,
+    readState,
+    isCurrent,
+    isInvalidated,
+    flush,
+    onSyncEvent,
+    onProgress,
+    timeBoundary,
+  } = options;
 
   const wideEvent: Record<string, unknown> = {
     "calendar.id": calendarId,
@@ -536,6 +549,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       state.localEvents,
       state.existingMappings,
       state.remoteEvents,
+      timeBoundary,
     );
 
     const addCount = operations.filter((op) => op.type === "add" || op.type === "replace").length;

@@ -46,6 +46,7 @@ describe("buildRemoveOperations", () => {
     const historicalMapping = createEventMapping({
       destinationEventUid: "historical-uid",
       eventStateId: "historical-event-state-id",
+      endTime: new Date("2026-03-07T11:00:00.000Z"),
       id: "historical-mapping-id",
       startTime: new Date("2026-03-07T10:00:00.000Z"),
     });
@@ -56,7 +57,6 @@ describe("buildRemoveOperations", () => {
       new Set<string>(),
       new Set<string>(),
       {
-        now: new Date("2026-03-08T12:00:00.000Z"),
         syncWindowStart: new Date("2026-03-08T00:00:00.000Z"),
       },
     );
@@ -79,7 +79,6 @@ describe("buildRemoveOperations", () => {
       new Set<string>(),
       new Set<string>(),
       {
-        now: new Date("2026-03-08T12:00:00.000Z"),
         syncWindowStart: new Date("2026-03-08T00:00:00.000Z"),
       },
     );
@@ -107,7 +106,6 @@ describe("buildRemoveOperations", () => {
       new Set<string>(),
       new Set<string>(),
       {
-        now: new Date("2026-03-08T12:00:00.000Z"),
         syncWindowStart: new Date("2026-03-08T00:00:00.000Z"),
       },
     );
@@ -135,16 +133,86 @@ describe("buildRemoveOperations", () => {
       new Set<string>(),
       new Set<string>(),
       {
-        now: new Date("2026-03-08T12:00:00.000Z"),
         syncWindowStart: new Date("2026-03-08T00:00:00.000Z"),
       },
     );
 
     expect(operations).toHaveLength(0);
   });
+
+  it("does not remove an unmapped non-keeper event after it becomes historical", () => {
+    const historicalRemoteEvent = createRemoteEvent({
+      deleteId: "historical-user-delete-id",
+      isKeeperEvent: false,
+      startTime: new Date("2020-01-01T18:00:00.000Z"),
+      uid: "historical-user-uid",
+    });
+
+    expect(buildRemoveOperations(
+      [],
+      [historicalRemoteEvent],
+      new Set<string>(),
+      new Set<string>(),
+      { syncWindowStart: new Date("2026-03-08T00:00:00.000Z") },
+    )).toEqual([]);
+  });
+
+  it("removes an untagged Outlook event when its mapping proves Keeper ownership", () => {
+    const mapping = createEventMapping({
+      deleteIdentifier: "mapped-outlook-id",
+      destinationEventUid: "mapped-outlook-uid",
+    });
+    const mappedRemote = createRemoteEvent({
+      deleteId: mapping.deleteIdentifier,
+      isKeeperEvent: false,
+      uid: mapping.destinationEventUid,
+    });
+
+    expect(buildRemoveOperations(
+      [mapping],
+      [mappedRemote],
+      new Set<string>(),
+      new Set([`${mapping.destinationEventUid}\u0000${mapping.deleteIdentifier}`]),
+      { syncWindowStart: new Date("2026-03-01T00:00:00.000Z") },
+    )).toEqual([{
+      deleteId: mapping.deleteIdentifier,
+      startTime: mapping.startTime,
+      type: "remove",
+      uid: mapping.destinationEventUid,
+    }]);
+  });
 });
 
 describe("computeSyncOperations", () => {
+  it("keeps a matching mapped far-future event without requiring an orphan marker", () => {
+    const event = createLocalEvent({
+      endTime: new Date("2040-03-15T10:00:00.000Z"),
+      startTime: new Date("2040-03-15T09:00:00.000Z"),
+    });
+    const mapping = createEventMapping({
+      deleteIdentifier: "far-future-outlook-id",
+      destinationEventUid: "far-future-outlook-uid",
+      endTime: event.endTime,
+      startTime: event.startTime,
+      syncEventHash: createSyncEventContentHash(event),
+    });
+    const remoteEvent = createRemoteEvent({
+      deleteId: mapping.deleteIdentifier,
+      endTime: event.endTime,
+      isKeeperEvent: false,
+      startTime: event.startTime,
+      uid: mapping.destinationEventUid,
+    });
+
+    expect(computeSyncOperations([event], [mapping], [remoteEvent], {
+      syncWindowStart: new Date("2026-07-10T00:00:00.000Z"),
+    })).toEqual({
+      mappingIdsToPrune: [],
+      operations: [],
+      staleMappingIds: [],
+    });
+  });
+
   it("tracks multiple materialized occurrences owned by the same event-state row", () => {
     const first = createLocalEvent({
       eventStateId: "master-event-state-id",
@@ -183,13 +251,13 @@ describe("computeSyncOperations", () => {
   it("prunes an expired occurrence mapping after it leaves the sliding window", () => {
     const mapping = createEventMapping({
       eventStateId: "master-event-state-id",
+      endTime: new Date("2026-03-01T15:00:00.000Z"),
       id: "expired-occurrence-mapping",
       startTime: new Date("2026-03-01T14:00:00.000Z"),
       syncEventId: "expired-recurrence-occurrence",
     });
 
     expect(computeSyncOperations([], [mapping], [], {
-      now: new Date("2026-03-10T12:00:00.000Z"),
       syncWindowStart: new Date("2026-03-03T00:00:00.000Z"),
     })).toEqual({
       mappingIdsToPrune: [mapping.id],
@@ -199,7 +267,7 @@ describe("computeSyncOperations", () => {
   });
 
 
-  it("retries an add and retains the stale mapping identity when the remote copy is missing", () => {
+  it("replaces a mapped event when the remote copy is missing", () => {
     const event = createLocalEvent({});
     const mapping = createEventMapping({
       eventStateId: event.id,
@@ -209,9 +277,13 @@ describe("computeSyncOperations", () => {
     const result = computeSyncOperations([event], [mapping], []);
 
     expect(result.staleMappingIds).toEqual([mapping.id]);
-    expect(result.operations).toEqual([
-      { event, staleMappingId: mapping.id, type: "add" },
-    ]);
+    expect(result.operations).toEqual([{
+      deleteId: mapping.deleteIdentifier,
+      event,
+      staleMappingId: mapping.id,
+      type: "replace",
+      uid: mapping.destinationEventUid,
+    }]);
   });
 
   it("recreates a mapped event when the same event ID moves", () => {

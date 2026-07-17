@@ -5,18 +5,22 @@ import {
   createSyncEventContentHash,
 } from "../../../core/events/content-hash";
 import { getErrorMessage } from "../../../core/utils/error";
-import type { DeleteResult, PushResult, RemoteEvent, SyncableEvent } from "../../../core/types";
+import type {
+  DeleteResult,
+  ListRemoteEventsOptions,
+  PushResult,
+  RemoteEvent,
+  SyncableEvent,
+} from "../../../core/types";
 import { CalDAVClient, CalDAVCreateConflictError, CalDAVHttpError } from "../shared/client";
 import {
   eventToICalString,
   parseICalCalendarsToRemoteEvents,
   parseICalToRemoteEvent,
 } from "../shared/ics";
-import { getCalDAVSyncWindow } from "../shared/sync-window";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 
 const CALDAV_RATE_LIMIT_CONCURRENCY = 5;
-const YEARS_UNTIL_FUTURE = 2;
 
 interface CalDAVSyncProviderConfig {
   authMethod?: "basic" | "digest";
@@ -192,16 +196,13 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
       ),
     );
 
-  const listRemoteEvents = async (): Promise<RemoteEvent[]> => {
-    const syncWindow = getCalDAVSyncWindow(YEARS_UNTIL_FUTURE);
+  const listRemoteEvents = async (
+    options: ListRemoteEventsOptions,
+  ): Promise<RemoteEvent[]> => {
     const calendarUrl = await client.resolveCalendarUrl(config.calendarUrl);
 
     const objects = await client.fetchCalendarObjects({
       calendarUrl,
-      timeRange: {
-        end: syncWindow.end.toISOString(),
-        start: syncWindow.start.toISOString(),
-      },
     });
 
     const remoteEvents: RemoteEvent[] = [];
@@ -215,7 +216,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
       }),
     );
     for (const parsed of parsedEvents) {
-      if (!isKeeperEvent(parsed.uid) || parsed.endTime < syncWindow.start) {
+      if (!isKeeperEvent(parsed.uid) || parsed.endTime < options.timeMin) {
         continue;
       }
 

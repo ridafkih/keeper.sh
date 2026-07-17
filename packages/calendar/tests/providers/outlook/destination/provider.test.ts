@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SyncableEvent } from "../../../../src/core/types";
 import { createOutlookSyncProvider } from "../../../../src/providers/outlook/destination/provider";
+import { KEEPER_CATEGORY } from "@keeper.sh/constants";
 
 const createProvider = (signal?: AbortSignal) =>
   createOutlookSyncProvider({
@@ -81,7 +82,9 @@ describe("createOutlookSyncProvider", () => {
     const provider = createProvider(controller.signal);
     const abortError = new Error("job deadline exceeded");
 
-    const pending = provider.listRemoteEvents();
+    const pending = provider.listRemoteEvents({
+      timeMin: new Date("2026-07-10T00:00:00.000Z"),
+    });
     await vi.waitFor(() => { expect(fetch).toHaveBeenCalledOnce(); });
     controller.abort(abortError);
 
@@ -93,7 +96,9 @@ describe("createOutlookSyncProvider", () => {
       Promise.resolve(Response.json({ value: [] })));
     vi.stubGlobal("fetch", fetchMock);
 
-    await createProvider().listRemoteEvents();
+    await createProvider().listRemoteEvents({
+      timeMin: new Date("2026-07-10T00:00:00.000Z"),
+    });
 
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
@@ -103,6 +108,57 @@ describe("createOutlookSyncProvider", () => {
     });
     const requestUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));
     expect(requestUrl.searchParams.get("$filter")).toContain("end/dateTime ge");
-    expect(requestUrl.searchParams.get("$filter")).not.toContain("start/dateTime ge");
+    expect(requestUrl.searchParams.get("$filter")).not.toContain("start/dateTime le");
+  });
+
+  it("pages through far-future Keeper events without a future cutoff", async () => {
+    const timeMin = new Date("2026-07-10T00:00:00.000Z");
+    const nextLink = "https://graph.microsoft.com/v1.0/me/events?$skiptoken=page-2";
+    const eventTime = {
+      end: { dateTime: "2040-03-15T10:00:00.000Z", timeZone: "UTC" },
+      start: { dateTime: "2040-03-15T09:00:00.000Z", timeZone: "UTC" },
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({
+        "@odata.nextLink": nextLink,
+        value: [{
+          ...eventTime,
+          categories: [KEEPER_CATEGORY],
+          iCalUId: "canonical-uid",
+          id: "canonical-id",
+        }],
+      }))
+      .mockResolvedValueOnce(Response.json({
+        value: [{
+          ...eventTime,
+          categories: [KEEPER_CATEGORY],
+          iCalUId: "duplicate-uid",
+          id: "duplicate-id",
+        }, {
+          ...eventTime,
+          categories: [],
+          iCalUId: "mapped-but-untagged-uid",
+          id: "mapped-but-untagged-id",
+        }],
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const remoteEvents = await createProvider().listRemoteEvents({ timeMin });
+
+    expect(remoteEvents.map((event) => ({
+      deleteId: event.deleteId,
+      isKeeperEvent: event.isKeeperEvent,
+    }))).toEqual([
+      { deleteId: "canonical-id", isKeeperEvent: true },
+      { deleteId: "duplicate-id", isKeeperEvent: true },
+      { deleteId: "mapped-but-untagged-id", isKeeperEvent: false },
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const initialUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));
+    const filter = initialUrl.searchParams.get("$filter") ?? "";
+    expect(filter).toContain(`categories/any(c:c eq '${KEEPER_CATEGORY}')`);
+    expect(filter).toContain(`end/dateTime ge '${timeMin.toISOString()}'`);
+    expect(filter).not.toContain("start/dateTime le");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe(nextLink);
   });
 });

@@ -43,6 +43,7 @@ export {
   getOAuthSyncTokenVersion,
   getOAuthSyncWindow,
   getOAuthSyncWindowStart,
+  type OAuthSyncWindow,
 } from "./core/oauth/sync-window";
 export {
   decodeStoredSyncToken,
@@ -74,6 +75,7 @@ export {
   mergeAbortSignals,
 } from "./core/utils/fetch-with-timeout";
 export {
+  getEventsForCalendars,
   getEventsForDestination,
   getMappedSourceCalendarIds,
 } from "./core/events/events";
@@ -81,10 +83,6 @@ export {
   materializeRecurrenceEvents,
   type RecurrenceMaterializationWindow,
 } from "./core/events/recurrence-materializer";
-export {
-  parseExceptionDatesFromJson,
-  parseRecurrenceRuleFromJson,
-} from "./core/events/recurrence";
 export {
   parseStoredIcsExceptionDates,
   parseStoredIcsRecurrenceRule,
@@ -109,7 +107,6 @@ export {
   filterSourceEventsToSyncWindow,
   resolveSourceSyncTokenAction,
   splitSourceEventsByPersistenceIdentity,
-  type OAuthSyncWindow,
   type SourceEventsInWindowResult,
   type SourceEventStoragePartition,
   type SourceSyncTokenAction,

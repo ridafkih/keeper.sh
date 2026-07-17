@@ -7,7 +7,6 @@ import {
 import { getOAuthSyncWindowStart } from "../oauth/sync-window";
 
 interface RemoveOperationTimeBoundary {
-  now: Date;
   syncWindowStart: Date;
 }
 
@@ -24,7 +23,6 @@ interface ComputeSyncOperationsResult {
 }
 
 const getDefaultTimeBoundary = (): RemoveOperationTimeBoundary => ({
-  now: new Date(),
   syncWindowStart: getOAuthSyncWindowStart(),
 });
 
@@ -74,6 +72,7 @@ const identifyStaleMappings = (
     if (localEventExists && !remoteEvent) {
       staleMappingIds.push(mapping.id);
       staleMappedEventIds.add(syncEventId);
+      staleRemoteMappings.push(mapping);
       continue;
     }
 
@@ -185,13 +184,21 @@ const buildRemoveOperations = (
   timeBoundary: RemoveOperationTimeBoundary = getDefaultTimeBoundary(),
 ): SyncOperation[] => {
   const operations: SyncOperation[] = [];
+  const remoteIdentities = new Set(
+    remoteEvents.map((remoteEvent) => `${remoteEvent.uid}\u0000${remoteEvent.deleteId}`),
+  );
 
   for (const mapping of existingMappings) {
-    if (mapping.startTime < timeBoundary.syncWindowStart) {
+    const remoteIdentity = `${mapping.destinationEventUid}\u0000${mapping.deleteIdentifier}`;
+    if (
+      mapping.endTime < timeBoundary.syncWindowStart
+      && !remoteIdentities.has(remoteIdentity)
+    ) {
       continue;
     }
-
-    if (!localEventIds.has(getMappingSyncEventId(mapping))) {
+    if (
+      !localEventIds.has(getMappingSyncEventId(mapping))
+    ) {
       operations.push({
         deleteId: mapping.deleteIdentifier,
         startTime: mapping.startTime,
@@ -206,10 +213,7 @@ const buildRemoveOperations = (
       continue;
     }
 
-    const isOrphanedKeeperEvent = remoteEvent.isKeeperEvent;
-    const isPastEvent = remoteEvent.startTime <= timeBoundary.now;
-
-    if (!isOrphanedKeeperEvent && !isPastEvent) {
+    if (!remoteEvent.isKeeperEvent) {
       continue;
     }
 
@@ -246,14 +250,19 @@ const computeSyncOperations = (
     const remoteExists = remoteEventsByIdentity.has(
       `${mapping.destinationEventUid}\u0000${mapping.deleteIdentifier}`,
     );
-    if (mapping.startTime < timeBoundary.syncWindowStart || !remoteExists) {
+    if (mapping.endTime < timeBoundary.syncWindowStart && !remoteExists) {
       return [mapping.id];
     }
     return [];
   });
 
   const { staleMappingIds, staleMappedEventIds, staleRemoteMappings } =
-    identifyStaleMappings(existingMappings, localEventIds, remoteEventsByIdentity, localEventsById);
+    identifyStaleMappings(
+      existingMappings,
+      localEventIds,
+      remoteEventsByIdentity,
+      localEventsById,
+    );
 
   const replacedEventIds = new Set(
     staleRemoteMappings.map((mapping) => getMappingSyncEventId(mapping)),

@@ -1,6 +1,6 @@
 import {
   syncCalendar,
-  getEventsForDestination,
+  getEventsForCalendars,
   getEventMappingsForDestination,
   createDatabaseFlush,
   createRedisRateLimiter,
@@ -8,6 +8,7 @@ import {
   RESET_CALENDAR_BACKOFF_STATE,
   getMappedSourceCalendarIds,
   withSourceIngestLocks,
+  getOAuthSyncWindow,
 } from "@keeper.sh/calendar";
 import type { SyncProgressUpdate, RefreshLockStore } from "@keeper.sh/calendar";
 import {
@@ -23,6 +24,7 @@ import type { OAuthConfig } from "./resolve-provider";
 import { createSyncLock, isCalendarInvalidated } from "./sync-lock";
 
 const GOOGLE_REQUESTS_PER_MINUTE = 500;
+const DESTINATION_RECURRENCE_YEARS = 2;
 
 const resetDestinationBackoff = async (
   database: BunSQLDatabase,
@@ -171,7 +173,7 @@ const syncDestinationsForUser = async (
       break;
     }
 
-    const lockResult = await syncLock.acquire(destination.calendarId);
+    const lockResult = await syncLock.acquire(destination.calendarId, config.abortSignal);
     if (!lockResult.acquired) {
       continue;
     }
@@ -203,17 +205,24 @@ const syncDestinationsForUser = async (
         database,
         destination.calendarId,
       );
+      const reconciliationWindow = getOAuthSyncWindow(DESTINATION_RECURRENCE_YEARS);
       const result = await withSourceIngestLocks(database, sourceCalendarIds, (lockedDatabase) => syncCalendar({
         userId: destination.userId,
         calendarId: destination.calendarId,
         provider: providerRef,
         readState: async () => ({
-          localEvents: await getEventsForDestination(lockedDatabase, destination.calendarId),
+          localEvents: await getEventsForCalendars(
+            lockedDatabase,
+            sourceCalendarIds,
+            reconciliationWindow,
+          ),
           existingMappings: await getEventMappingsForDestination(
             lockedDatabase,
             destination.calendarId,
           ),
-          remoteEvents: await providerRef.listRemoteEvents(),
+          remoteEvents: await providerRef.listRemoteEvents({
+            timeMin: reconciliationWindow.timeMin,
+          }),
         }),
         isCurrent: () => {
           if (config.abortSignal?.aborted) {
@@ -240,6 +249,9 @@ const syncDestinationsForUser = async (
           if (callbacks?.onSyncEvent) {
             callbacks.onSyncEvent(enrichedEvent);
           }
+        },
+        timeBoundary: {
+          syncWindowStart: reconciliationWindow.timeMin,
         },
       }));
 

@@ -4,9 +4,14 @@ import {
   outlookEventListSchema,
   outlookEventSchema,
 } from "@keeper.sh/data-schemas";
-import type { DeleteResult, PushResult, RemoteEvent, SyncableEvent } from "../../../core/types";
+import type {
+  DeleteResult,
+  ListRemoteEventsOptions,
+  PushResult,
+  RemoteEvent,
+  SyncableEvent,
+} from "../../../core/types";
 import { getErrorMessage } from "../../../core/utils/error";
-import { getOAuthSyncWindowStart } from "../../../core/oauth/sync-window";
 import { ensureValidToken } from "../../../core/oauth/ensure-valid-token";
 import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-valid-token";
 import { MICROSOFT_GRAPH_API, OUTLOOK_PAGE_SIZE } from "../shared/api";
@@ -142,7 +147,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
 
   const buildOutlookEventsUrl = (
     lookbackStart: Date,
-    futureDate: Date,
     nextLink: string | null,
   ): URL => {
     if (nextLink) {
@@ -151,7 +155,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     const baseUrl = new URL(calendarEventsUrl);
     baseUrl.searchParams.set(
       "$filter",
-      `categories/any(c:c eq '${KEEPER_CATEGORY}') and end/dateTime ge '${lookbackStart.toISOString()}' and start/dateTime le '${futureDate.toISOString()}'`,
+      `categories/any(c:c eq '${KEEPER_CATEGORY}') and end/dateTime ge '${lookbackStart.toISOString()}'`,
     );
     baseUrl.searchParams.set("$top", String(OUTLOOK_PAGE_SIZE));
     baseUrl.searchParams.set(
@@ -161,16 +165,14 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     return baseUrl;
   };
 
-  const listRemoteEvents = async (): Promise<RemoteEvent[]> => {
+  const listRemoteEvents = async (
+    options: ListRemoteEventsOptions,
+  ): Promise<RemoteEvent[]> => {
     await refreshIfNeeded();
     const remoteEvents: RemoteEvent[] = [];
     let nextLink: string | null = null;
-    const lookbackStart = getOAuthSyncWindowStart();
-    const futureDate = new Date();
-    futureDate.setFullYear(futureDate.getFullYear() + 2);
-
     do {
-      const url = buildOutlookEventsUrl(lookbackStart, futureDate, nextLink);
+      const url = buildOutlookEventsUrl(options.timeMin, nextLink);
 
       const response = await fetchWithTimeout(url, {
         headers: {

@@ -7,6 +7,7 @@ import { and, asc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
 import type { BunSQLClient } from "../database-client";
 import type { EventAvailability, SourceEventType, SyncableEvent } from "../types";
 import { getOAuthSyncWindow } from "../oauth/sync-window";
+import type { OAuthSyncWindow } from "../oauth/sync-window";
 import {
   parseStoredIcsExceptionDates,
   parseStoredIcsRecurrenceRule,
@@ -15,6 +16,11 @@ import { materializeRecurrenceEvents } from "./recurrence-materializer";
 
 const EMPTY_SOURCES_COUNT = 0;
 const YEARS_UNTIL_FUTURE = 2;
+
+const isEventInDestinationReconciliationWindow = (
+  event: Pick<SyncableEvent, "endTime">,
+  timeMin: Date,
+): boolean => event.endTime >= timeMin;
 
 const orAbsent = <TValue>(value: TValue | null): TValue | undefined => {
   if (value === null) {
@@ -121,15 +127,14 @@ const getMappedSourceCalendarIds = async (
   return mappings.map((mapping) => mapping.sourceCalendarId);
 };
 
-const fetchEventsForCalendars = async (
+const getEventsForCalendars = async (
   database: BunSQLClient,
   calendarIds: string[],
+  syncWindow: OAuthSyncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE),
 ): Promise<SyncableEvent[]> => {
   if (calendarIds.length === EMPTY_SOURCES_COUNT) {
     return [];
   }
-
-  const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
 
   const results = await database
     .select({
@@ -164,7 +169,7 @@ const fetchEventsForCalendars = async (
       and(
         inArray(eventStatesTable.calendarId, calendarIds),
         or(
-          gte(eventStatesTable.startTime, syncWindow.timeMin),
+          gte(eventStatesTable.endTime, syncWindow.timeMin),
           isNotNull(eventStatesTable.recurrenceRule),
           isNotNull(eventStatesTable.recurrenceId),
         ),
@@ -187,7 +192,7 @@ const fetchEventsForCalendars = async (
       ?.map((exceptionDate) => exceptionDate.date);
 
     if (
-      result.startTime < syncWindow.timeMin
+      !isEventInDestinationReconciliationWindow(result, syncWindow.timeMin)
       && !result.recurrenceId
       && !parsedRecurrenceRule
     ) {
@@ -235,6 +240,7 @@ const fetchEventsForCalendars = async (
 const getEventsForDestination = async (
   database: BunSQLClient,
   destinationCalendarId: string,
+  syncWindow: OAuthSyncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE),
 ): Promise<SyncableEvent[]> => {
   const sourceCalendarIds = await getMappedSourceCalendarIds(database, destinationCalendarId);
 
@@ -242,7 +248,13 @@ const getEventsForDestination = async (
     return [];
   }
 
-  return fetchEventsForCalendars(database, sourceCalendarIds);
+  return getEventsForCalendars(database, sourceCalendarIds, syncWindow);
 };
 
-export { getEventsForDestination, getMappedSourceCalendarIds, shouldExcludeSyncEvent };
+export {
+  getEventsForCalendars,
+  getEventsForDestination,
+  getMappedSourceCalendarIds,
+  isEventInDestinationReconciliationWindow,
+  shouldExcludeSyncEvent,
+};

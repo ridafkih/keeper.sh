@@ -1,11 +1,7 @@
 import type { SourceEvent } from "../types";
+import type { OAuthSyncWindow } from "../oauth/sync-window";
 import type { ExistingSourceEventState } from "./event-diff";
 import { buildSourceEventInstanceKey } from "./event-instance";
-
-interface OAuthSyncWindow {
-  timeMin: Date;
-  timeMax: Date;
-}
 
 interface SourceEventsInWindowResult {
   events: SourceEvent[];
@@ -109,7 +105,6 @@ export {
   splitSourceEventsByPersistenceIdentity,
 };
 export type {
-  OAuthSyncWindow,
   SourceEventsInWindowResult,
   SourceEventStoragePartition,
   SourceSyncTokenAction,

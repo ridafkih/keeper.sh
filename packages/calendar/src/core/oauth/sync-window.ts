@@ -43,3 +43,4 @@ export {
   getOAuthSyncWindowStart,
   getOAuthSyncWindow,
 };
+export type { OAuthSyncWindow };

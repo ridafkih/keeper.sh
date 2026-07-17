@@ -121,6 +121,7 @@ class InMemoryEventStateStore {
 
 class StatefulDestinationProvider implements CalendarSyncProvider {
   public readonly remoteEvents = new Map<string, SyncableEvent>();
+  public readonly nonKeeperRemoteIds = new Set<string>();
   public readonly calls: { deletes: string[][]; pushes: SyncableEvent[][] } = {
     deletes: [],
     pushes: [],
@@ -140,6 +141,7 @@ class StatefulDestinationProvider implements CalendarSyncProvider {
 
     for (const id of eventIds) {
       this.remoteEvents.delete(id);
+      this.nonKeeperRemoteIds.delete(id);
     }
     return Promise.resolve(eventIds.map(() => ({ success: true })));
   };
@@ -148,7 +150,7 @@ class StatefulDestinationProvider implements CalendarSyncProvider {
     [...this.remoteEvents.entries()].map(([uid, event]) => ({
       deleteId: uid,
       endTime: event.endTime,
-      isKeeperEvent: true,
+      isKeeperEvent: !this.nonKeeperRemoteIds.has(uid),
       startTime: event.startTime,
       uid,
     })),
@@ -166,6 +168,17 @@ class StatefulDestinationProvider implements CalendarSyncProvider {
   public resetCalls = (): void => {
     this.calls.deletes.length = 0;
     this.calls.pushes.length = 0;
+  };
+
+  public seedRemote = (
+    remoteId: string,
+    event: SyncableEvent,
+    isKeeperEvent: boolean,
+  ): void => {
+    this.remoteEvents.set(remoteId, { ...event });
+    if (!isKeeperEvent) {
+      this.nonKeeperRemoteIds.add(remoteId);
+    }
   };
 }
 
@@ -290,4 +303,45 @@ describe.each<ScenarioKind>([
     await runSync();
     expect(provider.calls).toEqual({ deletes: [], pushes: [] });
   });
+});
+
+it("repairs far-future Keeper orphans, retains user events, and converges", async () => {
+  const eventStates = new InMemoryEventStateStore();
+  const mappings = new InMemoryMappingStore();
+  const provider = new StatefulDestinationProvider();
+  const farFutureEvent = makeSourceEvent(
+    "ordinary event",
+    new Date("2040-03-15T09:00:00.000Z"),
+    new Date("2040-03-15T10:00:00.000Z"),
+  );
+  const runSync = () => syncCalendar({
+    calendarId: DESTINATION_CALENDAR_ID,
+    flush: mappings.flush,
+    isCurrent: () => Promise.resolve(true),
+    provider,
+    readState: async () => ({
+      existingMappings: [...mappings.mappings.values()],
+      localEvents: eventStates.syncableEvents(),
+      remoteEvents: await provider.listRemoteEvents(),
+    }),
+    timeBoundary: {
+      syncWindowStart: new Date("2026-07-10T00:00:00.000Z"),
+    },
+    userId: "user-1",
+  });
+
+  await ingest(eventStates, farFutureEvent);
+  await expect(runSync()).resolves.toMatchObject({ added: 1, removed: 0 });
+  const desiredEvent = requireValue(eventStates.syncableEvents()[0]);
+  provider.seedRemote("orphaned-keeper-copy", desiredEvent, true);
+  provider.seedRemote("user-owned-event", desiredEvent, false);
+  provider.resetCalls();
+
+  await expect(runSync()).resolves.toMatchObject({ added: 0, removed: 1 });
+  expect(provider.remoteEvents.has("orphaned-keeper-copy")).toBe(false);
+  expect(provider.remoteEvents.has("user-owned-event")).toBe(true);
+
+  provider.resetCalls();
+  await expect(runSync()).resolves.toMatchObject({ added: 0, removed: 0 });
+  expect(provider.calls).toEqual({ deletes: [], pushes: [] });
 });

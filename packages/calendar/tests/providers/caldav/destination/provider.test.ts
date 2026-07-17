@@ -79,6 +79,34 @@ describe("createCalDAVSyncProvider", () => {
     expect(typeof provider.listRemoteEvents).toBe("function");
   });
 
+  it("lists far-future Keeper objects without imposing a two-year CalDAV report cutoff", async () => {
+    const farFuture = createEvent({
+      endTime: new Date("2040-03-15T10:00:00.000Z"),
+      id: "far-future-event",
+      startTime: new Date("2040-03-15T09:00:00.000Z"),
+    });
+    const keeperUid = generateDeterministicEventUid(farFuture.id);
+    clientMocks.resolveCalendarUrl.mockResolvedValueOnce(
+      "https://caldav.example.com/calendar/",
+    );
+    clientMocks.fetchCalendarObjects.mockResolvedValueOnce([{
+      data: eventToICalString(farFuture, keeperUid),
+      url: `https://caldav.example.com/calendar/${keeperUid}.ics`,
+    }, {
+      data: eventToICalString(farFuture, "user-owned@example.com"),
+      url: "https://caldav.example.com/calendar/user-owned.ics",
+    }]);
+
+    const remoteEvents = await createProvider().listRemoteEvents({
+      timeMin: new Date("2026-07-10T00:00:00.000Z"),
+    });
+
+    expect(remoteEvents.map((event) => event.uid)).toEqual([keeperUid]);
+    expect(clientMocks.fetchCalendarObjects).toHaveBeenCalledWith({
+      calendarUrl: "https://caldav.example.com/calendar/",
+    });
+  });
+
   it("restores the mapping when a create conflict contains identical event content", async () => {
     const event = createEvent();
     const existingData = eventToICalString(event, generateDeterministicEventUid(event.id));
