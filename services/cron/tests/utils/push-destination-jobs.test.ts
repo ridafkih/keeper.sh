@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPushDestinationJobs } from "../../src/jobs/push-destination-jobs";
+import { buildPushDestinationJobs } from "../../src/utils/push-destination-jobs";
 
 describe("buildPushDestinationJobs", () => {
   it("creates an independent job for every destination calendar", () => {

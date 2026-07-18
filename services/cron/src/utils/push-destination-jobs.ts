@@ -1,6 +1,6 @@
 import type { Plan } from "@keeper.sh/data-schemas";
 import type { PushSyncJobPayload } from "@keeper.sh/queue";
-import type { DestinationCalendarRef } from "@/utils/get-sources";
+import type { DestinationCalendarRef } from "./get-sources";
 
 interface PushDestinationJob {
   data: PushSyncJobPayload;

@@ -4,8 +4,8 @@ import { createPushSyncQueue } from "@keeper.sh/queue";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { widelog } from "@/utils/logging";
 import { getDestinationCalendarsByPlan } from "@/utils/get-sources";
+import { buildPushDestinationJobs } from "@/utils/push-destination-jobs";
 import env from "@/env";
-import { buildPushDestinationJobs } from "./push-destination-jobs";
 
 const runEgressJob = async (plan: Plan): Promise<void> => {
   if (env.WORKER_JOB_QUEUE_ENABLED === false) {
