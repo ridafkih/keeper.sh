@@ -36,11 +36,35 @@ const parseLogLine = (line: string) => {
   return { message, level, time, service, attributes };
 };
 
+const parseStructuredLogLine = (
+  line: string,
+): ReturnType<typeof parseLogLine> | undefined => {
+  try {
+    return parseLogLine(line);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      return;
+    }
+    throw error;
+  }
+};
+
 const forwardToCollector = (
   logger: ReturnType<LoggerProvider["getLogger"]>,
   line: string,
-  { message, level, time, attributes }: ReturnType<typeof parseLogLine>,
+  entry: ReturnType<typeof parseLogLine> | undefined,
 ) => {
+  if (!entry) {
+    logger.emit({
+      body: line,
+      severityNumber: SeverityNumber.ERROR,
+      severityText: "ERROR",
+      attributes: { "log.format": "unstructured" },
+    });
+    return;
+  }
+
+  const { message, level, time, attributes } = entry;
   logger.emit({
     body: message ?? line,
     severityNumber: PINO_SEVERITY[level] ?? SeverityNumber.INFO,
@@ -52,18 +76,7 @@ const forwardToCollector = (
 
 if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
   const lineReader = createInterface({ input: process.stdin });
-  const lineIterator = lineReader[Symbol.asyncIterator]();
-
-  const firstResult = await lineIterator.next();
-
-  if (firstResult.done) {
-    process.exit(0);
-  }
-
-  process.stdout.write(`${firstResult.value}\n`);
-
-  const firstLogEntry = parseLogLine(firstResult.value);
-  const serviceName = firstLogEntry.service ?? "unknown";
+  const serviceName = process.env.OTEL_SERVICE_NAME ?? "unknown";
 
   const resource = detectResources({
     detectors: [envDetector, hostDetector, osDetector, processDetector],
@@ -81,15 +94,9 @@ if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
 
   const logger = provider.getLogger(serviceName);
 
-  forwardToCollector(logger, firstResult.value, firstLogEntry);
-
-  for await (const line of lineIterator) {
+  for await (const line of lineReader) {
     process.stdout.write(`${line}\n`);
-    try {
-      forwardToCollector(logger, line, parseLogLine(line));
-    } catch {
-      // Non-JSON line, pass through only
-    }
+    forwardToCollector(logger, line, parseStructuredLogLine(line));
   }
 
   await provider.shutdown();
