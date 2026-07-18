@@ -2,7 +2,7 @@
 
 # About
 
-Keeper is a simple & open-source calendar syncing tool. It allows you to pull events from remotely hosted iCal or ICS links, and push them to one or many calendars so the time slots can align across them all.
+Keeper.sh is a simple & open-source calendar syncing tool. It allows you to pull events from your Google Calendar, Outlook, iCloud, Fastmail, CalDAV server, or a remotely hosted iCal or ICS links, and push them to one or many calendars so the time slots can align across them all. It also serves as a global MCP server and API for you or your agents to manage all your calendars from one convenient interface. You can use the hosted version for convenience and zero-setup, or self-host to get Pro features free. 
 
 # Features
 
@@ -120,7 +120,7 @@ Head to [keeper.sh](https://keeper.sh) to get started with the cloud-hosted vers
 
 # Self Hosted
 
-By hosting Keeper yourself, you get all premium features for free, can guarantee data governance and autonomy, and it's fun. If you'll be self-hosting, please consider supporting me and development of the project by sponsoring me on GitHub.
+By hosting Keeper.sh yourself, you get all premium features for free, can guarantee data governance and autonomy, and it's fun. If you'll be self-hosting, please consider supporting me and development of the project by sponsoring me on GitHub.
 
 There are seven images currently available, two of them are designed for convenience, while the five are designed to serve the granular underlying services.
 
