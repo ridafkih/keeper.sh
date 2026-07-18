@@ -4,6 +4,13 @@ const dateTimeFormatters = new Map<string, Intl.DateTimeFormat>();
 const HOURS_TO_SAMPLE = 36;
 const SAMPLE_INTERVAL_HOURS = 6;
 const MS_PER_HOUR = 60 * 60 * 1000;
+const MS_PER_DAY = 24 * MS_PER_HOUR;
+
+interface TimeZoneTransition {
+  instant: Date;
+  offsetFromMinutes: number;
+  offsetToMinutes: number;
+}
 
 const getDateTimeFormatter = (timeZone: string): Intl.DateTimeFormat => {
   const existing = dateTimeFormatters.get(timeZone);
@@ -42,6 +49,17 @@ const resolveTimeZone = (timeZone: string | undefined): string | undefined => {
   return normalizedTimeZone;
 };
 
+const resolveSupportedTimeZone = (timeZone: string | undefined): string | undefined => {
+  try {
+    return resolveTimeZone(timeZone);
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return;
+    }
+    throw error;
+  }
+};
+
 const instantToWallTime = (date: Date, timeZone: string): Date => {
   const values = new Map(
     getDateTimeFormatter(timeZone).formatToParts(date).map((part) => [part.type, part.value]),
@@ -58,6 +76,75 @@ const instantToWallTime = (date: Date, timeZone: string): Date => {
     readPart("second"),
     date.getUTCMilliseconds(),
   ));
+};
+
+const getTimeZoneOffsetMinutes = (instant: Date, timeZone: string): number =>
+  Math.round((instantToWallTime(instant, timeZone).getTime() - instant.getTime()) / 60_000);
+
+const findTransitionInstant = (
+  lowerBound: number,
+  upperBound: number,
+  timeZone: string,
+  offsetFromMinutes: number,
+): number => {
+  let lower = lowerBound;
+  let upper = upperBound;
+  while (upper - lower > 1) {
+    const midpoint = Math.floor((lower + upper) / 2);
+    const midpointOffset = getTimeZoneOffsetMinutes(new Date(midpoint), timeZone);
+    if (midpointOffset === offsetFromMinutes) {
+      lower = midpoint;
+    } else {
+      upper = midpoint;
+    }
+  }
+  return upper;
+};
+
+const findTimeZoneTransitions = (
+  timeZone: string,
+  start: Date,
+  end: Date,
+): TimeZoneTransition[] => {
+  if (
+    Number.isNaN(start.getTime())
+    || Number.isNaN(end.getTime())
+    || start >= end
+  ) {
+    throw new RangeError("Timezone transition discovery requires a valid, non-empty window");
+  }
+
+  const transitions: TimeZoneTransition[] = [];
+  let previousSample = start.getTime();
+  let previousOffset = getTimeZoneOffsetMinutes(start, timeZone);
+
+  for (
+    let sample = Math.min(previousSample + MS_PER_DAY, end.getTime());
+    sample <= end.getTime();
+    sample = Math.min(sample + MS_PER_DAY, end.getTime())
+  ) {
+    const currentOffset = getTimeZoneOffsetMinutes(new Date(sample), timeZone);
+    if (currentOffset !== previousOffset) {
+      const instant = findTransitionInstant(
+        previousSample,
+        sample,
+        timeZone,
+        previousOffset,
+      );
+      transitions.push({
+        instant: new Date(instant),
+        offsetFromMinutes: previousOffset,
+        offsetToMinutes: currentOffset,
+      });
+      previousOffset = currentOffset;
+    }
+    if (sample === end.getTime()) {
+      break;
+    }
+    previousSample = sample;
+  }
+
+  return transitions;
 };
 
 const wallTimeToInstant = (wallTime: Date, timeZone: string): Date => {
@@ -99,4 +186,12 @@ const wallTimeToInstant = (wallTime: Date, timeZone: string): Date => {
   throw new RangeError(`Unable to resolve wall time in timezone ${timeZone}`);
 };
 
-export { instantToWallTime, resolveTimeZone, wallTimeToInstant };
+export {
+  findTimeZoneTransitions,
+  getTimeZoneOffsetMinutes,
+  instantToWallTime,
+  resolveSupportedTimeZone,
+  resolveTimeZone,
+  wallTimeToInstant,
+};
+export type { TimeZoneTransition };

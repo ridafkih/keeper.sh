@@ -12,7 +12,7 @@ import { parseEventDateTime } from "../../shared/date-time";
 import { microsoftApiErrorSchema, outlookEventListSchema } from "@keeper.sh/data-schemas";
 import { KEEPER_CATEGORY } from "@keeper.sh/constants";
 import { isKeeperEvent } from "../../../../core/events/identity";
-import { normalizeTimezone } from "../../../../ics/utils/normalize-timezone";
+import { resolveSupportedTimeZone } from "../../../../ics/utils/timezone-instant";
 import { buildTimeoutSignal } from "../../../../core/utils/fetch-with-timeout";
 
 class EventsFetchError extends Error {
@@ -51,6 +51,8 @@ const INSTANCES_SELECT = [
   "categories",
   "createdDateTime",
   "lastModifiedDateTime",
+  "originalEndTimeZone",
+  "originalStartTimeZone",
   "seriesMasterId",
   "type",
 ].join(",");
@@ -498,7 +500,8 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
       location: event.location?.displayName,
       sourceEventId: event.id,
       startTime: parseEventDateTime(start),
-      startTimeZone: normalizeTimezone(start.timeZone),
+      startTimeZone: resolveSupportedTimeZone(event.originalStartTimeZone)
+        ?? resolveSupportedTimeZone(start.timeZone),
       title: event.subject,
       uid: event.iCalUId,
     });

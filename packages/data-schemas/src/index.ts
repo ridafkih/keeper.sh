@@ -136,6 +136,8 @@ const outlookEventSchema = type({
   "isCancelled?": "boolean",
   "lastModifiedDateTime?": "string",
   "location?": { "displayName?": "string" },
+  "originalEndTimeZone?": "string",
+  "originalStartTimeZone?": "string",
   "showAs?": "string",
   "start?": { "dateTime?": "string", "timeZone?": "string" },
   "subject?": "string",

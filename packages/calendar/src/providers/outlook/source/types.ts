@@ -38,6 +38,8 @@ interface OutlookCalendarEvent {
   end?: OutlookEventDateTime;
   createdDateTime?: string;
   lastModifiedDateTime?: string;
+  originalEndTimeZone?: string;
+  originalStartTimeZone?: string;
   seriesMasterId?: string;
   type?: string;
   "@removed"?: OutlookRemovedInfo;

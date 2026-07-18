@@ -239,6 +239,29 @@ describe("fetchCalendarEvents", () => {
     expect(requestedInits[0]?.headers).toMatchObject({
       Prefer: expect.stringContaining(`outlook.body-content-type="text"`),
     });
+    expect(requestedInits[0]?.headers).toMatchObject({
+      Prefer: expect.stringContaining(`outlook.timezone="UTC"`),
+    });
+  });
+
+  it("retains original timezone fields through Graph response validation", async () => {
+    globalThis.fetch = createFetchQueue([createJsonResponse({
+      "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
+      value: [createOutlookEvent({
+        originalEndTimeZone: "Mountain Standard Time",
+        originalStartTimeZone: "Mountain Standard Time",
+      })],
+    })], []);
+
+    const result = await fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      timeMax: new Date("2026-07-31T00:00:00.000Z"),
+      timeMin: new Date("2026-07-01T00:00:00.000Z"),
+    });
+
+    expect(result.events[0]?.originalStartTimeZone).toBe("Mountain Standard Time");
+    expect(result.events[0]?.originalEndTimeZone).toBe("Mountain Standard Time");
   });
 
   it("expands an Outlook series master into all paged instances during full sync", async () => {
@@ -276,6 +299,8 @@ describe("fetchCalendarEvents", () => {
       "/me/calendars/calendar%2Fid/events/master%2Fid/instances",
     );
     expect(instancesUrl.searchParams.get("startDateTime")).toBe("2026-07-01T00:00:00.000Z");
+    expect(instancesUrl.searchParams.get("$select")).toContain("originalStartTimeZone");
+    expect(instancesUrl.searchParams.get("$select")).toContain("originalEndTimeZone");
     expect(requestedUrls[2]).toBe(instancesNextLink);
   });
 
@@ -399,6 +424,25 @@ describe("parseOutlookEvents", () => {
     expect(parsedEvents[0]?.startTime.toISOString()).toBe("2026-03-02T16:00:00.000Z");
     expect(parsedEvents[0]?.endTime.toISOString()).toBe("2026-03-02T17:00:00.000Z");
     expect(parsedEvents[0]?.startTimeZone).toBe("America/Denver");
+  });
+
+  it("parses UTC response instants but retains Outlook's original event timezone", () => {
+    const parsedEvents = parseOutlookEvents([createOutlookEvent({
+      originalEndTimeZone: "Mountain Standard Time",
+      originalStartTimeZone: "Mountain Standard Time",
+    })]);
+
+    expect(parsedEvents[0]?.startTime.toISOString()).toBe("2026-03-08T14:00:00.000Z");
+    expect(parsedEvents[0]?.endTime.toISOString()).toBe("2026-03-08T15:00:00.000Z");
+    expect(parsedEvents[0]?.startTimeZone).toBe("America/Denver");
+  });
+
+  it("falls back to the response timezone when Outlook's original label is unsupported", () => {
+    const parsedEvents = parseOutlookEvents([createOutlookEvent({
+      originalStartTimeZone: "Mailbox Specific Time",
+    })]);
+
+    expect(parsedEvents[0]?.startTimeZone).toBe("Etc/UTC");
   });
 
   it("skips keeper-managed and malformed events", () => {
