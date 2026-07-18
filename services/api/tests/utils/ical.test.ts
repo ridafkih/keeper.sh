@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { KEEPER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { formatEventsAsIcal } from "../../src/utils/ical-format";
 import type { CalendarEvent } from "../../src/utils/ical-format";
+import type { IcsRecurrenceRule } from "ts-ics";
 
 const resolveTemplate = (template: string, variables: Record<string, string>): string =>
   template.replaceAll(/\{\{(\w+)\}\}/g, (match, name: string) => variables[name] ?? match);
+
+const occurrences = (haystack: string, needle: string): number =>
+  haystack.split(needle).length - 1;
 
 interface SummaryEvent {
   title: string | null;
@@ -37,6 +42,8 @@ const DEFAULT_SETTINGS = {
 
 const makeEvent = (overrides: Partial<CalendarEvent> = {}): CalendarEvent => ({
   id: "test-event-id",
+  calendarId: "calendar-id",
+  availability: "busy",
   title: "Test Event",
   description: null,
   location: null,
@@ -45,6 +52,7 @@ const makeEvent = (overrides: Partial<CalendarEvent> = {}): CalendarEvent => ({
   isAllDay: false,
   calendarName: "Work",
   recurrenceRule: null,
+  recurrenceDuration: null,
   exceptionDates: null,
   recurrenceId: null,
   sourceEventUid: null,
@@ -52,6 +60,59 @@ const makeEvent = (overrides: Partial<CalendarEvent> = {}): CalendarEvent => ({
 });
 
 describe("formatEventsAsIcal", () => {
+  describe("availability", () => {
+    it("exports free events as transparent", () => {
+      const ics = formatEventsAsIcal(
+        [makeEvent({ availability: "free" })],
+        DEFAULT_SETTINGS,
+      );
+
+      expect(ics).toContain("TRANSP:TRANSPARENT");
+    });
+
+    it("does not export busy events as transparent", () => {
+      const ics = formatEventsAsIcal(
+        [makeEvent({ availability: "busy" })],
+        DEFAULT_SETTINGS,
+      );
+
+      expect(ics).not.toContain("TRANSP:TRANSPARENT");
+    });
+  });
+
+  it("keeps identical source UIDs isolated by source calendar", () => {
+    const recurrenceRule: IcsRecurrenceRule = { frequency: "WEEKLY" };
+    const ics = formatEventsAsIcal(
+      [
+        makeEvent({
+          calendarId: "calendar-a",
+          id: "master-a",
+          recurrenceRule,
+          sourceEventUid: "shared-source-uid",
+        }),
+        makeEvent({
+          calendarId: "calendar-a",
+          id: "override-a",
+          recurrenceId: new Date("2026-04-04T00:00:00.000Z"),
+          sourceEventUid: "shared-source-uid",
+          startTime: new Date("2026-04-05T00:00:00.000Z"),
+          endTime: new Date("2026-04-06T00:00:00.000Z"),
+        }),
+        makeEvent({
+          calendarId: "calendar-b",
+          id: "master-b",
+          recurrenceRule,
+          sourceEventUid: "shared-source-uid",
+        }),
+      ],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(occurrences(ics, `UID:master-a${KEEPER_EVENT_SUFFIX}`)).toBe(2);
+    expect(occurrences(ics, `UID:master-b${KEEPER_EVENT_SUFFIX}`)).toBe(1);
+    expect(ics).not.toContain(`UID:override-a${KEEPER_EVENT_SUFFIX}`);
+  });
+
   describe("all-day events", () => {
     it("emits VALUE=DATE for all-day events instead of datetime", () => {
       const ics = formatEventsAsIcal(
@@ -186,6 +247,50 @@ describe("recurring events", () => {
     expect(ics).toContain("RRULE:");
     expect(ics).toContain("FREQ=WEEKLY");
     expect(ics).toMatch(/BYDAY=MO,TU,WE,TH,FR|BYDAY=MO;BYDAY=TU/);
+  });
+
+  it("preserves nominal DURATION for a recurring master", () => {
+    const ics = formatEventsAsIcal(
+      [makeEvent({
+        endTime: new Date("2026-03-29T23:00:00Z"),
+        recurrenceDuration: { days: 1 },
+        recurrenceRule: { count: 2, frequency: "WEEKLY" },
+        sourceEventUid: "nominal-duration",
+        startTime: new Date("2026-03-29T00:00:00Z"),
+        startTimeZone: "Europe/London",
+      })],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(ics).toContain("DURATION:P1D");
+    expect(ics).not.toContain("DTEND;TZID=Europe/London");
+  });
+
+  it("excludes an all-day override without resurrecting its master occurrence", () => {
+    const recurrenceId = new Date("2026-04-06T18:00:00.000Z");
+    const ics = formatEventsAsIcal(
+      [
+        makeEvent({
+          id: "timed-master",
+          endTime: new Date("2026-03-30T19:00:00.000Z"),
+          recurrenceRule: { frequency: "WEEKLY" },
+          sourceEventUid: "mixed-series",
+          startTime: new Date("2026-03-30T18:00:00.000Z"),
+        }),
+        makeEvent({
+          id: "all-day-override",
+          endTime: new Date("2026-04-08T00:00:00.000Z"),
+          isAllDay: true,
+          recurrenceId,
+          sourceEventUid: "mixed-series",
+          startTime: new Date("2026-04-07T00:00:00.000Z"),
+        }),
+      ],
+      { ...DEFAULT_SETTINGS, excludeAllDayEvents: true },
+    );
+
+    expect(ics).toContain("EXDATE:20260406T180000Z");
+    expect(ics).not.toContain("RECURRENCE-ID");
   });
 
   /*
@@ -339,6 +444,32 @@ describe("recurring events", () => {
     expect(ics).not.toContain("UID:override-id@keeper.sh");
   });
 
+  it("keeps expanded provider instances standalone when no recurring master exists", () => {
+    const sourceUid = "google-expanded-series";
+    const ics = formatEventsAsIcal(
+      [
+        makeEvent({
+          id: "provider-instance-1",
+          sourceEventUid: sourceUid,
+          startTime: new Date("2026-05-18T13:00:00Z"),
+          endTime: new Date("2026-05-18T13:30:00Z"),
+        }),
+        makeEvent({
+          id: "provider-instance-2",
+          sourceEventUid: sourceUid,
+          startTime: new Date("2026-05-19T13:00:00Z"),
+          endTime: new Date("2026-05-19T13:30:00Z"),
+        }),
+      ],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(ics).toContain("UID:provider-instance-1@keeper.sh");
+    expect(ics).toContain("UID:provider-instance-2@keeper.sh");
+    expect(ics).not.toContain("RECURRENCE-ID");
+    expect(ics.match(/UID:/g)).toHaveLength(2);
+  });
+
   it("emits standalone UIDs for events lacking sourceEventUid", () => {
     const ics = formatEventsAsIcal(
       [
@@ -359,8 +490,6 @@ describe("recurring events", () => {
  * VTIMEZONE present in the object; emitting DTSTART;TZID=... alongside a real
  * VTIMEZONE makes Outlook show the correct local time.
  */
-const occurrences = (haystack: string, needle: string): number => haystack.split(needle).length - 1;
-
 describe("timezone-aware feed (Outlook)", () => {
   it("emits DTSTART/DTEND with a TZID and a matching VTIMEZONE when startTimeZone is set", () => {
     const ics = formatEventsAsIcal(
@@ -481,7 +610,7 @@ describe("timezone-aware feed (Outlook)", () => {
       DEFAULT_SETTINGS,
     );
 
-    expect(occurrences(ics, "BEGIN:STANDARD")).toBe(1);
+    expect(occurrences(ics, "BEGIN:STANDARD")).toBe(2);
     expect(ics).toContain("DTSTART;TZID=Europe/Berlin:20260617T124500");
     expect(ics).toContain("EXDATE;TZID=Europe/Berlin:20260701T124500");
     expect(ics).toContain("RECURRENCE-ID;TZID=Europe/Berlin:20260624T124500");

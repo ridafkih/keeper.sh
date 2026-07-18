@@ -14,6 +14,7 @@ import { createCoordinatedRefresher } from "@keeper.sh/calendar";
 import type { RefreshLockStore } from "@keeper.sh/calendar";
 import { resolveCredentialsByCalendarId, resolveCredentialsByEventId } from "./resolve-credentials";
 import { getEvent } from "@/queries/get-event";
+import { parseEventReference } from "@/queries/event-read-model";
 import {
   createGoogleEvent,
   updateGoogleEvent,
@@ -310,6 +311,11 @@ const updateEventMutation = async (
     return { success: false, error: "Synced events cannot be updated. Only user-created events can be modified." };
   }
 
+  const reference = parseEventReference(eventId);
+  if (!reference) {
+    return { success: false, error: "Event not found." };
+  }
+
   const { credentials, sourceEventUid } = resolved;
 
   if (!sourceEventUid) {
@@ -328,7 +334,7 @@ const updateEventMutation = async (
     await deps.database
       .update(userEventsTable)
       .set(dbUpdates)
-      .where(eq(userEventsTable.id, eventId));
+      .where(eq(userEventsTable.id, reference.resourceId));
   }
 
   return { success: true };
@@ -347,6 +353,11 @@ const deleteEventMutation = async (
 
   if (resolved.eventSource === "synced") {
     return { success: false, error: "Synced events cannot be deleted. Only user-created events can be removed." };
+  }
+
+  const reference = parseEventReference(eventId);
+  if (!reference) {
+    return { success: false, error: "Event not found." };
   }
 
   const { credentials, sourceEventUid } = resolved;
@@ -391,7 +402,7 @@ const deleteEventMutation = async (
 
   await deps.database
     .delete(userEventsTable)
-    .where(eq(userEventsTable.id, eventId));
+    .where(eq(userEventsTable.id, reference.resourceId));
 
   return { success: true };
 };
@@ -408,7 +419,7 @@ const rsvpEventMutation = async (
     return { success: false, error: "Event not found." };
   }
 
-  const { credentials, sourceEventUid } = resolved;
+  const { credentials, occurrenceStart, sourceEventId, sourceEventUid } = resolved;
 
   if (!sourceEventUid) {
     return { success: false, error: "Event cannot be responded to (no source UID)." };
@@ -427,11 +438,21 @@ const rsvpEventMutation = async (
     );
 
     if (credentials.provider === "google") {
-      return rsvpGoogleEvent(accessToken, credentials.externalCalendarId, sourceEventUid, status, credentials.email);
+      return rsvpGoogleEvent(
+        accessToken,
+        credentials.externalCalendarId,
+        { sourceEventId, sourceEventUid },
+        status,
+        credentials.email,
+      );
     }
 
     if (credentials.provider === "outlook") {
-      return rsvpOutlookEvent(accessToken, sourceEventUid, status);
+      return rsvpOutlookEvent(
+        accessToken,
+        { sourceEventId, sourceEventUid },
+        status,
+      );
     }
 
     return { success: false, error: `RSVP not supported for provider: ${credentials.provider}` };
@@ -448,6 +469,7 @@ const rsvpEventMutation = async (
         encryptionKey: deps.encryptionKey,
       },
       sourceEventUid,
+      occurrenceStart,
       status,
       credentials.email,
     );

@@ -1,8 +1,16 @@
-import type { SyncResult, SyncOperation, SyncableEvent, RemoteEvent, PushResult, DeleteResult } from "../types";
+import type {
+  DeleteResult,
+  MaterializedSyncableEvent,
+  PushResult,
+  RemoteEvent,
+  SyncOperation,
+  SyncResult,
+} from "../types";
 import type { EventMapping } from "../events/mappings";
 import type { SyncProgressUpdate } from "../sync/types";
 import { createSyncEventContentHash } from "../events/content-hash";
 import { computeSyncOperations } from "../sync/operations";
+import type { RemoveOperationTimeBoundary } from "../sync/operations";
 import type { CalendarSyncProvider, PendingChanges } from "./types";
 
 const resolveOutcome = (superseded: boolean, invalidated: boolean): string => {
@@ -62,7 +70,8 @@ const processAddResults = (
       conflictsResolved += 1;
     }
     changes.inserts.push({
-      eventStateId: operation.event.id,
+      eventStateId: operation.event.eventStateId ?? operation.event.id,
+      syncEventId: operation.event.id,
       calendarId,
       destinationEventUid: pushResult.remoteId,
       deleteIdentifier: pushResult.deleteId ?? pushResult.remoteId,
@@ -81,7 +90,7 @@ const processAddResults = (
 const processDeleteResults = (
   removeOperations: Extract<SyncOperation, { type: "remove" }>[],
   deleteResults: DeleteResult[],
-  mappingsByDestinationUid: Map<string, EventMapping>,
+  mappingsByRemoteIdentity: Map<string, EventMapping>,
 ): { deleteIds: string[]; removed: number; removeFailed: number; errors: OperationError[] } => {
   const deleteIds: string[] = [];
   const errors: OperationError[] = [];
@@ -106,7 +115,7 @@ const processDeleteResults = (
     }
 
     removed += 1;
-    const mapping = mappingsByDestinationUid.get(operation.uid);
+    const mapping = mappingsByRemoteIdentity.get(`${operation.uid}\u0000${operation.deleteId}`);
     if (mapping) {
       deleteIds.push(mapping.id);
     }
@@ -150,11 +159,11 @@ const executeAddRun = async (
 const executeRemoveRun = async (
   removes: Extract<SyncOperation, { type: "remove" }>[],
   provider: CalendarSyncProvider,
-  mappingsByDestinationUid: Map<string, EventMapping>,
+  mappingsByRemoteIdentity: Map<string, EventMapping>,
 ): Promise<RunResult> => {
   const idsToDelete = removes.map((op) => op.deleteId);
   const deleteResults = await provider.deleteEvents(idsToDelete);
-  const { removed, removeFailed, deleteIds, errors } = processDeleteResults(removes, deleteResults, mappingsByDestinationUid);
+  const { removed, removeFailed, deleteIds, errors } = processDeleteResults(removes, deleteResults, mappingsByRemoteIdentity);
   return {
     changes: { inserts: [], deletes: deleteIds },
     result: { added: 0, addFailed: 0, removed, removeFailed },
@@ -270,7 +279,7 @@ const executeAdds = async (
 const executeRemoves = async (
   removes: Extract<SyncOperation, { type: "remove" }>[],
   provider: CalendarSyncProvider,
-  mappingsByDestinationUid: Map<string, EventMapping>,
+  mappingsByRemoteIdentity: Map<string, EventMapping>,
   state: ChunkedExecutionState,
   totalOperations: number,
   isCurrent?: () => Promise<boolean>,
@@ -283,7 +292,7 @@ const executeRemoves = async (
 
   const actionable = removes.filter((operation) => !state.protectedRemoteUids.has(operation.uid));
   if (actionable.length > 0) {
-    const runResult = await executeRemoveRun(actionable, provider, mappingsByDestinationUid);
+    const runResult = await executeRemoveRun(actionable, provider, mappingsByRemoteIdentity);
     mergeRunResult(state, runResult);
     if (!(await checkpointRun(state, runResult.changes, checkpoint))) {
       return;
@@ -298,7 +307,7 @@ const executeReplacements = async (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   calendarId: string,
   provider: CalendarSyncProvider,
-  mappingsByDestinationUid: Map<string, EventMapping>,
+  mappingsByRemoteIdentity: Map<string, EventMapping>,
   state: ChunkedExecutionState,
   totalOperations: number,
   isCurrent?: () => Promise<boolean>,
@@ -316,7 +325,7 @@ const executeReplacements = async (
     uid: operation.uid,
   }));
   const deleteResults = await provider.deleteEvents(removes.map((operation) => operation.deleteId));
-  const processedRemoves = processDeleteResults(removes, deleteResults, mappingsByDestinationUid);
+  const processedRemoves = processDeleteResults(removes, deleteResults, mappingsByRemoteIdentity);
   mergeRunResult(state, {
     changes: { inserts: [], deletes: processedRemoves.deleteIds },
     result: {
@@ -375,9 +384,12 @@ const executeRemoteOperations = async (
   onRunComplete?: ProgressCallback,
   checkpoint?: CheckpointCallback,
 ): Promise<ExecuteRemoteResult> => {
-  const mappingsByDestinationUid = new Map<string, EventMapping>();
+  const mappingsByRemoteIdentity = new Map<string, EventMapping>();
   for (const mapping of existingMappings) {
-    mappingsByDestinationUid.set(mapping.destinationEventUid, mapping);
+    mappingsByRemoteIdentity.set(
+      `${mapping.destinationEventUid}\u0000${mapping.deleteIdentifier}`,
+      mapping,
+    );
   }
 
   const operationChunks = chunkOperations(operations, OPERATION_CHUNK_SIZE);
@@ -404,7 +416,7 @@ const executeRemoteOperations = async (
     await executeRemoves(
       removes,
       provider,
-      mappingsByDestinationUid,
+      mappingsByRemoteIdentity,
       state,
       totalOperations,
       isCurrent,
@@ -423,7 +435,7 @@ const executeRemoteOperations = async (
       replacements,
       calendarId,
       provider,
-      mappingsByDestinationUid,
+      mappingsByRemoteIdentity,
       state,
       totalOperations,
       isCurrent,
@@ -465,7 +477,7 @@ interface SyncCalendarOptions {
   calendarId: string;
   provider: CalendarSyncProvider;
   readState: () => Promise<{
-    localEvents: SyncableEvent[];
+    localEvents: MaterializedSyncableEvent[];
     existingMappings: EventMapping[];
     remoteEvents: RemoteEvent[];
   }>;
@@ -474,6 +486,7 @@ interface SyncCalendarOptions {
   flush: (changes: PendingChanges) => Promise<void>;
   onSyncEvent?: (event: Record<string, unknown>) => void;
   onProgress?: (update: SyncProgressUpdate) => void;
+  timeBoundary?: RemoveOperationTimeBoundary;
 }
 
 interface SyncCalendarResult extends SyncResult {
@@ -484,7 +497,18 @@ interface SyncCalendarResult extends SyncResult {
 const EMPTY_RESULT: SyncCalendarResult = { added: 0, addFailed: 0, removed: 0, removeFailed: 0, conflictsResolved: 0, errors: [] };
 
 const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarResult> => {
-  const { userId, calendarId, provider, readState, isCurrent, isInvalidated, flush, onSyncEvent, onProgress } = options;
+  const {
+    userId,
+    calendarId,
+    provider,
+    readState,
+    isCurrent,
+    isInvalidated,
+    flush,
+    onSyncEvent,
+    onProgress,
+    timeBoundary,
+  } = options;
 
   const wideEvent: Record<string, unknown> = {
     "calendar.id": calendarId,
@@ -528,10 +552,11 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     }
 
     emitProgress("comparing", state.localEvents.length, state.remoteEvents.length);
-    const { operations, staleMappingIds } = computeSyncOperations(
+    const { mappingIdsToPrune, mappingUpdates, operations, staleMappingIds } = computeSyncOperations(
       state.localEvents,
       state.existingMappings,
       state.remoteEvents,
+      timeBoundary,
     );
 
     const addCount = operations.filter((op) => op.type === "add" || op.type === "replace").length;
@@ -541,8 +566,14 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     wideEvent["operations.remove_count"] = removeCount;
     wideEvent["operations.total"] = addCount + removeCount;
     wideEvent["stale_mappings.count"] = staleMappingIds.length;
+    wideEvent["mapping_updates.count"] = mappingUpdates.length;
 
-    if (operations.length === 0 && staleMappingIds.length === 0) {
+    if (
+      operations.length === 0
+      && staleMappingIds.length === 0
+      && mappingIdsToPrune.length === 0
+      && mappingUpdates.length === 0
+    ) {
       wideEvent["outcome"] = "in-sync";
       wideEvent["flushed"] = false;
       wideEvent["events.added"] = 0;
@@ -590,6 +621,11 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     }
 
     const invalidated = checkpointInvalidated || outcome.checkpointRejected || (await isInvalidated?.() ?? false);
+
+    if (!invalidated && (mappingIdsToPrune.length > 0 || mappingUpdates.length > 0)) {
+      await flush({ deletes: mappingIdsToPrune, inserts: [], updates: mappingUpdates });
+      flushed = true;
+    }
 
     wideEvent["invalidated"] = invalidated;
     wideEvent["outcome"] = resolveOutcome(outcome.superseded, invalidated);

@@ -1,111 +1,226 @@
 import { describe, expect, it } from "vitest";
-import { generateIcsCalendar } from "ts-ics";
-import type { IcsCalendar } from "ts-ics";
+import {
+  convertIcsCalendar,
+  generateIcsCalendar,
+  timeZoneOffsetToMilliseconds,
+} from "ts-ics";
+import type { IcsCalendar, IcsTimezone, IcsTimezoneProp } from "ts-ics";
+import { RRule } from "rrule";
+import type { Weekday } from "rrule";
 import { buildVtimezone } from "../../../src/ics/utils/build-vtimezone";
+import { wallTimeToInstant } from "../../../src/ics/utils/timezone-instant";
 
-/**
- * Render a timezone to its serialized VTIMEZONE block so assertions run against
- * the real ts-ics output (the bytes Outlook actually reads), not the model.
- */
-const renderVtimezone = (timezone: string, reference: Date): string => {
-  const tz = buildVtimezone(timezone, reference);
-  if (!tz) {
-    return "";
+interface RenderedTimezone {
+  ics: string;
+  timezone: IcsTimezone;
+}
+
+interface ExpandedObservance {
+  localOnset: Date;
+  offsetFromMilliseconds: number;
+  offsetToMilliseconds: number;
+}
+
+const WEEKDAYS: Record<string, Weekday> = {
+  FR: RRule.FR,
+  MO: RRule.MO,
+  SA: RRule.SA,
+  SU: RRule.SU,
+  TH: RRule.TH,
+  TU: RRule.TU,
+  WE: RRule.WE,
+};
+
+const renderAndParseVtimezone = (timezone: string, reference: Date): RenderedTimezone => {
+  const builtTimezone = buildVtimezone(timezone, reference);
+  if (!builtTimezone) {
+    throw new Error(`Expected ${timezone} to resolve`);
   }
   const calendar: IcsCalendar = {
     version: "2.0",
     prodId: "-//Test//Test//EN",
-    timezones: [tz],
+    timezones: [builtTimezone],
     events: [],
   };
-  return generateIcsCalendar(calendar);
+  const ics = generateIcsCalendar(calendar);
+  const parsed = convertIcsCalendar(globalThis.undefined, ics);
+  const [parsedTimezone] = parsed.timezones ?? [];
+  if (!parsedTimezone) {
+    throw new Error(`Expected ts-ics to parse the emitted ${timezone} VTIMEZONE`);
+  }
+  return { ics, timezone: parsedTimezone };
 };
 
-const SUMMER_2026 = new Date("2026-06-17T12:00:00.000Z");
+const toLocalOnset = (prop: IcsTimezoneProp): Date =>
+  new Date(prop.start.getTime() + timeZoneOffsetToMilliseconds(prop.offsetTo));
+
+const expandObservance = (
+  prop: IcsTimezoneProp,
+  wallTime: Date,
+): ExpandedObservance[] => {
+  const firstLocalOnset = toLocalOnset(prop);
+  let localOnsets = [firstLocalOnset];
+  if (prop.recurrenceRule) {
+    const [byDay] = prop.recurrenceRule.byDay ?? [];
+    const [byMonth] = prop.recurrenceRule.byMonth ?? [];
+    const weekday = byDay && WEEKDAYS[byDay.day];
+    if (
+      prop.recurrenceRule.frequency !== "YEARLY"
+      || !weekday
+      || typeof byMonth !== "number"
+    ) {
+      throw new Error("Expected a yearly VTIMEZONE observance rule");
+    }
+    let byweekday = weekday;
+    if (typeof byDay.occurrence === "number") {
+      byweekday = weekday.nth(byDay.occurrence);
+    }
+    localOnsets = new RRule({
+      freq: RRule.YEARLY,
+      dtstart: firstLocalOnset,
+      bymonth: byMonth + 1,
+      byweekday,
+    }).between(firstLocalOnset, wallTime, true);
+  }
+
+  return localOnsets.map((localOnset) => ({
+    localOnset,
+    offsetFromMilliseconds: timeZoneOffsetToMilliseconds(prop.offsetFrom),
+    offsetToMilliseconds: timeZoneOffsetToMilliseconds(prop.offsetTo),
+  }));
+};
+
+const resolveWallTimeFromEmittedTimezone = (
+  timezone: IcsTimezone,
+  wallTime: Date,
+): Date => {
+  const observances = timezone.props
+    .flatMap((prop) => expandObservance(prop, wallTime))
+    .filter((observance) => observance.localOnset <= wallTime)
+    .toSorted((first, second) =>
+      first.localOnset.getTime() - second.localOnset.getTime());
+  const current = observances.at(-1);
+  if (!current) {
+    throw new Error(`No ${timezone.id} observance covers ${wallTime.toISOString()}`);
+  }
+
+  let offset = current.offsetToMilliseconds;
+  const transitionSize = current.offsetToMilliseconds - current.offsetFromMilliseconds;
+  const gapEnd = current.localOnset.getTime() + transitionSize;
+  if (
+    transitionSize > 0
+    && wallTime.getTime() >= current.localOnset.getTime()
+    && wallTime.getTime() < gapEnd
+  ) {
+    offset = current.offsetFromMilliseconds;
+  }
+  return new Date(wallTime.getTime() - offset);
+};
+
+const REFERENCE = new Date("2026-06-17T12:00:00.000Z");
 
 describe("buildVtimezone", () => {
-  it("emits a northern-hemisphere DST zone with last-Sunday rules (Europe/Berlin)", () => {
-    const ics = renderVtimezone("Europe/Berlin", SUMMER_2026);
+  it("emits Outlook-compatible annual rules only after validating the full projection", () => {
+    const { ics, timezone } = renderAndParseVtimezone("Europe/Berlin", REFERENCE);
 
-    expect(ics).toContain("BEGIN:VTIMEZONE");
     expect(ics).toContain("TZID:Europe/Berlin");
-
-    // Daylight onset: last Sunday of March, +01:00 -> +02:00.
-    expect(ics).toContain("BEGIN:DAYLIGHT");
+    expect(ics).toContain("DTSTART:20250330T020000");
+    expect(ics).toContain("RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3");
     expect(ics).toContain("TZOFFSETFROM:+0100");
     expect(ics).toContain("TZOFFSETTO:+0200");
-    expect(ics).toContain("RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3");
-    expect(ics).toContain("DTSTART:19700329T020000");
-
-    // Standard onset: last Sunday of October, +02:00 -> +01:00.
-    expect(ics).toContain("BEGIN:STANDARD");
-    expect(ics).toContain("TZOFFSETFROM:+0200");
-    expect(ics).toContain("TZOFFSETTO:+0100");
+    expect(ics).toContain("DTSTART:20251026T030000");
     expect(ics).toContain("RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10");
-    expect(ics).toContain("DTSTART:19701025T030000");
-    expect(ics.match(/BEGIN:STANDARD/g)).toHaveLength(1);
+    expect(timezone.props).toHaveLength(3);
   });
 
-  it("emits nth-Sunday rules for America/New_York", () => {
-    const ics = renderVtimezone("America/New_York", SUMMER_2026);
+  it("does not invent a perpetual rule for Morocco's moving Ramadan transitions", () => {
+    const { ics, timezone } = renderAndParseVtimezone("Africa/Casablanca", REFERENCE);
 
-    expect(ics).toContain("TZID:America/New_York");
-    // Daylight: 2nd Sunday of March, -05:00 -> -04:00.
-    expect(ics).toContain("TZOFFSETFROM:-0500");
-    expect(ics).toContain("TZOFFSETTO:-0400");
-    expect(ics).toContain("RRULE:FREQ=YEARLY;BYDAY=2SU;BYMONTH=3");
-    expect(ics).toContain("DTSTART:19700308T020000");
-    // Standard: 1st Sunday of November, -04:00 -> -05:00.
-    expect(ics).toContain("RRULE:FREQ=YEARLY;BYDAY=1SU;BYMONTH=11");
-    expect(ics).toContain("DTSTART:19701101T020000");
+    expect(ics).toContain("DTSTART:20260215T030000");
+    expect(ics).toContain("DTSTART:20260322T020000");
+    expect(ics).toContain("DTSTART:20270207T030000");
+    expect(ics).toContain("DTSTART:20270314T020000");
+    expect(ics).toContain("DTSTART:20280123T030000");
+    expect(ics).toContain("DTSTART:20280305T020000");
+    expect(ics).not.toContain("RRULE");
+    expect(timezone.props.length).toBeGreaterThan(100);
   });
 
-  it("recomputes the anchored onset date from the recurrence rule", () => {
-    const ics = renderVtimezone("Europe/Berlin", new Date("2025-06-17T12:00:00.000Z"));
+  it("preserves southern-hemisphere transition direction", () => {
+    const { ics } = renderAndParseVtimezone("Australia/Sydney", REFERENCE);
 
-    expect(ics).toContain("DTSTART:19700329T020000");
-    expect(ics).not.toContain("DTSTART:19700330T020000");
+    expect(ics).toContain("DTSTART:20250406T030000");
+    expect(ics).toContain("TZOFFSETFROM:+1100");
+    expect(ics).toContain("TZOFFSETTO:+1000");
+    expect(ics).toContain("DTSTART:20251005T020000");
+    expect(ics).toContain("TZOFFSETFROM:+1000");
+    expect(ics).toContain("TZOFFSETTO:+1100");
   });
 
-  it("classifies southern-hemisphere transitions by offset direction, not calendar order (Australia/Sydney)", () => {
-    const ics = renderVtimezone("Australia/Sydney", SUMMER_2026);
+  it("preserves non-hour transition sizes", () => {
+    const { ics } = renderAndParseVtimezone("Australia/Lord_Howe", REFERENCE);
 
-    expect(ics).toContain("TZID:Australia/Sydney");
-    // Daylight starts in October (+10:00 -> +11:00), standard resumes in April.
-    const daylight = ics.slice(ics.indexOf("BEGIN:DAYLIGHT"), ics.indexOf("END:DAYLIGHT"));
-    const standard = ics.slice(ics.indexOf("BEGIN:STANDARD"), ics.indexOf("END:STANDARD"));
-    expect(daylight).toContain("TZOFFSETTO:+1100");
-    expect(daylight).toContain("BYMONTH=10");
-    expect(standard).toContain("TZOFFSETTO:+1000");
-    expect(standard).toContain("BYMONTH=4");
+    expect(ics).toContain("TZOFFSETFROM:+1100");
+    expect(ics).toContain("TZOFFSETTO:+1030");
+    expect(ics).toContain("TZOFFSETFROM:+1030");
+    expect(ics).toContain("TZOFFSETTO:+1100");
   });
 
-  it("emits a single fixed-offset STANDARD observance for a no-DST zone (America/Montevideo)", () => {
-    const ics = renderVtimezone("America/Montevideo", SUMMER_2026);
+  it.each([
+    ["America/New_York", "2026-03-08T02:30:00.000Z"],
+    ["America/New_York", "2026-11-01T01:30:00.000Z"],
+    ["America/New_York", "2098-06-17T09:00:00.000Z"],
+    ["Australia/Sydney", "2026-04-05T02:30:00.000Z"],
+    ["Australia/Sydney", "2026-10-04T02:30:00.000Z"],
+    ["Australia/Lord_Howe", "2026-04-05T01:45:00.000Z"],
+    ["Australia/Lord_Howe", "2026-10-04T02:15:00.000Z"],
+    ["Africa/Casablanca", "2026-02-15T02:30:00.000Z"],
+    ["Africa/Casablanca", "2026-03-22T02:30:00.000Z"],
+    ["Africa/Casablanca", "2030-01-20T09:00:00.000Z"],
+  ])("resolves %s wall time %s to the same instant as recurrence materialization", (zone, iso) => {
+    const { timezone } = renderAndParseVtimezone(zone, REFERENCE);
+    const wallTime = new Date(iso);
 
-    expect(ics).toContain("TZID:America/Montevideo");
-    expect(ics).toContain("BEGIN:STANDARD");
+    expect(resolveWallTimeFromEmittedTimezone(timezone, wallTime))
+      .toEqual(wallTimeToInstant(wallTime, zone));
+  });
+
+  it("emits one baseline observance for a fixed-offset zone", () => {
+    const { ics, timezone } = renderAndParseVtimezone("America/Montevideo", REFERENCE);
+
     expect(ics).toContain("TZOFFSETFROM:-0300");
     expect(ics).toContain("TZOFFSETTO:-0300");
     expect(ics).not.toContain("BEGIN:DAYLIGHT");
     expect(ics).not.toContain("RRULE");
+    expect(timezone.props).toHaveLength(1);
   });
 
-  it("normalizes Windows timezone identifiers before building (W. Europe Standard Time)", () => {
-    const ics = renderVtimezone("W. Europe Standard Time", SUMMER_2026);
+  it("normalizes Windows timezone identifiers", () => {
+    const { ics } = renderAndParseVtimezone("W. Europe Standard Time", REFERENCE);
     expect(ics).toContain("TZID:Europe/Berlin");
   });
 
-  it("returns undefined for an unresolvable timezone", () => {
-    expect(buildVtimezone("Not/AZone", SUMMER_2026)).toBeUndefined();
+  it("reuses the expensive projection for the same zone and reference year", () => {
+    const first = buildVtimezone("America/New_York", new Date("2026-01-01T00:00:00.000Z"));
+    const second = buildVtimezone("America/New_York", new Date("2026-12-31T23:59:59.000Z"));
+
+    expect(second).toBe(first);
   });
 
-  it("returns undefined for an empty timezone", () => {
-    expect(buildVtimezone("", SUMMER_2026)).toBeUndefined();
+  it("does not let an old event truncate timezone rules for current and future events", () => {
+    const { timezone } = renderAndParseVtimezone(
+      "America/New_York",
+      new Date("1970-06-17T12:00:00.000Z"),
+    );
+    const wallTime = new Date("2098-06-17T09:00:00.000Z");
+
+    expect(resolveWallTimeFromEmittedTimezone(timezone, wallTime))
+      .toEqual(wallTimeToInstant(wallTime, "America/New_York"));
   });
 
-  it("uses the resolved IANA id as the VTIMEZONE id", () => {
-    const tz = buildVtimezone("Europe/Berlin", SUMMER_2026);
-    expect(tz?.id).toBe("Europe/Berlin");
+  it("rejects invalid timezone input and invalid reference dates", () => {
+    expect(buildVtimezone("Not/AZone", REFERENCE)).toBeUndefined();
+    expect(buildVtimezone("", REFERENCE)).toBeUndefined();
+    expect(buildVtimezone("Europe/Berlin", new Date("invalid"))).toBeUndefined();
   });
 });

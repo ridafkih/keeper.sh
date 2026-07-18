@@ -2,7 +2,11 @@ import type { Job } from "bullmq";
 import type { PushSyncJobPayload, PushSyncJobResult } from "@keeper.sh/queue";
 import { USER_TIMEOUT_MS } from "@keeper.sh/queue";
 import type { DestinationSyncResult } from "@keeper.sh/calendar";
-import { createSyncAggregateRuntime, mergeAbortSignals } from "@keeper.sh/calendar";
+import {
+  createSyncAggregateRuntime,
+  mergeAbortSignals,
+  RecurrenceMaterializationLimitError,
+} from "@keeper.sh/calendar";
 import { syncDestinationsForUser, SyncLockRenewalError } from "@keeper.sh/sync";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { syncStatusTable } from "@keeper.sh/database/schema";
@@ -53,9 +57,22 @@ const resolveErrorStatusCode = (error: unknown): number | null => {
   return null;
 };
 
-const classifySyncError = (error: unknown): string => {
+const classifyKnownSyncError = (error: unknown): string | null => {
+  if (error instanceof RecurrenceMaterializationLimitError) {
+    return "recurrence-materialization-limit";
+  }
+
   if (error instanceof SyncLockRenewalError) {
     return "sync-lock-renewal-failed";
+  }
+
+  return null;
+};
+
+const classifySyncError = (error: unknown): string => {
+  const knownErrorSlug = classifyKnownSyncError(error);
+  if (knownErrorSlug) {
+    return knownErrorSlug;
   }
 
   const statusCode = resolveErrorStatusCode(error);
@@ -312,7 +329,15 @@ const processJob = (
       });
 
       if (result.syncEvents.length === 0) {
-        widelog.set("outcome", "success");
+        const completedWithErrors = result.errors.length > 0;
+        let outcome = "success";
+        if (completedWithErrors) {
+          outcome = "error";
+        }
+        widelog.set("outcome", outcome);
+        for (const syncError of result.errors) {
+          widelog.error("sync.failures", syncError);
+        }
         needsFlush = true;
       }
 

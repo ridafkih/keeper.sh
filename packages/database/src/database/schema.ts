@@ -8,7 +8,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { isNotNull, isNull } from "drizzle-orm";
+import { isNotNull, isNull, sql } from "drizzle-orm";
 import { user } from "./auth-schema";
 
 const DEFAULT_EVENT_COUNT = 0;
@@ -175,12 +175,12 @@ const eventStatesTable = pgTable(
     uniqueIndex("event_states_source_event_idx")
       .on(table.calendarId, table.sourceEventId)
       .where(isNotNull(table.sourceEventId)),
-    uniqueIndex("event_states_identity_idx").on(
-      table.calendarId,
-      table.sourceEventUid,
-      table.startTime,
-      table.endTime,
-    ).where(isNull(table.sourceEventId)),
+    uniqueIndex("event_states_recurring_instance_idx")
+      .on(table.calendarId, table.sourceEventUid, table.recurrenceId)
+      .where(sql`${table.sourceEventId} is null and ${table.recurrenceId} is not null`),
+    uniqueIndex("event_states_non_recurring_instance_idx")
+      .on(table.calendarId, table.sourceEventUid, table.startTime, table.endTime)
+      .where(sql`${table.sourceEventId} is null and ${table.recurrenceId} is null`),
   ],
 );
 
@@ -262,12 +262,19 @@ const eventMappingsTable = pgTable(
       .notNull()
       .references(() => eventStatesTable.id, { onDelete: "cascade" }),
     id: uuid().notNull().primaryKey().defaultRandom(),
+    syncEventId: text(),
     syncEventHash: text(),
     startTime: timestamp().notNull(),
   },
   (table) => [
-    uniqueIndex("event_mappings_event_cal_idx").on(table.eventStateId, table.calendarId),
+    uniqueIndex("event_mappings_sync_event_cal_idx")
+      .on(table.calendarId, table.syncEventId)
+      .where(isNotNull(table.syncEventId)),
     index("event_mappings_calendar_idx").on(table.calendarId),
+    index("event_mappings_event_state_idx").on(table.eventStateId),
+    index("event_mappings_missing_sync_event_idx")
+      .on(table.id)
+      .where(isNull(table.syncEventId)),
     index("event_mappings_sync_hash_idx").on(table.syncEventHash),
   ],
 );

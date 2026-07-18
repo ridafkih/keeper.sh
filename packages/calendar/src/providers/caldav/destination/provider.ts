@@ -1,15 +1,26 @@
 import { RateLimiter } from "../../../core/utils/rate-limiter";
 import { generateDeterministicEventUid, isKeeperEvent } from "../../../core/events/identity";
-import { createSyncEventContentHash } from "../../../core/events/content-hash";
+import {
+  createEditableEventContentHash,
+  createSyncEventContentHash,
+} from "../../../core/events/content-hash";
 import { getErrorMessage } from "../../../core/utils/error";
-import type { DeleteResult, PushResult, RemoteEvent, SyncableEvent } from "../../../core/types";
+import type {
+  DeleteResult,
+  ListRemoteEventsOptions,
+  MaterializedSyncableEvent,
+  PushResult,
+  RemoteEvent,
+} from "../../../core/types";
 import { CalDAVClient, CalDAVCreateConflictError, CalDAVHttpError } from "../shared/client";
-import { eventToICalString, parseICalToRemoteEvent, parseICalToRemoteEvents } from "../shared/ics";
-import { getCalDAVSyncWindow } from "../shared/sync-window";
+import {
+  eventToICalString,
+  parseICalCalendarsToRemoteEvents,
+  parseICalToRemoteEvent,
+} from "../shared/ics";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 
 const CALDAV_RATE_LIMIT_CONCURRENCY = 5;
-const YEARS_UNTIL_FUTURE = 2;
 
 interface CalDAVSyncProviderConfig {
   authMethod?: "basic" | "digest";
@@ -68,7 +79,7 @@ const recoverCreateConflict = async (
   calendarUrl: string,
   uid: string,
   iCalString: string,
-  event: SyncableEvent,
+  event: MaterializedSyncableEvent,
 ): Promise<void> => {
   const existing = await client.fetchCalendarObject({
     calendarUrl,
@@ -123,7 +134,20 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
   const rateLimiter = new RateLimiter({ concurrency: CALDAV_RATE_LIMIT_CONCURRENCY });
 
-  const pushEvents = (events: SyncableEvent[]): Promise<PushResult[]> =>
+  const isKeeperCalendarObjectUrl = (objectUrl: string): boolean => {
+    try {
+      const url = new URL(objectUrl, config.calendarUrl);
+      const filename = decodeURIComponent(url.pathname.split("/").at(-1) ?? "");
+      if (!filename.endsWith(".ics")) {
+        return false;
+      }
+      return isKeeperEvent(filename.slice(0, -4));
+    } catch {
+      return false;
+    }
+  };
+
+  const pushEvents = (events: MaterializedSyncableEvent[]): Promise<PushResult[]> =>
     Promise.all(
       events.map((event) =>
         rateLimiter.execute(async (): Promise<PushResult> => {
@@ -185,32 +209,45 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
       ),
     );
 
-  const listRemoteEvents = async (): Promise<RemoteEvent[]> => {
-    const syncWindow = getCalDAVSyncWindow(YEARS_UNTIL_FUTURE);
+  const listRemoteEvents = async (
+    options: ListRemoteEventsOptions,
+  ): Promise<RemoteEvent[]> => {
     const calendarUrl = await client.resolveCalendarUrl(config.calendarUrl);
 
     const objects = await client.fetchCalendarObjects({
       calendarUrl,
-      timeRange: {
-        end: syncWindow.end.toISOString(),
-        start: syncWindow.start.toISOString(),
-      },
     });
 
     const remoteEvents: RemoteEvent[] = [];
 
-    for (const { data } of objects) {
-      if (!data) {
+    const parsedEvents = parseICalCalendarsToRemoteEvents(
+      objects.flatMap(({ data, url }) => {
+        if (!data || !isKeeperCalendarObjectUrl(url)) {
+          return [];
+        }
+        return [data];
+      }),
+      { rejectUnsupportedRecurrenceDates: false },
+    );
+    for (const parsed of parsedEvents) {
+      if (!isKeeperEvent(parsed.uid) || parsed.endTime < options.timeMin) {
         continue;
       }
 
-      for (const parsed of parseICalToRemoteEvents(data)) {
-        if (!isKeeperEvent(parsed.uid) || parsed.endTime < syncWindow.start) {
-          continue;
-        }
-
-        remoteEvents.push(parsed);
-      }
+      remoteEvents.push({
+        ...parsed,
+        editableAvailability: parsed.availability,
+        editableContentHash: createEditableEventContentHash({
+          availability: parsed.availability,
+          description: parsed.description,
+          endTime: parsed.endTime,
+          isAllDay: parsed.isAllDay,
+          location: parsed.location,
+          startTime: parsed.startTime,
+          summary: parsed.title ?? "",
+        }),
+        supportedAvailabilities: ["busy", "free"],
+      });
     }
 
     return remoteEvents;

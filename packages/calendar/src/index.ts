@@ -40,8 +40,10 @@ export {
 } from "./core/oauth/source-provider";
 export {
   OAUTH_SYNC_WINDOW_VERSION,
+  getOAuthSyncTokenVersion,
   getOAuthSyncWindow,
   getOAuthSyncWindowStart,
+  type OAuthSyncWindow,
 } from "./core/oauth/sync-window";
 export {
   decodeStoredSyncToken,
@@ -72,11 +74,27 @@ export {
   isTimeoutError,
   mergeAbortSignals,
 } from "./core/utils/fetch-with-timeout";
-export { getEventsForDestination } from "./core/events/events";
 export {
-  parseExceptionDatesFromJson,
-  parseRecurrenceRuleFromJson,
-} from "./core/events/recurrence";
+  getEventsForCalendars,
+  getEventsForDestination,
+  getMappedSourceCalendarIds,
+} from "./core/events/events";
+export {
+  assertSourceRecurrenceMaterializationWithinBudget,
+  materializeRecurrenceEvents,
+  RecurrenceMaterializationLimitError,
+  type RecurrenceMaterializationOptions,
+  type RecurrenceMaterializationWindow,
+} from "./core/events/recurrence-materializer";
+export {
+  parseStoredIcsExceptionDates,
+  parseStoredIcsRecurrence,
+  parseStoredIcsRecurrenceRule,
+  parseStoredRecurrenceForMaterialization,
+  type MaterializedRecurrenceFields,
+  type ParsedStoredRecurrenceRule,
+  type StoredRecurrenceMaterializationInput,
+} from "./core/events/stored-recurrence";
 export {
   buildSourceEventIdentityKey,
   buildSourceEventsToAdd,
@@ -85,15 +103,26 @@ export {
   type SourceEventDiffOptions,
 } from "./core/source/event-diff";
 export {
+  SOURCE_INGEST_LOCK_NAMESPACE,
+  SOURCE_INGEST_LOCK_TIMEOUT_MS,
+  withSourceIngestLock,
+  withSourceIngestLocks,
+} from "./core/source/ingest-lock";
+export {
+  parseStoredSourceEventState,
+  parseStoredSourceEventStates,
+  type StoredSourceEventState,
+} from "./core/source/stored-event-state";
+export {
   filterSourceEventsToSyncWindow,
   resolveSourceSyncTokenAction,
   splitSourceEventsByPersistenceIdentity,
-  type OAuthSyncWindow,
   type SourceEventsInWindowResult,
   type SourceEventStoragePartition,
   type SourceSyncTokenAction,
 } from "./core/source/sync-diagnostics";
 export {
+  buildEventStateInsertRow,
   insertEventStatesWithConflictResolution,
   type EventStateInsertRow,
   type EventStateInsertClient,
@@ -150,6 +179,7 @@ export type {
   ProviderDefinition,
   SourcePreferenceOption,
   SourcePreferencesConfig,
+  MaterializedSyncableEvent,
   SyncableEvent,
   PushResult,
   DeleteResult,
@@ -206,10 +236,13 @@ export { createRedisGenerationCheck } from "./core/sync-engine/generation";
 export type { GenerationStore } from "./core/sync-engine/generation";
 export { createDatabaseFlush } from "./core/sync-engine/flush";
 export { ingestSource } from "./core/sync-engine/ingest";
+export { buildSourceEventInstanceKey } from "./core/source/event-instance";
 export type {
   IngestSourceOptions,
   IngestionResult,
   IngestionChanges,
-  ExistingEventState,
+  IngestionPersistence,
+  IngestionPersistenceWork,
+  CalendarSnapshotChange,
   FetchEventsResult as IngestionFetchEventsResult,
 } from "./core/sync-engine/ingest";

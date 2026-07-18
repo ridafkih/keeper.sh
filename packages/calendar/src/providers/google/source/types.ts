@@ -57,6 +57,7 @@ interface FetchEventsOptions {
   timeMax?: Date;
   maxResults?: number;
   rateLimiter?: RedisRateLimiter;
+  signal?: AbortSignal;
 }
 
 interface FetchEventsResult {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { RecurrenceMaterializationLimitError } from "@keeper.sh/calendar";
 import { isBackoffEligibleError } from "../src/destination-errors";
 
 describe("isBackoffEligibleError", () => {
@@ -13,6 +14,16 @@ describe("isBackoffEligibleError", () => {
 
   it("matches cannot find homeUrl", () => {
     expect(isBackoffEligibleError(new Error("cannot find homeUrl"))).toBe(true);
+  });
+
+  it("backs off only the destination poisoned by an over-budget recurrence", () => {
+    const error = new RecurrenceMaterializationLimitError({
+      calendarId: "source-calendar-id",
+      eventId: "event-state-id",
+      sourceEventUid: "pathological-series",
+    }, 10_000);
+
+    expect(isBackoffEligibleError(error)).toBe(true);
   });
 
   it("does not match transient 500 errors", () => {

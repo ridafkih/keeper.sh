@@ -1,3 +1,5 @@
+import { RecurrenceMaterializationLimitError } from "@keeper.sh/calendar";
+
 /**
  * Patterns that indicate a destination calendar is fundamentally
  * broken and should be backed off with exponential delay.
@@ -18,6 +20,10 @@ const getErrorMessage = (error: unknown): string => {
 };
 
 const isBackoffEligibleError = (error: unknown): boolean => {
+  if (error instanceof RecurrenceMaterializationLimitError) {
+    return true;
+  }
+
   const message = getErrorMessage(error);
 
   for (const pattern of BACKOFF_ERROR_PATTERNS) {

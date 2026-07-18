@@ -3,9 +3,15 @@ import {
   pullRemoteCalendar,
   createIcsSourceFetcher,
   interpretFullDayTimedEventsAsAllDay,
+  persistCalendarSnapshot,
 } from "@keeper.sh/calendar/ics";
-import { ingestSource, insertEventStatesWithConflictResolution } from "@keeper.sh/calendar";
-import type { IngestionChanges } from "@keeper.sh/calendar";
+import {
+  buildEventStateInsertRow,
+  ingestSource,
+  insertEventStatesWithConflictResolution,
+  withSourceIngestLock,
+} from "@keeper.sh/calendar";
+import type { IngestionPersistenceWork } from "@keeper.sh/calendar";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { enqueuePushSync } from "./enqueue-push-sync";
 import {
@@ -18,58 +24,67 @@ import { applySourceSyncDefaults } from "./source-sync-defaults";
 import { safeFetchOptions } from "./safe-fetch-options";
 
 import { spawnBackgroundJob } from "./background-task";
-import { database, premiumService } from "@/context";
+import { database, premiumService, redis } from "@/context";
+import { createSyncLock } from "@keeper.sh/sync";
 
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
+const SOURCE_INGEST_LOCK_KEY_PREFIX = "source-ingest:";
+const sourceIngestLock = createSyncLock(redis);
 
 const FIRST_RESULT_LIMIT = 1;
 const ICAL_CALENDAR_TYPE = "ical";
 type Source = typeof calendarsTable.$inferSelect;
 
-const serializeOptionalJson = (value: unknown): string | null => {
-  if (!value) {
-    return null;
-  }
-  return JSON.stringify(value);
-};
+const createIngestionPersistenceTransaction = (calendarId: string) =>
+  (work: IngestionPersistenceWork) => withSourceIngestLock(
+    database,
+    calendarId,
+    (transaction) => work({
+      readExistingEvents: () => transaction
+        .select({
+          availability: eventStatesTable.availability,
+          description: eventStatesTable.description,
+          endTime: eventStatesTable.endTime,
+          exceptionDates: eventStatesTable.exceptionDates,
+          id: eventStatesTable.id,
+          isAllDay: eventStatesTable.isAllDay,
+          location: eventStatesTable.location,
+          recurrenceId: eventStatesTable.recurrenceId,
+          recurrenceRule: eventStatesTable.recurrenceRule,
+          sourceEventId: eventStatesTable.sourceEventId,
+          sourceEventType: eventStatesTable.sourceEventType,
+          sourceEventUid: eventStatesTable.sourceEventUid,
+          startTime: eventStatesTable.startTime,
+          startTimeZone: eventStatesTable.startTimeZone,
+          title: eventStatesTable.title,
+        })
+        .from(eventStatesTable)
+        .where(eq(eventStatesTable.calendarId, calendarId)),
+      flush: async (changes) => {
+        if (changes.deletes.length > 0) {
+          await transaction
+            .delete(eventStatesTable)
+            .where(
+              and(
+                eq(eventStatesTable.calendarId, calendarId),
+                inArray(eventStatesTable.id, changes.deletes),
+              ),
+            );
+        }
 
-const createIngestionFlush = (calendarId: string) =>
-  async (changes: IngestionChanges): Promise<void> => {
-    await database.transaction(async (transaction) => {
-      if (changes.deletes.length > 0) {
-        await transaction
-          .delete(eventStatesTable)
-          .where(
-            and(
-              eq(eventStatesTable.calendarId, calendarId),
-              inArray(eventStatesTable.id, changes.deletes),
-            ),
+        if (changes.inserts.length > 0) {
+          await insertEventStatesWithConflictResolution(
+            transaction,
+            changes.inserts.map((event) => buildEventStateInsertRow(calendarId, event)),
           );
-      }
+        }
 
-      if (changes.inserts.length > 0) {
-        await insertEventStatesWithConflictResolution(
-          transaction,
-          changes.inserts.map((event) => ({
-            availability: event.availability,
-            calendarId,
-            description: event.description,
-            endTime: event.endTime,
-            exceptionDates: serializeOptionalJson(event.exceptionDates),
-            isAllDay: event.isAllDay,
-            location: event.location,
-            recurrenceRule: serializeOptionalJson(event.recurrenceRule),
-            sourceEventId: event.sourceEventId,
-            sourceEventType: event.sourceEventType,
-            sourceEventUid: event.uid,
-            startTime: event.startTime,
-            startTimeZone: event.startTimeZone,
-            title: event.title,
-          })),
-        );
-      }
-    });
-  };
+        if (changes.snapshot) {
+          await persistCalendarSnapshot(transaction, calendarId, changes.snapshot);
+        }
+      },
+    }),
+  );
 
 const ingestIcsSource = async (source: Source): Promise<void> => {
   if (!source.url) {
@@ -83,35 +98,30 @@ const ingestIcsSource = async (source: Source): Promise<void> => {
     safeFetchOptions,
   });
 
-  await ingestSource({
-    calendarId: source.id,
-    fetchEvents: () =>
-      fetcher.fetchEvents({
-        interpretEvents: (events, context) =>
-          interpretFullDayTimedEventsAsAllDay(events, {
-            calendarTimeZone: context.calendarTimeZone,
-            enabled: source.treatFullDayTimedEventsAsAllDay,
-          }),
-      }),
-    readExistingEvents: () =>
-      database
-        .select({
-          availability: eventStatesTable.availability,
-          description: eventStatesTable.description,
-          endTime: eventStatesTable.endTime,
-          id: eventStatesTable.id,
-          isAllDay: eventStatesTable.isAllDay,
-          location: eventStatesTable.location,
-          sourceEventType: eventStatesTable.sourceEventType,
-          sourceEventId: eventStatesTable.sourceEventId,
-          sourceEventUid: eventStatesTable.sourceEventUid,
-          startTime: eventStatesTable.startTime,
-          title: eventStatesTable.title,
-        })
-        .from(eventStatesTable)
-        .where(eq(eventStatesTable.calendarId, source.id)),
-    flush: createIngestionFlush(source.id),
-  });
+  const lockResult = await sourceIngestLock.acquire(
+    `${SOURCE_INGEST_LOCK_KEY_PREFIX}${source.id}`,
+  );
+  if (!lockResult.acquired) {
+    return;
+  }
+
+  try {
+    await ingestSource({
+      calendarId: source.id,
+      fetchEvents: () =>
+        fetcher.fetchEvents({
+          interpretEvents: (events, context) =>
+            interpretFullDayTimedEventsAsAllDay(events, {
+              calendarTimeZone: context.calendarTimeZone,
+              enabled: source.treatFullDayTimedEventsAsAllDay,
+            }),
+        }),
+      isCurrent: lockResult.handle.isCurrent,
+      withPersistenceTransaction: createIngestionPersistenceTransaction(source.id),
+    });
+  } finally {
+    await lockResult.handle.release();
+  }
 };
 
 const getUserSources = async (userId: string): Promise<Source[]> => {

@@ -1,12 +1,23 @@
-import { buildSourceEventStateIdsToRemove, buildSourceEventsToAdd } from "../../../core/source/event-diff";
-import { insertEventStatesWithConflictResolution } from "../../../core/source/write-event-states";
+import {
+  buildSourceEventStateIdsToRemove,
+  buildSourceEventsToAdd,
+} from "../../../core/source/event-diff";
+import {
+  buildInvalidStoredEventIdsToRemove,
+  parseStoredSourceEventStatesRecoveringInvalid,
+} from "../../../core/source/stored-event-state";
+import {
+  buildEventStateInsertRow,
+  insertEventStatesWithConflictResolution,
+} from "../../../core/source/write-event-states";
 import { isKeeperEvent } from "../../../core/events/identity";
 import type { SourceEvent } from "../../../core/types";
 import { calendarAccountsTable, calendarsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { and, eq, inArray } from "drizzle-orm";
+import type { BunSQLClient } from "../../../core/database-client";
 import { CalDAVClient } from "../shared/client";
 import { resolveAuthMethod } from "../shared/digest-fetch";
-import { parseICalToRemoteEvents } from "../shared/ics";
+import { parseICalCalendarsToRemoteEvents } from "../shared/ics";
 import { isCalDAVAuthenticationError } from "./auth-error-classification";
 import { createCalDAVSourceService } from "./sync";
 import { getCalDAVSyncWindow } from "./sync-window";
@@ -16,13 +27,7 @@ import type {
   CalDAVSourceProviderConfig,
   CalDAVSourceSyncResult,
 } from "../types";
-
-const stringifyIfPresent = (value: unknown) => {
-  if (!value) {
-    return;
-  }
-  return JSON.stringify(value);
-};
+import { withSourceIngestLock } from "../../../core/source/ingest-lock";
 
 const EMPTY_COUNT = 0;
 const YEARS_UNTIL_FUTURE = 2;
@@ -69,36 +74,39 @@ const createCalDAVSourceProvider = (
     });
 
     const events: SourceEvent[] = [];
+    const parsedEvents = parseICalCalendarsToRemoteEvents(
+      objects.flatMap(({ data }) => {
+        if (!data) {
+          return [];
+        }
+        return [data];
+      }),
+    );
 
-    for (const { data } of objects) {
-      if (!data) {
+    for (const parsed of parsedEvents) {
+      if (isKeeperEvent(parsed.uid)) {
         continue;
       }
 
-      for (const parsed of parseICalToRemoteEvents(data)) {
-        if (isKeeperEvent(parsed.uid)) {
-          continue;
-        }
-
-        if (parsed.endTime < syncWindow.start) {
-          continue;
-        }
-
-        events.push({
-          availability: parsed.availability,
-          description: parsed.description,
-          endTime: parsed.endTime,
-          exceptionDates: parsed.exceptionDates,
-          recurrenceId: parsed.recurrenceId,
-          isAllDay: parsed.isAllDay,
-          location: parsed.location,
-          recurrenceRule: parsed.recurrenceRule,
-          startTime: parsed.startTime,
-          startTimeZone: parsed.startTimeZone,
-          title: parsed.title,
-          uid: parsed.uid,
-        });
+      if (!parsed.recurrenceRule && parsed.endTime < syncWindow.start) {
+        continue;
       }
+
+      events.push({
+        availability: parsed.availability,
+        description: parsed.description,
+        endTime: parsed.endTime,
+        exceptionDates: parsed.exceptionDates,
+        recurrenceId: parsed.recurrenceId,
+        isAllDay: parsed.isAllDay,
+        location: parsed.location,
+        recurrenceDuration: parsed.recurrenceDuration,
+        recurrenceRule: parsed.recurrenceRule,
+        startTime: parsed.startTime,
+        startTimeZone: parsed.startTimeZone,
+        title: parsed.title,
+        uid: parsed.uid,
+      });
     }
 
     return events;
@@ -107,57 +115,60 @@ const createCalDAVSourceProvider = (
   const processEvents = async (
     calendarId: string,
     events: SourceEvent[],
+    persistenceDatabase: BunSQLClient = database,
   ): Promise<CalDAVSourceSyncResult> => {
-    const existingEvents = await database
+    const storedEvents = await persistenceDatabase
       .select({
         availability: eventStatesTable.availability,
         description: eventStatesTable.description,
         endTime: eventStatesTable.endTime,
+        exceptionDates: eventStatesTable.exceptionDates,
         id: eventStatesTable.id,
         isAllDay: eventStatesTable.isAllDay,
         location: eventStatesTable.location,
+        recurrenceId: eventStatesTable.recurrenceId,
+        recurrenceRule: eventStatesTable.recurrenceRule,
+        sourceEventId: eventStatesTable.sourceEventId,
         sourceEventType: eventStatesTable.sourceEventType,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
+        startTimeZone: eventStatesTable.startTimeZone,
         title: eventStatesTable.title,
       })
       .from(eventStatesTable)
       .where(eq(eventStatesTable.calendarId, calendarId));
+    const parseResult = parseStoredSourceEventStatesRecoveringInvalid(storedEvents);
+    const existingEvents = parseResult.events;
 
     const eventsToAdd = buildSourceEventsToAdd(existingEvents, events, { isDeltaSync: false });
-    const eventStateIdsToRemove = buildSourceEventStateIdsToRemove(existingEvents, events);
+    const eventStateIdsToRemove = [...new Set([
+      ...buildInvalidStoredEventIdsToRemove(parseResult.failures, events),
+      ...buildSourceEventStateIdsToRemove(existingEvents, events),
+    ])];
 
-    if (eventStateIdsToRemove.length > EMPTY_COUNT) {
-      await database
-        .delete(eventStatesTable)
-        .where(
-          and(
-            eq(eventStatesTable.calendarId, calendarId),
-            inArray(eventStatesTable.id, eventStateIdsToRemove),
-          ),
-        );
-    }
+    if (
+      eventStateIdsToRemove.length > EMPTY_COUNT
+      || eventsToAdd.length > EMPTY_COUNT
+    ) {
+      await persistenceDatabase.transaction(async (transaction) => {
+        if (eventStateIdsToRemove.length > EMPTY_COUNT) {
+          await transaction
+            .delete(eventStatesTable)
+            .where(
+              and(
+                eq(eventStatesTable.calendarId, calendarId),
+                inArray(eventStatesTable.id, eventStateIdsToRemove),
+              ),
+            );
+        }
 
-    if (eventsToAdd.length > EMPTY_COUNT) {
-      await insertEventStatesWithConflictResolution(
-        database,
-        eventsToAdd.map((event) => ({
-          availability: event.availability,
-          calendarId,
-          description: event.description,
-          endTime: event.endTime,
-          exceptionDates: stringifyIfPresent(event.exceptionDates),
-          isAllDay: event.isAllDay,
-          location: event.location,
-          recurrenceRule: stringifyIfPresent(event.recurrenceRule),
-          recurrenceId: event.recurrenceId,
-          sourceEventType: event.sourceEventType ?? "default",
-          sourceEventUid: event.uid,
-          startTime: event.startTime,
-          startTimeZone: event.startTimeZone,
-          title: event.title,
-        })),
-      );
+        if (eventsToAdd.length > EMPTY_COUNT) {
+          await insertEventStatesWithConflictResolution(
+            transaction,
+            eventsToAdd.map((event) => buildEventStateInsertRow(calendarId, event)),
+          );
+        }
+      });
     }
 
     return {
@@ -167,7 +178,10 @@ const createCalDAVSourceProvider = (
     };
   };
 
-  const refreshOriginalName = async (account: CalDAVSourceAccount): Promise<void> => {
+  const refreshOriginalName = async (
+    account: CalDAVSourceAccount,
+    persistenceDatabase: BunSQLClient = database,
+  ): Promise<void> => {
     if (account.originalName !== null) {
       return;
     }
@@ -185,7 +199,7 @@ const createCalDAVSourceProvider = (
       return;
     }
 
-    await database
+    await persistenceDatabase
       .update(calendarsTable)
       .set({ originalName: displayName })
       .where(eq(calendarsTable.id, account.calendarId));
@@ -195,9 +209,11 @@ const createCalDAVSourceProvider = (
     account: CalDAVSourceAccount,
   ): Promise<CalDAVSourceSyncResult> => {
     try {
-      await refreshOriginalName(account);
-      const events = await fetchEventsFromCalDAV(account);
-      return processEvents(account.calendarId, events);
+      return await withSourceIngestLock(database, account.calendarId, async (lockedDatabase) => {
+        await refreshOriginalName(account, lockedDatabase);
+        const events = await fetchEventsFromCalDAV(account);
+        return processEvents(account.calendarId, events, lockedDatabase);
+      });
     } catch (error) {
       if (isCalDAVAuthenticationError(error)) {
         await database

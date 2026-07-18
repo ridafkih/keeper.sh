@@ -1,9 +1,14 @@
 import { generateDeterministicEventUid, isKeeperEvent } from "../../../core/events/identity";
-import { getOAuthSyncWindowStart } from "../../../core/oauth/sync-window";
 import { ensureValidToken } from "../../../core/oauth/ensure-valid-token";
 import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-valid-token";
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
-import type { DeleteResult, PushResult, RemoteEvent, SyncableEvent } from "../../../core/types";
+import type {
+  DeleteResult,
+  ListRemoteEventsOptions,
+  MaterializedSyncableEvent,
+  PushResult,
+  RemoteEvent,
+} from "../../../core/types";
 import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS, PROVIDER_PUSH_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
 import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
@@ -14,6 +19,7 @@ import { isRateLimitApiError, parseGoogleApiError } from "../shared/errors";
 import type { BatchSubRequest, BatchSubResponse } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
 import { serializeGoogleEvent } from "./serialize-event";
+import { createEditableEventContentHash } from "../../../core/events/content-hash";
 
 interface GoogleSyncProviderConfig {
   accessToken: string;
@@ -46,6 +52,32 @@ const extractBatchErrorMessage = (body: unknown, fallbackStatus: number): string
     return fallback;
   }
   return googleApiErrorSchema.assert(body).error?.message ?? fallback;
+};
+
+const getImportedEventId = (body: unknown): string | null => {
+  if (typeof body !== "object" || body === null || !("id" in body)) {
+    return null;
+  }
+  if (typeof body.id !== "string" || body.id.length === 0) {
+    return null;
+  }
+  return body.id;
+};
+
+const createImportResult = (
+  deleteId: string | null,
+  remoteId: string,
+  statusCode: number,
+): PushResult => {
+  if (deleteId) {
+    return { deleteId, remoteId, success: true };
+  }
+  return {
+    error: "Google import response is missing the event ID",
+    errorType: "GoogleBatchProtocolError",
+    statusCode,
+    success: false,
+  };
 };
 
 type DeleteLookupResolution =
@@ -129,7 +161,9 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   const eventsPath = `/calendar/v3/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
 
   // Writes go through events.import, which upserts by iCalUID: re-pushing an existing event updates it rather than 409ing.
-  const buildPushRequest = (event: SyncableEvent): { uid: string; request: BatchSubRequest } | null => {
+  const buildPushRequest = (
+    event: MaterializedSyncableEvent,
+  ): { uid: string; request: BatchSubRequest } | null => {
     const uid = generateDeterministicEventUid(`${event.id}:${config.externalCalendarId}`);
     const resource = serializeGoogleEvent(event, uid);
     if (!resource) {
@@ -146,7 +180,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     };
   };
 
-  const pushEvents = async (events: SyncableEvent[]): Promise<PushResult[]> => {
+  const pushEvents = async (events: MaterializedSyncableEvent[]): Promise<PushResult[]> => {
     await refreshIfNeeded();
 
     const results: PushResult[] = Array.from({ length: events.length });
@@ -185,7 +219,12 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
           success: false,
         };
       } else if (response.statusCode >= 200 && response.statusCode < 300) {
-        results[entry.index] = { remoteId: entry.uid, success: true };
+        const deleteId = getImportedEventId(response.body);
+        results[entry.index] = createImportResult(
+          deleteId,
+          entry.uid,
+          response.statusCode,
+        );
       } else {
         results[entry.index] = {
           error: extractBatchErrorMessage(response.body, response.statusCode),
@@ -315,12 +354,15 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     return results;
   };
 
-  const fetchRemoteEventsPage = async (pageToken: string | null): Promise<{
+  const fetchRemoteEventsPage = async (
+    options: ListRemoteEventsOptions,
+    pageToken: string | null,
+  ): Promise<{
     items: RemoteEvent[];
     nextPageToken: string | null;
   }> => {
     if (config.rateLimiter) {
-      await config.rateLimiter.acquire(1);
+      await config.rateLimiter.acquire(1, config.signal);
     }
 
     const url = new URL(
@@ -328,10 +370,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       GOOGLE_CALENDAR_API,
     );
     url.searchParams.set("maxResults", String(GOOGLE_CALENDAR_MAX_RESULTS));
-    url.searchParams.set("timeMin", getOAuthSyncWindowStart().toISOString());
-    const futureDate = new Date();
-    futureDate.setFullYear(futureDate.getFullYear() + 2);
-    url.searchParams.set("timeMax", futureDate.toISOString());
+    url.searchParams.set("timeMin", options.timeMin.toISOString());
     if (pageToken) {
       url.searchParams.set("pageToken", pageToken);
     }
@@ -364,10 +403,25 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       if (!startTime || !endTime) {
         continue;
       }
+      let availability: MaterializedSyncableEvent["availability"] = "busy";
+      if (event.transparency === "transparent") {
+        availability = "free";
+      }
       items.push({
         deleteId: event.id ?? event.iCalUID,
+        editableAvailability: availability,
+        editableContentHash: createEditableEventContentHash({
+          availability,
+          description: event.description,
+          endTime,
+          isAllDay: Boolean(event.start?.date),
+          location: event.location,
+          startTime,
+          summary: event.summary ?? "",
+        }),
         endTime,
         isKeeperEvent: true,
+        supportedAvailabilities: ["busy", "free"],
         startTime,
         uid: event.iCalUID,
       });
@@ -376,7 +430,9 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     return { items, nextPageToken: data.nextPageToken ?? null };
   };
 
-  const listRemoteEvents = async (): Promise<RemoteEvent[]> => {
+  const listRemoteEvents = async (
+    options: ListRemoteEventsOptions,
+  ): Promise<RemoteEvent[]> => {
     await refreshIfNeeded();
     const remoteEvents: RemoteEvent[] = [];
     let pageToken: string | null = null;
@@ -384,7 +440,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     do {
       const currentPageToken: string | null = pageToken;
       const page: { items: RemoteEvent[]; nextPageToken: string | null } = await withBackoff(
-        () => fetchRemoteEventsPage(currentPageToken),
+        () => fetchRemoteEventsPage(options, currentPageToken),
         {
           signal: config.signal,
           shouldRetry: (error) =>

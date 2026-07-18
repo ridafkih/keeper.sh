@@ -8,14 +8,21 @@ import {
 
 const createExistingEvent = (
   overrides: Partial<ExistingSourceEventState>,
-): ExistingSourceEventState => ({
-  endTime: new Date("2026-03-11T20:00:00.000Z"),
-  id: "existing-id-1",
-  sourceEventUid: "event-uid-1",
-  sourceEventType: "default",
-  startTime: new Date("2026-03-11T19:00:00.000Z"),
-  ...overrides,
-});
+): ExistingSourceEventState => {
+  const event = {
+    endTime: new Date("2026-03-11T20:00:00.000Z"),
+    exceptionDates: null,
+    id: "existing-id-1",
+    recurrenceId: null,
+    recurrenceRule: null,
+    sourceEventUid: "event-uid-1",
+    sourceEventType: "default",
+    startTime: new Date("2026-03-11T19:00:00.000Z"),
+    startTimeZone: null,
+    ...overrides,
+  };
+  return event;
+};
 
 const createIncomingEvent = (overrides: Partial<SourceEvent>): SourceEvent => ({
   endTime: new Date("2026-03-11T20:00:00.000Z"),
@@ -26,6 +33,31 @@ const createIncomingEvent = (overrides: Partial<SourceEvent>): SourceEvent => ({
 });
 
 describe("source event diff", () => {
+  it("does not update when recurrence set fields arrive in a different order", () => {
+    const existing = createExistingEvent({
+      exceptionDates: [
+        { date: new Date("2026-03-18T19:00:00.000Z"), type: "DATE-TIME" },
+        { date: new Date("2026-03-25T19:00:00.000Z"), type: "DATE-TIME" },
+      ],
+      recurrenceRule: {
+        byDay: [{ day: "MO" }, { day: "WE" }],
+        frequency: "WEEKLY",
+      },
+    });
+    const reordered = createIncomingEvent({
+      exceptionDates: [
+        { date: new Date("2026-03-25T19:00:00.000Z"), type: "DATE-TIME" },
+        { date: new Date("2026-03-18T19:00:00.000Z"), type: "DATE-TIME" },
+      ],
+      recurrenceRule: {
+        byDay: [{ day: "WE" }, { day: "MO" }],
+        frequency: "WEEKLY",
+      },
+    });
+
+    expect(buildSourceEventsToAdd([existing], [reordered])).toEqual([]);
+  });
+
   it("adds recurring instances that share UID but differ by start and end", () => {
     const existingEvents = [
       createExistingEvent({
@@ -203,7 +235,7 @@ describe("source event diff", () => {
     expect(idsToRemove).toEqual([]);
   });
 
-  it("backfills provider event identity during the forced full sync", () => {
+  it("does not transfer a legacy row to a newly assigned provider identity", () => {
     const existingEvents = [
       createExistingEvent({
         sourceEventId: null,
@@ -221,6 +253,27 @@ describe("source event diff", () => {
     expect(buildSourceEventStateIdsToRemove(existingEvents, incomingEvents)).toEqual([
       "existing-id-1",
     ]);
+  });
+
+  it("updates a recurrence override through its stable recurrence identity", () => {
+    const existingEvents = [
+      createExistingEvent({
+        id: "mapped-override-state",
+        recurrenceId: new Date("2026-03-11T19:00:00.000Z"),
+        sourceEventUid: "recurring-uid",
+        title: "Old title",
+      }),
+    ];
+    const incomingEvents = [
+      createIncomingEvent({
+        recurrenceId: new Date("2026-03-11T19:00:00.000Z"),
+        title: "Updated title",
+        uid: "recurring-uid",
+      }),
+    ];
+
+    expect(buildSourceEventStateIdsToRemove(existingEvents, incomingEvents)).toEqual([]);
+    expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toEqual(incomingEvents);
   });
 
   it("removes provider rows by provider identity during full sync", () => {
@@ -338,6 +391,140 @@ describe("source event diff", () => {
     const eventsToAdd = buildSourceEventsToAdd(existingEvents, incomingEvents);
 
     expect(eventsToAdd).toEqual([]);
+  });
+
+  it("re-adds an event when its recurrence rule changes", () => {
+    const existingEvents = [createExistingEvent({
+      recurrenceRule: { frequency: "WEEKLY", interval: 1 },
+    })];
+    const incomingEvents = [createIncomingEvent({
+      recurrenceRule: { frequency: "DAILY", interval: 1 },
+    })];
+
+    expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toHaveLength(1);
+  });
+
+  it("re-adds an event when its exception dates change", () => {
+    const existingEvents = [createExistingEvent({
+      exceptionDates: [{ date: new Date("2026-03-18T19:00:00.000Z") }],
+    })];
+    const incomingEvents = [createIncomingEvent({
+      exceptionDates: [{ date: new Date("2026-03-25T19:00:00.000Z") }],
+    })];
+
+    expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toHaveLength(1);
+  });
+
+  it("re-adds an event when its recurrence ID changes", () => {
+    const existingEvents = [createExistingEvent({
+      recurrenceId: new Date("2026-03-11T19:00:00.000Z"),
+    })];
+    const incomingEvents = [createIncomingEvent({
+      recurrenceId: new Date("2026-03-18T19:00:00.000Z"),
+    })];
+
+    expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toHaveLength(1);
+  });
+
+  it("re-adds an event when its start timezone changes", () => {
+    const existingEvents = [createExistingEvent({ startTimeZone: "America/Edmonton" })];
+    const incomingEvents = [createIncomingEvent({ startTimeZone: "America/Toronto" })];
+
+    expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toHaveLength(1);
+  });
+
+  it("compares structured recurrence fields independently of object key order", () => {
+    const existingEvents = [createExistingEvent({
+      recurrenceRule: { byDay: [{ day: "MO" }], frequency: "WEEKLY" },
+    })];
+    const incomingEvents = [createIncomingEvent({
+      recurrenceRule: { frequency: "WEEKLY", byDay: [{ day: "MO" }] },
+    })];
+
+    expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toEqual([]);
+  });
+
+  it("does not confuse field boundaries when event text contains identity delimiters", () => {
+    const existingEvents = [createExistingEvent({
+      description: "C",
+      title: "A|B",
+    })];
+    const incomingEvents = [createIncomingEvent({
+      description: "B|C",
+      title: "A",
+    })];
+
+    expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toEqual(incomingEvents);
+  });
+
+  it("preserves overrides with different recurrence IDs after they move to the same slot", () => {
+    const incomingEvents = [
+      createIncomingEvent({
+        recurrenceId: new Date("2026-03-11T19:00:00.000Z"),
+        uid: "recurring-uid",
+      }),
+      createIncomingEvent({
+        recurrenceId: new Date("2026-03-18T19:00:00.000Z"),
+        uid: "recurring-uid",
+      }),
+    ];
+
+    expect(buildSourceEventsToAdd([], incomingEvents)).toHaveLength(2);
+  });
+
+  it("does not merge recurring masters that reuse a UID at different slots", () => {
+    const incomingEvents = [
+      createIncomingEvent({
+        endTime: new Date("2023-07-27T18:30:00.000Z"),
+        recurrenceRule: { frequency: "WEEKLY" },
+        startTime: new Date("2023-07-27T18:00:00.000Z"),
+        uid: "reused-master-uid@zoho.com",
+      }),
+      createIncomingEvent({
+        endTime: new Date("2024-11-27T19:30:00.000Z"),
+        recurrenceRule: { frequency: "WEEKLY" },
+        startTime: new Date("2024-11-27T19:00:00.000Z"),
+        uid: "reused-master-uid@zoho.com",
+      }),
+    ];
+
+    expect(buildSourceEventsToAdd([], incomingEvents)).toEqual(incomingEvents);
+  });
+
+  it("keeps delete-and-create semantics when a legacy recurring master moves", () => {
+    const existingEvents = [createExistingEvent({
+      recurrenceRule: { frequency: "WEEKLY" },
+      sourceEventUid: "legacy-master",
+    })];
+    const movedMaster = createIncomingEvent({
+      endTime: new Date("2026-03-11T22:00:00.000Z"),
+      recurrenceRule: { frequency: "WEEKLY" },
+      startTime: new Date("2026-03-11T21:00:00.000Z"),
+      uid: "legacy-master",
+    });
+
+    expect(buildSourceEventsToAdd(existingEvents, [movedMaster])).toEqual([movedMaster]);
+    expect(buildSourceEventStateIdsToRemove(existingEvents, [movedMaster])).toEqual([
+      "existing-id-1",
+    ]);
+  });
+
+  it("updates a moved override without removing its stable recurrence instance", () => {
+    const existingEvents = [createExistingEvent({
+      endTime: new Date("2026-03-11T20:00:00.000Z"),
+      recurrenceId: new Date("2026-03-11T19:00:00.000Z"),
+      sourceEventUid: "recurring-uid",
+      startTime: new Date("2026-03-11T19:00:00.000Z"),
+    })];
+    const incomingEvents = [createIncomingEvent({
+      endTime: new Date("2026-03-11T22:00:00.000Z"),
+      recurrenceId: new Date("2026-03-11T19:00:00.000Z"),
+      startTime: new Date("2026-03-11T21:00:00.000Z"),
+      uid: "recurring-uid",
+    })];
+
+    expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toHaveLength(1);
+    expect(buildSourceEventStateIdsToRemove(existingEvents, incomingEvents)).toEqual([]);
   });
 
   it("deduplicates incoming events that share the same storage identity", () => {

@@ -17,6 +17,7 @@ import { parseEventDateTime } from "../../shared/date-time";
 import { isKeeperEvent } from "../../../../core/events/identity";
 import { withBackoff } from "../../shared/backoff";
 import { isRateLimitApiError } from "../../shared/errors";
+import { buildTimeoutSignal } from "../../../../core/utils/fetch-with-timeout";
 
 const EMPTY_API_ERROR: GoogleApiError = {};
 
@@ -65,6 +66,7 @@ interface PageFetchOptions {
   timeMax?: Date;
   maxResults: number;
   pageToken?: string;
+  signal?: AbortSignal;
 }
 
 interface PageFetchResult {
@@ -76,10 +78,34 @@ interface FullSyncRequiredResult {
   fullSyncRequired: true;
 }
 
+const getGoogleRevisionTime = (event: GoogleCalendarEvent): number | null => {
+  const value = event.updated ?? event.created;
+  if (!value) {
+    return null;
+  }
+  const revisionTime = new Date(value).getTime();
+  if (Number.isNaN(revisionTime)) {
+    return null;
+  }
+  return revisionTime;
+};
+
+const shouldReplaceGoogleRevision = (
+  current: GoogleCalendarEvent,
+  candidate: GoogleCalendarEvent,
+): boolean => {
+  const currentTime = getGoogleRevisionTime(current);
+  const candidateTime = getGoogleRevisionTime(candidate);
+  if (currentTime !== null && candidateTime !== null && currentTime !== candidateTime) {
+    return candidateTime > currentTime;
+  }
+  return true;
+};
+
 const fetchEventsPage = async (
   options: PageFetchOptions,
 ): Promise<PageFetchResult | FullSyncRequiredResult> => {
-  const { accessToken, baseUrl, syncToken, timeMin, timeMax, maxResults, pageToken } = options;
+  const { accessToken, baseUrl, syncToken, timeMin, timeMax, maxResults, pageToken, signal } = options;
 
   const url = new URL(baseUrl);
   url.searchParams.set("maxResults", String(maxResults));
@@ -100,13 +126,14 @@ const fetchEventsPage = async (
     url.searchParams.set("pageToken", pageToken);
   }
 
+  const timeout = buildTimeoutSignal(REQUEST_TIMEOUT_MS, signal);
   const response = await fetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    signal: timeout.signal,
   }).catch((error) => {
-    if (isRequestTimeoutError(error)) {
+    if (timeout.isTimeout() || isRequestTimeoutError(error) && !signal?.aborted) {
       throw new EventsFetchError(
         `Failed to fetch events: timeout after ${REQUEST_TIMEOUT_MS}ms`,
         408,
@@ -148,6 +175,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
     timeMax,
     maxResults = GOOGLE_CALENDAR_MAX_RESULTS,
     rateLimiter,
+    signal,
   } = options;
 
   const baseUrl = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events`;
@@ -157,6 +185,10 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
   const collectEvents = (pageEvents: GoogleCalendarEvent[]): void => {
     for (const event of pageEvents) {
       if (event.id) {
+        const current = changedEventsById.get(event.id);
+        if (current && !shouldReplaceGoogleRevision(current, event)) {
+          continue;
+        }
         changedEventsById.set(event.id, event);
       } else if (event.status !== "cancelled") {
         changedEventsWithoutId.push(event);
@@ -168,13 +200,14 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
     withBackoff(
       () => fetchEventsPage(pageOptions),
       {
+        signal,
         shouldRetry: (error) =>
           error instanceof EventsFetchError && isRateLimitApiError(error.status, error.apiError),
       },
     );
 
   if (rateLimiter) {
-    await rateLimiter.acquire(1);
+    await rateLimiter.acquire(1, signal);
   }
 
   let result = await fetchPageWithBackoff({
@@ -184,6 +217,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
     syncToken,
     timeMax,
     timeMin,
+    signal,
   });
 
   if (result.fullSyncRequired) {
@@ -196,7 +230,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
 
   while (result.data.nextPageToken) {
     if (rateLimiter) {
-      await rateLimiter.acquire(1);
+      await rateLimiter.acquire(1, signal);
     }
 
     result = await fetchPageWithBackoff({
@@ -207,6 +241,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
       syncToken,
       timeMax,
       timeMin,
+      signal,
     });
 
     if (result.fullSyncRequired) {

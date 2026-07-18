@@ -9,6 +9,7 @@ import type { OAuthSourceConfig, SourceEvent, SourceSyncResult } from "../types"
 import type { OAuthTokenProvider } from "./token-provider";
 import { isOAuthReauthRequiredError } from "./error-classification";
 import { runWithCredentialRefreshLock } from "./refresh-coordinator";
+import { withSourceIngestLock } from "../source/ingest-lock";
 
 const MS_PER_SECOND = 1000;
 
@@ -19,6 +20,7 @@ interface FetchEventsResult {
   isDeltaSync?: boolean;
   changedEventIds?: string[];
   cancelledEventIds?: string[];
+  syncTokenVersion?: number;
 }
 
 interface ProcessEventsOptions {
@@ -26,6 +28,7 @@ interface ProcessEventsOptions {
   isDeltaSync?: boolean;
   changedEventIds?: string[];
   cancelledEventIds?: string[];
+  syncTokenVersion?: number;
 }
 
 abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSourceConfig> {
@@ -43,7 +46,25 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
 
   abstract fetchEvents(syncToken: string | null): Promise<FetchEventsResult>;
 
-  async sync(): Promise<SourceSyncResult> {
+  sync(): Promise<SourceSyncResult> {
+    return withSourceIngestLock(
+      this.config.database,
+      this.config.calendarId,
+      (lockedDatabase) => this.syncWithLockHeld(lockedDatabase),
+    );
+  }
+
+  private async syncWithLockHeld(lockedDatabase: OAuthSourceConfig["database"]): Promise<SourceSyncResult> {
+    const originalDatabase = this.config.database;
+    this.config.database = lockedDatabase;
+    try {
+      return await this.runSyncWithLockHeld();
+    } finally {
+      this.config.database = originalDatabase;
+    }
+  }
+
+  private async runSyncWithLockHeld(): Promise<SourceSyncResult> {
     await this.ensureValidToken();
 
     const result = await this.fetchEvents(this.config.syncToken);
@@ -56,6 +77,7 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
         cancelledEventIds: fullResult.cancelledEventIds,
         isDeltaSync: fullResult.isDeltaSync,
         nextSyncToken: fullResult.nextSyncToken,
+        syncTokenVersion: fullResult.syncTokenVersion,
       });
     }
 
@@ -64,6 +86,7 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
       cancelledEventIds: result.cancelledEventIds,
       isDeltaSync: result.isDeltaSync,
       nextSyncToken: result.nextSyncToken,
+      syncTokenVersion: result.syncTokenVersion,
     });
 
     if (processResult.fullSyncRequired) {
@@ -73,6 +96,7 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
         cancelledEventIds: fullResult.cancelledEventIds,
         isDeltaSync: false,
         nextSyncToken: fullResult.nextSyncToken,
+        syncTokenVersion: fullResult.syncTokenVersion,
       });
     }
 

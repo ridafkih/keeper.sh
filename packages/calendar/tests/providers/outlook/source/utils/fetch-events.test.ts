@@ -25,6 +25,7 @@ const createOutlookEventVersion = (removed: boolean): OutlookCalendarEvent => ({
   ...(removed && { "@removed": { reason: "deleted" } }),
   iCalUId: "event-uid",
   id: "event-1",
+  type: "singleInstance",
 });
 
 const resolveInputUrl = (input: Request | URL | string): string => {
@@ -43,11 +44,13 @@ const createJsonResponse = (body: unknown, status = 200): Response =>
 const createFetchQueue = (
   queuedResponses: Response[],
   requestedUrls: string[],
+  requestedInits: RequestInit[] = [],
 ): typeof fetch => {
   let requestCount = 0;
 
-  const queuedFetch = (input: Request | URL | string): Promise<Response> => {
+  const queuedFetch = (input: Request | URL | string, init?: RequestInit): Promise<Response> => {
     requestedUrls.push(resolveInputUrl(input));
+    requestedInits.push(init ?? {});
 
     const nextResponse = queuedResponses[requestCount];
     requestCount += 1;
@@ -68,7 +71,7 @@ afterEach(() => {
 });
 
 describe("fetchCalendarEvents", () => {
-  it("collects paged events and removals during delta sync", async () => {
+  it("forces a full sync when paged delta data includes a sparse deletion tombstone", async () => {
     const requestedUrls: string[] = [];
 
     const initialDeltaLink = "https://graph.microsoft.com/v1.0/me/calendars/cal-1/calendarView/delta?$deltatoken=original";
@@ -101,17 +104,7 @@ describe("fetchCalendarEvents", () => {
       deltaLink: initialDeltaLink,
     });
 
-    expect(fetchResult.fullSyncRequired).toBe(false);
-    expect(fetchResult.isDeltaSync).toBe(true);
-    expect(fetchResult.nextDeltaLink).toContain("deltatoken=final");
-    expect(fetchResult.events.map((event) => event.id)).toEqual(["event-1", "event-3"]);
-    expect(fetchResult.changedEventIds).toEqual([
-      "event-1",
-      "event-2",
-      "removed-by-id",
-      "event-3",
-    ]);
-    expect(fetchResult.cancelledEventIds).toEqual(["event-2", "removed-by-id"]);
+    expect(fetchResult).toEqual({ events: [], fullSyncRequired: true });
     expect(requestedUrls).toEqual([initialDeltaLink, nextPageLink]);
   });
 
@@ -157,8 +150,61 @@ describe("fetchCalendarEvents", () => {
     expect(result.cancelledEventIds).toEqual(expectedCancelledIds);
   });
 
+  it.each([
+    ["older page first", ["older", "newer"]],
+    ["newer page first", ["newer", "older"]],
+  ])("uses Outlook revision timestamps instead of page order when %s", async (_label, order) => {
+    const revisions = {
+      newer: {
+        iCalUId: "event-uid",
+        id: "event-1",
+        lastModifiedDateTime: "2026-03-02T00:00:00.000Z",
+        subject: "Newest",
+      },
+      older: {
+        iCalUId: "event-uid",
+        id: "event-1",
+        lastModifiedDateTime: "2026-03-01T00:00:00.000Z",
+        subject: "Stale",
+      },
+    };
+    const orderedEvents = order.map((revision) => {
+      if (revision === "older") {
+        return revisions.older;
+      }
+      if (revision === "newer") {
+        return revisions.newer;
+      }
+      throw new Error(`Unknown revision: ${revision}`);
+    });
+    const [firstEvent, secondEvent] = orderedEvents;
+    if (!firstEvent || !secondEvent) {
+      throw new Error("Expected two ordered revisions");
+    }
+    const nextPageLink = "https://graph.microsoft.com/delta?$skiptoken=next";
+    globalThis.fetch = createFetchQueue([
+      createJsonResponse({
+        "@odata.nextLink": nextPageLink,
+        value: [firstEvent],
+      }),
+      createJsonResponse({
+        "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
+        value: [secondEvent],
+      }),
+    ], []);
+
+    const result = await fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      deltaLink: "https://graph.microsoft.com/delta?$deltatoken=current",
+    });
+
+    expect(result.events).toMatchObject([{ id: "event-1", subject: "Newest" }]);
+  });
+
   it("builds initial range URL when running full sync", async () => {
     const requestedUrls: string[] = [];
+    const requestedInits: RequestInit[] = [];
 
     globalThis.fetch = createFetchQueue(
       [
@@ -168,6 +214,7 @@ describe("fetchCalendarEvents", () => {
         }),
       ],
       requestedUrls,
+      requestedInits,
     );
 
     await fetchCalendarEvents({
@@ -188,9 +235,117 @@ describe("fetchCalendarEvents", () => {
     );
     expect(parsedUrl.searchParams.get("startDateTime")).toBe("2026-06-01T00:00:00.000Z");
     expect(parsedUrl.searchParams.get("endDateTime")).toBe("2026-06-02T00:00:00.000Z");
-    expect(parsedUrl.searchParams.get("$select")).toBe(
-      "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
+    expect(parsedUrl.searchParams.get("$select")).toBeNull();
+    expect(requestedInits[0]?.headers).toMatchObject({
+      Prefer: expect.stringContaining(`outlook.body-content-type="text"`),
+    });
+    expect(requestedInits[0]?.headers).toMatchObject({
+      Prefer: expect.stringContaining(`outlook.timezone="UTC"`),
+    });
+  });
+
+  it("retains original timezone fields through Graph response validation", async () => {
+    globalThis.fetch = createFetchQueue([createJsonResponse({
+      "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
+      value: [createOutlookEvent({
+        originalEndTimeZone: "Mountain Standard Time",
+        originalStartTimeZone: "Mountain Standard Time",
+      })],
+    })], []);
+
+    const result = await fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      timeMax: new Date("2026-07-31T00:00:00.000Z"),
+      timeMin: new Date("2026-07-01T00:00:00.000Z"),
+    });
+
+    expect(result.events[0]?.originalStartTimeZone).toBe("Mountain Standard Time");
+    expect(result.events[0]?.originalEndTimeZone).toBe("Mountain Standard Time");
+  });
+
+  it("expands an Outlook series master into all paged instances during full sync", async () => {
+    const requestedUrls: string[] = [];
+    const instancesNextLink = "https://graph.microsoft.com/v1.0/instances?$skiptoken=next";
+    globalThis.fetch = createFetchQueue([
+      createJsonResponse({
+        "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
+        value: [createOutlookEvent({
+          end: { dateTime: "2024-01-01T11:00:00", timeZone: "UTC" },
+          id: "master/id",
+          start: { dateTime: "2024-01-01T10:00:00", timeZone: "UTC" },
+          type: "seriesMaster",
+        })],
+      }),
+      createJsonResponse({
+        "@odata.nextLink": instancesNextLink,
+        value: [createOutlookEvent({ id: "occurrence-1", type: "occurrence" })],
+      }),
+      createJsonResponse({
+        value: [createOutlookEvent({ id: "occurrence-2", type: "exception" })],
+      }),
+    ], requestedUrls);
+
+    const result = await fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar/id",
+      timeMax: new Date("2026-07-31T00:00:00.000Z"),
+      timeMin: new Date("2026-07-01T00:00:00.000Z"),
+    });
+
+    expect(result.events.map((event) => event.id)).toEqual(["occurrence-1", "occurrence-2"]);
+    const instancesUrl = new URL(requestedUrls[1] ?? "");
+    expect(instancesUrl.pathname).toContain(
+      "/me/calendars/calendar%2Fid/events/master%2Fid/instances",
     );
+    expect(instancesUrl.searchParams.get("startDateTime")).toBe("2026-07-01T00:00:00.000Z");
+    expect(instancesUrl.searchParams.get("$select")).toContain("originalStartTimeZone");
+    expect(instancesUrl.searchParams.get("$select")).toContain("originalEndTimeZone");
+    expect(requestedUrls[2]).toBe(instancesNextLink);
+  });
+
+  it("forces an authoritative full sync when a delta page contains a series master", async () => {
+    globalThis.fetch = createFetchQueue([createJsonResponse({
+      "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
+      value: [createOutlookEvent({ id: "master-1", type: "seriesMaster" })],
+    })], []);
+
+    await expect(fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      deltaLink: "https://graph.microsoft.com/delta?$deltatoken=current",
+    })).resolves.toEqual({ events: [], fullSyncRequired: true });
+  });
+
+  it("treats isCancelled delta events as deletions", async () => {
+    globalThis.fetch = createFetchQueue([createJsonResponse({
+      "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
+      value: [createOutlookEvent({ id: "cancelled-1", isCancelled: true })],
+    })], []);
+
+    const result = await fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      deltaLink: "https://graph.microsoft.com/delta?$deltatoken=current",
+    });
+
+    expect(result.events).toEqual([]);
+    expect(result.changedEventIds).toEqual(["cancelled-1"]);
+    expect(result.cancelledEventIds).toEqual(["cancelled-1"]);
+  });
+
+  it("fails the full sync instead of silently dropping a series whose instances fail", async () => {
+    globalThis.fetch = createFetchQueue([
+      createJsonResponse({ value: [createOutlookEvent({ id: "master-1", type: "seriesMaster" })] }),
+      new Response("instance failure", { status: 500 }),
+    ], []);
+
+    await expect(fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      timeMax: new Date("2026-07-31T00:00:00.000Z"),
+      timeMin: new Date("2026-07-01T00:00:00.000Z"),
+    })).rejects.toThrow("Failed to fetch events: 500: instance failure");
   });
 
   it("returns full-sync-required when Microsoft responds with gone", async () => {
@@ -251,7 +406,72 @@ describe("parseOutlookEvents", () => {
     expect(parsedEvent.sourceEventId).toBe("outlook-event-id-1");
     expect(parsedEvent.startTime.toISOString()).toBe("2026-03-08T14:00:00.000Z");
     expect(parsedEvent.endTime.toISOString()).toBe("2026-03-08T15:00:00.000Z");
-    expect(parsedEvent.startTimeZone).toBe("UTC");
+    expect(parsedEvent.startTimeZone).toBe("Etc/UTC");
+  });
+
+  it("interprets Microsoft wall times in their Windows timezone", () => {
+    const parsedEvents = parseOutlookEvents([createOutlookEvent({
+      end: {
+        dateTime: "2026-03-02T10:00:00",
+        timeZone: "Mountain Standard Time",
+      },
+      start: {
+        dateTime: "2026-03-02T09:00:00",
+        timeZone: "Mountain Standard Time",
+      },
+    })]);
+
+    expect(parsedEvents[0]?.startTime.toISOString()).toBe("2026-03-02T16:00:00.000Z");
+    expect(parsedEvents[0]?.endTime.toISOString()).toBe("2026-03-02T17:00:00.000Z");
+    expect(parsedEvents[0]?.startTimeZone).toBe("America/Denver");
+  });
+
+  it("canonicalizes all-day dates independently of the mailbox timezone", () => {
+    const parsedEvents = parseOutlookEvents([createOutlookEvent({
+      isAllDay: true,
+      end: {
+        dateTime: "2026-03-09T00:00:00.0000000",
+        timeZone: "Mountain Standard Time",
+      },
+      start: {
+        dateTime: "2026-03-08T00:00:00.0000000",
+        timeZone: "Mountain Standard Time",
+      },
+    })]);
+
+    expect(parsedEvents[0]).toMatchObject({
+      endTime: new Date("2026-03-09T00:00:00.000Z"),
+      startTime: new Date("2026-03-08T00:00:00.000Z"),
+    });
+  });
+
+  it("parses UTC response instants but retains Outlook's original event timezone", () => {
+    const parsedEvents = parseOutlookEvents([createOutlookEvent({
+      originalEndTimeZone: "Mountain Standard Time",
+      originalStartTimeZone: "Mountain Standard Time",
+    })]);
+
+    expect(parsedEvents[0]?.startTime.toISOString()).toBe("2026-03-08T14:00:00.000Z");
+    expect(parsedEvents[0]?.endTime.toISOString()).toBe("2026-03-08T15:00:00.000Z");
+    expect(parsedEvents[0]?.startTimeZone).toBe("America/Denver");
+  });
+
+  it("falls back to the response timezone when Outlook's original label is unsupported", () => {
+    const parsedEvents = parseOutlookEvents([createOutlookEvent({
+      originalStartTimeZone: "Mailbox Specific Time",
+    })]);
+
+    expect(parsedEvents[0]?.startTimeZone).toBe("Etc/UTC");
+  });
+
+  it("rejects an unsupported response timezone instead of dropping timezone semantics", () => {
+    expect(() => parseOutlookEvents([createOutlookEvent({
+      originalStartTimeZone: "Mailbox Specific Time",
+      start: {
+        dateTime: "2026-03-08T14:00:00.0000000",
+        timeZone: "Unexpected Response Time",
+      },
+    })])).toThrow("Unsupported calendar timezone: Unexpected Response Time");
   });
 
   it("skips keeper-managed and malformed events", () => {

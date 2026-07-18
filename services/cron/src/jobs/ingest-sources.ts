@@ -3,6 +3,7 @@ import {
   ingestSource,
   allSettledWithConcurrency,
   insertEventStatesWithConflictResolution,
+  buildEventStateInsertRow,
   createGoogleTokenRefresher,
   createMicrosoftTokenRefresher,
   createCoordinatedRefresher,
@@ -10,12 +11,14 @@ import {
   ensureValidToken,
   isTimeoutError,
   buildCalendarBackoffState,
+  SOURCE_INGEST_LOCK_NAMESPACE,
 } from "@keeper.sh/calendar";
 import { INGEST_SOURCE_TIMEOUT_MS, PROVIDER_INGEST_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
-import type { CalendarBackoffState, IngestionChanges, IngestionFetchEventsResult, RedisRateLimiter, TokenState } from "@keeper.sh/calendar";
+import type { CalendarBackoffState, IngestionFetchEventsResult, IngestionPersistenceWork, IngestionResult, RedisRateLimiter, TokenState } from "@keeper.sh/calendar";
 import {
   createIcsSourceFetcher,
   interpretFullDayTimedEventsAsAllDay,
+  persistCalendarSnapshot,
 } from "@keeper.sh/calendar/ics";
 import { createGoogleSourceFetcher } from "@keeper.sh/calendar/google";
 import { createOutlookSourceFetcher } from "@keeper.sh/calendar/outlook";
@@ -28,16 +31,41 @@ import {
   eventStatesTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
-import { and, arrayContains, eq, inArray, isNull, lte, or } from "drizzle-orm";
+import { and, arrayContains, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import { database, refreshLockRedis, refreshLockStore } from "@/context";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import { resolveMissingCalendarFailure } from "@/utils/provider-ingest-failure";
+import { withAbortTimeout } from "@/utils/with-abort-timeout";
+import { createSyncLock } from "@keeper.sh/sync";
 
 const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
+const SOURCE_TIMEOUT_DATABASE_GRACE_MS = 5000;
 const SOURCE_CONCURRENCY = 5;
+const SOURCE_INGEST_LOCK_KEY_PREFIX = "source-ingest:";
+const sourceIngestLock = createSyncLock(refreshLockRedis);
+
+const runSourceIngest = async (
+  calendarId: string,
+  signal: AbortSignal,
+  work: (isCurrent: () => Promise<boolean>) => Promise<IngestionResult>,
+): Promise<IngestionResult> => {
+  const lockResult = await sourceIngestLock.acquire(
+    `${SOURCE_INGEST_LOCK_KEY_PREFIX}${calendarId}`,
+    signal,
+  );
+  if (!lockResult.acquired) {
+    signal.throwIfAborted();
+    return { eventsAdded: 0, eventsRemoved: 0 };
+  }
+  try {
+    return await work(lockResult.handle.isCurrent);
+  } finally {
+    await lockResult.handle.release();
+  }
+};
 
 const resolveIngestErrorSlug = (error: unknown): string => {
   if (!isTimeoutError(error)) {
@@ -84,87 +112,101 @@ const logIngestBackoff = (state: CalendarBackoffState): void => {
   }
 };
 
-const serializeOptionalJson = (value: unknown): string | null => {
-  if (!value) {
-    return null;
-  }
-  return JSON.stringify(value);
-};
+const createIngestionPersistenceTransaction = (
+  calendarId: string,
+  signal: AbortSignal,
+  deadlineAt: number,
+) =>
+  (work: IngestionPersistenceWork) => database.transaction(async (transaction) => {
+    const setRemainingStatementTimeout = async (): Promise<void> => {
+      signal.throwIfAborted();
+      const remainingMs = Math.max(1, Math.ceil(deadlineAt - Date.now()));
+      await transaction.execute(
+        sql`select set_config('statement_timeout', ${String(remainingMs)}, true)`,
+      );
+      signal.throwIfAborted();
+    };
 
-const withTimeout = <TResult>(
-  operation: () => Promise<TResult>,
-  timeoutMs: number,
-): Promise<TResult> =>
-  Promise.race([
-    Promise.resolve().then(operation),
-    Bun.sleep(timeoutMs).then((): never => {
-      throw new Error(`Source ingestion timed out after ${timeoutMs}ms`);
-    }),
-  ]);
+    const initialRemainingMs = Math.max(1, Math.ceil(deadlineAt - Date.now()));
+    await transaction.execute(sql`select set_config(
+      'idle_in_transaction_session_timeout',
+      ${String(initialRemainingMs + SOURCE_TIMEOUT_DATABASE_GRACE_MS)},
+      true
+    )`);
+    await setRemainingStatementTimeout();
+    await transaction.execute(
+      sql`select pg_advisory_xact_lock(${SOURCE_INGEST_LOCK_NAMESPACE}, hashtext(${calendarId}))`,
+    );
+    signal.throwIfAborted();
 
-const createIngestionFlush = (calendarId: string) =>
-  async (changes: IngestionChanges): Promise<void> => {
-    await database.transaction(async (transaction) => {
-      if (changes.deletes.length > 0) {
-        await transaction
-          .delete(eventStatesTable)
-          .where(
-            and(
-              eq(eventStatesTable.calendarId, calendarId),
-              inArray(eventStatesTable.id, changes.deletes),
-            ),
+    const result = await work({
+      readExistingEvents: async () => {
+        await setRemainingStatementTimeout();
+        const events = await transaction.select({
+          availability: eventStatesTable.availability,
+          description: eventStatesTable.description,
+          endTime: eventStatesTable.endTime,
+          exceptionDates: eventStatesTable.exceptionDates,
+          id: eventStatesTable.id,
+          isAllDay: eventStatesTable.isAllDay,
+          location: eventStatesTable.location,
+          recurrenceId: eventStatesTable.recurrenceId,
+          recurrenceRule: eventStatesTable.recurrenceRule,
+          sourceEventId: eventStatesTable.sourceEventId,
+          sourceEventType: eventStatesTable.sourceEventType,
+          sourceEventUid: eventStatesTable.sourceEventUid,
+          startTime: eventStatesTable.startTime,
+          startTimeZone: eventStatesTable.startTimeZone,
+          title: eventStatesTable.title,
+        })
+        .from(eventStatesTable)
+          .where(eq(eventStatesTable.calendarId, calendarId));
+        signal.throwIfAborted();
+        return events;
+      },
+      flush: async (changes) => {
+        signal.throwIfAborted();
+        if (changes.deletes.length > 0) {
+          await setRemainingStatementTimeout();
+          await transaction
+            .delete(eventStatesTable)
+            .where(
+              and(
+                eq(eventStatesTable.calendarId, calendarId),
+                inArray(eventStatesTable.id, changes.deletes),
+              ),
+            );
+          signal.throwIfAborted();
+        }
+
+        if (changes.inserts.length > 0) {
+          await setRemainingStatementTimeout();
+          await insertEventStatesWithConflictResolution(
+            transaction,
+            changes.inserts.map((event) => buildEventStateInsertRow(calendarId, event)),
           );
-      }
+          signal.throwIfAborted();
+        }
 
-      if (changes.inserts.length > 0) {
-        await insertEventStatesWithConflictResolution(
-          transaction,
-          changes.inserts.map((event) => ({
-            availability: event.availability,
-            calendarId,
-            description: event.description,
-            endTime: event.endTime,
-            exceptionDates: serializeOptionalJson(event.exceptionDates),
-            isAllDay: event.isAllDay,
-            location: event.location,
-            recurrenceRule: serializeOptionalJson(event.recurrenceRule),
-            recurrenceId: event.recurrenceId,
-            sourceEventId: event.sourceEventId,
-            sourceEventType: event.sourceEventType,
-            sourceEventUid: event.uid,
-            startTime: event.startTime,
-            startTimeZone: event.startTimeZone,
-            title: event.title,
-          })),
-        );
-      }
+        if ("syncToken" in changes) {
+          await setRemainingStatementTimeout();
+          await transaction
+            .update(calendarsTable)
+            .set({ syncToken: changes.syncToken })
+            .where(eq(calendarsTable.id, calendarId));
+          signal.throwIfAborted();
+        }
 
-      if ("syncToken" in changes) {
-        await transaction
-          .update(calendarsTable)
-          .set({ syncToken: changes.syncToken })
-          .where(eq(calendarsTable.id, calendarId));
-      }
+        if (changes.snapshot) {
+          await setRemainingStatementTimeout();
+          await persistCalendarSnapshot(transaction, calendarId, changes.snapshot);
+          signal.throwIfAborted();
+        }
+      },
     });
-  };
-
-const readExistingEvents = (calendarId: string) =>
-  database
-    .select({
-      availability: eventStatesTable.availability,
-      description: eventStatesTable.description,
-      endTime: eventStatesTable.endTime,
-      id: eventStatesTable.id,
-      isAllDay: eventStatesTable.isAllDay,
-      location: eventStatesTable.location,
-      sourceEventType: eventStatesTable.sourceEventType,
-      sourceEventId: eventStatesTable.sourceEventId,
-      sourceEventUid: eventStatesTable.sourceEventUid,
-      startTime: eventStatesTable.startTime,
-      title: eventStatesTable.title,
-    })
-    .from(eventStatesTable)
-    .where(eq(eventStatesTable.calendarId, calendarId));
+    signal.throwIfAborted();
+    return result;
+  });
 
 const resolveTokenRefresher = (provider: string) => {
   if (provider === "google" && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
@@ -198,9 +240,11 @@ const resolveRateLimiter = (provider: string, userId: string): RedisRateLimiter 
 
 interface OAuthFetcherParams {
   accessToken: string;
+  calendarId: string;
   externalCalendarId: string;
   syncToken: string | null;
   rateLimiter?: RedisRateLimiter;
+  signal?: AbortSignal;
 }
 
 const resolveOAuthFetcher = (
@@ -258,7 +302,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
 
   const settlements = await allSettledWithConcurrency(
     oauthSources.map((source) => () =>
-      withTimeout((): Promise<IngestionSourceResult> =>
+      withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
         context(async () => {
           widelog.set("operation.name", "ingest-source");
           widelog.set("operation.type", "job");
@@ -302,9 +346,11 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
 
             const resolvedFetcher = resolveOAuthFetcher(source.provider, {
               accessToken: tokenState.accessToken,
+              calendarId: source.calendarId,
               externalCalendarId: source.externalCalendarId,
               syncToken: source.syncToken,
               rateLimiter,
+              signal,
             });
 
             if (!resolvedFetcher) {
@@ -319,18 +365,19 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
             const ingestEvents: Record<string, unknown>[] = [];
 
             const result = await widelog.time.measure("duration_ms", () =>
-              ingestSource({
+              runSourceIngest(source.calendarId, signal, (isCurrent) => ingestSource({
                 calendarId: source.calendarId,
                 fetchEvents: () => fetcher.fetchEvents(),
-                readExistingEvents: () => readExistingEvents(source.calendarId),
-                flush: createIngestionFlush(source.calendarId),
+                isCurrent,
+                withPersistenceTransaction:
+                  createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),
                 onIngestEvent: (event) => {
                   ingestEvents.push({
                     ...event,
                     "source.provider": source.provider,
                   });
                 },
-              }),
+              })),
             );
 
             if (source.ingestFailureCount > 0) {
@@ -448,7 +495,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
 
   const settlements = await allSettledWithConcurrency(
     caldavSources.map((source) => () =>
-      withTimeout((): Promise<IngestionSourceResult> =>
+      withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
         context(async () => {
           widelog.set("operation.name", "ingest-source");
           widelog.set("operation.type", "job");
@@ -466,24 +513,25 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
               serverUrl: source.serverUrl,
               username: source.username,
               password,
-              safeFetchOptions,
+              safeFetchOptions: { ...safeFetchOptions, signal },
             });
 
             const ingestEvents: Record<string, unknown>[] = [];
 
             const result = await widelog.time.measure("duration_ms", () =>
-              ingestSource({
+              runSourceIngest(source.calendarId, signal, (isCurrent) => ingestSource({
                 calendarId: source.calendarId,
                 fetchEvents: () => fetcher.fetchEvents(),
-                readExistingEvents: () => readExistingEvents(source.calendarId),
-                flush: createIngestionFlush(source.calendarId),
+                isCurrent,
+                withPersistenceTransaction:
+                  createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),
                 onIngestEvent: (event) => {
                   ingestEvents.push({
                     ...event,
                     "source.provider": source.provider,
                   });
                 },
-              }),
+              })),
             );
 
             if (source.ingestFailureCount > 0) {
@@ -576,7 +624,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
 
   const settlements = await allSettledWithConcurrency(
     icsSources.map((source) => () =>
-      withTimeout((): Promise<IngestionSourceResult> =>
+      withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
         context(async () => {
           widelog.set("operation.name", "ingest-source");
           widelog.set("operation.type", "job");
@@ -598,13 +646,13 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
               calendarId: source.calendarId,
               url: source.url,
               database,
-              safeFetchOptions,
+              safeFetchOptions: { ...safeFetchOptions, signal },
             });
 
             const ingestEvents: Record<string, unknown>[] = [];
 
             const result = await widelog.time.measure("duration_ms", () =>
-              ingestSource({
+              runSourceIngest(source.calendarId, signal, (isCurrent) => ingestSource({
                 calendarId: source.calendarId,
                 fetchEvents: () =>
                   fetcher.fetchEvents({
@@ -614,15 +662,16 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
                         enabled: source.treatFullDayTimedEventsAsAllDay,
                       }),
                   }),
-                readExistingEvents: () => readExistingEvents(source.calendarId),
-                flush: createIngestionFlush(source.calendarId),
+                isCurrent,
+                withPersistenceTransaction:
+                  createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),
                 onIngestEvent: (event) => {
                   ingestEvents.push({
                     ...event,
                     "source.provider": "ical",
                   });
                 },
-              }),
+              })),
             );
 
             if (source.ingestFailureCount > 0) {
@@ -670,11 +719,28 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
 
 export default withCronWideEvent({
   async callback() {
-    await Promise.allSettled([
+    const settlements = await Promise.allSettled([
       ingestOAuthSources(),
       ingestCalDAVSources(),
       ingestIcsSources(),
     ]);
+    const failures: unknown[] = [];
+    let failedSourceCount = 0;
+
+    for (const settlement of settlements) {
+      if (settlement.status === "rejected") {
+        failures.push(settlement.reason);
+        continue;
+      }
+      failedSourceCount += settlement.value.errors;
+    }
+
+    if (failedSourceCount > 0) {
+      failures.push(new Error(`${failedSourceCount} calendar source ingestions failed`));
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(failures, "Calendar source ingestion completed with failures");
+    }
   },
   cron: "@every_1_minutes",
   immediate: true,

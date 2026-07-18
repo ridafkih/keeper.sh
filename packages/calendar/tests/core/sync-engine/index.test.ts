@@ -1,11 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { executeRemoteOperations } from "../../../src/core/sync-engine/index";
-import type { SyncOperation, PushResult, DeleteResult, SyncableEvent } from "../../../src/core/types";
+import type {
+  DeleteResult,
+  MaterializedSyncableEvent,
+  PushResult,
+  SyncOperation,
+} from "../../../src/core/types";
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { PendingChanges } from "../../../src/core/sync-engine/types";
-import { createSyncEventContentHash } from "../../../src/core/events/content-hash";
+import {
+  createEditableEventContentHash,
+  createSyncEventContentHash,
+} from "../../../src/core/events/content-hash";
+import { RecurrenceMaterializationLimitError } from "../../../src/core/events/recurrence-materializer";
 
-const makeEvent = (id: string, startTime: Date, endTime: Date): SyncableEvent => ({
+const makeEvent = (
+  id: string,
+  startTime: Date,
+  endTime: Date,
+): MaterializedSyncableEvent => ({
   id,
   sourceEventUid: `uid-${id}`,
   startTime,
@@ -19,6 +32,7 @@ const makeEvent = (id: string, startTime: Date, endTime: Date): SyncableEvent =>
 const makeMapping = (id: string, eventStateId: string, destinationEventUid: string): EventMapping => ({
   id,
   eventStateId,
+  syncEventId: eventStateId,
   calendarId: "dest-cal-1",
   destinationEventUid,
   deleteIdentifier: destinationEventUid,
@@ -28,7 +42,7 @@ const makeMapping = (id: string, eventStateId: string, destinationEventUid: stri
 });
 
 const makeProvider = (overrides: Partial<{
-  pushEvents: (events: SyncableEvent[]) => Promise<PushResult[]>;
+  pushEvents: (events: MaterializedSyncableEvent[]) => Promise<PushResult[]>;
   deleteEvents: (eventIds: string[]) => Promise<DeleteResult[]>;
   listRemoteEvents: () => Promise<never[]>;
 }> = {}) => ({
@@ -50,8 +64,39 @@ describe("executeRemoteOperations", () => {
     expect(outcome.result.addFailed).toBe(0);
     expect(outcome.changes.inserts).toHaveLength(1);
     expect(outcome.changes.inserts[0]?.eventStateId).toBe("ev-1");
+    expect(outcome.changes.inserts[0]?.syncEventId).toBe("ev-1");
     expect(outcome.changes.inserts[0]?.destinationEventUid).toBe("remote-1");
     expect(outcome.changes.deletes).toHaveLength(0);
+  });
+
+  it("checkpoints a materialized occurrence against its real owning event-state row", async () => {
+    const occurrence = {
+      ...makeEvent(
+        "recurrence-synthetic-id",
+        new Date("2026-03-15T09:00:00Z"),
+        new Date("2026-03-15T10:00:00Z"),
+      ),
+      eventStateId: "019c0000-0000-7000-8000-000000000001",
+    };
+    const provider = makeProvider({
+      pushEvents: () => Promise.resolve([{
+        deleteId: "provider-delete-id",
+        remoteId: "provider-uid",
+        success: true,
+      }]),
+    });
+
+    const outcome = await executeRemoteOperations(
+      [{ event: occurrence, type: "add" }],
+      [],
+      "dest-cal-1",
+      provider,
+    );
+
+    expect(outcome.changes.inserts).toMatchObject([{
+      eventStateId: "019c0000-0000-7000-8000-000000000001",
+      syncEventId: "recurrence-synthetic-id",
+    }]);
   });
 
   it("accumulates mapping deletes from successful removes", async () => {
@@ -409,6 +454,47 @@ describe("executeRemoteOperations", () => {
 });
 
 describe("syncCalendar", () => {
+  it("does not call providers or flush reconciliation state when local materialization fails", async () => {
+    const { syncCalendar } = await import("../../../src/core/sync-engine/index");
+    const materializationError = new RecurrenceMaterializationLimitError({
+      calendarId: "source-calendar-id",
+      eventId: "event-state-id",
+      eventStateId: "event-state-id",
+      sourceEventUid: "pathological-series",
+    }, 10_000);
+    let providerCalled = false;
+    let flushed = false;
+    const provider = makeProvider({
+      deleteEvents: () => {
+        providerCalled = true;
+        return Promise.resolve([]);
+      },
+      listRemoteEvents: () => {
+        providerCalled = true;
+        return Promise.resolve([]);
+      },
+      pushEvents: () => {
+        providerCalled = true;
+        return Promise.resolve([]);
+      },
+    });
+
+    await expect(syncCalendar({
+      userId: "user-1",
+      calendarId: "dest-cal-1",
+      provider,
+      readState: () => Promise.reject(materializationError),
+      isCurrent: () => Promise.resolve(true),
+      flush: () => {
+        flushed = true;
+        return Promise.resolve();
+      },
+    })).rejects.toBe(materializationError);
+
+    expect(providerCalled).toBe(false);
+    expect(flushed).toBe(false);
+  });
+
   it("uses a stable weighted progress total for replacements", async () => {
     const { syncCalendar } = await import("../../../src/core/sync-engine/index");
     const previousEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
@@ -546,6 +632,74 @@ describe("syncCalendar", () => {
     expect(result.added).toBe(0);
     expect(result.removed).toBe(0);
     expect(flushCalled).toBe(false);
+  });
+
+  it("flushes a recurring mapping identity migration without remote writes", async () => {
+    const { syncCalendar } = await import("../../../src/core/sync-engine/index");
+    const occurrence = {
+      ...makeEvent(
+        "materialized-occurrence-id",
+        new Date("2026-03-15T09:00:00Z"),
+        new Date("2026-03-15T10:00:00Z"),
+      ),
+      eventStateId: "recurring-master-id",
+    };
+    const mapping = {
+      ...makeMapping("map-1", "recurring-master-id", "legacy-occurrence@keeper.sh"),
+      syncEventHash: "legacy-master-hash",
+      syncEventId: "recurring-master-id",
+    };
+    let deleteCalled = false;
+    let pushCalled = false;
+    const provider = makeProvider({
+      deleteEvents: () => {
+        deleteCalled = true;
+        return Promise.resolve([]);
+      },
+      pushEvents: () => {
+        pushCalled = true;
+        return Promise.resolve([]);
+      },
+    });
+    const flushes: PendingChanges[] = [];
+
+    const result = await syncCalendar({
+      userId: "user-1",
+      calendarId: "dest-cal-1",
+      provider,
+      readState: () => Promise.resolve({
+        localEvents: [occurrence],
+        existingMappings: [mapping],
+        remoteEvents: [{
+          deleteId: "google-provider-occurrence-id",
+          editableAvailability: "busy",
+          editableContentHash: createEditableEventContentHash(occurrence),
+          endTime: occurrence.endTime,
+          isKeeperEvent: true,
+          startTime: occurrence.startTime,
+          uid: mapping.destinationEventUid,
+        }],
+      }),
+      isCurrent: () => Promise.resolve(true),
+      flush: (changes) => {
+        flushes.push(changes);
+        return Promise.resolve();
+      },
+    });
+
+    expect(result).toMatchObject({ added: 0, removed: 0 });
+    expect(deleteCalled).toBe(false);
+    expect(pushCalled).toBe(false);
+    expect(flushes).toEqual([{
+      deletes: [],
+      inserts: [],
+      updates: [{
+        deleteIdentifier: "google-provider-occurrence-id",
+        id: mapping.id,
+        syncEventHash: createSyncEventContentHash(occurrence),
+        syncEventId: occurrence.id,
+      }],
+    }]);
   });
 
   it("emits a wide event with sync context when onSyncEvent is provided", async () => {
@@ -705,13 +859,14 @@ describe("createRedisGenerationCheck", () => {
 });
 
 describe("createDatabaseFlush", () => {
-  it("batches all inserts and deletes into a single transaction", async () => {
+  it("batches inserts, deletes, and mapping updates into a single transaction", async () => {
     const { createDatabaseFlush } = await import("../../../src/core/sync-engine/flush");
     const executedOperations: string[] = [];
 
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
+          execute: () => { executedOperations.push("update"); return Promise.resolve(); },
           insert: () => { executedOperations.push("insert"); return { values: () => ({ onConflictDoNothing: () => Promise.resolve() }) }; },
           delete: () => { executedOperations.push("delete"); return { where: () => Promise.resolve() }; },
         };
@@ -723,13 +878,20 @@ describe("createDatabaseFlush", () => {
     await flush({
       inserts: [{
         eventStateId: "ev-1", calendarId: "cal-1", destinationEventUid: "remote-1",
+        syncEventId: "ev-1",
         deleteIdentifier: "remote-1", syncEventHash: null,
         startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
       }],
       deletes: ["map-1", "map-2"],
+      updates: [{
+        deleteIdentifier: "google-provider-occurrence-id",
+        id: "019c0000-0000-7000-8000-000000000001",
+        syncEventHash: "occurrence-hash",
+        syncEventId: "materialized-occurrence-id",
+      }],
     });
 
-    expect(executedOperations).toEqual(["delete", "insert"]);
+    expect(executedOperations).toEqual(["delete", "insert", "update"]);
   });
 
   it("skips delete when there are no deletes", async () => {
@@ -749,6 +911,7 @@ describe("createDatabaseFlush", () => {
     await flush({
       inserts: [{
         eventStateId: "ev-1", calendarId: "cal-1", destinationEventUid: "remote-1",
+        syncEventId: "ev-1",
         deleteIdentifier: "remote-1", syncEventHash: null,
         startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
       }],
@@ -831,6 +994,7 @@ describe("createDatabaseFlush", () => {
 
     const inserts = Array.from({ length: FLUSH_BATCH_SIZE + 10 }, (_entry, idx) => ({
       eventStateId: `ev-${idx}`, calendarId: "cal-1", destinationEventUid: `remote-${idx}`,
+      syncEventId: `ev-${idx}`,
       deleteIdentifier: `remote-${idx}`, syncEventHash: null,
       startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
     }));
@@ -866,11 +1030,13 @@ describe("createDatabaseFlush", () => {
       inserts: [
         {
           eventStateId: "ev-1", calendarId: "cal-1", destinationEventUid: "remote-1",
+          syncEventId: "ev-1",
           deleteIdentifier: "remote-1", syncEventHash: null,
           startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
         },
         {
           eventStateId: "ev-2", calendarId: "cal-1", destinationEventUid: "remote-2",
+          syncEventId: "ev-2",
           deleteIdentifier: "remote-2", syncEventHash: null,
           startTime: new Date("2026-03-16T09:00:00Z"), endTime: new Date("2026-03-16T10:00:00Z"),
         },

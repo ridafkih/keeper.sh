@@ -166,6 +166,59 @@ describe("fetchCalendarEvents", () => {
     expect(result.cancelledEventIds).toEqual(expectedCancelledIds);
   });
 
+  it.each([
+    ["older page first", ["older", "newer"]],
+    ["newer page first", ["newer", "older"]],
+  ])("uses Google revision timestamps instead of page order when %s", async (_label, order) => {
+    const revisions = {
+      newer: {
+        iCalUID: "event-uid",
+        id: "event-1",
+        status: "confirmed",
+        summary: "Newest",
+        updated: "2026-03-02T00:00:00.000Z",
+      },
+      older: {
+        iCalUID: "event-uid",
+        id: "event-1",
+        status: "confirmed",
+        summary: "Stale",
+        updated: "2026-03-01T00:00:00.000Z",
+      },
+    };
+    const orderedEvents = order.map((revision) => {
+      if (revision === "older") {
+        return revisions.older;
+      }
+      if (revision === "newer") {
+        return revisions.newer;
+      }
+      throw new Error(`Unknown revision: ${revision}`);
+    });
+    const [firstEvent, secondEvent] = orderedEvents;
+    if (!firstEvent || !secondEvent) {
+      throw new Error("Expected two ordered revisions");
+    }
+    globalThis.fetch = createFetchQueue([
+      createJsonResponse({
+        items: [firstEvent],
+        nextPageToken: "next-page-token",
+      }),
+      createJsonResponse({
+        items: [secondEvent],
+        nextSyncToken: "next-sync-token",
+      }),
+    ], []);
+
+    const result = await fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      syncToken: "current-sync-token",
+    });
+
+    expect(result.events).toMatchObject([{ id: "event-1", summary: "Newest" }]);
+  });
+
   it("returns full-sync-required when Google responds with gone", async () => {
     const requestedUrls: string[] = [];
 

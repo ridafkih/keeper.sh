@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { applyIcsPatches } from "../../../src/ics/utils/apply-patches";
+import {
+  applyIcsPatches,
+  visitIcsProperties,
+} from "../../../src/ics/utils/apply-patches";
 import type { IcsPatch } from "../../../src/ics/utils/apply-patches";
 
 const uppercaseSummary: IcsPatch = {
@@ -93,5 +96,50 @@ describe("applyIcsPatches", () => {
     const ics = ["BEGIN:VEVENT", "SUMMARY:hello", "END:VEVENT"].join("\r\n");
     const result = applyIcsPatches(ics, [uppercaseSummary, optOut]);
     expect(result).toContain("SUMMARY:HELLO");
+  });
+});
+
+describe("visitIcsProperties", () => {
+  it("reports unfolded properties with their component path", () => {
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "BEGIN:VEVENT",
+      "RDATE;VALUE=DATE:20260701,",
+      " 20260702",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    const properties: { componentPath: readonly string[]; property: string; value: string }[] = [];
+
+    visitIcsProperties(ics, ({ componentPath, property, value }) => {
+      properties.push({ componentPath: [...componentPath], property, value });
+    });
+
+    expect(properties).toContainEqual({
+      componentPath: ["VCALENDAR", "VEVENT"],
+      property: "RDATE",
+      value: "20260701,20260702",
+    });
+  });
+
+  it("distinguishes timezone properties from event properties", () => {
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "BEGIN:VTIMEZONE",
+      "BEGIN:STANDARD",
+      "RDATE:20260701T000000",
+      "END:STANDARD",
+      "END:VTIMEZONE",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    const paths: (readonly string[])[] = [];
+
+    visitIcsProperties(ics, ({ componentPath, property }) => {
+      if (property === "RDATE") {
+        paths.push([...componentPath]);
+      }
+    });
+
+    expect(paths).toEqual([["VCALENDAR", "VTIMEZONE", "STANDARD"]]);
   });
 });

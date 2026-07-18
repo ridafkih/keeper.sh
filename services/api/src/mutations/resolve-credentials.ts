@@ -9,6 +9,7 @@ import {
 import { and, arrayContains, eq } from "drizzle-orm";
 import type { KeeperDatabase } from "@/types";
 import type { ProviderCredentials } from "@/types";
+import { parseEventReference } from "@/queries/event-read-model";
 
 const credentialColumns = {
   calendarId: calendarsTable.id,
@@ -107,7 +108,11 @@ const resolveCredentialsByUserEventId = async (
   database: KeeperDatabase,
   userId: string,
   eventId: string,
-): Promise<{ credentials: ProviderCredentials; sourceEventUid: string | null } | null> => {
+): Promise<{
+  credentials: ProviderCredentials;
+  sourceEventId: null;
+  sourceEventUid: string | null;
+} | null> => {
   const [event] = await database
     .select({
       calendarId: userEventsTable.calendarId,
@@ -132,13 +137,19 @@ const resolveCredentialsByUserEventId = async (
     return null;
   }
 
-  return { credentials, sourceEventUid: event.sourceEventUid };
+  return {
+    credentials,
+    sourceEventId: null,
+    sourceEventUid: event.sourceEventUid,
+  };
 };
 
 type EventSource = "user" | "synced";
 
 interface ResolvedEventCredentials {
   credentials: ProviderCredentials;
+  occurrenceStart: Date | null;
+  sourceEventId: string | null;
   sourceEventUid: string | null;
   eventSource: EventSource;
 }
@@ -148,22 +159,32 @@ const resolveCredentialsByEventId = async (
   userId: string,
   eventId: string,
 ): Promise<ResolvedEventCredentials | null> => {
-  const userResult = await resolveCredentialsByUserEventId(database, userId, eventId);
+  const reference = parseEventReference(eventId);
+  if (!reference) {
+    return null;
+  }
+
+  let userResult: Awaited<ReturnType<typeof resolveCredentialsByUserEventId>> = null;
+  if (!reference.occurrenceStart) {
+    userResult = await resolveCredentialsByUserEventId(database, userId, reference.resourceId);
+  }
 
   if (userResult) {
-    return { ...userResult, eventSource: "user" };
+    return { ...userResult, occurrenceStart: null, eventSource: "user" };
   }
 
   const [syncedEvent] = await database
     .select({
       calendarId: eventStatesTable.calendarId,
+      sourceEventId: eventStatesTable.sourceEventId,
       sourceEventUid: eventStatesTable.sourceEventUid,
+      recurrenceId: eventStatesTable.recurrenceId,
     })
     .from(eventStatesTable)
     .innerJoin(calendarsTable, eq(eventStatesTable.calendarId, calendarsTable.id))
     .where(
       and(
-        eq(eventStatesTable.id, eventId),
+        eq(eventStatesTable.id, reference.resourceId),
         eq(calendarsTable.userId, userId),
       ),
     )
@@ -181,6 +202,8 @@ const resolveCredentialsByEventId = async (
 
   return {
     credentials,
+    occurrenceStart: reference.occurrenceStart ?? syncedEvent.recurrenceId,
+    sourceEventId: syncedEvent.sourceEventId,
     sourceEventUid: syncedEvent.sourceEventUid,
     eventSource: "synced",
   };

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { shouldExcludeSyncEvent } from "../../../src/core/events/events";
+import {
+  isEventInDestinationReconciliationWindow,
+  shouldExcludeSyncEvent,
+} from "../../../src/core/events/events";
 
 const createEvent = (overrides: Partial<{
   excludeAllDayEvents: boolean;
@@ -87,5 +90,27 @@ describe("shouldExcludeSyncEvent", () => {
         }),
       ),
     ).toBe(true);
+  });
+});
+
+describe("isEventInDestinationReconciliationWindow", () => {
+  const timeMin = new Date("2026-07-10T00:00:00.000Z");
+
+  it("includes an event that starts before the boundary but overlaps it", () => {
+    expect(isEventInDestinationReconciliationWindow({
+      endTime: new Date("2026-07-10T01:00:00.000Z"),
+    }, timeMin)).toBe(true);
+  });
+
+  it("includes ordinary events arbitrarily far in the future", () => {
+    expect(isEventInDestinationReconciliationWindow({
+      endTime: new Date("2040-03-15T10:00:00.000Z"),
+    }, timeMin)).toBe(true);
+  });
+
+  it("excludes events that ended before the boundary", () => {
+    expect(isEventInDestinationReconciliationWindow({
+      endTime: new Date("2026-07-09T23:59:59.999Z"),
+    }, timeMin)).toBe(false);
   });
 });

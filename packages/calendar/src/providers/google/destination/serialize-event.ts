@@ -1,5 +1,5 @@
 import type { GoogleEvent } from "@keeper.sh/data-schemas";
-import type { SyncableEvent } from "../../../core/types";
+import type { MaterializedSyncableEvent } from "../../../core/types";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
 
 const formatDateOnly = (value: Date): string => value.toISOString().slice(0, 10);
@@ -21,7 +21,7 @@ const buildDateField = (
   };
 };
 
-const canSerializeGoogleEvent = (event: SyncableEvent): boolean => {
+const canSerializeGoogleEvent = (event: MaterializedSyncableEvent): boolean => {
   if (event.availability === "workingElsewhere") {
     return false;
   }
@@ -30,7 +30,7 @@ const canSerializeGoogleEvent = (event: SyncableEvent): boolean => {
 };
 
 const serializeGoogleEvent = (
-  event: SyncableEvent,
+  event: MaterializedSyncableEvent,
   uid: string,
   recurrenceRule?: string | null,
 ): GoogleEvent | null => {

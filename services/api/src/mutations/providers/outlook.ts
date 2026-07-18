@@ -1,7 +1,13 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { microsoftApiErrorSchema, outlookCalendarViewListSchema, outlookEventListSchema, outlookEventSchema } from "@keeper.sh/data-schemas";
 import type { OutlookEvent } from "@keeper.sh/data-schemas";
-import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "@/types";
+import type {
+  EventActionResult,
+  EventInput,
+  EventUpdateInput,
+  ProviderEventReference,
+  RsvpStatus,
+} from "@/types";
 
 const MICROSOFT_GRAPH_API = "https://graph.microsoft.com/v1.0";
 
@@ -194,17 +200,22 @@ const RSVP_ACTION_MAP: Record<RsvpStatus, string> = {
 
 const rsvpOutlookEvent = async (
   accessToken: string,
-  sourceEventUid: string,
+  reference: ProviderEventReference,
   status: RsvpStatus,
 ): Promise<EventActionResult> => {
-  const existing = await findOutlookEventByUid(accessToken, sourceEventUid);
-
-  if (!existing?.id) {
-    return { success: false, error: "Event not found on Outlook." };
+  let { sourceEventId } = reference;
+  if (!sourceEventId) {
+    const existing = await findOutlookEventByUid(accessToken, reference.sourceEventUid);
+    sourceEventId = existing?.id ?? null;
+    if (!sourceEventId) {
+      return { success: false, error: "Event not found on Outlook." };
+    }
   }
 
   const action = RSVP_ACTION_MAP[status];
-  const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${existing.id}/${action}`);
+  const url = new URL(
+    `${MICROSOFT_GRAPH_API}/me/events/${encodeURIComponent(sourceEventId)}/${action}`,
+  );
 
   const response = await fetch(url, {
     body: JSON.stringify({ sendResponse: true }),

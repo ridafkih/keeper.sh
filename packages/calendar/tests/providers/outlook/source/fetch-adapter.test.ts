@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { OAUTH_SYNC_WINDOW_VERSION } from "../../../../src/core/oauth/sync-window";
+import { getOAuthSyncTokenVersion } from "../../../../src/core/oauth/sync-window";
 import {
   encodeStoredSyncToken,
   resolveSyncTokenForWindow,
 } from "../../../../src/core/oauth/sync-token";
 import { createOutlookSourceFetcher } from "../../../../src/providers/outlook/source/fetch-adapter";
 
-const OUTLOOK_SYNC_TOKEN_VERSION = OAUTH_SYNC_WINDOW_VERSION + 1;
+const CALENDAR_ID = "calendar-id";
+const OUTLOOK_SYNC_TOKEN_VERSION = getOAuthSyncTokenVersion(1, new Date(), CALENDAR_ID);
 const originalFetch = globalThis.fetch;
 const fetchKeeperCategoryDelta = (): Promise<Response> => Promise.resolve(Response.json({
   "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
@@ -19,6 +20,20 @@ const fetchKeeperCategoryDelta = (): Promise<Response> => Promise.resolve(Respon
   }],
 }));
 fetchKeeperCategoryDelta.preconnect = originalFetch.preconnect;
+const fetchSeriesMasterDelta = (): Promise<Response> => Promise.resolve(Response.json({
+  "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
+  value: [{ id: "series-master-1", type: "seriesMaster" }],
+}));
+fetchSeriesMasterDelta.preconnect = originalFetch.preconnect;
+const fetchOutlookDeltaWithoutSuccessor = (): Promise<Response> => Promise.resolve(Response.json({
+  value: [{
+    end: { dateTime: "2026-03-08T15:00:00.000Z", timeZone: "UTC" },
+    iCalUId: "external-uid-1",
+    id: "outlook-event-id-1",
+    start: { dateTime: "2026-03-08T14:00:00.000Z", timeZone: "UTC" },
+  }],
+}));
+fetchOutlookDeltaWithoutSuccessor.preconnect = originalFetch.preconnect;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -28,6 +43,7 @@ describe("createOutlookSourceFetcher", () => {
   it("returns a fetchEvents function", () => {
     const fetcher = createOutlookSourceFetcher({
       accessToken: "test-token",
+      calendarId: CALENDAR_ID,
       externalCalendarId: "calendar-id",
       syncToken: null,
     });
@@ -45,6 +61,7 @@ describe("createOutlookSourceFetcher", () => {
     globalThis.fetch = queuedFetch;
     const fetcher = createOutlookSourceFetcher({
       accessToken: "test-token",
+      calendarId: CALENDAR_ID,
       externalCalendarId: "calendar-id",
       syncToken: null,
     });
@@ -76,6 +93,7 @@ describe("createOutlookSourceFetcher", () => {
     globalThis.fetch = queuedFetch;
     const fetcher = createOutlookSourceFetcher({
       accessToken: "test-token",
+      calendarId: CALENDAR_ID,
       externalCalendarId: "calendar-id",
       syncToken: encodeStoredSyncToken(
         "https://graph.microsoft.com/delta?$deltatoken=current",
@@ -93,6 +111,7 @@ describe("createOutlookSourceFetcher", () => {
     globalThis.fetch = fetchKeeperCategoryDelta;
     const fetcher = createOutlookSourceFetcher({
       accessToken: "test-token",
+      calendarId: CALENDAR_ID,
       externalCalendarId: "calendar-id",
       syncToken: encodeStoredSyncToken(
         "https://graph.microsoft.com/delta?$deltatoken=current",
@@ -104,5 +123,39 @@ describe("createOutlookSourceFetcher", () => {
 
     expect(result.events).toEqual([]);
     expect(result.changedEventIds).toEqual(["outlook-event-id-1"]);
+  });
+
+  it("requests a full backfill when Graph returns a series master during delta sync", async () => {
+    globalThis.fetch = fetchSeriesMasterDelta;
+    const fetcher = createOutlookSourceFetcher({
+      accessToken: "test-token",
+      calendarId: CALENDAR_ID,
+      externalCalendarId: "calendar-id",
+      syncToken: encodeStoredSyncToken(
+        "https://graph.microsoft.com/delta?$deltatoken=current",
+        OUTLOOK_SYNC_TOKEN_VERSION,
+      ),
+    });
+
+    await expect(fetcher.fetchEvents()).resolves.toEqual({
+      events: [],
+      fullSyncRequired: true,
+    });
+  });
+
+  it("requests a full sync instead of replaying a delta with no successor link", async () => {
+    globalThis.fetch = fetchOutlookDeltaWithoutSuccessor;
+
+    const result = await createOutlookSourceFetcher({
+      accessToken: "test-token",
+      calendarId: CALENDAR_ID,
+      externalCalendarId: "calendar-id",
+      syncToken: encodeStoredSyncToken(
+        "https://graph.microsoft.com/delta?$deltatoken=current",
+        OUTLOOK_SYNC_TOKEN_VERSION,
+      ),
+    }).fetchEvents();
+
+    expect(result).toEqual({ events: [], fullSyncRequired: true });
   });
 });

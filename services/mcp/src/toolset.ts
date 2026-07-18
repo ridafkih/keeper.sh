@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const keeperEventSchema = z.object({
   id: z.string(),
+  eventStateId: z.string().uuid().nullable(),
   startTime: z.string(),
   endTime: z.string(),
   title: z.string().nullable(),
@@ -209,7 +210,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
     title: "Get event",
     description: "Get a single calendar event by its ID.",
     inputSchema: {
-      eventId: z.string().uuid().describe("The event ID"),
+      eventId: z.string().describe("The event ID returned by get_events"),
     },
     execute: (context, input) => {
       if (!input?.eventId || typeof input.eventId !== "string") {
@@ -251,7 +252,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
     description:
       "Update an existing calendar event. Only provided fields are updated.",
     inputSchema: {
-      eventId: z.string().uuid().describe("The event ID to update"),
+      eventId: z.string().describe("The event ID returned by get_events"),
       title: z.string().optional().describe("Updated event title"),
       description: z.string().optional().describe("Updated event description"),
       location: z.string().optional().describe("Updated event location"),
@@ -279,7 +280,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
     title: "Delete event",
     description: "Delete a calendar event by its ID.",
     inputSchema: {
-      eventId: z.string().uuid().describe("The event ID to delete"),
+      eventId: z.string().describe("The event ID returned by get_events"),
     },
     execute: async (context, input) => {
       if (!input?.eventId || typeof input.eventId !== "string") {
@@ -296,7 +297,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
     description:
       "Respond to a calendar event invitation. Set rsvpStatus to 'accepted', 'declined', or 'tentative'.",
     inputSchema: {
-      eventId: z.string().uuid().describe("The event ID to respond to"),
+      eventId: z.string().describe("The event ID returned by get_events"),
       rsvpStatus: z.enum(["accepted", "declined", "tentative"]).describe("The RSVP response"),
     },
     execute: (context, input) => {

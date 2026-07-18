@@ -3,6 +3,7 @@ import {
   buildBatchRequestBody,
   parseBatchResponseBody,
   chunkArray,
+  executeBatchChunked,
   extractResponseBoundary,
 } from "../../../../src/providers/google/shared/batch";
 import type { BatchSubRequest } from "../../../../src/providers/google/shared/batch";
@@ -235,5 +236,25 @@ describe("extractResponseBoundary", () => {
   it("returns null when no boundary parameter present", () => {
     const boundary = extractResponseBoundary("application/json");
     expect(boundary).toBeNull();
+  });
+});
+
+describe("executeBatchChunked", () => {
+  it("passes cancellation through quota acquisition", async () => {
+    const controller = new AbortController();
+    const abortReason = new Error("sync deadline exceeded");
+    const rateLimiter = {
+      acquire: (_count: number, signal?: AbortSignal): Promise<void> => {
+        expect(signal).toBe(controller.signal);
+        controller.abort(abortReason);
+        return Promise.reject(signal?.reason);
+      },
+    };
+
+    await expect(executeBatchChunked(
+      [{ method: "GET", path: "/calendar/v3/calendars/primary/events" }],
+      "access-token",
+      { rateLimiter, signal: controller.signal },
+    )).rejects.toBe(abortReason);
   });
 });

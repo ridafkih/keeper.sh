@@ -8,10 +8,12 @@ import type {
 import type { MicrosoftApiError } from "../../types";
 import { MICROSOFT_GRAPH_API, GONE_STATUS } from "../../shared/api";
 import { isAuthError, isSimpleAuthError } from "../../shared/errors";
-import { parseEventDateTime } from "../../shared/date-time";
+import { parseEventTime } from "../../shared/date-time";
 import { microsoftApiErrorSchema, outlookEventListSchema } from "@keeper.sh/data-schemas";
 import { KEEPER_CATEGORY } from "@keeper.sh/constants";
 import { isKeeperEvent } from "../../../../core/events/identity";
+import { resolveTimeZone } from "../../../../ics/utils/timezone-instant";
+import { buildTimeoutSignal } from "../../../../core/utils/fetch-with-timeout";
 
 class EventsFetchError extends Error {
   public readonly status: number;
@@ -34,6 +36,26 @@ class EventsFetchError extends Error {
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_PAGE_SIZE = 50;
+const SERIES_MASTER_TYPE = "seriesMaster";
+const INSTANCES_SELECT = [
+  "id",
+  "iCalUId",
+  "subject",
+  "body",
+  "location",
+  "start",
+  "end",
+  "isAllDay",
+  "isCancelled",
+  "showAs",
+  "categories",
+  "createdDateTime",
+  "lastModifiedDateTime",
+  "originalEndTimeZone",
+  "originalStartTimeZone",
+  "seriesMasterId",
+  "type",
+].join(",");
 
 const isRequestTimeoutError = (error: unknown): boolean =>
   error instanceof Error
@@ -46,6 +68,7 @@ interface PageFetchOptions {
   timeMin?: Date;
   timeMax?: Date;
   nextLink?: string;
+  signal?: AbortSignal;
 }
 
 interface PageFetchResult {
@@ -56,6 +79,30 @@ interface PageFetchResult {
 interface FullSyncRequiredResult {
   fullSyncRequired: true;
 }
+
+const getOutlookRevisionTime = (event: OutlookCalendarEvent): number | null => {
+  const value = event.lastModifiedDateTime ?? event.createdDateTime;
+  if (!value) {
+    return null;
+  }
+  const revisionTime = new Date(value).getTime();
+  if (Number.isNaN(revisionTime)) {
+    return null;
+  }
+  return revisionTime;
+};
+
+const shouldReplaceOutlookRevision = (
+  current: OutlookCalendarEvent,
+  candidate: OutlookCalendarEvent,
+): boolean => {
+  const currentTime = getOutlookRevisionTime(current);
+  const candidateTime = getOutlookRevisionTime(candidate);
+  if (currentTime !== null && candidateTime !== null && currentTime !== candidateTime) {
+    return candidateTime > currentTime;
+  }
+  return true;
+};
 
 interface FetchCalendarNameOptions {
   accessToken: string;
@@ -100,11 +147,6 @@ const buildInitialUrl = (calendarId: string, timeMin: Date, timeMax: Date): URL 
 
   url.searchParams.set("startDateTime", timeMin.toISOString());
   url.searchParams.set("endDateTime", timeMax.toISOString());
-  url.searchParams.set(
-    "$select",
-    "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
-  );
-
   return url;
 };
 
@@ -131,15 +173,16 @@ const fetchEventsPage = async (
 ): Promise<PageFetchResult | FullSyncRequiredResult> => {
   const { accessToken } = options;
   const url = getRequestUrl(options);
+  const timeout = buildTimeoutSignal(REQUEST_TIMEOUT_MS, options.signal);
 
   const response = await fetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      Prefer: `odata.maxpagesize=${DEFAULT_PAGE_SIZE}`,
+      Prefer: `odata.maxpagesize=${DEFAULT_PAGE_SIZE}, outlook.timezone="UTC", outlook.body-content-type="text"`,
     },
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    signal: timeout.signal,
   }).catch((error) => {
-    if (isRequestTimeoutError(error)) {
+    if (timeout.isTimeout() || isRequestTimeoutError(error) && !options.signal?.aborted) {
       throw new EventsFetchError(
         `Failed to fetch events: timeout after ${REQUEST_TIMEOUT_MS}ms`,
         408,
@@ -172,8 +215,88 @@ const fetchEventsPage = async (
   return { data, fullSyncRequired: false };
 };
 
+const fetchSeriesMasterInstances = async (
+  accessToken: string,
+  calendarId: string,
+  masterId: string,
+  timeMin: Date,
+  timeMax: Date,
+  signal?: AbortSignal,
+): Promise<OutlookCalendarEvent[]> => {
+  const calendarPath = encodeURIComponent(calendarId);
+  const masterPath = encodeURIComponent(masterId);
+  const initialUrl = new URL(
+    `${MICROSOFT_GRAPH_API}/me/calendars/${calendarPath}/events/${masterPath}/instances`,
+  );
+  initialUrl.searchParams.set("startDateTime", timeMin.toISOString());
+  initialUrl.searchParams.set("endDateTime", timeMax.toISOString());
+  initialUrl.searchParams.set("$select", INSTANCES_SELECT);
+
+  const instances: OutlookCalendarEvent[] = [];
+  let nextLink: string | undefined = initialUrl.toString();
+  while (nextLink) {
+    const pageResult = await fetchEventsPage({
+      accessToken,
+      calendarId,
+      nextLink,
+      signal,
+    });
+    if (pageResult.fullSyncRequired) {
+      throw new EventsFetchError(
+        `Failed to expand Outlook series master ${masterId}: event instances are gone`,
+        GONE_STATUS,
+      );
+    }
+    instances.push(...pageResult.data.value ?? []);
+    nextLink = pageResult.data["@odata.nextLink"];
+  }
+  return instances;
+};
+
+const expandSeriesMasters = async (
+  accessToken: string,
+  calendarId: string,
+  events: OutlookCalendarEvent[],
+  timeMin: Date,
+  timeMax: Date,
+  signal?: AbortSignal,
+): Promise<OutlookCalendarEvent[]> => {
+  const expanded: OutlookCalendarEvent[] = [];
+  for (const event of events) {
+    if (event.type !== SERIES_MASTER_TYPE || !event.id) {
+      expanded.push(event);
+      continue;
+    }
+    expanded.push(...await fetchSeriesMasterInstances(
+      accessToken,
+      calendarId,
+      event.id,
+      timeMin,
+      timeMax,
+      signal,
+    ));
+  }
+  return expanded;
+};
+
+const deduplicateOutlookEvents = (events: OutlookCalendarEvent[]): OutlookCalendarEvent[] => {
+  const eventsById = new Map<string, OutlookCalendarEvent>();
+  const eventsWithoutId: OutlookCalendarEvent[] = [];
+  for (const event of events) {
+    if (!event.id) {
+      eventsWithoutId.push(event);
+      continue;
+    }
+    const current = eventsById.get(event.id);
+    if (!current || shouldReplaceOutlookRevision(current, event)) {
+      eventsById.set(event.id, event);
+    }
+  }
+  return [...eventsWithoutId, ...eventsById.values()];
+};
+
 const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEventsResult> => {
-  const { accessToken, calendarId, deltaLink, timeMin, timeMax } = options;
+  const { accessToken, calendarId, deltaLink, timeMin, timeMax, signal } = options;
 
   const changedEventsById = new Map<string, OutlookCalendarEvent>();
   const changedEventsWithoutId: OutlookCalendarEvent[] = [];
@@ -181,6 +304,10 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
   const collectEvents = (pageEvents: OutlookCalendarEvent[]): void => {
     for (const event of pageEvents) {
       if (event.id) {
+        const current = changedEventsById.get(event.id);
+        if (current && !shouldReplaceOutlookRevision(current, event)) {
+          continue;
+        }
         changedEventsById.set(event.id, event);
       } else if (!event["@removed"]) {
         changedEventsWithoutId.push(event);
@@ -194,6 +321,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
     deltaLink,
     timeMax,
     timeMin,
+    signal,
   });
 
   if (initialResult.fullSyncRequired) {
@@ -212,6 +340,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
       nextLink,
       timeMax,
       timeMin,
+      signal,
     });
 
     if (pageResult.fullSyncRequired) {
@@ -226,12 +355,35 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
     nextLink = pageResult.data["@odata.nextLink"];
   }
 
-  const latestChangedEvents = [
+  let latestChangedEvents = [
     ...changedEventsWithoutId,
     ...changedEventsById.values(),
   ];
+  if (isDeltaSync && latestChangedEvents.some((event) => event.type === SERIES_MASTER_TYPE)) {
+    return { events: [], fullSyncRequired: true };
+  }
+  if (isDeltaSync && latestChangedEvents.some((event) =>
+    event["@removed"] && !event.type
+  )) {
+    /*
+     * Graph's deletion tombstones can omit the deleted event type.
+     * A sparse ID may identify a series master while local state contains only expanded instances.
+     * Advancing the delta token could therefore strand every occurrence of that series.
+     */
+    return { events: [], fullSyncRequired: true };
+  }
+  if (timeMin && timeMax) {
+    latestChangedEvents = deduplicateOutlookEvents(await expandSeriesMasters(
+      accessToken,
+      calendarId,
+      latestChangedEvents,
+      timeMin,
+      timeMax,
+      signal,
+    ));
+  }
   const result: FetchEventsResult = {
-    events: latestChangedEvents.filter((event) => !event["@removed"]),
+    events: latestChangedEvents.filter((event) => !event["@removed"] && !event.isCancelled),
     fullSyncRequired: false,
     isDeltaSync,
     nextDeltaLink: lastDeltaLink,
@@ -245,7 +397,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
       return [event.id];
     });
     result.cancelledEventIds = latestChangedEvents.flatMap((event) => {
-      if (event["@removed"] && event.id) {
+      if ((event["@removed"] || event.isCancelled) && event.id) {
         return [event.id];
       }
       return [];
@@ -308,6 +460,32 @@ const parseAvailability = (value: string | undefined): EventTimeSlot["availabili
   return null;
 };
 
+const resolveOutlookStartTimeZone = (
+  originalTimeZone: string | undefined,
+  responseTimeZone: string,
+): string => {
+  if (originalTimeZone) {
+    try {
+      const resolvedOriginalTimeZone = resolveTimeZone(originalTimeZone);
+      if (resolvedOriginalTimeZone) {
+        return resolvedOriginalTimeZone;
+      }
+    } catch (error) {
+      if (!(error instanceof RangeError)) {
+        throw error;
+      }
+    }
+  }
+
+  // Graph responses are requested in UTC.
+  // Fail ingestion on an unsupported response timezone instead of discarding its semantics.
+  const resolvedResponseTimeZone = resolveTimeZone(responseTimeZone);
+  if (!resolvedResponseTimeZone) {
+    throw new RangeError("Outlook event response timezone is missing");
+  }
+  return resolvedResponseTimeZone;
+};
+
 const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => {
   const result: EventTimeSlot[] = [];
 
@@ -340,15 +518,24 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
 
     const availability = parseAvailability(event.showAs);
 
+    const startTime = parseEventTime(start, event.isAllDay);
+    const endTime = parseEventTime(end, event.isAllDay);
+    if (!startTime || !endTime) {
+      continue;
+    }
+
     result.push({
       ...availability && { availability },
       description: event.body?.content,
-      endTime: parseEventDateTime(end),
+      endTime,
       isAllDay: event.isAllDay ?? false,
       location: event.location?.displayName,
       sourceEventId: event.id,
-      startTime: parseEventDateTime(start),
-      startTimeZone: start.timeZone,
+      startTime,
+      startTimeZone: resolveOutlookStartTimeZone(
+        event.originalStartTimeZone,
+        start.timeZone,
+      ),
       title: event.subject,
       uid: event.iCalUId,
     });

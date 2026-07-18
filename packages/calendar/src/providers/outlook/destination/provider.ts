@@ -4,15 +4,21 @@ import {
   outlookEventListSchema,
   outlookEventSchema,
 } from "@keeper.sh/data-schemas";
-import type { DeleteResult, PushResult, RemoteEvent, SyncableEvent } from "../../../core/types";
+import type {
+  DeleteResult,
+  ListRemoteEventsOptions,
+  MaterializedSyncableEvent,
+  PushResult,
+  RemoteEvent,
+} from "../../../core/types";
 import { getErrorMessage } from "../../../core/utils/error";
-import { getOAuthSyncWindowStart } from "../../../core/oauth/sync-window";
 import { ensureValidToken } from "../../../core/oauth/ensure-valid-token";
 import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-valid-token";
 import { MICROSOFT_GRAPH_API, OUTLOOK_PAGE_SIZE } from "../shared/api";
 import { parseEventTime } from "../shared/date-time";
 import { serializeOutlookEvent } from "./serialize-event";
 import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
+import { createEditableEventContentHash } from "../../../core/events/content-hash";
 
 interface OutlookSyncProviderConfig {
   accessToken: string;
@@ -31,6 +37,15 @@ const createCaughtFailure = (error: unknown): PushResult | DeleteResult => {
     errorType = error.name;
   }
   return { error: getErrorMessage(error), errorType, success: false };
+};
+
+const parseRemoteAvailability = (
+  showAs: string | undefined,
+): MaterializedSyncableEvent["availability"] => {
+  if (showAs === "free" || showAs === "oof" || showAs === "workingElsewhere") {
+    return showAs;
+  }
+  return "busy";
 };
 
 const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
@@ -53,7 +68,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
 
   const calendarEventsUrl = `${MICROSOFT_GRAPH_API}/me/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
 
-  const pushEvents = async (events: SyncableEvent[]): Promise<PushResult[]> => {
+  const pushEvents = async (events: MaterializedSyncableEvent[]): Promise<PushResult[]> => {
     await refreshIfNeeded();
     const results: PushResult[] = [];
 
@@ -134,7 +149,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
 
   const buildOutlookEventsUrl = (
     lookbackStart: Date,
-    futureDate: Date,
     nextLink: string | null,
   ): URL => {
     if (nextLink) {
@@ -143,26 +157,30 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     const baseUrl = new URL(calendarEventsUrl);
     baseUrl.searchParams.set(
       "$filter",
-      `categories/any(c:c eq '${KEEPER_CATEGORY}') and start/dateTime ge '${lookbackStart.toISOString()}' and start/dateTime le '${futureDate.toISOString()}'`,
+      `end/dateTime ge '${lookbackStart.toISOString()}'`,
     );
     baseUrl.searchParams.set("$top", String(OUTLOOK_PAGE_SIZE));
-    baseUrl.searchParams.set("$select", "id,iCalUId,subject,start,end,categories");
+    baseUrl.searchParams.set(
+      "$select",
+      "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
+    );
     return baseUrl;
   };
 
-  const listRemoteEvents = async (): Promise<RemoteEvent[]> => {
+  const listRemoteEvents = async (
+    options: ListRemoteEventsOptions,
+  ): Promise<RemoteEvent[]> => {
     await refreshIfNeeded();
     const remoteEvents: RemoteEvent[] = [];
     let nextLink: string | null = null;
-    const lookbackStart = getOAuthSyncWindowStart();
-    const futureDate = new Date();
-    futureDate.setFullYear(futureDate.getFullYear() + 2);
-
     do {
-      const url = buildOutlookEventsUrl(lookbackStart, futureDate, nextLink);
+      const url = buildOutlookEventsUrl(options.timeMin, nextLink);
 
       const response = await fetchWithTimeout(url, {
-        headers: { Authorization: `Bearer ${tokenState.accessToken}` },
+        headers: {
+          Authorization: `Bearer ${tokenState.accessToken}`,
+          Prefer: `outlook.body-content-type="text"`,
+        },
         method: "GET",
       }, PROVIDER_PUSH_REQUEST_TIMEOUT_MS, config.signal);
 
@@ -176,17 +194,29 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       const data = outlookEventListSchema.assert(body);
 
       for (const event of data.value ?? []) {
-        const startTime = parseEventTime(event.start);
-        const endTime = parseEventTime(event.end);
+        const startTime = parseEventTime(event.start, event.isAllDay);
+        const endTime = parseEventTime(event.end, event.isAllDay);
 
         if (!event.id || !event.iCalUId || !startTime || !endTime) {
           continue;
         }
 
+        const availability = parseRemoteAvailability(event.showAs);
         remoteEvents.push({
           deleteId: event.id,
+          editableAvailability: availability,
+          editableContentHash: createEditableEventContentHash({
+            availability,
+            description: event.body?.content,
+            endTime,
+            isAllDay: event.isAllDay,
+            location: event.location?.displayName,
+            startTime,
+            summary: event.subject ?? "",
+          }),
           endTime,
           isKeeperEvent: event.categories?.includes(KEEPER_CATEGORY) ?? false,
+          supportedAvailabilities: ["busy", "free", "oof", "workingElsewhere"],
           startTime,
           uid: event.iCalUId,
         });

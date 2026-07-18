@@ -4,7 +4,7 @@ import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { ProcessEventsOptions } from "../../../../src/core/oauth/source-provider";
 import { encodeStoredSyncToken } from "../../../../src/core/oauth/sync-token";
-import { OAUTH_SYNC_WINDOW_VERSION } from "../../../../src/core/oauth/sync-window";
+import { getOAuthSyncTokenVersion } from "../../../../src/core/oauth/sync-window";
 import type { SourceEvent, SourceSyncResult } from "../../../../src/core/types";
 import {
   createGoogleCalendarSourceProvider,
@@ -140,13 +140,20 @@ describe("GoogleCalendarSourceProvider", () => {
         from: () => ({
           where: () => Promise.resolve([{
             availability: "busy",
+            description: null,
             endTime: new Date("2026-03-12T15:00:00.000Z"),
+            exceptionDates: null,
             id: "event-state-1",
             isAllDay: false,
+            location: null,
+            recurrenceId: null,
+            recurrenceRule: null,
             sourceEventId: "provider-event-1",
             sourceEventType: "default",
             sourceEventUid: "source-uid-1",
             startTime: new Date("2026-03-12T14:00:00.000Z"),
+            startTimeZone: null,
+            title: null,
           }]),
         }),
       }),
@@ -226,12 +233,19 @@ describe("GoogleCalendarSourceProvider", () => {
         from: () => ({
           where: () => Promise.resolve([{
             availability: "busy",
+            description: null,
             endTime: new Date("2026-03-12T15:00:00.000Z"),
+            exceptionDates: null,
             id: "event-state-1",
             isAllDay: false,
+            location: null,
+            recurrenceId: null,
+            recurrenceRule: null,
             sourceEventType: "default",
             sourceEventUid: "source-uid-1",
             startTime: new Date("2026-03-12T14:00:00.000Z"),
+            startTimeZone: null,
+            title: null,
           }]),
         }),
       }),
@@ -384,7 +398,7 @@ describe("GoogleCalendarSourceProvider", () => {
 
     const result = await provider.fetchEvents(encodeStoredSyncToken(
       "current-sync-token",
-      OAUTH_SYNC_WINDOW_VERSION,
+      getOAuthSyncTokenVersion(0, new Date(), "calendar-1"),
     ));
 
     expect(result.events).toEqual([]);

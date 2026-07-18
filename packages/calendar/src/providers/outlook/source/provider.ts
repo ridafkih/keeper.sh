@@ -1,11 +1,21 @@
-import { buildSourceEventStateIdsToRemove, buildSourceEventsToAdd } from "../../../core/source/event-diff";
+import {
+  buildSourceEventStateIdsToRemove,
+  buildSourceEventsToAdd,
+} from "../../../core/source/event-diff";
+import {
+  buildInvalidStoredEventIdsToRemove,
+  parseStoredSourceEventStatesRecoveringInvalid,
+} from "../../../core/source/stored-event-state";
 import { filterSourceEventsToSyncWindow, resolveSourceSyncTokenAction, splitSourceEventsByPersistenceIdentity } from "../../../core/source/sync-diagnostics";
-import { insertEventStatesWithConflictResolution } from "../../../core/source/write-event-states";
+import {
+  buildEventStateInsertRow,
+  insertEventStatesWithConflictResolution,
+} from "../../../core/source/write-event-states";
 import { OAuthSourceProvider, type ProcessEventsOptions } from "../../../core/oauth/source-provider";
 import type { FetchEventsResult as BaseFetchEventsResult } from "../../../core/oauth/source-provider";
 import { createOAuthSourceProvider, type SourceProvider } from "../../../core/oauth/create-source-provider";
 import { encodeStoredSyncToken, resolveSyncTokenForWindow } from "../../../core/oauth/sync-token";
-import { getOAuthSyncWindow, OAUTH_SYNC_WINDOW_VERSION } from "../../../core/oauth/sync-window";
+import { getOAuthSyncTokenVersion, getOAuthSyncWindow } from "../../../core/oauth/sync-window";
 import type { OAuthTokenProvider } from "../../../core/oauth/token-provider";
 import type { RefreshLockStore } from "../../../core/oauth/refresh-coordinator";
 import type { OAuthSourceConfig, SourceEvent, SourceSyncResult } from "../../../core/types";
@@ -17,18 +27,13 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq, gt, inArray, lt, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { BunSQLClient } from "../../../core/database-client";
 import { fetchCalendarEvents, fetchCalendarName, parseOutlookEvents } from "./utils/fetch-events";
 
 const OUTLOOK_PROVIDER_ID = "outlook";
 const EMPTY_COUNT = 0;
-const OUTLOOK_SYNC_TOKEN_VERSION = OAUTH_SYNC_WINDOW_VERSION + 1;
+const OUTLOOK_ADAPTER_VERSION = 1;
 
-const stringifyIfPresent = (value: unknown) => {
-  if (!value) {
-    return;
-  }
-  return JSON.stringify(value);
-};
 const YEARS_UNTIL_FUTURE = 2;
 
 interface OutlookSourceConfig extends OAuthSourceConfig {
@@ -55,9 +60,14 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       accessToken: this.currentAccessToken,
       calendarId: this.config.externalCalendarId,
     };
+    const syncTokenVersion = getOAuthSyncTokenVersion(
+      OUTLOOK_ADAPTER_VERSION,
+      new Date(),
+      this.config.calendarId,
+    );
     const syncTokenResolution = resolveSyncTokenForWindow(
       syncToken,
-      OUTLOOK_SYNC_TOKEN_VERSION,
+      syncTokenVersion,
     );
 
     if (syncTokenResolution.requiresBackfill && syncToken !== null) {
@@ -85,6 +95,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       fullSyncRequired: false,
       isDeltaSync: result.isDeltaSync,
       nextSyncToken: result.nextDeltaLink,
+      syncTokenVersion,
     };
 
     if (result.cancelledEventIds) {
@@ -99,7 +110,13 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
     options: ProcessEventsOptions,
   ): Promise<SourceSyncResult> {
     const { database, calendarId } = this.config;
-    const { changedEventIds, nextSyncToken, isDeltaSync, cancelledEventIds } = options;
+    const {
+      cancelledEventIds,
+      changedEventIds,
+      isDeltaSync,
+      nextSyncToken,
+      syncTokenVersion,
+    } = options;
     const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
     const {
       events: eventsInWindow,
@@ -112,35 +129,57 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       syncWindow,
     );
 
-    const existingEvents = await database
+    const storedEvents = await database
       .select({
         availability: eventStatesTable.availability,
         description: eventStatesTable.description,
         id: eventStatesTable.id,
         endTime: eventStatesTable.endTime,
+        exceptionDates: eventStatesTable.exceptionDates,
         isAllDay: eventStatesTable.isAllDay,
         location: eventStatesTable.location,
+        recurrenceId: eventStatesTable.recurrenceId,
+        recurrenceRule: eventStatesTable.recurrenceRule,
         sourceEventType: eventStatesTable.sourceEventType,
         sourceEventId: eventStatesTable.sourceEventId,
         sourceEventUid: eventStatesTable.sourceEventUid,
         startTime: eventStatesTable.startTime,
+        startTimeZone: eventStatesTable.startTimeZone,
         title: eventStatesTable.title,
       })
       .from(eventStatesTable)
       .where(eq(eventStatesTable.calendarId, calendarId));
+    const parseResult = parseStoredSourceEventStatesRecoveringInvalid(storedEvents);
+    const existingEvents = parseResult.events;
+    if (isDeltaSync && parseResult.failures.length > 0) {
+      await this.clearSyncToken();
+      return {
+        eventsAdded: 0,
+        eventsFilteredOutOfWindow,
+        eventsRemoved: 0,
+        fullSyncRequired: true,
+        syncTokenResetCount: 1,
+      };
+    }
 
     const eventsToAdd = buildSourceEventsToAdd(existingEvents, eventsInWindow, { isDeltaSync });
-    const eventStateIdsToRemove = buildSourceEventStateIdsToRemove(
-      existingEvents,
-      eventsInWindow,
-      { cancelledEventIds, changedEventIds, isDeltaSync },
-    );
+    const eventStateIdsToRemove = [...new Set([
+      ...buildInvalidStoredEventIdsToRemove(parseResult.failures, eventsInWindow),
+      ...buildSourceEventStateIdsToRemove(
+        existingEvents,
+        eventsInWindow,
+        { cancelledEventIds, changedEventIds, isDeltaSync },
+      ),
+    ])];
     const { eventsToInsert, eventsToUpdate } = splitSourceEventsByPersistenceIdentity(
       existingEvents,
       eventsToAdd,
     );
 
-    if (eventStateIdsToRemove.length > EMPTY_COUNT || eventsToAdd.length > EMPTY_COUNT) {
+    if (
+      eventStateIdsToRemove.length > EMPTY_COUNT
+      || eventsToAdd.length > EMPTY_COUNT
+    ) {
       await database.transaction(async (transactionDatabase) => {
         if (eventStateIdsToRemove.length > EMPTY_COUNT) {
           await transactionDatabase
@@ -156,22 +195,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
         if (eventsToAdd.length > EMPTY_COUNT) {
           await insertEventStatesWithConflictResolution(
             transactionDatabase,
-            eventsToAdd.map((event) => ({
-              availability: event.availability,
-              calendarId,
-              description: event.description,
-              endTime: event.endTime,
-              exceptionDates: stringifyIfPresent(event.exceptionDates),
-              isAllDay: event.isAllDay,
-              location: event.location,
-              recurrenceRule: stringifyIfPresent(event.recurrenceRule),
-              sourceEventType: event.sourceEventType ?? "default",
-              sourceEventId: event.sourceEventId,
-              sourceEventUid: event.uid,
-              startTime: event.startTime,
-              startTimeZone: event.startTimeZone,
-              title: event.title,
-            })),
+            eventsToAdd.map((event) => buildEventStateInsertRow(calendarId, event)),
           );
         }
       });
@@ -186,7 +210,11 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       await this.updateSyncToken(
         encodeStoredSyncToken(
           syncTokenAction.nextSyncTokenToPersist,
-          OUTLOOK_SYNC_TOKEN_VERSION,
+          syncTokenVersion ?? getOAuthSyncTokenVersion(
+            OUTLOOK_ADAPTER_VERSION,
+            new Date(),
+            this.config.calendarId,
+          ),
         ),
       );
     }
@@ -221,7 +249,7 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
   }
 
   private static async removeOutOfRangeEvents(
-    database: BunSQLDatabase,
+    database: BunSQLClient,
     calendarId: string,
     syncWindow: { timeMin: Date; timeMax: Date },
   ): Promise<void> {

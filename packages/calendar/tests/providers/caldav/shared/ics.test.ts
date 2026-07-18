@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { eventToICalString, parseICalToRemoteEvent, parseICalToRemoteEvents } from "../../../../src/providers/caldav/shared/ics";
+import {
+  eventToICalString,
+  parseICalCalendarsToRemoteEvents,
+  parseICalToRemoteEvent,
+  parseICalToRemoteEvents,
+} from "../../../../src/providers/caldav/shared/ics";
 import { buildSourceEventsToAdd, buildSourceEventStateIdsToRemove } from "../../../../src/core/source/event-diff";
+import type { ExistingSourceEventState } from "../../../../src/core/source/event-diff";
 import type { SourceEvent } from "../../../../src/core/types";
 
 const buildIcs = (vevents: string[]): string => [
@@ -24,11 +30,32 @@ const toSourceEvent = (parsed: ReturnType<typeof parseICalToRemoteEvents>[number
   exceptionDates: parsed.exceptionDates,
   isAllDay: parsed.isAllDay,
   location: parsed.location,
+  recurrenceId: parsed.recurrenceId,
   recurrenceRule: parsed.recurrenceRule,
   startTime: parsed.startTime,
   startTimeZone: parsed.startTimeZone,
   title: parsed.title,
   uid: parsed.uid,
+});
+
+const toExistingSourceEventState = (
+  event: SourceEvent,
+  id: string,
+): ExistingSourceEventState => ({
+  availability: event.availability,
+  description: event.description,
+  endTime: event.endTime,
+  exceptionDates: event.exceptionDates ?? null,
+  id,
+  isAllDay: event.isAllDay,
+  location: event.location,
+  recurrenceId: event.recurrenceId ?? null,
+  recurrenceRule: event.recurrenceRule ?? null,
+  sourceEventType: event.sourceEventType ?? "default",
+  sourceEventUid: event.uid,
+  startTime: event.startTime,
+  startTimeZone: event.startTimeZone ?? null,
+  title: event.title,
 });
 
 describe("eventToICalString", () => {
@@ -104,6 +131,25 @@ describe("eventToICalString", () => {
     expect(parsedEvent?.endTime.toISOString()).toBe("2026-06-17T11:45:00.000Z");
   });
 
+  it("canonicalizes CRLF text before serialization so replay hashes converge", () => {
+    const icsString = eventToICalString(
+      {
+        calendarId: "calendar-id",
+        calendarName: "Calendar",
+        calendarUrl: null,
+        description: "first line\r\nsecond line",
+        endTime: new Date("2026-06-17T11:45:00.000Z"),
+        id: "event-id",
+        sourceEventUid: "source-uid",
+        startTime: new Date("2026-06-17T10:45:00.000Z"),
+        summary: "Appointment",
+      },
+      "destination-uid",
+    );
+
+    expect(parseICalToRemoteEvent(icsString)?.description).toBe("first line\nsecond line");
+  });
+
   it("falls back to a bare UTC datetime when no timezone is known", () => {
     const icsString = eventToICalString(
       {
@@ -145,7 +191,67 @@ describe("eventToICalString", () => {
   });
 });
 
+describe("unsupported recurrence input", () => {
+  it("rejects RDATE instead of silently truncating a CalDAV recurrence", () => {
+    const calendar = buildIcs([buildVevent({
+      DTEND: "20260701T100000Z",
+      DTSTART: "20260701T090000Z",
+      RDATE: "20260703T090000Z",
+      UID: "rdate-caldav",
+    })]);
+
+    expect(() => parseICalToRemoteEvents(calendar))
+      .toThrow("ICS RDATE recurrence is not supported");
+  });
+
+  it("rejects custom-timezone CalDAV recurrence before persistence", () => {
+    const calendar = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Test//Test//EN",
+      "BEGIN:VTIMEZONE",
+      "TZID:Custom/Eastern",
+      "BEGIN:STANDARD",
+      "DTSTART:19700101T000000",
+      "TZOFFSETFROM:-0500",
+      "TZOFFSETTO:-0500",
+      "END:STANDARD",
+      "END:VTIMEZONE",
+      "BEGIN:VEVENT",
+      "UID:custom-caldav",
+      "DTSTART;TZID=Custom/Eastern:20260701T090000",
+      "DTEND;TZID=Custom/Eastern:20260701T100000",
+      "RRULE:FREQ=DAILY;COUNT=2",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+
+    expect(() => parseICalToRemoteEvents(calendar))
+      .toThrow("Unsupported calendar timezone: Custom/Eastern");
+  });
+});
+
 describe("parseICalToRemoteEvents", () => {
+  it("resolves revisions and cancellations across separate CalDAV resources", () => {
+    const active = buildIcs([buildVevent({
+      UID: "cross-resource-revision",
+      SEQUENCE: "1",
+      DTSTART: "20260101T100000Z",
+      DTEND: "20260101T110000Z",
+      SUMMARY: "Stale active",
+    })]);
+    const cancellation = buildIcs([buildVevent({
+      UID: "cross-resource-revision",
+      SEQUENCE: "2",
+      DTSTART: "20260101T100000Z",
+      DTEND: "20260101T110000Z",
+      STATUS: "CANCELLED",
+    })]);
+
+    expect(parseICalCalendarsToRemoteEvents([active, cancellation])).toEqual([]);
+    expect(parseICalCalendarsToRemoteEvents([cancellation, active])).toEqual([]);
+  });
+
   it("returns both master and modified occurrence from a recurring event", () => {
     const ics = buildIcs([
       buildVevent({
@@ -324,18 +430,8 @@ describe("duplicate prevention with multi-VEVENT parsing", () => {
     const firstIngest = buildSourceEventsToAdd([], sourceEvents);
     expect(firstIngest).toHaveLength(2);
 
-    const existingAfterFirstIngest = firstIngest.map((event, index) => ({
-      id: `state-${index}`,
-      sourceEventUid: event.uid,
-      startTime: event.startTime,
-      endTime: event.endTime,
-      availability: event.availability,
-      description: event.description,
-      isAllDay: event.isAllDay,
-      location: event.location,
-      sourceEventType: "default" as const,
-      title: event.title,
-    }));
+    const existingAfterFirstIngest = firstIngest.map((event, index) =>
+      toExistingSourceEventState(event, `state-${index}`));
 
     const secondIngest = buildSourceEventsToAdd(existingAfterFirstIngest, sourceEvents);
     expect(secondIngest).toHaveLength(0);
@@ -367,15 +463,8 @@ describe("duplicate prevention with multi-VEVENT parsing", () => {
     ]);
 
     const allEvents = parseICalToRemoteEvents(allThree);
-    const existingStates = allEvents.map((event, index) => ({
-      id: `state-${index}`,
-      sourceEventUid: event.uid,
-      startTime: event.startTime,
-      endTime: event.endTime,
-      availability: event.availability,
-      isAllDay: event.isAllDay,
-      sourceEventType: "default" as const,
-    }));
+    const existingStates = allEvents.map((event, index) =>
+      toExistingSourceEventState(toSourceEvent(event), `state-${index}`));
 
     const withOneRemoved = buildIcs([
       buildVevent({
@@ -429,18 +518,9 @@ describe("transition from old single-event to new multi-event parsing", () => {
       throw new Error("Expected parsed event");
     }
 
-    const existingFromOldCode = [{
-      id: "old-state-1",
-      sourceEventUid: oldCodeResult.uid,
-      startTime: oldCodeResult.startTime,
-      endTime: oldCodeResult.endTime,
-      availability: oldCodeResult.availability,
-      description: oldCodeResult.description,
-      isAllDay: oldCodeResult.isAllDay,
-      location: oldCodeResult.location,
-      sourceEventType: "default" as const,
-      title: oldCodeResult.title,
-    }];
+    const existingFromOldCode = [
+      toExistingSourceEventState(toSourceEvent(oldCodeResult), "old-state-1"),
+    ];
 
     const newCodeResults = parseICalToRemoteEvents(ics);
     const newSourceEvents = newCodeResults.map((event) => toSourceEvent(event));
@@ -474,18 +554,9 @@ describe("transition from old single-event to new multi-event parsing", () => {
       throw new Error("Expected parsed event");
     }
 
-    const existingFromOldCode = [{
-      id: "old-state-1",
-      sourceEventUid: oldCodeResult.uid,
-      startTime: oldCodeResult.startTime,
-      endTime: oldCodeResult.endTime,
-      availability: oldCodeResult.availability,
-      description: oldCodeResult.description,
-      isAllDay: oldCodeResult.isAllDay,
-      location: oldCodeResult.location,
-      sourceEventType: "default" as const,
-      title: oldCodeResult.title,
-    }];
+    const existingFromOldCode = [
+      toExistingSourceEventState(toSourceEvent(oldCodeResult), "old-state-1"),
+    ];
 
     const newCodeResults = parseICalToRemoteEvents(ics);
     const newSourceEvents = newCodeResults.map((event) => toSourceEvent(event));
@@ -520,15 +591,8 @@ describe("transition from old single-event to new multi-event parsing", () => {
       throw new Error("Expected parsed events");
     }
 
-    const existingFromExpanded = [parsed1, parsed2].map((event, index) => ({
-      id: `expanded-${index}`,
-      sourceEventUid: event.uid,
-      startTime: event.startTime,
-      endTime: event.endTime,
-      availability: event.availability,
-      isAllDay: event.isAllDay,
-      sourceEventType: "default" as const,
-    }));
+    const existingFromExpanded = [parsed1, parsed2].map((event, index) =>
+      toExistingSourceEventState(toSourceEvent(event), `expanded-${index}`));
 
     const unexpandedIcs = buildIcs([
       buildVevent({
@@ -545,7 +609,6 @@ describe("transition from old single-event to new multi-event parsing", () => {
 
     const idsToRemove = buildSourceEventStateIdsToRemove(existingFromExpanded, newSourceEvents);
 
-    expect(idsToRemove).toHaveLength(1);
-    expect(idsToRemove[0]).toBe("expanded-1");
+    expect(idsToRemove).toEqual(["expanded-1"]);
   });
 });

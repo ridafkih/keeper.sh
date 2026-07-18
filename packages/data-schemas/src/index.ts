@@ -128,14 +128,21 @@ const outlookEventSchema = type({
   "@removed?": { "reason?": "'deleted' | 'changed'" },
   "body?": type({ "content?": "string", "contentType?": "string" }).or(type("null")),
   "categories?": "string[]",
+  "createdDateTime?": "string",
   "end?": { "dateTime?": "string", "timeZone?": "string" },
   "iCalUId?": "string | null",
   "id?": "string",
   "isAllDay?": "boolean",
+  "isCancelled?": "boolean",
+  "lastModifiedDateTime?": "string",
   "location?": { "displayName?": "string" },
+  "originalEndTimeZone?": "string",
+  "originalStartTimeZone?": "string",
   "showAs?": "string",
   "start?": { "dateTime?": "string", "timeZone?": "string" },
   "subject?": "string",
+  "seriesMasterId?": "string",
+  "type?": "string",
 });
 type OutlookEvent = typeof outlookEventSchema.infer;
 
@@ -352,7 +359,7 @@ type UpdateOAuthSourceDestinations = typeof updateOAuthSourceDestinationsSchema.
 
 /*
  * ICS recurrence-related shapes mirroring ts-ics's IcsDateObject and IcsRecurrenceRule.
- * Date fields use `string.date.iso.parse` so values stored as ISO strings in JSONB columns
+ * Date fields use `string.date.iso.parse` so values stored as ISO strings in JSON text
  * are validated and morphed back into Date instances on read — ts-ics requires real Date
  * objects on its in-memory shape.
  */
@@ -368,6 +375,15 @@ const icsDateObjectSchema = type({
   },
 });
 type StoredIcsDateObject = typeof icsDateObjectSchema.infer;
+
+const icsDurationSchema = type({
+  "before?": "boolean",
+  "weeks?": "number",
+  "days?": "number",
+  "hours?": "number",
+  "minutes?": "number",
+  "seconds?": "number",
+});
 
 const icsRecurrenceRuleSchema = type({
   frequency: "'SECONDLY' | 'MINUTELY' | 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'",
@@ -385,7 +401,10 @@ const icsRecurrenceRuleSchema = type({
   "bySetPos?": "number[]",
   "workweekStart?": icsWeekDaySchema,
 });
-type StoredIcsRecurrenceRule = typeof icsRecurrenceRuleSchema.infer;
+const storedIcsRecurrenceRuleSchema = icsRecurrenceRuleSchema.and({
+  "recurrenceDuration?": icsDurationSchema,
+});
+type StoredIcsRecurrenceRule = typeof storedIcsRecurrenceRuleSchema.infer;
 
 const icsExceptionDatesSchema = icsDateObjectSchema.array();
 type StoredIcsExceptionDates = typeof icsExceptionDatesSchema.infer;
@@ -434,7 +453,9 @@ export {
   updateOAuthSourceDestinationsSchema,
   icsWeekDaySchema,
   icsDateObjectSchema,
+  icsDurationSchema,
   icsRecurrenceRuleSchema,
+  storedIcsRecurrenceRuleSchema,
   icsExceptionDatesSchema,
 };
 

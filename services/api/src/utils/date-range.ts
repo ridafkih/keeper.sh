@@ -1,4 +1,14 @@
-import { MS_PER_WEEK } from "@keeper.sh/constants";
+import { MS_PER_DAY, MS_PER_WEEK } from "@keeper.sh/constants";
+
+const MAX_EVENT_RANGE_DAYS = 732;
+const MAX_EVENT_RANGE_MS = MAX_EVENT_RANGE_DAYS * MS_PER_DAY;
+
+class EventRangeValidationError extends RangeError {
+  constructor(message: string) {
+    super(message);
+    this.name = "EventRangeValidationError";
+  }
+}
 
 interface DateRange {
   from: Date;
@@ -43,10 +53,24 @@ const parseDateRangeParams = (url: URL): DateRange => {
  * supplies day-shaped bounds (see hooks/use-events.ts), so removing the
  * snap is a no-op for it.
  */
-const normalizeDateRange = (from: Date, to: Date): NormalizedDateRange => ({
-  start: new Date(from),
-  end: new Date(to),
-});
+const normalizeDateRange = (from: Date, to: Date): NormalizedDateRange => {
+  const start = new Date(from);
+  const end = new Date(to);
 
-export { parseDateRangeParams, normalizeDateRange };
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    throw new EventRangeValidationError("Event range requires valid from and to dates");
+  }
+  if (start >= end) {
+    throw new EventRangeValidationError("Event range requires from to be before to");
+  }
+  if (end.getTime() - start.getTime() > MAX_EVENT_RANGE_MS) {
+    throw new EventRangeValidationError(
+      `Event range cannot exceed ${MAX_EVENT_RANGE_DAYS} days`,
+    );
+  }
+
+  return { start, end };
+};
+
+export { EventRangeValidationError, parseDateRangeParams, normalizeDateRange };
 export type { DateRange, NormalizedDateRange };

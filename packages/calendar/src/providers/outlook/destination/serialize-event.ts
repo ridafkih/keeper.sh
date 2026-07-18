@@ -1,19 +1,28 @@
 import { KEEPER_CATEGORY } from "@keeper.sh/constants";
 import type { OutlookEvent } from "@keeper.sh/data-schemas";
-import type { SyncableEvent } from "../../../core/types";
+import type { MaterializedSyncableEvent } from "../../../core/types";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
+import {
+  instantToWallTime,
+  resolveTimeZone,
+} from "../../../ics/utils/timezone-instant";
 
-const formatOutlookDateTime = (value: Date, isAllDay: boolean): string => {
-  const isoString = value.toISOString();
-
-  if (!isAllDay) {
-    return isoString;
+const formatOutlookDateTime = (
+  value: Date,
+  timeZone: string,
+  isAllDay: boolean,
+): string => {
+  if (isAllDay) {
+    return value.toISOString().replace("Z", "");
   }
-
-  return isoString.replace("Z", "");
+  const resolvedTimeZone = resolveTimeZone(timeZone);
+  if (!resolvedTimeZone) {
+    throw new RangeError("Outlook event timezone is required");
+  }
+  return instantToWallTime(value, resolvedTimeZone).toISOString().replace("Z", "");
 };
 
-const getOutlookBody = (event: SyncableEvent): OutlookEvent["body"] => {
+const getOutlookBody = (event: MaterializedSyncableEvent): OutlookEvent["body"] => {
   if (!event.description) {
     return null;
   }
@@ -24,7 +33,7 @@ const getOutlookBody = (event: SyncableEvent): OutlookEvent["body"] => {
   };
 };
 
-const getOutlookLocation = (event: SyncableEvent): OutlookEvent["location"] => {
+const getOutlookLocation = (event: MaterializedSyncableEvent): OutlookEvent["location"] => {
   if (!event.location) {
     return;
   }
@@ -34,7 +43,7 @@ const getOutlookLocation = (event: SyncableEvent): OutlookEvent["location"] => {
   };
 };
 
-const getShowAs = (availability: SyncableEvent["availability"]): string => {
+const getShowAs = (availability: MaterializedSyncableEvent["availability"]): string => {
   if (availability === "free") {
     return "free";
   }
@@ -50,7 +59,7 @@ const getShowAs = (availability: SyncableEvent["availability"]): string => {
   return "busy";
 };
 
-const serializeOutlookEvent = (event: SyncableEvent): OutlookEvent => {
+const serializeOutlookEvent = (event: MaterializedSyncableEvent): OutlookEvent => {
   const body = getOutlookBody(event);
   const isAllDay = resolveIsAllDayEvent(event);
   const location = getOutlookLocation(event);
@@ -61,13 +70,13 @@ const serializeOutlookEvent = (event: SyncableEvent): OutlookEvent => {
     ...(location && { location }),
     categories: [KEEPER_CATEGORY],
     end: {
-      dateTime: formatOutlookDateTime(event.endTime, isAllDay),
+      dateTime: formatOutlookDateTime(event.endTime, eventTimeZone, isAllDay),
       timeZone: eventTimeZone,
     },
     isAllDay,
     showAs: getShowAs(event.availability),
     start: {
-      dateTime: formatOutlookDateTime(event.startTime, isAllDay),
+      dateTime: formatOutlookDateTime(event.startTime, eventTimeZone, isAllDay),
       timeZone: eventTimeZone,
     },
     subject: event.summary,

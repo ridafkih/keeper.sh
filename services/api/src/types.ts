@@ -47,6 +47,8 @@ interface KeeperMapping {
 
 interface KeeperEvent {
   id: string;
+  /** Persisted event_states UUID for synced events; null for user-created events. */
+  eventStateId: string | null;
   startTime: string;
   endTime: string;
   title: string | null;
@@ -94,6 +96,11 @@ type RsvpStatus = "accepted" | "declined" | "tentative";
 interface EventActionResult {
   success: boolean;
   error?: string;
+}
+
+interface ProviderEventReference {
+  sourceEventId: string | null;
+  sourceEventUid: string;
 }
 
 interface EventCreateResult extends EventActionResult {
@@ -165,5 +172,6 @@ export type {
   KeeperSyncStatus,
   PendingInvite,
   ProviderCredentials,
+  ProviderEventReference,
   RsvpStatus,
 };
