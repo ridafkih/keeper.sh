@@ -6,6 +6,7 @@ const PUSH_SYNC_QUEUE_NAME = "push-sync";
 const USER_TIMEOUT_MS = 300_000;
 
 interface PushSyncJobPayload {
+  calendarId: string;
   userId: string;
   plan: Plan;
   correlationId: string;

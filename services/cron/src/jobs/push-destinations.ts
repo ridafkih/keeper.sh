@@ -1,27 +1,29 @@
 import type { CronOptions } from "cronbake";
 import type { Plan } from "@keeper.sh/data-schemas";
 import { createPushSyncQueue } from "@keeper.sh/queue";
-import type { PushSyncJobPayload } from "@keeper.sh/queue";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { widelog } from "@/utils/logging";
-import { getUsersWithDestinationsByPlan } from "@/utils/get-sources";
+import { getDestinationCalendarsByPlan } from "@/utils/get-sources";
 import env from "@/env";
+import { buildPushDestinationJobs } from "./push-destination-jobs";
 
 const runEgressJob = async (plan: Plan): Promise<void> => {
   if (env.WORKER_JOB_QUEUE_ENABLED === false) {
     return;
   }
 
-  const usersWithDestinations = await getUsersWithDestinationsByPlan(plan);
+  const destinations = await getDestinationCalendarsByPlan(plan);
+  const userCount = new Set(destinations.map(({ userId }) => userId)).size;
 
   const correlationId = crypto.randomUUID();
 
   widelog.set("batch.plan", plan);
-  widelog.set("batch.user_count", usersWithDestinations.length);
-  widelog.set("batch.jobs_enqueued", usersWithDestinations.length);
+  widelog.set("batch.user_count", userCount);
+  widelog.set("batch.destination_count", destinations.length);
+  widelog.set("batch.jobs_enqueued", destinations.length);
   widelog.set("correlation.id", correlationId);
 
-  if (usersWithDestinations.length === 0) {
+  if (destinations.length === 0) {
     return;
   }
 
@@ -29,11 +31,7 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
 
   try {
     await queue.addBulk(
-      usersWithDestinations.map((userId) => ({
-        name: `sync-${userId}`,
-        data: { userId, plan, correlationId } satisfies PushSyncJobPayload,
-        opts: { jobId: `sync-${userId}`, removeOnComplete: true, removeOnFail: true },
-      })),
+      buildPushDestinationJobs(destinations, plan, correlationId),
     );
   } finally {
     await queue.close();

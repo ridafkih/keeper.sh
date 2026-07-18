@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getDatabaseErrorDetails } from "../../src/utils/errors";
+import { classifyDatabaseError, getDatabaseErrorDetails } from "../../src/utils/errors";
 
 describe("getDatabaseErrorDetails", () => {
   it("extracts PostgreSQL diagnostics from a wrapped query error", () => {
@@ -19,5 +19,16 @@ describe("getDatabaseErrorDetails", () => {
 
   it("returns null when an error has no database cause", () => {
     expect(getDatabaseErrorDetails(new Error("network failed"))).toBeNull();
+  });
+
+  it("classifies a connection termination wrapped by the query builder", () => {
+    const cause = Object.assign(new Error("connection terminated"), {
+      code: "ERR_POSTGRES_EXPECTED_REQUEST",
+    });
+
+    expect(classifyDatabaseError(new Error("Failed query", { cause }))).toEqual({
+      slug: "db-connection-terminated",
+      sqlState: null,
+    });
   });
 });

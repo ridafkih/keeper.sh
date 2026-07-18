@@ -132,10 +132,12 @@ class SyncAggregateTracker {
         syncEventsRemaining: INITIAL_COUNT,
         syncEventsTotal: INITIAL_COUNT,
       };
+      const syncing = this.syncingHeldByUser.has(userId);
 
       return {
         ...fallback,
-        syncing: false,
+        ...(syncing && { progressPercent: INITIAL_COUNT }),
+        syncing,
       };
     }
 
@@ -175,7 +177,7 @@ class SyncAggregateTracker {
       syncEventsProcessed,
       syncEventsRemaining,
       syncEventsTotal,
-      syncing: syncing && syncEventsRemaining > INITIAL_COUNT,
+      syncing,
     };
   }
 

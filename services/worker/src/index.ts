@@ -4,6 +4,7 @@ import { PUSH_SYNC_QUEUE_NAME } from "@keeper.sh/queue";
 import type { PushSyncJobPayload, PushSyncJobResult } from "@keeper.sh/queue";
 import { closeDatabase } from "@keeper.sh/database";
 import { processJob } from "./processor";
+import { createActiveDestinationJobs } from "./active-destination-jobs";
 import { destroy } from "./utils/logging";
 import env from "./env";
 
@@ -30,8 +31,6 @@ await entry({
 
     const { syncAggregateRuntime } = await import("./processor");
 
-    const activeJobsByUser = new Map<string, string>();
-
     const worker = new Worker<PushSyncJobPayload, PushSyncJobResult>(
       PUSH_SYNC_QUEUE_NAME,
       (job, token, signal) => processJob(job, token, signal),
@@ -47,37 +46,42 @@ await entry({
       },
     );
 
+    const activeDestinationJobs = createActiveDestinationJobs({
+      beginUserRun: (userId) => syncAggregateRuntime.beginSyncRun(userId),
+      cancelJob: (jobId) => worker.cancelJob(jobId, "superseded by newer destination sync"),
+      releaseUserRun: (userId) => {
+        syncAggregateRuntime.releaseSyncing(userId);
+      },
+    });
+
     worker.on("active", (job) => {
-      const { userId } = job.data;
-      const previousJobId = activeJobsByUser.get(userId);
-
-      if (previousJobId && previousJobId !== job.id) {
-        worker.cancelJob(previousJobId, "superseded by newer sync");
-      }
-
-      activeJobsByUser.set(userId, job.id ?? "");
-      syncAggregateRuntime.beginSyncRun(userId);
+      activeDestinationJobs.onActive({
+        calendarId: job.data.calendarId,
+        id: job.id ?? "",
+        userId: job.data.userId,
+      });
     });
 
     worker.on("completed", (job) => {
-      const currentJobId = activeJobsByUser.get(job.data.userId);
-      if (currentJobId === job.id) {
-        activeJobsByUser.delete(job.data.userId);
-        syncAggregateRuntime.releaseSyncing(job.data.userId);
-      }
+      activeDestinationJobs.onSettled({
+        calendarId: job.data.calendarId,
+        id: job.id ?? "",
+        userId: job.data.userId,
+      });
     });
 
     worker.on("failed", (job) => {
       if (job) {
-        const currentJobId = activeJobsByUser.get(job.data.userId);
-        if (currentJobId === job.id) {
-          activeJobsByUser.delete(job.data.userId);
-          syncAggregateRuntime.releaseSyncing(job.data.userId);
-        }
+        activeDestinationJobs.onSettled({
+          calendarId: job.data.calendarId,
+          id: job.id ?? "",
+          userId: job.data.userId,
+        });
       }
     });
 
     return async () => {
+      activeDestinationJobs.close();
       await worker.close();
       shutdownConnections();
       closeDatabase(database);

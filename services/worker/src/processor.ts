@@ -10,6 +10,7 @@ import {
 import { syncDestinationsForUser, SyncLockRenewalError } from "@keeper.sh/sync";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { syncStatusTable } from "@keeper.sh/database/schema";
+import { classifyDatabaseError, getDatabaseErrorDetails } from "@keeper.sh/database";
 import { database, refreshLockRedis, refreshLockStore } from "./context";
 import { context, widelog } from "./utils/logging";
 import env from "./env";
@@ -58,6 +59,11 @@ const resolveErrorStatusCode = (error: unknown): number | null => {
 };
 
 const classifyKnownSyncError = (error: unknown): string | null => {
+  const databaseError = classifyDatabaseError(error);
+  if (databaseError) {
+    return databaseError.slug;
+  }
+
   if (error instanceof RecurrenceMaterializationLimitError) {
     return "recurrence-materialization-limit";
   }
@@ -150,6 +156,25 @@ const applySyncEventFields = (syncEvent: Record<string, unknown>): void => {
   recordOperationFailures(syncEvent);
 };
 
+const applyDatabaseErrorFields = (error: unknown): void => {
+  const details = getDatabaseErrorDetails(error);
+  if (!details) {
+    return;
+  }
+  if (details.sqlState) {
+    widelog.set("error.database.sqlstate", details.sqlState);
+  }
+  if (details.message) {
+    widelog.set("error.database.message", details.message);
+  }
+  if (details.detail) {
+    widelog.set("error.database.detail", details.detail);
+  }
+  if (details.constraint) {
+    widelog.set("error.database.constraint", details.constraint);
+  }
+};
+
 const broadcastService = createBroadcastService({ redis: refreshLockRedis });
 
 const persistSyncStatus = async (result: DestinationSyncResult, syncedAt: Date): Promise<void> => {
@@ -212,12 +237,13 @@ const processJob = (
   signal: AbortSignal | undefined,
 ): Promise<PushSyncJobResult> =>
   context(async () => {
-    const { userId } = job.data;
+    const { calendarId, userId } = job.data;
 
     widelog.set("operation.name", "push-sync").sticky();
     widelog.set("operation.type", "job").sticky();
     widelog.set("sync.direction", "push").sticky();
     widelog.set("user.id", userId).sticky();
+    widelog.set("calendar.id", calendarId).sticky();
     widelog.set("user.plan", job.data.plan).sticky();
     widelog.set("job.id", job.id ?? "").sticky();
     widelog.set("job.name", job.name).sticky();
@@ -235,6 +261,7 @@ const processJob = (
     try {
       const abortSignal = mergeAbortSignals(deadlineController.signal, signal);
       const result = await syncDestinationsForUser(userId, {
+        destinationCalendarId: calendarId,
         database,
         redis: refreshLockRedis,
         refreshLockStore,
@@ -249,6 +276,9 @@ const processJob = (
         },
       }, {
         onProgress: (update) => {
+          if (signal?.aborted) {
+            return;
+          }
           syncAggregateRuntime.onSyncProgress(update);
           job.updateProgress({
             calendarId: update.calendarId,
@@ -257,10 +287,13 @@ const processJob = (
           });
         },
         onSyncEvent: (syncEvent) => {
+          if (signal?.aborted) {
+            return;
+          }
           applySyncEventFields(syncEvent);
           needsFlush = true;
 
-          const calendarId = syncEvent["calendar.id"];
+          const syncEventCalendarId = syncEvent["calendar.id"];
           const localCount = syncEvent["local_events.count"];
           const remoteCount = syncEvent["remote_events.count"];
           const addFailed = resolveCount(syncEvent["events.add_failed"]);
@@ -268,7 +301,7 @@ const processJob = (
           const completedOutcome = syncEvent["outcome"] === "success"
             || syncEvent["outcome"] === "in-sync";
 
-          if (typeof calendarId !== "string") {
+          if (typeof syncEventCalendarId !== "string") {
             return;
           }
 
@@ -276,7 +309,7 @@ const processJob = (
             syncAggregateRuntime
               .onDestinationSync({
                 userId,
-                calendarId,
+                calendarId: syncEventCalendarId,
                 completedSuccessfully: completedOutcome && addFailed === 0 && removeFailed === 0,
                 localEventCount: resolveCount(localCount),
                 remoteEventCount: resolveCount(remoteCount),
@@ -350,6 +383,7 @@ const processJob = (
       };
     } catch (error) {
       widelog.set("outcome", "error");
+      applyDatabaseErrorFields(error);
       widelog.errorFields(error, { slug: classifySyncError(error) });
       needsFlush = true;
       throw error;

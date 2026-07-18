@@ -5,7 +5,12 @@ import {
 import { and, arrayContains, eq, inArray } from "drizzle-orm";
 import type { Plan } from "@keeper.sh/data-schemas";
 import { database, premiumService } from "@/context";
-import { filterSourcesByPlan, filterUserIdsByPlan } from "./source-plan-selection";
+import { filterSourcesByPlan } from "./source-plan-selection";
+
+interface DestinationCalendarRef {
+  calendarId: string;
+  userId: string;
+}
 
 const fetchCalendars = (calendarType?: string) => {
   if (calendarType) {
@@ -50,17 +55,26 @@ const getSourcesByPlan = async (
   return filterSourcesByPlan(sources, targetPlan, (userId) => premiumService.getUserPlan(userId));
 };
 
-const getUsersWithDestinationsByPlan = async (targetPlan: Plan): Promise<string[]> => {
+const getDestinationCalendarsByPlan = async (
+  targetPlan: Plan,
+): Promise<DestinationCalendarRef[]> => {
   const destinations = await database
-    .select({ userId: calendarsTable.userId })
+    .select({
+      calendarId: calendarsTable.id,
+      userId: calendarsTable.userId,
+    })
     .from(calendarsTable)
     .where(getDestinationScopeFilter());
 
-  return filterUserIdsByPlan(
-    destinations.map(({ userId }) => userId),
+  return filterSourcesByPlan(
+    destinations,
     targetPlan,
     (userId) => premiumService.getUserPlan(userId),
   );
 };
 
-export { getSourcesByPlan, getUsersWithDestinationsByPlan };
+export {
+  getDestinationCalendarsByPlan,
+  getSourcesByPlan,
+};
+export type { DestinationCalendarRef };

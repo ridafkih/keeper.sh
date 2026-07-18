@@ -304,8 +304,8 @@ describe("createSyncAggregateRuntime", () => {
       const aggregate = runtime.getCurrentSyncAggregate("user-1");
       expect(aggregate.syncEventsTotal).toBe(0);
       expect(aggregate.syncEventsProcessed).toBe(0);
-      expect(aggregate.syncing).toBe(false);
-      expect(aggregate.progressPercent).toBe(100);
+      expect(aggregate.syncing).toBe(true);
+      expect(aggregate.progressPercent).toBe(0);
     });
   });
 
