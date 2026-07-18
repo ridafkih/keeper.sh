@@ -109,6 +109,31 @@ describe("createCalDAVSyncProvider", () => {
     });
   });
 
+  it("does not let an unrelated user RDATE abort Keeper reconciliation", async () => {
+    const keeperEvent = createEvent();
+    const keeperUid = generateDeterministicEventUid(keeperEvent.id);
+    const userEventWithRdate = eventToICalString(keeperEvent, "user-owned@example.com").replace(
+      "END:VEVENT",
+      "RDATE:20260401T090000Z\r\nEND:VEVENT",
+    );
+    clientMocks.resolveCalendarUrl.mockResolvedValueOnce(
+      "https://caldav.example.com/calendar/",
+    );
+    clientMocks.fetchCalendarObjects.mockResolvedValueOnce([{
+      data: userEventWithRdate,
+      url: "https://caldav.example.com/calendar/user-owned.ics",
+    }, {
+      data: eventToICalString(keeperEvent, keeperUid),
+      url: `https://caldav.example.com/calendar/${keeperUid}.ics`,
+    }]);
+
+    const remoteEvents = await createProvider().listRemoteEvents({
+      timeMin: new Date("2026-01-01T00:00:00.000Z"),
+    });
+
+    expect(remoteEvents.map((event) => event.uid)).toEqual([keeperUid]);
+  });
+
   it("restores the mapping when a create conflict contains identical event content", async () => {
     const event = createEvent();
     const existingData = eventToICalString(event, generateDeterministicEventUid(event.id));

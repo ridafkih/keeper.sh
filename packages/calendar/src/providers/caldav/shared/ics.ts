@@ -63,9 +63,18 @@ interface ParsedCalendarEvent {
   recurrenceId?: Date;
 }
 
-const parseICalCalendarsToRemoteEvents = (icsStrings: string[]): ParsedCalendarEvent[] => {
+interface ParseICalCalendarsOptions {
+  rejectUnsupportedRecurrenceDates?: boolean;
+}
+
+const parseICalCalendarsToRemoteEvents = (
+  icsStrings: string[],
+  options: ParseICalCalendarsOptions = {},
+): ParsedCalendarEvent[] => {
   const calendars = icsStrings.map((icsString) => {
-    assertNoUnsupportedRecurrenceDates(icsString);
+    if (options.rejectUnsupportedRecurrenceDates !== false) {
+      assertNoUnsupportedRecurrenceDates(icsString);
+    }
     const initialCalendar = parseIcsCalendar({ icsString });
     const normalizedIcs = applyCalendarTimeZoneToFloatingEventDates(
       icsString,
@@ -119,3 +128,4 @@ export {
   parseICalToRemoteEvent,
   parseICalToRemoteEvents,
 };
+export type { ParseICalCalendarsOptions };

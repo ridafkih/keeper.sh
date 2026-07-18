@@ -8,7 +8,7 @@ import type {
 import type { MicrosoftApiError } from "../../types";
 import { MICROSOFT_GRAPH_API, GONE_STATUS } from "../../shared/api";
 import { isAuthError, isSimpleAuthError } from "../../shared/errors";
-import { parseEventDateTime } from "../../shared/date-time";
+import { parseEventTime } from "../../shared/date-time";
 import { microsoftApiErrorSchema, outlookEventListSchema } from "@keeper.sh/data-schemas";
 import { KEEPER_CATEGORY } from "@keeper.sh/constants";
 import { isKeeperEvent } from "../../../../core/events/identity";
@@ -518,14 +518,20 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
 
     const availability = parseAvailability(event.showAs);
 
+    const startTime = parseEventTime(start, event.isAllDay);
+    const endTime = parseEventTime(end, event.isAllDay);
+    if (!startTime || !endTime) {
+      continue;
+    }
+
     result.push({
       ...availability && { availability },
       description: event.body?.content,
-      endTime: parseEventDateTime(end),
+      endTime,
       isAllDay: event.isAllDay ?? false,
       location: event.location?.displayName,
       sourceEventId: event.id,
-      startTime: parseEventDateTime(start),
+      startTime,
       startTimeZone: resolveOutlookStartTimeZone(
         event.originalStartTimeZone,
         start.timeZone,

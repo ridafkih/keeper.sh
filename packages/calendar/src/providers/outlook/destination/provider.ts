@@ -157,7 +157,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     const baseUrl = new URL(calendarEventsUrl);
     baseUrl.searchParams.set(
       "$filter",
-      `categories/any(c:c eq '${KEEPER_CATEGORY}') and end/dateTime ge '${lookbackStart.toISOString()}'`,
+      `end/dateTime ge '${lookbackStart.toISOString()}'`,
     );
     baseUrl.searchParams.set("$top", String(OUTLOOK_PAGE_SIZE));
     baseUrl.searchParams.set(
@@ -194,8 +194,8 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       const data = outlookEventListSchema.assert(body);
 
       for (const event of data.value ?? []) {
-        const startTime = parseEventTime(event.start);
-        const endTime = parseEventTime(event.end);
+        const startTime = parseEventTime(event.start, event.isAllDay);
+        const endTime = parseEventTime(event.end, event.isAllDay);
 
         if (!event.id || !event.iCalUId || !startTime || !endTime) {
           continue;

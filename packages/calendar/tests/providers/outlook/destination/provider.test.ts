@@ -156,9 +156,32 @@ describe("createOutlookSyncProvider", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const initialUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));
     const filter = initialUrl.searchParams.get("$filter") ?? "";
-    expect(filter).toContain(`categories/any(c:c eq '${KEEPER_CATEGORY}')`);
+    expect(filter).not.toContain("categories");
     expect(filter).toContain(`end/dateTime ge '${timeMin.toISOString()}'`);
     expect(filter).not.toContain("start/dateTime le");
     expect(String(fetchMock.mock.calls[1]?.[0])).toBe(nextLink);
+  });
+
+  it("canonicalizes named-timezone all-day responses to date-only UTC instants", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({
+      value: [{
+        categories: [KEEPER_CATEGORY],
+        end: { dateTime: "2026-03-09T00:00:00.0000000", timeZone: "Mountain Standard Time" },
+        iCalUId: "all-day-uid",
+        id: "all-day-id",
+        isAllDay: true,
+        start: { dateTime: "2026-03-08T00:00:00.0000000", timeZone: "Mountain Standard Time" },
+      }],
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const [event] = await createProvider().listRemoteEvents({
+      timeMin: new Date("2026-03-01T00:00:00.000Z"),
+    });
+
+    expect(event).toMatchObject({
+      endTime: new Date("2026-03-09T00:00:00.000Z"),
+      startTime: new Date("2026-03-08T00:00:00.000Z"),
+    });
   });
 });

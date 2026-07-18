@@ -426,6 +426,25 @@ describe("parseOutlookEvents", () => {
     expect(parsedEvents[0]?.startTimeZone).toBe("America/Denver");
   });
 
+  it("canonicalizes all-day dates independently of the mailbox timezone", () => {
+    const parsedEvents = parseOutlookEvents([createOutlookEvent({
+      isAllDay: true,
+      end: {
+        dateTime: "2026-03-09T00:00:00.0000000",
+        timeZone: "Mountain Standard Time",
+      },
+      start: {
+        dateTime: "2026-03-08T00:00:00.0000000",
+        timeZone: "Mountain Standard Time",
+      },
+    })]);
+
+    expect(parsedEvents[0]).toMatchObject({
+      endTime: new Date("2026-03-09T00:00:00.000Z"),
+      startTime: new Date("2026-03-08T00:00:00.000Z"),
+    });
+  });
+
   it("parses UTC response instants but retains Outlook's original event timezone", () => {
     const parsedEvents = parseOutlookEvents([createOutlookEvent({
       originalEndTimeZone: "Mountain Standard Time",

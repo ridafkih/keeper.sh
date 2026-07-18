@@ -214,6 +214,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
         }
         return [data];
       }),
+      { rejectUnsupportedRecurrenceDates: false },
     );
     for (const parsed of parsedEvents) {
       if (!isKeeperEvent(parsed.uid) || parsed.endTime < options.timeMin) {
