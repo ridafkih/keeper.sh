@@ -806,6 +806,37 @@ describe("syncCalendar", () => {
     expect(emittedEvents[0]?.["error.message"]).toBe("db connection failed");
     expect(typeof emittedEvents[0]?.["duration_ms"]).toBe("number");
   });
+
+  it("emits the underlying PostgreSQL error details when a database query throws", async () => {
+    const { syncCalendar } = await import("../../../src/core/sync-engine/index");
+    const provider = makeProvider();
+    const emittedEvents: Record<string, unknown>[] = [];
+    const cause = Object.assign(new Error("duplicate key value violates unique constraint"), {
+      constraint: "event_mappings_sync_event_cal_idx",
+      detail: "Key already exists.",
+      errno: "23505",
+    });
+    const error = new Error("Failed query", { cause });
+
+    await expect(syncCalendar({
+      userId: "user-1",
+      calendarId: "dest-cal-1",
+      provider,
+      readState: () => Promise.reject(error),
+      isCurrent: () => Promise.resolve(true),
+      flush: () => Promise.resolve(),
+      onSyncEvent: (event) => { emittedEvents.push(event); },
+    })).rejects.toThrow("Failed query");
+
+    expect(emittedEvents[0]).toMatchObject({
+      "error.database.constraint": "event_mappings_sync_event_cal_idx",
+      "error.database.detail": "Key already exists.",
+      "error.database.message": "duplicate key value violates unique constraint",
+      "error.database.sqlstate": "23505",
+      "error.message": "Failed query",
+      outcome: "error",
+    });
+  });
 });
 
 describe("createRedisGenerationCheck", () => {
@@ -866,7 +897,12 @@ describe("createDatabaseFlush", () => {
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
-          execute: () => { executedOperations.push("update"); return Promise.resolve(); },
+          update: () => ({
+            set: () => {
+              executedOperations.push("update");
+              return { where: () => Promise.resolve() };
+            },
+          }),
           insert: () => { executedOperations.push("insert"); return { values: () => ({ onConflictDoNothing: () => Promise.resolve() }) }; },
           delete: () => { executedOperations.push("delete"); return { where: () => Promise.resolve() }; },
         };
@@ -892,6 +928,61 @@ describe("createDatabaseFlush", () => {
     });
 
     expect(executedOperations).toEqual(["delete", "insert", "update"]);
+  });
+
+  it("updates every mapping through the typed update builder", async () => {
+    const { createDatabaseFlush } = await import("../../../src/core/sync-engine/flush");
+    const updateValues: unknown[] = [];
+    let whereCallCount = 0;
+    const fakeDatabase = {
+      transaction: (callback: (tx: unknown) => Promise<void>) => callback({
+        update: () => ({
+          set: (values: unknown) => {
+            updateValues.push(values);
+            return {
+              where: () => {
+                whereCallCount += 1;
+                return Promise.resolve();
+              },
+            };
+          },
+        }),
+      }),
+    };
+
+    const flush = createDatabaseFlush(fakeDatabase as never);
+    await flush({
+      deletes: [],
+      inserts: [],
+      updates: [
+        {
+          deleteIdentifier: "remote-delete-1",
+          id: "019c0000-0000-7000-8000-000000000001",
+          syncEventHash: "hash-1",
+          syncEventId: "recurrence-1",
+        },
+        {
+          deleteIdentifier: "remote-delete-2",
+          id: "019c0000-0000-7000-8000-000000000002",
+          syncEventHash: "hash-2",
+          syncEventId: "recurrence-2",
+        },
+      ],
+    });
+
+    expect(updateValues).toEqual([
+      {
+        deleteIdentifier: "remote-delete-1",
+        syncEventHash: "hash-1",
+        syncEventId: "recurrence-1",
+      },
+      {
+        deleteIdentifier: "remote-delete-2",
+        syncEventHash: "hash-2",
+        syncEventId: "recurrence-2",
+      },
+    ]);
+    expect(whereCallCount).toBe(2);
   });
 
   it("skips delete when there are no deletes", async () => {
