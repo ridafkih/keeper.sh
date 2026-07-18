@@ -1,7 +1,10 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client } from "pg";
-import { backfillEventMappingSyncEventIds } from "../src/database/backfill-event-mapping-sync-event-ids";
+import {
+  backfillEventMappingSyncEventIds,
+  createEventMappingBackfillDatabase,
+} from "../src/database/backfill-event-mapping-sync-event-ids";
 
 const connectionString = Bun.env.DATABASE_URL;
 
@@ -33,7 +36,9 @@ try {
     migrationsFolder: `${import.meta.dirname}/../drizzle`,
   });
 
-  await backfillEventMappingSyncEventIds(connection);
+  await backfillEventMappingSyncEventIds(
+    createEventMappingBackfillDatabase(database),
+  );
 } finally {
   await connection.end();
 }
