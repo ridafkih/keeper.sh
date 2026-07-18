@@ -5,6 +5,7 @@ import type { ApiEvent } from "@/types/api";
 
 export interface CalendarEvent {
   id: string;
+  eventStateId: string | null;
   startTime: Date;
   endTime: Date;
   calendarId: string;
@@ -26,6 +27,7 @@ const fetchEvents = async (url: string): Promise<CalendarEvent[]> => {
   const data = await fetcher<ApiEvent[]>(url);
   return data.map((event) => ({
     id: event.id,
+    eventStateId: event.eventStateId,
     startTime: new Date(event.startTime),
     endTime: new Date(event.endTime),
     calendarId: event.calendarId,

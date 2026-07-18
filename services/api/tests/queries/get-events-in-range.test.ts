@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { RecurrenceMaterializationLimitError } from "@keeper.sh/calendar";
 import { flattenSyncedEvents } from "../../src/queries/get-events-in-range";
+import {
+  parseEventReference,
+  projectSyncedEvents,
+} from "../../src/queries/event-read-model";
+
+const MASTER_ID = "019c0000-0000-7000-8000-000000000001";
+const OVERRIDE_ID = "019c0000-0000-7000-8000-000000000002";
 
 const sourceMap = new Map([
   [
@@ -21,7 +28,7 @@ const rows = [
     description: null,
     endTime: new Date("2026-03-02T11:00:00.000Z"),
     exceptionDates: null,
-    id: "master-1",
+    id: MASTER_ID,
     isAllDay: false,
     location: null,
     recurrenceId: null,
@@ -37,7 +44,7 @@ const rows = [
     description: null,
     endTime: new Date("2026-03-10T13:00:00.000Z"),
     exceptionDates: null,
-    id: "override-1",
+    id: OVERRIDE_ID,
     isAllDay: true,
     location: null,
     recurrenceId: new Date("2026-03-09T10:00:00.000Z"),
@@ -59,6 +66,46 @@ const flatten = (filters?: { availability?: string[]; isAllDay?: boolean }) =>
   );
 
 describe("flattenSyncedEvents", () => {
+  it("exposes separate, addressable identities for generated occurrences", () => {
+    const events = flatten();
+    const generatedOccurrence = events.find((event) => event.eventStateId === MASTER_ID);
+    const detachedOverride = events.find((event) => event.eventStateId === OVERRIDE_ID);
+    if (!generatedOccurrence || !detachedOverride) {
+      throw new Error("Expected a generated occurrence and detached override");
+    }
+
+    expect(generatedOccurrence.id).not.toBe(MASTER_ID);
+    expect(parseEventReference(generatedOccurrence.id)).toEqual({
+      occurrenceStart: generatedOccurrence.startTime,
+      resourceId: MASTER_ID,
+    });
+    expect(detachedOverride.id).toBe(OVERRIDE_ID);
+
+    const exactProjection = projectSyncedEvents(
+      rows,
+      sourceMap,
+      generatedOccurrence.startTime,
+      generatedOccurrence.startTime,
+    );
+    expect(exactProjection).toContainEqual(generatedOccurrence);
+  });
+
+  it("rejects internal recurrence hashes and malformed occurrence references", () => {
+    expect(parseEventReference("recurrence-opaque-internal-hash")).toBeNull();
+    expect(parseEventReference(`occurrence:${MASTER_ID}:not-a-timestamp`)).toBeNull();
+    expect(parseEventReference(`occurrence:${MASTER_ID}:9007199254740992`)).toBeNull();
+    expect(parseEventReference(`occurrence:${MASTER_ID}:1772445600000:extra`)).toBeNull();
+    expect(parseEventReference("not-a-uuid")).toBeNull();
+  });
+
+  it("round-trips occurrences before the Unix epoch", () => {
+    expect(parseEventReference(`occurrence:${MASTER_ID}:-86400000`))
+      .toEqual({
+        occurrenceStart: new Date("1969-12-31T00:00:00.000Z"),
+        resourceId: MASTER_ID,
+      });
+  });
+
   it("reconciles detached overrides before applying availability filters", () => {
     expect(flatten({ availability: ["busy"] }).map((event) => event.title)).toEqual(["Master"]);
     expect(flatten({ availability: ["free"] }).map((event) => event.title)).toEqual(["Override"]);

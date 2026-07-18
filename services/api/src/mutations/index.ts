@@ -14,6 +14,7 @@ import { createCoordinatedRefresher } from "@keeper.sh/calendar";
 import type { RefreshLockStore } from "@keeper.sh/calendar";
 import { resolveCredentialsByCalendarId, resolveCredentialsByEventId } from "./resolve-credentials";
 import { getEvent } from "@/queries/get-event";
+import { parseEventReference } from "@/queries/event-read-model";
 import {
   createGoogleEvent,
   updateGoogleEvent,
@@ -310,6 +311,11 @@ const updateEventMutation = async (
     return { success: false, error: "Synced events cannot be updated. Only user-created events can be modified." };
   }
 
+  const reference = parseEventReference(eventId);
+  if (!reference) {
+    return { success: false, error: "Event not found." };
+  }
+
   const { credentials, sourceEventUid } = resolved;
 
   if (!sourceEventUid) {
@@ -328,7 +334,7 @@ const updateEventMutation = async (
     await deps.database
       .update(userEventsTable)
       .set(dbUpdates)
-      .where(eq(userEventsTable.id, eventId));
+      .where(eq(userEventsTable.id, reference.resourceId));
   }
 
   return { success: true };
@@ -347,6 +353,11 @@ const deleteEventMutation = async (
 
   if (resolved.eventSource === "synced") {
     return { success: false, error: "Synced events cannot be deleted. Only user-created events can be removed." };
+  }
+
+  const reference = parseEventReference(eventId);
+  if (!reference) {
+    return { success: false, error: "Event not found." };
   }
 
   const { credentials, sourceEventUid } = resolved;
@@ -391,7 +402,7 @@ const deleteEventMutation = async (
 
   await deps.database
     .delete(userEventsTable)
-    .where(eq(userEventsTable.id, eventId));
+    .where(eq(userEventsTable.id, reference.resourceId));
 
   return { success: true };
 };

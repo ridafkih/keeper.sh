@@ -7,36 +7,15 @@ import {
 import { normalizeDateRange } from "@/utils/date-range";
 import { and, arrayContains, asc, eq, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import {
-  materializeRecurrenceEvents,
-  parseStoredRecurrenceForMaterialization,
-} from "@keeper.sh/calendar";
-import type { SyncableEvent } from "@keeper.sh/calendar";
-
 import type { KeeperDatabase, KeeperEvent, KeeperEventFilters, KeeperEventRangeInput } from "@/types";
+import { projectSyncedEvents, toKeeperEvent } from "./event-read-model";
+import type {
+  KeeperEventProjection,
+  SourceInfo,
+  SyncedEventRow,
+} from "./event-read-model";
 
 const EMPTY_RESULT_COUNT = 0;
-
-const orAbsent = <TValue>(value: TValue | null): TValue | undefined => {
-  if (value === null) {
-    return;
-  }
-  return value;
-};
-
-const parseAvailability = (
-  value: string | null,
-): NonNullable<SyncableEvent["availability"]> | null => {
-  if (
-    value === "busy"
-    || value === "free"
-    || value === "oof"
-    || value === "workingElsewhere"
-  ) {
-    return value;
-  }
-  return null;
-};
 
 const toRequiredDate = (value: Date | string, label: "from" | "to"): Date => {
   const parsedDate = new Date(value);
@@ -55,13 +34,6 @@ const normalizeEventRange = (
   toRequiredDate(range.from, "from"),
   toRequiredDate(range.to, "to"),
 );
-
-interface SourceInfo {
-  name: string;
-  provider: string;
-  url: string | null;
-  userId: string;
-}
 
 const getSourcesForUser = async (
   database: KeeperDatabase,
@@ -100,23 +72,6 @@ const getSourcesForUser = async (
   return { calendarIds, sourceMap };
 };
 
-interface SyncedEventRow {
-  availability: string | null;
-  calendarId: string;
-  description: string | null;
-  endTime: Date;
-  exceptionDates: string | null;
-  id: string;
-  isAllDay: boolean | null;
-  location: string | null;
-  recurrenceId: Date | null;
-  recurrenceRule: string | null;
-  sourceEventUid: string | null;
-  startTime: Date;
-  startTimeZone: string | null;
-  title: string | null;
-}
-
 interface UserEventRow {
   calendarId: string;
   description: string | null;
@@ -127,75 +82,19 @@ interface UserEventRow {
   title: string | null;
 }
 
-type FlattenedEvent = UserEventRow;
-
 const flattenSyncedEvents = (
   rows: SyncedEventRow[],
   sourceMap: Map<string, SourceInfo>,
   windowStart: Date,
   windowEnd: Date,
   filters?: KeeperEventFilters,
-): FlattenedEvent[] => {
-  const events: SyncableEvent[] = rows.flatMap((row) => {
-    const source = sourceMap.get(row.calendarId);
-    if (!source) {
-      return [];
-    }
-    const recurrence = parseStoredRecurrenceForMaterialization({
-      eventId: row.id,
-      exceptionDates: row.exceptionDates,
-      recurrenceId: row.recurrenceId,
-      recurrenceRule: row.recurrenceRule,
-    });
-    return [{
-      availability: orAbsent(parseAvailability(row.availability)),
-      calendarId: row.calendarId,
-      calendarName: source.name,
-      calendarUrl: source.url,
-      description: orAbsent(row.description),
-      endTime: row.endTime,
-      eventStateId: row.id,
-      ...recurrence,
-      id: row.id,
-      isAllDay: orAbsent(row.isAllDay),
-      location: orAbsent(row.location),
-      sourceEventUid: row.sourceEventUid ?? row.id,
-      startTime: row.startTime,
-      startTimeZone: orAbsent(row.startTimeZone),
-      summary: row.title ?? "",
-    }];
-  });
-  const exclusiveWindowEnd = new Date(windowEnd.getTime() + 1);
-  return materializeRecurrenceEvents(events, {
-    end: exclusiveWindowEnd,
-    start: windowStart,
-  }).filter((occurrence) => {
-    if (
-      filters?.availability
-      && filters.availability.length > 0
-      && !filters.availability.includes(occurrence.availability ?? "")
-    ) {
-      return false;
-    }
-    if (
-      filters
-      && "isAllDay" in filters
-      && typeof filters.isAllDay === "boolean"
-      && occurrence.isAllDay !== filters.isAllDay
-    ) {
-      return false;
-    }
-    return true;
-  }).map((occurrence) => ({
-    calendarId: occurrence.calendarId,
-    description: occurrence.description ?? null,
-    endTime: occurrence.endTime,
-    id: occurrence.id,
-    location: occurrence.location ?? null,
-    startTime: occurrence.startTime,
-    title: occurrence.summary || null,
-  }));
-};
+): KeeperEventProjection[] => projectSyncedEvents(
+  rows,
+  sourceMap,
+  windowStart,
+  windowEnd,
+  filters,
+);
 
 /**
  * Build the WHERE clause for fetching synced rows that may contribute events
@@ -295,7 +194,10 @@ const getEventsInRange = async (
     .where(and(...userConditions))
     .orderBy(asc(userEventsTable.startTime));
 
-  const allEvents: FlattenedEvent[] = [...syncedEvents, ...userEvents];
+  const allEvents: KeeperEventProjection[] = [
+    ...syncedEvents,
+    ...userEvents.map((event) => ({ ...event, eventStateId: null })),
+  ];
   allEvents.sort((left, right) => left.startTime.getTime() - right.startTime.getTime());
 
   return allEvents.map((event) => {
@@ -303,18 +205,7 @@ const getEventsInRange = async (
     if (!source) {
       throw new Error(`No source calendar found for event calendar ID: ${event.calendarId}`);
     }
-    return {
-      calendarId: event.calendarId,
-      calendarName: source.name,
-      calendarProvider: source.provider,
-      calendarUrl: source.url,
-      description: event.description,
-      endTime: event.endTime.toISOString(),
-      id: event.id,
-      location: event.location,
-      startTime: event.startTime.toISOString(),
-      title: event.title,
-    };
+    return toKeeperEvent(event, source);
   });
 };
 

@@ -9,6 +9,7 @@ import {
 import { and, arrayContains, eq } from "drizzle-orm";
 import type { KeeperDatabase } from "@/types";
 import type { ProviderCredentials } from "@/types";
+import { parseEventReference } from "@/queries/event-read-model";
 
 const credentialColumns = {
   calendarId: calendarsTable.id,
@@ -148,7 +149,15 @@ const resolveCredentialsByEventId = async (
   userId: string,
   eventId: string,
 ): Promise<ResolvedEventCredentials | null> => {
-  const userResult = await resolveCredentialsByUserEventId(database, userId, eventId);
+  const reference = parseEventReference(eventId);
+  if (!reference) {
+    return null;
+  }
+
+  let userResult: Awaited<ReturnType<typeof resolveCredentialsByUserEventId>> = null;
+  if (!reference.occurrenceStart) {
+    userResult = await resolveCredentialsByUserEventId(database, userId, reference.resourceId);
+  }
 
   if (userResult) {
     return { ...userResult, eventSource: "user" };
@@ -163,7 +172,7 @@ const resolveCredentialsByEventId = async (
     .innerJoin(calendarsTable, eq(eventStatesTable.calendarId, calendarsTable.id))
     .where(
       and(
-        eq(eventStatesTable.id, eventId),
+        eq(eventStatesTable.id, reference.resourceId),
         eq(calendarsTable.userId, userId),
       ),
     )
