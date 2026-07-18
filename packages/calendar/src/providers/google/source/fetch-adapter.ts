@@ -9,6 +9,7 @@ const YEARS_UNTIL_FUTURE = 2;
 
 interface GoogleSourceFetcherConfig {
   accessToken: string;
+  calendarId: string;
   externalCalendarId: string;
   syncToken: string | null;
   rateLimiter?: RedisRateLimiter;
@@ -28,7 +29,7 @@ const createGoogleSourceFetcher = (config: GoogleSourceFetcherConfig): GoogleSou
       signal: config.signal,
     };
     const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
-    const syncTokenVersion = getOAuthSyncTokenVersion();
+    const syncTokenVersion = getOAuthSyncTokenVersion(0, new Date(), config.calendarId);
 
     const syncTokenResolution = resolveSyncTokenForWindow(
       config.syncToken,

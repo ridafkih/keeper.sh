@@ -216,6 +216,7 @@ const resolveRateLimiter = (provider: string, userId: string): RedisRateLimiter 
 
 interface OAuthFetcherParams {
   accessToken: string;
+  calendarId: string;
   externalCalendarId: string;
   syncToken: string | null;
   rateLimiter?: RedisRateLimiter;
@@ -321,6 +322,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
 
             const resolvedFetcher = resolveOAuthFetcher(source.provider, {
               accessToken: tokenState.accessToken,
+              calendarId: source.calendarId,
               externalCalendarId: source.externalCalendarId,
               syncToken: source.syncToken,
               rateLimiter,

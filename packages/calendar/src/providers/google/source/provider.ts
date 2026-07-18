@@ -58,7 +58,11 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
       accessToken: this.currentAccessToken,
       calendarId: this.config.externalCalendarId,
     };
-    const syncTokenVersion = getOAuthSyncTokenVersion();
+    const syncTokenVersion = getOAuthSyncTokenVersion(
+      0,
+      new Date(),
+      this.config.calendarId,
+    );
     const syncTokenResolution = resolveSyncTokenForWindow(
       syncToken,
       syncTokenVersion,
@@ -204,7 +208,7 @@ class GoogleCalendarSourceProvider extends OAuthSourceProvider<GoogleSourceConfi
       await this.updateSyncToken(
         encodeStoredSyncToken(
           syncTokenAction.nextSyncTokenToPersist,
-          syncTokenVersion ?? getOAuthSyncTokenVersion(),
+          syncTokenVersion ?? getOAuthSyncTokenVersion(0, new Date(), this.config.calendarId),
         ),
       );
     }

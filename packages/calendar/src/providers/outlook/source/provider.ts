@@ -60,7 +60,11 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       accessToken: this.currentAccessToken,
       calendarId: this.config.externalCalendarId,
     };
-    const syncTokenVersion = getOAuthSyncTokenVersion(OUTLOOK_ADAPTER_VERSION);
+    const syncTokenVersion = getOAuthSyncTokenVersion(
+      OUTLOOK_ADAPTER_VERSION,
+      new Date(),
+      this.config.calendarId,
+    );
     const syncTokenResolution = resolveSyncTokenForWindow(
       syncToken,
       syncTokenVersion,
@@ -206,7 +210,11 @@ class OutlookSourceProvider extends OAuthSourceProvider<OutlookSourceConfig> {
       await this.updateSyncToken(
         encodeStoredSyncToken(
           syncTokenAction.nextSyncTokenToPersist,
-          syncTokenVersion ?? getOAuthSyncTokenVersion(OUTLOOK_ADAPTER_VERSION),
+          syncTokenVersion ?? getOAuthSyncTokenVersion(
+            OUTLOOK_ADAPTER_VERSION,
+            new Date(),
+            this.config.calendarId,
+          ),
         ),
       );
     }

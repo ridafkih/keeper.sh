@@ -9,6 +9,7 @@ const OUTLOOK_ADAPTER_VERSION = 1;
 
 interface OutlookSourceFetcherConfig {
   accessToken: string;
+  calendarId: string;
   externalCalendarId: string;
   syncToken: string | null;
   signal?: AbortSignal;
@@ -26,7 +27,11 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
       signal: config.signal,
     };
     const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
-    const syncTokenVersion = getOAuthSyncTokenVersion(OUTLOOK_ADAPTER_VERSION);
+    const syncTokenVersion = getOAuthSyncTokenVersion(
+      OUTLOOK_ADAPTER_VERSION,
+      new Date(),
+      config.calendarId,
+    );
 
     const syncTokenResolution = resolveSyncTokenForWindow(
       config.syncToken,

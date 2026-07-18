@@ -6,7 +6,8 @@ import {
 } from "../../../../src/core/oauth/sync-token";
 import { createGoogleSourceFetcher } from "../../../../src/providers/google/source/fetch-adapter";
 
-const SYNC_TOKEN_VERSION = getOAuthSyncTokenVersion();
+const CALENDAR_ID = "calendar-id";
+const SYNC_TOKEN_VERSION = getOAuthSyncTokenVersion(0, new Date(), CALENDAR_ID);
 
 const originalFetch = globalThis.fetch;
 
@@ -40,6 +41,7 @@ describe("createGoogleSourceFetcher", () => {
   it("returns a fetchEvents function that retrieves and parses Google Calendar events", () => {
     const fetcher = createGoogleSourceFetcher({
       accessToken: "test-token",
+      calendarId: CALENDAR_ID,
       externalCalendarId: "primary",
       syncToken: null,
     });
@@ -57,6 +59,7 @@ describe("createGoogleSourceFetcher", () => {
     globalThis.fetch = queuedFetch;
     const fetcher = createGoogleSourceFetcher({
       accessToken: "test-token",
+      calendarId: CALENDAR_ID,
       externalCalendarId: "primary",
       syncToken: null,
     });
@@ -77,6 +80,7 @@ describe("createGoogleSourceFetcher", () => {
     globalThis.fetch = fetchOutOfWindowGoogleDelta;
     const fetcher = createGoogleSourceFetcher({
       accessToken: "test-token",
+      calendarId: CALENDAR_ID,
       externalCalendarId: "primary",
       syncToken: encodeStoredSyncToken("current-google-token", SYNC_TOKEN_VERSION),
     });
@@ -92,6 +96,7 @@ describe("createGoogleSourceFetcher", () => {
 
     const result = await createGoogleSourceFetcher({
       accessToken: "test-token",
+      calendarId: CALENDAR_ID,
       externalCalendarId: "primary",
       syncToken: encodeStoredSyncToken("current-google-token", SYNC_TOKEN_VERSION),
     }).fetchEvents();

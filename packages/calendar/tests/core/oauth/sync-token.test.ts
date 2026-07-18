@@ -58,14 +58,36 @@ describe("sync token versioning", () => {
   });
 
   it("expires provider tokens when the absolute sync window advances", () => {
-    const firstWindowVersion = getOAuthSyncTokenVersion(0, new Date("2026-07-01T00:00:00Z"));
-    const nextWindowVersion = getOAuthSyncTokenVersion(0, new Date("2026-07-08T00:00:00Z"));
+    const calendarKey = "calendar-1";
+    const firstWindowVersion = getOAuthSyncTokenVersion(
+      0,
+      new Date("2026-07-01T00:00:00Z"),
+      calendarKey,
+    );
+    const nextWindowVersion = getOAuthSyncTokenVersion(
+      0,
+      new Date("2026-07-08T00:00:00Z"),
+      calendarKey,
+    );
     const encoded = encodeStoredSyncToken("window-bound-token", firstWindowVersion);
 
     expect(nextWindowVersion).toBeGreaterThan(firstWindowVersion);
     expect(resolveSyncTokenForWindow(encoded, nextWindowVersion)).toEqual({
       requiresBackfill: true,
       syncToken: null,
+    });
+  });
+
+  it("accepts an already-issued fleet-boundary token after staggering is enabled", () => {
+    const now = new Date("2026-07-04T12:00:00.000Z");
+    const fleetVersion = getOAuthSyncTokenVersion(0, now);
+    const staggeredCalendarVersion = getOAuthSyncTokenVersion(0, now, "calendar-1");
+    const encoded = encodeStoredSyncToken("existing-token", fleetVersion);
+
+    expect(staggeredCalendarVersion).toBeLessThanOrEqual(fleetVersion);
+    expect(resolveSyncTokenForWindow(encoded, staggeredCalendarVersion)).toEqual({
+      requiresBackfill: false,
+      syncToken: "existing-token",
     });
   });
 });

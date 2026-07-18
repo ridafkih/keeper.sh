@@ -398,7 +398,7 @@ describe("GoogleCalendarSourceProvider", () => {
 
     const result = await provider.fetchEvents(encodeStoredSyncToken(
       "current-sync-token",
-      getOAuthSyncTokenVersion(),
+      getOAuthSyncTokenVersion(0, new Date(), "calendar-1"),
     ));
 
     expect(result.events).toEqual([]);
