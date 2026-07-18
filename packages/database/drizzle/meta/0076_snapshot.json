@@ -1,5 +1,5 @@
 {
-  "id": "d32228fc-9a51-450b-8bfe-4c6f390b87c8",
+  "id": "0c8edcf1-1868-483f-9beb-b9696867770b",
   "prevId": "2f41536e-131f-4bdc-b580-c5ed37855b68",
   "version": "7",
   "dialect": "postgresql",
@@ -841,6 +841,37 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_mappings_event_state_idx": {
+          "name": "event_mappings_event_state_idx",
+          "columns": [
+            {
+              "expression": "eventStateId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_mappings_missing_sync_event_idx": {
+          "name": "event_mappings_missing_sync_event_idx",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"event_mappings\".\"syncEventId\" is null",
           "concurrently": false,
           "method": "btree",
           "with": {}

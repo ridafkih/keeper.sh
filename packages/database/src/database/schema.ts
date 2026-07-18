@@ -8,7 +8,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { isNotNull, sql } from "drizzle-orm";
+import { isNotNull, isNull, sql } from "drizzle-orm";
 import { user } from "./auth-schema";
 
 const DEFAULT_EVENT_COUNT = 0;
@@ -271,6 +271,10 @@ const eventMappingsTable = pgTable(
       .on(table.calendarId, table.syncEventId)
       .where(isNotNull(table.syncEventId)),
     index("event_mappings_calendar_idx").on(table.calendarId),
+    index("event_mappings_event_state_idx").on(table.eventStateId),
+    index("event_mappings_missing_sync_event_idx")
+      .on(table.id)
+      .where(isNull(table.syncEventId)),
     index("event_mappings_sync_hash_idx").on(table.syncEventHash),
   ],
 );

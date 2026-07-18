@@ -1,56 +1,65 @@
-import { count, isNull, sql } from "drizzle-orm";
+import { and, asc, count, inArray, isNull, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { eventMappingsTable } from "./schema";
 
-interface EventMappingBackfillTransaction {
-  backfillMissingIdentities: () => Promise<void>;
-  countMissingIdentities: () => Promise<number>;
-}
+const EVENT_MAPPING_BACKFILL_BATCH_SIZE = 1000;
 
 interface EventMappingBackfillDatabase {
-  withWriteLock: <TResult>(
-    work: (transaction: EventMappingBackfillTransaction) => Promise<TResult>,
-  ) => Promise<TResult>;
+  backfillMissingIdentitiesBatch: (batchSize: number) => Promise<number>;
+  countMissingIdentities: () => Promise<number>;
 }
 
 const createEventMappingBackfillDatabase = (
   database: NodePgDatabase,
 ): EventMappingBackfillDatabase => ({
-  withWriteLock: (work) => database.transaction(async (transaction) => {
-    await transaction.execute(
-      sql`lock table ${eventMappingsTable} in share row exclusive mode`,
-    );
+  backfillMissingIdentitiesBatch: (batchSize) => database.transaction(async (transaction) => {
+    const rows = await transaction
+      .select({ id: eventMappingsTable.id })
+      .from(eventMappingsTable)
+      .where(isNull(eventMappingsTable.syncEventId))
+      .orderBy(asc(eventMappingsTable.id))
+      .limit(batchSize)
+      .for("update");
+    if (rows.length === 0) {
+      return 0;
+    }
 
-    return work({
-      backfillMissingIdentities: async () => {
-        await transaction
-          .update(eventMappingsTable)
-          .set({ syncEventId: sql`cast(${eventMappingsTable.eventStateId} as text)` })
-          .where(isNull(eventMappingsTable.syncEventId));
-      },
-      countMissingIdentities: async () => {
-        const [result] = await transaction
-          .select({ value: count() })
-          .from(eventMappingsTable)
-          .where(isNull(eventMappingsTable.syncEventId));
-        return result?.value ?? 0;
-      },
-    });
+    await transaction
+      .update(eventMappingsTable)
+      .set({ syncEventId: sql`cast(${eventMappingsTable.eventStateId} as text)` })
+      .where(and(
+        inArray(eventMappingsTable.id, rows.map(({ id }) => id)),
+        isNull(eventMappingsTable.syncEventId),
+      ));
+    return rows.length;
   }),
+  countMissingIdentities: async () => {
+    const [result] = await database
+      .select({ value: count() })
+      .from(eventMappingsTable)
+      .where(isNull(eventMappingsTable.syncEventId));
+    return result?.value ?? 0;
+  },
 });
 
-const backfillEventMappingSyncEventIds = (
+const backfillEventMappingSyncEventIds = async (
   database: EventMappingBackfillDatabase,
-): Promise<void> => database.withWriteLock(async (transaction) => {
-  await transaction.backfillMissingIdentities();
-  const remainingCount = await transaction.countMissingIdentities();
+): Promise<void> => {
+  let updatedCount = 0;
+  do {
+    updatedCount = await database.backfillMissingIdentitiesBatch(
+      EVENT_MAPPING_BACKFILL_BATCH_SIZE,
+    );
+  } while (updatedCount > 0);
+
+  const remainingCount = await database.countMissingIdentities();
 
   if (remainingCount !== 0) {
     throw new Error(
       `Event mapping sync identity backfill left ${remainingCount} rows unresolved`,
     );
   }
-});
+};
 
 export {
   backfillEventMappingSyncEventIds,
@@ -58,5 +67,4 @@ export {
 };
 export type {
   EventMappingBackfillDatabase,
-  EventMappingBackfillTransaction,
 };

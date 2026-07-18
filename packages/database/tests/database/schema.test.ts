@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { getTableConfig } from "drizzle-orm/pg-core";
-import { calendarAccountsTable, eventStatesTable } from "../../src/database/schema";
+import {
+  calendarAccountsTable,
+  eventMappingsTable,
+  eventStatesTable,
+} from "../../src/database/schema";
 
 describe("calendar account schema", () => {
   it("enforces provider account identity for OAuth upserts", () => {
@@ -75,5 +79,28 @@ describe("event state schema", () => {
       "startTime",
       "endTime",
     ]);
+  });
+});
+
+describe("event mapping schema", () => {
+  it("indexes the event state foreign key used by cascading deletes", () => {
+    const tableConfig = getTableConfig(eventMappingsTable);
+    const eventStateIndex = tableConfig.indexes.find(
+      (index) => index.config.name === "event_mappings_event_state_idx",
+    );
+    const missingSyncEventIndex = tableConfig.indexes.find(
+      (index) => index.config.name === "event_mappings_missing_sync_event_idx",
+    );
+
+    expect(eventStateIndex?.config.unique).toBe(false);
+    expect(missingSyncEventIndex?.config.unique).toBe(false);
+    expect(missingSyncEventIndex?.config.where).toBeDefined();
+    const columnNames = eventStateIndex?.config.columns.map((column) => {
+      if ("name" in column && typeof column.name === "string") {
+        return column.name;
+      }
+      return null;
+    });
+    expect(columnNames).toEqual(["eventStateId"]);
   });
 });
