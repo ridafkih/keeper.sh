@@ -49,17 +49,6 @@ const resolveTimeZone = (timeZone: string | undefined): string | undefined => {
   return normalizedTimeZone;
 };
 
-const resolveSupportedTimeZone = (timeZone: string | undefined): string | undefined => {
-  try {
-    return resolveTimeZone(timeZone);
-  } catch (error) {
-    if (error instanceof RangeError) {
-      return;
-    }
-    throw error;
-  }
-};
-
 const instantToWallTime = (date: Date, timeZone: string): Date => {
   const values = new Map(
     getDateTimeFormatter(timeZone).formatToParts(date).map((part) => [part.type, part.value]),
@@ -190,7 +179,6 @@ export {
   findTimeZoneTransitions,
   getTimeZoneOffsetMinutes,
   instantToWallTime,
-  resolveSupportedTimeZone,
   resolveTimeZone,
   wallTimeToInstant,
 };

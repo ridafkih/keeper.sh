@@ -445,6 +445,16 @@ describe("parseOutlookEvents", () => {
     expect(parsedEvents[0]?.startTimeZone).toBe("Etc/UTC");
   });
 
+  it("rejects an unsupported response timezone instead of dropping timezone semantics", () => {
+    expect(() => parseOutlookEvents([createOutlookEvent({
+      originalStartTimeZone: "Mailbox Specific Time",
+      start: {
+        dateTime: "2026-03-08T14:00:00.0000000",
+        timeZone: "Unexpected Response Time",
+      },
+    })])).toThrow("Unsupported calendar timezone: Unexpected Response Time");
+  });
+
   it("skips keeper-managed and malformed events", () => {
     const validEvent = createOutlookEvent({
       iCalUId: "external-uid-2",

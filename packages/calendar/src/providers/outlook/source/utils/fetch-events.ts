@@ -12,7 +12,7 @@ import { parseEventDateTime } from "../../shared/date-time";
 import { microsoftApiErrorSchema, outlookEventListSchema } from "@keeper.sh/data-schemas";
 import { KEEPER_CATEGORY } from "@keeper.sh/constants";
 import { isKeeperEvent } from "../../../../core/events/identity";
-import { resolveSupportedTimeZone } from "../../../../ics/utils/timezone-instant";
+import { resolveTimeZone } from "../../../../ics/utils/timezone-instant";
 import { buildTimeoutSignal } from "../../../../core/utils/fetch-with-timeout";
 
 class EventsFetchError extends Error {
@@ -460,6 +460,32 @@ const parseAvailability = (value: string | undefined): EventTimeSlot["availabili
   return null;
 };
 
+const resolveOutlookStartTimeZone = (
+  originalTimeZone: string | undefined,
+  responseTimeZone: string,
+): string => {
+  if (originalTimeZone) {
+    try {
+      const resolvedOriginalTimeZone = resolveTimeZone(originalTimeZone);
+      if (resolvedOriginalTimeZone) {
+        return resolvedOriginalTimeZone;
+      }
+    } catch (error) {
+      if (!(error instanceof RangeError)) {
+        throw error;
+      }
+    }
+  }
+
+  // Graph responses are requested in UTC.
+  // Fail ingestion on an unsupported response timezone instead of discarding its semantics.
+  const resolvedResponseTimeZone = resolveTimeZone(responseTimeZone);
+  if (!resolvedResponseTimeZone) {
+    throw new RangeError("Outlook event response timezone is missing");
+  }
+  return resolvedResponseTimeZone;
+};
+
 const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => {
   const result: EventTimeSlot[] = [];
 
@@ -500,8 +526,10 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
       location: event.location?.displayName,
       sourceEventId: event.id,
       startTime: parseEventDateTime(start),
-      startTimeZone: resolveSupportedTimeZone(event.originalStartTimeZone)
-        ?? resolveSupportedTimeZone(start.timeZone),
+      startTimeZone: resolveOutlookStartTimeZone(
+        event.originalStartTimeZone,
+        start.timeZone,
+      ),
       title: event.subject,
       uid: event.iCalUId,
     });
