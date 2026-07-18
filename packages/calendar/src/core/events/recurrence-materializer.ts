@@ -7,6 +7,11 @@ import {
   resolveTimeZone,
   wallTimeToInstant,
 } from "../../ics/utils/timezone-instant";
+import {
+  addIcsDuration,
+  getIcsDurationNominalMilliseconds,
+} from "../../ics/utils/recurrence-duration";
+import { MS_PER_DAY } from "@keeper.sh/constants";
 
 interface RecurrenceMaterializationWindow {
   start: Date;
@@ -177,6 +182,7 @@ const toRRuleOptions = (
 const asOneOffEvent = (event: SyncableEvent): MaterializedSyncableEvent => {
   const {
     exceptionDates: _exceptionDates,
+    recurrenceDuration: _recurrenceDuration,
     recurrenceId: _recurrenceId,
     recurrenceRule: _recurrenceRule,
     ...oneOffEvent
@@ -208,14 +214,19 @@ const createMaterializedOccurrence = (
   occurrenceStartWallTime: Date,
   timeZone: string | undefined,
 ): MaterializedSyncableEvent => {
-  const masterStartWallTime = toRecurrenceWallTime(master.startTime, timeZone);
-  const masterEndWallTime = toRecurrenceWallTime(master.endTime, timeZone);
-  const wallDuration = masterEndWallTime.getTime() - masterStartWallTime.getTime();
   const occurrenceStart = fromRecurrenceWallTime(occurrenceStartWallTime, timeZone);
-  const occurrenceEnd = fromRecurrenceWallTime(
-    new Date(occurrenceStartWallTime.getTime() + wallDuration),
-    timeZone,
-  );
+  const resolveOccurrenceEnd = (): Date => {
+    if (master.recurrenceDuration) {
+      return addIcsDuration(
+        occurrenceStart,
+        master.recurrenceDuration,
+        timeZone,
+      );
+    }
+    const exactDuration = master.endTime.getTime() - master.startTime.getTime();
+    return new Date(occurrenceStart.getTime() + exactDuration);
+  };
+  const occurrenceEnd = resolveOccurrenceEnd();
 
   return asOneOffEvent({
     ...master,
@@ -316,10 +327,13 @@ const materializeMaster = (
   const timeZone = resolveTimeZone(master.startTimeZone);
   const recurrenceStart = toRecurrenceWallTime(master.startTime, timeZone);
   const recurrenceEnd = toRecurrenceWallTime(window.end, timeZone);
-  const wallDuration = toRecurrenceWallTime(master.endTime, timeZone).getTime()
-    - recurrenceStart.getTime();
+  let durationForWindowLookback = master.endTime.getTime() - master.startTime.getTime();
+  if (master.recurrenceDuration) {
+    durationForWindowLookback = getIcsDurationNominalMilliseconds(master.recurrenceDuration)
+      + MS_PER_DAY;
+  }
   const recurrenceWindowStart = toRecurrenceWallTime(
-    new Date(window.start.getTime() - Math.max(wallDuration, 0)),
+    new Date(window.start.getTime() - Math.max(durationForWindowLookback, 0)),
     timeZone,
   );
   assertHighFrequencyRuleWithinBudget(master, recurrenceStart, recurrenceEnd);
@@ -426,6 +440,7 @@ const assertSourceRecurrenceMaterializationWithinBudget = (
       endTime: event.endTime,
       id: event.sourceEventId ?? event.uid,
       recurrenceRule: event.recurrenceRule,
+      recurrenceDuration: event.recurrenceDuration,
       sourceEventUid: event.uid,
       startTime: event.startTime,
       summary: event.title ?? "",

@@ -3,6 +3,7 @@ import { isNotNull, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
 import type { SourceEvent } from "../types";
+import { serializeStoredIcsRecurrenceRule } from "../events/stored-recurrence";
 
 const EMPTY_ROW_COUNT = 0;
 
@@ -29,7 +30,10 @@ const buildEventStateInsertRow = (
   isAllDay: event.isAllDay,
   location: event.location,
   recurrenceId: event.recurrenceId,
-  recurrenceRule: serializeOptionalJson(event.recurrenceRule),
+  recurrenceRule: serializeStoredIcsRecurrenceRule(
+    event.recurrenceRule,
+    event.recurrenceDuration,
+  ),
   sourceEventId: event.sourceEventId,
   sourceEventType: event.sourceEventType ?? "default",
   sourceEventUid: event.uid,

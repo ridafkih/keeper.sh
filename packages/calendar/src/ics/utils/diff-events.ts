@@ -62,6 +62,7 @@ const eventIdentityKey = (event: EventTimeSlot): string =>
     String(resolveIsAllDay(event)),
     event.availability ?? "",
     normalizeTimeZone(event.startTimeZone),
+    serializeOptionalValue(event.recurrenceDuration),
     serializeOptionalValue(event.recurrenceRule),
     serializeOptionalValue(event.exceptionDates),
   ].join(":");

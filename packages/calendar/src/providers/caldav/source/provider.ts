@@ -100,6 +100,7 @@ const createCalDAVSourceProvider = (
         recurrenceId: parsed.recurrenceId,
         isAllDay: parsed.isAllDay,
         location: parsed.location,
+        recurrenceDuration: parsed.recurrenceDuration,
         recurrenceRule: parsed.recurrenceRule,
         startTime: parsed.startTime,
         startTimeZone: parsed.startTimeZone,

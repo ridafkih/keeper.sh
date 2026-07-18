@@ -1,5 +1,5 @@
 import type { SourceEvent } from "../types";
-import type { IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
+import type { IcsDuration, IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
 import stringify from "fast-json-stable-stringify";
 import { buildSourceEventInstanceKey } from "./event-instance";
 import type { ExistingSourceEventState } from "./stored-event-state";
@@ -49,7 +49,7 @@ const canonicalizeStructuredIdentityValue = (value: unknown): unknown => {
 };
 
 const serializeStructuredIdentityValue = (
-  value: IcsExceptionDates | IcsRecurrenceRule | null | undefined,
+  value: IcsDuration | IcsExceptionDates | IcsRecurrenceRule | null | undefined,
 ): string => {
   if (value === null || value === globalThis.undefined) {
     return "";
@@ -81,6 +81,7 @@ interface SourceEventIdentityInput {
   location?: string | null;
   exceptionDates?: IcsExceptionDates | null;
   recurrenceId?: Date | null;
+  recurrenceDuration?: SourceEvent["recurrenceDuration"];
   recurrenceRule?: IcsRecurrenceRule | null;
   startTimeZone?: string | null;
 }
@@ -102,6 +103,7 @@ const buildSourceEventIdentityKey = (
     normalizeIdentityContent(input.description),
     normalizeIdentityContent(input.location),
     normalizeIdentityContent(input.startTimeZone),
+    serializeStructuredIdentityValue(input.recurrenceDuration),
     serializeStructuredIdentityValue(input.recurrenceRule),
     serializeStructuredIdentityValue(input.exceptionDates),
     input.recurrenceId?.toISOString() ?? "",
@@ -144,6 +146,7 @@ const buildExistingEventIdentitySet = (
           isAllDay: existingEvent.isAllDay,
           location: existingEvent.location,
           recurrenceId: existingEvent.recurrenceId,
+          recurrenceDuration: existingEvent.recurrenceDuration,
           recurrenceRule: existingEvent.recurrenceRule,
           sourceEventInstanceKey: resolveExistingSourceEventInstanceKey(existingEvent),
           sourceEventType: existingEvent.sourceEventType,
@@ -183,6 +186,7 @@ const buildSourceEventsToAdd = (
             isAllDay: incomingEvent.isAllDay,
             location: incomingEvent.location,
             recurrenceId: incomingEvent.recurrenceId,
+            recurrenceDuration: incomingEvent.recurrenceDuration,
             recurrenceRule: incomingEvent.recurrenceRule,
             sourceEventInstanceKey: buildSourceEventInstanceKey(incomingEvent),
             sourceEventType: incomingEvent.sourceEventType,

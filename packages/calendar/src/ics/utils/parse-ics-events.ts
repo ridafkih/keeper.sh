@@ -1,39 +1,16 @@
 import type {
   IcsCalendar,
   IcsDateObject,
-  IcsDuration,
   IcsEvent,
   IcsExceptionDates,
 } from "ts-ics";
 import type { EventTimeSlot } from "./types";
-import {
-  KEEPER_EVENT_SUFFIX,
-  MS_PER_DAY,
-  MS_PER_HOUR,
-  MS_PER_MINUTE,
-  MS_PER_SECOND,
-  MS_PER_WEEK,
-} from "@keeper.sh/constants";
+import { KEEPER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { normalizeTimezone } from "./normalize-timezone";
+import { addIcsDuration } from "./recurrence-duration";
 
-const DEFAULT_DURATION_VALUE = 0;
-
-const durationToMs = (duration: IcsDuration): number => {
-  const {
-    weeks = DEFAULT_DURATION_VALUE,
-    days = DEFAULT_DURATION_VALUE,
-    hours = DEFAULT_DURATION_VALUE,
-    minutes = DEFAULT_DURATION_VALUE,
-    seconds = DEFAULT_DURATION_VALUE,
-  } = duration;
-  return (
-    weeks * MS_PER_WEEK +
-    days * MS_PER_DAY +
-    hours * MS_PER_HOUR +
-    minutes * MS_PER_MINUTE +
-    seconds * MS_PER_SECOND
-  );
-};
+const getEventStartTimeZone = (event: IcsEvent): string | undefined =>
+  normalizeTimezone(event.start.local?.timezone);
 
 const getEventEndTime = (event: IcsEvent, startTime: Date): Date => {
   if ("end" in event && event.end) {
@@ -41,17 +18,32 @@ const getEventEndTime = (event: IcsEvent, startTime: Date): Date => {
   }
 
   if ("duration" in event && event.duration) {
-    return new Date(startTime.getTime() + durationToMs(event.duration));
+    if (event.duration.before) {
+      throw new RangeError("VEVENT DURATION must be positive");
+    }
+    if (
+      event.start.type === "DATE"
+      && (event.duration.hours || event.duration.minutes || event.duration.seconds)
+    ) {
+      throw new RangeError("All-day VEVENT DURATION must use weeks or days");
+    }
+    return addIcsDuration(startTime, event.duration, getEventStartTimeZone(event));
   }
 
   return startTime;
 };
 
+const getRecurrenceDuration = (
+  event: IcsEvent,
+): EventTimeSlot["recurrenceDuration"] => {
+  if (event.recurrenceRule && "duration" in event && event.duration) {
+    return event.duration;
+  }
+  return globalThis.undefined;
+};
+
 const isKeeperEvent = (uid: string | undefined): boolean =>
   uid?.endsWith(KEEPER_EVENT_SUFFIX) ?? false;
-
-const getEventStartTimeZone = (event: IcsEvent): string | undefined =>
-  normalizeTimezone(event.start.local?.timezone);
 
 const getEventAvailability = (event: IcsEvent) => {
   if (event.timeTransparent === "TRANSPARENT") {
@@ -241,6 +233,7 @@ const convertCanonicalEvent = (
 
   const startTime = event.start.date;
   const availability = getEventAvailability(event);
+  const recurrenceDuration = getRecurrenceDuration(event);
   let { exceptionDates } = event;
   if (event.recurrenceRule) {
     exceptionDates = mergeExceptionDates(
@@ -257,6 +250,7 @@ const convertCanonicalEvent = (
     recurrenceId: event.recurrenceId?.value?.date,
     isAllDay: event.start.type === "DATE",
     location: event.location,
+    ...(recurrenceDuration && { recurrenceDuration }),
     recurrenceRule: event.recurrenceRule,
     startTime,
     startTimeZone: getEventStartTimeZone(event),

@@ -1,4 +1,4 @@
-import type { IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
+import type { IcsDuration, IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
 
 type EventAvailability = "busy" | "free" | "oof" | "workingElsewhere";
 
@@ -10,6 +10,7 @@ interface EventTimeSlot {
   isAllDay?: boolean;
   startTimeZone?: string;
   recurrenceRule?: IcsRecurrenceRule;
+  recurrenceDuration?: IcsDuration;
   exceptionDates?: IcsExceptionDates;
   recurrenceId?: Date;
   title?: string;

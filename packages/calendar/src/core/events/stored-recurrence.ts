@@ -1,8 +1,8 @@
 import {
   icsExceptionDatesSchema,
-  icsRecurrenceRuleSchema,
+  storedIcsRecurrenceRuleSchema,
 } from "@keeper.sh/data-schemas";
-import type { IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
+import type { IcsDuration, IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
 import { getErrorMessage } from "../utils/error";
 
 const parseStoredJson = (
@@ -17,10 +17,15 @@ const parseStoredJson = (
   }
 };
 
-const parseStoredIcsRecurrenceRule = (
+interface ParsedStoredRecurrenceRule {
+  recurrenceDuration?: IcsDuration;
+  recurrenceRule: IcsRecurrenceRule;
+}
+
+const parseStoredRecurrenceRule = (
   value: string | null,
   eventId: string,
-): IcsRecurrenceRule | null => {
+): ParsedStoredRecurrenceRule | null => {
   if (value === null) {
     return null;
   }
@@ -28,13 +33,34 @@ const parseStoredIcsRecurrenceRule = (
   const parsed = parseStoredJson(value, "recurrenceRule", eventId);
 
   try {
-    return icsRecurrenceRuleSchema.assert(parsed);
+    const storedRule = storedIcsRecurrenceRuleSchema.assert(parsed);
+    const { recurrenceDuration, ...recurrenceRule } = storedRule;
+    return { recurrenceDuration, recurrenceRule };
   } catch (error) {
     throw new TypeError(
       `Invalid recurrenceRule shape for event ${eventId}: ${getErrorMessage(error)}`,
       { cause: error },
     );
   }
+};
+
+const parseStoredIcsRecurrenceRule = (
+  value: string | null,
+  eventId: string,
+): IcsRecurrenceRule | null =>
+  parseStoredRecurrenceRule(value, eventId)?.recurrenceRule ?? null;
+
+const serializeStoredIcsRecurrenceRule = (
+  recurrenceRule: IcsRecurrenceRule | undefined,
+  recurrenceDuration: IcsDuration | undefined,
+): string | null => {
+  if (!recurrenceRule) {
+    return null;
+  }
+  return JSON.stringify({
+    ...recurrenceRule,
+    ...(recurrenceDuration && { recurrenceDuration }),
+  });
 };
 
 const parseStoredIcsExceptionDates = (
@@ -66,6 +92,7 @@ interface StoredRecurrenceMaterializationInput {
 
 interface MaterializedRecurrenceFields {
   exceptionDates?: Date[];
+  recurrenceDuration?: IcsDuration;
   recurrenceId?: Date;
   recurrenceRule?: IcsRecurrenceRule;
 }
@@ -77,7 +104,7 @@ const parseStoredRecurrenceForMaterialization = (
     input.exceptionDates,
     input.eventId,
   )?.map((exceptionDate) => exceptionDate.date);
-  const recurrenceRule = parseStoredIcsRecurrenceRule(
+  const storedRecurrenceRule = parseStoredRecurrenceRule(
     input.recurrenceRule,
     input.eventId,
   );
@@ -85,7 +112,12 @@ const parseStoredRecurrenceForMaterialization = (
   return {
     ...(exceptionDates && { exceptionDates }),
     ...(input.recurrenceId && { recurrenceId: input.recurrenceId }),
-    ...(recurrenceRule && { recurrenceRule }),
+    ...(storedRecurrenceRule && {
+      ...(storedRecurrenceRule.recurrenceDuration && {
+        recurrenceDuration: storedRecurrenceRule.recurrenceDuration,
+      }),
+      recurrenceRule: storedRecurrenceRule.recurrenceRule,
+    }),
   };
 };
 
@@ -93,6 +125,7 @@ export {
   parseStoredIcsExceptionDates,
   parseStoredIcsRecurrenceRule,
   parseStoredRecurrenceForMaterialization,
+  serializeStoredIcsRecurrenceRule,
 };
 export type {
   MaterializedRecurrenceFields,

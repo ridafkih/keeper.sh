@@ -1,7 +1,7 @@
 import type { IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
 import {
   parseStoredIcsExceptionDates,
-  parseStoredIcsRecurrenceRule,
+  parseStoredRecurrenceForMaterialization,
 } from "../events/stored-recurrence";
 import type { SourceEvent } from "../types";
 import { buildSourceEventInstanceKey } from "./event-instance";
@@ -29,6 +29,7 @@ interface ExistingSourceEventState extends Omit<
   "exceptionDates" | "recurrenceRule"
 > {
   exceptionDates: IcsExceptionDates | null;
+  recurrenceDuration?: SourceEvent["recurrenceDuration"];
   recurrenceRule: IcsRecurrenceRule | null;
 }
 
@@ -52,11 +53,20 @@ const normalizeStoredSourceEventParseError = (error: unknown): Error => {
 
 const parseStoredSourceEventState = (
   event: StoredSourceEventState,
-): ExistingSourceEventState => ({
-  ...event,
-  exceptionDates: parseStoredIcsExceptionDates(event.exceptionDates, event.id),
-  recurrenceRule: parseStoredIcsRecurrenceRule(event.recurrenceRule, event.id),
-});
+): ExistingSourceEventState => {
+  const recurrence = parseStoredRecurrenceForMaterialization({
+    eventId: event.id,
+    exceptionDates: event.exceptionDates,
+    recurrenceId: event.recurrenceId,
+    recurrenceRule: event.recurrenceRule,
+  });
+  return {
+    ...event,
+    exceptionDates: parseStoredIcsExceptionDates(event.exceptionDates, event.id),
+    recurrenceDuration: recurrence.recurrenceDuration,
+    recurrenceRule: recurrence.recurrenceRule ?? null,
+  };
+};
 
 const parseStoredSourceEventStates = (
   events: StoredSourceEventState[],

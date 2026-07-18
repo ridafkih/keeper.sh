@@ -376,6 +376,15 @@ const icsDateObjectSchema = type({
 });
 type StoredIcsDateObject = typeof icsDateObjectSchema.infer;
 
+const icsDurationSchema = type({
+  "before?": "boolean",
+  "weeks?": "number",
+  "days?": "number",
+  "hours?": "number",
+  "minutes?": "number",
+  "seconds?": "number",
+});
+
 const icsRecurrenceRuleSchema = type({
   frequency: "'SECONDLY' | 'MINUTELY' | 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'",
   "until?": icsDateObjectSchema,
@@ -392,7 +401,10 @@ const icsRecurrenceRuleSchema = type({
   "bySetPos?": "number[]",
   "workweekStart?": icsWeekDaySchema,
 });
-type StoredIcsRecurrenceRule = typeof icsRecurrenceRuleSchema.infer;
+const storedIcsRecurrenceRuleSchema = icsRecurrenceRuleSchema.and({
+  "recurrenceDuration?": icsDurationSchema,
+});
+type StoredIcsRecurrenceRule = typeof storedIcsRecurrenceRuleSchema.infer;
 
 const icsExceptionDatesSchema = icsDateObjectSchema.array();
 type StoredIcsExceptionDates = typeof icsExceptionDatesSchema.infer;
@@ -441,7 +453,9 @@ export {
   updateOAuthSourceDestinationsSchema,
   icsWeekDaySchema,
   icsDateObjectSchema,
+  icsDurationSchema,
   icsRecurrenceRuleSchema,
+  storedIcsRecurrenceRuleSchema,
   icsExceptionDatesSchema,
 };
 

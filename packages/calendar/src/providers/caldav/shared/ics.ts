@@ -58,6 +58,7 @@ interface ParsedCalendarEvent {
   location?: string;
   startTimeZone?: string;
   recurrenceRule?: IcsRecurrenceRule;
+  recurrenceDuration?: SyncableEvent["recurrenceDuration"];
   exceptionDates?: IcsExceptionDates;
   recurrenceId?: Date;
 }
@@ -95,6 +96,7 @@ const parseICalCalendarsToRemoteEvents = (icsStrings: string[]): ParsedCalendarE
     isKeeperEvent: isKeeperEvent(event.uid),
     isAllDay: event.isAllDay,
     location: event.location,
+    recurrenceDuration: event.recurrenceDuration,
     recurrenceRule: event.recurrenceRule,
     startTime: event.startTime,
     startTimeZone: event.startTimeZone,

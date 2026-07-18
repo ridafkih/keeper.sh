@@ -11,6 +11,7 @@ type SyncableEventContent = Pick<SyncableEvent, "summary" | "description" | "loc
     | "endTime"
     | "startTimeZone"
     | "recurrenceRule"
+    | "recurrenceDuration"
     | "exceptionDates"
     | "recurrenceId"
   >>;
@@ -40,6 +41,7 @@ const createSyncEventContentHash = (event: SyncableEventContent): string => {
     event.startTime?.toISOString() ?? "",
     event.endTime?.toISOString() ?? "",
     event.startTimeZone ?? "",
+    stringify(event.recurrenceDuration ?? null),
     stringify(event.recurrenceRule ?? null),
     [...event.exceptionDates ?? []].map((date) => date.toISOString()).toSorted(),
     event.recurrenceId?.toISOString() ?? "",

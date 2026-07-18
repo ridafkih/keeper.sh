@@ -3,6 +3,7 @@ import {
   parseStoredIcsExceptionDates,
   parseStoredIcsRecurrenceRule,
   parseStoredRecurrenceForMaterialization,
+  serializeStoredIcsRecurrenceRule,
 } from "../../../src/core/events/stored-recurrence";
 
 describe("stored recurrence parsing", () => {
@@ -65,6 +66,32 @@ describe("stored recurrence parsing", () => {
         frequency: "WEEKLY",
         until: { date: new Date("2026-12-31T00:00:00.000Z") },
       },
+    });
+  });
+
+  it("stores duration metadata beside the rule without exposing it as RRULE data", () => {
+    const stored = serializeStoredIcsRecurrenceRule(
+      { count: 2, frequency: "WEEKLY" },
+      { days: 1 },
+    );
+
+    expect(stored).toBe(JSON.stringify({
+      count: 2,
+      frequency: "WEEKLY",
+      recurrenceDuration: { days: 1 },
+    }));
+    expect(parseStoredIcsRecurrenceRule(stored, "duration-event")).toEqual({
+      count: 2,
+      frequency: "WEEKLY",
+    });
+    expect(parseStoredRecurrenceForMaterialization({
+      eventId: "duration-event",
+      exceptionDates: null,
+      recurrenceId: null,
+      recurrenceRule: stored,
+    })).toEqual({
+      recurrenceDuration: { days: 1 },
+      recurrenceRule: { count: 2, frequency: "WEEKLY" },
     });
   });
 

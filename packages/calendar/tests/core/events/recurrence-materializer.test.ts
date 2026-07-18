@@ -5,6 +5,12 @@ import {
   RecurrenceMaterializationLimitError,
 } from "../../../src/core/events/recurrence-materializer";
 import type { SourceEvent, SyncableEvent } from "../../../src/core/types";
+import { parseIcsCalendar } from "../../../src/ics/utils/parse-ics-calendar";
+import { parseIcsEvents } from "../../../src/ics/utils/parse-ics-events";
+import {
+  parseStoredRecurrenceForMaterialization,
+  serializeStoredIcsRecurrenceRule,
+} from "../../../src/core/events/stored-recurrence";
 
 const WINDOW = {
   end: new Date("2026-02-01T00:00:00.000Z"),
@@ -44,6 +50,56 @@ const expectOneOffEvents = (events: SyncableEvent[]): void => {
     expect(event).not.toHaveProperty("exceptionDates");
     expect(event).not.toHaveProperty("recurrenceId");
   }
+};
+
+const parseAndMaterialize = (
+  eventBody: string[],
+  window: { start: Date; end: Date },
+): SyncableEvent[] => {
+  const calendar = parseIcsCalendar({
+    icsString: [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Keeper Test//EN",
+      "BEGIN:VEVENT",
+      "UID:duration-series",
+      ...eventBody,
+      "RRULE:FREQ=WEEKLY;COUNT=2",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n"),
+  });
+  const [parsed] = parseIcsEvents(calendar);
+  if (!parsed?.recurrenceRule) {
+    throw new TypeError("Expected a parsed recurring event");
+  }
+  let storedExceptionDates: string | null = null;
+  if (parsed.exceptionDates) {
+    storedExceptionDates = JSON.stringify(parsed.exceptionDates);
+  }
+  const recurrence = parseStoredRecurrenceForMaterialization({
+    eventId: "parsed-master",
+    exceptionDates: storedExceptionDates,
+    recurrenceId: parsed.recurrenceId ?? null,
+    recurrenceRule: serializeStoredIcsRecurrenceRule(
+      parsed.recurrenceRule,
+      parsed.recurrenceDuration,
+    ),
+  });
+
+  return materializeRecurrenceEvents([{
+    calendarId: "calendar-1",
+    calendarName: "Primary",
+    calendarUrl: null,
+    endTime: parsed.endTime,
+    ...recurrence,
+    id: "parsed-master",
+    isAllDay: parsed.isAllDay,
+    sourceEventUid: parsed.uid,
+    startTime: parsed.startTime,
+    startTimeZone: parsed.startTimeZone,
+    summary: parsed.title ?? "",
+  }], window);
 };
 
 describe("materializeRecurrenceEvents", () => {
@@ -306,6 +362,81 @@ describe("materializeRecurrenceEvents", () => {
       "2026-03-09T16:00:00.000Z",
       "2026-03-16T16:00:00.000Z",
     ]);
+  });
+
+  it.each([
+    {
+      endProperty: "DTEND;TZID=America/New_York:20260302T003000",
+      expectedEnd: "2026-03-09T05:30:00.000Z",
+      expectedHours: 24,
+      label: "exact DTEND across the spring gap",
+      start: "DTSTART;TZID=America/New_York:20260301T003000",
+      windowEnd: "2026-03-10T00:00:00.000Z",
+    },
+    {
+      endProperty: "DURATION:P1D",
+      expectedEnd: "2026-03-09T04:30:00.000Z",
+      expectedHours: 23,
+      label: "nominal DURATION across the spring gap",
+      start: "DTSTART;TZID=America/New_York:20260301T003000",
+      windowEnd: "2026-03-10T00:00:00.000Z",
+    },
+    {
+      endProperty: "DURATION:PT24H",
+      expectedEnd: "2026-03-09T05:30:00.000Z",
+      expectedHours: 24,
+      label: "accurate DURATION across the spring gap",
+      start: "DTSTART;TZID=America/New_York:20260301T003000",
+      windowEnd: "2026-03-10T00:00:00.000Z",
+    },
+    {
+      endProperty: "DTEND;TZID=America/New_York:20261026T003000",
+      expectedEnd: "2026-11-02T04:30:00.000Z",
+      expectedHours: 24,
+      label: "exact DTEND across the fall fold",
+      start: "DTSTART;TZID=America/New_York:20261025T003000",
+      windowEnd: "2026-11-03T00:00:00.000Z",
+    },
+    {
+      endProperty: "DURATION:P1D",
+      expectedEnd: "2026-11-02T05:30:00.000Z",
+      expectedHours: 25,
+      label: "nominal DURATION across the fall fold",
+      start: "DTSTART;TZID=America/New_York:20261025T003000",
+      windowEnd: "2026-11-03T00:00:00.000Z",
+    },
+    {
+      endProperty: "DURATION:PT24H",
+      expectedEnd: "2026-11-02T04:30:00.000Z",
+      expectedHours: 24,
+      label: "accurate DURATION across the fall fold",
+      start: "DTSTART;TZID=America/New_York:20261025T003000",
+      windowEnd: "2026-11-03T00:00:00.000Z",
+    },
+  ])("preserves $label through ICS parsing and materialization", ({
+    endProperty,
+    expectedEnd,
+    expectedHours,
+    start,
+    windowEnd,
+  }) => {
+    let windowStart = "2026-03-01T00:00:00.000Z";
+    if (!start.includes("202603")) {
+      windowStart = "2026-10-25T00:00:00.000Z";
+    }
+    const occurrences = parseAndMaterialize([start, endProperty], {
+      end: new Date(windowEnd),
+      start: new Date(windowStart),
+    });
+    const [, secondOccurrence] = occurrences;
+    if (!secondOccurrence) {
+      throw new TypeError("Expected the second recurrence occurrence");
+    }
+
+    expect(secondOccurrence.endTime.toISOString()).toBe(expectedEnd);
+    expect((secondOccurrence.endTime.getTime() - secondOccurrence.startTime.getTime()) / 3_600_000)
+      .toBe(expectedHours);
+    expectOneOffEvents(occurrences);
   });
 
   it("does not truncate an unbounded series two years after its original DTSTART", () => {

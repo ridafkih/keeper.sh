@@ -43,6 +43,7 @@ describe("parseIcsEvents", () => {
     expect(parsedEvent.description).toBe("Weekly planning");
     expect(parsedEvent.location).toBe("Room 42");
     expect(parsedEvent.startTimeZone).toBe("America/Toronto");
+    expect(parsedEvent.recurrenceDuration).toEqual({ minutes: 30 });
     expect(parsedEvent.endTime.getTime() - parsedEvent.startTime.getTime()).toBe(30 * 60 * 1000);
 
     const { recurrenceRule } = parsedEvent;
@@ -59,6 +60,63 @@ describe("parseIcsEvents", () => {
       throw new TypeError("Expected exception dates array");
     }
     expect(exceptionDates).toHaveLength(1);
+  });
+
+  it("distinguishes exact DTEND duration from nominal DURATION", () => {
+    const calendar = parseIcsCalendar({
+      icsString: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Keeper Test//EN",
+        "BEGIN:VEVENT",
+        "UID:exact-duration",
+        "DTSTART;TZID=America/New_York:20260301T003000",
+        "DTEND;TZID=America/New_York:20260302T003000",
+        "RRULE:FREQ=WEEKLY;COUNT=2",
+        "END:VEVENT",
+        "BEGIN:VEVENT",
+        "UID:nominal-duration",
+        "DTSTART;TZID=America/New_York:20260301T003000",
+        "DURATION:P1D",
+        "RRULE:FREQ=WEEKLY;COUNT=2",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    });
+
+    const [exactDurationEvent, nominalDurationEvent] = parseIcsEvents(calendar);
+    expect(exactDurationEvent).not.toHaveProperty("recurrenceDuration");
+    expect(nominalDurationEvent?.recurrenceDuration).toEqual({ days: 1 });
+  });
+
+  it.each([
+    {
+      duration: "-P1D",
+      expectedError: "VEVENT DURATION must be positive",
+      start: "DTSTART;TZID=America/New_York:20260301T003000",
+    },
+    {
+      duration: "PT24H",
+      expectedError: "All-day VEVENT DURATION must use weeks or days",
+      start: "DTSTART;VALUE=DATE:20260301",
+    },
+  ])("rejects invalid event duration $duration", ({ duration, expectedError, start }) => {
+    const calendar = parseIcsCalendar({
+      icsString: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Keeper Test//EN",
+        "BEGIN:VEVENT",
+        "UID:invalid-duration",
+        start,
+        `DURATION:${duration}`,
+        "RRULE:FREQ=WEEKLY;COUNT=2",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    });
+
+    expect(() => parseIcsEvents(calendar)).toThrow(expectedError);
   });
 
   it("keeps duplicate UIDs and preserves adversarial time ranges", () => {
