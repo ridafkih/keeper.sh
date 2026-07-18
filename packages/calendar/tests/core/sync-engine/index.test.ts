@@ -8,7 +8,10 @@ import type {
 } from "../../../src/core/types";
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { PendingChanges } from "../../../src/core/sync-engine/types";
-import { createSyncEventContentHash } from "../../../src/core/events/content-hash";
+import {
+  createEditableEventContentHash,
+  createSyncEventContentHash,
+} from "../../../src/core/events/content-hash";
 import { RecurrenceMaterializationLimitError } from "../../../src/core/events/recurrence-materializer";
 
 const makeEvent = (
@@ -631,6 +634,74 @@ describe("syncCalendar", () => {
     expect(flushCalled).toBe(false);
   });
 
+  it("flushes a recurring mapping identity migration without remote writes", async () => {
+    const { syncCalendar } = await import("../../../src/core/sync-engine/index");
+    const occurrence = {
+      ...makeEvent(
+        "materialized-occurrence-id",
+        new Date("2026-03-15T09:00:00Z"),
+        new Date("2026-03-15T10:00:00Z"),
+      ),
+      eventStateId: "recurring-master-id",
+    };
+    const mapping = {
+      ...makeMapping("map-1", "recurring-master-id", "legacy-occurrence@keeper.sh"),
+      syncEventHash: "legacy-master-hash",
+      syncEventId: "recurring-master-id",
+    };
+    let deleteCalled = false;
+    let pushCalled = false;
+    const provider = makeProvider({
+      deleteEvents: () => {
+        deleteCalled = true;
+        return Promise.resolve([]);
+      },
+      pushEvents: () => {
+        pushCalled = true;
+        return Promise.resolve([]);
+      },
+    });
+    const flushes: PendingChanges[] = [];
+
+    const result = await syncCalendar({
+      userId: "user-1",
+      calendarId: "dest-cal-1",
+      provider,
+      readState: () => Promise.resolve({
+        localEvents: [occurrence],
+        existingMappings: [mapping],
+        remoteEvents: [{
+          deleteId: "google-provider-occurrence-id",
+          editableAvailability: "busy",
+          editableContentHash: createEditableEventContentHash(occurrence),
+          endTime: occurrence.endTime,
+          isKeeperEvent: true,
+          startTime: occurrence.startTime,
+          uid: mapping.destinationEventUid,
+        }],
+      }),
+      isCurrent: () => Promise.resolve(true),
+      flush: (changes) => {
+        flushes.push(changes);
+        return Promise.resolve();
+      },
+    });
+
+    expect(result).toMatchObject({ added: 0, removed: 0 });
+    expect(deleteCalled).toBe(false);
+    expect(pushCalled).toBe(false);
+    expect(flushes).toEqual([{
+      deletes: [],
+      inserts: [],
+      updates: [{
+        deleteIdentifier: "google-provider-occurrence-id",
+        id: mapping.id,
+        syncEventHash: createSyncEventContentHash(occurrence),
+        syncEventId: occurrence.id,
+      }],
+    }]);
+  });
+
   it("emits a wide event with sync context when onSyncEvent is provided", async () => {
     const { syncCalendar } = await import("../../../src/core/sync-engine/index");
     const localEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
@@ -788,13 +859,14 @@ describe("createRedisGenerationCheck", () => {
 });
 
 describe("createDatabaseFlush", () => {
-  it("batches all inserts and deletes into a single transaction", async () => {
+  it("batches inserts, deletes, and mapping updates into a single transaction", async () => {
     const { createDatabaseFlush } = await import("../../../src/core/sync-engine/flush");
     const executedOperations: string[] = [];
 
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
+          execute: () => { executedOperations.push("update"); return Promise.resolve(); },
           insert: () => { executedOperations.push("insert"); return { values: () => ({ onConflictDoNothing: () => Promise.resolve() }) }; },
           delete: () => { executedOperations.push("delete"); return { where: () => Promise.resolve() }; },
         };
@@ -811,9 +883,15 @@ describe("createDatabaseFlush", () => {
         startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
       }],
       deletes: ["map-1", "map-2"],
+      updates: [{
+        deleteIdentifier: "google-provider-occurrence-id",
+        id: "019c0000-0000-7000-8000-000000000001",
+        syncEventHash: "occurrence-hash",
+        syncEventId: "materialized-occurrence-id",
+      }],
     });
 
-    expect(executedOperations).toEqual(["delete", "insert"]);
+    expect(executedOperations).toEqual(["delete", "insert", "update"]);
   });
 
   it("skips delete when there are no deletes", async () => {

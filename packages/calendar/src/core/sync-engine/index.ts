@@ -552,7 +552,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     }
 
     emitProgress("comparing", state.localEvents.length, state.remoteEvents.length);
-    const { mappingIdsToPrune, operations, staleMappingIds } = computeSyncOperations(
+    const { mappingIdsToPrune, mappingUpdates, operations, staleMappingIds } = computeSyncOperations(
       state.localEvents,
       state.existingMappings,
       state.remoteEvents,
@@ -566,8 +566,14 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     wideEvent["operations.remove_count"] = removeCount;
     wideEvent["operations.total"] = addCount + removeCount;
     wideEvent["stale_mappings.count"] = staleMappingIds.length;
+    wideEvent["mapping_updates.count"] = mappingUpdates.length;
 
-    if (operations.length === 0 && staleMappingIds.length === 0 && mappingIdsToPrune.length === 0) {
+    if (
+      operations.length === 0
+      && staleMappingIds.length === 0
+      && mappingIdsToPrune.length === 0
+      && mappingUpdates.length === 0
+    ) {
       wideEvent["outcome"] = "in-sync";
       wideEvent["flushed"] = false;
       wideEvent["events.added"] = 0;
@@ -616,8 +622,8 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
 
     const invalidated = checkpointInvalidated || outcome.checkpointRejected || (await isInvalidated?.() ?? false);
 
-    if (!invalidated && mappingIdsToPrune.length > 0) {
-      await flush({ deletes: mappingIdsToPrune, inserts: [] });
+    if (!invalidated && (mappingIdsToPrune.length > 0 || mappingUpdates.length > 0)) {
+      await flush({ deletes: mappingIdsToPrune, inserts: [], updates: mappingUpdates });
       flushed = true;
     }
 

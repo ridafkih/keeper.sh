@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildRemoveOperations, computeSyncOperations } from "../../../src/core/sync/operations";
+import {
+  buildRemoveOperations,
+  computeSyncOperations,
+  matchRemoteEventsToMappings,
+} from "../../../src/core/sync/operations";
 import {
   createEditableEventContentHash,
   createSyncEventContentHash,
@@ -212,6 +216,7 @@ describe("computeSyncOperations", () => {
     expect(computeSyncOperations([event], [mapping], [remoteEvent], {
       syncWindowStart: new Date("2026-07-10T00:00:00.000Z"),
     })).toEqual({
+      mappingUpdates: [],
       mappingIdsToPrune: [],
       operations: [],
       staleMappingIds: [],
@@ -247,6 +252,7 @@ describe("computeSyncOperations", () => {
     }));
 
     expect(computeSyncOperations([first, second], mappings, remotes)).toEqual({
+      mappingUpdates: [],
       mappingIdsToPrune: [],
       operations: [],
       staleMappingIds: [],
@@ -265,6 +271,7 @@ describe("computeSyncOperations", () => {
     expect(computeSyncOperations([], [mapping], [], {
       syncWindowStart: new Date("2026-03-03T00:00:00.000Z"),
     })).toEqual({
+      mappingUpdates: [],
       mappingIdsToPrune: [mapping.id],
       operations: [],
       staleMappingIds: [],
@@ -368,6 +375,7 @@ describe("computeSyncOperations", () => {
     });
 
     expect(computeSyncOperations([event], [mapping], [remoteEvent])).toEqual({
+      mappingUpdates: [],
       mappingIdsToPrune: [],
       operations: [],
       staleMappingIds: [],
@@ -420,6 +428,7 @@ describe("computeSyncOperations", () => {
     });
 
     expect(computeSyncOperations([event], [mapping], [remoteEvent])).toEqual({
+      mappingUpdates: [],
       mappingIdsToPrune: [],
       operations: [],
       staleMappingIds: [],
@@ -445,6 +454,188 @@ describe("computeSyncOperations", () => {
 
     expect(computeSyncOperations([event], [mapping], [remoteEvent]).operations)
       .toHaveLength(1);
+  });
+
+  it("matches a legacy Google UID delete identifier to the provider event ID", () => {
+    const event = createLocalEvent({});
+    const legacyUid = "legacy-google-event@keeper.sh";
+    const mapping = createEventMapping({
+      deleteIdentifier: legacyUid,
+      destinationEventUid: legacyUid,
+      endTime: event.endTime,
+      startTime: event.startTime,
+      syncEventHash: createSyncEventContentHash(event),
+    });
+    const remoteEvent = createRemoteEvent({
+      deleteId: "google-provider-event-id",
+      editableContentHash: createEditableEventContentHash(event),
+      endTime: event.endTime,
+      isKeeperEvent: true,
+      startTime: event.startTime,
+      uid: legacyUid,
+    });
+
+    expect(computeSyncOperations([event], [mapping], [remoteEvent])).toEqual({
+      mappingIdsToPrune: [],
+      mappingUpdates: [{
+        deleteIdentifier: remoteEvent.deleteId,
+        id: mapping.id,
+        syncEventHash: createSyncEventContentHash(event),
+        syncEventId: event.id,
+      }],
+      operations: [],
+      staleMappingIds: [],
+    });
+  });
+
+  it("does not guess between duplicate remote events sharing a legacy UID", () => {
+    const legacyUid = "ambiguous-legacy-event@keeper.sh";
+    const mapping = createEventMapping({
+      deleteIdentifier: legacyUid,
+      destinationEventUid: legacyUid,
+    });
+    const first = createRemoteEvent({ deleteId: "provider-id-1", uid: legacyUid });
+    const second = createRemoteEvent({ deleteId: "provider-id-2", uid: legacyUid });
+
+    expect(matchRemoteEventsToMappings([mapping], [first, second])).toEqual(new Map());
+  });
+
+  it("migrates a legacy recurring mapping identity without rewriting the remote event", () => {
+    const event = createLocalEvent({
+      eventStateId: "recurring-master-id",
+      id: "materialized-occurrence-id",
+    });
+    const legacyUid = "legacy-occurrence@keeper.sh";
+    const mapping = createEventMapping({
+      deleteIdentifier: legacyUid,
+      destinationEventUid: legacyUid,
+      endTime: event.endTime,
+      eventStateId: "recurring-master-id",
+      startTime: event.startTime,
+      syncEventHash: "legacy-master-hash",
+      syncEventId: "recurring-master-id",
+    });
+    const remoteEvent = createRemoteEvent({
+      deleteId: "google-provider-occurrence-id",
+      editableAvailability: "busy",
+      editableContentHash: createEditableEventContentHash(event),
+      endTime: event.endTime,
+      isKeeperEvent: true,
+      startTime: event.startTime,
+      uid: legacyUid,
+    });
+
+    expect(computeSyncOperations([event], [mapping], [remoteEvent])).toEqual({
+      mappingIdsToPrune: [],
+      mappingUpdates: [{
+        deleteIdentifier: remoteEvent.deleteId,
+        id: mapping.id,
+        syncEventHash: createSyncEventContentHash(event),
+        syncEventId: event.id,
+      }],
+      operations: [],
+      staleMappingIds: [],
+    });
+  });
+
+  it("does not shift later recurring mappings when one legacy occurrence was removed", () => {
+    const first = createLocalEvent({
+      eventStateId: "recurring-master-id",
+      id: "first-occurrence-id",
+    });
+    const third = createLocalEvent({
+      endTime: new Date("2026-03-22T15:00:00.000Z"),
+      eventStateId: "recurring-master-id",
+      id: "third-occurrence-id",
+      startTime: new Date("2026-03-22T14:00:00.000Z"),
+    });
+    const removedSlot = createLocalEvent({
+      endTime: new Date("2026-03-15T15:00:00.000Z"),
+      eventStateId: "recurring-master-id",
+      id: "removed-occurrence-id",
+      startTime: new Date("2026-03-15T14:00:00.000Z"),
+    });
+    const mappedEvents = [first, removedSlot, third];
+    const mappings = mappedEvents.map((event, index) => createEventMapping({
+      deleteIdentifier: `legacy-${index}@keeper.sh`,
+      destinationEventUid: `legacy-${index}@keeper.sh`,
+      endTime: event.endTime,
+      eventStateId: "recurring-master-id",
+      id: `legacy-mapping-${index}`,
+      startTime: event.startTime,
+      syncEventHash: "legacy-master-hash",
+      syncEventId: "recurring-master-id",
+    }));
+    const remoteEvents = mappedEvents.map((event, index) => createRemoteEvent({
+      deleteId: `google-provider-id-${index}`,
+      editableAvailability: "busy",
+      editableContentHash: createEditableEventContentHash(event),
+      endTime: event.endTime,
+      isKeeperEvent: true,
+      startTime: event.startTime,
+      uid: `legacy-${index}@keeper.sh`,
+    }));
+
+    const result = computeSyncOperations([first, third], mappings, remoteEvents);
+
+    expect(result.mappingUpdates).toEqual([
+      {
+        deleteIdentifier: remoteEvents[0]?.deleteId,
+        id: "legacy-mapping-0",
+        syncEventHash: createSyncEventContentHash(first),
+        syncEventId: first.id,
+      },
+      {
+        deleteIdentifier: remoteEvents[2]?.deleteId,
+        id: "legacy-mapping-2",
+        syncEventHash: createSyncEventContentHash(third),
+        syncEventId: third.id,
+      },
+    ]);
+    expect(result.operations).toEqual([{
+      deleteId: "legacy-1@keeper.sh",
+      startTime: removedSlot.startTime,
+      type: "remove",
+      uid: "legacy-1@keeper.sh",
+    }]);
+    expect(result.staleMappingIds).toEqual([]);
+  });
+
+  it("rewrites a legacy recurring remote only when its editable state differs", () => {
+    const event = createLocalEvent({
+      eventStateId: "recurring-master-id",
+      id: "materialized-occurrence-id",
+    });
+    const mapping = createEventMapping({
+      deleteIdentifier: "legacy-occurrence@keeper.sh",
+      destinationEventUid: "legacy-occurrence@keeper.sh",
+      endTime: event.endTime,
+      eventStateId: "recurring-master-id",
+      startTime: event.startTime,
+      syncEventHash: "legacy-master-hash",
+      syncEventId: "recurring-master-id",
+    });
+    const remoteEvent = createRemoteEvent({
+      deleteId: "google-provider-occurrence-id",
+      editableAvailability: "busy",
+      editableContentHash: createEditableEventContentHash({ summary: "Edited remotely" }),
+      endTime: event.endTime,
+      isKeeperEvent: true,
+      startTime: event.startTime,
+      uid: mapping.destinationEventUid,
+    });
+
+    const result = computeSyncOperations([event], [mapping], [remoteEvent]);
+
+    expect(result.mappingUpdates).toEqual([]);
+    expect(result.operations).toEqual([{
+      deleteId: mapping.deleteIdentifier,
+      event,
+      staleMappingId: mapping.id,
+      type: "replace",
+      uid: mapping.destinationEventUid,
+    }]);
+    expect(result.staleMappingIds).toEqual([mapping.id]);
   });
 
   it("removes a duplicate remote copy without deleting the canonical mapping", () => {

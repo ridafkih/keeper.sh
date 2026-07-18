@@ -21,9 +21,17 @@ interface StaleMappingResult {
 }
 
 interface ComputeSyncOperationsResult {
+  mappingUpdates: MappingUpdate[];
   mappingIdsToPrune: string[];
   operations: SyncOperation[];
   staleMappingIds: string[];
+}
+
+interface MappingUpdate {
+  deleteIdentifier: string;
+  id: string;
+  syncEventHash: string;
+  syncEventId: string;
 }
 
 interface OccurrenceReassignment {
@@ -49,6 +57,9 @@ const compareEventSlots = (
 ): number => first.startTime.getTime() - second.startTime.getTime()
   || first.endTime.getTime() - second.endTime.getTime()
   || first.id.localeCompare(second.id);
+
+const getSerializedSlotKey = (startTime: Date, endTime: Date): string =>
+  `${Math.trunc(startTime.getTime() / 1000)}\u0000${Math.trunc(endTime.getTime() / 1000)}`;
 
 const pairReidentifiedMaterializedOccurrences = (
   localEvents: MaterializedSyncableEvent[],
@@ -85,10 +96,38 @@ const pairReidentifiedMaterializedOccurrences = (
     }
     const orderedEvents = events.toSorted(compareEventSlots);
     const orderedMappings = mappings.toSorted(compareMappingSlots);
-    const pairCount = Math.min(orderedEvents.length, orderedMappings.length);
+    const mappingsBySlot = new Map<string, EventMapping[]>();
+    for (const mapping of orderedMappings) {
+      const slotKey = getSerializedSlotKey(mapping.startTime, mapping.endTime);
+      const slotMappings = mappingsBySlot.get(slotKey) ?? [];
+      slotMappings.push(mapping);
+      mappingsBySlot.set(slotKey, slotMappings);
+    }
+
+    const pairedEventIds = new Set<string>();
+    const pairedMappingIds = new Set<string>();
+    for (const event of orderedEvents) {
+      const slotMappings = mappingsBySlot.get(getSerializedSlotKey(
+        event.startTime,
+        event.endTime,
+      ));
+      const mapping = slotMappings?.shift();
+      if (!mapping) {
+        continue;
+      }
+      reassignments.push({ event, mapping });
+      pairedEventIds.add(event.id);
+      pairedMappingIds.add(mapping.id);
+    }
+
+    const remainingEvents = orderedEvents.filter((event) => !pairedEventIds.has(event.id));
+    const remainingMappings = orderedMappings.filter(
+      (mapping) => !pairedMappingIds.has(mapping.id),
+    );
+    const pairCount = Math.min(remainingEvents.length, remainingMappings.length);
     for (let index = 0; index < pairCount; index++) {
-      const event = orderedEvents[index];
-      const mapping = orderedMappings[index];
+      const event = remainingEvents[index];
+      const mapping = remainingMappings[index];
       if (event && mapping) {
         reassignments.push({ event, mapping });
       }
@@ -100,6 +139,46 @@ const pairReidentifiedMaterializedOccurrences = (
 
 const isSameSerializedSecond = (first: Date, second: Date): boolean =>
   Math.trunc(first.getTime() / 1000) === Math.trunc(second.getTime() / 1000);
+
+const getRemoteIdentity = (uid: string, deleteId: string): string =>
+  `${uid}\u0000${deleteId}`;
+
+const matchRemoteEventsToMappings = (
+  mappings: EventMapping[],
+  remoteEvents: RemoteEvent[],
+): Map<string, RemoteEvent> => {
+  const remoteEventsByIdentity = new Map(
+    remoteEvents.map((event) => [getRemoteIdentity(event.uid, event.deleteId), event]),
+  );
+  const remoteEventsByUid = new Map<string, RemoteEvent[]>();
+  for (const remoteEvent of remoteEvents) {
+    const matchingUidEvents = remoteEventsByUid.get(remoteEvent.uid) ?? [];
+    matchingUidEvents.push(remoteEvent);
+    remoteEventsByUid.set(remoteEvent.uid, matchingUidEvents);
+  }
+
+  const matches = new Map<string, RemoteEvent>();
+  for (const mapping of mappings) {
+    const exactMatch = remoteEventsByIdentity.get(getRemoteIdentity(
+      mapping.destinationEventUid,
+      mapping.deleteIdentifier,
+    ));
+    if (exactMatch) {
+      matches.set(mapping.id, exactMatch);
+      continue;
+    }
+
+    if (mapping.deleteIdentifier !== mapping.destinationEventUid) {
+      continue;
+    }
+    const legacyUidMatches = remoteEventsByUid.get(mapping.destinationEventUid) ?? [];
+    if (legacyUidMatches.length === 1 && legacyUidMatches[0]) {
+      matches.set(mapping.id, legacyUidMatches[0]);
+    }
+  }
+
+  return matches;
+};
 
 const hasRemoteStateChanged = (
   mapping: EventMapping,
@@ -125,7 +204,7 @@ const hasRemoteStateChanged = (
 const identifyStaleMappings = (
   mappings: EventMapping[],
   localEventIds: Set<string>,
-  remoteEventsByIdentity: Map<string, RemoteEvent>,
+  remoteEventsByMappingId: Map<string, RemoteEvent>,
   localEventsById: Map<string, MaterializedSyncableEvent>,
 ): StaleMappingResult => {
   const staleMappingIds: string[] = [];
@@ -135,9 +214,7 @@ const identifyStaleMappings = (
   for (const mapping of mappings) {
     const syncEventId = getMappingSyncEventId(mapping);
     const localEventExists = localEventIds.has(syncEventId);
-    const remoteEvent = remoteEventsByIdentity.get(
-      `${mapping.destinationEventUid}\u0000${mapping.deleteIdentifier}`,
-    );
+    const remoteEvent = remoteEventsByMappingId.get(mapping.id);
     if (localEventExists && !remoteEvent) {
       staleMappingIds.push(mapping.id);
       staleMappedEventIds.add(syncEventId);
@@ -173,11 +250,16 @@ const buildAddOperations = (
   staleMappedEventIds: Set<string>,
 ): SyncOperation[] => {
   const operations: SyncOperation[] = [];
+  const mappingsBySyncEventId = new Map<string, EventMapping>();
+  for (const mapping of existingMappings) {
+    const syncEventId = getMappingSyncEventId(mapping);
+    if (!mappingsBySyncEventId.has(syncEventId)) {
+      mappingsBySyncEventId.set(syncEventId, mapping);
+    }
+  }
 
   for (const event of localEvents) {
-    const existingMapping = existingMappings.find(
-      (mapping) => getMappingSyncEventId(mapping) === event.id,
-    );
+    const existingMapping = mappingsBySyncEventId.get(event.id);
     const hasMapping = Boolean(existingMapping);
     const hasStaleMapping = staleMappedEventIds.has(event.id);
 
@@ -262,6 +344,7 @@ const buildRemoveOperations = (
     if (
       mapping.endTime < timeBoundary.syncWindowStart
       && !remoteIdentities.has(remoteIdentity)
+      && mapping.deleteIdentifier !== mapping.destinationEventUid
     ) {
       continue;
     }
@@ -305,16 +388,12 @@ const computeSyncOperations = (
 ): ComputeSyncOperationsResult => {
   const localEventIds = new Set(localEvents.map((event) => event.id));
   const localEventsById = new Map(localEvents.map((event) => [event.id, event]));
-  const remoteEventsByIdentity = new Map(
-    remoteEvents.map((event) => [`${event.uid}\u0000${event.deleteId}`, event]),
-  );
+  const remoteEventsByMappingId = matchRemoteEventsToMappings(existingMappings, remoteEvents);
   const mappingIdsToPrune = existingMappings.flatMap((mapping) => {
     if (localEventIds.has(getMappingSyncEventId(mapping))) {
       return [];
     }
-    const remoteExists = remoteEventsByIdentity.has(
-      `${mapping.destinationEventUid}\u0000${mapping.deleteIdentifier}`,
-    );
+    const remoteExists = remoteEventsByMappingId.has(mapping.id);
     if (mapping.endTime < timeBoundary.syncWindowStart && !remoteExists) {
       return [mapping.id];
     }
@@ -328,6 +407,26 @@ const computeSyncOperations = (
     localEvents,
     activeMappings,
   );
+  const databaseOnlyReassignments: OccurrenceReassignment[] = [];
+  const remoteReassignments: OccurrenceReassignment[] = [];
+  for (const reassignment of occurrenceReassignments) {
+    const { event, mapping } = reassignment;
+    const remoteEvent = remoteEventsByMappingId.get(mapping.id);
+    const mappingMatchesOccurrence = isSameSerializedSecond(mapping.startTime, event.startTime)
+      && isSameSerializedSecond(mapping.endTime, event.endTime);
+    const remoteStateIsVerifiable = typeof remoteEvent?.editableAvailability === "string"
+      && typeof remoteEvent.editableContentHash === "string";
+    if (
+      remoteEvent
+      && remoteStateIsVerifiable
+      && mappingMatchesOccurrence
+      && !hasRemoteStateChanged(mapping, event, remoteEvent)
+    ) {
+      databaseOnlyReassignments.push(reassignment);
+    } else {
+      remoteReassignments.push(reassignment);
+    }
+  }
   const reassignedMappingIds = new Set(
     occurrenceReassignments.map(({ mapping }) => mapping.id),
   );
@@ -338,17 +437,49 @@ const computeSyncOperations = (
     (mapping) => !reassignedMappingIds.has(mapping.id),
   );
   const mappedRemoteIdentities = new Set(
-    existingMappings.map((mapping) =>
-      `${mapping.destinationEventUid}\u0000${mapping.deleteIdentifier}`),
+    [...remoteEventsByMappingId.values()].map((remoteEvent) =>
+      getRemoteIdentity(remoteEvent.uid, remoteEvent.deleteId)),
   );
 
   const { staleMappingIds, staleMappedEventIds, staleRemoteMappings } =
     identifyStaleMappings(
       standardMappings,
       localEventIds,
-      remoteEventsByIdentity,
+      remoteEventsByMappingId,
       localEventsById,
     );
+  const staleMappingIdSet = new Set(staleMappingIds);
+  const mappingUpdatesById = new Map<string, MappingUpdate>();
+  for (const mapping of standardMappings) {
+    const remoteEvent = remoteEventsByMappingId.get(mapping.id);
+    const localEvent = localEventsById.get(getMappingSyncEventId(mapping));
+    if (
+      !staleMappingIdSet.has(mapping.id)
+      && localEvent
+      && remoteEvent
+      && mapping.deleteIdentifier === mapping.destinationEventUid
+      && remoteEvent.deleteId !== mapping.deleteIdentifier
+    ) {
+      mappingUpdatesById.set(mapping.id, {
+        deleteIdentifier: remoteEvent.deleteId,
+        id: mapping.id,
+        syncEventHash: createSyncEventContentHash(localEvent),
+        syncEventId: localEvent.id,
+      });
+    }
+  }
+  for (const { event, mapping } of databaseOnlyReassignments) {
+    const remoteEvent = remoteEventsByMappingId.get(mapping.id);
+    if (!remoteEvent) {
+      continue;
+    }
+    mappingUpdatesById.set(mapping.id, {
+      deleteIdentifier: remoteEvent.deleteId,
+      id: mapping.id,
+      syncEventHash: createSyncEventContentHash(event),
+      syncEventId: event.id,
+    });
+  }
 
   const replacedEventIds = new Set(
     staleRemoteMappings.map((mapping) => getMappingSyncEventId(mapping)),
@@ -358,7 +489,7 @@ const computeSyncOperations = (
       || !replacedEventIds.has(operation.event.id)
         && !reassignedEventIds.has(operation.event.id));
   const replacementOperations = buildReplacementOperations(staleRemoteMappings, localEventsById);
-  const reassignmentOperations: SyncOperation[] = occurrenceReassignments.map(({
+  const reassignmentOperations: SyncOperation[] = remoteReassignments.map(({
     event,
     mapping,
   }) => ({
@@ -378,6 +509,7 @@ const computeSyncOperations = (
   );
 
   return {
+    mappingUpdates: [...mappingUpdatesById.values()],
     mappingIdsToPrune,
     operations: sortOperationsByTime([
       ...addOperations,
@@ -387,7 +519,7 @@ const computeSyncOperations = (
     ]),
     staleMappingIds: [
       ...staleMappingIds,
-      ...occurrenceReassignments.map(({ mapping }) => mapping.id),
+      ...remoteReassignments.map(({ mapping }) => mapping.id),
     ],
   };
 };
@@ -399,10 +531,12 @@ export {
   buildReplacementOperations,
   computeSyncOperations,
   identifyStaleMappings,
+  matchRemoteEventsToMappings,
   pairReidentifiedMaterializedOccurrences,
 };
 export type {
   ComputeSyncOperationsResult,
+  MappingUpdate,
   OccurrenceReassignment,
   RemoveOperationTimeBoundary,
   StaleMappingResult,

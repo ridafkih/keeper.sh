@@ -23,9 +23,17 @@ interface PendingInsert {
   endTime: Date;
 }
 
+interface PendingUpdate {
+  deleteIdentifier: string;
+  id: string;
+  syncEventHash: string;
+  syncEventId: string;
+}
+
 interface PendingChanges {
   inserts: PendingInsert[];
   deletes: string[];
+  updates?: PendingUpdate[];
 }
 
-export type { CalendarSyncProvider, PendingChanges, PendingInsert };
+export type { CalendarSyncProvider, PendingChanges, PendingInsert, PendingUpdate };

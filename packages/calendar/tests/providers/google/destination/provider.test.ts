@@ -118,6 +118,24 @@ describe("createGoogleSyncProvider", () => {
     };
 
     expect(computeSyncOperations([event], [mapping], remoteEvents)).toEqual({
+      mappingUpdates: [],
+      mappingIdsToPrune: [],
+      operations: [],
+      staleMappingIds: [],
+    });
+
+    const legacyMapping = {
+      ...mapping,
+      deleteIdentifier: pushResult.remoteId,
+      id: "legacy-mapping-id",
+    };
+    expect(computeSyncOperations([event], [legacyMapping], remoteEvents)).toEqual({
+      mappingUpdates: [{
+        deleteIdentifier: remoteEvents[0]?.deleteId,
+        id: legacyMapping.id,
+        syncEventHash: createSyncEventContentHash(event),
+        syncEventId: event.id,
+      }],
       mappingIdsToPrune: [],
       operations: [],
       staleMappingIds: [],

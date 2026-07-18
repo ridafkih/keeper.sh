@@ -16,7 +16,10 @@ import type {
   SourceEvent,
   StoredSourceEventState,
 } from "../../src/index";
-import { createSyncEventContentHash } from "../../src/core/events/content-hash";
+import {
+  createEditableEventContentHash,
+  createSyncEventContentHash,
+} from "../../src/core/events/content-hash";
 
 const SOURCE_CALENDAR_ID = "source-calendar";
 const DESTINATION_CALENDAR_ID = "destination-calendar";
@@ -208,6 +211,12 @@ class InMemoryMappingStore {
       };
       this.mappings.set(mapping.id, mapping);
     }
+    for (const update of changes.updates ?? []) {
+      const mapping = this.mappings.get(update.id);
+      if (mapping) {
+        this.mappings.set(update.id, { ...mapping, ...update });
+      }
+    }
     return Promise.resolve();
   };
 }
@@ -367,6 +376,78 @@ it("repairs far-future Keeper orphans, retains user events, and converges", asyn
   provider.resetCalls();
   await expect(runSync()).resolves.toMatchObject({ added: 0, removed: 0 });
   expect(provider.calls).toEqual({ deletes: [], pushes: [] });
+});
+
+it("migrates a legacy recurring Google mapping in place and converges", async () => {
+  const occurrence: MaterializedSyncableEvent = {
+    calendarId: SOURCE_CALENDAR_ID,
+    calendarName: "Source calendar",
+    calendarUrl: null,
+    endTime: new Date("2027-03-08T17:00:00.000Z"),
+    eventStateId: "recurring-master-state",
+    id: "materialized-occurrence",
+    sourceEventUid: "legacy-series",
+    startTime: new Date("2027-03-08T16:00:00.000Z"),
+    summary: "Legacy recurring occurrence",
+  };
+  const legacyUid = "legacy-google-occurrence@keeper.sh";
+  const providerEventId = "google-provider-event-id";
+  const mappings = new InMemoryMappingStore();
+  mappings.mappings.set("legacy-mapping", {
+    calendarId: DESTINATION_CALENDAR_ID,
+    deleteIdentifier: legacyUid,
+    destinationEventUid: legacyUid,
+    endTime: occurrence.endTime,
+    eventStateId: "recurring-master-state",
+    id: "legacy-mapping",
+    startTime: occurrence.startTime,
+    syncEventHash: "legacy-master-hash",
+    syncEventId: occurrence.eventStateId,
+  });
+  const remoteEvent: RemoteEvent = {
+    deleteId: providerEventId,
+    editableAvailability: "busy",
+    editableContentHash: createEditableEventContentHash(occurrence),
+    endTime: occurrence.endTime,
+    isKeeperEvent: true,
+    startTime: occurrence.startTime,
+    uid: legacyUid,
+  };
+  const remoteWrites = { deletes: 0, pushes: 0 };
+  const provider: CalendarSyncProvider = {
+    deleteEvents: (ids) => {
+      remoteWrites.deletes += ids.length;
+      return Promise.resolve(ids.map(() => ({ success: true })));
+    },
+    listRemoteEvents: () => Promise.resolve([remoteEvent]),
+    pushEvents: (events) => {
+      remoteWrites.pushes += events.length;
+      return Promise.resolve(events.map(() => ({ success: true })));
+    },
+  };
+  const runSync = () => syncCalendar({
+    calendarId: DESTINATION_CALENDAR_ID,
+    flush: mappings.flush,
+    isCurrent: () => Promise.resolve(true),
+    provider,
+    readState: () => Promise.resolve({
+      existingMappings: [...mappings.mappings.values()],
+      localEvents: [occurrence],
+      remoteEvents: [remoteEvent],
+    }),
+    userId: "user-1",
+  });
+
+  await expect(runSync()).resolves.toMatchObject({ added: 0, removed: 0 });
+  expect([...mappings.mappings.values()][0]).toMatchObject({
+    deleteIdentifier: providerEventId,
+    syncEventHash: createSyncEventContentHash(occurrence),
+    syncEventId: occurrence.id,
+  });
+  expect(remoteWrites).toEqual({ deletes: 0, pushes: 0 });
+
+  await expect(runSync()).resolves.toMatchObject({ added: 0, removed: 0 });
+  expect(remoteWrites).toEqual({ deletes: 0, pushes: 0 });
 });
 
 it("prunes an expired recurrence mapping without deleting history when the window advances", async () => {
