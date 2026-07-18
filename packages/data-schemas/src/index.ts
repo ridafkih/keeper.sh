@@ -141,7 +141,7 @@ const outlookEventSchema = type({
   "showAs?": "string",
   "start?": { "dateTime?": "string", "timeZone?": "string" },
   "subject?": "string",
-  "seriesMasterId?": "string",
+  "seriesMasterId?": "string | null",
   "type?": "string",
 });
 type OutlookEvent = typeof outlookEventSchema.infer;

@@ -63,6 +63,22 @@ describe("createOutlookSyncProvider", () => {
     await expect(pending).rejects.toBe(abortError);
   });
 
+  it("accepts a null series master ID when Graph creates a standalone event", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({
+      iCalUId: "created-event-uid",
+      id: "created-event-id",
+      seriesMasterId: null,
+      type: "singleInstance",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(createProvider().pushEvents([createEvent()])).resolves.toEqual([{
+      deleteId: "created-event-id",
+      remoteId: "created-event-uid",
+      success: true,
+    }]);
+  });
+
   it("aborts a pending Graph event deletion", async () => {
     installAbortableFetch();
     const controller = new AbortController();
