@@ -175,8 +175,114 @@ describe("caldav provider mutations", () => {
 
   describe("rsvpCalDAVEvent", () => {
     it("finds event and updates attendee", async () => {
-      const result = await rsvpCalDAVEvent(mockCredentials, "uid", "accepted", "test@example.com");
+      const result = await rsvpCalDAVEvent(mockCredentials, "uid", null, "accepted", "test@example.com");
       expect(result.success).toBe(true);
+    });
+
+    it("updates only the selected detached occurrence and preserves sibling VEVENTs", async () => {
+      fetchCalendarObjectsMock.mockResolvedValueOnce([{
+        url: "url",
+        data: [
+          "BEGIN:VCALENDAR",
+          "VERSION:2.0",
+          "PRODID:-//Test//Test//EN",
+          "X-WR-CALNAME:Shared calendar",
+          "BEGIN:VEVENT",
+          "UID:uid",
+          "DTSTART:20260302T090000Z",
+          "DTEND:20260302T100000Z",
+          "RRULE:FREQ=WEEKLY;COUNT=3",
+          "ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:test@example.com",
+          "SUMMARY:Master",
+          "END:VEVENT",
+          "BEGIN:VEVENT",
+          "UID:uid",
+          "RECURRENCE-ID:20260309T090000Z",
+          "DTSTART:20260309T110000Z",
+          "DTEND:20260309T120000Z",
+          "ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:test@example.com",
+          "SUMMARY:First override",
+          "END:VEVENT",
+          "BEGIN:VEVENT",
+          "UID:uid",
+          "RECURRENCE-ID:20260316T090000Z",
+          "DTSTART:20260316T130000Z",
+          "DTEND:20260316T140000Z",
+          "ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:test@example.com",
+          "SUMMARY:Selected override",
+          "END:VEVENT",
+          "END:VCALENDAR",
+        ].join("\r\n"),
+      }]);
+
+      const result = await rsvpCalDAVEvent(
+        mockCredentials,
+        "uid",
+        new Date("2026-03-16T09:00:00.000Z"),
+        "accepted",
+        "test@example.com",
+      );
+
+      expect(result.success).toBe(true);
+      const data = updateCalendarObjectMock.mock.calls[0]?.[0]?.calendarObject?.data;
+      if (typeof data !== "string") {
+        throw new TypeError("Expected updated CalDAV payload");
+      }
+      expect(data.match(/BEGIN:VEVENT/g)).toHaveLength(3);
+      expect(data).toContain("X-WR-CALNAME:Shared calendar");
+      const firstOverride = data.split("BEGIN:VEVENT").find(
+        (segment) => segment.includes("SUMMARY:First override"),
+      );
+      const selectedOverride = data.split("BEGIN:VEVENT").find(
+        (segment) => segment.includes("SUMMARY:Selected override"),
+      );
+      expect(firstOverride).toContain("PARTSTAT=NEEDS-ACTION");
+      expect(selectedOverride).toContain("PARTSTAT=ACCEPTED");
+    });
+
+    it("creates one detached RSVP override for an unmodified recurrence", async () => {
+      fetchCalendarObjectsMock.mockResolvedValueOnce([{
+        url: "url",
+        data: [
+          "BEGIN:VCALENDAR",
+          "VERSION:2.0",
+          "PRODID:-//Test//Test//EN",
+          "BEGIN:VEVENT",
+          "UID:uid",
+          "DTSTART:20260302T090000Z",
+          "DTEND:20260302T100000Z",
+          "RRULE:FREQ=WEEKLY;COUNT=3",
+          "ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:test@example.com",
+          "SUMMARY:Master",
+          "END:VEVENT",
+          "BEGIN:VEVENT",
+          "UID:uid",
+          "RECURRENCE-ID:20260309T090000Z",
+          "DTSTART:20260309T110000Z",
+          "DTEND:20260309T120000Z",
+          "SUMMARY:Existing override",
+          "END:VEVENT",
+          "END:VCALENDAR",
+        ].join("\r\n"),
+      }]);
+
+      const result = await rsvpCalDAVEvent(
+        mockCredentials,
+        "uid",
+        new Date("2026-03-16T09:00:00.000Z"),
+        "tentative",
+        "test@example.com",
+      );
+
+      expect(result.success).toBe(true);
+      const data = updateCalendarObjectMock.mock.calls[0]?.[0]?.calendarObject?.data;
+      if (typeof data !== "string") {
+        throw new TypeError("Expected updated CalDAV payload");
+      }
+      expect(data.match(/BEGIN:VEVENT/g)).toHaveLength(3);
+      expect(data).toContain("SUMMARY:Existing override");
+      expect(data).toContain("RECURRENCE-ID:20260316T090000Z");
+      expect(data).toContain("PARTSTAT=TENTATIVE");
     });
   });
 

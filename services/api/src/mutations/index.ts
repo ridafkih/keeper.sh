@@ -419,7 +419,7 @@ const rsvpEventMutation = async (
     return { success: false, error: "Event not found." };
   }
 
-  const { credentials, sourceEventId, sourceEventUid } = resolved;
+  const { credentials, occurrenceStart, sourceEventId, sourceEventUid } = resolved;
 
   if (!sourceEventUid) {
     return { success: false, error: "Event cannot be responded to (no source UID)." };
@@ -469,6 +469,7 @@ const rsvpEventMutation = async (
         encryptionKey: deps.encryptionKey,
       },
       sourceEventUid,
+      occurrenceStart,
       status,
       credentials.email,
     );

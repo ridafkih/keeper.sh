@@ -148,6 +148,7 @@ type EventSource = "user" | "synced";
 
 interface ResolvedEventCredentials {
   credentials: ProviderCredentials;
+  occurrenceStart: Date | null;
   sourceEventId: string | null;
   sourceEventUid: string | null;
   eventSource: EventSource;
@@ -169,7 +170,7 @@ const resolveCredentialsByEventId = async (
   }
 
   if (userResult) {
-    return { ...userResult, eventSource: "user" };
+    return { ...userResult, occurrenceStart: null, eventSource: "user" };
   }
 
   const [syncedEvent] = await database
@@ -177,6 +178,7 @@ const resolveCredentialsByEventId = async (
       calendarId: eventStatesTable.calendarId,
       sourceEventId: eventStatesTable.sourceEventId,
       sourceEventUid: eventStatesTable.sourceEventUid,
+      recurrenceId: eventStatesTable.recurrenceId,
     })
     .from(eventStatesTable)
     .innerJoin(calendarsTable, eq(eventStatesTable.calendarId, calendarsTable.id))
@@ -200,6 +202,7 @@ const resolveCredentialsByEventId = async (
 
   return {
     credentials,
+    occurrenceStart: reference.occurrenceStart ?? syncedEvent.recurrenceId,
     sourceEventId: syncedEvent.sourceEventId,
     sourceEventUid: syncedEvent.sourceEventUid,
     eventSource: "synced",

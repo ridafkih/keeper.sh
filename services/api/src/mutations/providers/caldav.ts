@@ -3,8 +3,10 @@ import type { IcsCalendar, IcsEvent } from "ts-ics";
 import { HTTP_STATUS, KEEPER_USER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { decryptPassword } from "@keeper.sh/database";
 import { createSafeFetch } from "@keeper.sh/calendar/safe-fetch";
+import { materializeRecurrenceEvents } from "@keeper.sh/calendar";
+import type { SyncableEvent } from "@keeper.sh/calendar";
 import { createDigestAwareFetch, resolveAuthMethod } from "@keeper.sh/calendar/digest-fetch";
-import { buildZonedIcsDate } from "@keeper.sh/calendar/ics";
+import { buildZonedIcsDate, parseIcsEvents } from "@keeper.sh/calendar/ics";
 import { createDAVClient } from "tsdav";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "@/types";
@@ -257,9 +259,88 @@ const PARTSTAT_MAP: Record<RsvpStatus, "ACCEPTED" | "DECLINED" | "TENTATIVE"> = 
   tentative: "TENTATIVE",
 };
 
+const updateRsvpAttendee = (
+  event: IcsEvent,
+  partstat: "ACCEPTED" | "DECLINED" | "TENTATIVE",
+  userEmail: string,
+): IcsEvent => {
+  const normalizedEmail = userEmail.toLowerCase();
+  const attendees = event.attendees ?? [];
+  let foundAttendee = false;
+  const updatedAttendees = attendees.map((attendee) => {
+    if (attendee.email.toLowerCase() === normalizedEmail) {
+      foundAttendee = true;
+      return { ...attendee, partstat };
+    }
+    return attendee;
+  });
+  if (!foundAttendee) {
+    updatedAttendees.push({ email: userEmail, partstat });
+  }
+  return { ...event, attendees: updatedAttendees, stamp: { date: new Date() } };
+};
+
+const createRsvpOccurrenceOverride = (
+  calendar: IcsCalendar,
+  master: IcsEvent,
+  occurrenceStart: Date,
+  partstat: "ACCEPTED" | "DECLINED" | "TENTATIVE",
+  userEmail: string,
+): IcsEvent | null => {
+  const parsedMaster = parseIcsEvents(calendar, { includeKeeperEvents: true }).find(
+    (event) => event.uid === master.uid && event.recurrenceRule && !event.recurrenceId,
+  );
+  if (!parsedMaster?.recurrenceRule) {
+    return null;
+  }
+  const materializationInput: SyncableEvent = {
+    availability: parsedMaster.availability,
+    calendarId: "caldav-rsvp",
+    calendarName: "CalDAV RSVP",
+    calendarUrl: null,
+    description: parsedMaster.description,
+    endTime: parsedMaster.endTime,
+    exceptionDates: parsedMaster.exceptionDates?.map((date) => date.date),
+    id: "caldav-rsvp-master",
+    isAllDay: parsedMaster.isAllDay,
+    location: parsedMaster.location,
+    recurrenceDuration: parsedMaster.recurrenceDuration,
+    recurrenceRule: parsedMaster.recurrenceRule,
+    sourceEventUid: parsedMaster.uid,
+    startTime: parsedMaster.startTime,
+    startTimeZone: parsedMaster.startTimeZone,
+    summary: parsedMaster.title ?? "",
+  };
+  const [occurrence] = materializeRecurrenceEvents([materializationInput], {
+    start: occurrenceStart,
+    end: new Date(occurrenceStart.getTime() + 1),
+  });
+  if (!occurrence || occurrence.startTime.getTime() !== occurrenceStart.getTime()) {
+    return null;
+  }
+  const {
+    duration: _duration,
+    end: _end,
+    exceptionDates: _exceptionDates,
+    recurrenceId: _recurrenceId,
+    recurrenceRule: _recurrenceRule,
+    ...eventBase
+  } = master;
+  const isAllDay = parsedMaster.isAllDay ?? false;
+  return updateRsvpAttendee({
+    ...eventBase,
+    end: buildZonedIcsDate(occurrence.endTime, parsedMaster.startTimeZone, isAllDay),
+    recurrenceId: {
+      value: buildZonedIcsDate(occurrenceStart, parsedMaster.startTimeZone, isAllDay),
+    },
+    start: buildZonedIcsDate(occurrence.startTime, parsedMaster.startTimeZone, isAllDay),
+  }, partstat, userEmail);
+};
+
 const rsvpCalDAVEvent = async (
   credentials: CalDAVCredentials,
   sourceEventUid: string,
+  occurrenceStart: Date | null,
   status: RsvpStatus,
   userEmail: string,
 ): Promise<EventActionResult> => {
@@ -272,39 +353,46 @@ const rsvpCalDAVEvent = async (
     }
 
     const calendar = parseIcsString(existing.data);
-    const [event] = calendar.events ?? [];
-
+    const events = calendar.events ?? [];
+    const master = events.find(
+      (event) => event.uid === sourceEventUid && !event.recurrenceId,
+    );
+    const existingOverride = occurrenceStart && events.find(
+      (event) => event.uid === sourceEventUid
+        && event.recurrenceId?.value.date.getTime() === occurrenceStart.getTime(),
+    );
+    const event = existingOverride ?? master;
     if (!event) {
       return { success: false, error: "Could not parse event from CalDAV server." };
     }
 
     const partstat = PARTSTAT_MAP[status];
-    const normalizedEmail = userEmail.toLowerCase();
-    const attendees = event.attendees ?? [];
-    let foundAttendee = false;
-
-    const updatedAttendees = attendees.map((attendee) => {
-      if (attendee.email.toLowerCase() === normalizedEmail) {
-        foundAttendee = true;
-        return { ...attendee, partstat };
-      }
-      return attendee;
-    });
-
-    if (!foundAttendee) {
-      updatedAttendees.push({
-        email: userEmail,
+    let updatedEvent = updateRsvpAttendee(event, partstat, userEmail);
+    let appendsOverride = false;
+    if (occurrenceStart && !existingOverride) {
+      const generatedOverride = createRsvpOccurrenceOverride(
+        calendar,
+        event,
+        occurrenceStart,
         partstat,
-      });
+        userEmail,
+      );
+      if (!generatedOverride) {
+        return { success: false, error: "Recurring occurrence not found on CalDAV server." };
+      }
+      updatedEvent = generatedOverride;
+      appendsOverride = true;
     }
-
-    const updatedEvent: IcsEvent = {
-      ...event,
-      attendees: updatedAttendees,
-      stamp: { date: new Date() },
-    };
-
-    const updatedCalendar = buildIcsCalendar([updatedEvent]);
+    const updatedEvents = events.map((candidate) => {
+      if (candidate === event && !appendsOverride) {
+        return updatedEvent;
+      }
+      return candidate;
+    });
+    if (appendsOverride) {
+      updatedEvents.push(updatedEvent);
+    }
+    const updatedCalendar: IcsCalendar = { ...calendar, events: updatedEvents };
     const icsString = generateIcsCalendar(updatedCalendar);
 
     await client.updateCalendarObject({
