@@ -1,6 +1,6 @@
 import type { BunSQLClient } from "../database-client";
 import { eventMappingsTable } from "@keeper.sh/database/schema";
-import { inArray, sql } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { PendingChanges } from "./types";
 
 const FLUSH_BATCH_SIZE = 5000;
@@ -51,27 +51,16 @@ const createDatabaseFlush = (database: BunSQLClient): (changes: PendingChanges) 
       if (updates.length > 0) {
         const updateBatches = chunk(updates, FLUSH_BATCH_SIZE);
         for (const batch of updateBatches) {
-          const serializedUpdates = JSON.stringify(batch.map((update) => ({
-            deleteIdentifier: update.deleteIdentifier,
-            id: update.id,
-            syncEventHash: update.syncEventHash,
-            syncEventId: update.syncEventId,
-          })));
-          await transaction.execute(sql`
-            update ${eventMappingsTable}
-            set
-              "deleteIdentifier" = mapping_updates."deleteIdentifier",
-              "syncEventHash" = mapping_updates."syncEventHash",
-              "syncEventId" = mapping_updates."syncEventId"
-            from jsonb_to_recordset(${serializedUpdates}::jsonb)
-              as mapping_updates(
-                "deleteIdentifier" text,
-                id uuid,
-                "syncEventHash" text,
-                "syncEventId" text
-              )
-            where ${eventMappingsTable.id} = mapping_updates.id
-          `);
+          for (const update of batch) {
+            await transaction
+              .update(eventMappingsTable)
+              .set({
+                deleteIdentifier: update.deleteIdentifier,
+                syncEventHash: update.syncEventHash,
+                syncEventId: update.syncEventId,
+              })
+              .where(eq(eventMappingsTable.id, update.id));
+          }
         }
       }
     });

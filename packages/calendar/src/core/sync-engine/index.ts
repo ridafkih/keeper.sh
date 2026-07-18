@@ -7,6 +7,7 @@ import type {
   SyncResult,
 } from "../types";
 import type { EventMapping } from "../events/mappings";
+import { getDatabaseErrorDetails } from "@keeper.sh/database";
 import type { SyncProgressUpdate } from "../sync/types";
 import { createSyncEventContentHash } from "../events/content-hash";
 import { computeSyncOperations } from "../sync/operations";
@@ -496,6 +497,28 @@ interface SyncCalendarResult extends SyncResult {
 
 const EMPTY_RESULT: SyncCalendarResult = { added: 0, addFailed: 0, removed: 0, removeFailed: 0, conflictsResolved: 0, errors: [] };
 
+const appendDatabaseErrorFields = (
+  event: Record<string, unknown>,
+  error: unknown,
+): void => {
+  const databaseError = getDatabaseErrorDetails(error);
+  if (!databaseError) {
+    return;
+  }
+  if (databaseError.sqlState) {
+    event["error.database.sqlstate"] = databaseError.sqlState;
+  }
+  if (databaseError.message) {
+    event["error.database.message"] = databaseError.message;
+  }
+  if (databaseError.detail) {
+    event["error.database.detail"] = databaseError.detail;
+  }
+  if (databaseError.constraint) {
+    event["error.database.constraint"] = databaseError.constraint;
+  }
+};
+
 const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarResult> => {
   const {
     userId,
@@ -643,6 +666,8 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       wideEvent["error.message"] = error.message;
       wideEvent["error.type"] = error.constructor.name;
     }
+
+    appendDatabaseErrorFields(wideEvent, error);
 
     throw error;
   } finally {
