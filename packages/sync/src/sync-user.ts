@@ -67,6 +67,7 @@ const extractNumericField = (event: Record<string, unknown> | null | undefined, 
 };
 
 interface SyncConfig {
+  destinationCalendarId: string;
   database: BunSQLDatabase;
   redis: Redis;
   encryptionKey?: string;
@@ -160,6 +161,7 @@ const syncDestinationsForUser = async (
     .where(
       and(
         eq(calendarsTable.userId, userId),
+        eq(calendarsTable.id, config.destinationCalendarId),
         eq(calendarsTable.disabled, false),
         arrayContains(calendarsTable.capabilities, ["push"]),
         or(

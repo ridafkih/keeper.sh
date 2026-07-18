@@ -181,7 +181,7 @@ describe("SyncAggregateTracker", () => {
       expect(aggregate.syncing).toBe(false);
     });
 
-    it("shows up-to-date when syncing with zero total", () => {
+    it("remains visibly syncing while fetching with zero known operations", () => {
       const tracker = new SyncAggregateTracker({ progressThrottleMs: 0 });
       const result = tracker.trackProgress(
         createProgressUpdate({ progress: { current: 0, total: 0 } }),
@@ -189,7 +189,7 @@ describe("SyncAggregateTracker", () => {
 
       const aggregateMessage = requireAggregateMessage(result);
       expect(aggregateMessage.progressPercent).toBe(0);
-      expect(aggregateMessage.syncing).toBe(false);
+      expect(aggregateMessage.syncing).toBe(true);
     });
 
     it("isolates progress between different users", () => {
@@ -214,6 +214,42 @@ describe("SyncAggregateTracker", () => {
 
       expect(user1.syncEventsTotal).toBe(10);
       expect(user2.syncEventsTotal).toBe(8);
+    });
+
+    it("keeps user progress monotonic as concurrent calendars reveal their totals", () => {
+      const tracker = new SyncAggregateTracker({ progressThrottleMs: 0 });
+      tracker.holdSyncing("user-1");
+
+      const first = tracker.trackProgress(createProgressUpdate({
+        calendarId: "cal-1",
+        progress: { current: 50, total: 100 },
+      }));
+      const second = tracker.trackProgress(createProgressUpdate({
+        calendarId: "cal-2",
+        progress: { current: 0, total: 100 },
+      }));
+      tracker.trackDestinationSync(createDestinationResult({ calendarId: "cal-1" }));
+      const third = tracker.trackProgress(createProgressUpdate({
+        calendarId: "cal-2",
+        progress: { current: 50, total: 100 },
+      }));
+      const completed = tracker.trackDestinationSync(
+        createDestinationResult({ calendarId: "cal-2" }),
+      );
+
+      expect(requireAggregateMessage(first).progressPercent).toBe(50);
+      expect(requireAggregateMessage(second).progressPercent).toBe(50);
+      expect(requireAggregateMessage(third).progressPercent).toBe(75);
+      expect(requireAggregateMessage(completed)).toMatchObject({
+        progressPercent: 100,
+        syncing: true,
+      });
+
+      tracker.releaseSyncing("user-1");
+      expect(tracker.getCurrentAggregate("user-1")).toMatchObject({
+        progressPercent: 100,
+        syncing: false,
+      });
     });
   });
 

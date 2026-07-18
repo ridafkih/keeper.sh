@@ -56,7 +56,10 @@ const classifyDatabaseError = (error: unknown): DatabaseErrorClassification | nu
     return { slug: "db-statement-timeout", sqlState: STATEMENT_TIMEOUT_SQLSTATE };
   }
 
-  if (isRecord(error) && error.code === CONNECTION_TERMINATED_CODE) {
+  const connectionTerminated = (
+    isRecord(error) && error.code === CONNECTION_TERMINATED_CODE
+  ) || cause?.code === CONNECTION_TERMINATED_CODE;
+  if (connectionTerminated) {
     return { slug: "db-connection-terminated", sqlState: null };
   }
 
