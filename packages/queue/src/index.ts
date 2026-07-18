@@ -2,7 +2,7 @@ import { Queue } from "bullmq";
 import type { ConnectionOptions } from "bullmq";
 import type { Plan } from "@keeper.sh/data-schemas";
 
-const PUSH_SYNC_QUEUE_NAME = "push-sync";
+const PUSH_SYNC_QUEUE_NAME = "push-sync-v2";
 const USER_TIMEOUT_MS = 300_000;
 
 interface PushSyncJobPayload {
