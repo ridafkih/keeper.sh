@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client } from "pg";
+import { backfillEventMappingSyncEventIds } from "../src/database/backfill-event-mapping-sync-event-ids";
 
 const connectionString = Bun.env.DATABASE_URL;
 
@@ -16,20 +17,23 @@ const database = drizzle(connection);
 await connection.connect();
 
 try {
-  await connection.query(`
-    DELETE FROM drizzle.__drizzle_migrations
-    WHERE created_at = 1767760000000
-  `);
-} catch {
-  /**
-   * This is meant to remove a bad migration, if this fails - it just
-   * means that the migrations have not yet been run. We can safely ignore.
-   */
+  try {
+    await connection.query(`
+      DELETE FROM drizzle.__drizzle_migrations
+      WHERE created_at = 1767760000000
+    `);
+  } catch {
+    /**
+     * This is meant to remove a bad migration, if this fails - it just
+     * means that the migrations have not yet been run. We can safely ignore.
+     */
+  }
+
+  await migrate(database, {
+    migrationsFolder: `${import.meta.dirname}/../drizzle`,
+  });
+
+  await backfillEventMappingSyncEventIds(connection);
+} finally {
+  await connection.end();
 }
-
-await migrate(database, {
-  migrationsFolder: `${import.meta.dirname}/../drizzle`,
-});
-
-await connection.end();
-process.exit(0);

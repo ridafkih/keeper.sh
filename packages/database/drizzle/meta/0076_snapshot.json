@@ -1,5 +1,5 @@
 {
-  "id": "bd7bf981-3886-428a-9923-42c7c3be5af4",
+  "id": "d32228fc-9a51-450b-8bfe-4c6f390b87c8",
   "prevId": "2f41536e-131f-4bdc-b580-c5ed37855b68",
   "version": "7",
   "dialect": "postgresql",
@@ -979,16 +979,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "sourceEventInstanceKey": {
-          "name": "sourceEventInstanceKey",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "generated": {
-            "as": "\n      case\n        when \"recurrenceId\" is not null then\n          'recurrence|' || coalesce(\"sourceEventUid\", '') || '|' || extract(epoch from \"recurrenceId\")\n        else\n          'slot|' || coalesce(\"sourceEventUid\", '') || '|' || extract(epoch from \"startTime\") || '|' || extract(epoch from \"endTime\")\n      end\n    ",
-            "type": "stored"
-          }
-        },
         "sourceEventUid": {
           "name": "sourceEventUid",
           "type": "text",
@@ -1082,8 +1072,8 @@
           "method": "btree",
           "with": {}
         },
-        "event_states_instance_idx": {
-          "name": "event_states_instance_idx",
+        "event_states_recurring_instance_idx": {
+          "name": "event_states_recurring_instance_idx",
           "columns": [
             {
               "expression": "calendarId",
@@ -1092,14 +1082,54 @@
               "nulls": "last"
             },
             {
-              "expression": "sourceEventInstanceKey",
+              "expression": "sourceEventUid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "recurrenceId",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": true,
-          "where": "\"event_states\".\"sourceEventId\" is null",
+          "where": "\"event_states\".\"sourceEventId\" is null and \"event_states\".\"recurrenceId\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_states_non_recurring_instance_idx": {
+          "name": "event_states_non_recurring_instance_idx",
+          "columns": [
+            {
+              "expression": "calendarId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sourceEventUid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "startTime",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "endTime",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"event_states\".\"sourceEventId\" is null and \"event_states\".\"recurrenceId\" is null",
           "concurrently": false,
           "method": "btree",
           "with": {}

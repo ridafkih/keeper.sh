@@ -60,6 +60,13 @@ describe("insertEventStatesWithConflictResolution", () => {
         sourceEventUid: "legacy-uid-1",
         startTime: new Date("2026-03-13T10:00:00.000Z"),
       },
+      {
+        calendarId: "calendar-1",
+        endTime: new Date("2026-03-20T11:00:00.000Z"),
+        recurrenceId: new Date("2026-03-20T10:00:00.000Z"),
+        sourceEventUid: "legacy-recurring-uid-1",
+        startTime: new Date("2026-03-20T10:00:00.000Z"),
+      },
     ];
 
     const calls: {
@@ -97,8 +104,8 @@ describe("insertEventStatesWithConflictResolution", () => {
 
     await insertEventStatesWithConflictResolution(database, rows);
 
-    expect(calls).toHaveLength(2);
-    const [providerCall, legacyCall] = calls;
+    expect(calls).toHaveLength(3);
+    const [providerCall, legacyRecurringCall, legacyNonRecurringCall] = calls;
     expect(providerCall?.insertTable).toBe(eventStatesTable);
     expect(providerCall?.insertedRows).toEqual([rows[0]]);
     expect(providerCall?.conflictConfig.target).toEqual([
@@ -122,11 +129,22 @@ describe("insertEventStatesWithConflictResolution", () => {
       "startTimeZone",
       "title",
     ]);
-    expect(legacyCall?.insertTable).toBe(eventStatesTable);
-    expect(legacyCall?.insertedRows).toEqual([rows[1]]);
-    expect(legacyCall?.conflictConfig.target[0]).toBe(eventStatesTable.calendarId);
-    expect(legacyCall?.conflictConfig.target[1]).toBe(eventStatesTable.sourceEventInstanceKey);
-    expect(legacyCall?.conflictConfig.target).toHaveLength(2);
-    expect(legacyCall?.conflictConfig.targetWhere).toBeDefined();
+    expect(legacyRecurringCall?.insertTable).toBe(eventStatesTable);
+    expect(legacyRecurringCall?.insertedRows).toEqual([rows[2]]);
+    expect(legacyRecurringCall?.conflictConfig.target).toEqual([
+      eventStatesTable.calendarId,
+      eventStatesTable.sourceEventUid,
+      eventStatesTable.recurrenceId,
+    ]);
+    expect(legacyRecurringCall?.conflictConfig.targetWhere).toBeDefined();
+    expect(legacyNonRecurringCall?.insertTable).toBe(eventStatesTable);
+    expect(legacyNonRecurringCall?.insertedRows).toEqual([rows[1]]);
+    expect(legacyNonRecurringCall?.conflictConfig.target).toEqual([
+      eventStatesTable.calendarId,
+      eventStatesTable.sourceEventUid,
+      eventStatesTable.startTime,
+      eventStatesTable.endTime,
+    ]);
+    expect(legacyNonRecurringCall?.conflictConfig.targetWhere).toBeDefined();
   });
 });

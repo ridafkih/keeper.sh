@@ -29,14 +29,19 @@ describe("event state schema", () => {
     const sourceEventIndex = tableConfig.indexes.find(
       (index) => index.config.name === "event_states_source_event_idx",
     );
-    const instanceIdentityIndex = tableConfig.indexes.find(
-      (index) => index.config.name === "event_states_instance_idx",
+    const recurringIdentityIndex = tableConfig.indexes.find(
+      (index) => index.config.name === "event_states_recurring_instance_idx",
+    );
+    const nonRecurringIdentityIndex = tableConfig.indexes.find(
+      (index) => index.config.name === "event_states_non_recurring_instance_idx",
     );
 
     expect(sourceEventIndex?.config.unique).toBe(true);
     expect(sourceEventIndex?.config.where).toBeDefined();
-    expect(instanceIdentityIndex?.config.unique).toBe(true);
-    expect(instanceIdentityIndex?.config.where).toBeDefined();
+    expect(recurringIdentityIndex?.config.unique).toBe(true);
+    expect(recurringIdentityIndex?.config.where).toBeDefined();
+    expect(nonRecurringIdentityIndex?.config.unique).toBe(true);
+    expect(nonRecurringIdentityIndex?.config.where).toBeDefined();
     const sourceColumnNames = sourceEventIndex?.config.columns.map((column) => {
       if ("name" in column && typeof column.name === "string") {
         return column.name;
@@ -47,15 +52,28 @@ describe("event state schema", () => {
       "calendarId",
       "sourceEventId",
     ]);
-    const instanceColumnNames = instanceIdentityIndex?.config.columns.map((column) => {
+    const recurringColumnNames = recurringIdentityIndex?.config.columns.map((column) => {
       if ("name" in column && typeof column.name === "string") {
         return column.name;
       }
       return null;
     });
-    expect(instanceColumnNames).toEqual([
+    expect(recurringColumnNames).toEqual([
       "calendarId",
-      "sourceEventInstanceKey",
+      "sourceEventUid",
+      "recurrenceId",
+    ]);
+    const nonRecurringColumnNames = nonRecurringIdentityIndex?.config.columns.map((column) => {
+      if ("name" in column && typeof column.name === "string") {
+        return column.name;
+      }
+      return null;
+    });
+    expect(nonRecurringColumnNames).toEqual([
+      "calendarId",
+      "sourceEventUid",
+      "startTime",
+      "endTime",
     ]);
   });
 });

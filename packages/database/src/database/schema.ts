@@ -8,7 +8,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { isNotNull, isNull, sql } from "drizzle-orm";
+import { isNotNull, sql } from "drizzle-orm";
 import { user } from "./auth-schema";
 
 const DEFAULT_EVENT_COUNT = 0;
@@ -163,14 +163,6 @@ const eventStatesTable = pgTable(
     isAllDay: boolean(),
     sourceEventId: text(),
     sourceEventType: text(),
-    sourceEventInstanceKey: text().generatedAlwaysAs(sql`
-      case
-        when "recurrenceId" is not null then
-          'recurrence|' || coalesce("sourceEventUid", '') || '|' || extract(epoch from "recurrenceId")
-        else
-          'slot|' || coalesce("sourceEventUid", '') || '|' || extract(epoch from "startTime") || '|' || extract(epoch from "endTime")
-      end
-    `),
     sourceEventUid: text(),
     startTime: timestamp().notNull(),
     startTimeZone: text(),
@@ -183,10 +175,12 @@ const eventStatesTable = pgTable(
     uniqueIndex("event_states_source_event_idx")
       .on(table.calendarId, table.sourceEventId)
       .where(isNotNull(table.sourceEventId)),
-    uniqueIndex("event_states_instance_idx").on(
-      table.calendarId,
-      table.sourceEventInstanceKey,
-    ).where(isNull(table.sourceEventId)),
+    uniqueIndex("event_states_recurring_instance_idx")
+      .on(table.calendarId, table.sourceEventUid, table.recurrenceId)
+      .where(sql`${table.sourceEventId} is null and ${table.recurrenceId} is not null`),
+    uniqueIndex("event_states_non_recurring_instance_idx")
+      .on(table.calendarId, table.sourceEventUid, table.startTime, table.endTime)
+      .where(sql`${table.sourceEventId} is null and ${table.recurrenceId} is null`),
   ],
 );
 

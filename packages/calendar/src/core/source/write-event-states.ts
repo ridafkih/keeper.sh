@@ -1,5 +1,5 @@
 import { eventStatesTable } from "@keeper.sh/database/schema";
-import { isNotNull, isNull, sql } from "drizzle-orm";
+import { isNotNull, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
 import type { SourceEvent } from "../types";
@@ -38,12 +38,26 @@ const buildEventStateInsertRow = (
   title: event.title,
 });
 
-const LEGACY_EVENT_STATE_CONFLICT_TARGET: [
+const LEGACY_RECURRING_EVENT_STATE_CONFLICT_TARGET: [
   typeof eventStatesTable.calendarId,
-  typeof eventStatesTable.sourceEventInstanceKey,
+  typeof eventStatesTable.sourceEventUid,
+  typeof eventStatesTable.recurrenceId,
 ] = [
   eventStatesTable.calendarId,
-  eventStatesTable.sourceEventInstanceKey,
+  eventStatesTable.sourceEventUid,
+  eventStatesTable.recurrenceId,
+];
+
+const LEGACY_NON_RECURRING_EVENT_STATE_CONFLICT_TARGET: [
+  typeof eventStatesTable.calendarId,
+  typeof eventStatesTable.sourceEventUid,
+  typeof eventStatesTable.startTime,
+  typeof eventStatesTable.endTime,
+] = [
+  eventStatesTable.calendarId,
+  eventStatesTable.sourceEventUid,
+  eventStatesTable.startTime,
+  eventStatesTable.endTime,
 ];
 
 const PROVIDER_EVENT_STATE_CONFLICT_TARGET: [
@@ -76,7 +90,8 @@ const EVENT_STATE_CONFLICT_SET = {
 const PROVIDER_EVENT_STATE_CONFLICT_SET = EVENT_STATE_CONFLICT_SET;
 
 type EventStateConflictTarget =
-  | typeof LEGACY_EVENT_STATE_CONFLICT_TARGET
+  | typeof LEGACY_RECURRING_EVENT_STATE_CONFLICT_TARGET
+  | typeof LEGACY_NON_RECURRING_EVENT_STATE_CONFLICT_TARGET
   | typeof PROVIDER_EVENT_STATE_CONFLICT_TARGET;
 
 interface EventStateConflictConfig {
@@ -118,13 +133,16 @@ const insertEventStatesWithConflictResolution = async (
   rows: EventStateInsertRow[],
 ): Promise<void> => {
   const providerRows: EventStateInsertRow[] = [];
-  const legacyRows: EventStateInsertRow[] = [];
+  const legacyRecurringRows: EventStateInsertRow[] = [];
+  const legacyNonRecurringRows: EventStateInsertRow[] = [];
 
   for (const row of rows) {
     if (row.sourceEventId) {
       providerRows.push(row);
+    } else if (row.recurrenceId) {
+      legacyRecurringRows.push(row);
     } else {
-      legacyRows.push(row);
+      legacyNonRecurringRows.push(row);
     }
   }
 
@@ -133,10 +151,15 @@ const insertEventStatesWithConflictResolution = async (
     target: PROVIDER_EVENT_STATE_CONFLICT_TARGET,
     targetWhere: isNotNull(eventStatesTable.sourceEventId),
   });
-  await insertEventStateRows(database, legacyRows, {
+  await insertEventStateRows(database, legacyRecurringRows, {
     set: EVENT_STATE_CONFLICT_SET,
-    target: LEGACY_EVENT_STATE_CONFLICT_TARGET,
-    targetWhere: isNull(eventStatesTable.sourceEventId),
+    target: LEGACY_RECURRING_EVENT_STATE_CONFLICT_TARGET,
+    targetWhere: sql`${eventStatesTable.sourceEventId} is null and ${eventStatesTable.recurrenceId} is not null`,
+  });
+  await insertEventStateRows(database, legacyNonRecurringRows, {
+    set: EVENT_STATE_CONFLICT_SET,
+    target: LEGACY_NON_RECURRING_EVENT_STATE_CONFLICT_TARGET,
+    targetWhere: sql`${eventStatesTable.sourceEventId} is null and ${eventStatesTable.recurrenceId} is null`,
   });
 };
 
