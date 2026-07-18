@@ -529,6 +529,31 @@ describe("materializeRecurrenceEvents", () => {
     expect(result.every((event) => event.startTime.getUTCHours() === 9)).toBe(true);
   });
 
+  it("accepts counted sparse hourly rules when the requested output remains within budget", () => {
+    const result = materializeRecurrenceEvents([
+      createEvent({
+        endTime: new Date("2020-01-01T09:30:00.000Z"),
+        recurrenceRule: { byHour: [9], count: 20_000, frequency: "HOURLY" },
+        startTime: new Date("2020-01-01T09:00:00.000Z"),
+      }),
+    ], WINDOW);
+
+    expect(result).toHaveLength(31);
+    expect(result.every((event) => event.startTime.getUTCHours() === 9)).toBe(true);
+  });
+
+  it("does not reject a counted high-frequency series that ended before the window", () => {
+    const result = materializeRecurrenceEvents([
+      createEvent({
+        endTime: new Date("2020-01-01T00:00:00.500Z"),
+        recurrenceRule: { count: 20_000, frequency: "SECONDLY" },
+        startTime: new Date("2020-01-01T00:00:00.000Z"),
+      }),
+    ], WINDOW);
+
+    expect(result).toEqual([]);
+  });
+
   it("translates ts-ics zero-based BYMONTH values without shifting the month", () => {
     const result = materializeRecurrenceEvents([
       createEvent({

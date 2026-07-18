@@ -71,7 +71,9 @@ const hasOccurrenceSelectors = (rule: IcsRecurrenceRule): boolean => Boolean(
 const assertUnfilteredHighFrequencyRuleWithinBudget = (
   master: SyncableEvent,
   recurrenceStart: Date,
+  recurrenceWindowStart: Date,
   recurrenceEnd: Date,
+  timeZone: string | undefined,
 ): void => {
   const rule = master.recurrenceRule;
   if (!rule) {
@@ -81,17 +83,36 @@ const assertUnfilteredHighFrequencyRuleWithinBudget = (
   if (!baseInterval) {
     return;
   }
+  if (hasOccurrenceSelectors(rule)) {
+    return;
+  }
   const interval = Math.max(rule.interval ?? 1, 1);
-  const untilTime = rule.until?.date.getTime() ?? recurrenceEnd.getTime();
+  const intervalMilliseconds = baseInterval * interval;
+  let untilTime = recurrenceEnd.getTime();
+  if (rule.until) {
+    let until = rule.until.date;
+    if (timeZone) {
+      until = instantToWallTime(until, timeZone);
+    }
+    untilTime = until.getTime();
+  }
   const boundedEndTime = Math.min(recurrenceEnd.getTime(), untilTime);
-  const occurrencesBySpan = Math.max(
-    Math.floor((boundedEndTime - recurrenceStart.getTime()) / (baseInterval * interval)) + 1,
+  const firstOccurrenceIndex = Math.max(
+    Math.ceil(
+      (recurrenceWindowStart.getTime() - recurrenceStart.getTime()) / intervalMilliseconds,
+    ),
     0,
   );
-  let potentialOccurrences = rule.count ?? occurrencesBySpan;
-  if (typeof rule.count !== "number" && hasOccurrenceSelectors(rule)) {
-    potentialOccurrences = 0;
+  let lastOccurrenceIndex = Math.floor(
+    (boundedEndTime - recurrenceStart.getTime()) / intervalMilliseconds,
+  );
+  if (typeof rule.count === "number") {
+    lastOccurrenceIndex = Math.min(lastOccurrenceIndex, rule.count - 1);
   }
+  const potentialOccurrences = Math.max(
+    lastOccurrenceIndex - firstOccurrenceIndex + 1,
+    0,
+  );
   if (potentialOccurrences > MAX_OCCURRENCES_PER_SERIES) {
     throw new RecurrenceMaterializationLimitError({
       calendarId: master.calendarId,
@@ -350,7 +371,13 @@ const materializeMaster = (
     new Date(window.start.getTime() - Math.max(durationForWindowLookback, 0)),
     timeZone,
   );
-  assertUnfilteredHighFrequencyRuleWithinBudget(master, recurrenceStart, recurrenceEnd);
+  assertUnfilteredHighFrequencyRuleWithinBudget(
+    master,
+    recurrenceStart,
+    recurrenceWindowStart,
+    recurrenceEnd,
+    timeZone,
+  );
   const excludedSlots = new Set(master.exceptionDates?.map((date) => date.getTime()));
   const recurrence = new RRule(toRRuleOptions(
     master.recurrenceRule,
