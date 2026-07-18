@@ -1,5 +1,6 @@
-import { convertIcsCalendar, generateIcsCalendar } from "ts-ics";
+import { convertIcsCalendar, generateIcsCalendar, generateIcsEvent } from "ts-ics";
 import type { IcsCalendar, IcsEvent } from "ts-ics";
+import ICAL from "ical.js";
 import { HTTP_STATUS, KEEPER_USER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { decryptPassword } from "@keeper.sh/database";
 import { createSafeFetch } from "@keeper.sh/calendar/safe-fetch";
@@ -280,6 +281,52 @@ const updateRsvpAttendee = (
   return { ...event, attendees: updatedAttendees, stamp: { date: new Date() } };
 };
 
+type IcalComponent = ReturnType<typeof ICAL.Component.fromString>;
+
+const findIcalEventComponent = (
+  calendar: IcalComponent,
+  selectedEvent: IcsEvent,
+): IcalComponent | undefined => calendar.getAllSubcomponents("vevent").find((component) => {
+  const event = new ICAL.Event(component);
+  if (event.uid !== selectedEvent.uid) {
+    return false;
+  }
+  if (!selectedEvent.recurrenceId) {
+    return !event.isRecurrenceException();
+  }
+  if (!event.isRecurrenceException()) {
+    return false;
+  }
+  const selectedRecurrence = selectedEvent.recurrenceId.value;
+  if (event.recurrenceId.isDate || selectedRecurrence.type === "DATE") {
+    return event.recurrenceId.isDate
+      && selectedRecurrence.type === "DATE"
+      && event.recurrenceId.year === selectedRecurrence.date.getUTCFullYear()
+      && event.recurrenceId.month === selectedRecurrence.date.getUTCMonth() + 1
+      && event.recurrenceId.day === selectedRecurrence.date.getUTCDate();
+  }
+  return event.recurrenceId.toUnixTime() * 1000 === selectedRecurrence.date.getTime();
+});
+
+const updateIcalRsvpAttendee = (
+  event: IcalComponent,
+  partstat: "ACCEPTED" | "DECLINED" | "TENTATIVE",
+  userEmail: string,
+): void => {
+  const normalizedEmail = userEmail.toLowerCase();
+  const attendee = event.getAllProperties("attendee").find((candidate) => {
+    const value = candidate.getFirstValue();
+    return String(value).replace(/^mailto:/iu, "").toLowerCase() === normalizedEmail;
+  });
+  if (attendee) {
+    attendee.setParameter("partstat", partstat);
+  } else {
+    const addedAttendee = event.addPropertyWithValue("attendee", `mailto:${userEmail}`);
+    addedAttendee.setParameter("partstat", partstat);
+  }
+  event.updatePropertyWithValue("dtstamp", ICAL.Time.fromJSDate(new Date(), true));
+};
+
 const createRsvpOccurrenceOverride = (
   calendar: IcsCalendar,
   master: IcsEvent,
@@ -353,6 +400,7 @@ const rsvpCalDAVEvent = async (
     }
 
     const calendar = parseIcsString(existing.data);
+    const icalCalendar = ICAL.Component.fromString(existing.data);
     const events = calendar.events ?? [];
     const master = events.find(
       (event) => event.uid === sourceEventUid && !event.recurrenceId,
@@ -365,10 +413,12 @@ const rsvpCalDAVEvent = async (
     if (!event) {
       return { success: false, error: "Could not parse event from CalDAV server." };
     }
+    const icalEvent = findIcalEventComponent(icalCalendar, event);
+    if (!icalEvent) {
+      return { success: false, error: "Could not parse event from CalDAV server." };
+    }
 
     const partstat = PARTSTAT_MAP[status];
-    let updatedEvent = updateRsvpAttendee(event, partstat, userEmail);
-    let appendsOverride = false;
     if (occurrenceStart && !existingOverride) {
       const generatedOverride = createRsvpOccurrenceOverride(
         calendar,
@@ -380,20 +430,11 @@ const rsvpCalDAVEvent = async (
       if (!generatedOverride) {
         return { success: false, error: "Recurring occurrence not found on CalDAV server." };
       }
-      updatedEvent = generatedOverride;
-      appendsOverride = true;
+      icalCalendar.addSubcomponent(ICAL.Component.fromString(generateIcsEvent(generatedOverride)));
+    } else {
+      updateIcalRsvpAttendee(icalEvent, partstat, userEmail);
     }
-    const updatedEvents = events.map((candidate) => {
-      if (candidate === event && !appendsOverride) {
-        return updatedEvent;
-      }
-      return candidate;
-    });
-    if (appendsOverride) {
-      updatedEvents.push(updatedEvent);
-    }
-    const updatedCalendar: IcsCalendar = { ...calendar, events: updatedEvents };
-    const icsString = generateIcsCalendar(updatedCalendar);
+    const icsString = icalCalendar.toString();
 
     await client.updateCalendarObject({
       calendarObject: {

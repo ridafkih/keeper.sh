@@ -174,9 +174,53 @@ describe("caldav provider mutations", () => {
   });
 
   describe("rsvpCalDAVEvent", () => {
-    it("finds event and updates attendee", async () => {
+    it("updates the master when no occurrence is requested and preserves calendar data", async () => {
+      fetchCalendarObjectsMock.mockResolvedValueOnce([{
+        url: "url",
+        data: [
+          "BEGIN:VCALENDAR",
+          "VERSION:2.0",
+          "PRODID:-//Test//Test//EN",
+          "X-APPLE-CALENDAR-COLOR:#123456",
+          "BEGIN:VEVENT",
+          "UID:uid",
+          "DTSTART:20260302T090000Z",
+          "DTEND:20260302T100000Z",
+          "RRULE:FREQ=WEEKLY;COUNT=2",
+          "ATTENDEE;CN=Test;PARTSTAT=NEEDS-ACTION:mailto:test@",
+          " example.com",
+          "X-MOZ-GENERATION:7",
+          "SUMMARY:Master",
+          "END:VEVENT",
+          "BEGIN:VEVENT",
+          "UID:uid",
+          "RECURRENCE-ID:20260309T090000Z",
+          "DTSTART:20260309T110000Z",
+          "DTEND:20260309T120000Z",
+          "ATTENDEE;PARTSTAT=DECLINED:mailto:test@example.com",
+          "X-KEEPER-UNKNOWN:sibling-data",
+          "SUMMARY:Detached override",
+          "END:VEVENT",
+          "END:VCALENDAR",
+        ].join("\r\n"),
+      }]);
+
       const result = await rsvpCalDAVEvent(mockCredentials, "uid", null, "accepted", "test@example.com");
+
       expect(result.success).toBe(true);
+      const data = updateCalendarObjectMock.mock.calls[0]?.[0]?.calendarObject?.data;
+      if (typeof data !== "string") {
+        throw new TypeError("Expected updated CalDAV payload");
+      }
+      expect(data).toContain("X-APPLE-CALENDAR-COLOR:#123456");
+      expect(data).toContain("X-MOZ-GENERATION:7");
+      expect(data).toContain("X-KEEPER-UNKNOWN:sibling-data");
+      const master = data.split("BEGIN:VEVENT").find((segment) => segment.includes("SUMMARY:Master"));
+      const override = data.split("BEGIN:VEVENT").find(
+        (segment) => segment.includes("SUMMARY:Detached override"),
+      );
+      expect(master).toContain("CN=Test;PARTSTAT=ACCEPTED");
+      expect(override).toContain("PARTSTAT=DECLINED");
     });
 
     it("updates only the selected detached occurrence and preserves sibling VEVENTs", async () => {
@@ -187,12 +231,14 @@ describe("caldav provider mutations", () => {
           "VERSION:2.0",
           "PRODID:-//Test//Test//EN",
           "X-WR-CALNAME:Shared calendar",
+          "X-APPLE-CALENDAR-COLOR:#abcdef",
           "BEGIN:VEVENT",
           "UID:uid",
           "DTSTART:20260302T090000Z",
           "DTEND:20260302T100000Z",
           "RRULE:FREQ=WEEKLY;COUNT=3",
           "ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:test@example.com",
+          "X-MOZ-GENERATION:9",
           "SUMMARY:Master",
           "END:VEVENT",
           "BEGIN:VEVENT",
@@ -230,6 +276,8 @@ describe("caldav provider mutations", () => {
       }
       expect(data.match(/BEGIN:VEVENT/g)).toHaveLength(3);
       expect(data).toContain("X-WR-CALNAME:Shared calendar");
+      expect(data).toContain("X-APPLE-CALENDAR-COLOR:#abcdef");
+      expect(data).toContain("X-MOZ-GENERATION:9");
       const firstOverride = data.split("BEGIN:VEVENT").find(
         (segment) => segment.includes("SUMMARY:First override"),
       );
@@ -240,7 +288,7 @@ describe("caldav provider mutations", () => {
       expect(selectedOverride).toContain("PARTSTAT=ACCEPTED");
     });
 
-    it("creates one detached RSVP override for an unmodified recurrence", async () => {
+    it("selects an all-day detached occurrence by its parsed occurrence identity", async () => {
       fetchCalendarObjectsMock.mockResolvedValueOnce([{
         url: "url",
         data: [
@@ -249,10 +297,63 @@ describe("caldav provider mutations", () => {
           "PRODID:-//Test//Test//EN",
           "BEGIN:VEVENT",
           "UID:uid",
+          "DTSTART;VALUE=DATE:20260302",
+          "DTEND;VALUE=DATE:20260303",
+          "RRULE:FREQ=WEEKLY;COUNT=2",
+          "ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:test@example.com",
+          "SUMMARY:All-day master",
+          "END:VEVENT",
+          "BEGIN:VEVENT",
+          "UID:uid",
+          "RECURRENCE-ID;VALUE=DATE:20260309",
+          "DTSTART;VALUE=DATE:20260310",
+          "DTEND;VALUE=DATE:20260311",
+          "ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:test@example.com",
+          "SUMMARY:All-day override",
+          "END:VEVENT",
+          "END:VCALENDAR",
+        ].join("\r\n"),
+      }]);
+
+      const result = await rsvpCalDAVEvent(
+        mockCredentials,
+        "uid",
+        new Date("2026-03-09T00:00:00.000Z"),
+        "accepted",
+        "test@example.com",
+      );
+
+      expect(result.success).toBe(true);
+      const data = updateCalendarObjectMock.mock.calls[0]?.[0]?.calendarObject?.data;
+      if (typeof data !== "string") {
+        throw new TypeError("Expected updated CalDAV payload");
+      }
+      const master = data.split("BEGIN:VEVENT").find(
+        (segment) => segment.includes("SUMMARY:All-day master"),
+      );
+      const override = data.split("BEGIN:VEVENT").find(
+        (segment) => segment.includes("SUMMARY:All-day override"),
+      );
+      expect(master).toContain("PARTSTAT=NEEDS-ACTION");
+      expect(override).toContain("PARTSTAT=ACCEPTED");
+    });
+
+    it("creates one detached RSVP override for an unmodified recurrence", async () => {
+      fetchCalendarObjectsMock.mockResolvedValueOnce([{
+        url: "url",
+        data: [
+          "BEGIN:VCALENDAR",
+          "VERSION:2.0",
+          "PRODID:-//Test//Test//EN",
+          "X-APPLE-CALENDAR-COLOR:#fedcba",
+          "BEGIN:VEVENT",
+          "UID:uid",
           "DTSTART:20260302T090000Z",
           "DTEND:20260302T100000Z",
           "RRULE:FREQ=WEEKLY;COUNT=3",
+          "EXDATE:20260323T090000Z",
           "ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:test@example.com",
+          "X-MOZ-GENERATION:11",
           "SUMMARY:Master",
           "END:VEVENT",
           "BEGIN:VEVENT",
@@ -280,9 +381,18 @@ describe("caldav provider mutations", () => {
         throw new TypeError("Expected updated CalDAV payload");
       }
       expect(data.match(/BEGIN:VEVENT/g)).toHaveLength(3);
+      expect(data).toContain("X-APPLE-CALENDAR-COLOR:#fedcba");
+      expect(data).toContain("X-MOZ-GENERATION:11");
       expect(data).toContain("SUMMARY:Existing override");
       expect(data).toContain("RECURRENCE-ID:20260316T090000Z");
       expect(data).toContain("PARTSTAT=TENTATIVE");
+      const generatedOverride = data.split("BEGIN:VEVENT").find(
+        (segment) => segment.includes("RECURRENCE-ID:20260316T090000Z"),
+      );
+      expect(generatedOverride).not.toContain("RRULE:");
+      expect(generatedOverride).not.toContain("EXDATE:");
+      expect(generatedOverride).toContain("DTSTART:20260316T090000Z");
+      expect(generatedOverride).toContain("DTEND:20260316T100000Z");
     });
   });
 
