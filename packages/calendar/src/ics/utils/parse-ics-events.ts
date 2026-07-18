@@ -8,11 +8,13 @@ import type { EventTimeSlot } from "./types";
 import { KEEPER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { normalizeTimezone } from "./normalize-timezone";
 import { addIcsDuration } from "./recurrence-duration";
+import { MS_PER_DAY } from "@keeper.sh/constants";
 
 const getEventStartTimeZone = (event: IcsEvent): string | undefined =>
   normalizeTimezone(event.start.local?.timezone);
 
 const getEventEndTime = (event: IcsEvent, startTime: Date): Date => {
+  const isAllDay = event.start.type === "DATE";
   if ("end" in event && event.end) {
     return event.end.date;
   }
@@ -22,12 +24,16 @@ const getEventEndTime = (event: IcsEvent, startTime: Date): Date => {
       throw new RangeError("VEVENT DURATION must be positive");
     }
     if (
-      event.start.type === "DATE"
+      isAllDay
       && (event.duration.hours || event.duration.minutes || event.duration.seconds)
     ) {
       throw new RangeError("All-day VEVENT DURATION must use weeks or days");
     }
     return addIcsDuration(startTime, event.duration, getEventStartTimeZone(event));
+  }
+
+  if (isAllDay) {
+    return new Date(startTime.getTime() + MS_PER_DAY);
   }
 
   return startTime;

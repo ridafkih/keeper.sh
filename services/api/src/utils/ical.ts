@@ -1,7 +1,7 @@
 import { calendarsTable, eventStatesTable, icalFeedSettingsTable } from "@keeper.sh/database/schema";
 import {
   parseStoredIcsExceptionDates,
-  parseStoredIcsRecurrenceRule,
+  parseStoredIcsRecurrence,
 } from "@keeper.sh/calendar";
 import { and, asc, eq, inArray, ne, or, isNull } from "drizzle-orm";
 import { resolveUserIdentifier } from "./user";
@@ -87,11 +87,15 @@ const generateUserCalendar = async (identifier: string): Promise<string | null> 
     )
     .orderBy(asc(eventStatesTable.startTime));
 
-  const events: CalendarEvent[] = rows.map((row) => ({
-    ...row,
-    recurrenceRule: parseStoredIcsRecurrenceRule(row.recurrenceRule, row.id),
-    exceptionDates: parseStoredIcsExceptionDates(row.exceptionDates, row.id),
-  }));
+  const events: CalendarEvent[] = rows.map((row) => {
+    const recurrence = parseStoredIcsRecurrence(row.recurrenceRule, row.id);
+    return {
+      ...row,
+      recurrenceDuration: recurrence?.recurrenceDuration ?? null,
+      recurrenceRule: recurrence?.recurrenceRule ?? null,
+      exceptionDates: parseStoredIcsExceptionDates(row.exceptionDates, row.id),
+    };
+  });
 
   return formatEventsAsIcal(events, settings);
 };

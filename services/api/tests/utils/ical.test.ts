@@ -52,6 +52,7 @@ const makeEvent = (overrides: Partial<CalendarEvent> = {}): CalendarEvent => ({
   isAllDay: false,
   calendarName: "Work",
   recurrenceRule: null,
+  recurrenceDuration: null,
   exceptionDates: null,
   recurrenceId: null,
   sourceEventUid: null,
@@ -246,6 +247,50 @@ describe("recurring events", () => {
     expect(ics).toContain("RRULE:");
     expect(ics).toContain("FREQ=WEEKLY");
     expect(ics).toMatch(/BYDAY=MO,TU,WE,TH,FR|BYDAY=MO;BYDAY=TU/);
+  });
+
+  it("preserves nominal DURATION for a recurring master", () => {
+    const ics = formatEventsAsIcal(
+      [makeEvent({
+        endTime: new Date("2026-03-29T23:00:00Z"),
+        recurrenceDuration: { days: 1 },
+        recurrenceRule: { count: 2, frequency: "WEEKLY" },
+        sourceEventUid: "nominal-duration",
+        startTime: new Date("2026-03-29T00:00:00Z"),
+        startTimeZone: "Europe/London",
+      })],
+      DEFAULT_SETTINGS,
+    );
+
+    expect(ics).toContain("DURATION:P1D");
+    expect(ics).not.toContain("DTEND;TZID=Europe/London");
+  });
+
+  it("excludes an all-day override without resurrecting its master occurrence", () => {
+    const recurrenceId = new Date("2026-04-06T18:00:00.000Z");
+    const ics = formatEventsAsIcal(
+      [
+        makeEvent({
+          id: "timed-master",
+          endTime: new Date("2026-03-30T19:00:00.000Z"),
+          recurrenceRule: { frequency: "WEEKLY" },
+          sourceEventUid: "mixed-series",
+          startTime: new Date("2026-03-30T18:00:00.000Z"),
+        }),
+        makeEvent({
+          id: "all-day-override",
+          endTime: new Date("2026-04-08T00:00:00.000Z"),
+          isAllDay: true,
+          recurrenceId,
+          sourceEventUid: "mixed-series",
+          startTime: new Date("2026-04-07T00:00:00.000Z"),
+        }),
+      ],
+      { ...DEFAULT_SETTINGS, excludeAllDayEvents: true },
+    );
+
+    expect(ics).toContain("EXDATE:20260406T180000Z");
+    expect(ics).not.toContain("RECURRENCE-ID");
   });
 
   /*

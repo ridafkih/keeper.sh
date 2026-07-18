@@ -89,6 +89,27 @@ describe("parseIcsEvents", () => {
     expect(nominalDurationEvent?.recurrenceDuration).toEqual({ days: 1 });
   });
 
+  it("defaults a date-only event without DTEND or DURATION to one day", () => {
+    const calendar = parseIcsCalendar({
+      icsString: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Keeper Test//EN",
+        "BEGIN:VEVENT",
+        "UID:date-only-default-duration",
+        "DTSTART;VALUE=DATE:20260308",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    });
+
+    expect(parseIcsEvents(calendar)[0]).toMatchObject({
+      endTime: new Date("2026-03-09T00:00:00.000Z"),
+      isAllDay: true,
+      startTime: new Date("2026-03-08T00:00:00.000Z"),
+    });
+  });
+
   it.each([
     {
       duration: "-P1D",

@@ -114,19 +114,7 @@ const buildSyncedRangeCondition = (start: Date, end: Date): SQL | undefined =>
       isNotNull(eventStatesTable.recurrenceRule),
       lte(eventStatesTable.startTime, end),
     ),
-    and(
-      isNotNull(eventStatesTable.recurrenceId),
-      or(
-        and(
-          gte(eventStatesTable.endTime, start),
-          lte(eventStatesTable.startTime, end),
-        ),
-        and(
-          gte(eventStatesTable.recurrenceId, start),
-          lte(eventStatesTable.recurrenceId, end),
-        ),
-      ),
-    ),
+    isNotNull(eventStatesTable.recurrenceId),
   );
 
 const getEventsInRange = async (

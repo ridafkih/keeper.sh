@@ -12,6 +12,7 @@ import {
   assertNoUnsupportedRecurrenceDates,
   assertSupportedRecurrenceTimeZones,
 } from "./validate-recurrence-input";
+import { wallTimeToInstant } from "./timezone-instant";
 
 interface IcsSourceFetcherConfig {
   calendarId: string;
@@ -40,6 +41,43 @@ const FLOATING_DATE_PROPERTIES = new Set([
   "RECURRENCE-ID",
 ]);
 
+const FLOATING_UNTIL_PATTERN = /(^|;)UNTIL=(\d{8}T\d{6})(?=;|$)/i;
+
+const formatUtcIcsDateTime = (date: Date): string =>
+  date.toISOString().replaceAll(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+
+const applyCalendarTimeZoneToFloatingUntil = (
+  line: string,
+  calendarTimeZone: string | undefined,
+): string => {
+  const separatorIndex = line.indexOf(":");
+  if (separatorIndex === -1 || line.slice(0, separatorIndex).toUpperCase() !== "RRULE") {
+    return line;
+  }
+  const value = line.slice(separatorIndex + 1);
+  const match = FLOATING_UNTIL_PATTERN.exec(value);
+  const floatingUntil = match?.[2];
+  if (!floatingUntil) {
+    return line;
+  }
+  if (!calendarTimeZone) {
+    throw new RangeError("Floating ICS RRULE UNTIL requires an explicit X-WR-TIMEZONE");
+  }
+  const year = Number(floatingUntil.slice(0, 4));
+  const month = Number(floatingUntil.slice(4, 6));
+  const day = Number(floatingUntil.slice(6, 8));
+  const hour = Number(floatingUntil.slice(9, 11));
+  const minute = Number(floatingUntil.slice(11, 13));
+  const second = Number(floatingUntil.slice(13, 15));
+  const wallTime = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  const instant = wallTimeToInstant(wallTime, calendarTimeZone);
+  const normalizedValue = value.replace(
+    FLOATING_UNTIL_PATTERN,
+    (matched, prefix: string) => `${prefix}UNTIL=${formatUtcIcsDateTime(instant)}`,
+  );
+  return `${line.slice(0, separatorIndex + 1)}${normalizedValue}`;
+};
+
 const applyCalendarTimeZoneToFloatingEventDates = (
   ical: string,
   calendarTimeZone: string | undefined,
@@ -58,6 +96,10 @@ const applyCalendarTimeZoneToFloatingEventDates = (
     }
     if (!insideEvent) {
       return line;
+    }
+
+    if (line.slice(0, line.indexOf(":")).toUpperCase() === "RRULE") {
+      return applyCalendarTimeZoneToFloatingUntil(line, calendarTimeZone);
     }
 
     const separatorIndex = line.indexOf(":");

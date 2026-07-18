@@ -56,7 +56,19 @@ const HIGH_FREQUENCY_INTERVAL_MS: Partial<Record<IcsRecurrenceRule["frequency"],
   SECONDLY: 1000,
 };
 
-const assertHighFrequencyRuleWithinBudget = (
+const hasOccurrenceSelectors = (rule: IcsRecurrenceRule): boolean => Boolean(
+  rule.byDay
+  || rule.byHour
+  || rule.byMinute
+  || rule.byMonth
+  || rule.byMonthday
+  || rule.bySecond
+  || rule.bySetPos
+  || rule.byWeekNo
+  || rule.byYearday,
+);
+
+const assertUnfilteredHighFrequencyRuleWithinBudget = (
   master: SyncableEvent,
   recurrenceStart: Date,
   recurrenceEnd: Date,
@@ -76,7 +88,10 @@ const assertHighFrequencyRuleWithinBudget = (
     Math.floor((boundedEndTime - recurrenceStart.getTime()) / (baseInterval * interval)) + 1,
     0,
   );
-  const potentialOccurrences = rule.count ?? occurrencesBySpan;
+  let potentialOccurrences = rule.count ?? occurrencesBySpan;
+  if (typeof rule.count !== "number" && hasOccurrenceSelectors(rule)) {
+    potentialOccurrences = 0;
+  }
   if (potentialOccurrences > MAX_OCCURRENCES_PER_SERIES) {
     throw new RecurrenceMaterializationLimitError({
       calendarId: master.calendarId,
@@ -86,7 +101,6 @@ const assertHighFrequencyRuleWithinBudget = (
     }, MAX_OCCURRENCES_PER_SERIES);
   }
 };
-
 const assertValidWindow = (window: RecurrenceMaterializationWindow): void => {
   if (
     Number.isNaN(window.start.getTime())
@@ -336,7 +350,7 @@ const materializeMaster = (
     new Date(window.start.getTime() - Math.max(durationForWindowLookback, 0)),
     timeZone,
   );
-  assertHighFrequencyRuleWithinBudget(master, recurrenceStart, recurrenceEnd);
+  assertUnfilteredHighFrequencyRuleWithinBudget(master, recurrenceStart, recurrenceEnd);
   const excludedSlots = new Set(master.exceptionDates?.map((date) => date.getTime()));
   const recurrence = new RRule(toRRuleOptions(
     master.recurrenceRule,

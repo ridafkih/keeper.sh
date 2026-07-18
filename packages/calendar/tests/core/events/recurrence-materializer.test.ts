@@ -516,6 +516,19 @@ describe("materializeRecurrenceEvents", () => {
     ], WINDOW)).toThrow("exceeds the 10000 occurrence materialization limit");
   });
 
+  it("accepts sparse hourly rules whose actual output remains within the budget", () => {
+    const result = materializeRecurrenceEvents([
+      createEvent({
+        endTime: new Date("2020-01-01T09:30:00.000Z"),
+        recurrenceRule: { byHour: [9], frequency: "HOURLY" },
+        startTime: new Date("2020-01-01T09:00:00.000Z"),
+      }),
+    ], WINDOW);
+
+    expect(result).toHaveLength(31);
+    expect(result.every((event) => event.startTime.getUTCHours() === 9)).toBe(true);
+  });
+
   it("translates ts-ics zero-based BYMONTH values without shifting the month", () => {
     const result = materializeRecurrenceEvents([
       createEvent({

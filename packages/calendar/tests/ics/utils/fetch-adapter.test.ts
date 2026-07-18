@@ -103,6 +103,44 @@ describe("createIcsSourceFetcher", () => {
     });
   });
 
+  it("interprets floating RRULE UNTIL in the calendar timezone", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const floatingIcs = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//test//test//EN",
+      "X-WR-TIMEZONE:America/New_York",
+      "BEGIN:VEVENT",
+      "UID:floating-until@test",
+      "DTSTART:20260301T090000",
+      "DTEND:20260301T100000",
+      "RRULE:FREQ=DAILY;UNTIL=20260303T090000",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: floatingIcs });
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({ changed: false });
+
+    const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+    expect(result.events[0]?.recurrenceRule?.until?.date).toEqual(
+      new Date("2026-03-03T14:00:00.000Z"),
+    );
+  });
+
+  it("rejects floating RRULE UNTIL without calendar timezone context", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const floatingIcs = MINIMAL_ICS.replace(
+      "SUMMARY:Test",
+      "RRULE:FREQ=DAILY;UNTIL=20260519T120000\r\nSUMMARY:Test",
+    );
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: floatingIcs });
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({ changed: false });
+
+    await expect(createIcsSourceFetcher(buildConfig()).fetchEvents())
+      .rejects.toThrow("Floating ICS RRULE UNTIL requires an explicit X-WR-TIMEZONE");
+  });
+
   it("treats VALUE=DATE-TIME as floating rather than all-day", async () => {
     const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
     const floatingIcs = [

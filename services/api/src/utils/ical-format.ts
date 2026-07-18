@@ -2,7 +2,7 @@ import { KEEPER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { resolveIsAllDayEvent } from "@keeper.sh/calendar";
 import { buildVtimezone, buildZonedIcsDate } from "@keeper.sh/calendar/ics";
 import { generateIcsCalendar } from "ts-ics";
-import type { IcsCalendar, IcsDateObject, IcsEvent, IcsRecurrenceRule, IcsTimezone } from "ts-ics";
+import type { IcsCalendar, IcsDateObject, IcsDuration, IcsEvent, IcsRecurrenceRule, IcsTimezone } from "ts-ics";
 
 interface FeedSettings {
   includeEventName: boolean;
@@ -24,6 +24,7 @@ interface CalendarEvent {
   isAllDay: boolean | null;
   calendarName: string;
   recurrenceRule: IcsRecurrenceRule | null;
+  recurrenceDuration: IcsDuration | null;
   exceptionDates: IcsDateObject[] | null;
   recurrenceId: Date | null;
   sourceEventUid: string | null;
@@ -73,6 +74,15 @@ const resolveEventSummary = (event: CalendarEvent, settings: FeedSettings): stri
     event_name: event.title || "Untitled",
     calendar_name: event.calendarName,
   });
+};
+
+const buildTransparency = (
+  availability: CalendarEvent["availability"],
+): Pick<IcsEvent, "timeTransparent"> => {
+  if (availability === "free") {
+    return { timeTransparent: "TRANSPARENT" };
+  }
+  return {};
 };
 
 interface EventGroup {
@@ -126,16 +136,19 @@ const groupEventsBySourceUid = (events: CalendarEvent[]): EventGroup[] => {
 const buildBaseIcsEvent = (event: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => {
   const isAllDay = resolveIsAllDayEvent(toAllDayShape(event));
   const timezone = event.startTimeZone ?? "";
-  return {
-    end: buildZonedIcsDate(event.endTime, timezone, isAllDay),
+  const common = {
     stamp: { date: new Date() },
     start: buildZonedIcsDate(event.startTime, timezone, isAllDay),
     summary: resolveEventSummary(event, settings),
     uid,
-    ...(event.availability === "free" && { timeTransparent: "TRANSPARENT" }),
+    ...buildTransparency(event.availability),
     ...(settings.includeEventDescription && event.description && { description: event.description }),
     ...(settings.includeEventLocation && event.location && { location: event.location }),
   };
+  if (event.recurrenceRule && event.recurrenceDuration) {
+    return { ...common, duration: event.recurrenceDuration };
+  }
+  return { ...common, end: buildZonedIcsDate(event.endTime, timezone, isAllDay) };
 };
 
 const buildMasterIcsEvent = (master: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => {
@@ -204,10 +217,38 @@ const shouldIncludeEvent = (event: CalendarEvent, settings: FeedSettings): boole
 };
 
 const formatEventsAsIcal = (events: CalendarEvent[], settings: FeedSettings): string => {
-  const filteredEvents = events.filter((event) => shouldIncludeEvent(event, settings));
-  const groups = groupEventsBySourceUid(filteredEvents);
+  const groups = groupEventsBySourceUid(events).flatMap((group): EventGroup[] => {
+    if (!shouldIncludeEvent(group.master, settings)) {
+      return group.overrides
+        .filter((override) => shouldIncludeEvent(override, settings))
+        .map((override) => ({ master: override, overrides: [] }));
+    }
+    const includedOverrides = group.overrides.filter(
+      (override) => shouldIncludeEvent(override, settings),
+    );
+    const excludedOverrideDates = group.overrides.flatMap((override): IcsDateObject[] => {
+      if (shouldIncludeEvent(override, settings) || !override.recurrenceId) {
+        return [];
+      }
+      return [{ date: override.recurrenceId }];
+    });
+    if (excludedOverrideDates.length === 0) {
+      return [{ master: group.master, overrides: includedOverrides }];
+    }
+    return [{
+      master: {
+        ...group.master,
+        exceptionDates: [
+          ...group.master.exceptionDates ?? [],
+          ...excludedOverrideDates,
+        ],
+      },
+      overrides: includedOverrides,
+    }];
+  });
   const icsEvents = groups.flatMap((group) => buildIcsEventsForGroup(group, settings));
-  const timezones = collectTimezones(filteredEvents);
+  const includedEvents = groups.flatMap(({ master, overrides }) => [master, ...overrides]);
+  const timezones = collectTimezones(includedEvents);
 
   const calendar: IcsCalendar = {
     events: icsEvents,

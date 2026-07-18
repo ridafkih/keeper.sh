@@ -88,9 +88,11 @@ export {
 } from "./core/events/recurrence-materializer";
 export {
   parseStoredIcsExceptionDates,
+  parseStoredIcsRecurrence,
   parseStoredIcsRecurrenceRule,
   parseStoredRecurrenceForMaterialization,
   type MaterializedRecurrenceFields,
+  type ParsedStoredRecurrenceRule,
   type StoredRecurrenceMaterializationInput,
 } from "./core/events/stored-recurrence";
 export {

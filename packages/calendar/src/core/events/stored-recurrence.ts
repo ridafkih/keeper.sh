@@ -22,7 +22,7 @@ interface ParsedStoredRecurrenceRule {
   recurrenceRule: IcsRecurrenceRule;
 }
 
-const parseStoredRecurrenceRule = (
+const parseStoredIcsRecurrence = (
   value: string | null,
   eventId: string,
 ): ParsedStoredRecurrenceRule | null => {
@@ -48,7 +48,7 @@ const parseStoredIcsRecurrenceRule = (
   value: string | null,
   eventId: string,
 ): IcsRecurrenceRule | null =>
-  parseStoredRecurrenceRule(value, eventId)?.recurrenceRule ?? null;
+  parseStoredIcsRecurrence(value, eventId)?.recurrenceRule ?? null;
 
 const serializeStoredIcsRecurrenceRule = (
   recurrenceRule: IcsRecurrenceRule | undefined,
@@ -104,7 +104,7 @@ const parseStoredRecurrenceForMaterialization = (
     input.exceptionDates,
     input.eventId,
   )?.map((exceptionDate) => exceptionDate.date);
-  const storedRecurrenceRule = parseStoredRecurrenceRule(
+  const storedRecurrenceRule = parseStoredIcsRecurrence(
     input.recurrenceRule,
     input.eventId,
   );
@@ -123,11 +123,13 @@ const parseStoredRecurrenceForMaterialization = (
 
 export {
   parseStoredIcsExceptionDates,
+  parseStoredIcsRecurrence,
   parseStoredIcsRecurrenceRule,
   parseStoredRecurrenceForMaterialization,
   serializeStoredIcsRecurrenceRule,
 };
 export type {
   MaterializedRecurrenceFields,
+  ParsedStoredRecurrenceRule,
   StoredRecurrenceMaterializationInput,
 };
