@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SourceEvent } from "../../../src/core/types";
-import type {
-  IngestionChanges,
-  IngestionPersistenceWork,
-} from "../../../src/core/sync-engine/ingest";
+import type { IngestionChanges } from "../../../src/core/sync-engine/ingest";
 import { parseGoogleEvents } from "../../../src/providers/google/source/utils/fetch-events";
 import { parseOutlookEvents } from "../../../src/providers/outlook/source/utils/fetch-events";
 
@@ -43,10 +40,6 @@ const serializeOptionalJson = (value: unknown): string | null => {
     return null;
   }
   return JSON.stringify(value);
-};
-
-const failUninitializedBarrier = (): never => {
-  throw new Error("Test barrier was not initialized");
 };
 
 const toExistingEvent = (id: string, event: SourceEvent): ExistingEvent => ({
@@ -567,86 +560,54 @@ describe("ingestSource", () => {
     expect(flushedSnapshots).toEqual([snapshot]);
   });
 
-  it("locks before fetching so a slow older request cannot overwrite a newer snapshot", async () => {
+  it("fetches before opening the persistence transaction", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
-    let transactionAttempts = 0;
-    let releaseSecondAttempt: () => void = failUninitializedBarrier;
-    const secondAttempt = new Promise<void>((resolve) => {
-      releaseSecondAttempt = resolve;
-    });
-    let transactionTail = Promise.resolve();
-    const fetchOrder: string[] = [];
-    const storedEvents: ExistingEvent[] = [];
-    const storedSnapshot: { value: { contentHash: string; ical: string } | null } = {
-      value: null,
-    };
+    const order: string[] = [];
 
-    const withPersistenceTransaction = async (
-      work: IngestionPersistenceWork,
-    ) => {
-      transactionAttempts += 1;
-      if (transactionAttempts === 2) {
-        releaseSecondAttempt();
-      }
-      const previousTransaction = transactionTail;
-      let releaseTransaction: () => void = failUninitializedBarrier;
-      transactionTail = new Promise<void>((resolve) => {
-        releaseTransaction = resolve;
-      });
-      await previousTransaction;
-
-      try {
-        return await work({
-          readExistingEvents: () => Promise.resolve([...storedEvents]),
-          flush: (changes) => {
-            const deletedIds = new Set(changes.deletes);
-            const retainedEvents = storedEvents.filter((event) => !deletedIds.has(event.id));
-            storedEvents.splice(0, storedEvents.length, ...retainedEvents);
-            for (const event of changes.inserts) {
-              storedEvents.push(toExistingEvent(`state-${event.uid}`, event));
-            }
-            if (changes.snapshot) {
-              storedSnapshot.value = changes.snapshot;
-            }
-            return Promise.resolve();
-          },
-        });
-      } finally {
-        releaseTransaction();
-      }
-    };
-
-    const runIngest = (identity: string, waitForConcurrentAttempt = false) => ingestSource({
-      calendarId: "cal-concurrent",
-      fetchEvents: async () => {
-        if (waitForConcurrentAttempt) {
-          await secondAttempt;
-        }
-        fetchOrder.push(identity);
-        return {
-          events: [makeSourceEvent(
-            identity,
-            new Date("2026-03-15T09:00:00Z"),
-            new Date("2026-03-15T10:00:00Z"),
-          )],
-          snapshot: { contentHash: identity, ical: `BEGIN:${identity}` },
-        };
+    await ingestSource({
+      calendarId: "cal-fetch-order",
+      fetchEvents: () => {
+        order.push("fetch");
+        return Promise.resolve({ events: [] });
       },
-      withPersistenceTransaction,
+      withPersistenceTransaction: (work) => {
+        order.push("transaction");
+        return work({
+          flush: () => Promise.resolve(),
+          readExistingEvents: () => Promise.resolve([]),
+        });
+      },
     });
 
-    await Promise.all([
-      runIngest("older-snapshot", true),
-      runIngest("newer-snapshot"),
-    ]);
-
-    expect(storedEvents).toHaveLength(1);
-    expect(fetchOrder).toEqual(["older-snapshot", "newer-snapshot"]);
-    expect(storedEvents[0]?.sourceEventUid).toBe("newer-snapshot");
-    expect(storedSnapshot.value?.contentHash).toBe("newer-snapshot");
+    expect(order).toEqual(["fetch", "transaction"]);
   });
 
-  it("locks an unchanged fetch but does not read or flush persistence", async () => {
+  it("discards a superseded fetch before opening the persistence transaction", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    let transactionEntered = false;
+
+    const result = await ingestSource({
+      calendarId: "cal-superseded",
+      fetchEvents: () => Promise.resolve({
+        events: [makeSourceEvent(
+          "older-snapshot",
+          new Date("2026-03-15T09:00:00Z"),
+          new Date("2026-03-15T10:00:00Z"),
+        )],
+        snapshot: { contentHash: "older-snapshot", ical: "BEGIN:older-snapshot" },
+      }),
+      isCurrent: () => Promise.resolve(false),
+      withPersistenceTransaction: () => {
+        transactionEntered = true;
+        return Promise.resolve({ eventsAdded: 0, eventsRemoved: 0 });
+      },
+    });
+
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+    expect(transactionEntered).toBe(false);
+  });
+
+  it("opens a transaction for an unchanged fetch but does not read or flush persistence", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
     let transactionEntered = false;
     let persistenceUsed = false;

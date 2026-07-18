@@ -14,7 +14,7 @@ import {
   SOURCE_INGEST_LOCK_NAMESPACE,
 } from "@keeper.sh/calendar";
 import { INGEST_SOURCE_TIMEOUT_MS, PROVIDER_INGEST_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
-import type { CalendarBackoffState, IngestionFetchEventsResult, IngestionPersistenceWork, RedisRateLimiter, TokenState } from "@keeper.sh/calendar";
+import type { CalendarBackoffState, IngestionFetchEventsResult, IngestionPersistenceWork, IngestionResult, RedisRateLimiter, TokenState } from "@keeper.sh/calendar";
 import {
   createIcsSourceFetcher,
   interpretFullDayTimedEventsAsAllDay,
@@ -39,10 +39,34 @@ import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import { resolveMissingCalendarFailure } from "@/utils/provider-ingest-failure";
 import { withAbortTimeout } from "@/utils/with-abort-timeout";
+import { createSyncLock } from "@keeper.sh/sync";
 
 const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
 const SOURCE_TIMEOUT_DATABASE_GRACE_MS = 5000;
 const SOURCE_CONCURRENCY = 5;
+const SOURCE_INGEST_LOCK_KEY_PREFIX = "source-ingest:";
+const sourceIngestLock = createSyncLock(refreshLockRedis);
+
+const runSourceIngest = async (
+  calendarId: string,
+  signal: AbortSignal,
+  work: (isCurrent: () => Promise<boolean>) => Promise<IngestionResult>,
+): Promise<IngestionResult> => {
+  const lockResult = await sourceIngestLock.acquire(
+    `${SOURCE_INGEST_LOCK_KEY_PREFIX}${calendarId}`,
+    signal,
+  );
+  if (!lockResult.acquired) {
+    signal.throwIfAborted();
+    return { eventsAdded: 0, eventsRemoved: 0 };
+  }
+  try {
+    return await work(lockResult.handle.isCurrent);
+  } finally {
+    await lockResult.handle.release();
+  }
+};
+
 const resolveIngestErrorSlug = (error: unknown): string => {
   if (!isTimeoutError(error)) {
     return "provider-api-error";
@@ -341,9 +365,10 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
             const ingestEvents: Record<string, unknown>[] = [];
 
             const result = await widelog.time.measure("duration_ms", () =>
-              ingestSource({
+              runSourceIngest(source.calendarId, signal, (isCurrent) => ingestSource({
                 calendarId: source.calendarId,
                 fetchEvents: () => fetcher.fetchEvents(),
+                isCurrent,
                 withPersistenceTransaction:
                   createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),
                 onIngestEvent: (event) => {
@@ -352,7 +377,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
                     "source.provider": source.provider,
                   });
                 },
-              }),
+              })),
             );
 
             if (source.ingestFailureCount > 0) {
@@ -494,9 +519,10 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
             const ingestEvents: Record<string, unknown>[] = [];
 
             const result = await widelog.time.measure("duration_ms", () =>
-              ingestSource({
+              runSourceIngest(source.calendarId, signal, (isCurrent) => ingestSource({
                 calendarId: source.calendarId,
                 fetchEvents: () => fetcher.fetchEvents(),
+                isCurrent,
                 withPersistenceTransaction:
                   createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),
                 onIngestEvent: (event) => {
@@ -505,7 +531,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
                     "source.provider": source.provider,
                   });
                 },
-              }),
+              })),
             );
 
             if (source.ingestFailureCount > 0) {
@@ -626,7 +652,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
             const ingestEvents: Record<string, unknown>[] = [];
 
             const result = await widelog.time.measure("duration_ms", () =>
-              ingestSource({
+              runSourceIngest(source.calendarId, signal, (isCurrent) => ingestSource({
                 calendarId: source.calendarId,
                 fetchEvents: () =>
                   fetcher.fetchEvents({
@@ -636,6 +662,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
                         enabled: source.treatFullDayTimedEventsAsAllDay,
                       }),
                   }),
+                isCurrent,
                 withPersistenceTransaction:
                   createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),
                 onIngestEvent: (event) => {
@@ -644,7 +671,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
                     "source.provider": "ical",
                   });
                 },
-              }),
+              })),
             );
 
             if (source.ingestFailureCount > 0) {

@@ -49,6 +49,7 @@ type IngestionPersistenceWork = (
 interface BaseIngestSourceOptions {
   calendarId: string;
   fetchEvents: () => Promise<FetchEventsResult>;
+  isCurrent?: () => Promise<boolean>;
   onIngestEvent?: (event: Record<string, unknown>) => void;
 }
 
@@ -86,7 +87,7 @@ const EMPTY_RESULT: IngestionResult = { eventsAdded: 0, eventsRemoved: 0 };
 const RECURRENCE_VALIDATION_YEARS = 2;
 
 const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResult> => {
-  const { calendarId, fetchEvents, onIngestEvent } = options;
+  const { calendarId, fetchEvents, isCurrent, onIngestEvent } = options;
 
   const wideEvent: Record<string, unknown> = {
     "calendar.id": calendarId,
@@ -99,21 +100,26 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
 
   try {
     const withPersistenceTransaction = resolvePersistenceTransaction(options);
+    const fetchResult = await fetchEvents();
+    wideEvent["source_events.count"] = fetchResult.events.length;
+    const recurrenceValidationWindow = getOAuthSyncWindow(RECURRENCE_VALIDATION_YEARS);
+
+    assertSourceRecurrenceMaterializationWithinBudget(
+      calendarId,
+      fetchResult.events,
+      {
+        end: recurrenceValidationWindow.timeMax,
+        start: recurrenceValidationWindow.timeMin,
+      },
+    );
+
+    if (isCurrent && !(await isCurrent())) {
+      wideEvent["outcome"] = "superseded";
+      wideEvent["flushed"] = false;
+      return EMPTY_RESULT;
+    }
 
     return await withPersistenceTransaction(async ({ readExistingEvents, flush }) => {
-      const fetchResult = await fetchEvents();
-      wideEvent["source_events.count"] = fetchResult.events.length;
-      const recurrenceValidationWindow = getOAuthSyncWindow(RECURRENCE_VALIDATION_YEARS);
-
-      assertSourceRecurrenceMaterializationWithinBudget(
-        calendarId,
-        fetchResult.events,
-        {
-          end: recurrenceValidationWindow.timeMax,
-          start: recurrenceValidationWindow.timeMin,
-        },
-      );
-
       if (fetchResult.unchanged) {
         wideEvent["outcome"] = "unchanged";
         wideEvent["flushed"] = false;

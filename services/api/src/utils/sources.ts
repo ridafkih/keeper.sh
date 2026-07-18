@@ -24,9 +24,12 @@ import { applySourceSyncDefaults } from "./source-sync-defaults";
 import { safeFetchOptions } from "./safe-fetch-options";
 
 import { spawnBackgroundJob } from "./background-task";
-import { database, premiumService } from "@/context";
+import { database, premiumService, redis } from "@/context";
+import { createSyncLock } from "@keeper.sh/sync";
 
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
+const SOURCE_INGEST_LOCK_KEY_PREFIX = "source-ingest:";
+const sourceIngestLock = createSyncLock(redis);
 
 const FIRST_RESULT_LIMIT = 1;
 const ICAL_CALENDAR_TYPE = "ical";
@@ -95,18 +98,30 @@ const ingestIcsSource = async (source: Source): Promise<void> => {
     safeFetchOptions,
   });
 
-  await ingestSource({
-    calendarId: source.id,
-    fetchEvents: () =>
-      fetcher.fetchEvents({
-        interpretEvents: (events, context) =>
-          interpretFullDayTimedEventsAsAllDay(events, {
-            calendarTimeZone: context.calendarTimeZone,
-            enabled: source.treatFullDayTimedEventsAsAllDay,
-          }),
-      }),
-    withPersistenceTransaction: createIngestionPersistenceTransaction(source.id),
-  });
+  const lockResult = await sourceIngestLock.acquire(
+    `${SOURCE_INGEST_LOCK_KEY_PREFIX}${source.id}`,
+  );
+  if (!lockResult.acquired) {
+    return;
+  }
+
+  try {
+    await ingestSource({
+      calendarId: source.id,
+      fetchEvents: () =>
+        fetcher.fetchEvents({
+          interpretEvents: (events, context) =>
+            interpretFullDayTimedEventsAsAllDay(events, {
+              calendarTimeZone: context.calendarTimeZone,
+              enabled: source.treatFullDayTimedEventsAsAllDay,
+            }),
+        }),
+      isCurrent: lockResult.handle.isCurrent,
+      withPersistenceTransaction: createIngestionPersistenceTransaction(source.id),
+    });
+  } finally {
+    await lockResult.handle.release();
+  }
 };
 
 const getUserSources = async (userId: string): Promise<Source[]> => {
