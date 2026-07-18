@@ -15,6 +15,7 @@ interface RemoveOperationTimeBoundary {
 }
 
 interface StaleMappingResult {
+  staleReasonCounts: StaleReasonCounts;
   staleMappingIds: string[];
   staleMappedEventIds: Set<string>;
   staleRemoteMappings: EventMapping[];
@@ -24,7 +25,23 @@ interface ComputeSyncOperationsResult {
   mappingUpdates: MappingUpdate[];
   mappingIdsToPrune: string[];
   operations: SyncOperation[];
+  staleReasonCounts: StaleReasonCounts;
   staleMappingIds: string[];
+}
+
+interface StaleReasonCounts {
+  localHashChanged: number;
+  occurrenceReassigned: number;
+  remoteAvailabilityChanged: number;
+  remoteContentChanged: number;
+  remoteMissing: number;
+  remoteTimeChanged: number;
+}
+
+interface RemoteStateChanges {
+  availability: boolean;
+  content: boolean;
+  time: boolean;
 }
 
 interface MappingUpdate {
@@ -41,6 +58,15 @@ interface OccurrenceReassignment {
 
 const getDefaultTimeBoundary = (): RemoveOperationTimeBoundary => ({
   syncWindowStart: getOAuthSyncWindowStart(),
+});
+
+const createStaleReasonCounts = (): StaleReasonCounts => ({
+  localHashChanged: 0,
+  occurrenceReassigned: 0,
+  remoteAvailabilityChanged: 0,
+  remoteContentChanged: 0,
+  remoteMissing: 0,
+  remoteTimeChanged: 0,
 });
 
 const getMappingSyncEventId = (mapping: EventMapping): string =>
@@ -180,11 +206,11 @@ const matchRemoteEventsToMappings = (
   return matches;
 };
 
-const hasRemoteStateChanged = (
+const getRemoteStateChanges = (
   mapping: EventMapping,
   localEvent: MaterializedSyncableEvent,
   remoteEvent: RemoteEvent,
-): boolean => {
+): RemoteStateChanges => {
   const remoteContentChanged = typeof remoteEvent.editableContentHash === "string"
     && remoteEvent.editableContentHash !== createEditableEventContentHash(localEvent);
   const localAvailability = localEvent.availability ?? "busy";
@@ -198,7 +224,20 @@ const hasRemoteStateChanged = (
   const remoteTimeChanged = !isSameSerializedSecond(remoteEvent.startTime, mapping.startTime)
     || !isSameSerializedSecond(remoteEvent.endTime, mapping.endTime);
 
-  return remoteAvailabilityChanged || remoteContentChanged || remoteTimeChanged;
+  return {
+    availability: remoteAvailabilityChanged,
+    content: remoteContentChanged,
+    time: remoteTimeChanged,
+  };
+};
+
+const hasRemoteStateChanged = (
+  mapping: EventMapping,
+  localEvent: MaterializedSyncableEvent,
+  remoteEvent: RemoteEvent,
+): boolean => {
+  const changes = getRemoteStateChanges(mapping, localEvent, remoteEvent);
+  return changes.availability || changes.content || changes.time;
 };
 
 const identifyStaleMappings = (
@@ -210,12 +249,14 @@ const identifyStaleMappings = (
   const staleMappingIds: string[] = [];
   const staleMappedEventIds = new Set<string>();
   const staleRemoteMappings: EventMapping[] = [];
+  const staleReasonCounts = createStaleReasonCounts();
 
   for (const mapping of mappings) {
     const syncEventId = getMappingSyncEventId(mapping);
     const localEventExists = localEventIds.has(syncEventId);
     const remoteEvent = remoteEventsByMappingId.get(mapping.id);
     if (localEventExists && !remoteEvent) {
+      staleReasonCounts.remoteMissing += 1;
       staleMappingIds.push(mapping.id);
       staleMappedEventIds.add(syncEventId);
       staleRemoteMappings.push(mapping);
@@ -232,16 +273,37 @@ const identifyStaleMappings = (
     }
 
     const localEventHash = createSyncEventContentHash(localEvent);
-    const eventContentChanged = mapping.syncEventHash !== localEventHash;
+    const localHashChanged = mapping.syncEventHash !== localEventHash;
+    const remoteChanges = getRemoteStateChanges(mapping, localEvent, remoteEvent);
+    const remoteStateChanged = remoteChanges.availability
+      || remoteChanges.content
+      || remoteChanges.time;
 
-    if (eventContentChanged || hasRemoteStateChanged(mapping, localEvent, remoteEvent)) {
+    if (localHashChanged || remoteStateChanged) {
+      if (localHashChanged) {
+        staleReasonCounts.localHashChanged += 1;
+      }
+      if (remoteChanges.availability) {
+        staleReasonCounts.remoteAvailabilityChanged += 1;
+      }
+      if (remoteChanges.content) {
+        staleReasonCounts.remoteContentChanged += 1;
+      }
+      if (remoteChanges.time) {
+        staleReasonCounts.remoteTimeChanged += 1;
+      }
       staleMappingIds.push(mapping.id);
       staleMappedEventIds.add(syncEventId);
       staleRemoteMappings.push(mapping);
     }
   }
 
-  return { staleMappedEventIds, staleMappingIds, staleRemoteMappings };
+  return {
+    staleMappedEventIds,
+    staleMappingIds,
+    staleReasonCounts,
+    staleRemoteMappings,
+  };
 };
 
 const buildAddOperations = (
@@ -441,7 +503,7 @@ const computeSyncOperations = (
       getRemoteIdentity(remoteEvent.uid, remoteEvent.deleteId)),
   );
 
-  const { staleMappingIds, staleMappedEventIds, staleRemoteMappings } =
+  const { staleMappingIds, staleMappedEventIds, staleReasonCounts, staleRemoteMappings } =
     identifyStaleMappings(
       standardMappings,
       localEventIds,
@@ -517,6 +579,10 @@ const computeSyncOperations = (
       ...replacementOperations,
       ...reassignmentOperations,
     ]),
+    staleReasonCounts: {
+      ...staleReasonCounts,
+      occurrenceReassigned: remoteReassignments.length,
+    },
     staleMappingIds: [
       ...staleMappingIds,
       ...remoteReassignments.map(({ mapping }) => mapping.id),
@@ -540,4 +606,5 @@ export type {
   OccurrenceReassignment,
   RemoveOperationTimeBoundary,
   StaleMappingResult,
+  StaleReasonCounts,
 };

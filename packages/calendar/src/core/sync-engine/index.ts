@@ -11,7 +11,7 @@ import { getDatabaseErrorDetails } from "@keeper.sh/database";
 import type { SyncProgressUpdate } from "../sync/types";
 import { createSyncEventContentHash } from "../events/content-hash";
 import { computeSyncOperations } from "../sync/operations";
-import type { RemoveOperationTimeBoundary } from "../sync/operations";
+import type { RemoveOperationTimeBoundary, StaleReasonCounts } from "../sync/operations";
 import type { CalendarSyncProvider, PendingChanges } from "./types";
 
 const resolveOutcome = (superseded: boolean, invalidated: boolean): string => {
@@ -519,6 +519,26 @@ const appendDatabaseErrorFields = (
   }
 };
 
+const appendStaleReasonFields = (
+  event: Record<string, unknown>,
+  counts: StaleReasonCounts,
+): void => {
+  const fields: [string, number][] = [
+    ["stale_mappings.local_hash_changed_count", counts.localHashChanged],
+    ["stale_mappings.occurrence_reassigned_count", counts.occurrenceReassigned],
+    ["stale_mappings.remote_availability_changed_count", counts.remoteAvailabilityChanged],
+    ["stale_mappings.remote_content_changed_count", counts.remoteContentChanged],
+    ["stale_mappings.remote_missing_count", counts.remoteMissing],
+    ["stale_mappings.remote_time_changed_count", counts.remoteTimeChanged],
+  ];
+
+  for (const [field, count] of fields) {
+    if (count > 0) {
+      event[field] = count;
+    }
+  }
+};
+
 const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarResult> => {
   const {
     userId,
@@ -575,7 +595,13 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     }
 
     emitProgress("comparing", state.localEvents.length, state.remoteEvents.length);
-    const { mappingIdsToPrune, mappingUpdates, operations, staleMappingIds } = computeSyncOperations(
+    const {
+      mappingIdsToPrune,
+      mappingUpdates,
+      operations,
+      staleMappingIds,
+      staleReasonCounts,
+    } = computeSyncOperations(
       state.localEvents,
       state.existingMappings,
       state.remoteEvents,
@@ -589,6 +615,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     wideEvent["operations.remove_count"] = removeCount;
     wideEvent["operations.total"] = addCount + removeCount;
     wideEvent["stale_mappings.count"] = staleMappingIds.length;
+    appendStaleReasonFields(wideEvent, staleReasonCounts);
     wideEvent["mapping_updates.count"] = mappingUpdates.length;
 
     if (

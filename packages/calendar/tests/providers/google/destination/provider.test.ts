@@ -121,6 +121,14 @@ describe("createGoogleSyncProvider", () => {
       mappingUpdates: [],
       mappingIdsToPrune: [],
       operations: [],
+      staleReasonCounts: {
+        localHashChanged: 0,
+        occurrenceReassigned: 0,
+        remoteAvailabilityChanged: 0,
+        remoteContentChanged: 0,
+        remoteMissing: 0,
+        remoteTimeChanged: 0,
+      },
       staleMappingIds: [],
     });
 
@@ -138,6 +146,14 @@ describe("createGoogleSyncProvider", () => {
       }],
       mappingIdsToPrune: [],
       operations: [],
+      staleReasonCounts: {
+        localHashChanged: 0,
+        occurrenceReassigned: 0,
+        remoteAvailabilityChanged: 0,
+        remoteContentChanged: 0,
+        remoteMissing: 0,
+        remoteTimeChanged: 0,
+      },
       staleMappingIds: [],
     });
   });
