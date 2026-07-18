@@ -66,6 +66,51 @@ const flatten = (filters?: { availability?: string[]; isAllDay?: boolean }) =>
   );
 
 describe("flattenSyncedEvents", () => {
+  it("treats missing ICS transparency as the RFC-default busy availability", () => {
+    const [master] = rows;
+    if (!master) {
+      throw new Error("Expected a master fixture");
+    }
+    const opaqueOneOff = {
+      ...master,
+      availability: null,
+      endTime: new Date("2026-03-03T11:00:00.000Z"),
+      exceptionDates: null,
+      id: "019c0000-0000-7000-8000-000000000003",
+      recurrenceRule: null,
+      sourceEventUid: "opaque-one-off",
+      startTime: new Date("2026-03-03T10:00:00.000Z"),
+      title: "Opaque one-off",
+    };
+
+    expect(flattenSyncedEvents(
+      [opaqueOneOff],
+      sourceMap,
+      new Date("2026-03-03T00:00:00.000Z"),
+      new Date("2026-03-04T00:00:00.000Z"),
+      { availability: ["busy"] },
+    ).map((event) => event.title)).toEqual(["Opaque one-off"]);
+  });
+
+  it("does not resurrect an original slot when its override moved outside the range", () => {
+    const [master, override] = rows;
+    if (!master || !override) {
+      throw new Error("Expected recurrence fixtures");
+    }
+    const movedOutOverride = {
+      ...override,
+      endTime: new Date("2026-04-10T13:00:00.000Z"),
+      startTime: new Date("2026-04-10T12:00:00.000Z"),
+    };
+
+    expect(flattenSyncedEvents(
+      [master, movedOutOverride],
+      sourceMap,
+      new Date("2026-03-09T00:00:00.000Z"),
+      new Date("2026-03-09T23:59:59.999Z"),
+    )).toEqual([]);
+  });
+
   it("exposes separate, addressable identities for generated occurrences", () => {
     const events = flatten();
     const generatedOccurrence = events.find((event) => event.eventStateId === MASTER_ID);

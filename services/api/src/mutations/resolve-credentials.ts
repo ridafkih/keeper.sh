@@ -108,7 +108,11 @@ const resolveCredentialsByUserEventId = async (
   database: KeeperDatabase,
   userId: string,
   eventId: string,
-): Promise<{ credentials: ProviderCredentials; sourceEventUid: string | null } | null> => {
+): Promise<{
+  credentials: ProviderCredentials;
+  sourceEventId: null;
+  sourceEventUid: string | null;
+} | null> => {
   const [event] = await database
     .select({
       calendarId: userEventsTable.calendarId,
@@ -133,13 +137,18 @@ const resolveCredentialsByUserEventId = async (
     return null;
   }
 
-  return { credentials, sourceEventUid: event.sourceEventUid };
+  return {
+    credentials,
+    sourceEventId: null,
+    sourceEventUid: event.sourceEventUid,
+  };
 };
 
 type EventSource = "user" | "synced";
 
 interface ResolvedEventCredentials {
   credentials: ProviderCredentials;
+  sourceEventId: string | null;
   sourceEventUid: string | null;
   eventSource: EventSource;
 }
@@ -166,6 +175,7 @@ const resolveCredentialsByEventId = async (
   const [syncedEvent] = await database
     .select({
       calendarId: eventStatesTable.calendarId,
+      sourceEventId: eventStatesTable.sourceEventId,
       sourceEventUid: eventStatesTable.sourceEventUid,
     })
     .from(eventStatesTable)
@@ -190,6 +200,7 @@ const resolveCredentialsByEventId = async (
 
   return {
     credentials,
+    sourceEventId: syncedEvent.sourceEventId,
     sourceEventUid: syncedEvent.sourceEventUid,
     eventSource: "synced",
   };

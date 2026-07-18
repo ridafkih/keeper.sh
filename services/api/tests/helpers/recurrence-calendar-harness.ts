@@ -131,6 +131,7 @@ const toCalendarEvent = (
   event: ReturnType<typeof parseStoredSourceEventStates>[number],
 ): CalendarEvent => ({
   availability: event.availability ?? null,
+  calendarId: CALENDAR_ID,
   calendarName: CALENDAR_NAME,
   description: event.description ?? null,
   endTime: event.endTime,

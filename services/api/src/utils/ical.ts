@@ -54,6 +54,7 @@ const generateUserCalendar = async (identifier: string): Promise<string | null> 
   const calendarIds = sources.map(({ id }) => id);
   const rows = await database
     .select({
+      calendarId: eventStatesTable.calendarId,
       id: eventStatesTable.id,
       title: eventStatesTable.title,
       description: eventStatesTable.description,

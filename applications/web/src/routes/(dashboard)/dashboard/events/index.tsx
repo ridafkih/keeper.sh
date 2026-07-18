@@ -121,12 +121,6 @@ function LoadingIndicator() {
   );
 }
 
-const areDaySectionPropsEqual = (prev: DaySectionProps, next: DaySectionProps): boolean => {
-  if (prev.label !== next.label) return false;
-  if (prev.events.length !== next.events.length) return false;
-  return prev.events.every((event, index) => event.id === next.events[index].id);
-};
-
 const DaySection = memo(function DaySection({ label, events }: DaySectionProps) {
   return (
     <div className="flex flex-col px-0.5">
@@ -138,7 +132,7 @@ const DaySection = memo(function DaySection({ label, events }: DaySectionProps) 
       </div>
     </div>
   );
-}, areDaySectionPropsEqual);
+});
 
 function resolveEventRowClassName(past: boolean): string {
   return cn("flex items-center justify-between gap-2 py-1.5", past && "line-through");

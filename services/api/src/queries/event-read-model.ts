@@ -59,6 +59,9 @@ const orAbsent = <TValue>(value: TValue | null): TValue | undefined => {
 const parseAvailability = (
   value: string | null,
 ): NonNullable<SyncableEvent["availability"]> | null => {
+  if (value === null) {
+    return "busy";
+  }
   if (
     value === "busy"
     || value === "free"

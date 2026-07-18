@@ -14,6 +14,7 @@ interface FeedSettings {
 
 interface CalendarEvent {
   id: string;
+  calendarId: string;
   availability: string | null;
   title: string | null;
   description: string | null;
@@ -91,9 +92,10 @@ const groupEventsBySourceUid = (events: CalendarEvent[]): EventGroup[] => {
       ungrouped.push({ master: event, overrides: [] });
       continue;
     }
-    const sourceEvents = eventsBySourceUid.get(event.sourceEventUid) ?? [];
+    const sourceKey = JSON.stringify([event.calendarId, event.sourceEventUid]);
+    const sourceEvents = eventsBySourceUid.get(sourceKey) ?? [];
     sourceEvents.push(event);
-    eventsBySourceUid.set(event.sourceEventUid, sourceEvents);
+    eventsBySourceUid.set(sourceKey, sourceEvents);
   }
 
   const groups: EventGroup[] = [];

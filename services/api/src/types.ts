@@ -98,6 +98,11 @@ interface EventActionResult {
   error?: string;
 }
 
+interface ProviderEventReference {
+  sourceEventId: string | null;
+  sourceEventUid: string;
+}
+
 interface EventCreateResult extends EventActionResult {
   event?: KeeperEvent;
 }
@@ -167,5 +172,6 @@ export type {
   KeeperSyncStatus,
   PendingInvite,
   ProviderCredentials,
+  ProviderEventReference,
   RsvpStatus,
 };

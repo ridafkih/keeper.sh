@@ -419,7 +419,7 @@ const rsvpEventMutation = async (
     return { success: false, error: "Event not found." };
   }
 
-  const { credentials, sourceEventUid } = resolved;
+  const { credentials, sourceEventId, sourceEventUid } = resolved;
 
   if (!sourceEventUid) {
     return { success: false, error: "Event cannot be responded to (no source UID)." };
@@ -438,11 +438,21 @@ const rsvpEventMutation = async (
     );
 
     if (credentials.provider === "google") {
-      return rsvpGoogleEvent(accessToken, credentials.externalCalendarId, sourceEventUid, status, credentials.email);
+      return rsvpGoogleEvent(
+        accessToken,
+        credentials.externalCalendarId,
+        { sourceEventId, sourceEventUid },
+        status,
+        credentials.email,
+      );
     }
 
     if (credentials.provider === "outlook") {
-      return rsvpOutlookEvent(accessToken, sourceEventUid, status);
+      return rsvpOutlookEvent(
+        accessToken,
+        { sourceEventId, sourceEventUid },
+        status,
+      );
     }
 
     return { success: false, error: `RSVP not supported for provider: ${credentials.provider}` };

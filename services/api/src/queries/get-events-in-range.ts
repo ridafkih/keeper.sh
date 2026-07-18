@@ -98,10 +98,9 @@ const flattenSyncedEvents = (
 
 /**
  * Build the WHERE clause for fetching synced rows that may contribute events
- * to [start, end]: one-offs and detached overrides that overlap the range, plus recurring
- * masters whose first occurrence is at-or-before the window end (later
- * occurrences may still land inside the window even if the master is far in
- * the past).
+ * to [start, end]: overlapping one-offs, recurring masters whose first
+ * occurrence is at-or-before the window end, and detached overrides that either
+ * overlap the range at their moved time or originally occupied a slot in it.
  */
 const buildSyncedRangeCondition = (start: Date, end: Date): SQL | undefined =>
   or(
@@ -117,8 +116,16 @@ const buildSyncedRangeCondition = (start: Date, end: Date): SQL | undefined =>
     ),
     and(
       isNotNull(eventStatesTable.recurrenceId),
-      gte(eventStatesTable.endTime, start),
-      lte(eventStatesTable.startTime, end),
+      or(
+        and(
+          gte(eventStatesTable.endTime, start),
+          lte(eventStatesTable.startTime, end),
+        ),
+        and(
+          gte(eventStatesTable.recurrenceId, start),
+          lte(eventStatesTable.recurrenceId, end),
+        ),
+      ),
     ),
   );
 

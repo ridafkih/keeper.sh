@@ -1,7 +1,18 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import { googleApiErrorSchema, googleEventSchema, googleEventWithAttendeesListSchema } from "@keeper.sh/data-schemas";
+import {
+  googleApiErrorSchema,
+  googleEventSchema,
+  googleEventWithAttendeesListSchema,
+  googleEventWithAttendeesSchema,
+} from "@keeper.sh/data-schemas";
 import type { GoogleAttendee, GoogleEvent, GoogleEventWithAttendees } from "@keeper.sh/data-schemas";
-import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "@/types";
+import type {
+  EventActionResult,
+  EventInput,
+  EventUpdateInput,
+  ProviderEventReference,
+  RsvpStatus,
+} from "@/types";
 
 const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3/";
 
@@ -86,6 +97,47 @@ const findGoogleEventByUid = async (
   const body = googleEventWithAttendeesListSchema.assert(await response.json());
   const [item] = body.items ?? [];
   return item ?? null;
+};
+
+const findGoogleEventById = async (
+  accessToken: string,
+  externalCalendarId: string | null,
+  sourceEventId: string,
+): Promise<GoogleEventWithAttendees | null> => {
+  const calendarId = getCalendarId(externalCalendarId);
+  const url = new URL(
+    `calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(sourceEventId)}`,
+    GOOGLE_CALENDAR_API,
+  );
+  const response = await fetch(url, {
+    headers: buildHeaders(accessToken),
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  return googleEventWithAttendeesSchema.assert(await response.json());
+};
+
+const resolveGoogleEvent = (
+  accessToken: string,
+  externalCalendarId: string | null,
+  reference: ProviderEventReference,
+): Promise<GoogleEventWithAttendees | null> => {
+  if (reference.sourceEventId) {
+    return findGoogleEventById(
+      accessToken,
+      externalCalendarId,
+      reference.sourceEventId,
+    );
+  }
+  return findGoogleEventByUid(
+    accessToken,
+    externalCalendarId,
+    reference.sourceEventUid,
+  );
 };
 
 const buildGoogleDateField = (
@@ -197,11 +249,11 @@ const deleteGoogleEvent = async (
 const rsvpGoogleEvent = async (
   accessToken: string,
   externalCalendarId: string | null,
-  sourceEventUid: string,
+  reference: ProviderEventReference,
   status: RsvpStatus,
   userEmail: string,
 ): Promise<EventActionResult> => {
-  const existing = await findGoogleEventByUid(accessToken, externalCalendarId, sourceEventUid);
+  const existing = await resolveGoogleEvent(accessToken, externalCalendarId, reference);
 
   if (!existing?.id) {
     return { success: false, error: "Event not found on Google Calendar." };
