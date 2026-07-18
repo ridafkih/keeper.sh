@@ -264,6 +264,26 @@ describe("fetchCalendarEvents", () => {
     expect(result.events[0]?.originalEndTimeZone).toBe("Mountain Standard Time");
   });
 
+  it("accepts a null series master ID in a standalone Graph event", async () => {
+    globalThis.fetch = createFetchQueue([createJsonResponse({
+      "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
+      value: [createOutlookEvent({
+        seriesMasterId: null,
+        type: "singleInstance",
+      })],
+    })], []);
+
+    const result = await fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      timeMax: new Date("2026-07-31T00:00:00.000Z"),
+      timeMin: new Date("2026-07-01T00:00:00.000Z"),
+    });
+
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0]?.seriesMasterId).toBeNull();
+  });
+
   it("expands an Outlook series master into all paged instances during full sync", async () => {
     const requestedUrls: string[] = [];
     const instancesNextLink = "https://graph.microsoft.com/v1.0/instances?$skiptoken=next";

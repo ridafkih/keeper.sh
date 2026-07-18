@@ -40,7 +40,7 @@ interface OutlookCalendarEvent {
   lastModifiedDateTime?: string;
   originalEndTimeZone?: string;
   originalStartTimeZone?: string;
-  seriesMasterId?: string;
+  seriesMasterId?: string | null;
   type?: string;
   "@removed"?: OutlookRemovedInfo;
 }
