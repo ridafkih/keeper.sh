@@ -104,6 +104,8 @@ export {
 } from "./core/source/event-diff";
 export {
   SOURCE_INGEST_LOCK_NAMESPACE,
+  SOURCE_INGEST_LOCK_TIMEOUT_MS,
+  withSourceIngestLock,
   withSourceIngestLocks,
 } from "./core/source/ingest-lock";
 export {

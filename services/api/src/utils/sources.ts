@@ -9,6 +9,7 @@ import {
   buildEventStateInsertRow,
   ingestSource,
   insertEventStatesWithConflictResolution,
+  withSourceIngestLock,
 } from "@keeper.sh/calendar";
 import type { IngestionPersistenceWork } from "@keeper.sh/calendar";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
@@ -26,20 +27,16 @@ import { spawnBackgroundJob } from "./background-task";
 import { database, premiumService } from "@/context";
 
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
-const SOURCE_INGEST_LOCK_NAMESPACE = 9003;
 
 const FIRST_RESULT_LIMIT = 1;
 const ICAL_CALENDAR_TYPE = "ical";
 type Source = typeof calendarsTable.$inferSelect;
 
 const createIngestionPersistenceTransaction = (calendarId: string) =>
-  (work: IngestionPersistenceWork) => database.transaction(async (transaction) => {
-    await transaction.execute(sql`set local idle_in_transaction_session_timeout = 0`);
-    await transaction.execute(
-      sql`select pg_advisory_xact_lock(${SOURCE_INGEST_LOCK_NAMESPACE}, hashtext(${calendarId}))`,
-    );
-
-    return work({
+  (work: IngestionPersistenceWork) => withSourceIngestLock(
+    database,
+    calendarId,
+    (transaction) => work({
       readExistingEvents: () => transaction
         .select({
           availability: eventStatesTable.availability,
@@ -83,8 +80,8 @@ const createIngestionPersistenceTransaction = (calendarId: string) =>
           await persistCalendarSnapshot(transaction, calendarId, changes.snapshot);
         }
       },
-    });
-  });
+    }),
+  );
 
 const ingestIcsSource = async (source: Source): Promise<void> => {
   if (!source.url) {

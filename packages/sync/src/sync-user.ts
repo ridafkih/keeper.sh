@@ -10,7 +10,13 @@ import {
   withSourceIngestLocks,
   getOAuthSyncWindow,
 } from "@keeper.sh/calendar";
-import type { SyncProgressUpdate, RefreshLockStore } from "@keeper.sh/calendar";
+import type {
+  EventMapping,
+  MaterializedSyncableEvent,
+  RefreshLockStore,
+  RemoteEvent,
+  SyncProgressUpdate,
+} from "@keeper.sh/calendar";
 import {
   calendarAccountsTable,
   calendarsTable,
@@ -86,6 +92,20 @@ const EMPTY_RESULT: SyncDestinationsResult = {
   removeFailed: 0,
   errors: [],
   syncEvents: [],
+};
+
+interface DestinationLocalState {
+  localEvents: MaterializedSyncableEvent[];
+  existingMappings: EventMapping[];
+}
+
+const readDestinationReconciliationState = async (
+  readRemoteEvents: () => Promise<RemoteEvent[]>,
+  readLocalState: () => Promise<DestinationLocalState>,
+): Promise<DestinationLocalState & { remoteEvents: RemoteEvent[] }> => {
+  const remoteEvents = await readRemoteEvents();
+  const localState = await readLocalState();
+  return { ...localState, remoteEvents };
 };
 
 interface CalendarSyncCompletion {
@@ -206,24 +226,31 @@ const syncDestinationsForUser = async (
         destination.calendarId,
       );
       const reconciliationWindow = getOAuthSyncWindow(DESTINATION_RECURRENCE_YEARS);
-      const result = await withSourceIngestLocks(database, sourceCalendarIds, (lockedDatabase) => syncCalendar({
+      const reconciliationState = await readDestinationReconciliationState(
+        () => providerRef.listRemoteEvents({
+          timeMin: reconciliationWindow.timeMin,
+        }),
+        () => withSourceIngestLocks(
+          database,
+          sourceCalendarIds,
+          async (lockedDatabase) => ({
+            localEvents: await getEventsForCalendars(
+              lockedDatabase,
+              sourceCalendarIds,
+              reconciliationWindow,
+            ),
+            existingMappings: await getEventMappingsForDestination(
+              lockedDatabase,
+              destination.calendarId,
+            ),
+          }),
+        ),
+      );
+      const result = await syncCalendar({
         userId: destination.userId,
         calendarId: destination.calendarId,
         provider: providerRef,
-        readState: async () => ({
-          localEvents: await getEventsForCalendars(
-            lockedDatabase,
-            sourceCalendarIds,
-            reconciliationWindow,
-          ),
-          existingMappings: await getEventMappingsForDestination(
-            lockedDatabase,
-            destination.calendarId,
-          ),
-          remoteEvents: await providerRef.listRemoteEvents({
-            timeMin: reconciliationWindow.timeMin,
-          }),
-        }),
+        readState: () => Promise.resolve(reconciliationState),
         isCurrent: () => {
           if (config.abortSignal?.aborted) {
             return Promise.resolve(false);
@@ -234,7 +261,7 @@ const syncDestinationsForUser = async (
           return handle.isCurrent();
         },
         isInvalidated: () => isCalendarInvalidated(redis, destination.calendarId),
-        flush: createDatabaseFlush(lockedDatabase),
+        flush: createDatabaseFlush(database),
         onProgress: callbacks?.onProgress,
         onSyncEvent: (event) => {
           const enrichedEvent = {
@@ -253,7 +280,7 @@ const syncDestinationsForUser = async (
         timeBoundary: {
           syncWindowStart: reconciliationWindow.timeMin,
         },
-      }));
+      });
 
       if (callbacks?.onCalendarComplete) {
         callbacks.onCalendarComplete({
@@ -314,5 +341,5 @@ const syncDestinationsForUser = async (
   return { added, addFailed, removed, removeFailed, errors, syncEvents };
 };
 
-export { syncDestinationsForUser };
+export { readDestinationReconciliationState, syncDestinationsForUser };
 export type { CalendarSyncCompletion, CalendarSyncFailure, SyncConfig, SyncDestinationsResult };
