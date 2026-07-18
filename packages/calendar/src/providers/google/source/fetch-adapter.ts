@@ -47,24 +47,23 @@ const createGoogleSourceFetcher = (config: GoogleSourceFetcherConfig): GoogleSou
     if (result.fullSyncRequired) {
       return { events: [], fullSyncRequired: true };
     }
+    if (!result.nextSyncToken) {
+      return { events: [], fullSyncRequired: true };
+    }
 
     const parsedEvents = parseGoogleEvents(result.events);
     const { events } = filterSourceEventsToSyncWindow(parsedEvents, syncWindow);
 
-    const fetchResult: FetchEventsResult = {
+    return {
       events,
       changedEventIds: result.changedEventIds,
       cancelledEventIds: result.cancelledEventIds,
       isDeltaSync: result.isDeltaSync,
-    };
-    if (result.nextSyncToken) {
-      fetchResult.nextSyncToken = encodeStoredSyncToken(
+      nextSyncToken: encodeStoredSyncToken(
         result.nextSyncToken,
         syncTokenVersion,
-      );
-    }
-
-    return fetchResult;
+      ),
+    };
   };
 
   return { fetchEvents };

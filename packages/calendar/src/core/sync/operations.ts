@@ -305,27 +305,10 @@ const computeSyncOperations = (
 ): ComputeSyncOperationsResult => {
   const localEventIds = new Set(localEvents.map((event) => event.id));
   const localEventsById = new Map(localEvents.map((event) => [event.id, event]));
-  const occurrenceReassignments = pairReidentifiedMaterializedOccurrences(
-    localEvents,
-    existingMappings,
-  );
-  const reassignedMappingIds = new Set(
-    occurrenceReassignments.map(({ mapping }) => mapping.id),
-  );
-  const reassignedEventIds = new Set(
-    occurrenceReassignments.map(({ event }) => event.id),
-  );
-  const standardMappings = existingMappings.filter(
-    (mapping) => !reassignedMappingIds.has(mapping.id),
-  );
   const remoteEventsByIdentity = new Map(
     remoteEvents.map((event) => [`${event.uid}\u0000${event.deleteId}`, event]),
   );
-  const mappedRemoteIdentities = new Set(
-    existingMappings.map((mapping) =>
-      `${mapping.destinationEventUid}\u0000${mapping.deleteIdentifier}`),
-  );
-  const mappingIdsToPrune = standardMappings.flatMap((mapping) => {
+  const mappingIdsToPrune = existingMappings.flatMap((mapping) => {
     if (localEventIds.has(getMappingSyncEventId(mapping))) {
       return [];
     }
@@ -337,6 +320,27 @@ const computeSyncOperations = (
     }
     return [];
   });
+  const mappingIdsToPruneSet = new Set(mappingIdsToPrune);
+  const activeMappings = existingMappings.filter(
+    (mapping) => !mappingIdsToPruneSet.has(mapping.id),
+  );
+  const occurrenceReassignments = pairReidentifiedMaterializedOccurrences(
+    localEvents,
+    activeMappings,
+  );
+  const reassignedMappingIds = new Set(
+    occurrenceReassignments.map(({ mapping }) => mapping.id),
+  );
+  const reassignedEventIds = new Set(
+    occurrenceReassignments.map(({ event }) => event.id),
+  );
+  const standardMappings = activeMappings.filter(
+    (mapping) => !reassignedMappingIds.has(mapping.id),
+  );
+  const mappedRemoteIdentities = new Set(
+    existingMappings.map((mapping) =>
+      `${mapping.destinationEventUid}\u0000${mapping.deleteIdentifier}`),
+  );
 
   const { staleMappingIds, staleMappedEventIds, staleRemoteMappings } =
     identifyStaleMappings(

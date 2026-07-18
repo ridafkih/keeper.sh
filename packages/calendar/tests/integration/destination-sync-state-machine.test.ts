@@ -368,3 +368,66 @@ it("repairs far-future Keeper orphans, retains user events, and converges", asyn
   await expect(runSync()).resolves.toMatchObject({ added: 0, removed: 0 });
   expect(provider.calls).toEqual({ deletes: [], pushes: [] });
 });
+
+it("prunes an expired recurrence mapping without deleting history when the window advances", async () => {
+  const mappings = new InMemoryMappingStore();
+  const provider = new StatefulDestinationProvider();
+  const expiredOccurrence: MaterializedSyncableEvent = {
+    calendarId: SOURCE_CALENDAR_ID,
+    calendarName: "Source calendar",
+    calendarUrl: null,
+    endTime: new Date("2027-03-01T15:00:00.000Z"),
+    eventStateId: "recurring-master-state",
+    id: "recurrence-expired",
+    sourceEventUid: "sliding-window-series",
+    startTime: new Date("2027-03-01T14:00:00.000Z"),
+    summary: "Sliding window series",
+  };
+  const enteringOccurrence: MaterializedSyncableEvent = {
+    ...expiredOccurrence,
+    endTime: new Date("2029-03-01T15:00:00.000Z"),
+    id: "recurrence-entering",
+    startTime: new Date("2029-03-01T14:00:00.000Z"),
+  };
+  let localEvents = [expiredOccurrence];
+  let syncWindowStart = new Date("2027-02-22T00:00:00.000Z");
+
+  const runSync = () => syncCalendar({
+    calendarId: DESTINATION_CALENDAR_ID,
+    flush: mappings.flush,
+    isCurrent: () => Promise.resolve(true),
+    provider,
+    readState: async () => {
+      const remoteEvents = await provider.listRemoteEvents();
+      return {
+        existingMappings: [...mappings.mappings.values()],
+        localEvents,
+        remoteEvents: remoteEvents.filter((event) => event.endTime >= syncWindowStart),
+      };
+    },
+    timeBoundary: { syncWindowStart },
+    userId: "user-1",
+  });
+
+  await expect(runSync()).resolves.toMatchObject({ added: 1, removed: 0 });
+  expect(provider.remoteEvents).toHaveLength(1);
+  expect(mappings.mappings).toHaveLength(1);
+  const historicalRemoteId = requireValue([...provider.remoteEvents.keys()][0]);
+
+  localEvents = [enteringOccurrence];
+  syncWindowStart = new Date("2027-03-08T00:00:00.000Z");
+  provider.resetCalls();
+
+  await expect(runSync()).resolves.toMatchObject({ added: 1, removed: 0 });
+  expect(provider.calls.deletes).toEqual([]);
+  expect(provider.calls.pushes).toHaveLength(1);
+  expect(provider.remoteEvents).toHaveLength(2);
+  expect(provider.remoteEvents.has(historicalRemoteId)).toBe(true);
+  expect(mappings.mappings).toHaveLength(1);
+  expect([...mappings.mappings.values()][0]?.syncEventId).toBe(enteringOccurrence.id);
+
+  provider.resetCalls();
+  await expect(runSync()).resolves.toMatchObject({ added: 0, removed: 0 });
+  expect(provider.calls).toEqual({ deletes: [], pushes: [] });
+  expect(provider.remoteEvents).toHaveLength(2);
+});

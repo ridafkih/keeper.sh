@@ -316,7 +316,7 @@ const retryRateLimitedSubRequests = async (
 
     const retryBatch = pending.map((entry) => entry.request);
     if (options?.rateLimiter) {
-      await options.rateLimiter.acquire(retryBatch.length);
+      await options.rateLimiter.acquire(retryBatch.length, options.signal);
     }
     const responses = await executeBatch(retryBatch, accessToken, {
       signal: options?.signal,
@@ -362,7 +362,7 @@ const executeBatchChunked = async (
 
   for (const chunk of chunks) {
     if (options?.rateLimiter) {
-      await options.rateLimiter.acquire(chunk.length);
+      await options.rateLimiter.acquire(chunk.length, options.signal);
     }
     const responses = await executeBatch(chunk, accessToken, {
       signal: options?.signal,

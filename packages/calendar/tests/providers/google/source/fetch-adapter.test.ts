@@ -21,6 +21,16 @@ const fetchOutOfWindowGoogleDelta = (): Promise<Response> => Promise.resolve(Res
   nextSyncToken: "next-google-token",
 }));
 fetchOutOfWindowGoogleDelta.preconnect = originalFetch.preconnect;
+const fetchGoogleDeltaWithoutSuccessor = (): Promise<Response> => Promise.resolve(Response.json({
+  items: [{
+    end: { dateTime: "2026-03-08T15:00:00.000Z", timeZone: "UTC" },
+    iCalUID: "external-uid-1",
+    id: "google-event-id-1",
+    start: { dateTime: "2026-03-08T14:00:00.000Z", timeZone: "UTC" },
+    status: "confirmed",
+  }],
+}));
+fetchGoogleDeltaWithoutSuccessor.preconnect = originalFetch.preconnect;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -75,5 +85,17 @@ describe("createGoogleSourceFetcher", () => {
 
     expect(result.events).toEqual([]);
     expect(result.changedEventIds).toEqual(["google-event-id-1"]);
+  });
+
+  it("requests a full sync instead of replaying a delta with no successor token", async () => {
+    globalThis.fetch = fetchGoogleDeltaWithoutSuccessor;
+
+    const result = await createGoogleSourceFetcher({
+      accessToken: "test-token",
+      externalCalendarId: "primary",
+      syncToken: encodeStoredSyncToken("current-google-token", SYNC_TOKEN_VERSION),
+    }).fetchEvents();
+
+    expect(result).toEqual({ events: [], fullSyncRequired: true });
   });
 });

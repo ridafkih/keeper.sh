@@ -45,24 +45,23 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
     if (result.fullSyncRequired) {
       return { events: [], fullSyncRequired: true };
     }
+    if (!result.nextDeltaLink) {
+      return { events: [], fullSyncRequired: true };
+    }
 
     const parsedEvents = parseOutlookEvents(result.events);
     const { events } = filterSourceEventsToSyncWindow(parsedEvents, syncWindow);
 
-    const fetchResult: FetchEventsResult = {
+    return {
       events,
       changedEventIds: result.changedEventIds,
       cancelledEventIds: result.cancelledEventIds,
       isDeltaSync: result.isDeltaSync,
-    };
-    if (result.nextDeltaLink) {
-      fetchResult.nextSyncToken = encodeStoredSyncToken(
+      nextSyncToken: encodeStoredSyncToken(
         result.nextDeltaLink,
         syncTokenVersion,
-      );
-    }
-
-    return fetchResult;
+      ),
+    };
   };
 
   return { fetchEvents };
