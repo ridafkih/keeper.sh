@@ -185,13 +185,12 @@ const buildVtimezone = (timezone: string | undefined, referenceInstant: Date): I
       transitionObservances.push(buildTransitionObservance(transition));
     }
   }
-  if (transitionObservances.length === 0) {
-    transitionObservances.push(buildBaselineObservance(firstWallTime, initialOffset));
-  }
-
   const builtTimezone: IcsTimezone = {
     id: resolved,
-    props: transitionObservances,
+    props: [
+      buildBaselineObservance(firstWallTime, initialOffset),
+      ...transitionObservances,
+    ],
   };
   vtimezoneCache.set(cacheKey, builtTimezone);
   return builtTimezone;

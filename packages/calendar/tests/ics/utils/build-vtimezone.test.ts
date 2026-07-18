@@ -130,7 +130,7 @@ describe("buildVtimezone", () => {
     expect(ics).toContain("TZOFFSETTO:+0200");
     expect(ics).toContain("DTSTART:20251026T030000");
     expect(ics).toContain("RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10");
-    expect(timezone.props).toHaveLength(2);
+    expect(timezone.props).toHaveLength(3);
   });
 
   it("does not invent a perpetual rule for Morocco's moving Ramadan transitions", () => {

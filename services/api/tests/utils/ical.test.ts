@@ -528,7 +528,7 @@ describe("timezone-aware feed (Outlook)", () => {
       DEFAULT_SETTINGS,
     );
 
-    expect(occurrences(ics, "BEGIN:STANDARD")).toBe(1);
+    expect(occurrences(ics, "BEGIN:STANDARD")).toBe(2);
     expect(ics).toContain("DTSTART;TZID=Europe/Berlin:20260617T124500");
     expect(ics).toContain("EXDATE;TZID=Europe/Berlin:20260701T124500");
     expect(ics).toContain("RECURRENCE-ID;TZID=Europe/Berlin:20260624T124500");
