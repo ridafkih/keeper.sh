@@ -50,6 +50,15 @@ const createLocalEvent = (
   ...overrides,
 });
 
+const EMPTY_STALE_REASON_COUNTS = {
+  localHashChanged: 0,
+  occurrenceReassigned: 0,
+  remoteAvailabilityChanged: 0,
+  remoteContentChanged: 0,
+  remoteMissing: 0,
+  remoteTimeChanged: 0,
+};
+
 describe("buildRemoveOperations", () => {
   it("does not remove mapped events from before the sync window", () => {
     const historicalMapping = createEventMapping({
@@ -220,6 +229,7 @@ describe("computeSyncOperations", () => {
       mappingIdsToPrune: [],
       operations: [],
       staleMappingIds: [],
+      staleReasonCounts: EMPTY_STALE_REASON_COUNTS,
     });
   });
 
@@ -256,6 +266,7 @@ describe("computeSyncOperations", () => {
       mappingIdsToPrune: [],
       operations: [],
       staleMappingIds: [],
+      staleReasonCounts: EMPTY_STALE_REASON_COUNTS,
     });
   });
 
@@ -275,6 +286,7 @@ describe("computeSyncOperations", () => {
       mappingIdsToPrune: [mapping.id],
       operations: [],
       staleMappingIds: [],
+      staleReasonCounts: EMPTY_STALE_REASON_COUNTS,
     });
   });
 
@@ -289,6 +301,10 @@ describe("computeSyncOperations", () => {
     const result = computeSyncOperations([event], [mapping], []);
 
     expect(result.staleMappingIds).toEqual([mapping.id]);
+    expect(result.staleReasonCounts).toEqual({
+      ...EMPTY_STALE_REASON_COUNTS,
+      remoteMissing: 1,
+    });
     expect(result.operations).toEqual([{
       deleteId: mapping.deleteIdentifier,
       event,
@@ -319,6 +335,10 @@ describe("computeSyncOperations", () => {
     const result = computeSyncOperations([movedEvent], [mapping], [remoteEvent]);
 
     expect(result.staleMappingIds).toEqual([mapping.id]);
+    expect(result.staleReasonCounts).toEqual({
+      ...EMPTY_STALE_REASON_COUNTS,
+      localHashChanged: 1,
+    });
     expect(result.operations).toEqual([
       {
         deleteId: mapping.deleteIdentifier,
@@ -348,6 +368,10 @@ describe("computeSyncOperations", () => {
 
     const result = computeSyncOperations([event], [mapping], [movedRemoteEvent]);
 
+    expect(result.staleReasonCounts).toEqual({
+      ...EMPTY_STALE_REASON_COUNTS,
+      remoteTimeChanged: 1,
+    });
     expect(result.operations).toEqual([{
       deleteId: mapping.deleteIdentifier,
       event,
@@ -379,6 +403,7 @@ describe("computeSyncOperations", () => {
       mappingIdsToPrune: [],
       operations: [],
       staleMappingIds: [],
+      staleReasonCounts: EMPTY_STALE_REASON_COUNTS,
     });
   });
 
@@ -397,8 +422,13 @@ describe("computeSyncOperations", () => {
       startTime: event.startTime,
     });
 
-    expect(computeSyncOperations([event], [mapping], [editedRemote]).operations)
-      .toEqual([{
+    const result = computeSyncOperations([event], [mapping], [editedRemote]);
+
+    expect(result.staleReasonCounts).toEqual({
+      ...EMPTY_STALE_REASON_COUNTS,
+      remoteContentChanged: 1,
+    });
+    expect(result.operations).toEqual([{
         deleteId: mapping.deleteIdentifier,
         event,
         staleMappingId: mapping.id,
@@ -432,6 +462,7 @@ describe("computeSyncOperations", () => {
       mappingIdsToPrune: [],
       operations: [],
       staleMappingIds: [],
+      staleReasonCounts: EMPTY_STALE_REASON_COUNTS,
     });
   });
 
@@ -452,8 +483,13 @@ describe("computeSyncOperations", () => {
       supportedAvailabilities: ["busy", "free"],
     });
 
-    expect(computeSyncOperations([event], [mapping], [remoteEvent]).operations)
-      .toHaveLength(1);
+    const result = computeSyncOperations([event], [mapping], [remoteEvent]);
+
+    expect(result.operations).toHaveLength(1);
+    expect(result.staleReasonCounts).toEqual({
+      ...EMPTY_STALE_REASON_COUNTS,
+      remoteAvailabilityChanged: 1,
+    });
   });
 
   it("matches a legacy Google UID delete identifier to the provider event ID", () => {
@@ -485,6 +521,7 @@ describe("computeSyncOperations", () => {
       }],
       operations: [],
       staleMappingIds: [],
+      staleReasonCounts: EMPTY_STALE_REASON_COUNTS,
     });
   });
 
@@ -535,6 +572,7 @@ describe("computeSyncOperations", () => {
       }],
       operations: [],
       staleMappingIds: [],
+      staleReasonCounts: EMPTY_STALE_REASON_COUNTS,
     });
   });
 
@@ -628,6 +666,10 @@ describe("computeSyncOperations", () => {
     const result = computeSyncOperations([event], [mapping], [remoteEvent]);
 
     expect(result.mappingUpdates).toEqual([]);
+    expect(result.staleReasonCounts).toEqual({
+      ...EMPTY_STALE_REASON_COUNTS,
+      occurrenceReassigned: 1,
+    });
     expect(result.operations).toEqual([{
       deleteId: mapping.deleteIdentifier,
       event,

@@ -737,6 +737,60 @@ describe("syncCalendar", () => {
     expect(typeof event?.["duration_ms"]).toBe("number");
   });
 
+  it("emits only nonzero stale mapping reason counts", async () => {
+    const { syncCalendar } = await import("../../../src/core/sync-engine/index");
+    const localEvent = makeEvent(
+      "ev-1",
+      new Date("2026-03-15T09:00:00Z"),
+      new Date("2026-03-15T10:00:00Z"),
+    );
+    const mapping = {
+      ...makeMapping("map-1", localEvent.id, "remote-1"),
+      syncEventHash: createSyncEventContentHash(localEvent),
+    };
+    const provider = makeProvider({
+      deleteEvents: () => Promise.resolve([{ success: true }]),
+      pushEvents: () => Promise.resolve([{ remoteId: "remote-new", success: true }]),
+    });
+    const emittedEvents: Record<string, unknown>[] = [];
+
+    await syncCalendar({
+      userId: "user-1",
+      calendarId: "dest-cal-1",
+      provider,
+      readState: () => Promise.resolve({
+        localEvents: [localEvent],
+        existingMappings: [mapping],
+        remoteEvents: [{
+          deleteId: "remote-1",
+          editableContentHash: createEditableEventContentHash({
+            ...localEvent,
+            summary: "Edited remotely",
+          }),
+          endTime: localEvent.endTime,
+          isKeeperEvent: true,
+          startTime: localEvent.startTime,
+          uid: "remote-1",
+        }],
+      }),
+      isCurrent: () => Promise.resolve(true),
+      flush: () => Promise.resolve(),
+      onSyncEvent: (event) => { emittedEvents.push(event); },
+    });
+
+    expect(emittedEvents).toHaveLength(1);
+    expect(emittedEvents[0]).toMatchObject({
+      "stale_mappings.count": 1,
+      "stale_mappings.remote_content_changed_count": 1,
+    });
+    expect(emittedEvents[0]).not.toHaveProperty(
+      "stale_mappings.local_hash_changed_count",
+    );
+    expect(emittedEvents[0]).not.toHaveProperty(
+      "stale_mappings.remote_time_changed_count",
+    );
+  });
+
   it("emits a wide event with outcome superseded but flushed when generation becomes stale", async () => {
     const { syncCalendar } = await import("../../../src/core/sync-engine/index");
     const localEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
