@@ -134,6 +134,63 @@ describe("createCalDAVSyncProvider", () => {
     expect(remoteEvents.map((event) => event.uid)).toEqual([keeperUid]);
   });
 
+  it("does not let an unrelated ranged override abort Keeper reconciliation", async () => {
+    const keeperEvent = createEvent();
+    const keeperUid = generateDeterministicEventUid(keeperEvent.id);
+    const userSeriesWithRangedOverride = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:user-owned@example.com\r\nDTSTART:20260308T140000Z\r\nDTEND:20260308T150000Z\r\nRRULE:FREQ=DAILY;COUNT=3\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nUID:user-owned@example.com\r\nRECURRENCE-ID;RANGE=THISANDFUTURE:20260309T140000Z\r\nDTSTART:20260309T160000Z\r\nDTEND:20260309T170000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n`;
+    clientMocks.resolveCalendarUrl.mockResolvedValueOnce(
+      "https://caldav.example.com/calendar/",
+    );
+    clientMocks.fetchCalendarObjects.mockResolvedValueOnce([{
+      data: userSeriesWithRangedOverride,
+      url: "https://caldav.example.com/calendar/user-owned.ics",
+    }, {
+      data: eventToICalString(keeperEvent, keeperUid),
+      url: `https://caldav.example.com/calendar/${keeperUid}.ics`,
+    }]);
+
+    const remoteEvents = await createProvider().listRemoteEvents({
+      timeMin: new Date("2026-01-01T00:00:00.000Z"),
+    });
+
+    expect(remoteEvents.map((event) => event.uid)).toEqual([keeperUid]);
+  });
+
+  it("does not let a malformed unrelated object abort Keeper reconciliation", async () => {
+    const keeperEvent = createEvent();
+    const keeperUid = generateDeterministicEventUid(keeperEvent.id);
+    clientMocks.resolveCalendarUrl.mockResolvedValueOnce(
+      "https://caldav.example.com/calendar/",
+    );
+    clientMocks.fetchCalendarObjects.mockResolvedValueOnce([{
+      data: "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:user-owned@example.com\r\nDTSTART:not-a-date\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+      url: "https://caldav.example.com/calendar/malformed-user-event.ics",
+    }, {
+      data: eventToICalString(keeperEvent, keeperUid),
+      url: `https://caldav.example.com/calendar/${keeperUid}.ics`,
+    }]);
+
+    const remoteEvents = await createProvider().listRemoteEvents({
+      timeMin: new Date("2026-01-01T00:00:00.000Z"),
+    });
+
+    expect(remoteEvents.map((event) => event.uid)).toEqual([keeperUid]);
+  });
+
+  it("does not hide a malformed Keeper-owned object", async () => {
+    clientMocks.resolveCalendarUrl.mockResolvedValueOnce(
+      "https://caldav.example.com/calendar/",
+    );
+    clientMocks.fetchCalendarObjects.mockResolvedValueOnce([{
+      data: "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:malformed@keeper.sh\r\nDTSTART:not-a-date\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+      url: "https://caldav.example.com/calendar/malformed@keeper.sh.ics",
+    }]);
+
+    await expect(createProvider().listRemoteEvents({
+      timeMin: new Date("2026-01-01T00:00:00.000Z"),
+    })).rejects.toThrow();
+  });
+
   it("restores the mapping when a create conflict contains identical event content", async () => {
     const event = createEvent();
     const existingData = eventToICalString(event, generateDeterministicEventUid(event.id));
