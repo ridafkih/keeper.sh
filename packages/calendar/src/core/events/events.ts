@@ -19,6 +19,29 @@ import { materializeRecurrenceEvents } from "./recurrence-materializer";
 const EMPTY_SOURCES_COUNT = 0;
 const YEARS_UNTIL_FUTURE = 2;
 
+interface DestinationEventReadDiagnostics {
+  candidateEventStateCount: number;
+  excludedBySyncPolicyCount: number;
+  materializedEventCount: number;
+  missingSourceEventUidCount: number;
+  outsideReconciliationWindowCount: number;
+  syncableEventCount: number;
+}
+
+interface DestinationEventReadResult {
+  diagnostics: DestinationEventReadDiagnostics;
+  events: MaterializedSyncableEvent[];
+}
+
+const EMPTY_DESTINATION_EVENT_READ_DIAGNOSTICS: DestinationEventReadDiagnostics = {
+  candidateEventStateCount: 0,
+  excludedBySyncPolicyCount: 0,
+  materializedEventCount: 0,
+  missingSourceEventUidCount: 0,
+  outsideReconciliationWindowCount: 0,
+  syncableEventCount: 0,
+};
+
 const isEventInDestinationReconciliationWindow = (
   event: Pick<SyncableEvent, "endTime">,
   timeMin: Date,
@@ -129,13 +152,16 @@ const getMappedSourceCalendarIds = async (
   return mappings.map((mapping) => mapping.sourceCalendarId);
 };
 
-const getEventsForCalendars = async (
+const getEventsForCalendarsWithDiagnostics = async (
   database: BunSQLClient,
   calendarIds: string[],
   syncWindow: OAuthSyncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE),
-): Promise<MaterializedSyncableEvent[]> => {
+): Promise<DestinationEventReadResult> => {
   if (calendarIds.length === EMPTY_SOURCES_COUNT) {
-    return [];
+    return {
+      diagnostics: EMPTY_DESTINATION_EVENT_READ_DIAGNOSTICS,
+      events: [],
+    };
   }
 
   const results = await database
@@ -180,12 +206,17 @@ const getEventsForCalendars = async (
     .orderBy(asc(eventStatesTable.startTime));
 
   const syncableEvents: SyncableEvent[] = [];
+  let excludedBySyncPolicyCount = 0;
+  let missingSourceEventUidCount = 0;
+  let outsideReconciliationWindowCount = 0;
 
   for (const result of results) {
     if (result.sourceEventUid === null) {
+      missingSourceEventUidCount += 1;
       continue;
     }
     if (shouldExcludeSyncEvent(result)) {
+      excludedBySyncPolicyCount += 1;
       continue;
     }
 
@@ -201,6 +232,7 @@ const getEventsForCalendars = async (
       && !recurrence.recurrenceId
       && !recurrence.recurrenceRule
     ) {
+      outsideReconciliationWindowCount += 1;
       continue;
     }
 
@@ -235,12 +267,33 @@ const getEventsForCalendars = async (
     });
   }
 
-  return materializeRecurrenceEvents(syncableEvents, {
+  const events = materializeRecurrenceEvents(syncableEvents, {
     end: syncWindow.timeMax,
     start: syncWindow.timeMin,
   }, {
     retainOneOffEventsAfterWindowEnd: true,
   });
+
+  return {
+    diagnostics: {
+      candidateEventStateCount: results.length,
+      excludedBySyncPolicyCount,
+      materializedEventCount: events.length,
+      missingSourceEventUidCount,
+      outsideReconciliationWindowCount,
+      syncableEventCount: syncableEvents.length,
+    },
+    events,
+  };
+};
+
+const getEventsForCalendars = async (
+  database: BunSQLClient,
+  calendarIds: string[],
+  syncWindow: OAuthSyncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE),
+): Promise<MaterializedSyncableEvent[]> => {
+  const result = await getEventsForCalendarsWithDiagnostics(database, calendarIds, syncWindow);
+  return result.events;
 };
 
 const getEventsForDestination = async (
@@ -259,8 +312,10 @@ const getEventsForDestination = async (
 
 export {
   getEventsForCalendars,
+  getEventsForCalendarsWithDiagnostics,
   getEventsForDestination,
   getMappedSourceCalendarIds,
   isEventInDestinationReconciliationWindow,
   shouldExcludeSyncEvent,
 };
+export type { DestinationEventReadDiagnostics, DestinationEventReadResult };

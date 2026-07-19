@@ -1,6 +1,6 @@
 import {
   syncCalendar,
-  getEventsForCalendars,
+  getEventsForCalendarsWithDiagnostics,
   getEventMappingsForDestination,
   createDatabaseFlush,
   createRedisRateLimiter,
@@ -12,6 +12,7 @@ import {
 } from "@keeper.sh/calendar";
 import type {
   EventMapping,
+  DestinationEventReadDiagnostics,
   MaterializedSyncableEvent,
   RefreshLockStore,
   RemoteEvent,
@@ -99,6 +100,57 @@ interface DestinationLocalState {
   localEvents: MaterializedSyncableEvent[];
   existingMappings: EventMapping[];
 }
+
+interface DestinationReconciliationContext {
+  eventReadDiagnostics: DestinationEventReadDiagnostics;
+  localReadDurationMs: number;
+  reconciliationWindow: {
+    timeMax: Date;
+    timeMin: Date;
+  };
+  remoteReadDurationMs: number;
+  sourceCalendarIdsAtLocalRead: string[];
+  sourceCalendarIdsBeforeRemoteRead: string[];
+}
+
+const roundDuration = (durationMs: number): number =>
+  Math.round(durationMs * 100) / 100;
+
+const haveSourceCalendarsChanged = (
+  beforeRemoteRead: string[],
+  atLocalRead: string[],
+): boolean => {
+  if (beforeRemoteRead.length !== atLocalRead.length) {
+    return true;
+  }
+
+  const orderedBeforeRemoteRead = beforeRemoteRead.toSorted();
+  const orderedAtLocalRead = atLocalRead.toSorted();
+  return orderedBeforeRemoteRead.some(
+    (calendarId, index) => calendarId !== orderedAtLocalRead[index],
+  );
+};
+
+const createDestinationReconciliationWideEventFields = (
+  context: DestinationReconciliationContext,
+): Record<string, string | number | boolean> => ({
+  "local_event_states.candidate_count": context.eventReadDiagnostics.candidateEventStateCount,
+  "local_event_states.excluded_by_sync_policy_count": context.eventReadDiagnostics.excludedBySyncPolicyCount,
+  "local_event_states.materialized_count": context.eventReadDiagnostics.materializedEventCount,
+  "local_event_states.missing_source_event_uid_count": context.eventReadDiagnostics.missingSourceEventUidCount,
+  "local_event_states.outside_reconciliation_window_count": context.eventReadDiagnostics.outsideReconciliationWindowCount,
+  "local_event_states.syncable_count": context.eventReadDiagnostics.syncableEventCount,
+  "reconciliation.local_read.duration_ms": context.localReadDurationMs,
+  "reconciliation.remote_read.duration_ms": context.remoteReadDurationMs,
+  "reconciliation.source_calendars.at_local_read_count": context.sourceCalendarIdsAtLocalRead.length,
+  "reconciliation.source_calendars.before_remote_read_count": context.sourceCalendarIdsBeforeRemoteRead.length,
+  "reconciliation.source_calendars.changed_during_remote_read": haveSourceCalendarsChanged(
+    context.sourceCalendarIdsBeforeRemoteRead,
+    context.sourceCalendarIdsAtLocalRead,
+  ),
+  "reconciliation.window.recurrence_time_max": context.reconciliationWindow.timeMax.toISOString(),
+  "reconciliation.window.time_min": context.reconciliationWindow.timeMin.toISOString(),
+});
 
 const readDestinationReconciliationState = async (
   readRemoteEvents: () => Promise<RemoteEvent[]>,
@@ -228,26 +280,67 @@ const syncDestinationsForUser = async (
         destination.calendarId,
       );
       const reconciliationWindow = getOAuthSyncWindow(DESTINATION_RECURRENCE_YEARS);
+      let eventReadDiagnostics: DestinationEventReadDiagnostics = {
+        candidateEventStateCount: 0,
+        excludedBySyncPolicyCount: 0,
+        materializedEventCount: 0,
+        missingSourceEventUidCount: 0,
+        outsideReconciliationWindowCount: 0,
+        syncableEventCount: 0,
+      };
+      let localReadDurationMs = 0;
+      let remoteReadDurationMs = 0;
+      let sourceCalendarIdsAtLocalRead = sourceCalendarIds;
       const reconciliationState = await readDestinationReconciliationState(
-        () => providerRef.listRemoteEvents({
-          timeMin: reconciliationWindow.timeMin,
-        }),
-        () => withSourceIngestLocks(
-          database,
-          sourceCalendarIds,
-          async (lockedDatabase) => ({
-            localEvents: await getEventsForCalendars(
-              lockedDatabase,
+        async () => {
+          const startedAt = performance.now();
+          try {
+            return await providerRef.listRemoteEvents({
+              timeMin: reconciliationWindow.timeMin,
+            });
+          } finally {
+            remoteReadDurationMs = roundDuration(performance.now() - startedAt);
+          }
+        },
+        async () => {
+          const startedAt = performance.now();
+          try {
+            return await withSourceIngestLocks(
+              database,
               sourceCalendarIds,
-              reconciliationWindow,
-            ),
-            existingMappings: await getEventMappingsForDestination(
-              lockedDatabase,
-              destination.calendarId,
-            ),
-          }),
-        ),
+              async (lockedDatabase) => {
+                sourceCalendarIdsAtLocalRead = await getMappedSourceCalendarIds(
+                  lockedDatabase,
+                  destination.calendarId,
+                );
+                const eventRead = await getEventsForCalendarsWithDiagnostics(
+                  lockedDatabase,
+                  sourceCalendarIds,
+                  reconciliationWindow,
+                );
+                eventReadDiagnostics = eventRead.diagnostics;
+                return {
+                  localEvents: eventRead.events,
+                  existingMappings: await getEventMappingsForDestination(
+                    lockedDatabase,
+                    destination.calendarId,
+                  ),
+                };
+              },
+            );
+          } finally {
+            localReadDurationMs = roundDuration(performance.now() - startedAt);
+          }
+        },
       );
+      const reconciliationWideEventFields = createDestinationReconciliationWideEventFields({
+        eventReadDiagnostics,
+        localReadDurationMs,
+        reconciliationWindow,
+        remoteReadDurationMs,
+        sourceCalendarIdsAtLocalRead,
+        sourceCalendarIdsBeforeRemoteRead: sourceCalendarIds,
+      });
       const result = await syncCalendar({
         userId: destination.userId,
         calendarId: destination.calendarId,
@@ -268,6 +361,7 @@ const syncDestinationsForUser = async (
         onSyncEvent: (event) => {
           const enrichedEvent = {
             ...event,
+            ...reconciliationWideEventFields,
             "provider.name": destination.provider,
             "provider.account_id": destination.accountId,
             "provider.calendar_id": destination.calendarId,
@@ -343,5 +437,9 @@ const syncDestinationsForUser = async (
   return { added, addFailed, removed, removeFailed, errors, syncEvents };
 };
 
-export { readDestinationReconciliationState, syncDestinationsForUser };
+export {
+  createDestinationReconciliationWideEventFields,
+  readDestinationReconciliationState,
+  syncDestinationsForUser,
+};
 export type { CalendarSyncCompletion, CalendarSyncFailure, SyncConfig, SyncDestinationsResult };
