@@ -76,8 +76,11 @@ export {
 } from "./core/utils/fetch-with-timeout";
 export {
   getEventsForCalendars,
+  getEventsForCalendarsWithDiagnostics,
   getEventsForDestination,
   getMappedSourceCalendarIds,
+  type DestinationEventReadDiagnostics,
+  type DestinationEventReadResult,
 } from "./core/events/events";
 export {
   assertSourceRecurrenceMaterializationWithinBudget,
