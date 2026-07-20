@@ -22,6 +22,8 @@ const PRO_GATED_SOURCE_FIELDS = [
   ...EVENT_FILTER_FIELDS,
   "customEventName",
   "treatFullDayTimedEventsAsAllDay",
+  "syncHistoricRange",
+  "syncFutureRange",
 ] as const;
 
 interface SourceRouteContext {
@@ -52,6 +54,12 @@ const buildSourceUpdates = (
   }
   if (typeof body.customEventName === "string") {
     updates.customEventName = body.customEventName;
+  }
+  if (typeof body.syncHistoricRange === "string") {
+    updates.syncHistoricRange = body.syncHistoricRange;
+  }
+  if (typeof body.syncFutureRange === "string") {
+    updates.syncFutureRange = body.syncFutureRange;
   }
 
   for (const field of SOURCE_BOOLEAN_UPDATE_FIELDS) {

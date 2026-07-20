@@ -6,9 +6,10 @@ const DEFAULT_COUNT = 0;
 
 interface EventMapping {
   id: string;
-  eventStateId: string;
+  eventStateId: string | null;
   syncEventId?: string;
   calendarId: string;
+  sourceCalendarId: string;
   destinationEventUid: string;
   deleteIdentifier: string;
   syncEventHash: string | null;
@@ -28,6 +29,7 @@ const getEventMappingsForDestination = async (
       endTime: eventMappingsTable.endTime,
       eventStateId: eventMappingsTable.eventStateId,
       id: eventMappingsTable.id,
+      sourceCalendarId: eventMappingsTable.sourceCalendarId,
       syncEventId: eventMappingsTable.syncEventId,
       syncEventHash: eventMappingsTable.syncEventHash,
       startTime: eventMappingsTable.startTime,
@@ -35,17 +37,22 @@ const getEventMappingsForDestination = async (
     .from(eventMappingsTable)
     .where(eq(eventMappingsTable.calendarId, calendarId));
 
-  return mappings.map((mapping) => ({
-    ...mapping,
-    deleteIdentifier: mapping.deleteIdentifier ?? mapping.destinationEventUid,
-    syncEventId: mapping.syncEventId ?? mapping.eventStateId,
-  }));
+  return mappings.map((mapping) => {
+    const { syncEventId: storedSyncEventId, ...mappingWithoutSyncEventId } = mapping;
+    const syncEventId = storedSyncEventId ?? mapping.eventStateId;
+    return {
+      ...mappingWithoutSyncEventId,
+      deleteIdentifier: mapping.deleteIdentifier ?? mapping.destinationEventUid,
+      ...(syncEventId && { syncEventId }),
+    };
+  });
 };
 
 const createEventMapping = async (
   database: BunSQLClient,
   params: {
     eventStateId: string;
+    sourceCalendarId: string;
     syncEventId: string;
     calendarId: string;
     destinationEventUid: string;
@@ -63,6 +70,7 @@ const createEventMapping = async (
       destinationEventUid: params.destinationEventUid,
       endTime: params.endTime,
       eventStateId: params.eventStateId,
+      sourceCalendarId: params.sourceCalendarId,
       syncEventId: params.syncEventId,
       syncEventHash: params.syncEventHash,
       startTime: params.startTime,

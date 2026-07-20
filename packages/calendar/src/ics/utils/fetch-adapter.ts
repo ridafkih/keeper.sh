@@ -7,18 +7,29 @@ import { parseIcsEvents } from "./parse-ics-events";
 import { pullRemoteCalendar } from "./pull-remote-calendar";
 import { prepareCalendarSnapshot } from "./create-snapshot";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { SyncRange } from "@keeper.sh/data-schemas";
+import type { ConfigurableSyncWindow } from "../../core/sync/sync-range";
+import {
+  DEFAULT_FUTURE_SYNC_RANGE,
+  DEFAULT_HISTORIC_SYNC_RANGE,
+  getConfigurableSyncWindow,
+} from "../../core/sync/sync-range";
 import { normalizeTimezone } from "./normalize-timezone";
 import {
   assertNoUnsupportedRecurrenceDates,
   assertSupportedRecurrenceTimeZones,
 } from "./validate-recurrence-input";
 import { wallTimeToInstant } from "./timezone-instant";
+import { filterSourceEventsToSyncWindow } from "../../core/source/sync-diagnostics";
 
 interface IcsSourceFetcherConfig {
   calendarId: string;
   url: string;
   database: BunSQLDatabase;
   safeFetchOptions?: SafeFetchOptions;
+  syncWindow?: ConfigurableSyncWindow;
+  historicRange?: SyncRange;
+  futureRange?: SyncRange;
 }
 
 interface IcsSourceEventContext {
@@ -142,6 +153,12 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
   };
 
   const fetchEvents = async (options: FetchIcsSourceEventsOptions = {}): Promise<FetchEventsResult> => {
+    const historicRange = config.historicRange ?? DEFAULT_HISTORIC_SYNC_RANGE;
+    const futureRange = config.futureRange ?? DEFAULT_FUTURE_SYNC_RANGE;
+    const syncWindow = config.syncWindow ?? getConfigurableSyncWindow(
+      historicRange,
+      futureRange,
+    );
     const ical = await fetchRemoteIcal();
     if (!ical) {
       /*
@@ -168,7 +185,7 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
     }
     const parsed = parseIcsEvents(calendar);
     assertSupportedRecurrenceTimeZones(parsed);
-    const events: SourceEvent[] = parsed.map((event) => ({
+    let events: SourceEvent[] = parsed.map((event) => ({
       availability: event.availability,
       description: event.description,
       endTime: event.endTime,
@@ -184,17 +201,20 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
       uid: event.uid,
     }));
     if (options.interpretEvents) {
-      const result: FetchEventsResult = {
-        events: options.interpretEvents(events, {
-          calendarTimeZone,
-        }),
-      };
-      if (snapshotResult.changed && snapshotResult.snapshot) {
-        result.snapshot = snapshotResult.snapshot;
-      }
-      return result;
+      events = options.interpretEvents(events, {
+        calendarTimeZone,
+      });
     }
-    const result: FetchEventsResult = { events };
+    ({ events } = filterSourceEventsToSyncWindow(events, syncWindow));
+    const result: FetchEventsResult = {
+      events,
+      syncWindow,
+      coverage: {
+        futureRange,
+        historicRange,
+        window: syncWindow,
+      },
+    };
     if (snapshotResult.changed && snapshotResult.snapshot) {
       result.snapshot = snapshotResult.snapshot;
     }

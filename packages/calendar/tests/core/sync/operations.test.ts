@@ -22,6 +22,7 @@ const createEventMapping = (overrides: Partial<EventMapping>): EventMapping => (
   eventStateId: "event-state-id-1",
   syncEventId: "event-state-id-1",
   id: "mapping-id-1",
+  sourceCalendarId: "source-calendar-id",
   startTime: new Date("2026-03-08T14:00:00.000Z"),
   syncEventHash: "hash-1",
   ...overrides,
@@ -75,6 +76,7 @@ describe("buildRemoveOperations", () => {
       new Set<string>(),
       new Set<string>(),
       {
+        cleanupWindowStart: new Date("2026-03-01T00:00:00.000Z"),
         syncWindowStart: new Date("2026-03-08T00:00:00.000Z"),
       },
     );
@@ -270,7 +272,7 @@ describe("computeSyncOperations", () => {
     });
   });
 
-  it("prunes an expired occurrence mapping after it leaves the sliding window", () => {
+  it("removes a mapped event after it leaves the configured cleanup window", () => {
     const mapping = createEventMapping({
       eventStateId: "master-event-state-id",
       endTime: new Date("2026-03-01T15:00:00.000Z"),
@@ -280,14 +282,57 @@ describe("computeSyncOperations", () => {
     });
 
     expect(computeSyncOperations([], [mapping], [], {
+      cleanupWindowStart: new Date("2026-03-03T00:00:00.000Z"),
       syncWindowStart: new Date("2026-03-03T00:00:00.000Z"),
     })).toEqual({
       mappingUpdates: [],
-      mappingIdsToPrune: [mapping.id],
-      operations: [],
+      mappingIdsToPrune: [],
+      operations: [{
+        deleteId: mapping.deleteIdentifier,
+        startTime: mapping.startTime,
+        type: "remove",
+        uid: mapping.destinationEventUid,
+      }],
       staleMappingIds: [],
       staleReasonCounts: EMPTY_STALE_REASON_COUNTS,
     });
+  });
+
+  it("does not reconcile a mapping inside the requested window but outside source coverage", () => {
+    const historicalMapping = createEventMapping({
+      endTime: new Date("2026-03-05T15:00:00.000Z"),
+      eventStateId: "recurring-master-id",
+      startTime: new Date("2026-03-05T14:00:00.000Z"),
+      syncEventId: "historical-occurrence",
+    });
+    const enteringOccurrence = createLocalEvent({
+      endTime: new Date("2026-03-10T15:00:00.000Z"),
+      eventStateId: "recurring-master-id",
+      id: "entering-occurrence",
+      startTime: new Date("2026-03-10T14:00:00.000Z"),
+    });
+    const historicalRemote = createRemoteEvent({
+      deleteId: historicalMapping.deleteIdentifier,
+      endTime: historicalMapping.endTime,
+      isKeeperEvent: true,
+      startTime: historicalMapping.startTime,
+      uid: historicalMapping.destinationEventUid,
+    });
+
+    const result = computeSyncOperations(
+      [enteringOccurrence],
+      [historicalMapping],
+      [historicalRemote],
+      {
+        cleanupWindowEnd: new Date("2026-04-01T00:00:00.000Z"),
+        cleanupWindowStart: new Date("2026-03-01T00:00:00.000Z"),
+        syncWindowEnd: new Date("2026-04-01T00:00:00.000Z"),
+        syncWindowStart: new Date("2026-03-08T00:00:00.000Z"),
+      },
+    );
+
+    expect(result.operations).toEqual([{ event: enteringOccurrence, type: "add" }]);
+    expect(result.staleMappingIds).toEqual([]);
   });
 
 
@@ -614,7 +659,10 @@ describe("computeSyncOperations", () => {
       uid: `legacy-${index}@keeper.sh`,
     }));
 
-    const result = computeSyncOperations([first, third], mappings, remoteEvents);
+    const result = computeSyncOperations([first, third], mappings, remoteEvents, {
+      syncWindowEnd: new Date("2026-04-01T00:00:00.000Z"),
+      syncWindowStart: new Date("2026-03-01T00:00:00.000Z"),
+    });
 
     expect(result.mappingUpdates).toEqual([
       {
@@ -708,6 +756,10 @@ describe("computeSyncOperations", () => {
       [event],
       [mapping],
       [duplicateRemote, canonicalRemote],
+      {
+        syncWindowEnd: new Date("2026-04-01T00:00:00.000Z"),
+        syncWindowStart: new Date("2026-03-01T00:00:00.000Z"),
+      },
     );
 
     expect(result.staleMappingIds).toEqual([]);

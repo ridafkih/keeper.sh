@@ -1,4 +1,6 @@
 import type { SourceEvent } from "../types";
+import type { SyncRange } from "@keeper.sh/data-schemas";
+import type { ConfigurableSyncWindow } from "../sync/sync-range";
 import { getOAuthSyncWindow } from "../oauth/sync-window";
 import {
   assertSourceRecurrenceMaterializationWithinBudget,
@@ -23,6 +25,12 @@ interface FetchEventsResult {
   isDeltaSync?: boolean;
   fullSyncRequired?: boolean;
   unchanged?: boolean;
+  syncWindow?: ConfigurableSyncWindow;
+  coverage?: {
+    futureRange: SyncRange;
+    historicRange: SyncRange;
+    window: ConfigurableSyncWindow;
+  };
 }
 
 interface IngestionChanges {
@@ -30,6 +38,7 @@ interface IngestionChanges {
   deletes: string[];
   snapshot?: CalendarSnapshotChange;
   syncToken?: string | null;
+  coverage?: FetchEventsResult["coverage"];
 }
 
 interface CalendarSnapshotChange {
@@ -102,7 +111,8 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     const withPersistenceTransaction = resolvePersistenceTransaction(options);
     const fetchResult = await fetchEvents();
     wideEvent["source_events.count"] = fetchResult.events.length;
-    const recurrenceValidationWindow = getOAuthSyncWindow(RECURRENCE_VALIDATION_YEARS);
+    const recurrenceValidationWindow = fetchResult.syncWindow
+      ?? getOAuthSyncWindow(RECURRENCE_VALIDATION_YEARS);
 
     assertSourceRecurrenceMaterializationWithinBudget(
       calendarId,
@@ -166,6 +176,18 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       );
       const eventStateIdsToRemove = [...new Set([
         ...invalidStoredEventIdsToRemove,
+        ...existingEvents.flatMap((event) => {
+          if (!fetchResult.syncWindow || event.recurrenceRule) {
+            return [];
+          }
+          if (
+            event.endTime <= fetchResult.syncWindow.timeMin
+            || event.startTime >= fetchResult.syncWindow.timeMax
+          ) {
+            return [event.id];
+          }
+          return [];
+        }),
         ...buildSourceEventStateIdsToRemove(
           existingEvents,
           fetchResult.events,
@@ -181,13 +203,16 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       wideEvent["events.removed"] = eventStateIdsToRemove.length;
 
       if (eventsToAdd.length === 0 && eventStateIdsToRemove.length === 0) {
-        if (fetchResult.nextSyncToken || fetchResult.snapshot) {
+        if (fetchResult.nextSyncToken || fetchResult.snapshot || fetchResult.coverage) {
           const changes: IngestionChanges = { inserts: [], deletes: [] };
           if (fetchResult.nextSyncToken) {
             changes.syncToken = fetchResult.nextSyncToken;
           }
           if (fetchResult.snapshot) {
             changes.snapshot = fetchResult.snapshot;
+          }
+          if (fetchResult.coverage) {
+            changes.coverage = fetchResult.coverage;
           }
           await flush(changes);
           flushed = true;
@@ -211,6 +236,9 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       }
       if (fetchResult.snapshot) {
         changes.snapshot = fetchResult.snapshot;
+      }
+      if (fetchResult.coverage) {
+        changes.coverage = fetchResult.coverage;
       }
 
       await flush(changes);

@@ -122,4 +122,28 @@ describe("handlePatchSourceRoute", () => {
       error: "This setting requires a Pro plan.",
     });
   });
+
+  it("passes sync range updates through for Pro users", async () => {
+    let receivedUpdates: Record<string, unknown> = {};
+    const response = await handlePatchSourceRoute(
+      {
+        body: { syncFutureRange: "12_months", syncHistoricRange: "3_months" },
+        params: { id: "source-1" },
+        userId: "user-1",
+      },
+      {
+        canUseEventFilters: () => Promise.resolve(true),
+        updateSource: (_userId, _sourceId, updates) => {
+          receivedUpdates = updates;
+          return Promise.resolve({ id: "source-1", ...updates });
+        },
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(receivedUpdates).toEqual({
+      syncFutureRange: "12_months",
+      syncHistoricRange: "3_months",
+    });
+  });
 });

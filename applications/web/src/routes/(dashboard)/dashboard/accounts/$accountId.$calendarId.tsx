@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import useSWR, { preload, useSWRConfig } from "swr";
 import CheckIcon from "lucide-react/dist/esm/icons/check";
 import { useAtomValue, useStore } from "jotai";
+import type { SyncRange } from "@keeper.sh/data-schemas";
 import { useEntitlements, useMutateEntitlements, canAddMore } from "@/hooks/use-entitlements";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { UpgradeHint, PremiumFeatureGate } from "@/components/ui/primitives/upgrade-hint";
@@ -19,15 +20,18 @@ import { canPull, canPush } from "@/utils/calendars";
 import type { CalendarAccount, CalendarDetail, CalendarSource } from "@/types/api";
 import {
   NavigationMenu,
+  NavigationMenuButtonItem,
   NavigationMenuEmptyItem,
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
+  NavigationMenuItemTrailing,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
+import { NavigationMenuPopover } from "@/components/ui/composites/navigation-menu/navigation-menu-popover";
 import {
   NavigationMenuEditableItem,
   NavigationMenuEditableTemplateItem,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-editable";
-import { MenuVariantContext, ItemDisabledContext } from "@/components/ui/composites/navigation-menu/navigation-menu.contexts";
+import { MenuVariantContext, ItemDisabledContext, usePopover } from "@/components/ui/composites/navigation-menu/navigation-menu.contexts";
 import {
   DISABLED_LABEL_TONE,
   LABEL_TONE,
@@ -56,6 +60,10 @@ import {
   destinationIdsAtom,
   selectDestinationInclusion,
 } from "@/state/destination-ids";
+import {
+  getSyncRangeLabel,
+  SYNC_RANGE_OPTIONS,
+} from "@/features/dashboard/components/sync-range-options";
 
 
 export const Route = createFileRoute(
@@ -140,6 +148,7 @@ function CalendarDetailPage() {
   }
 
   const isPullCapable = canPull(calendar);
+  const isPushCapable = canPush(calendar);
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -158,10 +167,121 @@ function CalendarDetailPage() {
           <DestinationsSection calendarId={calendarId} />
         </>
       )}
+      {isPushCapable && <SyncWindowSection calendarId={calendarId} />}
       {isPullCapable && <SyncSettingsSection calendarId={calendarId} />}
       {isPullCapable && <ExclusionsSection calendarId={calendarId} provider={calendar.provider} />}
       <CalendarInfoSection account={account} accountId={accountId} />
     </div>
+  );
+}
+
+type SyncRangeField = "syncHistoricRange" | "syncFutureRange";
+
+function SyncWindowSection({ calendarId }: { calendarId: string }) {
+  const { data: entitlements } = useEntitlements();
+  const locked = Boolean(entitlements && !entitlements.canUseEventFilters);
+
+  return (
+    <>
+      <DashboardSection
+        title="Sync Window"
+        description="Choose how far back and ahead Keeper syncs events into this calendar."
+      />
+      <PremiumFeatureGate locked={locked} hint="Custom sync windows are a Pro feature.">
+        <NavigationMenu>
+          <SyncRangeItem
+            calendarId={calendarId}
+            field="syncHistoricRange"
+            label="Sync Historic Events"
+            locked={locked}
+          />
+          <SyncRangeItem
+            calendarId={calendarId}
+            field="syncFutureRange"
+            label="Sync Future Events"
+            locked={locked}
+          />
+        </NavigationMenu>
+      </PremiumFeatureGate>
+    </>
+  );
+}
+
+function SyncRangeItem({
+  calendarId,
+  field,
+  label,
+  locked,
+}: {
+  calendarId: string;
+  field: SyncRangeField;
+  label: string;
+  locked: boolean;
+}) {
+  const store = useStore();
+  const calendar = useAtomValue(calendarDetailAtom);
+  const fallbackRange: SyncRange = field === "syncHistoricRange" ? "1_week" : "2_years";
+  const selectedRange = calendar?.[field] ?? fallbackRange;
+
+  const selectRange = (range: SyncRange) => {
+    if (locked || range === selectedRange) return;
+
+    track(ANALYTICS_EVENTS.calendar_setting_toggled, { field, value: range });
+    store.set(calendarDetailAtom, (previous) => (
+      previous ? { ...previous, [field]: range } : previous
+    ));
+    patchSource(store, calendarId, { [field]: range });
+  };
+
+  return (
+    <NavigationMenuPopover
+      disabled={locked}
+      trigger={
+        <>
+          <NavigationMenuItemLabel>{label}</NavigationMenuItemLabel>
+          <NavigationMenuItemTrailing>
+            <Text size="sm" tone={locked ? "disabled" : "muted"}>
+              {getSyncRangeLabel(selectedRange)}
+            </Text>
+          </NavigationMenuItemTrailing>
+        </>
+      }
+    >
+      {SYNC_RANGE_OPTIONS.map((option) => (
+        <SyncRangeOptionItem
+          key={option.value}
+          option={option}
+          selected={option.value === selectedRange}
+          onSelect={selectRange}
+        />
+      ))}
+    </NavigationMenuPopover>
+  );
+}
+
+function SyncRangeOptionItem({
+  option,
+  selected,
+  onSelect,
+}: {
+  option: (typeof SYNC_RANGE_OPTIONS)[number];
+  selected: boolean;
+  onSelect: (range: SyncRange) => void;
+}) {
+  const { close } = usePopover();
+
+  return (
+    <NavigationMenuButtonItem
+      onClick={() => {
+        onSelect(option.value);
+        close();
+      }}
+    >
+      <NavigationMenuItemLabel>{option.label}</NavigationMenuItemLabel>
+      <NavigationMenuItemTrailing>
+        {selected && <CheckIcon size={14} />}
+      </NavigationMenuItemTrailing>
+    </NavigationMenuButtonItem>
   );
 }
 
