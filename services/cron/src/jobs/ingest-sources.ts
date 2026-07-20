@@ -12,9 +12,14 @@ import {
   isTimeoutError,
   buildCalendarBackoffState,
   SOURCE_INGEST_LOCK_NAMESPACE,
+  DEFAULT_FUTURE_SYNC_RANGE,
+  DEFAULT_HISTORIC_SYNC_RANGE,
+  getConfigurableSyncWindow,
+  getWiderSyncRange,
 } from "@keeper.sh/calendar";
 import { INGEST_SOURCE_TIMEOUT_MS, PROVIDER_INGEST_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
 import type { CalendarBackoffState, IngestionFetchEventsResult, IngestionPersistenceWork, IngestionResult, RedisRateLimiter, TokenState } from "@keeper.sh/calendar";
+import { syncRangeSchema, type SyncRange } from "@keeper.sh/data-schemas";
 import {
   createIcsSourceFetcher,
   interpretFullDayTimedEventsAsAllDay,
@@ -30,6 +35,7 @@ import {
   caldavCredentialsTable,
   eventStatesTable,
   oauthCredentialsTable,
+  sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
@@ -197,6 +203,20 @@ const createIngestionPersistenceTransaction = (
           signal.throwIfAborted();
         }
 
+        if (changes.coverage) {
+          await setRemainingStatementTimeout();
+          await transaction
+            .update(calendarsTable)
+            .set({
+              ingestFutureRange: changes.coverage.futureRange,
+              ingestHistoricRange: changes.coverage.historicRange,
+              ingestWindowEnd: changes.coverage.window.timeMax,
+              ingestWindowStart: changes.coverage.window.timeMin,
+            })
+            .where(eq(calendarsTable.id, calendarId));
+          signal.throwIfAborted();
+        }
+
         if (changes.snapshot) {
           await setRemainingStatementTimeout();
           await persistCalendarSnapshot(transaction, calendarId, changes.snapshot);
@@ -238,6 +258,50 @@ const resolveRateLimiter = (provider: string, userId: string): RedisRateLimiter 
   );
 };
 
+interface RequiredSourceRanges {
+  futureRange: SyncRange;
+  historicRange: SyncRange;
+}
+
+type RequiredSourceRangeMap = Map<string, RequiredSourceRanges>;
+
+const getRequiredSourceRanges = async (): Promise<RequiredSourceRangeMap> => {
+  const mappings = await database
+    .select({
+      sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId,
+      syncFutureRange: calendarsTable.syncFutureRange,
+      syncHistoricRange: calendarsTable.syncHistoricRange,
+    })
+    .from(sourceDestinationMappingsTable)
+    .innerJoin(
+      calendarsTable,
+      eq(sourceDestinationMappingsTable.destinationCalendarId, calendarsTable.id),
+    );
+  const ranges: RequiredSourceRangeMap = new Map();
+  for (const mapping of mappings) {
+    const current = ranges.get(mapping.sourceCalendarId);
+    const futureRange = syncRangeSchema.assert(mapping.syncFutureRange);
+    const historicRange = syncRangeSchema.assert(mapping.syncHistoricRange);
+    if (!current) {
+      ranges.set(mapping.sourceCalendarId, { futureRange, historicRange });
+      continue;
+    }
+    ranges.set(mapping.sourceCalendarId, {
+      futureRange: getWiderSyncRange(current.futureRange, futureRange),
+      historicRange: getWiderSyncRange(current.historicRange, historicRange),
+    });
+  }
+  return ranges;
+};
+
+const resolveRequiredSourceRanges = (
+  ranges: RequiredSourceRangeMap,
+  calendarId: string,
+): RequiredSourceRanges => ranges.get(calendarId) ?? {
+  futureRange: DEFAULT_FUTURE_SYNC_RANGE,
+  historicRange: DEFAULT_HISTORIC_SYNC_RANGE,
+};
+
 interface OAuthFetcherParams {
   accessToken: string;
   calendarId: string;
@@ -245,6 +309,9 @@ interface OAuthFetcherParams {
   syncToken: string | null;
   rateLimiter?: RedisRateLimiter;
   signal?: AbortSignal;
+  syncWindow: ReturnType<typeof getConfigurableSyncWindow>;
+  historicRange: SyncRange;
+  futureRange: SyncRange;
 }
 
 const resolveOAuthFetcher = (
@@ -266,7 +333,7 @@ interface IngestionSourceResult {
   ingestEvents: Record<string, unknown>[];
 }
 
-const ingestOAuthSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
+const ingestOAuthSources = async (requiredRanges: RequiredSourceRangeMap): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
   const oauthSources = await database
     .select({
       accountId: calendarAccountsTable.id,
@@ -280,6 +347,8 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
       expiresAt: oauthCredentialsTable.expiresAt,
       userId: calendarsTable.userId,
       ingestFailureCount: calendarsTable.ingestFailureCount,
+      ingestFutureRange: calendarsTable.ingestFutureRange,
+      ingestHistoricRange: calendarsTable.ingestHistoricRange,
     })
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
@@ -343,14 +412,27 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
             }
 
             const rateLimiter = resolveRateLimiter(source.provider, source.userId);
+            const ranges = resolveRequiredSourceRanges(requiredRanges, source.calendarId);
+            const requiresFullSync = ranges.historicRange
+              !== syncRangeSchema.assert(source.ingestHistoricRange)
+              || ranges.futureRange !== syncRangeSchema.assert(source.ingestFutureRange);
+            let { syncToken } = source;
+            if (requiresFullSync) {
+              syncToken = null;
+            }
 
             const resolvedFetcher = resolveOAuthFetcher(source.provider, {
               accessToken: tokenState.accessToken,
               calendarId: source.calendarId,
               externalCalendarId: source.externalCalendarId,
-              syncToken: source.syncToken,
+              syncToken,
               rateLimiter,
               signal,
+              syncWindow: getConfigurableSyncWindow(
+                ranges.historicRange,
+                ranges.futureRange,
+              ),
+              ...ranges,
             });
 
             if (!resolvedFetcher) {
@@ -455,7 +537,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
   return { added, removed, errors, ingestEvents: allIngestEvents };
 };
 
-const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
+const ingestCalDAVSources = async (requiredRanges: RequiredSourceRangeMap): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
   if (!env.ENCRYPTION_KEY) {
     return { added: 0, removed: 0, errors: 0, ingestEvents: [] };
   }
@@ -507,6 +589,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
 
           try {
             const password = decryptPassword(source.encryptedPassword, encryptionKey);
+            const ranges = resolveRequiredSourceRanges(requiredRanges, source.calendarId);
 
             const fetcher = createCalDAVSourceFetcher({
               calendarUrl: source.calendarUrl ?? source.serverUrl,
@@ -514,6 +597,11 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
               username: source.username,
               password,
               safeFetchOptions: { ...safeFetchOptions, signal },
+              syncWindow: getConfigurableSyncWindow(
+                ranges.historicRange,
+                ranges.futureRange,
+              ),
+              ...ranges,
             });
 
             const ingestEvents: Record<string, unknown>[] = [];
@@ -596,7 +684,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
   return { added, removed, errors, ingestEvents: allIngestEvents };
 };
 
-const ingestIcsSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
+const ingestIcsSources = async (requiredRanges: RequiredSourceRangeMap): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
   const icsSources = await database
     .select({
       calendarId: calendarsTable.id,
@@ -641,12 +729,18 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
               widelog.set("sync.events_removed", 0);
               return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
             }
+            const ranges = resolveRequiredSourceRanges(requiredRanges, source.calendarId);
 
             const fetcher = createIcsSourceFetcher({
               calendarId: source.calendarId,
               url: source.url,
               database,
               safeFetchOptions: { ...safeFetchOptions, signal },
+              syncWindow: getConfigurableSyncWindow(
+                ranges.historicRange,
+                ranges.futureRange,
+              ),
+              ...ranges,
             });
 
             const ingestEvents: Record<string, unknown>[] = [];
@@ -719,10 +813,11 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
 
 export default withCronWideEvent({
   async callback() {
+    const requiredRanges = await getRequiredSourceRanges();
     const settlements = await Promise.allSettled([
-      ingestOAuthSources(),
-      ingestCalDAVSources(),
-      ingestIcsSources(),
+      ingestOAuthSources(requiredRanges),
+      ingestCalDAVSources(requiredRanges),
+      ingestIcsSources(requiredRanges),
     ]);
     const failures: unknown[] = [];
     let failedSourceCount = 0;

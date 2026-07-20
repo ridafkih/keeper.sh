@@ -34,6 +34,7 @@ const makeMapping = (id: string, eventStateId: string, destinationEventUid: stri
   eventStateId,
   syncEventId: eventStateId,
   calendarId: "dest-cal-1",
+  sourceCalendarId: "cal-1",
   destinationEventUid,
   deleteIdentifier: destinationEventUid,
   syncEventHash: null,
@@ -968,6 +969,7 @@ describe("createDatabaseFlush", () => {
     await flush({
       inserts: [{
         eventStateId: "ev-1", calendarId: "cal-1", destinationEventUid: "remote-1",
+        sourceCalendarId: "source-cal-1",
         syncEventId: "ev-1",
         deleteIdentifier: "remote-1", syncEventHash: null,
         startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
@@ -1056,6 +1058,7 @@ describe("createDatabaseFlush", () => {
     await flush({
       inserts: [{
         eventStateId: "ev-1", calendarId: "cal-1", destinationEventUid: "remote-1",
+        sourceCalendarId: "source-cal-1",
         syncEventId: "ev-1",
         deleteIdentifier: "remote-1", syncEventHash: null,
         startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
@@ -1139,6 +1142,7 @@ describe("createDatabaseFlush", () => {
 
     const inserts = Array.from({ length: FLUSH_BATCH_SIZE + 10 }, (_entry, idx) => ({
       eventStateId: `ev-${idx}`, calendarId: "cal-1", destinationEventUid: `remote-${idx}`,
+      sourceCalendarId: "source-cal-1",
       syncEventId: `ev-${idx}`,
       deleteIdentifier: `remote-${idx}`, syncEventHash: null,
       startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
@@ -1175,12 +1179,14 @@ describe("createDatabaseFlush", () => {
       inserts: [
         {
           eventStateId: "ev-1", calendarId: "cal-1", destinationEventUid: "remote-1",
+          sourceCalendarId: "source-cal-1",
           syncEventId: "ev-1",
           deleteIdentifier: "remote-1", syncEventHash: null,
           startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
         },
         {
           eventStateId: "ev-2", calendarId: "cal-1", destinationEventUid: "remote-2",
+          sourceCalendarId: "source-cal-1",
           syncEventId: "ev-2",
           deleteIdentifier: "remote-2", syncEventHash: null,
           startTime: new Date("2026-03-16T09:00:00Z"), endTime: new Date("2026-03-16T10:00:00Z"),

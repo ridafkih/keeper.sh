@@ -112,6 +112,7 @@ describe("createGoogleSyncProvider", () => {
       endTime: event.endTime,
       eventStateId: event.id,
       id: "mapping-id",
+      sourceCalendarId: "source-cal-1",
       startTime: event.startTime,
       syncEventHash: createSyncEventContentHash(event),
       syncEventId: event.id,

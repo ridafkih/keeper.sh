@@ -8,10 +8,13 @@ import {
   createEditableEventContentHash,
   createSyncEventContentHash,
 } from "../events/content-hash";
-import { getOAuthSyncWindowStart } from "../oauth/sync-window";
+import { getOAuthSyncWindow } from "../oauth/sync-window";
 
 interface RemoveOperationTimeBoundary {
   syncWindowStart: Date;
+  syncWindowEnd?: Date;
+  cleanupWindowStart?: Date;
+  cleanupWindowEnd?: Date;
 }
 
 interface StaleMappingResult {
@@ -56,9 +59,13 @@ interface OccurrenceReassignment {
   mapping: EventMapping;
 }
 
-const getDefaultTimeBoundary = (): RemoveOperationTimeBoundary => ({
-  syncWindowStart: getOAuthSyncWindowStart(),
-});
+const getDefaultTimeBoundary = (): RemoveOperationTimeBoundary => {
+  const window = getOAuthSyncWindow(2);
+  return {
+    syncWindowStart: window.timeMin,
+    syncWindowEnd: window.timeMax,
+  };
+};
 
 const createStaleReasonCounts = (): StaleReasonCounts => ({
   localHashChanged: 0,
@@ -70,7 +77,13 @@ const createStaleReasonCounts = (): StaleReasonCounts => ({
 });
 
 const getMappingSyncEventId = (mapping: EventMapping): string =>
-  mapping.syncEventId ?? mapping.eventStateId;
+  mapping.syncEventId ?? mapping.eventStateId ?? `missing:${mapping.id}`;
+
+const overlapsWindow = (
+  value: Pick<EventMapping, "startTime" | "endTime">,
+  start: Date,
+  end: Date,
+): boolean => value.endTime > start && value.startTime < end;
 
 const compareMappingSlots = (first: EventMapping, second: EventMapping): number =>
   first.startTime.getTime() - second.startTime.getTime()
@@ -107,6 +120,9 @@ const pairReidentifiedMaterializedOccurrences = (
 
   for (const mapping of existingMappings) {
     if (localEventIds.has(getMappingSyncEventId(mapping))) {
+      continue;
+    }
+    if (!mapping.eventStateId) {
       continue;
     }
     const mappings = missingMappingsByOwner.get(mapping.eventStateId) ?? [];
@@ -397,21 +413,26 @@ const buildRemoveOperations = (
   timeBoundary: RemoveOperationTimeBoundary = getDefaultTimeBoundary(),
 ): SyncOperation[] => {
   const operations: SyncOperation[] = [];
-  const remoteIdentities = new Set(
-    remoteEvents.map((remoteEvent) => `${remoteEvent.uid}\u0000${remoteEvent.deleteId}`),
-  );
+  const syncWindowEnd = timeBoundary.syncWindowEnd ?? new Date(8_640_000_000_000_000);
+  const cleanupWindowStart = timeBoundary.cleanupWindowStart
+    ?? new Date(-8_640_000_000_000_000);
+  const cleanupWindowEnd = timeBoundary.cleanupWindowEnd
+    ?? new Date(8_640_000_000_000_000);
 
   for (const mapping of existingMappings) {
-    const remoteIdentity = `${mapping.destinationEventUid}\u0000${mapping.deleteIdentifier}`;
+    const outsideCleanupWindow = !overlapsWindow(
+      mapping,
+      cleanupWindowStart,
+      cleanupWindowEnd,
+    );
+    const insideAuthoritativeWindow = overlapsWindow(
+      mapping,
+      timeBoundary.syncWindowStart,
+      syncWindowEnd,
+    );
     if (
-      mapping.endTime < timeBoundary.syncWindowStart
-      && !remoteIdentities.has(remoteIdentity)
-      && mapping.deleteIdentifier !== mapping.destinationEventUid
-    ) {
-      continue;
-    }
-    if (
-      !localEventIds.has(getMappingSyncEventId(mapping))
+      outsideCleanupWindow
+      || insideAuthoritativeWindow && !localEventIds.has(getMappingSyncEventId(mapping))
     ) {
       operations.push({
         deleteId: mapping.deleteIdentifier,
@@ -428,6 +449,14 @@ const buildRemoveOperations = (
     }
 
     if (!remoteEvent.isKeeperEvent) {
+      continue;
+    }
+
+    if (!overlapsWindow(
+      remoteEvent,
+      timeBoundary.syncWindowStart,
+      syncWindowEnd,
+    )) {
       continue;
     }
 
@@ -451,20 +480,22 @@ const computeSyncOperations = (
   const localEventIds = new Set(localEvents.map((event) => event.id));
   const localEventsById = new Map(localEvents.map((event) => [event.id, event]));
   const remoteEventsByMappingId = matchRemoteEventsToMappings(existingMappings, remoteEvents);
-  const mappingIdsToPrune = existingMappings.flatMap((mapping) => {
-    if (localEventIds.has(getMappingSyncEventId(mapping))) {
-      return [];
-    }
-    const remoteExists = remoteEventsByMappingId.has(mapping.id);
-    if (mapping.endTime < timeBoundary.syncWindowStart && !remoteExists) {
-      return [mapping.id];
-    }
-    return [];
-  });
-  const mappingIdsToPruneSet = new Set(mappingIdsToPrune);
-  const activeMappings = existingMappings.filter(
-    (mapping) => !mappingIdsToPruneSet.has(mapping.id),
+  const mappingIdsToPrune: string[] = [];
+  const syncWindowEnd = timeBoundary.syncWindowEnd
+    ?? new Date(8_640_000_000_000_000);
+  const hasExplicitCleanupWindow = Boolean(
+    timeBoundary.cleanupWindowStart || timeBoundary.cleanupWindowEnd,
   );
+  const activeMappings = existingMappings.filter((mapping) => {
+    if (!hasExplicitCleanupWindow) {
+      return true;
+    }
+    return overlapsWindow(
+      mapping,
+      timeBoundary.syncWindowStart,
+      syncWindowEnd,
+    );
+  });
   const occurrenceReassignments = pairReidentifiedMaterializedOccurrences(
     localEvents,
     activeMappings,
@@ -546,7 +577,7 @@ const computeSyncOperations = (
   const replacedEventIds = new Set(
     staleRemoteMappings.map((mapping) => getMappingSyncEventId(mapping)),
   );
-  const addOperations = buildAddOperations(localEvents, existingMappings, staleMappedEventIds)
+  const addOperations = buildAddOperations(localEvents, activeMappings, staleMappedEventIds)
     .filter((operation) => operation.type !== "add"
       || !replacedEventIds.has(operation.event.id)
         && !reassignedEventIds.has(operation.event.id));
@@ -563,7 +594,7 @@ const computeSyncOperations = (
   }));
 
   const removeOperations = buildRemoveOperations(
-    standardMappings,
+    existingMappings.filter((mapping) => !reassignedMappingIds.has(mapping.id)),
     remoteEvents,
     localEventIds,
     mappedRemoteIdentities,

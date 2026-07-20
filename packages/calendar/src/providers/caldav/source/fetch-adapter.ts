@@ -1,12 +1,16 @@
 import type { SourceEvent } from "../../../core/types";
+import type { SyncRange } from "@keeper.sh/data-schemas";
+import type { ConfigurableSyncWindow } from "../../../core/sync/sync-range";
 import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import { isKeeperEvent } from "../../../core/events/identity";
+import {
+  DEFAULT_FUTURE_SYNC_RANGE,
+  DEFAULT_HISTORIC_SYNC_RANGE,
+  getConfigurableSyncWindow,
+} from "../../../core/sync/sync-range";
 import { CalDAVClient } from "../shared/client";
 import { parseICalCalendarsToRemoteEvents } from "../shared/ics";
-import { getCalDAVSyncWindow } from "../shared/sync-window";
-
-const YEARS_UNTIL_FUTURE = 2;
 
 interface CalDAVSourceFetcherConfig {
   authMethod?: "basic" | "digest";
@@ -15,6 +19,9 @@ interface CalDAVSourceFetcherConfig {
   username: string;
   password: string;
   safeFetchOptions?: SafeFetchOptions;
+  syncWindow?: ConfigurableSyncWindow;
+  historicRange?: SyncRange;
+  futureRange?: SyncRange;
 }
 
 interface CalDAVSourceFetcher {
@@ -29,14 +36,19 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
   }, config.safeFetchOptions);
 
   const fetchEvents = async (): Promise<FetchEventsResult> => {
-    const syncWindow = getCalDAVSyncWindow(YEARS_UNTIL_FUTURE);
+    const historicRange = config.historicRange ?? DEFAULT_HISTORIC_SYNC_RANGE;
+    const futureRange = config.futureRange ?? DEFAULT_FUTURE_SYNC_RANGE;
+    const syncWindow = config.syncWindow ?? getConfigurableSyncWindow(
+      historicRange,
+      futureRange,
+    );
     const calendarUrl = await client.resolveCalendarUrl(config.calendarUrl);
 
     const objects = await client.fetchCalendarObjects({
       calendarUrl,
       timeRange: {
-        end: syncWindow.end.toISOString(),
-        start: syncWindow.start.toISOString(),
+        end: syncWindow.timeMax.toISOString(),
+        start: syncWindow.timeMin.toISOString(),
       },
     });
 
@@ -60,7 +72,7 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
        * occurrences within the window were already returned by the CalDAV time-range
        * filter, and downstream RRULE expansion handles the rest.
        */
-      if (!parsed.recurrenceRule && parsed.endTime < syncWindow.start) {
+      if (!parsed.recurrenceRule && parsed.endTime < syncWindow.timeMin) {
         continue;
       }
 
@@ -81,7 +93,15 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
       });
     }
 
-    return { events };
+    return {
+      events,
+      syncWindow,
+      coverage: {
+        futureRange,
+        historicRange,
+        window: syncWindow,
+      },
+    };
   };
 
   return { fetchEvents };

@@ -2,6 +2,7 @@ import type { SourceEvent } from "../types";
 import type { OAuthSyncWindow } from "../oauth/sync-window";
 import type { ExistingSourceEventState } from "./event-diff";
 import { buildSourceEventInstanceKey } from "./event-instance";
+import { materializeRecurrenceEvents } from "../events/recurrence-materializer";
 
 interface SourceEventsInWindowResult {
   events: SourceEvent[];
@@ -18,8 +19,29 @@ interface SourceSyncTokenAction {
   shouldResetSyncToken: boolean;
 }
 
-const isSourceEventInWindow = (event: SourceEvent, syncWindow: OAuthSyncWindow): boolean =>
-  event.endTime >= syncWindow.timeMin && event.startTime <= syncWindow.timeMax;
+const isSourceEventInWindow = (event: SourceEvent, syncWindow: OAuthSyncWindow): boolean => {
+  if (!event.recurrenceRule || event.recurrenceId) {
+    return event.endTime > syncWindow.timeMin && event.startTime < syncWindow.timeMax;
+  }
+
+  return materializeRecurrenceEvents([{
+    calendarId: "sync-window-filter",
+    calendarName: null,
+    calendarUrl: null,
+    endTime: event.endTime,
+    exceptionDates: event.exceptionDates?.map(({ date }) => date),
+    id: event.sourceEventId ?? event.uid,
+    recurrenceDuration: event.recurrenceDuration,
+    recurrenceRule: event.recurrenceRule,
+    sourceEventUid: event.uid,
+    startTime: event.startTime,
+    startTimeZone: event.startTimeZone,
+    summary: event.title ?? "",
+  }], {
+    end: syncWindow.timeMax,
+    start: syncWindow.timeMin,
+  }).length > 0;
+};
 
 const filterSourceEventsToSyncWindow = (
   events: SourceEvent[],

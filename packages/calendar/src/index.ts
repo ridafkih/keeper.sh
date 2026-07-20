@@ -132,6 +132,14 @@ export {
 } from "./core/source/write-event-states";
 export { computeSyncOperations } from "./core/sync/operations";
 export {
+  DEFAULT_FUTURE_SYNC_RANGE,
+  DEFAULT_HISTORIC_SYNC_RANGE,
+  getConfigurableSyncWindow,
+  getWiderSyncRange,
+  isSyncRangeWider,
+  type ConfigurableSyncWindow,
+} from "./core/sync/sync-range";
+export {
   type DestinationSyncResult,
   type SyncProgressUpdate,
   type SyncStage,

@@ -7,6 +7,9 @@ type ProxyableMethods = typeof proxyableMethods.infer;
 const planSchema = type("'free' | 'pro'");
 type Plan = typeof planSchema.infer;
 
+const syncRangeSchema = type("'1_week' | '1_month' | '3_months' | '6_months' | '12_months' | '2_years'");
+type SyncRange = typeof syncRangeSchema.infer;
+
 const billingPeriodSchema = type("'monthly' | 'yearly'");
 type BillingPeriod = typeof billingPeriodSchema.infer;
 
@@ -412,6 +415,7 @@ type StoredIcsExceptionDates = typeof icsExceptionDatesSchema.infer;
 export {
   proxyableMethods,
   planSchema,
+  syncRangeSchema,
   billingPeriodSchema,
   feedbackRequestSchema,
   createSourceSchema,
@@ -462,6 +466,7 @@ export {
 export type {
   ProxyableMethods,
   Plan,
+  SyncRange,
   BillingPeriod,
   FeedbackRequest,
   CreateSource,

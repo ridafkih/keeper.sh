@@ -9,7 +9,9 @@ import {
   getMappedSourceCalendarIds,
   withSourceIngestLocks,
   getOAuthSyncWindow,
+  getConfigurableSyncWindow,
 } from "@keeper.sh/calendar";
+import { syncRangeSchema } from "@keeper.sh/data-schemas";
 import type {
   EventMapping,
   DestinationEventReadDiagnostics,
@@ -22,7 +24,7 @@ import {
   calendarAccountsTable,
   calendarsTable,
 } from "@keeper.sh/database/schema";
-import { and, arrayContains, eq, isNull, lte, or } from "drizzle-orm";
+import { and, arrayContains, eq, inArray, isNull, lte, or } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
 import { getErrorMessage, isBackoffEligibleError } from "./destination-errors";
@@ -31,7 +33,6 @@ import type { OAuthConfig } from "./resolve-provider";
 import { createSyncLock, isCalendarInvalidated } from "./sync-lock";
 
 const GOOGLE_REQUESTS_PER_MINUTE = 500;
-const DESTINATION_RECURRENCE_YEARS = 2;
 
 const resetDestinationBackoff = async (
   database: BunSQLDatabase,
@@ -115,6 +116,38 @@ interface DestinationReconciliationContext {
 
 const roundDuration = (durationMs: number): number =>
   Math.round(durationMs * 100) / 100;
+
+const intersectWithSourceCoverage = async (
+  database: Pick<BunSQLDatabase, "select">,
+  sourceCalendarIds: string[],
+  requestedWindow: { timeMin: Date; timeMax: Date },
+): Promise<{ timeMin: Date; timeMax: Date }> => {
+  if (sourceCalendarIds.length === 0) {
+    return requestedWindow;
+  }
+  const fallbackWindow = getOAuthSyncWindow(2);
+  const sources = await database
+    .select({
+      ingestWindowEnd: calendarsTable.ingestWindowEnd,
+      ingestWindowStart: calendarsTable.ingestWindowStart,
+    })
+    .from(calendarsTable)
+    .where(inArray(calendarsTable.id, sourceCalendarIds));
+
+  let { timeMin, timeMax } = requestedWindow;
+  for (const source of sources) {
+    const candidate = source.ingestWindowStart ?? fallbackWindow.timeMin;
+    if (candidate > timeMin) {
+      timeMin = candidate;
+    }
+    const endCandidate = source.ingestWindowEnd ?? fallbackWindow.timeMax;
+    if (endCandidate < timeMax) {
+      timeMax = endCandidate;
+    }
+  }
+
+  return { timeMin, timeMax };
+};
 
 const haveSourceCalendarsChanged = (
   beforeRemoteRead: string[],
@@ -207,6 +240,8 @@ const syncDestinationsForUser = async (
       userId: calendarsTable.userId,
       accountId: calendarsTable.accountId,
       failureCount: calendarsTable.failureCount,
+      syncFutureRange: calendarsTable.syncFutureRange,
+      syncHistoricRange: calendarsTable.syncHistoricRange,
     })
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
@@ -279,7 +314,16 @@ const syncDestinationsForUser = async (
         database,
         destination.calendarId,
       );
-      const reconciliationWindow = getOAuthSyncWindow(DESTINATION_RECURRENCE_YEARS);
+      const requestedWindow = getConfigurableSyncWindow(
+        syncRangeSchema.assert(destination.syncHistoricRange),
+        syncRangeSchema.assert(destination.syncFutureRange),
+      );
+      const initialReconciliationWindow = await intersectWithSourceCoverage(
+        database,
+        sourceCalendarIds,
+        requestedWindow,
+      );
+      let reconciliationWindow = initialReconciliationWindow;
       let eventReadDiagnostics: DestinationEventReadDiagnostics = {
         candidateEventStateCount: 0,
         excludedBySyncPolicyCount: 0,
@@ -296,7 +340,7 @@ const syncDestinationsForUser = async (
           const startedAt = performance.now();
           try {
             return await providerRef.listRemoteEvents({
-              timeMin: reconciliationWindow.timeMin,
+              timeMin: initialReconciliationWindow.timeMin,
             });
           } finally {
             remoteReadDurationMs = roundDuration(performance.now() - startedAt);
@@ -312,6 +356,18 @@ const syncDestinationsForUser = async (
                 sourceCalendarIdsAtLocalRead = await getMappedSourceCalendarIds(
                   lockedDatabase,
                   destination.calendarId,
+                );
+                /*
+                 * Source coverage can shrink while the destination provider is
+                 * being read. Re-read it under the source ingest locks and only
+                 * narrow the original window. Expansions wait for the next run,
+                 * because the remote read may not include the newly authoritative
+                 * history yet.
+                 */
+                reconciliationWindow = await intersectWithSourceCoverage(
+                  lockedDatabase,
+                  sourceCalendarIds,
+                  initialReconciliationWindow,
                 );
                 const eventRead = await getEventsForCalendarsWithDiagnostics(
                   lockedDatabase,
@@ -375,6 +431,9 @@ const syncDestinationsForUser = async (
         },
         timeBoundary: {
           syncWindowStart: reconciliationWindow.timeMin,
+          syncWindowEnd: reconciliationWindow.timeMax,
+          cleanupWindowStart: requestedWindow.timeMin,
+          cleanupWindowEnd: requestedWindow.timeMax,
         },
       });
 

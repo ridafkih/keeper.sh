@@ -822,6 +822,58 @@ describe("ingestSource", () => {
     expect(flushCapture[0]?.syncToken).toBe("token-new");
   });
 
+  it("prunes non-recurring source details outside the successful coverage window", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const historical = makeSourceEvent(
+      "historical",
+      new Date("2025-01-01T09:00:00.000Z"),
+      new Date("2025-01-01T10:00:00.000Z"),
+    );
+    const inWindow = makeSourceEvent(
+      "in-window",
+      new Date("2026-03-15T09:00:00.000Z"),
+      new Date("2026-03-15T10:00:00.000Z"),
+    );
+    const syncWindow = {
+      timeMin: new Date("2026-03-01T00:00:00.000Z"),
+      timeMax: new Date("2026-04-01T00:00:00.000Z"),
+    };
+    let flushed: IngestionChanges | null = null;
+
+    const result = await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({
+        coverage: {
+          futureRange: "1_month",
+          historicRange: "1_month",
+          window: syncWindow,
+        },
+        events: [],
+        isDeltaSync: true,
+        syncWindow,
+      }),
+      readExistingEvents: () => Promise.resolve([
+        toExistingEvent("historical-state", historical),
+        toExistingEvent("in-window-state", inWindow),
+      ]),
+      flush: (changes) => {
+        flushed = changes;
+        return Promise.resolve();
+      },
+    });
+
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 1 });
+    expect(flushed).toEqual({
+      coverage: {
+        futureRange: "1_month",
+        historicRange: "1_month",
+        window: syncWindow,
+      },
+      deletes: ["historical-state"],
+      inserts: [],
+    });
+  });
+
   it("does not flush sync token when no changes and no sync token provided", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
 

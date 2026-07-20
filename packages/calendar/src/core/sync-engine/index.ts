@@ -72,6 +72,7 @@ const processAddResults = (
     }
     changes.inserts.push({
       eventStateId: operation.event.eventStateId ?? operation.event.id,
+      sourceCalendarId: operation.event.calendarId,
       syncEventId: operation.event.id,
       calendarId,
       destinationEventUid: pushResult.remoteId,

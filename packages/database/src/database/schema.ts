@@ -110,12 +110,18 @@ const calendarsTable = pgTable(
     ingestFailureCount: integer().notNull().default(0),
     ingestLastFailureAt: timestamp(),
     ingestNextAttemptAt: timestamp(),
+    ingestFutureRange: text().notNull().default("2_years"),
+    ingestHistoricRange: text().notNull().default("1_week"),
+    ingestWindowEnd: timestamp(),
+    ingestWindowStart: timestamp(),
     externalCalendarId: text(),
     id: uuid().notNull().primaryKey().defaultRandom(),
     capabilities: text().array().notNull().default(["pull"]),
     name: text().notNull(),
     originalName: text(),
     syncToken: text(),
+    syncFutureRange: text().notNull().default("2_years"),
+    syncHistoricRange: text().notNull().default("1_week"),
     updatedAt: timestamp()
       .notNull()
       .defaultNow()
@@ -259,11 +265,13 @@ const eventMappingsTable = pgTable(
     destinationEventUid: text().notNull(),
     endTime: timestamp().notNull(),
     eventStateId: uuid()
-      .notNull()
-      .references(() => eventStatesTable.id, { onDelete: "cascade" }),
+      .references(() => eventStatesTable.id, { onDelete: "set null" }),
     id: uuid().notNull().primaryKey().defaultRandom(),
     syncEventId: text(),
     syncEventHash: text(),
+    sourceCalendarId: uuid()
+      .notNull()
+      .references(() => calendarsTable.id, { onDelete: "cascade" }),
     startTime: timestamp().notNull(),
   },
   (table) => [
@@ -272,6 +280,7 @@ const eventMappingsTable = pgTable(
       .where(isNotNull(table.syncEventId)),
     index("event_mappings_calendar_idx").on(table.calendarId),
     index("event_mappings_event_state_idx").on(table.eventStateId),
+    index("event_mappings_source_calendar_idx").on(table.sourceCalendarId),
     index("event_mappings_missing_sync_event_idx")
       .on(table.id)
       .where(isNull(table.syncEventId)),

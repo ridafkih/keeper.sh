@@ -270,8 +270,6 @@ const getEventsForCalendarsWithDiagnostics = async (
   const events = materializeRecurrenceEvents(syncableEvents, {
     end: syncWindow.timeMax,
     start: syncWindow.timeMin,
-  }, {
-    retainOneOffEventsAfterWindowEnd: true,
   });
 
   return {

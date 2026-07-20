@@ -400,6 +400,7 @@ it("migrates a legacy recurring Google mapping in place and converges", async ()
     endTime: occurrence.endTime,
     eventStateId: "recurring-master-state",
     id: "legacy-mapping",
+    sourceCalendarId: SOURCE_CALENDAR_ID,
     startTime: occurrence.startTime,
     syncEventHash: "legacy-master-hash",
     syncEventId: occurrence.eventStateId,
@@ -450,7 +451,7 @@ it("migrates a legacy recurring Google mapping in place and converges", async ()
   expect(remoteWrites).toEqual({ deletes: 0, pushes: 0 });
 });
 
-it("prunes an expired recurrence mapping without deleting history when the window advances", async () => {
+it("deletes an expired recurrence mapping when the cleanup window advances", async () => {
   const mappings = new InMemoryMappingStore();
   const provider = new StatefulDestinationProvider();
   const expiredOccurrence: MaterializedSyncableEvent = {
@@ -486,7 +487,7 @@ it("prunes an expired recurrence mapping without deleting history when the windo
         remoteEvents: remoteEvents.filter((event) => event.endTime >= syncWindowStart),
       };
     },
-    timeBoundary: { syncWindowStart },
+    timeBoundary: { cleanupWindowStart: syncWindowStart, syncWindowStart },
     userId: "user-1",
   });
 
@@ -499,16 +500,16 @@ it("prunes an expired recurrence mapping without deleting history when the windo
   syncWindowStart = new Date("2027-03-08T00:00:00.000Z");
   provider.resetCalls();
 
-  await expect(runSync()).resolves.toMatchObject({ added: 1, removed: 0 });
-  expect(provider.calls.deletes).toEqual([]);
+  await expect(runSync()).resolves.toMatchObject({ added: 1, removed: 1 });
+  expect(provider.calls.deletes).toHaveLength(1);
   expect(provider.calls.pushes).toHaveLength(1);
-  expect(provider.remoteEvents).toHaveLength(2);
-  expect(provider.remoteEvents.has(historicalRemoteId)).toBe(true);
+  expect(provider.remoteEvents).toHaveLength(1);
+  expect(provider.remoteEvents.has(historicalRemoteId)).toBe(false);
   expect(mappings.mappings).toHaveLength(1);
   expect([...mappings.mappings.values()][0]?.syncEventId).toBe(enteringOccurrence.id);
 
   provider.resetCalls();
   await expect(runSync()).resolves.toMatchObject({ added: 0, removed: 0 });
   expect(provider.calls).toEqual({ deletes: [], pushes: [] });
-  expect(provider.remoteEvents).toHaveLength(2);
+  expect(provider.remoteEvents).toHaveLength(1);
 });

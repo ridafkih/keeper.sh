@@ -1,5 +1,9 @@
-import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
-import { and, eq } from "drizzle-orm";
+import {
+  calendarAccountsTable,
+  calendarsTable,
+  sourceDestinationMappingsTable,
+} from "@keeper.sh/database/schema";
+import { and, eq, inArray } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { database, premiumService } from "@/context";
@@ -35,6 +39,8 @@ const GET = withWideEvent(
         excludeEventName: calendarsTable.excludeEventName,
         excludeFocusTime: calendarsTable.excludeFocusTime,
         excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
+        syncFutureRange: calendarsTable.syncFutureRange,
+        syncHistoricRange: calendarsTable.syncHistoricRange,
         treatFullDayTimedEventsAsAllDay: calendarsTable.treatFullDayTimedEventsAsAllDay,
         createdAt: calendarsTable.createdAt,
         updatedAt: calendarsTable.updatedAt,
@@ -73,20 +79,41 @@ const PATCH = withWideEvent(
       { body: payload, params, userId },
       {
         canUseEventFilters: (candidateUserId) => premiumService.canUseEventFilters(candidateUserId),
-        updateSource: async (userIdToUpdate, sourceCalendarId, updates) => {
-          const [updated] = await database
-            .update(calendarsTable)
-            .set(updates)
-            .where(
-              and(
-                eq(calendarsTable.id, sourceCalendarId),
-                eq(calendarsTable.userId, userIdToUpdate),
-              ),
-            )
-            .returning();
+        updateSource: (userIdToUpdate, sourceCalendarId, updates) =>
+          database.transaction(async (transaction) => {
+            const [updated] = await transaction
+              .update(calendarsTable)
+              .set(updates)
+              .where(
+                and(
+                  eq(calendarsTable.id, sourceCalendarId),
+                  eq(calendarsTable.userId, userIdToUpdate),
+                ),
+              )
+              .returning();
 
-          return updated ?? null;
-        },
+            if (
+              updated
+              && ("syncHistoricRange" in updates || "syncFutureRange" in updates)
+            ) {
+              const mappedSources = await transaction
+                .select({ id: sourceDestinationMappingsTable.sourceCalendarId })
+                .from(sourceDestinationMappingsTable)
+                .where(eq(
+                  sourceDestinationMappingsTable.destinationCalendarId,
+                  sourceCalendarId,
+                ));
+              const mappedSourceIds = mappedSources.map(({ id }) => id);
+              if (mappedSourceIds.length > 0) {
+                await transaction
+                  .update(calendarsTable)
+                  .set({ syncToken: null })
+                  .where(inArray(calendarsTable.id, mappedSourceIds));
+              }
+            }
+
+            return updated ?? null;
+          }),
       },
     );
   }),

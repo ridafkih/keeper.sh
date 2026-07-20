@@ -14,6 +14,7 @@ interface CalendarSyncProvider {
 
 interface PendingInsert {
   eventStateId: string;
+  sourceCalendarId: string;
   syncEventId: string;
   calendarId: string;
   destinationEventUid: string;
