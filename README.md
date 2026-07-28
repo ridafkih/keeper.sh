@@ -2,6 +2,8 @@
 
 # About
 
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2Fridafkih%2Fkeeper.sh.svg)](https://mcptoplist.com/server/glama%2Fridafkih%2Fkeeper.sh)
+
 Keeper.sh is a simple & open-source calendar syncing tool. It allows you to pull events from your Google Calendar, Outlook, iCloud, Fastmail, CalDAV server, or a remotely hosted iCal or ICS links, and push them to one or many calendars so the time slots can align across them all. It also serves as a global MCP server and API for you or your agents to manage all your calendars from one convenient interface. You can use the hosted version for convenience and zero-setup, or self-host to get Pro features free. 
 
 # Features
