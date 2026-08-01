@@ -35,6 +35,10 @@ const googleEventSchema = type({
   "iCalUID?": "string",
   "id?": "string",
   "location?": "string",
+  "outOfOfficeProperties?": {
+    "autoDeclineMode?": "string",
+    "declineMessage?": "string",
+  },
   "recurrence?": "string[]",
   "start?": { "date?": "string", "dateTime?": "string", "timeZone?": "string" },
   "status?": "'confirmed' | 'tentative' | 'cancelled'",

@@ -73,6 +73,7 @@ interface SyncSetting {
 const SYNC_SETTINGS: SyncSetting[] = [
   { field: "excludeEventDescription", label: "Sync Event Description", matchesField: false },
   { field: "excludeEventLocation", label: "Sync Event Location", matchesField: false },
+  { field: "createAsOutOfOffice", label: "Create as Out of Office", matchesField: true },
 ];
 
 const EXCLUSION_SETTINGS: SyncSetting[] = [

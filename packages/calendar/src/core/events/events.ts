@@ -176,6 +176,7 @@ const getEventsForCalendarsWithDiagnostics = async (
       excludeEventName: calendarsTable.excludeEventName,
       excludeFocusTime: calendarsTable.excludeFocusTime,
       excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
+      createAsOutOfOffice: calendarsTable.createAsOutOfOffice,
       availability: eventStatesTable.availability,
       description: eventStatesTable.description,
       endTime: eventStatesTable.endTime,
@@ -252,7 +253,9 @@ const getEventsForCalendarsWithDiagnostics = async (
       calendarId: result.calendarId,
       calendarName: result.calendarName,
       calendarUrl: result.calendarUrl,
-      availability: parseAvailability(result.availability),
+      availability: result.createAsOutOfOffice
+        ? "oof"
+        : parseAvailability(result.availability),
       description: excludeOrAbsent(result.excludeEventDescription, result.description),
       endTime: result.endTime,
       eventStateId: result.id,

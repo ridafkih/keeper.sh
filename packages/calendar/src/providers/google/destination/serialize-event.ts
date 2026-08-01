@@ -39,6 +39,8 @@ const serializeGoogleEvent = (
   }
 
   const isAllDay = resolveIsAllDayEvent(event);
+  // Google out-of-office events must be timed; fall back to a normal busy event for all-day.
+  const asOutOfOffice = event.availability === "oof" && !isAllDay;
 
   return {
     description: event.description,
@@ -48,6 +50,13 @@ const serializeGoogleEvent = (
     start: buildDateField(event.startTime, isAllDay, event.startTimeZone, recurrenceRule),
     summary: event.summary,
     ...(event.availability === "free" && { transparency: "transparent" }),
+    ...(asOutOfOffice && {
+      eventType: "outOfOffice",
+      outOfOfficeProperties: {
+        autoDeclineMode: "declineAllConflictingInvitations",
+      },
+      transparency: "opaque",
+    }),
     ...(recurrenceRule && { recurrence: [`RRULE:${recurrenceRule}`] }),
   };
 };

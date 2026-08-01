@@ -17,6 +17,7 @@ export const excludeEventLocationAtom = selectAtom(calendarDetailAtom, (detail) 
 export const excludeAllDayEventsAtom = selectAtom(calendarDetailAtom, (detail) => detail?.excludeAllDayEvents ?? false);
 export const excludeFocusTimeAtom = selectAtom(calendarDetailAtom, (detail) => detail?.excludeFocusTime ?? false);
 export const excludeOutOfOfficeAtom = selectAtom(calendarDetailAtom, (detail) => detail?.excludeOutOfOffice ?? false);
+export const createAsOutOfOfficeAtom = selectAtom(calendarDetailAtom, (detail) => detail?.createAsOutOfOffice ?? false);
 export const treatFullDayTimedEventsAsAllDayAtom = selectAtom(calendarDetailAtom, (detail) => detail?.treatFullDayTimedEventsAsAllDay ?? false);
 export type ExcludeField = keyof Pick<
   CalendarDetail,
@@ -26,6 +27,7 @@ export type ExcludeField = keyof Pick<
   | "excludeEventName"
   | "excludeFocusTime"
   | "excludeOutOfOffice"
+  | "createAsOutOfOffice"
 >;
 
 export const excludeFieldAtoms = {
@@ -35,4 +37,5 @@ export const excludeFieldAtoms = {
   excludeAllDayEvents: excludeAllDayEventsAtom,
   excludeFocusTime: excludeFocusTimeAtom,
   excludeOutOfOffice: excludeOutOfOfficeAtom,
+  createAsOutOfOffice: createAsOutOfOfficeAtom,
 } as const;
