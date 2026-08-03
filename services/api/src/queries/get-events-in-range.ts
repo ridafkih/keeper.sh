@@ -150,6 +150,7 @@ const getEventsInRange = async (
       location: eventStatesTable.location,
       recurrenceId: eventStatesTable.recurrenceId,
       recurrenceRule: eventStatesTable.recurrenceRule,
+      responseStatus: eventStatesTable.responseStatus,
       sourceEventUid: eventStatesTable.sourceEventUid,
       startTime: eventStatesTable.startTime,
       startTimeZone: eventStatesTable.startTimeZone,
@@ -191,7 +192,7 @@ const getEventsInRange = async (
 
   const allEvents: KeeperEventProjection[] = [
     ...syncedEvents,
-    ...userEvents.map((event) => ({ ...event, eventStateId: null })),
+    ...userEvents.map((event) => ({ ...event, eventStateId: null, responseStatus: null })),
   ];
   allEvents.sort((left, right) => left.startTime.getTime() - right.startTime.getTime());
 

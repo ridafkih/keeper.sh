@@ -27,6 +27,7 @@ interface SyncedEventRow {
   location: string | null;
   recurrenceId: Date | null;
   recurrenceRule: string | null;
+  responseStatus: string | null;
   sourceEventUid: string | null;
   startTime: Date;
   startTimeZone: string | null;
@@ -45,6 +46,7 @@ interface KeeperEventProjection {
   eventStateId: string | null;
   id: string;
   location: string | null;
+  responseStatus: string | null;
   startTime: Date;
   title: string | null;
 }
@@ -131,6 +133,7 @@ const toSyncableEvent = (
     id: row.id,
     isAllDay: orAbsent(row.isAllDay),
     location: orAbsent(row.location),
+    responseStatus: orAbsent(row.responseStatus),
     sourceEventUid: row.sourceEventUid ?? row.id,
     startTime: row.startTime,
     startTimeZone: orAbsent(row.startTimeZone),
@@ -156,6 +159,7 @@ const toSyncedProjection = (
     eventStateId,
     id,
     location: occurrence.location ?? null,
+    responseStatus: occurrence.responseStatus ?? null,
     startTime: occurrence.startTime,
     title: occurrence.summary || null,
   };
@@ -220,6 +224,7 @@ const toKeeperEvent = (
   eventStateId: event.eventStateId,
   id: event.id,
   location: event.location,
+  responseStatus: event.responseStatus,
   startTime: event.startTime.toISOString(),
   title: event.title,
 });

@@ -41,6 +41,7 @@ const syncedEventColumns = {
   location: eventStatesTable.location,
   recurrenceId: eventStatesTable.recurrenceId,
   recurrenceRule: eventStatesTable.recurrenceRule,
+  responseStatus: eventStatesTable.responseStatus,
   sourceEventUid: eventStatesTable.sourceEventUid,
   startTime: eventStatesTable.startTime,
   startTimeZone: eventStatesTable.startTimeZone,
@@ -81,7 +82,7 @@ const getUserEvent = async (
   }
 
   return toKeeperEvent(
-    { ...result, eventStateId: null },
+    { ...result, eventStateId: null, responseStatus: null },
     {
       name: result.calendarName,
       provider: result.calendarProvider,
@@ -142,6 +143,7 @@ const toPersistedSyncedProjection = (row: SyncedEventRow): KeeperEventProjection
   eventStateId: row.id,
   id: row.id,
   location: row.location,
+  responseStatus: row.responseStatus,
   startTime: row.startTime,
   title: row.title,
 });
