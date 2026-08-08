@@ -49,6 +49,7 @@ import {
   customEventNameAtom,
   excludeEventNameAtom,
   excludeFieldAtoms,
+  forcedAvailabilityAtom,
   treatFullDayTimedEventsAsAllDayAtom,
 } from "@/state/calendar-detail";
 import type { ExcludeField } from "@/state/calendar-detail";
@@ -73,8 +74,29 @@ interface SyncSetting {
 const SYNC_SETTINGS: SyncSetting[] = [
   { field: "excludeEventDescription", label: "Sync Event Description", matchesField: false },
   { field: "excludeEventLocation", label: "Sync Event Location", matchesField: false },
-  { field: "createAsOutOfOffice", label: "Create as Out of Office", matchesField: true },
 ];
+
+type ForcedAvailability = CalendarDetail["forcedAvailability"];
+
+const FORCED_AVAILABILITY_OPTIONS: ForcedAvailability[] = [null, "busy", "free", "oof"];
+
+const FORCED_AVAILABILITY_LABELS: Record<string, string> = {
+  busy: "Busy",
+  free: "Free",
+  oof: "Out of Office",
+};
+
+const forcedAvailabilityLabel = (value: ForcedAvailability): string => {
+  if (value === null) {
+    return "Source";
+  }
+  return FORCED_AVAILABILITY_LABELS[value] ?? "Source";
+};
+
+const nextForcedAvailability = (value: ForcedAvailability): ForcedAvailability => {
+  const index = FORCED_AVAILABILITY_OPTIONS.indexOf(value);
+  return FORCED_AVAILABILITY_OPTIONS[(index + 1) % FORCED_AVAILABILITY_OPTIONS.length] ?? null;
+};
 
 const EXCLUSION_SETTINGS: SyncSetting[] = [
   { field: "excludeAllDayEvents", label: "Exclude All Day Events", matchesField: true },
@@ -420,6 +442,7 @@ function SyncSettingsSection({ calendarId }: { calendarId: string }) {
         <NavigationMenu>
           <SyncEventNameTemplateItem calendarId={calendarId} locked={locked} />
           <SyncEventNameToggle calendarId={calendarId} locked={locked} />
+          <ForcedAvailabilityCycle calendarId={calendarId} locked={locked} />
           <ProviderSyncSettings calendarId={calendarId} calendarType={calendarType} locked={locked} />
           {SYNC_SETTINGS.map((setting) => (
             <ExcludeFieldToggle
@@ -452,6 +475,56 @@ function ProviderSyncSettings({
     default:
       return null;
   }
+}
+
+function ForcedAvailabilityCycle({ calendarId, locked }: { calendarId: string; locked: boolean }) {
+  const store = useStore();
+  const variant = use(MenuVariantContext);
+
+  const handleClick = () => {
+    if (locked) return;
+    const current = store.get(calendarDetailAtom);
+    if (!current) return;
+
+    const forcedAvailability = nextForcedAvailability(current.forcedAvailability);
+    track(ANALYTICS_EVENTS.calendar_setting_toggled, {
+      field: "forcedAvailability",
+      enabled: forcedAvailability !== null,
+      value: forcedAvailability ?? "source",
+    });
+    store.set(calendarDetailAtom, (prev) => (prev ? { ...prev, forcedAvailability } : prev));
+    patchSource(store, calendarId, { forcedAvailability });
+  };
+
+  return (
+    <li>
+      <ItemDisabledContext value={locked}>
+        <button
+          type="button"
+          disabled={locked}
+          onClick={handleClick}
+          className={navigationMenuItemStyle({ variant, interactive: !locked })}
+        >
+          <NavigationMenuItemLabel>Create as</NavigationMenuItemLabel>
+          <ForcedAvailabilityValue disabled={locked} />
+        </button>
+      </ItemDisabledContext>
+    </li>
+  );
+}
+
+function ForcedAvailabilityValue({ disabled }: { disabled: boolean }) {
+  const forcedAvailability = useAtomValue(forcedAvailabilityAtom);
+
+  return (
+    <Text
+      size="sm"
+      tone={disabled ? "disabled" : "muted"}
+      className="min-w-0 truncate flex-1 text-right"
+    >
+      {forcedAvailabilityLabel(forcedAvailability)}
+    </Text>
+  );
 }
 
 function TreatFullDayTimedEventsToggle({ calendarId, locked }: { calendarId: string; locked: boolean }) {

@@ -520,12 +520,11 @@
           "notNull": true,
           "default": false
         },
-        "createAsOutOfOffice": {
-          "name": "createAsOutOfOffice",
-          "type": "boolean",
+        "forcedAvailability": {
+          "name": "forcedAvailability",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": false
+          "notNull": false
         },
         "includeInIcalFeed": {
           "name": "includeInIcalFeed",

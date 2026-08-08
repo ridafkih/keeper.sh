@@ -48,7 +48,7 @@ export interface CalendarDetail {
   excludeEventName: boolean;
   excludeFocusTime: boolean;
   excludeOutOfOffice: boolean;
-  createAsOutOfOffice: boolean;
+  forcedAvailability: "busy" | "free" | "oof" | null;
   treatFullDayTimedEventsAsAllDay: boolean;
   destinationIds: string[];
   sourceIds: string[];

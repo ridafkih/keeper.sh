@@ -122,4 +122,43 @@ describe("handlePatchSourceRoute", () => {
       error: "This setting requires a Pro plan.",
     });
   });
+
+  it("updates forcedAvailability for pro users", async () => {
+    const response = await handlePatchSourceRoute(
+      {
+        body: { forcedAvailability: "oof" },
+        params: { id: "source-1" },
+        userId: "user-1",
+      },
+      {
+        canUseEventFilters: () => Promise.resolve(true),
+        updateSource: (_userId, _sourceId, updates) => Promise.resolve({
+          id: "source-1",
+          ...updates,
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await readJson(response)).toEqual({
+      id: "source-1",
+      forcedAvailability: "oof",
+    });
+  });
+
+  it("returns 403 when free users update forcedAvailability", async () => {
+    const response = await handlePatchSourceRoute(
+      {
+        body: { forcedAvailability: "busy" },
+        params: { id: "source-1" },
+        userId: "user-1",
+      },
+      {
+        canUseEventFilters: () => Promise.resolve(false),
+        updateSource: () => Promise.resolve(null),
+      },
+    );
+
+    expect(response.status).toBe(403);
+  });
 });

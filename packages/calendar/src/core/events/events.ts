@@ -81,6 +81,12 @@ const parseAvailability = (value: string | null): EventAvailability | undefined 
 
   return value;
 };
+
+const parseForcedAvailability = (value: string | null): EventAvailability | undefined => {
+  if (value === "busy" || value === "free" || value === "oof") {
+    return value;
+  }
+};
 const parseSourceEventType = (
   value: string | null,
   availability: string | null,
@@ -176,7 +182,7 @@ const getEventsForCalendarsWithDiagnostics = async (
       excludeEventName: calendarsTable.excludeEventName,
       excludeFocusTime: calendarsTable.excludeFocusTime,
       excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
-      createAsOutOfOffice: calendarsTable.createAsOutOfOffice,
+      forcedAvailability: calendarsTable.forcedAvailability,
       availability: eventStatesTable.availability,
       description: eventStatesTable.description,
       endTime: eventStatesTable.endTime,
@@ -253,9 +259,8 @@ const getEventsForCalendarsWithDiagnostics = async (
       calendarId: result.calendarId,
       calendarName: result.calendarName,
       calendarUrl: result.calendarUrl,
-      availability: result.createAsOutOfOffice
-        ? "oof"
-        : parseAvailability(result.availability),
+      availability: parseForcedAvailability(result.forcedAvailability)
+        ?? parseAvailability(result.availability),
       description: excludeOrAbsent(result.excludeEventDescription, result.description),
       endTime: result.endTime,
       eventStateId: result.id,

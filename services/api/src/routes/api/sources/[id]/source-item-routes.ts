@@ -10,7 +10,6 @@ const EVENT_FILTER_FIELDS = [
   "excludeEventName",
   "excludeFocusTime",
   "excludeOutOfOffice",
-  "createAsOutOfOffice",
 ] as const;
 
 const SOURCE_BOOLEAN_UPDATE_FIELDS = [
@@ -19,9 +18,12 @@ const SOURCE_BOOLEAN_UPDATE_FIELDS = [
   "treatFullDayTimedEventsAsAllDay",
 ] as const;
 
+const FORCED_AVAILABILITY_VALUES = new Set(["busy", "free", "oof"]);
+
 const PRO_GATED_SOURCE_FIELDS = [
   ...EVENT_FILTER_FIELDS,
   "customEventName",
+  "forcedAvailability",
   "treatFullDayTimedEventsAsAllDay",
 ] as const;
 
@@ -38,21 +40,29 @@ interface PatchSourceDependencies {
   updateSource: (
     userId: string,
     sourceCalendarId: string,
-    updates: Record<string, string | boolean>,
+    updates: Record<string, string | boolean | null>,
   ) => Promise<Record<string, unknown> | null>;
   canUseEventFilters: (userId: string) => Promise<boolean>;
 }
 
 const buildSourceUpdates = (
   body: SourcePatchBody,
-): Record<string, string | boolean> => {
-  const updates: Record<string, string | boolean> = {};
+): Record<string, string | boolean | null> => {
+  const updates: Record<string, string | boolean | null> = {};
 
   if (body.name) {
     updates.name = body.name;
   }
   if (typeof body.customEventName === "string") {
     updates.customEventName = body.customEventName;
+  }
+  if ("forcedAvailability" in body) {
+    const value = body.forcedAvailability;
+    if (value === null) {
+      updates.forcedAvailability = null;
+    } else if (typeof value === "string" && FORCED_AVAILABILITY_VALUES.has(value)) {
+      updates.forcedAvailability = value;
+    }
   }
 
   for (const field of SOURCE_BOOLEAN_UPDATE_FIELDS) {
