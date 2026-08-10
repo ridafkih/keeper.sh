@@ -2,6 +2,7 @@ import type { SourcePatchBody } from "@/utils/request-body";
 import { sourcePatchBodySchema } from "@/utils/request-body";
 import { idParamSchema } from "@/utils/request-query";
 import { ErrorResponse } from "@/utils/responses";
+import { isForcedAvailability } from "@keeper.sh/data-schemas";
 
 const EVENT_FILTER_FIELDS = [
   "excludeAllDayEvents",
@@ -17,8 +18,6 @@ const SOURCE_BOOLEAN_UPDATE_FIELDS = [
   "includeInIcalFeed",
   "treatFullDayTimedEventsAsAllDay",
 ] as const;
-
-const FORCED_AVAILABILITY_VALUES = new Set(["busy", "free", "oof"]);
 
 const PRO_GATED_SOURCE_FIELDS = [
   ...EVENT_FILTER_FIELDS,
@@ -60,7 +59,7 @@ const buildSourceUpdates = (
     const value = body.forcedAvailability;
     if (value === null) {
       updates.forcedAvailability = null;
-    } else if (typeof value === "string" && FORCED_AVAILABILITY_VALUES.has(value)) {
+    } else if (typeof value === "string" && isForcedAvailability(value)) {
       updates.forcedAvailability = value;
     }
   }

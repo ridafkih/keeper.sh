@@ -18,6 +18,11 @@ import { formatDate } from "@/lib/time";
 import { canPull, canPush } from "@/utils/calendars";
 import type { CalendarAccount, CalendarDetail, CalendarSource } from "@/types/api";
 import {
+  FORCED_AVAILABILITIES,
+  FORCED_AVAILABILITY,
+  type ForcedAvailability,
+} from "@keeper.sh/data-schemas";
+import {
   NavigationMenu,
   NavigationMenuEmptyItem,
   NavigationMenuItemIcon,
@@ -76,24 +81,24 @@ const SYNC_SETTINGS: SyncSetting[] = [
   { field: "excludeEventLocation", label: "Sync Event Location", matchesField: false },
 ];
 
-type ForcedAvailability = CalendarDetail["forcedAvailability"];
+type ForcedAvailabilitySetting = ForcedAvailability | null;
 
-const FORCED_AVAILABILITY_OPTIONS: ForcedAvailability[] = [null, "busy", "free", "oof"];
+const FORCED_AVAILABILITY_OPTIONS = [null, ...FORCED_AVAILABILITIES] as const satisfies readonly ForcedAvailabilitySetting[];
 
-const FORCED_AVAILABILITY_LABELS: Record<string, string> = {
-  busy: "Busy",
-  free: "Free",
-  oof: "Out of Office",
-};
+const FORCED_AVAILABILITY_LABELS = {
+  [FORCED_AVAILABILITY.busy]: "Busy",
+  [FORCED_AVAILABILITY.free]: "Free",
+  [FORCED_AVAILABILITY.oof]: "Out of Office",
+} as const;
 
-const forcedAvailabilityLabel = (value: ForcedAvailability): string => {
+const forcedAvailabilityLabel = (value: ForcedAvailabilitySetting): string => {
   if (value === null) {
     return "Source";
   }
-  return FORCED_AVAILABILITY_LABELS[value] ?? "Source";
+  return FORCED_AVAILABILITY_LABELS[value];
 };
 
-const nextForcedAvailability = (value: ForcedAvailability): ForcedAvailability => {
+const nextForcedAvailability = (value: ForcedAvailabilitySetting): ForcedAvailabilitySetting => {
   const index = FORCED_AVAILABILITY_OPTIONS.indexOf(value);
   return FORCED_AVAILABILITY_OPTIONS[(index + 1) % FORCED_AVAILABILITY_OPTIONS.length] ?? null;
 };

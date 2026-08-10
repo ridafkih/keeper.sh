@@ -1,3 +1,5 @@
+import type { ForcedAvailability } from "@keeper.sh/data-schemas";
+
 export interface CalendarAccount {
   id: string;
   provider: string;
@@ -48,7 +50,7 @@ export interface CalendarDetail {
   excludeEventName: boolean;
   excludeFocusTime: boolean;
   excludeOutOfOffice: boolean;
-  forcedAvailability: "busy" | "free" | "oof" | null;
+  forcedAvailability: ForcedAvailability | null;
   treatFullDayTimedEventsAsAllDay: boolean;
   destinationIds: string[];
   sourceIds: string[];

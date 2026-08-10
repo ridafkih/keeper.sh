@@ -26,6 +26,25 @@ const createSourceSchema = type({
 
 type CreateSource = typeof createSourceSchema.infer;
 
+const FORCED_AVAILABILITY = {
+  busy: "busy",
+  free: "free",
+  oof: "oof",
+} as const;
+
+type ForcedAvailability = (typeof FORCED_AVAILABILITY)[keyof typeof FORCED_AVAILABILITY];
+
+const FORCED_AVAILABILITIES = [
+  FORCED_AVAILABILITY.busy,
+  FORCED_AVAILABILITY.free,
+  FORCED_AVAILABILITY.oof,
+] as const;
+
+const isForcedAvailability = (value: string): value is ForcedAvailability =>
+  value === FORCED_AVAILABILITY.busy
+  || value === FORCED_AVAILABILITY.free
+  || value === FORCED_AVAILABILITY.oof;
+
 const stringSchema = type("string");
 
 const googleEventSchema = type({
@@ -461,6 +480,9 @@ export {
   icsRecurrenceRuleSchema,
   storedIcsRecurrenceRuleSchema,
   icsExceptionDatesSchema,
+  FORCED_AVAILABILITY,
+  FORCED_AVAILABILITIES,
+  isForcedAvailability,
 };
 
 export type {
@@ -469,6 +491,7 @@ export type {
   BillingPeriod,
   FeedbackRequest,
   CreateSource,
+  ForcedAvailability,
   GoogleEvent,
   GoogleEventList,
   GoogleAttendee,

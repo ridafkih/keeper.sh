@@ -3,6 +3,7 @@ import {
   eventStatesTable,
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
+import { isForcedAvailability } from "@keeper.sh/data-schemas";
 import { and, asc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
 import type { BunSQLClient } from "../database-client";
 import type {
@@ -83,7 +84,7 @@ const parseAvailability = (value: string | null): EventAvailability | undefined 
 };
 
 const parseForcedAvailability = (value: string | null): EventAvailability | undefined => {
-  if (value === "busy" || value === "free" || value === "oof") {
+  if (value !== null && isForcedAvailability(value)) {
     return value;
   }
 };
