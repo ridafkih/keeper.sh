@@ -137,6 +137,29 @@ export function softwareApplicationSchema() {
   };
 }
 
+export function faqSchema(items: Array<{ question: string; answer: string }>) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "@id": `${SITE_URL}/#faq`,
+    isPartOf: { "@id": `${SITE_URL}/#website` },
+    mainEntity: items.map((item) => {
+      const question = item.question.trim();
+      const answer = item.answer.trim();
+      if (!question || !answer) {
+        throw new Error(
+          `faqSchema requires a question and answer for every item, received ${JSON.stringify(item)}`,
+        );
+      }
+      return {
+        "@type": "Question",
+        name: question,
+        acceptedAnswer: { "@type": "Answer", text: answer },
+      };
+    }),
+  };
+}
+
 export function collectionPageSchema(posts: Array<{ slug: string; metadata: { title: string } }>) {
   return {
     "@context": "https://schema.org",
