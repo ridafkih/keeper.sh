@@ -40,18 +40,6 @@ afterEach(() => {
 });
 
 describe("createGoogleSourceFetcher", () => {
-  it("returns a fetchEvents function that retrieves and parses Google Calendar events", () => {
-    const fetcher = createGoogleSourceFetcher({
-      accessToken: "test-token",
-      calendarId: CALENDAR_ID,
-      plan: TEST_PLAN,
-      externalCalendarId: "primary",
-      syncToken: null,
-    });
-
-    expect(typeof fetcher.fetchEvents).toBe("function");
-  });
-
   it("returns a versioned token that the next cron run accepts", async () => {
     const rawSyncToken = "google-sync-token";
     const queuedFetch = (): Promise<Response> => Promise.resolve(Response.json({

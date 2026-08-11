@@ -119,9 +119,6 @@ const getWiderSyncRange = (first: SyncRange, second: SyncRange): SyncRange => {
   return second;
 };
 
-const isSyncRangeWider = (candidate: SyncRange, current: SyncRange): boolean =>
-  getSyncRangeOrder(candidate) > getSyncRangeOrder(current);
-
 export {
   DEFAULT_FUTURE_SYNC_RANGE,
   DEFAULT_HISTORIC_SYNC_RANGE,
@@ -131,6 +128,5 @@ export {
   getStartOfToday,
   getWiderSyncRange,
   intersectSyncWindows,
-  isSyncRangeWider,
 };
 export type { SourceIngestionPlan, SyncWindow };

@@ -1,28 +1,10 @@
 import { describe, expect, it } from "vitest";
-import {
-  createCalDAVSourceFetcher,
-  isCalDAVEventInSyncWindow,
-} from "../../../../src/providers/caldav/source/fetch-adapter";
-import { createSourceIngestionPlan } from "../../../../src/core/sync/sync-range";
+import { isCalDAVEventInSyncWindow } from "../../../../src/providers/caldav/source/fetch-adapter";
 
 const SYNC_WINDOW = {
   timeMax: new Date("2026-06-01T00:00:00.000Z"),
   timeMin: new Date("2026-03-01T00:00:00.000Z"),
 };
-
-describe("createCalDAVSourceFetcher", () => {
-  it("returns a fetchEvents function", () => {
-    const fetcher = createCalDAVSourceFetcher({
-      calendarUrl: "https://caldav.example.com/calendar/",
-      serverUrl: "https://caldav.example.com",
-      username: "user",
-      password: "pass",
-      plan: createSourceIngestionPlan("1_week", "2_years"),
-    });
-
-    expect(typeof fetcher.fetchEvents).toBe("function");
-  });
-});
 
 describe("isCalDAVEventInSyncWindow", () => {
   it("drops a non-recurring event that ends exactly at the window start", () => {

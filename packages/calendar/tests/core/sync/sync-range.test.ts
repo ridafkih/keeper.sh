@@ -8,7 +8,6 @@ import {
   getConfigurableSyncWindow,
   getWiderSyncRange,
   intersectSyncWindows,
-  isSyncRangeWider,
 } from "../../../src/core/sync/sync-range";
 
 describe("configurable sync ranges", () => {
@@ -40,8 +39,8 @@ describe("configurable sync ranges", () => {
 
   it("selects the widest range needed by mapped destinations", () => {
     expect(getWiderSyncRange("3_months", "12_months")).toBe("12_months");
-    expect(isSyncRangeWider("2_years", "12_months")).toBe(true);
-    expect(isSyncRangeWider("1_week", "1_month")).toBe(false);
+    expect(getWiderSyncRange("12_months", "3_months")).toBe("12_months");
+    expect(getWiderSyncRange("1_week", "1_week")).toBe("1_week");
   });
 
   it("reproduces the pre-configurable window for a migrated calendar", () => {
@@ -112,7 +111,7 @@ describe("configurable sync ranges", () => {
     expect(() => getWiderSyncRange(unsupported, "1_week")).toThrow(
       "Unsupported sync range: 5_years",
     );
-    expect(() => isSyncRangeWider(unsupported, "1_week")).toThrow(
+    expect(() => getWiderSyncRange("1_week", unsupported)).toThrow(
       "Unsupported sync range: 5_years",
     );
   });

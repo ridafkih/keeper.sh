@@ -128,7 +128,6 @@ export {
   getConfigurableSyncWindow,
   getWiderSyncRange,
   intersectSyncWindows,
-  isSyncRangeWider,
   type SourceIngestionPlan,
   type SyncWindow,
 } from "./core/sync/sync-range";

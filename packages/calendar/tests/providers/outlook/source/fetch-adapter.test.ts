@@ -42,18 +42,6 @@ afterEach(() => {
 });
 
 describe("createOutlookSourceFetcher", () => {
-  it("returns a fetchEvents function", () => {
-    const fetcher = createOutlookSourceFetcher({
-      accessToken: "test-token",
-      calendarId: CALENDAR_ID,
-      plan: TEST_PLAN,
-      externalCalendarId: "calendar-id",
-      syncToken: null,
-    });
-
-    expect(typeof fetcher.fetchEvents).toBe("function");
-  });
-
   it("returns a versioned delta link that the next cron run accepts", async () => {
     const rawDeltaLink = "https://graph.microsoft.com/delta?$deltatoken=next";
     const queuedFetch = (): Promise<Response> => Promise.resolve(Response.json({
