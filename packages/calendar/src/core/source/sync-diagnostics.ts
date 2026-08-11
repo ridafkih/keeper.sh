@@ -24,7 +24,8 @@ const isSourceEventInWindow = (event: SourceEvent, syncWindow: OAuthSyncWindow):
     return event.endTime > syncWindow.timeMin && event.startTime < syncWindow.timeMax;
   }
 
-  return materializeRecurrenceEvents([{
+  let isOverBudget = false;
+  const occurrences = materializeRecurrenceEvents([{
     calendarId: "sync-window-filter",
     calendarName: null,
     calendarUrl: null,
@@ -40,7 +41,18 @@ const isSourceEventInWindow = (event: SourceEvent, syncWindow: OAuthSyncWindow):
   }], {
     end: syncWindow.timeMax,
     start: syncWindow.timeMin,
-  }).length > 0;
+  }, {
+    onSeriesOverBudget: () => {
+      isOverBudget = true;
+    },
+  });
+
+  /*
+   * A series over the occurrence budget certainly overlaps the window, so keep it.
+   * Throwing here would fail the whole fetch before ingestion's budget scan could
+   * withhold and report the series, putting the entire calendar into backoff.
+   */
+  return isOverBudget || occurrences.length > 0;
 };
 
 const filterSourceEventsToSyncWindow = (
