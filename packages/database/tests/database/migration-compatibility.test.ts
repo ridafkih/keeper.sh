@@ -24,6 +24,43 @@ describe("0077 self-hosted upgrade compatibility", () => {
     expect(migration).not.toContain('event_mappings_identity_check');
   });
 
+  it("consolidates recurring states on databases that predate the sourceEventId column", async () => {
+    const migrateScript = await Bun.file(
+      `${import.meta.dirname}/../../scripts/migrate.ts`,
+    ).text();
+
+    /*
+     * Databases at 0070-0074 have no sourceEventId column. Referencing it
+     * unguarded aborts migration with 42703, and skipping consolidation instead
+     * lets 0076 fail building its unique index over the duplicates consolidation
+     * exists to remove. Either way the API entrypoint crash-loops under set -e.
+     */
+    expect(migrateScript).toContain("column_name = 'sourceEventId'");
+    expect(migrateScript).toContain("has_source_event_column");
+
+    const guardStart = migrateScript.indexOf("const [state] = compatibility.rows;");
+    const guard = migrateScript.slice(
+      guardStart,
+      migrateScript.indexOf("return;", guardStart),
+    );
+    expect(guard).toContain("has_recurring_index");
+    expect(guard).not.toContain("has_source_event_column");
+  });
+
+  it("walks the source-calendar backfill with a keyset cursor", async () => {
+    const backfillSource = await Bun.file(
+      `${import.meta.dirname}/../../src/database/backfill-event-mapping-source-calendar-ids.ts`,
+    ).text();
+
+    /*
+     * Without a cursor every batch rescans the rows it already filled, and the
+     * supporting index is only created after the backfill runs — quadratic work
+     * that can outlast the compose healthcheck window and strand the stack.
+     */
+    expect(backfillSource).toContain("lastId");
+    expect(backfillSource).toContain("gt(");
+  });
+
   it("routes the package migration command through serialized backfill verification", async () => {
     const packageJson = await Bun.file(`${import.meta.dirname}/../../package.json`).json();
     const migrateScript = await Bun.file(
