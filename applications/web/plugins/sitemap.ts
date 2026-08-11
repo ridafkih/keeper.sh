@@ -4,7 +4,7 @@ import type { Plugin } from "vite";
 import { XMLBuilder } from "fast-xml-parser";
 import { parse as parseYaml } from "yaml";
 
-const SITE_URL = "https://keeper.sh";
+const SITE_URL = "https://www.keeper.sh";
 const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---/;
 
 interface SitemapEntry {

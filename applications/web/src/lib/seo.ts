@@ -1,4 +1,4 @@
-const SITE_URL = "https://keeper.sh";
+const SITE_URL = "https://www.keeper.sh";
 const SITE_NAME = "Keeper.sh";
 
 export function canonicalUrl(path: string): string {
