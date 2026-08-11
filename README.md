@@ -2,14 +2,19 @@
 
 # About
 
-Keeper.sh is a simple & open-source calendar syncing tool. It allows you to pull events from your Google Calendar, Outlook, iCloud, Fastmail, CalDAV server, or a remotely hosted iCal or ICS links, and push them to one or many calendars so the time slots can align across them all. It also serves as a global MCP server and API for you or your agents to manage all your calendars from one convenient interface. You can use the hosted version for convenience and zero-setup, or self-host to get Pro features free. 
+Keeper.sh is a simple & open-source calendar syncing tool. It allows you to pull events from your Google Calendar, Outlook, iCloud, Fastmail, CalDAV server, or a remotely hosted iCal or ICS links, and push them to one or many calendars so the time slots can align across them all. Google, Outlook, iCloud, Fastmail, and CalDAV are first-class integrations that can each be used as a source or as a destination, while iCal and ICS links are pull-only. It also serves as a global MCP server and API for you or your agents to manage all your calendars from one convenient interface. You can use the hosted version for convenience and zero-setup, or self-host to get Pro features free. 
 
 # Features
 
-- Aggregating calendar events from remote sources
+- First-class Google Calendar, Outlook, iCloud, Fastmail, and CalDAV integrations, each usable as a source or a destination
+- Pull-only ingestion of remotely hosted iCal and ICS links
+- Incremental syncing on Google and Outlook using provider sync tokens rather than refetching everything
 - Event content agnostic syncing engine
 - Push aggregate events to one or more calendars
+- Per-source privacy controls to strip event names, descriptions, and locations, replacing the title with a `{{calendar_name}}` or `{{event_name}}` template
+- REST API under `/api/v1` authenticated with API tokens
 - MCP (Model Context Protocol) server for AI agent calendar access
+- Combined iCal feed you can subscribe to from any calendar app
 - Open source under AGPL-3.0
 - Easy to self-host
 - Easy-to-purge remote events
@@ -104,19 +109,32 @@ I've probably tried it. It was probably too finicky, ended up making me waste ho
 
 Events are flagged as having been created by Keeper either using a `@keeper.sh` suffix on the remote UID, or in the case of a platform like Outlook that doesn't support custom UIDs, we just put it in a `"keeper.sh"` category.
 
+## How is the syncing split up?
+
+There are two halves, and they run on separate schedules.
+
+Ingestion pulls from your sources into Keeper's own database once a minute, regardless of plan. Google and Outlook are fetched incrementally using the provider's own sync token and delta link respectively, so a run only asks for what changed since the last one. CalDAV, iCloud, and Fastmail are refetched and diffed against the event state Keeper already has stored, and iCal/ICS links are refetched and diffed against the last stored snapshot.
+
+Pushing to destinations is what the refresh interval in the pricing table refers to. The cron service enqueues a job per destination onto a Redis-backed queue every minute for Pro and every thirty minutes for free, and the worker service reconciles the destination calendar. This is polling on our side rather than provider push notifications, so nothing needs to reach your instance from the outside.
+
 # Cloud Hosted
 
 I've made Keeper easy to self-host, but whether you simply want to support the project or don't want to deal with the hassle or overhead of configuring and running your own infrastructure cloud hosting is always an option.
 
 Head to [keeper.sh](https://keeper.sh) to get started with the cloud-hosted version. Use code `README` for 25% off.
 
-|                       | Free       | Pro (Cloud-Hosted) | Pro (Self-Hosted) |
-| --------------------- | ---------- | ------------------ | ----------------- |
-| **Monthly Price**     | $0 USD     | $5 USD             | $0                |
-| **Annual Price**      | $0 USD     | $42 USD (-30%)     | $0                |
-| **Refresh Interval**  | 30 minutes | 1 minute           | 1 minute          |
-| **Source Limit**      | 2          | ∞                  | ∞                 |
-| **Destination Limit** | 1          | ∞                  | ∞                 |
+|                             | Free       | Pro (Cloud-Hosted) | Pro (Self-Hosted) |
+| --------------------------- | ---------- | ------------------ | ----------------- |
+| **Monthly Price**           | $0 USD     | $5 USD             | $0                |
+| **Annual Price**            | $0 USD     | $42 USD (-30%)     | $0                |
+| **Refresh Interval**        | 30 minutes | 1 minute           | 1 minute          |
+| **Linked Account Limit**    | 2          | ∞                  | ∞                 |
+| **Sync Mapping Limit**      | 3          | ∞                  | ∞                 |
+| **Event Filters**           | No         | Yes                | Yes               |
+| **iCal Feed Customization** | No         | Yes                | Yes               |
+| **API Requests**            | 25 per day | ∞                  | ∞                 |
+
+The two limits that bite first are counted separately. A linked account is one connected Google, Outlook, iCloud, Fastmail, or CalDAV account, or one iCal/ICS subscription, and free is capped at two of them however many calendars each exposes. A sync mapping is one source calendar wired to one destination calendar, and free is capped at three, so a single source fanning out to three destinations uses the whole allowance. The refresh interval is how often Keeper pushes to your destinations; ingestion from your sources runs every minute on every plan.
 
 # Self Hosted
 
@@ -497,21 +515,64 @@ Once that's configured, you can launch Keeper using the following command.
 docker compose up -d
 ```
 
+# REST API
+
+Keeper exposes a REST API under `/api/v1`. It is the same interface the dashboard and the MCP server use, so anything an agent can do through MCP you can do with `curl`.
+
+## Authentication
+
+Create an API token from **Settings → API Tokens** in the dashboard. Tokens are prefixed with `kpr_` and the full value is only returned once, at creation time. Pass it as a bearer token.
+
+```bash
+curl https://keeper.example.com/api/v1/calendars \
+  -H "Authorization: Bearer kpr_..."
+```
+
+`/api/v1` routes also accept a logged-in browser session or an MCP OAuth access token, so all three callers hit the same handlers. Token management itself lives at `/api/tokens` and requires a browser session rather than an API token.
+
+## Endpoints
+
+| Method   | Path                                     | Description                                                                                                                                                    |
+| -------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/api/v1/calendars`                      | List connected calendars. Accepts an optional comma-delimited `provider` filter.                                                                                |
+| `GET`    | `/api/v1/calendars/{calendarId}/invites` | List invitations on a calendar that have not been responded to, within a date range.                                                                            |
+| `GET`    | `/api/v1/accounts`                       | List connected calendar accounts and how many calendars each has. Accepts an optional comma-delimited `provider` filter.                                        |
+| `GET`    | `/api/v1/events`                         | List events in a date range. Accepts `calendarId`, `availability`, and `isAllDay` filters, and `count=true` to return only a count.                             |
+| `POST`   | `/api/v1/events`                         | Create an event. Requires `calendarId`, `title`, `startTime`, and `endTime`.                                                                                    |
+| `GET`    | `/api/v1/events/{id}`                    | Get a single event.                                                                                                                                            |
+| `PATCH`  | `/api/v1/events/{id}`                    | Update an event's fields, or send `rsvpStatus` to respond to an invitation.                                                                                     |
+| `DELETE` | `/api/v1/events/{id}`                    | Delete an event.                                                                                                                                               |
+| `GET`    | `/api/v1/ical`                           | Get the URL of your iCal feed.                                                                                                                                 |
+
+Range parameters `from` and `to` are ISO 8601 datetimes. If omitted, `from` defaults to now and `to` defaults to a week after `from`. A range may not exceed 732 days.
+
+> [!NOTE]
+>
+> On the free plan the API is capped at 25 requests per day, after which requests return `429`. Pro is uncapped, and self-hosted instances running without `COMMERCIAL_MODE` are treated as Pro.
+
 # MCP (Model Context Protocol)
 
 Keeper includes an optional MCP server that lets AI agents (such as Claude) access your calendar data through a standardized protocol. The MCP server authenticates via OAuth 2.1 with a consent flow hosted by the web application.
 
 ## Available Tools
 
-| Tool              | Description                                                                                          |
-| ----------------- | ---------------------------------------------------------------------------------------------------- |
-| `list_calendars`  | List all calendars connected to Keeper, including provider name and account.                          |
-| `get_events`      | Get calendar events within a date range. Accepts ISO 8601 datetimes and an IANA timezone identifier. |
-| `get_event_count` | Get the total number of calendar events synced to Keeper.                                            |
+| Tool                  | Description                                                                                                                                   |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_calendars`      | List all calendars connected to Keeper, including provider name and account.                                                                   |
+| `get_event_count`     | Get the number of calendar events. Optionally scoped to a date range with `from` and `to` ISO 8601 datetimes.                                  |
+| `get_events`          | Get calendar events within a date range. Accepts ISO 8601 datetimes and an IANA timezone identifier used to localize event times.              |
+| `get_event`           | Get a single calendar event by its ID.                                                                                                         |
+| `create_event`        | Create an event on a connected calendar. Requires a calendar ID, title, start time, and end time.                                               |
+| `update_event`        | Update an existing calendar event. Only the fields you provide are updated.                                                                    |
+| `delete_event`        | Delete a calendar event by its ID.                                                                                                             |
+| `get_pending_invites` | Get invitations on a calendar that have not been responded to within a date range.                                                             |
+| `rsvp_event`          | Respond to a calendar event invitation with `accepted`, `declined`, or `tentative`.                                                            |
+| `list_accounts`       | List all connected calendar accounts with provider information.                                                                                |
+| `get_ical_feed`       | Get your iCal feed URL for subscribing in other calendar apps.                                                                                 |
 
 ## Connecting an MCP Client
 
-To connect an MCP-compatible client (e.g. Claude Code, Claude Desktop), point it at your MCP server URL. The client will be guided through the OAuth consent flow to authorize read access to your calendar data.
+To connect an MCP-compatible client (e.g. Claude Code, Claude Desktop), point it at your MCP server URL. The client will be guided through the OAuth consent flow to authorize read and write access to your calendar data — the toolset can create, update, delete, and RSVP to events, not just read them.
 
 Example Claude Code MCP configuration:
 
