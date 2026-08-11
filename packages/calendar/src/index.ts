@@ -58,6 +58,11 @@ export {
 } from "./core/oauth/create-source-provider";
 export { generateDeterministicEventUid, isKeeperEvent } from "./core/events/identity";
 export { inferAllDayEvent, resolveIsAllDayEvent } from "./core/events/all-day";
+export {
+  instantToWallTime,
+  resolveTimeZone,
+  wallTimeToInstant,
+} from "./ics/utils/timezone-instant";
 export { RateLimiter, type RateLimiterConfig } from "./core/utils/rate-limiter";
 export { createRedisRateLimiter, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
 export { allSettledWithConcurrency, type AllSettledWithConcurrencyOptions } from "./core/utils/concurrency";

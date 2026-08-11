@@ -1,4 +1,5 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { FreeSlot, WorkingHours } from "@/utils/free-time";
 
 type KeeperDatabase = BunSQLDatabase;
 
@@ -58,6 +59,32 @@ interface KeeperEvent {
   calendarName: string;
   calendarProvider: string;
   calendarUrl: string | null;
+}
+
+interface KeeperFreeTimeOptions {
+  durationMinutes: number;
+  timezone: string;
+  workingHours: WorkingHours | null;
+  ignoreAllDayEvents: boolean;
+  limit: number;
+}
+
+interface KeeperFreeTimeResult {
+  from: string;
+  to: string;
+  timezone: string;
+  durationMinutes: number;
+  slots: FreeSlot[];
+}
+
+interface KeeperSyncTriggerResult {
+  triggered: boolean;
+  sourcesRefreshed: number;
+}
+
+interface KeeperCalendarPauseResult {
+  calendarId: string;
+  paused: boolean;
 }
 
 interface KeeperSyncStatus {
@@ -148,6 +175,12 @@ interface KeeperApi {
   getEventsInRange: (userId: string, range: KeeperEventRangeInput, filters?: KeeperEventFilters) => Promise<KeeperEvent[]>;
   getEvent: (userId: string, eventId: string) => Promise<KeeperEvent | null>;
   getEventCount: (userId: string, options?: { from?: Date; to?: Date }) => Promise<number>;
+  findFreeTime: (
+    userId: string,
+    range: KeeperEventRangeInput,
+    options: KeeperFreeTimeOptions,
+    filters?: KeeperEventFilters,
+  ) => Promise<KeeperFreeTimeResult>;
   getSyncStatuses: (userId: string) => Promise<KeeperSyncStatus[]>;
   createEvent: (userId: string, input: EventInput) => Promise<EventCreateResult>;
   updateEvent: (userId: string, eventId: string, updates: EventUpdateInput) => Promise<EventActionResult>;
@@ -162,12 +195,16 @@ export type {
   EventInput,
   EventUpdateInput,
   KeeperApi,
+  KeeperCalendarPauseResult,
   KeeperDatabase,
   KeeperDestination,
   KeeperEvent,
   KeeperEventFilters,
   KeeperEventRangeInput,
+  KeeperFreeTimeOptions,
+  KeeperFreeTimeResult,
   KeeperMapping,
+  KeeperSyncTriggerResult,
   KeeperSource,
   KeeperSyncStatus,
   PendingInvite,

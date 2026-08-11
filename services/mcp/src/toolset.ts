@@ -36,6 +36,33 @@ const keeperCalendarSchema = z.object({
 });
 type KeeperCalendar = z.infer<typeof keeperCalendarSchema>;
 
+const keeperFreeSlotSchema = z.object({
+  start: z.string(),
+  end: z.string(),
+  durationMinutes: z.number(),
+});
+
+const keeperFreeTimeSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  timezone: z.string(),
+  durationMinutes: z.number(),
+  slots: z.array(keeperFreeSlotSchema),
+});
+type KeeperFreeTime = z.infer<typeof keeperFreeTimeSchema>;
+
+const keeperSyncTriggerSchema = z.object({
+  triggered: z.boolean(),
+  sourcesRefreshed: z.number(),
+});
+type KeeperSyncTrigger = z.infer<typeof keeperSyncTriggerSchema>;
+
+const keeperCalendarPauseSchema = z.object({
+  calendarId: z.string(),
+  paused: z.boolean(),
+});
+type KeeperCalendarPause = z.infer<typeof keeperCalendarPauseSchema>;
+
 interface KeeperMcpToolset {
   list_calendars: KeeperMcpToolDefinition<KeeperCalendar[]>;
   get_event_count: KeeperMcpToolDefinition<{ count: number }>;
@@ -48,6 +75,9 @@ interface KeeperMcpToolset {
   rsvp_event: KeeperMcpToolDefinition<{ rsvpStatus: string } | { error: string }>;
   list_accounts: KeeperMcpToolDefinition<unknown[]>;
   get_ical_feed: KeeperMcpToolDefinition<{ url: string }>;
+  find_free_time: KeeperMcpToolDefinition<KeeperFreeTime>;
+  trigger_sync: KeeperMcpToolDefinition<KeeperSyncTrigger>;
+  pause_sync: KeeperMcpToolDefinition<KeeperCalendarPause>;
 }
 
 const isErrorResponse = (value: unknown): value is { error: string } =>
@@ -164,6 +194,52 @@ const localizeEvent = (event: KeeperEvent, timeZone: string) => ({
   ...event,
   startTime: toLocalizedTime(event.startTime, timeZone),
   endTime: toLocalizedTime(event.endTime, timeZone),
+});
+
+const FREE_TIME_OPTIONAL_PARAMS = [
+  "workingHoursStart",
+  "workingHoursEnd",
+  "workingDays",
+  "calendarId",
+  "ignoreAllDayEvents",
+  "limit",
+] as const;
+
+const toParamValue = (value: unknown): string | null => {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return null;
+};
+
+const buildFreeTimeParams = (
+  input: Record<string, unknown> & { from: string; to: string; timezone: string },
+  durationMinutes: number,
+): URLSearchParams =>
+  new URLSearchParams([
+    ["from", input.from],
+    ["to", input.to],
+    ["timezone", input.timezone],
+    ["durationMinutes", String(durationMinutes)],
+    ...FREE_TIME_OPTIONAL_PARAMS.flatMap((key) => {
+      const value = toParamValue(input[key]);
+      if (value === null) {
+        return [];
+      }
+      return [[key, value] satisfies [string, string]];
+    }),
+  ]);
+
+const localizeFreeTime = (freeTime: KeeperFreeTime): KeeperFreeTime => ({
+  ...freeTime,
+  slots: freeTime.slots.map((slot) => ({
+    ...slot,
+    start: toLocalizedTime(slot.start, freeTime.timezone),
+    end: toLocalizedTime(slot.end, freeTime.timezone),
+  })),
 });
 
 const createKeeperMcpToolset = (): KeeperMcpToolset => ({
@@ -342,7 +418,97 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
     description: "Get the user's iCal feed URL for subscribing in other calendar apps.",
     execute: (context) => apiFetch(context, "/api/v1/ical", z.object({ url: z.string() })),
   },
+  find_free_time: {
+    title: "Find free time",
+    description:
+      "Find open slots of at least 'durationMinutes' across every synced calendar in a date range. Events marked free or working-elsewhere never block; busy, out-of-office, and all-day events do. Optionally restrict candidates to working hours and weekdays in the given timezone. Returned slots are localized to that timezone.",
+    inputSchema: {
+      ...eventRangeSchema,
+      durationMinutes: z
+        .number()
+        .int()
+        .positive()
+        .describe("Minimum length of a usable slot, in minutes"),
+      workingHoursStart: z
+        .string()
+        .optional()
+        .describe("Local start of the working day as 24-hour HH:MM (e.g. 09:00)"),
+      workingHoursEnd: z
+        .string()
+        .optional()
+        .describe("Local end of the working day as 24-hour HH:MM (e.g. 17:00)"),
+      workingDays: z
+        .string()
+        .optional()
+        .describe("Comma-separated local weekdays to consider, 0 for Sunday through 6 for Saturday"),
+      calendarId: z
+        .string()
+        .optional()
+        .describe("Comma-separated calendar IDs to consider instead of every calendar"),
+      ignoreAllDayEvents: z
+        .boolean()
+        .optional()
+        .describe("Treat all-day events as non-blocking"),
+      limit: z.number().int().positive().optional().describe("Maximum number of slots to return"),
+    },
+    execute: async (context, input) => {
+      if (!input || !isEventRangeInput(input)) {
+        throw new Error("'from', 'to', and 'timezone' are required");
+      }
+      if (typeof input.durationMinutes !== "number") {
+        throw new TypeError("'durationMinutes' is required");
+      }
+      const params = buildFreeTimeParams(input, input.durationMinutes);
+      const freeTime = await apiFetch(
+        context,
+        `/api/v1/events/free-time?${params}`,
+        keeperFreeTimeSchema,
+      );
+      return localizeFreeTime(freeTime);
+    },
+  },
+  trigger_sync: {
+    title: "Trigger sync",
+    description:
+      "Force Keeper to sync now: clears the ingest backoff on every active source so they are polled on the next pass, and immediately enqueues a push to every destination calendar. Throttled to one request per minute per user.",
+    execute: (context) =>
+      apiFetch(context, "/api/v1/sync", keeperSyncTriggerSchema, { method: "POST" }),
+  },
+  pause_sync: {
+    title: "Pause or resume calendar sync",
+    description:
+      "Pause or resume syncing for a single calendar without disconnecting it. A paused calendar is neither polled for new events nor pushed to, in both directions, and its stored events are kept. Set paused to false to resume.",
+    inputSchema: {
+      calendarId: z.string().uuid().describe("The calendar ID returned by list_calendars"),
+      paused: z.boolean().describe("True to pause syncing, false to resume"),
+    },
+    execute: (context, input) => {
+      if (!input?.calendarId || typeof input.calendarId !== "string") {
+        throw new Error("'calendarId' is required");
+      }
+      if (typeof input.paused !== "boolean") {
+        throw new TypeError("'paused' is required");
+      }
+      return apiFetch(
+        context,
+        `/api/v1/calendars/${input.calendarId}`,
+        keeperCalendarPauseSchema,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ paused: input.paused }),
+        },
+      );
+    },
+  },
 });
 
 export { createKeeperMcpToolset, normalizeTimezoneOffset, toLocalizedTime };
-export type { KeeperCalendar, KeeperMcpToolDefinition, KeeperMcpToolset, KeeperToolContext };
+export type {
+  KeeperCalendar,
+  KeeperCalendarPause,
+  KeeperFreeTime,
+  KeeperMcpToolDefinition,
+  KeeperMcpToolset,
+  KeeperSyncTrigger,
+  KeeperToolContext,
+};
