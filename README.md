@@ -71,7 +71,7 @@ sudo update-ca-certificates
 bun dev
 ```
 
-This starts PostgreSQL, Redis, and a Caddy reverse proxy via Docker Compose, along with the API, web, MCP, and cron services locally. Once running, open `https://keeper.localhost`.
+This starts PostgreSQL, Redis, and a Caddy reverse proxy via Docker Compose, along with the API, web, MCP, cron, and worker services locally. Once running, open `https://keeper.localhost`.
 
 ### Architecture
 
@@ -135,18 +135,20 @@ There are seven images currently available, two of them are designed for conveni
 | DATABASE_URL                   | `api`, `cron`, `worker`, `mcp` | PostgreSQL connection URL.<br><br>e.g. `postgres://user:pass@postgres:5432/keeper`                                                                                  |
 | REDIS_URL                      | `api`, `cron`, `worker` | Redis connection URL. Must be the same Redis instance across all services.<br><br>e.g. `redis://redis:6379`                                                        |
 | WORKER_JOB_QUEUE_ENABLED       | `cron`        | Required. Set to `true` to enqueue sync jobs to the worker queue, or `false` to disable. If unset, the cron service will exit with a migration notice.              |
+| WORKER_CONCURRENCY             | `worker`      | Optional. Number of sync jobs the worker processes concurrently. Defaults to `25`.                                                                                  |
 | BETTER_AUTH_URL                | `api`, `mcp`  | The base URL used for auth redirects.<br><br>e.g. `http://localhost:3000`                                                                                           |
 | BETTER_AUTH_SECRET             | `api`, `mcp`  | Secret key for session signing.<br><br>e.g. `openssl rand -base64 32`                                                                                               |
-| API_PORT                       | `api`         | Port the Bun API listens on. Defaults to `3001` in container images.                                                                                                |
+| API_PORT                       | `api`         | Required. Port the Bun API listens on. Pre-set to `3001` in the `keeper-standalone` and `keeper-services` images.                                                    |
 | ENV                            | `web`         | Optional. Runtime environment. One of `development`, `production`, or `test`. Defaults to `production`.                                                             |
-| PORT                           | `web`         | Port the web server listens on. Defaults to `3000` in container images.                                                                                             |
+| PORT                           | `web`         | Required. Port the web server listens on. Pre-set to `3000` in the `keeper-standalone` and `keeper-services` images.                                                 |
 | VITE_API_URL                   | `web`         | The URL the web server uses to proxy requests to the Bun API.<br><br>e.g. `http://api:3001`                                                                         |
-| COMMERCIAL_MODE                | `api`, `cron` | Enable Polar billing flow. Set to `true` if using Polar for subscriptions.                                                                                          |
+| COMMERCIAL_MODE                | `api`, `cron`, `mcp`, `web` | Enable Polar billing flow. Set to `true` if using Polar for subscriptions.                                                                            |
 | POLAR_ACCESS_TOKEN             | `api`, `cron` | Optional. Polar API token for subscription management.                                                                                                              |
 | POLAR_MODE                     | `api`, `cron` | Optional. Polar environment, `sandbox` or `production`.                                                                                                             |
 | POLAR_WEBHOOK_SECRET           | `api`         | Optional. Secret to verify Polar webhooks.                                                                                                                          |
 | ENCRYPTION_KEY                 | `api`, `cron`, `worker` | Key for encrypting CalDAV credentials at rest.<br><br>e.g. `openssl rand -base64 32`                                                                                |
 | RESEND_API_KEY                 | `api`         | Optional. API key for sending emails via Resend.                                                                                                                    |
+| FEEDBACK_EMAIL                 | `api`         | Optional. Address that in-app feedback submissions are emailed to. Requires `RESEND_API_KEY`.                                                                        |
 | PASSKEY_RP_ID                  | `api`         | Optional. Relying party ID for passkey authentication.                                                                                                              |
 | PASSKEY_RP_NAME                | `api`         | Optional. Relying party display name for passkeys.                                                                                                                  |
 | PASSKEY_ORIGIN                 | `api`         | Optional. Origin allowed for passkey flows (e.g., `https://keeper.example.com`).                                                                                    |
@@ -158,18 +160,18 @@ There are seven images currently available, two of them are designed for conveni
 | BLOCK_PRIVATE_RESOLUTION       | `api`, `cron` | Optional. Set to `true` to block outbound fetches (ICS subscriptions, CalDAV servers) from resolving to private/reserved network addresses. Prevents SSRF. Defaults to `false` for backward compatibility with self-hosted setups that use local CalDAV/ICS servers. |
 | PRIVATE_RESOLUTION_WHITELIST          | `api`, `cron` | Optional. When `BLOCK_PRIVATE_RESOLUTION` is `true`, this comma-separated list of hostnames or IPs is exempt from the restriction.<br><br>e.g. `192.168.1.50,radicale.local,10.0.2.12` |
 | TRUSTED_ORIGINS                | `api`         | Optional. Comma-separated list of additional trusted origins for CSRF protection.<br><br>e.g. `http://192.168.1.100,http://keeper.local,https://keeper.example.com` |
-| MCP_PUBLIC_URL                 | `api`, `mcp`  | Optional. Public URL of the MCP resource. Enables OAuth on the API and identifies the MCP server to clients.<br><br>e.g. `https://keeper.example.com/mcp`           |
+| WEBSOCKET_URL                  | `api`         | Optional. External URL clients should open the realtime socket against. When unset, clients connect to the API's own `/api/socket` path.<br><br>e.g. `wss://socket.keeper.example.com` |
+| MCP_PUBLIC_URL                 | `api`, `mcp`  | Optional on `api`, required by `mcp`. Public URL of the MCP resource. Enables OAuth on the API and identifies the MCP server to clients.<br><br>e.g. `https://keeper.example.com/mcp` |
 | VITE_MCP_URL                   | `web`         | Optional. Internal URL the web server uses to proxy `/mcp` requests to the MCP service.<br><br>e.g. `http://mcp:3002`                                              |
-| MCP_PORT                       | `mcp`         | Optional. Port the MCP server listens on.<br><br>e.g. `3002`                                                                                                       |
-| OTEL_EXPORTER_OTLP_ENDPOINT    | `api`, `cron`, `worker`, `mcp`, `web` | Optional. When set, enables forwarding structured logs to an OpenTelemetry collector via [`pino-opentelemetry-transport`](https://github.com/Vunovati/pino-opentelemetry-transport). The transport runs in a dedicated worker thread and does not affect application performance.<br><br>e.g. `https://otel-collector.example.com:4318` |
+| MCP_PORT                       | `mcp`         | Required by `mcp`. Port the MCP server listens on.<br><br>e.g. `3002`                                                                                              |
+| OTEL_EXPORTER_OTLP_ENDPOINT    | `api`, `cron`, `worker`, `mcp`, `web` | Optional. When set, enables forwarding structured logs to an OpenTelemetry collector. Each service pipes its stdout through the `keeper-otelemetry` binary from [`@keeper.sh/otelemetry`](./packages/otelemetry), which runs as a separate process and does not affect application performance.<br><br>e.g. `https://otel-collector.example.com:4318` |
 | OTEL_EXPORTER_OTLP_PROTOCOL    | `api`, `cron`, `worker`, `mcp`, `web` | Optional. Protocol used by the OTLP exporter. Defaults to `http/protobuf` per the OpenTelemetry spec.<br><br>e.g. `http/protobuf`, `grpc`, `http/json` |
 | OTEL_EXPORTER_OTLP_HEADERS     | `api`, `cron`, `worker`, `mcp`, `web` | Optional. Headers sent with every OTLP export request. Use this for authentication (e.g. Basic auth or API keys).<br><br>e.g. `Authorization=Basic dXNlcjpwYXNz` |
 
-The following environment variables are baked into the web image at **build time**. They are pre-configured in the official Docker images and only need to be set if you are building from source.
+The following environment variables are read by the `web` server at **runtime** and serialized into the page as public runtime configuration. All of them are optional.
 
 | Name                              | Description                                                        |
 | --------------------------------- | ------------------------------------------------------------------ |
-| VITE_COMMERCIAL_MODE              | Toggle commercial mode in the web UI (`true`/`false`).             |
 | POLAR_PRO_MONTHLY_PRODUCT_ID      | Optional. Polar monthly product ID to power in-app upgrade links.  |
 | POLAR_PRO_YEARLY_PRODUCT_ID       | Optional. Polar yearly product ID to power in-app upgrade links.   |
 | VITE_VISITORS_NOW_TOKEN           | Optional. [visitors.now](https://visitors.now) token for analytics |
@@ -196,7 +198,7 @@ The following environment variables are baked into the web image at **build time
 
 > [!TIP]
 >
-> Pin your images to a major.minor version tag (e.g., `2.9`) rather than `latest`. This prevents breaking changes from automatically applying when you pull new images.
+> Pin your images to a major.minor version tag (e.g., `2.13`) rather than `latest`. This prevents breaking changes from automatically applying when you pull new images.
 
 ## Prerequisites
 
@@ -307,7 +309,7 @@ With all said and done, you can access Keeper at http://localhost/. You can use 
 
 ## Collective Services Image
 
-If you'd like to bring your own Redis and PostgreSQL, you can use the `keeper-services` image. This contains the `cron`, `web` and `api` services in one.
+If you'd like to bring your own Redis and PostgreSQL, you can use the `keeper-services` image. This contains the `cron`, `worker`, `web` and `api` services in one.
 
 ### Generate `keeper-services` Environment Variables
 
@@ -465,6 +467,23 @@ services:
       DATABASE_URL: postgres://keeper:keeper@postgres:5432/keeper
       REDIS_URL: redis://redis:6379
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      WORKER_JOB_QUEUE_ENABLED: "true"
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    image: ghcr.io/ridafkih/keeper-worker:latest
+    environment:
+      DATABASE_URL: postgres://keeper:keeper@postgres:5432/keeper
+      REDIS_URL: redis://redis:6379
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
@@ -544,41 +563,30 @@ To enable MCP on a self-hosted instance:
 
 ## Applications
 
-1. [@keeper.sh/api](./applications/api)
-2. [@keeper.sh/cron](./applications/cron)
-3. [@keeper.sh/mcp](./applications/mcp)
-4. [@keeper.sh/web](./applications/canary-web)
-5. @keeper.sh/cli _(Coming Soon)_
-6. @keeper.sh/mobile _(Coming Soon)_
-7. @keeper.sh/ssh _(Coming Soon)_
+1. [@keeper.sh/web](./applications/web)
+2. @keeper.sh/cli _(Coming Soon)_
+3. @keeper.sh/mobile _(Coming Soon)_
+4. @keeper.sh/ssh _(Coming Soon)_
+
+## Services
+
+1. [@keeper.sh/api](./services/api)
+2. [@keeper.sh/cron](./services/cron)
+3. [@keeper.sh/mcp](./services/mcp)
+4. [@keeper.sh/worker](./services/worker)
 
 ## Modules
 
 1. [@keeper.sh/auth](./packages/auth)
-1. [@keeper.sh/auth-plugin-username-only](./packages/auth-plugin-username-only)
 1. [@keeper.sh/broadcast](./packages/broadcast)
-1. [@keeper.sh/broadcast-client](./packages/broadcast-client)
 1. [@keeper.sh/calendar](./packages/calendar)
 1. [@keeper.sh/constants](./packages/constants)
 1. [@keeper.sh/data-schemas](./packages/data-schemas)
 1. [@keeper.sh/database](./packages/database)
-1. [@keeper.sh/date-utils](./packages/date-utils)
-1. [@keeper.sh/encryption](./packages/encryption)
-1. [@keeper.sh/env](./packages/env)
+1. [@keeper.sh/digest-fetch](./packages/digest-fetch)
 1. [@keeper.sh/fixtures](./packages/fixtures)
-1. [@keeper.sh/keeper-api](./packages/keeper-api)
-1. [@keeper.sh/oauth](./packages/oauth)
-1. [@keeper.sh/oauth-google](./packages/oauth-google)
-1. [@keeper.sh/oauth-microsoft](./packages/oauth-microsoft)
+1. [@keeper.sh/otelemetry](./packages/otelemetry)
 1. [@keeper.sh/premium](./packages/premium)
-1. [@keeper.sh/provider-caldav](./packages/provider-caldav)
-1. [@keeper.sh/provider-core](./packages/provider-core)
-1. [@keeper.sh/provider-fastmail](./packages/provider-fastmail)
-1. [@keeper.sh/provider-google-calendar](./packages/provider-google-calendar)
-1. [@keeper.sh/provider-icloud](./packages/provider-icloud)
-1. [@keeper.sh/provider-outlook](./packages/provider-outlook)
-1. [@keeper.sh/provider-registry](./packages/provider-registry)
-1. [@keeper.sh/pull-calendar](./packages/pull-calendar)
-1. [@keeper.sh/sync-calendar](./packages/sync-calendar)
-1. [@keeper.sh/sync-events](./packages/sync-events)
+1. [@keeper.sh/queue](./packages/queue)
+1. [@keeper.sh/sync](./packages/sync)
 1. [@keeper.sh/typescript-config](./packages/typescript-config)
