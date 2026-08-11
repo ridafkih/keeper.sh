@@ -32,11 +32,21 @@ const syncRangeSqlValues = SYNC_RANGE_DEFINITIONS
   .map(({ value }) => `'${value}'`)
   .join(", ");
 
+const buildLegacySourceEventFilter = (
+  hasSourceEventColumn: boolean,
+): string => {
+  if (hasSourceEventColumn) {
+    return `"sourceEventId" IS NULL AND `;
+  }
+  return "";
+};
+
 const consolidateLegacyRecurringEventStates = async (): Promise<void> => {
   const compatibility = await connection.query<{
     has_legacy_index: boolean;
     has_recurrence_column: boolean;
     has_recurring_index: boolean;
+    has_source_event_column: boolean;
   }>(`
     SELECT
       EXISTS (
@@ -50,6 +60,12 @@ const consolidateLegacyRecurringEventStates = async (): Promise<void> => {
           AND table_name = 'event_states'
           AND column_name = 'recurrenceId'
       ) AS has_recurrence_column,
+      EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'event_states'
+          AND column_name = 'sourceEventId'
+      ) AS has_source_event_column,
       EXISTS (
         SELECT 1 FROM pg_indexes
         WHERE schemaname = 'public'
@@ -65,6 +81,16 @@ const consolidateLegacyRecurringEventStates = async (): Promise<void> => {
     return;
   }
 
+  /**
+   * Databases at 0070-0074 predate the sourceEventId column that 0075 adds, so
+   * every row there is implicitly an unresolved source event. Consolidation
+   * cannot be skipped for them: 0076 builds a unique index over exactly these
+   * rows and fails on the duplicates consolidation exists to remove.
+   */
+  const legacySourceEventFilter = buildLegacySourceEventFilter(
+    state.has_source_event_column,
+  );
+
   await connection.query("BEGIN");
   try {
     await connection.query(`
@@ -79,8 +105,7 @@ const consolidateLegacyRecurringEventStates = async (): Promise<void> => {
             ORDER BY "createdAt" DESC, "id" DESC
           ) AS canonical_id
         FROM "event_states"
-        WHERE "sourceEventId" IS NULL
-          AND "sourceEventUid" IS NOT NULL
+        WHERE ${legacySourceEventFilter}"sourceEventUid" IS NOT NULL
           AND "recurrenceId" IS NOT NULL
       )
       SELECT
@@ -121,8 +146,7 @@ const consolidateLegacyRecurringEventStates = async (): Promise<void> => {
             ORDER BY "createdAt" DESC, "id" DESC
           ) AS canonical_id
         FROM "event_states"
-        WHERE "sourceEventId" IS NULL
-          AND "sourceEventUid" IS NOT NULL
+        WHERE ${legacySourceEventFilter}"sourceEventUid" IS NOT NULL
           AND "recurrenceId" IS NOT NULL
       )
       DELETE FROM "event_states" events

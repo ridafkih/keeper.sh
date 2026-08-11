@@ -13,9 +13,15 @@ const createDatabase = (
   database: EventMappingSourceBackfillDatabase;
 } => {
   const pendingBatchCounts = [...batchCounts];
-  const backfillMissingSourceCalendarIdsBatch = vi.fn(
-    () => Promise.resolve(pendingBatchCounts.shift() ?? 0),
-  );
+  let processedCount = 0;
+  const backfillMissingSourceCalendarIdsBatch = vi.fn(() => {
+    const updatedCount = pendingBatchCounts.shift() ?? 0;
+    processedCount += updatedCount;
+    if (updatedCount === 0) {
+      return Promise.resolve({ lastId: null, updatedCount });
+    }
+    return Promise.resolve({ lastId: `mapping-${processedCount}`, updatedCount });
+  });
   const countMissingSourceCalendarIds = vi.fn(() => Promise.resolve(remainingCount));
   return {
     backfillMissingSourceCalendarIdsBatch,
@@ -36,7 +42,11 @@ describe("event mapping source calendar backfill", () => {
     ).resolves.toBeUndefined();
 
     expect(context.backfillMissingSourceCalendarIdsBatch).toHaveBeenCalledTimes(3);
-    expect(context.backfillMissingSourceCalendarIdsBatch).toHaveBeenCalledWith(1000);
+    expect(context.backfillMissingSourceCalendarIdsBatch.mock.calls).toEqual([
+      [1000, null],
+      [1000, "mapping-1000"],
+      [1000, "mapping-1020"],
+    ]);
     expect(context.countMissingSourceCalendarIds).toHaveBeenCalledOnce();
   });
 
