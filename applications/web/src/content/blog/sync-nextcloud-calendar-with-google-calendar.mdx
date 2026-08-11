@@ -1,0 +1,106 @@
+---
+title: "How to Sync Nextcloud Calendar with Google Calendar"
+description: "A step-by-step guide to two-way syncing a Nextcloud calendar with Google Calendar using Keeper.sh, including the CalDAV URL to use, app passwords, and what the sync actually covers."
+blurb: "Nextcloud speaks CalDAV and Google speaks OAuth, so nothing syncs between them out of the box. Here is how I wire the two together, what URL to paste, and where the sharp edges are."
+createdAt: "2026-08-11"
+slug: "sync-nextcloud-calendar-with-google-calendar"
+updatedAt: "2026-08-11"
+tags:
+  - "nextcloud"
+  - "google-calendar"
+  - "caldav"
+  - "sync"
+  - "self-hosting"
+---
+
+Nextcloud exposes calendars over CalDAV. Google Calendar exposes them over its own OAuth API. Neither one will subscribe to the other in a way that gives you writable, two-way availability, so the usual result is a Nextcloud calendar nobody at work can see and a work calendar your personal setup knows nothing about.
+
+This is the pairing I run myself, so it is the one I can describe honestly. Below is the actual flow, screen by screen, plus the parts that do not work the way you might expect.
+
+## What you need first
+
+- A Nextcloud instance you can reach over HTTPS from wherever Keeper runs
+- Your Nextcloud username and either your password or, if you have two-factor enabled, a [Nextcloud app password](https://docs.nextcloud.com/server/latest/user_manual/en/session_management.html)
+- A Google account
+- A Keeper.sh account, either on [keeper.sh](https://keeper.sh/register) or a [self-hosted instance](https://github.com/ridafkih/keeper.sh)
+
+If you self-host Keeper and use Google as a source or destination, you also need your own Google OAuth client from Google Cloud. Nextcloud itself needs no OAuth setup at all; CalDAV is just a username and a password.
+
+## Connect Nextcloud
+
+From the dashboard, open **Import Calendars**, then pick **Connect CalDAV Server** from the bottom group. Nextcloud does not have its own tile, and it does not need one. It is a standard CalDAV server.
+
+The form has three fields:
+
+- **CalDAV Server URL** — your Nextcloud base URL, for example `https://cloud.example.com`
+- **CalDAV Server Username** — your Nextcloud username, not your email address unless they happen to match
+- **CalDAV Server Password** — your password, or an app password if you use two-factor
+
+Use the base URL. Keeper runs standards discovery against it: it looks up the current-user principal, follows that to your calendar home set, and enumerates the collections it finds. You do not need to hunt down the `remote.php/dav/calendars/username/` path yourself. If discovery comes back empty, that longer form is a reasonable fallback, but try the base URL first.
+
+Two-factor is the thing that trips most people. Nextcloud rejects your login password on CalDAV once 2FA is enabled, and the failure surfaces in Keeper as `Invalid credentials`. Generate an app password under **Settings → Security → Devices & sessions** and paste that instead.
+
+Click **Connect**. Keeper imports *every* calendar it discovers on the account at once, then drops you into a short setup flow. There is no "pick which ones to import" step before that — the picking happens after.
+
+One quiet detail worth knowing: Keeper only keeps collections that advertise support for `VEVENT`. That is what you want for a task list or a contacts collection, which get skipped. It also means a calendar on a server that omits the supported-component property entirely will not show up, which is rare on Nextcloud but does happen behind some reverse proxies.
+
+## Connect Google Calendar
+
+Back on **Import Calendars**, choose **Connect Google Calendar**. The page lists what Keeper is about to ask Google for before it sends you anywhere:
+
+- See your email address
+- View a list of your calendars
+- View events, summaries and details
+- Add or remove calendar events
+
+Press **Connect**, complete Google's consent screen, and you land back in the same setup flow. Google calendars come in with both pull and push, so any of them can be a source, a destination, or both.
+
+## Wire up the mapping
+
+The setup flow is four screens:
+
+1. **Which calendars would you like to configure?** Check the ones you care about. Everything got imported; this is only about what you configure now.
+2. **Rename Your Calendars.** Nextcloud names default to things like "Personal", and Google to your email address. Renaming here is Keeper-local and does not touch the calendar on either provider.
+3. **Where should 'Personal' send events?** This is the outbound direction, asked once per calendar. Pick the destinations that should receive copies.
+4. **Where should 'Personal' pull events from?** The inbound direction for the same calendar.
+
+For a two-way setup between one Nextcloud calendar and one Google calendar, you check each in the other's list. That is two mappings, and the free tier allows three.
+
+If you skip the flow or want to change things later, every calendar has a detail page under **Calendars** in the dashboard with a **Send Events to Calendars** section that does the same thing.
+
+## What actually gets synced
+
+Newly connected calendars default to time only, not detail. Keeper sets every new source to strip the event name, description and location, and replaces the title with the source calendar's name. So a dentist appointment on Nextcloud lands on Google as a block titled after the calendar it came from, not "Dentist".
+
+That is the behaviour most people want, and it is the default precisely because the failure mode of the opposite default is leaking a private title onto a work calendar.
+
+If you do want real detail to pass through, the calendar detail page has a **Sync Settings** section with **Sync Event Name**, **Sync Event Description** and **Sync Event Location** toggles, all off to begin with. Turning **Sync Event Name** on switches the **Event Name** template to `{{event_name}}` and lets the true title through. While it is off, that template field stays editable and accepts `{{event_name}}` and `{{calendar_name}}`, which is how you customise the placeholder text without exposing titles. An **Exclusions** section below can drop all-day events, and for Google sources it adds **Exclude Focus Time Events** and **Exclude Out of Office Events**. Google's Working Location entries are always dropped, with no toggle.
+
+These settings are Pro-gated on the hosted plan. On a self-hosted instance every user gets them.
+
+New sources are also added to your aggregated iCal feed by default. If you do not want a calendar in the feed, untick it under **iCal Link**.
+
+The sync window runs from seven days ago to two years out and is not configurable. One-off events outside that range are not copied. Recurring series are treated more generously — a series whose master starts before the window is still picked up so its in-window occurrences survive.
+
+## How often it runs
+
+There are two halves, on separate schedules.
+
+Ingestion — pulling from Nextcloud and Google into Keeper's own database — runs every minute on every plan. Pushing out to your destinations is the interval the pricing page refers to: every minute on Pro and self-hosted, every thirty minutes on free.
+
+Google gets incremental sync. Keeper hands Google its sync token and only asks for what changed. CalDAV gets no such thing here: each ingestion run refetches the Nextcloud calendar within the sync window and diffs it against what Keeper already has. It works fine, but it is more work per cycle, and a very large Nextcloud calendar will feel that.
+
+## Limits and rough edges
+
+- **Free tier.** Two linked accounts and three sync mappings. Nextcloud is one account regardless of how many calendars it exposes, and Google is another, so a Nextcloud-plus-Google setup consumes the whole account allowance. Self-hosting removes both limits.
+- **Private addresses.** The bundled `compose.yaml` sets `BLOCK_PRIVATE_RESOLUTION=true`, which refuses to fetch anything resolving to a private or reserved address. If your Nextcloud lives at `192.168.1.50` or `nextcloud.local`, add it to `PRIVATE_RESOLUTION_WHITELIST`. On hosted keeper.sh you cannot do this, so your Nextcloud has to be publicly reachable.
+- **Recurring events.** Recurrence expansion is the least forgiving part of the engine. Keeper refuses to materialise a series expanding past ten thousand occurrences in the two-year window, and today that check fails the *whole calendar's* ingestion rather than just the offending series, after which the calendar backs off and retries on a widening interval. A single pathological rule — something repeating minutely, usually imported from elsewhere — can therefore stall a calendar. If a Nextcloud calendar stops updating entirely, look for a recurring event with an absurd rule before anything else.
+- **Large calendars and server response caps.** Because CalDAV is refetched in full each cycle, a server that silently caps how many objects it returns in one response will look to Keeper like a calendar that genuinely lost the remainder, and the diff will remove them from the destination. Nextcloud does not impose such a cap by default, but a reverse proxy with an aggressive response limit in front of it can produce the same effect.
+- **Nothing is bidirectional by accident.** A mapping is one direction. If you only set up "Nextcloud sends to Google", changes made in Google will not travel back.
+- **There is no force-resync button.** You wait for the next cycle. Disconnecting and reconnecting the account is the blunt instrument if you need to start clean.
+
+## Credentials
+
+Your Nextcloud password is encrypted at rest with a configurable encryption key before it is stored. If you self-host, that key is yours, generated during setup. Keeper needs the password in a reversible form because CalDAV basic and digest auth require replaying it on every request; there is no token exchange to hide behind.
+
+Revoking access is a matter of deleting the app password in Nextcloud, or deleting the account in Keeper under **Calendar Sources**, which removes the account and all its calendars.

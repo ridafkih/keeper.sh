@@ -1,0 +1,106 @@
+---
+title: "How to Sync iCloud Calendar with Google Calendar"
+description: "A step-by-step guide to two-way syncing iCloud Calendar with Google Calendar using Keeper.sh, including how to generate an Apple app-specific password and what the sync covers."
+blurb: "Apple will publish an iCloud calendar as a read-only link and nothing more. Here is how I get real two-way syncing between iCloud and Google, starting with the app-specific password."
+createdAt: "2026-08-11"
+slug: "sync-icloud-calendar-with-google-calendar"
+updatedAt: "2026-08-11"
+tags:
+  - "icloud"
+  - "apple-calendar"
+  - "google-calendar"
+  - "caldav"
+  - "sync"
+---
+
+Apple gives you exactly one way to share an iCloud calendar with something outside Apple's world: a public read-only link. Google will subscribe to that link, refresh it on its own unhurried schedule, and give you no way to send anything back. If what you want is for a personal iCloud appointment to block time on your work Google calendar, that is not enough.
+
+iCloud does speak CalDAV, though, and that is the door worth using.
+
+## Get an app-specific password first
+
+This is the step people get stuck on, so do it before you open Keeper.
+
+iCloud will not accept your Apple Account password over CalDAV. You need an app-specific password, which is a 16-character credential scoped to one application and revocable on its own. Apple documents the process in [Sign in to apps with your Apple Account using app-specific passwords](https://support.apple.com/en-us/102654).
+
+Keeper's connect screen walks you through the same steps:
+
+1. Navigate to [appleid.apple.com](https://appleid.apple.com)
+2. Sign in with your Apple ID
+3. Select **App-Specific Passwords**
+4. Click the **+** next to **Passwords**
+5. Label and generate the password, then copy it
+6. Paste the app-specific password into Keeper
+
+Two things worth knowing. Your Apple Account needs two-factor authentication turned on before the App-Specific Passwords section appears at all. And Apple shows you the password once — if you close the sheet without copying it, generate another one.
+
+## Connect iCloud
+
+From the dashboard, open **Import Calendars** and choose **Connect iCloud**. There are two fields:
+
+- **Apple ID** — the email address you sign in to Apple with
+- **App-Specific Password** — the 16-character password you just generated, not your Apple Account password
+
+You are not asked for a server URL. Keeper already knows iCloud lives at `https://caldav.icloud.com/` and fills that in for you, which is the whole reason iCloud gets its own tile instead of going through the generic CalDAV form.
+
+Press **Connect**. Keeper discovers every calendar on the account, imports all of them, and moves you into setup. Only collections that support events come across, so your Reminders lists stay behind.
+
+If you get `Invalid credentials` here, it is almost always the password: either the Apple Account password was pasted instead of the app-specific one, or the app-specific password has been revoked. Apple invalidates every app-specific password when you change your Apple Account password, so a working sync that suddenly starts failing after a password change needs a fresh one.
+
+## Connect Google Calendar
+
+Back on **Import Calendars**, choose **Connect Google Calendar**. Keeper lists the access it is about to request before redirecting you:
+
+- See your email address
+- View a list of your calendars
+- View events, summaries and details
+- Add or remove calendar events
+
+Press **Connect** and finish Google's consent screen.
+
+## Wire up the mapping
+
+The setup flow asks four things in order:
+
+1. **Which calendars would you like to configure?** Tick the ones you want to set up now.
+2. **Rename Your Calendars.** iCloud calendars usually arrive as "Home" or "Work", and Google's default calendar arrives named after your email address. Renaming is Keeper-local only.
+3. **Where should 'Home' send events?** Pick the calendars that should receive copies from this one.
+4. **Where should 'Home' pull events from?** The reverse direction.
+
+For genuine two-way syncing between one iCloud calendar and one Google calendar, you set both directions, which is two of the three mappings the free tier allows.
+
+Everything here is editable later from the calendar's detail page under **Calendars**, in the **Send Events to Calendars** section.
+
+## What actually gets synced
+
+Time, not detail — that is the default. Every newly connected calendar is set to strip the event name, description and location, and to title the copy after the source calendar instead. Your dentist appointment reaches the work calendar as a block named after the iCloud calendar it came from, which is the behaviour most people are actually after.
+
+If you want the real titles to come through, the calendar detail page has a **Sync Settings** section with **Sync Event Name**, **Sync Event Description** and **Sync Event Location** toggles, all off to start with. Turning **Sync Event Name** on switches the **Event Name** template to `{{event_name}}` and lets the true title through. While it is off, that template field remains editable and understands `{{event_name}}` and `{{calendar_name}}`, which is how you change the placeholder wording without exposing anything. An **Exclusions** section can drop all-day events, and for Google sources adds Focus Time and Out of Office toggles. Google's Working Location entries are always dropped and have no toggle.
+
+On the hosted plan these are Pro features. Self-hosted instances give them to everyone.
+
+New sources also join your aggregated iCal feed automatically. Untick them under **iCal Link** if you would rather they did not.
+
+The sync window runs from seven days ago to two years ahead and is fixed. One-off events beyond it are not copied. Recurring series get more latitude — a series whose master starts before the window is still collected so its in-window occurrences survive.
+
+## How often it runs
+
+Ingestion, meaning the pull from iCloud and Google into Keeper's database, runs every minute on every plan. The push out to destinations runs every minute on Pro and self-hosted, and every thirty minutes on free.
+
+Google supports incremental sync, so Keeper hands back a sync token each cycle and only receives what changed. iCloud does not get that treatment: CalDAV sources are refetched within the sync window on every ingestion run and diffed against stored state. It is correct, just heavier.
+
+## Limits and rough edges
+
+- **Free tier.** Two linked accounts and three sync mappings. iCloud counts as one account no matter how many calendars it has, Google as another, so this pairing uses your full account allowance. Self-hosting lifts both.
+- **Failures back off rather than break.** When iCloud rejects or times out a request, Keeper records the failure and pushes the calendar's next attempt further out, retrying on a widening interval instead of hammering it or dropping the calendar. A calendar that stops updating for a while and then recovers on its own is this at work.
+- **Revoked passwords are silent on Apple's side.** Nothing in iCloud tells you a sync broke. Changing your Apple Account password kills every app-specific password, and you will find out when events stop moving.
+- **Shared and subscribed calendars.** Calendars shared to you by other people, and calendars you subscribed to from a URL, tend to arrive read-only over CalDAV. They work as sources and fail as destinations.
+- **Recurring events can stall a calendar.** Keeper will not materialise a series expanding past ten thousand occurrences within the two-year window, and that check currently fails the whole calendar's ingestion rather than just the offending series. One imported event with an absurd repeat rule can therefore stop an entire iCloud calendar from updating. If everything goes quiet at once, look there first.
+- **Directions are separate.** Each mapping is one-way. Only setting up "iCloud sends to Google" means Google edits never reach iCloud.
+- **No manual resync.** There is no "sync now" button; you wait for the next cycle. Removing and re-adding the account is the only way to force a clean start.
+
+## If you only need one direction
+
+If all you want is your iCloud availability visible elsewhere without writing anything into iCloud, skip the destination mapping and use the aggregated iCal feed instead. Keeper generates a token-authenticated URL under **iCal Link** that combines whichever sources you tick. Like calendar sync, the feed starts private: events appear as "Busy" with no title until you turn **Include Event Name** on.
+
+It is read-only by nature, which is the point. You hand out the URL without handing over your calendar.

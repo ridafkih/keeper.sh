@@ -1,0 +1,116 @@
+---
+title: "How to Sync Fastmail Calendar with Outlook"
+description: "A step-by-step guide to two-way syncing a Fastmail calendar with Outlook or Microsoft 365 using Keeper.sh, including Fastmail app passwords and what the sync covers."
+blurb: "Fastmail and Outlook have no path between them that survives contact with reality. Here is how I bridge the two, starting with a Fastmail app password scoped to CalDAV."
+createdAt: "2026-08-11"
+slug: "sync-fastmail-calendar-with-outlook"
+updatedAt: "2026-08-11"
+tags:
+  - "fastmail"
+  - "outlook"
+  - "caldav"
+  - "sync"
+  - "calendar"
+---
+
+I keep a business-personal calendar on Fastmail and deal with Outlook wherever work requires it. The two have no meeting point. Outlook will subscribe to an ICS URL and refresh it whenever it feels like it, which is neither two-way nor timely, and Fastmail has no idea Outlook exists.
+
+Fastmail speaks CalDAV properly, and Outlook speaks the Microsoft Graph API. Bridging them is a matter of holding credentials for both and mapping calendars in each direction.
+
+## Get a Fastmail app password first
+
+Fastmail will not accept your account password over CalDAV, and you would not want it to. You need an app password, which is a separate credential you can scope and revoke on its own. Fastmail documents this in [App passwords](https://www.fastmail.help/hc/en-us/articles/360058752854-App-passwords).
+
+The short version:
+
+1. Go to [Fastmail's app password settings](https://www.fastmail.com/settings/security/devicekeys)
+2. Click **Manage app passwords and access**
+3. Click **New app password**
+4. Give it a name you will recognise later, like "Keeper"
+5. Under **Access**, choose a scope that includes calendars. The default covers mail, contacts and calendars; if you would rather Keeper never see your mail, pick the narrower calendar-only option
+6. Click **Generate password** and copy it
+
+Fastmail shows the password once. If you lose it, generate another and delete the old one.
+
+Scoping matters more here than with most providers, because Fastmail lets you be specific about it. Keeper needs CalDAV and nothing else, so give it CalDAV and nothing else.
+
+## Connect Fastmail
+
+From the dashboard, open **Import Calendars** and choose **Connect Fastmail**. Two fields:
+
+- **Fastmail Email Address** — the address you sign in with
+- **App-Specific Password** — the password you just generated
+
+There is no server URL field. Keeper already knows Fastmail's CalDAV endpoint is `https://caldav.fastmail.com/` and fills it in, which is why Fastmail gets a dedicated tile rather than going through the generic CalDAV form.
+
+Press **Connect**. Keeper discovers the calendars on the account, imports all of them at once, and moves you into setup. Collections that do not hold events are skipped, so your task lists stay behind.
+
+An `Invalid credentials` error at this point means the password: either your account password went in instead of the app password, or the app password's access scope does not include calendars.
+
+## Connect Outlook
+
+Back on **Import Calendars**, there are two Microsoft tiles. **Connect Outlook** covers personal Outlook accounts, and **Connect Microsoft 365** covers work and school accounts. Both authorise against the same Microsoft Graph integration behind the scenes; pick the one matching the account you are signing into.
+
+Either way, Keeper lists what it will ask Microsoft for before redirecting you:
+
+- See your email address
+- View a list of your calendars
+- View events, summaries and details
+- Add or remove calendar events
+
+Press **Connect** and complete Microsoft's consent screen. If you are on a managed work tenant, your administrator may need to approve the app before consent will go through. That is a tenant policy, not something Keeper can route around.
+
+If you self-host Keeper, you need your own Microsoft OAuth app registered in Azure for this to work at all. Fastmail needs no such setup, which is one of the quiet advantages of CalDAV.
+
+## Wire up the mapping
+
+Setup asks four things:
+
+1. **Which calendars would you like to configure?** Tick what you want to set up now. Everything was already imported.
+2. **Rename Your Calendars.** Fastmail's default is usually "Calendar" and Outlook's is "Calendar" too, so renaming is worth the ten seconds. It is Keeper-local and does not touch either provider.
+3. **Where should 'Calendar' send events?** The outbound direction.
+4. **Where should 'Calendar' pull events from?** The inbound direction.
+
+Setting both gives you two-way syncing at the cost of two mappings, out of three on the free tier.
+
+You can change any of this later from a calendar's detail page under **Calendars**, in the **Send Events to Calendars** section.
+
+## A detail specific to Outlook
+
+Keeper marks the events it creates so it can recognise and clean them up later. On most providers it does this by suffixing the remote UID with `@keeper.sh`. Outlook does not allow custom UIDs, so Keeper tags its events with a `keeper.sh` category instead.
+
+This is invisible in normal use, but it has two consequences worth knowing. Keeper-created events on your Outlook calendar carry a visible category. And if you delete that category from an event by hand, Keeper loses track of it — the event becomes an orphan it can no longer manage.
+
+## What actually gets synced
+
+Time, not detail. Every newly connected calendar defaults to stripping the event name, description and location, titling the copy after the source calendar instead. Anything private on your Fastmail calendar reaches Outlook as an opaque block, which is the right default when one end of the pairing is a work account.
+
+To let real detail through, the calendar detail page has a **Sync Settings** section with **Sync Event Name**, **Sync Event Description** and **Sync Event Location** toggles, all off initially. Turning **Sync Event Name** on switches the **Event Name** template to `{{event_name}}` and passes the true title. While it is off, the template field stays editable and accepts `{{event_name}}` and `{{calendar_name}}`, letting you reword the placeholder without revealing anything. An **Exclusions** section can drop all-day events.
+
+These are Pro features on the hosted plan, and available to everyone on self-hosted instances.
+
+New sources are added to your aggregated iCal feed by default; untick them under **iCal Link** if you would rather they were not.
+
+The sync window is fixed at seven days back to two years forward. One-off events outside it are not copied, though recurring series whose master starts before the window are still collected so their in-window occurrences survive.
+
+## How often it runs
+
+Ingestion from Fastmail and Outlook into Keeper's database runs every minute regardless of plan. Pushing to destinations runs every minute on Pro and self-hosted, every thirty minutes on free.
+
+Outlook supports incremental sync through Graph delta links, so a cycle only asks for what changed. Fastmail does not get that: as a CalDAV source it is refetched within the sync window on every ingestion run and diffed against what Keeper already stored. Correct, but more work per cycle.
+
+## Limits and rough edges
+
+- **Free tier.** Two linked accounts and three sync mappings. Fastmail is one account regardless of calendar count, Outlook is another, so this pairing fills the account allowance exactly. Self-hosting removes both limits.
+- **Tenant restrictions.** Managed Microsoft 365 tenants can block third-party calendar apps outright. If consent fails and you cannot get an administrator to approve it, the ICS feed route below is the fallback.
+- **Directions are separate.** Each mapping is one-way. "Fastmail sends to Outlook" does not imply the reverse.
+- **Recurring events.** Keeper will not materialise a series expanding past ten thousand occurrences in the two-year window, and that check currently fails the entire calendar's ingestion rather than isolating the offending series. One event with a runaway repeat rule can stall a whole calendar, which then backs off and retries on a widening interval.
+- **Outlook recurrence is its own problem.** Recurring series coming *from* Microsoft 365 do not always survive the trip intact; there are open reports of only the first instance arriving. If a recurring Outlook meeting shows up on Fastmail as a single event, that is a known gap rather than a misconfiguration on your side.
+
+## The read-only fallback
+
+If you cannot get an OAuth connection to your work tenant, you can still get your Fastmail availability visible in Outlook. Keeper generates an aggregated iCal feed under **iCal Link**, a token-authenticated URL combining whichever sources you tick, and Outlook can subscribe to it.
+
+Be clear-eyed about what that gives you. It is pull-only, so nothing travels back from Outlook, and Outlook decides its own refresh cadence for subscribed calendars, which tends to be measured in hours. The feed starts private too: events appear as "Busy" with no title until you turn **Include Event Name** on.
+
+It is a worse sync and a better privacy story. Which one you want depends on whether the calendar is yours to expose.
