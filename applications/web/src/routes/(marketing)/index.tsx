@@ -1,6 +1,6 @@
 import { useSetAtom } from 'jotai'
 import { createFileRoute } from '@tanstack/react-router'
-import { canonicalUrl, jsonLdScript, seoMeta, softwareApplicationSchema } from '../../lib/seo'
+import { canonicalUrl, faqSchema, jsonLdScript, seoMeta, softwareApplicationSchema } from '../../lib/seo'
 import { Heading1, Heading2, Heading3 } from '../../components/ui/primitives/heading'
 import { Text } from '../../components/ui/primitives/text'
 import {
@@ -238,7 +238,10 @@ export const Route = createFileRoute('/(marketing)/')({
       path: "/",
       brandPosition: "before",
     }),
-    scripts: [jsonLdScript(softwareApplicationSchema())],
+    scripts: [
+      jsonLdScript(softwareApplicationSchema()),
+      jsonLdScript(faqSchema(FAQ_ITEMS)),
+    ],
   }),
 })
 

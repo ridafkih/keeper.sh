@@ -1,4 +1,4 @@
-const SITE_URL = "https://keeper.sh";
+const SITE_URL = "https://www.keeper.sh";
 const SITE_NAME = "Keeper.sh";
 
 export function canonicalUrl(path: string): string {
@@ -134,6 +134,29 @@ export function softwareApplicationSchema() {
       },
     ],
     provider: { "@id": `${SITE_URL}/#organization` },
+  };
+}
+
+export function faqSchema(items: Array<{ question: string; answer: string }>) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "@id": `${SITE_URL}/#faq`,
+    isPartOf: { "@id": `${SITE_URL}/#website` },
+    mainEntity: items.map((item) => {
+      const question = item.question.trim();
+      const answer = item.answer.trim();
+      if (!question || !answer) {
+        throw new Error(
+          `faqSchema requires a question and answer for every item, received ${JSON.stringify(item)}`,
+        );
+      }
+      return {
+        "@type": "Question",
+        name: question,
+        acceptedAnswer: { "@type": "Answer", text: answer },
+      };
+    }),
   };
 }
 

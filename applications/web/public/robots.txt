@@ -108,4 +108,4 @@ Disallow: /verify-authentication
 Disallow: /reset-password
 Disallow: /forgot-password
 
-Sitemap: https://keeper.sh/sitemap.xml
+Sitemap: https://www.keeper.sh/sitemap.xml

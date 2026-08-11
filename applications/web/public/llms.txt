@@ -15,9 +15,9 @@ Keeper.sh is an open-source (AGPL-3.0) calendar synchronization service that kee
 
 ## Links
 
-- [Homepage](https://keeper.sh)
-- [Blog](https://keeper.sh/blog)
-- [Privacy Policy](https://keeper.sh/privacy)
-- [Terms & Conditions](https://keeper.sh/terms)
+- [Homepage](https://www.keeper.sh)
+- [Blog](https://www.keeper.sh/blog)
+- [Privacy Policy](https://www.keeper.sh/privacy)
+- [Terms & Conditions](https://www.keeper.sh/terms)
 - [GitHub Repository](https://github.com/ridafkih/keeper.sh)
-- [Full LLM Context](https://keeper.sh/llms-full.txt)
+- [Full LLM Context](https://www.keeper.sh/llms-full.txt)
