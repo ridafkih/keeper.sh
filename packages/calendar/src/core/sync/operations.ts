@@ -434,11 +434,15 @@ const buildRemoveOperations = (
   const operations: SyncOperation[] = [];
 
   for (const mapping of existingMappings) {
-    const outsideCleanupWindow = !overlapsWindow(
-      mapping,
-      scope.requestedWindow.timeMin,
-      scope.requestedWindow.timeMax,
-    );
+    /*
+     * Only the requested window's lower edge retires a mapping outright. One-off
+     * events are mirrored past the upper edge on purpose, so a mapping beyond it is
+     * evidence of a live event rather than of a narrowed window, and deleting it
+     * would destroy the user's real calendar event irreversibly. Anything past the
+     * upper edge is retired only through the authoritative path below, which needs
+     * verified source coverage proving the event is actually gone.
+     */
+    const outsideCleanupWindow = mapping.endTime <= scope.requestedWindow.timeMin;
     const insideAuthoritativeWindow = isInsideSourceAuthoritativeWindow(
       mapping,
       mapping.sourceCalendarId,

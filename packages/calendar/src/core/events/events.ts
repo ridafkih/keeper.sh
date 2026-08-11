@@ -280,6 +280,7 @@ const getEventsForCalendarsWithDiagnostics = async (
     start: syncWindow.timeMin,
   }, {
     onSeriesOverBudget: (error) => overBudgetSourceEventUids.push(error.sourceEventUid),
+    retainOneOffEventsAfterWindowEnd: true,
   });
 
   return {

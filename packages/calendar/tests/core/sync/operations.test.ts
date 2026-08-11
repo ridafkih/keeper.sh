@@ -6,6 +6,11 @@ import {
 } from "../../../src/core/sync/operations";
 import type { ReconciliationScope } from "../../../src/core/sync/operations";
 import {
+  DEFAULT_FUTURE_SYNC_RANGE,
+  DEFAULT_HISTORIC_SYNC_RANGE,
+  getConfigurableSyncWindow,
+} from "../../../src/core/sync/sync-range";
+import {
   createEditableEventContentHash,
   createSyncEventContentHash,
 } from "../../../src/core/events/content-hash";
@@ -983,5 +988,29 @@ describe("computeSyncOperations", () => {
       type: "remove",
       uid: deletedSourceMapping.destinationEventUid,
     }]);
+  });
+
+  it("keeps a one-off mapping beyond the future edge under fully verified coverage", () => {
+    const now = new Date("2026-08-11T00:00:00.000Z");
+    const requestedWindow = getConfigurableSyncWindow(
+      DEFAULT_HISTORIC_SYNC_RANGE,
+      DEFAULT_FUTURE_SYNC_RANGE,
+      now,
+    );
+    const farFutureMapping = createEventMapping({
+      endTime: new Date("2029-08-11T15:00:00.000Z"),
+      id: "far-future-mapping",
+      startTime: new Date("2029-08-11T14:00:00.000Z"),
+      syncEventId: "far-future-event",
+    });
+
+    const result = computeSyncOperationsStrict([], [farFutureMapping], [], {
+      authoritativeSourceWindows: new Map([["source-calendar-id", requestedWindow]]),
+      authoritativeWindow: requestedWindow,
+      configuredSourceCalendarIds: new Set(["source-calendar-id"]),
+      requestedWindow,
+    });
+
+    expect(result.operations).toEqual([]);
   });
 });
