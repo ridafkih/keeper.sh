@@ -100,7 +100,6 @@ function MarketingLayout() {
             <MarketingFooterNavGroup>
               <MarketingFooterNavGroupLabel>Resources</MarketingFooterNavGroupLabel>
               <MarketingFooterNavItem to="/blog">Blog</MarketingFooterNavItem>
-              <MarketingFooterNavItem to="/blog/how-calendar-sync-actually-works">How Calendar Sync Works</MarketingFooterNavItem>
               <MarketingFooterNavItem href="https://github.com/ridafkih/keeper.sh">GitHub</MarketingFooterNavItem>
             </MarketingFooterNavGroup>
             <MarketingFooterNavGroup>
