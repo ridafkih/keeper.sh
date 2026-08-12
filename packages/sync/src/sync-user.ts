@@ -279,6 +279,14 @@ const haveSourceCalendarsChanged = (
   );
 };
 
+/*
+ * Every series a calendar withholds for exceeding the occurrence budget lands in this
+ * list, so a pathological source can push thousands of UIDs onto one log line. The
+ * adjacent over_budget_series_count still carries the uncapped total, which is what
+ * makes a truncated sample safe to read.
+ */
+const OVER_BUDGET_SERIES_UID_SAMPLE_SIZE = 20;
+
 const createDestinationReconciliationWideEventFields = (
   context: DestinationReconciliationContext,
 ): Record<string, string | number | boolean> => ({
@@ -288,7 +296,9 @@ const createDestinationReconciliationWideEventFields = (
   "local_event_states.missing_source_event_uid_count": context.eventReadDiagnostics.missingSourceEventUidCount,
   "local_event_states.outside_reconciliation_window_count": context.eventReadDiagnostics.outsideReconciliationWindowCount,
   "local_event_states.over_budget_series_count": context.eventReadDiagnostics.overBudgetSourceEventUids.length,
-  "local_event_states.over_budget_series_uids": context.eventReadDiagnostics.overBudgetSourceEventUids.join(","),
+  "local_event_states.over_budget_series_uids": context.eventReadDiagnostics.overBudgetSourceEventUids
+    .slice(0, OVER_BUDGET_SERIES_UID_SAMPLE_SIZE)
+    .join(","),
   "local_event_states.syncable_count": context.eventReadDiagnostics.syncableEventCount,
   "reconciliation.local_read.duration_ms": context.localReadDurationMs,
   "reconciliation.remote_read.duration_ms": context.remoteReadDurationMs,
@@ -727,6 +737,7 @@ const syncDestinationsForUser = async (
 
 export {
   createDestinationReconciliationWideEventFields,
+  OVER_BUDGET_SERIES_UID_SAMPLE_SIZE,
   readDestinationReconciliationState,
   resolveStoredSourceCoverage,
   syncDestinationsForUser,

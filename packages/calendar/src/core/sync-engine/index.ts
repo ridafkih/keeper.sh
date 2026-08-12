@@ -14,6 +14,14 @@ import { computeSyncOperations } from "../sync/operations";
 import type { ReconciliationScope, StaleReasonCounts } from "../sync/operations";
 import type { CalendarSyncProvider, PendingChanges } from "./types";
 
+/*
+ * A run whose provider rejects everything produces one error per operation. The wide
+ * event is emitted once per run, so the risk is not volume but a single log line
+ * carrying thousands of objects. A sample plus the uncapped total keeps the line
+ * bounded while still reporting the true scale of the failure.
+ */
+const OPERATION_ERROR_SAMPLE_SIZE = 20;
+
 const resolveOutcome = (superseded: boolean, invalidated: boolean): string => {
   if (invalidated) {
     return "invalidated";
@@ -666,7 +674,9 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     wideEvent["superseded"] = outcome.superseded;
 
     if (outcome.errors.length > 0) {
-      wideEvent["operation_errors"] = outcome.errors;
+      wideEvent["operation_errors"] = outcome.errors.slice(0, OPERATION_ERROR_SAMPLE_SIZE);
+      wideEvent["operation_errors.count"] = outcome.errors.length;
+      wideEvent["operation_errors.truncated"] = outcome.errors.length > OPERATION_ERROR_SAMPLE_SIZE;
     }
 
     const invalidated = checkpointInvalidated || outcome.checkpointRejected || (await isInvalidated?.() ?? false);
@@ -702,5 +712,5 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
   }
 };
 
-export { executeRemoteOperations, syncCalendar };
+export { executeRemoteOperations, syncCalendar, OPERATION_ERROR_SAMPLE_SIZE };
 export type { CalendarSyncProvider, PendingChanges, SyncCalendarOptions };
