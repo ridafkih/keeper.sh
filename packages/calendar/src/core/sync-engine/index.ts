@@ -1,6 +1,7 @@
 import type {
   DeleteResult,
   MaterializedSyncableEvent,
+  ProviderThrottleMetrics,
   PushResult,
   RemoteEvent,
   SyncOperation,
@@ -540,6 +541,17 @@ const appendStaleReasonFields = (
   }
 };
 
+const appendThrottleFields = (
+  event: Record<string, unknown>,
+  metrics?: ProviderThrottleMetrics,
+): void => {
+  if (!metrics || metrics.retryCount === 0) {
+    return;
+  }
+  event["provider.retry_count"] = metrics.retryCount;
+  event["provider.retry_after_ms"] = metrics.retryAfterMs;
+};
+
 const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarResult> => {
   const {
     userId,
@@ -698,6 +710,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     throw error;
   } finally {
     wideEvent["duration_ms"] = Date.now() - startTime;
+    appendThrottleFields(wideEvent, provider.getThrottleMetrics?.());
     onSyncEvent?.(wideEvent);
   }
 };

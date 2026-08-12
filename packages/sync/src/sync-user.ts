@@ -14,6 +14,7 @@ import {
 } from "@keeper.sh/calendar";
 import { syncRangeSchema } from "@keeper.sh/data-schemas";
 import type { Plan } from "@keeper.sh/data-schemas";
+import type { RedisRateLimiter } from "@keeper.sh/calendar";
 import type {
   EventMapping,
   DestinationEventReadDiagnostics,
@@ -41,6 +42,25 @@ import {
 } from "./sync-lock";
 
 const GOOGLE_REQUESTS_PER_MINUTE = 500;
+// Graph throttles a mailbox on sustained volume as well as concurrency, so a bulk push has to be paced.
+const OUTLOOK_REQUESTS_PER_MINUTE = 300;
+
+const PROVIDER_REQUESTS_PER_MINUTE: Record<string, number> = {
+  google: GOOGLE_REQUESTS_PER_MINUTE,
+  outlook: OUTLOOK_REQUESTS_PER_MINUTE,
+};
+
+const createProviderRateLimiter = (
+  redis: Redis,
+  userId: string,
+  provider: string,
+): RedisRateLimiter | undefined => {
+  const requestsPerMinute = PROVIDER_REQUESTS_PER_MINUTE[provider];
+  if (!requestsPerMinute) {
+    return;
+  }
+  return createRedisRateLimiter(redis, `ratelimit:${userId}:${provider}`, { requestsPerMinute });
+};
 
 const resetDestinationBackoff = async (
   database: BunSQLDatabase,
@@ -444,12 +464,6 @@ const syncDestinationsForUser = async (
   const errors: string[] = [];
   const syncEvents: Record<string, unknown>[] = [];
 
-  const rateLimiter = createRedisRateLimiter(
-    redis,
-    `ratelimit:${userId}:google`,
-    { requestsPerMinute: GOOGLE_REQUESTS_PER_MINUTE },
-  );
-
   for (const destinationCandidate of destinations) {
     if (config.abortSignal?.aborted) {
       break;
@@ -489,7 +503,7 @@ const syncDestinationsForUser = async (
         oauthConfig: config.oauthConfig,
         encryptionKey: config.encryptionKey,
         refreshLockStore: config.refreshLockStore,
-        rateLimiter,
+        rateLimiter: createProviderRateLimiter(redis, userId, destination.provider),
         signal: config.abortSignal,
       });
 
