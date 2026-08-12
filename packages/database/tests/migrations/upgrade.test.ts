@@ -23,6 +23,19 @@ const DRIZZLE_DIRECTORY = `${PACKAGE_ROOT}/drizzle`;
  * index a tag shipped reproduces that tag's schema exactly without needing tag
  * history at test time. v2.12.2 shipped 0074, v2.13.5 shipped 0076.
  */
+const findSchemaIndexBeforeCoverageCheck = async (): Promise<number> => {
+  const journal = await Bun.file(`${DRIZZLE_DIRECTORY}/meta/_journal.json`)
+    .json() as Journal;
+  const ordered = journal.entries.toSorted((first, second) => first.idx - second.idx);
+  for (const entry of ordered) {
+    const migration = await Bun.file(`${DRIZZLE_DIRECTORY}/${entry.tag}.sql`).text();
+    if (migration.includes("calendars_ingest_coverage_check")) {
+      return entry.idx - 1;
+    }
+  }
+  return Math.max(...ordered.map(({ idx }) => idx));
+};
+
 const RELEASED_SCHEMA_STATES = {
   v2_12_2: 74,
   v2_13_5: 76,
@@ -295,12 +308,15 @@ describe("migration runner against postgres", () => {
    * Coverage normalisation has to run before the checks are validated, or
    * VALIDATE CONSTRAINT aborts on rows written by older writers.
    */
-  it("normalises out-of-range coverage before validating the coverage checks", async () => {
-    const journal = await Bun.file(`${DRIZZLE_DIRECTORY}/meta/_journal.json`)
-      .json() as Journal;
-    const latestIndex = Math.max(...journal.entries.map(({ idx }) => idx));
+  it("repairs out-of-range coverage while upgrading a database that predates the checks", async () => {
+    /*
+     * Seed before the coverage check exists. It is added NOT VALID, which still
+     * enforces on new rows, so a database that already carries it cannot produce
+     * the legacy row this repairs — only an older writer could.
+     */
+    const seedIndex = await findSchemaIndexBeforeCoverageCheck();
     const databaseUrl = await createDatabase("keeper_migration_coverage");
-    await applyReleasedSchemaState(databaseUrl, latestIndex);
+    await applyReleasedSchemaState(databaseUrl, seedIndex);
     await withConnection(databaseUrl, async (client) => {
       const calendars = await seedCalendarPair(client);
       await client.query(`
