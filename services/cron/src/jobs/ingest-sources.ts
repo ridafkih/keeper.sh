@@ -12,6 +12,7 @@ import {
   isTimeoutError,
   buildCalendarBackoffState,
   SOURCE_INGEST_LOCK_NAMESPACE,
+  readCredentialTokensOrFlag,
 } from "@keeper.sh/calendar";
 import { INGEST_SOURCE_TIMEOUT_MS, PROVIDER_INGEST_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
 import type { CalendarBackoffState, IngestionFetchEventsResult, IngestionPersistenceWork, IngestionResult, RedisRateLimiter, TokenState } from "@keeper.sh/calendar";
@@ -325,10 +326,16 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
             }
 
             const rawRefresher = resolveTokenRefresher(source.provider);
+            const credentialTokens = await readCredentialTokensOrFlag(
+              database,
+              source.accountId,
+              source,
+              env.ENCRYPTION_KEY,
+            );
             const tokenState: TokenState = {
-              accessToken: source.accessToken,
+              accessToken: credentialTokens.accessToken,
               accessTokenExpiresAt: source.expiresAt,
-              refreshToken: source.refreshToken,
+              refreshToken: credentialTokens.refreshToken,
             };
 
             if (rawRefresher) {
@@ -336,6 +343,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
                 database,
                 oauthCredentialId: source.oauthCredentialId,
                 calendarAccountId: source.accountId,
+                encryptionKey: env.ENCRYPTION_KEY,
                 refreshLockStore,
                 rawRefresh: rawRefresher,
               });
@@ -456,10 +464,6 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
 };
 
 const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; errors: number; ingestEvents: Record<string, unknown>[] }> => {
-  if (!env.ENCRYPTION_KEY) {
-    return { added: 0, removed: 0, errors: 0, ingestEvents: [] };
-  }
-
   const encryptionKey = env.ENCRYPTION_KEY;
 
   const caldavSources = await database

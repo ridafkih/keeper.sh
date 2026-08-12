@@ -1,9 +1,20 @@
 {
   "$schema": "https://v2-9-0.turborepo.dev/schema.json",
-  "extends": ["//"],
+  "extends": [
+    "//"
+  ],
   "tasks": {
     "migrate": {
-      "passThroughEnv": ["DATABASE_URL"]
+      "passThroughEnv": [
+        "DATABASE_URL"
+      ]
+    },
+    "backfill:oauth-tokens": {
+      "cache": false,
+      "passThroughEnv": [
+        "DATABASE_URL",
+        "ENCRYPTION_KEY"
+      ]
     }
   }
 }

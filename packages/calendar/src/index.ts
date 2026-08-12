@@ -30,6 +30,13 @@ export {
 } from "./core/oauth/refresh-coordinator";
 export { isOAuthReauthRequiredError } from "./core/oauth/error-classification";
 export {
+  markCredentialNeedsReauthentication,
+  readCredentialTokens,
+  readCredentialTokensOrFlag,
+  type CredentialTokens,
+  type StoredCredentialTokens,
+} from "./core/oauth/credential-tokens";
+export {
   createCoordinatedRefresher,
   type CoordinatedRefresherOptions,
 } from "./core/oauth/coordinated-refresher";

@@ -203,6 +203,7 @@ interface OAuthSourceConfig {
   syncToken: string | null;
   calendarAccountId: string;
   oauthCredentialId: string;
+  encryptionKey: string;
   refreshLockStore?: RefreshLockStore | null;
 }
 

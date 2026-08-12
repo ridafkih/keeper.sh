@@ -86,9 +86,9 @@ const createCalDAVAccount = async (
   databaseClient: CaldavSourceDatabase,
   userId: string,
   data: CreateCalDAVSourceData,
-  resolvedEncryptionKey: string,
+  sourceEncryptionKey: string,
 ): Promise<string> => {
-  const encryptedPassword = encryptPassword(data.password, resolvedEncryptionKey);
+  const encryptedPassword = encryptPassword(data.password, sourceEncryptionKey);
 
   const [credential] = await databaseClient
     .insert(caldavCredentialsTable)
@@ -184,12 +184,6 @@ const createCalDAVSource = async (
   userId: string,
   data: CreateCalDAVSourceData,
 ): Promise<CalDAVSource> => {
-  if (!encryptionKey) {
-    throw new Error("Encryption key not configured");
-  }
-
-  const resolvedEncryptionKey = encryptionKey;
-
   const plan = await premiumService.getUserPlan(userId);
   if (!plan) {
     throw new Error("Unable to resolve user plan for sync enqueue");
@@ -234,7 +228,7 @@ const createCalDAVSource = async (
     }
 
     const accountId = existingAccount?.id ??
-      await createCalDAVAccount(tx, userId, data, resolvedEncryptionKey);
+      await createCalDAVAccount(tx, userId, data, encryptionKey);
 
     const [source] = await tx
       .insert(calendarsTable)

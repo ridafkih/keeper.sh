@@ -1,4 +1,5 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { StoredToken } from "@keeper.sh/database";
 
 type KeeperDatabase = BunSQLDatabase;
 
@@ -129,8 +130,8 @@ interface ProviderCredentials {
   email: string | null;
   oauth?: {
     credentialId: string;
-    accessToken: string;
-    refreshToken: string;
+    accessToken: StoredToken;
+    refreshToken: StoredToken;
     expiresAt: Date;
   };
   caldav?: {

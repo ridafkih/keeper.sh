@@ -7,6 +7,7 @@ import {
   userEventsTable,
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq } from "drizzle-orm";
+import type { StoredToken } from "@keeper.sh/database";
 import type { KeeperDatabase } from "@/types";
 import type { ProviderCredentials } from "@/types";
 import { parseEventReference } from "@/queries/event-read-model";
@@ -38,8 +39,8 @@ interface CredentialRow {
   email: string | null;
   needsReauthentication: boolean;
   oauthCredentialId: string | null;
-  oauthAccessToken: string | null;
-  oauthRefreshToken: string | null;
+  oauthAccessToken: StoredToken | null;
+  oauthRefreshToken: StoredToken | null;
   oauthExpiresAt: Date | null;
   caldavAuthMethod: string | null;
   caldavServerUrl: string | null;

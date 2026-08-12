@@ -11,6 +11,8 @@ import {
   GoogleCalendarSourceProvider,
 } from "../../../../src/providers/google/source/provider";
 
+const TEST_ENCRYPTION_KEY = Buffer.from(new Uint8Array(32).fill(1)).toString("base64");
+
 const originalFetch = globalThis.fetch;
 
 const createJsonResponse = (body: unknown, status = 200): Response =>
@@ -55,6 +57,7 @@ describe("GoogleCalendarSourceProvider", () => {
     } as unknown as BunSQLDatabase;
     const provider = createGoogleCalendarSourceProvider({
       database: mockDatabase,
+      encryptionKey: TEST_ENCRYPTION_KEY,
       oauthProvider: {
         refreshAccessToken: () => Promise.reject(new Error("No sources should be synced")),
       },
@@ -96,6 +99,7 @@ describe("GoogleCalendarSourceProvider", () => {
         database: mockDatabase as unknown as BunSQLDatabase,
         excludeFocusTime: false,
         excludeOutOfOffice: false,
+        encryptionKey: TEST_ENCRYPTION_KEY,
         externalCalendarId: "calendar@example.com",
         oauthCredentialId: "credential-1",
         originalName: "Original Calendar",
@@ -171,6 +175,7 @@ describe("GoogleCalendarSourceProvider", () => {
         database: mockDatabase as unknown as BunSQLDatabase,
         excludeFocusTime: false,
         excludeOutOfOffice: false,
+        encryptionKey: TEST_ENCRYPTION_KEY,
         externalCalendarId: "calendar@example.com",
         oauthCredentialId: "credential-1",
         originalName: "Original Calendar",
@@ -271,6 +276,7 @@ describe("GoogleCalendarSourceProvider", () => {
         database: mockDatabase as unknown as BunSQLDatabase,
         excludeFocusTime: false,
         excludeOutOfOffice: false,
+        encryptionKey: TEST_ENCRYPTION_KEY,
         externalCalendarId: "calendar@example.com",
         oauthCredentialId: "credential-1",
         originalName: "Original Calendar",
@@ -331,6 +337,7 @@ describe("GoogleCalendarSourceProvider", () => {
         database: {} as never,
         excludeFocusTime: false,
         excludeOutOfOffice: false,
+        encryptionKey: TEST_ENCRYPTION_KEY,
         externalCalendarId: "calendar@example.com",
         oauthCredentialId: "credential-1",
         originalName: "Original Calendar",
@@ -381,6 +388,7 @@ describe("GoogleCalendarSourceProvider", () => {
         database: {} as never,
         excludeFocusTime: false,
         excludeOutOfOffice: false,
+        encryptionKey: TEST_ENCRYPTION_KEY,
         externalCalendarId: "calendar@example.com",
         oauthCredentialId: "credential-1",
         originalName: "Original Calendar",

@@ -1,8 +1,8 @@
 import { createKeeperApi } from "@/read-models";
 import { withAuth, withWideEvent } from "@/utils/middleware";
-import { database } from "@/context";
+import { database, encryptionKey } from "@/context";
 
-const keeperApi = createKeeperApi(database);
+const keeperApi = createKeeperApi(database, { encryptionKey });
 
 const GET = withWideEvent(
   withAuth(async ({ userId }) => {

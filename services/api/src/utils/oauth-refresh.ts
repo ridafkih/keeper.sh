@@ -3,6 +3,7 @@ import {
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { createGoogleTokenRefresher } from "@keeper.sh/calendar";
+import { encryptToken } from "@keeper.sh/database";
 import { createMicrosoftTokenRefresher } from "@keeper.sh/calendar";
 import { eq } from "drizzle-orm";
 import { database, env } from "@/context";
@@ -41,9 +42,9 @@ const refreshGoogleAccessToken = async (
     await database
       .update(oauthCredentialsTable)
       .set({
-        accessToken: tokenData.access_token,
+        accessToken: encryptToken(tokenData.access_token, env.ENCRYPTION_KEY),
         expiresAt: newExpiresAt,
-        refreshToken: tokenData.refresh_token ?? refreshToken,
+        refreshToken: encryptToken(tokenData.refresh_token ?? refreshToken, env.ENCRYPTION_KEY),
       })
       .where(eq(oauthCredentialsTable.id, account.oauthCredentialId));
   }
@@ -80,9 +81,9 @@ const refreshMicrosoftAccessToken = async (
     await database
       .update(oauthCredentialsTable)
       .set({
-        accessToken: tokenData.access_token,
+        accessToken: encryptToken(tokenData.access_token, env.ENCRYPTION_KEY),
         expiresAt: newExpiresAt,
-        refreshToken: tokenData.refresh_token ?? refreshToken,
+        refreshToken: encryptToken(tokenData.refresh_token ?? refreshToken, env.ENCRYPTION_KEY),
       })
       .where(eq(oauthCredentialsTable.id, account.oauthCredentialId));
   }
@@ -112,9 +113,9 @@ const refreshGoogleSourceAccessToken = async (
   await database
     .update(oauthCredentialsTable)
     .set({
-      accessToken: tokenData.access_token,
+      accessToken: encryptToken(tokenData.access_token, env.ENCRYPTION_KEY),
       expiresAt: newExpiresAt,
-      refreshToken: tokenData.refresh_token ?? refreshToken,
+      refreshToken: encryptToken(tokenData.refresh_token ?? refreshToken, env.ENCRYPTION_KEY),
     })
     .where(eq(oauthCredentialsTable.id, credentialId));
 
@@ -143,9 +144,9 @@ const refreshMicrosoftSourceAccessToken = async (
   await database
     .update(oauthCredentialsTable)
     .set({
-      accessToken: tokenData.access_token,
+      accessToken: encryptToken(tokenData.access_token, env.ENCRYPTION_KEY),
       expiresAt: newExpiresAt,
-      refreshToken: tokenData.refresh_token ?? refreshToken,
+      refreshToken: encryptToken(tokenData.refresh_token ?? refreshToken, env.ENCRYPTION_KEY),
     })
     .where(eq(oauthCredentialsTable.id, credentialId));
 

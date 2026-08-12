@@ -13,7 +13,8 @@
     "migrate": "drizzle-kit migrate",
     "types": "tsc --noEmit",
     "test": "bun x --bun vitest run",
-    "lint": "oxlint ."
+    "lint": "oxlint .",
+    "backfill:oauth-tokens": "bun scripts/backfill-oauth-token-encryption.ts"
   },
   "dependencies": {
     "drizzle-orm": "0.45.1",

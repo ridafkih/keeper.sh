@@ -1,5 +1,6 @@
 import {
   boolean,
+  customType,
   index,
   integer,
   pgTable,
@@ -10,20 +11,28 @@ import {
 } from "drizzle-orm/pg-core";
 import { isNotNull, isNull, sql } from "drizzle-orm";
 import { user } from "./auth-schema";
+import { readStoredToken, storedTokenValue } from "../token-encryption";
+import type { StoredToken } from "../token-encryption";
 
 const DEFAULT_EVENT_COUNT = 0;
+
+const storedToken = customType<{ data: StoredToken; driverData: string }>({
+  dataType: () => "text",
+  fromDriver: (value) => readStoredToken(value),
+  toDriver: (value) => storedTokenValue(value),
+});
 
 const oauthCredentialsTable = pgTable(
   "oauth_credentials",
   {
-    accessToken: text().notNull(),
+    accessToken: storedToken().notNull(),
     createdAt: timestamp().notNull().defaultNow(),
     email: text(),
     expiresAt: timestamp().notNull(),
     id: uuid().notNull().primaryKey().defaultRandom(),
     needsReauthentication: boolean().notNull().default(false),
     provider: text().notNull(),
-    refreshToken: text().notNull(),
+    refreshToken: storedToken().notNull(),
     updatedAt: timestamp()
       .notNull()
       .defaultNow()

@@ -71,7 +71,7 @@ interface SyncConfig {
   destinationCalendarId: string;
   database: BunSQLDatabase;
   redis: Redis;
-  encryptionKey?: string;
+  encryptionKey: string;
   oauthConfig: OAuthConfig;
   refreshLockStore?: RefreshLockStore | null;
   deadlineMs?: number;

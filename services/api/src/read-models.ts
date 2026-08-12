@@ -19,15 +19,15 @@ import type { KeeperApi, KeeperDatabase } from "./types";
 interface KeeperApiOptions {
   oauthTokenRefresher?: OAuthTokenRefresher;
   refreshLockStore?: RefreshLockStore | null;
-  encryptionKey?: string;
+  encryptionKey: string;
 }
 
-const createKeeperApi = (database: KeeperDatabase, options?: KeeperApiOptions): KeeperApi => {
+const createKeeperApi = (database: KeeperDatabase, options: KeeperApiOptions): KeeperApi => {
   const deps = {
     database,
-    oauthTokenRefresher: options?.oauthTokenRefresher,
-    refreshLockStore: options?.refreshLockStore,
-    encryptionKey: options?.encryptionKey,
+    oauthTokenRefresher: options.oauthTokenRefresher,
+    refreshLockStore: options.refreshLockStore,
+    encryptionKey: options.encryptionKey,
   };
 
   return {

@@ -7,6 +7,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, asc, eq, gte } from "drizzle-orm";
 import type { Plan } from "@keeper.sh/data-schemas";
+import type { StoredToken } from "@keeper.sh/database";
 import type { SyncableEvent } from "../types";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { getOAuthSyncWindowStart } from "./sync-window";
@@ -15,8 +16,8 @@ interface OAuthAccount {
   calendarId: string;
   userId: string;
   accountId: string;
-  accessToken: string;
-  refreshToken: string;
+  accessToken: StoredToken;
+  refreshToken: StoredToken;
   accessTokenExpiresAt: Date;
 }
 

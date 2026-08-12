@@ -1,6 +1,7 @@
+import { encryptToken } from "@keeper.sh/database";
 import { oauthCredentialsTable } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
-import { database } from "@/context";
+import { database, encryptionKey } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;
 
@@ -32,10 +33,10 @@ const createOAuthSourceCredential = async (
     await database
       .update(oauthCredentialsTable)
       .set({
-        accessToken: data.accessToken,
+        accessToken: encryptToken(data.accessToken, encryptionKey),
         expiresAt: data.expiresAt,
         needsReauthentication: false,
-        refreshToken: data.refreshToken,
+        refreshToken: encryptToken(data.refreshToken, encryptionKey),
       })
       .where(eq(oauthCredentialsTable.id, existing.id));
 
@@ -45,11 +46,11 @@ const createOAuthSourceCredential = async (
   const [credential] = await database
     .insert(oauthCredentialsTable)
     .values({
-      accessToken: data.accessToken,
+      accessToken: encryptToken(data.accessToken, encryptionKey),
       email: data.email,
       expiresAt: data.expiresAt,
       provider: data.provider,
-      refreshToken: data.refreshToken,
+      refreshToken: encryptToken(data.refreshToken, encryptionKey),
       userId,
     })
     .returning({ id: oauthCredentialsTable.id });

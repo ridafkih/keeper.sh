@@ -13,7 +13,8 @@ import type {
   NormalizedUserInfo as OAuthUserInfo,
   ValidatedState,
 } from "@keeper.sh/calendar";
-import { database, oauthProviders, redis } from "@/context";
+import { encryptToken } from "@keeper.sh/database";
+import { database, encryptionKey, oauthProviders, redis } from "@/context";
 import { invalidateCalendarsForAccount } from "@/utils/invalidate-calendars";
 import {
   buildReconnectedCalendarState,
@@ -218,7 +219,11 @@ const saveCalendarDestinationWithDatabase = async (
   if (existingAccount?.oauthCredentialId) {
     await databaseClient
       .update(oauthCredentialsTable)
-      .set({ accessToken, expiresAt, refreshToken })
+      .set({
+        accessToken: encryptToken(accessToken, encryptionKey),
+        expiresAt,
+        refreshToken: encryptToken(refreshToken, encryptionKey),
+      })
       .where(eq(oauthCredentialsTable.id, existingAccount.oauthCredentialId));
 
     await databaseClient
@@ -252,7 +257,14 @@ const saveCalendarDestinationWithDatabase = async (
 
   const [credential] = await databaseClient
     .insert(oauthCredentialsTable)
-    .values({ accessToken, email, expiresAt, provider, refreshToken, userId })
+    .values({
+      accessToken: encryptToken(accessToken, encryptionKey),
+      email,
+      expiresAt,
+      provider,
+      refreshToken: encryptToken(refreshToken, encryptionKey),
+      userId,
+    })
     .returning({ id: oauthCredentialsTable.id });
 
   if (!credential) {

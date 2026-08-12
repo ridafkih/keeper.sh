@@ -11,6 +11,7 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 interface SourceFactoryConfig {
   database: BunSQLDatabase;
+  encryptionKey: string;
   oauthProvider: OAuthProvider;
   refreshLockStore?: RefreshLockStore | null;
 }
@@ -24,6 +25,7 @@ const SOURCE_OAUTH_FACTORIES: Record<string, SourceFactory> = {
 
 interface SourceProvidersConfig {
   database: BunSQLDatabase;
+  encryptionKey: string;
   oauthProviders: OAuthProviders;
   refreshLockStore?: RefreshLockStore | null;
 }
@@ -32,7 +34,7 @@ const getSourceProvider = (
   providerId: string,
   config: SourceProvidersConfig,
 ): SourceProvider | null => {
-  const { database, oauthProviders, refreshLockStore } = config;
+  const { database, encryptionKey, oauthProviders, refreshLockStore } = config;
   const factory = SOURCE_OAUTH_FACTORIES[providerId];
   const oauth = oauthProviders.getProvider(providerId);
 
@@ -40,7 +42,7 @@ const getSourceProvider = (
     return null;
   }
 
-  return factory({ database, oauthProvider: oauth, refreshLockStore });
+  return factory({ database, encryptionKey, oauthProvider: oauth, refreshLockStore });
 };
 
 export { getSourceProvider };

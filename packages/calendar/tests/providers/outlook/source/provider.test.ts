@@ -9,6 +9,8 @@ import {
   OutlookSourceProvider,
 } from "../../../../src/providers/outlook/source/provider";
 
+const TEST_ENCRYPTION_KEY = Buffer.from(new Uint8Array(32).fill(1)).toString("base64");
+
 class TestableOutlookSourceProvider extends OutlookSourceProvider {
   runProcessEvents(events: SourceEvent[], options: ProcessEventsOptions): Promise<SourceSyncResult> {
     return this.processEvents(events, options);
@@ -32,6 +34,7 @@ describe("OutlookSourceProvider", () => {
     } as unknown as BunSQLDatabase;
     const provider = createOutlookSourceProvider({
       database: mockDatabase,
+      encryptionKey: TEST_ENCRYPTION_KEY,
       oauthProvider: {
         refreshAccessToken: () => Promise.reject(new Error("No sources should be synced")),
       },
@@ -72,6 +75,7 @@ describe("OutlookSourceProvider", () => {
         calendarId: "calendar-1",
         database: mockDatabase as unknown as BunSQLDatabase,
         deltaLink: "delta-link-token",
+        encryptionKey: TEST_ENCRYPTION_KEY,
         externalCalendarId: "calendar@example.com",
         oauthCredentialId: "credential-1",
         originalName: "Original Calendar",
@@ -146,6 +150,7 @@ describe("OutlookSourceProvider", () => {
         calendarId: "calendar-1",
         database: mockDatabase as unknown as BunSQLDatabase,
         deltaLink: "delta-link-token",
+        encryptionKey: TEST_ENCRYPTION_KEY,
         externalCalendarId: "calendar@example.com",
         oauthCredentialId: "credential-1",
         originalName: "Original Calendar",
@@ -245,6 +250,7 @@ describe("OutlookSourceProvider", () => {
         calendarId: "calendar-1",
         database: mockDatabase as unknown as BunSQLDatabase,
         deltaLink: null,
+        encryptionKey: TEST_ENCRYPTION_KEY,
         externalCalendarId: "calendar@example.com",
         oauthCredentialId: "credential-1",
         originalName: "Original Calendar",

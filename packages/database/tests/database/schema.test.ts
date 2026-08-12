@@ -4,7 +4,50 @@ import {
   calendarAccountsTable,
   eventMappingsTable,
   eventStatesTable,
+  oauthCredentialsTable,
 } from "../../src/database/schema";
+import { encryptToken, readStoredToken, storedTokenValue } from "../../src/token-encryption";
+
+const ENCRYPTION_KEY = Buffer.from(new Uint8Array(32).fill(3)).toString("base64");
+
+describe("oauth credential token columns", () => {
+  it("keeps the on-disk column type unchanged so no migration is required", () => {
+    const tableConfig = getTableConfig(oauthCredentialsTable);
+    const tokenColumns = tableConfig.columns.filter(
+      (column) => column.name === "accessToken" || column.name === "refreshToken",
+    );
+
+    expect(tokenColumns).toHaveLength(2);
+    for (const column of tokenColumns) {
+      expect(column.getSQLType()).toBe("text");
+      expect(column.notNull).toBe(true);
+    }
+  });
+
+  it("maps stored text to a stored token on read and back to text on write", () => {
+    const tableConfig = getTableConfig(oauthCredentialsTable);
+    const accessTokenColumn = tableConfig.columns.find(
+      (column) => column.name === "accessToken",
+    );
+
+    const written = storedTokenValue(encryptToken("plain-access-token", ENCRYPTION_KEY));
+    const readBack = accessTokenColumn?.mapFromDriverValue(written);
+
+    expect(readBack).toEqual(readStoredToken(written));
+    expect(accessTokenColumn?.mapToDriverValue(readBack)).toBe(written);
+  });
+
+  it("passes legacy plaintext values through the read mapping untouched", () => {
+    const tableConfig = getTableConfig(oauthCredentialsTable);
+    const refreshTokenColumn = tableConfig.columns.find(
+      (column) => column.name === "refreshToken",
+    );
+
+    const readBack = refreshTokenColumn?.mapFromDriverValue("legacy-plaintext-token");
+
+    expect(refreshTokenColumn?.mapToDriverValue(readBack)).toBe("legacy-plaintext-token");
+  });
+});
 
 describe("calendar account schema", () => {
   it("enforces provider account identity for OAuth upserts", () => {

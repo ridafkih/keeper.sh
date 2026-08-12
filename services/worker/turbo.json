@@ -1,0 +1,32 @@
+{
+  "$schema": "https://v2-9-0.turborepo.dev/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "dev": {
+      "passThroughEnv": [
+        "LOG_LEVEL",
+        "DATABASE_URL",
+        "REDIS_URL",
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "MICROSOFT_CLIENT_ID",
+        "MICROSOFT_CLIENT_SECRET",
+        "ENCRYPTION_KEY",
+        "WORKER_CONCURRENCY"
+      ]
+    },
+    "start": {
+      "passThroughEnv": [
+        "LOG_LEVEL",
+        "DATABASE_URL",
+        "REDIS_URL",
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "MICROSOFT_CLIENT_ID",
+        "MICROSOFT_CLIENT_SECRET",
+        "ENCRYPTION_KEY",
+        "WORKER_CONCURRENCY"
+      ]
+    }
+  }
+}

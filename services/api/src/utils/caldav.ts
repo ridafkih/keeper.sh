@@ -90,10 +90,6 @@ const createCalDAVDestination = async (
     throw new CalDAVConnectionError(error);
   });
 
-  if (!encryptionKey) {
-    throw new Error("ENCRYPTION_KEY must be set to use CalDAV destinations");
-  }
-
   const encrypted = encryptPassword(credentials.password, encryptionKey);
   const serverHost = new URL(serverUrl).host;
   const accountId = `${credentials.username}@${serverHost}`;

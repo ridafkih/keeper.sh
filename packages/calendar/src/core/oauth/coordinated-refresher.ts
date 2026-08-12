@@ -1,6 +1,7 @@
 import type { RefreshLockStore } from "./refresh-coordinator";
 import { runWithCredentialRefreshLock } from "./refresh-coordinator";
 import { isOAuthReauthRequiredError } from "./error-classification";
+import { encryptToken } from "@keeper.sh/database";
 import {
   calendarAccountsTable,
   oauthCredentialsTable,
@@ -14,6 +15,7 @@ interface CoordinatedRefresherOptions {
   database: BunSQLDatabase;
   oauthCredentialId: string;
   calendarAccountId: string;
+  encryptionKey: string;
   refreshLockStore: RefreshLockStore | null;
   rawRefresh: (refreshToken: string) => Promise<{
     access_token: string;
@@ -23,7 +25,14 @@ interface CoordinatedRefresherOptions {
 }
 
 const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
-  const { database, oauthCredentialId, calendarAccountId, refreshLockStore, rawRefresh } = options;
+  const {
+    database,
+    oauthCredentialId,
+    calendarAccountId,
+    encryptionKey,
+    refreshLockStore,
+    rawRefresh,
+  } = options;
 
   return (refreshToken: string) =>
     runWithCredentialRefreshLock(
@@ -37,9 +46,9 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
           await database
             .update(oauthCredentialsTable)
             .set({
-              accessToken: result.access_token,
+              accessToken: encryptToken(result.access_token, encryptionKey),
               expiresAt: newExpiresAt,
-              refreshToken: result.refresh_token ?? refreshToken,
+              refreshToken: encryptToken(result.refresh_token ?? refreshToken, encryptionKey),
             })
             .where(eq(oauthCredentialsTable.id, oauthCredentialId));
 

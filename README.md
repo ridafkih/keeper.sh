@@ -146,6 +146,10 @@ There are seven images currently available, two of them are designed for conveni
 >
 > **Migrating from a previous version?** If you are upgrading from the older Next.js-based release, see the [migration guide](https://github.com/ridafkih/keeper.sh/issues/140) for environment variable changes. The new web server will also print a migration notice at startup if it detects old environment variables.
 
+> [!NOTE]
+>
+> **Upgrading without an `ENCRYPTION_KEY` set?** OAuth access and refresh tokens are now encrypted at rest alongside CalDAV credentials, so `ENCRYPTION_KEY` is required by the `api`, `cron`, and `worker` services. Generate one with `openssl rand -base64 32` and use the same value for all three. Each service will print a migration notice at startup and exit if it is missing. If you already set `ENCRYPTION_KEY`, keep it as-is — changing it makes existing credentials unreadable.
+
 ## Environment Variables
 
 | Name                           | Service(s)    | Description                                                                                                                                                         |
@@ -164,7 +168,7 @@ There are seven images currently available, two of them are designed for conveni
 | POLAR_ACCESS_TOKEN             | `api`, `cron` | Optional. Polar API token for subscription management.                                                                                                              |
 | POLAR_MODE                     | `api`, `cron` | Optional. Polar environment, `sandbox` or `production`.                                                                                                             |
 | POLAR_WEBHOOK_SECRET           | `api`         | Optional. Secret to verify Polar webhooks.                                                                                                                          |
-| ENCRYPTION_KEY                 | `api`, `cron`, `worker` | Key for encrypting CalDAV credentials at rest.<br><br>e.g. `openssl rand -base64 32`                                                                                |
+| ENCRYPTION_KEY                 | `api`, `cron`, `worker` | Required. Key for encrypting CalDAV credentials and OAuth access and refresh tokens at rest. Must be the same value across all three services. If unset, the service will exit with a migration notice.<br><br>e.g. `openssl rand -base64 32`                                                                                |
 | RESEND_API_KEY                 | `api`         | Optional. API key for sending emails via Resend.                                                                                                                    |
 | FEEDBACK_EMAIL                 | `api`         | Optional. Address that in-app feedback submissions are emailed to. Requires `RESEND_API_KEY`.                                                                        |
 | PASSKEY_RP_ID                  | `api`         | Optional. Relying party ID for passkey authentication.                                                                                                              |

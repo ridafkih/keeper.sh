@@ -3,6 +3,8 @@ import type { OAuthTokenProvider } from "./token-provider";
 import type { OAuthSourceProvider } from "./source-provider";
 import type { OAuthSourceConfig, SourceSyncResult } from "../types";
 import type { RefreshLockStore } from "./refresh-coordinator";
+import type { StoredToken } from "@keeper.sh/database";
+import { markCredentialNeedsReauthentication } from "./credential-tokens";
 import { allSettledWithConcurrency } from "../utils/concurrency";
 
 const EMPTY_SOURCES_COUNT = 0;
@@ -28,8 +30,8 @@ interface OAuthSourceAccount {
   userId: string;
   externalCalendarId: string;
   syncToken: string | null;
-  accessToken: string;
-  refreshToken: string;
+  accessToken: StoredToken;
+  refreshToken: StoredToken;
   accessTokenExpiresAt: Date;
   oauthCredentialId: string;
   provider: string;
@@ -77,8 +79,15 @@ const createOAuthSourceProvider = <
       return { eventsAdded: INITIAL_ADDED_COUNT, eventsRemoved: INITIAL_REMOVED_COUNT };
     }
 
-    const tasks = sources.map((source) => (): Promise<SourceSyncResult> => {
-        const config = buildConfig(database, source);
+    const tasks = sources.map((source) => async (): Promise<SourceSyncResult> => {
+        const config = await (async () => {
+          try {
+            return buildConfig(database, source);
+          } catch (error) {
+            await markCredentialNeedsReauthentication(database, source.calendarAccountId, error);
+            throw error;
+          }
+        })();
         config.refreshLockStore = refreshLockStore ?? null;
         const provider = createProviderInstance(config, oauthProvider);
 

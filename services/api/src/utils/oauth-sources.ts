@@ -9,7 +9,11 @@ import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/go
 import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/outlook";
 import type { database as contextDatabase } from "@/context";
 import { spawnBackgroundJob } from "./background-task";
-import { getSourceProvider } from "@keeper.sh/calendar";
+import {
+  getSourceProvider,
+  readCredentialTokens,
+  readCredentialTokensOrFlag,
+} from "@keeper.sh/calendar";
 import { applySourceSyncDefaults } from "./source-sync-defaults";
 
 import { enqueuePushSync } from "./enqueue-push-sync";
@@ -133,7 +137,7 @@ const getOAuthDestinationCredentials = async (
   accountId: string,
   provider: string,
 ): Promise<OAuthAccountWithCredentials> => {
-  const { database } = await import("@/context");
+  const { database, encryptionKey } = await import("@/context");
   const [result] = await database
     .select({
       accessToken: oauthCredentialsTable.accessToken,
@@ -164,12 +168,19 @@ const getOAuthDestinationCredentials = async (
     throw new DestinationProviderMismatchError(provider);
   }
 
+  const tokens = await readCredentialTokensOrFlag(
+    database,
+    result.accountId,
+    result,
+    encryptionKey,
+  );
+
   return {
-    accessToken: result.accessToken,
+    accessToken: tokens.accessToken,
     accountId: result.accountId,
     email: result.email,
     expiresAt: result.expiresAt,
-    refreshToken: result.refreshToken,
+    refreshToken: tokens.refreshToken,
   };
 };
 
@@ -190,7 +201,7 @@ const getOAuthSourceCredentials = async (
   credentialId: string,
   provider: string,
 ): Promise<OAuthSourceWithCredentials> => {
-  const { database } = await import("@/context");
+  const { database, encryptionKey } = await import("@/context");
   const [result] = await database
     .select({
       accessToken: oauthCredentialsTable.accessToken,
@@ -217,12 +228,14 @@ const getOAuthSourceCredentials = async (
     throw new SourceCredentialProviderMismatchError(provider);
   }
 
+  const tokens = readCredentialTokens(result, encryptionKey);
+
   return {
-    accessToken: result.accessToken,
+    accessToken: tokens.accessToken,
     credentialId: result.credentialId,
     email: result.email,
     expiresAt: result.expiresAt,
-    refreshToken: result.refreshToken,
+    refreshToken: tokens.refreshToken,
   };
 };
 
@@ -364,9 +377,10 @@ const hasExistingOAuthCalendar = async (
 };
 
 const syncOAuthSourcesByProvider = async (userId: string, providerId: string): Promise<void> => {
-  const { database, oauthProviders, refreshLockStore } = await import("@/context");
+  const { database, encryptionKey, oauthProviders, refreshLockStore } = await import("@/context");
   const sourceProvider = getSourceProvider(providerId, {
     database,
+    encryptionKey,
     oauthProviders,
     refreshLockStore,
   });

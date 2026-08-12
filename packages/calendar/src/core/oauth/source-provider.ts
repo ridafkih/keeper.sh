@@ -4,6 +4,7 @@ import {
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
+import { encryptToken } from "@keeper.sh/database";
 import { eq } from "drizzle-orm";
 import type { OAuthSourceConfig, SourceEvent, SourceSyncResult } from "../types";
 import type { OAuthTokenProvider } from "./token-provider";
@@ -137,6 +138,7 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
     const {
       database,
       accessTokenExpiresAt,
+      encryptionKey,
       refreshToken,
       oauthCredentialId,
     } = this.config;
@@ -161,9 +163,9 @@ abstract class OAuthSourceProvider<TConfig extends OAuthSourceConfig = OAuthSour
     await database
       .update(oauthCredentialsTable)
       .set({
-        accessToken: tokenData.access_token,
+        accessToken: encryptToken(tokenData.access_token, encryptionKey),
         expiresAt: newExpiresAt,
-        refreshToken: tokenData.refresh_token ?? refreshToken,
+        refreshToken: encryptToken(tokenData.refresh_token ?? refreshToken, encryptionKey),
       })
       .where(eq(oauthCredentialsTable.id, oauthCredentialId));
 

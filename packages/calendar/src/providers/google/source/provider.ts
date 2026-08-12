@@ -14,6 +14,8 @@ import {
 import { OAuthSourceProvider, type ProcessEventsOptions } from "../../../core/oauth/source-provider";
 import type { FetchEventsResult as BaseFetchEventsResult } from "../../../core/oauth/source-provider";
 import { createOAuthSourceProvider, type SourceProvider } from "../../../core/oauth/create-source-provider";
+import { readCredentialTokens } from "../../../core/oauth/credential-tokens";
+import type { StoredToken } from "@keeper.sh/database";
 import { encodeStoredSyncToken, resolveSyncTokenForWindow } from "../../../core/oauth/sync-token";
 import { getOAuthSyncTokenVersion, getOAuthSyncWindow } from "../../../core/oauth/sync-window";
 import type { OAuthTokenProvider } from "../../../core/oauth/token-provider";
@@ -248,8 +250,8 @@ interface GoogleSourceAccount {
   userId: string;
   externalCalendarId: string;
   syncToken: string | null;
-  accessToken: string;
-  refreshToken: string;
+  accessToken: StoredToken;
+  refreshToken: StoredToken;
   accessTokenExpiresAt: Date;
   credentialId: string;
   oauthCredentialId: string;
@@ -263,6 +265,7 @@ interface GoogleSourceAccount {
 
 interface CreateGoogleSourceProviderConfig {
   database: BunSQLDatabase;
+  encryptionKey: string;
   oauthProvider: OAuthTokenProvider;
   refreshLockStore?: RefreshLockStore | null;
 }
@@ -318,11 +321,11 @@ const getGoogleSourcesWithCredentials = async (
 const createGoogleCalendarSourceProvider = (
   config: CreateGoogleSourceProviderConfig,
 ): SourceProvider => {
-  const { database, oauthProvider, refreshLockStore } = config;
+  const { database, encryptionKey, oauthProvider, refreshLockStore } = config;
 
   return createOAuthSourceProvider<GoogleSourceAccount, GoogleSourceConfig>({
     buildConfig: (db, account) => ({
-      accessToken: account.accessToken,
+      ...readCredentialTokens(account, encryptionKey),
       accessTokenExpiresAt: account.accessTokenExpiresAt,
       calendarAccountId: account.calendarAccountId,
       calendarId: account.calendarId,
@@ -330,9 +333,9 @@ const createGoogleCalendarSourceProvider = (
       excludeFocusTime: account.excludeFocusTime,
       excludeOutOfOffice: account.excludeOutOfOffice,
       externalCalendarId: account.externalCalendarId,
+      encryptionKey,
       oauthCredentialId: account.oauthCredentialId,
       originalName: account.originalName,
-      refreshToken: account.refreshToken,
       sourceName: account.sourceName,
       syncToken: account.syncToken,
       userId: account.userId,
