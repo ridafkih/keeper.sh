@@ -1,0 +1,164 @@
+---
+title: "How to Sync Outlook Calendar with Google Calendar"
+description: "A step-by-step guide to getting your work Outlook schedule into Google Calendar, including what your household sees and how to keep meeting titles at work."
+blurb: "Your shifts and meetings live in a work Outlook account nobody at home can see. Here is how to get them into Google Calendar, how to keep the titles private, and what to do when your employer blocks it."
+createdAt: "2026-08-11"
+slug: "how-to-sync-outlook-calendar-with-google-calendar"
+updatedAt: "2026-08-11"
+tags:
+  - "outlook"
+  - "google-calendar"
+  - "how-to"
+  - "calendar-sync"
+---
+
+Your work schedule lives in Outlook. Everything else in your life runs on Google Calendar. The two never meet, so you keep agreeing to things you are not actually free for.
+
+This guide moves your Outlook schedule into Google, in one direction only. Work meetings show up at home, and nothing from your Google calendar goes back to your employer.
+
+That last part is worth saying plainly, because it is the thing people worry about. Setting this up does not expose your personal calendar to anyone at work.
+
+The tool is Keeper. Use it at [keeper.sh](https://keeper.sh), or run your own copy on your own hardware.
+
+## Why bother?
+
+Marcus is a respiratory therapist on a rotating roster, and his shifts are published to his hospital's Outlook account weeks ahead.
+
+His household runs on a Google calendar he shares with his partner. She cannot see the roster, so she books the dentist on a Tuesday he is working nights.
+
+After this, every shift appears on that shared Google calendar by itself. When the roster changes, the Google copy follows within the hour.
+
+He never retypes a shift again, and never has to remember to.
+
+## Will your employer let you?
+
+This is the first thing to find out, because it is the one part that is out of your hands.
+
+Some organisations restrict which outside applications can reach staff calendars. If yours does, the Microsoft sign-in screen stops you and says that approval is needed.
+
+You see this immediately, at the sign-in step, before anything has been connected. There is no half-finished state to clean up afterwards.
+
+Your options then are to ask IT to approve Keeper, or to run your own copy so the application is yours rather than ours. There is a section on that below.
+
+A personal Outlook.com account has no such restriction and will simply work.
+
+## Where should the copies go in Google?
+
+Do not send them into your main Google calendar. Create a separate one first and name it something like "Work shifts", then share it with whoever needs to see it.
+
+There are two reasons for that. The copies Keeper creates in Google carry no visible marker, so on a busy calendar you cannot tell them apart from events you made yourself.
+
+The second reason is simpler: a calendar of its own can be hidden with a single checkbox when the weekend starts.
+
+Create it before you connect Google to Keeper. Keeper reads your calendar list at the moment you connect and never checks again, so a calendar you add later will not appear as an option.
+
+## How do I set it up?
+
+Sign in at [keeper.sh](https://keeper.sh) to reach your dashboard.
+
+Connect Google first, because it is the calendar receiving events, and Keeper can only offer a target it already knows about.
+
+1. Choose **Import Calendars**.
+2. Choose **Connect Google Calendar**.
+3. A screen headed "Connect Google" lists what is being asked for: your email address, your list of calendars, your events and their details, and permission to add or remove events. Press **Connect**.
+4. Sign in to Google and approve.
+5. Keeper asks "Which calendars would you like to configure?". Nothing is leaving Google, so press **Skip**.
+
+Now connect the work account.
+
+6. Choose **Import Calendars**, then **Connect Outlook**.
+7. Press **Connect** and sign in with your work address. This is the step your employer might block.
+8. Keeper lists your Outlook calendars. Tick your main work calendar and press **Next**.
+9. You reach **Rename Your Calendars**. Read the next section before typing anything here, because this name can become the title of every event at home. Press **Next**.
+10. A screen asks **"Where should 'Work' send events?"**. Tick the Google calendar you made earlier and press **Next**.
+11. The next screen asks where this Outlook calendar should pull events *from*. Leave it empty, then press **Next** and **Finish**.
+
+Step 11 is the reverse direction. Ticking anything there would start copying your personal Google events onto your employer's systems.
+
+To change any of this later, open **Calendars** on the dashboard, choose the Outlook calendar, and edit **Send Events to Calendars**.
+
+## What will my partner see?
+
+This is the question that actually matters, because a shared Google calendar is being read by someone else.
+
+Keeper copies the times, but whether it copies the details is controlled by three switches you should check rather than assume.
+
+Open the Outlook calendar inside Keeper and look at **Sync Settings**, where you will find **Sync Event Name**, **Sync Event Description**, and **Sync Event Location**.
+
+Connected the way described above, all three start off. A meeting called "Redundancy consultation, R. Patel" arrives at home as a block with no title of its own, no notes, and no room number.
+
+In place of the real title, Keeper writes the name you gave the calendar back in step 9. Name it "Work" and your partner sees blocks called "Work", but name it after your employer and everyone you share with reads that instead.
+
+Check those switches on every calendar you connect. Keeper does not currently start every calendar from the same position depending on how it was added, so look rather than trust.
+
+Turning the switches on, so that real titles come through, is a Pro feature. On the free plan the details stay at work and cannot be released.
+
+## What stays behind in Outlook?
+
+Keeper copies the shape of a commitment rather than its contents.
+
+It carries the title or its stand-in, the description, the location, the start and end, the timezone, whether it is all-day, whether you are marked busy, and any repeat pattern.
+
+It does not carry attendees, Teams links, or reminders.
+
+So the Google copy is a block of time and nothing more. Your partner cannot see who else is in the meeting, and cannot accidentally join it.
+
+## Do you want the other direction too?
+
+Keeper connections run one way. That is a deliberate choice rather than a missing feature, and it is why step 11 exists.
+
+You can have both directions if you want them, set up as two separate connections, each configured on its own with its own settings.
+
+Think hard before adding the return trip. Sending personal Google events into a work Outlook account places them on your employer's systems, subject to your employer's retention and discovery rules.
+
+If you do want work to see when you are unavailable, set that direction up with the detail switches off. Colleagues then see busy hours and nothing else.
+
+The free plan covers three connections in total, so both directions fit.
+
+## Something looks wrong. What is it?
+
+**Google shows blocks with no useful title.** That is the intended behaviour rather than a fault, and the title you see is the name you gave the calendar in step 9. Rename that calendar inside Keeper and every copy updates.
+
+**Microsoft refused the sign-in.** Your workplace restricts which outside applications can reach staff calendars. Ask IT to approve it, or run your own instance so that the application registration belongs to you.
+
+**A night shift appears on the wrong day at home.** Check the timezone set on the Outlook calendar itself rather than the one on your computer. Shifts crossing midnight land on whichever day the start time falls in, and a wrong calendar timezone moves that boundary.
+
+**You deleted a copy in Google and it came back.** That is expected, because Keeper checks its copies against the original and replaces anything missing. Cancel the shift in Outlook instead, and the Google copy disappears on the next run.
+
+**The roster stopped updating.** Usually the work account needs signing in again, which happens after a password change or after IT revokes access. Reconnect the Outlook account in Keeper.
+
+**Everything vanished from Google after you left the job.** Losing access to the work account means Keeper can no longer confirm those events exist, so its copies are cleaned up. Export the Google calendar before your last day if you want to keep the history.
+
+## How current is it?
+
+Keeper reads your Outlook calendar every minute, whatever plan you are on, so a roster change is picked up almost straight away.
+
+Writing it into Google is the part that differs by plan: every 30 minutes on free, and every minute on Pro.
+
+For a roster published weeks ahead, every 30 minutes is more than enough. Pay for the faster one only if you are the person whose meetings move twice a morning.
+
+## Can I run it myself?
+
+Yes, and for a work calendar there is a specific reason to.
+
+Keeper is open source under AGPL-3.0, and running your own copy gives you every Pro feature at no cost. That includes one-minute updates and full control over which details travel.
+
+More usefully here, your own instance registers its own application with Microsoft. If your IT team will approve an internal application but not an outside service, that is the difference between this working and not working at all.
+
+Your calendar data also never leaves hardware you control, which is its own argument when the calendar belongs to an employer.
+
+The honest cost is a real evening's work. You need somewhere to run Docker, a PostgreSQL database, and a Redis instance, and you must register applications with both Google and Microsoft to make sign-in work.
+
+That last step means a trip through both companies' developer consoles. The [README on GitHub](https://github.com/ridafkih/keeper.sh#readme) covers all of it, and there are prepared Docker images.
+
+If none of that appeals, [keeper.sh](https://keeper.sh) is the same software already running.
+
+## What does it cost?
+
+Free is enough for this guide: two connected accounts, being one Outlook and one Google, plus three connections between calendars.
+
+There is no cap on the number of calendars inside an account. A work account exposing eight calendars still counts as a single connected account.
+
+Pro costs $5 a month. It moves updates from every 30 minutes to every minute, removes both limits, and unlocks the switches deciding which event details travel.
+
+Self-hosting gives you all of it in exchange for setting it up yourself.
