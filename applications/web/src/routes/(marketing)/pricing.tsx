@@ -16,7 +16,7 @@ import { PRICING_FEATURES, PRICING_PLANS } from "@/features/marketing/pricing-pl
 import { canonicalUrl, jsonLdScript, seoMeta, webPageSchema, breadcrumbSchema, offerCatalogSchema } from "@/lib/seo";
 
 const PAGE_DESCRIPTION =
-  "Keeper.sh pricing. Free covers 2 linked accounts, 3 sync mappings, and syncing every 30 minutes. Pro is $5 per month for unlimited accounts and mappings, syncing every minute, and uncapped API access.";
+  "Keeper.sh pricing. Free covers 2 linked accounts, 3 sync mappings, and changes reaching your other calendars every 30 minutes. Pro is $5 per month for unlimited accounts and mappings, changes every minute, and uncapped API access.";
 
 type PricingNote = {
   title: string;

@@ -10,7 +10,7 @@ import ArrowRightIcon from "lucide-react/dist/esm/icons/arrow-right";
 import ArrowUpRightIcon from "lucide-react/dist/esm/icons/arrow-up-right";
 
 const PAGE_DESCRIPTION =
-  "Two-way calendar sync for Google Calendar, Outlook, iCloud, Fastmail, and CalDAV, plus read-only ICS feeds, an anonymized iCal feed, a REST API, and an MCP server.";
+  "Keeper copies events from one calendar into another and combines everything you connect into a single feed. Works with Google Calendar, Outlook, iCloud, Fastmail, and more.";
 
 type FeatureSection = {
   title: string;
@@ -26,8 +26,9 @@ const FEATURE_SECTIONS: FeatureSection[] = [
       "Google and Outlook are pulled incrementally: Keeper stores a sync token or delta link per account and asks the provider only for what changed. CalDAV and ICS sources are re-read on each pass.",
     ],
     points: [
-      "Free plan: destinations are pushed every 30 minutes",
-      "Pro plan: destinations are pushed every minute",
+      "Both plans: changes are picked up from your calendars every minute",
+      "Free plan: those changes reach your other calendars every 30 minutes",
+      "Pro plan: those changes reach your other calendars every minute",
     ],
   },
   {
@@ -40,7 +41,7 @@ const FEATURE_SECTIONS: FeatureSection[] = [
   {
     title: "Control over what gets synced",
     body: [
-      "Display settings are configured per destination calendar, so a work calendar can show full details while a shared one shows a generic block.",
+      "Display settings are configured per destination calendar, so a work calendar can carry the title, description, and location while a shared one shows a generic block.",
       "Pro adds event filters and exclusions for skipping events you do not want mirrored at all.",
     ],
   },
