@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useLocation } from "@tanstack/react-router";
 import type { PublicRuntimeConfig } from "@/lib/runtime-config";
-import { identify, track, updateGoogleConsent } from "@/lib/analytics";
+import { identify, reportGooglePageView, track, updateGoogleConsent } from "@/lib/analytics";
 import { useEffectiveConsent } from "@/hooks/use-effective-consent";
 import { useGdprApplies } from "@/hooks/use-gdpr-applies";
 import { useSession } from "@/hooks/use-session";
@@ -13,10 +13,19 @@ function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfi
   const location = useLocation();
   const { user } = useSession();
   const identifiedUserId = useRef<string | null>(null);
+  const lastReportedPath = useRef<string | null>(null);
 
   useEffect(() => {
     track("page_view", { path: location.pathname });
   }, [location.pathname]);
+
+  useEffect(() => {
+    const previousPath = lastReportedPath.current;
+    lastReportedPath.current = location.pathname;
+
+    if (previousPath === null || previousPath === location.pathname) return;
+    reportGooglePageView(googleAdsId, location.pathname);
+  }, [googleAdsId, location.pathname]);
 
   useEffect(() => {
     updateGoogleConsent(hasConsent);

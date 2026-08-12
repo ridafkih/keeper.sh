@@ -198,6 +198,7 @@ The following environment variables are read by the `web` server at **runtime** 
 | VITE_VISITORS_NOW_TOKEN           | Optional. [visitors.now](https://visitors.now) token for analytics |
 | VITE_GOOGLE_ADS_ID                | Optional. Google Ads conversion tracking ID (e.g., `AW-123456789`) |
 | VITE_GOOGLE_ADS_CONVERSION_LABEL  | Optional. Google Ads conversion label for purchase tracking        |
+| VITE_GOOGLE_ADS_SIGNUP_CONVERSION_LABEL | Optional. Google Ads conversion label for signup tracking     |
 
 > [!NOTE]
 >

@@ -6,13 +6,14 @@ import { parseHTML } from "linkedom";
 import type { PublicRuntimeConfig } from "@/lib/runtime-config";
 import { AnalyticsScripts } from "@/components/analytics-scripts";
 
-const { effectiveConsentMock, gdprAppliesMock } = vi.hoisted(() => ({
+const { effectiveConsentMock, gdprAppliesMock, locationMock } = vi.hoisted(() => ({
   effectiveConsentMock: vi.fn(() => false),
   gdprAppliesMock: vi.fn(() => true),
+  locationMock: vi.fn(() => ({ pathname: "/" })),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
-  useLocation: () => ({ pathname: "/" }),
+  useLocation: locationMock,
 }));
 
 vi.mock("@/hooks/use-effective-consent", () => ({
@@ -31,6 +32,7 @@ const runtimeConfig: PublicRuntimeConfig = {
   commercialMode: true,
   googleAdsConversionLabel: "test-label",
   googleAdsId: "AW-1234567890",
+  googleAdsSignupConversionLabel: "signup-label",
   polarProMonthlyProductId: null,
   polarProYearlyProductId: null,
   visitorsNowToken: null,
@@ -162,5 +164,56 @@ describe("AnalyticsScripts consent signalling", () => {
 
     expect(markup).toContain("'ad_storage': 'denied'");
     expect(markup).not.toContain("'ad_storage': 'granted'");
+  });
+});
+
+describe("AnalyticsScripts page views", () => {
+  const pageViews = (): GtagCall[] =>
+    gtagSpy.mock.calls.filter(
+      (call): call is GtagCall => call[0] === "event" && call[1] === "page_view",
+    );
+
+  it("does not double-count the initial page view already sent by gtag config", async () => {
+    locationMock.mockReturnValue({ pathname: "/" });
+
+    await act(async () => {
+      root.render(<AnalyticsScripts runtimeConfig={runtimeConfig} />);
+    });
+
+    expect(pageViews()).toHaveLength(0);
+  });
+
+  it("sends a Google Ads page view on client-side navigation", async () => {
+    locationMock.mockReturnValue({ pathname: "/" });
+
+    await act(async () => {
+      root.render(<AnalyticsScripts runtimeConfig={runtimeConfig} />);
+    });
+
+    locationMock.mockReturnValue({ pathname: "/blog" });
+
+    await act(async () => {
+      root.render(<AnalyticsScripts runtimeConfig={runtimeConfig} />);
+    });
+
+    expect(pageViews()).toEqual([
+      ["event", "page_view", { page_path: "/blog", send_to: "AW-1234567890" }],
+    ]);
+  });
+
+  it("stays silent when no Google Ads id is configured", async () => {
+    locationMock.mockReturnValue({ pathname: "/" });
+
+    await act(async () => {
+      root.render(<AnalyticsScripts runtimeConfig={{ ...runtimeConfig, googleAdsId: null }} />);
+    });
+
+    locationMock.mockReturnValue({ pathname: "/blog" });
+
+    await act(async () => {
+      root.render(<AnalyticsScripts runtimeConfig={{ ...runtimeConfig, googleAdsId: null }} />);
+    });
+
+    expect(pageViews()).toHaveLength(0);
   });
 });

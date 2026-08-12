@@ -19,7 +19,8 @@ import {
   type AuthCapabilities,
 } from "@/lib/auth-capabilities";
 import { signInWithCredential, signUpWithCredential } from "@/lib/auth";
-import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
+import { track, ANALYTICS_EVENTS, reportSignupConversion } from "@/lib/analytics";
+import { getPublicRuntimeConfig } from "@/lib/runtime-config";
 import {
   Button,
   LinkButton,
@@ -338,6 +339,7 @@ function CredentialForm({
 
     if (action === "signUp") {
       track(ANALYTICS_EVENTS.signup_completed);
+      reportSignupConversion(getPublicRuntimeConfig());
     } else if (action === "signIn") {
       track(ANALYTICS_EVENTS.login_completed);
     }

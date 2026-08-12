@@ -118,21 +118,48 @@ const identify = (
 };
 
 interface ConversionOptions {
-  value: number | null;
-  currency: string | null;
-  transactionId: string | null;
+  value?: number | null;
+  currency?: string | null;
+  transactionId?: string | null;
 }
+
+const buildConversionPayload = (
+  sendTo: string,
+  options?: ConversionOptions,
+): Record<string, string | number> => ({
+  send_to: sendTo,
+  ...(typeof options?.value === "number" && { value: options.value }),
+  ...(options?.currency && { currency: options.currency }),
+  ...(options?.transactionId && { transaction_id: options.transactionId }),
+});
+
+const reportConversion = (
+  googleAdsId: string | null,
+  conversionLabel: string | null,
+  options?: ConversionOptions,
+): void => {
+  if (!googleAdsId || !conversionLabel) return;
+  globalThis.gtag?.(
+    "event",
+    "conversion",
+    buildConversionPayload(`${googleAdsId}/${conversionLabel}`, options),
+  );
+};
 
 const reportPurchaseConversion = (
   runtimeConfig: PublicRuntimeConfig,
   options?: ConversionOptions,
 ): void => {
-  const { googleAdsConversionLabel, googleAdsId } = runtimeConfig;
-  if (!googleAdsId || !googleAdsConversionLabel) return;
-  globalThis.gtag?.("event", "conversion", {
-    send_to: `${googleAdsId}/${googleAdsConversionLabel}`,
-    ...options,
-  });
+  reportConversion(runtimeConfig.googleAdsId, runtimeConfig.googleAdsConversionLabel, options);
+};
+
+const reportSignupConversion = (runtimeConfig: PublicRuntimeConfig): void => {
+  reportConversion(runtimeConfig.googleAdsId, runtimeConfig.googleAdsSignupConversionLabel);
+};
+
+const reportGooglePageView = (googleAdsId: string | null, path: string): void => {
+  if (!googleAdsId) return;
+  globalThis.gtag?.("event", "page_view", { page_path: path, send_to: googleAdsId });
 };
 
 declare global {
@@ -151,7 +178,9 @@ export {
   hasAnalyticsConsent,
   hasConsentChoice,
   identify,
+  reportGooglePageView,
   reportPurchaseConversion,
+  reportSignupConversion,
   resolveEffectiveConsent,
   setAnalyticsConsent,
   subscribeToConsentChanges,

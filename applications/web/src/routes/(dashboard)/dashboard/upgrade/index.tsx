@@ -103,7 +103,10 @@ function UpgradePage() {
     startTransition(async () => {
       await openCheckout(productId, {
         onSuccess: () => {
-          reportPurchaseConversion(runtimeConfig);
+          reportPurchaseConversion(runtimeConfig, {
+            currency: "USD",
+            value: yearly ? proPlan.yearlyPrice : proPlan.monthlyPrice,
+          });
           mutate();
         },
       });
