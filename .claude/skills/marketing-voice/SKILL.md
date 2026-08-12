@@ -21,7 +21,7 @@ A person with two calendars and a scheduling problem. They use Google Calendar o
 
 **Default to Register A**; pick B or C only for a file named above. A and B hold sentence discipline, C does not. A explains what happens, C why it was hard — C may assume the reader has built something, never that they have read our source. Symptom-first failure modes and question-shaped headings apply in all three.
 
-Read `glossary.md` (tiered terms, with why each fails so you can rule on ones it omits) and `examples.md` (ten before/after pairs from shipped copy, every edit enumerated) before any substantial rewrite. Also `formatting.md` and `positioning.md`.
+Read `glossary.md` (tiered terms, with why each fails so you can rule on ones it omits) and `examples.md` (ten before/after pairs from shipped copy, every edit enumerated) before any substantial rewrite. Also `formatting.md`, `positioning.md` and `length.md`.
 
 ## Rules
 
@@ -35,6 +35,7 @@ Read `glossary.md` (tiered terms, with why each fails so you can rule on ones it
 8. **Under 25 words in A and B, median 12–15. Paragraphs of three sentences or fewer.**
 9. **Attach a person to every capability** — a freelancer with three client calendars, a parent with a school timetable.
 10. **Keeper** in body prose, **keeper.sh** only for the hosted service as against self-hosting. Second person; "I" only in signed founder posts.
+11. **Length is a section problem, not a sentence problem.** Rule 8 has passed on every article that still shipped far too long. Ceilings by content type, the four redundancy patterns and the deletion test are in `length.md`.
 
 ## Hosted first, self-hosting as the alternative
 
@@ -58,7 +59,7 @@ Run the checker; do not estimate what it measures.
 bun .claude/skills/marketing-voice/scripts/readability.ts [--register=a|b|c] <file...>
 ```
 
-It reports median sentence length, sentences over 30 words, the longest and where, paragraphs over three sentences, and every Tier 1 term with its line, exiting non-zero when Register A breaks. Then answer what it cannot:
+It reports body words and section count, median sentence length, sentences over 30 words, the longest and where, paragraphs over three sentences, and every Tier 1 term with its line, exiting non-zero when Register A breaks. Word count is reported and never gated, because the ceiling depends on content type — read it against the table in `length.md`. Then answer what it cannot:
 
 1. Does the first sentence describe the reader's situation or answer the title's question?
 2. Any unglossed Tier 1 or Tier 2 term in the first 40 words?
@@ -68,3 +69,4 @@ It reports median sentence length, sentences over 30 words, the longest and wher
 6. Do limitations lead with the symptom?
 7. Any sentence only someone who has read our source could parse?
 8. Did every `[FACT]` tag land in one bucket?
+9. Is the piece inside its ceiling, and would deleting any section leave the reader unable to act?

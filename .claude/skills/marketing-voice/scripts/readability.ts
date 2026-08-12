@@ -29,6 +29,8 @@ interface Hit {
 
 interface FileReport {
   file: string;
+  words: number;
+  sections: number;
   median: number;
   sentences: number;
   longSentences: number;
@@ -269,6 +271,52 @@ const extractMarkdown = (source: string, starts: number[]): Block[] => {
   return blocks;
 };
 
+const bodyLines = (source: string): string[] => {
+  const lines = source.split("\n");
+  const kept: string[] = [];
+  let inFrontmatter = false;
+  let inFence = false;
+
+  for (const [index, line] of lines.entries()) {
+    const trimmed = line.trim();
+    if (index === 0 && trimmed === "---") {
+      inFrontmatter = true;
+      continue;
+    }
+    if (inFrontmatter) {
+      if (trimmed === "---") {
+        inFrontmatter = false;
+      }
+      continue;
+    }
+    if (trimmed.startsWith("```")) {
+      inFence = !inFence;
+      continue;
+    }
+    if (!inFence) {
+      kept.push(trimmed);
+    }
+  }
+  return kept;
+};
+
+const bodyWords = (lines: string[]): number =>
+  countWords(decode(lines.join(" ")).replaceAll(/\[([^\]]*)]\([^)]*\)/g, "$1"));
+
+const sectionCount = (lines: string[]): number =>
+  lines.filter((line) => /^#{2,6}\s/.test(line)).length;
+
+const bodyMetrics = (
+  source: string,
+  isCode: boolean,
+): { words: number; sections: number } => {
+  if (isCode) {
+    return { words: 0, sections: 0 };
+  }
+  const body = bodyLines(source);
+  return { words: bodyWords(body), sections: sectionCount(body) };
+};
+
 const median = (values: number[]): number => {
   if (values.length === 0) {
     return 0;
@@ -417,8 +465,12 @@ const analyse = (
     }
   }
 
+  const metrics = bodyMetrics(source, isCode);
+
   return {
     file,
+    words: metrics.words,
+    sections: metrics.sections,
     median: median(lengths),
     sentences: lengths.length,
     longSentences,
@@ -429,11 +481,16 @@ const analyse = (
 };
 
 const formatReport = (report: FileReport, checkGlossary: boolean): string[] => {
-  const lines = [
-    report.file,
+  const lines = [report.file];
+  if (report.words > 0) {
+    lines.push(
+      `  ${report.words} body words in ${report.sections} sections — check against length.md`,
+    );
+  }
+  lines.push(
     `  ${report.sentences} sentences, median ${report.median} words`,
     `  over ${LONG_SENTENCE_WORDS} words: ${report.longSentences}`,
-  ];
+  );
   if (report.longest) {
     lines.push(
       `  longest: ${report.longest.words} words at ${report.file}:${report.longest.line}`,
