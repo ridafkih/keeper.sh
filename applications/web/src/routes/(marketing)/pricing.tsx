@@ -12,37 +12,48 @@ import {
   MarketingPricingPlanCard,
   MarketingPricingSection,
 } from "@/features/marketing/components/marketing-pricing-section";
+import {
+  MarketingFaqItem,
+  MarketingFaqList,
+  MarketingFaqQuestion,
+  MarketingFaqSection,
+} from "@/features/marketing/components/marketing-faq";
+import { Collapsible } from "@/components/ui/primitives/collapsible";
 import { PRICING_FEATURES, PRICING_PLANS } from "@/features/marketing/pricing-plans";
-import { canonicalUrl, jsonLdScript, seoMeta, webPageSchema, breadcrumbSchema, offerCatalogSchema } from "@/lib/seo";
+import { canonicalUrl, jsonLdScript, seoMeta, webPageSchema, breadcrumbSchema, offerCatalogSchema, faqSchema } from "@/lib/seo";
 
 const PAGE_DESCRIPTION =
   "Keeper.sh pricing. Free covers 2 linked accounts, 3 sync mappings, and changes reaching your other calendars every 30 minutes. Pro is $5 per month for unlimited accounts and mappings, changes every minute, and uncapped API access.";
 
-type PricingNote = {
-  title: string;
-  body: string;
+type FaqItem = {
+  question: string;
+  answer: string;
 };
 
-const PRICING_NOTES: PricingNote[] = [
+const FAQ_ITEMS: FaqItem[] = [
   {
-    title: "What counts as a linked account",
-    body: "An account is one connected calendar provider, such as a Google or Outlook login or a CalDAV server. Free allows 2, Pro is unlimited.",
+    question: "What counts as a linked account?",
+    answer: "An account is one connected calendar provider, such as a Google or Outlook login or a CalDAV server. Free allows 2, Pro is unlimited.",
   },
   {
-    title: "What counts as a sync mapping",
-    body: "A mapping is one source calendar pushed to one destination calendar. Free allows 3, Pro is unlimited.",
+    question: "What counts as a sync mapping?",
+    answer: "A mapping is one source calendar pushed to one destination calendar. Free allows 3, Pro is unlimited.",
   },
   {
-    title: "Annual billing",
-    body: "Pro is $5 per month, or $42 per year if you pay annually.",
+    question: "How quickly do changes show up?",
+    answer: "Changes are picked up from your calendars every minute on both plans. On Free they reach your other calendars every 30 minutes, and on Pro every minute.",
   },
   {
-    title: "Self-hosting is free",
-    body: "Keeper is open-source under AGPL-3.0. A self-hosted instance runs without commercial mode, so every account on it gets the Pro feature set and no plan limits.",
+    question: "Is there a discount for paying annually?",
+    answer: "Pro is $5 per month, or $42 per year if you pay annually.",
   },
   {
-    title: "Cancelling",
-    body: "Billing is handled by Polar. You can manage or cancel your subscription from the customer portal linked in your account settings.",
+    question: "Is self-hosting free?",
+    answer: "Keeper is open-source under AGPL-3.0. A self-hosted instance runs without commercial mode, so every account on it gets the Pro feature set and no plan limits.",
+  },
+  {
+    question: "Can I cancel my subscription?",
+    answer: "Billing is handled by Polar. You can manage or cancel your subscription from the customer portal linked in your account settings.",
   },
 ];
 
@@ -63,6 +74,7 @@ export const Route = createFileRoute("/(marketing)/pricing")({
         price: plan.price.replace("$", ""),
         description: plan.description,
       })))),
+      jsonLdScript(faqSchema(FAQ_ITEMS)),
     ],
   }),
 });
@@ -112,19 +124,20 @@ function PricingPage() {
         </MarketingPricingComparisonGrid>
       </MarketingPricingSection>
 
-      <section className="flex flex-col gap-3">
-        <Heading2 as="h2">Details</Heading2>
-        <dl className="flex flex-col gap-4">
-          {PRICING_NOTES.map((note) => (
-            <div key={note.title} className="flex flex-col gap-1">
-              <dt className="text-sm tracking-tight text-foreground">{note.title}</dt>
-              <dd>
-                <Text size="sm">{note.body}</Text>
-              </dd>
-            </div>
+      <MarketingFaqSection>
+        <Heading2 className="text-center">Frequently Asked Questions</Heading2>
+        <MarketingFaqList>
+          {FAQ_ITEMS.map((item) => (
+            <MarketingFaqItem key={item.question}>
+              <Collapsible
+                trigger={<MarketingFaqQuestion>{item.question}</MarketingFaqQuestion>}
+              >
+                <Text size="sm" tone="muted">{item.answer}</Text>
+              </Collapsible>
+            </MarketingFaqItem>
           ))}
-        </dl>
-      </section>
+        </MarketingFaqList>
+      </MarketingFaqSection>
     </div>
   );
 }
