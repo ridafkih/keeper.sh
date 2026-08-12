@@ -3,6 +3,7 @@ import ArrowLeftRight from "lucide-react/dist/esm/icons/arrow-left-right";
 import Check from "lucide-react/dist/esm/icons/check";
 import KeeperLogo from "@/assets/keeper.svg?react";
 import { authClient } from "@/lib/auth-client";
+import { withSignupMarker } from "@/lib/signup-marker";
 import {
   resolvePathWithSearch,
   resolveClientPostAuthRedirect,
@@ -105,8 +106,11 @@ export function AuthOAuthPreamble({
     const socialProvider = PROVIDER_SOCIAL_MAP[provider];
     if (!socialProvider) return;
 
+    const callbackURL = resolveClientPostAuthRedirect(authorizationSearch);
+
     await authClient.signIn.social({
-      callbackURL: resolveClientPostAuthRedirect(authorizationSearch),
+      callbackURL,
+      newUserCallbackURL: withSignupMarker(callbackURL, globalThis.location.origin),
       provider: socialProvider,
     });
   };

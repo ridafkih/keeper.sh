@@ -68,6 +68,17 @@ beforeEach(() => {
   gtagSpy = vi.fn();
   globalThis.gtag = gtagSpy as unknown as typeof globalThis.gtag;
 
+  Object.defineProperty(globalThis, "location", {
+    configurable: true,
+    value: { href: "https://www.keeper.sh/", origin: "https://www.keeper.sh" },
+    writable: true,
+  });
+  Object.defineProperty(globalThis, "history", {
+    configurable: true,
+    value: { replaceState: () => undefined },
+    writable: true,
+  });
+
   const appContainer = document.getElementById("app");
   if (!(appContainer instanceof globalThis.HTMLElement)) {
     throw new Error("Expected app container");
@@ -83,6 +94,8 @@ afterEach(async () => {
   });
 
   globalThis.gtag = undefined;
+  Reflect.deleteProperty(globalThis, "location");
+  Reflect.deleteProperty(globalThis, "history");
   Object.assign(globalThis, previousGlobals);
   vi.clearAllMocks();
 });
@@ -215,5 +228,76 @@ describe("AnalyticsScripts page views", () => {
     });
 
     expect(pageViews()).toHaveLength(0);
+  });
+});
+
+describe("AnalyticsScripts oauth signup conversions", () => {
+  const conversions = (): GtagCall[] =>
+    gtagSpy.mock.calls.filter(
+      (call): call is GtagCall => call[0] === "event" && call[1] === "conversion",
+    );
+
+  const stubLocation = (href: string): { replaced: string[] } => {
+    const replaced: string[] = [];
+
+    Object.defineProperty(globalThis, "location", {
+      configurable: true,
+      value: { href, origin: "https://www.keeper.sh" },
+      writable: true,
+    });
+    Object.defineProperty(globalThis, "history", {
+      configurable: true,
+      value: {
+        replaceState: (_state: unknown, _title: string, url: string) => {
+          replaced.push(url);
+        },
+      },
+      writable: true,
+    });
+
+    return { replaced };
+  };
+
+  it("reports a signup conversion when better-auth lands a first-time oauth user", async () => {
+    const { replaced } = stubLocation("https://www.keeper.sh/dashboard?keeper_signup=1");
+
+    await act(async () => {
+      root.render(
+        <AnalyticsScripts
+          runtimeConfig={{ ...runtimeConfig, googleAdsSignupConversionLabel: "signup-label" }}
+        />,
+      );
+    });
+
+    expect(conversions()).toEqual([
+      ["event", "conversion", { send_to: "AW-1234567890/signup-label" }],
+    ]);
+    expect(replaced).toEqual(["/dashboard"]);
+  });
+
+  it("stays silent for a returning oauth user landing without the marker", async () => {
+    stubLocation("https://www.keeper.sh/dashboard");
+
+    await act(async () => {
+      root.render(<AnalyticsScripts runtimeConfig={runtimeConfig} />);
+    });
+
+    expect(conversions()).toHaveLength(0);
+  });
+
+  it("reports once even if the marked url is rendered again", async () => {
+    const stub = stubLocation("https://www.keeper.sh/dashboard?keeper_signup=1");
+
+    await act(async () => {
+      root.render(<AnalyticsScripts runtimeConfig={runtimeConfig} />);
+    });
+
+    globalThis.location.href = `https://www.keeper.sh${stub.replaced[0]}`;
+
+    await act(async () => {
+      root.render(<AnalyticsScripts runtimeConfig={{ ...runtimeConfig }} />);
+    });
+
+    expect(conversions()).toHaveLength(1);
   });
 });

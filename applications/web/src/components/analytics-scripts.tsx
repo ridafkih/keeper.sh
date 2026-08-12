@@ -1,7 +1,15 @@
 import { useEffect, useRef } from "react";
 import { useLocation } from "@tanstack/react-router";
 import type { PublicRuntimeConfig } from "@/lib/runtime-config";
-import { identify, reportGooglePageView, track, updateGoogleConsent } from "@/lib/analytics";
+import {
+  ANALYTICS_EVENTS,
+  identify,
+  reportGooglePageView,
+  reportSignupConversion,
+  track,
+  updateGoogleConsent,
+} from "@/lib/analytics";
+import { stripSignupMarker } from "@/lib/signup-marker";
 import { useEffectiveConsent } from "@/hooks/use-effective-consent";
 import { useGdprApplies } from "@/hooks/use-gdpr-applies";
 import { useSession } from "@/hooks/use-session";
@@ -30,6 +38,15 @@ function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfi
   useEffect(() => {
     updateGoogleConsent(hasConsent);
   }, [hasConsent]);
+
+  useEffect(() => {
+    const cleanedUrl = stripSignupMarker(globalThis.location.href);
+    if (cleanedUrl === null) return;
+
+    globalThis.history.replaceState(null, "", cleanedUrl);
+    track(ANALYTICS_EVENTS.signup_completed, { provider: "oauth" });
+    reportSignupConversion(runtimeConfig);
+  }, [runtimeConfig]);
 
   useEffect(() => {
     if (!user) return;
