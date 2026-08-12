@@ -380,7 +380,7 @@ services:
       retries: 5
 
   keeper:
-    image: ghcr.io/ridafkih/keeper-services:latest
+    image: ghcr.io/ridafkih/keeper-services:2
     environment:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
@@ -463,7 +463,7 @@ services:
       retries: 5
 
   api:
-    image: ghcr.io/ridafkih/keeper-api:latest
+    image: ghcr.io/ridafkih/keeper-api:2
     environment:
       API_PORT: 3001
       DATABASE_URL: postgres://keeper:keeper@postgres:5432/keeper
@@ -482,7 +482,7 @@ services:
         condition: service_healthy
 
   cron:
-    image: ghcr.io/ridafkih/keeper-cron:latest
+    image: ghcr.io/ridafkih/keeper-cron:2
     environment:
       DATABASE_URL: postgres://keeper:keeper@postgres:5432/keeper
       REDIS_URL: redis://redis:6379
@@ -499,7 +499,7 @@ services:
         condition: service_healthy
 
   worker:
-    image: ghcr.io/ridafkih/keeper-worker:latest
+    image: ghcr.io/ridafkih/keeper-worker:2
     environment:
       DATABASE_URL: postgres://keeper:keeper@postgres:5432/keeper
       REDIS_URL: redis://redis:6379
@@ -515,7 +515,7 @@ services:
         condition: service_healthy
 
   web:
-    image: ghcr.io/ridafkih/keeper-web:latest
+    image: ghcr.io/ridafkih/keeper-web:2
     environment:
       VITE_API_URL: ${VITE_API_URL}
       PORT: 3000
