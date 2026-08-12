@@ -32,16 +32,18 @@ Fastmail refuses to let outside apps sign in with your account password. That on
 
 Instead you generate a separate password just for Keeper. You can delete it on its own later, and your account password keeps working.
 
-1. Sign in to Fastmail and open **Settings**, then **Privacy & Security**.
-2. Find **Connected apps & API tokens** and click **Manage app passwords and access**.
+1. Open [Fastmail's app password settings](https://www.fastmail.com/settings/security/devicekeys).
+2. Click **Manage app password and access**.
 3. Click **New app password**. Fastmail may ask you to confirm your account password.
-4. Pick a name you will recognise in six months. **Custom...** lets you type "Keeper".
-5. Choose an access option that includes calendars.
+4. Give it a name you will recognise in six months, like "Keeper".
+5. Under **Access**, choose **Calendars (CalDAV)**.
 6. Click **Generate password** and copy what appears.
 
-Fastmail's access list currently reads **Mail, Contacts & Calendars** and **Files (WebDAV)**. Choose the first — it is the one covering calendars. If your account offers a narrower calendars-only option instead, take that one, because it hands over less.
+Step five is the one worth slowing down for. **Calendars (CalDAV)** is the narrowest option that still does the job, so the password you hand Keeper reaches your calendars and nothing else.
 
-Fastmail shows the password once and never again. If you lose it, delete it and generate another.
+The default is broader. It covers mail and contacts as well, which Keeper has no use for. Pick the narrow one and a leaked password cannot read your inbox.
+
+Fastmail shows the password once. If you lose it, delete it and generate another.
 
 ## How do you connect Fastmail?
 
@@ -125,7 +127,7 @@ Repeating events get more room. A weekly series that began years ago still has i
 
 **Connecting Fastmail fails with a short error mentioning 401.** Fastmail rejected the password. Either your account password went in instead of the app password, or that app password does not cover calendars.
 
-**Keeper says "No calendars found".** It reached Fastmail but saw nothing it could use. An app password limited to **Files (WebDAV)** produces exactly this.
+**Keeper says "No calendars found".** It reached Fastmail but saw nothing it could use. An app password scoped to something other than calendars does exactly this — **Files (WebDAV)** and **Mail (IMAP/POP/SMTP)** are the usual slips. Generate a new one set to **Calendars (CalDAV)**.
 
 **Events arrive on Google titled after the calendar.** That is **Sync Event Name** switched off. Turn it on under **Sync Settings**.
 
