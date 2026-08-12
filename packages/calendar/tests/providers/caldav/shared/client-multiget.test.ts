@@ -1,24 +1,36 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CalDAVClient } from "../../../../src/providers/caldav/shared/client";
 import {
-  CALENDAR_PATH,
-  createCalDAVServerStub,
-  hrefsIn,
-  SERVER_URL,
-} from "./caldav-server-stub";
-import type { CalDAVServerStub, MultiGetRow } from "./caldav-server-stub";
+  CalDAVClient,
+  CalDAVIncompleteMultiGetError,
+} from "../../../../src/providers/caldav/shared/client";
+import { isCalDAVAuthenticationError } from "../../../../src/providers/caldav/source/auth-error-classification";
 
-const fetchMocks = vi.hoisted(() => ({
-  safeFetch: vi.fn(),
+const davMocks = vi.hoisted(() => ({
+  calendarQuery: vi.fn(),
+  fetchCalendarObjects: vi.fn(),
 }));
 
-vi.mock("../../../../src/utils/safe-fetch", () => ({
-  createSafeFetch: () => fetchMocks.safeFetch,
+vi.mock("tsdav", () => ({
+  DAVNamespaceShort: { DAV: "d" },
+  createDAVClient: () => Promise.resolve({
+    calendarQuery: davMocks.calendarQuery,
+    fetchCalendarObjects: davMocks.fetchCalendarObjects,
+  }),
 }));
 
-const MAX_BATCH_HREFS = 250;
+const SERVER_URL = "https://caldav.example.com";
+const CALENDAR_PATH = "/cal/u/";
+const CALENDAR_URL = `${SERVER_URL}${CALENDAR_PATH}`;
+
+const MULTIGET_BATCH_SIZE = 250;
 const ZOHO_RESPONSE_CAP = 1000;
 const ZOHO_HREF_COUNT = 1971;
+
+interface MultiGetRow {
+  data?: unknown;
+  etag?: string;
+  url: string;
+}
 
 const objectPath = (index: number): string =>
   `${CALENDAR_PATH}event-${String(index).padStart(4, "0")}.ics`;
@@ -26,19 +38,32 @@ const objectPath = (index: number): string =>
 const objectPaths = (count: number): string[] =>
   Array.from({ length: count }, (_unused, index) => objectPath(index));
 
-const icsFor = (href: string): string =>
-  `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:${href}\r\nDTSTART:20260620T090000Z\r\nDTEND:20260620T100000Z\r\nSUMMARY:Event\r\nEND:VEVENT\r\nEND:VCALENDAR`;
+const icsFor = (uid: string): string =>
+  `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nDTSTART:20260620T090000Z\r\nDTEND:20260620T100000Z\r\nSUMMARY:Event\r\nEND:VEVENT\r\nEND:VCALENDAR`;
 
-const rowsFor = (hrefs: string[]): MultiGetRow[] =>
-  hrefs.map((href) => ({ data: icsFor(href), href }));
+const rowsFor = (paths: string[]): MultiGetRow[] =>
+  paths.map((path) => ({ data: icsFor(path), etag: `"etag-${path}"`, url: `${SERVER_URL}${path}` }));
 
-const cappedAt = (limit: number) => (hrefs: string[]): MultiGetRow[] =>
-  rowsFor(hrefs.slice(0, limit));
+let queriedPaths: string[] = [];
 
-const installStub = (stub: CalDAVServerStub): CalDAVServerStub => {
-  fetchMocks.safeFetch.mockImplementation(stub.handle);
-  return stub;
+const answerQueryWith = (hrefs: string[]): void => {
+  queriedPaths = hrefs;
+  davMocks.calendarQuery.mockResolvedValue(hrefs.map((href) => ({ href })));
 };
+
+const answerMultigetWith = (respond: (objectUrls: string[]) => MultiGetRow[]): void => {
+  davMocks.fetchCalendarObjects.mockImplementation(({ objectUrls }: { objectUrls?: string[] }) =>
+    Promise.resolve(respond(objectUrls ?? queriedPaths)));
+};
+
+const respondsWithAtMost = (rowsPerResponse: number) => (objectUrls: string[]): MultiGetRow[] =>
+  rowsFor(objectUrls.slice(0, rowsPerResponse));
+
+const requestedBatches = (): (string[] | undefined)[] =>
+  davMocks.fetchCalendarObjects.mock.calls.map(([{ objectUrls }]) => objectUrls);
+
+const largestBatchSize = (): number =>
+  Math.max(...requestedBatches().map((batch) => batch?.length ?? Number.POSITIVE_INFINITY));
 
 const createClient = () =>
   new CalDAVClient({
@@ -46,8 +71,10 @@ const createClient = () =>
     serverUrl: SERVER_URL,
   });
 
-const fetchObjects = (stub: CalDAVServerStub) =>
-  createClient().fetchCalendarObjects({ calendarUrl: stub.calendarUrl });
+const fetchObjects = () => createClient().fetchCalendarObjects({ calendarUrl: CALENDAR_URL });
+
+const pathsOf = (objects: { url: string }[]): string[] =>
+  objects.map((object) => new URL(object.url).pathname);
 
 const captureRejection = async (operation: () => Promise<unknown>): Promise<unknown> => {
   try {
@@ -59,53 +86,42 @@ const captureRejection = async (operation: () => Promise<unknown>): Promise<unkn
   throw new Error("expected the operation to reject");
 };
 
-describe("CalDAVClient.fetchCalendarObjects against a capped multiget", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+beforeEach(() => {
+  vi.clearAllMocks();
+  answerQueryWith([]);
+  answerMultigetWith(rowsFor);
+});
 
-  /*
-   * Regression for #461. Zoho answers a calendar-multiget covering 1,971 hrefs
-   * with a successful 207 carrying only the first 1,000 calendar-data entries.
-   * Nothing in tsdav reconciles requested hrefs against returned rows, so the
-   * remainder was silently dropped and ingestion reported success with zero
-   * events added.
-   */
+describe("CalDAVClient.fetchCalendarObjects against a capped multiget", () => {
   it("fetches every object when the server caps a multiget response at 1,000", async () => {
     const paths = objectPaths(ZOHO_HREF_COUNT);
-    const stub = installStub(createCalDAVServerStub({
-      queryHrefs: paths,
-      respond: cappedAt(ZOHO_RESPONSE_CAP),
-    }));
+    answerQueryWith(paths);
+    answerMultigetWith(respondsWithAtMost(ZOHO_RESPONSE_CAP));
 
-    const objects = await fetchObjects(stub);
+    const objects = await fetchObjects();
 
     expect(objects).toHaveLength(ZOHO_HREF_COUNT);
-    const returnedPaths = objects.map((object) => new URL(object.url).pathname);
-    expect(new Set(returnedPaths).size).toBe(ZOHO_HREF_COUNT);
-    expect(new Set(returnedPaths)).toEqual(new Set(paths));
+    expect(pathsOf(objects)).toEqual(paths);
+    expect(largestBatchSize()).toBeLessThan(ZOHO_RESPONSE_CAP);
   });
 
   it("issues one calendar-multiget per bounded batch of hrefs", async () => {
-    const stub = installStub(createCalDAVServerStub({
-      queryHrefs: objectPaths(ZOHO_HREF_COUNT),
-    }));
+    const paths = objectPaths(ZOHO_HREF_COUNT);
+    answerQueryWith(paths);
 
-    await fetchObjects(stub);
+    await fetchObjects();
 
-    const bodies = stub.multigetBodies();
-    expect(bodies).toHaveLength(Math.ceil(ZOHO_HREF_COUNT / MAX_BATCH_HREFS));
-    expect(bodies.every((body) => hrefsIn(body).length <= MAX_BATCH_HREFS)).toBe(true);
-    expect(bodies.flatMap((body) => hrefsIn(body))).toHaveLength(ZOHO_HREF_COUNT);
+    const batches = requestedBatches();
+    expect(batches).toHaveLength(Math.ceil(ZOHO_HREF_COUNT / MULTIGET_BATCH_SIZE));
+    expect(largestBatchSize()).toBeLessThanOrEqual(MULTIGET_BATCH_SIZE);
+    expect(batches.flatMap((batch) => batch ?? [])).toEqual(paths);
   });
 
   it("rejects instead of returning a short object set when hrefs are never returned", async () => {
-    const stub = installStub(createCalDAVServerStub({
-      queryHrefs: objectPaths(ZOHO_HREF_COUNT),
-      respond: cappedAt(100),
-    }));
+    answerQueryWith(objectPaths(ZOHO_HREF_COUNT));
+    answerMultigetWith(respondsWithAtMost(100));
 
-    const error = await captureRejection(() => fetchObjects(stub));
+    const error = await captureRejection(fetchObjects);
 
     expect(error).toMatchObject({
       batchCount: 8,
@@ -119,95 +135,114 @@ describe("CalDAVClient.fetchCalendarObjects against a capped multiget", () => {
 
   it("rejects a multiget row whose calendar-data element is empty instead of passing a non-string to the parser", async () => {
     const paths = objectPaths(2);
-    const stub = installStub(createCalDAVServerStub({
-      queryHrefs: paths,
-      respond: (hrefs) => [{ data: icsFor(hrefs[0] ?? ""), href: hrefs[0] ?? "" }, { href: hrefs[1] ?? "" }],
-    }));
+    answerQueryWith(paths);
+    answerMultigetWith((objectUrls) => [
+      ...rowsFor(objectUrls.slice(0, 1)),
+      { data: {}, url: `${SERVER_URL}${objectUrls[1] ?? ""}` },
+    ]);
 
-    const error = await captureRejection(() => fetchObjects(stub));
+    const error = await captureRejection(fetchObjects);
 
     expect(error).toMatchObject({ name: "CalDAVIncompleteMultiGetError" });
-    expect((error as { missingHrefs: string[] }).missingHrefs).toContain(paths[1]);
+    expect((error as { missingHrefs: string[] }).missingHrefs).toEqual([paths[1]]);
   });
 });
 
 describe("CalDAVClient.fetchCalendarObjects on healthy calendars", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  it("issues no multiget when the calendar-query returns no hrefs", async () => {
+    answerQueryWith([]);
+
+    await expect(fetchObjects()).resolves.toEqual([]);
+    expect(davMocks.fetchCalendarObjects).not.toHaveBeenCalled();
   });
 
-  it("issues no multiget when the calendar-query returns no hrefs", async () => {
-    const stub = installStub(createCalDAVServerStub({ queryHrefs: [] }));
+  it("issues a single multiget for a calendar smaller than one batch", async () => {
+    answerQueryWith(objectPaths(10));
 
-    await expect(fetchObjects(stub)).resolves.toEqual([]);
-    expect(stub.multigetBodies()).toHaveLength(0);
+    const objects = await fetchObjects();
+
+    expect(requestedBatches()).toHaveLength(1);
+    expect(objects).toHaveLength(10);
   });
 
   it("requests a duplicated href only once", async () => {
     const path = objectPath(0);
-    const stub = installStub(createCalDAVServerStub({ queryHrefs: [path, path, path] }));
+    answerQueryWith([path, path, path]);
 
-    const objects = await fetchObjects(stub);
+    const objects = await fetchObjects();
 
-    expect(stub.multigetBodies()).toHaveLength(1);
-    expect(hrefsIn(stub.multigetBodies()[0] ?? "")).toEqual([path]);
+    expect(requestedBatches()).toEqual([[path]]);
     expect(objects).toHaveLength(1);
-  });
-
-  it("matches percent-encoded response hrefs against the requested hrefs", async () => {
-    const stub = installStub(createCalDAVServerStub({
-      queryHrefs: [`${CALENDAR_PATH}a%20b.ics`, `${CALENDAR_PATH}c d.ics`],
-      respond: (hrefs) => [
-        { data: icsFor(hrefs[0] ?? ""), href: decodeURIComponent(hrefs[0] ?? "") },
-        { data: icsFor(hrefs[1] ?? ""), href: hrefs[1] ?? "" },
-      ],
-    }));
-
-    await expect(fetchObjects(stub)).resolves.toHaveLength(2);
-  });
-
-  it("does not reject when the server returns rows that were not requested", async () => {
-    const paths = objectPaths(3);
-    const stub = installStub(createCalDAVServerStub({
-      queryHrefs: paths,
-      respond: (hrefs) => rowsFor([...hrefs, `${CALENDAR_PATH}surprise.ics`]),
-    }));
-
-    const objects = await fetchObjects(stub);
-
-    expect(objects.map((object) => new URL(object.url).pathname))
-      .toEqual(expect.arrayContaining(paths));
-  });
-
-  it("issues a single multiget for a calendar smaller than one batch", async () => {
-    const stub = installStub(createCalDAVServerStub({ queryHrefs: objectPaths(10) }));
-
-    const objects = await fetchObjects(stub);
-
-    expect(stub.multigetBodies()).toHaveLength(1);
-    expect(objects).toHaveLength(10);
   });
 
   it("ignores calendar-query hrefs that are not calendar objects", async () => {
     const path = objectPath(0);
-    const stub = installStub(createCalDAVServerStub({
-      queryHrefs: [CALENDAR_PATH, `${CALENDAR_PATH}notes.txt`, path],
-    }));
+    answerQueryWith([CALENDAR_PATH, `${CALENDAR_PATH}notes.txt`, path]);
 
-    await fetchObjects(stub);
+    await fetchObjects();
 
-    expect(stub.multigetBodies().flatMap((body) => hrefsIn(body))).toEqual([path]);
+    expect(requestedBatches()).toEqual([[path]]);
+  });
+
+  it("matches a percent-encoded requested href against a decoded response href", async () => {
+    answerQueryWith([`${CALENDAR_PATH}a%20b.ics`, `${CALENDAR_PATH}c d.ics`]);
+    answerMultigetWith(() => [
+      { data: icsFor("a b"), url: `${SERVER_URL}${CALENDAR_PATH}a b.ics` },
+      { data: icsFor("c d"), url: `${SERVER_URL}${CALENDAR_PATH}c%20d.ics` },
+    ]);
+
+    await expect(fetchObjects()).resolves.toHaveLength(2);
+  });
+
+  it("does not reject when the server returns rows that were not requested", async () => {
+    const paths = objectPaths(3);
+    answerQueryWith(paths);
+    answerMultigetWith((objectUrls) => rowsFor([...objectUrls, `${CALENDAR_PATH}surprise.ics`]));
+
+    const objects = await fetchObjects();
+
+    expect(pathsOf(objects)).toEqual(paths);
   });
 
   it("returns objects in requested-href order", async () => {
     const paths = objectPaths(5);
-    const stub = installStub(createCalDAVServerStub({
-      queryHrefs: paths,
-      respond: (hrefs) => rowsFor(hrefs.toReversed()),
-    }));
+    answerQueryWith(paths);
+    answerMultigetWith((objectUrls) => rowsFor(objectUrls.toReversed()));
 
-    const objects = await fetchObjects(stub);
+    const objects = await fetchObjects();
 
-    expect(objects.map((object) => new URL(object.url).pathname)).toEqual(paths);
+    expect(pathsOf(objects)).toEqual(paths);
+  });
+});
+
+describe("CalDAVIncompleteMultiGetError", () => {
+  const createError = () =>
+    new CalDAVIncompleteMultiGetError({
+      batchCount: 8,
+      calendarUrl: CALENDAR_URL,
+      hrefsRequested: ZOHO_HREF_COUNT,
+      missingHrefs: Array.from(
+        { length: 20 },
+        (_unused, index) => `${CALENDAR_PATH}${String(index)}.ics`,
+      ),
+      objectsReturned: 800,
+    });
+
+  it("reports both counts and a bounded sample of the missing hrefs", () => {
+    const error = createError();
+
+    expect(error.message).toBe(
+      `CalDAV multiget returned 800 of 1971 requested objects for ${CALENDAR_URL}`,
+    );
+    expect(error.missingHrefs).toHaveLength(5);
+    expect(error.batchCount).toBe(8);
+  });
+
+  it("reports the shortfall without looking like an authentication failure", () => {
+    const error = createError();
+
+    expect(isCalDAVAuthenticationError(error)).toBe(false);
+    expect("status" in error).toBe(false);
+    expect("statusCode" in error).toBe(false);
   });
 });
