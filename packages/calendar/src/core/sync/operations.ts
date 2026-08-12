@@ -381,9 +381,22 @@ const buildRemoveOperationsForMappings = (mappings: EventMapping[]): SyncOperati
     uid: mapping.destinationEventUid,
   }));
 
+/*
+ * A mapping written before delete identifiers were recorded stores the iCalUID, which
+ * Google's delete endpoint does not accept: the destination provider spends a second
+ * batch request resolving that UID back to an event id, doubling the rate-limit cost
+ * of the delete. Reconciliation has just listed the remote copy, so its provider id is
+ * already in hand and the lookup is only needed when no remote copy was matched.
+ */
+const resolveMappingDeleteId = (
+  mapping: EventMapping,
+  remoteEventsByMappingId: ReadonlyMap<string, RemoteEvent>,
+): string => remoteEventsByMappingId.get(mapping.id)?.deleteId ?? mapping.deleteIdentifier;
+
 const buildReplacementOperations = (
   mappings: EventMapping[],
   localEventsById: Map<string, MaterializedSyncableEvent>,
+  remoteEventsByMappingId: ReadonlyMap<string, RemoteEvent>,
 ): SyncOperation[] => {
   const operations: SyncOperation[] = [];
   for (const mapping of mappings) {
@@ -392,7 +405,7 @@ const buildReplacementOperations = (
       continue;
     }
     operations.push({
-      deleteId: mapping.deleteIdentifier,
+      deleteId: resolveMappingDeleteId(mapping, remoteEventsByMappingId),
       event,
       staleMappingId: mapping.id,
       type: "replace",
@@ -430,6 +443,7 @@ const buildRemoveOperations = (
   remoteEvents: RemoteEvent[],
   localEventIds: Set<string>,
   mappedRemoteIdentities: Set<string>,
+  remoteEventsByMappingId: ReadonlyMap<string, RemoteEvent>,
   scope: ReconciliationScope,
 ): SyncOperation[] => {
   const operations: SyncOperation[] = [];
@@ -467,7 +481,7 @@ const buildRemoveOperations = (
         && !localEventIds.has(getMappingSyncEventId(mapping))
     ) {
       operations.push({
-        deleteId: mapping.deleteIdentifier,
+        deleteId: resolveMappingDeleteId(mapping, remoteEventsByMappingId),
         startTime: mapping.startTime,
         type: "remove",
         uid: mapping.destinationEventUid,
@@ -613,12 +627,16 @@ const computeSyncOperations = (
     .filter((operation) => operation.type !== "add"
       || !replacedEventIds.has(operation.event.id)
         && !reassignedEventIds.has(operation.event.id));
-  const replacementOperations = buildReplacementOperations(staleRemoteMappings, localEventsById);
+  const replacementOperations = buildReplacementOperations(
+    staleRemoteMappings,
+    localEventsById,
+    remoteEventsByMappingId,
+  );
   const reassignmentOperations: SyncOperation[] = remoteReassignments.map(({
     event,
     mapping,
   }) => ({
-    deleteId: mapping.deleteIdentifier,
+    deleteId: resolveMappingDeleteId(mapping, remoteEventsByMappingId),
     event,
     staleMappingId: mapping.id,
     type: "replace",
@@ -630,6 +648,7 @@ const computeSyncOperations = (
     remoteEvents,
     localEventIds,
     mappedRemoteIdentities,
+    remoteEventsByMappingId,
     scope,
   );
 

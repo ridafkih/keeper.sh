@@ -3,7 +3,7 @@ import {
   getEventsForCalendarsWithDiagnostics,
   getEventMappingsForDestination,
   createDatabaseFlush,
-  createRedisRateLimiter,
+  createGoogleUserRateLimiter,
   buildCalendarBackoffState,
   RESET_CALENDAR_BACKOFF_STATE,
   createSyncWindow,
@@ -39,8 +39,6 @@ import {
   isCalendarInvalidated,
   type SyncLockHandle,
 } from "./sync-lock";
-
-const GOOGLE_REQUESTS_PER_MINUTE = 500;
 
 const resetDestinationBackoff = async (
   database: BunSQLDatabase,
@@ -444,11 +442,7 @@ const syncDestinationsForUser = async (
   const errors: string[] = [];
   const syncEvents: Record<string, unknown>[] = [];
 
-  const rateLimiter = createRedisRateLimiter(
-    redis,
-    `ratelimit:${userId}:google`,
-    { requestsPerMinute: GOOGLE_REQUESTS_PER_MINUTE },
-  );
+  const rateLimiter = createGoogleUserRateLimiter(redis, userId, "push");
 
   for (const destinationCandidate of destinations) {
     if (config.abortSignal?.aborted) {

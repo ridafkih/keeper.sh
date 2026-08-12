@@ -257,4 +257,56 @@ describe("executeBatchChunked", () => {
       { rateLimiter, signal: controller.signal },
     )).rejects.toBe(abortReason);
   });
+
+  it("acquires quota for every batch attempt when the whole batch is rate limited", async () => {
+    const acquired: number[] = [];
+    const rateLimiter = {
+      acquire: (count: number): Promise<void> => {
+        acquired.push(count);
+        return Promise.resolve();
+      },
+    };
+
+    const successBody = [
+      "--response_boundary",
+      "Content-Type: application/http",
+      "Content-ID: <response-item-0>",
+      "",
+      "HTTP/1.1 204 No Content",
+      "Content-Type: application/json",
+      "",
+      "{}",
+      "--response_boundary--",
+    ].join("\r\n");
+
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = Object.assign((): Promise<Response> => {
+      calls++;
+      if (calls === 1) {
+        return Promise.resolve(Response.json(
+          { error: { code: 429, message: "rateLimitExceeded" } },
+          { status: 429 },
+        ));
+      }
+      return Promise.resolve(new Response(successBody, {
+        headers: { "Content-Type": "multipart/mixed; boundary=response_boundary" },
+        status: 200,
+      }));
+    }, { preconnect: originalFetch.preconnect });
+
+    try {
+      const responses = await executeBatchChunked(
+        [{ method: "DELETE", path: "/calendar/v3/calendars/primary/events/abc" }],
+        "access-token",
+        { rateLimiter },
+      );
+      expect(responses[0]?.statusCode).toBe(204);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(calls).toBe(2);
+    expect(acquired).toEqual([1, 1]);
+  });
 });

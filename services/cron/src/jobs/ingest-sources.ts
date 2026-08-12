@@ -7,7 +7,7 @@ import {
   createGoogleTokenRefresher,
   createMicrosoftTokenRefresher,
   createCoordinatedRefresher,
-  createRedisRateLimiter,
+  createGoogleUserRateLimiter,
   ensureValidToken,
   isTimeoutError,
   buildCalendarBackoffState,
@@ -157,7 +157,6 @@ const resolveIngestErrorSlug = (error: unknown): string => {
   widelog.set("timeout.limit_ms", PROVIDER_INGEST_REQUEST_TIMEOUT_MS);
   return "provider-request-timeout";
 };
-const GOOGLE_REQUESTS_PER_MINUTE = 500;
 
 const createIngestionPersistenceTransaction = (
   calendarId: string,
@@ -303,11 +302,7 @@ const resolveRateLimiter = (provider: string, userId: string): RedisRateLimiter 
     return;
   }
 
-  return createRedisRateLimiter(
-    refreshLockRedis,
-    `ratelimit:${userId}:google`,
-    { requestsPerMinute: GOOGLE_REQUESTS_PER_MINUTE },
-  );
+  return createGoogleUserRateLimiter(refreshLockRedis, userId, "ingest");
 };
 
 const getRequiredSourceRanges = async (

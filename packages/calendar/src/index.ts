@@ -50,7 +50,7 @@ export {
   wallTimeToInstant,
 } from "./ics/utils/timezone-instant";
 export { RateLimiter, type RateLimiterConfig } from "./core/utils/rate-limiter";
-export { createRedisRateLimiter, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
+export { createGoogleUserRateLimiter, createRedisRateLimiter, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
 export { allSettledWithConcurrency, type AllSettledWithConcurrencyOptions } from "./core/utils/concurrency";
 export { getErrorMessage } from "./core/utils/error";
 export {
