@@ -8,3 +8,4 @@ dist/
 screenshots/
 applications/mobile/
 .pki/
+.gstack/

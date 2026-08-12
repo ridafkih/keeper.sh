@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import type { PropsWithChildren } from "react";
 import { AnimatePresence, LazyMotion } from "motion/react";
 import * as m from "motion/react-m";
@@ -6,7 +6,8 @@ import { loadMotionFeatures } from "@/lib/motion-features";
 import { Text } from "@/components/ui/primitives/text";
 import { TextLink } from "@/components/ui/primitives/text-link";
 import { Button, ButtonText } from "@/components/ui/primitives/button";
-import { hasConsentChoice, setAnalyticsConsent, track } from "@/lib/analytics";
+import { hasConsentChoice, setAnalyticsConsent, subscribeToConsentChanges, track } from "@/lib/analytics";
+import { useGdprApplies } from "@/hooks/use-gdpr-applies";
 
 const CARD_ENTER = { opacity: 0, y: 10, filter: "blur(4px)" };
 const CARD_VISIBLE = { opacity: 1, y: 0, filter: "blur(0px)" };
@@ -45,17 +46,25 @@ function ConsentBannerCard({ children }: PropsWithChildren) {
   );
 }
 
+const getChoiceSnapshot = (): boolean => hasConsentChoice();
+const getChoiceServerSnapshot = (): boolean => false;
+
 function CookieConsent() {
-  const [visible, setVisible] = useState(() => !hasConsentChoice());
+  const gdprApplies = useGdprApplies();
+  const choiceMade = useSyncExternalStore(
+    subscribeToConsentChanges,
+    getChoiceSnapshot,
+    getChoiceServerSnapshot,
+  );
+  const visible = gdprApplies && !choiceMade;
 
   const handleChoice = useCallback((consent: boolean): void => {
     track(resolveConsentEventName(consent));
     setAnalyticsConsent(consent);
-    setVisible(false);
   }, []);
 
   return (
-    <div className="sticky bottom-0 z-50 px-4 pb-4 pointer-events-none">
+    <div data-consent-banner className="sticky bottom-0 z-50 px-4 pb-4 pointer-events-none">
       <div className="mx-auto flex max-w-3xl justify-end">
         <LazyMotion features={loadMotionFeatures}>
           <AnimatePresence>
