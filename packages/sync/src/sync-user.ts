@@ -215,8 +215,13 @@ const createAggregateAuthorityWindow = (
   sourceWindows: ReadonlyMap<string, SyncWindow>,
   requestedWindow: SyncWindow,
 ): SyncWindow | null => {
+  /*
+   * A destination with no mapped sources is not authoritative over anything. Granting
+   * it the requested window lets a freshly imported, unmapped calendar delete every
+   * Keeper-tagged event another calendar row put on that remote calendar.
+   */
   if (sourceCalendarIds.length === 0) {
-    return requestedWindow;
+    return null;
   }
   if (sourceWindows.size !== sourceCalendarIds.length) {
     return null;
@@ -242,7 +247,7 @@ const resolveSourceAuthority = async (
   requestedWindow: SyncWindow,
 ): Promise<SourceAuthority> => {
   if (sourceCalendarIds.length === 0) {
-    return { aggregateWindow: requestedWindow, sourceWindows: new Map() };
+    return { aggregateWindow: null, sourceWindows: new Map() };
   }
   const sources = await database
     .select({
@@ -946,11 +951,13 @@ const syncDestinationsForUser = async (
 };
 
 export {
+  createAggregateAuthorityWindow,
   createDestinationAttemptWideEventFields,
   createDestinationReconciliationScope,
   createDestinationReconciliationWideEventFields,
   OVER_BUDGET_SERIES_UID_SAMPLE_SIZE,
   readDestinationReconciliationState,
+  resolveSourceAuthority,
   resolveStoredSourceCoverage,
   syncDestinationsForUser,
 };

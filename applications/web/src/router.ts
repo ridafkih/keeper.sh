@@ -1,6 +1,6 @@
 import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./generated/tanstack/route-tree.generated";
-import { HttpError } from "./lib/fetcher";
+import { createJsonFetcher } from "./lib/json-fetcher";
 import { getPublicRuntimeConfig, getServerPublicRuntimeConfig } from "./lib/runtime-config";
 import type { PublicRuntimeConfig } from "./lib/runtime-config";
 import { hasSessionCookie } from "./lib/session-cookie";
@@ -48,31 +48,6 @@ function resolveWebOrigin(request: Request | undefined): string {
   }
 
   throw new Error("Unable to resolve web origin.");
-}
-
-function createJsonFetcher(
-  requestCookie: string | null,
-  origin: string,
-): AppRouterContext["fetchApi"] {
-  return async <T>(path: string, init: RequestInit = {}): Promise<T> => {
-    const requestHeaders = new Headers(init.headers);
-    if (requestCookie && !requestHeaders.has("cookie")) {
-      requestHeaders.set("cookie", requestCookie);
-    }
-
-    const absoluteUrl = new URL(path, origin).toString();
-    const response = await fetch(absoluteUrl, {
-      ...init,
-      credentials: "include",
-      headers: requestHeaders,
-    });
-
-    if (!response.ok) {
-      throw new HttpError(response.status, path);
-    }
-
-    return response.json();
-  };
 }
 
 function createApiFetcher(

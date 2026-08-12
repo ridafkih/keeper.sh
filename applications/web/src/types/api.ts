@@ -12,6 +12,7 @@ export interface CalendarAccount {
   authType: string;
   needsReauthentication: boolean;
   calendarCount: number;
+  calendarsRefreshedAt: string | null;
   createdAt: string;
 }
 
@@ -30,6 +31,7 @@ export interface CalendarSource {
   accountIdentifier: string | null;
   needsReauthentication: boolean;
   includeInIcalFeed: boolean;
+  unavailableSince: string | null;
 }
 
 export interface CalendarDetail {
@@ -55,6 +57,7 @@ export interface CalendarDetail {
   syncHistoricRange: SyncRange;
   destinationIds: string[];
   sourceIds: string[];
+  unavailableSince: string | null;
   createdAt: string;
   updatedAt: string;
 }

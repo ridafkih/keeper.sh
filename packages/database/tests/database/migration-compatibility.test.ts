@@ -179,10 +179,10 @@ describe("0077 self-hosted upgrade compatibility", () => {
 });
 
 /*
- * Located by what the migration does rather than by its index, which shifts
- * whenever another migration lands ahead of it.
+ * Migrations are located by what they do rather than by their index, which
+ * shifts whenever another migration lands ahead of them.
  */
-const readIcalFeedsMigration = async (): Promise<string> => {
+const readMigrationContaining = async (needle: string): Promise<string> => {
   const drizzleDirectory = `${import.meta.dirname}/../../drizzle`;
   const journal = await Bun.file(`${drizzleDirectory}/meta/_journal.json`).json() as {
     entries: { idx: number; tag: string }[];
@@ -190,13 +190,16 @@ const readIcalFeedsMigration = async (): Promise<string> => {
 
   for (const { tag } of journal.entries) {
     const migration = await Bun.file(`${drizzleDirectory}/${tag}.sql`).text();
-    if (migration.includes('CREATE TABLE IF NOT EXISTS "ical_feeds"')) {
+    if (migration.includes(needle)) {
       return migration;
     }
   }
 
-  throw new Error("Expected a migration to create and backfill ical_feeds");
+  throw new Error(`Expected a migration containing ${needle}`);
 };
+
+const readIcalFeedsMigration = (): Promise<string> =>
+  readMigrationContaining('CREATE TABLE IF NOT EXISTS "ical_feeds"');
 
 describe("ical feed backfill migration", () => {
   it("backfills one default feed per user carrying their existing settings", async () => {
@@ -301,5 +304,51 @@ describe("ical feed backfill migration", () => {
     expect(migration).toContain("'feed_'");
     expect(migration).not.toContain("gen_random_bytes");
     expect(migration).not.toContain("CREATE EXTENSION");
+  });
+});
+
+const readCalendarRediscoveryMigration = (): Promise<string> =>
+  readMigrationContaining('ADD COLUMN IF NOT EXISTS "calendarsRefreshedAt"');
+
+describe("calendar rediscovery upgrade compatibility", () => {
+  it("adds the rediscovery columns as nullable and defaultless", async () => {
+    const migration = await readCalendarRediscoveryMigration();
+
+    expect(migration).toContain('ADD COLUMN IF NOT EXISTS "unavailableSince" timestamp');
+    expect(migration).toContain('ADD COLUMN IF NOT EXISTS "calendarsRefreshedAt" timestamp');
+    expect(migration)
+      .toContain('ADD COLUMN IF NOT EXISTS "calendarsRefreshAttemptedAt" timestamp');
+    expect(migration).not.toContain("DEFAULT");
+  });
+
+  /* The runner replays the newest migration against databases that have it. */
+  it("re-applies cleanly against a database that already has the columns", async () => {
+    const migration = await readCalendarRediscoveryMigration();
+
+    const additions = migration.match(/ADD COLUMN /g) ?? [];
+    const guarded = migration.match(/ADD COLUMN IF NOT EXISTS /g) ?? [];
+    expect(additions).toHaveLength(guarded.length);
+  });
+
+  it("stays additive so old writers survive a rolling upgrade", async () => {
+    const migration = await readCalendarRediscoveryMigration();
+
+    expect(migration).not.toContain("SET NOT NULL");
+    expect(migration).not.toContain('UPDATE "calendars"');
+    expect(migration).not.toContain('UPDATE "calendar_accounts"');
+    expect(migration).not.toContain("CREATE INDEX");
+    expect(migration).not.toContain("CREATE UNIQUE INDEX");
+    expect(migration).not.toContain("ADD CONSTRAINT");
+    expect(migration).not.toContain("DROP COLUMN");
+  });
+
+  it("needs no backfill in the migration runner", async () => {
+    const migrateScript = await Bun.file(
+      `${import.meta.dirname}/../../scripts/migrate.ts`,
+    ).text();
+
+    expect(migrateScript).not.toContain("unavailableSince");
+    expect(migrateScript).not.toContain("calendarsRefreshedAt");
+    expect(migrateScript).not.toContain("calendarsRefreshAttemptedAt");
   });
 });

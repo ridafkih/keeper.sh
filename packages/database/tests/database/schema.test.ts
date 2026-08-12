@@ -248,3 +248,76 @@ describe("ical feed schema", () => {
     }
   });
 });
+
+const readIndexColumnName = (column: object): string | null => {
+  if ("name" in column && typeof column.name === "string") {
+    return column.name;
+  }
+  return null;
+};
+
+const indexedColumnNames = (
+  table: Parameters<typeof getTableConfig>[0],
+): (string | null)[] =>
+  getTableConfig(table).indexes.flatMap((index) =>
+    index.config.columns.map((column) => readIndexColumnName(column)));
+
+describe("calendar rediscovery schema", () => {
+  it("marks a calendar unavailable with a nullable timestamp instead of deleting it", () => {
+    const tableConfig = getTableConfig(calendarsTable);
+    const unavailableSince = tableConfig.columns.find(
+      (column) => column.name === "unavailableSince",
+    );
+
+    expect(unavailableSince).toBeDefined();
+    expect(unavailableSince?.notNull).toBe(false);
+    expect(unavailableSince?.hasDefault).toBe(false);
+  });
+
+  it("records the last successful calendar enumeration per account", () => {
+    const tableConfig = getTableConfig(calendarAccountsTable);
+    const calendarsRefreshedAt = tableConfig.columns.find(
+      (column) => column.name === "calendarsRefreshedAt",
+    );
+
+    expect(calendarsRefreshedAt).toBeDefined();
+    expect(calendarsRefreshedAt?.notNull).toBe(false);
+    expect(calendarsRefreshedAt?.hasDefault).toBe(false);
+  });
+
+  it("records the last attempted calendar enumeration per account", () => {
+    const tableConfig = getTableConfig(calendarAccountsTable);
+    const calendarsRefreshAttemptedAt = tableConfig.columns.find(
+      (column) => column.name === "calendarsRefreshAttemptedAt",
+    );
+
+    expect(calendarsRefreshAttemptedAt).toBeDefined();
+    expect(calendarsRefreshAttemptedAt?.notNull).toBe(false);
+    expect(calendarsRefreshAttemptedAt?.hasDefault).toBe(false);
+  });
+
+  it("keeps the attempt cursor distinct from the success timestamp", () => {
+    const scheduleColumns = getTableConfig(calendarAccountsTable).columns
+      .map((column) => column.name)
+      .filter((name) =>
+        name === "calendarsRefreshAttemptedAt" || name === "calendarsRefreshedAt");
+
+    expect(scheduleColumns.toSorted())
+      .toEqual(["calendarsRefreshAttemptedAt", "calendarsRefreshedAt"]);
+  });
+
+  it("keeps availability separate from the user-controlled paused flag", () => {
+    const tableConfig = getTableConfig(calendarsTable);
+    const disabled = tableConfig.columns.find((column) => column.name === "disabled");
+
+    expect(disabled?.notNull).toBe(true);
+    expect(disabled?.default).toBe(false);
+  });
+
+  it("adds no index over the rediscovery columns", () => {
+    expect(indexedColumnNames(calendarsTable)).not.toContain("unavailableSince");
+    expect(indexedColumnNames(calendarAccountsTable)).not.toContain("calendarsRefreshedAt");
+    expect(indexedColumnNames(calendarAccountsTable))
+      .not.toContain("calendarsRefreshAttemptedAt");
+  });
+});

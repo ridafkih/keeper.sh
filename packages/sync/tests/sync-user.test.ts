@@ -1,12 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
+import { KEEPER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { computeSyncOperations } from "@keeper.sh/calendar";
 import type { EventMapping } from "@keeper.sh/calendar";
 import {
+  createAggregateAuthorityWindow,
   createDestinationAttemptWideEventFields,
   createDestinationReconciliationScope,
   createDestinationReconciliationWideEventFields,
   OVER_BUDGET_SERIES_UID_SAMPLE_SIZE,
   readDestinationReconciliationState,
+  resolveSourceAuthority,
   resolveStoredSourceCoverage,
 } from "../src/sync-user";
 
@@ -315,5 +318,116 @@ describe("createDestinationReconciliationScope", () => {
     expect(scope.requestedWindow).toEqual(WINDOW);
     expect(scope.configuredSourceCalendarIds).toEqual(new Set([SOURCE_CALENDAR_ID]));
     expect(scope.authoritativeSourceWindows).toEqual(new Map([[SOURCE_CALENDAR_ID, WINDOW]]));
+  });
+});
+
+describe("source authority for a destination with no mappings", () => {
+  const REQUESTED_WINDOW = {
+    timeMax: new Date("2028-07-18T00:00:00.000Z"),
+    timeMin: new Date("2026-07-11T00:00:00.000Z"),
+  };
+
+  const KEEPER_REMOTE_EVENT = {
+    deleteId: "remote-delete-1",
+    endTime: new Date("2026-08-12T11:00:00.000Z"),
+    isKeeperEvent: true,
+    startTime: new Date("2026-08-12T10:00:00.000Z"),
+    uid: `abcdef${KEEPER_EVENT_SUFFIX}`,
+  };
+
+  const createSourceCoverageDatabase = (rows: Record<string, unknown>[]) => ({
+    select: () => ({
+      from: () => ({
+        where: () => Promise.resolve(rows),
+      }),
+    }),
+  }) as unknown as Parameters<typeof resolveSourceAuthority>[0];
+
+  it("grants no aggregate window when the destination has no configured sources", async () => {
+    const authority = await resolveSourceAuthority(
+      createSourceCoverageDatabase([]),
+      [],
+      REQUESTED_WINDOW,
+    );
+
+    expect(authority.aggregateWindow).toBeNull();
+    expect(authority.sourceWindows.size).toBe(0);
+    expect(createAggregateAuthorityWindow([], new Map(), REQUESTED_WINDOW)).toBeNull();
+  });
+
+  it("removes nothing from a remote calendar full of Keeper events", async () => {
+    const authority = await resolveSourceAuthority(
+      createSourceCoverageDatabase([]),
+      [],
+      REQUESTED_WINDOW,
+    );
+
+    const { operations } = computeSyncOperations([], [], [KEEPER_REMOTE_EVENT], {
+      authoritativeSourceWindows: authority.sourceWindows,
+      authoritativeWindow: authority.aggregateWindow,
+      configuredSourceCalendarIds: new Set<string>(),
+      requestedWindow: REQUESTED_WINDOW,
+    });
+
+    expect(operations).toEqual([]);
+  });
+
+  it("still retires mirrors left behind when the last mapping was removed", async () => {
+    const authority = await resolveSourceAuthority(
+      createSourceCoverageDatabase([]),
+      [],
+      REQUESTED_WINDOW,
+    );
+
+    const retainedMapping = {
+      calendarId: "destination-1",
+      deleteIdentifier: KEEPER_REMOTE_EVENT.deleteId,
+      destinationEventUid: KEEPER_REMOTE_EVENT.uid,
+      endTime: KEEPER_REMOTE_EVENT.endTime,
+      eventStateId: null,
+      id: "mapping-1",
+      sourceCalendarId: "unmapped-source-1",
+      startTime: KEEPER_REMOTE_EVENT.startTime,
+      syncEventHash: null,
+      syncEventId: "sync-event-1",
+    };
+
+    const { operations } = computeSyncOperations([], [retainedMapping], [KEEPER_REMOTE_EVENT], {
+      authoritativeSourceWindows: authority.sourceWindows,
+      authoritativeWindow: authority.aggregateWindow,
+      configuredSourceCalendarIds: new Set<string>(),
+      requestedWindow: REQUESTED_WINDOW,
+    });
+
+    expect(operations).toEqual([{
+      deleteId: KEEPER_REMOTE_EVENT.deleteId,
+      mappingId: retainedMapping.id,
+      startTime: KEEPER_REMOTE_EVENT.startTime,
+      type: "remove",
+      uid: KEEPER_REMOTE_EVENT.uid,
+    }]);
+  });
+
+  it("still reclaims a Keeper event once the destination has a verified source", async () => {
+    const authority = await resolveSourceAuthority(
+      createSourceCoverageDatabase([{ id: "source-1", ...COMPLETE_SOURCE_COVERAGE }]),
+      ["source-1"],
+      REQUESTED_WINDOW,
+    );
+
+    const { operations } = computeSyncOperations([], [], [KEEPER_REMOTE_EVENT], {
+      authoritativeSourceWindows: authority.sourceWindows,
+      authoritativeWindow: authority.aggregateWindow,
+      configuredSourceCalendarIds: new Set(["source-1"]),
+      requestedWindow: REQUESTED_WINDOW,
+    });
+
+    expect(authority.aggregateWindow).not.toBeNull();
+    expect(operations).toEqual([{
+      deleteId: KEEPER_REMOTE_EVENT.deleteId,
+      startTime: KEEPER_REMOTE_EVENT.startTime,
+      type: "remove",
+      uid: KEEPER_REMOTE_EVENT.uid,
+    }]);
   });
 });

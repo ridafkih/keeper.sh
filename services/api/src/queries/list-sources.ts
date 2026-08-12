@@ -20,6 +20,7 @@ const listSources = async (database: KeeperDatabase, userId: string): Promise<Ke
       accountIdentifier: calendarAccountsTable.accountId,
       needsReauthentication: calendarAccountsTable.needsReauthentication,
       includeInIcalFeed: calendarsTable.includeInIcalFeed,
+      unavailableSince: calendarsTable.unavailableSince,
     })
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))

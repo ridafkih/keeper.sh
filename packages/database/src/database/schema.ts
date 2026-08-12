@@ -72,6 +72,8 @@ const calendarAccountsTable = pgTable(
     caldavCredentialId: uuid().references(() => caldavCredentialsTable.id, {
       onDelete: "cascade",
     }),
+    calendarsRefreshAttemptedAt: timestamp(),
+    calendarsRefreshedAt: timestamp(),
     createdAt: timestamp().notNull().defaultNow(),
     displayName: text(),
     email: text(),
@@ -136,6 +138,7 @@ const calendarsTable = pgTable(
     syncToken: text(),
     syncFutureRange: text().notNull().default(DEFAULT_FUTURE_SYNC_RANGE),
     syncHistoricRange: text().notNull().default(DEFAULT_HISTORIC_SYNC_RANGE),
+    unavailableSince: timestamp(),
     updatedAt: timestamp()
       .notNull()
       .defaultNow()

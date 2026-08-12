@@ -3,6 +3,7 @@ import arkenv from "arkenv";
 const schema = {
   PRIVATE_RESOLUTION_WHITELIST: "string?",
   BLOCK_PRIVATE_RESOLUTION: "boolean?",
+  CALENDAR_REDISCOVERY_ENABLED: "boolean?",
   COMMERCIAL_MODE: "boolean?",
   DATABASE_URL: "string.url",
   ENCRYPTION_KEY: "string?",

@@ -9,6 +9,7 @@ import {
 } from "./api";
 import { createDigestAwareFetch } from "./digest-fetch";
 import { runInRequestScope } from "./response-status-scope";
+import { findCalendarByStoredUrl } from "./calendar-identity";
 import type { CalDAVAuthMethod } from "./digest-fetch";
 import type { SafeFetchOptions, WithheldCredentials } from "../../../utils/safe-fetch";
 import type { CalDAVClientConfig, CalendarInfo } from "../types";
@@ -224,24 +225,14 @@ class CalDAVClient {
 
   async fetchCalendarDisplayName(calendarUrl: string): Promise<string | null> {
     const calendars = await this.discoverCalendars();
-    const storedPath = new URL(calendarUrl).pathname;
 
-    const matchingCalendar = calendars.find(
-      (calendar) => new URL(calendar.url).pathname === storedPath,
-    );
-
-    return matchingCalendar?.displayName ?? null;
+    return findCalendarByStoredUrl(calendars, calendarUrl)?.displayName ?? null;
   }
 
   async resolveCalendarUrl(storedUrl: string): Promise<string> {
     const calendars = await this.discoverCalendars();
-    const storedPath = new URL(storedUrl).pathname;
 
-    const matchingCalendar = calendars.find(
-      (calendar) => new URL(calendar.url).pathname === storedPath,
-    );
-
-    return matchingCalendar?.url ?? storedUrl;
+    return findCalendarByStoredUrl(calendars, storedUrl)?.url ?? storedUrl;
   }
 
   async createCalendarObject(params: {

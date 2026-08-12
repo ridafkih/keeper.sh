@@ -114,6 +114,32 @@ export {
   type SourceEventDiffOptions,
 } from "./core/source/event-diff";
 export {
+  planCalendarRediscovery,
+  resolveRediscoveryCalendarType,
+  toDiscoveredCalDAVCalendars,
+  toDiscoveredGoogleCalendars,
+  toDiscoveredOutlookCalendars,
+  toExistingCalendars,
+  type CalendarRediscoveryPlan,
+  type CalendarRetarget,
+  type DiscoveredCalendar,
+  type ExistingCalendar,
+  type RediscoveryCalendarType,
+  type StoredCalendarRow,
+} from "./core/source/calendar-rediscovery";
+export {
+  isCalendarListFailure,
+  isProviderAuthFailure,
+  isProviderTokenRefreshFailure,
+} from "./core/source/rediscovery-failures";
+export {
+  applyCalendarRediscoveryPlan,
+  markCalendarRediscoveryAttempt,
+  type CalendarRediscoveryApplyInput,
+  type CalendarRediscoveryApplyResult,
+  type InsertedCalendar,
+} from "./core/source/apply-calendar-rediscovery";
+export {
   SOURCE_INGEST_LOCK_NAMESPACE,
   SOURCE_INGEST_LOCK_TIMEOUT_MS,
   withSourceIngestLock,

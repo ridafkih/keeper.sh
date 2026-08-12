@@ -96,6 +96,7 @@ const parseCalendarListResponse = (value: unknown): OutlookCalendarListResponse 
 
 const fetchCalendarPage = async (
   accessToken: string,
+  signal: AbortSignal | undefined,
   nextLink?: string,
 ): Promise<OutlookCalendarListResponse> => {
   let url = new URL(`${MICROSOFT_GRAPH_API}/me/calendars`);
@@ -109,6 +110,7 @@ const fetchCalendarPage = async (
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
+    signal,
   });
 
   if (!response.ok) {
@@ -128,13 +130,17 @@ const fetchCalendarPage = async (
   return parsedResponse;
 };
 
-const listUserCalendars = async (accessToken: string): Promise<OutlookCalendarListEntry[]> => {
+const listUserCalendars = async (
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<OutlookCalendarListEntry[]> => {
   const calendars: OutlookCalendarListEntry[] = [];
-  let response = await fetchCalendarPage(accessToken);
+  let response = await fetchCalendarPage(accessToken, signal);
   calendars.push(...response.value);
 
   while (response["@odata.nextLink"]) {
-    response = await fetchCalendarPage(accessToken, response["@odata.nextLink"]);
+    signal?.throwIfAborted();
+    response = await fetchCalendarPage(accessToken, signal, response["@odata.nextLink"]);
     calendars.push(...response.value);
   }
 

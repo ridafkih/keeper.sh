@@ -30,4 +30,24 @@ const withAbortTimeout = async <TResult>(
   }
 };
 
-export { OperationTimeoutError, withAbortTimeout };
+const raceAbortSignal = <TResult>(
+  signal: AbortSignal,
+  operation: Promise<TResult>,
+): Promise<TResult> => {
+  if (signal.aborted) {
+    return Promise.reject(signal.reason);
+  }
+
+  const listenerScope = new AbortController();
+  const aborted = new Promise<never>((_resolve, reject) => {
+    signal.addEventListener("abort", () => reject(signal.reason), {
+      once: true,
+      signal: listenerScope.signal,
+    });
+  });
+
+  return Promise.race([operation, aborted])
+    .finally(() => listenerScope.abort());
+};
+
+export { OperationTimeoutError, raceAbortSignal, withAbortTimeout };

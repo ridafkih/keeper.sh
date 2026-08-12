@@ -39,6 +39,7 @@ interface CalendarListPage {
 
 const fetchCalendarPage = async (
   accessToken: string,
+  signal: AbortSignal | undefined,
   pageToken?: string,
 ): Promise<CalendarListPage> => {
   const url = new URL(GOOGLE_CALENDAR_LIST_URL);
@@ -51,6 +52,7 @@ const fetchCalendarPage = async (
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
+    signal,
   });
 
   if (!response.ok) {
@@ -85,21 +87,24 @@ const fetchCalendarPage = async (
 
 interface ListUserCalendarsOptions {
   onInvalidEntries?: (count: number) => void;
+  signal?: AbortSignal;
 }
 
 const listUserCalendars = async (
   accessToken: string,
   options?: ListUserCalendarsOptions,
 ): Promise<GoogleCalendarListEntry[]> => {
+  const signal = options?.signal;
   const calendars: GoogleCalendarListEntry[] = [];
   let invalidEntryCount = 0;
 
-  let response = await fetchCalendarPage(accessToken);
+  let response = await fetchCalendarPage(accessToken, signal);
   calendars.push(...response.items);
   invalidEntryCount += response.invalidEntryCount;
 
   while (response.nextPageToken) {
-    response = await fetchCalendarPage(accessToken, response.nextPageToken);
+    signal?.throwIfAborted();
+    response = await fetchCalendarPage(accessToken, signal, response.nextPageToken);
     calendars.push(...response.items);
     invalidEntryCount += response.invalidEntryCount;
   }

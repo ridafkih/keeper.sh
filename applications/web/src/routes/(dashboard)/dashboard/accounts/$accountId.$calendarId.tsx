@@ -827,6 +827,23 @@ function ExcludeFieldToggleIndicator({ field, matchesField, disabled }: { field:
 }
 
 
+function CalendarUnavailableNotice(
+  { providerName, unavailableSince }: { providerName: string; unavailableSince: string },
+) {
+  return (
+    <NavigationMenu>
+      <NavigationMenuEmptyItem>
+        <Text size="sm" tone="muted">
+          Not found on {providerName} since {formatDate(unavailableSince)}. Keeper.sh re-checks
+          this account regularly and will pick the calendar up automatically if it comes back.
+          Your sync connections and settings are kept in the meantime, and events already copied
+          to your other calendars have been left alone.
+        </Text>
+      </NavigationMenuEmptyItem>
+    </NavigationMenu>
+  );
+}
+
 function CalendarInfoSection({ account, accountId }: { account: CalendarAccount; accountId: string }) {
   const calendar = useAtomValue(calendarDetailAtom);
 
@@ -834,6 +851,12 @@ function CalendarInfoSection({ account, accountId }: { account: CalendarAccount;
 
   return (
     <>
+      {calendar.unavailableSince && (
+        <CalendarUnavailableNotice
+          providerName={calendar.providerName}
+          unavailableSince={calendar.unavailableSince}
+        />
+      )}
       <DashboardSection
         title="Calendar Information"
         description="View details about the calendar."

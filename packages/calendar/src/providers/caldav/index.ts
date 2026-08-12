@@ -13,6 +13,12 @@ export {
   createCalDAVClient,
 } from "./shared/client";
 export {
+  findCalendarByStoredUrl,
+  normalizeCalDAVCalendarKey,
+  normalizeCalDAVServerHost,
+  resolveCalDAVServerHost,
+} from "./shared/calendar-identity";
+export {
   CalDAVUnreadableResourceError,
   eventToICalString,
   parseICalToRemoteEvent,

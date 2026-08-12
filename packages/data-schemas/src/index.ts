@@ -448,9 +448,38 @@ type StoredIcsRecurrenceRule = typeof storedIcsRecurrenceRuleSchema.infer;
 const icsExceptionDatesSchema = icsDateObjectSchema.array();
 type StoredIcsExceptionDates = typeof icsExceptionDatesSchema.infer;
 
+const DEFAULT_SOURCE_SYNC_RULES = {
+  customEventName: "{{calendar_name}}",
+  excludeEventDescription: true,
+  excludeEventLocation: true,
+  excludeEventName: true,
+  includeInIcalFeed: true,
+} as const;
+
+const applySourceSyncDefaults = <TValues extends object>(
+  values: TValues,
+): TValues & typeof DEFAULT_SOURCE_SYNC_RULES => ({
+  ...DEFAULT_SOURCE_SYNC_RULES,
+  ...values,
+});
+
+const apiErrorBodySchema = type({ error: "string | null" });
+type ApiErrorBody = typeof apiErrorBodySchema.infer;
+
+const readApiErrorMessage = (body: unknown): string | null => {
+  if (!apiErrorBodySchema.allows(body)) {
+    return null;
+  }
+  return body.error;
+};
+
 export {
   DEFAULT_FEED_NAME,
   DEFAULT_FEED_SETTINGS,
+  DEFAULT_SOURCE_SYNC_RULES,
+  apiErrorBodySchema,
+  applySourceSyncDefaults,
+  readApiErrorMessage,
   DEFAULT_FUTURE_SYNC_RANGE,
   DEFAULT_HISTORIC_SYNC_RANGE,
   SYNC_RANGE_DEFINITIONS,
@@ -550,4 +579,5 @@ export type {
   StoredIcsDateObject,
   StoredIcsRecurrenceRule,
   StoredIcsExceptionDates,
+  ApiErrorBody,
 };

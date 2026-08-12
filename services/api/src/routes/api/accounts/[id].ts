@@ -29,6 +29,7 @@ const GET = withWideEvent(
         authType: calendarAccountsTable.authType,
         needsReauthentication: calendarAccountsTable.needsReauthentication,
         calendarCount: count(calendarsTable.id),
+        calendarsRefreshedAt: calendarAccountsTable.calendarsRefreshedAt,
         createdAt: calendarAccountsTable.createdAt,
       })
       .from(calendarAccountsTable)

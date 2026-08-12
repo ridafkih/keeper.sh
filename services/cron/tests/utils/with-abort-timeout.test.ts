@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { withAbortTimeout } from "../../src/utils/with-abort-timeout";
+import { raceAbortSignal, withAbortTimeout } from "../../src/utils/with-abort-timeout";
+
+const neverSettles = (): Promise<never> => Promise.withResolvers<never>().promise;
 
 const waitForAbort = (signal: AbortSignal): Promise<never> =>
   new Promise((_resolve, reject) => {
@@ -33,5 +35,40 @@ describe("withAbortTimeout", () => {
 
     operation.resolve(true);
     await expect(result).rejects.toMatchObject({ name: "TimeoutError" });
+  });
+});
+
+describe("raceAbortSignal", () => {
+  it("resolves with the operation result when it settles first", async () => {
+    const controller = new AbortController();
+
+    await expect(raceAbortSignal(controller.signal, Promise.resolve("done")))
+      .resolves.toBe("done");
+  });
+
+  it("rejects with the abort reason when a signal already aborted", async () => {
+    const controller = new AbortController();
+    const reason = new Error("already gone");
+    controller.abort(reason);
+
+    await expect(raceAbortSignal(controller.signal, neverSettles()))
+      .rejects.toBe(reason);
+  });
+
+  it("settles a never-settling operation as soon as the deadline fires", async () => {
+    let settled = false;
+
+    const result = withAbortTimeout(
+      (signal) => raceAbortSignal(signal, neverSettles()),
+      1,
+    ).finally(() => {
+      settled = true;
+    });
+
+    await expect(result).rejects.toMatchObject({
+      message: "Source ingestion timed out after 1ms",
+      name: "TimeoutError",
+    });
+    expect(settled).toBe(true);
   });
 });

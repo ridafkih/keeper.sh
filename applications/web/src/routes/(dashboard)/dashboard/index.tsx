@@ -150,7 +150,7 @@ function CalendarsMenu() {
             <NavigationMenuItemLabel className="shrink-0">{calendar.name}</NavigationMenuItemLabel>
             <NavigationMenuItemTrailing className="overflow-hidden">
               <Text size="sm" tone="muted" align="right" className="flex-1 min-w-0 truncate">
-                {calendar.accountLabel}
+                {calendar.unavailableSince ? "Unavailable" : calendar.accountLabel}
               </Text>
             </NavigationMenuItemTrailing>
           </NavigationMenuLinkItem>

@@ -74,6 +74,7 @@ export const ANALYTICS_EVENTS = {
   destination_toggled: "destination_toggled",
   calendar_setting_toggled: "calendar_setting_toggled",
   calendar_account_deleted: "calendar_account_deleted",
+  calendar_account_refreshed: "calendar_account_refreshed",
   setup_step_completed: "setup_step_completed",
   setup_skipped: "setup_skipped",
   setup_completed: "setup_completed",
