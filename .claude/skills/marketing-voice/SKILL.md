@@ -25,7 +25,7 @@ Read `glossary.md` (tiered terms, with why each fails so you can rule on ones it
 
 ## Rules
 
-1. **First sentence names the reader's situation or answers the title's question.** Not what Keeper is.
+1. **First sentence names the reader's situation or answers the title's question.** Not what Keeper.sh is.
 2. **What the reader sees, then the mechanism.** Never the reverse.
 3. **No interval, limit or number without what it costs the reader.**
 4. **Rename internal concepts after what the user does with them.** A mapping is a **connection**.
@@ -34,12 +34,12 @@ Read `glossary.md` (tiered terms, with why each fails so you can rule on ones it
 7. **Failure modes lead with the symptom the reader would observe.**
 8. **Under 25 words in A and B, median 12–15. Paragraphs of three sentences or fewer.**
 9. **Attach a person to every capability** — a freelancer with three client calendars, a parent with a school timetable.
-10. **Keeper** in body prose, **keeper.sh** only for the hosted service as against self-hosting. Second person; "I" only in signed founder posts.
+10. **Always "Keeper.sh", never bare "Keeper".** A password manager owns that word — AlternativeTo already files us under `keeper-1` because of it — so dropping the `.sh` blurs us in the exact copy meant to tell us apart. Code identifiers, literal strings and other people's words are exempt; the list is at the end of `glossary.md`. Second person; "I" only in signed founder posts.
 11. **Length is a section problem, not a sentence problem.** Rule 8 has passed on every article that still shipped far too long. Ceilings by content type, the four redundancy patterns and the deletion test are in `length.md`.
 
 ## Hosted first, self-hosting as the alternative
 
-Guides and blog posts are marketing material, not neutral documentation. The happy path is hosted keeper.sh. Self-hosting gets its own signposted section, never interleaved step by step, described honestly: a server, a domain, updates, backups, being paged when it stops. Never inferior — every Pro feature included when self-hosted is a differentiator competitors concede in writing. Full section in `positioning.md`.
+Guides and blog posts are marketing material, not neutral documentation. The happy path is hosted Keeper.sh. Self-hosting gets its own signposted section, never interleaved step by step, described honestly: a server, a domain, updates, backups, being paged when it stops. Never inferior — every Pro feature included when self-hosted is a differentiator competitors concede in writing. Full section in `positioning.md`.
 
 ## Accuracy is part of voice: the `[FACT]` protocol
 
@@ -70,3 +70,4 @@ It reports body words and section count, median sentence length, sentences over 
 7. Any sentence only someone who has read our source could parse?
 8. Did every `[FACT]` tag land in one bucket?
 9. Is the piece inside its ceiling, and would deleting any section leave the reader unable to act?
+10. Is every mention of the product "Keeper.sh", and is every bare "Keeper" left standing one of the exemptions in `glossary.md`? The checker does not test this and cannot: bare "Keeper" is correct inside a quotation and inside an identifier, and no pattern separates those from a slip.

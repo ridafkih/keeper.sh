@@ -26,9 +26,9 @@ Tier 1 terms are an automatic rewrite in Register A — no gloss rescues them, b
 | push / pushed / pushing | Direction of data flow inside our system, invisible to the reader | "copies", "adds" |
 | pull / pulled / pulling | Same | "reads", "fetches" if you must, "checks" usually |
 | orphan event | Our name for a bug class. Marketing the absence of a bug the reader has never heard of just teaches them to fear it | "leftover events" |
-| sync token / delta link | Two vendors' names for the same optimisation. The reader cares about the consequence, never the mechanism, and naming both doubles the cost for zero gain | "Google tells Keeper only what changed since last time, so checking is fast even on a huge calendar" |
-| incremental sync | Names the optimisation rather than its effect | "Keeper only fetches what changed" |
-| webhook / polling | A pair of architecture choices. The reader only needs the one consequence that follows | "Keeper checks on a timer rather than being pinged the moment something changes" — then the consequence |
+| sync token / delta link | Two vendors' names for the same optimisation. The reader cares about the consequence, never the mechanism, and naming both doubles the cost for zero gain | "Google tells Keeper.sh only what changed since last time, so checking is fast even on a huge calendar" |
+| incremental sync | Names the optimisation rather than its effect | "Keeper.sh only fetches what changed" |
+| webhook / polling | A pair of architecture choices. The reader only needs the one consequence that follows | "Keeper.sh checks on a timer rather than being pinged the moment something changes" — then the consequence |
 | iCalendar | Constantly misread as Apple's iCal app, so it actively creates a wrong belief | "The standard calendar file format", if at all |
 | pull-compare-push / generation counter | Architecture names. They belong in Register C and the README | Cut the name, keep the promise it makes |
 
@@ -50,10 +50,10 @@ Phrases that contain a Tier 1 word but are correct as written. The checker blank
 |---|---|---|
 | ICS / iCal link | The reader has met these links without ever learning the name, and the name carries the wrong half of the meaning — the important part is that the link is read-only | "a calendar link you can subscribe to". For behaviour: "a read-only feed — you can see those events, but nothing you do can change them." |
 | CalDAV | A protocol name where the reader wants a compatibility answer. They cannot look up whether their calendar "supports CalDAV" | Lead with providers: "Works with Google, Outlook, iCloud, Fastmail — and any other calendar that uses the CalDAV standard." |
-| OAuth | Only relevant when trust is the subject. Elsewhere it is a spec number attached to a button they already know how to press | "You sign in through Google's own permission screen. Keeper never sees your password." Otherwise "sign in with Google" |
+| OAuth | Only relevant when trust is the subject. Elsewhere it is a spec number attached to a button they already know how to press | "You sign in through Google's own permission screen. Keeper.sh never sees your password." Otherwise "sign in with Google" |
 | app-specific password | Apple's own UI uses this label, so the reader will meet the exact words. But the label explains nothing about why it exists | Keep the term, gloss on first use per page by what it protects — see rule 6 |
 | provider | Our word for a company whose calendar we talk to. The reader calls it "Google" or "my calendar" | Name the companies. Use "calendar service" only when you genuinely mean the general case |
-| sync window | A number that silently decides whether the reader's event gets copied. Never state it bare | "Keeper looks at events from a week ago to two years ahead. A one-off event further out than that isn't copied." |
+| sync window | A number that silently decides whether the reader's event gets copied. Never state it bare | "Keeper.sh looks at events from a week ago to two years ahead. A one-off event further out than that isn't copied." |
 | sync interval | A settings-field name, and a number that is meaningless without the cost — see rule 3 | "updating every 30 minutes", immediately followed by who that is fine for and who it is not |
 | feed | Fine once, ambiguous when stacked. "Aggregated iCal Feed" is three unfamiliar words in a row | Say what the reader gets: "one calendar link containing everything" |
 | AGPL-3.0 | A licence SKU. It earns its place on pricing and comparison pages, where the reader is weighing lock-in, and nowhere else | Hero: "open-source, and yours to self-host." Keep the licence name on `/pricing` and `/compare` |
@@ -66,6 +66,23 @@ Phrases that contain a Tier 1 word but are correct as written. The checker blank
 | one-way / two-way | Everyday words, and the reader needs the distinction to understand what they are buying | Define by behaviour on first use, every page. Check the code before claiming either — mappings are strictly one-directional |
 | Google Calendar / Outlook / iCloud / Fastmail | The reader's own vocabulary for the thing | Use these instead of "provider" wherever you can |
 | calendar / event / account / password / permission | Assumed knowledge, per the reader description in SKILL.md | |
-| Keeper / keeper.sh | See rule 10 | `keeper.sh` only for the hosted service as distinct from self-hosting |
+| Keeper.sh | The product name, and the reader's own vocabulary for it | Always in full. Bare "Keeper" is a different company's product — see "The product name" below |
 | Docker / environment variable / reverse proxy | Register B vocabulary, where the reader runs containers | Auto-fail in Register A, unglossed and correct in Register B |
 | 410 GONE / RECURRENCE-ID / VTIMEZONE / RRULE / DST | Register C vocabulary. Flattening these would cost more credibility than it gains | Register C only |
+
+## The product name
+
+The product is **Keeper.sh** in every sentence a customer reads, including headings, titles, meta descriptions and alt text. There is no shortened form and no distinction between the hosted service and the self-hosted one — both are Keeper.sh, and self-hosting is described by what the reader does, not by a second name.
+
+The reason is a collision we are already paying for. "Keeper" is a well-known password manager, which is why AlternativeTo lists us under the slug `keeper-1`. Every bare "Keeper" in a comparison page or a how-to guide hands the ambiguity back to the reader in the one place we are trying to resolve it.
+
+Bare "Keeper" or lowercase "keeper" stands unchanged in six places, none of them prose we wrote about the product:
+
+- Code identifiers and package names — `@keeper.sh/calendar`, `keeper-standalone`, environment variables, file paths
+- The `@keeper.sh` remote UID suffix and the `"keeper.sh"` Outlook category, which are literal strings the sync engine matches on
+- Verbatim quotations from third parties who wrote "Keeper". A competitor's page quoted in our copy keeps their wording
+- The repository path `github.com/ridafkih/keeper.sh`
+- Hostnames and URLs, where lowercase `keeper.sh` is already correct
+- Anything inside a fenced code block, for the same reason as the first two
+
+This is a reading job, not a pattern. `\bKeeper\b` matches inside "Keeper.sh" itself and inside every exemption above, so `scripts/readability.ts` deliberately does not test it — it is question 10 in the publishing checklist instead.

@@ -43,7 +43,7 @@ Source: `index.tsx`, `MARKETING_FEATURES`
 
 **After**
 
-> Sign in to Google, Outlook or iCloud and Keeper is connected. If your calendar is somewhere else, you can paste a calendar link instead.
+> Sign in to Google, Outlook or iCloud and Keeper.sh is connected. If your calendar is somewhere else, you can paste a calendar link instead.
 
 **Transformation notes**
 
@@ -66,12 +66,12 @@ Source: `index.tsx`, `HOW_IT_WORKS_STEPS`
 
 **After**
 
-> Keeper checks your calendars on a timer and copies anything new across. If you move an event, the copy moves with it.
+> Keeper.sh checks your calendars on a timer and copies anything new across. If you move an event, the copy moves with it.
 
 **Transformation notes**
 
 - "aggregated", "pushed", "reconciled" — three Tier 1 verbs, all passive, none describing anything the reader can see
-- Passive voice → Keeper as the subject, so the reader knows who is acting
+- Passive voice → Keeper.sh as the subject, so the reader knows who is acting
 - "continuously" → "on a timer", which is both truer and the thing they need to know before rule 3 bites on the pricing table
 - "Conflicts are reconciled" → the specific case the reader has in mind (they moved an event)
 
@@ -91,13 +91,14 @@ Source: `index.tsx`, `FAQ_ITEMS`
 
 > My calendar only gives me a link, not a login. Does that work?
 >
-> Yes. Paste the link and Keeper will copy those events onto your other calendars. It works one way only: you will see the events, but nothing you change in Keeper reaches the original calendar.
+> Yes. Paste the link and Keeper.sh will copy those events onto your other calendars. It works one way only: you will see the events, but nothing you change in Keeper.sh reaches the original calendar.
 
 **Transformation notes**
 
 - Heading was a system noun question → heading is now the reader's situation, in the words they would use (rule: headings are the reader's question)
 - "as a source" → deleted from both question and answer (Tier 1)
 - "publicly accessible" → deleted; the reader cannot assess it, and pasting the link tests it for them
+- "in Keeper" → "Keeper.sh", per rule 10, in both places the answer names the product
 - "pull events" → "copy those events onto your other calendars" (Tier 1)
 - "read-only calendar feeds" → the behaviour spelled out, because read-only is the entire consequence and the phrase buries it
 - The one-way limitation moved from an implication to a flat statement, per the limitations rule
@@ -114,7 +115,7 @@ Source: `index.tsx`, `FAQ_ITEMS`
 
 **After**
 
-> Keeper works with Google Calendar, Microsoft Outlook, Apple iCloud and Fastmail. Beyond those, most calendars work too — if yours can give you a calendar link, or a username and password for a calendar app, you are covered.
+> Keeper.sh works with Google Calendar, Microsoft Outlook, Apple iCloud and Fastmail. Beyond those, most calendars work too — if yours can give you a calendar link, or a username and password for a calendar app, you are covered.
 
 **Transformation notes**
 
@@ -122,7 +123,7 @@ Source: `index.tsx`, `FAQ_ITEMS`
 - "any provider that supports CalDAV or ICS feeds" → a test the reader can actually run on their own screen (Tier 2)
 - "provider" → deleted; the companies are already named (Tier 2)
 - "protocols" → deleted (Tier 2)
-- "Keeper.sh" → "Keeper" in body prose, per rule 10
+- "it will work with Keeper" → "Keeper.sh", per rule 10; the bare name is a password manager, and the sentence that opened with the full name should not have dropped it four clauses later
 - Facts preserved: the four named providers, and the CalDAV/ICS capability restated as its user-visible test
 
 ---
@@ -195,7 +196,7 @@ Source: `index.tsx`, pricing section
 >
 > Free covers two calendar accounts and three connections between them, updating every 30 minutes — fine if you are blocking out evenings, too slow if people book you through a scheduling link. Pro is $5 a month for unlimited connections and updates every minute.
 >
-> Keeper is open source, and you can run it yourself instead. Every Pro feature is included when you self-host — see the self-hosting guide for what that costs you in servers and upkeep.
+> Keeper.sh is open source, and you can run it yourself instead. Every Pro feature is included when you self-host — see the self-hosting guide for what that costs you in servers and upkeep.
 
 **Transformation notes**
 
@@ -221,7 +222,7 @@ Source: `index.tsx`, hero
 
 > Stop double-booking yourself.
 >
-> Keeper copies your events between your personal, work and school calendars, so every one of them shows you as busy at the same times. Works with Google Calendar, Outlook, iCloud and Fastmail.
+> Keeper.sh copies your events between your personal, work and school calendars, so every one of them shows you as busy at the same times. Works with Google Calendar, Outlook, iCloud and Fastmail.
 
 **Transformation notes**
 
@@ -245,7 +246,7 @@ Source: `applications/web/src/content/blog/introducing-keeper-blog.mdx`
 
 **After**
 
-> Every few minutes Keeper looks at the calendars you told it to watch, works out what changed since last time, and makes the same change on the calendars you are copying to.
+> Every few minutes Keeper.sh looks at the calendars you told it to watch, works out what changed since last time, and makes the same change on the calendars you are copying to.
 >
 > Two of those checks can overlap, and when they do only one of them is allowed to write. That is why you never end up with the same meeting twice.
 
