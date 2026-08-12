@@ -12,45 +12,33 @@ tags:
   - "onecal"
 ---
 
-You have a work calendar and a personal one, and you want your busy time to show up in both. Keeper.sh and OneCal both do that job, in noticeably different ways.
+You have a work calendar and a personal one, and you want your busy time to show up in both. Keeper.sh and OneCal both do that job, for different people.
 
-They are also built for different people, and this page lays out the differences without spin. Some of what follows is us telling you to buy the other product, and that is deliberate. If OneCal fits you better, we would rather you find that out here than after a refund request.
-
-## What each product actually is
-
-Keeper.sh keeps your busy time mirrored between calendars, and it is open source under AGPL-3.0, so you can run it on your own server.
-
-OneCal does calendar sync too, and quite a bit more. It adds booking links, a unified calendar view, phone and desktop apps, and admin tools for teams. It is a commercial product with no free plan.
-
-The short version is that OneCal is a broader scheduling suite, while Keeper.sh is a focused sync tool that connects to more kinds of calendar.
+OneCal is a broader scheduling suite with booking links, apps and admin tools. Keeper.sh is a focused sync tool, open source under AGPL-3.0, that connects to more kinds of calendar. Some of what follows is us telling you to buy the other product.
 
 ## Which calendars can you connect?
 
-OneCal connects Google Calendar, Microsoft Outlook Calendar and Apple iCloud Calendar. That is the full list on their site, with no CalDAV option and no way to pull in a plain `.ics` feed.
+OneCal connects Google Calendar, Microsoft Outlook Calendar and Apple iCloud Calendar. That is the full list on their site, with no CalDAV option and no way to add a plain `.ics` feed.
 
-Keeper.sh connects Google, Outlook, iCloud and Fastmail, plus any CalDAV server and any public `.ics` or iCal link.
+Keeper.sh connects Google, Outlook, iCloud and Fastmail, plus any CalDAV server and any public `.ics` or iCal link. If your calendar lives on Fastmail, Nextcloud, Zimbra, Radicale or your university's server, OneCal cannot see it and we can.
 
-That last part is the real gap between the two products. If your calendar lives on Fastmail, Nextcloud, Zimbra, Radicale or your university's CalDAV server, OneCal cannot see it and Keeper.sh can.
-
-One caveat on our side: an `.ics` link is read-only by nature, so Keeper.sh can read events from it but never write to it.
+One caveat on our side: an `.ics` link is read-only by nature, so Keeper.sh reads events from it but never writes to it.
 
 ## How fast do changes show up?
 
 OneCal syncs changes as they happen on Google and Outlook. For iCloud, their site says updates take up to 10 minutes to reach your other calendars.
 
-Keeper.sh works on a timer instead, reading your calendars every minute on every plan, including the free one. Writing to the other calendar is the part that changes with your plan. On the free plan a change lands within 30 minutes, and on Pro it lands within a minute.
+Keeper.sh works on a timer, reading your calendars every minute on every plan including the free one. Writing to the other calendar is the part that changes with your plan: within 30 minutes on free, within a minute on Pro.
 
-So on Google and Outlook, OneCal is faster than Keeper.sh Pro and much faster than Keeper.sh free. On iCloud the two are closer. If you book meetings back to back and need the block to appear instantly, that speed difference is worth paying for.
+So on Google and Outlook, OneCal is faster than Keeper.sh Pro and much faster than our free plan. On iCloud the two are closer. If you book meetings back to back and need the block to appear instantly, that difference is worth paying for.
 
 ## What does it cost?
 
-OneCal has no free tier, and every plan starts with a 14-day trial that needs no card.
+OneCal has no free tier, and every plan starts with a 14-day trial that needs no card. Their annual prices are $5, $10 and $25 per user per month, for 2, 5 and 50 calendars. Billed monthly, the same three plans are $6, $12 and $30 per user.
 
-Their annual prices are $5, $10 and $25 per user per month, for 2, 5 and 50 calendars. Billed monthly, the same three plans are $6, $12 and $30 per user.
+Keeper.sh is free for 2 linked accounts and 3 connections, with no limit on how many calendars each account exposes. Pro is $5 a month, or $42 a year, and it removes the account and connection limits and speeds writes up to every minute.
 
-Keeper.sh is free for 2 linked accounts and 3 connections, with no limit on how many calendars each account exposes. Keeper.sh Pro is $5 a month, or $42 a year, which works out to $3.50 a month. Pro removes the account and connection limits and speeds writes up to every minute.
-
-Note that the calendar counts are not comparable, because OneCal counts calendars while we count accounts and connections. Two Google accounts with six calendars between them is a 5-calendar OneCal plan, and fits inside the Keeper.sh free tier.
+The calendar counts are not comparable, because OneCal counts calendars and we count accounts and connections. Two Google accounts with six calendars between them is a 5-calendar OneCal plan, and fits inside the Keeper.sh free tier.
 
 ## Where OneCal is the better pick
 
@@ -64,7 +52,7 @@ These are real advantages, and no amount of feature-matching on our side changes
 
 **Your security review has teeth.** OneCal publishes a data security page, a data processing addendum and a subprocessor list, states that it is GDPR compliant, and says its SOC 2 audit is in progress. We publish none of that today.
 
-**You wanted the AI angle.** OneCal ships an MCP server with 8 tools for reading calendars and creating, updating, deleting and responding to events. We ship one too, so treat this as a tie rather than a reason to pick us.
+**You wanted the AI angle.** OneCal ships an MCP server with 8 tools for reading calendars and creating, updating, deleting and responding to events. We ship a REST API and an MCP server too, so treat this as a tie.
 
 ## Where Keeper.sh is the better pick
 
@@ -72,9 +60,9 @@ These are real advantages, and no amount of feature-matching on our side changes
 
 **You want to try it without handing over a card.** Two accounts and three connections stay free indefinitely, which is where most people with one work calendar and one personal calendar stay.
 
-**You do not want to think about per-calendar pricing.** Link an account and every calendar on it is available to you. Nothing gets more expensive because you made a new calendar this morning.
+**You do not want to think about per-calendar pricing.** Link an account and every calendar on it is available. Nothing gets more expensive because you made a new calendar this morning.
 
-**You want to pull your schedule somewhere else.** Keeper.sh gives you one iCal feed covering every calendar you opt in, subscribable from anything that reads a calendar link.
+**You want your schedule available somewhere else.** Keeper.sh gives you one iCal feed covering every calendar you opt in, subscribable from anything that reads a calendar link.
 
 **You want to read the code.** Keeper.sh is AGPL-3.0, so you can see exactly how your events are handled and file an issue when we get it wrong.
 
@@ -82,53 +70,35 @@ These are real advantages, and no amount of feature-matching on our side changes
 
 These are the symptoms, so you can recognise your own situation in them.
 
-**You invite three people to a meeting, and the copy on your other calendar has no attendees.** We do not copy attendees, and the same goes for video call links and reminders. Only the title, description, location, times and busy status cross over.
+**You invite three people to a meeting, and the copy on your other calendar has no attendees.** We do not copy attendees, video call links or reminders. Only the title, description, location, times and busy status cross over.
 
-**You edit an event on the mirrored side and your change disappears.** Each connection runs in one direction only, so if you want both calendars to feed each other, you set up two connections, one each way.
+**You edit an event on the mirrored side and your change disappears.** Each connection runs in one direction only, so two calendars feeding each other means two connections.
 
-**You want the other calendar to show real event titles, and the option is greyed out.** Choosing what shows up on the other calendar is a Pro feature, and on the free plan you take the default.
+**You want the other calendar to show real event titles, and the option is greyed out.** A connected calendar arrives anonymised, and changing what shows up is a Pro feature.
 
 **Your recurring meeting looks like a wall of separate events.** We copy each occurrence as its own event rather than as a repeating series.
 
-**You want a booking page, or an app, or single sign-on.** We have none of these, so read the OneCal section above again.
+**You want a booking page, or an app, or single sign-on.** We have none of these.
 
 ## Running Keeper.sh yourself
 
-Keeper.sh is AGPL-3.0 and designed to be self-hosted, and this is a genuine option rather than a stripped-down demo.
+Keeper.sh is designed to be self-hosted, and that is a genuine option rather than a stripped-down demo.
 
-Every Pro feature is included when you run it yourself, at no cost. There is no licence key, no seat count and no phone-home. You get unlimited accounts, unlimited connections, one-minute writes, feed customisation and event filters.
+Every Pro feature is included when you run it yourself, at no cost. There is no licence key, no seat count and no phone-home. You get unlimited accounts and connections, one-minute writes, feed customisation and event filters, and your events stay on hardware you control.
 
-Your events also stay on hardware you control, which for many people is the entire argument for not handing a calendar to a third party.
+Be realistic about the effort. You will need a server, a Postgres database, Redis and a domain with TLS. You also register your own Google and Microsoft apps for calendar access, which takes an afternoon and involves Google's verification process.
 
-Be realistic about the effort involved. You will need a server, a Postgres database, Redis and a domain with TLS. You also register your own Google and Microsoft apps for OAuth credentials, which takes an afternoon and involves Google's verification process.
-
-After that, upgrades, backups and uptime are yours forever. We ship Docker Compose files and a standalone image to keep the setup as short as we can. If that read like a fun weekend, self-hosting suits you, and if it read like a chore, use hosted keeper.sh for $5 a month.
+After that, upgrades, backups and uptime are yours forever. We ship Docker Compose files and a standalone image to keep the setup short. If that read like a chore, use hosted keeper.sh for $5 a month.
 
 ## FAQ
 
-### Does OneCal support CalDAV or ICS calendars?
+### Can I self-host OneCal?
 
-No, OneCal lists only Google Calendar, Microsoft Outlook Calendar and Apple iCloud Calendar. Keeper.sh supports those three, plus Fastmail, any CalDAV server and any public `.ics` link.
-
-### Is OneCal faster than Keeper.sh?
-
-On Google and Outlook, yes, because OneCal syncs changes as they happen. Keeper.sh writes every minute on Pro and every 30 minutes on free. On iCloud, OneCal's own site says up to 10 minutes, which puts the two products much closer together.
-
-### Does OneCal have a free plan?
-
-No, though OneCal offers a 14-day free trial on every plan with no card required, after which you pick a paid plan. Keeper.sh has a permanent free tier of 2 accounts and 3 connections.
-
-### Can I get booking links from Keeper.sh?
-
-No, Keeper.sh only mirrors busy time between calendars. If you need scheduling links for other people to book you, OneCal includes them on every plan.
+No, OneCal is a hosted commercial product with no free plan. Keeper.sh is AGPL-3.0 and can be run on your own server with every Pro feature included.
 
 ### Does Keeper.sh sync both directions?
 
 Not in one step, because each connection runs one way. You create two connections, one in each direction, to keep a pair of calendars feeding each other.
-
-### Can I self-host OneCal?
-
-No, OneCal is a hosted commercial product. Keeper.sh is AGPL-3.0 and can be run on your own server with every Pro feature included.
 
 ### Which one should I pick?
 
