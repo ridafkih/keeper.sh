@@ -186,7 +186,7 @@ function SyncWindowSection({ calendarId }: { calendarId: string }) {
     <>
       <DashboardSection
         title="Sync Window"
-        description="Choose how far back and ahead Keeper syncs events into this calendar."
+        description="Choose how far back and ahead Keeper syncs events into this calendar. Narrowing a range removes already-synced events outside it from this calendar."
       />
       <PremiumFeatureGate locked={locked} hint="Custom sync windows are a Pro feature.">
         <NavigationMenu>
