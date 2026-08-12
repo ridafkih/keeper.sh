@@ -1,6 +1,6 @@
 import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./generated/tanstack/route-tree.generated";
-import { createHttpError } from "./lib/fetcher";
+import { HttpError } from "./lib/fetcher";
 import { getPublicRuntimeConfig, getServerPublicRuntimeConfig } from "./lib/runtime-config";
 import type { PublicRuntimeConfig } from "./lib/runtime-config";
 import { hasSessionCookie } from "./lib/session-cookie";
@@ -68,7 +68,7 @@ function createJsonFetcher(
     });
 
     if (!response.ok) {
-      throw await createHttpError(response, path);
+      throw new HttpError(response.status, path);
     }
 
     return response.json();
