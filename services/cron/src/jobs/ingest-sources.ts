@@ -33,7 +33,7 @@ import {
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
-import { and, arrayContains, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, arrayContains, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import { database, refreshLockRedis, refreshLockStore } from "@/context";
@@ -48,6 +48,7 @@ import { withAbortTimeout } from "@/utils/with-abort-timeout";
 import { createSyncLock } from "@keeper.sh/sync";
 import { enqueueDestinationSyncsForUsers } from "@/utils/enqueue-destination-syncs";
 import { createRequiredSourceRanges } from "@/utils/source-ingestion-ranges";
+import { deleteEventStatesInChunks } from "@/utils/delete-event-states";
 
 const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
 const SOURCE_TIMEOUT_DATABASE_GRACE_MS = 5000;
@@ -207,14 +208,7 @@ const createIngestionPersistenceTransaction = (
         signal.throwIfAborted();
         if (changes.deletes.length > 0) {
           await setRemainingStatementTimeout();
-          await transaction
-            .delete(eventStatesTable)
-            .where(
-              and(
-                eq(eventStatesTable.calendarId, calendarId),
-                inArray(eventStatesTable.id, changes.deletes),
-              ),
-            );
+          await deleteEventStatesInChunks(transaction, calendarId, changes.deletes);
           signal.throwIfAborted();
         }
 
