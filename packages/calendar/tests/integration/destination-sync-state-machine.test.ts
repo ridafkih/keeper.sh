@@ -136,7 +136,6 @@ class InMemoryEventStateStore {
         end: new Date("2029-01-01T00:00:00.000Z"),
         start: new Date("2026-01-01T00:00:00.000Z"),
       },
-      { retainOneOffEventsAfterWindowEnd: true },
     );
 }
 
@@ -351,14 +350,14 @@ describe.each<ScenarioKind>([
   });
 });
 
-it("repairs far-future Keeper orphans, retains user events, and converges", async () => {
+it("repairs Keeper orphans, retains user events, and converges", async () => {
   const eventStates = new InMemoryEventStateStore();
   const mappings = new InMemoryMappingStore();
   const provider = new StatefulDestinationProvider();
-  const farFutureEvent = makeSourceEvent(
+  const futureEvent = makeSourceEvent(
     "ordinary event",
-    new Date("2040-03-15T09:00:00.000Z"),
-    new Date("2040-03-15T10:00:00.000Z"),
+    new Date("2028-03-15T09:00:00.000Z"),
+    new Date("2028-03-15T10:00:00.000Z"),
   );
   const runSync = () => syncCalendar({
     calendarId: DESTINATION_CALENDAR_ID,
@@ -380,7 +379,7 @@ it("repairs far-future Keeper orphans, retains user events, and converges", asyn
     userId: "user-1",
   });
 
-  await ingest(eventStates, farFutureEvent);
+  await ingest(eventStates, futureEvent);
   await expect(runSync()).resolves.toMatchObject({ added: 1, removed: 0 });
   const desiredEvent = requireValue(eventStates.syncableEvents()[0]);
   provider.seedRemote("orphaned-keeper-copy", desiredEvent, true);

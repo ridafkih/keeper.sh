@@ -325,7 +325,7 @@ describe("materializeRecurrenceEvents", () => {
     expect(result.map((event) => event.id)).toEqual(["overlaps-start"]);
   });
 
-  it("retains far-future one-offs for an unbounded destination write domain", () => {
+  it("drops far-future one-offs that start after the window end", () => {
     const farFuture = createEvent({
       endTime: new Date("2040-03-15T10:00:00.000Z"),
       id: "far-future-one-off",
@@ -334,9 +334,6 @@ describe("materializeRecurrenceEvents", () => {
     });
 
     expect(materializeRecurrenceEvents([farFuture], WINDOW)).toEqual([]);
-    expect(materializeRecurrenceEvents([farFuture], WINDOW, {
-      retainOneOffEventsAfterWindowEnd: true,
-    })).toEqual([farFuture]);
   });
 
   it("keeps the source wall time across DST independently of the host timezone", () => {

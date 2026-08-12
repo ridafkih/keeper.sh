@@ -25,6 +25,7 @@ interface DestinationEventReadDiagnostics {
   materializedEventCount: number;
   missingSourceEventUidCount: number;
   outsideReconciliationWindowCount: number;
+  overBudgetSourceEventStateIds: string[];
   overBudgetSourceEventUids: string[];
   syncableEventCount: number;
 }
@@ -40,6 +41,7 @@ const EMPTY_DESTINATION_EVENT_READ_DIAGNOSTICS: DestinationEventReadDiagnostics 
   materializedEventCount: 0,
   missingSourceEventUidCount: 0,
   outsideReconciliationWindowCount: 0,
+  overBudgetSourceEventStateIds: [],
   overBudgetSourceEventUids: [],
   syncableEventCount: 0,
 };
@@ -274,13 +276,16 @@ const getEventsForCalendarsWithDiagnostics = async (
    * Skipping it keeps the destination syncing; failing here would back off the whole
    * calendar over one series, and ingestion already withholds these from new writes.
    */
+  const overBudgetSourceEventStateIds: string[] = [];
   const overBudgetSourceEventUids: string[] = [];
   const events = materializeRecurrenceEvents(syncableEvents, {
     end: syncWindow.timeMax,
     start: syncWindow.timeMin,
   }, {
-    onSeriesOverBudget: (error) => overBudgetSourceEventUids.push(error.sourceEventUid),
-    retainOneOffEventsAfterWindowEnd: true,
+    onSeriesOverBudget: (error) => {
+      overBudgetSourceEventUids.push(error.sourceEventUid);
+      overBudgetSourceEventStateIds.push(error.eventStateId ?? error.eventId);
+    },
   });
 
   return {
@@ -290,6 +295,7 @@ const getEventsForCalendarsWithDiagnostics = async (
       materializedEventCount: events.length,
       missingSourceEventUidCount,
       outsideReconciliationWindowCount,
+      overBudgetSourceEventStateIds,
       overBudgetSourceEventUids,
       syncableEventCount: syncableEvents.length,
     },

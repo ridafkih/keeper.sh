@@ -525,6 +525,7 @@ const syncDestinationsForUser = async (
         excludedBySyncPolicyCount: 0,
         materializedEventCount: 0,
         missingSourceEventUidCount: 0,
+        overBudgetSourceEventStateIds: [],
         overBudgetSourceEventUids: [],
         outsideReconciliationWindowCount: 0,
         syncableEventCount: 0,
@@ -667,6 +668,9 @@ const syncDestinationsForUser = async (
           authoritativeSourceWindows,
           configuredSourceCalendarIds: new Set(sourceCalendarIdsAtLocalRead),
           requestedWindow,
+          withheldSourceEventStateIds: new Set(
+            eventReadDiagnostics.overBudgetSourceEventStateIds,
+          ),
         },
       });
 

@@ -990,7 +990,7 @@ describe("computeSyncOperations", () => {
     }]);
   });
 
-  it("keeps a one-off mapping beyond the future edge under fully verified coverage", () => {
+  it("retires a one-off mapping beyond the future edge once its source event is gone", () => {
     const now = new Date("2026-08-11T00:00:00.000Z");
     const requestedWindow = getConfigurableSyncWindow(
       DEFAULT_HISTORIC_SYNC_RANGE,
@@ -1011,6 +1011,87 @@ describe("computeSyncOperations", () => {
       requestedWindow,
     });
 
+    expect(result.operations).toEqual([{
+      deleteId: farFutureMapping.deleteIdentifier,
+      startTime: farFutureMapping.startTime,
+      type: "remove",
+      uid: farFutureMapping.destinationEventUid,
+    }]);
+  });
+
+  it("retires a mapping left beyond a narrowed future edge", () => {
+    const requestedWindow = {
+      timeMax: new Date("2027-01-01T00:00:00.000Z"),
+      timeMin: new Date("2026-01-01T00:00:00.000Z"),
+    };
+    const beyondEdgeMapping = createEventMapping({
+      endTime: new Date("2028-06-01T15:00:00.000Z"),
+      id: "beyond-edge-mapping",
+      startTime: new Date("2028-06-01T14:00:00.000Z"),
+      syncEventId: "beyond-edge-event",
+    });
+
+    const result = computeSyncOperationsStrict([], [beyondEdgeMapping], [], {
+      authoritativeSourceWindows: new Map([["source-calendar-id", requestedWindow]]),
+      authoritativeWindow: requestedWindow,
+      configuredSourceCalendarIds: new Set(["source-calendar-id"]),
+      requestedWindow,
+    });
+
+    expect(result.operations).toEqual([{
+      deleteId: beyondEdgeMapping.deleteIdentifier,
+      startTime: beyondEdgeMapping.startTime,
+      type: "remove",
+      uid: beyondEdgeMapping.destinationEventUid,
+    }]);
+  });
+
+  it("keeps the mirrors of a series withheld for exceeding the occurrence budget", () => {
+    const occurrenceMappings = [1, 2, 3].map((index) => createEventMapping({
+      endTime: new Date(`2026-03-0${index}T15:00:00.000Z`),
+      eventStateId: "over-budget-series",
+      id: `over-budget-mapping-${index}`,
+      startTime: new Date(`2026-03-0${index}T14:00:00.000Z`),
+      syncEventId: `over-budget-series::occurrence-${index}`,
+    }));
+
+    const result = computeSyncOperationsStrict([], occurrenceMappings, [], {
+      authoritativeSourceWindows: new Map([["source-calendar-id", TEST_WINDOW]]),
+      authoritativeWindow: TEST_WINDOW,
+      configuredSourceCalendarIds: new Set(["source-calendar-id"]),
+      requestedWindow: TEST_WINDOW,
+      withheldSourceEventStateIds: new Set(["over-budget-series"]),
+    });
+
     expect(result.operations).toEqual([]);
+  });
+
+  it("still retires a withheld series' mapping once it falls outside the requested window", () => {
+    const requestedWindow = {
+      timeMax: new Date("2027-01-01T00:00:00.000Z"),
+      timeMin: new Date("2026-01-01T00:00:00.000Z"),
+    };
+    const withheldOutsideMapping = createEventMapping({
+      endTime: new Date("2028-06-01T15:00:00.000Z"),
+      eventStateId: "over-budget-series",
+      id: "over-budget-outside-mapping",
+      startTime: new Date("2028-06-01T14:00:00.000Z"),
+      syncEventId: "over-budget-series::occurrence-outside",
+    });
+
+    const result = computeSyncOperationsStrict([], [withheldOutsideMapping], [], {
+      authoritativeSourceWindows: new Map([["source-calendar-id", requestedWindow]]),
+      authoritativeWindow: requestedWindow,
+      configuredSourceCalendarIds: new Set(["source-calendar-id"]),
+      requestedWindow,
+      withheldSourceEventStateIds: new Set(["over-budget-series"]),
+    });
+
+    expect(result.operations).toEqual([{
+      deleteId: withheldOutsideMapping.deleteIdentifier,
+      startTime: withheldOutsideMapping.startTime,
+      type: "remove",
+      uid: withheldOutsideMapping.destinationEventUid,
+    }]);
   });
 });

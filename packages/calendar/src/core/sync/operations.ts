@@ -15,6 +15,7 @@ interface ReconciliationScope {
   authoritativeSourceWindows?: ReadonlyMap<string, SyncWindow>;
   configuredSourceCalendarIds?: ReadonlySet<string>;
   requestedWindow: SyncWindow;
+  withheldSourceEventStateIds?: ReadonlySet<string>;
 }
 
 interface StaleMappingResult {
@@ -435,22 +436,35 @@ const buildRemoveOperations = (
 
   for (const mapping of existingMappings) {
     /*
-     * Only the requested window's lower edge retires a mapping outright. One-off
-     * events are mirrored past the upper edge on purpose, so a mapping beyond it is
-     * evidence of a live event rather than of a narrowed window, and deleting it
-     * would destroy the user's real calendar event irreversibly. Anything past the
-     * upper edge is retired only through the authoritative path below, which needs
-     * verified source coverage proving the event is actually gone.
+     * Both edges of the requested window retire a mapping. A mirror the window no
+     * longer covers stops receiving updates, and a stale copy that never reflects a
+     * rename, move, or deletion of its source reads as broken sync. The source event
+     * itself is retained in Keeper's own store, so retiring the mirror narrows scope
+     * rather than losing data.
      */
-    const outsideCleanupWindow = mapping.endTime <= scope.requestedWindow.timeMin;
+    const outsideCleanupWindow = !overlapsWindow(
+      mapping,
+      scope.requestedWindow.timeMin,
+      scope.requestedWindow.timeMax,
+    );
     const insideAuthoritativeWindow = isInsideSourceAuthoritativeWindow(
       mapping,
       mapping.sourceCalendarId,
       scope,
     );
+    /*
+     * A series withheld for exceeding the occurrence budget is absent from the local
+     * read for a technical limit, not because it is gone. Deleting its mirrors here
+     * would mass-delete and then mass-re-add them the moment the window changes, so
+     * the missing-source path leaves them alone. Window cleanup above still applies.
+     */
+    const isWithheldSeriesMapping = mapping.eventStateId !== null
+      && Boolean(scope.withheldSourceEventStateIds?.has(mapping.eventStateId));
     if (
       outsideCleanupWindow
-      || insideAuthoritativeWindow && !localEventIds.has(getMappingSyncEventId(mapping))
+      || insideAuthoritativeWindow
+        && !isWithheldSeriesMapping
+        && !localEventIds.has(getMappingSyncEventId(mapping))
     ) {
       operations.push({
         deleteId: mapping.deleteIdentifier,

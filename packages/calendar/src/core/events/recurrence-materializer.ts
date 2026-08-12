@@ -20,7 +20,6 @@ interface RecurrenceMaterializationWindow {
 
 interface RecurrenceMaterializationOptions {
   onSeriesOverBudget?: (error: RecurrenceMaterializationLimitError) => void;
-  retainOneOffEventsAfterWindowEnd?: boolean;
 }
 
 interface RecurrenceSeriesIdentity {
@@ -137,16 +136,6 @@ const overlapsWindow = (
   event: Pick<SyncableEvent, "startTime" | "endTime">,
   window: RecurrenceMaterializationWindow,
 ): boolean => event.endTime > window.start && event.startTime < window.end;
-
-const overlapsOneOffDomain = (
-  event: Pick<SyncableEvent, "startTime" | "endTime">,
-  window: RecurrenceMaterializationWindow,
-  options: RecurrenceMaterializationOptions,
-): boolean => event.endTime > window.start
-  && (
-    options.retainOneOffEventsAfterWindowEnd
-    || event.startTime < window.end
-  );
 
 const toRecurrenceWallTime = (date: Date, timeZone: string | undefined): Date => {
   if (!timeZone) {
@@ -478,7 +467,7 @@ const materializeRecurrenceEvents = (
       continue;
     }
     const oneOffEvent = asOneOffEvent(event);
-    if (overlapsOneOffDomain(oneOffEvent, window, options)) {
+    if (overlapsWindow(oneOffEvent, window)) {
       materializedEvents.push(oneOffEvent);
     }
   }

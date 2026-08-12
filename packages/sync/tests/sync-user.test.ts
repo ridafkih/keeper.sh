@@ -85,6 +85,7 @@ describe("createDestinationReconciliationWideEventFields", () => {
     materializedEventCount: 5,
     missingSourceEventUidCount: 1,
     outsideReconciliationWindowCount: 1,
+    overBudgetSourceEventStateIds: [],
     overBudgetSourceEventUids: ["pathological-series"],
     syncableEventCount: 4,
   };
