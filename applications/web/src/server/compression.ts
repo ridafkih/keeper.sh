@@ -26,28 +26,46 @@ function acceptsGzip(request: Request): boolean {
   return acceptEncoding !== null && acceptEncoding.includes("gzip");
 }
 
+function varyingOnAcceptEncoding(existingVary: string | null): string {
+  if (!existingVary) {
+    return "accept-encoding";
+  }
+
+  const fields = existingVary.split(",").map((field) => field.trim().toLowerCase());
+  if (fields.includes("accept-encoding")) {
+    return existingVary;
+  }
+
+  return `${existingVary}, accept-encoding`;
+}
+
 export async function withCompression(
   request: Request,
   response: Response,
 ): Promise<Response> {
-  if (!acceptsGzip(request)) {
+  if (!isCompressible(response.headers.get("content-type"))) {
     return response;
   }
 
-  if (!isCompressible(response.headers.get("content-type"))) {
-    return response;
+  const headers = new Headers(response.headers);
+  headers.set("vary", varyingOnAcceptEncoding(headers.get("vary")));
+
+  if (!acceptsGzip(request)) {
+    return new Response(response.body, {
+      headers,
+      status: response.status,
+    });
   }
 
   const body = await response.arrayBuffer();
   if (body.byteLength < 1024) {
     return new Response(body, {
-      headers: response.headers,
+      headers,
       status: response.status,
     });
   }
 
   const compressed = gzipSync(new Uint8Array(body));
-  const headers = new Headers(response.headers);
   headers.set("content-encoding", "gzip");
   headers.set("content-length", compressed.byteLength.toString());
 

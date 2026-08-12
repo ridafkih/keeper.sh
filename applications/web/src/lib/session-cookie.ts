@@ -9,3 +9,5 @@ export function hasSessionCookie(cookieHeader?: string): boolean {
     .map((cookie) => cookie.trim())
     .some((cookie) => cookie.startsWith(SESSION_COOKIE));
 }
+
+export { SESSION_COOKIE };
