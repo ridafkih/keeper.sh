@@ -34,7 +34,8 @@ import {
   NavigationMenuItemLabel,
   NavigationMenuItemTrailing,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
-import { resolveEffectiveConsent, setAnalyticsConsent, track, ANALYTICS_EVENTS } from "@/lib/analytics";
+import { setAnalyticsConsent, track, ANALYTICS_EVENTS } from "@/lib/analytics";
+import { useEffectiveConsent } from "@/hooks/use-effective-consent";
 import { Text } from "@/components/ui/primitives/text";
 import { resolveErrorMessage } from "@/utils/errors";
 import { fetchAuthCapabilitiesWithApi } from "@/lib/auth-capabilities";
@@ -80,14 +81,10 @@ function SettingsPage() {
   });
   const isPro = subscription?.plan === "pro";
   const [isManaging, setIsManaging] = useState(false);
-  const { runtimeConfig } = Route.useRouteContext();
-  const [analyticsConsent, setAnalyticsConsentState] = useState(() =>
-    resolveEffectiveConsent(runtimeConfig.gdprApplies),
-  );
+  const analyticsConsent = useEffectiveConsent();
   const handleAnalyticsToggle = useCallback((checked: boolean) => {
     track(ANALYTICS_EVENTS.analytics_consent_changed, { granted: checked });
     setAnalyticsConsent(checked);
-    setAnalyticsConsentState(checked);
   }, []);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);

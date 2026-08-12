@@ -1,19 +1,10 @@
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef } from "react";
 import { useLocation } from "@tanstack/react-router";
 import type { PublicRuntimeConfig } from "@/lib/runtime-config";
-import {
-  identify,
-  resolveEffectiveConsent,
-  track,
-} from "@/lib/analytics";
+import { identify, track } from "@/lib/analytics";
+import { useEffectiveConsent } from "@/hooks/use-effective-consent";
+import { useGdprApplies } from "@/hooks/use-gdpr-applies";
 import { useSession } from "@/hooks/use-session";
-
-const subscribe = (callback: () => void): (() => void) => {
-  window.addEventListener("storage", callback);
-  return () => window.removeEventListener("storage", callback);
-};
-
-const getServerSnapshot = (): boolean => false;
 
 function resolveConsentLabel(hasConsent: boolean): "granted" | "denied" {
   if (hasConsent) return "granted";
@@ -21,12 +12,9 @@ function resolveConsentLabel(hasConsent: boolean): "granted" | "denied" {
 }
 
 function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfig }) {
-  const { gdprApplies, googleAdsId, visitorsNowToken } = runtimeConfig;
-  const getSnapshot = useCallback(
-    () => resolveEffectiveConsent(gdprApplies),
-    [gdprApplies],
-  );
-  const hasConsent = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const { googleAdsId, visitorsNowToken } = runtimeConfig;
+  const gdprApplies = useGdprApplies();
+  const hasConsent = useEffectiveConsent();
   const location = useLocation();
   const consentState = resolveConsentLabel(hasConsent);
   const { user } = useSession();

@@ -93,10 +93,7 @@ function createWebFetcher(
 
 function resolveRuntimeConfig(request: Request | undefined): PublicRuntimeConfig {
   if (request) {
-    return getServerPublicRuntimeConfig({
-      environment: process.env,
-      countryCode: request.headers.get("cf-ipcountry"),
-    });
+    return getServerPublicRuntimeConfig({ environment: process.env });
   }
 
   return getPublicRuntimeConfig();
