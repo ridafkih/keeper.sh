@@ -1,9 +1,30 @@
-import type { PropsWithChildren } from "react";
+import type { ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Heading1, Heading2 } from "@/components/ui/primitives/heading";
+import { Heading1, Heading2, Heading3 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
 import { ButtonIcon, ButtonText, ExternalLinkButton, LinkButton } from "@/components/ui/primitives/button";
 import { MarketingCtaCard, MarketingCtaSection } from "@/features/marketing/components/marketing-cta";
+import {
+  MarketingFeatureBentoBody,
+  MarketingFeatureBentoCard,
+  MarketingFeatureBentoGrid,
+  MarketingFeatureBentoIllustration,
+  MarketingFeatureBentoSection,
+} from "@/features/marketing/components/marketing-feature-bento";
+import {
+  MarketingHowItWorksCard,
+  MarketingHowItWorksRow,
+  MarketingHowItWorksSection,
+  MarketingHowItWorksStepBody,
+  MarketingHowItWorksStepIllustration,
+} from "@/features/marketing/components/marketing-how-it-works";
+import { MarketingIllustrationContributors } from "@/illustrations/marketing-illustration-contributors";
+import { MarketingIllustrationProviders } from "@/illustrations/marketing-illustration-providers";
+import { MarketingIllustrationSetup } from "@/illustrations/marketing-illustration-setup";
+import { MarketingIllustrationSync } from "@/illustrations/marketing-illustration-sync";
+import { HowItWorksConnect } from "@/illustrations/how-it-works-connect";
+import { HowItWorksConfigure } from "@/illustrations/how-it-works-configure";
+import { HowItWorksSync } from "@/illustrations/how-it-works-sync";
 import { canonicalUrl, jsonLdScript, seoMeta, webPageSchema, breadcrumbSchema, breadcrumbTrail } from "@/lib/seo";
 import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
 import { ANALYTICS_EVENTS } from "@/lib/analytics";
@@ -15,63 +36,76 @@ const breadcrumbs = breadcrumbTrail({ name: "Features", path: "/features" });
 const PAGE_DESCRIPTION =
   "Keeper copies events from one calendar into another and combines everything you connect into a single feed. Works with Google Calendar, Outlook, iCloud, Fastmail, and more.";
 
-type FeatureSection = {
+type FeatureCard = {
   title: string;
-  body: string[];
-  points?: string[];
+  body: string;
+  gridClassName: string;
+  illustration?: ReactNode;
 };
 
-const FEATURE_SECTIONS: FeatureSection[] = [
+const FEATURE_CARDS: FeatureCard[] = [
   {
-    title: "Syncing that reconciles instead of duplicating",
-    body: [
-      "Events are pulled from every source you connect, then pushed to every destination you map them to. Updates and deletions propagate, so destination calendars are corrected rather than accumulating copies.",
-      "Google and Outlook are pulled incrementally: Keeper stores a sync token or delta link per account and asks the provider only for what changed. CalDAV and ICS sources are re-read on each pass.",
-    ],
-    points: [
-      "Both plans: changes are picked up from your calendars every minute",
-      "Free plan: those changes reach your other calendars every 30 minutes",
-      "Pro plan: those changes reach your other calendars every minute",
-    ],
+    title: "Works with the calendars you already use",
+    body: "Sign in to Google Calendar, Outlook, iCloud, or Fastmail. Other calendars connect with a link you paste in, or over the CalDAV standard they already support.",
+    gridClassName: "lg:col-start-1 lg:col-span-4 lg:row-start-1",
+    illustration: <MarketingIllustrationProviders />,
   },
   {
-    title: "One aggregated iCal feed",
-    body: [
-      "Every source you connect is combined into a single iCal feed you can subscribe to from any calendar app. By default the feed is anonymized: titles, descriptions, and locations are stripped and every event reads as “Busy”, so you can share availability without sharing your schedule.",
-      "On Pro you can customize the feed, choosing which details are included and what the placeholder title says.",
-    ],
+    title: "One calendar link with everything in it",
+    body: "Every calendar you connect also lands in a single link. Subscribe to it from any calendar app and your whole week shows up in one place.",
+    gridClassName: "lg:col-start-5 lg:col-span-6 lg:row-start-1",
+    illustration: <MarketingIllustrationSync />,
   },
   {
-    title: "Control over what gets synced",
-    body: [
-      "Display settings are configured per destination calendar, so a work calendar can carry the title, description, and location while a shared one shows a generic block.",
-      "Pro adds event filters and exclusions for skipping events you do not want mirrored at all.",
-    ],
+    title: "Share that you are busy, not what you are doing",
+    body: "The link hides titles, descriptions, and locations by default. Every event reads “Busy”, so you can hand it to a colleague without handing over your schedule. On Pro you pick which details it keeps and what the stand-in title says.",
+    gridClassName: "lg:col-start-1 lg:col-span-6 lg:row-start-2",
   },
   {
-    title: "REST API",
-    body: [
-      "Keeper exposes a REST API under /api/v1, authenticated with a bearer token you create under Settings → API Tokens. It covers accounts, calendars, events, invites, and the iCal feed.",
-      "The free plan allows 25 API calls per day. Pro is uncapped.",
-    ],
+    title: "Connections go one way",
+    body: "A connection copies events from one calendar into another. If you want both calendars to match, connect them in both directions.",
+    gridClassName: "lg:col-start-7 lg:col-span-4 lg:row-start-2",
+    illustration: <MarketingIllustrationSetup />,
   },
   {
-    title: "MCP server",
-    body: [
-      "Keeper ships an MCP server so an assistant can read and write your calendars directly, authenticated with OAuth 2.1 and a consent screen you approve in the browser.",
-    ],
-    points: [
-      "Read: list_calendars, list_accounts, get_events, get_event, get_event_count, get_pending_invites, get_ical_feed",
-      "Write: create_event, update_event, delete_event, rsvp_event",
-    ],
+    title: "Copies that stay right",
+    body: "Move an event and the copy moves. Delete it and the copy goes too. Your other calendar gets corrected instead of collecting duplicates.",
+    gridClassName: "lg:col-start-1 lg:col-span-5 lg:row-start-3",
   },
   {
-    title: "Self-hosting",
-    body: [
-      "Keeper is open-source under the AGPL-3.0 license and publishes Docker images. A self-hosted instance runs with commercial mode off, which means every account on it gets the Pro feature set and no plan limits.",
-    ],
+    title: "Open-source, and yours to run",
+    body: "Keeper is open-source under AGPL-3.0, with Docker images ready to deploy. Run it yourself and every account on it gets the Pro feature set, with no plan limits.",
+    gridClassName: "lg:col-start-6 lg:col-span-5 lg:row-start-3",
+    illustration: <MarketingIllustrationContributors />,
   },
 ];
+
+type UpdateStep = {
+  title: string;
+  body: string;
+  note?: string;
+};
+
+const UPDATE_STEPS: UpdateStep[] = [
+  {
+    title: "Connect a calendar, then say where it copies to",
+    body: "Connecting takes a sign-in or a pasted link. You then point that calendar at the one you want its events to land in.",
+  },
+  {
+    title: "Choose what each calendar shows",
+    body: "You set this per calendar. A work calendar can carry the title, description, and location while a shared one shows a plain block. On Pro you can also filter out events you would rather not copy at all.",
+  },
+  {
+    title: "Keeper takes it from there",
+    body: "Your calendars are checked every minute on both plans. Google and Outlook only report what changed, so checking stays quick even on a packed calendar. A change reaches your other calendars within 30 minutes on Free, and within a minute on Pro.",
+    note: "Calendars connected by a link are read in full each time.",
+  },
+];
+
+const MCP_READ_TOOLS =
+  "Read: list_calendars, list_accounts, get_events, get_event, get_event_count, get_pending_invites, get_ical_feed";
+
+const MCP_WRITE_TOOLS = "Write: create_event, update_event, delete_event, rsvp_event";
 
 export const Route = createFileRoute("/(marketing)/features")({
   component: FeaturesPage,
@@ -100,22 +134,95 @@ function FeaturesPage() {
         </Text>
       </header>
 
-      <div className="flex flex-col gap-8">
-        {FEATURE_SECTIONS.map((section) => (
-          <Section key={section.title} title={section.title}>
-            {section.body.map((paragraph) => (
-              <Text key={paragraph} size="sm">{paragraph}</Text>
-            ))}
-            {section.points && (
+      <MarketingFeatureBentoSection>
+        <MarketingFeatureBentoGrid>
+          {FEATURE_CARDS.map((card) => (
+            <MarketingFeatureBentoCard key={card.title} className={card.gridClassName}>
+              <MarketingFeatureBentoIllustration plain={!!card.illustration}>
+                {card.illustration}
+              </MarketingFeatureBentoIllustration>
+              <MarketingFeatureBentoBody>
+                <Heading3 as="h2">{card.title}</Heading3>
+                <Text size="sm" className="text-left">{card.body}</Text>
+              </MarketingFeatureBentoBody>
+            </MarketingFeatureBentoCard>
+          ))}
+        </MarketingFeatureBentoGrid>
+      </MarketingFeatureBentoSection>
+
+      <MarketingHowItWorksSection>
+        <Heading2>How your calendars stay in step</Heading2>
+        <Text size="sm" tone="muted" className="mt-2 max-w-[64ch]">
+          You set a connection up once. After that, Keeper keeps the copies right.
+        </Text>
+        <MarketingHowItWorksCard>
+          <MarketingHowItWorksRow>
+            <MarketingHowItWorksStepBody step={1}>
+              <Heading3 as="h3">{UPDATE_STEPS[0].title}</Heading3>
+              <Text size="sm" tone="muted">{UPDATE_STEPS[0].body}</Text>
+            </MarketingHowItWorksStepBody>
+            <MarketingHowItWorksStepIllustration align="right">
+              <HowItWorksConnect />
+            </MarketingHowItWorksStepIllustration>
+          </MarketingHowItWorksRow>
+
+          <MarketingHowItWorksRow reverse>
+            <MarketingHowItWorksStepBody step={2}>
+              <Heading3 as="h3">{UPDATE_STEPS[1].title}</Heading3>
+              <Text size="sm" tone="muted">{UPDATE_STEPS[1].body}</Text>
+            </MarketingHowItWorksStepBody>
+            <MarketingHowItWorksStepIllustration align="left">
+              <HowItWorksConfigure />
+            </MarketingHowItWorksStepIllustration>
+          </MarketingHowItWorksRow>
+
+          <MarketingHowItWorksRow>
+            <MarketingHowItWorksStepBody step={3}>
+              <Heading3 as="h3">{UPDATE_STEPS[2].title}</Heading3>
+              <Text size="sm" tone="muted">{UPDATE_STEPS[2].body}</Text>
+              <Text size="sm" tone="muted">{UPDATE_STEPS[2].note}</Text>
+            </MarketingHowItWorksStepBody>
+            <MarketingHowItWorksStepIllustration align="right">
+              <HowItWorksSync />
+            </MarketingHowItWorksStepIllustration>
+          </MarketingHowItWorksRow>
+        </MarketingHowItWorksCard>
+      </MarketingHowItWorksSection>
+
+      <MarketingFeatureBentoSection>
+        <Heading2>For developers</Heading2>
+        <Text size="sm" tone="muted" className="mt-2 mb-8 max-w-[64ch]">
+          Skip this part unless you want to drive Keeper from your own code or from an assistant.
+        </Text>
+        <MarketingFeatureBentoGrid>
+          <MarketingFeatureBentoCard className="lg:col-start-1 lg:col-span-5 lg:row-start-1">
+            <MarketingFeatureBentoBody>
+              <Heading3 as="h3">REST API</Heading3>
+              <Text size="sm" className="text-left">
+                Keeper exposes a REST API under /api/v1, authenticated with a bearer token you create under Settings → API Tokens.
+                It covers accounts, calendars, events, invites, and the calendar link.
+              </Text>
+              <Text size="sm" tone="muted" className="text-left">
+                The free plan allows 25 API calls per day. Pro is uncapped.
+              </Text>
+            </MarketingFeatureBentoBody>
+          </MarketingFeatureBentoCard>
+
+          <MarketingFeatureBentoCard className="lg:col-start-6 lg:col-span-5 lg:row-start-1">
+            <MarketingFeatureBentoBody>
+              <Heading3 as="h3">MCP server</Heading3>
+              <Text size="sm" className="text-left">
+                An assistant can read and write your calendars through Keeper&rsquo;s MCP server. You approve it once on a consent
+                screen in your browser, and it signs in with OAuth 2.1 rather than a password.
+              </Text>
               <ul className="list-disc list-inside flex flex-col gap-1 ml-2 text-sm tracking-tight text-foreground-muted">
-                {section.points.map((point) => (
-                  <li key={point}>{point}</li>
-                ))}
+                <li>{MCP_READ_TOOLS}</li>
+                <li>{MCP_WRITE_TOOLS}</li>
               </ul>
-            )}
-          </Section>
-        ))}
-      </div>
+            </MarketingFeatureBentoBody>
+          </MarketingFeatureBentoCard>
+        </MarketingFeatureBentoGrid>
+      </MarketingFeatureBentoSection>
 
       <MarketingCtaSection>
         <MarketingCtaCard>
@@ -152,14 +259,5 @@ function FeaturesPage() {
         </MarketingCtaCard>
       </MarketingCtaSection>
     </div>
-  );
-}
-
-function Section({ title, children }: PropsWithChildren<{ title: string }>) {
-  return (
-    <section className="flex flex-col gap-3">
-      <Heading2 as="h2">{title}</Heading2>
-      {children}
-    </section>
   );
 }
