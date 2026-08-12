@@ -16,7 +16,7 @@ const SYNC_RANGE_DEFINITIONS = [
   { label: "2 Years", shift: { amount: 24, unit: "months" }, value: "2_years" },
 ] as const;
 
-const DEFAULT_HISTORIC_SYNC_RANGE = "1_week" as const;
+const DEFAULT_HISTORIC_SYNC_RANGE = "1_month" as const;
 const DEFAULT_FUTURE_SYNC_RANGE = "2_years" as const;
 
 const syncRangeSchema = type.enumerated(

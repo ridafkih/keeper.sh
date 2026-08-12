@@ -10,6 +10,11 @@ import {
   createEventMappingSourceBackfillDatabase,
 } from "../src/database/backfill-event-mapping-source-calendar-ids";
 import {
+  buildLegacyRecurringStateConsolidation,
+  shouldConsolidateLegacyRecurringStates,
+  type LegacyRecurringStateCompatibility,
+} from "../src/database/legacy-recurring-state-consolidation";
+import {
   DEFAULT_FUTURE_SYNC_RANGE,
   DEFAULT_HISTORIC_SYNC_RANGE,
   SYNC_RANGE_DEFINITIONS,
@@ -32,22 +37,8 @@ const syncRangeSqlValues = SYNC_RANGE_DEFINITIONS
   .map(({ value }) => `'${value}'`)
   .join(", ");
 
-const buildLegacySourceEventFilter = (
-  hasSourceEventColumn: boolean,
-): string => {
-  if (hasSourceEventColumn) {
-    return `"sourceEventId" IS NULL AND `;
-  }
-  return "";
-};
-
 const consolidateLegacyRecurringEventStates = async (): Promise<void> => {
-  const compatibility = await connection.query<{
-    has_legacy_index: boolean;
-    has_recurrence_column: boolean;
-    has_recurring_index: boolean;
-    has_source_event_column: boolean;
-  }>(`
+  const compatibility = await connection.query<LegacyRecurringStateCompatibility>(`
     SELECT
       EXISTS (
         SELECT 1 FROM pg_indexes
@@ -72,88 +63,20 @@ const consolidateLegacyRecurringEventStates = async (): Promise<void> => {
           AND indexname = 'event_states_recurring_instance_idx'
       ) AS has_recurring_index
   `);
-  const [state] = compatibility.rows;
-  if (
-    !state?.has_legacy_index
-    || !state.has_recurrence_column
-    || state.has_recurring_index
-  ) {
+  const [state = null] = compatibility.rows;
+  if (!shouldConsolidateLegacyRecurringStates(state)) {
     return;
   }
 
-  /**
-   * Databases at 0070-0074 predate the sourceEventId column that 0075 adds, so
-   * every row there is implicitly an unresolved source event. Consolidation
-   * cannot be skipped for them: 0076 builds a unique index over exactly these
-   * rows and fails on the duplicates consolidation exists to remove.
-   */
-  const legacySourceEventFilter = buildLegacySourceEventFilter(
+  const statements = buildLegacyRecurringStateConsolidation(
     state.has_source_event_column,
   );
 
   await connection.query("BEGIN");
   try {
-    await connection.query(`
-      CREATE TEMP TABLE keeper_recurring_state_consolidation
-      ON COMMIT DROP
-      AS
-      WITH ranked_states AS (
-        SELECT
-          "id",
-          first_value("id") OVER (
-            PARTITION BY "calendarId", "sourceEventUid", "recurrenceId"
-            ORDER BY "createdAt" DESC, "id" DESC
-          ) AS canonical_id
-        FROM "event_states"
-        WHERE ${legacySourceEventFilter}"sourceEventUid" IS NOT NULL
-          AND "recurrenceId" IS NOT NULL
-      )
-      SELECT
-        mappings."id" AS mapping_id,
-        states."id" AS event_state_id,
-        states.canonical_id,
-        row_number() OVER (
-          PARTITION BY states.canonical_id, mappings."calendarId"
-          ORDER BY
-            (states."id" = states.canonical_id) DESC,
-            mappings."createdAt" DESC,
-            mappings."id" DESC
-        ) AS mapping_rank
-      FROM ranked_states states
-      INNER JOIN "event_mappings" mappings
-        ON mappings."eventStateId" = states."id"
-    `);
-    await connection.query(`
-      DELETE FROM "event_mappings" mappings
-      USING keeper_recurring_state_consolidation consolidation
-      WHERE mappings."id" = consolidation.mapping_id
-        AND consolidation.mapping_rank > 1
-    `);
-    await connection.query(`
-      UPDATE "event_mappings" mappings
-      SET "eventStateId" = consolidation.canonical_id
-      FROM keeper_recurring_state_consolidation consolidation
-      WHERE mappings."id" = consolidation.mapping_id
-        AND consolidation.mapping_rank = 1
-        AND consolidation.event_state_id <> consolidation.canonical_id
-    `);
-    await connection.query(`
-      WITH ranked_states AS (
-        SELECT
-          "id",
-          first_value("id") OVER (
-            PARTITION BY "calendarId", "sourceEventUid", "recurrenceId"
-            ORDER BY "createdAt" DESC, "id" DESC
-          ) AS canonical_id
-        FROM "event_states"
-        WHERE ${legacySourceEventFilter}"sourceEventUid" IS NOT NULL
-          AND "recurrenceId" IS NOT NULL
-      )
-      DELETE FROM "event_states" events
-      USING ranked_states states
-      WHERE events."id" = states."id"
-        AND states."id" <> states.canonical_id
-    `);
+    for (const statement of statements) {
+      await connection.query(statement);
+    }
     await connection.query("COMMIT");
   } catch (error) {
     await connection.query("ROLLBACK");

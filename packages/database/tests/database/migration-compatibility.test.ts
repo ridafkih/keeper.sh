@@ -1,4 +1,19 @@
 import { describe, expect, it } from "vitest";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Client } from "pg";
+import { selectPendingSourceCalendarMappings } from "../../src/database/backfill-event-mapping-source-calendar-ids";
+import {
+  buildLegacyRecurringStateConsolidation,
+  shouldConsolidateLegacyRecurringStates,
+  type LegacyRecurringStateCompatibility,
+} from "../../src/database/legacy-recurring-state-consolidation";
+
+const LEGACY_0070_COMPATIBILITY: LegacyRecurringStateCompatibility = {
+  has_legacy_index: true,
+  has_recurrence_column: true,
+  has_recurring_index: false,
+  has_source_event_column: false,
+};
 
 const readLatestMigration = async (): Promise<string> => {
   const drizzleDirectory = `${import.meta.dirname}/../../drizzle`;
@@ -24,41 +39,90 @@ describe("0077 self-hosted upgrade compatibility", () => {
     expect(migration).not.toContain('event_mappings_identity_check');
   });
 
-  it("consolidates recurring states on databases that predate the sourceEventId column", async () => {
-    const migrateScript = await Bun.file(
-      `${import.meta.dirname}/../../scripts/migrate.ts`,
-    ).text();
+  /*
+   * Databases at 0070-0074 have no sourceEventId column. Referencing it
+   * unguarded aborts migration with 42703, and skipping consolidation instead
+   * lets 0076 fail building its unique index over the duplicates consolidation
+   * exists to remove. Either way the API entrypoint crash-loops under set -e.
+   */
+  it("consolidates without naming sourceEventId when the column is absent", () => {
+    expect(shouldConsolidateLegacyRecurringStates(LEGACY_0070_COMPATIBILITY))
+      .toBe(true);
 
-    /*
-     * Databases at 0070-0074 have no sourceEventId column. Referencing it
-     * unguarded aborts migration with 42703, and skipping consolidation instead
-     * lets 0076 fail building its unique index over the duplicates consolidation
-     * exists to remove. Either way the API entrypoint crash-loops under set -e.
-     */
-    expect(migrateScript).toContain("column_name = 'sourceEventId'");
-    expect(migrateScript).toContain("has_source_event_column");
-
-    const guardStart = migrateScript.indexOf("const [state] = compatibility.rows;");
-    const guard = migrateScript.slice(
-      guardStart,
-      migrateScript.indexOf("return;", guardStart),
+    const statements = buildLegacyRecurringStateConsolidation(
+      LEGACY_0070_COMPATIBILITY.has_source_event_column,
     );
-    expect(guard).toContain("has_recurring_index");
-    expect(guard).not.toContain("has_source_event_column");
+
+    expect(statements).toHaveLength(4);
+    for (const statement of statements) {
+      expect(statement).not.toContain("sourceEventId");
+    }
+    const ranking = statements.filter((statement) =>
+      statement.includes("ranked_states AS"));
+    expect(ranking).toHaveLength(2);
+    for (const statement of ranking) {
+      expect(statement).toContain(`WHERE "sourceEventUid" IS NOT NULL`);
+    }
+    expect(statements[1]).toContain("consolidation.mapping_rank > 1");
   });
 
-  it("walks the source-calendar backfill with a keyset cursor", async () => {
-    const backfillSource = await Bun.file(
-      `${import.meta.dirname}/../../src/database/backfill-event-mapping-source-calendar-ids.ts`,
-    ).text();
+  it("restricts consolidation to unresolved source events once 0075 adds the column", () => {
+    const statements = buildLegacyRecurringStateConsolidation(true);
 
-    /*
-     * Without a cursor every batch rescans the rows it already filled, and the
-     * supporting index is only created after the backfill runs — quadratic work
-     * that can outlast the compose healthcheck window and strand the stack.
-     */
-    expect(backfillSource).toContain("lastId");
-    expect(backfillSource).toContain("gt(");
+    const ranking = statements.filter((statement) =>
+      statement.includes("ranked_states AS"));
+    expect(ranking).toHaveLength(2);
+    for (const statement of ranking) {
+      expect(statement).toContain(
+        `WHERE "sourceEventId" IS NULL AND "sourceEventUid" IS NOT NULL`,
+      );
+    }
+  });
+
+  it("skips consolidation only once the recurring instance index exists", () => {
+    expect(shouldConsolidateLegacyRecurringStates(null)).toBe(false);
+    expect(shouldConsolidateLegacyRecurringStates({
+      ...LEGACY_0070_COMPATIBILITY,
+      has_recurring_index: true,
+    })).toBe(false);
+    expect(shouldConsolidateLegacyRecurringStates({
+      ...LEGACY_0070_COMPATIBILITY,
+      has_legacy_index: false,
+    })).toBe(false);
+    expect(shouldConsolidateLegacyRecurringStates({
+      ...LEGACY_0070_COMPATIBILITY,
+      has_recurrence_column: false,
+    })).toBe(false);
+    expect(shouldConsolidateLegacyRecurringStates({
+      ...LEGACY_0070_COMPATIBILITY,
+      has_source_event_column: true,
+    })).toBe(true);
+  });
+
+  /*
+   * Without a cursor every batch rescans the rows it already filled, and the
+   * supporting index is only created after the backfill runs — quadratic work
+   * that can outlast the compose healthcheck window and strand the stack.
+   */
+  it("walks the source-calendar backfill with a keyset cursor on id", () => {
+    const database = drizzle(new Client({ connectionString: "postgres://unused" }));
+
+    const firstBatch = selectPendingSourceCalendarMappings(database, 1000, null)
+      .toSQL();
+    expect(firstBatch.sql).toContain(`order by "event_mappings"."id" asc`);
+    expect(firstBatch.sql).not.toContain(`"event_mappings"."id" >`);
+    expect(firstBatch.params).toEqual([1000]);
+
+    const nextBatch = selectPendingSourceCalendarMappings(
+      database,
+      1000,
+      "mapping-1000",
+    ).toSQL();
+    expect(nextBatch.sql).toContain(
+      `where ("event_mappings"."sourceCalendarId" is null and "event_mappings"."id" > $1)`,
+    );
+    expect(nextBatch.sql).toContain(`order by "event_mappings"."id" asc`);
+    expect(nextBatch.params).toEqual(["mapping-1000", 1000]);
   });
 
   it("routes the package migration command through serialized backfill verification", async () => {
@@ -75,11 +139,12 @@ describe("0077 self-hosted upgrade compatibility", () => {
     expect(migrateScript).toContain("lock_timeout");
     expect(migrateScript).toContain("keeper_fill_event_mapping_compatibility");
     expect(migrateScript).toContain("OLD.\"eventStateId\"");
-    expect(migrateScript).toContain("keeper_recurring_state_consolidation");
+    expect(migrateScript).toContain("buildLegacyRecurringStateConsolidation");
     expect(migrateScript.indexOf("installPreMigrationTombstoneProtection()"))
       .toBeLessThan(migrateScript.indexOf("await migrate(database"));
+    expect(migrateScript.indexOf("consolidateLegacyRecurringEventStates()"))
+      .toBeLessThan(migrateScript.indexOf("await migrate(database"));
     expect(migrateScript).toContain('ALTER COLUMN "eventStateId" DROP NOT NULL');
-    expect(migrateScript).toContain("mapping_rank > 1");
     expect(migrateScript).toContain("backfillEventMappingSourceCalendarIds");
     expect(migrateScript).toContain("backfillEventMappingSyncEventIds");
     expect(migrateScript).toContain("CREATE INDEX CONCURRENTLY");

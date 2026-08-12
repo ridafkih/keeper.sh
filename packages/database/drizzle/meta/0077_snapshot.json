@@ -1,5 +1,5 @@
 {
-  "id": "4872dccb-0a81-47b7-a8cd-aeeb32c34c88",
+  "id": "e20bc6b8-8ed1-4602-b4d3-0781a81bc21d",
   "prevId": "0c8edcf1-1868-483f-9beb-b9696867770b",
   "version": "7",
   "dialect": "postgresql",
@@ -598,7 +598,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'1_week'"
+          "default": "'1_month'"
         },
         "ingestWindowEnd": {
           "name": "ingestWindowEnd",
@@ -668,7 +668,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'1_week'"
+          "default": "'1_month'"
         },
         "updatedAt": {
           "name": "updatedAt",

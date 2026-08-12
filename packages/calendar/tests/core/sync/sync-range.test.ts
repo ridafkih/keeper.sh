@@ -43,24 +43,23 @@ describe("configurable sync ranges", () => {
     expect(getWiderSyncRange("1_week", "1_week")).toBe("1_week");
   });
 
-  it("reproduces the pre-configurable window for a migrated calendar", () => {
+  it("defaults one month back and two years forward, deliberately wider than the retired fixed window", () => {
     const now = new Date(2026, 6, 20, 15, 42, 10);
     const startOfToday = getStartOfToday(now);
 
-    const migrated = getConfigurableSyncWindow(
+    const defaults = getConfigurableSyncWindow(
       DEFAULT_HISTORIC_SYNC_RANGE,
       DEFAULT_FUTURE_SYNC_RANGE,
       now,
     );
 
-    expect(migrated).toEqual({
-      timeMin: new Date(startOfToday.getTime() - 7 * MS_PER_DAY),
-      timeMax: new Date(
-        startOfToday.getFullYear() + 2,
-        startOfToday.getMonth(),
-        startOfToday.getDate(),
-      ),
+    expect(defaults).toEqual({
+      timeMin: new Date(2026, 5, 20),
+      timeMax: new Date(2028, 6, 20),
     });
+    expect(defaults.timeMin.getTime()).toBeLessThan(
+      startOfToday.getTime() - 7 * MS_PER_DAY,
+    );
   });
 
   it("advances the window by exactly one day across a day boundary", () => {

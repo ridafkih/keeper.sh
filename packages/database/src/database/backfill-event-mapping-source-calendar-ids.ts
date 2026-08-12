@@ -11,6 +11,23 @@ const buildCursorFilter = (afterId: string | null): SQL => {
   return gt(eventMappingsTable.id, afterId);
 };
 
+const selectPendingSourceCalendarMappings = (
+  database: Pick<NodePgDatabase, "select">,
+  batchSize: number,
+  afterId: string | null,
+) =>
+  database
+    .select({ id: eventMappingsTable.id })
+    .from(eventMappingsTable)
+    .innerJoin(eventStatesTable, eq(eventMappingsTable.eventStateId, eventStatesTable.id))
+    .where(and(
+      isNull(eventMappingsTable.sourceCalendarId),
+      buildCursorFilter(afterId),
+    ))
+    .orderBy(asc(eventMappingsTable.id))
+    .limit(batchSize)
+    .for("update", { of: eventMappingsTable });
+
 interface EventMappingSourceBackfillBatch {
   lastId: string | null;
   updatedCount: number;
@@ -29,17 +46,11 @@ const createEventMappingSourceBackfillDatabase = (
 ): EventMappingSourceBackfillDatabase => ({
   backfillMissingSourceCalendarIdsBatch: (batchSize, afterId) =>
     database.transaction(async (transaction) => {
-      const rows = await transaction
-        .select({ id: eventMappingsTable.id })
-        .from(eventMappingsTable)
-        .innerJoin(eventStatesTable, eq(eventMappingsTable.eventStateId, eventStatesTable.id))
-        .where(and(
-          isNull(eventMappingsTable.sourceCalendarId),
-          buildCursorFilter(afterId),
-        ))
-        .orderBy(asc(eventMappingsTable.id))
-        .limit(batchSize)
-        .for("update", { of: eventMappingsTable });
+      const rows = await selectPendingSourceCalendarMappings(
+        transaction,
+        batchSize,
+        afterId,
+      );
       if (rows.length === 0) {
         return { lastId: null, updatedCount: 0 };
       }
@@ -96,6 +107,7 @@ const backfillEventMappingSourceCalendarIds = async (
 export {
   backfillEventMappingSourceCalendarIds,
   createEventMappingSourceBackfillDatabase,
+  selectPendingSourceCalendarMappings,
 };
 export type {
   EventMappingSourceBackfillBatch,
