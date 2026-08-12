@@ -50,6 +50,7 @@ const enqueueDestinationSyncsForUsers = async (
     getPendingRequests: () => database
       .select({
         requestId: userSyncRequestsTable.requestId,
+        requestedAt: userSyncRequestsTable.requestedAt,
         userId: userSyncRequestsTable.userId,
       })
       .from(userSyncRequestsTable),

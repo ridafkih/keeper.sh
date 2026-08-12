@@ -6,14 +6,12 @@ import {
 
 const createHarness = () => {
   const beginUserRun = vi.fn();
-  const cancelJob = vi.fn();
   const releaseUserRun = vi.fn();
   const tracker = createActiveDestinationJobs({
     beginUserRun,
-    cancelJob,
     releaseUserRun,
   });
-  return { beginUserRun, cancelJob, releaseUserRun, tracker };
+  return { beginUserRun, releaseUserRun, tracker };
 };
 
 describe("createActiveDestinationJobs", () => {
@@ -58,7 +56,7 @@ describe("createActiveDestinationJobs", () => {
     harness.tracker.close();
   });
 
-  it("supersedes only the older job for the same destination", () => {
+  it("tracks a replacement for the same destination without cancelling the older run", () => {
     vi.useFakeTimers();
     const harness = createHarness();
 
@@ -66,7 +64,6 @@ describe("createActiveDestinationJobs", () => {
     harness.tracker.onActive({ calendarId: "cal-1", id: "new", userId: "user-1" });
     harness.tracker.onActive({ calendarId: "cal-2", id: "sibling", userId: "user-1" });
 
-    expect(harness.cancelJob).toHaveBeenCalledWith("old");
     expect(harness.beginUserRun).toHaveBeenCalledOnce();
 
     harness.tracker.onSettled({ calendarId: "cal-1", id: "old", userId: "user-1" });

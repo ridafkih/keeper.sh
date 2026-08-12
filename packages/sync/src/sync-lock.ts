@@ -159,6 +159,12 @@ const createLockHandle = (
   const renewalTimer = setInterval(async () => {
     try {
       await redis.eval(RENEW_SCRIPT, 1, lockKey, holderId, String(LOCK_TTL_SECONDS));
+      /*
+       * A later success proves the lease is still ours, so a single blip must not
+       * strand the run. Losing the lock for real surfaces through isHeld/isCurrent
+       * reading a different holder, not through this flag.
+       */
+      delete renewalState.error;
     } catch (error) {
       renewalState.error = error;
     }

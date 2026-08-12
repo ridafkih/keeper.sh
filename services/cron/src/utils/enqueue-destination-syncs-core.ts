@@ -2,20 +2,29 @@ import type { Plan } from "@keeper.sh/data-schemas";
 import type { PushDestinationJob } from "./push-destination-jobs";
 import { buildPushDestinationJobs } from "./push-destination-jobs";
 
+interface InFlightPushSyncJob {
+  timestamp: number;
+}
+
+interface PendingSyncRequest {
+  requestId: string;
+  requestedAt: Date;
+  userId: string;
+}
+
 interface DestinationSyncQueue {
   addBulk: (jobs: PushDestinationJob[]) => Promise<unknown>;
   close: () => Promise<void>;
+  getJob: (jobId: string) => Promise<InFlightPushSyncJob | null | undefined>;
 }
 
 interface EnqueueDestinationSyncDependencies {
-  acknowledgePendingRequests?: (
-    requests: { requestId: string; userId: string }[],
-  ) => Promise<void>;
+  acknowledgePendingRequests?: (requests: PendingSyncRequest[]) => Promise<void>;
   createQueue: () => DestinationSyncQueue;
   enabled: boolean;
   generateCorrelationId: () => string;
   getDestinations: (userIds: string[]) => Promise<{ calendarId: string; userId: string }[]>;
-  getPendingRequests?: () => Promise<{ requestId: string; userId: string }[]>;
+  getPendingRequests?: () => Promise<PendingSyncRequest[]>;
   resolvePlan: (userId: string) => Promise<Plan | null>;
 }
 
@@ -68,7 +77,6 @@ const runEnqueueDestinationSyncsForUsers = async (
       ),
       plan,
       correlationId,
-      { correlatedJobIds: true },
     ));
   if (jobs.length === 0) {
     await dependencies.acknowledgePendingRequests?.(pendingRequests);
@@ -77,11 +85,31 @@ const runEnqueueDestinationSyncsForUsers = async (
 
   const queue = dependencies.createQueue();
   try {
+    // Only a job predating the request can miss changes it already read past.
+    // Retaining against a newer job would never terminate.
+    // Free users whose sync outlives the tick would sit on the Pro cadence forever.
+    const existingJobs = await Promise.all(
+      jobs.map((job) => queue.getJob(job.opts.jobId)),
+    );
     await queue.addBulk(jobs);
+    const requestedAtByUserId = new Map(pendingRequests.map(
+      ({ requestedAt, userId }) => [userId, requestedAt.getTime()],
+    ));
+    const retainedUserIds = new Set(jobs
+      .filter((job, index) => {
+        const existingJob = existingJobs.at(index);
+        if (!existingJob) {
+          return false;
+        }
+        return existingJob.timestamp < (requestedAtByUserId.get(job.data.userId) ?? 0);
+      })
+      .map((job) => job.data.userId));
+    await dependencies.acknowledgePendingRequests?.(
+      pendingRequests.filter(({ userId }) => !retainedUserIds.has(userId)),
+    );
   } finally {
     await queue.close();
   }
-  await dependencies.acknowledgePendingRequests?.(pendingRequests);
   return jobs.length;
 };
 export { runEnqueueDestinationSyncsForUsers };

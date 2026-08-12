@@ -53,7 +53,6 @@ await entry({
 
     const activeDestinationJobs = createActiveDestinationJobs({
       beginUserRun: (userId) => syncAggregateRuntime.beginSyncRun(userId),
-      cancelJob: (jobId) => worker.cancelJob(jobId, "superseded by newer destination sync"),
       releaseUserRun: (userId) => {
         syncAggregateRuntime.releaseSyncing(userId);
       },
