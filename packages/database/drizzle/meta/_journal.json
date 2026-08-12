@@ -561,6 +561,13 @@
       "when": 1786573785858,
       "tag": "0079_hot_whizzer",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1786575131988,
+      "tag": "0080_parallel_jack_power",
+      "breakpoints": true
     }
   ]
 }

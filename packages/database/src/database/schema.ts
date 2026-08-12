@@ -300,7 +300,7 @@ const eventMappingsTable = pgTable(
     // Kept as the legacy cascade in Drizzle metadata so 0077 remains additive.
     // The migration runner upgrades the live FK to SET NULL before applying 0077.
     eventStateId: uuid()
-      .references(() => eventStatesTable.id, { onDelete: "cascade" }),
+      .references(() => eventStatesTable.id, { onDelete: "set null" }),
     id: uuid().notNull().primaryKey().defaultRandom(),
     syncEventId: text(),
     syncEventHash: text(),
@@ -315,6 +315,11 @@ const eventMappingsTable = pgTable(
       .where(isNotNull(table.syncEventId)),
     index("event_mappings_calendar_idx").on(table.calendarId),
     index("event_mappings_event_state_idx").on(table.eventStateId),
+    index("event_mappings_source_calendar_idx").on(table.sourceCalendarId),
+    check(
+      "event_mappings_identity_check",
+      sql`${table.eventStateId} is not null or ${table.syncEventId} is not null`,
+    ),
     index("event_mappings_missing_sync_event_idx")
       .on(table.id)
       .where(isNull(table.syncEventId)),
