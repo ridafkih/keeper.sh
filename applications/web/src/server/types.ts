@@ -2,6 +2,7 @@ import type { Server as BunServer, ServerWebSocket as BunServerWebSocket } from 
 import type { ViteAssets } from "@/lib/router-context";
 
 export interface Runtime {
+  cacheableHtmlPaths: ReadonlySet<string>;
   handleAssetRequest: (request: Request) => Promise<Response>;
   resolveViteAssets: (requestPath: string) => Promise<ViteAssets>;
   renderApp: (request: Request, viteAssets: ViteAssets) => Promise<Response>;
