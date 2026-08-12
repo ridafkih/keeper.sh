@@ -32,6 +32,12 @@ interface ParsedPropertyLine {
 
 interface IcsPropertyContext extends ParsedPropertyLine {
   componentPath: readonly string[];
+  /**
+   * Parallel to componentPath, holding a unique id per component occurrence.
+   * Two sibling VEVENTs share a component path, so callers that need to group
+   * properties by the event they came from cannot key on the path alone.
+   */
+  componentInstancePath: readonly number[];
 }
 
 type IcsPropertyVisitor = (context: IcsPropertyContext) => void;
@@ -99,6 +105,8 @@ const parsePropertyLine = (line: string): ParsedPropertyLine | null => {
 const visitIcsProperties = (ics: string, visitor: IcsPropertyVisitor): void => {
   const rawLines = stripIcsByteOrderMark(ics).split(LINE_BREAK_PATTERN);
   const componentPath: string[] = [];
+  const componentInstancePath: number[] = [];
+  let componentCount = 0;
   for (const indices of groupContinuations(rawLines)) {
     const parsed = parsePropertyLine(unfoldGroup(rawLines, indices));
     if (!parsed) {
@@ -106,6 +114,8 @@ const visitIcsProperties = (ics: string, visitor: IcsPropertyVisitor): void => {
     }
     if (parsed.property === "BEGIN") {
       componentPath.push(parsed.value.toUpperCase());
+      componentCount += 1;
+      componentInstancePath.push(componentCount);
       continue;
     }
     if (parsed.property === "END") {
@@ -117,9 +127,14 @@ const visitIcsProperties = (ics: string, visitor: IcsPropertyVisitor): void => {
         );
       }
       componentPath.pop();
+      componentInstancePath.pop();
       continue;
     }
-    visitor({ ...parsed, componentPath: [...componentPath] });
+    visitor({
+      ...parsed,
+      componentInstancePath: [...componentInstancePath],
+      componentPath: [...componentPath],
+    });
   }
   if (componentPath.length > 0) {
     throw new RangeError(
