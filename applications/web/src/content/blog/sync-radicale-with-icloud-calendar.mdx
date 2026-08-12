@@ -14,7 +14,7 @@ tags:
 
 You run Radicale because your calendar should live on your own hardware. Then you pick up your iPhone, and none of it is there.
 
-Keeper signs into Radicale and iCloud and keeps copies of your events in step.
+Keeper.sh signs into Radicale and iCloud and keeps copies of your events in step.
 
 ## What does this actually do?
 
@@ -24,13 +24,13 @@ By default the copy is a block of busy time, not a readable event. Your notes do
 
 Copies travel one way per connection: Radicale to iCloud, or iCloud to Radicale. Want both? That is two connections, not a single "two-way" switch.
 
-## Can Keeper reach a Radicale on your home network?
+## Can Keeper.sh reach a Radicale on your home network?
 
-You need a username and password from your htpasswd file, an Apple Account with two-factor login on, and an account on [keeper.sh](https://keeper.sh/register). You also need Radicale answering on an address Keeper can reach, and that is the part to settle first.
+You need a username and password from your htpasswd file, an Apple Account with two-factor login on, and an account on [keeper.sh](https://keeper.sh/register). You also need Radicale answering on an address Keeper.sh can reach, and that is the part to settle first.
 
 Most Radicale instances sit on a home network — `192.168.1.x`, a `.local` hostname, or `localhost:5232`.
 
-**On hosted keeper.sh, private addresses are refused and you cannot change that.** Your Radicale needs to be reachable from the public internet, through a domain with a reverse proxy or a tunnel. If you will not expose it, run Keeper yourself on the same network instead.
+**On hosted Keeper.sh, private addresses are refused and you cannot change that.** Your Radicale needs to be reachable from the public internet, through a domain with a reverse proxy or a tunnel. If you will not expose it, run Keeper.sh yourself on the same network instead.
 
 The setting behind this is `BLOCK_PRIVATE_RESOLUTION`. It is off by default, but `deploy/compose.yaml` turns it on for the `api` and `cron` services. `PRIVATE_RESOLUTION_WHITELIST` is the exemption list:
 
@@ -59,7 +59,7 @@ Click **Connect**. Every calendar found is imported at once and you land in a sh
 
 Apple will not let outside apps sign in with your normal Apple password, which opens your photos, purchases and Find My. You generate a separate app-specific password instead, which only reaches your calendar.
 
-Keeper's connect page lists the steps, matching Apple's own [instructions](https://support.apple.com/en-us/102654):
+Keeper.sh's connect page lists the steps, matching Apple's own [instructions](https://support.apple.com/en-us/102654):
 
 1. Navigate to iCloud Apple ID
 2. Sign in with your Apple ID
@@ -77,12 +77,12 @@ Then click **Connect iCloud** on **Import Calendars**. The page is headed **Conn
 
 No server address is needed here.
 
-## How do you tell Keeper which way events travel?
+## How do you tell Keeper.sh which way events travel?
 
 Setup asks four questions, word for word:
 
 1. **Which calendars would you like to configure?** Tick the ones you want now.
-2. **Rename Your Calendars.** Radicale collections often arrive named after directories. Renaming only changes what you see in Keeper.
+2. **Rename Your Calendars.** Radicale collections often arrive named after directories. Renaming only changes what you see in Keeper.sh.
 3. **Where should 'Personal' send events?** Tick iCloud, and copies start appearing on your phone.
 4. **Where should 'Personal' pull events from?** Tick iCloud here for the reverse.
 
@@ -94,11 +94,11 @@ Open the calendar under **Calendars** and find **Sync Settings**. Three switches
 
 Calendars added through **Import Calendars** arrive with all three off, at both ends, so Radicale and iCloud exchange opaque blocks. Turn **Sync Event Name** on for real titles, shaped by the **Event Name** box, which understands `{{calendar_name}}` and `{{event_name}}`.
 
-On keeper.sh this is a Pro feature — the dashboard says **Advanced sync settings are a Pro feature.** Run Keeper yourself and every user on the instance gets it. Below, **Exclusions** can drop **Exclude All Day Events**.
+On Keeper.sh this is a Pro feature — the dashboard says **Advanced sync settings are a Pro feature.** Run Keeper.sh yourself and every user on the instance gets it. Below, **Exclusions** can drop **Exclude All Day Events**.
 
 ## How fast do changes show up?
 
-Keeper reads both calendars every minute, on every plan. Getting that change onto the other calendar depends on the plan: up to thirty minutes on free, about a minute on Pro and on your own instance.
+Keeper.sh reads both calendars every minute, on every plan. Getting that change onto the other calendar depends on the plan: up to thirty minutes on free, about a minute on Pro and on your own instance.
 
 If you are mirroring Radicale so your phone knows you are busy, thirty minutes changes nothing. If people book you through a scheduling link, it is too slow.
 
@@ -106,19 +106,19 @@ If you are mirroring Radicale so your phone knows you are busy, thirty minutes c
 
 Guest lists, video call links and reminders do not travel at all, so a copied meeting is a block of time rather than a working invite. Guest lists are read only to show you invitations you have not answered yet.
 
-Keeper also looks at a fixed stretch of time — from a week ago to two years ahead. A one-off event further out is not copied. A repeating event that began before the window is still picked up, so its dates inside the window survive.
+Keeper.sh also looks at a fixed stretch of time — from a week ago to two years ahead. A one-off event further out is not copied. A repeating event that began before the window is still picked up, so its dates inside the window survive.
 
 ## What goes wrong, and what does it look like?
 
 **The page says "Invalid credentials".** The server was reached and rejected the sign-in. On the Radicale side, check the details against your htpasswd file. On the iCloud side, the normal Apple password was pasted, or the app-specific one has been cancelled.
 
-**The page says "Failed to discover calendars".** This means something different. Keeper never got a usable answer from that address, so the credentials were never tested. Check the address for a typo, confirm Radicale is running, and if you self-host, check the private-address setting above.
+**The page says "Failed to discover calendars".** This means something different. Keeper.sh never got a usable answer from that address, so the credentials were never tested. Check the address for a typo, confirm Radicale is running, and if you self-host, check the private-address setting above.
 
-**The page says "No calendars found".** Your credentials worked, but Keeper found nothing to import at that address. This is when to try `https://radicale.example.com/username/` with the trailing slash.
+**The page says "No calendars found".** Your credentials worked, but Keeper.sh found nothing to import at that address. This is when to try `https://radicale.example.com/username/` with the trailing slash.
 
-**One bad repeating event freezes a whole calendar.** Not one missing event — everything stops updating. Keeper refuses to work through a repeating series producing more than 10,000 dates in two years, and today that stops the whole calendar. Delete the runaway event and it catches up.
+**One bad repeating event freezes a whole calendar.** Not one missing event — everything stops updating. Keeper.sh refuses to work through a repeating series producing more than 10,000 dates in two years, and today that stops the whole calendar. Delete the runaway event and it catches up.
 
-**Events disappear from iCloud that still exist in Radicale.** Keeper reads the whole calendar each round. If a proxy in front of Radicale caps how many items come back in one response, Keeper sees a shorter calendar and removes the difference.
+**Events disappear from iCloud that still exist in Radicale.** Keeper.sh reads the whole calendar each round. If a proxy in front of Radicale caps how many items come back in one response, Keeper.sh sees a shorter calendar and removes the difference.
 
 **There is no "sync now" button.** You wait for the next round.
 
@@ -130,9 +130,9 @@ Two calendar accounts and three connections. Radicale is one account no matter h
 
 Three connections covers both directions with one spare, and there is no cap on how many calendars an account brings in.
 
-## Would you rather run Keeper yourself?
+## Would you rather run Keeper.sh yourself?
 
-You already run Radicale, so this will not frighten you, and for a calendar server on your own network it is often the better fit. Keeper is open source under AGPL-3.0. Run it yourself and every user on the instance gets Pro behaviour, with nothing held back.
+You already run Radicale, so this will not frighten you, and for a calendar server on your own network it is often the better fit. Keeper.sh is open source under AGPL-3.0. Run it yourself and every user on the instance gets Pro behaviour, with nothing held back.
 
 It is a Docker Compose stack with Postgres and Redis behind it, documented in the [repository](https://github.com/ridafkih/keeper.sh). Running it beside Radicale is what makes `PRIVATE_RESOLUTION_WHITELIST` useful, and means you never expose Radicale at all.
 
@@ -142,4 +142,4 @@ The cost is real. Another service to upgrade, another database to back up, anoth
 
 Delete the app-specific password at Apple, or delete the account under **Calendar Sources** in the dashboard.
 
-Keeper stores both passwords in a form it can read back, because this kind of connection sends the password on every request. They are encrypted first, with a key you control if you self-host.
+Keeper.sh stores both passwords in a form it can read back, because this kind of connection sends the password on every request. They are encrypted first, with a key you control if you self-host.

@@ -14,7 +14,7 @@ tags:
 
 You book personal things on your iPhone, and they land in iCloud. Work books you in Google Calendar. Nobody at work can see the personal side, so they book straight over it.
 
-Apple offers one way out: publish the calendar as a public link that Google refreshes whenever it feels like it. Keeper does the real thing instead. It signs into both calendars and keeps copies of your events in step.
+Apple offers one way out: publish the calendar as a public link that Google refreshes whenever it feels like it. Keeper.sh does the real thing instead. It signs into both calendars and keeps copies of your events in step.
 
 ## What does this actually do?
 
@@ -30,7 +30,7 @@ Do this first, because it is where people get stuck.
 
 Apple will not let outside apps sign in with your normal Apple password, which opens your photos, your purchases and Find My. Instead you generate a separate one, called an app-specific password. It only reaches your calendar, and you can cancel it without touching anything else.
 
-Keeper's connect page lists the steps, and they match Apple's own [instructions](https://support.apple.com/en-us/102654):
+Keeper.sh's connect page lists the steps, and they match Apple's own [instructions](https://support.apple.com/en-us/102654):
 
 1. Navigate to iCloud Apple ID
 2. Sign in with your Apple ID
@@ -50,7 +50,7 @@ The page is headed **Connect Apple Calendar**, Apple's newer name for the same t
 - **Apple ID** — the email address you sign in to Apple with
 - **App-Specific Password** — the one you just generated, not your normal password
 
-You are not asked for a server address. Keeper already knows where iCloud keeps calendars.
+You are not asked for a server address. Keeper.sh already knows where iCloud keeps calendars.
 
 Click **Connect**. Every calendar on the account is imported at once and you land in a short setup flow. Your Reminders lists stay behind.
 
@@ -58,14 +58,14 @@ Click **Connect**. Every calendar on the account is imported at once and you lan
 
 Go back to **Import Calendars** and click **Connect Google Calendar**. The page is headed **Connect Google** and shows what it will ask Google for before sending you anywhere.
 
-Click **Connect** and approve it on Google's screen. Keeper never sees your Google password.
+Click **Connect** and approve it on Google's screen. Keeper.sh never sees your Google password.
 
-## How do you tell Keeper which way events travel?
+## How do you tell Keeper.sh which way events travel?
 
 Setup asks four questions, word for word:
 
 1. **Which calendars would you like to configure?** Tick the ones you want now.
-2. **Rename Your Calendars.** iCloud calendars arrive as "Home" or "Work", and Google's as your email address. Renaming only changes what you see in Keeper.
+2. **Rename Your Calendars.** iCloud calendars arrive as "Home" or "Work", and Google's as your email address. Renaming only changes what you see in Keeper.sh.
 3. **Where should 'Home' send events?** Tick Google, and copies of your iCloud events start appearing there.
 4. **Where should 'Home' pull events from?** Tick Google here for the reverse direction.
 
@@ -79,13 +79,13 @@ Check this yourself before you trust it. Open the calendar under **Calendars** a
 
 Calendars you add through **Import Calendars** arrive with all three off. Your dentist appointment reaches Google as a block named after the iCloud calendar it came from. Turn **Sync Event Name** on for real titles, shaped by the **Event Name** box, which understands `{{calendar_name}}` and `{{event_name}}`.
 
-On keeper.sh these switches are a Pro feature — the dashboard says **Advanced sync settings are a Pro feature.**
+On Keeper.sh these switches are a Pro feature — the dashboard says **Advanced sync settings are a Pro feature.**
 
 Below them, **Exclusions** can drop **Exclude All Day Events**. Google calendars also offer **Exclude Focus Time Events** and **Exclude Out of Office Events**.
 
 ## How fast do changes show up?
 
-Keeper reads both calendars every minute, on every plan. Getting that change onto the other calendar depends on your plan: up to thirty minutes on free, about a minute on Pro.
+Keeper.sh reads both calendars every minute, on every plan. Getting that change onto the other calendar depends on your plan: up to thirty minutes on free, about a minute on Pro.
 
 If you are blocking out evenings so nobody books them, thirty minutes changes nothing. If people book you through a scheduling link, it is too slow. Do not pay for speed you will not notice.
 
@@ -93,17 +93,17 @@ If you are blocking out evenings so nobody books them, thirty minutes changes no
 
 Guest lists, video call links and reminders do not travel at all. So a copied meeting is a block of time, not a working invite — you cannot join the call from it, and nobody gets notified. Guest lists are read only to show you invitations you have not answered yet.
 
-Keeper also looks at a fixed stretch of time — from a week ago to two years ahead. A one-off event further out is not copied. A repeating event that began before that window is still picked up, so its dates inside the window survive.
+Keeper.sh also looks at a fixed stretch of time — from a week ago to two years ahead. A one-off event further out is not copied. A repeating event that began before that window is still picked up, so its dates inside the window survive.
 
 ## What goes wrong, and what does it look like?
 
-**The page says "Invalid credentials".** Apple was reached and turned Keeper away. In practice it is one of two things. You pasted your normal Apple password instead of the app-specific one, or the app-specific one has been cancelled.
+**The page says "Invalid credentials".** Apple was reached and turned Keeper.sh away. In practice it is one of two things. You pasted your normal Apple password instead of the app-specific one, or the app-specific one has been cancelled.
 
-**The page says "Failed to discover calendars".** That is a different problem, and your password is probably fine. Keeper could not reach Apple at all, so it never got as far as checking. Wait a minute and try again.
+**The page says "Failed to discover calendars".** That is a different problem, and your password is probably fine. Keeper.sh could not reach Apple at all, so it never got as far as checking. Wait a minute and try again.
 
 **Everything stopped, and Apple gave no warning.** Changing your Apple password cancels every app-specific password. You find out when events stop appearing. Generate a new one and paste it in.
 
-**One bad repeating event freezes a whole calendar.** Not one missing event — everything stops. Keeper refuses to work through a repeating series producing more than 10,000 dates in two years, and today that stops the whole calendar. Delete the event repeating every minute or hour and it catches up.
+**One bad repeating event freezes a whole calendar.** Not one missing event — everything stops. Keeper.sh refuses to work through a repeating series producing more than 10,000 dates in two years, and today that stops the whole calendar. Delete the event repeating every minute or hour and it catches up.
 
 **A shared calendar will not accept copies.** Calendars other people shared with you, and ones you subscribed to from a link, usually arrive read-only. They work fine as the calendar events come from, and fail as the one events are copied to.
 
@@ -115,10 +115,10 @@ Two calendar accounts and three connections. iCloud is one account no matter how
 
 Three connections covers both directions here with one spare. There is no cap on how many calendars an account brings in.
 
-## Would you rather run Keeper yourself?
+## Would you rather run Keeper.sh yourself?
 
-Keeper is open source under AGPL-3.0, and self-hosting is a real alternative rather than a lesser one. Every Pro feature comes with it, including real event titles and updates every minute. It is a Docker Compose stack with Postgres and Redis behind it, documented in the [repository](https://github.com/ridafkih/keeper.sh).
+Keeper.sh is open source under AGPL-3.0, and self-hosting is a real alternative rather than a lesser one. Every Pro feature comes with it, including real event titles and updates every minute. It is a Docker Compose stack with Postgres and Redis behind it, documented in the [repository](https://github.com/ridafkih/keeper.sh).
 
 Be honest about the cost. A server, a domain and a certificate, plus upgrades and backups. When it stops on a Monday morning, you are the person who fixes it.
 
-If that sounds like a fun weekend, it is a good trade. If it sounds like a chore, use keeper.sh.
+If that sounds like a fun weekend, it is a good trade. If it sounds like a chore, use Keeper.sh.
