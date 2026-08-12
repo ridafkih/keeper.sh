@@ -20,7 +20,10 @@ import {
 } from "@/features/marketing/components/marketing-faq";
 import { Collapsible } from "@/components/ui/primitives/collapsible";
 import { PRICING_FEATURES, PRICING_PLANS } from "@/features/marketing/pricing-plans";
-import { canonicalUrl, jsonLdScript, seoMeta, webPageSchema, breadcrumbSchema, offerCatalogSchema, faqSchema } from "@/lib/seo";
+import { canonicalUrl, jsonLdScript, seoMeta, webPageSchema, breadcrumbSchema, breadcrumbTrail, offerCatalogSchema, faqSchema } from "@/lib/seo";
+import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
+
+const breadcrumbs = breadcrumbTrail({ name: "Pricing", path: "/pricing" });
 
 const PAGE_DESCRIPTION =
   "Keeper.sh pricing. Free covers 2 linked accounts, 3 sync mappings, and changes reaching your other calendars every 30 minutes. Pro is $5 per month for unlimited accounts and mappings, changes every minute, and uncapped API access.";
@@ -68,7 +71,7 @@ export const Route = createFileRoute("/(marketing)/pricing")({
     }),
     scripts: [
       jsonLdScript(webPageSchema("Pricing", PAGE_DESCRIPTION, "/pricing")),
-      jsonLdScript(breadcrumbSchema([{ name: "Home", path: "/" }, { name: "Pricing", path: "/pricing" }])),
+      jsonLdScript(breadcrumbSchema(breadcrumbs)),
       jsonLdScript(offerCatalogSchema("/pricing", PRICING_PLANS.map((plan) => ({
         name: plan.name,
         price: plan.price.replace("$", ""),
@@ -82,6 +85,7 @@ export const Route = createFileRoute("/(marketing)/pricing")({
 function PricingPage() {
   return (
     <div className="flex flex-col gap-6 py-16">
+      <Breadcrumb items={breadcrumbs} />
       <header className="flex flex-col gap-1.5">
         <Heading1>Pricing</Heading1>
         <Text size="base" tone="muted" className="max-w-[64ch] leading-6">

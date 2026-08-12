@@ -4,10 +4,13 @@ import { Heading1, Heading2 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
 import { ButtonIcon, ButtonText, ExternalLinkButton, LinkButton } from "@/components/ui/primitives/button";
 import { MarketingCtaCard, MarketingCtaSection } from "@/features/marketing/components/marketing-cta";
-import { canonicalUrl, jsonLdScript, seoMeta, webPageSchema, breadcrumbSchema } from "@/lib/seo";
+import { canonicalUrl, jsonLdScript, seoMeta, webPageSchema, breadcrumbSchema, breadcrumbTrail } from "@/lib/seo";
+import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
 import { ANALYTICS_EVENTS } from "@/lib/analytics";
 import ArrowRightIcon from "lucide-react/dist/esm/icons/arrow-right";
 import ArrowUpRightIcon from "lucide-react/dist/esm/icons/arrow-up-right";
+
+const breadcrumbs = breadcrumbTrail({ name: "Features", path: "/features" });
 
 const PAGE_DESCRIPTION =
   "Keeper copies events from one calendar into another and combines everything you connect into a single feed. Works with Google Calendar, Outlook, iCloud, Fastmail, and more.";
@@ -81,7 +84,7 @@ export const Route = createFileRoute("/(marketing)/features")({
     }),
     scripts: [
       jsonLdScript(webPageSchema("Features", PAGE_DESCRIPTION, "/features")),
-      jsonLdScript(breadcrumbSchema([{ name: "Home", path: "/" }, { name: "Features", path: "/features" }])),
+      jsonLdScript(breadcrumbSchema(breadcrumbs)),
     ],
   }),
 });
@@ -89,6 +92,7 @@ export const Route = createFileRoute("/(marketing)/features")({
 function FeaturesPage() {
   return (
     <div className="flex flex-col gap-6 py-16">
+      <Breadcrumb items={breadcrumbs} />
       <header className="flex flex-col gap-1.5">
         <Heading1>Features</Heading1>
         <Text size="base" tone="muted" className="max-w-[64ch] leading-6">
