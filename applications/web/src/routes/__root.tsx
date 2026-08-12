@@ -5,6 +5,7 @@ import { SWRConfig } from "swr";
 import { Heading2 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
 import { LinkButton, ButtonText } from "@/components/ui/primitives/button";
+import { NotFoundState } from "@/components/ui/shells/not-found";
 import { fetcher, HttpError } from "@/lib/fetcher";
 import { resolveErrorMessage } from "@/utils/errors";
 import type { AppRouterContext, ViteScript } from "@/lib/router-context";
@@ -36,7 +37,7 @@ const SWR_CONFIG = {
 
 export const Route = createRootRouteWithContext<AppRouterContext>()({
   component: RootComponent,
-  notFoundComponent: NotFound,
+  notFoundComponent: NotFoundState,
   errorComponent: ErrorFallback,
   head: () => ({
     meta: [
@@ -119,21 +120,6 @@ function ScrollToTopOnNavigation() {
   }, [location.hash, location.pathname]);
 
   return null;
-}
-
-function NotFound() {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-dvh px-2 gap-3">
-      <meta name="robots" content="noindex" />
-      <Heading2>Page not found</Heading2>
-      <Text size="sm" tone="muted">
-        The page you're looking for doesn't exist.
-      </Text>
-      <LinkButton to="/" variant="border" size="compact">
-        <ButtonText>Go home</ButtonText>
-      </LinkButton>
-    </div>
-  );
 }
 
 function ErrorFallback({ error }: ErrorComponentProps) {

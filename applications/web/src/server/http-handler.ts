@@ -57,6 +57,28 @@ function withSecurityHeaders(response: Response, config: ServerConfig): Response
   });
 }
 
+function permanentRedirect(location: string): Response {
+  return new Response(null, {
+    headers: { location },
+    status: 308,
+  });
+}
+
+export function resolveCanonicalRedirect(requestUrl: URL): Response | null {
+  const pathname = requestUrl.pathname;
+
+  if (pathname === "/index.html") {
+    return permanentRedirect(`/${requestUrl.search}`);
+  }
+
+  if (pathname.length > 1 && pathname.endsWith("/")) {
+    const normalizedPath = pathname.replace(/\/+$/, "");
+    return permanentRedirect(`${normalizedPath || "/"}${requestUrl.search}`);
+  }
+
+  return null;
+}
+
 function resolveGdprCacheSegment(countryCode: string): string {
   if (GDPR_COUNTRIES.has(countryCode)) return "gdpr";
   return "default";
@@ -79,6 +101,11 @@ export async function handleApplicationRequest(
 
   if (isApiRequest(requestUrl)) {
     return proxyRequest(request, config.apiProxyOrigin);
+  }
+
+  const canonicalRedirect = resolveCanonicalRedirect(requestUrl);
+  if (canonicalRedirect) {
+    return canonicalRedirect;
   }
 
   const assetResponse = await runtime.handleAssetRequest(request);

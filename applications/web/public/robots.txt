@@ -2,110 +2,50 @@ User-agent: *
 Allow: /
 Disallow: /dashboard
 Disallow: /auth
-Disallow: /login
-Disallow: /register
-Disallow: /verify-email
-Disallow: /verify-authentication
-Disallow: /reset-password
-Disallow: /forgot-password
 
 User-agent: GPTBot
 Allow: /
 Disallow: /dashboard
 Disallow: /auth
-Disallow: /login
-Disallow: /register
-Disallow: /verify-email
-Disallow: /verify-authentication
-Disallow: /reset-password
-Disallow: /forgot-password
 
 User-agent: ChatGPT-User
 Allow: /
 Disallow: /dashboard
 Disallow: /auth
-Disallow: /login
-Disallow: /register
-Disallow: /verify-email
-Disallow: /verify-authentication
-Disallow: /reset-password
-Disallow: /forgot-password
 
 User-agent: ClaudeBot
 Allow: /
 Disallow: /dashboard
 Disallow: /auth
-Disallow: /login
-Disallow: /register
-Disallow: /verify-email
-Disallow: /verify-authentication
-Disallow: /reset-password
-Disallow: /forgot-password
 
 User-agent: PerplexityBot
 Allow: /
 Disallow: /dashboard
 Disallow: /auth
-Disallow: /login
-Disallow: /register
-Disallow: /verify-email
-Disallow: /verify-authentication
-Disallow: /reset-password
-Disallow: /forgot-password
 
 User-agent: Google-Extended
 Allow: /
 Disallow: /dashboard
 Disallow: /auth
-Disallow: /login
-Disallow: /register
-Disallow: /verify-email
-Disallow: /verify-authentication
-Disallow: /reset-password
-Disallow: /forgot-password
 
 User-agent: Amazonbot
 Allow: /
 Disallow: /dashboard
 Disallow: /auth
-Disallow: /login
-Disallow: /register
-Disallow: /verify-email
-Disallow: /verify-authentication
-Disallow: /reset-password
-Disallow: /forgot-password
 
 User-agent: Applebot
 Allow: /
 Disallow: /dashboard
 Disallow: /auth
-Disallow: /login
-Disallow: /register
-Disallow: /verify-email
-Disallow: /verify-authentication
-Disallow: /reset-password
-Disallow: /forgot-password
 
 User-agent: Bytespider
 Allow: /
 Disallow: /dashboard
 Disallow: /auth
-Disallow: /login
-Disallow: /register
-Disallow: /verify-email
-Disallow: /verify-authentication
-Disallow: /reset-password
-Disallow: /forgot-password
 
 User-agent: Cohere-AI
 Allow: /
 Disallow: /dashboard
 Disallow: /auth
-Disallow: /login
-Disallow: /register
-Disallow: /verify-email
-Disallow: /verify-authentication
-Disallow: /reset-password
-Disallow: /forgot-password
 
 Sitemap: https://www.keeper.sh/sitemap.xml
