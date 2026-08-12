@@ -3,7 +3,12 @@ const SITE_NAME = "Keeper.sh";
 const DEFAULT_IMAGE_PATH = "/open-graph.png";
 
 export function canonicalUrl(path: string): string {
-  return `${SITE_URL}${path}`;
+  return `${SITE_URL}/${path.replace(/^\/+/, "")}`;
+}
+
+function entityId(path: string, fragment: string): string {
+  const url = canonicalUrl(path);
+  return `${url.endsWith("/") ? url : `${url}/`}#${fragment}`;
 }
 
 export function jsonLdScript(data: Record<string, unknown>) {
@@ -73,9 +78,13 @@ export const organizationSchema = {
   ],
 };
 
-export function breadcrumbSchema(
-  items: Array<{ name: string; path: string }>,
-) {
+export type BreadcrumbTrailItem = { name: string; path: string };
+
+export function breadcrumbTrail(...items: BreadcrumbTrailItem[]): BreadcrumbTrailItem[] {
+  return [{ name: "Home", path: "/" }, ...items];
+}
+
+export function breadcrumbSchema(items: BreadcrumbTrailItem[]) {
   return {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
@@ -92,12 +101,28 @@ export function webPageSchema(name: string, description: string, path: string) {
   return {
     "@context": "https://schema.org",
     "@type": "WebPage",
-    "@id": `${canonicalUrl(path)}/#webpage`,
+    "@id": entityId(path, "webpage"),
     name,
     description,
     url: canonicalUrl(path),
     isPartOf: { "@id": `${SITE_URL}/#website` },
     publisher: { "@id": `${SITE_URL}/#organization` },
+  };
+}
+
+export function faqPageSchema(
+  path: string,
+  questions: Array<{ question: string; answer: string }>,
+) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "@id": `${canonicalUrl(path)}/#faqpage`,
+    mainEntity: questions.map((entry) => ({
+      "@type": "Question",
+      name: entry.question,
+      acceptedAnswer: { "@type": "Answer", text: entry.answer },
+    })),
   };
 }
 
@@ -141,11 +166,41 @@ export function softwareApplicationSchema() {
   };
 }
 
-export function faqSchema(items: Array<{ question: string; answer: string }>) {
+export function offerCatalogSchema(
+  path: string,
+  offers: Array<{ name: string; price: string; description: string }>,
+) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "OfferCatalog",
+    "@id": `${canonicalUrl(path)}/#offercatalog`,
+    name: `${SITE_NAME} Plans`,
+    url: canonicalUrl(path),
+    itemListElement: offers.map((offer) => ({
+      "@type": "Offer",
+      name: offer.name,
+      price: offer.price,
+      priceCurrency: "USD",
+      priceSpecification: {
+        "@type": "UnitPriceSpecification",
+        price: offer.price,
+        priceCurrency: "USD",
+        billingDuration: "P1M",
+      },
+      description: offer.description,
+      itemOffered: { "@id": `${SITE_URL}/#software` },
+    })),
+  };
+}
+
+export function faqSchema(
+  path: string,
+  items: Array<{ question: string; answer: string }>,
+) {
   return {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    "@id": `${SITE_URL}/#faq`,
+    "@id": `${canonicalUrl(path)}/#faq`,
     isPartOf: { "@id": `${SITE_URL}/#website` },
     mainEntity: items.map((item) => {
       const question = item.question.trim();
@@ -168,7 +223,7 @@ export function collectionPageSchema(posts: Array<{ slug: string; metadata: { ti
   return {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
-    "@id": `${SITE_URL}/blog/#collectionpage`,
+    "@id": entityId("/blog", "collectionpage"),
     name: "Blog",
     url: canonicalUrl("/blog"),
     isPartOf: { "@id": `${SITE_URL}/#website` },
@@ -205,7 +260,7 @@ export function blogPostingSchema(post: {
   return {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
-    "@id": `${url}/#blogposting`,
+    "@id": entityId(`/blog/${post.slug}`, "blogposting"),
     headline: post.title,
     description: post.description,
     image: canonicalUrl(post.imagePath ?? DEFAULT_IMAGE_PATH),

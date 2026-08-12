@@ -1,0 +1,143 @@
+---
+title: "Keeper.sh vs SyncThemCalendars"
+description: "An honest comparison of Keeper.sh and SyncThemCalendars for calendar sync, covering two-way sync, update speed, pricing by sync count, supported calendars, languages, open source and self-hosting."
+blurb: "SyncThemCalendars does two-way sync in one setting and we do not. Here is that trade-off in full, plus pricing, provider coverage, and where each of us wins."
+createdAt: "2026-08-11"
+slug: "keeper-sh-vs-syncthemcalendars"
+updatedAt: "2026-08-11"
+tags:
+  - "calendar"
+  - "sync"
+  - "comparison"
+---
+
+You keep a work calendar and a personal one, and neither knows about the other. Both Keeper.sh and SyncThemCalendars fix that by copying your busy time between them.
+
+They take different shapes. SyncThemCalendars is a polished, narrow product covering three providers very well. Keeper.sh is open source, covers more calendar types, and gives you an API.
+
+## Does either one sync both ways?
+
+SyncThemCalendars does, and this is a real advantage over us.
+
+Their two-way sync page puts it plainly. One-way copies events from one calendar to another. Two-way "mirrors both calendars", so a change on either side shows up on the other, and it is a per-sync setting you toggle.
+
+Keeper.sh does not work that way. Every connection runs in one direction, so mirroring two calendars means building two connections instead of flipping one switch. The end result is similar and the setup is not.
+
+## Which calendars does each one connect?
+
+SyncThemCalendars supports Google Calendar, Microsoft Outlook and Office 365, and Apple iCloud. Their own FAQ lists those three, and we could not find any mention of generic CalDAV on their site.
+
+Keeper.sh supports Google, Outlook, iCloud, Fastmail and any CalDAV server. That last part is the difference. If your calendar lives at mailbox.org, Posteo, Nextcloud, Infomaniak or a server you run, Keeper.sh can read and write it.
+
+We also read iCal and ICS links, though we cannot write back to them, because those links only go one way.
+
+If your calendars are all Google, Outlook or iCloud, none of this affects you.
+
+## Which one updates faster?
+
+SyncThemCalendars, for Google and Outlook.
+
+Google and Microsoft can notify a tool the instant an event changes. Their two-way sync page says "Google and Outlook notify us the moment something changes, so copies update in moments." For iCloud, the same page says they check "every few minutes."
+
+Keeper.sh asks on a timer rather than being told. We read every calendar every minute, on every plan including Free. We write the copies out every 30 minutes on Free, and every minute on Pro.
+
+Neither of us publishes a number in seconds. In practice a Google change reaches its copy in moments on their side, and in under two minutes on Keeper.sh Pro. For an iCloud change, the two are close.
+
+## What does each one cost?
+
+SyncThemCalendars charges by how many syncs you run, and does not charge for connecting more calendars or accounts. Their three tiers each cover one user, with a 14-day free trial.
+
+| | Keeper.sh | SyncThemCalendars |
+| --- | --- | --- |
+| Free plan | 2 linked accounts, 3 connections, no card | 14-day trial, no card |
+| Entry paid plan | $5/month, unlimited connections | $3.99/month, 5 syncs |
+| Middle plan | None | $7.99/month, 16 syncs |
+| Top plan | None | $17.99/month, 36 syncs |
+| Yearly option | Not offered | $47.88, $95.88, $215.88 |
+
+Run five syncs or fewer and they are cheaper by a dollar. Run more than five and we are cheaper, because $5 on Keeper.sh Pro has no connection limit at all.
+
+The other real difference is the free plan. Ours never expires, with 2 accounts and 3 connections. Theirs is 14 days, and then they ask for payment.
+
+## Where is SyncThemCalendars genuinely better?
+
+**Two-way sync in one setting**, and **faster updates on Google and Outlook**, both covered above.
+
+**Cheaper below five connections.** $3.99 a month against our $5.
+
+**Simpler onboarding.** They advertise "Set up your first sync in 2 minutes" and the product is built around that promise. Keeper.sh asks you to think about direction, which calendars feed which, and what to hide, which is more control and more decisions.
+
+**Seven languages.** Their site and product ship in English, French, German, Japanese, Spanish, Italian and Portuguese. Keeper.sh is English only, so if you would rather not work in English, pick them.
+
+**Field-level privacy without configuration hunting.** Their pages describe it as: "Show full details, or hide title, description and location behind a 'Busy' block. You decide, per sync and per field."
+
+## Where is Keeper.sh genuinely better?
+
+**More calendar types.** CalDAV and Fastmail, as above.
+
+**It is open source.** Keeper.sh is AGPL-3.0. The sync engine is on GitHub and you can read it before trusting it with your calendar.
+
+**You can run it yourself.** Every paid feature is free on your own instance. See below.
+
+**Unlimited connections for $5.** No counting syncs.
+
+**An API and an agent connector.** Keeper.sh has a REST API, plus an MCP server with 11 tools, so assistants like Claude can list, create, edit, delete and RSVP to events. Both run on the free plan, capped at 25 requests a day, and uncapped on Pro.
+
+**One feed for every calendar.** Keeper.sh gives you a single private iCal link combining everything you have connected, readable by anything that takes a calendar feed.
+
+## What about data handling?
+
+Neither of us is a compliance product, so this deserves care.
+
+SyncThemCalendars does not publish a DPA or a security page that we could find. Their privacy policy, dated March 2019, says data is "stored and processed in United States, or where we or our partners, affiliates and third-party providers maintain facilities."
+
+Keeper.sh does not publish a DPA either. If your employer requires a signed data processing agreement before you connect a work calendar, neither of us clears that bar today. Self-host Keeper.sh, or pick a vendor built for it.
+
+## What Keeper.sh does not do
+
+**One direction per connection**, as above.
+
+**Attendees, meeting links and reminders do not come across.** A copied block carries its time, plus its details if you share them, while guests, the Meet or Teams link and alerts stay on the original. We do read attendees for invitations you receive, so you can answer them.
+
+**Showing real event details costs $5.** A connected calendar arrives anonymised: titles, descriptions and locations are replaced with something generic. Changing that is a Pro setting.
+
+**Free plan writes are slow.** Every 30 minutes.
+
+**English only.**
+
+## Running Keeper.sh yourself
+
+Keeper.sh is built to be self-hosted, and self-hosting is not a lesser version. Every Pro feature switches on automatically, including per-minute writes and the uncapped API.
+
+Take this route when the data cannot leave your control. You hold the database, the tokens and the logs, and nobody else sits in the path.
+
+It is genuine work. You need Docker and Docker Compose, Postgres, Redis and a domain, plus your own Google and Microsoft applications, which is the fiddliest step.
+
+Most people should use hosted Keeper.sh at $5 a month. Self-hosting is there when you need it, and the [repository](https://github.com/ridafkih/keeper.sh) has the full guide.
+
+## FAQ
+
+### Which should I choose?
+
+Choose SyncThemCalendars if you want two-way sync as one switch, the fastest Google and Outlook updates, a two-minute setup, five connections or fewer, or the product in your own language. Choose Keeper.sh if you use CalDAV or Fastmail, want open source and self-hosting, run more than five connections, or want an API and agent access.
+
+### Does Keeper.sh only sync every 30 minutes?
+
+No. We read every calendar every minute on all plans. The 30-minute figure is how often the free plan writes copies out, and Pro writes every minute.
+
+### Can I try both?
+
+Yes. Keeper.sh has a free plan that does not expire. SyncThemCalendars has a 14-day trial without a card.
+
+## Sources
+
+Everything above about SyncThemCalendars comes from their own public pages, checked on the date this post was published:
+
+- [syncthemcalendars.com](https://syncthemcalendars.com/) — homepage, pricing and FAQ
+- [Two-way calendar sync](https://syncthemcalendars.com/features/two-way-calendar-sync) — sync direction, update speed and privacy fields
+- [Apple iCloud calendar sync](https://syncthemcalendars.com/features/apple-icloud-calendar-sync) — iCloud checking interval
+- [Google calendar sync](https://syncthemcalendars.com/features/google-calendar-sync) — instant updates from Google
+- [Compare](https://syncthemcalendars.com/compare) — pricing model
+- [Privacy policy](https://syncthemcalendars.com/privacy-policy) — data storage location
+
+Prices and features change. If something here is out of date, their page wins, and we would appreciate you [telling us](https://github.com/ridafkih/keeper.sh/issues).

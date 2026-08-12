@@ -1,7 +1,7 @@
 import type { PropsWithChildren } from "react";
 import { cn } from "@/utils/cn";
 
-const GRID_COLS = "grid grid-cols-[minmax(1rem,1fr)_minmax(auto,48rem)_minmax(1rem,1fr)]";
+const GRID_COLS = "grid grid-cols-[minmax(1rem,1fr)_minmax(0,48rem)_minmax(1rem,1fr)]";
 
 export function Layout({ children }: PropsWithChildren) {
   return (

@@ -61,29 +61,35 @@ function buildBlogIndexEntry(blogEntries: SitemapEntry[]): SitemapEntry {
   return { loc: `${SITE_URL}/blog`, lastmod };
 }
 
-function parseFrontmatter(raw: string): Record<string, unknown> {
-  const [, match] = raw.match(FRONTMATTER_PATTERN);
-  if (!match) return {};
-  return parseYaml(match);
+function parseFrontmatter(raw: string, file: string): Record<string, unknown> {
+  const match = raw.match(FRONTMATTER_PATTERN);
+  if (!match) {
+    throw new Error(`"${file}" is missing a YAML frontmatter block.`);
+  }
+  return parseYaml(match[1]);
 }
 
-function discoverBlogEntries(blogDir: string): SitemapEntry[] {
-  const files = readdirSync(blogDir).filter((f) => f.endsWith(".mdx"));
+function discoverContentEntries(
+  directory: string,
+  basePath: string,
+  label: string,
+): SitemapEntry[] {
+  const files = readdirSync(directory).filter((file) => file.endsWith(".mdx"));
 
   return files.map((file) => {
-    const raw = readFileSync(join(blogDir, file), "utf-8");
-    const frontmatter = parseFrontmatter(raw);
+    const raw = readFileSync(join(directory, file), "utf-8");
+    const frontmatter = parseFrontmatter(raw, file);
 
     if (typeof frontmatter.slug !== "string") {
-      throw new Error(`Blog post "${file}" is missing a slug.`);
+      throw new Error(`${label} "${file}" is missing a slug.`);
     }
 
     if (typeof frontmatter.updatedAt !== "string") {
-      throw new Error(`Blog post "${file}" is missing updatedAt.`);
+      throw new Error(`${label} "${file}" is missing updatedAt.`);
     }
 
     return {
-      loc: `${SITE_URL}/blog/${frontmatter.slug}`,
+      loc: `${SITE_URL}${basePath}/${frontmatter.slug}`,
       lastmod: frontmatter.updatedAt.slice(0, 10),
     };
   });
@@ -124,7 +130,7 @@ export function sitemapPlugin(): Plugin {
     },
 
     generateBundle() {
-      const blogEntries = discoverBlogEntries(blogDir);
+      const blogEntries = discoverContentEntries(blogDir, "/blog", "Blog post");
       const entries = [
         ...readStaticEntries(pagesFile),
         buildBlogIndexEntry(blogEntries),

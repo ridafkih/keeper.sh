@@ -94,8 +94,8 @@ function MarketingLayout() {
             <MarketingFooterNavGroup>
               <MarketingFooterNavGroupLabel>Product</MarketingFooterNavGroupLabel>
               <MarketingFooterNavItem to="/register">Get Started</MarketingFooterNavItem>
-              <MarketingFooterNavItem to="/#features">Features</MarketingFooterNavItem>
-              <MarketingFooterNavItem to="/#pricing">Pricing</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/features">Features</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/pricing">Pricing</MarketingFooterNavItem>
             </MarketingFooterNavGroup>
             <MarketingFooterNavGroup>
               <MarketingFooterNavGroupLabel>Resources</MarketingFooterNavGroupLabel>

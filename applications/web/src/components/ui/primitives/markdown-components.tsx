@@ -1,5 +1,4 @@
-import { isValidElement, type JSX, type ReactNode } from "react";
-import { cn } from "@/utils/cn";
+import { Children, isValidElement, type JSX, type ReactNode } from "react";
 import { Heading1, Heading2, Heading3 } from "./heading";
 import { ListItem, OrderedList, UnorderedList } from "./list";
 import { Text } from "./text";
@@ -9,30 +8,16 @@ type MarkdownElementProps<Tag extends keyof JSX.IntrinsicElements> =
   node?: unknown;
 };
 
-const PROSE_CELL_CHARACTER_THRESHOLD = 20;
+const SITE_ORIGIN = "https://keeper.sh";
+const HTTP_PROTOCOLS = ["http:", "https:"];
+const LABEL_COLUMN_MIN_WIDTH = "18ch";
+const COLUMN_MIN_WIDTH = "13ch";
 
 function isExternalHttpLink(href: string): boolean {
-  return href.startsWith("http://") || href.startsWith("https://");
-}
+  if (!URL.canParse(href)) return false;
 
-function countTextCharacters(node: ReactNode): number {
-  if (typeof node === "string" || typeof node === "number") {
-    return String(node).length;
-  }
-
-  if (Array.isArray(node)) {
-    return node.reduce<number>((total, child) => total + countTextCharacters(child), 0);
-  }
-
-  if (isValidElement<{ children?: ReactNode }>(node)) {
-    return countTextCharacters(node.props.children);
-  }
-
-  return 0;
-}
-
-function isProseCell(children: ReactNode): boolean {
-  return countTextCharacters(children) > PROSE_CELL_CHARACTER_THRESHOLD;
+  const url = new URL(href);
+  return HTTP_PROTOCOLS.includes(url.protocol) && url.origin !== SITE_ORIGIN;
 }
 
 export function MarkdownHeadingOne({ children }: MarkdownElementProps<"h1">) {
@@ -124,28 +109,11 @@ export function MarkdownRule() {
   return <hr className="my-6 border-interactive-border" />;
 }
 
-export function MarkdownTable({
-  children,
-}: MarkdownElementProps<"table">) {
-  return (
-    <div className="my-4 overflow-x-auto [contain:inline-size]">
-      <table className="min-w-full border-collapse border border-interactive-border text-base tracking-tight text-foreground-muted">
-        {children}
-      </table>
-    </div>
-  );
-}
-
 export function MarkdownTableHeader({
   children,
 }: MarkdownElementProps<"th">) {
   return (
-    <th
-      className={cn(
-        "border border-interactive-border px-2 py-1 text-left font-medium text-foreground",
-        isProseCell(children) && "min-w-32",
-      )}
-    >
+    <th className="border-interactive-border border-r border-b bg-background-elevated px-2 py-3 sm:px-3 text-left align-top font-medium text-foreground break-words">
       {children}
     </th>
   );
@@ -155,13 +123,56 @@ export function MarkdownTableCell({
   children,
 }: MarkdownElementProps<"td">) {
   return (
-    <td
-      className={cn(
-        "border border-interactive-border px-2 py-1",
-        isProseCell(children) && "min-w-32",
-      )}
-    >
+    <td className="border-interactive-border border-r border-b px-2 py-3 sm:px-3 align-top break-words">
       {children}
     </td>
+  );
+}
+
+export function MarkdownTableSection({
+  children,
+}: MarkdownElementProps<"thead">) {
+  return <thead className="contents">{children}</thead>;
+}
+
+export function MarkdownTableBody({
+  children,
+}: MarkdownElementProps<"tbody">) {
+  return <tbody className="contents">{children}</tbody>;
+}
+
+export function MarkdownTableRow({ children }: MarkdownElementProps<"tr">) {
+  return <tr className="contents">{children}</tr>;
+}
+
+function countHeaderCells(children: ReactNode): number {
+  return Children.toArray(children).reduce<number>((total, child) => {
+    if (!isValidElement<{ children?: ReactNode }>(child)) return total;
+    if (child.type === MarkdownTableHeader) return total + 1;
+    return total + countHeaderCells(child.props.children);
+  }, 0);
+}
+
+export function MarkdownTable({
+  children,
+}: MarkdownElementProps<"table">) {
+  const columnCount = Math.max(countHeaderCells(children), 1);
+  const gridTemplateColumns = [
+    `minmax(${LABEL_COLUMN_MIN_WIDTH}, 1.5fr)`,
+    ...Array.from(
+      { length: columnCount - 1 },
+      () => `minmax(${COLUMN_MIN_WIDTH}, 1fr)`,
+    ),
+  ].join(" ");
+
+  return (
+    <div className="my-4 overflow-x-auto rounded-2xl border border-interactive-border [contain:inline-size]">
+      <table
+        className="grid w-full text-sm tracking-tight text-foreground-muted [&_tbody_tr:last-child_:is(td,th)]:border-b-0 [&_tr_:is(td,th):last-child]:border-r-0"
+        style={{ gridTemplateColumns }}
+      >
+        {children}
+      </table>
+    </div>
   );
 }

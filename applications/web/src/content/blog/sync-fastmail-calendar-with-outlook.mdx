@@ -1,0 +1,138 @@
+---
+title: "How to Sync Fastmail Calendar with Outlook"
+description: "Get your Fastmail events showing up in Outlook or Microsoft 365 with Keeper.sh: the app password to make, what to click, and who can see your event titles."
+blurb: "Fastmail and Outlook have no way to talk to each other. Here is how to get your Fastmail events appearing in Outlook, starting with the right app password."
+createdAt: "2026-08-11"
+slug: "sync-fastmail-calendar-with-outlook"
+updatedAt: "2026-08-11"
+tags:
+  - "fastmail"
+  - "outlook"
+  - "microsoft-365"
+  - "sync"
+---
+
+Your own life lives in Fastmail. Work runs on Outlook. Neither knows the other exists, so colleagues book meetings on top of things you already committed to.
+
+Keeper.sh signs into both calendars and keeps copies of your events in step.
+
+## What does this actually do?
+
+Add something to your Fastmail calendar and a copy appears in Outlook. Move it, the copy moves. Delete it, the copy goes.
+
+By default the copy is a block of busy time, not a readable event. Colleagues see you are unavailable, not what you are doing.
+
+Copies travel one way per connection: Fastmail to Outlook, or Outlook to Fastmail. Want both? That is two connections, not a single "two-way" switch.
+
+## Which Fastmail password do you need?
+
+Fastmail will not accept your account password here. You make a separate app password instead, which you can cancel on its own without changing anything else.
+
+The scope matters. Fastmail's **Access** dropdown offers nine options, and you want **Calendars (CalDAV)** — the narrowest one that works. Fastmail's own help article is out of date and lists only two, so trust the dropdown in front of you.
+
+Keeper.sh's connect page lists the steps in the right order:
+
+1. Navigate to Fastmail Settings
+2. Click "Manage app password and access"
+3. Click "New app password"
+4. Under "Access", select "Calendars (CalDAV)"
+5. Click "Generate password"
+6. Copy the password, and paste it below
+
+Fastmail shows the password once. Lose it and you make another, then delete the old one.
+
+## How do you connect Fastmail?
+
+From the dashboard, click **Import Calendars**, then **Connect Fastmail**.
+
+The page is headed **Connect Fastmail** and has two boxes:
+
+- **Fastmail Email Address** — the address you sign in with
+- **App-Specific Password** — the one you just generated
+
+There is no server address to fill in. Keeper.sh already knows where Fastmail keeps calendars.
+
+Click **Connect**. Every calendar on the account is imported at once and you land in a short setup flow. Task lists stay behind.
+
+## How do you connect Outlook?
+
+Back on **Import Calendars** there are two Microsoft buttons. **Connect Outlook** is for personal Outlook and Hotmail accounts. **Connect Microsoft 365** is for work and school accounts.
+
+Click **Connect** and approve it on Microsoft's screen. Keeper.sh never sees your Microsoft password.
+
+If work manages your account, an administrator may have to approve Keeper.sh first. That is your employer's policy, not something Keeper.sh can change.
+
+## How do you tell Keeper.sh which way events travel?
+
+Setup asks four questions, word for word:
+
+1. **Which calendars would you like to configure?** Tick the ones you want now.
+2. **Rename Your Calendars.** Fastmail and Outlook both default to "Calendar", so this is worth ten seconds. Renaming only changes what you see in Keeper.sh.
+3. **Where should 'Calendar' send events?** Tick Outlook, and copies of your Fastmail events start appearing there.
+4. **Where should 'Calendar' pull events from?** Tick Outlook here for the reverse.
+
+Each tick is one connection. Both directions is two connections.
+
+Change any of it later from the calendar under **Calendars**, in the **Send Events to Calendars** section.
+
+## Will my colleagues see my private event titles?
+
+Check this yourself, because one end of this pairing is a work account.
+
+Open the calendar under **Calendars** and find **Sync Settings**. Three switches decide what travels: **Sync Event Name**, **Sync Event Description** and **Sync Event Location**.
+
+Calendars added through **Import Calendars** arrive with all three off. A therapy appointment reaches Outlook as a block named after the Fastmail calendar it came from. Turn **Sync Event Name** on for real titles, shaped by the **Event Name** box, which understands `{{calendar_name}}` and `{{event_name}}`.
+
+On Keeper.sh these are a Pro feature — the dashboard says **Advanced sync settings are a Pro feature.** Below them, **Exclusions** can drop **Exclude All Day Events**.
+
+## How fast do changes show up?
+
+Keeper.sh reads both calendars every minute, on every plan. Getting that change onto the other calendar depends on your plan: up to thirty minutes on free, about a minute on Pro.
+
+If you are marking yourself busy so colleagues stop double-booking you, thirty minutes is fine. If people book you through a scheduling link, it is too slow.
+
+## What does not come across?
+
+Guest lists, video call links and reminders do not travel at all. A copied meeting is a block of time, not a working invite — nobody can join a Teams call from it, and no invitations are sent. Guest lists are read only to show you invitations you have not answered yet.
+
+Keeper.sh also looks at a fixed stretch of time — from a week ago to two years ahead. A one-off event further out is not copied. A repeating event that began before the window is still picked up, so its dates inside the window survive.
+
+## Why do Keeper.sh's events have a category in Outlook?
+
+Keeper.sh marks the events it creates so it can clean them up later. On most calendars that is invisible, but on Outlook it uses a `keeper.sh` category.
+
+So the copies carry a visible category. Strip it off by hand and Keeper.sh stops recognising the event as its own, and leaves it behind.
+
+## What goes wrong, and what does it look like?
+
+**The page says "Invalid credentials".** Fastmail was reached and turned Keeper.sh away. Usually it is your account password pasted instead of the app password. The other common cause is an app password whose **Access** does not include **Calendars (CalDAV)**.
+
+**The page says "Failed to discover calendars".** That is a different problem, and your password is probably fine. Keeper.sh could not reach Fastmail at all, so it never got as far as checking. Wait a minute and try again.
+
+**Microsoft refuses the sign-in on a work account.** Managed Microsoft 365 tenants can block outside calendar apps outright. If no administrator will approve it, the read-only feed below is your fallback.
+
+**One bad repeating event freezes a whole calendar.** Not one missing event — everything stops updating. Keeper.sh refuses to work through a repeating series producing more than 10,000 dates in two years, and today that stops the whole calendar. Delete the event repeating every minute or hour and it catches up.
+
+**A repeating Outlook meeting arrives in Fastmail as a single event.** Repeating series coming out of Microsoft do not always survive the trip whole. That is a known gap on our side, not something you configured wrong.
+
+**There is no "sync now" button.** You wait for the next round. Removing the account and adding it again is the blunt way to start clean.
+
+## What does the free plan cover?
+
+Two calendar accounts and three connections. Fastmail is one account no matter how many calendars it holds, and Outlook is the second, so this pairing uses both. Adding Google later means upgrading.
+
+Three connections covers both directions here with one spare. There is no cap on how many calendars an account brings in.
+
+## What if Outlook will not let Keeper.sh in at all?
+
+Keeper.sh builds a single feed from whichever calendars you tick, at **iCal Link** in the dashboard. Outlook can subscribe to it without an approved sign-in. It is read-only, and Outlook picks its own refresh schedule.
+
+Before sharing the link, check two things there. **Include Event Name** decides whether real titles appear or everything reads "Busy", and the **Sources** list decides which calendars are in the feed at all. Both are Pro on Keeper.sh, shown as **Feed settings are Pro-only.**
+
+## Would you rather run Keeper.sh yourself?
+
+Keeper.sh is open source under AGPL-3.0, and self-hosting is a genuine alternative rather than a downgrade. Every Pro feature is included, including real event titles and updates every minute. It is a Docker Compose stack with Postgres and Redis behind it, documented in the [repository](https://github.com/ridafkih/keeper.sh).
+
+One catch is specific to this pairing. Connecting Outlook needs a Microsoft app registration of your own, created in Azure. Fastmail needs nothing of the kind.
+
+The running cost is a server, a domain, a certificate, upgrades and backups — plus being the person who fixes it when it breaks. If that appeals, it is a good trade. If not, use Keeper.sh.

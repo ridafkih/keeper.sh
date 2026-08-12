@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { blogPostingSchema, seoMeta } from "@/lib/seo";
+import {
+  blogPostingSchema,
+  canonicalUrl,
+  collectionPageSchema,
+  seoMeta,
+  webPageSchema,
+} from "@/lib/seo";
 
 const GENERIC_IMAGE_URL = "https://www.keeper.sh/open-graph.png";
 
@@ -16,6 +22,25 @@ function findMeta(meta: ReturnType<typeof seoMeta>, key: string) {
   return meta.find((entry) => "property" in entry && entry.property === key
     || "name" in entry && entry.name === key);
 }
+
+describe("canonicalUrl", () => {
+  it("keeps the trailing slash on the homepage", () => {
+    expect(canonicalUrl("/")).toBe("https://www.keeper.sh/");
+  });
+
+  it("treats an empty path as the homepage", () => {
+    expect(canonicalUrl("")).toBe("https://www.keeper.sh/");
+  });
+
+  it("preserves nested paths verbatim", () => {
+    expect(canonicalUrl("/blog/why-keeper")).toBe("https://www.keeper.sh/blog/why-keeper");
+    expect(canonicalUrl("/pricing/")).toBe("https://www.keeper.sh/pricing/");
+  });
+
+  it("collapses duplicate leading slashes", () => {
+    expect(canonicalUrl("//pricing")).toBe("https://www.keeper.sh/pricing");
+  });
+});
 
 describe("seoMeta", () => {
   it("falls back to the generic share image", () => {
@@ -72,6 +97,19 @@ describe("seoMeta", () => {
   });
 });
 
+describe("webPageSchema", () => {
+  it("builds a fragment identifier without a double slash", () => {
+    expect(webPageSchema("Home", "Home page", "/")["@id"]).toBe("https://www.keeper.sh/#webpage");
+    expect(webPageSchema("Home", "Home page", "")["@id"]).toBe("https://www.keeper.sh/#webpage");
+  });
+
+  it("keeps the published identifier for nested pages", () => {
+    const schema = webPageSchema("Privacy Policy", "Privacy policy", "/privacy");
+    expect(schema["@id"]).toBe("https://www.keeper.sh/privacy/#webpage");
+    expect(schema.url).toBe("https://www.keeper.sh/privacy");
+  });
+});
+
 describe("blogPostingSchema", () => {
   it("falls back to the generic share image", () => {
     expect(blogPostingSchema(post).image).toBe(GENERIC_IMAGE_URL);
@@ -86,5 +124,24 @@ describe("blogPostingSchema", () => {
     ).toBe(
       "https://www.keeper.sh/open-graph/how-calendar-sync-actually-works.png",
     );
+  });
+
+  it("keeps the published identifier", () => {
+    const schema = blogPostingSchema({
+      title: "Why Keeper",
+      description: "A post",
+      slug: "why-keeper",
+      createdAt: "2026-01-01",
+      updatedAt: "2026-01-02",
+      tags: ["calendar"],
+    });
+    expect(schema["@id"]).toBe("https://www.keeper.sh/blog/why-keeper/#blogposting");
+    expect(schema.url).toBe("https://www.keeper.sh/blog/why-keeper");
+  });
+});
+
+describe("collectionPageSchema", () => {
+  it("keeps the published identifier", () => {
+    expect(collectionPageSchema([])["@id"]).toBe("https://www.keeper.sh/blog/#collectionpage");
   });
 });

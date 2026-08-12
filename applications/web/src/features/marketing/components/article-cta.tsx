@@ -2,9 +2,9 @@ import { ButtonText, LinkButton } from "@/components/ui/primitives/button";
 import { Heading3 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
 
-export function BlogPostCta() {
+export function ArticleCta() {
   return (
-    <aside className="overflow-hidden rounded-2xl border border-interactive-border bg-background-elevated">
+    <aside className="overflow-hidden rounded-2xl border border-border-elevated bg-background-elevated">
       <div className="grid grid-cols-1 sm:grid-cols-3 sm:items-stretch">
         <div className="flex flex-col gap-3 p-5 md:p-6 sm:col-span-2">
           <Heading3 as="h2" className="mb-0 mt-0">

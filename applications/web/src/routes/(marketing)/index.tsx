@@ -34,7 +34,6 @@ import {
   MarketingPricingComparisonSpacer,
   MarketingPricingFeatureDisplay,
   MarketingPricingFeatureLabel,
-  type MarketingPricingFeatureValueKind,
   MarketingPricingFeatureMatrix,
   MarketingPricingFeatureRow,
   MarketingPricingFeatureValue,
@@ -42,6 +41,7 @@ import {
   MarketingPricingPlanCard,
   MarketingPricingSection,
 } from '../../features/marketing/components/marketing-pricing-section'
+import { PRICING_FEATURES, PRICING_PLANS } from '../../features/marketing/pricing-plans'
 import { calendarEmphasizedAtom } from '../../state/calendar-emphasized'
 import { ANALYTICS_EVENTS } from '../../lib/analytics'
 import ArrowRightIcon from "lucide-react/dist/esm/icons/arrow-right";
@@ -108,56 +108,6 @@ const MARKETING_FEATURES: MarketingFeature[] = [
     gridClassName: 'lg:col-start-7 lg:col-span-4 lg:row-start-2',
     illustration: <MarketingIllustrationSetup />,
   },
-]
-
-type PricingFeature = {
-  label: string
-  free: MarketingPricingFeatureValueKind
-  pro: MarketingPricingFeatureValueKind
-}
-
-type PricingPlan = {
-  id: string
-  name: string
-  price: string
-  period: string
-  description: string
-  ctaLabel: string
-  tone?: "default" | "inverse"
-}
-
-const PRICING_PLANS: PricingPlan[] = [
-  {
-    id: 'free',
-    name: 'Free',
-    price: '$0',
-    period: 'per month',
-    description:
-      'For personal use and getting started with calendar sync.',
-    ctaLabel: 'Get Started',
-  },
-  {
-    id: 'pro',
-    name: 'Pro',
-    price: '$5',
-    period: 'per month',
-    description:
-      'For power users who need fast syncs, advanced feed controls, and unlimited syncing.',
-    ctaLabel: 'Get Started',
-    tone: "inverse" as const,
-  },
-]
-
-const PRICING_FEATURES: PricingFeature[] = [
-  { label: 'Reading Your Calendars', free: 'Every 1 minute', pro: 'Every 1 minute' },
-  { label: 'Updating Your Calendars', free: 'Every 30 minutes', pro: 'Every 1 minute' },
-  { label: 'Linked Accounts', free: 'Up to 2', pro: 'infinity' },
-  { label: 'Sync Mappings', free: 'Up to 3', pro: 'infinity' },
-  { label: 'Aggregated iCal Feed', free: 'check', pro: 'check' },
-  { label: 'iCal Feed Customization', free: 'minus', pro: 'check' },
-  { label: 'Event Filters & Exclusions', free: 'minus', pro: 'check' },
-  { label: 'API & MCP Access', free: '25 calls/day', pro: 'infinity' },
-  { label: 'Priority Support', free: 'minus', pro: 'check' },
 ]
 
 type HowItWorksStep = {
@@ -241,7 +191,7 @@ export const Route = createFileRoute('/(marketing)/')({
     }),
     scripts: [
       jsonLdScript(softwareApplicationSchema()),
-      jsonLdScript(faqSchema(FAQ_ITEMS)),
+      jsonLdScript(faqSchema("", FAQ_ITEMS)),
     ],
   }),
 })

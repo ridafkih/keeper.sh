@@ -67,7 +67,7 @@ html {
     transparent 40%
   );
   --ui-background-elevated: var(--color-white);
-  --ui-border-elevated: var(--color-neutral-200);
+  --ui-border-elevated: var(--color-neutral-300);
   --ui-background-inverse-hover: var(--color-neutral-800);
   --ui-background-hover: color-mix(
     in srgb,

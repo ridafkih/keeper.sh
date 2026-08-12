@@ -131,7 +131,8 @@ export function createAppRouter(options: CreateAppRouterOptions = {}) {
     context: buildRouterContext(options.request, options.viteAssets),
     defaultPreload: "intent",
     routeTree,
-    scrollRestoration: false,
+    scrollRestoration: true,
+    scrollToTopSelectors: ["body"],
   });
 
   return router;
