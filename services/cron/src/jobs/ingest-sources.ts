@@ -38,6 +38,10 @@ import { database, refreshLockRedis, refreshLockStore } from "@/context";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import { resolveMissingCalendarFailure } from "@/utils/provider-ingest-failure";
+import {
+  getDatabaseErrorObservability,
+  getIngestEventObservability,
+} from "@/utils/ingest-observability";
 import { withAbortTimeout } from "@/utils/with-abort-timeout";
 import { createSyncLock } from "@keeper.sh/sync";
 
@@ -68,6 +72,10 @@ const runSourceIngest = async (
 };
 
 const resolveIngestErrorSlug = (error: unknown): string => {
+  const databaseObservability = getDatabaseErrorObservability(error);
+  if (databaseObservability) {
+    return databaseObservability.slug;
+  }
   if (!isTimeoutError(error)) {
     return "provider-api-error";
   }
@@ -75,6 +83,31 @@ const resolveIngestErrorSlug = (error: unknown): string => {
   widelog.set("timeout.kind", "request");
   widelog.set("timeout.limit_ms", PROVIDER_INGEST_REQUEST_TIMEOUT_MS);
   return "provider-request-timeout";
+};
+
+const logIngestError = (
+  error: unknown,
+  fields: { slug: string; retriable?: boolean; requiresReauth?: boolean; disableCalendar?: boolean },
+): void => {
+  const databaseObservability = getDatabaseErrorObservability(error);
+  if (!databaseObservability) {
+    widelog.errorFields(error, fields);
+    return;
+  }
+
+  for (const [key, value] of Object.entries(databaseObservability.fields)) {
+    widelog.set(key, value);
+  }
+  widelog.errorFields(databaseObservability.error, {
+    ...fields,
+    slug: databaseObservability.slug,
+  });
+};
+
+const applyIngestEventObservability = (event: Record<string, unknown>): void => {
+  for (const [key, value] of Object.entries(getIngestEventObservability(event))) {
+    widelog.set(key, value);
+  }
 };
 const GOOGLE_REQUESTS_PER_MINUTE = 500;
 
@@ -372,6 +405,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
                 withPersistenceTransaction:
                   createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),
                 onIngestEvent: (event) => {
+                  applyIngestEventObservability(event);
                   ingestEvents.push({
                     ...event,
                     "source.provider": source.provider,
@@ -396,7 +430,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
 
             const missingCalendarFailure = resolveMissingCalendarFailure(error);
             if (missingCalendarFailure) {
-              widelog.errorFields(error, missingCalendarFailure);
+              logIngestError(error, missingCalendarFailure);
               logIngestBackoff(
                 await applyIngestBackoff(source.calendarId, source.ingestFailureCount),
               );
@@ -404,7 +438,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
             }
 
             if (error instanceof Error && "authRequired" in error && error.authRequired === true) {
-              widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
+              logIngestError(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
 
               await database
                 .update(calendarAccountsTable)
@@ -415,7 +449,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
             }
 
             if (error instanceof Error && "oauthReauthRequired" in error && error.oauthReauthRequired === true) {
-              widelog.errorFields(error, { slug: "provider-token-refresh-failed", retriable: false, requiresReauth: true });
+              logIngestError(error, { slug: "provider-token-refresh-failed", retriable: false, requiresReauth: true });
 
               await database
                 .update(calendarAccountsTable)
@@ -425,7 +459,7 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
               return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [] };
             }
 
-            widelog.errorFields(error, {
+            logIngestError(error, {
               slug: resolveIngestErrorSlug(error),
               retriable: true,
             });
@@ -526,6 +560,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
                 withPersistenceTransaction:
                   createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),
                 onIngestEvent: (event) => {
+                  applyIngestEventObservability(event);
                   ingestEvents.push({
                     ...event,
                     "source.provider": source.provider,
@@ -549,7 +584,7 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
             widelog.set("outcome", "error");
 
             if (isCalDAVAuthenticationError(error)) {
-              widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
+              logIngestError(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
 
               await database
                 .update(calendarAccountsTable)
@@ -561,9 +596,9 @@ const ingestCalDAVSources = async (): Promise<{ added: number; removed: number; 
 
             const missingCalendarFailure = resolveMissingCalendarFailure(error);
             if (missingCalendarFailure) {
-              widelog.errorFields(error, missingCalendarFailure);
+              logIngestError(error, missingCalendarFailure);
             } else {
-              widelog.errorFields(error, {
+              logIngestError(error, {
                 slug: resolveIngestErrorSlug(error),
                 retriable: true,
               });
@@ -666,6 +701,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
                 withPersistenceTransaction:
                   createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),
                 onIngestEvent: (event) => {
+                  applyIngestEventObservability(event);
                   ingestEvents.push({
                     ...event,
                     "source.provider": "ical",
@@ -687,7 +723,7 @@ const ingestIcsSources = async (): Promise<{ added: number; removed: number; err
           } catch (error) {
 
             widelog.set("outcome", "error");
-            widelog.errorFields(error, {
+            logIngestError(error, {
               slug: resolveIngestErrorSlug(error),
               retriable: true,
             });

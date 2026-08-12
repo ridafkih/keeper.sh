@@ -9,10 +9,14 @@ interface DatabaseErrorClassification {
 }
 
 interface DatabaseErrorDetails {
+  column?: string;
   constraint: string | null;
+  dataType?: string;
   detail: string | null;
   message: string | null;
+  schema?: string;
   sqlState: string | null;
+  table?: string;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -38,12 +42,28 @@ const getDatabaseErrorDetails = (error: unknown): DatabaseErrorDetails | null =>
     return null;
   }
 
-  const details = {
+  const details: DatabaseErrorDetails = {
     constraint: readString(cause.constraint),
     detail: readString(cause.detail),
     message: readString(cause.message),
     sqlState: readString(cause.errno) ?? readString(cause.code),
   };
+  const column = readString(cause.column);
+  if (column) {
+    details.column = column;
+  }
+  const dataType = readString(cause.dataType);
+  if (dataType) {
+    details.dataType = dataType;
+  }
+  const schema = readString(cause.schema);
+  if (schema) {
+    details.schema = schema;
+  }
+  const table = readString(cause.table);
+  if (table) {
+    details.table = table;
+  }
   if (Object.values(details).every((value) => value === null)) {
     return null;
   }
