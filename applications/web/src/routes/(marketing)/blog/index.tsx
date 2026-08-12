@@ -56,7 +56,7 @@ function BlogDirectoryPage() {
                 <Heading3 as="h2" className="group-hover:text-foreground-hover">
                   {blogPost.metadata.title}
                 </Heading3>
-                <Text size="xs" tone="muted" className="opacity-75">
+                <Text size="xs" tone="muted">
                   Created {formatIsoDate(blogPost.metadata.createdAt)}
                 </Text>
                 <Text size="sm" tone="muted" className="line-clamp-3">

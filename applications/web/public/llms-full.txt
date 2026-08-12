@@ -14,20 +14,20 @@ People with calendars across multiple providers (Google Calendar, Outlook, iClou
 
 Keeper.sh uses a pull-compare-push architecture, split across two schedules:
 
-1. **Pull**: Events are fetched from configured source calendars into Keeper's own database. This runs every minute on every plan
+1. **Pull**: Events are fetched from configured source calendars into Keeper.sh's own database. This runs every minute on every plan
 2. **Compare**: Events are compared against known state
 3. **Push**: Changes are written out to destination calendars. This runs every minute on Pro and every thirty minutes on Free
 
 Core sync operations:
 - **Add**: Source event with no mapping on destination gets created
 - **Delete**: Mapping exists but source event is gone — destination event gets removed
-- **Cleanup**: Keeper-created events with no mapping are cleaned up
+- **Cleanup**: Keeper.sh-created events with no mapping are cleaned up
 
-Events created by Keeper are tagged with a `@keeper.sh` suffix on their remote UID. For Outlook (which doesn't support custom UIDs), a `"keeper.sh"` category is used instead.
+Events created by Keeper.sh are tagged with a `@keeper.sh` suffix on their remote UID. For Outlook (which doesn't support custom UIDs), a `"keeper.sh"` category is used instead.
 
 Race conditions are prevented using Redis-backed generation counters. If two syncs target the same calendar simultaneously, the later one backs off.
 
-For Google and Outlook, Keeper uses incremental sync tokens — only fetching what changed since the last sync, making cycles fast even for calendars with thousands of events.
+For Google and Outlook, Keeper.sh uses incremental sync tokens — only fetching what changed since the last sync, making cycles fast even for calendars with thousands of events.
 
 ### Supported Providers
 
@@ -56,7 +56,7 @@ Per-source calendar settings:
 
 ### iCal Feed
 
-Keeper generates a unique, token-authenticated URL combining events from selected source calendars. Subscribable from any calendar app supporting iCal (Apple Calendar, Thunderbird, etc.). Respects all privacy settings.
+Keeper.sh generates a unique, token-authenticated URL combining events from selected source calendars. Subscribable from any calendar app supporting iCal (Apple Calendar, Thunderbird, etc.). Respects all privacy settings.
 
 ### Source and Destination Mappings
 
@@ -75,7 +75,7 @@ Setup flow:
 
 There is no cap on how many calendars an account exposes. A linked account is one connected Google, Outlook, iCloud, FastMail, or CalDAV account, or one iCal/ICS subscription. A sync mapping is one source calendar wired to one destination calendar.
 
-Reading from your sources into Keeper runs every minute on every plan. The refresh interval above is how often Keeper writes those changes out to your destination calendars, and that is the only part that differs by plan.
+Reading from your sources into Keeper.sh runs every minute on every plan. The refresh interval above is how often Keeper.sh writes those changes out to your destination calendars, and that is the only part that differs by plan.
 
 Self-hosted instances get Pro-tier features by default.
 
@@ -92,11 +92,11 @@ Google Calendar and Outlook require OAuth app setup (Google Cloud / Azure). CalD
 
 ## MCP (Model Context Protocol)
 
-Keeper includes an optional MCP server that gives AI agents (such as Claude) read and write access to calendar data. The server authenticates via OAuth 2.1 with a user consent flow and is proxied through the web service at `/mcp`.
+Keeper.sh includes an optional MCP server that gives AI agents (such as Claude) read and write access to calendar data. The server authenticates via OAuth 2.1 with a user consent flow and is proxied through the web service at `/mcp`.
 
 ### Available Tools
 
-- **list_calendars** — List all calendars connected to Keeper, including provider name and account
+- **list_calendars** — List all calendars connected to Keeper.sh, including provider name and account
 - **list_accounts** — List all connected calendar accounts with provider information
 - **get_events** — Get calendar events within a date range (ISO 8601 datetimes + IANA timezone)
 - **get_event** — Get a single calendar event by its ID
@@ -110,7 +110,7 @@ Keeper includes an optional MCP server that gives AI agents (such as Claude) rea
 
 ### Connecting
 
-Point any MCP-compatible client at the `/mcp` endpoint of a Keeper instance. The client will be guided through the OAuth consent flow to authorize read and write access.
+Point any MCP-compatible client at the `/mcp` endpoint of a Keeper.sh instance. The client will be guided through the OAuth consent flow to authorize read and write access.
 
 On the free plan the underlying API is capped at 25 requests per day, after which requests are rejected. Pro is uncapped, as are self-hosted instances running without commercial mode.
 

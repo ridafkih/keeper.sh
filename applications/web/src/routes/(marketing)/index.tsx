@@ -174,7 +174,7 @@ const HOW_IT_WORKS_STEPS: HowItWorksStep[] = [
   {
     title: 'Configure sync rules',
     description:
-      'Choose which calendars to sync and how events should appear. Keeper handles the rest automatically.',
+      'Choose which calendars to sync and how events should appear. Keeper.sh handles the rest automatically.',
   },
   {
     title: 'Stay in sync',
@@ -193,12 +193,12 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'Can I use ICS or iCal links as a source?',
     answer:
-      'Yes. Any publicly accessible ICS or iCal link can be used as a calendar source in Keeper. This means you can pull events from services that only offer read-only calendar feeds.',
+      'Yes. Any publicly accessible ICS or iCal link can be used as a calendar source in Keeper.sh. This means you can pull events from services that only offer read-only calendar feeds.',
   },
   {
     question: 'Which calendar providers does Keeper.sh support?',
     answer:
-      'Keeper.sh works with Google Calendar, Microsoft Outlook, Apple iCloud, FastMail, and any provider that supports CalDAV or ICS feeds. If your calendar supports one of these, it should work with Keeper.',
+      'Keeper.sh works with Google Calendar, Microsoft Outlook, Apple iCloud, FastMail, and any provider that supports CalDAV or ICS feeds. If your calendar supports one of these, it should work with Keeper.sh.',
   },
   {
     question: 'Can I self-host Keeper.sh?',
@@ -235,7 +235,7 @@ export const Route = createFileRoute('/(marketing)/')({
     meta: seoMeta({
       title: "Open-Source Calendar Syncing for Google, Outlook & iCloud",
       description:
-        "Keep your personal, work, and school calendars in sync automatically. Open-source (AGPL-3.0) calendar syncing for Google Calendar, Outlook, iCloud, FastMail, and CalDAV.",
+        "Keep your personal, work, and school calendars in sync automatically. Open source, and works with Google Calendar, Outlook, iCloud, Fastmail and more.",
       path: "/",
       brandPosition: "before",
     }),

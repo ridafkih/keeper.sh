@@ -41,13 +41,13 @@ The core logic is straightforward:
 
 - **Add:** If a source event has no corresponding mapping on the destination, it gets created
 - **Delete:** If a mapping exists but the source event no longer does, the destination event gets removed
-- **Cleanup:** Any Keeper-created events with no mapping are cleaned up for consistency
+- **Cleanup:** Any Keeper.sh-created events with no mapping are cleaned up for consistency
 
-Events created by Keeper are tagged with a `@keeper.sh` suffix on their remote UID so they can be identified later. For platforms like Outlook that don't support custom UIDs, we use a `"keeper.sh"` category instead.
+Events created by Keeper.sh are tagged with a `@keeper.sh` suffix on their remote UID so they can be identified later. For platforms like Outlook that don't support custom UIDs, we use a `"keeper.sh"` category instead.
 
 To prevent race conditions, each sync operation acquires a Redis-backed generation counter. If two syncs try to run on the same calendar at the same time, the later one backs off. This keeps things consistent without requiring heavy locking.
 
-For Google and Outlook, Keeper uses incremental sync tokens. Instead of re-fetching every event on each cycle, it asks the provider for only what changed since the last sync. This makes regular sync cycles fast and lightweight, even for calendars with thousands of events.
+For Google and Outlook, Keeper.sh uses incremental sync tokens. Instead of re-fetching every event on each cycle, it asks the provider for only what changed since the last sync. This makes regular sync cycles fast and lightweight, even for calendars with thousands of events.
 
 ## What Keeper.sh supports
 
@@ -63,7 +63,7 @@ Keeper.sh works with six calendar providers across two authentication mechanisms
 - **Generic CalDAV** — any CalDAV-compatible server with username/password auth
 - **iCal/ICS feeds** — read-only public URL-based calendars
 
-Each calendar in Keeper has a capability flag: "pull" means it can be used as a source (read events from), and "push" means it can be used as a destination (write events to). iCal feeds, for example, are pull-only since they're read-only by nature. OAuth and CalDAV calendars support both.
+Each calendar in Keeper.sh has a capability flag: "pull" means it can be used as a source (read events from), and "push" means it can be used as a destination (write events to). iCal feeds, for example, are pull-only since they're read-only by nature. OAuth and CalDAV calendars support both.
 
 ## Privacy controls
 
@@ -81,7 +81,7 @@ These same controls apply to the iCal feed. When you generate your aggregated fe
 
 ## The iCal feed
 
-One of the features I use most is the aggregated iCal feed. Keeper generates a unique, token-authenticated URL that combines events from all your selected source calendars into a single feed. You can subscribe to it from any calendar app that supports iCal — Apple Calendar, Thunderbird, or any CalDAV client.
+One of the features I use most is the aggregated iCal feed. Keeper.sh generates a unique, token-authenticated URL that combines events from all your selected source calendars into a single feed. You can subscribe to it from any calendar app that supports iCal — Apple Calendar, Thunderbird, or any CalDAV client.
 
 The feed respects all your privacy settings. If you've chosen to exclude event titles, the feed shows "Busy" blocks. If you've included titles and locations, those show up too. It's the same event data, just served as a subscribable feed instead of pushed to a specific calendar.
 
@@ -89,7 +89,7 @@ This is especially useful for sharing availability externally. Instead of giving
 
 ## Source and destination mappings
 
-The mapping model is what makes Keeper flexible. You connect calendar accounts, then configure which calendars are sources and which are destinations. A single source can push to multiple destinations, and a single destination can receive from multiple sources.
+The mapping model is what makes Keeper.sh flexible. You connect calendar accounts, then configure which calendars are sources and which are destinations. A single source can push to multiple destinations, and a single destination can receive from multiple sources.
 
 The setup flow walks you through it:
 
@@ -139,11 +139,11 @@ The [`compose.yaml` setup in the README](https://github.com/ridafkih/keeper.sh/b
 
 A few decisions that shaped the architecture:
 
-**CalDAV as the universal protocol.** Rather than building custom integrations for every provider, Keeper treats CalDAV (RFC 4791) as the common layer for FastMail, iCloud, and any standards-compliant server. This means adding a new CalDAV provider is mostly a configuration change, not new code.
+**CalDAV as the universal protocol.** Rather than building custom integrations for every provider, Keeper.sh treats CalDAV (RFC 4791) as the common layer for FastMail, iCloud, and any standards-compliant server. This means adding a new CalDAV provider is mostly a configuration change, not new code.
 
 **Encrypted credentials at rest.** CalDAV passwords and OAuth tokens are encrypted before storage using a configurable encryption key. OAuth tokens include refresh token rotation, so sessions stay valid without storing long-lived credentials.
 
-**Content hashing for iCal feeds.** When pulling from iCal/ICS URLs, Keeper hashes the response content and skips processing if nothing changed. This avoids redundant work when feeds haven't been updated and keeps snapshots for 6 hours in case something goes wrong.
+**Content hashing for iCal feeds.** When pulling from iCal/ICS URLs, Keeper.sh hashes the response content and skips processing if nothing changed. This avoids redundant work when feeds haven't been updated and keeps snapshots for 6 hours in case something goes wrong.
 
 **Real-time sync status.** The API server runs a WebSocket endpoint that broadcasts sync progress to the dashboard. You can watch events get pulled, compared, and pushed in real time rather than wondering if a sync cycle actually ran.
 

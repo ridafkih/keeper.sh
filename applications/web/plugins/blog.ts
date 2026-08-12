@@ -1,14 +1,20 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Plugin } from "vite";
 import { type } from "arktype";
 import { parse as parseYaml } from "yaml";
+
+const OPEN_GRAPH_IMAGE_WIDTH = 1200;
+const OPEN_GRAPH_IMAGE_HEIGHT = 630;
+const OPEN_GRAPH_IMAGE_PATH =
+  /^\/open-graph\/[a-z0-9]+(?:-[a-z0-9]+)*\.png$/;
 
 const blogPostMetadataSchema = type({
   "+": "reject",
   blurb: "string >= 1",
   createdAt: "string.date.iso",
   description: "string >= 1",
+  "image?": OPEN_GRAPH_IMAGE_PATH,
   "slug?": /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
   tags: "string[]",
   title: "string >= 1",
@@ -17,7 +23,7 @@ const blogPostMetadataSchema = type({
 
 type BlogPostMetadata = typeof blogPostMetadataSchema.infer;
 
-interface ProcessedBlogPost {
+export interface ProcessedBlogPost {
   content: string;
   metadata: BlogPostMetadata;
   slug: string;
@@ -90,6 +96,46 @@ function parseMetadata(value: unknown, filePath: string): BlogPostMetadata {
   };
 }
 
+const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+
+function readPngDimensions(
+  file: Buffer,
+): { height: number; width: number } | null {
+  if (file.length < 24 || !file.subarray(0, 8).equals(PNG_SIGNATURE)) {
+    return null;
+  }
+  return { height: file.readUInt32BE(20), width: file.readUInt32BE(16) };
+}
+
+function assertOpenGraphImage(
+  imagePath: string,
+  publicDir: string,
+  filePath: string,
+): void {
+  const absolutePath = join(publicDir, imagePath);
+  if (!existsSync(absolutePath)) {
+    throw new Error(
+      `Blog post "${filePath}" references an Open Graph image that does not exist at "public${imagePath}".`,
+    );
+  }
+
+  const dimensions = readPngDimensions(readFileSync(absolutePath));
+  if (!dimensions) {
+    throw new Error(
+      `Open Graph image "public${imagePath}" referenced by "${filePath}" is not a valid PNG.`,
+    );
+  }
+
+  if (
+    dimensions.width !== OPEN_GRAPH_IMAGE_WIDTH ||
+    dimensions.height !== OPEN_GRAPH_IMAGE_HEIGHT
+  ) {
+    throw new Error(
+      `Open Graph image "public${imagePath}" referenced by "${filePath}" must be ${OPEN_GRAPH_IMAGE_WIDTH}x${OPEN_GRAPH_IMAGE_HEIGHT}, but is ${dimensions.width}x${dimensions.height}.`,
+    );
+  }
+}
+
 function createSlug(title: string): string {
   return title
     .toLowerCase()
@@ -119,7 +165,10 @@ function removeRedundantLeadingHeading(
   return lines.slice(nextIndex).join("\n");
 }
 
-function processBlogDirectory(blogDir: string): ProcessedBlogPost[] {
+export function processBlogDirectory(
+  blogDir: string,
+  publicDir: string,
+): ProcessedBlogPost[] {
   const files = readdirSync(blogDir)
     .filter((f) => f.endsWith(".mdx"))
     .sort();
@@ -132,6 +181,10 @@ function processBlogDirectory(blogDir: string): ProcessedBlogPost[] {
     const { content: rawContent, data } = splitFrontmatter(raw, file);
     const metadata = parseMetadata(data, file);
     const content = removeRedundantLeadingHeading(rawContent, metadata.title);
+
+    if (metadata.image) {
+      assertOpenGraphImage(metadata.image, publicDir, file);
+    }
 
     const hasCustomSlug = typeof metadata.slug === "string";
     const baseSlug = hasCustomSlug ? metadata.slug : createSlug(metadata.title);
@@ -157,12 +210,14 @@ const RESOLVED_ID = `\0${VIRTUAL_MODULE_ID}`;
 
 export function blogPlugin(): Plugin {
   let blogDir: string;
+  let publicDir: string;
 
   return {
     name: "keeper-blog",
 
     configResolved(config) {
       blogDir = resolve(config.root, "src/content/blog");
+      publicDir = config.publicDir;
     },
 
     resolveId(id) {
@@ -172,7 +227,7 @@ export function blogPlugin(): Plugin {
     load(id) {
       if (id !== RESOLVED_ID) return;
 
-      const posts = processBlogDirectory(blogDir);
+      const posts = processBlogDirectory(blogDir, publicDir);
       return `export const blogPosts = ${JSON.stringify(posts)};`;
     },
 
