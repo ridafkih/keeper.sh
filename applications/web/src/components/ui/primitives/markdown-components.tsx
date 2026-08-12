@@ -105,7 +105,7 @@ export function MarkdownTable({
   children,
 }: MarkdownElementProps<"table">) {
   return (
-    <div className="my-4 overflow-x-auto">
+    <div className="my-4 overflow-x-auto [contain:inline-size]">
       <table className="min-w-full border-collapse border border-interactive-border text-base tracking-tight text-foreground-muted">
         {children}
       </table>
@@ -116,11 +116,11 @@ export function MarkdownTable({
 export function MarkdownTableHeader({
   children,
 }: MarkdownElementProps<"th">) {
-  return <th className="border border-interactive-border px-2 py-1 text-left font-medium text-foreground">{children}</th>;
+  return <th className="min-w-32 border border-interactive-border px-2 py-1 text-left font-medium text-foreground first:min-w-48">{children}</th>;
 }
 
 export function MarkdownTableCell({
   children,
 }: MarkdownElementProps<"td">) {
-  return <td className="border border-interactive-border px-2 py-1">{children}</td>;
+  return <td className="min-w-32 border border-interactive-border px-2 py-1 first:min-w-48">{children}</td>;
 }
