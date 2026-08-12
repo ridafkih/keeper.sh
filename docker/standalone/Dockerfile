@@ -79,7 +79,7 @@ COPY --from=build /app/applications/web/dist ./applications/web/dist
 
 COPY docker/standalone/rootfs /
 
-RUN chmod +x /etc/s6-overlay/s6-rc.d/*/run /etc/s6-overlay/scripts/* \
+RUN chmod +x /etc/s6-overlay/s6-rc.d/*/run /etc/s6-overlay/s6-rc.d/*/finish /etc/s6-overlay/scripts/* \
   && mkdir -p /var/lib/postgresql/data /run/postgresql /var/log/keeper \
   && chown -R postgres:postgres /var/lib/postgresql /run/postgresql
 
