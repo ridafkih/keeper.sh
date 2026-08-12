@@ -35,6 +35,14 @@ const buildConfig = () => ({
   calendarId: "calendar-1",
   url: "https://example.com/calendar.ics",
   database: {} as never,
+  plan: {
+    futureRange: "2_years" as const,
+    historicRange: "1_week" as const,
+    window: {
+      timeMin: new Date("2026-01-01T00:00:00.000Z"),
+      timeMax: new Date("2027-01-01T00:00:00.000Z"),
+    },
+  },
 });
 
 describe("createIcsSourceFetcher", () => {
@@ -282,5 +290,54 @@ describe("createIcsSourceFetcher", () => {
 
     await expect(createIcsSourceFetcher(buildConfig()).fetchEvents())
       .rejects.toThrow("Unsupported calendar timezone: Custom/Eastern");
+  });
+
+  it("returns events far outside the sync window so stored history stays unbounded", async () => {
+    /*
+     * ICS storage is unbounded on purpose: the sync window bounds what Keeper
+     * mirrors to destinations, not what it retains. Dropping historic events here
+     * would make the snapshot diff delete their stored state on the next ingest.
+     */
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const historicIcs = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//test//test//EN",
+      "BEGIN:VEVENT",
+      "UID:ancient@test",
+      "DTSTAMP:20190517T000000Z",
+      "DTSTART:20190517T120000Z",
+      "DTEND:20190517T130000Z",
+      "SUMMARY:Ancient",
+      "END:VEVENT",
+      "BEGIN:VEVENT",
+      "UID:distant-future@test",
+      "DTSTAMP:20190517T000000Z",
+      "DTSTART:20400517T120000Z",
+      "DTEND:20400517T130000Z",
+      "SUMMARY:Distant",
+      "END:VEVENT",
+      "BEGIN:VEVENT",
+      "UID:event-1@test",
+      "DTSTAMP:20260517T000000Z",
+      "DTSTART:20260517T120000Z",
+      "DTEND:20260517T130000Z",
+      "SUMMARY:Test",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: historicIcs });
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({
+      changed: true,
+      snapshot: { contentHash: "historic", ical: historicIcs },
+    });
+
+    const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+    expect(result.events.map(({ uid }) => uid)).toEqual([
+      "ancient@test",
+      "distant-future@test",
+      "event-1@test",
+    ]);
   });
 });

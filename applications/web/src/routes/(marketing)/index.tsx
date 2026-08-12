@@ -34,7 +34,6 @@ import {
   MarketingPricingComparisonSpacer,
   MarketingPricingFeatureDisplay,
   MarketingPricingFeatureLabel,
-  type MarketingPricingFeatureValueKind,
   MarketingPricingFeatureMatrix,
   MarketingPricingFeatureRow,
   MarketingPricingFeatureValue,
@@ -42,6 +41,7 @@ import {
   MarketingPricingPlanCard,
   MarketingPricingSection,
 } from '../../features/marketing/components/marketing-pricing-section'
+import { PRICING_FEATURES, PRICING_PLANS } from '../../features/marketing/pricing-plans'
 import { calendarEmphasizedAtom } from '../../state/calendar-emphasized'
 import { ANALYTICS_EVENTS } from '../../lib/analytics'
 import ArrowRightIcon from "lucide-react/dist/esm/icons/arrow-right";
@@ -80,7 +80,7 @@ const MARKETING_FEATURES: MarketingFeature[] = [
     id: 1,
     title: 'Privacy-First & Open Source',
     description:
-      'Open-source, released under an AGPL-3.0 license. Secure and community driven. Here are some of the latest contributors.',
+      'Open-source, released under an AGPL-3.0 license. Community driven, and anyone can read the code to check what it does with your calendars. Here are some of the latest contributors.',
     gridClassName: 'lg:col-start-1 lg:col-span-4 lg:row-start-1',
     illustration: <MarketingIllustrationContributors />,
   },
@@ -96,7 +96,7 @@ const MARKETING_FEATURES: MarketingFeature[] = [
     id: 3,
     title: 'Simple Synchronization Engine',
     description:
-      'Your events are aggregated and synced across all linked calendars. Discrepancies are reconciled. Built to prevent orphan events.',
+      'Your events are aggregated and synced across all linked calendars. Keeper tracks every copy it creates and checks them on each run, updating and removing them as the original changes.',
     gridClassName: 'lg:col-start-1 lg:col-span-6 lg:row-start-2',
     illustration: <MarketingIllustrationSync />,
   },
@@ -104,59 +104,10 @@ const MARKETING_FEATURES: MarketingFeature[] = [
     id: 4,
     title: 'Quick Setup',
     description:
-      'Link OAuth, ICS or CalDAV accounts in seconds. No complicated configuration or technical knowledge required. Connect and go.',
+      'Link your Google, Outlook, iCloud, or CalDAV accounts in seconds. On the hosted version there is nothing to configure. Sign in and go.',
     gridClassName: 'lg:col-start-7 lg:col-span-4 lg:row-start-2',
     illustration: <MarketingIllustrationSetup />,
   },
-]
-
-type PricingFeature = {
-  label: string
-  free: MarketingPricingFeatureValueKind
-  pro: MarketingPricingFeatureValueKind
-}
-
-type PricingPlan = {
-  id: string
-  name: string
-  price: string
-  period: string
-  description: string
-  ctaLabel: string
-  tone?: "default" | "inverse"
-}
-
-const PRICING_PLANS: PricingPlan[] = [
-  {
-    id: 'free',
-    name: 'Free',
-    price: '$0',
-    period: 'per month',
-    description:
-      'For personal use and getting started with calendar sync.',
-    ctaLabel: 'Get Started',
-  },
-  {
-    id: 'pro',
-    name: 'Pro',
-    price: '$5',
-    period: 'per month',
-    description:
-      'For power users who need fast syncs, advanced feed controls, and unlimited syncing.',
-    ctaLabel: 'Get Started',
-    tone: "inverse" as const,
-  },
-]
-
-const PRICING_FEATURES: PricingFeature[] = [
-  { label: 'Sync Interval', free: 'Every 30 minutes', pro: 'Every 1 minute' },
-  { label: 'Linked Accounts', free: 'Up to 2', pro: 'infinity' },
-  { label: 'Sync Mappings', free: 'Up to 3', pro: 'infinity' },
-  { label: 'Aggregated iCal Feed', free: 'check', pro: 'check' },
-  { label: 'iCal Feed Customization', free: 'minus', pro: 'check' },
-  { label: 'Event Filters & Exclusions', free: 'minus', pro: 'check' },
-  { label: 'API & MCP Access', free: '25 calls/day', pro: 'infinity' },
-  { label: 'Priority Support', free: 'minus', pro: 'check' },
 ]
 
 type HowItWorksStep = {
@@ -173,12 +124,12 @@ const HOW_IT_WORKS_STEPS: HowItWorksStep[] = [
   {
     title: 'Configure sync rules',
     description:
-      'Choose which calendars to sync and how events should appear. Keeper handles the rest automatically.',
+      'Choose which calendars to sync and how events should appear. Keeper.sh handles the rest automatically.',
   },
   {
     title: 'Stay in sync',
     description:
-      'Events are continuously aggregated and pushed across all your linked calendars. Conflicts are reconciled.',
+      'Events are aggregated and pushed out across all your linked calendars on a schedule. Discrepancies are reconciled.',
   },
 ]
 
@@ -192,12 +143,12 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'Can I use ICS or iCal links as a source?',
     answer:
-      'Yes. Any publicly accessible ICS or iCal link can be used as a calendar source in Keeper. This means you can pull events from services that only offer read-only calendar feeds.',
+      'Yes. Any publicly accessible ICS or iCal link can be used as a calendar source in Keeper.sh. This means you can pull events from services that only offer read-only calendar feeds.',
   },
   {
     question: 'Which calendar providers does Keeper.sh support?',
     answer:
-      'Keeper.sh works with Google Calendar, Microsoft Outlook, Apple iCloud, FastMail, and any provider that supports CalDAV or ICS feeds. If your calendar supports one of these protocols, it will work with Keeper.',
+      'Keeper.sh works with Google Calendar, Microsoft Outlook, Apple iCloud, FastMail, and any provider that supports CalDAV or ICS feeds. If your calendar supports one of these, it should work with Keeper.sh.',
   },
   {
     question: 'Can I self-host Keeper.sh?',
@@ -208,7 +159,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'How often do calendars sync?',
     answer:
-      'On the free plan, calendars sync every 30 minutes. On the Pro plan, calendars sync every minute.',
+      'Keeper reads your calendars every minute on both plans. What differs is how often it writes those changes back out to your other calendars: every 30 minutes on the free plan, and every minute on Pro.',
   },
   {
     question: 'Are my event details visible to others?',
@@ -234,13 +185,13 @@ export const Route = createFileRoute('/(marketing)/')({
     meta: seoMeta({
       title: "Open-Source Calendar Syncing for Google, Outlook & iCloud",
       description:
-        "Keep your personal, work, and school calendars in sync automatically. Open-source (AGPL-3.0) calendar syncing for Google Calendar, Outlook, iCloud, FastMail, and CalDAV.",
+        "Keep your personal, work, and school calendars in sync automatically. Open source, and works with Google Calendar, Outlook, iCloud, Fastmail and more.",
       path: "/",
       brandPosition: "before",
     }),
     scripts: [
       jsonLdScript(softwareApplicationSchema()),
-      jsonLdScript(faqSchema(FAQ_ITEMS)),
+      jsonLdScript(faqSchema("", FAQ_ITEMS)),
     ],
   }),
 })

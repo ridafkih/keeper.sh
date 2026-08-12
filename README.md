@@ -117,6 +117,8 @@ Ingestion pulls from your sources into Keeper's own database once a minute, rega
 
 Pushing to destinations is what the refresh interval in the pricing table refers to. The cron service enqueues a job per destination onto a Redis-backed queue every minute for Pro and every thirty minutes for free, and the worker service reconciles the destination calendar. This is polling on our side rather than provider push notifications, so nothing needs to reach your instance from the outside.
 
+Neither half is schedule-only. `POST /api/v1/sync`, or `trigger_sync` over MCP, clears the ingest backoff so your sources are re-polled on the next pass and enqueues the push half straight away, throttled to one request per minute per user so a client cannot hammer your providers. A calendar paused with `pause_sync` is skipped by both halves until it is resumed.
+
 # Cloud Hosted
 
 I've made Keeper easy to self-host, but whether you simply want to support the project or don't want to deal with the hassle or overhead of configuring and running your own infrastructure cloud hosting is always an option.
@@ -554,6 +556,7 @@ curl https://keeper.example.com/api/v1/calendars \
 | Method   | Path                                     | Description                                                                                                                                                    |
 | -------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET`    | `/api/v1/calendars`                      | List connected calendars. Accepts an optional comma-delimited `provider` filter.                                                                                |
+| `PATCH`  | `/api/v1/calendars/{calendarId}`         | Pause or resume syncing for a calendar. Send `paused` as `true` to halt it in both directions without disconnecting it.                                         |
 | `GET`    | `/api/v1/calendars/{calendarId}/invites` | List invitations on a calendar that have not been responded to, within a date range.                                                                            |
 | `GET`    | `/api/v1/accounts`                       | List connected calendar accounts and how many calendars each has. Accepts an optional comma-delimited `provider` filter.                                        |
 | `GET`    | `/api/v1/events`                         | List events in a date range. Accepts `calendarId`, `availability`, and `isAllDay` filters, and `count=true` to return only a count.                             |
@@ -561,9 +564,15 @@ curl https://keeper.example.com/api/v1/calendars \
 | `GET`    | `/api/v1/events/{id}`                    | Get a single event.                                                                                                                                            |
 | `PATCH`  | `/api/v1/events/{id}`                    | Update an event's fields, or send `rsvpStatus` to respond to an invitation.                                                                                     |
 | `DELETE` | `/api/v1/events/{id}`                    | Delete an event.                                                                                                                                               |
+| `GET`    | `/api/v1/events/free-time`               | Find free slots of at least `durationMinutes` in a date range. Requires `timezone`, and accepts working-hours options.                                          |
+| `POST`   | `/api/v1/sync`                           | Trigger a sync immediately. Throttled to one request per minute per user.                                                                                      |
 | `GET`    | `/api/v1/ical`                           | Get the URL of your iCal feed.                                                                                                                                 |
 
 Range parameters `from` and `to` are ISO 8601 datetimes. If omitted, `from` defaults to now and `to` defaults to a week after `from`. A range may not exceed 732 days.
+
+`/api/v1/events/free-time` treats events marked free or working-elsewhere as non-blocking and everything else, including all-day events, as busy; pass `ignoreAllDayEvents=true` to stop all-day events blocking. `workingHoursStart` and `workingHoursEnd` are 24-hour local times such as `09:00`, and `workingDays` is a comma-delimited list where `0` is Sunday. All three are read against `timezone`, so the hours hold across daylight saving transitions.
+
+`POST /api/v1/sync` clears the ingest backoff on your sources so they are re-polled on the next pass, and enqueues a push to every destination. Exceeding the throttle returns `429` with a `Retry-After` header rather than queueing a second run.
 
 > [!NOTE]
 >
@@ -581,17 +590,20 @@ Keeper includes an optional MCP server that lets AI agents (such as Claude) acce
 | `get_event_count`     | Get the number of calendar events. Optionally scoped to a date range with `from` and `to` ISO 8601 datetimes.                                  |
 | `get_events`          | Get calendar events within a date range. Accepts ISO 8601 datetimes and an IANA timezone identifier used to localize event times.              |
 | `get_event`           | Get a single calendar event by its ID.                                                                                                         |
+| `find_free_time`      | Find open slots of at least a given duration across every synced calendar in a date range.                                                     |
 | `create_event`        | Create an event on a connected calendar. Requires a calendar ID, title, start time, and end time.                                               |
 | `update_event`        | Update an existing calendar event. Only the fields you provide are updated.                                                                    |
 | `delete_event`        | Delete a calendar event by its ID.                                                                                                             |
 | `get_pending_invites` | Get invitations on a calendar that have not been responded to within a date range.                                                             |
 | `rsvp_event`          | Respond to a calendar event invitation with `accepted`, `declined`, or `tentative`.                                                            |
 | `list_accounts`       | List all connected calendar accounts with provider information.                                                                                |
+| `trigger_sync`        | Force a sync now instead of waiting for the next scheduled run. Throttled to one request per minute.                                           |
+| `pause_sync`          | Pause or resume syncing for a single calendar without disconnecting it.                                                                        |
 | `get_ical_feed`       | Get your iCal feed URL for subscribing in other calendar apps.                                                                                 |
 
 ## Connecting an MCP Client
 
-To connect an MCP-compatible client (e.g. Claude Code, Claude Desktop), point it at your MCP server URL. The client will be guided through the OAuth consent flow to authorize read and write access to your calendar data — the toolset can create, update, delete, and RSVP to events, not just read them.
+To connect an MCP-compatible client (e.g. Claude Code, Claude Desktop), point it at your MCP server URL. The client will be guided through the OAuth consent flow to authorize read and write access to your calendar data — the toolset can create, update, delete, and RSVP to events, find open time, and pause or force a sync, not just read them.
 
 Example Claude Code MCP configuration:
 

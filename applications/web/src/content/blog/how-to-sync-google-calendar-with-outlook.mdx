@@ -1,0 +1,118 @@
+---
+title: "How to Sync Google Calendar with Outlook"
+description: "A step-by-step guide to making your Google Calendar events appear in Outlook as busy time, so colleagues stop booking over your personal commitments."
+blurb: "Your Google events do not show up in Outlook, so people book over them. Here is how to make your Google commitments appear in Outlook, what your colleagues will actually see, and how long it takes."
+createdAt: "2026-08-11"
+slug: "how-to-sync-google-calendar-with-outlook"
+updatedAt: "2026-08-11"
+tags:
+  - "google-calendar"
+  - "outlook"
+  - "how-to"
+  - "calendar-sync"
+---
+
+Your personal life sits in Google Calendar. Your work sits in Outlook. Nobody at work can see the Google side, so they book you at 2pm on a Thursday you already gave away.
+
+This guide fixes that in one direction, so your Google events start appearing in Outlook as busy time. It takes about five minutes and costs nothing.
+
+The tool doing the copying is Keeper.sh, at [keeper.sh](https://keeper.sh) or on your own hardware.
+
+## What will my colleagues actually see?
+
+Meet Priya, a contract product designer. Her Thursday physio appointment and her daughter's 3pm school pickup both live in Google.
+
+Once this is set up, each becomes an event in her work Outlook calendar at the same day, time and length. When her project lead checks her availability, the 3pm pickup is a blocked hour.
+
+The title is not "Physio". Keeper.sh writes the name of the Google calendar instead, so colleagues see an hour called "Personal". They need to know the hour is gone, not why.
+
+## What should I do before I start?
+
+**Decide where the copies land in Outlook.** They go into a real Outlook calendar, mixed in with your actual meetings. If you would rather keep them apart, make a new Outlook calendar now and call it something like "Personal (synced)".
+
+Make it before you connect Outlook to Keeper.sh. Keeper.sh reads your list of Outlook calendars at the moment you connect and never re-scans, so a calendar you create later will not appear as an option.
+
+## How do I set it up?
+
+Sign in at [keeper.sh](https://keeper.sh) to reach your dashboard. Connect Outlook first, because it is the calendar receiving events, and Keeper.sh can only offer a target it already knows about.
+
+1. Choose **Import Calendars**.
+2. Choose **Connect Outlook**.
+3. A screen headed "Connect Outlook" lists what is being asked for: your email address, your calendars, your events and their details, and permission to add or remove events. That last one lets Keeper.sh write the copies. Press **Connect**.
+4. Sign in to Microsoft and approve.
+5. Keeper.sh shows **Which calendars would you like to configure?**. Nothing is leaving Outlook yet, so press **Skip**.
+
+Now connect Google.
+
+6. Choose **Import Calendars** again, then **Connect Google Calendar**.
+7. Press **Connect** and sign in to Google.
+8. Keeper.sh asks which calendars to configure. Tick the Google calendars you want visible at work, then press **Next**.
+9. You reach **Rename Your Calendars**, which matters more than it looks. The name you type is what colleagues read as the event title, so "Personal" works and your full name does not.
+10. **Where should 'Personal' send events?** Tick your Outlook calendar and press **Next**.
+11. **Where should 'Personal' pull events from?** Leave it empty, then press **Next** and **Finish**.
+
+Step 11 is the reverse direction, and you do not want it yet. Ticking anything there would start copying work meetings into your personal Google calendar.
+
+You can change all of this later. Open **Calendars** on the dashboard, pick the Google calendar, and edit **Send Events to Calendars**.
+
+## How long before an event shows up?
+
+Keeper.sh reads your Google calendar every minute, on every plan, so a new appointment is noticed almost immediately.
+
+Writing it into Outlook is the slower half: every 30 minutes on free, every minute on Pro. So on free you can book something in Google and expect it in Outlook within half an hour.
+
+If you routinely add meetings for that same morning, that gap is the reason to pay.
+
+## Who can see what?
+
+Keeper.sh copies the time, but whether it copies the detail is a setting you should look at rather than assume.
+
+Open the Google calendar inside Keeper.sh and find **Sync Settings**. Three switches decide what leaves: **Sync Event Name**, **Sync Event Description** and **Sync Event Location**.
+
+Connected the way described above, all three start off. Your titles, notes and addresses stay in Google, and Outlook gets an hour named after the calendar.
+
+Check them on every calendar you connect, because Keeper.sh does not yet start every calendar from the same position. Turning them on is a Pro feature; on free the details stay hidden and cannot be released.
+
+Every event Keeper.sh creates in Outlook carries a coloured category label called `keeper.sh`. That label is how Keeper.sh recognises its own work later, so leave it alone.
+
+## What does not come across?
+
+Keeper.sh carries the title or its stand-in, the description, the location, the start and end, the timezone, all-day status, busy or free, and any repeat pattern. It does not carry attendees, video call links or reminders.
+
+So the copy in Outlook is a block of time rather than a joinable meeting. If Priya's client call has a Meet link, she still joins from Google, and nobody at work can dial into her physio appointment.
+
+## Can I make it work both ways?
+
+Not with one switch, no. Keeper.sh connections point one way, deliberately, which is why step 11 exists.
+
+You can still have both directions, set up as two separate connections: Google to Outlook, and Outlook to Google. Each is configured on its own and each can hide or show different things.
+
+Do it deliberately, though. Copying a work calendar into a personal Google calendar you share with a partner is a different privacy question from the one you just answered.
+
+## Something looks wrong. What is it?
+
+**Outlook shows a duplicate of every synced event.** You probably have both directions running and something stripped the `keeper.sh` label off Keeper.sh's copies. Without it Keeper.sh no longer recognises them and treats them as real events worth copying back.
+
+**An event moved in Google but Outlook still shows the old time.** On free, wait a full 30 minutes. If it is still wrong, the Google connection likely needs re-authorising, which happens after a password change or a revoked permission.
+
+**A repeating appointment came across, but the one week you moved it did not.** Give it another update interval. Keeper.sh treats a moved instance of a repeating event as its own separate change.
+
+**Nothing at all arrived.** Check that you ticked an Outlook calendar on the **Where should 'Personal' send events?** screen. An unticked box is the most common cause, and it looks exactly like everything working slowly.
+
+**A calendar you just made in Outlook is missing from the list.** Remove the Outlook account in Keeper.sh and connect it again to pick it up.
+
+## Can I run this myself?
+
+Yes, and it is a genuine alternative rather than a consolation prize. Keeper.sh is open source under AGPL-3.0, and a copy you run yourself has every Pro feature at no cost, including the one-minute updates and the detail switches.
+
+The honest cost is a real evening's work. You need somewhere to run Docker, a PostgreSQL database and a Redis instance, and you must register your own application with both Google and Microsoft.
+
+The [README on GitHub](https://github.com/ridafkih/keeper.sh#readme) has the walkthrough and prepared Docker images. If that sounds like a chore, [keeper.sh](https://keeper.sh) is the same software with the setup already done.
+
+## What does it cost?
+
+Free covers this guide exactly: two connected accounts, one Google and one Outlook, plus three connections between calendars. Running both directions still fits.
+
+There is no limit on how many calendars each account brings with it. If your Google account has six calendars behind it, all six are available.
+
+Pro costs $5 a month and moves updates from every 30 minutes to every minute. It also removes both limits and unlocks the settings deciding which event details travel.

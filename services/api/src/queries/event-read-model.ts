@@ -183,13 +183,12 @@ const isIncludedByFilters = (
   return true;
 };
 
-const projectSyncedEvents = (
+const materializeSyncedEvents = (
   rows: SyncedEventRow[],
   sourceMap: Map<string, SourceInfo>,
   windowStart: Date,
   windowEnd: Date,
-  filters?: KeeperEventFilters,
-): KeeperEventProjection[] => {
+): MaterializedSyncableEvent[] => {
   const events = rows.flatMap((row) => {
     const source = sourceMap.get(row.calendarId);
     if (!source) {
@@ -202,10 +201,19 @@ const projectSyncedEvents = (
   return materializeRecurrenceEvents(events, {
     end: exclusiveWindowEnd,
     start: windowStart,
-  })
+  });
+};
+
+const projectSyncedEvents = (
+  rows: SyncedEventRow[],
+  sourceMap: Map<string, SourceInfo>,
+  windowStart: Date,
+  windowEnd: Date,
+  filters?: KeeperEventFilters,
+): KeeperEventProjection[] =>
+  materializeSyncedEvents(rows, sourceMap, windowStart, windowEnd)
     .filter((occurrence) => isIncludedByFilters(occurrence, filters))
     .map((occurrence) => toSyncedProjection(occurrence));
-};
 
 const toKeeperEvent = (
   event: KeeperEventProjection,
@@ -225,6 +233,7 @@ const toKeeperEvent = (
 });
 
 export {
+  materializeSyncedEvents,
   parseEventReference,
   projectSyncedEvents,
   toKeeperEvent,

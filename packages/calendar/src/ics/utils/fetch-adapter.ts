@@ -7,6 +7,7 @@ import { parseIcsEvents } from "./parse-ics-events";
 import { pullRemoteCalendar } from "./pull-remote-calendar";
 import { prepareCalendarSnapshot } from "./create-snapshot";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { SourceIngestionPlan } from "../../core/sync/sync-range";
 import { normalizeTimezone } from "./normalize-timezone";
 import {
   assertNoUnsupportedRecurrenceDates,
@@ -19,6 +20,7 @@ interface IcsSourceFetcherConfig {
   url: string;
   database: BunSQLDatabase;
   safeFetchOptions?: SafeFetchOptions;
+  plan: SourceIngestionPlan;
 }
 
 interface IcsSourceEventContext {
@@ -142,6 +144,7 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
   };
 
   const fetchEvents = async (options: FetchIcsSourceEventsOptions = {}): Promise<FetchEventsResult> => {
+    const { futureRange, historicRange, window: syncWindow } = config.plan;
     const ical = await fetchRemoteIcal();
     if (!ical) {
       /*
@@ -149,7 +152,7 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
        * but if a future change ever returns an empty string here, treat it as
        * unchanged rather than authoritative-empty to keep the no-wipe invariant.
        */
-      return { events: [], unchanged: true };
+      return { events: [], syncWindow, unchanged: true };
     }
     assertNoUnsupportedRecurrenceDates(ical);
     const snapshotResult = await prepareCalendarSnapshot(config.database, config.calendarId, ical);
@@ -168,7 +171,7 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
     }
     const parsed = parseIcsEvents(calendar);
     assertSupportedRecurrenceTimeZones(parsed);
-    const events: SourceEvent[] = parsed.map((event) => ({
+    let events: SourceEvent[] = parsed.map((event) => ({
       availability: event.availability,
       description: event.description,
       endTime: event.endTime,
@@ -184,17 +187,25 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
       uid: event.uid,
     }));
     if (options.interpretEvents) {
-      const result: FetchEventsResult = {
-        events: options.interpretEvents(events, {
-          calendarTimeZone,
-        }),
-      };
-      if (snapshotResult.changed && snapshotResult.snapshot) {
-        result.snapshot = snapshotResult.snapshot;
-      }
-      return result;
+      events = options.interpretEvents(events, {
+        calendarTimeZone,
+      });
     }
-    const result: FetchEventsResult = { events };
+    /*
+     * The whole feed is kept on purpose. ICS storage is unbounded: the sync
+     * window bounds what Keeper mirrors to destinations, not what it retains.
+     * Filtering here would make the snapshot diff delete the stored state of
+     * every historic event on the next ingest.
+     */
+    const result: FetchEventsResult = {
+      events,
+      syncWindow,
+      coverage: {
+        futureRange,
+        historicRange,
+        window: syncWindow,
+      },
+    };
     if (snapshotResult.changed && snapshotResult.snapshot) {
       result.snapshot = snapshotResult.snapshot;
     }

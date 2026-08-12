@@ -204,4 +204,10 @@ const getEventsInRange = async (
   });
 };
 
-export { flattenSyncedEvents, getEventsInRange, normalizeEventRange };
+export {
+  buildSyncedRangeCondition,
+  flattenSyncedEvents,
+  getEventsInRange,
+  getSourcesForUser,
+  normalizeEventRange,
+};

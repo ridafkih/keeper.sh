@@ -11,13 +11,11 @@ import type {
   SourceEventType,
   SyncableEvent,
 } from "../types";
-import { getOAuthSyncWindow } from "../oauth/sync-window";
-import type { OAuthSyncWindow } from "../oauth/sync-window";
+import type { SyncWindow } from "../sync/sync-range";
 import { parseStoredRecurrenceForMaterialization } from "./stored-recurrence";
 import { materializeRecurrenceEvents } from "./recurrence-materializer";
 
 const EMPTY_SOURCES_COUNT = 0;
-const YEARS_UNTIL_FUTURE = 2;
 
 interface DestinationEventReadDiagnostics {
   candidateEventStateCount: number;
@@ -25,6 +23,8 @@ interface DestinationEventReadDiagnostics {
   materializedEventCount: number;
   missingSourceEventUidCount: number;
   outsideReconciliationWindowCount: number;
+  overBudgetSourceEventStateIds: string[];
+  overBudgetSourceEventUids: string[];
   syncableEventCount: number;
 }
 
@@ -39,6 +39,8 @@ const EMPTY_DESTINATION_EVENT_READ_DIAGNOSTICS: DestinationEventReadDiagnostics 
   materializedEventCount: 0,
   missingSourceEventUidCount: 0,
   outsideReconciliationWindowCount: 0,
+  overBudgetSourceEventStateIds: [],
+  overBudgetSourceEventUids: [],
   syncableEventCount: 0,
 };
 
@@ -155,7 +157,7 @@ const getMappedSourceCalendarIds = async (
 const getEventsForCalendarsWithDiagnostics = async (
   database: BunSQLClient,
   calendarIds: string[],
-  syncWindow: OAuthSyncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE),
+  syncWindow: SyncWindow,
 ): Promise<DestinationEventReadResult> => {
   if (calendarIds.length === EMPTY_SOURCES_COUNT) {
     return {
@@ -267,11 +269,21 @@ const getEventsForCalendarsWithDiagnostics = async (
     });
   }
 
+  /*
+   * A series can exceed the occurrence budget for a window the user just widened.
+   * Skipping it keeps the destination syncing; failing here would back off the whole
+   * calendar over one series, and ingestion already withholds these from new writes.
+   */
+  const overBudgetSourceEventStateIds: string[] = [];
+  const overBudgetSourceEventUids: string[] = [];
   const events = materializeRecurrenceEvents(syncableEvents, {
     end: syncWindow.timeMax,
     start: syncWindow.timeMin,
   }, {
-    retainOneOffEventsAfterWindowEnd: true,
+    onSeriesOverBudget: (error) => {
+      overBudgetSourceEventUids.push(error.sourceEventUid);
+      overBudgetSourceEventStateIds.push(error.eventStateId ?? error.eventId);
+    },
   });
 
   return {
@@ -281,6 +293,8 @@ const getEventsForCalendarsWithDiagnostics = async (
       materializedEventCount: events.length,
       missingSourceEventUidCount,
       outsideReconciliationWindowCount,
+      overBudgetSourceEventStateIds,
+      overBudgetSourceEventUids,
       syncableEventCount: syncableEvents.length,
     },
     events,
@@ -290,7 +304,7 @@ const getEventsForCalendarsWithDiagnostics = async (
 const getEventsForCalendars = async (
   database: BunSQLClient,
   calendarIds: string[],
-  syncWindow: OAuthSyncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE),
+  syncWindow: SyncWindow,
 ): Promise<MaterializedSyncableEvent[]> => {
   const result = await getEventsForCalendarsWithDiagnostics(database, calendarIds, syncWindow);
   return result.events;
@@ -299,7 +313,7 @@ const getEventsForCalendars = async (
 const getEventsForDestination = async (
   database: BunSQLClient,
   destinationCalendarId: string,
-  syncWindow: OAuthSyncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE),
+  syncWindow: SyncWindow,
 ): Promise<MaterializedSyncableEvent[]> => {
   const sourceCalendarIds = await getMappedSourceCalendarIds(database, destinationCalendarId);
 

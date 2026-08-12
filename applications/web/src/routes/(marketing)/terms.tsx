@@ -2,7 +2,10 @@ import type { PropsWithChildren } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Heading1, Heading2 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
-import { canonicalUrl, jsonLdScript, seoMeta, webPageSchema, breadcrumbSchema } from "@/lib/seo";
+import { canonicalUrl, jsonLdScript, seoMeta, webPageSchema, breadcrumbSchema, breadcrumbTrail } from "@/lib/seo";
+import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
+
+const breadcrumbs = breadcrumbTrail({ name: "Terms & Conditions", path: "/terms" });
 import { termsPageMetadata, formatMonthYear } from "@/lib/page-metadata";
 
 export const Route = createFileRoute("/(marketing)/terms")({
@@ -17,7 +20,7 @@ export const Route = createFileRoute("/(marketing)/terms")({
     }),
     scripts: [
       jsonLdScript(webPageSchema("Terms & Conditions", "Terms and conditions for using Keeper.sh, the open-source calendar syncing service.", "/terms")),
-      jsonLdScript(breadcrumbSchema([{ name: "Home", path: "/" }, { name: "Terms & Conditions", path: "/terms" }])),
+      jsonLdScript(breadcrumbSchema(breadcrumbs)),
     ],
   }),
 });
@@ -25,6 +28,7 @@ export const Route = createFileRoute("/(marketing)/terms")({
 function TermsPage() {
   return (
     <div className="flex flex-col gap-6 py-16">
+      <Breadcrumb items={breadcrumbs} />
       <div className="flex flex-col gap-1">
         <Heading1>Terms &amp; Conditions</Heading1>
         <Text size="sm" tone="muted">Last updated: {formatMonthYear(termsPageMetadata.updatedAt)}</Text>
@@ -45,7 +49,8 @@ function TermsPage() {
         <Section title="Description of Service">
           <Text size="sm">
             Keeper.sh provides calendar aggregation and synchronization services that allow you to
-            combine events from multiple calendar sources into a unified, anonymized feed. The service
+            combine events from multiple calendar sources into a single feed, with per-calendar control
+            over which event details it carries. The service
             includes generating iCal feeds and pushing events to external calendar providers.
           </Text>
           <Text size="sm">

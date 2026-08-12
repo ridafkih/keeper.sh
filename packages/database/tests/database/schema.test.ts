@@ -5,6 +5,7 @@ import {
   calendarsTable,
   eventMappingsTable,
   eventStatesTable,
+  userSyncRequestsTable,
 } from "../../src/database/schema";
 
 describe("calendar account schema", () => {
@@ -98,18 +99,30 @@ describe("event state schema", () => {
 });
 
 describe("event mapping schema", () => {
-  it("indexes the event state foreign key used by cascading deletes", () => {
+  it("keeps legacy identities nullable while indexing backfill and uniqueness", () => {
     const tableConfig = getTableConfig(eventMappingsTable);
     const eventStateIndex = tableConfig.indexes.find(
       (index) => index.config.name === "event_mappings_event_state_idx",
     );
+    const syncEventIndex = tableConfig.indexes.find(
+      (index) => index.config.name === "event_mappings_sync_event_cal_idx",
+    );
     const missingSyncEventIndex = tableConfig.indexes.find(
       (index) => index.config.name === "event_mappings_missing_sync_event_idx",
     );
+    const syncEventIdColumn = tableConfig.columns.find(
+      (column) => column.name === "syncEventId",
+    );
+    const sourceCalendarIdColumn = tableConfig.columns.find(
+      (column) => column.name === "sourceCalendarId",
+    );
 
     expect(eventStateIndex?.config.unique).toBe(false);
-    expect(missingSyncEventIndex?.config.unique).toBe(false);
+    expect(syncEventIdColumn?.notNull).toBe(false);
+    expect(syncEventIndex?.config.unique).toBe(true);
+    expect(syncEventIndex?.config.where).toBeDefined();
     expect(missingSyncEventIndex?.config.where).toBeDefined();
+    expect(sourceCalendarIdColumn?.notNull).toBe(false);
     const columnNames = eventStateIndex?.config.columns.map((column) => {
       if ("name" in column && typeof column.name === "string") {
         return column.name;
@@ -117,5 +130,18 @@ describe("event mapping schema", () => {
       return null;
     });
     expect(columnNames).toEqual(["eventStateId"]);
+  });
+});
+
+describe("durable sync request schema", () => {
+  it("stores one replaceable reconciliation request per user", () => {
+    const tableConfig = getTableConfig(userSyncRequestsTable);
+    const userIdColumn = tableConfig.columns.find((column) => column.name === "userId");
+    const requestIdColumn = tableConfig.columns.find(
+      (column) => column.name === "requestId",
+    );
+
+    expect(userIdColumn?.primary).toBe(true);
+    expect(requestIdColumn?.notNull).toBe(true);
   });
 });

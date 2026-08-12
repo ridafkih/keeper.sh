@@ -8,11 +8,12 @@ import CONTRIBUTORS from "@/features/marketing/contributors.json";
 const VISIBLE_COUNT = 3;
 const ROTATE_INTERVAL_MS = 1800;
 const FALLBACK_ROW_HEIGHT = 36;
+const CONTAINER_PADDING_TOP = 12;
 
 const SLOT_STYLES = [
-  { scale: 0.92, opacity: 0.35, filter: "blur(1px)" },
-  { scale: 1, opacity: 1, filter: "blur(0px)" },
-  { scale: 0.92, opacity: 0.35, filter: "blur(1px)" },
+  { scale: 0.92, filter: "blur(1px)" },
+  { scale: 1, filter: "blur(0px)" },
+  { scale: 0.92, filter: "blur(1px)" },
 ];
 
 const TRANSITION = {
@@ -75,7 +76,10 @@ export function MarketingIllustrationContributors() {
 
   return (
     <LazyMotion features={loadMotionFeatures}>
-      <div className="relative w-full pt-3 px-4" style={{ height: rowHeight * VISIBLE_COUNT + 12 }}>
+      <div
+        className="relative w-full pt-3 px-4 overflow-hidden"
+        style={{ height: rowHeight * VISIBLE_COUNT + CONTAINER_PADDING_TOP }}
+      >
         <div ref={measureRef} className="absolute inset-x-0 invisible pointer-events-none" aria-hidden="true">
           <ContributorRow contributor={CONTRIBUTORS[0]} />
         </div>
@@ -84,20 +88,17 @@ export function MarketingIllustrationContributors() {
             <m.div
               key={contributorIndex}
               initial={{
-                y: rowHeight * (VISIBLE_COUNT - 1) + (rowHeight * 2) / 3,
-                opacity: 0,
+                y: rowHeight * VISIBLE_COUNT,
                 scale: 0.7,
                 filter: "blur(3px)",
               }}
               animate={{
                 y: rowHeight * slot,
-                opacity: SLOT_STYLES[slot].opacity,
                 scale: SLOT_STYLES[slot].scale,
                 filter: SLOT_STYLES[slot].filter,
               }}
               exit={{
-                y: -(rowHeight * 2) / 3,
-                opacity: 0,
+                y: -(rowHeight + CONTAINER_PADDING_TOP),
                 scale: 0.7,
                 filter: "blur(3px)",
               }}

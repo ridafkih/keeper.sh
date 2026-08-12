@@ -19,6 +19,26 @@ body {
   @apply w-full;
 }
 
+[data-session-slot] {
+  display: contents;
+}
+
+[data-session-slot="authenticated"] {
+  display: none;
+}
+
+[data-session="authed"] [data-session-slot="authenticated"] {
+  display: contents;
+}
+
+[data-session="authed"] [data-session-slot="unauthenticated"] {
+  display: none;
+}
+
+[data-consent="resolved"] [data-consent-banner] {
+  display: none;
+}
+
 html {
   color-scheme: light;
 }
@@ -47,7 +67,7 @@ html {
     transparent 40%
   );
   --ui-background-elevated: var(--color-white);
-  --ui-border-elevated: var(--color-neutral-200);
+  --ui-border-elevated: var(--color-neutral-300);
   --ui-background-inverse-hover: var(--color-neutral-800);
   --ui-background-hover: color-mix(
     in srgb,

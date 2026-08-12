@@ -5,13 +5,6 @@ export {
   parseOutlookEvents,
   EventsFetchError,
 } from "./source/utils/fetch-events";
-export {
-  createOutlookSourceProvider,
-  OutlookSourceProvider,
-  type CreateOutlookSourceProviderConfig,
-  type OutlookSourceAccount,
-  type OutlookSourceConfig,
-} from "./source/provider";
 export type {
   OutlookCalendarListEntry,
   OutlookCalendarListResponse,

@@ -1,8 +1,5 @@
-import { GDPR_COUNTRIES } from "@/config/gdpr";
-
 interface PublicRuntimeConfig {
   commercialMode: boolean;
-  gdprApplies: boolean;
   googleAdsConversionLabel: string | null;
   googleAdsId: string | null;
   polarProMonthlyProductId: string | null;
@@ -12,7 +9,6 @@ interface PublicRuntimeConfig {
 
 interface RuntimeConfigSource {
   commercialMode?: boolean | null;
-  gdprApplies?: boolean | null;
   googleAdsConversionLabel?: string | null;
   googleAdsId?: string | null;
   polarProMonthlyProductId?: string | null;
@@ -30,17 +26,15 @@ const normalizeOptionalValue = (value: string | null | undefined): string | null
 
 interface ServerRuntimeConfigOptions {
   environment: Record<string, string | undefined>;
-  countryCode?: string | null;
 }
 
 const getServerPublicRuntimeConfig = (
   options: ServerRuntimeConfigOptions,
 ): PublicRuntimeConfig => {
-  const { environment, countryCode } = options;
+  const { environment } = options;
 
   return {
     commercialMode: environment.COMMERCIAL_MODE === "true",
-    gdprApplies: environment.ENV === "development" || (typeof countryCode === "string" && GDPR_COUNTRIES.has(countryCode)),
     googleAdsConversionLabel: normalizeOptionalValue(
       environment.VITE_GOOGLE_ADS_CONVERSION_LABEL,
     ),
@@ -61,7 +55,6 @@ const getWindowPublicRuntimeConfig = (): RuntimeConfigSource => {
 
 const resolvePublicRuntimeConfig = (source: RuntimeConfigSource): PublicRuntimeConfig => ({
   commercialMode: source.commercialMode === true,
-  gdprApplies: source.gdprApplies === true,
   googleAdsConversionLabel: normalizeOptionalValue(source.googleAdsConversionLabel),
   googleAdsId: normalizeOptionalValue(source.googleAdsId),
   polarProMonthlyProductId: normalizeOptionalValue(source.polarProMonthlyProductId),

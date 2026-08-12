@@ -822,6 +822,147 @@ describe("ingestSource", () => {
     expect(flushCapture[0]?.syncToken).toBe("token-new");
   });
 
+  it("prunes non-recurring source details outside the successful coverage window", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const historical = makeSourceEvent(
+      "historical",
+      new Date("2025-01-01T09:00:00.000Z"),
+      new Date("2025-01-01T10:00:00.000Z"),
+    );
+    const inWindow = makeSourceEvent(
+      "in-window",
+      new Date("2026-03-15T09:00:00.000Z"),
+      new Date("2026-03-15T10:00:00.000Z"),
+    );
+    const syncWindow = {
+      timeMin: new Date("2026-03-01T00:00:00.000Z"),
+      timeMax: new Date("2026-04-01T00:00:00.000Z"),
+    };
+    let flushed: IngestionChanges | null = null;
+
+    const result = await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({
+        coverage: {
+          futureRange: "1_month",
+          historicRange: "1_month",
+          window: syncWindow,
+        },
+        events: [],
+        isDeltaSync: true,
+        syncWindow,
+      }),
+      readExistingEvents: () => Promise.resolve([
+        toExistingEvent("historical-state", historical),
+        toExistingEvent("in-window-state", inWindow),
+      ]),
+      flush: (changes) => {
+        flushed = changes;
+        return Promise.resolve();
+      },
+    });
+
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 1 });
+    expect(flushed).toEqual({
+      coverage: {
+        futureRange: "1_month",
+        historicRange: "1_month",
+        window: syncWindow,
+      },
+      deletes: ["historical-state"],
+      inserts: [],
+    });
+  });
+
+  it("keeps stored history a snapshot source still reports outside the sync window", async () => {
+    /*
+     * ICS is snapshot-style and fetches the whole feed, so a historic event is
+     * still present in every fetch. Pruning it for being outside the window would
+     * collapse stored history to a rolling window on the first ingest after
+     * deploy, silently truncating the dashboard, MCP tools and published feed.
+     */
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const historical = makeSourceEvent(
+      "historical",
+      new Date("2019-01-01T09:00:00.000Z"),
+      new Date("2019-01-01T10:00:00.000Z"),
+    );
+    const inWindow = makeSourceEvent(
+      "in-window",
+      new Date("2026-03-15T09:00:00.000Z"),
+      new Date("2026-03-15T10:00:00.000Z"),
+    );
+    const syncWindow = {
+      timeMin: new Date("2026-03-01T00:00:00.000Z"),
+      timeMax: new Date("2026-04-01T00:00:00.000Z"),
+    };
+    let flushed: IngestionChanges | null = null;
+
+    const result = await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({
+        coverage: {
+          futureRange: "1_month",
+          historicRange: "1_month",
+          window: syncWindow,
+        },
+        events: [
+          { ...historical, isAllDay: false },
+          { ...inWindow, isAllDay: false },
+        ],
+        syncWindow,
+      }),
+      readExistingEvents: () => Promise.resolve([
+        toExistingEvent("historical-state", { ...historical, isAllDay: false }),
+        toExistingEvent("in-window-state", { ...inWindow, isAllDay: false }),
+      ]),
+      flush: (changes) => {
+        flushed = changes;
+        return Promise.resolve();
+      },
+    });
+
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+    expect(flushed).toEqual({
+      coverage: {
+        futureRange: "1_month",
+        historicRange: "1_month",
+        window: syncWindow,
+      },
+      deletes: [],
+      inserts: [],
+    });
+  });
+
+  it("still removes stored state a snapshot source stops reporting", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const historical = makeSourceEvent(
+      "historical",
+      new Date("2019-01-01T09:00:00.000Z"),
+      new Date("2019-01-01T10:00:00.000Z"),
+    );
+    const syncWindow = {
+      timeMin: new Date("2026-03-01T00:00:00.000Z"),
+      timeMax: new Date("2026-04-01T00:00:00.000Z"),
+    };
+    let flushed: IngestionChanges | null = null;
+
+    const result = await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({ events: [], syncWindow }),
+      readExistingEvents: () => Promise.resolve([
+        toExistingEvent("historical-state", historical),
+      ]),
+      flush: (changes) => {
+        flushed = changes;
+        return Promise.resolve();
+      },
+    });
+
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 1 });
+    expect(flushed).toEqual({ deletes: ["historical-state"], inserts: [] });
+  });
+
   it("does not flush sync token when no changes and no sync token provided", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
 
@@ -839,37 +980,113 @@ describe("ingestSource", () => {
     expect(flushCalled).toBe(false);
   });
 
-  it("rejects an over-budget recurrence before reading or mutating persistence", async () => {
+  it("drops an over-budget recurrence but keeps ingesting the rest of the calendar", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
-    const sourceMaster: SourceEvent = {
+    const pathological: SourceEvent = {
       endTime: new Date("2040-01-01T00:00:01.000Z"),
       recurrenceRule: { frequency: "SECONDLY" },
       sourceEventId: "provider-master-id",
       startTime: new Date("2040-01-01T00:00:00.000Z"),
       uid: "pathological-series",
     };
-    let persistenceRead = false;
-    let persistenceFlushed = false;
+    const healthy: SourceEvent = {
+      endTime: new Date("2040-01-01T10:00:00.000Z"),
+      sourceEventId: "healthy-id",
+      startTime: new Date("2040-01-01T09:00:00.000Z"),
+      uid: "healthy-event",
+    };
+    const emittedEvents: Record<string, unknown>[] = [];
+    const flushes: IngestionChanges[] = [];
 
-    await expect(ingestSource({
+    const result = await ingestSource({
       calendarId: "cal-1",
       fetchEvents: () => Promise.resolve({
-        events: [sourceMaster],
-        nextSyncToken: "must-not-be-persisted",
-        snapshot: { contentHash: "must-not-be-persisted", ical: "BEGIN:VCALENDAR" },
+        events: [pathological, healthy],
+        nextSyncToken: "token-1",
+        syncWindow: {
+          timeMax: new Date("2040-01-02T00:00:00.000Z"),
+          timeMin: new Date("2040-01-01T00:00:00.000Z"),
+        },
       }),
-      flush: () => {
-        persistenceFlushed = true;
+      flush: (changes) => {
+        flushes.push(changes);
         return Promise.resolve();
       },
-      readExistingEvents: () => {
-        persistenceRead = true;
-        return Promise.resolve([]);
-      },
-    })).rejects.toThrow("exceeds the 10000 occurrence materialization limit");
+      onIngestEvent: (event) => emittedEvents.push(event),
+      readExistingEvents: () => Promise.resolve([]),
+    });
 
-    expect(persistenceRead).toBe(false);
-    expect(persistenceFlushed).toBe(false);
+    expect(flushes[0]?.inserts.map(({ uid }) => uid)).toEqual(["healthy-event"]);
+    expect(result.eventsAdded).toBe(1);
+    expect(emittedEvents[0]?.["recurrence.over_budget_count"]).toBe(1);
+    expect(emittedEvents[0]?.["recurrence.over_budget_uids"]).toBe("pathological-series");
+    expect(emittedEvents[0]?.["outcome"]).not.toBe("error");
+  });
+
+  it("keeps the stored events of an over-budget series instead of deleting them", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const pathological: SourceEvent = {
+      endTime: new Date("2040-01-01T00:00:01.000Z"),
+      recurrenceRule: { frequency: "SECONDLY" },
+      sourceEventId: "pathological-provider-id",
+      startTime: new Date("2040-01-01T00:00:00.000Z"),
+      uid: "pathological-series",
+    };
+    const flushes: IngestionChanges[] = [];
+
+    await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({
+        events: [pathological],
+        syncWindow: {
+          timeMax: new Date("2040-01-02T00:00:00.000Z"),
+          timeMin: new Date("2040-01-01T00:00:00.000Z"),
+        },
+      }),
+      flush: (changes) => {
+        flushes.push(changes);
+        return Promise.resolve();
+      },
+      readExistingEvents: () => Promise.resolve([
+        toExistingEvent("stored-pathological-state", pathological),
+      ]),
+    });
+
+    expect(flushes[0]?.deletes ?? []).not.toContain("stored-pathological-state");
+  });
+
+  it("keeps an unparseable stored row belonging to a withheld over-budget series", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const pathological: SourceEvent = {
+      endTime: new Date("2040-01-01T00:00:01.000Z"),
+      recurrenceRule: { frequency: "SECONDLY" },
+      sourceEventId: "pathological-provider-id",
+      startTime: new Date("2040-01-01T00:00:00.000Z"),
+      uid: "pathological-series",
+    };
+    const corruptStoredRow = {
+      ...toExistingEvent("corrupt-pathological-state", pathological),
+      recurrenceRule: "{not-valid-json",
+    };
+    const flushes: IngestionChanges[] = [];
+
+    await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({
+        events: [pathological],
+        syncWindow: {
+          timeMax: new Date("2040-01-02T00:00:00.000Z"),
+          timeMin: new Date("2040-01-01T00:00:00.000Z"),
+        },
+      }),
+      flush: (changes) => {
+        flushes.push(changes);
+        return Promise.resolve();
+      },
+      readExistingEvents: () => Promise.resolve([corruptStoredRow]),
+    });
+
+    expect(flushes[0]?.deletes ?? []).not.toContain("corrupt-pathological-state");
   });
 
   it("emits wide event with flushed: false in error path", async () => {

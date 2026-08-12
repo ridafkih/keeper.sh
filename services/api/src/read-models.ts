@@ -1,6 +1,7 @@
 import { getEventCount } from "./queries/get-event-count";
 import { getEvent } from "./queries/get-event";
 import { getEventsInRange, normalizeEventRange } from "./queries/get-events-in-range";
+import { findFreeTime } from "./queries/find-free-time";
 import { getSyncStatuses } from "./queries/get-sync-statuses";
 import { listDestinations } from "./queries/list-destinations";
 import { listMappings } from "./queries/list-mappings";
@@ -37,6 +38,8 @@ const createKeeperApi = (database: KeeperDatabase, options?: KeeperApiOptions): 
     getEventsInRange: (userId, range, filters) => getEventsInRange(database, userId, range, filters),
     getEvent: (userId, eventId) => getEvent(database, userId, eventId),
     getEventCount: (userId, countOptions) => getEventCount(database, userId, countOptions),
+    findFreeTime: (userId, range, freeTimeOptions, filters) =>
+      findFreeTime(database, userId, range, freeTimeOptions, filters),
     getSyncStatuses: (userId) => getSyncStatuses(database, userId),
     createEvent: (userId, input) => createEventMutation(deps, userId, input),
     updateEvent: (userId, eventId, updates) => updateEventMutation(deps, userId, eventId, updates),

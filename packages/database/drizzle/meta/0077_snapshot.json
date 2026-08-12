@@ -1,5 +1,5 @@
 {
-  "id": "1ca99b29-7b92-428b-805b-155ef0f4d4ea",
+  "id": "e20bc6b8-8ed1-4602-b4d3-0781a81bc21d",
   "prevId": "0c8edcf1-1868-483f-9beb-b9696867770b",
   "version": "7",
   "dialect": "postgresql",
@@ -490,21 +490,21 @@
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": true
+          "default": false
         },
         "excludeEventLocation": {
           "name": "excludeEventLocation",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": true
+          "default": false
         },
         "excludeEventName": {
           "name": "excludeEventName",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": true
+          "default": false
         },
         "excludeFocusTime": {
           "name": "excludeFocusTime",
@@ -539,7 +539,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'{{calendar_name}}'"
+          "default": "''"
         },
         "disabled": {
           "name": "disabled",
@@ -586,6 +586,38 @@
           "primaryKey": false,
           "notNull": false
         },
+        "ingestFutureRange": {
+          "name": "ingestFutureRange",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'2_years'"
+        },
+        "ingestHistoricRange": {
+          "name": "ingestHistoricRange",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'1_month'"
+        },
+        "ingestWindowEnd": {
+          "name": "ingestWindowEnd",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ingestWindowRecordedAt": {
+          "name": "ingestWindowRecordedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ingestWindowStart": {
+          "name": "ingestWindowStart",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
         "externalCalendarId": {
           "name": "externalCalendarId",
           "type": "text",
@@ -623,6 +655,20 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "syncFutureRange": {
+          "name": "syncFutureRange",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'2_years'"
+        },
+        "syncHistoricRange": {
+          "name": "syncHistoricRange",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'1_month'"
         },
         "updatedAt": {
           "name": "updatedAt",
@@ -779,7 +825,7 @@
           "name": "eventStateId",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "id": {
           "name": "id",
@@ -797,6 +843,12 @@
         "syncEventHash": {
           "name": "syncEventHash",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sourceCalendarId": {
+          "name": "sourceCalendarId",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -1906,6 +1958,53 @@
         "user_subscriptions_userId_user_id_fk": {
           "name": "user_subscriptions_userId_user_id_fk",
           "tableFrom": "user_subscriptions",
+          "tableTo": "user",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.user_sync_requests": {
+      "name": "user_sync_requests",
+      "schema": "",
+      "columns": {
+        "requestId": {
+          "name": "requestId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "requestedAt": {
+          "name": "requestedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "userId": {
+          "name": "userId",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "user_sync_requests_userId_user_id_fk": {
+          "name": "user_sync_requests_userId_user_id_fk",
+          "tableFrom": "user_sync_requests",
           "tableTo": "user",
           "columnsFrom": [
             "userId"

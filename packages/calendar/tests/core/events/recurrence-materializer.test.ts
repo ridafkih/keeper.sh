@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  assertSourceRecurrenceMaterializationWithinBudget,
+  findSourceEventsExceedingRecurrenceBudget,
   materializeRecurrenceEvents,
   RecurrenceMaterializationLimitError,
 } from "../../../src/core/events/recurrence-materializer";
@@ -325,7 +325,7 @@ describe("materializeRecurrenceEvents", () => {
     expect(result.map((event) => event.id)).toEqual(["overlaps-start"]);
   });
 
-  it("retains far-future one-offs for an unbounded destination write domain", () => {
+  it("drops far-future one-offs that start after the window end", () => {
     const farFuture = createEvent({
       endTime: new Date("2040-03-15T10:00:00.000Z"),
       id: "far-future-one-off",
@@ -334,9 +334,6 @@ describe("materializeRecurrenceEvents", () => {
     });
 
     expect(materializeRecurrenceEvents([farFuture], WINDOW)).toEqual([]);
-    expect(materializeRecurrenceEvents([farFuture], WINDOW, {
-      retainOneOffEventsAfterWindowEnd: true,
-    })).toEqual([farFuture]);
   });
 
   it("keeps the source wall time across DST independently of the host timezone", () => {
@@ -464,15 +461,14 @@ describe("materializeRecurrenceEvents", () => {
       recurrenceRule: { frequency: "SECONDLY" },
       startTime: new Date("2026-01-01T00:00:00.000Z"),
     });
-    let thrown: unknown = null;
-    try {
-      materializeRecurrenceEvents([master], {
-        end: new Date("2026-01-02T00:00:00.000Z"),
-        start: new Date("2026-01-01T00:00:00.000Z"),
-      });
-    } catch (error) {
-      thrown = error;
-    }
+    const reported: RecurrenceMaterializationLimitError[] = [];
+    const result = materializeRecurrenceEvents([master], {
+      end: new Date("2026-01-02T00:00:00.000Z"),
+      start: new Date("2026-01-01T00:00:00.000Z"),
+    }, { onSeriesOverBudget: (error) => reported.push(error) });
+
+    expect(result).toEqual([]);
+    const [thrown] = reported;
 
     expect(thrown).toBeInstanceOf(RecurrenceMaterializationLimitError);
     if (!(thrown instanceof RecurrenceMaterializationLimitError)) {
@@ -487,7 +483,7 @@ describe("materializeRecurrenceEvents", () => {
     });
   });
 
-  it("rejects a future source master before it can be persisted", () => {
+  it("does not flag a series whose occurrences all fall outside the window", () => {
     const sourceMaster: SourceEvent = {
       endTime: new Date("2040-01-01T00:00:01.000Z"),
       recurrenceRule: { frequency: "SECONDLY" },
@@ -496,24 +492,102 @@ describe("materializeRecurrenceEvents", () => {
       uid: "future-pathological-series",
     };
 
-    expect(() => assertSourceRecurrenceMaterializationWithinBudget(
+    expect(findSourceEventsExceedingRecurrenceBudget(
       "source-calendar-id",
       [sourceMaster],
       {
-      end: new Date("2026-01-02T00:00:00.000Z"),
-      start: new Date("2026-01-01T00:00:00.000Z"),
+        end: new Date("2026-01-02T00:00:00.000Z"),
+        start: new Date("2026-01-01T00:00:00.000Z"),
       },
-    )).toThrow(RecurrenceMaterializationLimitError);
+    )).toEqual([]);
   });
 
-  it("rejects a pathological high-frequency series before scanning years of history", () => {
-    expect(() => materializeRecurrenceEvents([
+  it("isolates an over-budget series without condemning its healthy siblings", () => {
+    const pathological: SourceEvent = {
+      endTime: new Date("2026-01-01T00:00:01.000Z"),
+      recurrenceRule: { frequency: "SECONDLY" },
+      sourceEventId: "pathological-id",
+      startTime: new Date("2026-01-01T00:00:00.000Z"),
+      uid: "pathological-series",
+    };
+    const healthy: SourceEvent = {
+      endTime: new Date("2026-01-01T10:00:00.000Z"),
+      recurrenceRule: { frequency: "WEEKLY" },
+      sourceEventId: "healthy-id",
+      startTime: new Date("2026-01-01T09:00:00.000Z"),
+      uid: "healthy-series",
+    };
+
+    expect(findSourceEventsExceedingRecurrenceBudget(
+      "source-calendar-id",
+      [pathological, healthy],
+      {
+        end: new Date("2028-01-01T00:00:00.000Z"),
+        start: new Date("2026-01-01T00:00:00.000Z"),
+      },
+    )).toEqual([pathological]);
+  });
+
+  it("brings a series over budget only once the window is widened", () => {
+    const hourlyWorkday: SourceEvent = {
+      endTime: new Date("2026-01-01T00:30:00.000Z"),
+      recurrenceRule: { frequency: "HOURLY" },
+      sourceEventId: "hourly-id",
+      startTime: new Date("2026-01-01T00:00:00.000Z"),
+      uid: "hourly-series",
+    };
+    const findOverBudget = (end: Date): SourceEvent[] =>
+      findSourceEventsExceedingRecurrenceBudget("source-calendar-id", [hourlyWorkday], {
+        end,
+        start: new Date("2026-01-01T00:00:00.000Z"),
+      });
+
+    expect(findOverBudget(new Date("2026-06-01T00:00:00.000Z"))).toEqual([]);
+    expect(findOverBudget(new Date("2030-01-01T00:00:00.000Z"))).toEqual([hourlyWorkday]);
+  });
+
+  it("skips a pathological high-frequency series instead of failing the whole read", () => {
+    const healthy = createWeeklyMaster({ sourceEventUid: "healthy-series" });
+    const reported: RecurrenceMaterializationLimitError[] = [];
+
+    const result = materializeRecurrenceEvents([
       createEvent({
         endTime: new Date("2020-01-01T00:00:01.000Z"),
         recurrenceRule: { frequency: "SECONDLY" },
+        sourceEventUid: "pathological-series",
         startTime: new Date("2020-01-01T00:00:00.000Z"),
       }),
-    ], WINDOW)).toThrow("exceeds the 10000 occurrence materialization limit");
+      healthy,
+    ], WINDOW, { onSeriesOverBudget: (error) => reported.push(error) });
+
+    expect(reported.map((error) => error.sourceEventUid)).toEqual(["pathological-series"]);
+    expect(result).toHaveLength(4);
+    expect(result.every((event) => event.sourceEventUid === "healthy-series")).toBe(true);
+  });
+
+  it("drops the detached occurrences of a skipped series rather than stranding them", () => {
+    const reported: RecurrenceMaterializationLimitError[] = [];
+    const movedOccurrence = createEvent({
+      endTime: new Date("2026-01-15T16:00:00.000Z"),
+      id: "moved-occurrence",
+      recurrenceId: new Date("2026-01-12T00:00:00.000Z"),
+      sourceEventUid: "pathological-series",
+      startTime: new Date("2026-01-15T15:00:00.000Z"),
+      summary: "Dragged to a new time",
+    });
+
+    const result = materializeRecurrenceEvents([
+      createEvent({
+        endTime: new Date("2026-01-01T00:00:01.000Z"),
+        recurrenceRule: { frequency: "SECONDLY" },
+        sourceEventUid: "pathological-series",
+        startTime: new Date("2026-01-01T00:00:00.000Z"),
+      }),
+      movedOccurrence,
+    ], WINDOW, { onSeriesOverBudget: (error) => reported.push(error) });
+
+    expect(reported.map((error) => error.sourceEventUid)).toEqual(["pathological-series"]);
+    expect(result).toEqual([]);
   });
 
   it("accepts sparse hourly rules whose actual output remains within the budget", () => {

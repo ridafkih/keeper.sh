@@ -41,6 +41,12 @@ services:
       - ./global-bundle.pem:/certs/global-bundle.pem:ro
     depends_on:
       - redis
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3001').then(() => process.exit(0), () => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 10s
     restart: unless-stopped
 
   cron:
@@ -55,7 +61,8 @@ services:
     volumes:
       - ./global-bundle.pem:/certs/global-bundle.pem:ro
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
   worker:
@@ -68,7 +75,10 @@ services:
     volumes:
       - ./global-bundle.pem:/certs/global-bundle.pem:ro
     depends_on:
-      - redis
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_started
     restart: unless-stopped
 
   mcp:

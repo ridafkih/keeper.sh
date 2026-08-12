@@ -9,6 +9,10 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { isNotNull, isNull, sql } from "drizzle-orm";
+import {
+  DEFAULT_FUTURE_SYNC_RANGE,
+  DEFAULT_HISTORIC_SYNC_RANGE,
+} from "@keeper.sh/data-schemas";
 import { user } from "./auth-schema";
 
 const DEFAULT_EVENT_COUNT = 0;
@@ -110,12 +114,19 @@ const calendarsTable = pgTable(
     ingestFailureCount: integer().notNull().default(0),
     ingestLastFailureAt: timestamp(),
     ingestNextAttemptAt: timestamp(),
+    ingestFutureRange: text().notNull().default(DEFAULT_FUTURE_SYNC_RANGE),
+    ingestHistoricRange: text().notNull().default(DEFAULT_HISTORIC_SYNC_RANGE),
+    ingestWindowEnd: timestamp(),
+    ingestWindowRecordedAt: timestamp(),
+    ingestWindowStart: timestamp(),
     externalCalendarId: text(),
     id: uuid().notNull().primaryKey().defaultRandom(),
     capabilities: text().array().notNull().default(["pull"]),
     name: text().notNull(),
     originalName: text(),
     syncToken: text(),
+    syncFutureRange: text().notNull().default(DEFAULT_FUTURE_SYNC_RANGE),
+    syncHistoricRange: text().notNull().default(DEFAULT_HISTORIC_SYNC_RANGE),
     updatedAt: timestamp()
       .notNull()
       .defaultNow()
@@ -248,6 +259,15 @@ const syncStatusTable = pgTable(
   (table) => [uniqueIndex("sync_status_calendar_idx").on(table.calendarId)],
 );
 
+const userSyncRequestsTable = pgTable("user_sync_requests", {
+  requestId: uuid().notNull().defaultRandom(),
+  requestedAt: timestamp().notNull().defaultNow(),
+  userId: text()
+    .notNull()
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+});
+
 const eventMappingsTable = pgTable(
   "event_mappings",
   {
@@ -258,12 +278,16 @@ const eventMappingsTable = pgTable(
     deleteIdentifier: text(),
     destinationEventUid: text().notNull(),
     endTime: timestamp().notNull(),
+    // Kept as the legacy cascade in Drizzle metadata so 0077 remains additive.
+    // The migration runner upgrades the live FK to SET NULL before applying 0077.
     eventStateId: uuid()
-      .notNull()
       .references(() => eventStatesTable.id, { onDelete: "cascade" }),
     id: uuid().notNull().primaryKey().defaultRandom(),
     syncEventId: text(),
     syncEventHash: text(),
+    // Nullable for rolling compatibility with writers from before this column existed.
+    // The migration runner backfills it and installs its validated index/checks.
+    sourceCalendarId: uuid(),
     startTime: timestamp().notNull(),
   },
   (table) => [
@@ -365,6 +389,7 @@ export {
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
   syncStatusTable,
+  userSyncRequestsTable,
   userEventsTable,
   userSubscriptionsTable,
 };

@@ -61,6 +61,31 @@ describe("filterSourceEventsToSyncWindow", () => {
     expect(result.events).toHaveLength(1);
     expect(result.events[0]?.uid).toBe("inside");
   });
+
+  it("keeps a series that exceeds the recurrence budget instead of throwing", () => {
+    /*
+     * Regression: materializing without the over-budget handler threw here,
+     * before ingestion's budget scan could withhold and report the series, which
+     * put the whole calendar into permanent backoff.
+     */
+    const events = [
+      createSourceEvent({
+        endTime: new Date("2026-03-12T10:05:00.000Z"),
+        recurrenceRule: { frequency: "MINUTELY", interval: 1 },
+        startTime: new Date("2026-03-12T10:00:00.000Z"),
+        uid: "over-budget",
+      }),
+      createSourceEvent({ uid: "healthy" }),
+    ];
+
+    const result = filterSourceEventsToSyncWindow(events, {
+      timeMax: new Date("2028-03-31T23:59:59.999Z"),
+      timeMin: new Date("2026-03-10T00:00:00.000Z"),
+    });
+
+    expect(result.events.map(({ uid }) => uid)).toEqual(["over-budget", "healthy"]);
+    expect(result.filteredCount).toBe(0);
+  });
 });
 
 describe("splitSourceEventsByPersistenceIdentity", () => {

@@ -1,4 +1,5 @@
 import { type } from "arktype";
+import { syncRangeSchema } from "@keeper.sh/data-schemas";
 
 const calendarIdsBodySchema = type({
   calendarIds: "string[]",
@@ -17,6 +18,8 @@ const sourcePatchBodySchema = type({
   "excludeOutOfOffice?": "boolean",
   "includeInIcalFeed?": "boolean",
   "treatFullDayTimedEventsAsAllDay?": "boolean",
+  "syncHistoricRange?": syncRangeSchema,
+  "syncFutureRange?": syncRangeSchema,
   "+": "reject",
 });
 type SourcePatchBody = typeof sourcePatchBodySchema.infer;
@@ -59,6 +62,12 @@ const eventPatchBodySchema = type({
 });
 type EventPatchBody = typeof eventPatchBodySchema.infer;
 
+const calendarPausePatchBodySchema = type({
+  paused: "boolean",
+  "+": "reject",
+});
+type CalendarPausePatchBody = typeof calendarPausePatchBodySchema.infer;
+
 const tokenCreateBodySchema = type({
   name: "string",
   "+": "reject",
@@ -67,6 +76,7 @@ type TokenCreateBody = typeof tokenCreateBodySchema.infer;
 
 export {
   calendarIdsBodySchema,
+  calendarPausePatchBodySchema,
   sourcePatchBodySchema,
   icalSettingsPatchBodySchema,
   eventCreateBodySchema,
@@ -75,6 +85,7 @@ export {
 };
 export type {
   CalendarIdsBody,
+  CalendarPausePatchBody,
   SourcePatchBody,
   IcalSettingsPatchBody,
   EventCreateBody,

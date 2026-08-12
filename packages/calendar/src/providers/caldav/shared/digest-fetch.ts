@@ -48,6 +48,7 @@ interface DigestAwareFetchOptions {
 interface DigestAwareFetchResult {
   fetch: FetchFunction;
   getResolvedMethod: () => CalDAVAuthMethod | null;
+  getLastResponseStatus: () => number | null;
 }
 
 const createDigestAwareFetch = (options: DigestAwareFetchOptions): DigestAwareFetchResult => {
@@ -59,9 +60,12 @@ const createDigestAwareFetch = (options: DigestAwareFetchOptions): DigestAwareFe
     fetch: baseFetch,
   });
 
-  const state: { method: AuthMethod } = { method: knownAuthMethod ?? "unknown" };
+  const state: { method: AuthMethod; lastResponseStatus: number | null } = {
+    method: knownAuthMethod ?? "unknown",
+    lastResponseStatus: null,
+  };
 
-  const performFetch: FetchFunction = async (input, init) => {
+  const authenticatedFetch: FetchFunction = async (input, init) => {
     if (state.method === "digest") {
       return digestClient.fetch(input, init);
     }
@@ -89,6 +93,12 @@ const createDigestAwareFetch = (options: DigestAwareFetchOptions): DigestAwareFe
     return digestClient.fetch(input, init);
   };
 
+  const performFetch: FetchFunction = async (input, init) => {
+    const response = await authenticatedFetch(input, init);
+    state.lastResponseStatus = response.status;
+    return response;
+  };
+
   const getResolvedMethod = (): CalDAVAuthMethod | null => {
     if (state.method === "unknown") {
       return null;
@@ -96,7 +106,9 @@ const createDigestAwareFetch = (options: DigestAwareFetchOptions): DigestAwareFe
     return state.method;
   };
 
-  return { fetch: performFetch, getResolvedMethod };
+  const getLastResponseStatus = (): number | null => state.lastResponseStatus;
+
+  return { fetch: performFetch, getLastResponseStatus, getResolvedMethod };
 };
 
 type CalDAVAuthMethod = "basic" | "digest";

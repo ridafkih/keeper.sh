@@ -26,7 +26,12 @@ const createEventMappingBackfillDatabase = (
 
     await transaction
       .update(eventMappingsTable)
-      .set({ syncEventId: sql`cast(${eventMappingsTable.eventStateId} as text)` })
+      .set({
+        syncEventId: sql`coalesce(
+          cast(${eventMappingsTable.eventStateId} as text),
+          concat('legacy-mapping:', cast(${eventMappingsTable.id} as text))
+        )`,
+      })
       .where(and(
         inArray(eventMappingsTable.id, rows.map(({ id }) => id)),
         isNull(eventMappingsTable.syncEventId),

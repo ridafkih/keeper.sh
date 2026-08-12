@@ -42,6 +42,38 @@ describe("insertEventStatesWithConflictResolution", () => {
     expect(insertCalled).toBe(false);
   });
 
+  it("chunks a large snapshot so one statement cannot exceed the bind-parameter ceiling", async () => {
+    /*
+     * An unbounded ICS feed reports its whole history in one fetch. At roughly
+     * fifteen bind parameters per row, a single statement past ~4000 rows is
+     * rejected outright, rolling back the ingest on every tick thereafter.
+     */
+    const batchSizes: number[] = [];
+    const database = {
+      insert: () => ({
+        values: (value: EventStateInsertRow | EventStateInsertRow[]) => {
+          let insertedRows = value;
+          if (!Array.isArray(insertedRows)) {
+            insertedRows = [insertedRows];
+          }
+          batchSizes.push(insertedRows.length);
+          return { onConflictDoUpdate: () => Promise.resolve() };
+        },
+      }),
+    };
+    const rows = Array.from({ length: 8000 }, (_unused, index) =>
+      buildEventStateInsertRow("calendar-1", {
+        endTime: new Date("2026-03-12T11:00:00.000Z"),
+        startTime: new Date("2026-03-12T10:00:00.000Z"),
+        uid: `uid-${index}`,
+      }));
+
+    await insertEventStatesWithConflictResolution(database, rows);
+
+    expect(batchSizes.reduce((total, size) => total + size, 0)).toBe(8000);
+    expect(Math.max(...batchSizes)).toBeLessThanOrEqual(4000);
+  });
+
   it("uses provider identity for provider rows and storage identity for legacy rows", async () => {
     const rows: EventStateInsertRow[] = [
       {

@@ -8,6 +8,7 @@ import type { ViteAssets } from "@/lib/router-context";
 import type { Runtime, ServerConfig } from "./types";
 
 interface EntryServerModule {
+  cacheableHtmlPaths: string[];
   render: (request: Request, viteAssets: ViteAssets) => Promise<Response>;
 }
 
@@ -17,13 +18,23 @@ function isEntryServerModule(value: unknown): value is EntryServerModule {
   }
 
   const renderProperty = Reflect.get(value, "render");
-  return typeof renderProperty === "function";
+  if (typeof renderProperty !== "function") {
+    return false;
+  }
+
+  const cacheablePathsProperty = Reflect.get(value, "cacheableHtmlPaths");
+  return (
+    Array.isArray(cacheablePathsProperty)
+    && cacheablePathsProperty.every((entry) => typeof entry === "string")
+  );
 }
 
 async function loadProductionRenderer(): Promise<EntryServerModule> {
   const moduleValue = await import(pathToFileURL(serverDistEntry).href);
   if (!isEntryServerModule(moduleValue)) {
-    throw new Error("SSR entry module must export render(request, viteAssets).");
+    throw new Error(
+      "SSR entry module must export render(request, viteAssets) and cacheableHtmlPaths.",
+    );
   }
 
   return moduleValue;
@@ -35,6 +46,7 @@ async function createProductionRuntime(): Promise<Runtime> {
   const renderer = await loadProductionRenderer();
 
   return {
+    cacheableHtmlPaths: new Set(renderer.cacheableHtmlPaths),
     handleAssetRequest: async (request) => {
       const requestUrl = new URL(request.url);
       return readStaticFile(requestUrl.pathname);
@@ -78,6 +90,7 @@ async function createDevelopmentRuntime(vitePort: number): Promise<Runtime> {
   const viteOrigin = `http://localhost:${vitePort}`;
 
   return {
+    cacheableHtmlPaths: new Set<string>(),
     handleAssetRequest: (request) => proxyRequest(request, viteOrigin),
     resolveViteAssets: async (requestPath) => {
       const template = await fs.readFile(sourceTemplatePath, "utf-8");

@@ -1,11 +1,14 @@
 const LOCK_PREFIX = "sync:lock:";
 const SIGNAL_PREFIX = "sync:signal:";
+const WAITER_PREFIX = "sync:waiters:";
 const INVALIDATION_PREFIX = "sync:invalidated:";
 const LOCK_TTL_SECONDS = 120;
 const LOCK_RENEW_INTERVAL_MS = (LOCK_TTL_SECONDS * 1000) / 3;
+const SIGNAL_TTL_SECONDS = 320;
 const INVALIDATION_TTL_SECONDS = 300;
 const POLL_INTERVAL_MS = 250;
-const POLL_TIMEOUT_MS = (LOCK_TTL_SECONDS * 1000) + 10_000;
+const POLL_TIMEOUT_MS = 310_000;
+const MAPPING_MUTATION_LOCK_PREFIX = "mapping-mutation:";
 
 interface SyncLockRedis {
   get: (key: string) => Promise<string | null>;
@@ -17,6 +20,7 @@ interface InvalidationRedis {
 }
 
 interface SyncLockHandle {
+  isHeld: () => Promise<boolean>;
   isCurrent: () => Promise<boolean>;
   release: () => Promise<void>;
 }
@@ -45,24 +49,34 @@ interface SyncLockSkippedResult {
  *
  * KEYS[1] = lock key
  * KEYS[2] = signal key
+ * KEYS[3] = optional blocker lock key
+ * KEYS[4] = waiter stack key
  * ARGV[1] = holder ID
  * ARGV[2] = lock TTL in seconds
+ * ARGV[3] = waiter signal TTL in seconds
+ * ARGV[4] = whether the blocker key should be checked
  *
  * Returns:
  *   "acquired"  — lock was free, caller now holds it
+ *   "blocked"   — a higher-priority mutation lock is held
  *   "queued"    — lock was held, caller is now the pending waiter
  *   "replaced"  — lock was held and there was already a waiter; old waiter replaced
  */
 const ACQUIRE_OR_SIGNAL_SCRIPT = `
+  if ARGV[4] == '1' and redis.call('EXISTS', KEYS[3]) == 1 then
+    return 'blocked'
+  end
   local lock = redis.call('GET', KEYS[1])
+  local existing = redis.call('GET', KEYS[2])
+  redis.call('LREM', KEYS[4], 0, ARGV[1])
+  redis.call('LPUSH', KEYS[4], ARGV[1])
+  redis.call('EXPIRE', KEYS[4], ARGV[3])
+  redis.call('SET', KEYS[2], ARGV[1], 'EX', ARGV[3])
+
   if not lock then
     redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
-    redis.call('DEL', KEYS[2])
     return 'acquired'
   end
-
-  local existing = redis.call('GET', KEYS[2])
-  redis.call('SET', KEYS[2], ARGV[1], 'EX', ARGV[2])
 
   if existing then
     return 'replaced'
@@ -94,6 +108,45 @@ const RENEW_SCRIPT = `
   return 0
 `;
 
+/**
+ * Remove this caller from the waiter stack and atomically promote the previous
+ * live waiter when needed. This preserves a valid predecessor when a newer
+ * request is cancelled after replacing it.
+ */
+const CANCEL_WAITER_SCRIPT = `
+  local holder = redis.call('GET', KEYS[3])
+  if holder == ARGV[1] then
+    redis.call('DEL', KEYS[3])
+  end
+  redis.call('LREM', KEYS[2], 0, ARGV[1])
+  local waiter = redis.call('LINDEX', KEYS[2], 0)
+  if waiter then
+    redis.call('SET', KEYS[1], waiter, 'EX', ARGV[2])
+    redis.call('EXPIRE', KEYS[2], ARGV[2])
+    return waiter
+  end
+  redis.call('DEL', KEYS[1])
+  redis.call('DEL', KEYS[2])
+  return ''
+`;
+
+/**
+ * Commit an acquisition only if the caller still owns the lock. Until this
+ * confirmation, predecessor waiters remain available for cancellation
+ * handoff if the abort signal fires while the acquire EVAL is in flight.
+ */
+const CONFIRM_ACQUISITION_SCRIPT = `
+  local holder = redis.call('GET', KEYS[1])
+  local signal = redis.call('GET', KEYS[2])
+  local waiter = redis.call('LINDEX', KEYS[3], 0)
+  if holder == ARGV[1] and signal == ARGV[1] and waiter == ARGV[1] then
+    redis.call('DEL', KEYS[2])
+    redis.call('DEL', KEYS[3])
+    return 1
+  end
+  return 0
+`;
+
 const createLockHandle = (
   redis: SyncLockRedis,
   calendarId: string,
@@ -106,15 +159,30 @@ const createLockHandle = (
   const renewalTimer = setInterval(async () => {
     try {
       await redis.eval(RENEW_SCRIPT, 1, lockKey, holderId, String(LOCK_TTL_SECONDS));
+      /*
+       * A later success proves the lease is still ours, so a single blip must not
+       * strand the run. Losing the lock for real surfaces through isHeld/isCurrent
+       * reading a different holder, not through this flag.
+       */
+      delete renewalState.error;
     } catch (error) {
       renewalState.error = error;
     }
   }, LOCK_RENEW_INTERVAL_MS);
 
-  const isCurrent = async (): Promise<boolean> => {
+  const throwIfRenewalFailed = (): void => {
     if ("error" in renewalState) {
       throw new SyncLockRenewalError(calendarId, renewalState.error);
     }
+  };
+
+  const isHeld = async (): Promise<boolean> => {
+    throwIfRenewalFailed();
+    return await redis.get(lockKey) === holderId;
+  };
+
+  const isCurrent = async (): Promise<boolean> => {
+    throwIfRenewalFailed();
 
     const [lockHolder, pendingWaiter, invalidated] = await Promise.all([
       redis.get(lockKey),
@@ -134,30 +202,60 @@ const createLockHandle = (
     await redis.eval(RELEASE_SCRIPT, 1, lockKey, holderId);
   };
 
-  return { isCurrent, release };
+  return { isCurrent, isHeld, release };
 };
 
 const createSyncLock = (redis: SyncLockRedis) => {
   const acquire = async (
     calendarId: string,
     abortSignal?: AbortSignal,
+    blockerCalendarId?: string,
   ): Promise<AcquireSyncLockResult | SyncLockSkippedResult> => {
     const lockKey = `${LOCK_PREFIX}${calendarId}`;
     const signalKey = `${SIGNAL_PREFIX}${calendarId}`;
+    const waiterKey = `${WAITER_PREFIX}${calendarId}`;
     const invalidationKey = `${INVALIDATION_PREFIX}${calendarId}`;
+    const blockerLockKey = `${LOCK_PREFIX}${blockerCalendarId ?? calendarId}`;
     const holderId = crypto.randomUUID();
+    let checkBlocker = "0";
+    if (blockerCalendarId) {
+      checkBlocker = "1";
+    }
 
-    const result = await redis.eval(
-      ACQUIRE_OR_SIGNAL_SCRIPT,
-      2,
-      lockKey,
-      signalKey,
-      holderId,
-      String(LOCK_TTL_SECONDS),
-    );
+    if (abortSignal?.aborted) {
+      return { acquired: false };
+    }
 
-    if (result === "acquired") {
-      const handle = createLockHandle(
+    const cancelWaiter = async (): Promise<void> => {
+      await redis.eval(
+        CANCEL_WAITER_SCRIPT,
+        3,
+        signalKey,
+        waiterKey,
+        lockKey,
+        holderId,
+        String(SIGNAL_TTL_SECONDS),
+      );
+    };
+
+    const createConfirmedHandle = async (): Promise<SyncLockHandle | null> => {
+      if (abortSignal?.aborted) {
+        await cancelWaiter();
+        return null;
+      }
+      const confirmed = await redis.eval(
+        CONFIRM_ACQUISITION_SCRIPT,
+        3,
+        lockKey,
+        signalKey,
+        waiterKey,
+        holderId,
+      );
+      if (confirmed !== 1) {
+        await cancelWaiter();
+        return null;
+      }
+      return createLockHandle(
         redis,
         calendarId,
         lockKey,
@@ -165,53 +263,94 @@ const createSyncLock = (redis: SyncLockRedis) => {
         invalidationKey,
         holderId,
       );
+    };
+
+    const createConfirmedResult = async (): Promise<
+      AcquireSyncLockResult | SyncLockSkippedResult
+    > => {
+      const handle = await createConfirmedHandle();
+      if (!handle) {
+        return { acquired: false };
+      }
       return { acquired: true, handle };
+    };
+
+    let result = await redis.eval(
+      ACQUIRE_OR_SIGNAL_SCRIPT,
+      4,
+      lockKey,
+      signalKey,
+      blockerLockKey,
+      waiterKey,
+      holderId,
+      String(LOCK_TTL_SECONDS),
+      String(SIGNAL_TTL_SECONDS),
+      checkBlocker,
+    );
+
+    if (result === "acquired") {
+      return await createConfirmedResult();
     }
 
     const pollDeadline = Date.now() + POLL_TIMEOUT_MS;
+    let acquired = false;
 
-    while (Date.now() < pollDeadline) {
-      if (abortSignal?.aborted) {
-        return { acquired: false };
-      }
+    try {
+      while (Date.now() < pollDeadline) {
+        if (abortSignal?.aborted) {
+          return { acquired: false };
+        }
 
-      const currentWaiter = await redis.get(signalKey);
-      if (currentWaiter !== holderId) {
-        return { acquired: false };
-      }
+        if (result !== "blocked") {
+          const currentWaiter = await redis.get(signalKey);
+          if (currentWaiter === null) {
+            return { acquired: false };
+          }
+          if (currentWaiter !== holderId) {
+            await Bun.sleep(POLL_INTERVAL_MS);
+            continue;
+          }
+        }
 
-      const lockHolder = await redis.get(lockKey);
-      if (!lockHolder) {
-        const retryResult = await redis.eval(
-          ACQUIRE_OR_SIGNAL_SCRIPT,
-          2,
-          lockKey,
-          signalKey,
-          holderId,
-          String(LOCK_TTL_SECONDS),
-        );
-
-        if (retryResult === "acquired") {
-          const handle = createLockHandle(
-            redis,
-            calendarId,
+        const lockHolder = await redis.get(lockKey);
+        if (result === "blocked" || !lockHolder) {
+          result = await redis.eval(
+            ACQUIRE_OR_SIGNAL_SCRIPT,
+            4,
             lockKey,
             signalKey,
-            invalidationKey,
+            blockerLockKey,
+            waiterKey,
             holderId,
+            String(LOCK_TTL_SECONDS),
+            String(SIGNAL_TTL_SECONDS),
+            checkBlocker,
           );
-          return { acquired: true, handle };
+
+          if (result === "acquired") {
+            const confirmedResult = await createConfirmedResult();
+            const { acquired: acquisitionConfirmed } = confirmedResult;
+            acquired = acquisitionConfirmed;
+            return confirmedResult;
+          }
         }
+
+        await Bun.sleep(POLL_INTERVAL_MS);
       }
 
-      await Bun.sleep(POLL_INTERVAL_MS);
+      return { acquired: false };
+    } finally {
+      if (!acquired) {
+        await cancelWaiter();
+      }
     }
-
-    return { acquired: false };
   };
 
   return { acquire };
 };
+
+const createMappingMutationLockId = (userId: string): string =>
+  `${MAPPING_MUTATION_LOCK_PREFIX}${userId}`;
 
 const invalidateCalendar = async (redis: InvalidationRedis, calendarId: string): Promise<void> => {
   const key = `${INVALIDATION_PREFIX}${calendarId}`;
@@ -224,5 +363,5 @@ const isCalendarInvalidated = async (redis: SyncLockRedis, calendarId: string): 
   return value !== null;
 };
 
-export { createSyncLock, invalidateCalendar, isCalendarInvalidated, SyncLockRenewalError, LOCK_PREFIX, SIGNAL_PREFIX, INVALIDATION_PREFIX, LOCK_TTL_SECONDS, LOCK_RENEW_INTERVAL_MS, INVALIDATION_TTL_SECONDS, POLL_INTERVAL_MS };
+export { createSyncLock, createMappingMutationLockId, invalidateCalendar, isCalendarInvalidated, SyncLockRenewalError, LOCK_PREFIX, SIGNAL_PREFIX, INVALIDATION_PREFIX, LOCK_TTL_SECONDS, LOCK_RENEW_INTERVAL_MS, INVALIDATION_TTL_SECONDS, POLL_INTERVAL_MS };
 export type { SyncLockHandle, SyncLockRedis, InvalidationRedis, AcquireSyncLockResult, SyncLockSkippedResult };

@@ -1,0 +1,129 @@
+---
+title: "Keeper.sh vs SyncDate"
+description: "An honest comparison of Keeper.sh and SyncDate for calendar sync, covering update speed, pricing, supported calendars, open source and self-hosting, MCP servers, and where each tool is the better choice."
+blurb: "SyncDate updates in about four seconds and we poll every minute. Here is where that matters, where it doesn't, and where each of us is genuinely the better pick."
+createdAt: "2026-08-11"
+slug: "keeper-sh-vs-syncdate"
+updatedAt: "2026-08-11"
+tags:
+  - "calendar"
+  - "sync"
+  - "comparison"
+---
+
+You have calendars in more than one place, and you want your busy time to show up everywhere so nobody double-books you. Keeper.sh and SyncDate both do that job.
+
+SyncDate wrote a comparison of us first, and wrote it fairly. In one important area they beat us outright, so that goes before anything else.
+
+## Which one updates faster?
+
+SyncDate. This is not close, and we will not talk around it.
+
+Google and Microsoft can tell a tool the moment an event changes. SyncDate listens for that, and their features page puts the end-to-end result at "roughly 4 seconds" for the providers that support it.
+
+Keeper.sh asks on a timer instead. We read your calendars every minute, on every plan including Free. We write the blocks out every 30 minutes on Free, and every minute on Pro.
+
+So a change lands on your other calendar in under two minutes on Pro, and just over half an hour on Free.
+
+That gap matters if you are a consultant who moves client calls three times a day, and someone books the slot you just freed. Four seconds closes that hole and a minute might not. It is invisible if you are blocking out appointments set days ago.
+
+## What does each one cost?
+
+SyncDate shows annual pricing by default. Their pricing page lists Plus at "$7.42/mo" billed as "$89 billed annually", and Pro at "$14.08/mo" billed as "$169 billed annually". The same page says plans "start at $8.99/month", which suggests month-to-month costs more.
+
+Keeper.sh has one paid plan at $5 per month. There is no seat pricing and no higher tier.
+
+| | Keeper.sh | SyncDate |
+| --- | --- | --- |
+| Free plan | 2 linked accounts, 3 connections | 2 calendars, 2 accounts, 1 sync setup, 1-month horizon |
+| Entry paid plan | $5/month | $7.42/mo billed annually ($89/year) |
+| Higher paid plan | None | $14.08/mo billed annually ($169/year) |
+| Team plan | None | Custom, minimum 5 seats |
+
+Our free plan sets no limit on calendars per account. Theirs caps you at two calendars and one sync setup, and only looks one month ahead.
+
+## Which calendars does each one connect?
+
+Both cover the big ones. SyncDate supports Google, Outlook, CalDAV and iCal feeds, and names iCloud, Fastmail, Infomaniak, mailbox.org, Posteo and Nextcloud as CalDAV servers it works with.
+
+Keeper.sh supports Google, Outlook, iCloud, Fastmail and any CalDAV server, and can read and write all five. We also read iCal and ICS links, but cannot write to them, because those links only go one way.
+
+Call this one a tie.
+
+## Where is Keeper.sh genuinely better?
+
+**It is open source.** Keeper.sh is AGPL-3.0, so you can read the sync engine before trusting it with your calendar. SyncDate says plainly on their comparison page: "SYNCDATE is not open source and cannot be self-hosted."
+
+**You can run it yourself, with every paid feature unlocked.** More on that below.
+
+**It costs less.** $5 a month against $7.42 a month billed annually, and more than that month-to-month.
+
+**One calendar feed for everything.** Keeper.sh gives you a single private iCal link that combines every calendar you have connected. Paste it into anything that reads calendar feeds for one merged view.
+
+**An API and an agent connector on the free plan.** Keeper.sh has a REST API, and an MCP server so tools like Claude can read and change your calendars. Both are capped at 25 requests a day on Free, and uncapped on Pro.
+
+## One correction
+
+Their comparison page calls our agent tools "read-focused (`list_calendars`, `get_events`, `get_event_count`, over OAuth 2.1)". We ship 11 tools and 4 of them write: `create_event`, `update_event`, `delete_event` and `rsvp_event`. An assistant connected to Keeper.sh can book, edit, cancel and reply to invitations, not just look.
+
+We do not think this was careless. Their page already carries a dated correction retracting an earlier mistake about us, which is more than most companies do.
+
+## Where is SyncDate genuinely better?
+
+**Speed**, covered above, and it is the biggest one.
+
+**Paperwork your legal team will ask for.** SyncDate publishes a self-serve Data Processing Agreement, names DUMA DIGITAL SOLUTIONS S.R.L. as the operating company, and lists its subprocessors. If your employer needs a signed DPA before you connect a work calendar, SyncDate clears that bar and we do not.
+
+**Named infrastructure and encryption.** Their security page states hosting "with Hetzner in EU data centres (Germany and Finland)", running under an ISO 27001 certified management system. The same page says "OAuth tokens are encrypted at rest with AES-256-GCM."
+
+**More agent tools, including sync control.** Their MCP server has "12 tools", covering things ours does not, like triggering and pausing a sync from an assistant.
+
+They disclose their own gaps too, noting they are "not currently SOC 2 or application-layer ISO 27001 certified." Their subprocessor list also names several US vendors alongside the EU hosting. That is normal for a SaaS product and they document it openly, so read the list yourself if data residency is your reason for choosing.
+
+## What Keeper.sh does not do
+
+**Your changes only travel one way per connection.** If you want your work calendar in your personal one and the reverse, that is two connections, not a setting.
+
+**Attendees, meeting links and reminders do not come across.** A synced block carries its time, plus its title and details if you share them, while guests, the Meet or Teams link and alerts stay on the original. We do read attendees for invitations you receive, so you can answer them.
+
+**Showing real event details costs $5.** A connected calendar arrives anonymised: titles, descriptions and locations are replaced with something generic. Changing that is a Pro setting.
+
+**Free plan writes are slow.** Every 30 minutes, as above.
+
+## Running Keeper.sh yourself
+
+Self-hosting Keeper.sh is not a stripped-down version. Every Pro feature turns on automatically on your own instance, including per-minute writes and the uncapped API.
+
+This is the option to take when your data cannot leave your control. You keep the database, the tokens and the logs, and nobody else is in the path.
+
+It is real work, though. You need Docker and Docker Compose, a Postgres database, a Redis instance and a domain, plus your own Google and Microsoft applications for calendar access, which is the fiddliest part.
+
+Most people should use hosted Keeper.sh and pay the $5. Self-hosting is there when you need it, and the [repository](https://github.com/ridafkih/keeper.sh) has the full setup guide.
+
+## FAQ
+
+### Which should I choose?
+
+Choose SyncDate if you need updates in seconds, or if your company requires a signed DPA. Choose Keeper.sh if you want open source, self-hosting, a lower price, or an API and agent connector without paying.
+
+### Does Keeper.sh really sync every minute?
+
+We read your calendars every minute on all plans, including Free. Writing out is every 30 minutes on Free and every minute on Pro. Comparisons that call Keeper.sh a 30-minute product are describing the free plan's writes.
+
+### Can I try both?
+
+Yes. Both have free plans that need no card. Connect one calendar to each and watch how they behave for a week.
+
+## Sources
+
+Everything above about SyncDate comes from their own public pages, checked on the date this post was published:
+
+- [syncdate.app/pricing](https://syncdate.app/pricing) — plans, prices and free tier limits
+- [syncdate.app/features](https://syncdate.app/features) — supported calendars and the four-second figure
+- [syncdate.app/mcp](https://syncdate.app/mcp) — 12 tools
+- [syncdate.app/security](https://syncdate.app/security) — hosting, encryption and certifications
+- [syncdate.app/subprocessors](https://syncdate.app/subprocessors) — vendor list
+- [syncdate.app/dpa](https://syncdate.app/dpa) — the Data Processing Agreement
+- [syncdate.app/compare/syncdate-vs-keeper](https://syncdate.app/compare/syncdate-vs-keeper) — their comparison and correction notice
+
+Prices change. If a figure here is out of date, their page wins, and we would appreciate you [telling us](https://github.com/ridafkih/keeper.sh/issues).

@@ -1,7 +1,8 @@
 import type { SourceEvent } from "../types";
-import { getOAuthSyncWindow } from "../oauth/sync-window";
+import type { SyncRange } from "@keeper.sh/data-schemas";
+import type { SyncWindow } from "../sync/sync-range";
 import {
-  assertSourceRecurrenceMaterializationWithinBudget,
+  findSourceEventsExceedingRecurrenceBudget,
   RecurrenceMaterializationLimitError,
 } from "../events/recurrence-materializer";
 import {
@@ -23,6 +24,12 @@ interface FetchEventsResult {
   isDeltaSync?: boolean;
   fullSyncRequired?: boolean;
   unchanged?: boolean;
+  syncWindow?: SyncWindow;
+  coverage?: {
+    futureRange: SyncRange;
+    historicRange: SyncRange;
+    window: SyncWindow;
+  };
 }
 
 interface IngestionChanges {
@@ -30,6 +37,7 @@ interface IngestionChanges {
   deletes: string[];
   snapshot?: CalendarSnapshotChange;
   syncToken?: string | null;
+  coverage?: FetchEventsResult["coverage"];
 }
 
 interface CalendarSnapshotChange {
@@ -84,7 +92,35 @@ interface IngestionResult {
 }
 
 const EMPTY_RESULT: IngestionResult = { eventsAdded: 0, eventsRemoved: 0 };
-const RECURRENCE_VALIDATION_YEARS = 2;
+
+/*
+ * Only delta sources need this. A snapshot source re-reports its whole coverage
+ * every fetch, so the snapshot diff already removes whatever it stopped
+ * reporting; pruning on top of that would delete the unbounded history an ICS
+ * feed still reports. A delta source only reports changes, so a stored event
+ * that fell outside a narrowed window would otherwise be stranded forever.
+ */
+const getNonRecurringStoredEventIdsOutsideWindow = (
+  events: (Pick<StoredSourceEventState, "endTime" | "id" | "startTime"> & {
+    recurrenceRule: unknown;
+  })[],
+  window: SyncWindow | undefined,
+  isDeltaSync: boolean,
+): string[] => {
+  if (!window || !isDeltaSync) {
+    return [];
+  }
+  const eventIds: string[] = [];
+  for (const event of events) {
+    if (
+      !event.recurrenceRule
+      && (event.endTime <= window.timeMin || event.startTime >= window.timeMax)
+    ) {
+      eventIds.push(event.id);
+    }
+  }
+  return eventIds;
+};
 
 const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResult> => {
   const { calendarId, fetchEvents, isCurrent, onIngestEvent } = options;
@@ -102,16 +138,31 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     const withPersistenceTransaction = resolvePersistenceTransaction(options);
     const fetchResult = await fetchEvents();
     wideEvent["source_events.count"] = fetchResult.events.length;
-    const recurrenceValidationWindow = getOAuthSyncWindow(RECURRENCE_VALIDATION_YEARS);
-
-    assertSourceRecurrenceMaterializationWithinBudget(
-      calendarId,
-      fetchResult.events,
-      {
-        end: recurrenceValidationWindow.timeMax,
-        start: recurrenceValidationWindow.timeMin,
-      },
-    );
+    let sourceEvents = fetchResult.events;
+    if (sourceEvents.some((event) => event.recurrenceRule)) {
+      if (!fetchResult.syncWindow) {
+        throw new RangeError("Recurring source ingestion requires an explicit sync window");
+      }
+      const overBudget = findSourceEventsExceedingRecurrenceBudget(
+        calendarId,
+        sourceEvents,
+        {
+          end: fetchResult.syncWindow.timeMax,
+          start: fetchResult.syncWindow.timeMin,
+        },
+      );
+      if (overBudget.length > 0) {
+        /*
+         * A widened sync range can pull a pathological series over the occurrence
+         * budget. Drop those series and keep ingesting the rest, so one bad series
+         * cannot push the whole calendar into permanent ingestion backoff.
+         */
+        const overBudgetUids = new Set(overBudget.map(({ uid }) => uid));
+        sourceEvents = sourceEvents.filter(({ uid }) => !overBudgetUids.has(uid));
+        wideEvent["recurrence.over_budget_count"] = overBudget.length;
+        wideEvent["recurrence.over_budget_uids"] = [...overBudgetUids].join(",");
+      }
+    }
 
     if (isCurrent && !(await isCurrent())) {
       wideEvent["outcome"] = "superseded";
@@ -157,7 +208,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
         return EMPTY_RESULT;
       }
 
-      const eventsToAdd = buildSourceEventsToAdd(existingEvents, fetchResult.events, {
+      const eventsToAdd = buildSourceEventsToAdd(existingEvents, sourceEvents, {
         isDeltaSync,
       });
       const invalidStoredEventIdsToRemove = buildInvalidStoredEventIdsToRemove(
@@ -166,6 +217,16 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       );
       const eventStateIdsToRemove = [...new Set([
         ...invalidStoredEventIdsToRemove,
+        ...getNonRecurringStoredEventIdsOutsideWindow(
+          existingEvents,
+          fetchResult.syncWindow,
+          isDeltaSync,
+        ),
+        /*
+         * Removal is computed against the unfiltered fetch. An over-budget series is
+         * only withheld from ingestion; treating it as absent here would delete the
+         * states it already has, turning a stalled series into deleted user events.
+         */
         ...buildSourceEventStateIdsToRemove(
           existingEvents,
           fetchResult.events,
@@ -181,13 +242,16 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       wideEvent["events.removed"] = eventStateIdsToRemove.length;
 
       if (eventsToAdd.length === 0 && eventStateIdsToRemove.length === 0) {
-        if (fetchResult.nextSyncToken || fetchResult.snapshot) {
+        if (fetchResult.nextSyncToken || fetchResult.snapshot || fetchResult.coverage) {
           const changes: IngestionChanges = { inserts: [], deletes: [] };
           if (fetchResult.nextSyncToken) {
             changes.syncToken = fetchResult.nextSyncToken;
           }
           if (fetchResult.snapshot) {
             changes.snapshot = fetchResult.snapshot;
+          }
+          if (fetchResult.coverage) {
+            changes.coverage = fetchResult.coverage;
           }
           await flush(changes);
           flushed = true;
@@ -211,6 +275,9 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       }
       if (fetchResult.snapshot) {
         changes.snapshot = fetchResult.snapshot;
+      }
+      if (fetchResult.coverage) {
+        changes.coverage = fetchResult.coverage;
       }
 
       await flush(changes);

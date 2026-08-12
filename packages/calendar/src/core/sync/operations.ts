@@ -8,10 +8,14 @@ import {
   createEditableEventContentHash,
   createSyncEventContentHash,
 } from "../events/content-hash";
-import { getOAuthSyncWindowStart } from "../oauth/sync-window";
+import type { SyncWindow } from "./sync-range";
 
-interface RemoveOperationTimeBoundary {
-  syncWindowStart: Date;
+interface ReconciliationScope {
+  authoritativeWindow: SyncWindow | null;
+  authoritativeSourceWindows?: ReadonlyMap<string, SyncWindow>;
+  configuredSourceCalendarIds?: ReadonlySet<string>;
+  requestedWindow: SyncWindow;
+  withheldSourceEventStateIds?: ReadonlySet<string>;
 }
 
 interface StaleMappingResult {
@@ -23,7 +27,6 @@ interface StaleMappingResult {
 
 interface ComputeSyncOperationsResult {
   mappingUpdates: MappingUpdate[];
-  mappingIdsToPrune: string[];
   operations: SyncOperation[];
   staleReasonCounts: StaleReasonCounts;
   staleMappingIds: string[];
@@ -56,10 +59,6 @@ interface OccurrenceReassignment {
   mapping: EventMapping;
 }
 
-const getDefaultTimeBoundary = (): RemoveOperationTimeBoundary => ({
-  syncWindowStart: getOAuthSyncWindowStart(),
-});
-
 const createStaleReasonCounts = (): StaleReasonCounts => ({
   localHashChanged: 0,
   occurrenceReassigned: 0,
@@ -69,8 +68,42 @@ const createStaleReasonCounts = (): StaleReasonCounts => ({
   remoteTimeChanged: 0,
 });
 
-const getMappingSyncEventId = (mapping: EventMapping): string =>
-  mapping.syncEventId ?? mapping.eventStateId;
+const getMappingSyncEventId = (mapping: EventMapping): string => mapping.syncEventId;
+
+const overlapsWindow = (
+  value: Pick<EventMapping, "startTime" | "endTime">,
+  start: Date,
+  end: Date,
+): boolean => value.endTime > start && value.startTime < end;
+
+const getSourceAuthoritativeWindow = (
+  scope: ReconciliationScope,
+  sourceCalendarId: string | null,
+): SyncWindow | null => {
+  if (sourceCalendarId === null) {
+    return scope.requestedWindow;
+  }
+  if (!scope.authoritativeSourceWindows || !scope.configuredSourceCalendarIds) {
+    return scope.authoritativeWindow;
+  }
+  if (!scope.configuredSourceCalendarIds.has(sourceCalendarId)) {
+    return scope.requestedWindow;
+  }
+  return scope.authoritativeSourceWindows.get(sourceCalendarId) ?? null;
+};
+
+const isInsideSourceAuthoritativeWindow = (
+  value: Pick<EventMapping, "startTime" | "endTime">,
+  sourceCalendarId: string | null,
+  scope: ReconciliationScope,
+): boolean => {
+  const sourceWindow = getSourceAuthoritativeWindow(scope, sourceCalendarId);
+  return sourceWindow !== null && overlapsWindow(
+    value,
+    sourceWindow.timeMin,
+    sourceWindow.timeMax,
+  );
+};
 
 const compareMappingSlots = (first: EventMapping, second: EventMapping): number =>
   first.startTime.getTime() - second.startTime.getTime()
@@ -107,6 +140,9 @@ const pairReidentifiedMaterializedOccurrences = (
 
   for (const mapping of existingMappings) {
     if (localEventIds.has(getMappingSyncEventId(mapping))) {
+      continue;
+    }
+    if (!mapping.eventStateId) {
       continue;
     }
     const mappings = missingMappingsByOwner.get(mapping.eventStateId) ?? [];
@@ -394,24 +430,41 @@ const buildRemoveOperations = (
   remoteEvents: RemoteEvent[],
   localEventIds: Set<string>,
   mappedRemoteIdentities: Set<string>,
-  timeBoundary: RemoveOperationTimeBoundary = getDefaultTimeBoundary(),
+  scope: ReconciliationScope,
 ): SyncOperation[] => {
   const operations: SyncOperation[] = [];
-  const remoteIdentities = new Set(
-    remoteEvents.map((remoteEvent) => `${remoteEvent.uid}\u0000${remoteEvent.deleteId}`),
-  );
 
   for (const mapping of existingMappings) {
-    const remoteIdentity = `${mapping.destinationEventUid}\u0000${mapping.deleteIdentifier}`;
+    /*
+     * Both edges of the requested window retire a mapping. A mirror the window no
+     * longer covers stops receiving updates, and a stale copy that never reflects a
+     * rename, move, or deletion of its source reads as broken sync. The source event
+     * itself is retained in Keeper's own store, so retiring the mirror narrows scope
+     * rather than losing data.
+     */
+    const outsideCleanupWindow = !overlapsWindow(
+      mapping,
+      scope.requestedWindow.timeMin,
+      scope.requestedWindow.timeMax,
+    );
+    const insideAuthoritativeWindow = isInsideSourceAuthoritativeWindow(
+      mapping,
+      mapping.sourceCalendarId,
+      scope,
+    );
+    /*
+     * A series withheld for exceeding the occurrence budget is absent from the local
+     * read for a technical limit, not because it is gone. Deleting its mirrors here
+     * would mass-delete and then mass-re-add them the moment the window changes, so
+     * the missing-source path leaves them alone. Window cleanup above still applies.
+     */
+    const isWithheldSeriesMapping = mapping.eventStateId !== null
+      && Boolean(scope.withheldSourceEventStateIds?.has(mapping.eventStateId));
     if (
-      mapping.endTime < timeBoundary.syncWindowStart
-      && !remoteIdentities.has(remoteIdentity)
-      && mapping.deleteIdentifier !== mapping.destinationEventUid
-    ) {
-      continue;
-    }
-    if (
-      !localEventIds.has(getMappingSyncEventId(mapping))
+      outsideCleanupWindow
+      || insideAuthoritativeWindow
+        && !isWithheldSeriesMapping
+        && !localEventIds.has(getMappingSyncEventId(mapping))
     ) {
       operations.push({
         deleteId: mapping.deleteIdentifier,
@@ -431,6 +484,14 @@ const buildRemoveOperations = (
       continue;
     }
 
+    if (!scope.authoritativeWindow || !overlapsWindow(
+      remoteEvent,
+      scope.authoritativeWindow.timeMin,
+      scope.authoritativeWindow.timeMax,
+    )) {
+      continue;
+    }
+
     operations.push({
       deleteId: remoteEvent.deleteId,
       startTime: remoteEvent.startTime,
@@ -446,27 +507,19 @@ const computeSyncOperations = (
   localEvents: MaterializedSyncableEvent[],
   existingMappings: EventMapping[],
   remoteEvents: RemoteEvent[],
-  timeBoundary: RemoveOperationTimeBoundary = getDefaultTimeBoundary(),
+  scope: ReconciliationScope,
 ): ComputeSyncOperationsResult => {
-  const localEventIds = new Set(localEvents.map((event) => event.id));
-  const localEventsById = new Map(localEvents.map((event) => [event.id, event]));
+  const authoritativeLocalEvents: MaterializedSyncableEvent[] = [];
+  const activeMappings: EventMapping[] = [];
+  authoritativeLocalEvents.push(...localEvents.filter((event) =>
+    isInsideSourceAuthoritativeWindow(event, event.calendarId, scope)));
+  activeMappings.push(...existingMappings.filter((mapping) =>
+    isInsideSourceAuthoritativeWindow(mapping, mapping.sourceCalendarId, scope)));
+  const localEventIds = new Set(authoritativeLocalEvents.map((event) => event.id));
+  const localEventsById = new Map(authoritativeLocalEvents.map((event) => [event.id, event]));
   const remoteEventsByMappingId = matchRemoteEventsToMappings(existingMappings, remoteEvents);
-  const mappingIdsToPrune = existingMappings.flatMap((mapping) => {
-    if (localEventIds.has(getMappingSyncEventId(mapping))) {
-      return [];
-    }
-    const remoteExists = remoteEventsByMappingId.has(mapping.id);
-    if (mapping.endTime < timeBoundary.syncWindowStart && !remoteExists) {
-      return [mapping.id];
-    }
-    return [];
-  });
-  const mappingIdsToPruneSet = new Set(mappingIdsToPrune);
-  const activeMappings = existingMappings.filter(
-    (mapping) => !mappingIdsToPruneSet.has(mapping.id),
-  );
   const occurrenceReassignments = pairReidentifiedMaterializedOccurrences(
-    localEvents,
+    authoritativeLocalEvents,
     activeMappings,
   );
   const databaseOnlyReassignments: OccurrenceReassignment[] = [];
@@ -546,7 +599,17 @@ const computeSyncOperations = (
   const replacedEventIds = new Set(
     staleRemoteMappings.map((mapping) => getMappingSyncEventId(mapping)),
   );
-  const addOperations = buildAddOperations(localEvents, existingMappings, staleMappedEventIds)
+  /*
+   * Matched against every existing mapping, not just authoritative ones: a mapping
+   * between recorded coverage and the requested edge would otherwise look unmapped
+   * and be re-added, while its insert is dropped by the mapping uniqueness index
+   * and the orphaned remote event is deleted on the next run, forever.
+   */
+  const addOperations = buildAddOperations(
+    authoritativeLocalEvents,
+    existingMappings,
+    staleMappedEventIds,
+  )
     .filter((operation) => operation.type !== "add"
       || !replacedEventIds.has(operation.event.id)
         && !reassignedEventIds.has(operation.event.id));
@@ -563,16 +626,15 @@ const computeSyncOperations = (
   }));
 
   const removeOperations = buildRemoveOperations(
-    standardMappings,
+    existingMappings.filter((mapping) => !reassignedMappingIds.has(mapping.id)),
     remoteEvents,
     localEventIds,
     mappedRemoteIdentities,
-    timeBoundary,
+    scope,
   );
 
   return {
     mappingUpdates: [...mappingUpdatesById.values()],
-    mappingIdsToPrune,
     operations: sortOperationsByTime([
       ...addOperations,
       ...removeOperations,
@@ -604,7 +666,7 @@ export type {
   ComputeSyncOperationsResult,
   MappingUpdate,
   OccurrenceReassignment,
-  RemoveOperationTimeBoundary,
+  ReconciliationScope,
   StaleMappingResult,
   StaleReasonCounts,
 };

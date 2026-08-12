@@ -112,14 +112,25 @@ describe("createGoogleSyncProvider", () => {
       endTime: event.endTime,
       eventStateId: event.id,
       id: "mapping-id",
+      sourceCalendarId: "source-cal-1",
       startTime: event.startTime,
       syncEventHash: createSyncEventContentHash(event),
       syncEventId: event.id,
     };
 
-    expect(computeSyncOperations([event], [mapping], remoteEvents)).toEqual({
+    const reconciliationScope = {
+      authoritativeWindow: {
+        timeMax: new Date("2100-01-01T00:00:00.000Z"),
+        timeMin: new Date("2000-01-01T00:00:00.000Z"),
+      },
+      requestedWindow: {
+        timeMax: new Date("2100-01-01T00:00:00.000Z"),
+        timeMin: new Date("2000-01-01T00:00:00.000Z"),
+      },
+    };
+
+    expect(computeSyncOperations([event], [mapping], remoteEvents, reconciliationScope)).toEqual({
       mappingUpdates: [],
-      mappingIdsToPrune: [],
       operations: [],
       staleReasonCounts: {
         localHashChanged: 0,
@@ -137,14 +148,18 @@ describe("createGoogleSyncProvider", () => {
       deleteIdentifier: pushResult.remoteId,
       id: "legacy-mapping-id",
     };
-    expect(computeSyncOperations([event], [legacyMapping], remoteEvents)).toEqual({
+    expect(computeSyncOperations(
+      [event],
+      [legacyMapping],
+      remoteEvents,
+      reconciliationScope,
+    )).toEqual({
       mappingUpdates: [{
         deleteIdentifier: remoteEvents[0]?.deleteId,
         id: legacyMapping.id,
         syncEventHash: createSyncEventContentHash(event),
         syncEventId: event.id,
       }],
-      mappingIdsToPrune: [],
       operations: [],
       staleReasonCounts: {
         localHashChanged: 0,

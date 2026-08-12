@@ -3,9 +3,14 @@ import { and, count, eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { idParamSchema } from "@/utils/request-query";
-import { database, redis } from "@/context";
+import { database } from "@/context";
 import { withAccountDisplay } from "@/utils/provider-display";
-import { invalidateCalendarsForAccount } from "@/utils/invalidate-calendars";
+import { getCalendarsAffectedByAccountMutation } from "@/utils/invalidate-calendars";
+import {
+  requestUserSync,
+  scheduleMappingReplacementSync,
+  withMappingMutationLocks,
+} from "@/utils/source-destination-mappings";
 
 const GET = withWideEvent(
   withAuth(async ({ params, userId }) => {
@@ -52,24 +57,41 @@ const DELETE = withWideEvent(
     }
     const { id } = params;
 
-    const owned = await invalidateCalendarsForAccount(database, redis, userId, id);
-    if (!owned) {
+    const affected = await getCalendarsAffectedByAccountMutation(database, userId, id);
+    if (!affected.owned) {
       return ErrorResponse.notFound("Account not found").toResponse();
     }
 
-    const [deleted] = await database
-      .delete(calendarAccountsTable)
-      .where(
-        and(
-          eq(calendarAccountsTable.id, id),
-          eq(calendarAccountsTable.userId, userId),
-        ),
-      )
-      .returning({ id: calendarAccountsTable.id });
+    const { result: deleted } = await withMappingMutationLocks(
+      userId,
+      async () => {
+        const currentAffected = await getCalendarsAffectedByAccountMutation(
+          database,
+          userId,
+          id,
+        );
+        return currentAffected.calendarIds;
+      },
+      () => database.transaction(async (transaction) => {
+        await requestUserSync(transaction, userId);
+        const [deletedAccount] = await transaction
+          .delete(calendarAccountsTable)
+          .where(
+            and(
+              eq(calendarAccountsTable.id, id),
+              eq(calendarAccountsTable.userId, userId),
+            ),
+          )
+          .returning({ id: calendarAccountsTable.id });
+        return deletedAccount;
+      }),
+    );
 
     if (!deleted) {
       return ErrorResponse.notFound("Account not found").toResponse();
     }
+
+    scheduleMappingReplacementSync(userId);
 
     return Response.json({ success: true });
   }),

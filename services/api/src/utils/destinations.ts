@@ -13,8 +13,13 @@ import type {
   NormalizedUserInfo as OAuthUserInfo,
   ValidatedState,
 } from "@keeper.sh/calendar";
-import { database, oauthProviders, redis } from "@/context";
-import { invalidateCalendarsForAccount } from "@/utils/invalidate-calendars";
+import { database, oauthProviders } from "@/context";
+import { getCalendarsAffectedByAccountMutation } from "@/utils/invalidate-calendars";
+import {
+  requestUserSync,
+  scheduleMappingReplacementSync,
+  withMappingMutationLocks,
+} from "./source-destination-mappings";
 import {
   buildReconnectedCalendarState,
   RECONNECTED_CALENDAR_STATE,
@@ -322,20 +327,38 @@ const deleteCalendarDestination = async (
   userId: string,
   accountId: string,
 ): Promise<boolean> => {
-  const owned = await invalidateCalendarsForAccount(database, redis, userId, accountId);
-  if (!owned) {
+  const affected = await getCalendarsAffectedByAccountMutation(database, userId, accountId);
+  if (!affected.owned) {
     return false;
   }
 
-  const result = await database
-    .delete(calendarAccountsTable)
-    .where(
-      and(
-        eq(calendarAccountsTable.userId, userId),
-        eq(calendarAccountsTable.id, accountId),
-      ),
-    )
-    .returning({ id: calendarAccountsTable.id });
+  const { result } = await withMappingMutationLocks(
+    userId,
+    async () => {
+      const currentAffected = await getCalendarsAffectedByAccountMutation(
+        database,
+        userId,
+        accountId,
+      );
+      return currentAffected.calendarIds;
+    },
+    () => database.transaction(async (transaction) => {
+      await requestUserSync(transaction, userId);
+      return transaction
+        .delete(calendarAccountsTable)
+        .where(
+          and(
+            eq(calendarAccountsTable.userId, userId),
+            eq(calendarAccountsTable.id, accountId),
+          ),
+        )
+        .returning({ id: calendarAccountsTable.id });
+    }),
+  );
+
+  if (result.length > EMPTY_RESULT_COUNT) {
+    scheduleMappingReplacementSync(userId);
+  }
 
   return result.length > EMPTY_RESULT_COUNT;
 };

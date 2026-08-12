@@ -1,3 +1,5 @@
+import type { SyncRange } from "@keeper.sh/data-schemas";
+
 export interface CalendarAccount {
   id: string;
   provider: string;
@@ -49,6 +51,8 @@ export interface CalendarDetail {
   excludeFocusTime: boolean;
   excludeOutOfOffice: boolean;
   treatFullDayTimedEventsAsAllDay: boolean;
+  syncFutureRange: SyncRange;
+  syncHistoricRange: SyncRange;
   destinationIds: string[];
   sourceIds: string[];
   createdAt: string;

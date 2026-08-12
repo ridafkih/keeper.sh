@@ -1,18 +1,47 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { Streamdown } from "streamdown";
+import type { AllowedTags, Components } from "streamdown";
 import { Heading1 } from "@/components/ui/primitives/heading";
-import { markdownComponents } from "@/components/ui/primitives/markdown-component-map";
+import { Prose } from "@/components/ui/primitives/prose";
+import { ExternalTextLink } from "@/components/ui/primitives/text-link";
 import { Text } from "@/components/ui/primitives/text";
-import { BlogPostCta } from "@/features/blog/components/blog-post-cta";
-import { findBlogPostBySlug, formatIsoDate } from "@/lib/blog-posts";
-import { canonicalUrl, jsonLdScript, seoMeta, blogPostingSchema, breadcrumbSchema } from "@/lib/seo";
+import { NotFoundState } from "@/components/ui/shells/not-found";
+import { ArticleCta } from "@/features/marketing/components/article-cta";
+import { MarkdownFaq, MarkdownFaqItem } from "@/features/marketing/components/markdown-faq";
+import { findBlogPostBySlug } from "@/lib/blog-posts";
+import { formatIsoDate } from "@/utils/date";
+import { canonicalUrl, jsonLdScript, seoMeta, blogPostingSchema, breadcrumbSchema, breadcrumbTrail, faqPageSchema } from "@/lib/seo";
+import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
+
+const MARKDOWN_FAQ_TAGS: AllowedTags = {
+  faq: [],
+  "faq-item": ["question"],
+};
+
+const MARKDOWN_FAQ_COMPONENTS = {
+  faq: MarkdownFaq,
+  "faq-item": MarkdownFaqItem,
+} as Components;
+
+const blogPostBreadcrumbs = (title: string, slug: string) =>
+  breadcrumbTrail({ name: "Blog", path: "/blog" }, { name: title, path: `/blog/${slug}` });
 
 export const Route = createFileRoute("/(marketing)/blog/$slug")({
+  loader: ({ params }) => {
+    if (!findBlogPostBySlug(params.slug)) {
+      throw notFound();
+    }
+  },
   component: BlogPostPage,
+  notFoundComponent: NotFoundState,
   head: ({ params }) => {
     const blogPost = findBlogPostBySlug(params.slug);
     if (!blogPost) {
-      return { meta: [{ title: "Blog Post · Keeper.sh" }] };
+      return {
+        meta: [
+          { title: "Blog Post · Keeper.sh" },
+          { content: "noindex", name: "robots" },
+        ],
+      };
     }
 
     const postUrl = `/blog/${params.slug}`;
@@ -24,6 +53,7 @@ export const Route = createFileRoute("/(marketing)/blog/$slug")({
           description: blogPost.metadata.description,
           path: postUrl,
           type: "article",
+          imagePath: blogPost.metadata.image,
         }),
         { content: blogPost.metadata.tags.join(", "), name: "keywords" },
         { content: blogPost.metadata.createdAt, property: "article:published_time" },
@@ -41,12 +71,12 @@ export const Route = createFileRoute("/(marketing)/blog/$slug")({
           createdAt: blogPost.metadata.createdAt,
           updatedAt: blogPost.metadata.updatedAt,
           tags: blogPost.metadata.tags,
+          imagePath: blogPost.metadata.image,
         })),
-        jsonLdScript(breadcrumbSchema([
-          { name: "Home", path: "/" },
-          { name: "Blog", path: "/blog" },
-          { name: blogPost.metadata.title, path: postUrl },
-        ])),
+        jsonLdScript(breadcrumbSchema(blogPostBreadcrumbs(blogPost.metadata.title, params.slug))),
+        ...(blogPost.faq.length > 0
+          ? [jsonLdScript(faqPageSchema(postUrl, blogPost.faq))]
+          : []),
       ],
     };
   },
@@ -65,27 +95,33 @@ function BlogPostPage() {
 
   return (
     <div className="flex flex-col gap-6 py-16">
+      <Breadcrumb items={blogPostBreadcrumbs(blogPost.metadata.title, slug)} />
       <header className="flex flex-col gap-2">
         <Heading1>{blogPost.metadata.title}</Heading1>
         <div className="flex flex-col">
           <Text size="sm" tone="muted" align="left">
             By{" "}
-            <a href="https://rida.dev" target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-2">
-              Rida F'kih
-            </a>
+            <ExternalTextLink
+              align="left"
+              href="https://rida.dev"
+              rel="noopener noreferrer"
+              size="sm"
+              target="_blank"
+              tone="default"
+            >
+              Rida F&apos;kih
+            </ExternalTextLink>
             {" · "}{createdDate}
             {showUpdated && <> · Updated {updatedDate}</>}
           </Text>
         </div>
       </header>
 
-      <article className="flex flex-col gap-2">
-        <Streamdown components={markdownComponents}>
-          {blogPost.content}
-        </Streamdown>
-      </article>
+      <Prose allowedTags={MARKDOWN_FAQ_TAGS} components={MARKDOWN_FAQ_COMPONENTS}>
+        {blogPost.content}
+      </Prose>
 
-      <BlogPostCta />
+      <ArticleCta />
     </div>
   );
 }

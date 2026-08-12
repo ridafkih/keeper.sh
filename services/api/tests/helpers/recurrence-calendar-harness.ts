@@ -264,7 +264,13 @@ class RecurrenceCalendarHarness {
     const flushCountBefore = this.flushCount;
     const result = await ingestSource({
       calendarId: CALENDAR_ID,
-      fetchEvents: () => Promise.resolve({ events }),
+      fetchEvents: () => Promise.resolve({
+        events,
+        syncWindow: {
+          timeMax: new Date("2100-01-01T00:00:00.000Z"),
+          timeMin: new Date("2000-01-01T00:00:00.000Z"),
+        },
+      }),
       flush: (changes) => {
         this.flushCount += 1;
         const deletedIds = new Set(changes.deletes);

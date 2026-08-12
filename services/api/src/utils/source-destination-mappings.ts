@@ -2,9 +2,14 @@ import {
   calendarsTable,
   sourceDestinationMappingsTable,
   syncStatusTable,
+  userSyncRequestsTable,
 } from "@keeper.sh/database/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { createMappingMutationLockId, createSyncLock } from "@keeper.sh/sync";
+import type { SyncLockHandle } from "@keeper.sh/sync";
 import type { database as databaseInstance } from "@/context";
+import { enqueuePushSync } from "./enqueue-push-sync";
+import { spawnBackgroundJob } from "./background-task";
 const EMPTY_LIST_COUNT = 0;
 const USER_MAPPING_LOCK_NAMESPACE = 9001;
 const MAPPING_LIMIT_ERROR_MESSAGE = "Mapping limit reached. Upgrade to Pro for unlimited sync mappings.";
@@ -35,6 +40,7 @@ interface SetDestinationsTransaction {
     destinationCalendarIds: string[],
   ) => Promise<void>;
   ensureDestinationSyncStatuses: (destinationCalendarIds: string[]) => Promise<void>;
+  requestUserSync?: (userId: string) => Promise<void>;
 }
 
 type ResolveMappingLimit = (userId: string) => Promise<number>;
@@ -57,7 +63,23 @@ interface SetSourcesTransaction {
     sourceCalendarIds: string[],
   ) => Promise<void>;
   ensureDestinationSyncStatus: (destinationCalendarId: string) => Promise<void>;
+  requestUserSync?: (userId: string) => Promise<void>;
 }
+
+const requestUserSync = async (
+  transactionClient: DatabaseTransactionClient,
+  userId: string,
+): Promise<void> => {
+  const requestId = crypto.randomUUID();
+  const requestedAt = new Date();
+  await transactionClient
+    .insert(userSyncRequestsTable)
+    .values({ requestId, requestedAt, userId })
+    .onConflictDoUpdate({
+      target: userSyncRequestsTable.userId,
+      set: { requestId, requestedAt },
+    });
+};
 
 interface SetSourcesDependencies {
   withTransaction: <TResult>(
@@ -164,6 +186,7 @@ const createSetDestinationsTransaction = (
         .onConflictDoNothing();
     }
   },
+  requestUserSync: (userId) => requestUserSync(transactionClient, userId),
 });
 
 const createSetSourcesTransaction = (
@@ -254,6 +277,7 @@ const createSetSourcesTransaction = (
       .values({ calendarId: destinationCalendarId })
       .onConflictDoNothing();
   },
+  requestUserSync: (userId) => requestUserSync(transactionClient, userId),
 });
 
 const createSetDestinationsDependencies = async (): Promise<SetDestinationsDependencies> => {
@@ -347,6 +371,7 @@ const runSetDestinationsForSource = async (
     if (uniqueDestinationCalendarIds.length > EMPTY_LIST_COUNT) {
       await transaction.ensureDestinationSyncStatuses(uniqueDestinationCalendarIds);
     }
+    await transaction.requestUserSync?.(userId);
   });
 };
 
@@ -399,6 +424,7 @@ const runSetSourcesForDestination = async (
     if (uniqueSourceCalendarIds.length > EMPTY_LIST_COUNT) {
       await transaction.ensureDestinationSyncStatus(destinationCalendarId);
     }
+    await transaction.requestUserSync?.(userId);
   });
 };
 
@@ -477,18 +503,200 @@ const getSourcesForDestination = async (userId: string, destinationCalendarId: s
   return mappings.map((mapping) => mapping.sourceCalendarId);
 };
 
+const getOwnedCalendarIds = async (
+  userId: string,
+  calendarIds: string[],
+): Promise<string[]> => {
+  if (calendarIds.length === 0) {
+    return [];
+  }
+  const { database } = await import("@/context");
+  const calendars = await database
+    .select({ id: calendarsTable.id })
+    .from(calendarsTable)
+    .where(and(
+      eq(calendarsTable.userId, userId),
+      inArray(calendarsTable.id, calendarIds),
+    ));
+  return calendars.map(({ id }) => id);
+};
+
+const releaseSyncHandles = async (handles: SyncLockHandle[]): Promise<void> => {
+  const settlements = await Promise.allSettled(
+    handles.toReversed().map((handle) => handle.release()),
+  );
+  const failures = settlements
+    .filter((settlement): settlement is PromiseRejectedResult =>
+      settlement.status === "rejected")
+    .map((settlement) => settlement.reason);
+  if (failures.length > 0) {
+    throw new AggregateError(failures, "Failed to release mapping mutation locks");
+  }
+};
+
+const releaseMappingMutationLocks = async (
+  destinationHandles: SyncLockHandle[],
+  mutationHandle: SyncLockHandle,
+): Promise<unknown[]> => {
+  const releaseFailures: unknown[] = [];
+  try {
+    await releaseSyncHandles(destinationHandles);
+  } catch (error) {
+    releaseFailures.push(error);
+  }
+  try {
+    await mutationHandle.release();
+  } catch (error) {
+    releaseFailures.push(error);
+  }
+  return releaseFailures;
+};
+
+const settle = async <TResult>(
+  callback: () => Promise<TResult>,
+): Promise<PromiseSettledResult<TResult>> => {
+  try {
+    return { status: "fulfilled", value: await callback() };
+  } catch (error) {
+    return { reason: error, status: "rejected" };
+  }
+};
+
+interface MappingMutationSyncLock {
+  acquire: ReturnType<typeof createSyncLock>["acquire"];
+}
+
+const runWithMappingMutationLocks = async <TResult>(
+  syncLock: MappingMutationSyncLock,
+  userId: string,
+  resolveDestinationCalendarIds: () => Promise<string[]>,
+  callback: () => Promise<TResult>,
+): Promise<{ destinationCalendarIds: string[]; result: TResult }> => {
+  const mutationLock = await syncLock.acquire(createMappingMutationLockId(userId));
+  if (!mutationLock.acquired) {
+    throw new Error("Mapping update was superseded by another request");
+  }
+
+  const destinationHandles: SyncLockHandle[] = [];
+  const operation = await settle(async () => {
+    const destinationCalendarIds = [...new Set(await resolveDestinationCalendarIds())].toSorted();
+    for (const destinationCalendarId of destinationCalendarIds) {
+      const destinationLock = await syncLock.acquire(destinationCalendarId);
+      if (!destinationLock.acquired) {
+        throw new Error(`Unable to coordinate mapping update for destination ${destinationCalendarId}`);
+      }
+      destinationHandles.push(destinationLock.handle);
+    }
+
+    const heldStates = await Promise.all([
+      mutationLock.handle.isHeld(),
+      ...destinationHandles.map((handle) => handle.isHeld()),
+    ]);
+    if (heldStates.some((held) => !held)) {
+      throw new Error("Mapping update lost its reconciliation lock before mutation");
+    }
+
+    return {
+      destinationCalendarIds,
+      result: await callback(),
+    };
+  });
+  const releaseFailures = await releaseMappingMutationLocks(
+    destinationHandles,
+    mutationLock.handle,
+  );
+  if (operation.status === "rejected") {
+    if (releaseFailures.length > 0) {
+      throw new AggregateError(
+        [operation.reason, ...releaseFailures],
+        "Mapping mutation failed and its locks could not be fully released",
+        { cause: operation.reason },
+      );
+    }
+    throw operation.reason;
+  }
+  if (releaseFailures.length > 0) {
+    throw new AggregateError(releaseFailures, "Failed to release mapping mutation locks");
+  }
+  return operation.value;
+};
+
+const withMappingMutationLocks = async <TResult>(
+  userId: string,
+  resolveDestinationCalendarIds: () => Promise<string[]>,
+  callback: () => Promise<TResult>,
+): Promise<{ destinationCalendarIds: string[]; result: TResult }> => {
+  const { redis } = await import("@/context");
+  return runWithMappingMutationLocks(
+    createSyncLock(redis),
+    userId,
+    resolveDestinationCalendarIds,
+    callback,
+  );
+};
+
+const enqueueMappingReplacementSync = async (userId: string): Promise<void> => {
+  const { database, premiumService } = await import("@/context");
+  const [request] = await database
+    .select({ requestId: userSyncRequestsTable.requestId })
+    .from(userSyncRequestsTable)
+    .where(eq(userSyncRequestsTable.userId, userId))
+    .limit(1);
+  if (!request) {
+    return;
+  }
+  const plan = await premiumService.getUserPlan(userId);
+  if (!plan) {
+    throw new Error("Unable to resolve user plan for mapping sync enqueue");
+  }
+  await enqueuePushSync(userId, plan);
+  await database
+    .delete(userSyncRequestsTable)
+    .where(and(
+      eq(userSyncRequestsTable.userId, userId),
+      eq(userSyncRequestsTable.requestId, request.requestId),
+    ));
+};
+
+const scheduleMappingReplacementSync = (userId: string): void => {
+  spawnBackgroundJob(
+    "mapping-replacement-push-enqueue",
+    { userId },
+    () => enqueueMappingReplacementSync(userId),
+  );
+};
+
 const setDestinationsForSource = async (
   userId: string,
   sourceCalendarId: string,
   destinationCalendarIds: string[],
 ): Promise<void> => {
   const dependencies = await createSetDestinationsDependencies();
-  await runSetDestinationsForSource(
+  await withMappingMutationLocks(
     userId,
-    sourceCalendarId,
-    destinationCalendarIds,
-    dependencies,
+    async () => {
+      const ownedDestinationCalendarIds = await getOwnedCalendarIds(
+        userId,
+        destinationCalendarIds,
+      );
+      assertAllIdsOwned(
+        destinationCalendarIds,
+        ownedDestinationCalendarIds,
+        "Some destination calendars not found",
+      );
+      return [
+        ...await getDestinationsForSource(userId, sourceCalendarId),
+        ...ownedDestinationCalendarIds,
+      ];
+    },
+    () => runSetDestinationsForSource(
+      userId,
+      sourceCalendarId,
+      destinationCalendarIds,
+      dependencies,
+    ),
   );
+  scheduleMappingReplacementSync(userId);
 };
 
 const setSourcesForDestination = async (
@@ -497,12 +705,28 @@ const setSourcesForDestination = async (
   sourceCalendarIds: string[],
 ): Promise<void> => {
   const dependencies = await createSetSourcesDependencies();
-  await runSetSourcesForDestination(
+  await withMappingMutationLocks(
     userId,
-    destinationCalendarId,
-    sourceCalendarIds,
-    dependencies,
+    async () => {
+      const ownedDestinationCalendarIds = await getOwnedCalendarIds(
+        userId,
+        [destinationCalendarId],
+      );
+      assertAllIdsOwned(
+        [destinationCalendarId],
+        ownedDestinationCalendarIds,
+        "Destination calendar not found",
+      );
+      return ownedDestinationCalendarIds;
+    },
+    () => runSetSourcesForDestination(
+      userId,
+      destinationCalendarId,
+      sourceCalendarIds,
+      dependencies,
+    ),
   );
+  scheduleMappingReplacementSync(userId);
 };
 
 export {
@@ -514,4 +738,10 @@ export {
   setSourcesForDestination,
   runSetDestinationsForSource,
   runSetSourcesForDestination,
+  runWithMappingMutationLocks,
+  withMappingMutationLocks,
+  enqueueMappingReplacementSync,
+  requestUserSync,
+  scheduleMappingReplacementSync,
 };
+export type { MappingMutationSyncLock };

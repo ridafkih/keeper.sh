@@ -11,7 +11,11 @@ import {
 
 const createMockRedis = () => {
   const store = new Map<string, { value: string; expiresAt: number | null }>();
+  const lists = new Map<string, string[]>();
   const evalFailures: Error[] = [];
+  let acquireAbortController: AbortController | null = null;
+  let deferConfirmation = false;
+  let runDeferredConfirmation: (() => void) | null = null;
 
   const isExpired = (key: string): boolean => {
     const entry = store.get(key);
@@ -56,6 +60,101 @@ const createMockRedis = () => {
     return store.get(key)?.value ?? null;
   };
 
+  const runAcquireOrSignal = (args: string[]): unknown => {
+    const lockKey = args[0] ?? "";
+    const signalKey = args[1] ?? "";
+    const blockerLockKey = args[2] ?? "";
+    const waiterKey = args[3] ?? "";
+    const holderId = args[4] ?? "";
+    const lockTtlSeconds = Number(args[5]);
+    const signalTtlSeconds = Number(args[6]);
+    const checkBlocker = args[7] === "1";
+
+    if (checkBlocker && readValue(blockerLockKey) !== null) {
+      return "blocked";
+    }
+
+    const existing = readValue(signalKey);
+    const waiters = (lists.get(waiterKey) ?? [])
+      .filter((waiter) => waiter !== holderId);
+    waiters.unshift(holderId);
+    lists.set(waiterKey, waiters);
+    set(signalKey, holderId, "EX", signalTtlSeconds);
+
+    if (readValue(lockKey) === null) {
+      set(lockKey, holderId, "EX", lockTtlSeconds);
+      acquireAbortController?.abort();
+      acquireAbortController = null;
+      return "acquired";
+    }
+
+    if (existing === null) {
+      return "queued";
+    }
+    return "replaced";
+  };
+
+  const runCancelWaiter = (args: string[]): unknown => {
+    const signalKey = args[0] ?? "";
+    const waiterKey = args[1] ?? "";
+    const lockKey = args[2] ?? "";
+    const holderId = args[3] ?? "";
+    const signalTtlSeconds = Number(args[4]);
+    if (readValue(lockKey) === holderId) {
+      del(lockKey);
+    }
+    const waiters = (lists.get(waiterKey) ?? [])
+      .filter((waiter) => waiter !== holderId);
+    const [nextWaiter] = waiters;
+    if (nextWaiter) {
+      lists.set(waiterKey, waiters);
+      set(signalKey, nextWaiter, "EX", signalTtlSeconds);
+      return nextWaiter;
+    }
+    lists.delete(waiterKey);
+    del(signalKey);
+    return "";
+  };
+
+  const runConfirmAcquisition = (args: string[]): unknown => {
+    const lockKey = args[0] ?? "";
+    const signalKey = args[1] ?? "";
+    const waiterKey = args[2] ?? "";
+    const holderId = args[3] ?? "";
+    const [currentWaiter] = lists.get(waiterKey) ?? [];
+    if (
+      readValue(lockKey) !== holderId
+      || readValue(signalKey) !== holderId
+      || currentWaiter !== holderId
+    ) {
+      return 0;
+    }
+    del(signalKey);
+    lists.delete(waiterKey);
+    return 1;
+  };
+
+  const runRenew = (args: string[]): unknown => {
+    const lockKey = args[0] ?? "";
+    const holderId = args[1] ?? "";
+    const ttlSeconds = Number(args[2]);
+    if (readValue(lockKey) === holderId) {
+      set(lockKey, holderId, "EX", ttlSeconds);
+      return 1;
+    }
+    return 0;
+  };
+
+  const runRelease = (args: string[]): unknown => {
+    const lockKey = args[0] ?? "";
+    const holderId = args[1] ?? "";
+    if (readValue(lockKey) === holderId) {
+      del(lockKey);
+      return 1;
+    }
+    return 0;
+  };
+
   const evalImpl = (
     _script: string,
     keyCount: number,
@@ -66,48 +165,30 @@ const createMockRedis = () => {
       return Promise.reject(new Error(evalFailure.message, { cause: evalFailure }));
     }
 
-    const lockKey = args[0] ?? "";
+    if (keyCount === 4 && args.length === 8) {
+      return Promise.resolve(runAcquireOrSignal(args));
+    }
 
-    if (keyCount === 2 && args.length === 4) {
-      const signalKey = args[1] ?? "";
-      const holderId = args[2] ?? "";
-      const ttlSeconds = Number(args[3]);
+    if (keyCount === 3 && args.length === 5) {
+      return Promise.resolve(runCancelWaiter(args));
+    }
 
-      const lockValue = readValue(lockKey);
-      if (lockValue === null) {
-        set(lockKey, holderId, "EX", ttlSeconds);
-        del(signalKey);
-        return Promise.resolve("acquired");
+    if (keyCount === 3 && args.length === 4) {
+      if (deferConfirmation) {
+        deferConfirmation = false;
+        return new Promise((resolve) => {
+          runDeferredConfirmation = () => resolve(runConfirmAcquisition(args));
+        });
       }
-
-      const existing = readValue(signalKey);
-      set(signalKey, holderId, "EX", ttlSeconds);
-
-      if (existing !== null) {
-        return Promise.resolve("replaced");
-      }
-      return Promise.resolve("queued");
+      return Promise.resolve(runConfirmAcquisition(args));
     }
 
     if (keyCount === 1 && args.length === 3) {
-      const holderId = args[1] ?? "";
-      const ttlSeconds = Number(args[2]);
-      const holder = readValue(lockKey);
-      if (holder === holderId) {
-        set(lockKey, holderId, "EX", ttlSeconds);
-        return Promise.resolve(1);
-      }
-      return Promise.resolve(0);
+      return Promise.resolve(runRenew(args));
     }
 
     if (keyCount === 1 && args.length === 2) {
-      const holderId = args[1] ?? "";
-      const holder = readValue(lockKey);
-      if (holder === holderId) {
-        del(lockKey);
-        return Promise.resolve(1);
-      }
-      return Promise.resolve(0);
+      return Promise.resolve(runRelease(args));
     }
 
     return Promise.reject(
@@ -119,7 +200,27 @@ const createMockRedis = () => {
     evalFailures.push(error);
   };
 
-  return { get, set, del, eval: evalImpl, rejectNextEval };
+  const abortDuringNextAcquisition = (controller: AbortController): void => {
+    acquireAbortController = controller;
+  };
+
+  const deferNextConfirmation = (): (() => void) => {
+    deferConfirmation = true;
+    return () => {
+      runDeferredConfirmation?.();
+      runDeferredConfirmation = null;
+    };
+  };
+
+  return {
+    abortDuringNextAcquisition,
+    deferNextConfirmation,
+    get,
+    set,
+    del,
+    eval: evalImpl,
+    rejectNextEval,
+  };
 };
 
 const flushAsync = async (): Promise<void> => {
@@ -169,6 +270,109 @@ describe("createSyncLock", () => {
 
     const signalValue = await redis.get(`${SIGNAL_PREFIX}cal-1`);
     expect(signalValue).toBeNull();
+  });
+
+  it("does not mutate waiter state for an already-aborted caller", async () => {
+    const { redis, syncLock } = makeSyncLock();
+    const firstResult = await syncLock.acquire("cal-1");
+    if (!firstResult.acquired) {
+      throw new Error("expected acquired");
+    }
+    const validWaiter = syncLock.acquire("cal-1");
+    await flushAsync();
+    const signalBefore = await redis.get(`${SIGNAL_PREFIX}cal-1`);
+
+    const controller = new AbortController();
+    controller.abort();
+    await expect(syncLock.acquire("cal-1", controller.signal))
+      .resolves.toEqual({ acquired: false });
+
+    expect(await redis.get(`${SIGNAL_PREFIX}cal-1`)).toBe(signalBefore);
+    await firstResult.handle.release();
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    const waiterResult = await validWaiter;
+    expect(waiterResult.acquired).toBe(true);
+    if (waiterResult.acquired) {
+      await waiterResult.handle.release();
+    }
+  });
+
+  it("restores a predecessor when the latest caller aborts during acquisition", async () => {
+    const { redis, syncLock } = makeSyncLock();
+    const firstResult = await syncLock.acquire("cal-1");
+    if (!firstResult.acquired) {
+      throw new Error("expected acquired");
+    }
+    const predecessorPromise = syncLock.acquire("cal-1");
+    await flushAsync();
+    const predecessorSignal = await redis.get(`${SIGNAL_PREFIX}cal-1`);
+    await firstResult.handle.release();
+
+    const controller = new AbortController();
+    redis.abortDuringNextAcquisition(controller);
+    await expect(syncLock.acquire("cal-1", controller.signal))
+      .resolves.toEqual({ acquired: false });
+    expect(await redis.get(`${SIGNAL_PREFIX}cal-1`)).toBe(predecessorSignal);
+
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    const predecessorResult = await predecessorPromise;
+    expect(predecessorResult.acquired).toBe(true);
+    if (predecessorResult.acquired) {
+      await predecessorResult.handle.release();
+    }
+  });
+
+  it("rejects a provisional acquisition when a newer waiter arrives before confirmation", async () => {
+    const { redis, syncLock } = makeSyncLock();
+    const firstResult = await syncLock.acquire("cal-1");
+    if (!firstResult.acquired) {
+      throw new Error("expected acquired");
+    }
+    const predecessorPromise = syncLock.acquire("cal-1");
+    await flushAsync();
+    await firstResult.handle.release();
+
+    const releaseConfirmation = redis.deferNextConfirmation();
+    const provisionalPromise = syncLock.acquire("cal-1");
+    await flushAsync();
+    const latestPromise = syncLock.acquire("cal-1");
+    await flushAsync();
+
+    releaseConfirmation();
+    await expect(provisionalPromise).resolves.toEqual({ acquired: false });
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
+
+    const latestResult = await latestPromise;
+    expect(latestResult.acquired).toBe(true);
+    await expect(predecessorPromise).resolves.toEqual({ acquired: false });
+    if (latestResult.acquired) {
+      await latestResult.handle.release();
+    }
+  });
+
+  it("waits for a mutation blocker without replacing a destination waiter", async () => {
+    const { redis, syncLock } = makeSyncLock();
+    const blocker = await syncLock.acquire("mapping-mutation:user-1");
+    expect(blocker.acquired).toBe(true);
+
+    const resultPromise = syncLock.acquire(
+      "cal-1",
+      new AbortController().signal,
+      "mapping-mutation:user-1",
+    );
+    await flushAsync();
+
+    expect(await redis.get(`${SIGNAL_PREFIX}cal-1`)).toBeNull();
+    if (blocker.acquired) {
+      await blocker.handle.release();
+    }
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+    const result = await resultPromise;
+    expect(result.acquired).toBe(true);
+    if (result.acquired) {
+      await result.handle.release();
+    }
   });
 
   describe("isCurrent", () => {
@@ -223,6 +427,35 @@ describe("createSyncLock", () => {
       redis.set(`${LOCK_PREFIX}cal-1`, "replacement-holder");
 
       expect(await result.handle.isCurrent()).toBe(false);
+    });
+  });
+
+  describe("isHeld", () => {
+    it("ignores waiters while confirming lock ownership", async () => {
+      const { redis, syncLock } = makeSyncLock();
+      const result = await syncLock.acquire("cal-1");
+
+      if (!result.acquired) {
+        throw new Error("expected acquired");
+      }
+
+      redis.set(`${SIGNAL_PREFIX}cal-1`, "waiter-id");
+
+      expect(await result.handle.isHeld()).toBe(true);
+      expect(await result.handle.isCurrent()).toBe(false);
+    });
+
+    it("returns false after lock ownership is lost", async () => {
+      const { redis, syncLock } = makeSyncLock();
+      const result = await syncLock.acquire("cal-1");
+
+      if (!result.acquired) {
+        throw new Error("expected acquired");
+      }
+
+      redis.set(`${LOCK_PREFIX}cal-1`, "replacement-holder");
+
+      expect(await result.handle.isHeld()).toBe(false);
     });
   });
 
@@ -332,6 +565,26 @@ describe("createSyncLock", () => {
       expect(secondResult.acquired).toBe(true);
     });
 
+    it("keeps a waiter visible beyond the renewable holder TTL", async () => {
+      const { redis, syncLock } = makeSyncLock();
+      const firstResult = await syncLock.acquire("cal-1");
+      if (!firstResult.acquired) {
+        throw new Error("expected acquired");
+      }
+
+      const secondPromise = syncLock.acquire("cal-1");
+      await flushAsync();
+      await vi.advanceTimersByTimeAsync((LOCK_TTL_SECONDS * 1000) + 1000);
+
+      expect(await redis.get(`${SIGNAL_PREFIX}cal-1`)).not.toBeNull();
+      expect(await firstResult.handle.isCurrent()).toBe(false);
+
+      await firstResult.handle.release();
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      const secondResult = await secondPromise;
+      expect(secondResult.acquired).toBe(true);
+    });
+
     it("third caller replaces the second waiter", async () => {
       const { redis, syncLock } = makeSyncLock();
 
@@ -353,25 +606,19 @@ describe("createSyncLock", () => {
       const thirdSignal = await redis.get(`${SIGNAL_PREFIX}cal-1`);
       expect(thirdSignal).not.toBe(secondSignal);
 
-      // Advance so second detects replacement on next poll
-      vi.advanceTimersByTime(POLL_INTERVAL_MS);
-      await flushAsync();
-
-      const secondResult = await secondPromise;
-      expect(secondResult.acquired).toBe(false);
-
       // Release lock so third can acquire
       await firstResult.handle.release();
 
-      vi.advanceTimersByTime(POLL_INTERVAL_MS);
-      await flushAsync();
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
 
       const thirdResult = await thirdPromise;
       expect(thirdResult.acquired).toBe(true);
+      const secondResult = await secondPromise;
+      expect(secondResult.acquired).toBe(false);
     });
 
-    it("waiter returns acquired false when abort signal is triggered", async () => {
-      const { syncLock } = makeSyncLock();
+    it("waiter removes its signal when its abort signal is triggered", async () => {
+      const { redis, syncLock } = makeSyncLock();
 
       const firstResult = await syncLock.acquire("cal-1");
       if (!firstResult.acquired) {
@@ -390,8 +637,39 @@ describe("createSyncLock", () => {
 
       const secondResult = await secondPromise;
       expect(secondResult.acquired).toBe(false);
+      expect(await redis.get(`${SIGNAL_PREFIX}cal-1`)).toBeNull();
+      expect(await firstResult.handle.isCurrent()).toBe(true);
 
       await firstResult.handle.release();
+    });
+
+    it("promotes the previous waiter when the latest waiter aborts", async () => {
+      const { redis, syncLock } = makeSyncLock();
+      const firstResult = await syncLock.acquire("cal-1");
+      if (!firstResult.acquired) {
+        throw new Error("expected acquired");
+      }
+
+      const secondPromise = syncLock.acquire("cal-1");
+      await flushAsync();
+      const secondSignal = await redis.get(`${SIGNAL_PREFIX}cal-1`);
+      const thirdAbort = new AbortController();
+      const thirdPromise = syncLock.acquire("cal-1", thirdAbort.signal);
+      await flushAsync();
+
+      expect(await redis.get(`${SIGNAL_PREFIX}cal-1`)).not.toBe(secondSignal);
+      thirdAbort.abort();
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      await expect(thirdPromise).resolves.toEqual({ acquired: false });
+      expect(await redis.get(`${SIGNAL_PREFIX}cal-1`)).toBe(secondSignal);
+
+      await firstResult.handle.release();
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      const secondResult = await secondPromise;
+      expect(secondResult.acquired).toBe(true);
+      if (secondResult.acquired) {
+        await secondResult.handle.release();
+      }
     });
   });
 
@@ -452,14 +730,6 @@ describe("createSyncLock", () => {
       await flushAsync();
       executionOrder.push("third:waiting");
 
-      // Advance so second detects replacement
-      vi.advanceTimersByTime(POLL_INTERVAL_MS);
-      await flushAsync();
-
-      const secondResult = await secondPromise;
-      expect(secondResult.acquired).toBe(false);
-      executionOrder.push("second:replaced");
-
       // First detects supersession, does its work, flushes, releases
       expect(await first.handle.isCurrent()).toBe(false);
       executionOrder.push("first:superseded", "first:flushed");
@@ -467,10 +737,12 @@ describe("createSyncLock", () => {
       executionOrder.push("first:released");
 
       // Advance so third can acquire
-      vi.advanceTimersByTime(POLL_INTERVAL_MS);
-      await flushAsync();
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
 
       const thirdResult = await thirdPromise;
+      const secondResult = await secondPromise;
+      expect(secondResult.acquired).toBe(false);
+      executionOrder.push("second:replaced");
       expect(thirdResult.acquired).toBe(true);
       executionOrder.push("third:acquired");
 
@@ -486,10 +758,10 @@ describe("createSyncLock", () => {
         "first:acquired",
         "second:waiting",
         "third:waiting",
-        "second:replaced",
         "first:superseded",
         "first:flushed",
         "first:released",
+        "second:replaced",
         "third:acquired",
         "third:completed",
         "third:released",

@@ -10,12 +10,13 @@
   "scripts": {
     "push": "drizzle-kit push",
     "generate": "drizzle-kit generate",
-    "migrate": "drizzle-kit migrate",
+    "migrate": "bun scripts/migrate.ts",
     "types": "tsc --noEmit",
     "test": "bun x --bun vitest run",
     "lint": "oxlint ."
   },
   "dependencies": {
+    "@keeper.sh/data-schemas": "workspace:*",
     "drizzle-orm": "0.45.1",
     "pg": "8.16.3",
     "tweetnacl": "^1.0.3",

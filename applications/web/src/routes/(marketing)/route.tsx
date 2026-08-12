@@ -41,7 +41,6 @@ export const Route = createFileRoute('/(marketing)')({
 
 function MarketingLayout() {
   const githubStars = Route.useLoaderData();
-  const { runtimeConfig } = Route.useRouteContext();
 
   return (
     <>
@@ -49,27 +48,26 @@ function MarketingLayout() {
         <MarketingHeaderBranding label="Keeper.sh home">
           <KeeperLogo className="w-full max-w-6" aria-hidden="true" />
         </MarketingHeaderBranding>
-        <SessionSlot
-          authenticated={
-            <MarketingHeaderActions>
-              <GithubStarButton initialStarCount={githubStars.count} />
+        <MarketingHeaderActions>
+          <GithubStarButton initialStarCount={githubStars.count} />
+          <SessionSlot
+            authenticated={
               <LinkButton size="compact" variant="highlight" to="/dashboard">
                 <ButtonText>Dashboard</ButtonText>
               </LinkButton>
-            </MarketingHeaderActions>
-          }
-          unauthenticated={
-            <MarketingHeaderActions>
-              <GithubStarButton initialStarCount={githubStars.count} />
-              <LinkButton size="compact" variant="border" to="/login">
-                <ButtonText>Login</ButtonText>
-              </LinkButton>
-              <LinkButton size="compact" variant="highlight" to="/register">
-                <ButtonText>Register</ButtonText>
-              </LinkButton>
-            </MarketingHeaderActions>
-          }
-        />
+            }
+            unauthenticated={
+              <>
+                <LinkButton size="compact" variant="border" to="/login">
+                  <ButtonText>Login</ButtonText>
+                </LinkButton>
+                <LinkButton size="compact" variant="highlight" to="/register">
+                  <ButtonText>Register</ButtonText>
+                </LinkButton>
+              </>
+            }
+          />
+        </MarketingHeaderActions>
       </MarketingHeader>
       <Layout>
       <LayoutItem>
@@ -96,8 +94,8 @@ function MarketingLayout() {
             <MarketingFooterNavGroup>
               <MarketingFooterNavGroupLabel>Product</MarketingFooterNavGroupLabel>
               <MarketingFooterNavItem to="/register">Get Started</MarketingFooterNavItem>
-              <MarketingFooterNavItem to="/#features">Features</MarketingFooterNavItem>
-              <MarketingFooterNavItem to="/#pricing">Pricing</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/features">Features</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/pricing">Pricing</MarketingFooterNavItem>
             </MarketingFooterNavGroup>
             <MarketingFooterNavGroup>
               <MarketingFooterNavGroupLabel>Resources</MarketingFooterNavGroupLabel>
@@ -114,7 +112,7 @@ function MarketingLayout() {
         </MarketingFooter>
       </LayoutItem>
     </Layout>
-    {runtimeConfig.gdprApplies && <CookieConsent />}
+    <CookieConsent />
     </>
   )
 }

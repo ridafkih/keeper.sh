@@ -1,6 +1,7 @@
 export { syncDestinationsForUser } from "./sync-user";
 export {
   createSyncLock,
+  createMappingMutationLockId,
   invalidateCalendar,
   isCalendarInvalidated,
   SyncLockRenewalError,

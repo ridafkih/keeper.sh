@@ -12,22 +12,22 @@ People with calendars across multiple providers (Google Calendar, Outlook, iClou
 
 ### Sync Engine
 
-Keeper.sh uses a pull-compare-push architecture. On each sync cycle:
+Keeper.sh uses a pull-compare-push architecture, split across two schedules:
 
-1. **Pull**: Events are fetched from configured source calendars
+1. **Pull**: Events are fetched from configured source calendars into Keeper.sh's own database. This runs every minute on every plan
 2. **Compare**: Events are compared against known state
-3. **Push**: Changes are pushed to destination calendars
+3. **Push**: Changes are written out to destination calendars. This runs every minute on Pro and every thirty minutes on Free
 
 Core sync operations:
 - **Add**: Source event with no mapping on destination gets created
 - **Delete**: Mapping exists but source event is gone — destination event gets removed
-- **Cleanup**: Keeper-created events with no mapping are cleaned up
+- **Cleanup**: Keeper.sh-created events with no mapping are cleaned up
 
-Events created by Keeper are tagged with a `@keeper.sh` suffix on their remote UID. For Outlook (which doesn't support custom UIDs), a `"keeper.sh"` category is used instead.
+Events created by Keeper.sh are tagged with a `@keeper.sh` suffix on their remote UID. For Outlook (which doesn't support custom UIDs), a `"keeper.sh"` category is used instead.
 
 Race conditions are prevented using Redis-backed generation counters. If two syncs target the same calendar simultaneously, the later one backs off.
 
-For Google and Outlook, Keeper uses incremental sync tokens — only fetching what changed since the last sync, making cycles fast even for calendars with thousands of events.
+For Google and Outlook, Keeper.sh uses incremental sync tokens — only fetching what changed since the last sync, making cycles fast even for calendars with thousands of events.
 
 ### Supported Providers
 
@@ -45,7 +45,7 @@ Each calendar has capability flags: "pull" (read events from) and "push" (write 
 
 ### Privacy Controls
 
-By default, only busy/free time blocks are shared. Event titles, descriptions, locations, and attendee lists are stripped before syncing.
+The aggregated iCal feed hides event names, descriptions, and locations by default, showing time blocks labelled "Busy". Events pushed to your destination calendars carry the original title, description, and location unless you turn those off, which is done per source calendar. Attendee lists are never copied to destination calendars or the iCal feed. They are read only when you use the invite and RSVP features.
 
 Per-source calendar settings:
 - Include or exclude event titles (replace with "Busy")
@@ -56,7 +56,7 @@ Per-source calendar settings:
 
 ### iCal Feed
 
-Keeper generates a unique, token-authenticated URL combining events from selected source calendars. Subscribable from any calendar app supporting iCal (Apple Calendar, Thunderbird, etc.). Respects all privacy settings.
+Keeper.sh generates a unique, token-authenticated URL combining events from selected source calendars. Subscribable from any calendar app supporting iCal (Apple Calendar, Thunderbird, etc.). Respects all privacy settings.
 
 ### Source and Destination Mappings
 
@@ -70,8 +70,12 @@ Setup flow:
 
 ## Pricing
 
-- **Free**: 2 linked accounts, 2 calendars per account, 30-minute sync intervals, aggregated iCal feed
-- **Pro ($5/month)**: Unlimited accounts, unlimited calendars, 1-minute sync intervals, priority support
+- **Free**: 2 linked accounts, 3 sync mappings, destinations refreshed every 30 minutes, aggregated iCal feed
+- **Pro ($5/month)**: Unlimited linked accounts, unlimited sync mappings, destinations refreshed every minute, priority support
+
+There is no cap on how many calendars an account exposes. A linked account is one connected Google, Outlook, iCloud, FastMail, or CalDAV account, or one iCal/ICS subscription. A sync mapping is one source calendar wired to one destination calendar.
+
+Reading from your sources into Keeper.sh runs every minute on every plan. The refresh interval above is how often Keeper.sh writes those changes out to your destination calendars, and that is the only part that differs by plan.
 
 Self-hosted instances get Pro-tier features by default.
 
@@ -88,17 +92,27 @@ Google Calendar and Outlook require OAuth app setup (Google Cloud / Azure). CalD
 
 ## MCP (Model Context Protocol)
 
-Keeper includes an optional MCP server that gives AI agents (such as Claude) read-only access to calendar data. The server authenticates via OAuth 2.1 with a user consent flow and is proxied through the web service at `/mcp`.
+Keeper.sh includes an optional MCP server that gives AI agents (such as Claude) read and write access to calendar data. The server authenticates via OAuth 2.1 with a user consent flow and is proxied through the web service at `/mcp`.
 
 ### Available Tools
 
-- **list_calendars** — List all calendars connected to Keeper, including provider name and account
+- **list_calendars** — List all calendars connected to Keeper.sh, including provider name and account
+- **list_accounts** — List all connected calendar accounts with provider information
 - **get_events** — Get calendar events within a date range (ISO 8601 datetimes + IANA timezone)
-- **get_event_count** — Get the total number of synced calendar events
+- **get_event** — Get a single calendar event by its ID
+- **get_event_count** — Get the number of calendar events, optionally within a date range
+- **create_event** — Create an event on a connected calendar
+- **update_event** — Update an existing event
+- **delete_event** — Delete an event by its ID
+- **rsvp_event** — Respond to an event invite
+- **get_pending_invites** — List invites awaiting a response
+- **get_ical_feed** — Get the user's iCal feed URL
 
 ### Connecting
 
-Point any MCP-compatible client at the `/mcp` endpoint of a Keeper instance. The client will be guided through the OAuth consent flow to authorize read access.
+Point any MCP-compatible client at the `/mcp` endpoint of a Keeper.sh instance. The client will be guided through the OAuth consent flow to authorize read and write access.
+
+On the free plan the underlying API is capped at 25 requests per day, after which requests are rejected. Pro is uncapped, as are self-hosted instances running without commercial mode.
 
 MCP is fully optional — all related environment variables are optional across every service. Existing deployments are unaffected when upgrading.
 

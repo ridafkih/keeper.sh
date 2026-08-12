@@ -16,6 +16,8 @@ import { Route as authRouteRouteImport } from './../../routes/(auth)/route'
 import { Route as marketingIndexRouteImport } from './../../routes/(marketing)/index'
 import { Route as marketingTermsRouteImport } from './../../routes/(marketing)/terms'
 import { Route as marketingPrivacyRouteImport } from './../../routes/(marketing)/privacy'
+import { Route as marketingPricingRouteImport } from './../../routes/(marketing)/pricing'
+import { Route as marketingFeaturesRouteImport } from './../../routes/(marketing)/features'
 import { Route as authVerifyEmailRouteImport } from './../../routes/(auth)/verify-email'
 import { Route as authVerifyAuthenticationRouteImport } from './../../routes/(auth)/verify-authentication'
 import { Route as authResetPasswordRouteImport } from './../../routes/(auth)/reset-password'
@@ -87,6 +89,16 @@ const marketingTermsRoute = marketingTermsRouteImport.update({
 const marketingPrivacyRoute = marketingPrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
+  getParentRoute: () => marketingRouteRoute,
+} as any)
+const marketingPricingRoute = marketingPricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
+  getParentRoute: () => marketingRouteRoute,
+} as any)
+const marketingFeaturesRoute = marketingFeaturesRouteImport.update({
+  id: '/features',
+  path: '/features',
   getParentRoute: () => marketingRouteRoute,
 } as any)
 const authVerifyEmailRoute = authVerifyEmailRouteImport.update({
@@ -331,6 +343,8 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof authResetPasswordRoute
   '/verify-authentication': typeof authVerifyAuthenticationRoute
   '/verify-email': typeof authVerifyEmailRoute
+  '/features': typeof marketingFeaturesRoute
+  '/pricing': typeof marketingPricingRoute
   '/privacy': typeof marketingPrivacyRoute
   '/terms': typeof marketingTermsRoute
   '/': typeof marketingIndexRoute
@@ -375,6 +389,8 @@ export interface FileRoutesByTo {
   '/reset-password': typeof authResetPasswordRoute
   '/verify-authentication': typeof authVerifyAuthenticationRoute
   '/verify-email': typeof authVerifyEmailRoute
+  '/features': typeof marketingFeaturesRoute
+  '/pricing': typeof marketingPricingRoute
   '/privacy': typeof marketingPrivacyRoute
   '/terms': typeof marketingTermsRoute
   '/': typeof marketingIndexRoute
@@ -422,6 +438,8 @@ export interface FileRoutesById {
   '/(auth)/reset-password': typeof authResetPasswordRoute
   '/(auth)/verify-authentication': typeof authVerifyAuthenticationRoute
   '/(auth)/verify-email': typeof authVerifyEmailRoute
+  '/(marketing)/features': typeof marketingFeaturesRoute
+  '/(marketing)/pricing': typeof marketingPricingRoute
   '/(marketing)/privacy': typeof marketingPrivacyRoute
   '/(marketing)/terms': typeof marketingTermsRoute
   '/(marketing)/': typeof marketingIndexRoute
@@ -470,6 +488,8 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/verify-authentication'
     | '/verify-email'
+    | '/features'
+    | '/pricing'
     | '/privacy'
     | '/terms'
     | '/'
@@ -514,6 +534,8 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/verify-authentication'
     | '/verify-email'
+    | '/features'
+    | '/pricing'
     | '/privacy'
     | '/terms'
     | '/'
@@ -560,6 +582,8 @@ export interface FileRouteTypes {
     | '/(auth)/reset-password'
     | '/(auth)/verify-authentication'
     | '/(auth)/verify-email'
+    | '/(marketing)/features'
+    | '/(marketing)/pricing'
     | '/(marketing)/privacy'
     | '/(marketing)/terms'
     | '/(marketing)/'
@@ -653,6 +677,20 @@ declare module '@tanstack/react-router' {
       path: '/privacy'
       fullPath: '/privacy'
       preLoaderRoute: typeof marketingPrivacyRouteImport
+      parentRoute: typeof marketingRouteRoute
+    }
+    '/(marketing)/pricing': {
+      id: '/(marketing)/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof marketingPricingRouteImport
+      parentRoute: typeof marketingRouteRoute
+    }
+    '/(marketing)/features': {
+      id: '/(marketing)/features'
+      path: '/features'
+      fullPath: '/features'
+      preLoaderRoute: typeof marketingFeaturesRouteImport
       parentRoute: typeof marketingRouteRoute
     }
     '/(auth)/verify-email': {
@@ -1074,6 +1112,8 @@ const marketingBlogRouteRouteWithChildren =
 
 interface marketingRouteRouteChildren {
   marketingBlogRouteRoute: typeof marketingBlogRouteRouteWithChildren
+  marketingFeaturesRoute: typeof marketingFeaturesRoute
+  marketingPricingRoute: typeof marketingPricingRoute
   marketingPrivacyRoute: typeof marketingPrivacyRoute
   marketingTermsRoute: typeof marketingTermsRoute
   marketingIndexRoute: typeof marketingIndexRoute
@@ -1081,6 +1121,8 @@ interface marketingRouteRouteChildren {
 
 const marketingRouteRouteChildren: marketingRouteRouteChildren = {
   marketingBlogRouteRoute: marketingBlogRouteRouteWithChildren,
+  marketingFeaturesRoute: marketingFeaturesRoute,
+  marketingPricingRoute: marketingPricingRoute,
   marketingPrivacyRoute: marketingPrivacyRoute,
   marketingTermsRoute: marketingTermsRoute,
   marketingIndexRoute: marketingIndexRoute,

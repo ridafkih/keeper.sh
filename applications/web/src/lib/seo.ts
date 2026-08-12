@@ -1,8 +1,14 @@
 const SITE_URL = "https://www.keeper.sh";
 const SITE_NAME = "Keeper.sh";
+const DEFAULT_IMAGE_PATH = "/open-graph.png";
 
 export function canonicalUrl(path: string): string {
-  return `${SITE_URL}${path}`;
+  return `${SITE_URL}/${path.replace(/^\/+/, "")}`;
+}
+
+function entityId(path: string, fragment: string): string {
+  const url = canonicalUrl(path);
+  return `${url.endsWith("/") ? url : `${url}/`}#${fragment}`;
 }
 
 export function jsonLdScript(data: Record<string, unknown>) {
@@ -15,16 +21,19 @@ export function seoMeta({
   path,
   type = "website",
   brandPosition = "after",
+  imagePath = DEFAULT_IMAGE_PATH,
 }: {
   title: string;
   description: string;
   path: string;
   type?: string;
   brandPosition?: "before" | "after";
+  imagePath?: string;
 }) {
   const fullTitle = brandPosition === "before"
     ? `${SITE_NAME} — ${title}`
     : `${title} · ${SITE_NAME}`;
+  const imageUrl = canonicalUrl(imagePath);
   return [
     { title: fullTitle },
     { content: description, name: "description" },
@@ -33,13 +42,13 @@ export function seoMeta({
     { content: description, property: "og:description" },
     { content: canonicalUrl(path), property: "og:url" },
     { content: SITE_NAME, property: "og:site_name" },
-    { content: `${SITE_URL}/open-graph.png`, property: "og:image" },
+    { content: imageUrl, property: "og:image" },
     { content: "1200", property: "og:image:width" },
     { content: "630", property: "og:image:height" },
     { content: "summary_large_image", name: "twitter:card" },
     { content: title, name: "twitter:title" },
     { content: description, name: "twitter:description" },
-    { content: `${SITE_URL}/open-graph.png`, name: "twitter:image" },
+    { content: imageUrl, name: "twitter:image" },
   ];
 }
 
@@ -69,9 +78,13 @@ export const organizationSchema = {
   ],
 };
 
-export function breadcrumbSchema(
-  items: Array<{ name: string; path: string }>,
-) {
+export type BreadcrumbTrailItem = { name: string; path: string };
+
+export function breadcrumbTrail(...items: BreadcrumbTrailItem[]): BreadcrumbTrailItem[] {
+  return [{ name: "Home", path: "/" }, ...items];
+}
+
+export function breadcrumbSchema(items: BreadcrumbTrailItem[]) {
   return {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
@@ -88,12 +101,28 @@ export function webPageSchema(name: string, description: string, path: string) {
   return {
     "@context": "https://schema.org",
     "@type": "WebPage",
-    "@id": `${canonicalUrl(path)}/#webpage`,
+    "@id": entityId(path, "webpage"),
     name,
     description,
     url: canonicalUrl(path),
     isPartOf: { "@id": `${SITE_URL}/#website` },
     publisher: { "@id": `${SITE_URL}/#organization` },
+  };
+}
+
+export function faqPageSchema(
+  path: string,
+  questions: Array<{ question: string; answer: string }>,
+) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "@id": `${canonicalUrl(path)}/#faqpage`,
+    mainEntity: questions.map((entry) => ({
+      "@type": "Question",
+      name: entry.question,
+      acceptedAnswer: { "@type": "Answer", text: entry.answer },
+    })),
   };
 }
 
@@ -130,18 +159,48 @@ export function softwareApplicationSchema() {
           billingDuration: "P1M",
         },
         description:
-          "For power users who want minutely syncs and unlimited calendars.",
+          "For power users who want minutely syncs and unlimited linked accounts.",
       },
     ],
     provider: { "@id": `${SITE_URL}/#organization` },
   };
 }
 
-export function faqSchema(items: Array<{ question: string; answer: string }>) {
+export function offerCatalogSchema(
+  path: string,
+  offers: Array<{ name: string; price: string; description: string }>,
+) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "OfferCatalog",
+    "@id": `${canonicalUrl(path)}/#offercatalog`,
+    name: `${SITE_NAME} Plans`,
+    url: canonicalUrl(path),
+    itemListElement: offers.map((offer) => ({
+      "@type": "Offer",
+      name: offer.name,
+      price: offer.price,
+      priceCurrency: "USD",
+      priceSpecification: {
+        "@type": "UnitPriceSpecification",
+        price: offer.price,
+        priceCurrency: "USD",
+        billingDuration: "P1M",
+      },
+      description: offer.description,
+      itemOffered: { "@id": `${SITE_URL}/#software` },
+    })),
+  };
+}
+
+export function faqSchema(
+  path: string,
+  items: Array<{ question: string; answer: string }>,
+) {
   return {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    "@id": `${SITE_URL}/#faq`,
+    "@id": `${canonicalUrl(path)}/#faq`,
     isPartOf: { "@id": `${SITE_URL}/#website` },
     mainEntity: items.map((item) => {
       const question = item.question.trim();
@@ -164,7 +223,7 @@ export function collectionPageSchema(posts: Array<{ slug: string; metadata: { ti
   return {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
-    "@id": `${SITE_URL}/blog/#collectionpage`,
+    "@id": entityId("/blog", "collectionpage"),
     name: "Blog",
     url: canonicalUrl("/blog"),
     isPartOf: { "@id": `${SITE_URL}/#website` },
@@ -195,15 +254,16 @@ export function blogPostingSchema(post: {
   createdAt: string;
   updatedAt: string;
   tags: string[];
+  imagePath?: string;
 }) {
   const url = canonicalUrl(`/blog/${post.slug}`);
   return {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
-    "@id": `${url}/#blogposting`,
+    "@id": entityId(`/blog/${post.slug}`, "blogposting"),
     headline: post.title,
     description: post.description,
-    image: `${SITE_URL}/open-graph.png`,
+    image: canonicalUrl(post.imagePath ?? DEFAULT_IMAGE_PATH),
     url,
     datePublished: post.createdAt,
     dateModified: post.updatedAt,

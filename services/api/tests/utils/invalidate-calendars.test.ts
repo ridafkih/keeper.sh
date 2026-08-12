@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
-import type Redis from "ioredis";
-import { invalidateCalendarsForAccount } from "../../src/utils/invalidate-calendars";
+import { getCalendarsAffectedByAccountMutation } from "../../src/utils/invalidate-calendars";
 
 interface CalendarRow {
   calendarId: string | null;
@@ -15,10 +14,10 @@ type SelectBuilder = Promise<CalendarRow[]> & {
   where: (condition: SQL) => SelectBuilder;
 };
 
-const createDatabase = (
+const createBuilder = (
   rows: CalendarRow[],
   capture?: { query: { sql: string; params: unknown[] } | null },
-): BunSQLDatabase => {
+): SelectBuilder => {
   const builder = Promise.resolve(rows) as SelectBuilder;
   builder.from = () => builder;
   builder.leftJoin = () => builder;
@@ -28,82 +27,64 @@ const createDatabase = (
     }
     return builder;
   };
+  return builder;
+};
 
+const createDatabase = (
+  ownedRows: CalendarRow[],
+  mappedDestinationRows: CalendarRow[] = [],
+  capture?: { query: { sql: string; params: unknown[] } | null },
+): BunSQLDatabase => {
+  let selectCount = 0;
   return {
-    select: () => builder,
+    select: () => {
+      selectCount += 1;
+      if (selectCount === 1) {
+        return createBuilder(ownedRows, capture);
+      }
+      return createBuilder(mappedDestinationRows);
+    },
   } as unknown as BunSQLDatabase;
 };
 
-const createRedis = () => {
-  const writes: [string, string, string, number][] = [];
-  const execCalls: string[] = [];
-  const pipeline = {
-    exec: () => {
-      execCalls.push("executed");
-      return Promise.resolve([]);
-    },
-    set: (...args: [string, string, string, number]) => {
-      writes.push(args);
-      return pipeline;
-    },
-  };
-
-  return {
-    execCalls,
-    redis: { pipeline: () => pipeline } as unknown as Redis,
-    writes,
-  };
-};
-
-describe("invalidateCalendarsForAccount", () => {
-  it("does not write invalidation keys when the account is not owned", async () => {
-    const { redis, writes, execCalls } = createRedis();
+describe("getCalendarsAffectedByAccountMutation", () => {
+  it("does not expose calendars when the account is not owned", async () => {
     const captured: { query: { sql: string; params: unknown[] } | null } = { query: null };
 
-    const owned = await invalidateCalendarsForAccount(
-      createDatabase([], captured),
-      redis,
+    const result = await getCalendarsAffectedByAccountMutation(
+      createDatabase([], [], captured),
       "attacker-user",
       "victim-account",
     );
 
-    expect(owned).toBe(false);
-    expect(writes).toEqual([]);
-    expect(execCalls).toEqual([]);
+    expect(result).toEqual({ calendarIds: [], owned: false });
     expect(captured.query?.sql).toContain('"calendar_accounts"."userId" =');
     expect(captured.query?.params).toEqual(["victim-account", "attacker-user"]);
   });
 
-  it("invalidates every calendar after ownership is established", async () => {
-    const { redis, writes, execCalls } = createRedis();
-
-    const owned = await invalidateCalendarsForAccount(
-      createDatabase([{ calendarId: "calendar-1" }, { calendarId: "calendar-2" }]),
-      redis,
+  it("includes owned calendars and destinations fed by their sources", async () => {
+    const result = await getCalendarsAffectedByAccountMutation(
+      createDatabase(
+        [{ calendarId: "source-1" }, { calendarId: "destination-1" }],
+        [{ calendarId: "destination-2" }, { calendarId: "destination-1" }],
+      ),
       "owner-user",
       "owned-account",
     );
 
-    expect(owned).toBe(true);
-    expect(writes).toEqual([
-      ["sync:invalidated:calendar-1", "1", "EX", 300],
-      ["sync:invalidated:calendar-2", "1", "EX", 300],
-    ]);
-    expect(execCalls).toEqual(["executed"]);
+    expect(result).toEqual({
+      calendarIds: ["source-1", "destination-1", "destination-2"],
+      owned: true,
+    });
   });
 
   it("allows deleting an owned account that has no calendars", async () => {
-    const { redis, writes, execCalls } = createRedis();
-
-    const owned = await invalidateCalendarsForAccount(
+    const result = await getCalendarsAffectedByAccountMutation(
       createDatabase([{ calendarId: null }]),
-      redis,
       "owner-user",
       "empty-account",
     );
 
-    expect(owned).toBe(true);
-    expect(writes).toEqual([]);
-    expect(execCalls).toEqual([]);
+    expect(result).toEqual({ calendarIds: [], owned: true });
   });
 });
