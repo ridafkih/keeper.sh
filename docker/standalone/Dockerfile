@@ -9,7 +9,7 @@ COPY . .
 FROM base AS prune
 RUN bun install --global turbo
 COPY --from=source /app .
-RUN turbo prune @keeper.sh/api @keeper.sh/cron @keeper.sh/worker @keeper.sh/web --docker
+RUN turbo prune @keeper.sh/api @keeper.sh/cron @keeper.sh/mcp @keeper.sh/worker @keeper.sh/web --docker
 
 FROM base AS build
 COPY --from=prune /app/out/json/ .
@@ -17,6 +17,7 @@ RUN bun install --frozen-lockfile
 COPY --from=prune /app/out/full/ .
 RUN bun run --cwd services/api build && \
     bun run --cwd services/cron build && \
+    bun run --cwd services/mcp build && \
     bun run --cwd services/worker build && \
     bun run --cwd applications/web build
 
@@ -67,6 +68,7 @@ RUN bun install --frozen-lockfile --production
 
 COPY --from=build /app/services/api/dist ./services/api/dist
 COPY --from=build /app/services/cron/dist ./services/cron/dist
+COPY --from=build /app/services/mcp/dist ./services/mcp/dist
 COPY --from=build /app/services/worker/dist ./services/worker/dist
 COPY --from=build /app/packages/database/src ./packages/database/src
 COPY --from=build /app/packages/data-schemas/src ./packages/data-schemas/src
@@ -93,6 +95,9 @@ ENV COMMERCIAL_MODE=false
 ENV WORKER_JOB_QUEUE_ENABLED=true
 ENV BETTER_AUTH_URL=http://localhost
 ENV VITE_API_URL=http://127.0.0.1:3001
+ENV VITE_MCP_URL=http://127.0.0.1:3002
+ENV MCP_PORT=3002
+ENV MCP_API_URL=http://127.0.0.1:3001
 
 EXPOSE 80
 

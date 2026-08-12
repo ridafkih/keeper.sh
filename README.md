@@ -181,9 +181,10 @@ There are seven images currently available, two of them are designed for conveni
 | PRIVATE_RESOLUTION_WHITELIST          | `api`, `cron` | Optional. When `BLOCK_PRIVATE_RESOLUTION` is `true`, this comma-separated list of hostnames or IPs is exempt from the restriction.<br><br>e.g. `192.168.1.50,radicale.local,10.0.2.12` |
 | TRUSTED_ORIGINS                | `api`         | Optional. Comma-separated list of additional trusted origins for CSRF protection.<br><br>e.g. `http://192.168.1.100,http://keeper.local,https://keeper.example.com` |
 | WEBSOCKET_URL                  | `api`         | Optional. External URL clients should open the realtime socket against. When unset, clients connect to the API's own `/api/socket` path.<br><br>e.g. `wss://socket.keeper.example.com` |
-| MCP_PUBLIC_URL                 | `api`, `mcp`  | Optional on `api`, required by `mcp`. Public URL of the MCP resource. Enables OAuth on the API and identifies the MCP server to clients.<br><br>e.g. `https://keeper.example.com/mcp` |
-| VITE_MCP_URL                   | `web`         | Optional. Internal URL the web server uses to proxy `/mcp` requests to the MCP service.<br><br>e.g. `http://mcp:3002`                                              |
-| MCP_PORT                       | `mcp`         | Required by `mcp`. Port the MCP server listens on.<br><br>e.g. `3002`                                                                                              |
+| MCP_PUBLIC_URL                 | `api`, `mcp`  | Optional on `api`, required by `mcp`. Public URL of the MCP resource. Enables OAuth on the API and identifies the MCP server to clients. In `keeper-standalone` it defaults to `BETTER_AUTH_URL` with `/mcp` appended.<br><br>e.g. `https://keeper.example.com/mcp` |
+| VITE_MCP_URL                   | `web`         | Optional. Internal URL the web server uses to proxy `/mcp` requests to the MCP service. Pre-set in the `keeper-standalone` image.<br><br>e.g. `http://mcp:3002`     |
+| MCP_PORT                       | `mcp`         | Required by `mcp`. Port the MCP server listens on. Pre-set to `3002` in the `keeper-standalone` image.<br><br>e.g. `3002`                                          |
+| MCP_API_URL                    | `api`, `mcp`  | Optional. Internal URL used to reach the Keeper API when serving MCP — for tool calls, and for fetching the signing keys that validate MCP tokens. Defaults to `BETTER_AUTH_URL`, which requires both services to be able to reach your instance's public URL. Pre-set to the bundled API in the `keeper-standalone` image.<br><br>e.g. `http://api:3001` |
 | OTEL_EXPORTER_OTLP_ENDPOINT    | `api`, `cron`, `worker`, `mcp`, `web` | Optional. When set, enables forwarding structured logs to an OpenTelemetry collector. Each service pipes its stdout through the `keeper-otelemetry` binary from [`@keeper.sh/otelemetry`](./packages/otelemetry), which runs as a separate process and does not affect application performance.<br><br>e.g. `https://otel-collector.example.com:4318` |
 | OTEL_EXPORTER_OTLP_PROTOCOL    | `api`, `cron`, `worker`, `mcp`, `web` | Optional. Protocol used by the OTLP exporter. Defaults to `http/protobuf` per the OpenTelemetry spec.<br><br>e.g. `http/protobuf`, `grpc`, `http/json` |
 | OTEL_EXPORTER_OTLP_HEADERS     | `api`, `cron`, `worker`, `mcp`, `web` | Optional. Headers sent with every OTLP export request. Use this for authentication (e.g. Basic auth or API keys).<br><br>e.g. `Authorization=Basic dXNlcjpwYXNz` |
@@ -208,13 +209,13 @@ The following environment variables are read by the `web` server at **runtime** 
 
 | Tag                        | Description                                                                                                                                              | Included Services                                                                        |
 | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `keeper-standalone:2`    | The "standalone" image is everything you need to get up and running with Keeper with as little configuration as possible.                                | `keeper-web`, `keeper-api`, `keeper-cron`, `keeper-worker`, `redis`, `postgresql`, `caddy` |
+| `keeper-standalone:2`    | The "standalone" image is everything you need to get up and running with Keeper with as little configuration as possible.                                | `keeper-web`, `keeper-api`, `keeper-cron`, `keeper-worker`, `keeper-mcp`, `redis`, `postgresql`, `caddy` |
 | `keeper-services:2`      | If you'd like for the Redis & Database to exist outside of the container, you can use the "services" image to launch without them included in the image. | `keeper-web`, `keeper-api`, `keeper-cron`, `keeper-worker`                                 |
 | `keeper-web:2`           | An image containing the Vite SSR web interface.                                                                                                          | `keeper-web`                                                                              |
 | `keeper-api:2`           | An image containing the Bun API service.                                                                                                                 | `keeper-api`                                                                              |
 | `keeper-cron:2`          | An image containing the Bun cron service. Requires `keeper-worker` for destination syncing.                                                              | `keeper-cron`                                                                             |
 | `keeper-worker:2`        | An image containing the BullMQ worker that processes calendar sync jobs enqueued by `keeper-cron`.                                                       | `keeper-worker`                                                                           |
-| `keeper-mcp:2`           | An image containing the MCP server for AI agent calendar access. Optional — only needed if using MCP clients.                                            | `keeper-mcp`                                                                              |
+| `keeper-mcp:2`           | An image containing the MCP server for AI agent calendar access. Optional — only needed if using MCP clients, and already included in `keeper-standalone`. | `keeper-mcp`                                                                              |
 
 > [!TIP]
 >
@@ -624,9 +625,11 @@ Example Claude Code MCP configuration:
 >
 > MCP is fully optional. All MCP-related environment variables are optional across every service and image. If they are not set, Keeper starts normally without MCP functionality. Existing self-hosted deployments are unaffected.
 
-The MCP server is proxied through the web service at `/mcp`, the same way the API is proxied at `/api`. MCP is **not** bundled in the `keeper-standalone` or `keeper-services` convenience images — run the `keeper-mcp` image as a separate container alongside them.
+The MCP server is proxied through the web service at `/mcp`, the same way the API is proxied at `/api`.
 
-To enable MCP on a self-hosted instance:
+`keeper-standalone` bundles the MCP server and serves it at `/mcp` on the port you already publish, with no extra configuration. It derives `MCP_PUBLIC_URL` from `BETTER_AUTH_URL`, so as long as `BETTER_AUTH_URL` is your instance URL, your MCP client points at that same URL with `/mcp` appended.
+
+MCP is **not** bundled in `keeper-services` or the individual service images. To enable it there:
 
 1. Run the `keeper-mcp` container with `MCP_PORT`, `MCP_PUBLIC_URL`, `DATABASE_URL`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL`.
 2. Set `MCP_PUBLIC_URL` on the `api` service to the same value (e.g. `https://keeper.example.com/mcp`).

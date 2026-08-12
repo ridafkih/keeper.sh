@@ -6,6 +6,7 @@ import {
   KEEPER_API_SCOPES,
   KEEPER_MCP_OAUTH_SCOPES,
   resolveMcpAuthOptions,
+  resolveMcpJwksUrl,
 } from "../src/mcp-config";
 
 describe("resolveMcpAuthOptions", () => {
@@ -62,5 +63,25 @@ describe("resolveMcpAuthOptions", () => {
     expect(KEEPER_MCP_OAUTH_SCOPES).toContain("offline_access");
     expect(KEEPER_API_RESOURCE_SCOPES).not.toContain("offline_access");
     expect(KEEPER_API_DEFAULT_SCOPE.split(" ")).toContain("offline_access");
+  });
+});
+
+describe("resolveMcpJwksUrl", () => {
+  it("derives the JWKS URL from the instance base URL", () => {
+    expect(resolveMcpJwksUrl("https://keeper.example.com")).toBe(
+      "https://keeper.example.com/api/auth/jwks",
+    );
+  });
+
+  it("ignores a trailing slash on the base URL", () => {
+    expect(resolveMcpJwksUrl("https://keeper.example.com/")).toBe(
+      "https://keeper.example.com/api/auth/jwks",
+    );
+  });
+
+  it("prefers an internal API base URL over the instance base URL", () => {
+    expect(resolveMcpJwksUrl("https://keeper.example.com", "http://127.0.0.1:3001")).toBe(
+      "http://127.0.0.1:3001/api/auth/jwks",
+    );
   });
 });
