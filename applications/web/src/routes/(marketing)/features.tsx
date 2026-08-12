@@ -34,7 +34,7 @@ import ArrowUpRightIcon from "lucide-react/dist/esm/icons/arrow-up-right";
 const breadcrumbs = breadcrumbTrail({ name: "Features", path: "/features" });
 
 const PAGE_DESCRIPTION =
-  "Keeper copies events from one calendar into another and combines everything you connect into a single feed. Works with Google Calendar, Outlook, iCloud, Fastmail, and more.";
+  "Keeper.sh copies events from one calendar into another and combines everything you connect into a single feed. Works with Google Calendar, Outlook, iCloud, Fastmail, and more.";
 
 type FeatureCard = {
   title: string;
@@ -74,7 +74,7 @@ const FEATURE_CARDS: FeatureCard[] = [
   },
   {
     title: "Open-source, and yours to run",
-    body: "Keeper is open-source under AGPL-3.0, with Docker images ready to deploy. Run it yourself and every account on it gets the Pro feature set, with no plan limits.",
+    body: "Keeper.sh is open-source under AGPL-3.0, with Docker images ready to deploy. Run it yourself and every account on it gets the Pro feature set, with no plan limits.",
     gridClassName: "lg:col-start-6 lg:col-span-5 lg:row-start-3",
     illustration: <MarketingIllustrationContributors />,
   },
@@ -96,7 +96,7 @@ const UPDATE_STEPS: UpdateStep[] = [
     body: "You set this per calendar. A work calendar can carry the title, description, and location while a shared one shows a plain block. On Pro you can also filter out events you would rather not copy at all.",
   },
   {
-    title: "Keeper takes it from there",
+    title: "Keeper.sh takes it from there",
     body: "Your calendars are checked every minute on both plans. Google and Outlook only report what changed, so checking stays quick even on a packed calendar. A change reaches your other calendars within 30 minutes on Free, and within a minute on Pro.",
     note: "Calendars connected by a link are read in full each time.",
   },
@@ -153,7 +153,7 @@ function FeaturesPage() {
       <MarketingHowItWorksSection>
         <Heading2>How your calendars stay in step</Heading2>
         <Text size="sm" tone="muted" className="mt-2 max-w-[64ch]">
-          You set a connection up once. After that, Keeper keeps the copies right.
+          You set a connection up once. After that, Keeper.sh keeps the copies right.
         </Text>
         <MarketingHowItWorksCard>
           <MarketingHowItWorksRow>
@@ -192,14 +192,14 @@ function FeaturesPage() {
       <MarketingFeatureBentoSection>
         <Heading2>For developers</Heading2>
         <Text size="sm" tone="muted" className="mt-2 mb-8 max-w-[64ch]">
-          Skip this part unless you want to drive Keeper from your own code or from an assistant.
+          Skip this part unless you want to drive Keeper.sh from your own code or from an assistant.
         </Text>
         <MarketingFeatureBentoGrid>
           <MarketingFeatureBentoCard className="lg:col-start-1 lg:col-span-5 lg:row-start-1">
             <MarketingFeatureBentoBody>
               <Heading3 as="h3">REST API</Heading3>
               <Text size="sm" className="text-left">
-                Keeper exposes a REST API under /api/v1, authenticated with a bearer token you create under Settings → API Tokens.
+                Keeper.sh exposes a REST API under /api/v1, authenticated with a bearer token you create under Settings → API Tokens.
                 It covers accounts, calendars, events, invites, and the calendar link.
               </Text>
               <Text size="sm" tone="muted" className="text-left">
@@ -212,7 +212,7 @@ function FeaturesPage() {
             <MarketingFeatureBentoBody>
               <Heading3 as="h3">MCP server</Heading3>
               <Text size="sm" className="text-left">
-                An assistant can read and write your calendars through Keeper&rsquo;s MCP server. You approve it once on a consent
+                An assistant can read and write your calendars through Keeper.sh&rsquo;s MCP server. You approve it once on a consent
                 screen in your browser, and it signs in with OAuth 2.1 rather than a password.
               </Text>
               <ul className="list-disc list-inside flex flex-col gap-1 ml-2 text-sm tracking-tight text-foreground-muted">
