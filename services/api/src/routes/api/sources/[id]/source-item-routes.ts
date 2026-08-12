@@ -2,6 +2,7 @@ import type { SourcePatchBody } from "@/utils/request-body";
 import { sourcePatchBodySchema } from "@/utils/request-body";
 import { idParamSchema } from "@/utils/request-query";
 import { ErrorResponse } from "@/utils/responses";
+import { isForcedAvailability } from "@keeper.sh/data-schemas";
 
 const EVENT_FILTER_FIELDS = [
   "excludeAllDayEvents",
@@ -21,6 +22,7 @@ const SOURCE_BOOLEAN_UPDATE_FIELDS = [
 const PRO_GATED_SOURCE_FIELDS = [
   ...EVENT_FILTER_FIELDS,
   "customEventName",
+  "forcedAvailability",
   "treatFullDayTimedEventsAsAllDay",
 ] as const;
 
@@ -37,21 +39,29 @@ interface PatchSourceDependencies {
   updateSource: (
     userId: string,
     sourceCalendarId: string,
-    updates: Record<string, string | boolean>,
+    updates: Record<string, string | boolean | null>,
   ) => Promise<Record<string, unknown> | null>;
   canUseEventFilters: (userId: string) => Promise<boolean>;
 }
 
 const buildSourceUpdates = (
   body: SourcePatchBody,
-): Record<string, string | boolean> => {
-  const updates: Record<string, string | boolean> = {};
+): Record<string, string | boolean | null> => {
+  const updates: Record<string, string | boolean | null> = {};
 
   if (body.name) {
     updates.name = body.name;
   }
   if (typeof body.customEventName === "string") {
     updates.customEventName = body.customEventName;
+  }
+  if ("forcedAvailability" in body) {
+    const value = body.forcedAvailability;
+    if (value === null) {
+      updates.forcedAvailability = null;
+    } else if (typeof value === "string" && isForcedAvailability(value)) {
+      updates.forcedAvailability = value;
+    }
   }
 
   for (const field of SOURCE_BOOLEAN_UPDATE_FIELDS) {

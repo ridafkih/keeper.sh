@@ -18,6 +18,11 @@ import { formatDate } from "@/lib/time";
 import { canPull, canPush } from "@/utils/calendars";
 import type { CalendarAccount, CalendarDetail, CalendarSource } from "@/types/api";
 import {
+  FORCED_AVAILABILITIES,
+  FORCED_AVAILABILITY,
+  type ForcedAvailability,
+} from "@keeper.sh/data-schemas";
+import {
   NavigationMenu,
   NavigationMenuEmptyItem,
   NavigationMenuItemIcon,
@@ -49,6 +54,7 @@ import {
   customEventNameAtom,
   excludeEventNameAtom,
   excludeFieldAtoms,
+  forcedAvailabilityAtom,
   treatFullDayTimedEventsAsAllDayAtom,
 } from "@/state/calendar-detail";
 import type { ExcludeField } from "@/state/calendar-detail";
@@ -74,6 +80,28 @@ const SYNC_SETTINGS: SyncSetting[] = [
   { field: "excludeEventDescription", label: "Sync Event Description", matchesField: false },
   { field: "excludeEventLocation", label: "Sync Event Location", matchesField: false },
 ];
+
+type ForcedAvailabilitySetting = ForcedAvailability | null;
+
+const FORCED_AVAILABILITY_OPTIONS = [null, ...FORCED_AVAILABILITIES] as const satisfies readonly ForcedAvailabilitySetting[];
+
+const FORCED_AVAILABILITY_LABELS = {
+  [FORCED_AVAILABILITY.busy]: "Busy",
+  [FORCED_AVAILABILITY.free]: "Free",
+  [FORCED_AVAILABILITY.oof]: "Out of Office",
+} as const;
+
+const forcedAvailabilityLabel = (value: ForcedAvailabilitySetting): string => {
+  if (value === null) {
+    return "Source";
+  }
+  return FORCED_AVAILABILITY_LABELS[value];
+};
+
+const nextForcedAvailability = (value: ForcedAvailabilitySetting): ForcedAvailabilitySetting => {
+  const index = FORCED_AVAILABILITY_OPTIONS.indexOf(value);
+  return FORCED_AVAILABILITY_OPTIONS[(index + 1) % FORCED_AVAILABILITY_OPTIONS.length] ?? null;
+};
 
 const EXCLUSION_SETTINGS: SyncSetting[] = [
   { field: "excludeAllDayEvents", label: "Exclude All Day Events", matchesField: true },
@@ -419,6 +447,7 @@ function SyncSettingsSection({ calendarId }: { calendarId: string }) {
         <NavigationMenu>
           <SyncEventNameTemplateItem calendarId={calendarId} locked={locked} />
           <SyncEventNameToggle calendarId={calendarId} locked={locked} />
+          <ForcedAvailabilityCycle calendarId={calendarId} locked={locked} />
           <ProviderSyncSettings calendarId={calendarId} calendarType={calendarType} locked={locked} />
           {SYNC_SETTINGS.map((setting) => (
             <ExcludeFieldToggle
@@ -451,6 +480,56 @@ function ProviderSyncSettings({
     default:
       return null;
   }
+}
+
+function ForcedAvailabilityCycle({ calendarId, locked }: { calendarId: string; locked: boolean }) {
+  const store = useStore();
+  const variant = use(MenuVariantContext);
+
+  const handleClick = () => {
+    if (locked) return;
+    const current = store.get(calendarDetailAtom);
+    if (!current) return;
+
+    const forcedAvailability = nextForcedAvailability(current.forcedAvailability);
+    track(ANALYTICS_EVENTS.calendar_setting_toggled, {
+      field: "forcedAvailability",
+      enabled: forcedAvailability !== null,
+      value: forcedAvailability ?? "source",
+    });
+    store.set(calendarDetailAtom, (prev) => (prev ? { ...prev, forcedAvailability } : prev));
+    patchSource(store, calendarId, { forcedAvailability });
+  };
+
+  return (
+    <li>
+      <ItemDisabledContext value={locked}>
+        <button
+          type="button"
+          disabled={locked}
+          onClick={handleClick}
+          className={navigationMenuItemStyle({ variant, interactive: !locked })}
+        >
+          <NavigationMenuItemLabel>Create as</NavigationMenuItemLabel>
+          <ForcedAvailabilityValue disabled={locked} />
+        </button>
+      </ItemDisabledContext>
+    </li>
+  );
+}
+
+function ForcedAvailabilityValue({ disabled }: { disabled: boolean }) {
+  const forcedAvailability = useAtomValue(forcedAvailabilityAtom);
+
+  return (
+    <Text
+      size="sm"
+      tone={disabled ? "disabled" : "muted"}
+      className="min-w-0 truncate flex-1 text-right"
+    >
+      {forcedAvailabilityLabel(forcedAvailability)}
+    </Text>
+  );
 }
 
 function TreatFullDayTimedEventsToggle({ calendarId, locked }: { calendarId: string; locked: boolean }) {

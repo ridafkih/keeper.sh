@@ -71,6 +71,42 @@ describe("createGoogleSyncProvider", () => {
       remoteId: expect.stringContaining("@keeper.sh"),
       success: true,
     });
+    expect(batchMocks.executeBatchChunked.mock.calls[0]?.[0]?.[0]).toMatchObject({
+      path: expect.stringContaining("/events/import"),
+    });
+  });
+
+  it("creates out-of-office events with events.insert", async () => {
+    batchMocks.executeBatchChunked.mockResolvedValueOnce([
+      batchResponse(200, { id: "google-ooo-id" }),
+    ]);
+
+    const [result] = await createProvider().pushEvents([{
+      availability: "oof",
+      calendarId: "source-calendar",
+      calendarName: "Source",
+      calendarUrl: null,
+      endTime: new Date("2026-03-15T10:00:00Z"),
+      id: "event-state-id",
+      sourceEventUid: "source-event-uid",
+      startTime: new Date("2026-03-15T09:00:00Z"),
+      summary: "Private block",
+    }]);
+
+    expect(result).toMatchObject({
+      deleteId: "google-ooo-id",
+      remoteId: expect.stringContaining("@keeper.sh"),
+      success: true,
+    });
+    expect(batchMocks.executeBatchChunked.mock.calls[0]?.[0]?.[0]).toMatchObject({
+      body: {
+        eventType: "outOfOffice",
+        outOfOfficeProperties: {
+          autoDeclineMode: "declineAllConflictingInvitations",
+        },
+      },
+      path: expect.stringMatching(/\/events$/),
+    });
   });
 
   it("converges when import and listing use Google's two different identifiers", async () => {

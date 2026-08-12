@@ -100,6 +100,8 @@ const calendarsTable = pgTable(
     excludeEventName: boolean().notNull().default(false),
     excludeFocusTime: boolean().notNull().default(false),
     excludeOutOfOffice: boolean().notNull().default(false),
+    /** When set, destination events use this availability instead of the source value. */
+    forcedAvailability: text(),
     includeInIcalFeed: boolean().notNull().default(false),
     treatFullDayTimedEventsAsAllDay: boolean().notNull().default(false),
     customEventName: text().notNull().default(""),

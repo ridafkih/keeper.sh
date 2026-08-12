@@ -51,6 +51,17 @@ describe("sourcePatchBodySchema", () => {
     expect(result instanceof type.errors).toBe(false);
   });
 
+  it("accepts forcedAvailability overrides", () => {
+    expect(sourcePatchBodySchema({ forcedAvailability: "oof" }) instanceof type.errors).toBe(false);
+    expect(sourcePatchBodySchema({ forcedAvailability: "busy" }) instanceof type.errors).toBe(false);
+    expect(sourcePatchBodySchema({ forcedAvailability: "free" }) instanceof type.errors).toBe(false);
+    expect(sourcePatchBodySchema({ forcedAvailability: null }) instanceof type.errors).toBe(false);
+  });
+
+  it("rejects invalid forcedAvailability values", () => {
+    expect(sourcePatchBodySchema({ forcedAvailability: "workingElsewhere" }) instanceof type.errors).toBe(true);
+  });
+
   it("rejects extra properties", () => {
     const result = sourcePatchBodySchema({ name: "ok", hacker: true });
     expect(result instanceof type.errors).toBe(true);

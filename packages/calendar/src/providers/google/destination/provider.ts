@@ -160,7 +160,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
 
   const eventsPath = `/calendar/v3/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
 
-  // Writes go through events.import, which upserts by iCalUID: re-pushing an existing event updates it rather than 409ing.
+  // Default events use events.import (upserts by iCalUID). Out-of-office requires events.insert.
   const buildPushRequest = (
     event: MaterializedSyncableEvent,
   ): { uid: string; request: BatchSubRequest } | null => {
@@ -169,11 +169,12 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     if (!resource) {
       return null;
     }
+    const isOutOfOffice = resource.eventType === "outOfOffice";
     return {
       uid,
       request: {
         method: "POST",
-        path: `${eventsPath}/import`,
+        path: isOutOfOffice ? eventsPath : `${eventsPath}/import`,
         headers: { "Content-Type": "application/json" },
         body: resource,
       },
@@ -404,7 +405,9 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         continue;
       }
       let availability: MaterializedSyncableEvent["availability"] = "busy";
-      if (event.transparency === "transparent") {
+      if (event.eventType === "outOfOffice") {
+        availability = "oof";
+      } else if (event.transparency === "transparent") {
         availability = "free";
       }
       items.push({
@@ -421,7 +424,10 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         }),
         endTime,
         isKeeperEvent: true,
-        supportedAvailabilities: ["busy", "free"],
+        // OOO is only supported for timed Google events; all-day falls back to busy.
+        supportedAvailabilities: event.eventType === "outOfOffice"
+          ? ["busy", "free", "oof"]
+          : ["busy", "free"],
         startTime,
         uid: event.iCalUID,
       });
