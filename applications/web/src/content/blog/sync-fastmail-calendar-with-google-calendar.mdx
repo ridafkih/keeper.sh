@@ -16,15 +16,13 @@ Your dentist appointment lives on Fastmail. Your meetings live on Google Calenda
 
 So a colleague books you at 3pm, and you were already busy at 3pm. Keeper fixes that by copying events from one calendar onto the other.
 
-This guide sets it up start to finish. It also says plainly what never crosses over.
-
 ## What will this actually do?
 
 Your Fastmail events appear on your Google calendar. Move one on Fastmail and the copy moves with it. Delete it and the copy goes too.
 
 That is a connection, and it runs in one direction only. Fastmail sending to Google does not mean Google sends back.
 
-Want it both ways? Set up a second connection pointing the other way. The first one carries on unchanged.
+Want it both ways? Set up a second connection pointing the other way.
 
 ## Why won't Fastmail take your normal password?
 
@@ -39,9 +37,7 @@ Instead you generate a separate password just for Keeper. You can delete it on i
 5. Under **Access**, choose **Calendars (CalDAV)**.
 6. Click **Generate password** and copy what appears.
 
-Step five is the one worth slowing down for. **Calendars (CalDAV)** is the narrowest option that still does the job, so the password you hand Keeper reaches your calendars and nothing else.
-
-The default is broader. It covers mail and contacts as well, which Keeper has no use for. Pick the narrow one and a leaked password cannot read your inbox.
+Step five is worth slowing down for. **Calendars (CalDAV)** is the narrowest option that still works, so the password reaches your calendars and nothing else. The default also covers mail and contacts, which Keeper has no use for.
 
 Fastmail shows the password once. If you lose it, delete it and generate another.
 
@@ -54,13 +50,11 @@ Two boxes appear:
 - **Fastmail Email Address** — the full address you sign in with, domain included
 - **App-Specific Password** — the one you just generated
 
-You are never asked for a server address. Keeper already knows where Fastmail keeps calendars, which is why Fastmail gets its own button rather than the generic one.
-
 Click **Connect**. Keeper finds every calendar on the account and brings them all in at once. Your task lists stay behind.
 
 ## How do you connect Google Calendar?
 
-Return to **Import Calendars** and choose **Connect Google Calendar**. Keeper shows what it is about to ask Google for before sending you anywhere:
+Return to **Import Calendars** and choose **Connect Google Calendar**. Keeper shows what it is about to ask Google for:
 
 - See your email address
 - View a list of your calendars
@@ -94,8 +88,6 @@ Turn it on and the real title goes through. The **Event Name** box also accepts 
 
 Below that, **Exclusions** can drop all-day events. Both sections are Pro on keeper.sh and included for everyone on a self-hosted install.
 
-Check these switches on every calendar you connect, rather than assuming what they are set to.
-
 ## What does not come across?
 
 Time and text, and little else. None of the following reaches the copy:
@@ -107,15 +99,15 @@ Time and text, and little else. None of the following reaches the copy:
 
 What does travel: the title, description, location, start and end, the time zone, whether it repeats, and whether it shows you as busy or free.
 
-Keeper does read the guest list on your own calendars, separately from all this. That is what powers its pending-invite list and lets you RSVP. It is never written into a copied event.
+Keeper does read the guest list on your own calendars, separately from all this. That powers its pending-invite list and lets you RSVP, and it is never written into a copied event.
 
 ## How quickly do changes show up?
 
 Keeper reads both calendars every minute, on every plan. That half never slows down.
 
-Writing the change onto the other calendar is the part that differs. Free does that every 30 minutes. Pro does it every minute.
+Writing the change onto the other calendar is the part that differs. Free does that every 30 minutes, Pro every minute.
 
-If you are blocking out evenings so work sees you as busy, 30 minutes is invisible. If people book you through a scheduling link, half an hour is long enough to get double-booked. Pay for the speed only if you will notice it.
+If you are blocking out evenings so work sees you as busy, 30 minutes is invisible. If people book you through a scheduling link, half an hour is long enough to get double-booked.
 
 ## How far ahead does it look?
 
@@ -127,19 +119,17 @@ Repeating events get more room. A weekly series that began years ago still has i
 
 **Connecting Fastmail fails with a short error mentioning 401.** Fastmail rejected the password. Either your account password went in instead of the app password, or that app password does not cover calendars.
 
-**Keeper says "No calendars found".** It reached Fastmail but saw nothing it could use. An app password scoped to something other than calendars does exactly this — **Files (WebDAV)** and **Mail (IMAP/POP/SMTP)** are the usual slips. Generate a new one set to **Calendars (CalDAV)**.
+**Keeper says "No calendars found".** It reached Fastmail but saw nothing it could use. An app password scoped to **Files (WebDAV)** or **Mail (IMAP/POP/SMTP)** does exactly this, so generate a new one set to **Calendars (CalDAV)**.
 
 **Events arrive on Google titled after the calendar.** That is **Sync Event Name** switched off. Turn it on under **Sync Settings**.
 
 **Changes you make in Google never reach Fastmail.** You built one connection and it points one way. Add a second going back.
 
-**An entire calendar stops updating, not just one event.** Usually a repeating event with a runaway rule. Keeper will not expand a series past ten thousand occurrences inside its two-year window, and hitting that stops the calendar it belongs to. Look for something set to repeat every minute, often imported from elsewhere.
+**An entire calendar stops updating, not just one event.** Usually a repeating event with a runaway rule. Keeper will not expand a series past ten thousand occurrences inside its two-year window, and hitting that stops the calendar it belongs to.
 
 ## What does the free plan cover?
 
-Two calendar accounts and three connections.
-
-Fastmail counts as one account however many calendars it holds, and Google is the second. So this pairing uses your account allowance exactly, and adding iCloud later means upgrading.
+Two calendar accounts and three connections. Fastmail is one account and Google the second, so this pairing uses your account allowance exactly.
 
 Nothing caps the calendars inside an account. Ten Fastmail calendars still count as one.
 
@@ -156,4 +146,4 @@ It is more work, and you should know how much before starting:
 - Your own Google OAuth client, because Google issues credentials per application. Fastmail needs nothing of the sort — a username and a password is the whole story.
 - Backups, updates, and being the person who gets paged when it stops at 2am
 
-The [README](https://github.com/ridafkih/keeper.sh) covers a single-container setup and a full Compose file. If that reads like a decent evening, self-host it. If it reads like a chore, [keeper.sh](https://keeper.sh/register) does the same job and funds the project.
+The [README](https://github.com/ridafkih/keeper.sh) covers a single-container setup and a full Compose file. If that reads like a chore, [keeper.sh](https://keeper.sh/register) does the same job and funds the project.

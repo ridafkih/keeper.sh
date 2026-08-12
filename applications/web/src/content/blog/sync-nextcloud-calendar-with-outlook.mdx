@@ -15,17 +15,13 @@ tags:
 
 You run Nextcloud because your calendar should belong to you. Then work hands you Outlook, and your two calendars stop speaking.
 
-The usual result is a personal calendar nobody at work can see, and a work calendar that books straight over your Saturday. Keeper copies events from one onto the other so the busy blocks line up.
-
-You already run a server, so this guide goes into the URLs and the failure modes properly.
+The result is a personal calendar nobody at work can see, and a work calendar that books straight over your Saturday. Keeper copies events from one onto the other so the busy blocks line up.
 
 ## What will this actually do?
 
 Your Nextcloud events appear on your Outlook calendar. Move one in Nextcloud and the copy moves. Delete it and the copy goes.
 
-That is a connection, and it runs in one direction only. Nextcloud sending to Outlook does not mean Outlook sends back.
-
-Want both directions? Build a second connection the other way. Each one is separate, and each counts separately.
+That is a connection, and it runs in one direction only. Want both directions? Build a second connection the other way, which counts separately.
 
 ## What do you need before you start?
 
@@ -35,13 +31,11 @@ Want both directions? Build a second connection the other way. Each one is separ
 - An Outlook or Microsoft 365 account
 - An account on [keeper.sh](https://keeper.sh/register)
 
-That last one is the easy path, and the rest of this guide assumes it. If you would rather run Keeper on your own box too, there is a section at the end.
-
 One thing worth settling early: hosted keeper.sh has to reach your Nextcloud over the public internet. A Nextcloud on `192.168.1.50` or `nextcloud.local` is not reachable, and no setting on your account changes that. Self-hosting Keeper is the answer for a LAN-only instance.
 
 ## How do you connect Nextcloud?
 
-Open **Import Calendars** from your dashboard and choose **Connect CalDAV Server** from the bottom group. Nextcloud has no button of its own and does not need one. It speaks the CalDAV standard, the same one Keeper uses for iCloud and Fastmail.
+Open **Import Calendars** from your dashboard and choose **Connect CalDAV Server** from the bottom group. Nextcloud has no button of its own and does not need one, because it speaks the same CalDAV standard Keeper uses for iCloud.
 
 Three fields:
 
@@ -49,32 +43,26 @@ Three fields:
 - **CalDAV Server Username** — your Nextcloud username, not your email address unless they match
 - **CalDAV Server Password** — your password, or an app password
 
-Paste the base URL. Keeper walks the rest itself. It checks `/.well-known/caldav`, follows any redirect, asks the server who you are, then follows that to your calendar home and lists what it finds.
-
-So you do not need to dig out the `remote.php/dav/calendars/username/` path.
-
-Both basic and digest authentication work, and Keeper negotiates which one without asking you.
+Paste the base URL and Keeper finds your calendars from there. You do not need to dig out the `remote.php/dav/calendars/username/` path.
 
 ### Get an app password
 
-Use one even without two-factor. It is revocable on its own, and it never reaches your Nextcloud login session.
+Use one even without two-factor, because it is revocable on its own.
 
-In Nextcloud, open **Settings → Security**, find **Devices & sessions**, name the app and create the password. With two-factor turned on this stops being optional — Nextcloud rejects your login password over CalDAV entirely.
+In Nextcloud, open **Settings → Security**, find **Devices & sessions**, name the app and create the password. With two-factor turned on this stops being optional, because Nextcloud rejects your login password over CalDAV entirely.
 
-Click **Connect**. Keeper imports every calendar it discovers on the account at once, then drops you into setup. There is no "choose which ones" step first; the choosing happens after.
+Click **Connect**. Keeper imports every calendar it discovers, then drops you into setup.
 
 ## How do you connect Outlook?
 
-Back on **Import Calendars** there are two Microsoft buttons. **Connect Outlook** is for personal accounts. **Connect Microsoft 365** is for work and school accounts. Pick the one matching the account you are signing into.
-
-Either way, Keeper lists what it will ask Microsoft for before redirecting you:
+Back on **Import Calendars**, **Connect Outlook** is for personal accounts and **Connect Microsoft 365** is for work and school accounts. Either way, Keeper lists what it will ask Microsoft for:
 
 - See your email address
 - View a list of your calendars
 - View events, summaries and details
 - Add or remove calendar events
 
-Click **Connect** and complete Microsoft's consent screen. On a managed work tenant an administrator may need to approve the app first. That is your employer's policy, and nothing in Keeper can route around it.
+Click **Connect** and complete Microsoft's consent screen. On a managed work tenant an administrator may need to approve the app first, and nothing in Keeper can route around that.
 
 ## Which calendar sends to which?
 
@@ -87,21 +75,17 @@ Setup is four screens.
 
 For Nextcloud into Outlook you need screen three. Pick your Outlook calendar and the connection exists.
 
-Everything is editable afterwards. Open a calendar from your dashboard and use **Send Events to Calendars**.
+Everything is editable afterwards from a calendar's page, under **Send Events to Calendars**.
 
 ## How much of the event crosses over?
 
-Decide this deliberately, because one end of this pairing is your employer's system. Open the calendar in your dashboard and find **Sync Settings**.
-
-Three switches: **Sync Event Name**, **Sync Event Description** and **Sync Event Location**.
+Decide this deliberately, because one end of this pairing is your employer's system. Open the calendar in your dashboard and find **Sync Settings**, which holds **Sync Event Name**, **Sync Event Description** and **Sync Event Location**.
 
 With **Sync Event Name** off, the copy is titled after the calendar it came from. A consultant's appointment reaches Outlook as a block called "Personal", not as its real name.
 
 Turn it on and the true title goes through. The **Event Name** box accepts `{{event_name}}` and `{{calendar_name}}`, so you can word the placeholder however you like.
 
 **Exclusions** below can drop all-day events. Both sections are Pro on keeper.sh and included for everyone self-hosting.
-
-Check these switches on each calendar you connect rather than assuming what they are set to.
 
 ## What does not come across?
 
@@ -114,80 +98,58 @@ Time and text, and little else. None of this reaches the copy:
 
 What does travel: the title, description, location, start and end, the time zone, whether it repeats, and whether it shows you as busy or free.
 
-Keeper does read the guest list on your own calendars, separately. That drives its pending-invite list and lets you RSVP. It never lands in a copied event.
+## How quickly, and how far ahead?
 
-## What is that keeper.sh category on my Outlook events?
-
-Keeper tags every event it creates in Outlook with a category named `keeper.sh`. Microsoft does not let outside apps set their own event identifiers, so this tag is how Keeper recognises its own work later.
-
-It is visible in Outlook, which some people dislike. It also matters practically: strip that category off an event by hand and Keeper stops recognising it. The event becomes a leftover it can no longer update or clean up.
-
-The tag is what keeps events from looping back, too. Outlook events carrying it are skipped when Outlook is the calendar sending events.
-
-## How quickly do changes show up?
-
-Keeper reads both calendars every minute, on every plan.
-
-Writing the change onto the other calendar is what differs. Free does it every 30 minutes. Pro does it every minute.
+Keeper reads both calendars every minute, on every plan. Writing the change onto the other calendar is what differs: free does it every 30 minutes, Pro every minute.
 
 If you are mirroring personal commitments so work sees you as busy, 30 minutes changes nothing you will notice. If people book you through a scheduling link, half an hour is enough to get double-booked.
 
-Worth knowing about the reading half. Microsoft tells Keeper only what changed since last time, so a large Outlook calendar stays cheap to check.
+Keeper covers a week back to two years ahead. A one-off event further out is not copied until it drifts into range, though a repeating series that began before the window still has its upcoming occurrences copied.
 
-Nextcloud gets refetched in full each cycle and compared against what Keeper stored. Correct either way, but a very large Nextcloud calendar does more work per cycle.
-
-## How far ahead does it look?
-
-A week back to two years ahead. A one-off event further out is not copied until it drifts into range.
-
-Repeating events get more room. A series whose first occurrence predates the window is still collected, so its upcoming occurrences survive.
+Every event Keeper creates in Outlook carries a category named `keeper.sh`. That tag is how Keeper recognises its own work later, so leave it alone.
 
 ## Why isn't it working?
 
 **Connecting fails with a short error mentioning 401.** Nextcloud rejected the credentials. With two-factor enabled this is almost always the login password being used where an app password is required.
 
-**Keeper says "No calendars found".** It authenticated but nothing survived filtering. Keeper keeps only collections that advertise support for `VEVENT`, which correctly skips task lists and contacts. A server that omits the supported-components property entirely reports nothing at all, and some reverse proxy configurations strip it from PROPFIND responses.
+**Keeper says "No calendars found".** It authenticated, but Keeper keeps only collections advertising support for `VEVENT`, and some reverse proxies strip that property from PROPFIND responses.
 
-**Nextcloud is unreachable and you self-host Keeper.** The deployment Compose file sets `BLOCK_PRIVATE_RESOLUTION=true`, which refuses to fetch anything resolving to a private or reserved address. Add your host to `PRIVATE_RESOLUTION_WHITELIST`. On hosted keeper.sh you cannot change this, so the instance has to be publicly reachable.
+**Nextcloud is unreachable and you self-host Keeper.** The deployment Compose file sets `BLOCK_PRIVATE_RESOLUTION=true`, which refuses anything resolving to a private address. Add your host to `PRIVATE_RESOLUTION_WHITELIST`.
 
-**Microsoft consent fails outright on a work account.** Managed tenants can block third-party calendar apps. You need an administrator to approve it; there is no way around a tenant policy.
+**Microsoft consent fails outright on a work account.** Managed tenants can block third-party calendar apps, and you need an administrator to approve it.
 
 **Events arrive on Outlook titled after the calendar.** **Sync Event Name** is off. Turn it on in **Sync Settings**.
 
 **Changes in Outlook never reach Nextcloud.** One connection, one direction. Add a second going back.
 
-**An entire calendar stops updating, not one event.** Usually a repeating event with a runaway rule. Keeper will not expand a series past ten thousand occurrences in the two-year window, and hitting that stops the calendar it belongs to. Look for something repeating every minute, generally imported from elsewhere.
+**An entire calendar stops updating, not one event.** Usually a repeating event with a runaway rule. Keeper will not expand a series past ten thousand occurrences in the two-year window, and hitting that stops the calendar it belongs to.
 
-**Events vanish from Outlook that still exist in Nextcloud.** Nextcloud is refetched in full each cycle. So a proxy that silently caps objects per response looks like a calendar that really lost them. Nextcloud sets no such cap itself, but an aggressive response limit in front of it does.
+**Events vanish from Outlook that still exist in Nextcloud.** Keeper refetches Nextcloud in full each cycle, so a proxy that silently caps objects per response looks like a calendar that really lost them.
 
 ## What does the free plan cover?
 
-Two calendar accounts and three connections.
+Two calendar accounts and three connections. Nextcloud is one account and Microsoft the second, so this pairing uses the whole account allowance.
 
-Nextcloud is one account however many calendars it exposes, and Microsoft is the second. So this pairing uses the whole account allowance.
-
-Nothing caps calendars inside an account. Twelve Nextcloud calendars still count as one.
-
-Three connections covers Nextcloud to Outlook, Outlook back to Nextcloud, and one spare.
+Nothing caps calendars inside an account — twelve Nextcloud calendars still count as one. Three connections covers Nextcloud to Outlook, Outlook back to Nextcloud, and one spare.
 
 ## Where are my Nextcloud credentials kept?
 
-Encrypted at rest with a configurable key before storage. CalDAV replays the password on every request, so there is no token exchange to hide behind. Keeper needs it in a reversible form, and would rather say so than imply otherwise.
+Encrypted at rest with a configurable key. CalDAV replays the password on every request, so Keeper needs it in a reversible form and would rather say so than imply otherwise.
 
-Revoking is either end. Delete the app password in Nextcloud, or open the account in Keeper and use **Delete Account**, which removes the account and all its calendars.
+Revoking works from either end: delete the app password in Nextcloud, or open the account in Keeper and use **Delete Account**.
 
 ## Would you rather run Keeper yourself too?
 
 Running Nextcloud does not mean you want another service to babysit, so this is a real choice rather than the obvious one.
 
-If you do want it, self-hosting Keeper is not a downgrade. It is AGPL-3.0 and every Pro feature is included: one-minute updates, unlimited accounts, unlimited connections, **Sync Settings** and **Exclusions**. It also removes the public-reachability problem, since Keeper can then sit on the same network as your Nextcloud.
+Self-hosting is not a downgrade. It is AGPL-3.0 with every Pro feature included, and it removes the public-reachability problem, since Keeper can then sit on the same network as your Nextcloud.
 
 The honest costs:
 
 - Another server, domain and certificate to keep alive
 - Docker and Docker Compose, plus Postgres and Redis
-- Your own Microsoft OAuth app registered in Azure, with scopes `Calendars.ReadWrite`, `User.Read` and `offline_access`. Nextcloud needs no such registration — CalDAV is a username and a password.
-- `BETTER_AUTH_SECRET` and `ENCRYPTION_KEY` generated and kept safe, because losing the second one loses your stored credentials
+- Your own Microsoft OAuth app registered in Azure, with scopes `Calendars.ReadWrite`, `User.Read` and `offline_access`
+- `BETTER_AUTH_SECRET` and `ENCRYPTION_KEY` kept safe, because losing the second loses your stored credentials
 - Backups, updates, and being the person who gets paged when it stops
 
-The [README](https://github.com/ridafkih/keeper.sh) has a single-container setup and a full Compose file. If none of that is new to you, self-host it. If you would rather not own another thing, [keeper.sh](https://keeper.sh/register) runs it and funds the project.
+The [README](https://github.com/ridafkih/keeper.sh) has a single-container setup and a full Compose file. If you would rather not own another thing, [keeper.sh](https://keeper.sh/register) runs it and funds the project.
