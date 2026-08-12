@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  BACKGROUND_HOLDER_PREFIX,
   createSyncLock,
   LOCK_PREFIX,
   LOCK_RENEW_INTERVAL_MS,
@@ -7,6 +8,7 @@ import {
   SyncLockRenewalError,
   SIGNAL_PREFIX,
   POLL_INTERVAL_MS,
+  WAITER_PREFIX,
 } from "../src/sync-lock";
 
 const createMockRedis = () => {
@@ -134,6 +136,23 @@ const createMockRedis = () => {
     return 1;
   };
 
+  const runIsCurrent = (args: string[]): unknown => {
+    const lockKey = args[0] ?? "";
+    const waiterKey = args[1] ?? "";
+    const invalidationKey = args[2] ?? "";
+    const holderId = args[3] ?? "";
+    if (readValue(lockKey) !== holderId || readValue(invalidationKey) !== null) {
+      return 0;
+    }
+    const waiters = lists.get(waiterKey) ?? [];
+    const preempted = waiters.some((waiter) =>
+      waiter !== holderId && !waiter.startsWith(BACKGROUND_HOLDER_PREFIX));
+    if (preempted) {
+      return 0;
+    }
+    return 1;
+  };
+
   const runRenew = (args: string[]): unknown => {
     const lockKey = args[0] ?? "";
     const holderId = args[1] ?? "";
@@ -156,13 +175,17 @@ const createMockRedis = () => {
   };
 
   const evalImpl = (
-    _script: string,
+    script: string,
     keyCount: number,
     ...args: string[]
   ): Promise<unknown> => {
     const evalFailure = evalFailures.shift();
     if (evalFailure) {
       return Promise.reject(new Error(evalFailure.message, { cause: evalFailure }));
+    }
+
+    if (script.includes("LRANGE")) {
+      return Promise.resolve(runIsCurrent(args));
     }
 
     if (keyCount === 4 && args.length === 8) {
@@ -212,6 +235,12 @@ const createMockRedis = () => {
     };
   };
 
+  const pushWaiter = (waiterKey: string, holderId: string): void => {
+    const waiters = (lists.get(waiterKey) ?? []).filter((waiter) => waiter !== holderId);
+    waiters.unshift(holderId);
+    lists.set(waiterKey, waiters);
+  };
+
   return {
     abortDuringNextAcquisition,
     deferNextConfirmation,
@@ -219,6 +248,7 @@ const createMockRedis = () => {
     set,
     del,
     eval: evalImpl,
+    pushWaiter,
     rejectNextEval,
   };
 };
@@ -233,6 +263,12 @@ describe("createSyncLock", () => {
   const makeSyncLock = () => {
     const redis = createMockRedis();
     const syncLock = createSyncLock(redis);
+    return { redis, syncLock };
+  };
+
+  const makeBackgroundSyncLock = () => {
+    const redis = createMockRedis();
+    const syncLock = createSyncLock(redis, "background");
     return { redis, syncLock };
   };
 
@@ -396,11 +432,89 @@ describe("createSyncLock", () => {
         throw new Error("expected acquired");
       }
 
-      // Simulate a second caller setting the signal key
-      redis.set(`${SIGNAL_PREFIX}cal-1`, "waiter-id");
+      // Simulate a second caller queueing behind the holder
+      redis.pushWaiter(`${WAITER_PREFIX}cal-1`, "waiter-id");
 
       const current = await firstResult.handle.isCurrent();
       expect(current).toBe(false);
+    });
+
+    it("stays current while another background sync waits behind it", async () => {
+      const { syncLock } = makeBackgroundSyncLock();
+      const firstResult = await syncLock.acquire("cal-1");
+
+      if (!firstResult.acquired) {
+        throw new Error("expected acquired");
+      }
+
+      const secondPromise = syncLock.acquire("cal-1");
+      await flushAsync();
+
+      expect(await firstResult.handle.isCurrent()).toBe(true);
+
+      await firstResult.handle.release();
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      const secondResult = await secondPromise;
+      expect(secondResult.acquired).toBe(true);
+      if (secondResult.acquired) {
+        await secondResult.handle.release();
+      }
+    });
+
+    it("stops being current once a mapping mutation queues behind it", async () => {
+      const { redis, syncLock } = makeBackgroundSyncLock();
+      const mutationLock = createSyncLock(redis);
+      const firstResult = await syncLock.acquire("cal-1");
+
+      if (!firstResult.acquired) {
+        throw new Error("expected acquired");
+      }
+
+      expect(await firstResult.handle.isCurrent()).toBe(true);
+
+      const mutationPromise = mutationLock.acquire("cal-1");
+      await flushAsync();
+
+      expect(await firstResult.handle.isCurrent()).toBe(false);
+
+      await firstResult.handle.release();
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      const mutationResult = await mutationPromise;
+      expect(mutationResult.acquired).toBe(true);
+      if (mutationResult.acquired) {
+        await mutationResult.handle.release();
+      }
+    });
+
+    it("treats an unprefixed waiter from an older deployment as preempting", async () => {
+      const { redis, syncLock } = makeBackgroundSyncLock();
+      const firstResult = await syncLock.acquire("cal-1");
+
+      if (!firstResult.acquired) {
+        throw new Error("expected acquired");
+      }
+
+      redis.pushWaiter(`${WAITER_PREFIX}cal-1`, "1f1a2b3c-legacy-holder-id");
+
+      expect(await firstResult.handle.isCurrent()).toBe(false);
+      await firstResult.handle.release();
+    });
+
+    it("reads the waiter list so a later background waiter cannot mask a preempting one", async () => {
+      const { redis, syncLock } = makeBackgroundSyncLock();
+      const firstResult = await syncLock.acquire("cal-1");
+
+      if (!firstResult.acquired) {
+        throw new Error("expected acquired");
+      }
+
+      const maskingWaiter = `${BACKGROUND_HOLDER_PREFIX}later-waiter`;
+      redis.pushWaiter(`${WAITER_PREFIX}cal-1`, "preempting:mapping-mutation");
+      redis.pushWaiter(`${WAITER_PREFIX}cal-1`, maskingWaiter);
+      redis.set(`${SIGNAL_PREFIX}cal-1`, maskingWaiter);
+
+      expect(await firstResult.handle.isCurrent()).toBe(false);
+      await firstResult.handle.release();
     });
 
     it("returns false when the holder no longer owns the lock key", async () => {
@@ -439,7 +553,7 @@ describe("createSyncLock", () => {
         throw new Error("expected acquired");
       }
 
-      redis.set(`${SIGNAL_PREFIX}cal-1`, "waiter-id");
+      redis.pushWaiter(`${WAITER_PREFIX}cal-1`, "waiter-id");
 
       expect(await result.handle.isHeld()).toBe(true);
       expect(await result.handle.isCurrent()).toBe(false);
@@ -692,8 +806,8 @@ describe("createSyncLock", () => {
         throw new Error("expected acquired");
       }
 
-      // Signal only cal-1
-      redis.set(`${SIGNAL_PREFIX}cal-1`, "waiter");
+      // Queue a waiter on cal-1 only
+      redis.pushWaiter(`${WAITER_PREFIX}cal-1`, "waiter");
 
       // Cal-1 should be superseded
       expect(await resultA.handle.isCurrent()).toBe(false);

@@ -435,7 +435,7 @@ const syncDestinationsForUser = async (
     return EMPTY_RESULT;
   }
 
-  const syncLock = createSyncLock(redis);
+  const syncLock = createSyncLock(redis, "background");
 
   let added = 0;
   let addFailed = 0;
