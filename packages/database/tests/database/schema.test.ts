@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import {
   calendarAccountsTable,
+  calendarsTable,
   eventMappingsTable,
   eventStatesTable,
 } from "../../src/database/schema";
@@ -24,6 +25,20 @@ describe("calendar account schema", () => {
       "provider",
       "accountId",
     ]);
+  });
+});
+
+describe("calendar schema", () => {
+  it("anonymises event detail by default regardless of the flow that inserted the row", () => {
+    const tableConfig = getTableConfig(calendarsTable);
+    const defaults = Object.fromEntries(
+      tableConfig.columns.map((column) => [column.name, column.default]),
+    );
+
+    expect(defaults.excludeEventName).toBe(true);
+    expect(defaults.excludeEventDescription).toBe(true);
+    expect(defaults.excludeEventLocation).toBe(true);
+    expect(defaults.customEventName).toBe("{{calendar_name}}");
   });
 });
 
