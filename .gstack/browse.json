@@ -1,9 +1,0 @@
-{
-  "pid": 45764,
-  "port": 25292,
-  "token": "4debdc47-6b0d-43af-8093-59865e903b93",
-  "startedAt": "2026-08-12T02:03:54.631Z",
-  "serverPath": "/Users/rida/.claude/skills/gstack/browse/src/server.ts",
-  "mode": "launched",
-  "configHash": "303a7eeccc03078b"
-}
