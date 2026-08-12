@@ -132,7 +132,9 @@ Two consequences. The copies on your Outlook calendar carry a visible category. 
 
 ## What goes wrong, and what does it look like?
 
-**The page shows `401 /api/sources/caldav/discover` in red.** That means the password was wrong, shown badly. Keeper's server does say "Invalid credentials", but the dashboard prints the status code instead of the message. Usually it is your account password pasted instead of the app password, or an app password whose access does not include calendars.
+**The page says "Invalid credentials".** Fastmail turned Keeper away. Usually it is your account password pasted instead of the app password. The other common cause is an app password whose **Access** does not include **Calendars (CalDAV)**.
+
+**The page says "Failed to discover calendars".** That is a different problem, and your password is probably fine. Keeper could not reach Fastmail at all, so it never got as far as checking. Wait a minute and try again.
 
 **Microsoft refuses the sign-in on a work account.** Managed Microsoft 365 tenants can block outside calendar apps outright. If you cannot get an administrator to approve it, the read-only feed below is your fallback.
 

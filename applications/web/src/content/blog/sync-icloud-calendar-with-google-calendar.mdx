@@ -122,7 +122,9 @@ Keeper also looks at a fixed stretch of time — from a week ago to two years ah
 
 ## What goes wrong, and what does it look like?
 
-**The page shows `401 /api/sources/caldav/discover` in red.** That means the password was wrong, shown badly. Keeper's server does say "Invalid credentials", but the dashboard throws away the message and prints the status code. In practice it is one of two things. You pasted your normal Apple password instead of the app-specific one, or the app-specific one has been cancelled.
+**The page says "Invalid credentials".** Apple turned Keeper away. In practice it is one of two things. You pasted your normal Apple password instead of the app-specific one, or the app-specific one has been cancelled.
+
+**The page says "Failed to discover calendars".** That is a different problem, and your password is probably fine. Keeper could not reach Apple at all, so it never got as far as checking. Wait a minute and try again.
 
 **Everything stopped, and Apple gave no warning.** Changing your Apple password cancels every app-specific password. Nothing in iCloud tells you a sync broke — you find out when events stop appearing. Generate a new one and paste it in.
 

@@ -58,7 +58,7 @@ PRIVATE_RESOLUTION_WHITELIST=192.168.1.50,radicale.local,10.0.2.12
 
 Set both on `api` and `cron`, and whitelist the exact host and port you are going to paste into the form. Restart both afterwards.
 
-Skip it and the connection fails with a message about the address being private or reserved. It means exactly what it says.
+Skip it and the connect page says **Failed to discover calendars**, because Keeper refused to make the request at all. It will not tell you that was the reason. The specific message about a private or reserved address only appears in the server logs, so check there before assuming Radicale is at fault.
 
 ## How do you connect Radicale?
 
@@ -151,7 +151,11 @@ Keeper also looks at a fixed stretch of time — from a week ago to two years ah
 
 ## What goes wrong, and what does it look like?
 
-**The page shows `401 /api/sources/caldav/discover` in red.** That is a wrong username or password, shown badly. Keeper's server does say "Invalid credentials", but the dashboard prints the status code instead of the message. On the iCloud side it usually means the normal Apple password was pasted, or the app-specific one has been cancelled.
+**The page says "Invalid credentials".** The server was reached and rejected the sign-in. On the Radicale side, check the username and password against your htpasswd file. On the iCloud side it usually means the normal Apple password was pasted, or the app-specific one has been cancelled.
+
+**The page says "Failed to discover calendars".** This means something different, and it is worth telling apart. Keeper never got a usable answer from that address, so the credentials were never tested. Check the address for a typo and confirm Radicale is running. If you host Keeper yourself, the private-address setting above produces this same message.
+
+**The page says "No calendars found".** Your credentials worked. Keeper reached Radicale and found nothing to import at that address. This is when to try `https://radicale.example.com/username/` with the trailing slash.
 
 **One bad repeating event freezes a whole calendar.** Not one missing event — everything stops updating. Keeper refuses to work through a repeating series that would produce more than 10,000 dates in two years. Today that refusal stops the whole calendar, not just the one series. A calendar going completely silent, rather than losing one event, is the signature. Delete the runaway event and it catches up on its own.
 

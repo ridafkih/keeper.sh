@@ -115,7 +115,11 @@ Keeper also looks at a fixed stretch of time — from a week ago to two years ah
 
 ## What goes wrong, and what does it look like?
 
-**The page shows `401 /api/sources/caldav/discover` in red.** That is a wrong username or password, shown badly. Keeper's server does say "Invalid credentials", but the dashboard throws the status code away before it reads the message. Almost always this is two-factor login. Nextcloud stops accepting your normal password once it is on. Generate an app password and use that instead.
+**The page says "Invalid credentials".** Keeper reached your Nextcloud, and Nextcloud turned it away. Almost always this is two-factor login, which stops your normal password working here. Generate an app password and use that instead. Check the username too, since it is often not your email address.
+
+**The page says "Failed to discover calendars".** This means something different, and it is worth telling apart. Keeper never got a usable answer from the address you gave, so your username and password were never tested. Check the web address for a typo, confirm the server is up, and confirm it can be reached from outside your own network.
+
+**The page says "No calendars found".** Your credentials worked. Keeper just could not find any calendars to import at that address. Try the longer `remote.php/dav/calendars/username/` form instead of the base address.
 
 **One bad repeating event freezes a whole calendar.** Not one missing event — everything stops updating. Keeper refuses to work through a repeating series that would produce more than 10,000 dates in two years. Today that refusal stops the whole calendar, not just the one series. Look for something set to repeat every minute or hour, usually imported from an old calendar. Delete it and the calendar catches up on its own.
 
@@ -156,7 +160,9 @@ BLOCK_PRIVATE_RESOLUTION=true
 PRIVATE_RESOLUTION_WHITELIST=192.168.1.50,nextcloud.local
 ```
 
-Set both on `api` and `cron`, and whitelist the exact form you will paste into the connect form. If you skip it, the connection fails with a message about the address being private or reserved.
+Set both on `api` and `cron`, and whitelist the exact form you will paste into the connect form.
+
+Skip it and the connect page says **Failed to discover calendars**, because Keeper refused to make the request at all. It will not tell you that was the reason. The specific message about a private or reserved address only appears in the server logs.
 
 On hosted keeper.sh you cannot change either. Your Nextcloud has to be reachable from the internet.
 
