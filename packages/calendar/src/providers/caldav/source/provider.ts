@@ -20,7 +20,11 @@ import { resolveAuthMethod } from "../shared/digest-fetch";
 import { parseICalCalendarsToRemoteEvents } from "../shared/ics";
 import { isCalDAVAuthenticationError } from "./auth-error-classification";
 import { createCalDAVSourceService } from "./sync";
-import { getCalDAVSyncWindow } from "./sync-window";
+import {
+  DEFAULT_FUTURE_SYNC_RANGE,
+  DEFAULT_HISTORIC_SYNC_RANGE,
+  getConfigurableSyncWindow,
+} from "../../../core/sync/sync-range";
 import type {
   CalDAVProviderOptions,
   CalDAVSourceAccount,
@@ -30,7 +34,6 @@ import type {
 import { withSourceIngestLock } from "../../../core/source/ingest-lock";
 
 const EMPTY_COUNT = 0;
-const YEARS_UNTIL_FUTURE = 2;
 
 const DEFAULT_CALDAV_OPTIONS: CalDAVProviderOptions = {
   providerId: "caldav",
@@ -61,15 +64,18 @@ const createCalDAVSourceProvider = (
       serverUrl: account.serverUrl,
     });
 
-    const syncWindow = getCalDAVSyncWindow(YEARS_UNTIL_FUTURE);
+    const syncWindow = getConfigurableSyncWindow(
+      DEFAULT_HISTORIC_SYNC_RANGE,
+      DEFAULT_FUTURE_SYNC_RANGE,
+    );
 
     const calendarUrl = await client.resolveCalendarUrl(account.calendarUrl);
 
     const objects = await client.fetchCalendarObjects({
       calendarUrl,
       timeRange: {
-        end: syncWindow.end.toISOString(),
-        start: syncWindow.start.toISOString(),
+        end: syncWindow.timeMax.toISOString(),
+        start: syncWindow.timeMin.toISOString(),
       },
     });
 
@@ -88,7 +94,7 @@ const createCalDAVSourceProvider = (
         continue;
       }
 
-      if (!parsed.recurrenceRule && parsed.endTime < syncWindow.start) {
+      if (!parsed.recurrenceRule && parsed.endTime < syncWindow.timeMin) {
         continue;
       }
 

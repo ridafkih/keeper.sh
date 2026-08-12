@@ -36,9 +36,6 @@ export {
 export {
   OAUTH_SYNC_WINDOW_VERSION,
   getOAuthSyncTokenVersion,
-  getOAuthSyncWindow,
-  getOAuthSyncWindowStart,
-  type OAuthSyncWindow,
 } from "./core/oauth/sync-window";
 export {
   decodeStoredSyncToken,

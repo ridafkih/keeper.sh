@@ -1,5 +1,5 @@
 import type { SourceEvent } from "../types";
-import type { OAuthSyncWindow } from "../oauth/sync-window";
+import type { SyncWindow } from "../sync/sync-range";
 import type { ExistingSourceEventState } from "./event-diff";
 import { buildSourceEventInstanceKey } from "./event-instance";
 import { materializeRecurrenceEvents } from "../events/recurrence-materializer";
@@ -19,7 +19,7 @@ interface SourceSyncTokenAction {
   shouldResetSyncToken: boolean;
 }
 
-const isSourceEventInWindow = (event: SourceEvent, syncWindow: OAuthSyncWindow): boolean => {
+const isSourceEventInWindow = (event: SourceEvent, syncWindow: SyncWindow): boolean => {
   if (!event.recurrenceRule || event.recurrenceId) {
     return event.endTime > syncWindow.timeMin && event.startTime < syncWindow.timeMax;
   }
@@ -57,7 +57,7 @@ const isSourceEventInWindow = (event: SourceEvent, syncWindow: OAuthSyncWindow):
 
 const filterSourceEventsToSyncWindow = (
   events: SourceEvent[],
-  syncWindow: OAuthSyncWindow,
+  syncWindow: SyncWindow,
 ): SourceEventsInWindowResult => {
   const eventsInWindow = events.filter((event) => isSourceEventInWindow(event, syncWindow));
   return {
