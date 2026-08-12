@@ -15,21 +15,21 @@ const LEGACY_0070_COMPATIBILITY: LegacyRecurringStateCompatibility = {
   has_source_event_column: false,
 };
 
-const readLatestMigration = async (): Promise<string> => {
+const readSyncWindowMigration = async (): Promise<string> => {
   const drizzleDirectory = `${import.meta.dirname}/../../drizzle`;
   const journal = await Bun.file(`${drizzleDirectory}/meta/_journal.json`).json() as {
     entries: { idx: number; tag: string }[];
   };
-  const latest = journal.entries.at(-1);
-  if (!latest || latest.idx !== 77) {
-    throw new Error("Expected migration 0077 to be the latest migration");
+  const syncWindowMigration = journal.entries.find(({ idx }) => idx === 77);
+  if (!syncWindowMigration) {
+    throw new Error("Expected the sync-window migration to remain in the journal");
   }
-  return Bun.file(`${drizzleDirectory}/${latest.tag}.sql`).text();
+  return Bun.file(`${drizzleDirectory}/${syncWindowMigration.tag}.sql`).text();
 };
 
 describe("0077 self-hosted upgrade compatibility", () => {
   it("keeps the generated migration additive and compatible with old writers", async () => {
-    const migration = await readLatestMigration();
+    const migration = await readSyncWindowMigration();
 
     expect(migration).toContain('ADD COLUMN "ingestWindowRecordedAt" timestamp');
     expect(migration).toContain('ADD COLUMN "sourceCalendarId" uuid');

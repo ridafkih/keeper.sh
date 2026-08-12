@@ -23,8 +23,8 @@ interface CalDAVSourceFetcher {
 /*
  * Recurring masters are kept regardless of their own start/end: the CalDAV
  * time-range filter already returned their in-window occurrences. Non-recurring
- * events use the exact complement of the ingest prune predicate, so an event on
- * either boundary is never fetched and then immediately pruned.
+ * events use the same overlap test the rest of the pipeline uses, so a boundary
+ * event is treated identically wherever the window is applied.
  */
 const isCalDAVEventInSyncWindow = (
   event: { endTime: Date; recurrenceRule?: unknown; startTime: Date },
