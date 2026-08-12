@@ -1,0 +1,157 @@
+---
+title: "How to Sync Fastmail Calendar with Google Calendar"
+description: "Put your Fastmail events on your Google calendar so nobody books over them. Covers the Fastmail app password, both connection screens, how much detail crosses over, and what never does."
+blurb: "Your dentist appointment is on Fastmail and your meetings are on Google, and neither one knows the other exists. Here is how to fix that in about ten minutes."
+createdAt: "2026-08-11"
+slug: "sync-fastmail-calendar-with-google-calendar"
+updatedAt: "2026-08-11"
+tags:
+  - "fastmail"
+  - "google-calendar"
+  - "sync"
+  - "calendar"
+---
+
+Your dentist appointment lives on Fastmail. Your meetings live on Google Calendar. Neither one knows the other exists.
+
+So a colleague books you at 3pm, and you were already busy at 3pm. Keeper fixes that by copying events from one calendar onto the other.
+
+This guide sets it up start to finish. It also says plainly what never crosses over.
+
+## What will this actually do?
+
+Your Fastmail events appear on your Google calendar. Move one on Fastmail and the copy moves with it. Delete it and the copy goes too.
+
+That is a connection, and it runs in one direction only. Fastmail sending to Google does not mean Google sends back.
+
+Want it both ways? Set up a second connection pointing the other way. The first one carries on unchanged.
+
+## Why won't Fastmail take your normal password?
+
+Fastmail refuses to let outside apps sign in with your account password. That one password reaches your mail, your files, your contacts and your billing.
+
+Instead you generate a separate password just for Keeper. You can delete it on its own later, and your account password keeps working.
+
+1. Sign in to Fastmail and open **Settings**, then **Privacy & Security**.
+2. Find **Connected apps & API tokens** and click **Manage app passwords and access**.
+3. Click **New app password**. Fastmail may ask you to confirm your account password.
+4. Pick a name you will recognise in six months. **Custom...** lets you type "Keeper".
+5. Choose an access option that includes calendars.
+6. Click **Generate password** and copy what appears.
+
+Fastmail's access list currently reads **Mail, Contacts & Calendars** and **Files (WebDAV)**. Choose the first — it is the one covering calendars. If your account offers a narrower calendars-only option instead, take that one, because it hands over less.
+
+Fastmail shows the password once and never again. If you lose it, delete it and generate another.
+
+## How do you connect Fastmail?
+
+Sign in at [keeper.sh](https://keeper.sh/register) and open **Import Calendars** from your dashboard. Choose **Connect Fastmail**.
+
+Two boxes appear:
+
+- **Fastmail Email Address** — the full address you sign in with, domain included
+- **App-Specific Password** — the one you just generated
+
+You are never asked for a server address. Keeper already knows where Fastmail keeps calendars, which is why Fastmail gets its own button rather than the generic one.
+
+Click **Connect**. Keeper finds every calendar on the account and brings them all in at once. Your task lists stay behind.
+
+## How do you connect Google Calendar?
+
+Return to **Import Calendars** and choose **Connect Google Calendar**. Keeper shows what it is about to ask Google for before sending you anywhere:
+
+- See your email address
+- View a list of your calendars
+- View events, summaries and details
+- Add or remove calendar events
+
+Click **Connect** and finish Google's own permission screen. You sign in to Google directly, so Keeper never sees that password.
+
+## Which calendar sends to which?
+
+Connecting an account drops you into a short setup of four screens.
+
+1. **Which calendars would you like to configure?** Tick the ones you care about now. Everything was already brought in.
+2. **Rename Your Calendars.** Fastmail tends to call yours "Calendar" and Google uses your email address. Renaming here changes only what you see inside Keeper.
+3. **Where should 'Calendar' send events?** Pick the calendars that should receive copies.
+4. **Where should 'Calendar' pull events from?** The same question in reverse.
+
+For Fastmail into Google you only need screen three. Choose your Google calendar there and the connection exists.
+
+You can change any of this later. Open a calendar from your dashboard and use **Send Events to Calendars**.
+
+## How much of the event crosses over?
+
+Settle this before you trust it with anything private. Open the calendar in your dashboard and find **Sync Settings**.
+
+Three switches live there: **Sync Event Name**, **Sync Event Description** and **Sync Event Location**.
+
+With **Sync Event Name** off, the copy is titled after the calendar it came from. Your 3pm arrives on Google as a block called "Personal", not "Therapy".
+
+Turn it on and the real title goes through. The **Event Name** box also accepts `{{event_name}}` and `{{calendar_name}}`, so you can word the placeholder yourself.
+
+Below that, **Exclusions** can drop all-day events. Both sections are Pro on keeper.sh and included for everyone on a self-hosted install.
+
+Check these switches on every calendar you connect, rather than assuming what they are set to.
+
+## What does not come across?
+
+Time and text, and little else. None of the following reaches the copy:
+
+- **Guests.** The copy has no attendees, so nobody receives an invitation from it.
+- **Meeting links.** Google Meet, Teams and Zoom joins are not carried over.
+- **Alerts.** Reminders do not travel, so Google applies its own defaults instead.
+- **Colours, attachments and categories.** None of these are copied.
+
+What does travel: the title, description, location, start and end, the time zone, whether it repeats, and whether it shows you as busy or free.
+
+Keeper does read the guest list on your own calendars, separately from all this. That is what powers its pending-invite list and lets you RSVP. It is never written into a copied event.
+
+## How quickly do changes show up?
+
+Keeper reads both calendars every minute, on every plan. That half never slows down.
+
+Writing the change onto the other calendar is the part that differs. Free does that every 30 minutes. Pro does it every minute.
+
+If you are blocking out evenings so work sees you as busy, 30 minutes is invisible. If people book you through a scheduling link, half an hour is long enough to get double-booked. Pay for the speed only if you will notice it.
+
+## How far ahead does it look?
+
+Keeper covers a week back to two years ahead. A one-off booking further out than that is not copied until it drifts into range.
+
+Repeating events get more room. A weekly series that began years ago still has its upcoming occurrences copied.
+
+## Why isn't it working?
+
+**Connecting Fastmail fails with a short error mentioning 401.** Fastmail rejected the password. Either your account password went in instead of the app password, or that app password does not cover calendars.
+
+**Keeper says "No calendars found".** It reached Fastmail but saw nothing it could use. An app password limited to **Files (WebDAV)** produces exactly this.
+
+**Events arrive on Google titled after the calendar.** That is **Sync Event Name** switched off. Turn it on under **Sync Settings**.
+
+**Changes you make in Google never reach Fastmail.** You built one connection and it points one way. Add a second going back.
+
+**An entire calendar stops updating, not just one event.** Usually a repeating event with a runaway rule. Keeper will not expand a series past ten thousand occurrences inside its two-year window, and hitting that stops the calendar it belongs to. Look for something set to repeat every minute, often imported from elsewhere.
+
+## What does the free plan cover?
+
+Two calendar accounts and three connections.
+
+Fastmail counts as one account however many calendars it holds, and Google is the second. So this pairing uses your account allowance exactly, and adding iCloud later means upgrading.
+
+Nothing caps the calendars inside an account. Ten Fastmail calendars still count as one.
+
+Three connections covers Fastmail to Google, Google back to Fastmail, and one spare.
+
+## Would you rather run it yourself?
+
+Keeper is open source under AGPL-3.0, and self-hosting is a genuine option rather than a cut-down one. Every Pro feature comes with it: one-minute updates, unlimited accounts, unlimited connections, **Sync Settings** and **Exclusions**.
+
+It is more work, and you should know how much before starting:
+
+- A server, a domain and a certificate
+- Docker and Docker Compose, alongside Postgres and Redis
+- Your own Google OAuth client, because Google issues credentials per application. Fastmail needs nothing of the sort — a username and a password is the whole story.
+- Backups, updates, and being the person who gets paged when it stops at 2am
+
+The [README](https://github.com/ridafkih/keeper.sh) covers a single-container setup and a full Compose file. If that reads like a decent evening, self-host it. If it reads like a chore, [keeper.sh](https://keeper.sh/register) does the same job and funds the project.
