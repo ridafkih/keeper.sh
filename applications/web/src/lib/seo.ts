@@ -3,7 +3,12 @@ const SITE_NAME = "Keeper.sh";
 const DEFAULT_IMAGE_PATH = "/open-graph.png";
 
 export function canonicalUrl(path: string): string {
-  return `${SITE_URL}${path}`;
+  return `${SITE_URL}/${path.replace(/^\/+/, "")}`;
+}
+
+function entityId(path: string, fragment: string): string {
+  const url = canonicalUrl(path);
+  return `${url.endsWith("/") ? url : `${url}/`}#${fragment}`;
 }
 
 export function jsonLdScript(data: Record<string, unknown>) {
@@ -92,7 +97,7 @@ export function webPageSchema(name: string, description: string, path: string) {
   return {
     "@context": "https://schema.org",
     "@type": "WebPage",
-    "@id": `${canonicalUrl(path)}/#webpage`,
+    "@id": entityId(path, "webpage"),
     name,
     description,
     url: canonicalUrl(path),
@@ -168,7 +173,7 @@ export function collectionPageSchema(posts: Array<{ slug: string; metadata: { ti
   return {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
-    "@id": `${SITE_URL}/blog/#collectionpage`,
+    "@id": entityId("/blog", "collectionpage"),
     name: "Blog",
     url: canonicalUrl("/blog"),
     isPartOf: { "@id": `${SITE_URL}/#website` },
@@ -205,7 +210,7 @@ export function blogPostingSchema(post: {
   return {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
-    "@id": `${url}/#blogposting`,
+    "@id": entityId(`/blog/${post.slug}`, "blogposting"),
     headline: post.title,
     description: post.description,
     image: canonicalUrl(post.imagePath ?? DEFAULT_IMAGE_PATH),
