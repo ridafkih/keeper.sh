@@ -1,7 +1,17 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import { createDAVClient } from "tsdav";
+import { createDAVClient, DAVNamespaceShort } from "tsdav";
+import { chunkArray } from "../../../core/utils/chunk";
 import { createSafeFetch } from "../../../utils/safe-fetch";
 import { createDigestAwareFetch } from "./digest-fetch";
+import {
+  buildCalendarObjectFilters,
+  CALDAV_MULTIGET_BATCH_SIZE,
+  CalDAVIncompleteMultiGetError,
+  findMissingHrefs,
+  hasCalendarData,
+  orderCalendarObjectsByHref,
+  toCalendarObjectPathnames,
+} from "./multiget";
 import type { CalDAVAuthMethod } from "./digest-fetch";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import type { CalDAVClientConfig, CalendarInfo } from "../types";
@@ -207,10 +217,47 @@ class CalDAVClient {
     return this.mapAuthenticationFailure(async () => {
       const client = await this.getClient();
 
-      return client.fetchCalendarObjects({
-        calendar: { url: params.calendarUrl },
-        ...(params.timeRange && { timeRange: params.timeRange }),
+      const queryResponses = await client.calendarQuery({
+        depth: "1",
+        filters: buildCalendarObjectFilters(params.timeRange),
+        props: { [`${DAVNamespaceShort.DAV}:getetag`]: {} },
+        url: params.calendarUrl,
       });
+
+      const requestedPathnames = toCalendarObjectPathnames(queryResponses, params.calendarUrl);
+      if (requestedPathnames.length === 0) {
+        return [];
+      }
+
+      const batches = chunkArray(requestedPathnames, CALDAV_MULTIGET_BATCH_SIZE);
+      const returnedObjects: CalendarObject[] = [];
+
+      for (const batch of batches) {
+        const objects = await client.fetchCalendarObjects({
+          calendar: { url: params.calendarUrl },
+          objectUrls: batch,
+        });
+        returnedObjects.push(...objects.filter((object) => hasCalendarData(object)));
+      }
+
+      const orderedObjects = orderCalendarObjectsByHref(
+        requestedPathnames,
+        returnedObjects,
+        params.calendarUrl,
+      );
+      const missingHrefs = findMissingHrefs(requestedPathnames, returnedObjects, params.calendarUrl);
+
+      if (missingHrefs.length > 0) {
+        throw new CalDAVIncompleteMultiGetError({
+          batchCount: batches.length,
+          calendarUrl: params.calendarUrl,
+          hrefsRequested: requestedPathnames.length,
+          missingHrefs,
+          objectsReturned: orderedObjects.length,
+        });
+      }
+
+      return orderedObjects;
     });
   }
 
@@ -236,5 +283,6 @@ export {
   CalDAVClient,
   CalDAVCreateConflictError,
   CalDAVHttpError,
+  CalDAVIncompleteMultiGetError,
   createCalDAVClient,
 };
