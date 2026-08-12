@@ -2,24 +2,46 @@ import { HTTP_STATUS } from "@keeper.sh/constants";
 import { createDAVClient, DAVNamespaceShort } from "tsdav";
 import { chunkArray } from "../../../core/utils/chunk";
 import { createSafeFetch } from "../../../utils/safe-fetch";
+import { buildCalendarObjectFilters, CALDAV_MULTIGET_BATCH_SIZE } from "./api";
 import { createDigestAwareFetch } from "./digest-fetch";
-import {
-  buildCalendarObjectFilters,
-  CALDAV_MULTIGET_BATCH_SIZE,
-  CalDAVIncompleteMultiGetError,
-  findMissingHrefs,
-  hasCalendarData,
-  orderCalendarObjectsByHref,
-  toCalendarObjectPathnames,
-} from "./multiget";
 import type { CalDAVAuthMethod } from "./digest-fetch";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import type { CalDAVClientConfig, CalendarInfo } from "../types";
+
+const MISSING_HREF_SAMPLE_SIZE = 5;
 
 interface CalendarObject {
   url: string;
   etag?: string;
   data?: string;
+}
+
+interface CalDAVIncompleteMultiGetDetails {
+  batchCount: number;
+  calendarUrl: string;
+  hrefsRequested: number;
+  missingHrefs: string[];
+  objectsReturned: number;
+}
+
+class CalDAVIncompleteMultiGetError extends Error {
+  readonly batchCount: number;
+  readonly calendarUrl: string;
+  readonly hrefsRequested: number;
+  readonly missingHrefs: string[];
+  readonly objectsReturned: number;
+
+  constructor(details: CalDAVIncompleteMultiGetDetails) {
+    super(
+      `CalDAV multiget returned ${details.objectsReturned} of ${details.hrefsRequested} requested objects for ${details.calendarUrl}`,
+    );
+    this.name = "CalDAVIncompleteMultiGetError";
+    this.batchCount = details.batchCount;
+    this.calendarUrl = details.calendarUrl;
+    this.hrefsRequested = details.hrefsRequested;
+    this.missingHrefs = details.missingHrefs.slice(0, MISSING_HREF_SAMPLE_SIZE);
+    this.objectsReturned = details.objectsReturned;
+  }
 }
 
 type CalDAVWriteOperation = "create" | "delete";
@@ -74,6 +96,17 @@ const getDisplayName = (name: unknown): string => {
   }
   return "Unnamed Calendar";
 };
+
+const toCalendarObjectPath = (href: string, calendarUrl: string): string =>
+  new URL(href, calendarUrl).pathname;
+
+const toRequestedPaths = (responses: { href?: string }[], calendarUrl: string): string[] => [
+  ...new Set(
+    responses
+      .map(({ href }) => toCalendarObjectPath(href ?? "", calendarUrl))
+      .filter((path) => path.includes(".ics")),
+  ),
+];
 
 class CalDAVClient {
   private client: DAVClientInstance | null = null;
@@ -224,40 +257,48 @@ class CalDAVClient {
         url: params.calendarUrl,
       });
 
-      const requestedPathnames = toCalendarObjectPathnames(queryResponses, params.calendarUrl);
-      if (requestedPathnames.length === 0) {
+      const requestedPaths = toRequestedPaths(queryResponses, params.calendarUrl);
+      if (requestedPaths.length === 0) {
         return [];
       }
 
-      const batches = chunkArray(requestedPathnames, CALDAV_MULTIGET_BATCH_SIZE);
-      const returnedObjects: CalendarObject[] = [];
+      const batches = chunkArray(requestedPaths, CALDAV_MULTIGET_BATCH_SIZE);
+      const batchResults: CalendarObject[][] = [];
 
-      for (const batch of batches) {
+      for (const objectUrls of batches) {
         const objects = await client.fetchCalendarObjects({
           calendar: { url: params.calendarUrl },
-          objectUrls: batch,
+          objectUrls,
         });
-        returnedObjects.push(...objects.filter((object) => hasCalendarData(object)));
+        batchResults.push(
+          objects.filter((object): object is CalendarObject => typeof object.data === "string"),
+        );
       }
 
-      const orderedObjects = orderCalendarObjectsByHref(
-        requestedPathnames,
-        returnedObjects,
-        params.calendarUrl,
+      const objectsByPath = new Map(
+        batchResults
+          .flat()
+          .map((object) => [toCalendarObjectPath(object.url, params.calendarUrl), object]),
       );
-      const missingHrefs = findMissingHrefs(requestedPathnames, returnedObjects, params.calendarUrl);
 
+      const missingHrefs = requestedPaths.filter((path) => !objectsByPath.has(path));
       if (missingHrefs.length > 0) {
         throw new CalDAVIncompleteMultiGetError({
           batchCount: batches.length,
           calendarUrl: params.calendarUrl,
-          hrefsRequested: requestedPathnames.length,
+          hrefsRequested: requestedPaths.length,
           missingHrefs,
-          objectsReturned: orderedObjects.length,
+          objectsReturned: requestedPaths.length - missingHrefs.length,
         });
       }
 
-      return orderedObjects;
+      return requestedPaths.flatMap((path) => {
+        const object = objectsByPath.get(path);
+        if (!object) {
+          return [];
+        }
+        return [object];
+      });
     });
   }
 
