@@ -1,5 +1,7 @@
 const CALDAV_MULTIGET_BATCH_SIZE = 250;
 
+const isCalendarObjectPath = (path: string): boolean => path.includes(".ics");
+
 const toCalDAVTimestamp = (value: string): string =>
   `${new Date(value).toISOString().slice(0, 19).replaceAll(/[-:.]/gu, "")}Z`;
 
@@ -22,4 +24,4 @@ const buildCalendarObjectFilters = (timeRange?: { start: string; end: string }):
   },
 ];
 
-export { buildCalendarObjectFilters, CALDAV_MULTIGET_BATCH_SIZE };
+export { buildCalendarObjectFilters, CALDAV_MULTIGET_BATCH_SIZE, isCalendarObjectPath };

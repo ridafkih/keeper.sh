@@ -184,6 +184,17 @@ describe("CalDAVClient.fetchCalendarObjects on healthy calendars", () => {
     expect(requestedBatches()).toEqual([[path]]);
   });
 
+  it("supplies its own url filter so tsdav cannot drop a requested path", async () => {
+    answerQueryWith([objectPath(0)]);
+
+    await fetchObjects();
+
+    const { urlFilter } = davMocks.fetchCalendarObjects.mock.calls[0]?.[0] ?? {};
+    expect(urlFilter?.(`${SERVER_URL}${objectPath(0)}`)).toBe(true);
+    expect(urlFilter?.(`${SERVER_URL}${CALENDAR_PATH}notes.txt`)).toBe(false);
+    expect(urlFilter?.(`https://cal.ics.example.com${CALENDAR_PATH}notes.txt`)).toBe(false);
+  });
+
   it("matches a percent-encoded requested href against a decoded response href", async () => {
     answerQueryWith([`${CALENDAR_PATH}a%20b.ics`, `${CALENDAR_PATH}c d.ics`]);
     answerMultigetWith(() => [

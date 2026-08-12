@@ -2,7 +2,11 @@ import { HTTP_STATUS } from "@keeper.sh/constants";
 import { createDAVClient, DAVNamespaceShort } from "tsdav";
 import { chunkArray } from "../../../core/utils/chunk";
 import { createSafeFetch } from "../../../utils/safe-fetch";
-import { buildCalendarObjectFilters, CALDAV_MULTIGET_BATCH_SIZE } from "./api";
+import {
+  buildCalendarObjectFilters,
+  CALDAV_MULTIGET_BATCH_SIZE,
+  isCalendarObjectPath,
+} from "./api";
 import { createDigestAwareFetch } from "./digest-fetch";
 import type { CalDAVAuthMethod } from "./digest-fetch";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
@@ -104,7 +108,7 @@ const toRequestedPaths = (responses: { href?: string }[], calendarUrl: string): 
   ...new Set(
     responses
       .map(({ href }) => toCalendarObjectPath(href ?? "", calendarUrl))
-      .filter((path) => path.includes(".ics")),
+      .filter((path) => isCalendarObjectPath(path)),
   ),
 ];
 
@@ -269,6 +273,7 @@ class CalDAVClient {
         const objects = await client.fetchCalendarObjects({
           calendar: { url: params.calendarUrl },
           objectUrls,
+          urlFilter: (url) => isCalendarObjectPath(toCalendarObjectPath(url, params.calendarUrl)),
         });
         batchResults.push(
           objects.filter((object): object is CalendarObject => typeof object.data === "string"),
