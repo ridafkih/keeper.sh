@@ -157,7 +157,7 @@ const outlookEventSchema = type({
   "originalStartTimeZone?": "string",
   "showAs?": "string",
   "start?": { "dateTime?": "string", "timeZone?": "string" },
-  "subject?": "string",
+  "subject?": "string | null",
   "seriesMasterId?": "string | null",
   "type?": "string",
 });
@@ -173,7 +173,7 @@ type OutlookEventList = typeof outlookEventListSchema.infer;
 const outlookCalendarViewEventSchema = type({
   "id?": "string",
   "iCalUId?": "string | null",
-  "subject?": "string",
+  "subject?": "string | null",
   "bodyPreview?": "string",
   "location?": { "displayName?": "string" },
   "start?": { "dateTime?": "string", "timeZone?": "string" },

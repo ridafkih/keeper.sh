@@ -200,4 +200,34 @@ describe("createOutlookSyncProvider", () => {
       startTime: new Date("2026-03-08T00:00:00.000Z"),
     });
   });
+
+  it("reads a remote calendar containing an event with a null subject", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({
+      value: [
+        {
+          categories: [KEEPER_CATEGORY],
+          end: { dateTime: "2026-03-08T19:00:00.0000000", timeZone: "UTC" },
+          iCalUId: "titled-uid",
+          id: "titled-id",
+          start: { dateTime: "2026-03-08T18:00:00.0000000", timeZone: "UTC" },
+          subject: "Titled",
+        },
+        {
+          categories: [KEEPER_CATEGORY],
+          end: { dateTime: "2026-03-09T19:00:00.0000000", timeZone: "UTC" },
+          iCalUId: "untitled-uid",
+          id: "untitled-id",
+          start: { dateTime: "2026-03-09T18:00:00.0000000", timeZone: "UTC" },
+          subject: null,
+        },
+      ],
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const events = await createProvider().listRemoteEvents({
+      timeMin: new Date("2026-03-01T00:00:00.000Z"),
+    });
+
+    expect(events.map((event) => event.uid)).toEqual(["titled-uid", "untitled-uid"]);
+  });
 });

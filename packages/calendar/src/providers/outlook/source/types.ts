@@ -30,7 +30,7 @@ interface OutlookCalendarEvent {
   categories?: string[];
   isAllDay?: boolean;
   isCancelled?: boolean;
-  subject?: string;
+  subject?: string | null;
   body?: { contentType?: string; content?: string } | null;
   location?: { displayName?: string };
   showAs?: string;

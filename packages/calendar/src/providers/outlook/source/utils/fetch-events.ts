@@ -536,7 +536,7 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
         event.originalStartTimeZone,
         start.timeZone,
       ),
-      title: event.subject,
+      ...event.subject && { title: event.subject },
       uid: event.iCalUId,
     });
   }
