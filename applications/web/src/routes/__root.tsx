@@ -9,6 +9,7 @@ import { fetcher, HttpError } from "@/lib/fetcher";
 import { resolveErrorMessage } from "@/utils/errors";
 import type { AppRouterContext, ViteScript } from "@/lib/router-context";
 import { serializePublicRuntimeConfig } from "@/lib/runtime-config";
+import { clientStateScript } from "@/lib/client-state-script";
 import { AnalyticsScripts } from "@/components/analytics-scripts";
 
 const NON_RETRYABLE_STATUSES = new Set([401, 403, 404]);
@@ -71,6 +72,7 @@ function RootComponent() {
             __html: `window.__KEEPER_RUNTIME_CONFIG__ = ${serializePublicRuntimeConfig(runtimeConfig)};`,
           }}
         />
+        <script dangerouslySetInnerHTML={{ __html: clientStateScript }} />
         {viteAssets?.inlineStyles?.map((css, index) => (
           <style key={index} dangerouslySetInnerHTML={{ __html: css }} />
         ))}
