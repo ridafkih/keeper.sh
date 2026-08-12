@@ -1,6 +1,6 @@
 import type { PropsWithChildren } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Heading1, Heading2, Heading3 } from "@/components/ui/primitives/heading";
+import { Heading1, Heading2 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
 import { ButtonIcon, ButtonText, ExternalLinkButton, LinkButton } from "@/components/ui/primitives/button";
 import { MarketingCtaCard, MarketingCtaSection } from "@/features/marketing/components/marketing-cta";
@@ -11,45 +11,6 @@ import ArrowUpRightIcon from "lucide-react/dist/esm/icons/arrow-up-right";
 
 const PAGE_DESCRIPTION =
   "Two-way calendar sync for Google Calendar, Outlook, iCloud, Fastmail, and CalDAV, plus read-only ICS feeds, an anonymized iCal feed, a REST API, and an MCP server.";
-
-type ProviderSupport = {
-  name: string;
-  role: string;
-  detail: string;
-};
-
-const PROVIDER_SUPPORT: ProviderSupport[] = [
-  {
-    name: "Google Calendar",
-    role: "Source and destination",
-    detail: "Connected over OAuth. Pulls incrementally using sync tokens.",
-  },
-  {
-    name: "Microsoft Outlook",
-    role: "Source and destination",
-    detail: "Connected over OAuth. Pulls incrementally using delta links.",
-  },
-  {
-    name: "Apple iCloud",
-    role: "Source and destination",
-    detail: "Connected with an app-specific password over CalDAV.",
-  },
-  {
-    name: "Fastmail",
-    role: "Source and destination",
-    detail: "Connected with an app password over CalDAV.",
-  },
-  {
-    name: "CalDAV",
-    role: "Source and destination",
-    detail: "Any CalDAV server, authenticated with a username and password.",
-  },
-  {
-    name: "ICS / iCal links",
-    role: "Source only",
-    detail: "Any publicly reachable feed. ICS cannot be written to, so it is never a destination.",
-  },
-];
 
 type FeatureSection = {
   title: string;
@@ -135,25 +96,6 @@ function FeaturesPage() {
       </header>
 
       <div className="flex flex-col gap-8">
-        <Section title="Supported providers">
-          <Text size="sm">
-            Five providers are supported directly, and each one can act as both a source and a destination. ICS feeds
-            are read-only by nature, so they can only be a source.
-          </Text>
-          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 list-none">
-            {PROVIDER_SUPPORT.map((provider) => (
-              <li
-                key={provider.name}
-                className="flex flex-col gap-1 rounded-2xl border border-interactive-border bg-background p-4 shadow-xs"
-              >
-                <Heading3 as="h3">{provider.name}</Heading3>
-                <Text size="xs" tone="default">{provider.role}</Text>
-                <Text size="sm" tone="muted">{provider.detail}</Text>
-              </li>
-            ))}
-          </ul>
-        </Section>
-
         {FEATURE_SECTIONS.map((section) => (
           <Section key={section.title} title={section.title}>
             {section.body.map((paragraph) => (
