@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  BACKGROUND_HOLDER_PREFIX,
   createSyncLock,
   LOCK_PREFIX,
   LOCK_RENEW_INTERVAL_MS,
@@ -72,14 +73,31 @@ const createMockRedis = () => {
     return Promise.resolve(0);
   };
 
+  const isCurrent = (args: string[]): Promise<unknown> => {
+    const [lockKey = "", waiterKey = "", invalidationKey = "", holderId = ""] = args;
+    if (store.get(lockKey) !== holderId || store.has(invalidationKey)) {
+      return Promise.resolve(0);
+    }
+    const waiters = lists.get(waiterKey) ?? [];
+    const preempted = waiters.some((waiter) =>
+      waiter !== holderId && !waiter.startsWith(BACKGROUND_HOLDER_PREFIX));
+    if (preempted) {
+      return Promise.resolve(0);
+    }
+    return Promise.resolve(1);
+  };
+
   const evalImpl = (
-    _script: string,
+    script: string,
     keyCount: number,
     ...args: string[]
   ): Promise<unknown> => {
     const failure = pendingFailures.shift();
     if (failure) {
       return Promise.reject(failure);
+    }
+    if (script.includes("LRANGE")) {
+      return isCurrent(args);
     }
     if (keyCount === 4) {
       return acquireOrSignal(args);
