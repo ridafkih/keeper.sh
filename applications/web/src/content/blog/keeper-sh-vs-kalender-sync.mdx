@@ -1,0 +1,176 @@
+---
+title: "Keeper.sh vs Kalender Sync"
+description: "An honest comparison of Keeper.sh and Kalender Sync for calendar sync, covering the AVV and EU contracting entity, the Sharings feature, German email providers, update speed, pricing, open source and self-hosting."
+blurb: "Kalender Sync signs an AVV with a named German company and we do not. They also share your availability into someone else's calendar, which we cannot do at all."
+createdAt: "2026-08-11"
+slug: "keeper-sh-vs-kalender-sync"
+updatedAt: "2026-08-11"
+tags:
+  - "calendar"
+  - "sync"
+  - "comparison"
+---
+
+Kalender Sync is a calendar syncing product from Munich. Keeper.sh does the same core job from an open-source codebase. Both keep your busy time aligned across calendars.
+
+They wrote a comparison of us first, and it was accurate and fair. It also landed one criticism we cannot argue with, so that goes near the top.
+
+## Can your legal team approve it?
+
+Kalender Sync, and it is not close.
+
+They publish an AVV, the German data processing agreement required under Article 28 of the GDPR. Their page for IT administrators offers "einen signierten AVV nach Art. 28 DSGVO" as a pre-filled PDF.
+
+It is included with their Business plan and available on request otherwise. You ask for it through their contact form.
+
+The contracting party is named and it is European. Their Impressum lists PPJ Venture Labs UG (haftungsbeschränkt), Hohenzollernstraße 30, Munich, registered as HRB 308771 at the Amtsgericht München.
+
+Keeper.sh does not publish a DPA, and does not offer a named EU contracting entity for the hosted service. Their comparison page says exactly that, and they are right.
+
+If your employer requires a signed agreement before you connect a work calendar, we fail that check outright. Kalender Sync passes it. That is the single clearest reason to pick them.
+
+They also state where the data sits: "Alle Datenbanken laufen bei Hetzner Online GmbH in Falkenstein (Sachsen)", with tokens encrypted using ChaCha20-Poly1305. They note their marketing site runs on Netlify in the United States, and they disclose that rather than glossing over it.
+
+## Can you push your availability to someone else?
+
+Kalender Sync can. Keeper.sh cannot do this at all.
+
+They call it Sharings. You create one for another person, and their site describes it as: "erstelle ein Sharing für jemand anderen. Die Person wird eingeladen, fügt es ihrem Kalender hinzu, und ab da läuft alles automatisch synchron." The other person is invited, adds it, and your blocks keep appearing in their calendar.
+
+You choose how much they see. There are three visibility levels, from availability only, through title and time, up to full details.
+
+Keeper.sh only connects calendars you own. If you want your assistant, your partner or a colleague to see your busy time inside their own calendar, we have nothing for that. Their free plan includes one Sharing.
+
+## Which calendars does each one connect?
+
+Kalender Sync's integrations page lists Google Calendar, Microsoft Outlook, Apple iCloud, Infomaniak kSuite, GMX, WEB.DE, mailbox.org, and read-only iCal feeds. They list Fastmail, Proton Calendar, Yahoo, Nextcloud and Posteo as planned rather than live.
+
+That GMX, WEB.DE and mailbox.org coverage is deliberate and useful. Those are common German consumer mailboxes, and most sync tools ignore them.
+
+Keeper.sh supports Google, Outlook, iCloud, Fastmail, and any CalDAV server you can give us an address for. Because GMX, WEB.DE and mailbox.org all speak CalDAV, you can connect them to Keeper.sh too, by entering the server details yourself rather than picking a logo.
+
+We also read iCal and ICS links, and like them, cannot write back to those.
+
+So they have Fastmail on a roadmap where we have it shipped, and we have an open CalDAV field where they have a curated list. Curated is friendlier. Open covers more.
+
+## Which one updates faster?
+
+Kalender Sync, for Google and Microsoft calendars.
+
+Google and Microsoft can notify a tool the instant an event changes, instead of the tool asking. Kalender Sync subscribes to those notifications on paid plans and markets it as "Echtzeit per Webhook". Their documentation is more precise, describing it as "nahezu sofort", nearly instant, and applying it to Google and Microsoft only.
+
+For their CalDAV-based providers, including iCloud, GMX, WEB.DE and mailbox.org, the same documentation says those are checked "alle 5 Minuten". Their free plan runs on a 30-minute interval and is limited to Google and Outlook.
+
+Keeper.sh asks on a timer for everything. We read every calendar every minute, on every plan including Free. We write copies out every 30 minutes on Free, and every minute on Pro.
+
+So for a Google calendar on a paid plan, they are faster than us. For an iCloud or mailbox.org calendar, we read every minute against their five, and our Pro plan is competitive. Neither of us publishes a latency figure in seconds.
+
+## What does each one cost?
+
+| | Keeper.sh | Kalender Sync |
+| --- | --- | --- |
+| Free plan | 2 accounts, 3 connections, per-minute reads | 2 accounts, 1 Sharing, Google and Outlook, 30-minute interval |
+| Entry paid plan | $5/month, unlimited connections | €4/month, 5 accounts, 5 syncs, 5 Sharings |
+| Higher paid plan | None | €10/month, unlimited accounts, syncs and Sharings |
+| Team plan | None | Custom, from 5 users |
+| Yearly option | Not offered | €40 and €100 per year |
+
+Their Basic plan is €4 a month, with 5 accounts, 5 syncs and 5 Sharings, or €40 a year. Business is €10 a month for unlimited accounts, syncs and Sharings, or €100 a year. All plans come with a 14-day trial of Business features and no card.
+
+Keeper.sh Pro is $5 a month with no limit on connections or accounts.
+
+At the entry tier the prices are close enough not to matter. Above five connections, we are cheaper than their Business plan. Below that, they are competitive and they include Sharings, which we do not have at any price.
+
+## What if you are buying for a company?
+
+Kalender Sync has a Team plan and we have nothing equivalent.
+
+Their pricing page lists central management of employee accounts and "SSO mit Entra ID & Google Workspace". It adds organisation-wide sync and visibility policies, plus immediate offboarding when someone leaves.
+
+The same tier covers invoiced billing and "AVV, Audit-Log, Priority-Support & persönliches Onboarding". It is quote-based from five users.
+
+Keeper.sh has no single sign-on, no admin console, no audit log and no invoicing. Keeper.sh is a tool for one person. If you are buying for a team, they built for you and we did not.
+
+## Where is Keeper.sh genuinely better?
+
+**It is open source.** Keeper.sh is AGPL-3.0 and the whole sync engine is on GitHub. Their comparison page notes this favourably.
+
+**You can run it yourself, with everything unlocked.** More below.
+
+**Every CalDAV server, not a list.** Covered above.
+
+**An API and an agent connector on the free plan.** Keeper.sh has a REST API with scoped access tokens, and an MCP server with 11 tools. An assistant can list calendars, read events, and also create, edit, delete and RSVP. Both are free, capped at 25 requests a day, and uncapped on Pro.
+
+**One feed for every calendar.** Keeper.sh gives you a single private iCal link that merges everything you have connected, readable by anything that takes a calendar feed.
+
+**Per-minute reads on the free plan.** Their free tier checks every 30 minutes and covers two providers.
+
+## One small correction
+
+Their comparison describes Keeper.sh Free as a 30-minute sync. That is right about half of the job, so it is worth splitting apart.
+
+We read your calendars every minute on every plan, including Free. The 30 minutes is how often the free plan writes the copies out. On Pro, both halves run every minute.
+
+Everything else on their page matches what we ship, including the self-hosting description and the note that our field-by-field privacy controls are more configuration work than their three visibility levels. Both of those are fair.
+
+## What Keeper.sh does not do
+
+**No signed AVV and no EU contracting entity**, as above. This is the big one.
+
+**No sharing into another person's calendar.** Also above.
+
+**One direction per connection.** Every connection in Keeper.sh runs one way. Mirroring two calendars means building two connections rather than flipping a switch.
+
+**Attendees, meeting links and reminders do not come across.** A copied block carries its time, and its details if you share them. Guests, the Meet or Teams link, and alerts stay on the original. We do read attendees for invitations you receive, so you can answer them.
+
+**Privacy settings depend on how you added the calendar.** Keeper.sh can replace titles, descriptions and locations with something generic. Whether that starts switched on depends on which screen you used, which is an inconsistency we are fixing. Check the setting rather than assuming it.
+
+**English only.** Their product and site are in German.
+
+## Running Keeper.sh yourself
+
+Self-hosting is where Keeper.sh answers the data question in its own way. Every Pro feature turns on automatically on your own instance, including per-minute writes and the uncapped API.
+
+It also changes the compliance conversation. If you run Keeper.sh on your own server, there is no processor to sign an agreement with, because nobody else is in the path. For some organisations that is a better answer than a DPA, and for others it is not acceptable at all.
+
+It is real work and their comparison page describes the effort accurately. You need Docker and Docker Compose, Postgres, Redis and a domain. You also register your own Google and Microsoft applications, which is the fiddliest step.
+
+Most people should use hosted keeper.sh at $5 a month. Self-hosting is there when you need it, and the [repository](https://github.com/ridafkih/keeper.sh) has the full guide.
+
+## FAQ
+
+### Which should I choose?
+
+Choose Kalender Sync if you need a signed AVV or an EU contracting party. It also wins if you share availability with other people, buy for a team, or want the product in German.
+
+Choose Keeper.sh if you want open source and self-hosting, need CalDAV or Fastmail, or want an API and agent access.
+
+### Can Keeper.sh connect GMX, WEB.DE or mailbox.org?
+
+Yes, through our CalDAV option. You enter the server address and credentials yourself instead of choosing a preset.
+
+### Does Keeper.sh have anything like Sharings?
+
+Not really. Our public iCal feed lets you hand someone a read-only link, but it does not push events into their calendar. It also covers all your calendars at once rather than a chosen slice.
+
+### Is Kalender Sync's article about Keeper.sh accurate?
+
+Yes, and it is generous in places. The one thing we would sharpen is the sync frequency, covered above.
+
+### Can I try both?
+
+Yes. Keeper.sh has a free plan that does not expire. Kalender Sync has a free plan and a 14-day trial of Business features without a card.
+
+## Sources
+
+Everything above about Kalender Sync comes from their own public pages, checked on the date this post was published. Quotes are in the original German:
+
+- [kalender-sync.de/preise](https://kalender-sync.de/preise/) — plans, prices and the Team tier
+- [kalender-sync.de/integrationen](https://kalender-sync.de/integrationen/) — supported and planned providers
+- [kalender-sync.de/it-admin](https://kalender-sync.de/it-admin/) — the AVV, hosting and encryption
+- [kalender-sync.de/impressum](https://kalender-sync.de/impressum/) — company details
+- [docs.kalender-sync.de/sync/how-it-works](https://docs.kalender-sync.de/sync/how-it-works/) — update intervals
+- [docs.kalender-sync.de/sharings/self-sync](https://docs.kalender-sync.de/sharings/self-sync/) — Sharings and Self-Sync
+- [kalender-sync.de/vergleich/keeper](https://kalender-sync.de/vergleich/keeper/) — their comparison with us
+
+Prices and features change. If something here is out of date, their page wins, and we would appreciate you [telling us](https://github.com/ridafkih/keeper.sh/issues).
