@@ -54,6 +54,12 @@ interface KeeperEvent {
   title: string | null;
   description: string | null;
   location: string | null;
+  /**
+   * RSVP status of the calendar owner (self attendee) for synced events:
+   * "accepted" | "declined" | "tentative" | "needsAction". Null for
+   * user-created events and events without a self attendee.
+   */
+  responseStatus: string | null;
   calendarId: string;
   calendarName: string;
   calendarProvider: string;

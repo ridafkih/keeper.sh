@@ -28,6 +28,7 @@ const master: SyncedEventOwner = {
   location: "Location",
   recurrenceId: null,
   recurrenceRule: JSON.stringify({ count: 3, frequency: "WEEKLY" }),
+  responseStatus: null,
   sourceEventUid: "series-1",
   startTime: new Date("2026-03-02T10:00:00.000Z"),
   startTimeZone: "Etc/UTC",
@@ -175,6 +176,7 @@ describe("resolveEventReadModel", () => {
       eventStateId: null,
       id: USER_EVENT_ID,
       location: null,
+      responseStatus: null,
       startTime: "2026-03-02T10:00:00.000Z",
       title: "User event",
     };

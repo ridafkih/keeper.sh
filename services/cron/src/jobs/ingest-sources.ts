@@ -384,6 +384,20 @@ const ingestOAuthSources = async (): Promise<{ added: number; removed: number; e
               await resetIngestBackoff(source.calendarId);
             }
 
+            // A successful authenticated OAuth pull proves the account's token is
+            // healthy, so clear any stale account-level reauth latch. Nothing else
+            // resets calendar_accounts.needsReauthentication on success, so without
+            // this it stays TRUE forever once tripped (MA-423 stale-latch bug).
+            await database
+              .update(calendarAccountsTable)
+              .set({ needsReauthentication: false })
+              .where(
+                and(
+                  eq(calendarAccountsTable.id, source.accountId),
+                  eq(calendarAccountsTable.needsReauthentication, true),
+                ),
+              );
+
             widelog.set("sync.events_added", result.eventsAdded);
             widelog.set("sync.events_removed", result.eventsRemoved);
 

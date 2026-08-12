@@ -22,6 +22,12 @@ interface GoogleEventDateTime {
   timeZone?: string;
 }
 
+interface GoogleEventAttendee {
+  email?: string;
+  self?: boolean;
+  responseStatus?: string;
+}
+
 interface GoogleCalendarEvent {
   id?: string;
   iCalUID?: string;
@@ -35,6 +41,7 @@ interface GoogleCalendarEvent {
   updated?: string;
   eventType?: string;
   transparency?: string;
+  attendees?: GoogleEventAttendee[];
   workingLocationProperties?: {
     type?: string;
     customLocation?: { label?: string };
@@ -81,12 +88,19 @@ interface EventTimeSlot {
   title?: string;
   description?: string;
   location?: string;
+  /**
+   * RSVP status of the calendar owner (self attendee) for this event:
+   * "accepted" | "declined" | "tentative" | "needsAction". Undefined when the
+   * event has no self attendee (e.g. events the owner created without invitees).
+   */
+  responseStatus?: string;
 }
 
 export type {
   GoogleCalendarListEntry,
   GoogleCalendarListResponse,
   GoogleEventDateTime,
+  GoogleEventAttendee,
   GoogleCalendarEvent,
   GoogleEventsListResponse,
   FetchEventsOptions,

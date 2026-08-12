@@ -5,7 +5,7 @@ import {
   calendarAccountsTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 const MS_PER_SECOND = 1000;
@@ -42,6 +42,20 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
               refreshToken: result.refresh_token ?? refreshToken,
             })
             .where(eq(oauthCredentialsTable.id, oauthCredentialId));
+
+          // A successful refresh proves the account no longer needs reauth. Clear
+          // the account-level latch so a healthy token doesn't stay flagged forever
+          // (MA-423): the failure branch below sets this TRUE, but until now no
+          // success branch ever reset it.
+          await database
+            .update(calendarAccountsTable)
+            .set({ needsReauthentication: false })
+            .where(
+              and(
+                eq(calendarAccountsTable.id, calendarAccountId),
+                eq(calendarAccountsTable.needsReauthentication, true),
+              ),
+            );
 
           return result;
         } catch (error) {

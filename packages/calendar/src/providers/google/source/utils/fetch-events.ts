@@ -336,6 +336,15 @@ const resolveSourceEventType = (
   return "default";
 };
 
+const resolveSelfResponseStatus = (
+  event: Pick<GoogleCalendarEvent, "attendees">,
+): string | undefined => {
+  const selfAttendee = (event.attendees ?? []).find(
+    (attendee) => attendee.self === true,
+  );
+  return selfAttendee?.responseStatus;
+};
+
 const parseGoogleEvents = (events: GoogleCalendarEvent[]): EventTimeSlot[] => {
   const result: EventTimeSlot[] = [];
 
@@ -352,6 +361,7 @@ const parseGoogleEvents = (events: GoogleCalendarEvent[]): EventTimeSlot[] => {
       endTime: parseEventDateTime(event.end),
       isAllDay: isAllDayGoogleEvent(event),
       location: resolveGoogleLocation(event),
+      responseStatus: resolveSelfResponseStatus(event),
       sourceEventType: resolveSourceEventType(event.eventType),
       startTime: parseEventDateTime(event.start),
       startTimeZone: event.start.timeZone ?? event.end.timeZone,

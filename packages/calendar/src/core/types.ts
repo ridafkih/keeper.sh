@@ -62,6 +62,8 @@ interface SyncableEvent {
   summary: string;
   description?: string;
   location?: string;
+  /** RSVP status of the calendar owner (self attendee) for this event. */
+  responseStatus?: string;
   calendarId: string;
   calendarName: string | null;
   calendarUrl: string | null;
@@ -178,6 +180,7 @@ interface SourceEvent {
   title?: string;
   description?: string;
   location?: string;
+  responseStatus?: string;
 }
 
 interface SourceSyncResult {

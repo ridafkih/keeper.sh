@@ -122,6 +122,7 @@ describe("insertEventStatesWithConflictResolution", () => {
       "location",
       "recurrenceId",
       "recurrenceRule",
+      "responseStatus",
       "sourceEventId",
       "sourceEventType",
       "sourceEventUid",
