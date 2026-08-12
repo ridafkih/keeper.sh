@@ -14,7 +14,7 @@ tags:
 
 Your dentist appointment lives on Fastmail. Your meetings live on Google Calendar. Neither one knows the other exists.
 
-So a colleague books you at 3pm, and you were already busy at 3pm. Keeper fixes that by copying events from one calendar onto the other.
+So a colleague books you at 3pm, and you were already busy at 3pm. Keeper.sh fixes that by copying events from one calendar onto the other.
 
 ## What will this actually do?
 
@@ -28,16 +28,16 @@ Want it both ways? Set up a second connection pointing the other way.
 
 Fastmail refuses to let outside apps sign in with your account password. That one password reaches your mail, your files, your contacts and your billing.
 
-Instead you generate a separate password just for Keeper. You can delete it on its own later, and your account password keeps working.
+Instead you generate a separate password just for Keeper.sh. You can delete it on its own later, and your account password keeps working.
 
 1. Open [Fastmail's app password settings](https://www.fastmail.com/settings/security/devicekeys).
 2. Click **Manage app password and access**.
 3. Click **New app password**. Fastmail may ask you to confirm your account password.
-4. Give it a name you will recognise in six months, like "Keeper".
+4. Give it a name you will recognise in six months, like "Keeper.sh".
 5. Under **Access**, choose **Calendars (CalDAV)**.
 6. Click **Generate password** and copy what appears.
 
-Step five is worth slowing down for. **Calendars (CalDAV)** is the narrowest option that still works, so the password reaches your calendars and nothing else. The default also covers mail and contacts, which Keeper has no use for.
+Step five is worth slowing down for. **Calendars (CalDAV)** is the narrowest option that still works, so the password reaches your calendars and nothing else. The default also covers mail and contacts, which Keeper.sh has no use for.
 
 Fastmail shows the password once. If you lose it, delete it and generate another.
 
@@ -50,25 +50,25 @@ Two boxes appear:
 - **Fastmail Email Address** — the full address you sign in with, domain included
 - **App-Specific Password** — the one you just generated
 
-Click **Connect**. Keeper finds every calendar on the account and brings them all in at once. Your task lists stay behind.
+Click **Connect**. Keeper.sh finds every calendar on the account and brings them all in at once. Your task lists stay behind.
 
 ## How do you connect Google Calendar?
 
-Return to **Import Calendars** and choose **Connect Google Calendar**. Keeper shows what it is about to ask Google for:
+Return to **Import Calendars** and choose **Connect Google Calendar**. Keeper.sh shows what it is about to ask Google for:
 
 - See your email address
 - View a list of your calendars
 - View events, summaries and details
 - Add or remove calendar events
 
-Click **Connect** and finish Google's own permission screen. You sign in to Google directly, so Keeper never sees that password.
+Click **Connect** and finish Google's own permission screen. You sign in to Google directly, so Keeper.sh never sees that password.
 
 ## Which calendar sends to which?
 
 Connecting an account drops you into a short setup of four screens.
 
 1. **Which calendars would you like to configure?** Tick the ones you care about now. Everything was already brought in.
-2. **Rename Your Calendars.** Fastmail tends to call yours "Calendar" and Google uses your email address. Renaming here changes only what you see inside Keeper.
+2. **Rename Your Calendars.** Fastmail tends to call yours "Calendar" and Google uses your email address. Renaming here changes only what you see inside Keeper.sh.
 3. **Where should 'Calendar' send events?** Pick the calendars that should receive copies.
 4. **Where should 'Calendar' pull events from?** The same question in reverse.
 
@@ -86,7 +86,7 @@ With **Sync Event Name** off, the copy is titled after the calendar it came from
 
 Turn it on and the real title goes through. The **Event Name** box also accepts `{{event_name}}` and `{{calendar_name}}`, so you can word the placeholder yourself.
 
-Below that, **Exclusions** can drop all-day events. Both sections are Pro on keeper.sh and included for everyone on a self-hosted install.
+Below that, **Exclusions** can drop all-day events. Both sections are Pro on Keeper.sh and included for everyone on a self-hosted install.
 
 ## What does not come across?
 
@@ -99,11 +99,11 @@ Time and text, and little else. None of the following reaches the copy:
 
 What does travel: the title, description, location, start and end, the time zone, whether it repeats, and whether it shows you as busy or free.
 
-Keeper does read the guest list on your own calendars, separately from all this. That powers its pending-invite list and lets you RSVP, and it is never written into a copied event.
+Keeper.sh does read the guest list on your own calendars, separately from all this. That powers its pending-invite list and lets you RSVP, and it is never written into a copied event.
 
 ## How quickly do changes show up?
 
-Keeper reads both calendars every minute, on every plan. That half never slows down.
+Keeper.sh reads both calendars every minute, on every plan. That half never slows down.
 
 Writing the change onto the other calendar is the part that differs. Free does that every 30 minutes, Pro every minute.
 
@@ -111,7 +111,7 @@ If you are blocking out evenings so work sees you as busy, 30 minutes is invisib
 
 ## How far ahead does it look?
 
-Keeper covers a week back to two years ahead. A one-off booking further out than that is not copied until it drifts into range.
+Keeper.sh covers a week back to two years ahead. A one-off booking further out than that is not copied until it drifts into range.
 
 Repeating events get more room. A weekly series that began years ago still has its upcoming occurrences copied.
 
@@ -119,13 +119,13 @@ Repeating events get more room. A weekly series that began years ago still has i
 
 **Connecting Fastmail fails with a short error mentioning 401.** Fastmail rejected the password. Either your account password went in instead of the app password, or that app password does not cover calendars.
 
-**Keeper says "No calendars found".** It reached Fastmail but saw nothing it could use. An app password scoped to **Files (WebDAV)** or **Mail (IMAP/POP/SMTP)** does exactly this, so generate a new one set to **Calendars (CalDAV)**.
+**Keeper.sh says "No calendars found".** It reached Fastmail but saw nothing it could use. An app password scoped to **Files (WebDAV)** or **Mail (IMAP/POP/SMTP)** does exactly this, so generate a new one set to **Calendars (CalDAV)**.
 
 **Events arrive on Google titled after the calendar.** That is **Sync Event Name** switched off. Turn it on under **Sync Settings**.
 
 **Changes you make in Google never reach Fastmail.** You built one connection and it points one way. Add a second going back.
 
-**An entire calendar stops updating, not just one event.** Usually a repeating event with a runaway rule. Keeper will not expand a series past ten thousand occurrences inside its two-year window, and hitting that stops the calendar it belongs to.
+**An entire calendar stops updating, not just one event.** Usually a repeating event with a runaway rule. Keeper.sh will not expand a series past ten thousand occurrences inside its two-year window, and hitting that stops the calendar it belongs to.
 
 ## What does the free plan cover?
 
@@ -137,7 +137,7 @@ Three connections covers Fastmail to Google, Google back to Fastmail, and one sp
 
 ## Would you rather run it yourself?
 
-Keeper is open source under AGPL-3.0, and self-hosting is a genuine option rather than a cut-down one. Every Pro feature comes with it: one-minute updates, unlimited accounts, unlimited connections, **Sync Settings** and **Exclusions**.
+Keeper.sh is open source under AGPL-3.0, and self-hosting is a genuine option rather than a cut-down one. Every Pro feature comes with it: one-minute updates, unlimited accounts, unlimited connections, **Sync Settings** and **Exclusions**.
 
 It is more work, and you should know how much before starting:
 
