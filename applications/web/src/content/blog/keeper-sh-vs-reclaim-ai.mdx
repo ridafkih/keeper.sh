@@ -78,11 +78,15 @@ Reclaim gives you a set of visibility choices on each policy. You can pick a Per
 
 You can also keep single events out by adding `#nosync` to the description ([using #nosync](https://help.reclaim.ai/en/articles/3639946-using-nosync-to-prevent-events-from-being-synced)). Their policy settings include a "Sync outside of working hours?" toggle and three separate rules for all-day events.
 
-Keeper copies the real title, description, and location by default. You can switch each of those off per calendar, and replace the title with fixed text or with the calendar's name.
+Keeper anonymises copies by default. A calendar you connect is copied out under the name of the calendar it came from, with the description and location stripped.
 
-Here is the honest part: those controls sit behind Pro. On our free plan, a copied event carries its original title.
+So a dentist appointment on a calendar you called "Personal" shows up at work as "Personal". Right day, right time, no detail.
 
-Reclaim's visibility choices are available on Lite, at no cost. If privacy on a free plan is what you need, they beat us outright.
+Here is the honest part: changing that is a Pro feature. Turning event names, descriptions, or locations back on needs a paid plan.
+
+Those defaults are applied when you connect a calendar, rather than enforced forever afterwards. A Pro user can turn detail back on, and we do not stop them.
+
+Reclaim gives you that choice for free. Their visibility levels sit on every policy including Lite, so you pick per policy instead of accepting one default.
 
 Reclaim's filtering is also further along than ours. Working-hours filters, all-day rules, and a per-event keyword are more than we ship today.
 
@@ -94,7 +98,7 @@ Keeper is $0 or $5 a month, flat, for one person.
 
 Our free plan gives you two linked accounts and three connections between calendars. There is no limit on how many calendars each account exposes.
 
-Pro removes both limits. It also drops the write interval to a minute and unlocks the title and detail controls.
+Pro removes both limits. It also drops the write interval to a minute, and lets you change what shows through on a copy.
 
 We have no team plan, no seats, no SSO, and no SCIM. If you are buying this for a company, Reclaim is built for that and we are not.
 
@@ -154,7 +158,7 @@ Keeper connects to iCloud directly, using an app-specific password you generate 
 
 It is enough for two linked accounts and three connections between calendars. Copies are written out every 30 minutes rather than every minute.
 
-The catch is that copied events keep their real title on the free plan, because masking titles is a Pro feature.
+Copies are anonymised by default, which is what most people want anyway. The catch is that changing what shows through is a Pro feature.
 
 ### Do I need two connections to sync both ways?
 
@@ -164,7 +168,7 @@ Work into personal and personal into work is two connections. Reclaim works the 
 
 ### Does Keeper copy attendees or video call links?
 
-No. A copied event carries its title, description, location, times, and busy or free status.
+No. A copy carries the times, the busy or free status, and whatever detail your settings let through.
 
 Attendees, meeting links, and reminders are never copied across. Keeper does read attendees, so you can see pending invites and RSVP from the API.
 
