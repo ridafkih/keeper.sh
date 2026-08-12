@@ -315,12 +315,16 @@ const googleCalendarListEntrySchema = type({
   "foregroundColor?": "string",
   id: "string",
   "primary?": "boolean",
-  summary: "string",
+  "summary?": "string",
 });
 type GoogleCalendarListEntry = typeof googleCalendarListEntrySchema.infer;
 
+/*
+ * Google omits empty arrays, and entries are validated one by one so an unusual calendar
+ * costs that calendar rather than the whole account.
+ */
 const googleCalendarListResponseSchema = type({
-  items: googleCalendarListEntrySchema.array(),
+  "items?": "unknown[]",
   kind: "'calendar#calendarList'",
   "nextPageToken?": "string",
 });
