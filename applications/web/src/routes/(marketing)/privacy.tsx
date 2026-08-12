@@ -2,7 +2,10 @@ import type { PropsWithChildren } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Heading1, Heading2, Heading3 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
-import { canonicalUrl, jsonLdScript, seoMeta, webPageSchema, breadcrumbSchema } from "@/lib/seo";
+import { canonicalUrl, jsonLdScript, seoMeta, webPageSchema, breadcrumbSchema, breadcrumbTrail } from "@/lib/seo";
+import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
+
+const breadcrumbs = breadcrumbTrail({ name: "Privacy Policy", path: "/privacy" });
 import { privacyPageMetadata, formatMonthYear } from "@/lib/page-metadata";
 
 export const Route = createFileRoute("/(marketing)/privacy")({
@@ -17,7 +20,7 @@ export const Route = createFileRoute("/(marketing)/privacy")({
     }),
     scripts: [
       jsonLdScript(webPageSchema("Privacy Policy", "Privacy policy for Keeper.sh, the open-source calendar syncing service.", "/privacy")),
-      jsonLdScript(breadcrumbSchema([{ name: "Home", path: "/" }, { name: "Privacy Policy", path: "/privacy" }])),
+      jsonLdScript(breadcrumbSchema(breadcrumbs)),
     ],
   }),
 });
@@ -25,6 +28,7 @@ export const Route = createFileRoute("/(marketing)/privacy")({
 function PrivacyPage() {
   return (
     <div className="flex flex-col gap-6 py-16">
+      <Breadcrumb items={breadcrumbs} />
       <div className="flex flex-col gap-1">
         <Heading1>Privacy Policy</Heading1>
         <Text size="sm" tone="muted">Last updated: {formatMonthYear(privacyPageMetadata.updatedAt)}</Text>

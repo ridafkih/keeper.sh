@@ -6,7 +6,11 @@ import { Text } from "@/components/ui/primitives/text";
 import { NotFoundState } from "@/components/ui/shells/not-found";
 import { BlogPostCta } from "@/features/blog/components/blog-post-cta";
 import { findBlogPostBySlug, formatIsoDate } from "@/lib/blog-posts";
-import { canonicalUrl, jsonLdScript, seoMeta, blogPostingSchema, breadcrumbSchema } from "@/lib/seo";
+import { canonicalUrl, jsonLdScript, seoMeta, blogPostingSchema, breadcrumbSchema, breadcrumbTrail } from "@/lib/seo";
+import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
+
+const blogPostBreadcrumbs = (title: string, slug: string) =>
+  breadcrumbTrail({ name: "Blog", path: "/blog" }, { name: title, path: `/blog/${slug}` });
 
 export const Route = createFileRoute("/(marketing)/blog/$slug")({
   loader: ({ params }) => {
@@ -56,11 +60,7 @@ export const Route = createFileRoute("/(marketing)/blog/$slug")({
           tags: blogPost.metadata.tags,
           imagePath: blogPost.metadata.image,
         })),
-        jsonLdScript(breadcrumbSchema([
-          { name: "Home", path: "/" },
-          { name: "Blog", path: "/blog" },
-          { name: blogPost.metadata.title, path: postUrl },
-        ])),
+        jsonLdScript(breadcrumbSchema(blogPostBreadcrumbs(blogPost.metadata.title, params.slug))),
       ],
     };
   },
@@ -79,6 +79,7 @@ function BlogPostPage() {
 
   return (
     <div className="flex flex-col gap-6 py-16">
+      <Breadcrumb items={blogPostBreadcrumbs(blogPost.metadata.title, slug)} />
       <header className="flex flex-col gap-2">
         <Heading1>{blogPost.metadata.title}</Heading1>
         <div className="flex flex-col">

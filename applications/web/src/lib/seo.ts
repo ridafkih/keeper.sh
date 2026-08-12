@@ -78,9 +78,13 @@ export const organizationSchema = {
   ],
 };
 
-export function breadcrumbSchema(
-  items: Array<{ name: string; path: string }>,
-) {
+export type BreadcrumbTrailItem = { name: string; path: string };
+
+export function breadcrumbTrail(...items: BreadcrumbTrailItem[]): BreadcrumbTrailItem[] {
+  return [{ name: "Home", path: "/" }, ...items];
+}
+
+export function breadcrumbSchema(items: BreadcrumbTrailItem[]) {
   return {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",

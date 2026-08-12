@@ -2,7 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Heading1, Heading3 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
 import { blogPosts, formatIsoDate } from "@/lib/blog-posts";
-import { canonicalUrl, jsonLdScript, seoMeta, breadcrumbSchema, collectionPageSchema } from "@/lib/seo";
+import { canonicalUrl, jsonLdScript, seoMeta, breadcrumbSchema, breadcrumbTrail, collectionPageSchema } from "@/lib/seo";
+import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
+
+const breadcrumbs = breadcrumbTrail({ name: "Blog", path: "/blog" });
 
 const BLOG_ILLUSTRATION_STYLE = {
   backgroundImage:
@@ -19,10 +22,7 @@ export const Route = createFileRoute("/(marketing)/blog/")({
       path: "/blog",
     }),
     scripts: [
-      jsonLdScript(breadcrumbSchema([
-        { name: "Home", path: "/" },
-        { name: "Blog", path: "/blog" },
-      ])),
+      jsonLdScript(breadcrumbSchema(breadcrumbs)),
       jsonLdScript(collectionPageSchema(blogPosts)),
     ],
   }),
@@ -31,6 +31,7 @@ export const Route = createFileRoute("/(marketing)/blog/")({
 function BlogDirectoryPage() {
   return (
     <div className="flex flex-col gap-8 py-16">
+      <Breadcrumb items={breadcrumbs} />
       <header className="flex flex-col gap-1.5">
         <Heading1>Blog</Heading1>
         <Text size="base" tone="muted" className="leading-6">
