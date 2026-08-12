@@ -14,8 +14,6 @@ tags:
 
 Your own life lives in Fastmail. Work runs on Outlook. Neither knows the other exists, so colleagues book meetings on top of things you already committed to.
 
-Outlook will subscribe to a calendar link and refresh it on its own unhurried schedule. That is not enough when someone needs to know you are busy on Thursday.
-
 Keeper signs into both calendars and keeps copies of your events in step.
 
 ## What does this actually do?
@@ -24,17 +22,13 @@ Add something to your Fastmail calendar and a copy appears in Outlook. Move it, 
 
 By default the copy is a block of busy time, not a readable event. Colleagues see you are unavailable, not what you are doing.
 
-Copies travel one way per connection. You decide whether events go from Fastmail to Outlook, from Outlook to Fastmail, or both. Both means two connections, one each way.
-
-There is no single "two-way" switch.
+Copies travel one way per connection: Fastmail to Outlook, or Outlook to Fastmail. Want both? That is two connections, not a single "two-way" switch.
 
 ## Which Fastmail password do you need?
 
-Fastmail will not accept your account password here, and you would not want it to. You make a separate app password instead, which you can cancel on its own without changing anything else.
+Fastmail will not accept your account password here. You make a separate app password instead, which you can cancel on its own without changing anything else.
 
-The scope matters, and this is the part to get right. Fastmail's **Access** dropdown offers nine options. Pick **Calendars (CalDAV)** — it is the narrowest one that works, and Keeper needs nothing else.
-
-Fastmail's own help article about app passwords is out of date and lists only two options. Trust the dropdown in front of you, not the article.
+The scope matters. Fastmail's **Access** dropdown offers nine options, and you want **Calendars (CalDAV)** — the narrowest one that works. Fastmail's own help article is out of date and lists only two, so trust the dropdown in front of you.
 
 Keeper's connect page lists the steps in the right order:
 
@@ -56,26 +50,17 @@ The page is headed **Connect Fastmail** and has two boxes:
 - **Fastmail Email Address** — the address you sign in with
 - **App-Specific Password** — the one you just generated
 
-There is no server address to fill in. Keeper already knows where Fastmail keeps calendars, which is why Fastmail has its own button.
+There is no server address to fill in. Keeper already knows where Fastmail keeps calendars.
 
-Click **Connect**. Every calendar on the account is imported at once and you land in a short setup flow. Task lists stay behind, because Keeper only takes collections that hold events.
+Click **Connect**. Every calendar on the account is imported at once and you land in a short setup flow. Task lists stay behind.
 
 ## How do you connect Outlook?
 
-Back on **Import Calendars** there are two Microsoft buttons.
-
-**Connect Outlook** is for personal Outlook and Hotmail accounts. **Connect Microsoft 365** is for work and school accounts. Pick the one matching the account you are signing into.
-
-Either page shows what it will ask Microsoft for before sending you anywhere:
-
-- See your email address
-- View a list of your calendars
-- View events, summaries and details
-- Add or remove calendar events
+Back on **Import Calendars** there are two Microsoft buttons. **Connect Outlook** is for personal Outlook and Hotmail accounts. **Connect Microsoft 365** is for work and school accounts.
 
 Click **Connect** and approve it on Microsoft's screen. Keeper never sees your Microsoft password.
 
-If work manages your account, an administrator may have to approve Keeper before you can. That is your employer's policy and there is nothing Keeper can do about it from this end.
+If work manages your account, an administrator may have to approve Keeper first. That is your employer's policy, not something Keeper can change.
 
 ## How do you tell Keeper which way events travel?
 
@@ -92,55 +77,41 @@ Change any of it later from the calendar under **Calendars**, in the **Send Even
 
 ## Will my colleagues see my private event titles?
 
-Check this yourself before you trust it. It takes thirty seconds, and one end of this pairing is a work account.
+Check this yourself, because one end of this pairing is a work account.
 
 Open the calendar under **Calendars** and find **Sync Settings**. Three switches decide what travels: **Sync Event Name**, **Sync Event Description** and **Sync Event Location**.
 
-Calendars added through **Import Calendars** arrive with all three off. A therapy appointment reaches Outlook as a block named after the Fastmail calendar it came from.
+Calendars added through **Import Calendars** arrive with all three off. A therapy appointment reaches Outlook as a block named after the Fastmail calendar it came from. Turn **Sync Event Name** on for real titles, shaped by the **Event Name** box, which understands `{{calendar_name}}` and `{{event_name}}`.
 
-The name on the copy comes from the **Event Name** box, which understands `{{calendar_name}}` and `{{event_name}}`. Turn **Sync Event Name** on to let real titles through.
-
-On keeper.sh these are a Pro feature — the dashboard says **Advanced sync settings are a Pro feature.** On free they stay off, so titles stay private by default.
-
-Below them, **Exclusions** can drop **Exclude All Day Events**.
+On keeper.sh these are a Pro feature — the dashboard says **Advanced sync settings are a Pro feature.** Below them, **Exclusions** can drop **Exclude All Day Events**.
 
 ## How fast do changes show up?
 
-Keeper reads both calendars every minute, on every plan. That never gets slower.
-
-Getting a change onto the other calendar depends on your plan. On free it takes up to thirty minutes. On Pro it is about a minute.
+Keeper reads both calendars every minute, on every plan. Getting that change onto the other calendar depends on your plan: up to thirty minutes on free, about a minute on Pro.
 
 If you are marking yourself busy so colleagues stop double-booking you, thirty minutes is fine. If people book you through a scheduling link, it is too slow.
 
 ## What does not come across?
 
-Guest lists, video call links and reminders do not travel at all. Keeper has nowhere to store them.
-
-A copied meeting is a block of time, not a working invite. Nobody can join a Teams call from the copy, and no invitations are sent.
-
-Guest lists are read for one thing only: showing you invitations you have not answered yet, so you can reply from Keeper.
+Guest lists, video call links and reminders do not travel at all. A copied meeting is a block of time, not a working invite — nobody can join a Teams call from it, and no invitations are sent. Guest lists are read only to show you invitations you have not answered yet.
 
 Keeper also looks at a fixed stretch of time — from a week ago to two years ahead. A one-off event further out is not copied. A repeating event that began before the window is still picked up, so its dates inside the window survive.
 
 ## Why do Keeper's events have a category in Outlook?
 
-Keeper marks the events it creates so it can find and clean them up later. On most calendars it does that invisibly, in an identifier you never see.
+Keeper marks the events it creates so it can clean them up later. On most calendars that is invisible, but on Outlook it uses a `keeper.sh` category.
 
-On Outlook it uses a `keeper.sh` category instead.
-
-Two consequences. The copies on your Outlook calendar carry a visible category. And if you strip that category off an event by hand, Keeper stops recognising it as its own and leaves it behind.
+So the copies carry a visible category. Strip it off by hand and Keeper stops recognising the event as its own, and leaves it behind.
 
 ## What goes wrong, and what does it look like?
 
-**The page says "Invalid credentials".** Fastmail turned Keeper away. Usually it is your account password pasted instead of the app password. The other common cause is an app password whose **Access** does not include **Calendars (CalDAV)**.
+**The page says "Invalid credentials".** Fastmail was reached and turned Keeper away. Usually it is your account password pasted instead of the app password. The other common cause is an app password whose **Access** does not include **Calendars (CalDAV)**.
 
 **The page says "Failed to discover calendars".** That is a different problem, and your password is probably fine. Keeper could not reach Fastmail at all, so it never got as far as checking. Wait a minute and try again.
 
-**Microsoft refuses the sign-in on a work account.** Managed Microsoft 365 tenants can block outside calendar apps outright. If you cannot get an administrator to approve it, the read-only feed below is your fallback.
+**Microsoft refuses the sign-in on a work account.** Managed Microsoft 365 tenants can block outside calendar apps outright. If no administrator will approve it, the read-only feed below is your fallback.
 
-**One bad repeating event freezes a whole calendar.** Not one missing event — everything stops updating. Keeper refuses to work through a repeating series that would produce more than 10,000 dates in two years. Today that refusal stops the whole calendar, not just the one series. Look for something repeating every minute or hour. Delete it and the calendar catches up on its own.
-
-**A calendar goes quiet for hours, then recovers.** After a rejected or timed-out request, Keeper waits five minutes, then ten, then twenty, up to six hours. It backs off deliberately and comes back by itself.
+**One bad repeating event freezes a whole calendar.** Not one missing event — everything stops updating. Keeper refuses to work through a repeating series producing more than 10,000 dates in two years, and today that stops the whole calendar. Delete the event repeating every minute or hour and it catches up.
 
 **A repeating Outlook meeting arrives in Fastmail as a single event.** Repeating series coming out of Microsoft do not always survive the trip whole. That is a known gap on our side, not something you configured wrong.
 
@@ -148,32 +119,20 @@ Two consequences. The copies on your Outlook calendar carry a visible category. 
 
 ## What does the free plan cover?
 
-Two calendar accounts and three connections.
-
-Fastmail is one account no matter how many calendars it holds. Outlook is the second. So this pairing uses both, and adding Google later means upgrading.
+Two calendar accounts and three connections. Fastmail is one account no matter how many calendars it holds, and Outlook is the second, so this pairing uses both. Adding Google later means upgrading.
 
 Three connections covers both directions here with one spare. There is no cap on how many calendars an account brings in.
 
 ## What if Outlook will not let Keeper in at all?
 
-You can still get your Fastmail availability visible in Outlook without an approved sign-in.
+Keeper builds a single feed from whichever calendars you tick, at **iCal Link** in the dashboard. Outlook can subscribe to it without an approved sign-in. It is read-only, and Outlook picks its own refresh schedule.
 
-Keeper builds a single feed from whichever calendars you tick, at **iCal Link** in the dashboard. Outlook can subscribe to it like any other calendar link.
-
-Know what you are getting. It is read-only, so nothing travels back from Outlook, and Outlook picks its own refresh schedule, usually measured in hours.
-
-Before sharing the link, open that page and check two things. **Include Event Name** decides whether real titles appear or everything reads "Busy". The **Sources** list decides which calendars are in the feed at all.
-
-Feed settings are a Pro feature on keeper.sh, shown as **Feed settings are Pro-only.**
+Before sharing the link, check two things there. **Include Event Name** decides whether real titles appear or everything reads "Busy", and the **Sources** list decides which calendars are in the feed at all. Both are Pro on keeper.sh, shown as **Feed settings are Pro-only.**
 
 ## Would you rather run Keeper yourself?
 
-Keeper is open source under AGPL-3.0, and self-hosting is a genuine alternative rather than a downgrade. Every Pro feature is included: real event titles, exclusions, feed settings, unlimited accounts and connections, and updates every minute.
+Keeper is open source under AGPL-3.0, and self-hosting is a genuine alternative rather than a downgrade. Every Pro feature is included, including real event titles and updates every minute. It is a Docker Compose stack with Postgres and Redis behind it, documented in the [repository](https://github.com/ridafkih/keeper.sh).
 
-It is a Docker Compose stack with Postgres and Redis behind it, and the setup guide is in the [repository](https://github.com/ridafkih/keeper.sh).
+One catch is specific to this pairing. Connecting Outlook needs a Microsoft app registration of your own, created in Azure. Fastmail needs nothing of the kind.
 
-One catch specific to this pairing. Connecting Outlook needs a Microsoft app registration of your own, which you create in Azure. Fastmail needs nothing of the kind.
-
-And be honest about the running cost. A server, a domain, a certificate, upgrades and backups — plus being the person who fixes it when it breaks.
-
-If that appeals, it is a good trade. If not, use keeper.sh.
+The running cost is a server, a domain, a certificate, upgrades and backups — plus being the person who fixes it when it breaks. If that appeals, it is a good trade. If not, use keeper.sh.
