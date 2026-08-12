@@ -15,7 +15,13 @@ function createRuntime(cacheableHtmlPaths: string[], body = "<html>page</html>")
   return {
     cacheableHtmlPaths: new Set(cacheableHtmlPaths),
     handleAssetRequest: async () => new Response("Not Found", { status: 404 }),
-    resolveViteAssets: async () => ({ bodyScripts: [], headScripts: [], modulePreloads: [], stylesheets: [] }),
+    resolveViteAssets: async () => ({
+      bodyScripts: [],
+      headScripts: [],
+      inlineStyles: [],
+      modulePreloads: [],
+      stylesheets: [],
+    }),
     renderApp: vi.fn(async () =>
       new Response(body, { headers: { "content-type": "text/html; charset=UTF-8" } })),
   };
