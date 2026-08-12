@@ -1,14 +1,13 @@
 import { withCompression } from "./compression";
 import { isApiRequest, isMcpRequest, proxyRequest } from "./proxy/http";
 import { handleInternalRoute } from "./internal-routes";
-import { GDPR_COUNTRIES } from "@/config/gdpr";
 import { hasSessionCookie } from "@/lib/session-cookie";
 import type { Runtime, ServerConfig } from "./types";
 
 const HTML_CACHE_TTL_MS = 60_000;
 const PUBLIC_HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=600, stale-while-revalidate=86400";
 const PRIVATE_HTML_CACHE_CONTROL = "private, no-store";
-const PUBLIC_HTML_VARY = "accept-encoding, cookie, cf-ipcountry";
+const PUBLIC_HTML_VARY = "accept-encoding";
 
 interface CachedHtml {
   body: string;
@@ -89,11 +88,6 @@ function notModifiedResponse(etag: string, config: ServerConfig): Response {
   return withSecurityHeaders(withPublicHtmlCacheHeaders(response, etag), config);
 }
 
-function resolveGdprCacheSegment(countryCode: string): string {
-  if (GDPR_COUNTRIES.has(countryCode)) return "gdpr";
-  return "default";
-}
-
 export async function handleApplicationRequest(
   request: Request,
   runtime: Runtime,
@@ -119,12 +113,9 @@ export async function handleApplicationRequest(
   }
 
   const pathname = requestUrl.pathname;
-  const countryCode = request.headers.get("cf-ipcountry") ?? "";
-  const gdprSegment = resolveGdprCacheSegment(countryCode);
   const cookieHeader = request.headers.get("cookie") ?? undefined;
   const isAuthenticated = hasSessionCookie(cookieHeader);
-  const authSegment = isAuthenticated ? "authed" : "anon";
-  const cacheKey = `${pathname}:${gdprSegment}:${authSegment}`;
+  const cacheKey = pathname;
   const isCacheablePath = config.isProduction && runtime.cacheableHtmlPaths.has(pathname);
   const isPubliclyCacheable = isCacheablePath && !isAuthenticated;
 

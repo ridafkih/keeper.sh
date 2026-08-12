@@ -51,6 +51,11 @@ function resolveEffectiveConsent(gdprApplies: boolean, cookieHeader?: string): b
   return !gdprApplies;
 }
 
+const subscribeToConsentChanges = (listener: () => void): (() => void) => {
+  globalThis.addEventListener("storage", listener);
+  return () => globalThis.removeEventListener("storage", listener);
+};
+
 const setAnalyticsConsent = (granted: boolean): void => {
   const state = resolveConsentState(granted);
   document.cookie = `${CONSENT_COOKIE}=${state}; path=/; max-age=${CONSENT_MAX_AGE}; samesite=lax`;
@@ -141,11 +146,13 @@ declare global {
 }
 
 export {
+  CONSENT_COOKIE,
   hasAnalyticsConsent,
   hasConsentChoice,
   identify,
   reportPurchaseConversion,
   resolveEffectiveConsent,
   setAnalyticsConsent,
+  subscribeToConsentChanges,
   track,
 };

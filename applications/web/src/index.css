@@ -19,6 +19,26 @@ body {
   @apply w-full;
 }
 
+[data-session-slot] {
+  display: contents;
+}
+
+[data-session-slot="authenticated"] {
+  display: none;
+}
+
+[data-session="authed"] [data-session-slot="authenticated"] {
+  display: contents;
+}
+
+[data-session="authed"] [data-session-slot="unauthenticated"] {
+  display: none;
+}
+
+[data-consent="resolved"] [data-consent-banner] {
+  display: none;
+}
+
 html {
   color-scheme: light;
 }

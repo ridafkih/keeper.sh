@@ -15,7 +15,13 @@ function createRuntime(cacheableHtmlPaths: string[], body = "<html>page</html>")
   return {
     cacheableHtmlPaths: new Set(cacheableHtmlPaths),
     handleAssetRequest: async () => new Response("Not Found", { status: 404 }),
-    resolveViteAssets: async () => ({ bodyScripts: [], headScripts: [], modulePreloads: [], stylesheets: [] }),
+    resolveViteAssets: async () => ({
+      bodyScripts: [],
+      headScripts: [],
+      inlineStyles: [],
+      modulePreloads: [],
+      stylesheets: [],
+    }),
     renderApp: vi.fn(async () =>
       new Response(body, { headers: { "content-type": "text/html; charset=UTF-8" } })),
   };
@@ -36,7 +42,35 @@ describe("handleApplicationRequest caching", () => {
       "public, max-age=0, s-maxage=600, stale-while-revalidate=86400",
     );
     expect(response.headers.get("etag")).toMatch(/^"[0-9a-f]+"$/);
-    expect(response.headers.get("vary")).toBe("accept-encoding, cookie, cf-ipcountry");
+    expect(response.headers.get("vary")).toBe("accept-encoding");
+  });
+
+  it("renders one shared document for every country and session", async () => {
+    const path = "/blog/shared-post";
+    const runtime = createRuntime([path]);
+
+    const german = await handleApplicationRequest(
+      request(path, { "cf-ipcountry": "DE" }),
+      runtime,
+      config,
+    );
+    const american = await handleApplicationRequest(
+      request(path, { "cf-ipcountry": "US" }),
+      runtime,
+      config,
+    );
+    const authenticated = await handleApplicationRequest(
+      request(path, { "cf-ipcountry": "US", cookie: "keeper.has_session=1" }),
+      runtime,
+      config,
+    );
+
+    const germanBody = await german.text();
+
+    expect(await american.text()).toBe(germanBody);
+    expect(await authenticated.text()).toBe(germanBody);
+    expect(german.headers.get("etag")).toBe(american.headers.get("etag"));
+    expect(runtime.renderApp).toHaveBeenCalledTimes(1);
   });
 
   it("serves a repeated blog post request from the cache without re-rendering", async () => {
