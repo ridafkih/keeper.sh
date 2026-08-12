@@ -317,7 +317,7 @@ describe("createOutlookSyncProvider", () => {
   });
 
   it("paces bulk pushes through the rate limiter, one slot per request", async () => {
-    const acquire = vi.fn(() => Promise.resolve());
+    const acquire = vi.fn((_count: number, _signal?: AbortSignal) => Promise.resolve());
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(throttledResponse(429, "0"))
       .mockImplementation(() => Promise.resolve(Response.json({ iCalUId: "uid", id: "id" })));
