@@ -12,8 +12,14 @@ export interface BlogPostMetadata {
   updatedAt: string;
 }
 
+export interface BlogPostFaqEntry {
+  answer: string;
+  question: string;
+}
+
 export interface BlogPost {
   content: string;
+  faq: BlogPostFaqEntry[];
   metadata: BlogPostMetadata;
   slug: string;
 }
@@ -22,25 +28,4 @@ export const blogPosts: BlogPost[] = processedPosts;
 
 export function findBlogPostBySlug(slug: string): BlogPost | undefined {
   return blogPosts.find((blogPost) => blogPost.slug === slug);
-}
-
-const monthNames = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-] as const;
-
-export function formatIsoDate(isoDate: string): string {
-  const [yearPart, monthPart, dayPart] = isoDate.split("-");
-  const monthName = monthNames[Number(monthPart) - 1];
-  return `${monthName} ${Number(dayPart)}, ${yearPart}`;
 }

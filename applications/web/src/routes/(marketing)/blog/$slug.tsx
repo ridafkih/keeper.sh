@@ -1,13 +1,26 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { Streamdown } from "streamdown";
+import type { AllowedTags, Components } from "streamdown";
 import { Heading1 } from "@/components/ui/primitives/heading";
-import { markdownComponents } from "@/components/ui/primitives/markdown-component-map";
+import { Prose } from "@/components/ui/primitives/prose";
+import { ExternalTextLink } from "@/components/ui/primitives/text-link";
 import { Text } from "@/components/ui/primitives/text";
 import { NotFoundState } from "@/components/ui/shells/not-found";
-import { BlogPostCta } from "@/features/blog/components/blog-post-cta";
-import { findBlogPostBySlug, formatIsoDate } from "@/lib/blog-posts";
-import { canonicalUrl, jsonLdScript, seoMeta, blogPostingSchema, breadcrumbSchema, breadcrumbTrail } from "@/lib/seo";
+import { ArticleCta } from "@/features/marketing/components/article-cta";
+import { MarkdownFaq, MarkdownFaqItem } from "@/features/marketing/components/markdown-faq";
+import { findBlogPostBySlug } from "@/lib/blog-posts";
+import { formatIsoDate } from "@/utils/date";
+import { canonicalUrl, jsonLdScript, seoMeta, blogPostingSchema, breadcrumbSchema, breadcrumbTrail, faqPageSchema } from "@/lib/seo";
 import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
+
+const MARKDOWN_FAQ_TAGS: AllowedTags = {
+  faq: [],
+  "faq-item": ["question"],
+};
+
+const MARKDOWN_FAQ_COMPONENTS = {
+  faq: MarkdownFaq,
+  "faq-item": MarkdownFaqItem,
+} as Components;
 
 const blogPostBreadcrumbs = (title: string, slug: string) =>
   breadcrumbTrail({ name: "Blog", path: "/blog" }, { name: title, path: `/blog/${slug}` });
@@ -61,6 +74,9 @@ export const Route = createFileRoute("/(marketing)/blog/$slug")({
           imagePath: blogPost.metadata.image,
         })),
         jsonLdScript(breadcrumbSchema(blogPostBreadcrumbs(blogPost.metadata.title, params.slug))),
+        ...(blogPost.faq.length > 0
+          ? [jsonLdScript(faqPageSchema(postUrl, blogPost.faq))]
+          : []),
       ],
     };
   },
@@ -85,22 +101,27 @@ function BlogPostPage() {
         <div className="flex flex-col">
           <Text size="sm" tone="muted" align="left">
             By{" "}
-            <a href="https://rida.dev" target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-2">
-              Rida F'kih
-            </a>
+            <ExternalTextLink
+              align="left"
+              href="https://rida.dev"
+              rel="noopener noreferrer"
+              size="sm"
+              target="_blank"
+              tone="default"
+            >
+              Rida F&apos;kih
+            </ExternalTextLink>
             {" · "}{createdDate}
             {showUpdated && <> · Updated {updatedDate}</>}
           </Text>
         </div>
       </header>
 
-      <article className="flex flex-col gap-2">
-        <Streamdown components={markdownComponents}>
-          {blogPost.content}
-        </Streamdown>
-      </article>
+      <Prose allowedTags={MARKDOWN_FAQ_TAGS} components={MARKDOWN_FAQ_COMPONENTS}>
+        {blogPost.content}
+      </Prose>
 
-      <BlogPostCta />
+      <ArticleCta />
     </div>
   );
 }

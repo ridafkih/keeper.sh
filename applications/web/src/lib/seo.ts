@@ -110,6 +110,22 @@ export function webPageSchema(name: string, description: string, path: string) {
   };
 }
 
+export function faqPageSchema(
+  path: string,
+  questions: Array<{ question: string; answer: string }>,
+) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "@id": `${canonicalUrl(path)}/#faqpage`,
+    mainEntity: questions.map((entry) => ({
+      "@type": "Question",
+      name: entry.question,
+      acceptedAnswer: { "@type": "Answer", text: entry.answer },
+    })),
+  };
+}
+
 export function softwareApplicationSchema() {
   return {
     "@context": "https://schema.org",

@@ -23,10 +23,37 @@ const blogPostMetadataSchema = type({
 
 type BlogPostMetadata = typeof blogPostMetadataSchema.infer;
 
+interface BlogPostFaqEntry {
+  answer: string;
+  question: string;
+}
+
 export interface ProcessedBlogPost {
   content: string;
+  faq: BlogPostFaqEntry[];
   metadata: BlogPostMetadata;
   slug: string;
+}
+
+const FAQ_ITEM_PATTERN = /<faq-item question="([^"]*)">([\s\S]*?)<\/faq-item>/g;
+
+function extractFaqEntries(content: string, filePath: string): BlogPostFaqEntry[] {
+  const entries = [...content.matchAll(FAQ_ITEM_PATTERN)].map((match) => ({
+    answer: match[2].trim(),
+    question: match[1].trim(),
+  }));
+
+  const incomplete = entries.find(
+    (entry) => entry.question.length === 0 || entry.answer.length === 0,
+  );
+
+  if (incomplete) {
+    throw new Error(
+      `Blog post "${filePath}" has a faq-item with an empty question or answer.`,
+    );
+  }
+
+  return entries;
 }
 
 function toIsoDate(value: string): string {
@@ -197,7 +224,7 @@ export function processBlogDirectory(
     slugCounts.set(baseSlug, seenCount + 1);
     const slug = seenCount === 0 ? baseSlug : `${baseSlug}-${seenCount + 1}`;
 
-    return { content, metadata, slug };
+    return { content, faq: extractFaqEntries(content, file), metadata, slug };
   });
 
   return posts.sort((a, b) =>

@@ -12,8 +12,11 @@ import {
   MarkdownParagraph,
   MarkdownRule,
   MarkdownTable,
+  MarkdownTableBody,
   MarkdownTableCell,
   MarkdownTableHeader,
+  MarkdownTableRow,
+  MarkdownTableSection,
   MarkdownUnorderedList,
 } from "./markdown-components";
 
@@ -31,7 +34,10 @@ export const markdownComponents: Components = {
   p: MarkdownParagraph,
   pre: MarkdownCodeBlock,
   table: MarkdownTable,
+  tbody: MarkdownTableBody,
   td: MarkdownTableCell,
   th: MarkdownTableHeader,
+  thead: MarkdownTableSection,
+  tr: MarkdownTableRow,
   ul: MarkdownUnorderedList,
 };

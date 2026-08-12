@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Heading1, Heading3 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
-import { blogPosts, formatIsoDate } from "@/lib/blog-posts";
+import { blogPosts } from "@/lib/blog-posts";
+import { formatIsoDate } from "@/utils/date";
 import { canonicalUrl, jsonLdScript, seoMeta, breadcrumbSchema, breadcrumbTrail, collectionPageSchema } from "@/lib/seo";
 import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
 
