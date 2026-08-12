@@ -1,3 +1,5 @@
+import { CalDAVIncompleteMultiGetError } from "@keeper.sh/calendar/caldav";
+
 interface MissingCalendarFailure {
   disableCalendar: false;
   retriable: true;
@@ -8,6 +10,10 @@ const hasNotFoundStatus = (error: Error): boolean =>
   "status" in error && error.status === 404;
 
 const resolveMissingCalendarFailure = (error: unknown): MissingCalendarFailure | null => {
+  if (error instanceof CalDAVIncompleteMultiGetError) {
+    return null;
+  }
+
   if (!(error instanceof Error) || (!hasNotFoundStatus(error) && !error.message.includes("404"))) {
     return null;
   }
