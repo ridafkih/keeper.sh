@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   index,
   integer,
   pgTable,
@@ -12,10 +13,15 @@ import { isNotNull, isNull, sql } from "drizzle-orm";
 import {
   DEFAULT_FUTURE_SYNC_RANGE,
   DEFAULT_HISTORIC_SYNC_RANGE,
+  SYNC_RANGE_DEFINITIONS,
 } from "@keeper.sh/data-schemas";
 import { user } from "./auth-schema";
 
 const DEFAULT_EVENT_COUNT = 0;
+
+const SYNC_RANGE_SQL_VALUES = SYNC_RANGE_DEFINITIONS
+  .map(({ value }) => `'${value}'`)
+  .join(", ");
 
 const oauthCredentialsTable = pgTable(
   "oauth_credentials",
@@ -141,6 +147,19 @@ const calendarsTable = pgTable(
     index("calendars_account_idx").on(table.accountId),
     index("calendars_capabilities_idx").on(table.capabilities),
     index("calendars_type_idx").on(table.calendarType),
+    /*
+     * Range columns are plain text so a bad write is only caught when a reader
+     * asserts it, far from the writer that caused it. Constraining them here
+     * keeps a corrupt persisted value distinguishable from a corrupt read.
+     */
+    check(
+      "calendars_sync_ranges_check",
+      sql`"syncHistoricRange" IN (${sql.raw(SYNC_RANGE_SQL_VALUES)}) AND "syncFutureRange" IN (${sql.raw(SYNC_RANGE_SQL_VALUES)})`,
+    ),
+    check(
+      "calendars_ingest_coverage_check",
+      sql`"ingestHistoricRange" IN (${sql.raw(SYNC_RANGE_SQL_VALUES)}) AND "ingestFutureRange" IN (${sql.raw(SYNC_RANGE_SQL_VALUES)}) AND (("ingestWindowStart" IS NULL AND "ingestWindowEnd" IS NULL AND "ingestWindowRecordedAt" IS NULL) OR ("ingestWindowStart" IS NOT NULL AND "ingestWindowEnd" IS NOT NULL AND "ingestWindowRecordedAt" IS NOT NULL AND "ingestWindowStart" < "ingestWindowEnd"))`,
+    ),
   ],
 );
 
