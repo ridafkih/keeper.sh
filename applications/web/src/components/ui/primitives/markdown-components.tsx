@@ -1,4 +1,5 @@
-import type { JSX } from "react";
+import { isValidElement, type JSX, type ReactNode } from "react";
+import { cn } from "@/utils/cn";
 import { Heading1, Heading2, Heading3 } from "./heading";
 import { ListItem, OrderedList, UnorderedList } from "./list";
 import { Text } from "./text";
@@ -8,8 +9,30 @@ type MarkdownElementProps<Tag extends keyof JSX.IntrinsicElements> =
   node?: unknown;
 };
 
+const PROSE_CELL_CHARACTER_THRESHOLD = 20;
+
 function isExternalHttpLink(href: string): boolean {
   return href.startsWith("http://") || href.startsWith("https://");
+}
+
+function countTextCharacters(node: ReactNode): number {
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node).length;
+  }
+
+  if (Array.isArray(node)) {
+    return node.reduce<number>((total, child) => total + countTextCharacters(child), 0);
+  }
+
+  if (isValidElement<{ children?: ReactNode }>(node)) {
+    return countTextCharacters(node.props.children);
+  }
+
+  return 0;
+}
+
+function isProseCell(children: ReactNode): boolean {
+  return countTextCharacters(children) > PROSE_CELL_CHARACTER_THRESHOLD;
 }
 
 export function MarkdownHeadingOne({ children }: MarkdownElementProps<"h1">) {
@@ -116,11 +139,29 @@ export function MarkdownTable({
 export function MarkdownTableHeader({
   children,
 }: MarkdownElementProps<"th">) {
-  return <th className="min-w-32 border border-interactive-border px-2 py-1 text-left font-medium text-foreground first:min-w-48">{children}</th>;
+  return (
+    <th
+      className={cn(
+        "border border-interactive-border px-2 py-1 text-left font-medium text-foreground",
+        isProseCell(children) && "min-w-32",
+      )}
+    >
+      {children}
+    </th>
+  );
 }
 
 export function MarkdownTableCell({
   children,
 }: MarkdownElementProps<"td">) {
-  return <td className="min-w-32 border border-interactive-border px-2 py-1 first:min-w-48">{children}</td>;
+  return (
+    <td
+      className={cn(
+        "border border-interactive-border px-2 py-1",
+        isProseCell(children) && "min-w-32",
+      )}
+    >
+      {children}
+    </td>
+  );
 }
