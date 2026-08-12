@@ -292,43 +292,52 @@ describe("createIcsSourceFetcher", () => {
       .rejects.toThrow("Unsupported calendar timezone: Custom/Eastern");
   });
 
-  it("keeps fetching when a series exceeds the recurrence budget", async () => {
+  it("returns events far outside the sync window so stored history stays unbounded", async () => {
     /*
-     * Regression: the sync-window filter materialized recurrences without the
-     * over-budget handler, so a pathological series threw here — before ingestion
-     * could withhold it — and put the whole calendar into permanent backoff.
+     * ICS storage is unbounded on purpose: the sync window bounds what Keeper
+     * mirrors to destinations, not what it retains. Dropping historic events here
+     * would make the snapshot diff delete their stored state on the next ingest.
      */
     const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
-    const overBudgetIcs = [
+    const historicIcs = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
       "PRODID:-//test//test//EN",
       "BEGIN:VEVENT",
-      "UID:over-budget@test",
-      "DTSTAMP:20260517T000000Z",
-      "DTSTART:20260517T120000Z",
-      "DTEND:20260517T120500Z",
-      "RRULE:FREQ=MINUTELY;INTERVAL=1",
-      "SUMMARY:Pathological",
+      "UID:ancient@test",
+      "DTSTAMP:20190517T000000Z",
+      "DTSTART:20190517T120000Z",
+      "DTEND:20190517T130000Z",
+      "SUMMARY:Ancient",
       "END:VEVENT",
       "BEGIN:VEVENT",
-      "UID:healthy@test",
+      "UID:distant-future@test",
+      "DTSTAMP:20190517T000000Z",
+      "DTSTART:20400517T120000Z",
+      "DTEND:20400517T130000Z",
+      "SUMMARY:Distant",
+      "END:VEVENT",
+      "BEGIN:VEVENT",
+      "UID:event-1@test",
       "DTSTAMP:20260517T000000Z",
-      "DTSTART:20260518T120000Z",
-      "DTEND:20260518T130000Z",
-      "SUMMARY:Healthy",
+      "DTSTART:20260517T120000Z",
+      "DTEND:20260517T130000Z",
+      "SUMMARY:Test",
       "END:VEVENT",
       "END:VCALENDAR",
     ].join("\r\n");
-    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: overBudgetIcs });
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: historicIcs });
     mockPrepareCalendarSnapshot.mockResolvedValueOnce({
       changed: true,
-      snapshot: { contentHash: "over-budget", ical: overBudgetIcs },
+      snapshot: { contentHash: "historic", ical: historicIcs },
     });
 
     const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
 
-    expect(result.events.map(({ uid }) => uid))
-      .toEqual(["over-budget@test", "healthy@test"]);
+    expect(result.events.map(({ uid }) => uid)).toEqual([
+      "ancient@test",
+      "distant-future@test",
+      "event-1@test",
+    ]);
   });
 });

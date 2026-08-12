@@ -14,7 +14,6 @@ import {
   assertSupportedRecurrenceTimeZones,
 } from "./validate-recurrence-input";
 import { wallTimeToInstant } from "./timezone-instant";
-import { filterSourceEventsToSyncWindow } from "../../core/source/sync-diagnostics";
 
 interface IcsSourceFetcherConfig {
   calendarId: string;
@@ -192,7 +191,12 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
         calendarTimeZone,
       });
     }
-    ({ events } = filterSourceEventsToSyncWindow(events, syncWindow));
+    /*
+     * The whole feed is kept on purpose. ICS storage is unbounded: the sync
+     * window bounds what Keeper mirrors to destinations, not what it retains.
+     * Filtering here would make the snapshot diff delete the stored state of
+     * every historic event on the next ingest.
+     */
     const result: FetchEventsResult = {
       events,
       syncWindow,

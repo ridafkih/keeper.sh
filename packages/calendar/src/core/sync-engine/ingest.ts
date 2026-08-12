@@ -93,13 +93,21 @@ interface IngestionResult {
 
 const EMPTY_RESULT: IngestionResult = { eventsAdded: 0, eventsRemoved: 0 };
 
+/*
+ * Only delta sources need this. A snapshot source re-reports its whole coverage
+ * every fetch, so the snapshot diff already removes whatever it stopped
+ * reporting; pruning on top of that would delete the unbounded history an ICS
+ * feed still reports. A delta source only reports changes, so a stored event
+ * that fell outside a narrowed window would otherwise be stranded forever.
+ */
 const getNonRecurringStoredEventIdsOutsideWindow = (
   events: (Pick<StoredSourceEventState, "endTime" | "id" | "startTime"> & {
     recurrenceRule: unknown;
   })[],
   window: SyncWindow | undefined,
+  isDeltaSync: boolean,
 ): string[] => {
-  if (!window) {
+  if (!window || !isDeltaSync) {
     return [];
   }
   const eventIds: string[] = [];
@@ -212,6 +220,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
         ...getNonRecurringStoredEventIdsOutsideWindow(
           existingEvents,
           fetchResult.syncWindow,
+          isDeltaSync,
         ),
         /*
          * Removal is computed against the unfiltered fetch. An over-budget series is

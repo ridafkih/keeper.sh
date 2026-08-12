@@ -874,6 +874,95 @@ describe("ingestSource", () => {
     });
   });
 
+  it("keeps stored history a snapshot source still reports outside the sync window", async () => {
+    /*
+     * ICS is snapshot-style and fetches the whole feed, so a historic event is
+     * still present in every fetch. Pruning it for being outside the window would
+     * collapse stored history to a rolling window on the first ingest after
+     * deploy, silently truncating the dashboard, MCP tools and published feed.
+     */
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const historical = makeSourceEvent(
+      "historical",
+      new Date("2019-01-01T09:00:00.000Z"),
+      new Date("2019-01-01T10:00:00.000Z"),
+    );
+    const inWindow = makeSourceEvent(
+      "in-window",
+      new Date("2026-03-15T09:00:00.000Z"),
+      new Date("2026-03-15T10:00:00.000Z"),
+    );
+    const syncWindow = {
+      timeMin: new Date("2026-03-01T00:00:00.000Z"),
+      timeMax: new Date("2026-04-01T00:00:00.000Z"),
+    };
+    let flushed: IngestionChanges | null = null;
+
+    const result = await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({
+        coverage: {
+          futureRange: "1_month",
+          historicRange: "1_month",
+          window: syncWindow,
+        },
+        events: [
+          { ...historical, isAllDay: false },
+          { ...inWindow, isAllDay: false },
+        ],
+        syncWindow,
+      }),
+      readExistingEvents: () => Promise.resolve([
+        toExistingEvent("historical-state", { ...historical, isAllDay: false }),
+        toExistingEvent("in-window-state", { ...inWindow, isAllDay: false }),
+      ]),
+      flush: (changes) => {
+        flushed = changes;
+        return Promise.resolve();
+      },
+    });
+
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+    expect(flushed).toEqual({
+      coverage: {
+        futureRange: "1_month",
+        historicRange: "1_month",
+        window: syncWindow,
+      },
+      deletes: [],
+      inserts: [],
+    });
+  });
+
+  it("still removes stored state a snapshot source stops reporting", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const historical = makeSourceEvent(
+      "historical",
+      new Date("2019-01-01T09:00:00.000Z"),
+      new Date("2019-01-01T10:00:00.000Z"),
+    );
+    const syncWindow = {
+      timeMin: new Date("2026-03-01T00:00:00.000Z"),
+      timeMax: new Date("2026-04-01T00:00:00.000Z"),
+    };
+    let flushed: IngestionChanges | null = null;
+
+    const result = await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({ events: [], syncWindow }),
+      readExistingEvents: () => Promise.resolve([
+        toExistingEvent("historical-state", historical),
+      ]),
+      flush: (changes) => {
+        flushed = changes;
+        return Promise.resolve();
+      },
+    });
+
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 1 });
+    expect(flushed).toEqual({ deletes: ["historical-state"], inserts: [] });
+  });
+
   it("does not flush sync token when no changes and no sync token provided", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
 
