@@ -27,6 +27,19 @@ function createRuntime(cacheableHtmlPaths: string[], body = "<html>page</html>")
   };
 }
 
+function createCountingRuntime(cacheableHtmlPaths: string[]): Runtime {
+  let renderCount = 0;
+  return {
+    ...createRuntime(cacheableHtmlPaths),
+    renderApp: vi.fn(async () => {
+      renderCount += 1;
+      return new Response(`<html>render ${renderCount}</html>`, {
+        headers: { "content-type": "text/html; charset=UTF-8" },
+      });
+    }),
+  };
+}
+
 function request(path: string, headers: Record<string, string> = {}): Request {
   return new Request(`http://localhost${path}`, { headers });
 }
@@ -123,6 +136,39 @@ describe("handleApplicationRequest caching", () => {
 
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(response.headers.get("etag")).toBeNull();
+  });
+
+  it("never lets a signed-in render reach the shared cache", async () => {
+    const path = "/blog/authenticated-first-post";
+    const runtime = createCountingRuntime([path]);
+
+    const authenticated = await handleApplicationRequest(
+      request(path, { cookie: "keeper.has_session=1" }),
+      runtime,
+      config,
+    );
+    const anonymous = await handleApplicationRequest(request(path), runtime, config);
+
+    expect(await authenticated.text()).toBe("<html>render 1</html>");
+    expect(await anonymous.text()).toBe("<html>render 2</html>");
+    expect(runtime.renderApp).toHaveBeenCalledTimes(2);
+  });
+
+  it("serves an anonymous render to a later signed-in visitor", async () => {
+    const path = "/blog/anonymous-first-post";
+    const runtime = createCountingRuntime([path]);
+
+    await handleApplicationRequest(request(path), runtime, config);
+    const authenticated = await handleApplicationRequest(
+      request(path, { cookie: "keeper.has_session=1" }),
+      runtime,
+      config,
+    );
+
+    expect(await authenticated.text()).toBe("<html>render 1</html>");
+    expect(authenticated.headers.get("cache-control")).toBe("private, no-store");
+    expect(authenticated.headers.get("etag")).toBeNull();
+    expect(runtime.renderApp).toHaveBeenCalledTimes(1);
   });
 
   it("keeps dashboard responses out of every cache", async () => {

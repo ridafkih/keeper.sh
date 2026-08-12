@@ -145,16 +145,14 @@ export async function handleApplicationRequest(
     return withPrivateHtmlCacheHeaders(routerResponse);
   }
 
-  if (isCacheablePath && routerResponse.status === 200) {
+  if (isPubliclyCacheable && routerResponse.status === 200) {
     const body = await routerResponse.text();
     const entry = setCachedHtml(cacheKey, body);
     const freshResponse = new Response(body, {
       headers: routerResponse.headers,
       status: routerResponse.status,
     });
-    const cacheableResponse = isPubliclyCacheable
-      ? withPublicHtmlCacheHeaders(freshResponse, entry.etag)
-      : withPrivateHtmlCacheHeaders(freshResponse);
+    const cacheableResponse = withPublicHtmlCacheHeaders(freshResponse, entry.etag);
     const securedResponse = withSecurityHeaders(cacheableResponse, config);
     return withCompression(request, securedResponse);
   }
