@@ -3,16 +3,28 @@ import { Streamdown } from "streamdown";
 import { Heading1 } from "@/components/ui/primitives/heading";
 import { markdownComponents } from "@/components/ui/primitives/markdown-component-map";
 import { Text } from "@/components/ui/primitives/text";
+import { NotFoundState } from "@/components/ui/shells/not-found";
 import { BlogPostCta } from "@/features/blog/components/blog-post-cta";
 import { findBlogPostBySlug, formatIsoDate } from "@/lib/blog-posts";
 import { canonicalUrl, jsonLdScript, seoMeta, blogPostingSchema, breadcrumbSchema } from "@/lib/seo";
 
 export const Route = createFileRoute("/(marketing)/blog/$slug")({
+  loader: ({ params }) => {
+    if (!findBlogPostBySlug(params.slug)) {
+      throw notFound();
+    }
+  },
   component: BlogPostPage,
+  notFoundComponent: NotFoundState,
   head: ({ params }) => {
     const blogPost = findBlogPostBySlug(params.slug);
     if (!blogPost) {
-      return { meta: [{ title: "Blog Post · Keeper.sh" }] };
+      return {
+        meta: [
+          { title: "Blog Post · Keeper.sh" },
+          { content: "noindex", name: "robots" },
+        ],
+      };
     }
 
     const postUrl = `/blog/${params.slug}`;

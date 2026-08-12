@@ -35,7 +35,7 @@ export async function proxyRequest(request: Request, origin: string): Promise<Re
 }
 
 function resolveStaticFilePath(pathname: string): string | null {
-  if (pathname === "/") {
+  if (pathname === "/" || pathname === "/index.html") {
     return null;
   }
 
