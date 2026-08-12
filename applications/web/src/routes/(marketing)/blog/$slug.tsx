@@ -24,6 +24,7 @@ export const Route = createFileRoute("/(marketing)/blog/$slug")({
           description: blogPost.metadata.description,
           path: postUrl,
           type: "article",
+          imagePath: blogPost.metadata.image,
         }),
         { content: blogPost.metadata.tags.join(", "), name: "keywords" },
         { content: blogPost.metadata.createdAt, property: "article:published_time" },
@@ -41,6 +42,7 @@ export const Route = createFileRoute("/(marketing)/blog/$slug")({
           createdAt: blogPost.metadata.createdAt,
           updatedAt: blogPost.metadata.updatedAt,
           tags: blogPost.metadata.tags,
+          imagePath: blogPost.metadata.image,
         })),
         jsonLdScript(breadcrumbSchema([
           { name: "Home", path: "/" },
