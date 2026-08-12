@@ -17,7 +17,7 @@ const blogPostMetadataSchema = type({
 
 type BlogPostMetadata = typeof blogPostMetadataSchema.infer;
 
-interface ProcessedBlogPost {
+export interface ProcessedBlogPost {
   content: string;
   metadata: BlogPostMetadata;
   slug: string;
@@ -119,7 +119,7 @@ function removeRedundantLeadingHeading(
   return lines.slice(nextIndex).join("\n");
 }
 
-function processBlogDirectory(blogDir: string): ProcessedBlogPost[] {
+export function processBlogDirectory(blogDir: string): ProcessedBlogPost[] {
   const files = readdirSync(blogDir)
     .filter((f) => f.endsWith(".mdx"))
     .sort();

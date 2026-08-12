@@ -234,7 +234,7 @@ export const Route = createFileRoute('/(marketing)/')({
     meta: seoMeta({
       title: "Open-Source Calendar Syncing for Google, Outlook & iCloud",
       description:
-        "Keep your personal, work, and school calendars in sync automatically. Open-source (AGPL-3.0) calendar syncing for Google Calendar, Outlook, iCloud, FastMail, and CalDAV.",
+        "Keep your personal, work, and school calendars in sync automatically. Open source, and works with Google Calendar, Outlook, iCloud, Fastmail and more.",
       path: "/",
       brandPosition: "before",
     }),
