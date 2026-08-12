@@ -74,7 +74,7 @@ export const Route = createFileRoute("/(marketing)/pricing")({
         price: plan.price.replace("$", ""),
         description: plan.description,
       })))),
-      jsonLdScript(faqSchema(FAQ_ITEMS)),
+      jsonLdScript(faqSchema("/pricing", FAQ_ITEMS)),
     ],
   }),
 });

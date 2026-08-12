@@ -150,29 +150,6 @@ export function softwareApplicationSchema() {
   };
 }
 
-export function faqSchema(items: Array<{ question: string; answer: string }>) {
-  return {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    "@id": `${SITE_URL}/#faq`,
-    isPartOf: { "@id": `${SITE_URL}/#website` },
-    mainEntity: items.map((item) => {
-      const question = item.question.trim();
-      const answer = item.answer.trim();
-      if (!question || !answer) {
-        throw new Error(
-          `faqSchema requires a question and answer for every item, received ${JSON.stringify(item)}`,
-        );
-      }
-      return {
-        "@type": "Question",
-        name: question,
-        acceptedAnswer: { "@type": "Answer", text: answer },
-      };
-    }),
-  };
-}
-
 export function offerCatalogSchema(
   path: string,
   offers: Array<{ name: string; price: string; description: string }>,
@@ -197,6 +174,32 @@ export function offerCatalogSchema(
       description: offer.description,
       itemOffered: { "@id": `${SITE_URL}/#software` },
     })),
+  };
+}
+
+export function faqSchema(
+  path: string,
+  items: Array<{ question: string; answer: string }>,
+) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "@id": `${canonicalUrl(path)}/#faq`,
+    isPartOf: { "@id": `${SITE_URL}/#website` },
+    mainEntity: items.map((item) => {
+      const question = item.question.trim();
+      const answer = item.answer.trim();
+      if (!question || !answer) {
+        throw new Error(
+          `faqSchema requires a question and answer for every item, received ${JSON.stringify(item)}`,
+        );
+      }
+      return {
+        "@type": "Question",
+        name: question,
+        acceptedAnswer: { "@type": "Answer", text: answer },
+      };
+    }),
   };
 }
 

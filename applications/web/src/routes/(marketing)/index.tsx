@@ -191,7 +191,7 @@ export const Route = createFileRoute('/(marketing)/')({
     }),
     scripts: [
       jsonLdScript(softwareApplicationSchema()),
-      jsonLdScript(faqSchema(FAQ_ITEMS)),
+      jsonLdScript(faqSchema("", FAQ_ITEMS)),
     ],
   }),
 })
