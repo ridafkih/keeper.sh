@@ -1,3 +1,4 @@
+import { HTTP_STATUS } from "@keeper.sh/constants";
 import { createDAVClient } from "tsdav";
 import { createSafeFetch } from "../../../utils/safe-fetch";
 import { createDigestAwareFetch } from "./digest-fetch";
@@ -22,6 +23,15 @@ class CalDAVHttpError extends Error {
     this.name = "CalDAVHttpError";
     this.operation = operation;
     this.status = response.status;
+  }
+}
+
+class CalDAVAuthenticationError extends Error {
+  readonly status = HTTP_STATUS.UNAUTHORIZED;
+
+  constructor(cause: unknown) {
+    super("Invalid credentials", { cause });
+    this.name = "CalDAVAuthenticationError";
   }
 }
 
@@ -60,6 +70,7 @@ class CalDAVClient {
   private config: CalDAVClientConfig;
   private safeFetchOptions?: SafeFetchOptions;
   private resolvedAuthMethod: (() => CalDAVAuthMethod | null) | null = null;
+  private lastResponseStatus: (() => number | null) | null = null;
 
   constructor(config: CalDAVClientConfig, safeFetchOptions?: SafeFetchOptions) {
     this.config = config;
@@ -73,12 +84,13 @@ class CalDAVClient {
   private async getClient(): Promise<DAVClientInstance> {
     if (!this.client) {
       const safeFetch = createSafeFetch(this.safeFetchOptions);
-      const { fetch: digestAwareFetch, getResolvedMethod } = createDigestAwareFetch({
+      const { fetch: digestAwareFetch, getLastResponseStatus, getResolvedMethod } = createDigestAwareFetch({
         credentials: this.config.credentials,
         baseFetch: safeFetch,
         knownAuthMethod: this.config.authMethod,
       });
       this.resolvedAuthMethod = getResolvedMethod;
+      this.lastResponseStatus = getLastResponseStatus;
       this.client = await createDAVClient({
         authMethod: "Custom",
         authFunction: () => Promise.resolve({}),
@@ -91,9 +103,22 @@ class CalDAVClient {
     return this.client;
   }
 
+  private async mapAuthenticationFailure<Result>(operation: () => Promise<Result>): Promise<Result> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (this.lastResponseStatus?.() === HTTP_STATUS.UNAUTHORIZED) {
+        throw new CalDAVAuthenticationError(error);
+      }
+      throw error;
+    }
+  }
+
   async discoverCalendars(): Promise<CalendarInfo[]> {
-    const client = await this.getClient();
-    const calendars = await client.fetchCalendars();
+    const calendars = await this.mapAuthenticationFailure(async () => {
+      const client = await this.getClient();
+      return client.fetchCalendars();
+    });
 
     return calendars
       .filter(({ components }) => components?.includes("VEVENT"))
@@ -175,18 +200,18 @@ class CalDAVClient {
     return objects[0] ?? null;
   }
 
-  async fetchCalendarObjects(params: {
+  fetchCalendarObjects(params: {
     calendarUrl: string;
     timeRange?: { start: string; end: string };
   }): Promise<CalendarObject[]> {
-    const client = await this.getClient();
+    return this.mapAuthenticationFailure(async () => {
+      const client = await this.getClient();
 
-    const objects = await client.fetchCalendarObjects({
-      calendar: { url: params.calendarUrl },
-      ...(params.timeRange && { timeRange: params.timeRange }),
+      return client.fetchCalendarObjects({
+        calendar: { url: params.calendarUrl },
+        ...(params.timeRange && { timeRange: params.timeRange }),
+      });
     });
-
-    return objects;
   }
 
   private static ensureTrailingSlash(url: string): string {
@@ -206,4 +231,10 @@ class CalDAVClient {
 const createCalDAVClient = (config: CalDAVClientConfig, safeFetchOptions?: SafeFetchOptions): CalDAVClient =>
   new CalDAVClient(config, safeFetchOptions);
 
-export { CalDAVClient, CalDAVCreateConflictError, CalDAVHttpError, createCalDAVClient };
+export {
+  CalDAVAuthenticationError,
+  CalDAVClient,
+  CalDAVCreateConflictError,
+  CalDAVHttpError,
+  createCalDAVClient,
+};
