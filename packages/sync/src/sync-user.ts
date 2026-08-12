@@ -36,8 +36,6 @@ import type { OAuthConfig } from "./resolve-provider";
 import {
   createMappingMutationLockId,
   createSyncLock,
-  isCalendarInvalidated,
-  type SyncLockHandle,
 } from "./sync-lock";
 
 const GOOGLE_REQUESTS_PER_MINUTE = 500;
@@ -394,13 +392,6 @@ const isDestinationAttemptEligible = (
 ): boolean =>
   destination.nextAttemptAt === null || destination.nextAttemptAt <= now;
 
-const isCompletedAttemptCurrent = async (
-  handle: SyncLockHandle,
-  redis: Redis,
-  calendarId: string,
-): Promise<boolean> =>
-  await handle.isCurrent() && !await isCalendarInvalidated(redis, calendarId);
-
 const resetDestinationBackoffIfNeeded = async (
   database: BunSQLDatabase,
   destination: DestinationAttempt,
@@ -645,7 +636,6 @@ const syncDestinationsForUser = async (
           }
           return handle.isCurrent();
         },
-        isInvalidated: () => isCalendarInvalidated(redis, destination.calendarId),
         flush: createDatabaseFlush(database),
         onProgress: callbacks?.onProgress,
         onSyncEvent: (event) => {
@@ -689,7 +679,7 @@ const syncDestinationsForUser = async (
         ...(calendarAttempt.syncEvent && { syncEvent: calendarAttempt.syncEvent }),
       });
 
-      if (!(await isCompletedAttemptCurrent(handle, redis, destination.calendarId))) {
+      if (!(await handle.isCurrent())) {
         continue;
       }
 
