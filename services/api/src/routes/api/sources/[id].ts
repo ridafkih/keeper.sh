@@ -1,5 +1,5 @@
 import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
-import { and, eq } from "drizzle-orm";
+import { and, arrayContains, eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { database, premiumService } from "@/context";
@@ -7,6 +7,9 @@ import { idParamSchema } from "@/utils/request-query";
 import {
   getDestinationsForSource,
   getSourcesForDestination,
+  requestUserSync,
+  scheduleMappingReplacementSync,
+  withMappingMutationLocks,
 } from "@/utils/source-destination-mappings";
 import { withProviderMetadata } from "@/utils/provider-display";
 import { handlePatchSourceRoute } from "./[id]/source-item-routes";
@@ -35,6 +38,8 @@ const GET = withWideEvent(
         excludeEventName: calendarsTable.excludeEventName,
         excludeFocusTime: calendarsTable.excludeFocusTime,
         excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
+        syncFutureRange: calendarsTable.syncFutureRange,
+        syncHistoricRange: calendarsTable.syncHistoricRange,
         treatFullDayTimedEventsAsAllDay: calendarsTable.treatFullDayTimedEventsAsAllDay,
         createdAt: calendarsTable.createdAt,
         updatedAt: calendarsTable.updatedAt,
@@ -74,6 +79,45 @@ const PATCH = withWideEvent(
       {
         canUseEventFilters: (candidateUserId) => premiumService.canUseEventFilters(candidateUserId),
         updateSource: async (userIdToUpdate, sourceCalendarId, updates) => {
+          const updatesSyncWindow = "syncHistoricRange" in updates
+            || "syncFutureRange" in updates;
+          if (updatesSyncWindow) {
+            const mutation = await withMappingMutationLocks(
+              userIdToUpdate,
+              async () => {
+                const pushCalendars = await database
+                  .select({ id: calendarsTable.id })
+                  .from(calendarsTable)
+                  .where(and(
+                    eq(calendarsTable.id, sourceCalendarId),
+                    eq(calendarsTable.userId, userIdToUpdate),
+                    arrayContains(calendarsTable.capabilities, ["push"]),
+                  ));
+                return pushCalendars.map(({ id: calendarId }) => calendarId);
+              },
+              () => database.transaction(async (transaction) => {
+                const [updated] = await transaction
+                  .update(calendarsTable)
+                  .set(updates)
+                  .where(
+                    and(
+                      eq(calendarsTable.id, sourceCalendarId),
+                      eq(calendarsTable.userId, userIdToUpdate),
+                    ),
+                  )
+                  .returning();
+                if (updated?.capabilities.includes("push")) {
+                  await requestUserSync(transaction, userIdToUpdate);
+                }
+                return updated ?? null;
+              }),
+            );
+            if (mutation.destinationCalendarIds.length > 0 && mutation.result) {
+              scheduleMappingReplacementSync(userIdToUpdate);
+            }
+            return mutation.result;
+          }
+
           const [updated] = await database
             .update(calendarsTable)
             .set(updates)
@@ -84,7 +128,6 @@ const PATCH = withWideEvent(
               ),
             )
             .returning();
-
           return updated ?? null;
         },
       },

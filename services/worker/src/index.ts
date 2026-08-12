@@ -2,7 +2,11 @@ import { entry } from "entrykit";
 import { Worker } from "bullmq";
 import { PUSH_SYNC_QUEUE_NAME } from "@keeper.sh/queue";
 import type { PushSyncJobPayload, PushSyncJobResult } from "@keeper.sh/queue";
-import { closeDatabase } from "@keeper.sh/database";
+import {
+  closeDatabase,
+  createMigrationReadinessDatabase,
+  waitForDatabaseMigrations,
+} from "@keeper.sh/database";
 import { processJob } from "./processor";
 import { createActiveDestinationJobs } from "./active-destination-jobs";
 import { destroy } from "./utils/logging";
@@ -27,6 +31,7 @@ const parseConcurrency = (value: string | undefined): number => {
 await entry({
   main: async () => {
     const { database, shutdownConnections } = await import("./context");
+    await waitForDatabaseMigrations(createMigrationReadinessDatabase(database));
     const concurrency = parseConcurrency(env.WORKER_CONCURRENCY);
 
     const { syncAggregateRuntime } = await import("./processor");
@@ -48,7 +53,6 @@ await entry({
 
     const activeDestinationJobs = createActiveDestinationJobs({
       beginUserRun: (userId) => syncAggregateRuntime.beginSyncRun(userId),
-      cancelJob: (jobId) => worker.cancelJob(jobId, "superseded by newer destination sync"),
       releaseUserRun: (userId) => {
         syncAggregateRuntime.releaseSyncing(userId);
       },

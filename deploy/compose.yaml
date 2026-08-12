@@ -30,7 +30,7 @@ services:
     restart: unless-stopped
 
   api:
-    image: ghcr.io/ridafkih/keeper-api:latest
+    image: ghcr.io/ridafkih/keeper-api:2
     container_name: keeper-api
     env_file: .env
     environment:
@@ -41,10 +41,16 @@ services:
       - ./global-bundle.pem:/certs/global-bundle.pem:ro
     depends_on:
       - redis
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3001').then(() => process.exit(0), () => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 10s
     restart: unless-stopped
 
   cron:
-    image: ghcr.io/ridafkih/keeper-cron:latest
+    image: ghcr.io/ridafkih/keeper-cron:2
     container_name: keeper-cron
     env_file: .env
     environment:
@@ -55,11 +61,12 @@ services:
     volumes:
       - ./global-bundle.pem:/certs/global-bundle.pem:ro
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
   worker:
-    image: ghcr.io/ridafkih/keeper-worker:latest
+    image: ghcr.io/ridafkih/keeper-worker:2
     container_name: keeper-worker
     env_file: .env
     environment:
@@ -68,11 +75,14 @@ services:
     volumes:
       - ./global-bundle.pem:/certs/global-bundle.pem:ro
     depends_on:
-      - redis
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_started
     restart: unless-stopped
 
   mcp:
-    image: ghcr.io/ridafkih/keeper-mcp:latest
+    image: ghcr.io/ridafkih/keeper-mcp:2
     container_name: keeper-mcp
     env_file: .env
     environment:
@@ -85,7 +95,7 @@ services:
     restart: unless-stopped
 
   web:
-    image: ghcr.io/ridafkih/keeper-web:latest
+    image: ghcr.io/ridafkih/keeper-web:2
     container_name: keeper-web
     env_file: .env
     environment:

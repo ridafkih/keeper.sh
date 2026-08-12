@@ -19,7 +19,7 @@ interface RecurrenceMaterializationWindow {
 }
 
 interface RecurrenceMaterializationOptions {
-  retainOneOffEventsAfterWindowEnd?: boolean;
+  onSeriesOverBudget?: (error: RecurrenceMaterializationLimitError) => void;
 }
 
 interface RecurrenceSeriesIdentity {
@@ -136,16 +136,6 @@ const overlapsWindow = (
   event: Pick<SyncableEvent, "startTime" | "endTime">,
   window: RecurrenceMaterializationWindow,
 ): boolean => event.endTime > window.start && event.startTime < window.end;
-
-const overlapsOneOffDomain = (
-  event: Pick<SyncableEvent, "startTime" | "endTime">,
-  window: RecurrenceMaterializationWindow,
-  options: RecurrenceMaterializationOptions,
-): boolean => event.endTime > window.start
-  && (
-    options.retainOneOffEventsAfterWindowEnd
-    || event.startTime < window.end
-  );
 
 const toRecurrenceWallTime = (date: Date, timeZone: string | undefined): Date => {
   if (!timeZone) {
@@ -436,19 +426,48 @@ const materializeRecurrenceEvents = (
   const uniqueMastersBySeries = getUniqueMastersBySeries(events);
   const overriddenSlotsByMaster = getOverriddenSlotsByMaster(events, uniqueMastersBySeries);
   const materializedEvents: MaterializedSyncableEvent[] = [];
+  const { onSeriesOverBudget } = options;
+  const skippedSeriesUids = new Set<string>();
 
   for (const event of events) {
-    if (event.recurrenceRule && !event.recurrenceId) {
+    if (!event.recurrenceRule || event.recurrenceId) {
+      continue;
+    }
+    /*
+     * Callers that supply onSeriesOverBudget choose isolation: a series exceeding the
+     * budget for a freshly widened window is skipped so it cannot put a whole
+     * destination into backoff. Without the handler the limit still throws, so read
+     * paths surface it rather than silently returning a partial range.
+     */
+    try {
       materializedEvents.push(...materializeMaster(
         event,
         overriddenSlotsByMaster.get(event) ?? new Set<number>(),
         window,
       ));
+    } catch (error) {
+      if (!onSeriesOverBudget || !(error instanceof RecurrenceMaterializationLimitError)) {
+        throw error;
+      }
+      skippedSeriesUids.add(event.sourceEventUid);
+      onSeriesOverBudget(error);
+    }
+  }
+
+  for (const event of events) {
+    if (event.recurrenceRule && !event.recurrenceId) {
       continue;
     }
-
+    /*
+     * Overrides of a skipped series are dropped with it. Emitting them alone would
+     * surface a few detached occurrences with none of the series around them, which
+     * reads as a real sparse calendar rather than an omission.
+     */
+    if (event.recurrenceId && skippedSeriesUids.has(event.sourceEventUid)) {
+      continue;
+    }
     const oneOffEvent = asOneOffEvent(event);
-    if (overlapsOneOffDomain(oneOffEvent, window, options)) {
+    if (overlapsWindow(oneOffEvent, window)) {
       materializedEvents.push(oneOffEvent);
     }
   }
@@ -456,24 +475,38 @@ const materializeRecurrenceEvents = (
   return materializedEvents.toSorted(compareEvents);
 };
 
-const assertSourceRecurrenceMaterializationWithinBudget = (
+/*
+ * Returns the recurring masters that cannot be materialized within budget over
+ * this window. The window is user-configurable, so widening a sync range can pull
+ * a pathological series over the limit; callers drop those series rather than
+ * failing the whole calendar's ingestion.
+ */
+const findSourceEventsExceedingRecurrenceBudget = (
   calendarId: string,
   events: SourceEvent[],
   window: RecurrenceMaterializationWindow,
-): void => {
+): SourceEvent[] => {
   assertValidWindow(window);
-  const windowDuration = window.end.getTime() - window.start.getTime();
+  const exceeded: SourceEvent[] = [];
 
   for (const event of events) {
     if (!event.recurrenceRule || event.recurrenceId) {
       continue;
     }
 
+    /*
+     * Validate over the window the series is actually materialized against. Extending
+     * the end by a full window duration past `window.end` over-counts a series that
+     * starts inside the window, which now silently withholds it instead of throwing.
+     */
     let validationStart = window.start;
     if (event.startTime > window.start) {
       validationStart = event.startTime;
     }
-    const validationEnd = new Date(validationStart.getTime() + windowDuration);
+    if (validationStart >= window.end) {
+      continue;
+    }
+    const validationEnd = window.end;
     const master: SyncableEvent = {
       calendarId,
       calendarName: null,
@@ -488,15 +521,24 @@ const assertSourceRecurrenceMaterializationWithinBudget = (
       ...(event.startTimeZone && { startTimeZone: event.startTimeZone }),
     };
 
-    materializeMaster(master, new Set<number>(), {
-      end: validationEnd,
-      start: validationStart,
-    });
+    try {
+      materializeMaster(master, new Set<number>(), {
+        end: validationEnd,
+        start: validationStart,
+      });
+    } catch (error) {
+      if (!(error instanceof RecurrenceMaterializationLimitError)) {
+        throw error;
+      }
+      exceeded.push(event);
+    }
   }
+
+  return exceeded;
 };
 
 export {
-  assertSourceRecurrenceMaterializationWithinBudget,
+  findSourceEventsExceedingRecurrenceBudget,
   materializeRecurrenceEvents,
   RecurrenceMaterializationLimitError,
 };

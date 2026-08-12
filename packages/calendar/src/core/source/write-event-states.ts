@@ -117,6 +117,14 @@ interface EventStateInsertClient {
   };
 }
 
+/*
+ * Postgres caps a bind message at 65535 parameters and each row spends roughly
+ * fifteen of them, so a snapshot source reporting its whole history in one fetch
+ * can exceed the ceiling in a single statement. That rejection rolls the whole
+ * ingest back and recurs every tick, so the calendar never stores anything again.
+ */
+const INSERT_CHUNK_SIZE = 1000;
+
 const insertEventStateRows = async (
   database: EventStateInsertClient,
   rows: EventStateInsertRow[],
@@ -126,10 +134,12 @@ const insertEventStateRows = async (
     return;
   }
 
-  await database
-    .insert(eventStatesTable)
-    .values(rows)
-    .onConflictDoUpdate(conflictConfig);
+  for (let offset = 0; offset < rows.length; offset += INSERT_CHUNK_SIZE) {
+    await database
+      .insert(eventStatesTable)
+      .values(rows.slice(offset, offset + INSERT_CHUNK_SIZE))
+      .onConflictDoUpdate(conflictConfig);
+  }
 };
 
 const insertEventStatesWithConflictResolution = async (

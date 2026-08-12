@@ -13,6 +13,7 @@ const { auth: baseAuth } = createAuth({
   baseUrl: env.BETTER_AUTH_URL,
   commercialMode: env.COMMERCIAL_MODE ?? false,
   mcpResourceUrl: env.MCP_PUBLIC_URL,
+  mcpApiBaseUrl: env.MCP_API_URL,
 });
 
 if (!isKeeperMcpEnabledAuth(baseAuth)) {
@@ -24,7 +25,7 @@ const keeperMcpToolset = createKeeperMcpToolset();
 const handleMcpRequest = createKeeperMcpHandler({
   auth,
   mcpPublicUrl: env.MCP_PUBLIC_URL,
-  apiBaseUrl: env.BETTER_AUTH_URL,
+  apiBaseUrl: env.MCP_API_URL ?? env.BETTER_AUTH_URL,
   toolset: keeperMcpToolset,
 });
 

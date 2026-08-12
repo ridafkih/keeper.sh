@@ -1,0 +1,137 @@
+---
+title: "How to Sync iCloud Calendar with Outlook"
+description: "Connect your iCloud calendar to Outlook with Keeper.sh so personal commitments block time at work. Covers the Apple app-specific password, the exact setup screens, and what to check when sync stops."
+blurb: "Your dentist appointment is in iCloud and your coworkers book you in Outlook. Here is how to make one show up as busy time in the other, starting with the Apple password step everyone gets stuck on."
+createdAt: "2026-08-11"
+slug: "sync-icloud-calendar-with-outlook"
+updatedAt: "2026-08-11"
+tags:
+  - "icloud"
+  - "apple-calendar"
+  - "outlook"
+  - "sync"
+  - "guides"
+---
+
+Your dentist appointment is in iCloud. Your coworkers book you in Outlook. Neither calendar knows the other exists, so the 2pm you already gave away gets taken again.
+
+This guide blocks that time in Outlook automatically. It takes about ten minutes, and most of that is one Apple step.
+
+## What this actually does
+
+Keeper.sh copies events in one direction at a time. You pick the calendar events come from, and the calendar they go to.
+
+So "iCloud shows up in Outlook" is one connection. Work meetings appearing on your iPhone would be a second one, pointing the other way.
+
+Set up only the first and your Outlook edits never reach iCloud. That is intended, not a bug.
+
+## First, generate an Apple app-specific password
+
+Apple will not let an outside app sign in with your normal Apple Account password. That password also opens your photos, your purchase history and Find My.
+
+Instead you generate a separate password that reaches your calendar and nothing else. You can cancel it at any time without touching your real password.
+
+Keeper.sh shows you these same steps on the connect screen, and [Apple documents them too](https://support.apple.com/en-us/102654):
+
+1. Navigate to [appleid.apple.com](https://appleid.apple.com)
+2. Sign in with your Apple ID
+3. Select "App-Specific Passwords"
+4. Click the "+" next to "Passwords"
+5. Label and generate the password, then copy it
+6. Paste the app-specific password below
+
+You need two-factor authentication turned on, or the App-Specific Passwords option never appears. Apple shows the password exactly once, so copy it before closing the box.
+
+## Connect iCloud
+
+From your dashboard, open **Import Calendars**, then **Connect iCloud**. The screen is headed **Connect Apple Calendar** and asks for two things:
+
+- **Apple ID** — the email address you sign in to Apple with
+- **App-Specific Password** — the one you just generated, not your usual password
+
+Press **Connect**. Keeper.sh finds the calendars on your account, brings them all in, and takes you into setup.
+
+If you see **Invalid credentials**, it is the password nearly every time. Either your normal Apple password went in by mistake, or the generated one has since been cancelled.
+
+## Connect Outlook
+
+Back on **Import Calendars**, choose **Connect Outlook**. Keeper.sh lists what it is about to ask for:
+
+- See your email address
+- View a list of your calendars
+- View events, summaries and details
+- Add or remove calendar events
+
+Press **Connect** and sign in to Microsoft as normal.
+
+## Point one calendar at the other
+
+Setup asks a short series of questions.
+
+**Which calendars would you like to configure?** Tick the iCloud calendar you care about. You do not have to set up all of them now.
+
+**Rename Your Calendars.** iCloud calendars often arrive called "Home" or "Work". Renaming here only changes what you see inside Keeper.sh.
+
+**Where should 'Home' send events?** Tick your Outlook calendar. That is the connection made.
+
+**Where should 'Home' pull events from?** Leave it empty if you only want personal time showing up at work. Tick your Outlook calendar to get work meetings on your iPhone too.
+
+Press **Next** to finish. The first copy runs immediately rather than waiting for the next scheduled round.
+
+You can change any of this later from the calendar's own page, under **Send Events to Calendars**.
+
+## Decide how much detail crosses over
+
+You probably do not want colleagues reading the title of a personal appointment. Keeper.sh can copy the time and leave everything else behind.
+
+Open the calendar from your dashboard and find **Sync Settings**. Three switches control what travels: **Sync Event Name**, **Sync Event Description** and **Sync Event Location**.
+
+Turn one off and that detail stays in iCloud. With the name off, the copy in Outlook is titled after the calendar it came from, so it reads as a block of busy time.
+
+Check these switches before you trust the connection with anything sensitive. What they start out set to depends on how the calendar was first added, and we are [fixing that inconsistency](https://github.com/ridafkih/keeper.sh/issues/501).
+
+The **Exclusions** section keeps all-day events out, if birthdays and holidays would otherwise land on your work calendar as day-long blocks.
+
+On the hosted service both sections are part of Pro. On free, the copy stays titled after the calendar with the details left behind. Self-hosted installs include them for everyone.
+
+## What does not cross over
+
+Guests are not copied, so nobody gets invited twice or emailed by mistake. Meeting links and reminders stay put as well.
+
+The copy in Outlook is a block of time, not a second working version of the meeting. If you build the Outlook-to-iCloud direction, the meeting shows on your iPhone but you cannot join the call from it.
+
+## How quickly changes show up, and how far ahead
+
+Keeper.sh reads your calendars once a minute, on every plan, paid or not. Writing the change into the other calendar is the part that differs.
+
+Free writes every thirty minutes, so an appointment you add now blocks time at work within the half hour. Pro writes every minute. If you book at short notice and need coworkers to see it straight away, that gap is the reason to pay.
+
+Keeper.sh works with a window running from a week ago to two years out. A one-off appointment further ahead than that will not copy yet, and starts once it comes within range.
+
+## What the free plan covers
+
+Two connected accounts and three connections. iCloud is one account and Outlook the other, so this pairing uses both.
+
+The number of calendars inside each account does not matter. An iCloud account with six calendars still counts as one.
+
+Personal into work uses one connection. Adding work into personal uses a second, leaving one spare. Tick past that and Keeper.sh stops you and points you at the upgrade rather than failing quietly later.
+
+## When it stops working
+
+**Events quietly stopped appearing and nothing looks broken.** Changing your Apple Account password silently cancels every app-specific password you have ever made, including this one. Generate a fresh password and reconnect iCloud.
+
+**A calendar you were added to will not accept events.** Calendars shared with you by someone else, and ones you subscribed to from a link, usually arrive read-only. They work fine as the calendar events come from, and fail as the one events go to.
+
+**A calendar goes quiet for a while, then recovers.** When Apple or Microsoft rejects or times out a request, Keeper.sh waits longer before trying again. Left alone, it comes back.
+
+**An event you deleted is still there.** Check which direction you actually set up. Deleting in Outlook does nothing to iCloud unless you built that second connection.
+
+## Running it yourself instead
+
+Keeper.sh is open source, and self-hosting is a genuine alternative rather than a stripped-down one. Every paid feature is included free, and your calendar data stays on hardware you control.
+
+The `keeper-standalone` Docker image bundles the database, the background workers and everything else into one container.
+
+Be honest with yourself about the effort. iCloud works immediately, but Outlook means registering your own application with Microsoft and supplying its credentials. You are also the one who notices when it breaks.
+
+If that sounds fine, the [README](https://github.com/ridafkih/keeper.sh) has the setup. If you would rather not think about it, the hosted version is the same software with the maintenance handled.

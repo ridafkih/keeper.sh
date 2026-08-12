@@ -15,6 +15,7 @@ import { writeAuthStderr } from "./runtime-environment";
 import { resolveAuthCapabilities } from "./capabilities";
 import {
   resolveMcpAuthOptions,
+  resolveMcpJwksUrl,
 } from "./mcp-config";
 import {
   account as accountTable,
@@ -58,6 +59,7 @@ interface AuthConfig {
   passkeyOrigin?: string;
   trustedOrigins?: string[];
   mcpResourceUrl?: string;
+  mcpApiBaseUrl?: string;
 }
 
 interface KeeperMcpAuthSession {
@@ -134,6 +136,7 @@ const createAuth = (config: AuthConfig) => {
     passkeyOrigin,
     trustedOrigins,
     mcpResourceUrl,
+    mcpApiBaseUrl,
   } = config;
 
   const buildResendClient = (): Resend | null => {
@@ -353,7 +356,7 @@ const createAuth = (config: AuthConfig) => {
   if (mcpOptions) {
     const resourceClient = oauthProviderResourceClient();
     const resourceActions = resourceClient.getActions();
-    const jwksUrl = `${baseUrl}/api/auth/jwks`;
+    const jwksUrl = resolveMcpJwksUrl(baseUrl, mcpApiBaseUrl);
 
     if (!hasOAuthProviderApi(auth.api)) {
       throw new Error("OAuth provider plugin did not register expected API methods");

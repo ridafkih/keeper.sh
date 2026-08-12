@@ -1,17 +1,16 @@
-import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
-import { and, eq } from "drizzle-orm";
+import {
+  calendarAccountsTable,
+  calendarsTable,
+  sourceDestinationMappingsTable,
+} from "@keeper.sh/database/schema";
+import { and, eq, inArray } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type Redis from "ioredis";
 
-const INVALIDATION_PREFIX = "sync:invalidated:";
-const INVALIDATION_TTL_SECONDS = 300;
-
-const invalidateCalendarsForAccount = async (
+const getCalendarsAffectedByAccountMutation = async (
   database: BunSQLDatabase,
-  redis: Redis,
   userId: string,
   accountId: string,
-): Promise<boolean> => {
+): Promise<{ calendarIds: string[]; owned: boolean }> => {
   const ownedCalendars = await database
     .select({ calendarId: calendarsTable.id })
     .from(calendarAccountsTable)
@@ -24,23 +23,28 @@ const invalidateCalendarsForAccount = async (
     );
 
   if (ownedCalendars.length === 0) {
-    return false;
+    return { calendarIds: [], owned: false };
   }
 
-  const calendarIds = ownedCalendars
+  const ownedCalendarIds = ownedCalendars
     .map(({ calendarId }) => calendarId)
     .filter((calendarId): calendarId is string => calendarId !== null);
-  if (calendarIds.length === 0) {
-    return true;
+  if (ownedCalendarIds.length === 0) {
+    return { calendarIds: [], owned: true };
   }
 
-  const pipeline = redis.pipeline();
-  for (const calendarId of calendarIds) {
-    const key = `${INVALIDATION_PREFIX}${calendarId}`;
-    pipeline.set(key, "1", "EX", INVALIDATION_TTL_SECONDS);
-  }
-  await pipeline.exec();
-  return true;
+  const mappedDestinations = await database
+    .select({ calendarId: sourceDestinationMappingsTable.destinationCalendarId })
+    .from(sourceDestinationMappingsTable)
+    .where(inArray(sourceDestinationMappingsTable.sourceCalendarId, ownedCalendarIds));
+
+  return {
+    calendarIds: [...new Set([
+      ...ownedCalendarIds,
+      ...mappedDestinations.map(({ calendarId }) => calendarId),
+    ])],
+    owned: true,
+  };
 };
 
-export { invalidateCalendarsForAccount };
+export { getCalendarsAffectedByAccountMutation };

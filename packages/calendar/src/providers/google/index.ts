@@ -5,13 +5,6 @@ export {
   parseGoogleEvents,
   EventsFetchError,
 } from "./source/utils/fetch-events";
-export {
-  createGoogleCalendarSourceProvider,
-  GoogleCalendarSourceProvider,
-  type CreateGoogleSourceProviderConfig,
-  type GoogleSourceAccount,
-  type GoogleSourceConfig,
-} from "./source/provider";
 export type {
   GoogleCalendarListEntry,
   GoogleCalendarListResponse,

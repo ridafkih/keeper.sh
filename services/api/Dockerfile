@@ -22,6 +22,7 @@ COPY --from=build /app/services/api/dist ./services/api/dist
 COPY --from=prune /app/out/full/packages/otelemetry ./packages/otelemetry
 RUN bun link --cwd packages/otelemetry
 COPY --from=build /app/packages/database/src ./packages/database/src
+COPY --from=build /app/packages/data-schemas/src ./packages/data-schemas/src
 COPY --from=source /app/packages/database/scripts ./packages/database/scripts
 COPY --from=source /app/packages/database/drizzle ./packages/database/drizzle
 COPY --from=source /app/services/api/entrypoint.sh ./services/api/entrypoint.sh

@@ -10,6 +10,9 @@ import {
   ingestSource,
   insertEventStatesWithConflictResolution,
   withSourceIngestLock,
+  createSourceIngestionPlan,
+  DEFAULT_FUTURE_SYNC_RANGE,
+  DEFAULT_HISTORIC_SYNC_RANGE,
 } from "@keeper.sh/calendar";
 import type { IngestionPersistenceWork } from "@keeper.sh/calendar";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
@@ -82,6 +85,19 @@ const createIngestionPersistenceTransaction = (calendarId: string) =>
         if (changes.snapshot) {
           await persistCalendarSnapshot(transaction, calendarId, changes.snapshot);
         }
+
+        if (changes.coverage) {
+          await transaction
+            .update(calendarsTable)
+            .set({
+              ingestFutureRange: changes.coverage.futureRange,
+              ingestHistoricRange: changes.coverage.historicRange,
+              ingestWindowEnd: changes.coverage.window.timeMax,
+              ingestWindowRecordedAt: new Date(),
+              ingestWindowStart: changes.coverage.window.timeMin,
+            })
+            .where(eq(calendarsTable.id, calendarId));
+        }
       },
     }),
   );
@@ -95,6 +111,10 @@ const ingestIcsSource = async (source: Source): Promise<void> => {
     calendarId: source.id,
     url: source.url,
     database,
+    plan: createSourceIngestionPlan(
+      DEFAULT_HISTORIC_SYNC_RANGE,
+      DEFAULT_FUTURE_SYNC_RANGE,
+    ),
     safeFetchOptions,
   });
 

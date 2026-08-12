@@ -117,6 +117,8 @@ Ingestion pulls from your sources into Keeper's own database once a minute, rega
 
 Pushing to destinations is what the refresh interval in the pricing table refers to. The cron service enqueues a job per destination onto a Redis-backed queue every minute for Pro and every thirty minutes for free, and the worker service reconciles the destination calendar. This is polling on our side rather than provider push notifications, so nothing needs to reach your instance from the outside.
 
+Neither half is schedule-only. `POST /api/v1/sync`, or `trigger_sync` over MCP, clears the ingest backoff so your sources are re-polled on the next pass and enqueues the push half straight away, throttled to one request per minute per user so a client cannot hammer your providers. A calendar paused with `pause_sync` is skipped by both halves until it is resumed.
+
 # Cloud Hosted
 
 I've made Keeper easy to self-host, but whether you simply want to support the project or don't want to deal with the hassle or overhead of configuring and running your own infrastructure cloud hosting is always an option.
@@ -179,9 +181,10 @@ There are seven images currently available, two of them are designed for conveni
 | PRIVATE_RESOLUTION_WHITELIST          | `api`, `cron` | Optional. When `BLOCK_PRIVATE_RESOLUTION` is `true`, this comma-separated list of hostnames or IPs is exempt from the restriction.<br><br>e.g. `192.168.1.50,radicale.local,10.0.2.12` |
 | TRUSTED_ORIGINS                | `api`         | Optional. Comma-separated list of additional trusted origins for CSRF protection.<br><br>e.g. `http://192.168.1.100,http://keeper.local,https://keeper.example.com` |
 | WEBSOCKET_URL                  | `api`         | Optional. External URL clients should open the realtime socket against. When unset, clients connect to the API's own `/api/socket` path.<br><br>e.g. `wss://socket.keeper.example.com` |
-| MCP_PUBLIC_URL                 | `api`, `mcp`  | Optional on `api`, required by `mcp`. Public URL of the MCP resource. Enables OAuth on the API and identifies the MCP server to clients.<br><br>e.g. `https://keeper.example.com/mcp` |
+| MCP_PUBLIC_URL                 | `api`, `mcp`  | Optional on `api`, required by `mcp`. Public URL of the MCP resource. Enables OAuth on the API and identifies the MCP server to clients. In `keeper-standalone` it defaults to `BETTER_AUTH_URL` with `/mcp` appended.<br><br>e.g. `https://keeper.example.com/mcp` |
 | VITE_MCP_URL                   | `web`         | Optional. Internal URL the web server uses to proxy `/mcp` requests to the MCP service.<br><br>e.g. `http://mcp:3002`                                              |
-| MCP_PORT                       | `mcp`         | Required by `mcp`. Port the MCP server listens on.<br><br>e.g. `3002`                                                                                              |
+| MCP_PORT                       | `mcp`         | Required by `mcp`. Port the MCP server listens on. Pre-set to `3002` in the `keeper-standalone` image.<br><br>e.g. `3002`                                          |
+| MCP_API_URL                    | `api`, `mcp`  | Optional. Internal URL used to reach the Keeper API when serving MCP — for tool calls, and for fetching the signing keys that validate MCP tokens. Defaults to `BETTER_AUTH_URL`, which requires both services to be able to reach your instance's public URL. Pre-set to the bundled API in the `keeper-standalone` image.<br><br>e.g. `http://api:3001` |
 | OTEL_EXPORTER_OTLP_ENDPOINT    | `api`, `cron`, `worker`, `mcp`, `web` | Optional. When set, enables forwarding structured logs to an OpenTelemetry collector. Each service pipes its stdout through the `keeper-otelemetry` binary from [`@keeper.sh/otelemetry`](./packages/otelemetry), which runs as a separate process and does not affect application performance.<br><br>e.g. `https://otel-collector.example.com:4318` |
 | OTEL_EXPORTER_OTLP_PROTOCOL    | `api`, `cron`, `worker`, `mcp`, `web` | Optional. Protocol used by the OTLP exporter. Defaults to `http/protobuf` per the OpenTelemetry spec.<br><br>e.g. `http/protobuf`, `grpc`, `http/json` |
 | OTEL_EXPORTER_OTLP_HEADERS     | `api`, `cron`, `worker`, `mcp`, `web` | Optional. Headers sent with every OTLP export request. Use this for authentication (e.g. Basic auth or API keys).<br><br>e.g. `Authorization=Basic dXNlcjpwYXNz` |
@@ -206,7 +209,7 @@ The following environment variables are read by the `web` server at **runtime** 
 
 | Tag                        | Description                                                                                                                                              | Included Services                                                                        |
 | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `keeper-standalone:2`    | The "standalone" image is everything you need to get up and running with Keeper with as little configuration as possible.                                | `keeper-web`, `keeper-api`, `keeper-cron`, `keeper-worker`, `redis`, `postgresql`, `caddy` |
+| `keeper-standalone:2`    | The "standalone" image is everything you need to get up and running with Keeper with as little configuration as possible.                                | `keeper-web`, `keeper-api`, `keeper-cron`, `keeper-worker`, `keeper-mcp`, `redis`, `postgresql`, `caddy` |
 | `keeper-services:2`      | If you'd like for the Redis & Database to exist outside of the container, you can use the "services" image to launch without them included in the image. | `keeper-web`, `keeper-api`, `keeper-cron`, `keeper-worker`                                 |
 | `keeper-web:2`           | An image containing the Vite SSR web interface.                                                                                                          | `keeper-web`                                                                              |
 | `keeper-api:2`           | An image containing the Bun API service.                                                                                                                 | `keeper-api`                                                                              |
@@ -378,7 +381,7 @@ services:
       retries: 5
 
   keeper:
-    image: ghcr.io/ridafkih/keeper-services:latest
+    image: ghcr.io/ridafkih/keeper-services:2
     environment:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
@@ -461,7 +464,7 @@ services:
       retries: 5
 
   api:
-    image: ghcr.io/ridafkih/keeper-api:latest
+    image: ghcr.io/ridafkih/keeper-api:2
     environment:
       API_PORT: 3001
       DATABASE_URL: postgres://keeper:keeper@postgres:5432/keeper
@@ -480,7 +483,7 @@ services:
         condition: service_healthy
 
   cron:
-    image: ghcr.io/ridafkih/keeper-cron:latest
+    image: ghcr.io/ridafkih/keeper-cron:2
     environment:
       DATABASE_URL: postgres://keeper:keeper@postgres:5432/keeper
       REDIS_URL: redis://redis:6379
@@ -497,7 +500,7 @@ services:
         condition: service_healthy
 
   worker:
-    image: ghcr.io/ridafkih/keeper-worker:latest
+    image: ghcr.io/ridafkih/keeper-worker:2
     environment:
       DATABASE_URL: postgres://keeper:keeper@postgres:5432/keeper
       REDIS_URL: redis://redis:6379
@@ -513,7 +516,7 @@ services:
         condition: service_healthy
 
   web:
-    image: ghcr.io/ridafkih/keeper-web:latest
+    image: ghcr.io/ridafkih/keeper-web:2
     environment:
       VITE_API_URL: ${VITE_API_URL}
       PORT: 3000
@@ -554,6 +557,7 @@ curl https://keeper.example.com/api/v1/calendars \
 | Method   | Path                                     | Description                                                                                                                                                    |
 | -------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET`    | `/api/v1/calendars`                      | List connected calendars. Accepts an optional comma-delimited `provider` filter.                                                                                |
+| `PATCH`  | `/api/v1/calendars/{calendarId}`         | Pause or resume syncing for a calendar. Send `paused` as `true` to halt it in both directions without disconnecting it.                                         |
 | `GET`    | `/api/v1/calendars/{calendarId}/invites` | List invitations on a calendar that have not been responded to, within a date range.                                                                            |
 | `GET`    | `/api/v1/accounts`                       | List connected calendar accounts and how many calendars each has. Accepts an optional comma-delimited `provider` filter.                                        |
 | `GET`    | `/api/v1/events`                         | List events in a date range. Accepts `calendarId`, `availability`, and `isAllDay` filters, and `count=true` to return only a count.                             |
@@ -561,9 +565,15 @@ curl https://keeper.example.com/api/v1/calendars \
 | `GET`    | `/api/v1/events/{id}`                    | Get a single event.                                                                                                                                            |
 | `PATCH`  | `/api/v1/events/{id}`                    | Update an event's fields, or send `rsvpStatus` to respond to an invitation.                                                                                     |
 | `DELETE` | `/api/v1/events/{id}`                    | Delete an event.                                                                                                                                               |
+| `GET`    | `/api/v1/events/free-time`               | Find free slots of at least `durationMinutes` in a date range. Requires `timezone`, and accepts working-hours options.                                          |
+| `POST`   | `/api/v1/sync`                           | Trigger a sync immediately. Throttled to one request per minute per user.                                                                                      |
 | `GET`    | `/api/v1/ical`                           | Get the URL of your iCal feed.                                                                                                                                 |
 
 Range parameters `from` and `to` are ISO 8601 datetimes. If omitted, `from` defaults to now and `to` defaults to a week after `from`. A range may not exceed 732 days.
+
+`/api/v1/events/free-time` treats events marked free or working-elsewhere as non-blocking and everything else, including all-day events, as busy; pass `ignoreAllDayEvents=true` to stop all-day events blocking. `workingHoursStart` and `workingHoursEnd` are 24-hour local times such as `09:00`, and `workingDays` is a comma-delimited list where `0` is Sunday. All three are read against `timezone`, so the hours hold across daylight saving transitions.
+
+`POST /api/v1/sync` clears the ingest backoff on your sources so they are re-polled on the next pass, and enqueues a push to every destination. Exceeding the throttle returns `429` with a `Retry-After` header rather than queueing a second run.
 
 > [!NOTE]
 >
@@ -581,17 +591,20 @@ Keeper includes an optional MCP server that lets AI agents (such as Claude) acce
 | `get_event_count`     | Get the number of calendar events. Optionally scoped to a date range with `from` and `to` ISO 8601 datetimes.                                  |
 | `get_events`          | Get calendar events within a date range. Accepts ISO 8601 datetimes and an IANA timezone identifier used to localize event times.              |
 | `get_event`           | Get a single calendar event by its ID.                                                                                                         |
+| `find_free_time`      | Find open slots of at least a given duration across every synced calendar in a date range.                                                     |
 | `create_event`        | Create an event on a connected calendar. Requires a calendar ID, title, start time, and end time.                                               |
 | `update_event`        | Update an existing calendar event. Only the fields you provide are updated.                                                                    |
 | `delete_event`        | Delete a calendar event by its ID.                                                                                                             |
 | `get_pending_invites` | Get invitations on a calendar that have not been responded to within a date range.                                                             |
 | `rsvp_event`          | Respond to a calendar event invitation with `accepted`, `declined`, or `tentative`.                                                            |
 | `list_accounts`       | List all connected calendar accounts with provider information.                                                                                |
+| `trigger_sync`        | Force a sync now instead of waiting for the next scheduled run. Throttled to one request per minute.                                           |
+| `pause_sync`          | Pause or resume syncing for a single calendar without disconnecting it.                                                                        |
 | `get_ical_feed`       | Get your iCal feed URL for subscribing in other calendar apps.                                                                                 |
 
 ## Connecting an MCP Client
 
-To connect an MCP-compatible client (e.g. Claude Code, Claude Desktop), point it at your MCP server URL. The client will be guided through the OAuth consent flow to authorize read and write access to your calendar data — the toolset can create, update, delete, and RSVP to events, not just read them.
+To connect an MCP-compatible client (e.g. Claude Code, Claude Desktop), point it at your MCP server URL. The client will be guided through the OAuth consent flow to authorize read and write access to your calendar data — the toolset can create, update, delete, and RSVP to events, find open time, and pause or force a sync, not just read them.
 
 Example Claude Code MCP configuration:
 
@@ -612,9 +625,11 @@ Example Claude Code MCP configuration:
 >
 > MCP is fully optional. All MCP-related environment variables are optional across every service and image. If they are not set, Keeper starts normally without MCP functionality. Existing self-hosted deployments are unaffected.
 
-The MCP server is proxied through the web service at `/mcp`, the same way the API is proxied at `/api`. MCP is **not** bundled in the `keeper-standalone` or `keeper-services` convenience images — run the `keeper-mcp` image as a separate container alongside them.
+The MCP server is proxied through the web service at `/mcp`, the same way the API is proxied at `/api`.
 
-To enable MCP on a self-hosted instance:
+`keeper-standalone` bundles the MCP server and serves it at `/mcp` on the port you already publish, with no extra configuration. It derives `MCP_PUBLIC_URL` from `BETTER_AUTH_URL`, so as long as `BETTER_AUTH_URL` is your instance URL, your MCP client points at that same URL with `/mcp` appended.
+
+MCP is **not** bundled in `keeper-services` or the individual service images. To enable it there:
 
 1. Run the `keeper-mcp` container with `MCP_PORT`, `MCP_PUBLIC_URL`, `DATABASE_URL`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL`.
 2. Set `MCP_PUBLIC_URL` on the `api` service to the same value (e.g. `https://keeper.example.com/mcp`).

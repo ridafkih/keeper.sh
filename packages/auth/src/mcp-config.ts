@@ -61,6 +61,9 @@ const resolveValidAudiences = (resourceBaseUrl: string): string[] => {
   return [...audiences];
 };
 
+const resolveMcpJwksUrl = (baseUrl: string, apiBaseUrl?: string): string =>
+  `${normalizeUrl(apiBaseUrl ?? baseUrl)}/api/auth/jwks`;
+
 const resolveMcpAuthOptions = (
   input: ResolveMcpAuthOptionsInput,
 ): ResolvedMcpAuthOptions | null => {
@@ -105,5 +108,6 @@ export {
   KEEPER_API_SYNC_SCOPE,
   KEEPER_MCP_OAUTH_SCOPES,
   resolveMcpAuthOptions,
+  resolveMcpJwksUrl,
 };
 export type { ResolvedMcpAuthOptions, ResolveMcpAuthOptionsInput };

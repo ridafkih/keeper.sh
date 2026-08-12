@@ -51,6 +51,19 @@ describe("sourcePatchBodySchema", () => {
     expect(result instanceof type.errors).toBe(false);
   });
 
+  it("accepts mapped historic and future sync ranges", () => {
+    const result = sourcePatchBodySchema({
+      syncFutureRange: "2_years",
+      syncHistoricRange: "3_months",
+    });
+    expect(result instanceof type.errors).toBe(false);
+  });
+
+  it("rejects arbitrary sync ranges", () => {
+    const result = sourcePatchBodySchema({ syncHistoricRange: "90_days" });
+    expect(result instanceof type.errors).toBe(true);
+  });
+
   it("rejects extra properties", () => {
     const result = sourcePatchBodySchema({ name: "ok", hacker: true });
     expect(result instanceof type.errors).toBe(true);

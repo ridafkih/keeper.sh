@@ -9,7 +9,11 @@ import { and, arrayContains, asc, eq, gte } from "drizzle-orm";
 import type { Plan } from "@keeper.sh/data-schemas";
 import type { SyncableEvent } from "../types";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { getOAuthSyncWindowStart } from "./sync-window";
+import {
+  DEFAULT_FUTURE_SYNC_RANGE,
+  DEFAULT_HISTORIC_SYNC_RANGE,
+  getConfigurableSyncWindow,
+} from "../sync/sync-range";
 
 interface OAuthAccount {
   calendarId: string;
@@ -120,7 +124,10 @@ const getUserEventsForSync = async (
   database: BunSQLDatabase,
   userId: string,
 ): Promise<SyncableEvent[]> => {
-  const syncWindowStart = getOAuthSyncWindowStart();
+  const { timeMin: syncWindowStart } = getConfigurableSyncWindow(
+    DEFAULT_HISTORIC_SYNC_RANGE,
+    DEFAULT_FUTURE_SYNC_RANGE,
+  );
 
   const results = await database
     .select({

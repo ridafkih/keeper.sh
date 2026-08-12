@@ -1,12 +1,10 @@
 import type { SourceEvent } from "../../../core/types";
+import type { SourceIngestionPlan, SyncWindow } from "../../../core/sync/sync-range";
 import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import { isKeeperEvent } from "../../../core/events/identity";
 import { CalDAVClient } from "../shared/client";
 import { parseICalCalendarsToRemoteEvents } from "../shared/ics";
-import { getCalDAVSyncWindow } from "../shared/sync-window";
-
-const YEARS_UNTIL_FUTURE = 2;
 
 interface CalDAVSourceFetcherConfig {
   authMethod?: "basic" | "digest";
@@ -15,11 +13,24 @@ interface CalDAVSourceFetcherConfig {
   username: string;
   password: string;
   safeFetchOptions?: SafeFetchOptions;
+  plan: SourceIngestionPlan;
 }
 
 interface CalDAVSourceFetcher {
   fetchEvents: () => Promise<FetchEventsResult>;
 }
+
+/*
+ * Recurring masters are kept regardless of their own start/end: the CalDAV
+ * time-range filter already returned their in-window occurrences. Non-recurring
+ * events use the same overlap test the rest of the pipeline uses, so a boundary
+ * event is treated identically wherever the window is applied.
+ */
+const isCalDAVEventInSyncWindow = (
+  event: { endTime: Date; recurrenceRule?: unknown; startTime: Date },
+  syncWindow: SyncWindow,
+): boolean => Boolean(event.recurrenceRule)
+  || event.endTime > syncWindow.timeMin && event.startTime < syncWindow.timeMax;
 
 const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSourceFetcher => {
   const client = new CalDAVClient({
@@ -29,14 +40,14 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
   }, config.safeFetchOptions);
 
   const fetchEvents = async (): Promise<FetchEventsResult> => {
-    const syncWindow = getCalDAVSyncWindow(YEARS_UNTIL_FUTURE);
+    const { futureRange, historicRange, window: syncWindow } = config.plan;
     const calendarUrl = await client.resolveCalendarUrl(config.calendarUrl);
 
     const objects = await client.fetchCalendarObjects({
       calendarUrl,
       timeRange: {
-        end: syncWindow.end.toISOString(),
-        start: syncWindow.start.toISOString(),
+        end: syncWindow.timeMax.toISOString(),
+        start: syncWindow.timeMin.toISOString(),
       },
     });
 
@@ -54,13 +65,7 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
       if (isKeeperEvent(parsed.uid)) {
         continue;
       }
-      /*
-       * Non-recurring events that ended before the sync window are out of scope.
-       * Recurring events with a master DTSTART before the window are kept: their
-       * occurrences within the window were already returned by the CalDAV time-range
-       * filter, and downstream RRULE expansion handles the rest.
-       */
-      if (!parsed.recurrenceRule && parsed.endTime < syncWindow.start) {
+      if (!isCalDAVEventInSyncWindow(parsed, syncWindow)) {
         continue;
       }
 
@@ -81,11 +86,19 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
       });
     }
 
-    return { events };
+    return {
+      events,
+      syncWindow,
+      coverage: {
+        futureRange,
+        historicRange,
+        window: syncWindow,
+      },
+    };
   };
 
   return { fetchEvents };
 };
 
-export { createCalDAVSourceFetcher };
+export { createCalDAVSourceFetcher, isCalDAVEventInSyncWindow };
 export type { CalDAVSourceFetcherConfig, CalDAVSourceFetcher };

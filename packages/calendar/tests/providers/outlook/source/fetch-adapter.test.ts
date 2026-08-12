@@ -5,9 +5,11 @@ import {
   resolveSyncTokenForWindow,
 } from "../../../../src/core/oauth/sync-token";
 import { createOutlookSourceFetcher } from "../../../../src/providers/outlook/source/fetch-adapter";
+import { createSourceIngestionPlan } from "../../../../src/core/sync/sync-range";
 
 const CALENDAR_ID = "calendar-id";
 const OUTLOOK_SYNC_TOKEN_VERSION = getOAuthSyncTokenVersion(1, new Date(), CALENDAR_ID);
+const TEST_PLAN = createSourceIngestionPlan("1_week", "2_years");
 const originalFetch = globalThis.fetch;
 const fetchKeeperCategoryDelta = (): Promise<Response> => Promise.resolve(Response.json({
   "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
@@ -40,17 +42,6 @@ afterEach(() => {
 });
 
 describe("createOutlookSourceFetcher", () => {
-  it("returns a fetchEvents function", () => {
-    const fetcher = createOutlookSourceFetcher({
-      accessToken: "test-token",
-      calendarId: CALENDAR_ID,
-      externalCalendarId: "calendar-id",
-      syncToken: null,
-    });
-
-    expect(typeof fetcher.fetchEvents).toBe("function");
-  });
-
   it("returns a versioned delta link that the next cron run accepts", async () => {
     const rawDeltaLink = "https://graph.microsoft.com/delta?$deltatoken=next";
     const queuedFetch = (): Promise<Response> => Promise.resolve(Response.json({
@@ -62,6 +53,7 @@ describe("createOutlookSourceFetcher", () => {
     const fetcher = createOutlookSourceFetcher({
       accessToken: "test-token",
       calendarId: CALENDAR_ID,
+      plan: TEST_PLAN,
       externalCalendarId: "calendar-id",
       syncToken: null,
     });
@@ -94,6 +86,7 @@ describe("createOutlookSourceFetcher", () => {
     const fetcher = createOutlookSourceFetcher({
       accessToken: "test-token",
       calendarId: CALENDAR_ID,
+      plan: TEST_PLAN,
       externalCalendarId: "calendar-id",
       syncToken: encodeStoredSyncToken(
         "https://graph.microsoft.com/delta?$deltatoken=current",
@@ -112,6 +105,7 @@ describe("createOutlookSourceFetcher", () => {
     const fetcher = createOutlookSourceFetcher({
       accessToken: "test-token",
       calendarId: CALENDAR_ID,
+      plan: TEST_PLAN,
       externalCalendarId: "calendar-id",
       syncToken: encodeStoredSyncToken(
         "https://graph.microsoft.com/delta?$deltatoken=current",
@@ -130,6 +124,7 @@ describe("createOutlookSourceFetcher", () => {
     const fetcher = createOutlookSourceFetcher({
       accessToken: "test-token",
       calendarId: CALENDAR_ID,
+      plan: TEST_PLAN,
       externalCalendarId: "calendar-id",
       syncToken: encodeStoredSyncToken(
         "https://graph.microsoft.com/delta?$deltatoken=current",
@@ -140,6 +135,7 @@ describe("createOutlookSourceFetcher", () => {
     await expect(fetcher.fetchEvents()).resolves.toEqual({
       events: [],
       fullSyncRequired: true,
+      syncWindow: TEST_PLAN.window,
     });
   });
 
@@ -149,6 +145,7 @@ describe("createOutlookSourceFetcher", () => {
     const result = await createOutlookSourceFetcher({
       accessToken: "test-token",
       calendarId: CALENDAR_ID,
+      plan: TEST_PLAN,
       externalCalendarId: "calendar-id",
       syncToken: encodeStoredSyncToken(
         "https://graph.microsoft.com/delta?$deltatoken=current",
@@ -156,6 +153,10 @@ describe("createOutlookSourceFetcher", () => {
       ),
     }).fetchEvents();
 
-    expect(result).toEqual({ events: [], fullSyncRequired: true });
+    expect(result).toEqual({
+      events: [],
+      fullSyncRequired: true,
+      syncWindow: TEST_PLAN.window,
+    });
   });
 });

@@ -12,6 +12,9 @@ interface PushDestinationJob {
   };
 }
 
+// The stable job id is load-bearing: BullMQ dedups enqueues on it.
+// A running sync therefore never gains a queued replacement that supersedes or cancels it, which used to livelock.
+// Correlation ids belong in job data only, never in the id.
 const buildPushDestinationJobs = (
   destinations: DestinationCalendarRef[],
   plan: Plan,

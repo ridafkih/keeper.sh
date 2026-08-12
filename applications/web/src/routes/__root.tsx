@@ -1,14 +1,15 @@
-import { HeadContent, Outlet, Scripts, createRootRouteWithContext, useLocation } from "@tanstack/react-router";
+import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
-import { useEffect } from "react";
 import { SWRConfig } from "swr";
 import { Heading2 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
 import { LinkButton, ButtonText } from "@/components/ui/primitives/button";
+import { NotFoundState } from "@/components/ui/shells/not-found";
 import { fetcher, HttpError } from "@/lib/fetcher";
 import { resolveErrorMessage } from "@/utils/errors";
 import type { AppRouterContext, ViteScript } from "@/lib/router-context";
 import { serializePublicRuntimeConfig } from "@/lib/runtime-config";
+import { clientStateScript } from "@/lib/client-state-script";
 import { AnalyticsScripts } from "@/components/analytics-scripts";
 
 const NON_RETRYABLE_STATUSES = new Set([401, 403, 404]);
@@ -36,7 +37,7 @@ const SWR_CONFIG = {
 
 export const Route = createRootRouteWithContext<AppRouterContext>()({
   component: RootComponent,
-  notFoundComponent: NotFound,
+  notFoundComponent: NotFoundState,
   errorComponent: ErrorFallback,
   head: () => ({
     meta: [
@@ -71,6 +72,7 @@ function RootComponent() {
             __html: `window.__KEEPER_RUNTIME_CONFIG__ = ${serializePublicRuntimeConfig(runtimeConfig)};`,
           }}
         />
+        <script dangerouslySetInnerHTML={{ __html: clientStateScript }} />
         {viteAssets?.inlineStyles?.map((css, index) => (
           <style key={index} dangerouslySetInnerHTML={{ __html: css }} />
         ))}
@@ -93,7 +95,6 @@ function RootComponent() {
       <body>
         <div id="root">
           <SWRConfig value={SWR_CONFIG}>
-            <ScrollToTopOnNavigation />
             <Outlet />
           </SWRConfig>
         </div>
@@ -104,35 +105,6 @@ function RootComponent() {
         <AnalyticsScripts runtimeConfig={runtimeConfig} />
       </body>
     </html>
-  );
-}
-
-function ScrollToTopOnNavigation() {
-  const location = useLocation();
-
-  useEffect(() => {
-    if (location.hash.length > 0) {
-      return;
-    }
-
-    window.scrollTo({ left: 0, top: 0, behavior: "auto" });
-  }, [location.hash, location.pathname]);
-
-  return null;
-}
-
-function NotFound() {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-dvh px-2 gap-3">
-      <meta name="robots" content="noindex" />
-      <Heading2>Page not found</Heading2>
-      <Text size="sm" tone="muted">
-        The page you're looking for doesn't exist.
-      </Text>
-      <LinkButton to="/" variant="border" size="compact">
-        <ButtonText>Go home</ButtonText>
-      </LinkButton>
-    </div>
   );
 }
 

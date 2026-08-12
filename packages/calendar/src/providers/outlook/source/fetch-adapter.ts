@@ -1,10 +1,10 @@
 import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
+import type { SourceIngestionPlan } from "../../../core/sync/sync-range";
 import { encodeStoredSyncToken, resolveSyncTokenForWindow } from "../../../core/oauth/sync-token";
-import { getOAuthSyncTokenVersion, getOAuthSyncWindow } from "../../../core/oauth/sync-window";
+import { getOAuthSyncTokenVersion } from "../../../core/oauth/sync-window";
 import { filterSourceEventsToSyncWindow } from "../../../core/source/sync-diagnostics";
 import { fetchCalendarEvents, parseOutlookEvents } from "./utils/fetch-events";
 
-const YEARS_UNTIL_FUTURE = 2;
 const OUTLOOK_ADAPTER_VERSION = 1;
 
 interface OutlookSourceFetcherConfig {
@@ -13,6 +13,7 @@ interface OutlookSourceFetcherConfig {
   externalCalendarId: string;
   syncToken: string | null;
   signal?: AbortSignal;
+  plan: SourceIngestionPlan;
 }
 
 interface OutlookSourceFetcher {
@@ -26,7 +27,7 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
       calendarId: config.externalCalendarId,
       signal: config.signal,
     };
-    const syncWindow = getOAuthSyncWindow(YEARS_UNTIL_FUTURE);
+    const { futureRange, historicRange, window: syncWindow } = config.plan;
     const syncTokenVersion = getOAuthSyncTokenVersion(
       OUTLOOK_ADAPTER_VERSION,
       new Date(),
@@ -48,10 +49,10 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
     const result = await fetchCalendarEvents(fetchOptions);
 
     if (result.fullSyncRequired) {
-      return { events: [], fullSyncRequired: true };
+      return { events: [], fullSyncRequired: true, syncWindow };
     }
     if (!result.nextDeltaLink) {
-      return { events: [], fullSyncRequired: true };
+      return { events: [], fullSyncRequired: true, syncWindow };
     }
 
     const parsedEvents = parseOutlookEvents(result.events);
@@ -66,6 +67,14 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
         result.nextDeltaLink,
         syncTokenVersion,
       ),
+      syncWindow,
+      ...(!result.isDeltaSync && {
+        coverage: {
+          futureRange,
+          historicRange,
+          window: syncWindow,
+        },
+      }),
     };
   };
 

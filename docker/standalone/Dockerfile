@@ -9,7 +9,7 @@ COPY . .
 FROM base AS prune
 RUN bun install --global turbo
 COPY --from=source /app .
-RUN turbo prune @keeper.sh/api @keeper.sh/cron @keeper.sh/worker @keeper.sh/web --docker
+RUN turbo prune @keeper.sh/api @keeper.sh/cron @keeper.sh/mcp @keeper.sh/worker @keeper.sh/web --docker
 
 FROM base AS build
 COPY --from=prune /app/out/json/ .
@@ -17,6 +17,7 @@ RUN bun install --frozen-lockfile
 COPY --from=prune /app/out/full/ .
 RUN bun run --cwd services/api build && \
     bun run --cwd services/cron build && \
+    bun run --cwd services/mcp build && \
     bun run --cwd services/worker build && \
     bun run --cwd applications/web build
 
@@ -67,8 +68,10 @@ RUN bun install --frozen-lockfile --production
 
 COPY --from=build /app/services/api/dist ./services/api/dist
 COPY --from=build /app/services/cron/dist ./services/cron/dist
+COPY --from=build /app/services/mcp/dist ./services/mcp/dist
 COPY --from=build /app/services/worker/dist ./services/worker/dist
 COPY --from=build /app/packages/database/src ./packages/database/src
+COPY --from=build /app/packages/data-schemas/src ./packages/data-schemas/src
 COPY --from=source /app/packages/database/scripts ./packages/database/scripts
 COPY --from=source /app/packages/database/drizzle ./packages/database/drizzle
 
@@ -76,7 +79,7 @@ COPY --from=build /app/applications/web/dist ./applications/web/dist
 
 COPY docker/standalone/rootfs /
 
-RUN chmod +x /etc/s6-overlay/s6-rc.d/*/run /etc/s6-overlay/scripts/* \
+RUN chmod +x /etc/s6-overlay/s6-rc.d/*/run /etc/s6-overlay/s6-rc.d/*/finish /etc/s6-overlay/scripts/* \
   && mkdir -p /var/lib/postgresql/data /run/postgresql /var/log/keeper \
   && chown -R postgres:postgres /var/lib/postgresql /run/postgresql
 
@@ -92,6 +95,9 @@ ENV COMMERCIAL_MODE=false
 ENV WORKER_JOB_QUEUE_ENABLED=true
 ENV BETTER_AUTH_URL=http://localhost
 ENV VITE_API_URL=http://127.0.0.1:3001
+ENV VITE_MCP_URL=http://127.0.0.1:3002
+ENV MCP_PORT=3002
+ENV MCP_API_URL=http://127.0.0.1:3001
 
 EXPOSE 80
 

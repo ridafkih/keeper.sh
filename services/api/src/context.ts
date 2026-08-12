@@ -78,6 +78,7 @@ const { auth, capabilities: authCapabilities } = createAuth({
   passkeyRpName: env.PASSKEY_RP_NAME,
   passkeyOrigin: env.PASSKEY_ORIGIN,
   mcpResourceUrl: env.MCP_PUBLIC_URL,
+  mcpApiBaseUrl: env.MCP_API_URL,
   ...(trustedOrigins.length > MIN_TRUSTED_ORIGINS_COUNT && { trustedOrigins }),
 });
 

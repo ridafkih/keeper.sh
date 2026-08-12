@@ -34,30 +34,21 @@ export {
   type CoordinatedRefresherOptions,
 } from "./core/oauth/coordinated-refresher";
 export {
-  OAuthSourceProvider,
-  type FetchEventsResult,
-  type ProcessEventsOptions,
-} from "./core/oauth/source-provider";
-export {
   OAUTH_SYNC_WINDOW_VERSION,
   getOAuthSyncTokenVersion,
-  getOAuthSyncWindow,
-  getOAuthSyncWindowStart,
-  type OAuthSyncWindow,
 } from "./core/oauth/sync-window";
 export {
   decodeStoredSyncToken,
   encodeStoredSyncToken,
   resolveSyncTokenForWindow,
 } from "./core/oauth/sync-token";
-export {
-  createOAuthSourceProvider,
-  type CreateOAuthSourceProviderOptions,
-  type OAuthSourceAccount,
-  type SourceProvider,
-} from "./core/oauth/create-source-provider";
 export { generateDeterministicEventUid, isKeeperEvent } from "./core/events/identity";
 export { inferAllDayEvent, resolveIsAllDayEvent } from "./core/events/all-day";
+export {
+  instantToWallTime,
+  resolveTimeZone,
+  wallTimeToInstant,
+} from "./ics/utils/timezone-instant";
 export { RateLimiter, type RateLimiterConfig } from "./core/utils/rate-limiter";
 export { createRedisRateLimiter, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
 export { allSettledWithConcurrency, type AllSettledWithConcurrencyOptions } from "./core/utils/concurrency";
@@ -83,7 +74,7 @@ export {
   type DestinationEventReadResult,
 } from "./core/events/events";
 export {
-  assertSourceRecurrenceMaterializationWithinBudget,
+  findSourceEventsExceedingRecurrenceBudget,
   materializeRecurrenceEvents,
   RecurrenceMaterializationLimitError,
   type RecurrenceMaterializationOptions,
@@ -131,6 +122,17 @@ export {
   type EventStateInsertClient,
 } from "./core/source/write-event-states";
 export { computeSyncOperations } from "./core/sync/operations";
+export {
+  DEFAULT_FUTURE_SYNC_RANGE,
+  DEFAULT_HISTORIC_SYNC_RANGE,
+  createSyncWindow,
+  createSourceIngestionPlan,
+  getConfigurableSyncWindow,
+  getWiderSyncRange,
+  intersectSyncWindows,
+  type SourceIngestionPlan,
+  type SyncWindow,
+} from "./core/sync/sync-range";
 export {
   type DestinationSyncResult,
   type SyncProgressUpdate,
@@ -197,8 +199,6 @@ export type {
   ListRemoteEventsOptions,
   BroadcastSyncStatus,
   SourceEvent,
-  SourceSyncResult,
-  OAuthSourceConfig,
   SyncOperation,
 } from "./core/types";
 
@@ -220,11 +220,6 @@ export type {
   OAuthProviderDefinition,
   CalDAVProviderDefinition,
 } from "./utils/registry/registry";
-
-export {
-  getSourceProvider,
-  type SourceProvidersConfig,
-} from "./utils/registry/server";
 
 export {
   executeRemoteOperations,

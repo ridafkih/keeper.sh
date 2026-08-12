@@ -1,5 +1,4 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type { BunSQLClient } from "./database-client";
 import type { IcsDuration, IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
 import type { RefreshLockStore } from "./oauth/refresh-coordinator";
 
@@ -180,32 +179,6 @@ interface SourceEvent {
   location?: string;
 }
 
-interface SourceSyncResult {
-  eventsAdded: number;
-  eventsRemoved: number;
-  eventsInserted?: number;
-  eventsUpdated?: number;
-  eventsFilteredOutOfWindow?: number;
-  syncTokenResetCount?: number;
-  syncToken?: string;
-  fullSyncRequired?: boolean;
-  errors?: Error[];
-}
-
-interface OAuthSourceConfig {
-  database: BunSQLClient;
-  userId: string;
-  calendarId: string;
-  externalCalendarId: string;
-  accessToken: string;
-  refreshToken: string;
-  accessTokenExpiresAt: Date;
-  syncToken: string | null;
-  calendarAccountId: string;
-  oauthCredentialId: string;
-  refreshLockStore?: RefreshLockStore | null;
-}
-
 export type {
   AuthType,
   EventAvailability,
@@ -230,6 +203,4 @@ export type {
   OutlookCalendarConfig,
   CalDAVConfig,
   SourceEvent,
-  SourceSyncResult,
-  OAuthSourceConfig,
 };

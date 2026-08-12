@@ -9,7 +9,6 @@ import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/go
 import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/outlook";
 import type { database as contextDatabase } from "@/context";
 import { spawnBackgroundJob } from "./background-task";
-import { getSourceProvider } from "@keeper.sh/calendar";
 import { applySourceSyncDefaults } from "./source-sync-defaults";
 
 import { enqueuePushSync } from "./enqueue-push-sync";
@@ -363,19 +362,6 @@ const hasExistingOAuthCalendar = async (
   return hasExistingOAuthCalendarWithDatabase(database, options);
 };
 
-const syncOAuthSourcesByProvider = async (userId: string, providerId: string): Promise<void> => {
-  const { database, oauthProviders, refreshLockStore } = await import("@/context");
-  const sourceProvider = getSourceProvider(providerId, {
-    database,
-    oauthProviders,
-    refreshLockStore,
-  });
-  if (!sourceProvider) {
-    return;
-  }
-  await sourceProvider.syncSourcesForUser(userId);
-};
-
 const createOAuthSourceRecordWithDatabase = async (
   databaseClient: OAuthSourceDatabase,
   payload: Parameters<CreateOAuthSourceDependencies["createSource"]>[0],
@@ -460,8 +446,7 @@ const createDefaultCreateOAuthSourceDependencies = (): CreateOAuthSourceDependen
   findExistingAccountId: findOAuthAccountId,
   hasExistingCalendar: hasExistingOAuthCalendar,
   triggerSync: (userId, provider) => {
-    spawnBackgroundJob("oauth-source-sync", { userId, provider }, async () => {
-      await syncOAuthSourcesByProvider(userId, provider);
+    spawnBackgroundJob("oauth-source-push-enqueue", { userId, provider }, async () => {
       const { premiumService } = await import("@/context");
       const plan = await premiumService.getUserPlan(userId);
       if (!plan) {
@@ -706,8 +691,7 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
     }
   },
   triggerSync: (userId, provider) => {
-    spawnBackgroundJob("oauth-account-import", { userId, provider }, async () => {
-      await syncOAuthSourcesByProvider(userId, provider);
+    spawnBackgroundJob("oauth-account-import-push-enqueue", { userId, provider }, async () => {
       const { premiumService } = await import("@/context");
       const plan = await premiumService.getUserPlan(userId);
       if (!plan) {

@@ -5,7 +5,7 @@ export { createCalDAVSyncProvider, type CalDAVSyncProviderConfig } from "./desti
 export { createCalDAVSourceProvider } from "./source/provider";
 export { createCalDAVSourceService } from "./source/sync";
 
-export { CalDAVClient, createCalDAVClient } from "./shared/client";
+export { CalDAVAuthenticationError, CalDAVClient, createCalDAVClient } from "./shared/client";
 export { eventToICalString, parseICalToRemoteEvent, parseICalToRemoteEvents } from "./shared/ics";
 
 export type {

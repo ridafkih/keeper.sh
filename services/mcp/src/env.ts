@@ -5,6 +5,7 @@ const schema = {
   BETTER_AUTH_URL: "string.url",
   COMMERCIAL_MODE: "boolean?",
   DATABASE_URL: "string.url",
+  MCP_API_URL: "string.url?",
   MCP_PORT: "number",
   MCP_PUBLIC_URL: "string.url",
 } as const;

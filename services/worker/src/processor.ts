@@ -274,6 +274,7 @@ const processJob = (
           microsoftClientId: env.MICROSOFT_CLIENT_ID,
           microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
         },
+        plan: job.data.plan,
       }, {
         onProgress: (update) => {
           if (signal?.aborted) {
