@@ -24,6 +24,8 @@ interface FetchEventsResult {
   isDeltaSync?: boolean;
   fullSyncRequired?: boolean;
   unchanged?: boolean;
+  skippedResourceCount?: number;
+  skippedResourceReasons?: string[];
   syncWindow?: SyncWindow;
   coverage?: {
     futureRange: SyncRange;

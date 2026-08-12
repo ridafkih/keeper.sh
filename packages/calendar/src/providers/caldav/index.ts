@@ -11,7 +11,12 @@ export {
   CalDAVIncompleteMultiGetError,
   createCalDAVClient,
 } from "./shared/client";
-export { eventToICalString, parseICalToRemoteEvent, parseICalToRemoteEvents } from "./shared/ics";
+export {
+  CalDAVUnreadableResourceError,
+  eventToICalString,
+  parseICalToRemoteEvent,
+  parseICalToRemoteEvents,
+} from "./shared/ics";
 
 export type {
   CalDAVProviderOptions,

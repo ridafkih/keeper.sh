@@ -39,6 +39,20 @@ type IcsPropertyVisitor = (context: IcsPropertyContext) => void;
 const LINE_BREAK_PATTERN = /\r?\n/;
 const CONTINUATION_PATTERN = /^[ \t]/;
 const PROPERTY_LINE_PATTERN = /^([A-Za-z][A-Za-z0-9-]*)((?:;[^:]*)?):(.*)$/;
+const BYTE_ORDER_MARK = "﻿";
+
+/*
+ * Only the ICS-over-HTTP transport is accidentally BOM-safe: `Response.text()`
+ * drops a leading UTF-8 BOM while decoding. CalDAV `calendar-data` arrives as an
+ * XML text node with the BOM intact, which turns BEGIN:VCALENDAR into an
+ * unparseable property line and fails the whole resource.
+ */
+const stripIcsByteOrderMark = (ics: string): string => {
+  if (!ics.startsWith(BYTE_ORDER_MARK)) {
+    return ics;
+  }
+  return ics.slice(BYTE_ORDER_MARK.length);
+};
 
 const groupContinuations = (rawLines: readonly string[]): number[][] => {
   const groups: number[][] = [];
@@ -83,7 +97,7 @@ const parsePropertyLine = (line: string): ParsedPropertyLine | null => {
 };
 
 const visitIcsProperties = (ics: string, visitor: IcsPropertyVisitor): void => {
-  const rawLines = ics.split(LINE_BREAK_PATTERN);
+  const rawLines = stripIcsByteOrderMark(ics).split(LINE_BREAK_PATTERN);
   const componentPath: string[] = [];
   for (const indices of groupContinuations(rawLines)) {
     const parsed = parsePropertyLine(unfoldGroup(rawLines, indices));
@@ -132,7 +146,7 @@ const applyIcsPatches = (
   ics: string,
   patches: readonly IcsPatch[],
 ): string => {
-  const rawLines = ics.split(LINE_BREAK_PATTERN);
+  const rawLines = stripIcsByteOrderMark(ics).split(LINE_BREAK_PATTERN);
   const output: string[] = [];
   for (const indices of groupContinuations(rawLines)) {
     const unfolded = unfoldGroup(rawLines, indices);
@@ -157,6 +171,7 @@ const applyIcsPatches = (
 
 export {
   applyIcsPatches,
+  stripIcsByteOrderMark,
   visitIcsProperties,
   type IcsPatch,
   type IcsPatchCoercion,

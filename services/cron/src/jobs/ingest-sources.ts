@@ -25,6 +25,7 @@ import { createGoogleSourceFetcher } from "@keeper.sh/calendar/google";
 import { createOutlookSourceFetcher } from "@keeper.sh/calendar/outlook";
 import {
   CalDAVIncompleteMultiGetError,
+  CalDAVUnreadableResourceError,
   createCalDAVSourceFetcher,
   isCalDAVAuthenticationError,
 } from "@keeper.sh/calendar/caldav";
@@ -145,9 +146,21 @@ const hasErrorFlag = (error: unknown, key: string): boolean =>
 const shouldApplyOAuthIngestBackoff = (error: unknown): boolean =>
   !hasErrorFlag(error, "authRequired") && !hasErrorFlag(error, "oauthReauthRequired");
 
+const recordSkippedResources = (skippedResourceCount: number, reasons: string[]): void => {
+  if (skippedResourceCount === 0) {
+    return;
+  }
+  widelog.set("provider.resources_skipped", skippedResourceCount);
+  widelog.set("provider.resources_skipped_reasons", reasons.join("; "));
+};
+
 const resolveIngestErrorSlug = (error: unknown): string => {
   if (error instanceof CalDAVIncompleteMultiGetError) {
     return "provider-response-incomplete";
+  }
+  if (error instanceof CalDAVUnreadableResourceError) {
+    recordSkippedResources(error.skippedResourceCount, error.skippedResourceReasons);
+    return "provider-partial-response";
   }
   if (!isTimeoutError(error)) {
     return "provider-api-error";
@@ -718,7 +731,14 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                 const ingestEvents: Record<string, unknown>[] = [];
                 const ingestionResult = await ingestSource({
                   calendarId: source.calendarId,
-                  fetchEvents: () => fetcher.fetchEvents(),
+                  fetchEvents: async () => {
+                    const fetchResult = await fetcher.fetchEvents();
+                    recordSkippedResources(
+                      fetchResult.skippedResourceCount ?? 0,
+                      fetchResult.skippedResourceReasons ?? [],
+                    );
+                    return fetchResult;
+                  },
                   isCurrent,
                   withPersistenceTransaction:
                     createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),
