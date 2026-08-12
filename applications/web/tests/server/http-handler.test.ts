@@ -227,3 +227,52 @@ describe("resolveCanonicalRedirect", () => {
     expect(resolveCanonicalRedirect(new URL("https://www.keeper.sh/blog"))).toBeNull();
   });
 });
+
+function cspDirectives(header: string): Map<string, string[]> {
+  return new Map(
+    header
+      .split(";")
+      .map((directive) => directive.trim())
+      .filter((directive) => directive.length > 0)
+      .map((directive) => {
+        const [name, ...sources] = directive.split(/\s+/);
+        return [name ?? "", sources] as const;
+      }),
+  );
+}
+
+async function productionCsp(): Promise<Map<string, string[]>> {
+  const response = await handleApplicationRequest(request("/"), createRuntime([]), config);
+  const header = response.headers.get("content-security-policy");
+  if (!header) throw new Error("Expected a content-security-policy header in production");
+  return cspDirectives(header);
+}
+
+describe("content security policy", () => {
+  it("allows the hosts Google Ads loads conversion scripts from", async () => {
+    const scriptSrc = (await productionCsp()).get("script-src") ?? [];
+
+    expect(scriptSrc).toContain("https://www.googletagmanager.com");
+    expect(scriptSrc).toContain("https://www.googleadservices.com");
+    expect(scriptSrc).toContain("https://googleads.g.doubleclick.net");
+  });
+
+  it("allows the hosts Google Ads pings conversions to over fetch", async () => {
+    const connectSrc = (await productionCsp()).get("connect-src") ?? [];
+
+    expect(connectSrc).toContain("https://www.googleadservices.com");
+    expect(connectSrc).toContain("https://googleads.g.doubleclick.net");
+    expect(connectSrc).toContain("https://ad.doubleclick.net");
+    expect(connectSrc).toContain("https://www.google.com");
+    expect(connectSrc).toContain("https://pagead2.googlesyndication.com");
+  });
+
+  it("allows the hosts Google Ads falls back to pixel pings on", async () => {
+    const imgSrc = (await productionCsp()).get("img-src") ?? [];
+
+    expect(imgSrc).toContain("https://www.googleadservices.com");
+    expect(imgSrc).toContain("https://googleads.g.doubleclick.net");
+    expect(imgSrc).toContain("https://www.google.com");
+    expect(imgSrc).toContain("https://pagead2.googlesyndication.com");
+  });
+});

@@ -1,28 +1,26 @@
 import { useEffect, useRef } from "react";
 import { useLocation } from "@tanstack/react-router";
 import type { PublicRuntimeConfig } from "@/lib/runtime-config";
-import { identify, track } from "@/lib/analytics";
+import { identify, track, updateGoogleConsent } from "@/lib/analytics";
 import { useEffectiveConsent } from "@/hooks/use-effective-consent";
 import { useGdprApplies } from "@/hooks/use-gdpr-applies";
 import { useSession } from "@/hooks/use-session";
-
-function resolveConsentLabel(hasConsent: boolean): "granted" | "denied" {
-  if (hasConsent) return "granted";
-  return "denied";
-}
 
 function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfig }) {
   const { googleAdsId, visitorsNowToken } = runtimeConfig;
   const gdprApplies = useGdprApplies();
   const hasConsent = useEffectiveConsent();
   const location = useLocation();
-  const consentState = resolveConsentLabel(hasConsent);
   const { user } = useSession();
   const identifiedUserId = useRef<string | null>(null);
 
   useEffect(() => {
     track("page_view", { path: location.pathname });
   }, [location.pathname]);
+
+  useEffect(() => {
+    updateGoogleConsent(hasConsent);
+  }, [hasConsent]);
 
   useEffect(() => {
     if (!user) return;
@@ -45,16 +43,15 @@ function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfi
       {googleAdsId && (
         <>
           <script
-            defer
             dangerouslySetInnerHTML={{
               __html: `
                 window.dataLayer = window.dataLayer || [];
                 function gtag(){dataLayer.push(arguments);}
                 gtag('consent', 'default', {
-                  'ad_storage': '${consentState}',
-                  'ad_user_data': '${consentState}',
-                  'ad_personalization': '${consentState}',
-                  'analytics_storage': '${consentState}',
+                  'ad_storage': 'denied',
+                  'ad_user_data': 'denied',
+                  'ad_personalization': 'denied',
+                  'analytics_storage': 'denied',
                   'wait_for_update': 500
                 });
               `,

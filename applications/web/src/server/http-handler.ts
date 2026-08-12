@@ -41,8 +41,27 @@ const baseSecurityHeaders: Record<string, string> = {
   "permissions-policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
 };
 
-const cspHeader =
-  "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://cdn.visitors.now; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://pagead2.googlesyndication.com; font-src 'self'; connect-src 'self' https://www.google-analytics.com https://cdn.visitors.now https://e.visitors.now https://pagead2.googlesyndication.com; frame-src https://polar.sh; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+const googleAdsHosts = [
+  "https://www.googletagmanager.com",
+  "https://www.googleadservices.com",
+  "https://googleads.g.doubleclick.net",
+  "https://ad.doubleclick.net",
+  "https://pagead2.googlesyndication.com",
+  "https://www.google.com",
+].join(" ");
+
+const cspHeader = [
+  "default-src 'self'",
+  `script-src 'self' 'unsafe-inline' ${googleAdsHosts} https://cdn.visitors.now`,
+  "style-src 'self' 'unsafe-inline'",
+  `img-src 'self' data: ${googleAdsHosts}`,
+  "font-src 'self'",
+  `connect-src 'self' ${googleAdsHosts} https://www.google-analytics.com https://cdn.visitors.now https://e.visitors.now`,
+  "frame-src https://polar.sh",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
 
 function withSecurityHeaders(response: Response, config: ServerConfig): Response {
   const headers = new Headers(response.headers);

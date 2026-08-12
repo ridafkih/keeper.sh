@@ -147,6 +147,7 @@ declare global {
 
 export {
   CONSENT_COOKIE,
+  updateGoogleConsent,
   hasAnalyticsConsent,
   hasConsentChoice,
   identify,
