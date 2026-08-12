@@ -1,6 +1,5 @@
-import { HeadContent, Outlet, Scripts, createRootRouteWithContext, useLocation } from "@tanstack/react-router";
+import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
-import { useEffect } from "react";
 import { SWRConfig } from "swr";
 import { Heading2 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
@@ -96,7 +95,6 @@ function RootComponent() {
       <body>
         <div id="root">
           <SWRConfig value={SWR_CONFIG}>
-            <ScrollToTopOnNavigation />
             <Outlet />
           </SWRConfig>
         </div>
@@ -108,20 +106,6 @@ function RootComponent() {
       </body>
     </html>
   );
-}
-
-function ScrollToTopOnNavigation() {
-  const location = useLocation();
-
-  useEffect(() => {
-    if (location.hash.length > 0) {
-      return;
-    }
-
-    window.scrollTo({ left: 0, top: 0, behavior: "auto" });
-  }, [location.hash, location.pathname]);
-
-  return null;
 }
 
 function ErrorFallback({ error }: ErrorComponentProps) {
