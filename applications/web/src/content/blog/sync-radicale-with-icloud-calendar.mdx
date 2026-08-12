@@ -1,133 +1,198 @@
 ---
 title: "How to Sync Radicale with iCloud Calendar"
-description: "A step-by-step guide to two-way syncing a self-hosted Radicale CalDAV server with iCloud Calendar using Keeper.sh, including server URLs, private network access, and known limits."
-blurb: "Radicale is a small CalDAV server that does one job well and knows nothing about the outside world. Here is how I sync it with iCloud, including the private-network setting that catches most self-hosters."
+description: "Connect a self-hosted Radicale calendar server to iCloud with Keeper.sh: server addresses, the private-network setting that catches self-hosters, and what the copies look like."
+blurb: "Radicale keeps your calendar on your own hardware and tells nothing else about it. Here is how to get those events onto your iPhone through iCloud."
 createdAt: "2026-08-11"
 slug: "sync-radicale-with-icloud-calendar"
 updatedAt: "2026-08-11"
 tags:
   - "radicale"
   - "icloud"
-  - "caldav"
   - "self-hosting"
   - "sync"
 ---
 
-Radicale is about as small as a CalDAV server gets. A Python process, a directory of files, an htpasswd file, done. That minimalism is the appeal, and it is also why it has no notion of syncing with anything else. Whatever you put in Radicale stays in Radicale.
+You run Radicale because your calendar should live on your own hardware. Then you pick up your iPhone, and none of it is there.
 
-iCloud is the opposite kind of system, and it also speaks CalDAV. Since both ends talk the same protocol, this pairing is entirely credentials and mappings — no OAuth applications, no cloud console, nothing to register anywhere.
+Radicale has no idea anything else exists. Whatever you put in it stays in it.
 
-This one is aimed at self-hosters, so it spends more time on the network details than the others.
+Keeper signs into Radicale and iCloud and keeps copies of your events in step, so the same appointments show up in both.
 
-## Before you start
+## What does this actually do?
 
-- A Radicale instance reachable over HTTP or HTTPS from wherever Keeper runs
-- A Radicale username and password from your htpasswd file
-- An Apple Account with two-factor authentication enabled
-- A Keeper.sh instance, hosted or [self-hosted](https://github.com/ridafkih/keeper.sh)
+Add an event in Radicale and a copy appears in iCloud, which means it appears on your iPhone. Move it, the copy moves. Delete it, the copy goes.
 
-Only `http:` and `https:` URLs are accepted. There is no way to point Keeper at a Unix socket or a non-HTTP transport.
+By default the copy is a block of busy time, not a readable event. That is worth knowing before you assume your notes came along.
 
-## The private network problem
+Copies travel one way per connection. You choose Radicale to iCloud, iCloud to Radicale, or both. Both means two connections, one each way.
 
-Read this before anything else, because it determines whether this works at all.
+There is no single "two-way" switch.
 
-Most Radicale instances live on a home network — `192.168.1.x`, `10.x`, a `.local` hostname, or `localhost:5232` on the machine that runs everything. Keeper refuses to fetch URLs resolving to private or reserved addresses when `BLOCK_PRIVATE_RESOLUTION` is on, which is a deliberate defence against server-side request forgery. The bundled `compose.yaml` turns it on.
+## What you need before you start
 
-So:
+- A Radicale server reachable over HTTP or HTTPS from wherever Keeper runs
+- A username and password from your htpasswd file
+- An Apple Account with two-factor login switched on
+- An account on [keeper.sh](https://keeper.sh/register), or your own Keeper instance
 
-**On hosted keeper.sh**, private addresses are blocked and you cannot change that. Your Radicale has to be reachable from the public internet — a domain with a reverse proxy in front of it, or a tunnel. There is no way around this from the dashboard, and it is not a bug.
+Only `http:` and `https:` addresses work. There is no way to point Keeper at a Unix socket.
 
-**On a self-hosted Keeper**, add the host to `PRIVATE_RESOLUTION_WHITELIST` on both the `api` and `cron` services. It takes a comma-separated list of hostnames or IPs:
+Most of this guide describes hosted keeper.sh, because that is the quickest way to get this working even if you already run servers. Running Keeper yourself is covered at the end, and it is a perfectly good choice.
+
+## Can Keeper reach a Radicale on your home network?
+
+Read this before anything else. It decides whether the hosted route works for you at all.
+
+Most Radicale instances sit on a home network — `192.168.1.x`, a `.local` hostname, or `localhost:5232` on the box that runs everything.
+
+**On hosted keeper.sh, private addresses are refused and you cannot change that.** Your Radicale needs to be reachable from the public internet. A domain with a reverse proxy in front works, or a tunnel. If you are not willing to expose it, run Keeper yourself on the same network instead.
+
+The setting behind this is `BLOCK_PRIVATE_RESOLUTION`, which stops the server fetching anything that resolves to a private or reserved address. It is off by default in the code and in the compose file at the repository root, which only runs Postgres, Redis and Caddy. The deployment compose file at `deploy/compose.yaml` turns it on for the `api` and `cron` services, and the README documents the default as `false`.
+
+If you self-host and turn it on, `PRIVATE_RESOLUTION_WHITELIST` is the exemption list:
 
 ```
 BLOCK_PRIVATE_RESOLUTION=true
 PRIVATE_RESOLUTION_WHITELIST=192.168.1.50,radicale.local,10.0.2.12
 ```
 
-The check runs against the host as written and against everything the hostname resolves to, so whitelist the exact form you are going to paste into the connect form. Restart both services afterwards.
+Set both on `api` and `cron`, and whitelist the exact host and port you are going to paste into the form. Restart both afterwards.
 
-If you skip this, connecting fails with a message about the URL pointing to a private or reserved network address. That error means exactly what it says, and it is the single most common reason this setup does not work on the first try.
+Skip it and the connection fails with a message about the address being private or reserved. It means exactly what it says.
 
-## Connect Radicale
+## How do you connect Radicale?
 
-From the dashboard, open **Import Calendars**, then choose **Connect CalDAV Server** from the bottom group. Radicale has no dedicated tile; the generic CalDAV form is the right one.
+From the dashboard, click **Import Calendars**, then **Connect CalDAV Server** at the bottom.
 
-Three fields:
+Radicale has no button of its own. It speaks the same calendar standard as iCloud, Google and Outlook — CalDAV — so the general form is the right one.
 
-- **CalDAV Server URL** — your Radicale base URL, for example `https://radicale.example.com`
-- **CalDAV Server Username** — your Radicale username from htpasswd
+The page is headed **Connect CalDAV Server** and has three boxes:
+
+- **CalDAV Server URL** — your Radicale address, like `https://radicale.example.com`
+- **CalDAV Server Username** — your username from htpasswd
 - **CalDAV Server Password** — the matching password
 
-Start with the base URL. Keeper performs standards discovery: it asks the server for the current-user principal, follows that to the calendar home set, and enumerates the collections underneath.
+Start with the plain address. Keeper asks the server where your calendars live and follows that to the collections.
 
-If that turns up nothing, try your user collection root instead — `https://radicale.example.com/username/`, with the trailing slash. Radicale organises collections as direct children of `/USERNAME/`, and pointing straight at that path skips the discovery step that some reverse proxy configurations interfere with. This is the fallback worth trying before you assume something is broken.
+If nothing turns up, point it at your user collection root instead — `https://radicale.example.com/username/`, with the trailing slash. Radicale keeps collections directly under `/USERNAME/`, and going straight there skips the discovery step that some reverse proxy setups interfere with. Try that before assuming something is broken.
 
-Keeper handles both basic and digest authentication and works out which one your server wants on the first request. Radicale's htpasswd backend uses basic auth, so put HTTPS in front of it — basic auth over plain HTTP puts your password on the wire in every request.
+Radicale's htpasswd backend uses basic authentication, which puts your password on the wire with every single request. Put HTTPS in front of it.
 
-Press **Connect**. Every discovered calendar is imported at once, and you land in setup.
+Click **Connect**. Every calendar found is imported at once and you land in a short setup flow.
 
-One Radicale-specific note: Keeper only keeps collections advertising support for events. Radicale's task lists and address books are correctly skipped. But if a collection you expect is missing, check that it actually declares `VEVENT` in its supported component set — a collection created without that property will be filtered out even though it holds events.
+Keeper keeps only collections that declare they hold events, so your task lists and address books are skipped correctly. If a calendar you expected is missing, check that the collection actually declares events in its supported component set. One created without that will be filtered out even though it holds events.
 
-## Connect iCloud
+## How do you connect iCloud?
 
-iCloud needs an app-specific password. Your Apple Account password will not work over CalDAV.
+Apple will not let outside apps sign in with your normal Apple password. That one opens your photos, purchases and Find My. You generate a separate app-specific password instead, which only reaches your calendar and can be cancelled on its own.
 
-1. Go to [appleid.apple.com](https://appleid.apple.com) and sign in
-2. Select **App-Specific Passwords**
-3. Click the **+** next to **Passwords**
-4. Label and generate it, then copy the 16-character password
+Keeper's connect page lists the steps, matching Apple's own [instructions](https://support.apple.com/en-us/102654):
 
-Apple's own documentation is [Sign in to apps with your Apple Account using app-specific passwords](https://support.apple.com/en-us/102654). The section only appears if two-factor authentication is on.
+1. Navigate to iCloud Apple ID
+2. Sign in with your Apple ID
+3. Select "App-Specific Passwords"
+4. Click the "+" next to "Passwords"
+5. Label and generate the password, then copy it
+6. Paste the app-specific password below
 
-Then in Keeper, **Import Calendars → Connect iCloud**, and fill in:
+That section only appears if two-factor login is on. Apple shows the password once, so copy it before closing the box.
+
+Then go to **Import Calendars** and click **Connect iCloud**. The page is headed **Connect Apple Calendar**, and has two boxes:
 
 - **Apple ID** — your Apple sign-in address
-- **App-Specific Password** — the password you just generated
+- **App-Specific Password** — the one you just generated
 
-No server URL is needed; Keeper knows iCloud is at `https://caldav.icloud.com/`.
+No server address is needed. Keeper already knows where iCloud keeps calendars.
 
-## Wire up the mapping
+## How do you tell Keeper which way events travel?
 
-Setup asks four questions:
+Setup asks four questions, word for word:
 
-1. **Which calendars would you like to configure?**
-2. **Rename Your Calendars.** Radicale collections often arrive with directory-derived names, so this is more useful here than usual. Renaming only affects Keeper.
-3. **Where should 'Personal' send events?** Outbound.
-4. **Where should 'Personal' pull events from?** Inbound.
+1. **Which calendars would you like to configure?** Tick the ones you want now.
+2. **Rename Your Calendars.** Radicale collections often arrive with names taken from directories, so this is more useful here than usual. Renaming only changes what you see in Keeper.
+3. **Where should 'Personal' send events?** Tick iCloud, and copies start appearing on your phone.
+4. **Where should 'Personal' pull events from?** Tick iCloud here for the reverse.
 
-Both CalDAV ends can pull and push, so either can be a source, a destination, or both. Two-way syncing between one Radicale calendar and one iCloud calendar is two mappings.
+Both ends of this pairing can send and receive, so either can be the one events come from.
 
-## What actually gets synced
+Each tick is one connection. Both directions is two connections. Change any of it later from the calendar under **Calendars**, in the **Send Events to Calendars** section.
 
-Time, not detail. Newly connected calendars default to stripping the event name, description and location, and titling the copy after the source calendar. Both directions of this pairing behave that way, so out of the box Radicale and iCloud exchange opaque blocks rather than content.
+## Will the copies carry real event titles?
 
-The calendar detail page has a **Sync Settings** section with **Sync Event Name**, **Sync Event Description** and **Sync Event Location** toggles, all off initially. Turning **Sync Event Name** on switches the **Event Name** template to `{{event_name}}` and passes the real title. While it is off, that template field stays editable and understands `{{event_name}}` and `{{calendar_name}}`. An **Exclusions** section can drop all-day events. On a self-hosted instance all of this is available to every user; on hosted keeper.sh it is Pro-only.
+Check before you assume either way. It takes thirty seconds.
 
-New sources also join the aggregated iCal feed by default, which you can change under **iCal Link**.
+Open the calendar under **Calendars** and find **Sync Settings**. Three switches decide what travels: **Sync Event Name**, **Sync Event Description** and **Sync Event Location**.
 
-The sync window runs from seven days ago to two years ahead and is not configurable. One-off events outside it are skipped; recurring series whose master starts before the window are still collected.
+Calendars added through **Import Calendars** arrive with all three off. Both ends of this pairing behave that way, so out of the box Radicale and iCloud exchange opaque blocks rather than content.
 
-## How often it runs
+The name on the copy comes from the **Event Name** box, which understands `{{calendar_name}}` and `{{event_name}}`. Turn **Sync Event Name** on to let real titles through.
 
-Ingestion runs every minute on every plan. Pushing to destinations runs every minute on self-hosted and Pro, and every thirty minutes on free.
+On keeper.sh this is a Pro feature — the dashboard says **Advanced sync settings are a Pro feature.** Run Keeper yourself and every user on the instance gets it.
 
-Neither end of this pairing gets incremental sync. Sync tokens and delta links are a Google and Outlook feature; CalDAV sources are refetched inside the sync window on every ingestion run and diffed against stored state. For Radicale that is usually irrelevant, since it is your own server and the calendars are small. For iCloud it means a steady stream of requests you are not in control of.
+Below, **Exclusions** can drop **Exclude All Day Events**.
 
-Nothing needs to reach your Keeper instance from outside. It polls; there are no webhooks or push notifications to expose.
+## How fast do changes show up?
 
-## Limits and rough edges
+Keeper reads both calendars every minute, on every plan. That never gets slower.
 
-- **Self-hosting removes the tier limits.** When Keeper runs outside commercial mode, every user on the instance gets Pro behaviour: unlimited linked accounts, unlimited mappings, event filters and feed customisation. On hosted keeper.sh it is two accounts and three mappings on free, and Radicale plus iCloud uses both account slots.
-- **Credentials are stored encrypted, not hashed.** CalDAV requires replaying the password on every request, so Keeper encrypts both passwords at rest with your `ENCRYPTION_KEY` rather than one-way hashing them. Self-hosting means that key never leaves your infrastructure. It also means you are responsible for it — lose it and stored credentials become unrecoverable.
-- **Radicale's own storage is a directory of files.** If you edit files under Radicale's collection root by hand while syncing is running, Keeper will see the result on its next pass and reconcile it. That is usually what you want, but it makes hand-editing a live sync target a poor idea.
-- **Recurring events.** Keeper refuses to materialise a series expanding past ten thousand occurrences inside the two-year window, and that check currently fails the whole calendar's ingestion rather than isolating the offending series. A calendar that stops updating outright, rather than losing one event, is the signature.
-- **Response caps truncate silently.** CalDAV is refetched in full every cycle with no pagination. If a server or proxy caps how many objects come back in one response, Keeper sees a calendar that appears to have lost the remainder and removes them from the destination accordingly. Radicale does not cap by default, but it is worth knowing before you put something restrictive in front of it.
-- **Directions are separate.** Each mapping is one-way, and you set them independently.
-- **No manual resync.** There is no "sync now" control. You wait for the next cycle, or remove and re-add the account.
+Getting a change onto the other calendar depends on the plan. On free it takes up to thirty minutes. On Pro and on your own instance it is about a minute.
 
-## Checking it worked
+If you are mirroring your Radicale calendar so your phone knows you are busy, thirty minutes changes nothing. If people book you through a scheduling link, it is too slow.
 
-The dashboard shows live sync status over a WebSocket, so you can watch a cycle happen rather than guess. **View Events** lists what Keeper has ingested, which is the fastest way to tell an ingestion problem from a push problem: events present there but missing on the destination is a mapping or push issue, events missing there is a source connection issue.
+Nothing needs to reach Keeper from outside. It checks on a timer rather than waiting to be told, so there is no callback address to expose.
 
-Each calendar's detail page has a **Calendar Information** section showing its type, its capabilities, and the resolved calendar URL. If discovery landed somewhere unexpected on Radicale, that URL is where you will see it.
+## What does not come across?
+
+Guest lists, video call links and reminders do not travel at all. Keeper has nowhere to store them.
+
+So a copied meeting is a block of time, not a working invite. Guest lists are read for one thing only: showing you invitations you have not answered yet, so you can reply from Keeper.
+
+Keeper also looks at a fixed stretch of time — from a week ago to two years ahead. A one-off event further out is not copied. A repeating event that began before the window is still picked up, so its dates inside the window survive.
+
+## What goes wrong, and what does it look like?
+
+**The page shows `401 /api/sources/caldav/discover` in red.** That is a wrong username or password, shown badly. Keeper's server does say "Invalid credentials", but the dashboard prints the status code instead of the message. On the iCloud side it usually means the normal Apple password was pasted, or the app-specific one has been cancelled.
+
+**One bad repeating event freezes a whole calendar.** Not one missing event — everything stops updating. Keeper refuses to work through a repeating series that would produce more than 10,000 dates in two years. Today that refusal stops the whole calendar, not just the one series. A calendar going completely silent, rather than losing one event, is the signature. Delete the runaway event and it catches up on its own.
+
+**A calendar goes quiet for hours, then recovers.** After a failed request Keeper waits five minutes, then ten, then twenty, up to six hours. It backs off on purpose and comes back by itself.
+
+**Events disappear from iCloud that still exist in Radicale.** Keeper reads the whole calendar each round and matches it against what it already has. If something in front of Radicale caps how many items come back in one response, Keeper sees a shorter calendar and removes the difference. Radicale does not cap by default, but a restrictive proxy will.
+
+**You hand-edited a file and something odd happened.** Radicale stores collections as plain files. Editing them under a live sync is a poor idea — Keeper reads the result on its next round and acts on it.
+
+**There is no "sync now" button.** You wait for the next round. Removing the account and adding it again is the blunt way to start clean.
+
+## How do you tell whether it is working?
+
+The dashboard shows sync status live, so you can watch a round happen rather than guess.
+
+**View Events** lists what Keeper currently holds. That tells you which half of the problem you have. Events present there but missing in iCloud is a connection or delivery problem. Events missing there is a Radicale connection problem.
+
+Each calendar's page has a **Calendar Information** section showing its type, what it can do, and the address Keeper resolved. If discovery landed somewhere unexpected on Radicale, that is where you will see it.
+
+## What does the free plan cover?
+
+Two calendar accounts and three connections.
+
+Radicale is one account no matter how many collections it holds. iCloud is the second. So this pairing uses both, and adding Google later means upgrading.
+
+Three connections covers both directions here with one spare. There is no cap on how many calendars an account brings in.
+
+## Would you rather run Keeper yourself?
+
+You already run Radicale, so this will not frighten you. For a calendar server on your own network it is often the better fit.
+
+Keeper is open source under AGPL-3.0. Run it yourself and every user on the instance gets Pro behaviour. That means real event titles, exclusions, feed settings, unlimited accounts and connections, and updates every minute. Nothing is held back.
+
+It is a Docker Compose stack with Postgres and Redis behind it, and the setup guide is in the [repository](https://github.com/ridafkih/keeper.sh). Running it on the same network as Radicale is what makes `PRIVATE_RESOLUTION_WHITELIST` above useful, and means you never have to expose Radicale to the internet.
+
+The cost is real, though. Another service to upgrade, another database to back up, another thing that pages you when it stops. You are already carrying that for Radicale, so you know exactly what it feels like.
+
+## One more thing about your passwords
+
+Keeper stores both passwords in a form it can read back, because this kind of calendar connection sends the password on every single request. There is no token to hide behind.
+
+They are encrypted before storage using your `ENCRYPTION_KEY`. Self-host and that key never leaves your infrastructure — which also means losing it makes the stored credentials unrecoverable.
+
+Cancelling access is deleting the app-specific password at Apple, or deleting the account under **Calendar Sources** in the dashboard, which removes it and its calendars.
