@@ -23,7 +23,11 @@ import {
 } from "@keeper.sh/calendar/ics";
 import { createGoogleSourceFetcher } from "@keeper.sh/calendar/google";
 import { createOutlookSourceFetcher } from "@keeper.sh/calendar/outlook";
-import { createCalDAVSourceFetcher, isCalDAVAuthenticationError } from "@keeper.sh/calendar/caldav";
+import {
+  CalDAVIncompleteMultiGetError,
+  createCalDAVSourceFetcher,
+  isCalDAVAuthenticationError,
+} from "@keeper.sh/calendar/caldav";
 import { decryptPassword } from "@keeper.sh/database";
 import {
   calendarAccountsTable,
@@ -142,6 +146,9 @@ const shouldApplyOAuthIngestBackoff = (error: unknown): boolean =>
   !hasErrorFlag(error, "authRequired") && !hasErrorFlag(error, "oauthReauthRequired");
 
 const resolveIngestErrorSlug = (error: unknown): string => {
+  if (error instanceof CalDAVIncompleteMultiGetError) {
+    return "provider-response-incomplete";
+  }
   if (!isTimeoutError(error)) {
     return "provider-api-error";
   }
