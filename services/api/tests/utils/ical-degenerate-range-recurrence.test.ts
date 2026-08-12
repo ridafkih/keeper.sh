@@ -6,6 +6,8 @@ import type { CalendarEvent } from "../../src/utils/ical-format";
 const SETTINGS = {
   customEventName: "Busy",
   excludeAllDayEvents: false,
+  excludeFocusTime: false,
+  excludeOutOfOffice: false,
   includeEventDescription: false,
   includeEventLocation: false,
   includeEventName: false,

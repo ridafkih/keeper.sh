@@ -21,11 +21,14 @@ import {
   runSourceCreationPreflight,
   runCreateSource,
 } from "./source-lifecycle";
-import { applySourceSyncDefaults } from "./source-sync-defaults";
 import {
   buildSourceIngestionPlan,
   createDestinationRangesReader,
 } from "./source-ingestion-ranges";
+import {
+  createSourceCalendarInsertDependencies,
+  insertSourceCalendars,
+} from "./source-calendar-insert";
 import { safeFetchOptions } from "./safe-fetch-options";
 
 import { spawnBackgroundJob } from "./background-task";
@@ -235,16 +238,17 @@ const createSource = async (userId: string, name: string, url: string): Promise<
           return account?.id;
         },
         createSourceCalendar: async ({ accountId, name: sourceName, url: sourceUrl, userId: sourceUserId }) => {
-          const [source] = await tx
-            .insert(calendarsTable)
-            .values(applySourceSyncDefaults({
+          const [source] = await insertSourceCalendars(
+            createSourceCalendarInsertDependencies(tx),
+            sourceUserId,
+            [{
               accountId,
               calendarType: ICAL_CALENDAR_TYPE,
               name: sourceName,
               url: sourceUrl,
               userId: sourceUserId,
-            }))
-            .returning();
+            }],
+          );
           return source;
         },
         fetchAndSyncSource: async (source) => {

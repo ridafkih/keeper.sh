@@ -9,7 +9,10 @@ import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/go
 import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/outlook";
 import type { database as contextDatabase } from "@/context";
 import { spawnBackgroundJob } from "./background-task";
-import { applySourceSyncDefaults } from "./source-sync-defaults";
+import {
+  createSourceCalendarInsertDependencies,
+  insertSourceCalendars,
+} from "./source-calendar-insert";
 
 import { enqueuePushSync } from "./enqueue-push-sync";
 
@@ -366,9 +369,10 @@ const createOAuthSourceRecordWithDatabase = async (
   databaseClient: OAuthSourceDatabase,
   payload: Parameters<CreateOAuthSourceDependencies["createSource"]>[0],
 ): Promise<{ id: string; name: string } | null> => {
-  const [source] = await databaseClient
-    .insert(calendarsTable)
-    .values(applySourceSyncDefaults({
+  const [source] = await insertSourceCalendars(
+    createSourceCalendarInsertDependencies(databaseClient),
+    payload.userId,
+    [{
       accountId: payload.accountId,
       calendarType: OAUTH_CALENDAR_TYPE,
       capabilities: ["pull", "push"],
@@ -378,8 +382,8 @@ const createOAuthSourceRecordWithDatabase = async (
       name: payload.name,
       originalName: payload.originalName,
       userId: payload.userId,
-    }))
-    .returning();
+    }],
+  );
 
   if (!source) {
     return null;
@@ -658,19 +662,19 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
     }
 
     const { database } = await import("@/context");
-    await database
-      .insert(calendarsTable)
-      .values(
-        calendars.map((calendar) => applySourceSyncDefaults({
-          accountId,
-          calendarType: OAUTH_CALENDAR_TYPE,
-          capabilities: ["pull", "push"],
-          externalCalendarId: calendar.externalId,
-          name: calendar.name,
-          originalName: calendar.name,
-          userId,
-        })),
-      );
+    await insertSourceCalendars(
+      createSourceCalendarInsertDependencies(database),
+      userId,
+      calendars.map((calendar) => ({
+        accountId,
+        calendarType: OAUTH_CALENDAR_TYPE,
+        capabilities: ["pull", "push"],
+        externalCalendarId: calendar.externalId,
+        name: calendar.name,
+        originalName: calendar.name,
+        userId,
+      })),
+    );
   },
   listCalendars: async (provider, accessToken) => {
     try {
@@ -820,19 +824,19 @@ const insertOAuthCalendarsWithDatabase = async (
     return;
   }
 
-  await databaseClient
-    .insert(calendarsTable)
-    .values(
-      calendars.map((calendar) => applySourceSyncDefaults({
-        accountId,
-        calendarType: OAUTH_CALENDAR_TYPE,
-        capabilities: ["pull", "push"],
-        externalCalendarId: calendar.externalId,
-        name: calendar.name,
-        originalName: calendar.name,
-        userId,
-      })),
-    );
+  await insertSourceCalendars(
+    createSourceCalendarInsertDependencies(databaseClient),
+    userId,
+    calendars.map((calendar) => ({
+      accountId,
+      calendarType: OAUTH_CALENDAR_TYPE,
+      capabilities: ["pull", "push"],
+      externalCalendarId: calendar.externalId,
+      name: calendar.name,
+      originalName: calendar.name,
+      userId,
+    })),
+  );
 };
 
 const importOAuthAccountCalendars = async (

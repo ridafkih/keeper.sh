@@ -34,6 +34,25 @@ const icalSettingsPatchBodySchema = type({
 });
 type IcalSettingsPatchBody = typeof icalSettingsPatchBodySchema.infer;
 
+const icalFeedCreateBodySchema = type({
+  name: "string",
+  "+": "reject",
+});
+type IcalFeedCreateBody = typeof icalFeedCreateBodySchema.infer;
+
+const icalFeedPatchBodySchema = type({
+  "name?": "string",
+  "includeEventName?": "boolean",
+  "includeEventDescription?": "boolean",
+  "includeEventLocation?": "boolean",
+  "excludeAllDayEvents?": "boolean",
+  "excludeFocusTime?": "boolean",
+  "excludeOutOfOffice?": "boolean",
+  "customEventName?": "string",
+  "+": "reject",
+});
+type IcalFeedPatchBody = typeof icalFeedPatchBodySchema.infer;
+
 const eventCreateBodySchema = type({
   calendarId: "string",
   title: "string",
@@ -79,6 +98,8 @@ export {
   calendarPausePatchBodySchema,
   sourcePatchBodySchema,
   icalSettingsPatchBodySchema,
+  icalFeedCreateBodySchema,
+  icalFeedPatchBodySchema,
   eventCreateBodySchema,
   eventPatchBodySchema,
   tokenCreateBodySchema,
@@ -88,6 +109,8 @@ export type {
   CalendarPausePatchBody,
   SourcePatchBody,
   IcalSettingsPatchBody,
+  IcalFeedCreateBody,
+  IcalFeedPatchBody,
   EventCreateBody,
   EventPatchBody,
   TokenCreateBody,

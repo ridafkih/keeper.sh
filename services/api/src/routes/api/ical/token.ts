@@ -1,17 +1,12 @@
 import { withAuth, withWideEvent } from "@/utils/middleware";
-import { getUserIdentifierToken } from "@/utils/user";
-import { baseUrl } from "@/context";
-
-const getIcalUrl = (token: string): string | null => {
-  const url = new URL(`/api/cal/${token}.ics`, baseUrl);
-  return url.toString();
-};
+import { ensureDefaultFeedForClient } from "@/utils/ical-feeds";
+import { buildFeedUrl } from "@/utils/ical-feed-url";
+import { database } from "@/context";
 
 const GET = withWideEvent(
   withAuth(async ({ userId }) => {
-    const token = await getUserIdentifierToken(userId);
-    const icalUrl = getIcalUrl(token);
-    return Response.json({ icalUrl, token });
+    const feed = await ensureDefaultFeedForClient(database, userId);
+    return Response.json({ icalUrl: buildFeedUrl(feed.token), token: feed.token });
   }),
 );
 

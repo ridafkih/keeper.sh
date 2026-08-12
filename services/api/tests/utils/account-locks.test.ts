@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { getTableName } from "drizzle-orm";
 import type { createCalDAVDestination as createCalDAVDestinationFn } from "../../src/utils/caldav";
 import type { createCalDAVSource as createCalDAVSourceFn } from "../../src/utils/caldav-sources";
 import type { handleOAuthCallback as handleOAuthCallbackFn } from "../../src/utils/oauth";
@@ -48,16 +49,23 @@ const createSelectBuilder = (result: unknown[]): SelectPromise => {
   return chain;
 };
 
-const createInsertBuilder = (result: unknown) => ({
+const createTrackedInsertBuilder = (result: unknown, track: boolean) => ({
   values: (values: unknown) => {
-    insertCalls.push(values);
+    if (track) {
+      insertCalls.push(values);
+    }
+
+    const conflictChain = Promise.resolve() as Promise<void> & {
+      returning: () => Promise<unknown>;
+    };
+    conflictChain.returning = () => Promise.resolve(result);
 
     const valueChain = Promise.resolve() as Promise<void> & {
-      onConflictDoNothing: () => Promise<void>;
+      onConflictDoNothing: () => typeof conflictChain;
       onConflictDoUpdate: () => { returning: () => Promise<unknown> };
       returning: () => Promise<unknown>;
     };
-    valueChain.onConflictDoNothing = () => Promise.resolve();
+    valueChain.onConflictDoNothing = () => conflictChain;
     valueChain.onConflictDoUpdate = () => ({
       returning: () => Promise.resolve(result),
     });
@@ -67,9 +75,35 @@ const createInsertBuilder = (result: unknown) => ({
   },
 });
 
+const createInsertBuilder = (result: unknown) => createTrackedInsertBuilder(result, true);
+
+const DEFAULT_FEED_ROW = {
+  id: "feed-default",
+  isDefault: true,
+  legacyAlias: false,
+  name: "My Calendar",
+  token: `feed_${"a".repeat(64)}`,
+  userId: "user-1",
+};
+
+const FEED_BOOKKEEPING_ROWS: Record<string, unknown> = {
+  ical_feed_calendars: [],
+  ical_feeds: [DEFAULT_FEED_ROW],
+};
+
+const withFeedBookkeepingInserts = (
+  insert: (table: unknown) => unknown,
+) => (table: unknown): unknown => {
+  const tableName = getTableName(table as never);
+  if (tableName in FEED_BOOKKEEPING_ROWS) {
+    return createTrackedInsertBuilder(FEED_BOOKKEEPING_ROWS[tableName], false);
+  }
+  return insert(table);
+};
+
 const createTxInstance = (): object => ({
   execute: () => Promise.resolve(),
-  insert: () => createInsertBuilder([]),
+  insert: withFeedBookkeepingInserts(() => createInsertBuilder([])),
   select: () => createSelectBuilder(selectResults.shift() ?? []),
   selectDistinct: () => ({
     from: () => ({}),
@@ -322,14 +356,14 @@ describe("Account locks", () => {
     let insertStep = 0;
     txInstance = {
       execute: () => Promise.resolve(),
-      insert: () => {
+      insert: withFeedBookkeepingInserts(() => {
         insertStep += 1;
         if (insertStep === 1) {
           return createInsertBuilder([{ id: "account-1" }]);
         }
 
         return createInsertBuilder([{ id: "source-1", name: "Team Calendar" }]);
-      },
+      }),
       select: () => createSelectBuilder(selectResults.shift() ?? []),
       selectDistinct: () => ({
         from: () => ({}),
@@ -364,14 +398,14 @@ describe("Account locks", () => {
     let insertStep = 0;
     txInstance = {
       execute: () => Promise.resolve(),
-      insert: () => {
+      insert: withFeedBookkeepingInserts(() => {
         insertStep += 1;
         if (insertStep === 1) {
           return createInsertBuilder([{ id: "account-1" }]);
         }
 
-        return createInsertBuilder(null);
-      },
+        return createInsertBuilder([]);
+      }),
       select: () => createSelectBuilder(selectResults.shift() ?? []),
       selectDistinct: () => ({
         from: () => ({}),
@@ -428,7 +462,7 @@ describe("Account locks", () => {
     let insertStep = 0;
     txInstance = {
       execute: () => Promise.resolve(),
-      insert: () => {
+      insert: withFeedBookkeepingInserts(() => {
         insertStep += 1;
         if (insertStep === 1) {
           return createInsertBuilder([{ id: "credential-1" }]);
@@ -443,7 +477,7 @@ describe("Account locks", () => {
           name: "Team CalDAV",
           userId: "user-1",
         }]);
-      },
+      }),
       select: () => createSelectBuilder(selectResults.shift() ?? []),
       selectDistinct: () => ({
         from: () => ({}),

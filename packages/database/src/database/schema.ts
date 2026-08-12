@@ -9,8 +9,10 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { isNotNull, isNull, sql } from "drizzle-orm";
+import { eq, isNotNull, isNull, sql } from "drizzle-orm";
 import {
+  DEFAULT_FEED_NAME,
+  DEFAULT_FEED_SETTINGS,
   DEFAULT_FUTURE_SYNC_RANGE,
   DEFAULT_HISTORIC_SYNC_RANGE,
   SYNC_RANGE_DEFINITIONS,
@@ -390,16 +392,72 @@ const icalFeedSettingsTable = pgTable("ical_feed_settings", {
     .notNull()
     .primaryKey()
     .references(() => user.id, { onDelete: "cascade" }),
-  includeEventName: boolean().notNull().default(false),
-  includeEventDescription: boolean().notNull().default(false),
-  includeEventLocation: boolean().notNull().default(false),
-  excludeAllDayEvents: boolean().notNull().default(false),
-  customEventName: text().notNull().default("Busy"),
+  includeEventName: boolean().notNull().default(DEFAULT_FEED_SETTINGS.includeEventName),
+  includeEventDescription: boolean()
+    .notNull()
+    .default(DEFAULT_FEED_SETTINGS.includeEventDescription),
+  includeEventLocation: boolean().notNull().default(DEFAULT_FEED_SETTINGS.includeEventLocation),
+  excludeAllDayEvents: boolean().notNull().default(DEFAULT_FEED_SETTINGS.excludeAllDayEvents),
+  customEventName: text().notNull().default(DEFAULT_FEED_SETTINGS.customEventName),
   updatedAt: timestamp()
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
 });
+
+const icalFeedsTable = pgTable(
+  "ical_feeds",
+  {
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text().notNull().default(DEFAULT_FEED_NAME),
+    token: text().notNull(),
+    isDefault: boolean().notNull().default(false),
+    legacyAlias: boolean().notNull().default(false),
+    includeEventName: boolean().notNull().default(DEFAULT_FEED_SETTINGS.includeEventName),
+    includeEventDescription: boolean()
+      .notNull()
+      .default(DEFAULT_FEED_SETTINGS.includeEventDescription),
+    includeEventLocation: boolean().notNull().default(DEFAULT_FEED_SETTINGS.includeEventLocation),
+    excludeAllDayEvents: boolean().notNull().default(DEFAULT_FEED_SETTINGS.excludeAllDayEvents),
+    excludeFocusTime: boolean().notNull().default(DEFAULT_FEED_SETTINGS.excludeFocusTime),
+    excludeOutOfOffice: boolean().notNull().default(DEFAULT_FEED_SETTINGS.excludeOutOfOffice),
+    customEventName: text().notNull().default(DEFAULT_FEED_SETTINGS.customEventName),
+    createdAt: timestamp().notNull().defaultNow(),
+    updatedAt: timestamp()
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("ical_feeds_user_idx").on(table.userId),
+    uniqueIndex("ical_feeds_token_idx").on(table.token),
+    uniqueIndex("ical_feeds_default_idx")
+      .on(table.userId)
+      .where(eq(table.isDefault, sql`true`)),
+  ],
+);
+
+const icalFeedCalendarsTable = pgTable(
+  "ical_feed_calendars",
+  {
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    feedId: uuid()
+      .notNull()
+      .references(() => icalFeedsTable.id, { onDelete: "cascade" }),
+    calendarId: uuid()
+      .notNull()
+      .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    createdAt: timestamp().notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("ical_feed_calendar_idx").on(table.feedId, table.calendarId),
+    index("ical_feed_calendars_feed_idx").on(table.feedId),
+    index("ical_feed_calendars_calendar_idx").on(table.calendarId),
+  ],
+);
 
 export {
   apiTokensTable,
@@ -410,7 +468,9 @@ export {
   eventMappingsTable,
   eventStatesTable,
   feedbackTable,
+  icalFeedCalendarsTable,
   icalFeedSettingsTable,
+  icalFeedsTable,
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
   syncStatusTable,

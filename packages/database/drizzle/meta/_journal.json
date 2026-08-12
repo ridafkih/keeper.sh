@@ -575,6 +575,13 @@
       "when": 1786614075691,
       "tag": "0081_sparkling_sentry",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1786667334968,
+      "tag": "0082_groovy_mentallo",
+      "breakpoints": true
     }
   ]
 }

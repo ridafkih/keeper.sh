@@ -1,19 +1,21 @@
 import { eq } from "drizzle-orm";
-import { icalFeedSettingsTable } from "@keeper.sh/database/schema";
+import { icalFeedSettingsTable, icalFeedsTable } from "@keeper.sh/database/schema";
+import { DEFAULT_FEED_SETTINGS } from "@keeper.sh/data-schemas";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { database, premiumService } from "@/context";
+import { ensureDefaultFeedForClient } from "@/utils/ical-feeds";
 import {
   icalSettingsPatchBodySchema,
   type IcalSettingsPatchBody,
 } from "@/utils/request-body";
 
 const DEFAULT_SETTINGS = {
-  includeEventName: false,
-  includeEventDescription: false,
-  includeEventLocation: false,
-  excludeAllDayEvents: false,
-  customEventName: "Busy",
+  includeEventName: DEFAULT_FEED_SETTINGS.includeEventName,
+  includeEventDescription: DEFAULT_FEED_SETTINGS.includeEventDescription,
+  includeEventLocation: DEFAULT_FEED_SETTINGS.includeEventLocation,
+  excludeAllDayEvents: DEFAULT_FEED_SETTINGS.excludeAllDayEvents,
+  customEventName: DEFAULT_FEED_SETTINGS.customEventName,
 };
 
 const ICAL_BOOLEAN_UPDATE_FIELDS = [
@@ -22,6 +24,15 @@ const ICAL_BOOLEAN_UPDATE_FIELDS = [
   "includeEventLocation",
   "excludeAllDayEvents",
 ] as const;
+
+const LEGACY_SETTINGS_COLUMNS = {
+  userId: icalFeedsTable.userId,
+  includeEventName: icalFeedsTable.includeEventName,
+  includeEventDescription: icalFeedsTable.includeEventDescription,
+  includeEventLocation: icalFeedsTable.includeEventLocation,
+  excludeAllDayEvents: icalFeedsTable.excludeAllDayEvents,
+  customEventName: icalFeedsTable.customEventName,
+};
 
 const buildIcalSettingsUpdates = (
   body: IcalSettingsPatchBody,
@@ -47,6 +58,11 @@ interface PatchIcalSettingsRouteContext {
 
 interface PatchIcalSettingsDependencies {
   canCustomizeIcalFeed: (userId: string) => Promise<boolean>;
+  ensureDefaultFeed: (userId: string) => Promise<{ id: string }>;
+  updateFeedSettings: (
+    feedId: string,
+    updates: Record<string, string | boolean>,
+  ) => Promise<Record<string, unknown> | null>;
   upsertSettings: (
     userId: string,
     updates: Record<string, string | boolean>,
@@ -73,19 +89,28 @@ const handlePatchIcalSettingsRoute = async (
     return ErrorResponse.forbidden("iCal feed customization requires a Pro plan.").toResponse();
   }
 
-  const updated = await dependencies.upsertSettings(userId, updates);
+  const feed = await dependencies.ensureDefaultFeed(userId);
+  const updated = await dependencies.updateFeedSettings(feed.id, updates);
+  await dependencies.upsertSettings(userId, updates);
+
   return Response.json(updated);
 };
 
 const GET = withWideEvent(
   withAuth(async ({ userId }) => {
+    const feed = await ensureDefaultFeedForClient(database, userId);
+
     const [settings] = await database
-      .select()
-      .from(icalFeedSettingsTable)
-      .where(eq(icalFeedSettingsTable.userId, userId))
+      .select(LEGACY_SETTINGS_COLUMNS)
+      .from(icalFeedsTable)
+      .where(eq(icalFeedsTable.id, feed.id))
       .limit(1);
 
-    return Response.json(settings ?? { userId, ...DEFAULT_SETTINGS });
+    if (!settings) {
+      throw new Error("Failed to resolve default iCal feed settings");
+    }
+
+    return Response.json(settings);
   }),
 );
 
@@ -96,6 +121,17 @@ const PATCH = withWideEvent(
       { body: payload, userId },
       {
         canCustomizeIcalFeed: (resolvedUserId) => premiumService.canCustomizeIcalFeed(resolvedUserId),
+        ensureDefaultFeed: (resolvedUserId) =>
+          ensureDefaultFeedForClient(database, resolvedUserId),
+        updateFeedSettings: async (feedId, updates) => {
+          const [updated] = await database
+            .update(icalFeedsTable)
+            .set(updates)
+            .where(eq(icalFeedsTable.id, feedId))
+            .returning(LEGACY_SETTINGS_COLUMNS);
+
+          return updated ?? null;
+        },
         upsertSettings: async (resolvedUserId, updates) => {
           const [updated] = await database
             .insert(icalFeedSettingsTable)

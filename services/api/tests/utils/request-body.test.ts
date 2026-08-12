@@ -7,6 +7,8 @@ import {
   eventCreateBodySchema,
   eventPatchBodySchema,
   tokenCreateBodySchema,
+  icalFeedCreateBodySchema,
+  icalFeedPatchBodySchema,
 } from "../../src/utils/request-body";
 
 describe("calendarIdsBodySchema", () => {
@@ -193,6 +195,61 @@ describe("tokenCreateBodySchema", () => {
 
   it("rejects extra properties", () => {
     const result = tokenCreateBodySchema({ name: "ok", extra: true });
+    expect(result instanceof type.errors).toBe(true);
+  });
+});
+
+describe("icalFeedCreateBodySchema", () => {
+  it("accepts a feed name", () => {
+    const result = icalFeedCreateBodySchema({ name: "Work only" });
+    expect(result instanceof type.errors).toBe(false);
+  });
+
+  it("rejects a missing name", () => {
+    const result = icalFeedCreateBodySchema({});
+    expect(result instanceof type.errors).toBe(true);
+  });
+
+  it("rejects a client-supplied token", () => {
+    const result = icalFeedCreateBodySchema({ name: "Work only", token: "feed_chosen" });
+    expect(result instanceof type.errors).toBe(true);
+  });
+
+  it("rejects extra properties", () => {
+    const result = icalFeedCreateBodySchema({ name: "ok", isDefault: true });
+    expect(result instanceof type.errors).toBe(true);
+  });
+});
+
+describe("icalFeedPatchBodySchema", () => {
+  const patchableFields: Record<string, string | boolean>[] = [
+    { name: "Work only" },
+    { includeEventName: true },
+    { includeEventDescription: true },
+    { includeEventLocation: true },
+    { excludeAllDayEvents: true },
+    { excludeFocusTime: true },
+    { excludeOutOfOffice: true },
+    { customEventName: "Away" },
+  ];
+
+  it.each(patchableFields)("accepts %o", (field) => {
+    const result = icalFeedPatchBodySchema(field);
+    expect(result instanceof type.errors).toBe(false);
+  });
+
+  it("rejects extra properties", () => {
+    const result = icalFeedPatchBodySchema({ name: "ok", legacyAlias: false });
+    expect(result instanceof type.errors).toBe(true);
+  });
+
+  it("rejects a client-supplied token", () => {
+    const result = icalFeedPatchBodySchema({ token: "feed_chosen" });
+    expect(result instanceof type.errors).toBe(true);
+  });
+
+  it("rejects wrong types", () => {
+    const result = icalFeedPatchBodySchema({ excludeFocusTime: "yes" });
     expect(result instanceof type.errors).toBe(true);
   });
 });

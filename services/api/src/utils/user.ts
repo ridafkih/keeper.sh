@@ -24,14 +24,4 @@ const resolveUserIdentifier = async (identifier: string): Promise<string | null>
   return userById?.id ?? null;
 };
 
-const getUserIdentifierToken = async (userId: string): Promise<string> => {
-  const [userData] = await database
-    .select({ username: userTable.username })
-    .from(userTable)
-    .where(eq(userTable.id, userId))
-    .limit(FIRST_RESULT_LIMIT);
-
-  return userData?.username ?? userId;
-};
-
-export { resolveUserIdentifier, getUserIdentifierToken };
+export { resolveUserIdentifier };

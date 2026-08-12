@@ -177,3 +177,129 @@ describe("0077 self-hosted upgrade compatibility", () => {
     expect(compose).toContain("condition: service_healthy");
   });
 });
+
+/*
+ * Located by what the migration does rather than by its index, which shifts
+ * whenever another migration lands ahead of it.
+ */
+const readIcalFeedsMigration = async (): Promise<string> => {
+  const drizzleDirectory = `${import.meta.dirname}/../../drizzle`;
+  const journal = await Bun.file(`${drizzleDirectory}/meta/_journal.json`).json() as {
+    entries: { idx: number; tag: string }[];
+  };
+
+  for (const { tag } of journal.entries) {
+    const migration = await Bun.file(`${drizzleDirectory}/${tag}.sql`).text();
+    if (migration.includes('CREATE TABLE IF NOT EXISTS "ical_feeds"')) {
+      return migration;
+    }
+  }
+
+  throw new Error("Expected a migration to create and backfill ical_feeds");
+};
+
+describe("ical feed backfill migration", () => {
+  it("backfills one default feed per user carrying their existing settings", async () => {
+    const migration = await readIcalFeedsMigration();
+
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS "ical_feeds"');
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS "ical_feed_calendars"');
+    expect(migration).toContain('INSERT INTO "ical_feeds"');
+    expect(migration).toContain('FROM "user"');
+    expect(migration).toContain('LEFT JOIN "ical_feed_settings"');
+    expect(migration).not.toContain('FROM "ical_feed_settings"');
+  });
+
+  it("falls back to the synthesized defaults for users who never saved settings", async () => {
+    const migration = await readIcalFeedsMigration();
+
+    for (const field of [
+      "includeEventName",
+      "includeEventDescription",
+      "includeEventLocation",
+      "excludeAllDayEvents",
+    ]) {
+      expect(migration).toContain(`COALESCE(s."${field}", false)`);
+    }
+    expect(migration).toContain(`COALESCE(s."customEventName", 'Busy')`);
+  });
+
+  it("keeps every backfilled feed reachable by its old username url", async () => {
+    const migration = await readIcalFeedsMigration();
+
+    expect(migration).toContain('"legacyAlias"');
+    expect(migration).toContain('"isDefault"');
+  });
+
+  it("materializes the current calendar selection without a capability filter", async () => {
+    const migration = await readIcalFeedsMigration();
+
+    expect(migration).toContain('INSERT INTO "ical_feed_calendars"');
+    expect(migration).toContain('"includeInIcalFeed" = true');
+    expect(migration).not.toContain("capabilities");
+  });
+
+  it("is idempotent and fails loud rather than silently skipping a user", async () => {
+    const migration = await readIcalFeedsMigration();
+
+    const inserts = migration.split('INSERT INTO "ical_feed').length - 1;
+    expect(inserts).toBe(2);
+    expect(migration.split("ON CONFLICT DO NOTHING").length - 1).toBe(2);
+    expect(migration).toContain("RAISE EXCEPTION");
+  });
+
+  it("anchors the backfill and its verification against concurrent signups", async () => {
+    const migration = await readIcalFeedsMigration();
+
+    expect(migration.split("transaction_timestamp()").length - 1)
+      .toBeGreaterThanOrEqual(2);
+    expect(migration).toContain('u."createdAt" <= transaction_timestamp()');
+    expect(migration).toContain("interval '1 minute'");
+  });
+
+  it("grace-bands both verification checks against concurrent writes", async () => {
+    const migration = await readIcalFeedsMigration();
+
+    expect(migration)
+      .toContain(`u."createdAt" < transaction_timestamp() - interval '1 minute'`);
+    expect(migration)
+      .toContain(`c."createdAt" < transaction_timestamp() - interval '1 minute'`);
+  });
+
+  it("stays additive so a rolled-back api still serves the old feed", async () => {
+    const migration = await readIcalFeedsMigration();
+
+    expect(migration).not.toContain('DROP TABLE "ical_feed_settings"');
+    expect(migration).not.toContain('DROP COLUMN "includeInIcalFeed"');
+    expect(migration).not.toContain("SET NOT NULL");
+  });
+
+  /*
+   * The migration runner replays the newest migration against databases that
+   * already carry it, so every object it creates has to tolerate being created
+   * twice.
+   */
+  it("re-applies cleanly against a database that already has the tables", async () => {
+    const migration = await readIcalFeedsMigration();
+
+    const creations = migration.match(/CREATE (?:UNIQUE )?(?:TABLE|INDEX) /g) ?? [];
+    const guarded = migration.match(/CREATE (?:UNIQUE )?(?:TABLE|INDEX) IF NOT EXISTS /g) ?? [];
+    expect(creations).toHaveLength(guarded.length);
+
+    for (const statement of migration.split("--> statement-breakpoint")) {
+      if (statement.includes("ADD CONSTRAINT")) {
+        expect(statement).toContain("IF NOT EXISTS (");
+        expect(statement).toContain("pg_constraint");
+      }
+    }
+  });
+
+  it("mints backfilled tokens without requiring pgcrypto", async () => {
+    const migration = await readIcalFeedsMigration();
+
+    expect(migration).toContain("gen_random_uuid()");
+    expect(migration).toContain("'feed_'");
+    expect(migration).not.toContain("gen_random_bytes");
+    expect(migration).not.toContain("CREATE EXTENSION");
+  });
+});

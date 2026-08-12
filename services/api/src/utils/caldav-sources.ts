@@ -8,7 +8,10 @@ import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { encryptPassword } from "@keeper.sh/database";
 import { database, premiumService, encryptionKey } from "@/context";
 import { enqueuePushSync } from "./enqueue-push-sync";
-import { applySourceSyncDefaults } from "./source-sync-defaults";
+import {
+  createSourceCalendarInsertDependencies,
+  insertSourceCalendars,
+} from "./source-calendar-insert";
 
 const FIRST_RESULT_LIMIT = 1;
 const CALDAV_CALENDAR_TYPE = "caldav";
@@ -236,9 +239,10 @@ const createCalDAVSource = async (
     const accountId = existingAccount?.id ??
       await createCalDAVAccount(tx, userId, data, resolvedEncryptionKey);
 
-    const [source] = await tx
-      .insert(calendarsTable)
-      .values(applySourceSyncDefaults({
+    const [source] = await insertSourceCalendars(
+      createSourceCalendarInsertDependencies(tx),
+      userId,
+      [{
         accountId,
         calendarType: CALDAV_CALENDAR_TYPE,
         capabilities: ["pull", "push"],
@@ -246,8 +250,8 @@ const createCalDAVSource = async (
         name: data.name,
         originalName: data.name,
         userId,
-      }))
-      .returning();
+      }],
+    );
 
     if (!source) {
       throw new Error("Failed to create CalDAV source");

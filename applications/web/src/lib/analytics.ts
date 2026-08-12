@@ -89,6 +89,8 @@ export const ANALYTICS_EVENTS = {
   plan_managed: "plan_managed",
   feedback_submitted: "feedback_submitted",
   report_submitted: "report_submitted",
+  ical_feed_created: "ical_feed_created",
+  ical_feed_deleted: "ical_feed_deleted",
   ical_link_copied: "ical_link_copied",
   ical_setting_toggled: "ical_setting_toggled",
   ical_source_toggled: "ical_source_toggled",

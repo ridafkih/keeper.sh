@@ -32,12 +32,29 @@ const createStoredEvent = (
   ...overrides,
 });
 
+interface FeedScope {
+  feedId: string;
+}
+
+const FEED_SCOPE: FeedScope = { feedId: "feed-1" };
+
+const DEFAULT_SETTINGS: FeedSettings = {
+  customEventName: "Busy",
+  excludeAllDayEvents: false,
+  excludeFocusTime: false,
+  excludeOutOfOffice: false,
+  includeEventDescription: false,
+  includeEventLocation: false,
+  includeEventName: false,
+};
+
 const createDependencies = (
   events: StoredFeedEvent[],
   exclusions: FeedExclusionCounts,
-  overrides: Partial<FeedDependencies> = {},
-): FeedDependencies => ({
+  overrides: Partial<FeedDependencies<FeedScope>> = {},
+): FeedDependencies<FeedScope> => ({
   now: NOW,
+  resolveFeed: () => Promise.resolve({ scope: FEED_SCOPE, settings: DEFAULT_SETTINGS }),
   readFeedCalendars: () => Promise.resolve([{
     id: "calendar-1",
     syncFutureRange: "2_years",
@@ -46,14 +63,14 @@ const createDependencies = (
   readFeedEvents: () => Promise.resolve(events),
   readFeedExclusions: () => Promise.resolve(exclusions),
   readFeedRevision: () => Promise.resolve("revision-1"),
-  readFeedSettings: () => Promise.resolve(null),
-  resolveUserIdentifier: () => Promise.resolve("user-1"),
   ...overrides,
 });
 
 const ALL_DAY_EXCLUDING_SETTINGS: FeedSettings = {
   customEventName: "Busy",
   excludeAllDayEvents: true,
+  excludeFocusTime: false,
+  excludeOutOfOffice: false,
   includeEventDescription: false,
   includeEventLocation: false,
   includeEventName: false,
@@ -69,6 +86,8 @@ describe("feed withheld counts", () => {
     expect(feed?.body).toContain("BEGIN:VEVENT");
     expect(feed?.withheld).toEqual({
       allDay: 0,
+      focusTime: 0,
+      outOfOffice: 0,
       workingElsewhere: 2,
       workingLocation: 3,
     });
@@ -85,11 +104,16 @@ describe("feed withheld counts", () => {
         }),
       ],
       { workingElsewhere: 0, workingLocation: 0 },
-      { readFeedSettings: () => Promise.resolve(ALL_DAY_EXCLUDING_SETTINGS) },
+      {
+        resolveFeed: () =>
+          Promise.resolve({ scope: FEED_SCOPE, settings: ALL_DAY_EXCLUDING_SETTINGS }),
+      },
     ));
 
     expect(feed?.withheld).toEqual({
       allDay: 1,
+      focusTime: 0,
+      outOfOffice: 0,
       workingElsewhere: 0,
       workingLocation: 0,
     });
@@ -113,6 +137,8 @@ describe("feed withheld counts", () => {
     expect(unchanged?.body).toBeNull();
     expect(unchanged?.withheld).toEqual({
       allDay: 0,
+      focusTime: 0,
+      outOfOffice: 0,
       workingElsewhere: 0,
       workingLocation: 0,
     });
@@ -131,6 +157,8 @@ describe("feed withheld counts", () => {
 
     expect(feed?.withheld).toEqual({
       allDay: 0,
+      focusTime: 0,
+      outOfOffice: 0,
       workingElsewhere: 0,
       workingLocation: 0,
     });

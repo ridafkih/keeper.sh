@@ -69,14 +69,6 @@ const createIcalFeedQuery = (
   };
 };
 
-const DEFAULT_FEED_SETTINGS: FeedSettings = {
-  includeEventName: false,
-  includeEventDescription: false,
-  includeEventLocation: false,
-  excludeAllDayEvents: false,
-  customEventName: "Busy",
-};
-
 type StoredFeedEvent = Omit<
   CalendarEvent,
   "exceptionDates" | "recurrenceDuration" | "recurrenceRule"
@@ -93,13 +85,23 @@ interface FeedExclusionCounts {
 
 interface FeedWithheldCounts extends FeedExclusionCounts {
   allDay: number;
+  focusTime: number;
+  outOfOffice: number;
 }
 
-interface FeedDependencies {
+/*
+ * A feed, not a user, is what an identifier resolves to: one account can
+ * publish several, each with its own calendar selection and settings.
+ */
+interface ResolvedFeedIdentity<TScope> {
+  scope: TScope;
+  settings: FeedSettings;
+}
+
+interface FeedDependencies<TScope> {
   now?: Date;
-  resolveUserIdentifier: (identifier: string) => Promise<string | null>;
-  readFeedSettings: (userId: string) => Promise<FeedSettings | null>;
-  readFeedCalendars: (userId: string) => Promise<FeedCalendar[]>;
+  resolveFeed: (identifier: string) => Promise<ResolvedFeedIdentity<TScope> | null>;
+  readFeedCalendars: (scope: TScope) => Promise<FeedCalendar[]>;
   readFeedEvents: (
     calendarIds: string[],
     query: IcalFeedQuery,
@@ -124,9 +126,31 @@ interface FeedResponse {
 
 const NOTHING_WITHHELD: FeedWithheldCounts = {
   allDay: 0,
+  focusTime: 0,
+  outOfOffice: 0,
   workingElsewhere: 0,
   workingLocation: 0,
 };
+
+const NO_EVENT_FILTERS = {
+  excludeAllDayEvents: false,
+  excludeFocusTime: false,
+  excludeOutOfOffice: false,
+} as const;
+
+type EventFilter = keyof typeof NO_EVENT_FILTERS;
+
+/*
+ * Each reason is counted with only its own filter enabled, so an event two
+ * filters would both drop lands in both buckets rather than whichever the
+ * combined predicate happened to reject it for first.
+ */
+const countWithheldBy = (
+  events: CalendarEvent[],
+  settings: FeedSettings,
+  filter: EventFilter,
+): number => events.filter((event) =>
+  !shouldIncludeEvent(event, { ...settings, ...NO_EVENT_FILTERS, [filter]: settings[filter] })).length;
 
 /*
  * Settings decide what each event renders as, so two feeds over identical rows
@@ -140,6 +164,8 @@ const describeFeedSettings = (settings: FeedSettings): string => [
   settings.includeEventDescription,
   settings.includeEventLocation,
   settings.excludeAllDayEvents,
+  settings.excludeFocusTime,
+  settings.excludeOutOfOffice,
   settings.customEventName,
 ].join("\u001F");
 
@@ -160,23 +186,19 @@ const toCalendarEvent = (row: StoredFeedEvent): CalendarEvent => {
   };
 };
 
-const generateCalendarFeed = async (
+const generateCalendarFeed = async <TScope>(
   identifier: string,
-  dependencies: FeedDependencies,
+  dependencies: FeedDependencies<TScope>,
   ifNoneMatch: string | null = null,
 ): Promise<FeedResponse | null> => {
-  const userId = await dependencies.resolveUserIdentifier(identifier);
+  const feed = await dependencies.resolveFeed(identifier);
 
-  if (!userId) {
+  if (!feed) {
     return null;
   }
 
-  const [settings, calendars] = await Promise.all([
-    dependencies.readFeedSettings(userId),
-    dependencies.readFeedCalendars(userId),
-  ]);
-
-  const feedSettings = settings ?? DEFAULT_FEED_SETTINGS;
+  const feedSettings = feed.settings;
+  const calendars = await dependencies.readFeedCalendars(feed.scope);
 
   if (calendars.length === 0) {
     const body = formatEventsAsIcal([], feedSettings);
@@ -205,18 +227,21 @@ const generateCalendarFeed = async (
   ]);
 
   const events = rows.map((row) => toCalendarEvent(row));
-  const allDay = events.filter((event) => !shouldIncludeEvent(event, feedSettings)).length;
 
   return {
     body: formatEventsAsIcal(events, feedSettings),
     etag,
     eventCount: rows.length,
-    withheld: { ...exclusions, allDay },
+    withheld: {
+      ...exclusions,
+      allDay: countWithheldBy(events, feedSettings, "excludeAllDayEvents"),
+      focusTime: countWithheldBy(events, feedSettings, "excludeFocusTime"),
+      outOfOffice: countWithheldBy(events, feedSettings, "excludeOutOfOffice"),
+    },
   };
 };
 
 export {
-  DEFAULT_FEED_SETTINGS,
   createIcalFeedQuery,
   generateCalendarFeed,
 };
@@ -226,5 +251,6 @@ export type {
   FeedResponse,
   FeedWithheldCounts,
   IcalFeedQuery,
+  ResolvedFeedIdentity,
   StoredFeedEvent,
 };

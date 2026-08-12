@@ -28,7 +28,9 @@ describe("handlePatchIcalSettingsRoute", () => {
       },
       {
         canCustomizeIcalFeed: () => Promise.resolve(false),
-        upsertSettings: () => Promise.resolve(null),
+        ensureDefaultFeed: () => Promise.reject(new Error("must not resolve a feed")),
+        updateFeedSettings: () => Promise.reject(new Error("must not write feed settings")),
+        upsertSettings: () => Promise.reject(new Error("must not mirror legacy settings")),
       },
     );
 
@@ -46,7 +48,8 @@ describe("handlePatchIcalSettingsRoute", () => {
       },
       {
         canCustomizeIcalFeed: () => Promise.resolve(true),
-        upsertSettings: (_userId, updates) => Promise.resolve({
+        ensureDefaultFeed: () => Promise.resolve({ id: "feed-default" }),
+        updateFeedSettings: (_feedId, updates) => Promise.resolve({
           customEventName: "Busy",
           excludeAllDayEvents: false,
           id: "settings-1",
@@ -55,6 +58,7 @@ describe("handlePatchIcalSettingsRoute", () => {
           includeEventName: false,
           userId: "user-1",
         }),
+        upsertSettings: () => Promise.resolve(null),
       },
     );
 
@@ -68,5 +72,60 @@ describe("handlePatchIcalSettingsRoute", () => {
       includeEventName: false,
       userId: "user-1",
     });
+  });
+});
+
+const makeRewiredDependencies = () => {
+  const calls: string[] = [];
+  const targetedFeedIds: string[] = [];
+  const mirrored: Record<string, unknown>[] = [];
+  return {
+    calls,
+    targetedFeedIds,
+    mirrored,
+    dependencies: {
+      canCustomizeIcalFeed: () => Promise.resolve(true),
+      ensureDefaultFeed: () => {
+        calls.push("ensureDefaultFeed");
+        return Promise.resolve({ id: "feed-default" });
+      },
+      updateFeedSettings: (feedId: string, updates: Record<string, unknown>) => {
+        calls.push("updateFeedSettings");
+        targetedFeedIds.push(feedId);
+        return Promise.resolve({ id: "settings-1", userId: "user-1", ...updates });
+      },
+      upsertSettings: (_userId: string, updates: Record<string, unknown>) => {
+        calls.push("upsertSettings");
+        mirrored.push(updates);
+        return Promise.resolve(updates);
+      },
+    },
+  };
+};
+
+describe("handlePatchIcalSettingsRoute default feed rewiring", () => {
+  it("materializes the default feed before patching it", async () => {
+    const { calls, targetedFeedIds, dependencies } = makeRewiredDependencies();
+
+    const response = await handlePatchIcalSettingsRoute(
+      { body: { includeEventName: true }, userId: "user-1" },
+      dependencies,
+    );
+
+    expect(response.status).toBe(200);
+    expect(calls.indexOf("ensureDefaultFeed"))
+      .toBeLessThan(calls.indexOf("updateFeedSettings"));
+    expect(targetedFeedIds).toEqual(["feed-default"]);
+  });
+
+  it("mirrors the shared columns into the legacy settings row", async () => {
+    const { mirrored, dependencies } = makeRewiredDependencies();
+
+    await handlePatchIcalSettingsRoute(
+      { body: { includeEventName: true, customEventName: "Away" }, userId: "user-1" },
+      dependencies,
+    );
+
+    expect(mirrored).toEqual([{ includeEventName: true, customEventName: "Away" }]);
   });
 });

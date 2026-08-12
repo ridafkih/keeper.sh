@@ -9,6 +9,7 @@
   },
   "scripts": {
     "types": "tsc --noEmit",
+    "test": "bun x --bun vitest run",
     "lint": "oxlint ."
   },
   "dependencies": {
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",
     "@types/bun": "latest",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "^4.1.4"
   }
 }

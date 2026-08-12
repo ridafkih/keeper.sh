@@ -12,6 +12,8 @@ import {
   withMappingMutationLocks,
 } from "@/utils/source-destination-mappings";
 import { withProviderMetadata } from "@/utils/provider-display";
+import { syncDefaultFeedMembership } from "@/utils/ical-feeds";
+import type { FeedMembershipClient } from "@/utils/ical-feeds";
 import { handlePatchSourceRoute } from "./[id]/source-item-routes";
 
 const GET = withWideEvent(
@@ -79,6 +81,20 @@ const PATCH = withWideEvent(
       {
         canUseEventFilters: (candidateUserId) => premiumService.canUseEventFilters(candidateUserId),
         updateSource: async (userIdToUpdate, sourceCalendarId, updates) => {
+          const applyFeedMembership = async (
+            client: FeedMembershipClient,
+            updated: Record<string, unknown> | null,
+          ): Promise<void> => {
+            if (updated && typeof updates.includeInIcalFeed === "boolean") {
+              await syncDefaultFeedMembership(
+                client,
+                userIdToUpdate,
+                sourceCalendarId,
+                updates.includeInIcalFeed,
+              );
+            }
+          };
+
           const updatesSyncWindow = "syncHistoricRange" in updates
             || "syncFutureRange" in updates;
           if (updatesSyncWindow) {
@@ -109,6 +125,7 @@ const PATCH = withWideEvent(
                 if (updated?.capabilities.includes("push")) {
                   await requestUserSync(transaction, userIdToUpdate);
                 }
+                await applyFeedMembership(transaction, updated ?? null);
                 return updated ?? null;
               }),
             );
@@ -118,17 +135,20 @@ const PATCH = withWideEvent(
             return mutation.result;
           }
 
-          const [updated] = await database
-            .update(calendarsTable)
-            .set(updates)
-            .where(
-              and(
-                eq(calendarsTable.id, sourceCalendarId),
-                eq(calendarsTable.userId, userIdToUpdate),
-              ),
-            )
-            .returning();
-          return updated ?? null;
+          return await database.transaction(async (transaction) => {
+            const [updated] = await transaction
+              .update(calendarsTable)
+              .set(updates)
+              .where(
+                and(
+                  eq(calendarsTable.id, sourceCalendarId),
+                  eq(calendarsTable.userId, userIdToUpdate),
+                ),
+              )
+              .returning();
+            await applyFeedMembership(transaction, updated ?? null);
+            return updated ?? null;
+          });
         },
       },
     );

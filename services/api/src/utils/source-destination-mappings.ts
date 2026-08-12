@@ -10,6 +10,7 @@ import type { SyncLockHandle } from "@keeper.sh/sync";
 import type { database as databaseInstance } from "@/context";
 import { enqueuePushSync } from "./enqueue-push-sync";
 import { spawnBackgroundJob } from "./background-task";
+import { assertAllIdsOwned } from "./owned-ids";
 const EMPTY_LIST_COUNT = 0;
 const USER_MAPPING_LOCK_NAMESPACE = 9001;
 const MAPPING_LIMIT_ERROR_MESSAGE = "Mapping limit reached. Upgrade to Pro for unlimited sync mappings.";
@@ -87,18 +88,6 @@ interface SetSourcesDependencies {
   ) => Promise<TResult>;
   resolveMappingLimit?: ResolveMappingLimit;
 }
-
-const assertAllIdsOwned = (
-  requestedIds: string[],
-  validIds: string[],
-  errorMessage: string,
-): void => {
-  const validIdSet = new Set(validIds);
-  const invalidIds = requestedIds.filter((requestedId) => !validIdSet.has(requestedId));
-  if (invalidIds.length > EMPTY_LIST_COUNT) {
-    throw new Error(errorMessage);
-  }
-};
 
 const createSetDestinationsTransaction = (
   transactionClient: DatabaseTransactionClient,

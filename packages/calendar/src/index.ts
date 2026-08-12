@@ -86,6 +86,7 @@ export {
   getEventsForCalendarsWithDiagnostics,
   getEventsForDestination,
   getMappedSourceCalendarIds,
+  shouldExcludeSyncEvent,
   type DestinationEventReadDiagnostics,
   type DestinationEventReadResult,
 } from "./core/events/events";

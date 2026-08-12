@@ -19,6 +19,24 @@ const SYNC_RANGE_DEFINITIONS = [
 const DEFAULT_HISTORIC_SYNC_RANGE = "1_month" as const;
 const DEFAULT_FUTURE_SYNC_RANGE = "2_years" as const;
 
+const DEFAULT_FEED_SETTINGS = {
+  includeEventName: false,
+  includeEventDescription: false,
+  includeEventLocation: false,
+  excludeAllDayEvents: false,
+  excludeFocusTime: false,
+  excludeOutOfOffice: false,
+  customEventName: "Busy",
+} as const;
+
+const DEFAULT_FEED_NAME = "My Calendar" as const;
+
+/* A feed name is shown to the user and must survive a round trip, so an
+ * all-whitespace name is rejected rather than silently stored. */
+const icalFeedNameSchema = type("string >= 1").narrow(
+  (value) => value.trim().length > 0,
+);
+
 const syncRangeSchema = type.enumerated(
   ...SYNC_RANGE_DEFINITIONS.map(({ value }) => value),
 );
@@ -431,12 +449,15 @@ const icsExceptionDatesSchema = icsDateObjectSchema.array();
 type StoredIcsExceptionDates = typeof icsExceptionDatesSchema.infer;
 
 export {
+  DEFAULT_FEED_NAME,
+  DEFAULT_FEED_SETTINGS,
   DEFAULT_FUTURE_SYNC_RANGE,
   DEFAULT_HISTORIC_SYNC_RANGE,
   SYNC_RANGE_DEFINITIONS,
   proxyableMethods,
   planSchema,
   syncRangeSchema,
+  icalFeedNameSchema,
   billingPeriodSchema,
   feedbackRequestSchema,
   createSourceSchema,

@@ -2,6 +2,7 @@ import { KEEPER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import {
   resolveIsAllDayEvent,
   resolveRepresentableTimeRange,
+  shouldExcludeSyncEvent,
 } from "@keeper.sh/calendar";
 import {
   buildVtimezone,
@@ -16,6 +17,8 @@ interface FeedSettings {
   includeEventDescription: boolean;
   includeEventLocation: boolean;
   excludeAllDayEvents: boolean;
+  excludeFocusTime: boolean;
+  excludeOutOfOffice: boolean;
   customEventName: string;
 }
 
@@ -35,6 +38,7 @@ interface CalendarEvent {
   exceptionDates: IcsDateObject[] | null;
   recurrenceId: Date | null;
   sourceEventUid: string | null;
+  sourceEventType?: string | null;
   startTimeZone?: string | null;
 }
 
@@ -221,10 +225,17 @@ const collectTimezones = (events: CalendarEvent[]): IcsTimezone[] => {
 };
 
 const shouldIncludeEvent = (event: CalendarEvent, settings: FeedSettings): boolean => {
-  if (!settings.excludeAllDayEvents) {
-    return true;
+  if (settings.excludeAllDayEvents && resolveIsAllDayEvent(toAllDayShape(event))) {
+    return false;
   }
-  return !resolveIsAllDayEvent(toAllDayShape(event));
+  return !shouldExcludeSyncEvent({
+    excludeAllDayEvents: false,
+    excludeFocusTime: settings.excludeFocusTime,
+    excludeOutOfOffice: settings.excludeOutOfOffice,
+    availability: event.availability,
+    isAllDay: event.isAllDay,
+    sourceEventType: event.sourceEventType ?? null,
+  });
 };
 
 const formatEventsAsIcal = (events: CalendarEvent[], settings: FeedSettings): string => {

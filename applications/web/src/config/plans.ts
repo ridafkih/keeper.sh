@@ -21,7 +21,7 @@ const basePlans: Omit<PlanConfig, "monthlyProductId" | "yearlyProductId">[] = [
     features: [
       "Up to 2 linked accounts",
       "Up to 3 sync mappings",
-      "Aggregated iCal feed",
+      "1 aggregated iCal feed",
       "Syncing every 30 minutes",
       "API access (25 calls/day)",
     ],
@@ -36,7 +36,7 @@ const basePlans: Omit<PlanConfig, "monthlyProductId" | "yearlyProductId">[] = [
       "Syncing every 1 minute",
       "Unlimited linked accounts",
       "Unlimited sync mappings",
-      "Event filters, exclusions, and iCal feed customization",
+      "Unlimited iCal feeds with per-feed filters and customization",
       "Unlimited API & MCP access",
       "Priority support",
     ],

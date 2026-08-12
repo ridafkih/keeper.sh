@@ -34,14 +34,14 @@ const RENDERED_FEED: FeedResponse = {
   body: "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n",
   etag: '"etag-1"',
   eventCount: 4,
-  withheld: { allDay: 1, workingElsewhere: 2, workingLocation: 3 },
+  withheld: { allDay: 1, focusTime: 5, outOfOffice: 6, workingElsewhere: 2, workingLocation: 3 },
 };
 
 const NOT_MODIFIED_FEED: FeedResponse = {
   body: null,
   etag: '"etag-1"',
   eventCount: 0,
-  withheld: { allDay: 0, workingElsewhere: 0, workingLocation: 0 },
+  withheld: { allDay: 0, focusTime: 0, outOfOffice: 0, workingElsewhere: 0, workingLocation: 0 },
 };
 
 const requestFeed = async (): Promise<Response> => {
@@ -71,6 +71,8 @@ describe("feed route withheld telemetry", () => {
     expect(fields.get("feed.withheld.working_location")).toBe(3);
     expect(fields.get("feed.withheld.working_elsewhere")).toBe(2);
     expect(fields.get("feed.withheld.all_day")).toBe(1);
+    expect(fields.get("feed.withheld.focus_time")).toBe(5);
+    expect(fields.get("feed.withheld.out_of_office")).toBe(6);
     expect(fields.get("feed.event_count")).toBe(4);
   });
 
@@ -84,5 +86,7 @@ describe("feed route withheld telemetry", () => {
     expect(keys).not.toContain("feed.withheld.working_location");
     expect(keys).not.toContain("feed.withheld.working_elsewhere");
     expect(keys).not.toContain("feed.withheld.all_day");
+    expect(keys).not.toContain("feed.withheld.focus_time");
+    expect(keys).not.toContain("feed.withheld.out_of_office");
   });
 });

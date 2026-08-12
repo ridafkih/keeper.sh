@@ -37,6 +37,8 @@ const DEFAULT_SETTINGS = {
   includeEventDescription: false,
   includeEventLocation: false,
   excludeAllDayEvents: false,
+  excludeFocusTime: false,
+  excludeOutOfOffice: false,
   customEventName: "Busy",
 };
 

@@ -11,6 +11,7 @@ interface EntitlementLimit {
 interface Entitlements {
   plan: "free" | "pro";
   accounts: EntitlementLimit;
+  feeds: EntitlementLimit;
   mappings: EntitlementLimit;
   canCustomizeIcalFeed: boolean;
   canUseEventFilters: boolean;
@@ -39,6 +40,7 @@ function useEntitlements() {
     return {
       plan: "pro",
       accounts: { current: 0, limit: null },
+      feeds: { current: 0, limit: null },
       mappings: { current: 0, limit: null },
       canCustomizeIcalFeed: true,
       canUseEventFilters: true,

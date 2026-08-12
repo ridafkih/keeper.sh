@@ -346,6 +346,8 @@ class RecurrenceCalendarHarness {
     return formatEventsAsIcal(parsed.map((event) => toCalendarEvent(event)), {
       customEventName: "Busy",
       excludeAllDayEvents: false,
+      excludeFocusTime: false,
+      excludeOutOfOffice: false,
       includeEventDescription: true,
       includeEventLocation: true,
       includeEventName: true,

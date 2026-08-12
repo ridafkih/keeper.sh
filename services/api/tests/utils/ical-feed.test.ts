@@ -1,6 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { createIcalFeedQuery, generateCalendarFeed } from "../../src/utils/ical-feed";
 import type { FeedResponse, IcalFeedQuery, StoredFeedEvent } from "../../src/utils/ical-feed";
+import type { FeedSettings } from "../../src/utils/ical-format";
+
+interface FeedScope {
+  feedId: string;
+}
+
+const FEED_SETTINGS: FeedSettings = {
+  customEventName: "Busy",
+  excludeAllDayEvents: false,
+  excludeFocusTime: false,
+  excludeOutOfOffice: false,
+  includeEventDescription: false,
+  includeEventLocation: false,
+  includeEventName: false,
+};
+
+const resolveFeed = () =>
+  Promise.resolve({ scope: { feedId: "feed-1" }, settings: FEED_SETTINGS });
 
 const NOW = new Date("2026-08-12T12:00:00.000Z");
 const MS_PER_DAY = 86_400_000;
@@ -52,7 +70,7 @@ const responseFor = (
   events: StoredFeedEvent[],
   ifNoneMatch: string | null = null,
 ): Promise<FeedResponse | null> =>
-  generateCalendarFeed("feed-token", {
+  generateCalendarFeed<FeedScope>("feed-token", {
     now: NOW,
     readFeedCalendars: () => Promise.resolve([{
       id: "calendar-1",
@@ -62,8 +80,7 @@ const responseFor = (
     readFeedEvents: createReader(events),
     readFeedExclusions: () => Promise.resolve({ workingElsewhere: 0, workingLocation: 0 }),
     readFeedRevision: createRevisionReader(events),
-    readFeedSettings: () => Promise.resolve(null),
-    resolveUserIdentifier: () => Promise.resolve("user-1"),
+    resolveFeed,
   }, ifNoneMatch);
 
 const feedFor = async (events: StoredFeedEvent[]): Promise<string | null> => {
@@ -118,14 +135,13 @@ describe("createIcalFeedQuery", () => {
 
 describe("generateCalendarFeed", () => {
   it("returns null for an unknown identifier", async () => {
-    const feed = await generateCalendarFeed("feed-token", {
+    const feed = await generateCalendarFeed<FeedScope>("feed-token", {
       now: NOW,
       readFeedCalendars: () => Promise.reject(new Error("must not be called")),
       readFeedEvents: () => Promise.reject(new Error("must not be called")),
       readFeedExclusions: () => Promise.reject(new Error("must not be called")),
       readFeedRevision: () => Promise.reject(new Error("must not be called")),
-      readFeedSettings: () => Promise.reject(new Error("must not be called")),
-      resolveUserIdentifier: () => Promise.resolve(null),
+      resolveFeed: () => Promise.resolve(null),
     });
 
     expect(feed).toBeNull();
@@ -184,7 +200,7 @@ describe("generateCalendarFeed", () => {
     const events = [createStoredEvent("event-1", shiftDays(1))];
     const { etag } = await responseFor(events) ?? {};
 
-    const unchanged = await generateCalendarFeed("feed-token", {
+    const unchanged = await generateCalendarFeed<FeedScope>("feed-token", {
       now: NOW,
       readFeedCalendars: () => Promise.resolve([{
         id: "calendar-1",
@@ -194,8 +210,7 @@ describe("generateCalendarFeed", () => {
       readFeedEvents: () => Promise.reject(new Error("must not read events on a match")),
       readFeedExclusions: () => Promise.reject(new Error("must not count exclusions on a match")),
       readFeedRevision: createRevisionReader(events),
-      readFeedSettings: () => Promise.resolve(null),
-      resolveUserIdentifier: () => Promise.resolve("user-1"),
+      resolveFeed,
     }, etag ?? null);
 
     expect(unchanged?.body).toBeNull();
@@ -210,14 +225,13 @@ describe("generateCalendarFeed", () => {
   });
 
   it("renders an empty calendar when no calendars opt into the feed", async () => {
-    const feed = await generateCalendarFeed("feed-token", {
+    const feed = await generateCalendarFeed<FeedScope>("feed-token", {
       now: NOW,
       readFeedCalendars: () => Promise.resolve([]),
       readFeedEvents: () => Promise.reject(new Error("must not be called")),
       readFeedExclusions: () => Promise.reject(new Error("must not be called")),
       readFeedRevision: () => Promise.reject(new Error("must not be called")),
-      readFeedSettings: () => Promise.resolve(null),
-      resolveUserIdentifier: () => Promise.resolve("user-1"),
+      resolveFeed,
     });
 
     expect(feed?.body).toContain("BEGIN:VCALENDAR");

@@ -5,6 +5,7 @@ import { ErrorResponse } from "@/utils/responses";
 
 const ICS_EXTENSION_LENGTH = 4;
 const NOT_MODIFIED_STATUS = 304;
+const REDACTED_FEED_PATH = "/api/cal/:identifier";
 
 /*
  * The feed is bounded only by its horizon, so a busy calendar makes a large
@@ -19,6 +20,8 @@ const CACHE_CONTROL = "private, no-cache";
 
 const GET = withWideEvent(async ({ params, request }) => {
   const { identifier } = params;
+
+  widelog.set("http.path", REDACTED_FEED_PATH);
 
   if (!identifier?.endsWith(".ics")) {
     return ErrorResponse.notFound().toResponse();
@@ -50,6 +53,8 @@ const GET = withWideEvent(async ({ params, request }) => {
   widelog.set("feed.withheld.working_location", feed.withheld.workingLocation);
   widelog.set("feed.withheld.working_elsewhere", feed.withheld.workingElsewhere);
   widelog.set("feed.withheld.all_day", feed.withheld.allDay);
+  widelog.set("feed.withheld.focus_time", feed.withheld.focusTime);
+  widelog.set("feed.withheld.out_of_office", feed.withheld.outOfOffice);
 
   return new Response(feed.body, {
     headers: {
