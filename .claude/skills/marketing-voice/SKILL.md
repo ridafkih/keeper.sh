@@ -109,6 +109,16 @@ Being straight about our own weaknesses is a genuine strength and predates this 
 9. Is there a sentence only someone who has read our source could parse?
 10. Have you written "mapping", "source", "destination", "ingest", "reconcile", or "propagate"?
 
+## Hosted first, self-hosting as the alternative
+
+Blog posts and guides are marketing material, not neutral documentation. The happy path in a guide is hosted keeper.sh — that is the default the reader should fall into without thinking about it.
+
+Self-hosting still gets presented properly, as a real alternative for readers who are technically inclined or interested. Give it its own signposted section rather than interleaving both paths step by step, so a non-technical reader never has to work out which half of a numbered list applies to them. Describe it honestly, including what it costs: a server, a domain, updates, backups, and being the person who gets paged when it stops.
+
+Do not frame self-hosting as inferior or as a downgrade. Being genuinely open-source with every Pro feature included when self-hosted is a real differentiator that competitors concede in writing, and grudging it would cost us credibility with exactly the audience that amplifies the project.
+
+Register B content — Docker, environment variables, operator guides — is written for self-hosters by nature and needs no hosted nudge.
+
 ## Accuracy is part of voice
 
 Rewriting copy is when a wrong claim gets restated more confidently. Every claim must be defensible from the code. Two that have already shipped wrong: we do not do two-way sync (mappings are strictly one-directional), and there is no per-account calendar limit. Check the source before you write the sentence, and if you cannot verify it, leave it out.
