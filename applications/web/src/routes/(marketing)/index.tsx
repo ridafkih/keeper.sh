@@ -173,7 +173,7 @@ const HOW_IT_WORKS_STEPS: HowItWorksStep[] = [
   {
     title: 'Configure sync rules',
     description:
-      'Choose which calendars to sync and how events should appear. Keeper handles the rest automatically.',
+      'Choose which calendars to sync and how events should appear. Keeper.sh handles the rest automatically.',
   },
   {
     title: 'Stay in sync',
@@ -192,12 +192,12 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'Can I use ICS or iCal links as a source?',
     answer:
-      'Yes. Any publicly accessible ICS or iCal link can be used as a calendar source in Keeper. This means you can pull events from services that only offer read-only calendar feeds.',
+      'Yes. Any publicly accessible ICS or iCal link can be used as a calendar source in Keeper.sh. This means you can pull events from services that only offer read-only calendar feeds.',
   },
   {
     question: 'Which calendar providers does Keeper.sh support?',
     answer:
-      'Keeper.sh works with Google Calendar, Microsoft Outlook, Apple iCloud, FastMail, and any provider that supports CalDAV or ICS feeds. If your calendar supports one of these protocols, it will work with Keeper.',
+      'Keeper.sh works with Google Calendar, Microsoft Outlook, Apple iCloud, FastMail, and any provider that supports CalDAV or ICS feeds. If your calendar supports one of these protocols, it will work with Keeper.sh.',
   },
   {
     question: 'Can I self-host Keeper.sh?',

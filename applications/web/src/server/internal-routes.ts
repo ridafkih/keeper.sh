@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { GDPR_COUNTRIES } from "@/config/gdpr";
 import { getGithubStarsSnapshot } from "./github-stars";
 import { proxyRequest } from "./proxy/http";
 import type { ServerConfig } from "./types";
@@ -101,6 +102,21 @@ export async function handleInternalRoute(
     proxyUrl.pathname = internalProxyPath;
 
     return proxyRequest(new Request(proxyUrl, request), config.apiProxyOrigin);
+  }
+
+  if (requestUrl.pathname === "/internal/geo") {
+    const countryCode = request.headers.get("cf-ipcountry") ?? "";
+    const gdprApplies = config.environment === "development" || GDPR_COUNTRIES.has(countryCode);
+
+    return Response.json(
+      { gdprApplies },
+      {
+        headers: {
+          "cache-control": "private, no-store",
+          vary: "cf-ipcountry",
+        },
+      },
+    );
   }
 
   if (requestUrl.pathname === "/internal/github-stars") {

@@ -78,6 +78,7 @@ function buildFeedXml(posts: ProcessedBlogPost[]): string {
 
 export function feedPlugin(): Plugin {
   let blogDir: string;
+  let publicDir: string;
 
   return {
     name: "keeper-feed",
@@ -85,13 +86,14 @@ export function feedPlugin(): Plugin {
 
     configResolved(config) {
       blogDir = resolve(config.root, "src/content/blog");
+      publicDir = config.publicDir;
     },
 
     generateBundle() {
       this.emitFile({
         type: "asset",
         fileName: FEED_FILE_NAME,
-        source: buildFeedXml(processBlogDirectory(blogDir)),
+        source: buildFeedXml(processBlogDirectory(blogDir, publicDir)),
       });
     },
   };

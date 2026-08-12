@@ -81,7 +81,7 @@ export function MarkdownCodeBlock({
   children,
 }: MarkdownElementProps<"pre">) {
   return (
-    <pre className="my-4 overflow-x-auto border border-interactive-border bg-background p-3 text-xs text-foreground">
+    <pre className="my-4 overflow-x-auto border border-interactive-border bg-background p-3 text-xs text-foreground [&_code]:rounded-none [&_code]:border-0 [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-[length:inherit]">
       {children}
     </pre>
   );
