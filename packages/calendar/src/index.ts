@@ -134,6 +134,12 @@ export {
   type SyncWindow,
 } from "./core/sync/sync-range";
 export {
+  BASE_SOURCE_SYNC_RANGES,
+  createRequiredSourceRanges,
+  type RequiredSourceRanges,
+  type StoredDestinationRanges,
+} from "./core/sync/required-source-ranges";
+export {
   type DestinationSyncResult,
   type SyncProgressUpdate,
   type SyncStage,
