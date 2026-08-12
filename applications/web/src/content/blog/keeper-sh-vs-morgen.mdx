@@ -12,27 +12,19 @@ tags:
   - "sync"
 ---
 
-Morgen is a calendar app you install and live in. It shows all your calendars together, plans your day, and pulls in tasks from tools like Notion and Todoist.
+Morgen is a calendar app you install and live in. It shows all your calendars together, plans your day, and brings in tasks from tools like Notion and Todoist.
 
-Keeper.sh is not a calendar app at all. It runs in the background and keeps busy time visible across the calendars you already use.
-
-Both can block out your personal events on your work calendar. They do it very differently, and the difference is timing.
+Keeper.sh is not a calendar app at all. It runs in the background and keeps busy time visible across the calendars you already use. Both can block out your personal events on your work calendar, and the difference is timing.
 
 ## How often does each one block out your time?
 
 This is the main reason to read this page, so it goes first.
 
-Morgen's Calendar Propagation workflow "will run daily at 6:00 pm" and covers "the upcoming 14 days" ([Morgen's guide](https://www.morgen.so/guides/how-to-use-morgens-calendar-propagation-workflow)). It runs in one direction, from one calendar to another.
+Morgen's Calendar Propagation workflow "will run daily at 6:00 pm" and covers "the upcoming 14 days" ([Morgen's guide](https://www.morgen.so/guides/how-to-use-morgens-calendar-propagation-workflow)). The same guide is upfront about the consequence. When an event is cancelled or moved, "there will be a lag as the workflow runs daily at 6pm".
 
-The same guide is upfront about the consequence. When an event is cancelled or moved, "there will be a lag as the workflow runs daily at 6pm".
+Say you book a dentist appointment at 9am, for 2pm the same day. Your work calendar still looks free at 2pm all morning, because the workflow has not run yet. Anything more than two weeks out is not blocked at all until the day gets close.
 
-So a meeting you accept at 9am is not blocked elsewhere until that evening. Anything more than two weeks out is not blocked at all until the day gets close enough.
-
-Keeper reads your calendars every minute, on every plan. It writes copies out every minute on Pro, and every 30 minutes on the free plan.
-
-It also reaches much further ahead. Keeper covers the next two years and the past week, rather than only the next fortnight.
-
-Say you book a dentist appointment at 9am, for 2pm the same day. Your work calendar still looks free at 2pm all morning, because the workflow has not run yet.
+Keeper reads your calendars every minute, on every plan. It writes copies out every minute on Pro, and every 30 minutes on the free plan. It also covers the next two years and the past week, rather than only the next fortnight.
 
 That is the case for us over Morgen, and honestly it is the only one that really matters.
 
@@ -44,21 +36,19 @@ Morgen connects Google Calendar, Outlook Calendar, Apple Calendar, Fastmail, gen
 
 Keeper connects Google, Outlook, iCloud, Fastmail, and any CalDAV server. It reads public ICS links but cannot write to them, and it connects no task tools at all.
 
-For calendars specifically, the two lists are close to equal. There is one limit worth noting on Morgen's side. Their own guide says Calendar Propagation supports "Outlook, Google, iCloud, and Fastmail Calendars", which is narrower than the calendars Morgen can display.
+For calendars specifically, the two lists are close to equal. There is one limit worth noting on Morgen's side. Their guide says the blocking workflow supports "Outlook, Google, iCloud, and Fastmail Calendars", which is narrower than the calendars Morgen can display.
 
 ## What does a blocked-out copy look like?
 
 Morgen writes a plain placeholder instead of the event. Copies appear as "Private Event (from Morgen)" with no details listed, so you check the original calendar for specifics.
 
-Keeper does much the same thing, with one difference. A calendar you connect is copied out under the name of the calendar it came from, with the description and location stripped.
+Keeper does much the same, with one difference. A calendar you connect is copied out under the name of the calendar it came from, with the description and location stripped.
 
-So every Morgen copy reads "Private Event (from Morgen)". Ours read "Personal", or "Family", or whatever you named the calendar.
+So where a Morgen copy reads "Private Event", ours reads "Personal", or "Family", or whatever you named the calendar.
 
-That cuts both ways. Ours tell you a bit more at a glance, but a calendar name travels with every copy, so a revealing name is worth renaming.
+That cuts both ways. Ours tell you a bit more at a glance. But a calendar name travels with every copy, so a revealing name is worth renaming.
 
 Changing what shows through is a Pro feature on our side. Free users keep the anonymised default, which is usually the one they wanted.
-
-Those defaults are applied when you connect a calendar, rather than enforced forever afterwards. A Pro user can turn detail back on.
 
 ## Which one has better filtering?
 
@@ -66,9 +56,7 @@ Morgen does, and it is not a close call.
 
 Their guide describes a "Nerd Mode" that lets you add custom filters on things like business hours, event tags, and whether an event has invitees. It also lets you choose between copying every event or only events marked busy.
 
-Keeper's controls are noticeably coarser than that. You can let event names, descriptions, and locations back through, and exclude all-day events, focus time, or out-of-office blocks. Those are per-calendar switches rather than a real filter language.
-
-If you want fine-grained rules about which events get blocked, Morgen is ahead of us today.
+Keeper's controls are coarser. You can let event names, descriptions, and locations back through, and exclude all-day events, focus time, or out-of-office blocks. Those are per-calendar switches rather than a real filter language.
 
 ## Where does your calendar data live?
 
@@ -78,21 +66,19 @@ Their FAQ states: "We do not store your calendar data in the cloud. Instead, our
 
 Their privacy policy adds that "Our data centers are located in Switzerland or in the European Union, while some partners are located in the United States" ([privacy policy](https://www.morgen.so/privacy)).
 
-Keeper works differently, and it has to. We keep a copy of your events in our own database.
-
-That copy is exactly what makes minute-level timing possible. We can only spot a change in under a minute if we know what your calendar looked like a minute ago.
+Keeper works differently, and it has to. We keep a copy of your events in our own database. That copy is exactly what makes minute-level timing possible.
 
 It is a real trade, not a detail. If you would rather no service held a copy of your events, Morgen's design suits you better. If you want that copy on a server you own, see the self-hosting section below.
 
 ## What apps does each one have?
 
-Morgen wins this one outright, with nothing to argue about.
+Morgen wins this one outright.
 
 Morgen ships desktop apps for macOS 12 and above, Windows 10 and above, and Linux on x86 64-bit ([downloads](https://platform.morgen.so/download)). There are iOS and Android apps too, though the download page says to set up your account on desktop first.
 
-Keeper is a web app you open in a browser. There is no desktop app and no mobile app.
+Keeper is a web app you open in a browser, with no desktop or mobile app.
 
-You do not really sit in Keeper, so this matters less than it sounds. But if you want a calendar client on your laptop, we do not have one and Morgen does.
+You do not really sit in Keeper, so this matters less than it sounds. But if you want a calendar client on your laptop, we do not have one.
 
 ## What does each one cost?
 
@@ -100,19 +86,15 @@ Morgen Pro is $30 a month, or $15 a month billed annually ([pricing](https://www
 
 There is no free tier at all. Morgen offers a 14-day trial with no credit card, and a 30-day money-back guarantee.
 
-Keeper is $0 or $5 a month, flat, for one person.
+Keeper is $0 or $5 a month, flat, for one person. The free plan covers two linked accounts and three connections, and Pro removes both limits.
 
-The prices are not really comparable, and pretending otherwise would be unfair. Morgen is a full calendar client you sit in all day. Keeper is plumbing you set up once and then forget about.
-
-Paying $15 a month for an app you open thirty times a day is reasonable. Paying that much for background blocking alone probably is not.
+The prices are not really comparable. Morgen is a full calendar client you sit in all day. Keeper is plumbing you set up once and then forget about.
 
 ## Can you use both?
 
 Yes, and for some people this is the right answer.
 
-Run Morgen as your calendar app, for the interface, the task tools, and the native apps. Run Keeper underneath for the blocking, so your availability is right within a minute instead of after 6pm.
-
-The two do not conflict, because Morgen reads your calendars and Keeper writes to them.
+Run Morgen as your calendar app, for the interface, the task tools, and the native apps. Run Keeper underneath for the blocking, so your availability is right within a minute instead of after 6pm. The two do not conflict, because Morgen reads your calendars and Keeper writes to them.
 
 ## Can you run Keeper yourself?
 
@@ -122,19 +104,19 @@ The whole codebase is on [GitHub](https://github.com/ridafkih/keeper.sh) under A
 
 That means the copy of your events sits in a database you own, on hardware you chose. For some people, that settles the privacy question entirely.
 
-It is also genuine work, and worth knowing before you start. You need a host, a Postgres database, and Redis. You register your own OAuth credentials with Google and Microsoft, which takes an afternoon the first time.
+It is also genuine work. You need a host, a Postgres database, and Redis. You register your own Google and Microsoft credentials, which takes an afternoon the first time.
 
 Upgrades, backups, and uptime are yours after that. Most people should use hosted keeper.sh and pay the $5 instead.
 
 ## So which should you pick?
 
-Pick Morgen if you want a calendar app you actually enjoy opening every morning. Pick Morgen if you need native desktop apps, and especially if you are on Linux.
+Pick Morgen if you want a calendar app you enjoy opening every morning. Pick Morgen if you need native desktop apps, and especially if you are on Linux.
 
-Pick Morgen if EU or Swiss hosting matters, or if you want your tasks and calendar in one place. Pick Morgen if once-a-day blocking is fine for the way you work.
+Pick Morgen if EU or Swiss hosting matters, or if you want your tasks and calendar in one place.
 
-Pick Keeper if a stale calendar has already got you double-booked more than once. Pick Keeper if you need your time blocked further out than the next two weeks.
+Pick Keeper if a stale calendar has already got you double-booked. Pick Keeper if you need your time blocked further out than the next two weeks.
 
-Pick Keeper if $5 a month is the right size for a background job. Pick Keeper if you would rather run the whole thing on your own server.
+Pick Keeper if $5 a month is the right size for a background job, or if you would rather run the whole thing on your own server.
 
 If you are not sure, ask one question. Has anyone booked over you because your other calendar looked free? If the answer is no, Morgen's timing will not bother you.
 
@@ -142,31 +124,17 @@ If you are not sure, ask one question. Has anyone booked over you because your o
 
 ### How often does Morgen block out my events?
 
-Once a day. Morgen's guide states that the Calendar Propagation workflow runs daily at 6:00 pm and covers the upcoming 14 days.
-
-Keeper reads every minute, and writes every minute on Pro or every 30 minutes on the free plan.
-
-### Does Keeper have a desktop or mobile app?
-
-No. Keeper is a web app you configure in a browser, and it runs on its own after that.
-
-Morgen has native apps for macOS, Windows, Linux, iOS, and Android.
-
-### Does Morgen store my calendar in the cloud?
-
-Their FAQ says it does not, and describes their servers as a proxy that does not keep your data. Keeper does store a copy, which is what makes minute-level timing possible.
+Once a day. Morgen's guide states that the workflow runs daily at 6:00 pm and covers the upcoming 14 days. Keeper reads every minute, and writes every minute on Pro or every 30 minutes on the free plan.
 
 ### Can Keeper sync in both directions?
 
-Only by setting up two connections, one pointing each way, because each connection moves events one way.
-
-Morgen's Calendar Propagation runs in one direction per workflow too.
+Only by setting up two connections, one pointing each way, because each connection moves events one way. Morgen's Calendar Propagation runs in one direction per workflow too.
 
 ### Does Keeper copy attendees or video call links?
 
 No. A copy carries the times, the busy or free status, and whatever detail your settings let through.
 
-Attendees, meeting links, and reminders are never copied across. Keeper does read attendees, so you can see pending invites and RSVP from the API.
+Attendees, meeting links, and reminders are never copied across. Keeper does read attendees, so you can see pending invites and RSVP.
 
 ## Sources
 

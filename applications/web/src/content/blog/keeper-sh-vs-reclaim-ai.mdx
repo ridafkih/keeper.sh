@@ -1,7 +1,7 @@
 ---
 title: "Keeper.sh vs Reclaim.ai"
 description: "An honest comparison of Keeper.sh and Reclaim.ai for keeping work and personal calendars in sync, including when Reclaim's free plan is the better answer."
-blurb: "Reclaim's free plan already mirrors one work calendar into one personal calendar, forever, at no cost. Here is when that is enough, and when you need something that reaches iCloud and CalDAV."
+blurb: "Reclaim's free plan covers one sync between two Google or Outlook calendars, at no cost. Here is when that is enough, and when you need something that reaches iCloud and CalDAV."
 createdAt: "2026-08-11"
 updatedAt: "2026-08-11"
 slug: "keeper-sh-vs-reclaim-ai"
@@ -14,47 +14,39 @@ tags:
 
 Reclaim.ai is an AI scheduling assistant. It plans your tasks, defends your focus time, and copies events between calendars.
 
-Keeper.sh does one of those things, and it does it across more calendar providers than Reclaim can reach.
-
-That difference decides most of this comparison. This page tries to be straight about where each tool wins, including the parts where we lose.
+Keeper does one of those things, across more calendar providers than Reclaim can reach. That difference decides most of this comparison, including the parts where we lose.
 
 ## Should you just use Reclaim's free plan?
 
-For a lot of people, yes.
+Sometimes, and we would rather say so than take your money.
 
-Reclaim's Lite plan is free forever, and it includes one calendar sync and two connected calendars, per their [pricing page](https://reclaim.ai/pricing).
+Reclaim's Lite plan is free and includes one Calendar Sync and two connected calendars, per their [pricing page](https://reclaim.ai/pricing). Picture a Gmail account and a Google Workspace account, with personal events showing as busy at work. Lite does that at $0, and we would charge you $5 a month.
 
-That is exactly the job most people come to us for. One work calendar, one personal calendar, copied so nobody double-books you.
+That offer is narrower than it first looks. Reclaim supports Google and Outlook only, on every tier including the paid ones.
 
-Picture a Gmail account and a Google Workspace account. You want personal events to show up as busy at work. Reclaim Lite does that at $0, and we would charge you $5 a month.
+So if either calendar lives on iCloud, Fastmail, Nextcloud, Radicale or another CalDAV server, Reclaim cannot connect it. The same goes for a public ICS feed.
 
-If that is your situation, use Reclaim, because we would rather say so than take your money.
+The counts are not comparable either. Reclaim's free plan is one sync between two calendars. Ours is two linked accounts and three connections, and one account can expose many calendars.
 
-The free plan runs out in two places. It runs out when you need a third calendar involved, and it runs out when either calendar is not Google or Outlook.
+So the rule is simple. If you are on Google and Outlook only and need exactly one connection, use Reclaim Lite. Anything wider than that and the free plan runs out.
 
 ## Which calendars can each one connect?
 
 This is the sharpest split between the two products.
 
-Reclaim's Calendar Sync covers Google and Outlook. Their help centre says it "is only supported for calendars connected to a Google Calendar or Microsoft Outlook account" ([Calendar Sync overview](https://help.reclaim.ai/en/articles/3600762-calendar-sync-overview-keep-multiple-schedules-in-sync)).
-
-The same article suggests sharing an iCloud calendar into Google as a workaround, and notes this may cause delays.
+Reclaim's Calendar Sync covers Google and Outlook. Their help centre says it "is only supported for calendars connected to a Google Calendar or Microsoft Outlook account" ([Calendar Sync overview](https://help.reclaim.ai/en/articles/3600762-calendar-sync-overview-keep-multiple-schedules-in-sync)). The same article suggests sharing an iCloud calendar into Google as a workaround, and notes this may cause delays.
 
 Keeper connects to Google, Outlook, iCloud, Fastmail, and any CalDAV server. It also reads public ICS links, though it cannot write events back to those.
 
-So if your personal calendar lives on iCloud, Reclaim cannot reach it directly. Same if it lives on a Nextcloud or Radicale server you run yourself.
-
-That is the single most common reason people end up with us.
+So if your personal calendar lives on iCloud, or on a Nextcloud or Radicale server you run yourself, Reclaim cannot reach it directly. That is the single most common reason people end up with us.
 
 ## How fast do copies appear?
 
 Reclaim says its copies are immediate, and their product page states: "Updates happen instantly—not on a timer or slow refresh" ([AI Calendar Sync](https://reclaim.ai/features/calendar-sync)).
 
-Keeper runs on timers, and we would rather admit that than dress it up as something else.
+Keeper runs on timers, and we would rather admit that than dress it up. We read your calendars every minute, on every plan. We write copies out every minute on Pro, and every 30 minutes on the free plan.
 
-We read your calendars every minute, on every plan. We write copies out every minute on Pro, and every 30 minutes on the free plan.
-
-So a new meeting lands on your other calendar in about a minute if you pay us. On the free plan, it can take half an hour.
+So a new meeting lands on your other calendar in about a minute if you pay us. On the free plan it can take half an hour.
 
 If you need a personal event blocked at work within seconds, Reclaim is faster. That is a genuine advantage and we are not going to argue with it.
 
@@ -64,13 +56,11 @@ We do reach further out in time. Keeper covers the next two years plus the last 
 
 Yes, both of them do, and neither of us pretends otherwise.
 
-Reclaim's help centre puts it plainly. Calendar Sync "has to create copies by design, because without those copies, your colleagues viewing the destination calendar wouldn't see time from the source calendar as blocked" ([handling duplicates](https://help.reclaim.ai/en/articles/3639940-how-to-handle-duplicate-events-from-calendar-sync)).
+Reclaim's help centre puts it plainly. Calendar Sync "has to create copies by design, because without those copies, your colleagues viewing the destination calendar wouldn't see time from the source calendar as blocked" ([handling duplicates](https://help.reclaim.ai/en/articles/3639940-how-to-handle-duplicate-events-from-calendar-sync)). The same is true of Keeper, because a copy is the only thing another person's calendar can see.
 
-The same is true of Keeper, for the same reason. A copy is the only thing another person's calendar can actually see.
+Both tools also copy in one direction at a time. Reclaim tells you to "set up two sync policies" when you want both ways ([syncing in multiple directions](https://help.reclaim.ai/en/articles/3654852-using-calendar-sync-to-sync-calendars-in-multiple-directions)). Keeper wants two connections, one pointing each way.
 
-Both tools also copy in one direction at a time. Reclaim tells you to "set up two sync policies" when you want both ways ([syncing in multiple directions](https://help.reclaim.ai/en/articles/3654852-using-calendar-sync-to-sync-calendars-in-multiple-directions)).
-
-Keeper works the same way, with two connections, one pointing each way. Neither of us does true two-way sync, and you should be suspicious of anyone who claims to.
+Neither of us does two-way sync, and you should be suspicious of anyone who claims to.
 
 ## What does a copied event look like?
 
@@ -82,21 +72,15 @@ Keeper anonymises copies by default. A calendar you connect is copied out under 
 
 So a dentist appointment on a calendar you called "Personal" shows up at work as "Personal". Right day, right time, no detail.
 
-Here is the honest part: changing that is a Pro feature. Turning event names, descriptions, or locations back on needs a paid plan.
+Here is the honest part: changing that is a Pro feature. Reclaim gives you the same choice for free, on every policy including Lite.
 
-Those defaults are applied when you connect a calendar, rather than enforced forever afterwards. A Pro user can turn detail back on, and we do not stop them.
-
-Reclaim gives you that choice for free. Their visibility levels sit on every policy including Lite, so you pick per policy instead of accepting one default.
-
-Reclaim's filtering is also further along than ours. Working-hours filters, all-day rules, and a per-event keyword are more than we ship today.
+Their filtering is further along than ours too. Working-hours filters, all-day rules, and a per-event keyword are more than we ship today.
 
 ## What does each one cost?
 
-Reclaim's paid tiers are listed at $10, $15, and $22 per seat per month for Starter, Business, and Enterprise ([pricing](https://reclaim.ai/pricing)). Enterprise is where SSO and SCIM user provisioning live.
+Reclaim's paid tiers are listed at $10, $15, and $22 per seat per month for Starter, Business, and Enterprise ([pricing](https://reclaim.ai/pricing)). Enterprise is where SSO and SCIM user provisioning live. None of those tiers add a calendar provider, so paying more does not get you iCloud or CalDAV.
 
-Keeper is $0 or $5 a month, flat, for one person.
-
-Our free plan gives you two linked accounts and three connections between calendars. There is no limit on how many calendars each account exposes.
+Keeper is $0 or $5 a month, flat, for one person. Our free plan gives you two linked accounts and three connections, with no limit on how many calendars each account exposes.
 
 Pro removes both limits. It also drops the write interval to a minute, and lets you change what shows through on a copy.
 
@@ -106,43 +90,37 @@ We have no team plan, no seats, no SSO, and no SCIM. If you are buying this for 
 
 Most of Reclaim's product, honestly.
 
-It schedules tasks into open time, defends focus blocks, and adds buffer time around meetings. It builds recurring habits into your week, and offers scheduling links, a planner, and time tracking.
-
-None of that exists in Keeper, and none of it is on our list. We move events between calendars, and that is the whole product.
+It schedules tasks into open time, defends focus blocks, and adds buffer time around meetings. It builds recurring habits into your week, and offers scheduling links, a planner, and time tracking. None of that exists in Keeper, and none of it is on our list.
 
 Reclaim is also part of Dropbox, which its own site states ([about Reclaim](https://reclaim.ai/about)). If a larger company behind the product matters to your procurement team, that is worth weighing.
 
 ## What Keeper does that Reclaim does not
 
-Keeper talks to iCloud, Fastmail, and CalDAV servers directly, with no shared-calendar workaround sitting in the middle.
+Keeper talks to iCloud, Fastmail, and CalDAV servers directly, with no shared-calendar workaround in the middle.
 
-It publishes one iCal feed covering every calendar you pick. You hand that link to anyone who needs your availability, and event names show as "Busy" unless you change that.
+It publishes one iCal feed covering every calendar you pick. Hand that link to anyone who needs your availability, and event names show as "Busy" unless you change that.
 
-It has a REST API and an MCP server, both usable on the free plan at 25 calls a day.
-
-It costs $5 a month for a person, rather than a price per seat.
+It has a REST API and an MCP server, both usable on the free plan at 25 calls a day. It costs $5 a month for a person, rather than a price per seat.
 
 And it is open source under AGPL-3.0, so you can read every line of code that touches your calendar.
 
 ## Can you run Keeper yourself?
 
-Yes, and it is a real option rather than a token gesture.
-
-The whole codebase is on [GitHub](https://github.com/ridafkih/keeper.sh) under AGPL-3.0, with Docker images to make a first deployment quick.
+Yes, and it is a real option rather than a token gesture. The whole codebase is on [GitHub](https://github.com/ridafkih/keeper.sh) under AGPL-3.0, with Docker images to make a first deployment quick.
 
 Self-hosting turns on every Pro feature at no cost, and that is deliberate. We are not going to hold the good parts back from people running our code on their own hardware.
 
-It is also genuine work, and worth knowing that before you start. You need somewhere to run it, a Postgres database, and Redis. You register your own OAuth credentials with Google and Microsoft, which takes an afternoon the first time.
+It is genuine work, though. You need somewhere to run it, a Postgres database, and Redis. You also register your own Google and Microsoft credentials, which takes an afternoon the first time.
 
 After that, upgrades, backups, and uptime are yours to own.
 
-Most people should use hosted keeper.sh and pay the $5. Run it yourself if you want your calendar data on hardware you control, or you simply enjoy this kind of thing.
+Most people should use hosted keeper.sh and pay the $5. Run it yourself if you want your calendar data on hardware you control.
 
 ## So which should you pick?
 
-Pick Reclaim if you are on Google or Outlook only, and one free calendar sync covers you. Pick Reclaim if you want AI scheduling, focus time, and task planning. Pick Reclaim if you are buying seats for a team that needs SSO.
+Pick Reclaim if both calendars are Google or Outlook and one free sync covers you. Pick Reclaim if you want AI scheduling and task planning, or if you are buying seats for a team that needs SSO.
 
-Pick Keeper if any calendar you care about is on iCloud, Fastmail, or CalDAV. Pick Keeper if you want more than three calendars involved for a flat $5. Pick Keeper if you want an aggregated availability feed, an API, or the source code.
+Pick Keeper if any calendar you care about is on iCloud, Fastmail, or CalDAV. Pick Keeper if you want more than three calendars involved for a flat $5. Pick Keeper if you want an availability feed, an API, or the source code.
 
 Plenty of people should pick Reclaim. We would rather you work that out on this page than a month after paying us.
 
@@ -150,27 +128,13 @@ Plenty of people should pick Reclaim. We would rather you work that out on this 
 
 ### Can Reclaim sync my iCloud calendar?
 
-Not directly. Their documentation limits Calendar Sync to calendars connected to a Google or Microsoft Outlook account, and suggests sharing iCloud into Google as a workaround.
-
-Keeper connects to iCloud directly, using an app-specific password you generate in your Apple account.
-
-### Is Keeper's free plan enough for me?
-
-It is enough for two linked accounts and three connections between calendars. Copies are written out every 30 minutes rather than every minute.
-
-Copies are anonymised by default, which is what most people want anyway. The catch is that changing what shows through is a Pro feature.
-
-### Do I need two connections to sync both ways?
-
-Yes, because each connection moves events in one direction only.
-
-Work into personal and personal into work is two connections. Reclaim works the same way, using two of its sync policies.
+Not directly, on any plan. Their documentation limits Calendar Sync to calendars connected to a Google or Microsoft Outlook account, and suggests sharing iCloud into Google as a workaround. Keeper connects to iCloud directly, using an app-specific password you generate in your Apple account.
 
 ### Does Keeper copy attendees or video call links?
 
 No. A copy carries the times, the busy or free status, and whatever detail your settings let through.
 
-Attendees, meeting links, and reminders are never copied across. Keeper does read attendees, so you can see pending invites and RSVP from the API.
+Attendees, meeting links, and reminders are never copied across. Keeper does read attendees, so you can see pending invites and RSVP.
 
 ### Can I use both tools together?
 
