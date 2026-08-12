@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildBatchRequestBody,
   parseBatchResponseBody,
-  chunkArray,
   executeBatchChunked,
   extractResponseBoundary,
 } from "../../../../src/providers/google/shared/batch";
+import { chunkArray } from "../../../../src/core/utils/chunk";
 import type { BatchSubRequest } from "../../../../src/providers/google/shared/batch";
 
 describe("buildBatchRequestBody", () => {

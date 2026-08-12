@@ -1,5 +1,6 @@
 import { HTTP_STATUS, PROVIDER_PUSH_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
+import { chunkArray } from "../../../core/utils/chunk";
 import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
 import { GOOGLE_BATCH_API, GOOGLE_BATCH_MAX_SIZE } from "./api";
 import { withBackoff, abortableSleep, computeDelay, DEFAULT_MAX_RETRIES } from "./backoff";
@@ -270,14 +271,6 @@ const executeBatch = (
     },
   );
 
-const chunkArray = <TItem>(items: TItem[], size: number): TItem[][] => {
-  const chunks: TItem[][] = [];
-  for (let offset = 0; offset < items.length; offset += size) {
-    chunks.push(items.slice(offset, offset + size));
-  }
-  return chunks;
-};
-
 const collectRateLimitedIndices = (responses: BatchSubResponse[]): number[] => {
   const indices: number[] = [];
   for (let index = 0; index < responses.length; index++) {
@@ -408,7 +401,6 @@ export {
   parseBatchResponseBody,
   executeBatch,
   executeBatchChunked,
-  chunkArray,
   extractResponseBoundary,
 };
 export type { BatchSubRequest, BatchSubResponse };
