@@ -95,28 +95,102 @@ const getEventRevisionTime = (event: IcsEvent): number =>
   ?? event.created?.date.getTime()
   ?? 0;
 
-const isNewerEventRevision = (candidate: IcsEvent, current: IcsEvent): boolean => {
-  const candidateSequence = candidate.sequence ?? 0;
-  const currentSequence = current.sequence ?? 0;
-  if (candidateSequence !== currentSequence) {
-    return candidateSequence > currentSequence;
+const compareEventRevisions = (candidate: IcsEvent, current: IcsEvent): number => {
+  const sequenceDelta = (candidate.sequence ?? 0) - (current.sequence ?? 0);
+  if (sequenceDelta !== 0) {
+    return Math.sign(sequenceDelta);
   }
-  return getEventRevisionTime(candidate) > getEventRevisionTime(current);
+  return Math.sign(getEventRevisionTime(candidate) - getEventRevisionTime(current));
 };
 
-const selectCanonicalEventRevisions = (events: IcsEvent[]): IcsEvent[] => {
-  const revisions = new Map<string, IcsEvent>();
+const isNewerEventRevision = (candidate: IcsEvent, current: IcsEvent): boolean =>
+  compareEventRevisions(candidate, current) > 0;
+
+/*
+ * The slot a VEVENT would occupy in storage, read straight off the parsed
+ * properties so it can be built for any VEVENT without evaluating a DURATION
+ * that convertCanonicalEvent would reject. Two VEVENTs sharing a revision
+ * identity but not a slot signature cannot both be stored.
+ */
+const describeEventDuration = (event: IcsEvent): string => {
+  if (!event.duration) {
+    return "none";
+  }
+  return JSON.stringify(event.duration);
+};
+
+const buildEventSlotSignature = (event: IcsEvent): string => [
+  event.start?.date.getTime() ?? "none",
+  event.end?.date.getTime() ?? "none",
+  describeEventDuration(event),
+].join("|");
+
+interface CanonicalEventRevision {
+  collapsedSlotCount: number;
+  event: IcsEvent;
+}
+
+/*
+ * Revision ties carry no ordering information, so the winner is pinned to the
+ * lowest slot signature rather than to feed order: a publisher that renders
+ * from an unordered query would otherwise swap the stored row on every poll,
+ * deleting and re-creating it forever. Ties that disagree on their slot are
+ * distinct events the storage model cannot both hold, so the losing slots are
+ * reported as discarded; an event superseded by a genuinely newer revision is
+ * not a loss and stays uncounted.
+ */
+const selectGroupRevision = (group: readonly IcsEvent[]): CanonicalEventRevision => {
+  const [first, ...rest] = group;
+  if (!first) {
+    throw new TypeError("A revision group must hold at least one VEVENT");
+  }
+  let winner = first;
+  for (const event of rest) {
+    const order = compareEventRevisions(event, winner);
+    if (
+      order > 0
+      || order === 0 && buildEventSlotSignature(event) < buildEventSlotSignature(winner)
+    ) {
+      winner = event;
+    }
+  }
+  const tiedSlots = new Set(
+    group
+      .filter((event) => compareEventRevisions(event, winner) === 0)
+      .map((event) => buildEventSlotSignature(event)),
+  );
+  return { collapsedSlotCount: tiedSlots.size - 1, event: winner };
+};
+
+interface CanonicalEventRevisions {
+  collapsedSlotCount: number;
+  events: IcsEvent[];
+}
+
+const groupEventsByRevisionIdentity = (
+  events: readonly IcsEvent[],
+): Map<string, IcsEvent[]> => {
+  const groups = new Map<string, IcsEvent[]>();
   for (const event of events) {
     const identity = buildEventRevisionIdentity(event);
     if (!identity) {
       continue;
     }
-    const current = revisions.get(identity);
-    if (!current || isNewerEventRevision(event, current)) {
-      revisions.set(identity, event);
-    }
+    groups.set(identity, [...groups.get(identity) ?? [], event]);
   }
-  const canonicalEvents = [...revisions.values()];
+  return groups;
+};
+
+const selectCanonicalEventRevisions = (
+  events: IcsEvent[],
+): CanonicalEventRevisions => {
+  const revisions = [...groupEventsByRevisionIdentity(events).values()]
+    .map((group) => selectGroupRevision(group));
+  const collapsedSlotCount = revisions.reduce(
+    (total, revision) => total + revision.collapsedSlotCount,
+    0,
+  );
+  const canonicalEvents = revisions.map(({ event }) => event);
   const authoritativeMasterByUid = new Map<string, IcsEvent>();
   for (const event of canonicalEvents) {
     if (!event.uid || buildEventRevisionIdentity(event) !== `${event.uid}|master`) {
@@ -128,17 +202,20 @@ const selectCanonicalEventRevisions = (events: IcsEvent[]): IcsEvent[] => {
     }
   }
 
-  return canonicalEvents.filter((event) => {
-    if (!event.uid || event.recurrenceId) {
-      return true;
-    }
-    const identity = buildEventRevisionIdentity(event);
-    if (!identity?.includes("|slot|")) {
-      return true;
-    }
-    const authoritativeMaster = authoritativeMasterByUid.get(event.uid);
-    return !authoritativeMaster || isNewerEventRevision(event, authoritativeMaster);
-  });
+  return {
+    collapsedSlotCount,
+    events: canonicalEvents.filter((event) => {
+      if (!event.uid || event.recurrenceId) {
+        return true;
+      }
+      const identity = buildEventRevisionIdentity(event);
+      if (!identity?.includes("|slot|")) {
+        return true;
+      }
+      const authoritativeMaster = authoritativeMasterByUid.get(event.uid);
+      return !authoritativeMaster || isNewerEventRevision(event, authoritativeMaster);
+    }),
+  };
 };
 
 const mergeExceptionDates = (
@@ -277,19 +354,32 @@ interface ParsedIcsEventDiagnostics {
 }
 
 /*
+ * Stored rows are keyed per instance, so a modified occurrence is its own row
+ * even though it shares its UID with the series master. Counting per UID would
+ * hide the drop of an override behind a master that still parses, which is the
+ * one deletion this counter most needs to surface.
+ */
+const buildInstanceIdentity = (uid: string, recurrenceDate: Date | undefined): string => {
+  if (!recurrenceDate) {
+    return `${uid}|master`;
+  }
+  return buildRecurrenceIdentity(uid, recurrenceDate);
+};
+
+/*
  * A VEVENT with no UID or no DTSTART is dropped before it ever reaches the
  * output, and every snapshot source reads that absence as "the publisher
  * removed it" and deletes the stored row. Counting the drop here is what keeps
- * that deletion from being silent. Revisions of the same UID are counted once,
- * and a UID that still produced an event elsewhere in the feed is not a loss.
+ * that deletion from being silent. Revisions of the same instance are counted
+ * once, and an instance that still produced an event is not a loss.
  */
 const countDiscardedIcsEvents = (
   rawEvents: readonly IcsEvent[],
   options: ParseIcsEventsOptions,
-  parsedUids: ReadonlySet<string>,
+  parsedIdentities: ReadonlySet<string>,
 ): Pick<ParsedIcsEventDiagnostics, "selfAuthoredCount" | "unrepresentableCount"> => {
   const selfAuthoredUids = new Set<string>();
-  const unrepresentableUids = new Set<string>();
+  const unrepresentableIdentities = new Set<string>();
   let anonymousUnrepresentableCount = 0;
 
   for (const event of rawEvents) {
@@ -301,14 +391,15 @@ const countDiscardedIcsEvents = (
       selfAuthoredUids.add(event.uid);
       continue;
     }
-    if (!event.start?.date && !parsedUids.has(event.uid)) {
-      unrepresentableUids.add(event.uid);
+    const identity = buildInstanceIdentity(event.uid, event.recurrenceId?.value.date);
+    if (!event.start?.date && !parsedIdentities.has(identity)) {
+      unrepresentableIdentities.add(identity);
     }
   }
 
   return {
     selfAuthoredCount: selfAuthoredUids.size,
-    unrepresentableCount: anonymousUnrepresentableCount + unrepresentableUids.size,
+    unrepresentableCount: anonymousUnrepresentableCount + unrepresentableIdentities.size,
   };
 };
 
@@ -317,7 +408,8 @@ const parseIcsEventsWithDiagnostics = (
   options: ParseIcsEventsOptions = {},
 ): ParsedIcsEventDiagnostics => {
   const rawEvents = calendar.events ?? [];
-  const canonicalEvents = selectCanonicalEventRevisions(rawEvents);
+  const { collapsedSlotCount, events: canonicalEvents } =
+    selectCanonicalEventRevisions(rawEvents);
   assertNoRangedOverrides(canonicalEvents);
   const cancellations = collectCancellationState(canonicalEvents);
   const events = canonicalEvents.flatMap((event) => {
@@ -327,13 +419,16 @@ const parseIcsEventsWithDiagnostics = (
     return [convertCanonicalEvent(event, cancellations)];
   });
 
+  const discarded = countDiscardedIcsEvents(
+    rawEvents,
+    options,
+    new Set(events.map(({ recurrenceId, uid }) => buildInstanceIdentity(uid, recurrenceId))),
+  );
+
   return {
     events,
-    ...countDiscardedIcsEvents(
-      rawEvents,
-      options,
-      new Set(events.map(({ uid }) => uid)),
-    ),
+    selfAuthoredCount: discarded.selfAuthoredCount,
+    unrepresentableCount: discarded.unrepresentableCount + collapsedSlotCount,
   };
 };
 

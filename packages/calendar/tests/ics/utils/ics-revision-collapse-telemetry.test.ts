@@ -106,16 +106,23 @@ const COLLIDING_UID_REVIEW = [
 const storedId = (event: SourceEvent): string =>
   `state-${event.uid}-${event.recurrenceId?.toISOString() ?? "master"}-${event.startTime.toISOString()}`;
 
+const stringifyOrNull = (value: unknown): string | null => {
+  if (!value) {
+    return null;
+  }
+  return JSON.stringify(value);
+};
+
 const toStoredState = (event: SourceEvent): StoredSourceEventState => ({
   availability: event.availability ?? null,
   description: event.description ?? null,
   endTime: event.endTime,
-  exceptionDates: event.exceptionDates ? JSON.stringify(event.exceptionDates) : null,
+  exceptionDates: stringifyOrNull(event.exceptionDates),
   id: storedId(event),
   isAllDay: event.isAllDay ?? null,
   location: event.location ?? null,
   recurrenceId: event.recurrenceId ?? null,
-  recurrenceRule: event.recurrenceRule ? JSON.stringify(event.recurrenceRule) : null,
+  recurrenceRule: stringifyOrNull(event.recurrenceRule),
   sourceEventId: event.sourceEventId ?? null,
   sourceEventType: event.sourceEventType ?? null,
   sourceEventUid: event.uid,

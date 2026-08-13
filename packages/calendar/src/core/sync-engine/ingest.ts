@@ -17,6 +17,39 @@ import {
 
 type IngestWideEventFields = Record<string, boolean | number | string>;
 
+/*
+ * Identifier lists on the wide event grow with the feed, and the counts beside
+ * them are the point of the record: a few thousand unsupported UIDs would push
+ * the whole line past what a log pipeline keeps, taking the counters with it.
+ * The list is a sample, so it is capped by entry count and by total length; the
+ * unbounded truth stays in the count field next to it.
+ */
+const WIDE_EVENT_LIST_LIMIT = 20;
+const WIDE_EVENT_LIST_MAX_LENGTH = 2048;
+
+const buildOmittedSuffix = (omittedCount: number): string => {
+  if (omittedCount <= 0) {
+    return "";
+  }
+  return ` (+${String(omittedCount)} more)`;
+};
+
+const truncateWideEventList = (list: string, omittedCount: number): string => {
+  const suffix = buildOmittedSuffix(omittedCount);
+  if (list.length <= WIDE_EVENT_LIST_MAX_LENGTH) {
+    return `${list}${suffix}`;
+  }
+  return `${list.slice(0, WIDE_EVENT_LIST_MAX_LENGTH)}... (truncated)${suffix}`;
+};
+
+const summarizeWideEventList = (
+  values: readonly string[],
+  separator = ",",
+): string => truncateWideEventList(
+  values.slice(0, WIDE_EVENT_LIST_LIMIT).join(separator),
+  Math.max(values.length - WIDE_EVENT_LIST_LIMIT, 0),
+);
+
 /**
  * Events the provider reported that never reach the diff: the parser could not
  * build a source event from them, or they fell outside the sync window. A delta
@@ -184,14 +217,15 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     if (fetchResult.skippedResourceCount) {
       wideEvent["source_events.skipped_resources"] = fetchResult.skippedResourceCount;
       wideEvent["source_events.skipped_resource_reasons"] =
-        (fetchResult.skippedResourceReasons ?? []).join("; ");
+        summarizeWideEventList(fetchResult.skippedResourceReasons ?? [], "; ");
     }
     let sourceEvents = fetchResult.events;
     const unsupportedEventUids = new Set(fetchResult.unsupportedEventUids);
     if (unsupportedEventUids.size > 0) {
       sourceEvents = sourceEvents.filter(({ uid }) => !unsupportedEventUids.has(uid));
       wideEvent["source_events.unsupported_count"] = unsupportedEventUids.size;
-      wideEvent["source_events.unsupported_uids"] = [...unsupportedEventUids].join(",");
+      wideEvent["source_events.unsupported_uids"] =
+        summarizeWideEventList([...unsupportedEventUids]);
     }
     if (sourceEvents.some((event) => event.recurrenceRule)) {
       if (!fetchResult.syncWindow) {
@@ -214,7 +248,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
         const overBudgetUids = new Set(overBudget.map(({ uid }) => uid));
         sourceEvents = sourceEvents.filter(({ uid }) => !overBudgetUids.has(uid));
         wideEvent["recurrence.over_budget_count"] = overBudget.length;
-        wideEvent["recurrence.over_budget_uids"] = [...overBudgetUids].join(",");
+        wideEvent["recurrence.over_budget_uids"] = summarizeWideEventList([...overBudgetUids]);
       }
     }
 
@@ -248,10 +282,11 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       const invalidStoredEventIds = parseResult.failures.map((failure) => failure.eventId);
       if (parseResult.failures.length > 0) {
         wideEvent["stored_events.invalid_count"] = parseResult.failures.length;
-        wideEvent["stored_events.invalid_ids"] = invalidStoredEventIds.join(",");
-        wideEvent["stored_events.validation_errors"] = parseResult.failures
-          .map((failure) => failure.error.message)
-          .join("; ");
+        wideEvent["stored_events.invalid_ids"] = summarizeWideEventList(invalidStoredEventIds);
+        wideEvent["stored_events.validation_errors"] = summarizeWideEventList(
+          parseResult.failures.map((failure) => failure.error.message),
+          "; ",
+        );
       }
 
       if (isDeltaSync && parseResult.failures.length > 0) {
