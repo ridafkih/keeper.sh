@@ -163,7 +163,7 @@ const getDisplayName = (name: unknown): string => {
 const toCalendarObjectPath = (href: string, calendarUrl: string): string =>
   new URL(href, calendarUrl).pathname;
 
-const toRequestedPaths = (responses: { href?: string }[], calendarUrl: string): string[] => [
+const toCalendarObjectPaths = (responses: { href?: string }[], calendarUrl: string): string[] => [
   ...new Set(
     responses
       .map(({ href }) => toCalendarObjectPath(href ?? "", calendarUrl))
@@ -310,10 +310,11 @@ class CalDAVClient {
         url: params.calendarUrl,
       });
 
-      const requestedPaths = toRequestedPaths(queryResponses, params.calendarUrl);
+      const listedPaths = toCalendarObjectPaths(queryResponses, params.calendarUrl);
+      const requestedPaths = listedPaths;
       if (requestedPaths.length === 0) {
         params.onListing?.({
-          listedCount: 0,
+          listedCount: listedPaths.length,
           requestedCount: 0,
           returnedCount: 0,
           unrequestedCount: 0,
@@ -344,7 +345,7 @@ class CalDAVClient {
       const missingHrefs = requestedPaths.filter((path) => !objectsByPath.has(path));
       const requestedPathSet = new Set(requestedPaths);
       params.onListing?.({
-        listedCount: requestedPaths.length,
+        listedCount: listedPaths.length,
         requestedCount: batches.reduce((total, batch) => total + batch.length, 0),
         returnedCount: requestedPaths.length - missingHrefs.length,
         unrequestedCount: [...objectsByPath.keys()].filter((path) => !requestedPathSet.has(path)).length,
