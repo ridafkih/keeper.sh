@@ -24,6 +24,10 @@ import {
   parseICalCalendarsToRemoteEvents,
 } from "../shared/ics";
 import { isCalDAVAuthenticationError } from "./auth-error-classification";
+import {
+  readPriorReauthenticationState,
+  recordReauthenticationDemand,
+} from "../../../core/reauthentication/demand-telemetry";
 import { createCalDAVSourceService } from "./sync";
 import {
   DEFAULT_FUTURE_SYNC_RANGE,
@@ -207,6 +211,7 @@ const createCalDAVSourceProvider = (
       });
     } catch (error) {
       if (isCalDAVAuthenticationError(error)) {
+        const prior = await readPriorReauthenticationState(database, account.calendarAccountId);
         await database
           .update(calendarAccountsTable)
           .set({
@@ -214,6 +219,14 @@ const createCalDAVSourceProvider = (
             reauthenticationSource: REAUTHENTICATION_SOURCE_CREDENTIALS,
           })
           .where(eq(calendarAccountsTable.id, account.calendarAccountId));
+        recordReauthenticationDemand({
+          accountId: account.calendarAccountId,
+          action: "raise",
+          previous: prior?.needsReauthentication ?? null,
+          provenance: REAUTHENTICATION_SOURCE_CREDENTIALS,
+          recordedProvenance: prior?.reauthenticationSource,
+          signal: "caldav-authentication-error",
+        });
       }
 
       return {

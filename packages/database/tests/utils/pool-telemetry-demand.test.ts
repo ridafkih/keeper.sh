@@ -102,36 +102,45 @@ describe("database pool telemetry demand accounting", () => {
     expect(samples).toEqual([0, 0, 0, 0, 0]);
   });
 
-  it("adds well under a microsecond of overhead per query", async () => {
-    const { client, pending } = createDeferredClient();
-    const iterations = 5000;
+  /*
+   * A single involuntary preemption on a contended CI runner adds tens of milliseconds
+   * to a two-millisecond batch, which reads as ~10µs/query of phantom overhead — any
+   * budget loose enough to absorb that would no longer prove the instrumentation is
+   * cheap. Opt in on quiet hardware; CI reports it as skipped, never silently absent.
+   */
+  it.runIf(Boolean(process.env.KEEPER_PERF_TESTS))(
+    "adds well under a microsecond of overhead per query",
+    async () => {
+      const { client, pending } = createDeferredClient();
+      const iterations = 5000;
 
-    const runBatch = async (): Promise<number> => {
-      const startedAt = performance.now();
-      for (let index = 0; index < iterations; index += 1) {
-        const query = client.unsafe("select 1") as { values: () => Promise<unknown> };
-        pending.at(-1)?.resolve([]);
-        await query.values();
-      }
-      return performance.now() - startedAt;
-    };
+      const runBatch = async (): Promise<number> => {
+        const startedAt = performance.now();
+        for (let index = 0; index < iterations; index += 1) {
+          const query = client.unsafe("select 1") as { values: () => Promise<unknown> };
+          pending.at(-1)?.resolve([]);
+          await query.values();
+        }
+        return performance.now() - startedAt;
+      };
 
-    // Fastest of several batches: a single batch is swamped by JIT warm-up and GC.
-    const runFastestBatch = async (): Promise<number> => {
-      let fastestMs = Number.POSITIVE_INFINITY;
-      for (let round = 0; round < 4; round += 1) {
-        fastestMs = Math.min(fastestMs, await runBatch());
-      }
-      return fastestMs;
-    };
+      // Fastest of several batches: a single batch is swamped by JIT warm-up and GC.
+      const runFastestBatch = async (): Promise<number> => {
+        let fastestMs = Number.POSITIVE_INFINITY;
+        for (let round = 0; round < 4; round += 1) {
+          fastestMs = Math.min(fastestMs, await runBatch());
+        }
+        return fastestMs;
+      };
 
-    const plainMs = await runFastestBatch();
-    instrumentDatabasePool(client, 10);
-    const instrumentedMs = await runFastestBatch();
+      const plainMs = await runFastestBatch();
+      instrumentDatabasePool(client, 10);
+      const instrumentedMs = await runFastestBatch();
 
-    const overheadPerQueryUs = ((instrumentedMs - plainMs) / iterations) * 1000;
-    expect(overheadPerQueryUs).toBeLessThan(5);
-  });
+      const overheadPerQueryUs = ((instrumentedMs - plainMs) / iterations) * 1000;
+      expect(overheadPerQueryUs).toBeLessThan(5);
+    },
+  );
 });
 
 describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry against postgres", () => {

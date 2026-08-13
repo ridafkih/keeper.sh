@@ -8,6 +8,11 @@ import {
 } from "@keeper.sh/database/schema";
 import { REAUTHENTICATION_DESTINATION_GRANT } from "@keeper.sh/constants";
 import { and, eq, inArray } from "drizzle-orm";
+import {
+  buildReauthenticationDemandFields,
+  getErrorMessage,
+  resolveReauthenticationDemandAction,
+} from "@keeper.sh/calendar";
 import type {
   AuthorizationUrlOptions,
   OAuthTokens,
@@ -15,6 +20,7 @@ import type {
   ValidatedState,
 } from "@keeper.sh/calendar";
 import { database, oauthProviders } from "@/context";
+import { widelog } from "@/utils/logging";
 import { getCalendarsAffectedByAccountMutation } from "@/utils/invalidate-calendars";
 import {
   requestUserSync,
@@ -72,6 +78,8 @@ interface ExistingAccount {
   userId: string;
   oauthCredentialId: string | null;
   caldavCredentialId: string | null;
+  needsReauthentication: boolean;
+  reauthenticationSource: string | null;
 }
 
 const findExistingAccount = async (
@@ -83,7 +91,9 @@ const findExistingAccount = async (
     .select({
       caldavCredentialId: calendarAccountsTable.caldavCredentialId,
       id: calendarAccountsTable.id,
+      needsReauthentication: calendarAccountsTable.needsReauthentication,
       oauthCredentialId: calendarAccountsTable.oauthCredentialId,
+      reauthenticationSource: calendarAccountsTable.reauthenticationSource,
       userId: calendarAccountsTable.userId,
     })
     .from(calendarAccountsTable)
@@ -138,11 +148,77 @@ const resolveGrantDemandSource = (needsReauthentication: boolean): string | null
   return null;
 };
 
+interface PriorGrantDemandState {
+  needsReauthentication: boolean;
+  reauthenticationSource: string | null;
+}
+
+const resolveGrantDemandSignal = (needsReauthentication: boolean): string | undefined => {
+  if (!needsReauthentication) {
+    return;
+  }
+  return "grant-missing-scopes";
+};
+
+const recordGrantDemand = (
+  accountId: string,
+  needsReauthentication: boolean,
+  prior: PriorGrantDemandState | null,
+): void => {
+  const fields = buildReauthenticationDemandFields({
+    accountId,
+    action: resolveReauthenticationDemandAction(needsReauthentication),
+    previous: prior?.needsReauthentication ?? null,
+    provenance: REAUTHENTICATION_DESTINATION_GRANT,
+    recordedProvenance: prior?.reauthenticationSource,
+    signal: resolveGrantDemandSignal(needsReauthentication),
+  });
+  for (const [key, value] of Object.entries(fields)) {
+    widelog.set(key, value);
+  }
+};
+
+const readPriorGrantDemandState = async (
+  databaseClient: DestinationDatabase,
+  provider: string,
+  accountId: string,
+): Promise<PriorGrantDemandState | null> => {
+  try {
+    const [account] = await databaseClient
+      .select({
+        needsReauthentication: calendarAccountsTable.needsReauthentication,
+        reauthenticationSource: calendarAccountsTable.reauthenticationSource,
+      })
+      .from(calendarAccountsTable)
+      .where(
+        and(
+          eq(calendarAccountsTable.provider, provider),
+          eq(calendarAccountsTable.accountId, accountId),
+        ),
+      )
+      .limit(FIRST_RESULT_LIMIT);
+    return account ?? { needsReauthentication: false, reauthenticationSource: null };
+  } catch (error) {
+    widelog.set("reauth.previous_read_failed", true);
+    widelog.set("reauth.previous_read_error", getErrorMessage(error));
+    return null;
+  }
+};
+
 const upsertAccountAndCalendarWithDatabase = async (
   databaseClient: DestinationDatabase,
   data: AccountInsertData,
 ): Promise<string | undefined> => {
   const { oauthCredentialId, caldavCredentialId, needsReauthentication, ...base } = data;
+
+  let priorGrantDemandState: PriorGrantDemandState | null = null;
+  if (oauthCredentialId) {
+    priorGrantDemandState = await readPriorGrantDemandState(
+      databaseClient,
+      base.provider,
+      base.accountId,
+    );
+  }
 
   const setClause: Record<string, unknown> = { email: base.email };
 
@@ -182,6 +258,10 @@ const upsertAccountAndCalendarWithDatabase = async (
 
   if (!account) {
     throw new Error("This account is already linked to another user");
+  }
+
+  if (oauthCredentialId) {
+    recordGrantDemand(account.id, needsReauthentication ?? false, priorGrantDemandState);
   }
 
   const [existingCalendar] = await databaseClient
@@ -244,6 +324,8 @@ const saveCalendarDestinationWithDatabase = async (
         reauthenticationSource: resolveGrantDemandSource(needsReauthentication),
       })
       .where(eq(calendarAccountsTable.id, existingAccount.id));
+
+    recordGrantDemand(existingAccount.id, needsReauthentication, existingAccount);
 
     const [existingCalendar] = await databaseClient
       .select({ id: calendarsTable.id })

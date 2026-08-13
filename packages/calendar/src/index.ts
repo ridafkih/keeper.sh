@@ -30,6 +30,13 @@ export {
 } from "./core/oauth/refresh-coordinator";
 export { isOAuthReauthRequiredError } from "./core/oauth/error-classification";
 export {
+  buildReauthenticationDemandFields,
+  resolveReauthenticationDemandAction,
+  type ReauthenticationDemandAction,
+  type ReauthenticationDemandFields,
+  type ReauthenticationDemandFieldsParams,
+} from "./core/reauthentication/demand-telemetry";
+export {
   createCoordinatedRefresher,
   type CoordinatedRefresherOptions,
 } from "./core/oauth/coordinated-refresher";

@@ -110,6 +110,7 @@
         "tldts": "^7.0.27",
         "ts-ics": "^2.4.3",
         "tsdav": "^2.1.8",
+        "widelogger": "^0.7.0",
       },
       "devDependencies": {
         "@keeper.sh/fixtures": "workspace:*",
