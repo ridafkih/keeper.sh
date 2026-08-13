@@ -15,7 +15,12 @@ import {
   createRequiredSourceRanges,
   createSourceIngestionPlan,
 } from "@keeper.sh/calendar";
-import { INGEST_SOURCE_TIMEOUT_MS, PROVIDER_INGEST_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
+import {
+  INGEST_SOURCE_TIMEOUT_MS,
+  INGEST_UNADJUDICABLE_REAUTHENTICATION_SOURCES,
+  PROVIDER_INGEST_REQUEST_TIMEOUT_MS,
+  REAUTHENTICATION_SOURCE_INGEST,
+} from "@keeper.sh/constants";
 import type { CalendarBackoffState, IngestionFetchEventsResult, IngestionPersistenceWork, RedisRateLimiter, RequiredSourceRanges, TokenState } from "@keeper.sh/calendar";
 import {
   createIcsSourceFetcher,
@@ -403,6 +408,29 @@ interface ReauthenticationDemandRecord {
   demand: ReauthenticationDemand;
 }
 
+interface SourceAccountContext {
+  accountId: string | null;
+  recordedDemandSource: string | null;
+}
+
+const INGEST_UNADJUDICABLE_DEMAND_SOURCES = new Set(
+  INGEST_UNADJUDICABLE_REAUTHENTICATION_SOURCES,
+);
+
+const isIngestAdjudicableDemand = (recordedDemandSource: string | null): boolean => {
+  if (recordedDemandSource === null) {
+    return true;
+  }
+  return !INGEST_UNADJUDICABLE_DEMAND_SOURCES.has(recordedDemandSource);
+};
+
+const resolveRecordedDemandSource = (needsReauthentication: boolean): string | null => {
+  if (needsReauthentication) {
+    return REAUTHENTICATION_SOURCE_INGEST;
+  }
+  return null;
+};
+
 interface IngestionSourceResult {
   eventsAdded: number;
   eventsRemoved: number;
@@ -440,12 +468,20 @@ const resolveReauthenticationDemands = (
 
 const applyReauthenticationDemands = async (
   demands: ReauthenticationDemandRecord[],
+  recordedDemandSources: Map<string, string | null>,
 ): Promise<void> => {
   for (const [accountId, needsReauthentication] of resolveReauthenticationDemands(demands)) {
+    const recordedDemandSource = recordedDemandSources.get(accountId) ?? null;
+    if (!needsReauthentication && !isIngestAdjudicableDemand(recordedDemandSource)) {
+      continue;
+    }
     try {
       await database
         .update(calendarAccountsTable)
-        .set({ needsReauthentication })
+        .set({
+          needsReauthentication,
+          reauthenticationSource: resolveRecordedDemandSource(needsReauthentication),
+        })
         .where(and(
           eq(calendarAccountsTable.id, accountId),
           ne(calendarAccountsTable.needsReauthentication, needsReauthentication),
@@ -487,29 +523,44 @@ const createRejectedIngestionResult = (
 
 const collectReauthenticationDemands = (
   settlements: PromiseSettledResult<IngestionSourceResult>[],
-  accountIds: (string | null)[],
+  accounts: SourceAccountContext[],
 ): ReauthenticationDemandRecord[] =>
   settlements.flatMap((settlement, index): ReauthenticationDemandRecord[] => {
     if (settlement.status === "fulfilled" && settlement.value.reauthentication) {
       return [settlement.value.reauthentication];
     }
-    const accountId = accountIds[index];
+    const accountId = accounts[index]?.accountId;
     if (!accountId) {
       return [];
     }
     return [{ accountId, demand: "abstain" }];
   });
 
+const collectRecordedDemandSources = (
+  accounts: SourceAccountContext[],
+): Map<string, string | null> =>
+  new Map(
+    accounts.flatMap(({ accountId, recordedDemandSource }): [string, string | null][] => {
+      if (!accountId) {
+        return [];
+      }
+      return [[accountId, recordedDemandSource]];
+    }),
+  );
+
 const summariseIngestionSettlements = async (
   settlements: PromiseSettledResult<IngestionSourceResult>[],
-  accountIds: (string | null)[],
+  accounts: SourceAccountContext[],
 ): Promise<IngestionBatchResult> => {
   const results = settlements
     .filter((settlement): settlement is PromiseFulfilledResult<IngestionSourceResult> =>
       settlement.status === "fulfilled")
     .map(({ value }) => value);
 
-  await applyReauthenticationDemands(collectReauthenticationDemands(settlements, accountIds));
+  await applyReauthenticationDemands(
+    collectReauthenticationDemands(settlements, accounts),
+    collectRecordedDemandSources(accounts),
+  );
 
   return {
     added: results.reduce((total, { eventsAdded }) => total + eventsAdded, 0),
@@ -528,6 +579,7 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
       accountId: calendarAccountsTable.id,
       calendarId: calendarsTable.id,
       provider: calendarAccountsTable.provider,
+      reauthenticationSource: calendarAccountsTable.reauthenticationSource,
       externalCalendarId: calendarsTable.externalCalendarId,
       syncToken: calendarsTable.syncToken,
       oauthCredentialId: oauthCredentialsTable.id,
@@ -726,7 +778,13 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
     { concurrency: SOURCE_CONCURRENCY },
   );
 
-  return summariseIngestionSettlements(settlements, oauthSources.map(({ accountId }) => accountId));
+  return summariseIngestionSettlements(
+    settlements,
+    oauthSources.map(({ accountId, reauthenticationSource }) => ({
+      accountId,
+      recordedDemandSource: reauthenticationSource,
+    })),
+  );
 };
 
 const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
@@ -742,6 +800,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
       calendarId: calendarsTable.id,
       calendarUrl: calendarsTable.calendarUrl,
       provider: calendarAccountsTable.provider,
+      reauthenticationSource: calendarAccountsTable.reauthenticationSource,
       username: caldavCredentialsTable.username,
       encryptedPassword: caldavCredentialsTable.encryptedPassword,
       serverUrl: caldavCredentialsTable.serverUrl,
@@ -894,7 +953,13 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
     { concurrency: SOURCE_CONCURRENCY },
   );
 
-  return summariseIngestionSettlements(settlements, caldavSources.map(({ accountId }) => accountId));
+  return summariseIngestionSettlements(
+    settlements,
+    caldavSources.map(({ accountId, reauthenticationSource }) => ({
+      accountId,
+      recordedDemandSource: reauthenticationSource,
+    })),
+  );
 };
 
 const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
@@ -1022,7 +1087,10 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
     { concurrency: SOURCE_CONCURRENCY },
   );
 
-  return summariseIngestionSettlements(settlements, icsSources.map(() => null));
+  return summariseIngestionSettlements(
+    settlements,
+    icsSources.map(() => ({ accountId: null, recordedDemandSource: null })),
+  );
 };
 
 export default withCronWideEvent({
