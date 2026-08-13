@@ -436,8 +436,11 @@ const isDestinationAttemptEligible = (
 
 /**
  * The conditions under which this worker must stop touching the destination
- * even though it still holds the lock. Shared by the in-flight check handed to
- * syncCalendar and the post-run verdict, so both read the same run as superseded.
+ * even though it still holds the lock. Read only by the in-flight check handed
+ * to syncCalendar: the post-run verdict uses whether that check ever fired,
+ * because a run that read both sides and found nothing to do returns the same
+ * all-zero result as a run truncated at the gate, and re-reading the clock
+ * afterwards cannot tell the two apart.
  */
 const isDestinationAttemptSuperseded = (
   config: SyncConfig,
@@ -471,18 +474,31 @@ const resetDestinationBackoffIfNeeded = async (
   }
 };
 
+/**
+ * The one place a run's verdict reaches the database, so the throwing and
+ * non-throwing paths cannot disagree about who owns the calendar. Reports
+ * whether this run still owned it, which is also the gate on folding the run's
+ * counts into the aggregate result.
+ */
 const applyDestinationAttemptVerdict = async (
-  database: BunSQLDatabase,
-  destination: DestinationAttempt,
-  verdict: DestinationAttemptVerdict,
-): Promise<void> => {
+  options: {
+    database: BunSQLDatabase;
+    destination: DestinationAttempt;
+    handle: SyncLockHandle;
+    redis: Redis;
+    verdict: DestinationAttemptVerdict;
+  },
+): Promise<boolean> => {
+  const { database, destination, handle, redis, verdict } = options;
+  if (!await isCompletedAttemptCurrent(handle, redis, destination.calendarId)) {
+    return false;
+  }
   if (verdict === "failed") {
     await applyDestinationBackoff(database, destination.calendarId, destination.failureCount);
-    return;
-  }
-  if (verdict === "succeeded") {
+  } else if (verdict === "succeeded") {
     await resetDestinationBackoffIfNeeded(database, destination);
   }
+  return true;
 };
 
 const syncDestinationsForUser = async (
@@ -536,7 +552,10 @@ const syncDestinationsForUser = async (
     }
 
     const { handle } = lockResult;
-    const calendarAttempt: { syncEvent: Record<string, unknown> | null } = { syncEvent: null };
+    const calendarAttempt: {
+      superseded: boolean;
+      syncEvent: Record<string, unknown> | null;
+    } = { superseded: false, syncEvent: null };
     let attemptedDestination: DestinationAttempt | null = null;
 
     try {
@@ -699,10 +718,9 @@ const syncDestinationsForUser = async (
         sourceCalendarIdsBeforeRemoteRead: sourceCalendarIds,
         verifiedSourceCalendarCount: authoritativeSourceWindows.size,
       });
-      const isAttemptSuperseded = (): boolean =>
-        isDestinationAttemptSuperseded(config, sourceCalendarsChangedDuringRemoteRead);
       const isAttemptCurrent = (): Promise<boolean> => {
-        if (isAttemptSuperseded()) {
+        if (isDestinationAttemptSuperseded(config, sourceCalendarsChangedDuringRemoteRead)) {
+          calendarAttempt.superseded = true;
           return Promise.resolve(false);
         }
         return handle.isCurrent();
@@ -755,15 +773,16 @@ const syncDestinationsForUser = async (
         ...(calendarAttempt.syncEvent && { syncEvent: calendarAttempt.syncEvent }),
       });
 
-      if (!(await isCompletedAttemptCurrent(handle, redis, destination.calendarId))) {
-        continue;
-      }
-
-      await applyDestinationAttemptVerdict(
+      const stillOwned = await applyDestinationAttemptVerdict({
         database,
         destination,
-        resolveDestinationAttemptVerdict(result, isAttemptSuperseded()),
-      );
+        handle,
+        redis,
+        verdict: resolveDestinationAttemptVerdict(result, calendarAttempt.superseded),
+      });
+      if (!stillOwned) {
+        continue;
+      }
 
       added += result.added;
       addFailed += result.addFailed;
@@ -776,7 +795,13 @@ const syncDestinationsForUser = async (
         throw error;
       }
 
-      await applyDestinationBackoff(database, destination.calendarId, destination.failureCount);
+      await applyDestinationAttemptVerdict({
+        database,
+        destination,
+        handle,
+        redis,
+        verdict: "failed",
+      });
       errors.push(getErrorMessage(error));
       callbacks?.onCalendarError?.({
         provider: destination.provider,
