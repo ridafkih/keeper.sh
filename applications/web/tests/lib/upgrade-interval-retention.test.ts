@@ -6,8 +6,18 @@ import { SWRConfig } from "swr";
 import { isRedirect } from "@tanstack/react-router";
 import { HttpError } from "../../src/lib/fetcher";
 import { resolveUpgradeMode, retainKnownInterval } from "../../src/lib/upgrade-mode";
-import { useSubscription } from "../../src/hooks/use-subscription";
+import {
+  fetchSubscriptionStateWithApi,
+  useSubscription,
+} from "../../src/hooks/use-subscription";
 import type { SubscriptionState } from "../../src/hooks/use-subscription";
+import { Route as UpgradeRoute } from "../../src/routes/(dashboard)/dashboard/upgrade/index";
+
+const upgradeLoader = (
+  UpgradeRoute as unknown as {
+    options: { loader: (args: unknown) => Promise<unknown> };
+  }
+).options.loader;
 
 const CUSTOMER_STATE_PATH = "/api/auth/customer/state";
 
@@ -21,10 +31,7 @@ const createApi = (respond: (path: string) => unknown) => {
 };
 
 const runUpgradeLoader = async (respond: (path: string) => unknown) => {
-  const mod = await import("../../src/routes/(dashboard)/dashboard/upgrade/index");
-  const loader = (mod as { Route: { options: { loader: (args: unknown) => Promise<unknown> } } })
-    .Route.options.loader;
-  return loader({
+  return upgradeLoader({
     context: {
       auth: { hasSession: () => true },
       fetchApi: createApi(respond),
@@ -205,9 +212,6 @@ describe("upgrade call to action while the customer state flaps after an in-page
 
   it("would hold steady if the previously rendered state were carried instead of the loader one", async () => {
     const readPlan = async (failing: boolean): Promise<SubscriptionState> => {
-      const { fetchSubscriptionStateWithApi } = await import(
-        "../../src/hooks/use-subscription"
-      );
       return fetchSubscriptionStateWithApi(
         createApi((path) => {
           if (path === CUSTOMER_STATE_PATH) {

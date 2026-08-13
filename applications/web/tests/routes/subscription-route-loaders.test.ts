@@ -1,6 +1,13 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { isRedirect } from "@tanstack/react-router";
 import { HttpError } from "../../src/lib/fetcher";
+import { Route as UpgradeRoute } from "../../src/routes/(dashboard)/dashboard/upgrade/index";
+import { Route as SettingsRoute } from "../../src/routes/(dashboard)/dashboard/settings/index";
+
+type RouteOptions = { options: Record<string, unknown> };
+
+const upgradeRoute = UpgradeRoute as unknown as RouteOptions;
+const settingsRoute = SettingsRoute as unknown as RouteOptions;
 
 const CUSTOMER_STATE_PATH = "/api/auth/customer/state";
 const ENTITLEMENTS_PATH = "/api/entitlements";
@@ -30,22 +37,11 @@ const createApi = (respond: Responder) => {
   return { calls, fetchApi };
 };
 
-const loadUpgradeRoute = async () => {
-  const mod = await import("../../src/routes/(dashboard)/dashboard/upgrade/index");
-  return (mod as unknown as { Route: { options: Record<string, unknown> } }).Route;
-};
-
-const loadSettingsRoute = async () => {
-  const mod = await import("../../src/routes/(dashboard)/dashboard/settings/index");
-  return (mod as unknown as { Route: { options: Record<string, unknown> } }).Route;
-};
-
 const runUpgradeLoader = async (
   fetchApi: <T>(path: string) => Promise<T>,
   { hasSession = true, commercialMode = true } = {},
 ) => {
-  const route = await loadUpgradeRoute();
-  const loader = route.options.loader as (args: unknown) => Promise<unknown>;
+  const loader = upgradeRoute.options.loader as (args: unknown) => Promise<unknown>;
   return loader({
     context: {
       auth: { hasSession: () => hasSession },
@@ -59,8 +55,7 @@ const runSettingsLoader = async (
   fetchApi: <T>(path: string) => Promise<T>,
   { commercialMode = true } = {},
 ) => {
-  const route = await loadSettingsRoute();
-  const loader = route.options.loader as (args: unknown) => Promise<unknown>;
+  const loader = settingsRoute.options.loader as (args: unknown) => Promise<unknown>;
   return loader({
     context: { fetchApi, runtimeConfig: { commercialMode } },
   });
@@ -205,8 +200,7 @@ describe("upgrade route loader", () => {
   });
 
   it("sends a commercial-mode-off deployment away from the upgrade page before reading anything", async () => {
-    const route = await loadUpgradeRoute();
-    const beforeLoad = route.options.beforeLoad as (args: unknown) => unknown;
+    const beforeLoad = upgradeRoute.options.beforeLoad as (args: unknown) => unknown;
     const { calls, fetchApi } = createApi(() => ({ activeSubscriptions: [] }));
 
     const thrown = await captureThrow(async () =>

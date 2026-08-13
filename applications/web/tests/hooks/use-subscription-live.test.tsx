@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as React from "react";
+import { createRoot } from "react-dom/client";
 import { parseHTML } from "linkedom";
+import { SWRConfig } from "swr";
+import { useSubscription } from "../../src/hooks/use-subscription";
+import { resolveUpgradeMode } from "../../src/lib/upgrade-mode";
 import type { SubscriptionState } from "../../src/hooks/use-subscription";
 import type { UpgradeMode } from "../../src/lib/upgrade-mode";
 
@@ -119,12 +124,7 @@ const mountSubscription = async (options: {
   strict?: boolean;
 }): Promise<Harness> => {
   const window = setupDom();
-  const React = await import("react");
   const { act } = React;
-  const { createRoot } = await import("react-dom/client");
-  const { SWRConfig } = await import("swr");
-  const { useSubscription } = await import("../../src/hooks/use-subscription");
-  const { resolveUpgradeMode } = await import("../../src/lib/upgrade-mode");
 
   const consumers = options.consumers ?? 1;
   const renders: SubscriptionState[][] = [];
