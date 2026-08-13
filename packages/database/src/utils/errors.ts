@@ -1,13 +1,24 @@
-// SQLSTATE 57014 (query_canceled) — Postgres raises this when statement_timeout fires.
 const STATEMENT_TIMEOUT_SQLSTATE = "57014";
-// Bun's code for a backend terminated mid-flight (idle-in-transaction timeout, shutdown, drop).
 const CONNECTION_TERMINATED_CODE = "ERR_POSTGRES_EXPECTED_REQUEST";
-// Bun's codes for a pooled connection that was never usable or was reclaimed under load.
 const CONNECTION_UNAVAILABLE_CODES = new Set([
   "ERR_POSTGRES_CONNECTION_CLOSED",
   "ERR_POSTGRES_CONNECTION_TIMEOUT",
   "ERR_POSTGRES_IDLE_TIMEOUT",
   "ERR_POSTGRES_LIFETIME_TIMEOUT",
+]);
+const CONNECTION_UNAVAILABLE_SQLSTATES = new Set([
+  "08000",
+  "08001",
+  "08003",
+  "08004",
+  "08006",
+  "08007",
+  "25P03",
+  "53300",
+  "57P01",
+  "57P02",
+  "57P03",
+  "57P05",
 ]);
 
 interface DatabaseErrorClassification {
@@ -57,24 +68,30 @@ const getDatabaseErrorDetails = (error: unknown): DatabaseErrorDetails | null =>
   return details;
 };
 
-const readDriverCode = (value: unknown): string | null => {
+const readField = (value: unknown, field: string): string | null => {
   if (!isRecord(value)) {
     return null;
   }
-  return readString(value.code);
+  return readString(value[field]);
 };
+
+const readFromErrorOrCause = (
+  error: unknown,
+  cause: Record<string, unknown> | null,
+  field: string,
+): string | null => readField(error, field) ?? readField(cause, field);
 
 const hasDriverCode = (
   error: unknown,
   cause: Record<string, unknown> | null,
   matches: (code: string) => boolean,
 ): boolean => {
-  const directCode = readDriverCode(error);
+  const directCode = readField(error, "code");
   if (directCode !== null && matches(directCode)) {
     return true;
   }
 
-  const causeCode = readDriverCode(cause);
+  const causeCode = readField(cause, "code");
   if (causeCode !== null && matches(causeCode)) {
     return true;
   }
@@ -90,7 +107,9 @@ const isConnectionUnavailableCode = (code: string): boolean =>
 
 const classifyDatabaseError = (error: unknown): DatabaseErrorClassification | null => {
   const cause = readCause(error);
-  if (cause && readString(cause.errno) === STATEMENT_TIMEOUT_SQLSTATE) {
+  const sqlState = readFromErrorOrCause(error, cause, "errno");
+
+  if (sqlState === STATEMENT_TIMEOUT_SQLSTATE) {
     return { slug: "db-statement-timeout", sqlState: STATEMENT_TIMEOUT_SQLSTATE };
   }
 
@@ -100,6 +119,10 @@ const classifyDatabaseError = (error: unknown): DatabaseErrorClassification | nu
 
   if (hasDriverCode(error, cause, isConnectionUnavailableCode)) {
     return { slug: "db-connection-unavailable", sqlState: null };
+  }
+
+  if (sqlState !== null && CONNECTION_UNAVAILABLE_SQLSTATES.has(sqlState)) {
+    return { slug: "db-connection-unavailable", sqlState };
   }
 
   return null;
