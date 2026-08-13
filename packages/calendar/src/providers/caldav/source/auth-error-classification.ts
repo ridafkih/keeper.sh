@@ -4,12 +4,27 @@ const AUTH_ERROR_PATTERNS = [
   /\binvalid credentials\b/i,
   /\b(?:401|authentication)\s+unauthorized\b/i,
   /\bauthentication required\b/i,
-  /\bauthentication failed\b/i,
   /\bnot authenticated\b/i,
 ];
 
+const CALDAV_AUTH_ERROR_NAME = "CalDAVAuthenticationError";
+
+const SQLSTATE_PATTERN = /^[0-9A-Z]{5}$/;
+
+const DATABASE_ERROR_NAMES = new Set(["DrizzleQueryError", "PostgresError"]);
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
+
+const hasSqlState = (value: unknown): boolean =>
+  typeof value === "string" && SQLSTATE_PATTERN.test(value);
+
+const isDatabaseFailure = (value: Record<string, unknown>): boolean => {
+  if (typeof value.name === "string" && DATABASE_ERROR_NAMES.has(value.name)) {
+    return true;
+  }
+  return hasSqlState(value.errno) || hasSqlState(value.code);
+};
 
 const toStatusCode = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isInteger(value)) {
@@ -85,6 +100,14 @@ const isCalDAVAuthenticationError = (error: unknown): boolean => {
         continue;
       }
       visited.add(candidate);
+
+      if (isDatabaseFailure(candidate)) {
+        continue;
+      }
+
+      if (candidate.name === CALDAV_AUTH_ERROR_NAME) {
+        return true;
+      }
 
       if ("status" in candidate && hasAuthStatusCode(candidate.status)) {
         return true;

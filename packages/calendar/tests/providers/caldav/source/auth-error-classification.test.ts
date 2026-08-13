@@ -46,4 +46,23 @@ describe("isCalDAVAuthenticationError", () => {
   it("returns false for non-auth operational errors", () => {
     expect(isCalDAVAuthenticationError(new Error("cannot find homeUrl"))).toBe(false);
   });
+
+  it("returns false for a Postgres 28P01 credential rejection", () => {
+    const cause = Object.assign(
+      new Error('password authentication failed for user "keeper"'),
+      { code: "28P01", errno: "28P01", name: "PostgresError" },
+    );
+
+    expect(isCalDAVAuthenticationError(cause)).toBe(false);
+    expect(isCalDAVAuthenticationError(new Error("Failed query", { cause }))).toBe(false);
+  });
+
+  it("returns false for a Postgres pg_hba rejection", () => {
+    const cause = Object.assign(
+      new Error('no pg_hba.conf entry for host "10.0.0.4", SSL off'),
+      { code: "28000", errno: "28000", name: "PostgresError" },
+    );
+
+    expect(isCalDAVAuthenticationError(new Error("Failed query", { cause }))).toBe(false);
+  });
 });

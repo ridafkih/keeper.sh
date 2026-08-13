@@ -2,6 +2,9 @@
 const STATEMENT_TIMEOUT_SQLSTATE = "57014";
 // Bun's code for a backend terminated mid-flight (idle-in-transaction timeout, shutdown, drop).
 const CONNECTION_TERMINATED_CODE = "ERR_POSTGRES_EXPECTED_REQUEST";
+// SQLSTATE class 28 (invalid_authorization_specification) — Postgres rejected our own credentials.
+const AUTHORIZATION_SQLSTATE_CLASS = "28";
+const SQLSTATE_LENGTH = 5;
 
 interface DatabaseErrorClassification {
   slug: string;
@@ -50,10 +53,25 @@ const getDatabaseErrorDetails = (error: unknown): DatabaseErrorDetails | null =>
   return details;
 };
 
+const readSqlState = (value: unknown): string | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+  return readString(value.errno) ?? readString(value.code);
+};
+
+const findSqlState = (error: unknown, cause: Record<string, unknown> | null): string | null =>
+  readSqlState(error) ?? readSqlState(cause);
+
 const classifyDatabaseError = (error: unknown): DatabaseErrorClassification | null => {
   const cause = readCause(error);
   if (cause && String(cause.errno) === STATEMENT_TIMEOUT_SQLSTATE) {
     return { slug: "db-statement-timeout", sqlState: STATEMENT_TIMEOUT_SQLSTATE };
+  }
+
+  const sqlState = findSqlState(error, cause);
+  if (sqlState && sqlState.startsWith(AUTHORIZATION_SQLSTATE_CLASS) && sqlState.length === SQLSTATE_LENGTH) {
+    return { slug: "db-authentication-failed", sqlState };
   }
 
   const connectionTerminated = (
