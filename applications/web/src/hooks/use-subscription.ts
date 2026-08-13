@@ -1,4 +1,6 @@
+import { type } from "arktype";
 import useSWR from "swr";
+import { planSchema } from "@keeper.sh/data-schemas";
 import { fetcher, HttpError } from "@/lib/fetcher";
 import { getCommercialMode } from "@/config/commercial";
 
@@ -7,17 +9,17 @@ export interface SubscriptionState {
   interval: "month" | "year" | null;
 }
 
-interface ActiveSubscription {
-  recurringInterval?: "month" | "year" | null;
-}
+const customerStateSchema = type({
+  "activeSubscriptions?": type({
+    "recurringInterval?": "'month' | 'year' | null",
+  })
+    .array()
+    .or("null"),
+});
 
-interface CustomerStateResponse {
-  activeSubscriptions?: ActiveSubscription[] | null;
-}
+const entitlementsPlanSchema = type({ plan: planSchema });
 
-interface EntitlementsPlanResponse {
-  plan: "free" | "pro";
-}
+type CustomerStateResponse = typeof customerStateSchema.infer;
 
 const SUBSCRIPTION_STATE_CACHE_KEY = "customer-state";
 const CUSTOMER_STATE_PATH = "/api/auth/customer/state";
@@ -72,14 +74,21 @@ export async function fetchSubscriptionStateWithApi(
   fetchApi: <T>(path: string, init?: RequestInit) => Promise<T>,
 ): Promise<SubscriptionState> {
   try {
-    const data = await fetchApi<CustomerStateResponse>(CUSTOMER_STATE_PATH);
-    return resolveSubscriptionState(data);
+    const data = await fetchApi<unknown>(CUSTOMER_STATE_PATH);
+    return resolveSubscriptionState(customerStateSchema.assert(data));
   } catch (error) {
     if (isUnauthorized(error)) {
       throw error;
     }
 
-    const entitlements = await fetchApi<EntitlementsPlanResponse>(ENTITLEMENTS_PATH);
+    console.error(
+      `[subscription] ${CUSTOMER_STATE_PATH} read failed, falling back to ${ENTITLEMENTS_PATH}:`,
+      error,
+    );
+
+    const entitlements = entitlementsPlanSchema.assert(
+      await fetchApi<unknown>(ENTITLEMENTS_PATH),
+    );
     return { plan: entitlements.plan, interval: null };
   }
 }
