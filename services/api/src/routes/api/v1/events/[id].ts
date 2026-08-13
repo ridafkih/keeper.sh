@@ -3,6 +3,7 @@ import { createKeeperApi } from "@/read-models";
 import { handleGetEventRoute } from "@/handlers/event-routes";
 import { withV1Auth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
+import { labelFailureResponse } from "@/utils/error-labelling";
 import { eventPatchBodySchema } from "@/utils/request-body";
 import { database, oauthProviders, refreshLockStore, encryptionKey } from "@/context";
 
@@ -55,7 +56,12 @@ const PATCH = withWideEvent(
 
       const updated = await keeperApi.getEvent(userId, eventId);
       return Response.json(updated);
-    } catch {
+    } catch (error) {
+      const databaseResponse = labelFailureResponse(error, { slug: "invalid-request-body" });
+      if (databaseResponse) {
+        return databaseResponse;
+      }
+
       return ErrorResponse.badRequest("Invalid update data.").toResponse();
     }
   }),

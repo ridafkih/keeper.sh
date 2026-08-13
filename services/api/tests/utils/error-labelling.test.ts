@@ -16,7 +16,7 @@ vi.mock("@/utils/logging", () => ({
   },
 }));
 
-const { labelFailure } = await import("@/utils/error-labelling");
+const { labelFailure, labelFailureResponse } = await import("@/utils/error-labelling");
 
 const pooledQueryFailure = (driverFields: Record<string, unknown>): DrizzleQueryError =>
   new DrizzleQueryError(
@@ -58,5 +58,34 @@ describe("labelFailure", () => {
     expect(fields.slug).toBe("unclassified");
     expect(fields.retriable).toBe(false);
     expect(values["db.error_sqlstate"]).toBeUndefined();
+  });
+});
+
+describe("labelFailureResponse", () => {
+  beforeEach(() => {
+    fields = {};
+    values = {};
+  });
+
+  it("answers a pool failure with 500 and no query text", async () => {
+    const response = labelFailureResponse(
+      pooledQueryFailure({ code: "ERR_POSTGRES_CONNECTION_CLOSED" }),
+      { slug: "caldav-connection-failed" },
+    );
+
+    expect(response).not.toBeNull();
+    expect(response?.status).toBe(500);
+    const body = (await response?.json()) as { error?: string };
+    expect(body.error ?? "").not.toContain("select");
+    expect(fields.slug).toBe("db-connection-unavailable");
+  });
+
+  it("leaves the caller to answer a non-database failure", () => {
+    const response = labelFailureResponse(new Error("CalDAV server responded 401"), {
+      slug: "caldav-connection-failed",
+    });
+
+    expect(response).toBeNull();
+    expect(fields.slug).toBe("caldav-connection-failed");
   });
 });

@@ -3,6 +3,7 @@ import { HTTP_STATUS } from "@keeper.sh/constants";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { widelog } from "@/utils/logging";
+import { labelFailureResponse } from "@/utils/error-labelling";
 import { caldavSourcesQuerySchema } from "@/utils/request-query";
 import {
   CalDAVSourceLimitError,
@@ -53,7 +54,13 @@ const POST = withWideEvent(
         return Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT });
       }
 
-      widelog.errorFields(error, { slug: "caldav-connection-failed" });
+      const databaseResponse = labelFailureResponse(error, {
+        slug: "caldav-connection-failed",
+      });
+      if (databaseResponse) {
+        return databaseResponse;
+      }
+
       const fallbackMessage = "Invalid request body";
       if (error instanceof Error) {
         return ErrorResponse.badRequest(error.message).toResponse();
