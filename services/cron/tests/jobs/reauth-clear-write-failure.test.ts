@@ -262,6 +262,16 @@ describe("a failing re-authentication clear write on the ingest success path", (
     expect(pushedUserIds).toContain("user-1");
   });
 
+  it("leaves an existing demand raised when the clear write keeps failing", async () => {
+    accountNeedsReauthentication = true;
+    clearWriteFails = true;
+
+    await runTick();
+
+    expect(accountNeedsReauthentication).toBe(true);
+    expect(pushedUserIds).toContain("user-1");
+  });
+
   it("converges instead of escalating backoff on every healthy tick", async () => {
     clearWriteFails = true;
 

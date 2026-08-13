@@ -1,4 +1,11 @@
 const SQLSTATE_PATTERN = /^[0-9A-Z]{5}$/;
+const SQLSTATE_CLASSES = new Set([
+  "00", "01", "02", "03", "07", "08", "09", "0A", "0B", "0F", "0K", "0L", "0N",
+  "0P", "0S", "0T", "0U", "0V", "0W", "0X", "0Y", "0Z", "10", "20", "21", "22",
+  "23", "24", "25", "26", "27", "28", "2B", "2C", "2D", "2E", "2F", "2H", "30",
+  "33", "34", "35", "36", "38", "39", "3B", "3C", "3D", "3F", "40", "42", "44",
+  "45", "46", "53", "54", "55", "57", "58", "F0", "HV", "HW", "HZ", "P0", "XX",
+]);
 const DRIVER_CODE_PREFIX = "ERR_POSTGRES_";
 const STATEMENT_TIMEOUT_SQLSTATE = "57014";
 const UNCLASSIFIED_DATABASE_SLUG = "db-query-failed";
@@ -96,9 +103,12 @@ const readField = (value: unknown, field: string): string | null => {
   return readString(value[field]);
 };
 
+const isSqlState = (value: string): boolean =>
+  SQLSTATE_PATTERN.test(value) && SQLSTATE_CLASSES.has(value.slice(0, 2));
+
 const readSqlState = (value: unknown): string | null => {
   const errno = readField(value, "errno");
-  if (errno !== null && SQLSTATE_PATTERN.test(errno)) {
+  if (errno !== null && isSqlState(errno)) {
     return errno;
   }
   return null;

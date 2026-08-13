@@ -3,6 +3,7 @@ import {
   classifyDatabaseError,
   getDatabaseErrorDetails,
   isDatabaseError,
+  resolveDatabaseErrorClassification,
 } from "../../src/utils/errors";
 
 const withFields = (
@@ -37,6 +38,32 @@ describe("errors that are not ours", () => {
     const brokenPipe = withFields("write EPIPE", { code: "EPIPE", errno: "EPIPE" });
 
     expect(classifyDatabaseError(brokenPipe)).toBeNull();
+    expect(isDatabaseError(brokenPipe)).toBe(false);
+    expect(resolveDatabaseErrorClassification(brokenPipe)).toBeNull();
+    expect(getDatabaseErrorDetails(brokenPipe)).toBeNull();
+  });
+
+  it.each(["EPERM", "EBUSY", "EROFS", "ENOSR"])(
+    "does not read %s as a sqlstate",
+    (code) => {
+      const failure = withFields(`socket ${code}`, { code, errno: code });
+
+      expect(isDatabaseError(failure)).toBe(false);
+      expect(resolveDatabaseErrorClassification(failure)).toBeNull();
+    },
+  );
+
+  it("still reads a real sqlstate whose class is alphabetic", () => {
+    const undefinedDatabase = withFields("database \"keeper\" does not exist", {
+      code: "ERR_POSTGRES_SERVER_ERROR",
+      errno: "3D000",
+      name: "PostgresError",
+    });
+
+    expect(resolveDatabaseErrorClassification(undefinedDatabase)).toEqual({
+      slug: "db-connection-unavailable",
+      sqlState: "3D000",
+    });
   });
 
   it("returns null for an aggregate of provider failures only", () => {

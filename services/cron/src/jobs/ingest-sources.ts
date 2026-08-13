@@ -69,22 +69,6 @@ const resetIngestBackoff = async (calendarId: string): Promise<void> => {
     .where(eq(calendarsTable.id, calendarId));
 };
 
-const clearReauthenticationDemand = async (
-  accountId: string,
-  isCurrent: () => Promise<boolean>,
-): Promise<void> => {
-  if (!await isCurrent()) {
-    return;
-  }
-  await database
-    .update(calendarAccountsTable)
-    .set({ needsReauthentication: false })
-    .where(and(
-      eq(calendarAccountsTable.id, accountId),
-      eq(calendarAccountsTable.needsReauthentication, true),
-    ));
-};
-
 const applyIngestBackoff = async (
   calendarId: string,
   currentFailureCount: number,
@@ -401,13 +385,56 @@ const resolveOAuthFetcher = (
   return null;
 };
 
+type ReauthenticationDemand = "raise" | "clear";
+
+interface ReauthenticationDemandRecord {
+  accountId: string;
+  demand: ReauthenticationDemand;
+}
+
 interface IngestionSourceResult {
   eventsAdded: number;
   eventsRemoved: number;
   ingestEvents: Record<string, unknown>[];
+  reauthentication: ReauthenticationDemandRecord | null;
   shouldPush: boolean;
   userId: string;
 }
+
+const resolveReauthenticationDemands = (
+  demands: ReauthenticationDemandRecord[],
+): Map<string, boolean> => {
+  const raisedAccountIds = new Set(
+    demands.filter(({ demand }) => demand === "raise").map(({ accountId }) => accountId),
+  );
+  return new Map(
+    demands.map(({ accountId }): [string, boolean] => [
+      accountId,
+      raisedAccountIds.has(accountId),
+    ]),
+  );
+};
+
+const applyReauthenticationDemands = async (
+  demands: ReauthenticationDemandRecord[],
+): Promise<void> => {
+  for (const [accountId, needsReauthentication] of resolveReauthenticationDemands(demands)) {
+    try {
+      await database
+        .update(calendarAccountsTable)
+        .set({ needsReauthentication })
+        .where(and(
+          eq(calendarAccountsTable.id, accountId),
+          ne(calendarAccountsTable.needsReauthentication, needsReauthentication),
+        ));
+    } catch (error) {
+      widelog.errorFields(error, {
+        retriable: true,
+        slug: resolveDatabaseIngestErrorSlug(error) ?? "reauthentication-demand-write-failed",
+      });
+    }
+  }
+};
 
 interface IngestionBatchResult {
   added: number;
@@ -421,9 +448,41 @@ const createSkippedIngestionResult = (userId: string): IngestionSourceResult => 
   eventsAdded: 0,
   eventsRemoved: 0,
   ingestEvents: [],
+  reauthentication: null,
   shouldPush: false,
   userId,
 });
+
+const createRejectedIngestionResult = (
+  userId: string,
+  accountId: string,
+): IngestionSourceResult => ({
+  ...createSkippedIngestionResult(userId),
+  reauthentication: { accountId, demand: "raise" },
+});
+
+const summariseIngestionSettlements = async (
+  settlements: PromiseSettledResult<IngestionSourceResult>[],
+): Promise<IngestionBatchResult> => {
+  const results = settlements
+    .filter((settlement): settlement is PromiseFulfilledResult<IngestionSourceResult> =>
+      settlement.status === "fulfilled")
+    .map(({ value }) => value);
+
+  await applyReauthenticationDemands(
+    results.flatMap(({ reauthentication }) => reauthentication ?? []),
+  );
+
+  return {
+    added: results.reduce((total, { eventsAdded }) => total + eventsAdded, 0),
+    affectedUserIds: [
+      ...new Set(results.filter(({ shouldPush }) => shouldPush).map(({ userId }) => userId)),
+    ],
+    errors: settlements.length - results.length,
+    ingestEvents: results.flatMap(({ ingestEvents }) => ingestEvents),
+    removed: results.reduce((total, { eventsRemoved }) => total + eventsRemoved, 0),
+  };
+};
 
 const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
   const oauthSources = await database
@@ -453,12 +512,6 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
         eq(calendarsTable.disabled, false),
       ),
     );
-
-  let added = 0;
-  let removed = 0;
-  let errors = 0;
-  const allIngestEvents: Record<string, unknown>[] = [];
-  const affectedUserIds = new Set<string>();
 
   const settlements = await allSettledWithConcurrency(
     oauthSources.map((source) => () =>
@@ -573,11 +626,14 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
                     });
                   },
                 });
-                await clearReauthenticationDemand(currentSource.accountId, isCurrent);
                 return {
                   eventsAdded: ingestionResult.eventsAdded,
                   eventsRemoved: ingestionResult.eventsRemoved,
                   ingestEvents,
+                  reauthentication: {
+                    accountId: currentSource.accountId,
+                    demand: "clear" as const,
+                  },
                   shouldPush: ingestionState.authorityChanged
                     || ingestionResult.eventsAdded > 0
                     || ingestionResult.eventsRemoved > 0,
@@ -609,23 +665,13 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
             if (error instanceof Error && "authRequired" in error && error.authRequired === true) {
               widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
 
-              await database
-                .update(calendarAccountsTable)
-                .set({ needsReauthentication: true })
-                .where(eq(calendarAccountsTable.id, source.accountId));
-
-              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [], shouldPush: false, userId: source.userId };
+              return createRejectedIngestionResult(source.userId, source.accountId);
             }
 
             if (error instanceof Error && "oauthReauthRequired" in error && error.oauthReauthRequired === true) {
               widelog.errorFields(error, { slug: "provider-token-refresh-failed", retriable: false, requiresReauth: true });
 
-              await database
-                .update(calendarAccountsTable)
-                .set({ needsReauthentication: true })
-                .where(eq(calendarAccountsTable.id, source.accountId));
-
-              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [], shouldPush: false, userId: source.userId };
+              return createRejectedIngestionResult(source.userId, source.accountId);
             }
 
             widelog.errorFields(error, {
@@ -642,20 +688,7 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
     { concurrency: SOURCE_CONCURRENCY },
   );
 
-  for (const settlement of settlements) {
-    if (settlement.status === "fulfilled") {
-      added += settlement.value.eventsAdded;
-      removed += settlement.value.eventsRemoved;
-      allIngestEvents.push(...settlement.value.ingestEvents);
-      if (settlement.value.shouldPush) {
-        affectedUserIds.add(settlement.value.userId);
-      }
-    } else {
-      errors += 1;
-    }
-  }
-
-  return { added, affectedUserIds: [...affectedUserIds], removed, errors, ingestEvents: allIngestEvents };
+  return summariseIngestionSettlements(settlements);
 };
 
 const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
@@ -688,12 +721,6 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
         eq(calendarsTable.disabled, false),
       ),
     );
-
-  let added = 0;
-  let removed = 0;
-  let errors = 0;
-  const allIngestEvents: Record<string, unknown>[] = [];
-  const affectedUserIds = new Set<string>();
 
   const settlements = await allSettledWithConcurrency(
     caldavSources.map((source) => () =>
@@ -773,11 +800,14 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                     });
                   },
                 });
-                await clearReauthenticationDemand(source.accountId, isCurrent);
                 return {
                   eventsAdded: ingestionResult.eventsAdded,
                   eventsRemoved: ingestionResult.eventsRemoved,
                   ingestEvents,
+                  reauthentication: {
+                    accountId: source.accountId,
+                    demand: "clear" as const,
+                  },
                   shouldPush: hasSourceAuthorityChanged(currentSource, ranges)
                     || ingestionResult.eventsAdded > 0
                     || ingestionResult.eventsRemoved > 0,
@@ -803,12 +833,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
             if (isCalDAVAuthenticationError(error)) {
               widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
 
-              await database
-                .update(calendarAccountsTable)
-                .set({ needsReauthentication: true })
-                .where(eq(calendarAccountsTable.id, source.accountId));
-
-              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [], shouldPush: false, userId: source.userId };
+              return createRejectedIngestionResult(source.userId, source.accountId);
             }
 
             const missingCalendarFailure = resolveMissingCalendarFailure(error);
@@ -831,20 +856,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
     { concurrency: SOURCE_CONCURRENCY },
   );
 
-  for (const settlement of settlements) {
-    if (settlement.status === "fulfilled") {
-      added += settlement.value.eventsAdded;
-      removed += settlement.value.eventsRemoved;
-      allIngestEvents.push(...settlement.value.ingestEvents);
-      if (settlement.value.shouldPush) {
-        affectedUserIds.add(settlement.value.userId);
-      }
-    } else {
-      errors += 1;
-    }
-  }
-
-  return { added, affectedUserIds: [...affectedUserIds], removed, errors, ingestEvents: allIngestEvents };
+  return summariseIngestionSettlements(settlements);
 };
 
 const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
@@ -865,12 +877,6 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
         eq(calendarsTable.disabled, false),
       ),
     );
-
-  let added = 0;
-  let removed = 0;
-  let errors = 0;
-  const allIngestEvents: Record<string, unknown>[] = [];
-  const affectedUserIds = new Set<string>();
 
   const settlements = await allSettledWithConcurrency(
     icsSources.map((source) => () =>
@@ -942,6 +948,7 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
                   eventsAdded: ingestionResult.eventsAdded,
                   eventsRemoved: ingestionResult.eventsRemoved,
                   ingestEvents,
+                  reauthentication: null,
                   shouldPush: hasSourceAuthorityChanged(currentSource, ranges)
                     || ingestionResult.eventsAdded > 0
                     || ingestionResult.eventsRemoved > 0,
@@ -977,20 +984,7 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
     { concurrency: SOURCE_CONCURRENCY },
   );
 
-  for (const settlement of settlements) {
-    if (settlement.status === "fulfilled") {
-      added += settlement.value.eventsAdded;
-      removed += settlement.value.eventsRemoved;
-      allIngestEvents.push(...settlement.value.ingestEvents);
-      if (settlement.value.shouldPush) {
-        affectedUserIds.add(settlement.value.userId);
-      }
-    } else {
-      errors += 1;
-    }
-  }
-
-  return { added, affectedUserIds: [...affectedUserIds], removed, errors, ingestEvents: allIngestEvents };
+  return summariseIngestionSettlements(settlements);
 };
 
 export default withCronWideEvent({

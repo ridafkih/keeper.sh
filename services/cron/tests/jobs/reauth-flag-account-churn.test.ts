@@ -110,7 +110,7 @@ const applyWrite = (values: Record<string, unknown>): void => {
     return;
   }
   const next = values.needsReauthentication === true;
-  if (!next && !accountNeedsReauthentication) {
+  if (next === accountNeedsReauthentication) {
     return;
   }
   accountNeedsReauthentication = next;
