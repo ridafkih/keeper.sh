@@ -215,7 +215,7 @@ const runTick = async (): Promise<void> => {
   emitted.length = 0;
   updates.length = 0;
   pushedUserIds = [];
-  await ingestSourcesJob.callback().catch(() => null);
+  await Promise.resolve(ingestSourcesJob.callback()).catch(() => null);
 };
 
 const sourceEvent = (): WideEvent => {

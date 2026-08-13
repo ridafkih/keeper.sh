@@ -188,7 +188,7 @@ const ingestSourcesJob = ingestSourcesModule.default;
 
 const runTick = async (): Promise<void> => {
   emitted.length = 0;
-  await ingestSourcesJob.callback().catch(() => null);
+  await Promise.resolve(ingestSourcesJob.callback()).catch(() => null);
 };
 
 describe("one account whose calendars disagree about its credentials", () => {

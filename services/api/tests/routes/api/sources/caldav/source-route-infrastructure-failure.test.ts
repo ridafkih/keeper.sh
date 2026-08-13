@@ -92,7 +92,8 @@ describe("POST /api/sources/caldav when a non-database dependency fails", () => 
   it("does not echo the queue host and port back to the caller", async () => {
     createCalDAVSourceResult = () => Promise.reject(queueConnectionFailure());
 
-    const body = await (await post()).text();
+    const response = await post();
+    const body = await response.text();
 
     expect(body).not.toContain(REDIS_HOST);
     expect(body).not.toContain(String(REDIS_PORT));
@@ -109,7 +110,8 @@ describe("POST /api/sources/caldav when a non-database dependency fails", () => 
   it("does not echo an internal service URL back to the caller", async () => {
     createCalDAVSourceResult = () => Promise.reject(planLookupFailure());
 
-    const body = await (await post()).text();
+    const response = await post();
+    const body = await response.text();
 
     expect(body).not.toContain("billing.internal.keeper");
   });

@@ -174,7 +174,7 @@ const runTick = async (outcome: () => IngestionCounts): Promise<void> => {
   ingestOutcome = outcome;
   emitted.length = 0;
   updates.length = 0;
-  await ingestSourcesJob.callback().catch(() => null);
+  await Promise.resolve(ingestSourcesJob.callback()).catch(() => null);
 };
 
 const rejectedPoolPassword = (): IngestionCounts => {

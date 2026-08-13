@@ -60,11 +60,18 @@ const readResponseSurface = async (response: Response): Promise<string> => {
   return `${body}\n${decodeFallbackPayload(body)}`;
 };
 
+const readDevelopmentOverride = (): { development?: false } => {
+  if (suppressesDevelopmentErrorPage(serveOptionsSource)) {
+    return { development: false };
+  }
+  return {};
+};
+
 const serveLikeApi = (fetchHandler: () => Response): ReturnType<typeof Bun.serve> =>
   Bun.serve({
     fetch: fetchHandler,
     port: 0,
-    ...(suppressesDevelopmentErrorPage(serveOptionsSource) ? { development: false } : {}),
+    ...readDevelopmentOverride(),
   });
 
 const requestFailureSurface = async (

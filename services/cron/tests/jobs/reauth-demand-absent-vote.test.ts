@@ -224,7 +224,7 @@ const runTick = async (outcome: RevokedOutcome): Promise<void> => {
   emitted.length = 0;
   revokedOutcome = outcome;
   lockedCalendarIds = resolveLockedCalendarIds(outcome);
-  await ingestSourcesJob.callback().catch(() => null);
+  await Promise.resolve(ingestSourcesJob.callback()).catch(() => null);
 };
 
 describe("an account whose rejecting calendar cannot always cast a vote", () => {

@@ -63,10 +63,18 @@ const readLinkedErrors = (error: unknown): unknown[] => {
     return [];
   }
   return [
-    ...NESTED_ERROR_KEYS.flatMap((key) => (key in error ? [error[key]] : [])),
+    ...NESTED_ERROR_KEYS.flatMap((key) => {
+      if (key in error) {
+        return [error[key]];
+      }
+      return [];
+    }),
     ...NESTED_ERROR_LIST_KEYS.flatMap((key) => {
       const value = error[key];
-      return Array.isArray(value) ? value : [];
+      if (Array.isArray(value)) {
+        return value;
+      }
+      return [];
     }),
   ];
 };

@@ -194,7 +194,9 @@ const ingestSourcesJob = ingestSourcesModule.default;
 const runTick = async (): Promise<unknown> => {
   emitted.length = 0;
   updateAttempts = 0;
-  return await ingestSourcesJob.callback().then(() => null).catch((error: unknown) => error);
+  return await Promise.resolve(ingestSourcesJob.callback())
+    .then(() => null)
+    .catch((error: unknown) => error);
 };
 
 describe("a failing re-authentication settlement write", () => {
