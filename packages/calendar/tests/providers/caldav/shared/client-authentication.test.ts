@@ -8,7 +8,8 @@ const fetchMocks = vi.hoisted(() => ({
   safeFetch: vi.fn(),
 }));
 
-vi.mock("../../../../src/utils/safe-fetch", () => ({
+vi.mock("../../../../src/utils/safe-fetch", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../../src/utils/safe-fetch")>()),
   createSafeFetch: () => fetchMocks.safeFetch,
 }));
 

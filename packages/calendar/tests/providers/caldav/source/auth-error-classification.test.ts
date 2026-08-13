@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CalDAVWithheldCredentialsError } from "../../../../src/providers/caldav/shared/client";
 import { isCalDAVAuthenticationError } from "../../../../src/providers/caldav/source/auth-error-classification";
 
 describe("isCalDAVAuthenticationError", () => {
@@ -112,5 +113,15 @@ describe("isCalDAVAuthenticationError", () => {
     );
 
     expect(isCalDAVAuthenticationError(new Error("Failed query", { cause }))).toBe(false);
+  });
+
+  it("returns false for a redirect that withheld our credentials, even though the transport said Invalid credentials", () => {
+    const withheld = new CalDAVWithheldCredentialsError(
+      { redirectedTo: "https://dav.other-provider.test/principals/" },
+      new Error("Invalid credentials"),
+    );
+
+    expect(isCalDAVAuthenticationError(withheld)).toBe(false);
+    expect(isCalDAVAuthenticationError(new Error("Failed query", { cause: withheld }))).toBe(false);
   });
 });

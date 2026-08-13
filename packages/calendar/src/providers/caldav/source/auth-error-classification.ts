@@ -11,6 +11,8 @@ const CALDAV_AUTH_ERROR_NAME = "CalDAVAuthenticationError";
 
 const CALDAV_TRANSPORT_ERROR_NAMES = new Set(["Error", CALDAV_AUTH_ERROR_NAME]);
 
+const CALDAV_NON_AUTH_ERROR_NAMES = new Set(["CalDAVWithheldCredentialsError"]);
+
 const HTTP_FAILURE_STATUS_PATTERN =
   /(?:\bhttp\/\d(?:\.\d)?\s+|\bstatus(?:\s*code)?\b\s*[:=]?\s*|\bfailed\b\s*(?:with\s+)?[:=]?\s*)([45]\d{2})(?!\d)/gi;
 
@@ -120,6 +122,10 @@ const isCalDAVAuthenticationError = (error: unknown): boolean => {
       visited.add(candidate);
 
       if (isDatabaseFailure(candidate)) {
+        continue;
+      }
+
+      if (typeof candidate.name === "string" && CALDAV_NON_AUTH_ERROR_NAMES.has(candidate.name)) {
         continue;
       }
 

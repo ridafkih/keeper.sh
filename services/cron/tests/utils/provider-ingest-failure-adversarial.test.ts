@@ -1,5 +1,5 @@
 import { RequestTimeoutError } from "@keeper.sh/calendar";
-import { CalDAVAuthenticationError } from "@keeper.sh/calendar/caldav";
+import { CalDAVAuthenticationError, CalDAVWithheldCredentialsError } from "@keeper.sh/calendar/caldav";
 import { describe, expect, it } from "vitest";
 import { shouldTreatAsProviderAuthFailure } from "../../src/utils/provider-ingest-failure";
 
@@ -33,6 +33,17 @@ describe("shouldTreatAsProviderAuthFailure with infrastructure failures", () => 
   it("does not blame the customer when our egress proxy demands authentication", () => {
     const error = new Error(
       "Collection query failed: 407 Proxy Authentication Required. Raw response: <html>407</html>",
+    );
+
+    expect(shouldTreatAsProviderAuthFailure(error)).toBe(false);
+  });
+});
+
+describe("shouldTreatAsProviderAuthFailure on a redirect that withheld our credentials", () => {
+  it("does not flag the account for reauthentication", () => {
+    const error = new CalDAVWithheldCredentialsError(
+      { redirectedTo: "https://dav.other-provider.test/principals/" },
+      new Error("Invalid credentials"),
     );
 
     expect(shouldTreatAsProviderAuthFailure(error)).toBe(false);

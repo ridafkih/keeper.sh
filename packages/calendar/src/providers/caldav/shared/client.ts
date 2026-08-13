@@ -10,7 +10,7 @@ import {
 import { createDigestAwareFetch } from "./digest-fetch";
 import { runInRequestScope } from "./response-status-scope";
 import type { CalDAVAuthMethod } from "./digest-fetch";
-import type { SafeFetchOptions } from "../../../utils/safe-fetch";
+import type { SafeFetchOptions, WithheldCredentials } from "../../../utils/safe-fetch";
 import type { CalDAVClientConfig, CalendarInfo } from "../types";
 
 const MISSING_HREF_SAMPLE_SIZE = 5;
@@ -72,6 +72,19 @@ class CalDAVAuthenticationError extends Error {
   }
 }
 
+class CalDAVWithheldCredentialsError extends Error {
+  readonly redirectedTo: string;
+
+  constructor(details: WithheldCredentials, cause: unknown) {
+    super(
+      `CalDAV redirect to ${details.redirectedTo} crossed a security boundary, so the request was sent without credentials and the server refused it`,
+      { cause },
+    );
+    this.name = "CalDAVWithheldCredentialsError";
+    this.redirectedTo = details.redirectedTo;
+  }
+}
+
 class CalDAVCreateConflictError extends CalDAVHttpError {
   constructor(response: Response) {
     super(response, "create");
@@ -106,15 +119,28 @@ class CalDAVUnauthorizedResponseError extends Error {
 
 const mapAuthenticationFailure = <Result>(operation: () => Promise<Result>): Promise<Result> =>
   runInRequestScope(async (requests) => {
-    const result = await operation().catch((error: unknown) => {
-      if (!requests.isPropagatedTransportFailure(error) && requests.hasUnrefutedUnauthorized()) {
-        throw new CalDAVAuthenticationError(error);
+    const raiseUnauthorizedVerdict = (cause: unknown): never => {
+      if (requests.hasUnrefutedUnauthorized()) {
+        throw new CalDAVAuthenticationError(cause);
       }
-      throw error;
+
+      const withheld = requests.findUnrefutedWithheldCredentials();
+      if (withheld) {
+        throw new CalDAVWithheldCredentialsError(withheld, cause);
+      }
+
+      throw cause;
+    };
+
+    const result = await operation().catch((error: unknown) => {
+      if (requests.isPropagatedTransportFailure(error)) {
+        throw error;
+      }
+      return raiseUnauthorizedVerdict(error);
     });
 
-    if (requests.hasUnrefutedUnauthorized()) {
-      throw new CalDAVAuthenticationError(new CalDAVUnauthorizedResponseError());
+    if (requests.hasUnrefutedUnauthorized() || requests.findUnrefutedWithheldCredentials()) {
+      return raiseUnauthorizedVerdict(new CalDAVUnauthorizedResponseError());
     }
 
     return result;
@@ -345,5 +371,6 @@ export {
   CalDAVCreateConflictError,
   CalDAVHttpError,
   CalDAVIncompleteMultiGetError,
+  CalDAVWithheldCredentialsError,
   createCalDAVClient,
 };

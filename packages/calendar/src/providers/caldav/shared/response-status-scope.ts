@@ -1,5 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { HTTP_STATUS } from "@keeper.sh/constants";
+import { getWithheldCredentials } from "../../../utils/safe-fetch";
+import type { WithheldCredentials } from "../../../utils/safe-fetch";
 
 interface RequestFailure {
   reason: unknown;
@@ -10,6 +12,7 @@ interface RequestRecord {
   settledAt: number | null;
   startedAt: number;
   status: number | null;
+  withheldCredentials: WithheldCredentials | null;
 }
 
 interface RequestScope {
@@ -18,6 +21,7 @@ interface RequestScope {
 }
 
 interface RequestScopeView {
+  findUnrefutedWithheldCredentials: () => WithheldCredentials | null;
   hasUnrefutedUnauthorized: () => boolean;
   isPropagatedTransportFailure: (error: unknown) => boolean;
 }
@@ -37,12 +41,19 @@ const wasAccepted = (record: RequestRecord): boolean =>
 const refutes = (accepted: RequestRecord, unauthorized: RequestRecord): boolean =>
   accepted.settledAt !== null && accepted.settledAt > unauthorized.startedAt;
 
-const hasUnrefutedUnauthorized = (scope: RequestScope): boolean =>
-  scope.records.some(
+const unrefutedUnauthorized = (scope: RequestScope): RequestRecord[] =>
+  scope.records.filter(
     (record) =>
       record.status === HTTP_STATUS.UNAUTHORIZED
       && !scope.records.some((other) => wasAccepted(other) && refutes(other, record)),
   );
+
+const hasUnrefutedUnauthorized = (scope: RequestScope): boolean =>
+  unrefutedUnauthorized(scope).some((record) => record.withheldCredentials === null);
+
+const findUnrefutedWithheldCredentials = (scope: RequestScope): WithheldCredentials | null =>
+  unrefutedUnauthorized(scope).find((record) => record.withheldCredentials !== null)
+    ?.withheldCredentials ?? null;
 
 const causeChain = (error: unknown): unknown[] => {
   const chain: unknown[] = [error];
@@ -76,10 +87,20 @@ const recordRequest = async (perform: () => Promise<Response>): Promise<Response
   const index = scope.records.length;
   scope.records = [
     ...scope.records,
-    { failure: null, settledAt: null, startedAt: nextTick(scope), status: null },
+    {
+      failure: null,
+      settledAt: null,
+      startedAt: nextTick(scope),
+      status: null,
+      withheldCredentials: null,
+    },
   ];
 
-  const settle = (outcome: { failure: RequestFailure | null; status: number | null }): void => {
+  const settle = (outcome: {
+    failure: RequestFailure | null;
+    status: number | null;
+    withheldCredentials: WithheldCredentials | null;
+  }): void => {
     const settledAt = nextTick(scope);
     scope.records = scope.records.map((record, position) => {
       if (position !== index) {
@@ -91,10 +112,14 @@ const recordRequest = async (perform: () => Promise<Response>): Promise<Response
 
   try {
     const response = await perform();
-    settle({ failure: null, status: response.status });
+    settle({
+      failure: null,
+      status: response.status,
+      withheldCredentials: getWithheldCredentials(response),
+    });
     return response;
   } catch (error) {
-    settle({ failure: { reason: error }, status: null });
+    settle({ failure: { reason: error }, status: null, withheldCredentials: null });
     throw error;
   }
 };
@@ -105,6 +130,7 @@ const runInRequestScope = <Result>(
   const scope: RequestScope = { clock: 0, records: [] };
   return storage.run(scope, () =>
     operation({
+      findUnrefutedWithheldCredentials: () => findUnrefutedWithheldCredentials(scope),
       hasUnrefutedUnauthorized: () => hasUnrefutedUnauthorized(scope),
       isPropagatedTransportFailure: (error: unknown) => isPropagatedTransportFailure(scope, error),
     }));

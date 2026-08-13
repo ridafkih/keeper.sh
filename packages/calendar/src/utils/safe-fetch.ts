@@ -115,18 +115,22 @@ const resolveRedirectUrl = (response: Response, originalUrl: string): string | n
   }
 };
 
-const isCrossSite = (current: string, next: string): boolean => {
-  const currentUrl = new URL(current);
-  const nextUrl = new URL(next);
-  if (currentUrl.protocol !== nextUrl.protocol) {
-    return true;
-  }
-  const currentDomain = getDomain(currentUrl.hostname);
-  const nextDomain = getDomain(nextUrl.hostname);
+const isTransportDowngrade = (current: URL, next: URL): boolean =>
+  current.protocol === "https:" && next.protocol !== "https:";
+
+const isDifferentSite = (current: URL, next: URL): boolean => {
+  const currentDomain = getDomain(current.hostname);
+  const nextDomain = getDomain(next.hostname);
   if (!currentDomain || !nextDomain) {
-    return true;
+    return current.hostname !== next.hostname;
   }
   return currentDomain !== nextDomain;
+};
+
+const shouldWithholdAuthorization = (current: string, next: string): boolean => {
+  const currentUrl = new URL(current);
+  const nextUrl = new URL(next);
+  return isTransportDowngrade(currentUrl, nextUrl) || isDifferentSite(currentUrl, nextUrl);
 };
 
 const toHeaderRecord = (headers: RequestInit["headers"]): Record<string, string> => {
@@ -149,11 +153,30 @@ const getHeadersForRedirect = (
   currentUrl: string,
   redirectUrl: string,
 ): Record<string, string> => {
-  if (isCrossSite(currentUrl, redirectUrl)) {
+  if (shouldWithholdAuthorization(currentUrl, redirectUrl)) {
     return withoutAuthorization(headers);
   }
   return headers;
 };
+
+const WITHHELD_CREDENTIALS = Symbol.for("keeper.sh/safe-fetch/withheld-credentials");
+
+interface WithheldCredentials {
+  redirectedTo: string;
+}
+
+const markWithheldCredentials = (response: Response, redirectedTo: string): Response => {
+  Object.defineProperty(response, WITHHELD_CREDENTIALS, {
+    configurable: true,
+    enumerable: false,
+    value: { redirectedTo },
+    writable: false,
+  });
+  return response;
+};
+
+const getWithheldCredentials = (response: Response): WithheldCredentials | null =>
+  (Reflect.get(response, WITHHELD_CREDENTIALS) as WithheldCredentials | undefined) ?? null;
 
 const isStaleSocketError = (error: unknown): boolean => error instanceof Error && "code" in error && error.code === STALE_SOCKET_ERROR_CODE;
 
@@ -197,16 +220,28 @@ const followRedirects = async (
   let currentUrl = initialUrl;
   let currentResponse = initialResponse;
   let currentHeaders = headers;
+  let withheldAt: string | null = null;
+
+  const settle = (response: Response): Response => {
+    if (!withheldAt) {
+      return response;
+    }
+    return markWithheldCredentials(response, withheldAt);
+  };
 
   for (let count = 0; count < MAX_REDIRECTS; count++) {
     const redirectUrl = resolveRedirectUrl(currentResponse, currentUrl);
     if (!redirectUrl) {
-      return currentResponse;
+      return settle(currentResponse);
     }
 
     await validateUrlSafety(redirectUrl, options);
 
-    currentHeaders = getHeadersForRedirect(currentHeaders, currentUrl, redirectUrl);
+    const nextHeaders = getHeadersForRedirect(currentHeaders, currentUrl, redirectUrl);
+    if (!withheldAt && currentHeaders.authorization && !nextHeaders.authorization) {
+      withheldAt = redirectUrl;
+    }
+    currentHeaders = nextHeaders;
     currentUrl = redirectUrl;
 
     currentResponse = await fetchWithStaleSocketRetry(currentUrl, {
@@ -217,7 +252,7 @@ const followRedirects = async (
     });
 
     if (!isRedirect(currentResponse)) {
-      return currentResponse;
+      return settle(currentResponse);
     }
   }
 
@@ -302,5 +337,5 @@ const createSafeFetch = (options?: SafeFetchOptions): SafeFetch => async (input,
     }
   };
 
-export { createSafeFetch, UrlSafetyError, validateUrlSafety };
-export type { SafeFetchOptions };
+export { createSafeFetch, getWithheldCredentials, UrlSafetyError, validateUrlSafety };
+export type { SafeFetchOptions, WithheldCredentials };
