@@ -163,11 +163,12 @@ describe("syncCalendar phase attribution", () => {
         },
       }),
       remoteEvents: [{
+        deleteId: "remote-1",
         endTime: localEvent.endTime,
-        id: "remote-1",
+        isKeeperEvent: true,
         startTime: localEvent.startTime,
         uid: "remote-1",
-      } as RemoteEvent],
+      }],
     });
 
     expect(event["sync.phase.provider_delete.duration_ms"] as number).toBeGreaterThanOrEqual(5);

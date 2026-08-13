@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { SQL } from "bun";
 import {
   instrumentDatabasePool,
-  openDatabasePoolWindow,
+  withDatabasePoolWindow,
   resetDatabasePoolTelemetry,
 } from "../../src/utils/pool-telemetry";
 
@@ -28,22 +28,22 @@ interface AttemptResult {
  * attempt has. The offset between issuing the transaction and its callback
  * starting is the ground truth for whether this attempt waited on the pool.
  */
-const runAttempt = async (client: PoolClient): Promise<AttemptResult> => {
-  const window = openDatabasePoolWindow();
-  const issuedAt = performance.now();
-  let startOffsetMs = 0;
-  await client.begin(async (transactionClient) => {
-    startOffsetMs = performance.now() - issuedAt;
-    await (transactionClient.unsafe(`select pg_sleep(${STATEMENT_SECONDS})`, []) as Promise<unknown>);
+const runAttempt = async (client: PoolClient): Promise<AttemptResult> =>
+  await withDatabasePoolWindow(async (window) => {
+    const issuedAt = performance.now();
+    let startOffsetMs = 0;
+    await client.begin(async (transactionClient) => {
+      startOffsetMs = performance.now() - issuedAt;
+      await (transactionClient.unsafe(`select pg_sleep(${STATEMENT_SECONDS})`, []) as Promise<unknown>);
+    });
+    const sample = window();
+    return {
+      queryCount: sample.queryCount,
+      queuedQueryCount: sample.queuedQueryCount,
+      startOffsetMs,
+      waited: startOffsetMs > STATEMENT_SECONDS * 500,
+    };
   });
-  const sample = window();
-  return {
-    queryCount: sample.queryCount,
-    queuedQueryCount: sample.queuedQueryCount,
-    startOffsetMs,
-    waited: startOffsetMs > STATEMENT_SECONDS * 500,
-  };
-};
 
 describe.skipIf(!TEST_DATABASE_URL)("database pool queue attribution across attempts", () => {
   beforeEach(() => {
@@ -124,14 +124,15 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool queue attribution across atte
 
       await Promise.all(Array.from({ length: 8 }, () => runAttempt(client)));
 
-      const window = openDatabasePoolWindow();
-      await (client.unsafe("select 1", []) as Promise<unknown>);
-      const sample = window();
+      await withDatabasePoolWindow(async (window): Promise<void> => {
+        await (client.unsafe("select 1", []) as Promise<unknown>);
+        const sample = window();
 
-      expect(sample.queryCount).toBe(1);
-      expect(sample.queuedQueryCount).toBe(0);
-      expect(sample.inFlight).toBe(0);
-      expect(sample.failedQueryCount).toBe(0);
+        expect(sample.queryCount).toBe(1);
+        expect(sample.queuedQueryCount).toBe(0);
+        expect(sample.inFlight).toBe(0);
+        expect(sample.failedQueryCount).toBe(0);
+      });
     } finally {
       await sql.end();
     }

@@ -35,12 +35,11 @@ const counters = {
  * `inFlight` stays process-wide on purpose: it is a pool gauge, and how much of
  * the pool is busy right now is a property of the process, not of one attempt.
  *
- * Windows partition a context rather than nest inside it: opening one declares
- * a new unit of work and ends the span of the window the context was carrying.
- * Nothing distinguishes a window opened inside another from a window opened by
- * the next concurrent attempt to start -- both find the earlier window in the
- * context they were handed -- and treating the two alike is what would put
- * another attempt's queries on this attempt's event.
+ * A window is bounded by the body it is opened around rather than left set on
+ * the context it was opened from. Scoping it to a callback is what keeps a
+ * caller's later queries off the window a function it called had opened, and it
+ * keeps the module off `AsyncLocalStorage.enterWith`, which segfaults Bun when
+ * it is reached from a top-level-await chain.
  */
 interface WindowScope {
   failedQueryCount: number;
@@ -402,22 +401,24 @@ const instrumentDatabasePool = (
   instrumentClient(client, false);
 };
 
-const openDatabasePoolWindow = (): DatabasePoolWindow => {
+const withDatabasePoolWindow = <TResult>(
+  body: (readWindow: DatabasePoolWindow) => TResult,
+): TResult => {
   const scope: WindowScope = {
     failedQueryCount: 0,
     queryCount: 0,
     queryDurationMs: 0,
     queuedQueryCount: 0,
   };
-  windowScopes.enterWith(scope);
-
-  return () => ({
+  const readWindow: DatabasePoolWindow = () => ({
     inFlight: counters.inFlight,
     queryCount: scope.queryCount,
     queryDurationMs: roundDuration(scope.queryDurationMs),
     queuedQueryCount: scope.queuedQueryCount,
     failedQueryCount: scope.failedQueryCount,
   });
+
+  return windowScopes.run(scope, () => body(readWindow));
 };
 
 const resetDatabasePoolTelemetry = (): void => {
@@ -431,5 +432,5 @@ const resetDatabasePoolTelemetry = (): void => {
   maxConnections = 0;
 };
 
-export { instrumentDatabasePool, openDatabasePoolWindow, resetDatabasePoolTelemetry };
+export { instrumentDatabasePool, resetDatabasePoolTelemetry, withDatabasePoolWindow };
 export type { DatabasePoolWindow, DatabasePoolWindowSample };

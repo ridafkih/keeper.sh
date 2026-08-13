@@ -5,7 +5,7 @@ import { SQL } from "bun";
 import { tmpdir } from "node:os";
 import {
   instrumentDatabasePool,
-  openDatabasePoolWindow,
+  withDatabasePoolWindow,
   resetDatabasePoolTelemetry,
 } from "../../src/utils/pool-telemetry";
 
@@ -48,23 +48,24 @@ describe("database pool telemetry after failed acquisitions", () => {
     instrumentDatabasePool(client, 2);
 
     for (let round = 0; round < 50; round++) {
-      await expect(client.begin(async () => undefined)).rejects.toThrow("pool refused");
+      await expect(client.begin(() => Promise.resolve(null))).rejects.toThrow("pool refused");
     }
 
     const healthy = createHealthyClient();
     instrumentDatabasePool(healthy, 2);
-    const window = openDatabasePoolWindow();
-    await healthy.begin(async (transaction) => {
-      await transaction.unsafe("select 1", []);
-      return undefined;
-    });
+    await withDatabasePoolWindow(async (window): Promise<void> => {
+      await healthy.begin(async (transaction) => {
+        await transaction.unsafe("select 1", []);
+        return null;
+      });
 
-    expect(window()).toEqual({
-      failedQueryCount: 0,
-      inFlight: 0,
-      queryCount: 1,
-      queryDurationMs: expect.any(Number),
-      queuedQueryCount: 0,
+      expect(window()).toEqual({
+        failedQueryCount: 0,
+        inFlight: 0,
+        queryCount: 1,
+        queryDurationMs: expect.any(Number),
+        queuedQueryCount: 0,
+      });
     });
   });
 
@@ -79,16 +80,17 @@ describe("database pool telemetry after failed acquisitions", () => {
       })).rejects.toThrow("rolled back");
     }
 
-    const window = openDatabasePoolWindow();
-    await client.begin(async (transaction) => {
-      await transaction.unsafe("select 1", []);
-      return undefined;
-    });
+    await withDatabasePoolWindow(async (window): Promise<void> => {
+      await client.begin(async (transaction) => {
+        await transaction.unsafe("select 1", []);
+        return null;
+      });
 
-    const sample = window();
-    expect(sample.queuedQueryCount).toBe(0);
-    expect(sample.inFlight).toBe(0);
-    expect(sample.queryCount).toBe(1);
+      const sample = window();
+      expect(sample.queuedQueryCount).toBe(0);
+      expect(sample.inFlight).toBe(0);
+      expect(sample.queryCount).toBe(1);
+    });
   });
 
   it("keeps an unawaited transaction rejection observable to the process", async () => {
@@ -156,16 +158,17 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry across rollback and
       const samples: unknown[] = [];
 
       for (let round = 0; round < 5; round++) {
-        const window = openDatabasePoolWindow();
-        await database.transaction(async (transaction) => {
-          await transaction.execute(raw`select 1`);
-          await expect(transaction.transaction(async (savepoint) => {
-            await savepoint.execute(raw`select 2`);
-            throw new Error("savepoint rolled back");
-          })).rejects.toThrow("savepoint rolled back");
-          await transaction.execute(raw`select 3`);
+        await withDatabasePoolWindow(async (window): Promise<void> => {
+          await database.transaction(async (transaction) => {
+            await transaction.execute(raw`select 1`);
+            await expect(transaction.transaction(async (savepoint) => {
+              await savepoint.execute(raw`select 2`);
+              throw new Error("savepoint rolled back");
+            })).rejects.toThrow("savepoint rolled back");
+            await transaction.execute(raw`select 3`);
+          });
+          samples.push(window());
         });
-        samples.push(window());
       }
 
       expect(samples[0]).toEqual({
@@ -191,28 +194,29 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry across rollback and
       const samples: { queryCount: number; failedQueryCount: number; inFlight: number; queuedQueryCount: number }[] = [];
 
       for (let round = 0; round < 12; round++) {
-        const window = openDatabasePoolWindow();
+        await withDatabasePoolWindow(async (window): Promise<void> => {
 
-        await database.execute(raw`select 1`);
+          await database.execute(raw`select 1`);
 
-        await database.transaction(async (transaction) => {
-          await transaction.execute(raw`select 2`);
-          await transaction.execute(raw`select 3`);
-        });
+          await database.transaction(async (transaction) => {
+            await transaction.execute(raw`select 2`);
+            await transaction.execute(raw`select 3`);
+          });
 
-        await expect(database.transaction(async (transaction) => {
-          await transaction.execute(raw`select 4`);
-          throw new Error("outer rolled back");
-        })).rejects.toThrow("outer rolled back");
+          await expect(database.transaction(async (transaction) => {
+            await transaction.execute(raw`select 4`);
+            throw new Error("outer rolled back");
+          })).rejects.toThrow("outer rolled back");
 
-        await expect(database.execute(raw`selec bad syntax`)).rejects.toThrow();
+          await expect(database.execute(raw`selec bad syntax`)).rejects.toThrow();
 
-        const sample = window();
-        samples.push({
-          failedQueryCount: sample.failedQueryCount,
-          inFlight: sample.inFlight,
-          queryCount: sample.queryCount,
-          queuedQueryCount: sample.queuedQueryCount,
+          const sample = window();
+          samples.push({
+            failedQueryCount: sample.failedQueryCount,
+            inFlight: sample.inFlight,
+            queryCount: sample.queryCount,
+            queuedQueryCount: sample.queuedQueryCount,
+          });
         });
       }
 
@@ -236,15 +240,16 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry across rollback and
           unsafe: (query: string, params?: unknown[]) => Promise<unknown>;
         })
           .unsafe("selec bad", [])
-          .catch(() => undefined);
+          .catch(() => null);
       }
 
-      const window = openDatabasePoolWindow();
-      await database.execute(raw`select 1`);
-      const sample = window();
-      expect(sample.inFlight).toBe(0);
-      expect(sample.queuedQueryCount).toBe(0);
-      expect(sample.queryCount).toBe(1);
+      await withDatabasePoolWindow(async (window): Promise<void> => {
+        await database.execute(raw`select 1`);
+        const sample = window();
+        expect(sample.inFlight).toBe(0);
+        expect(sample.queuedQueryCount).toBe(0);
+        expect(sample.queryCount).toBe(1);
+      });
     });
   });
 });

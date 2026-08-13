@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { SQL } from "bun";
 import {
   instrumentDatabasePool,
-  openDatabasePoolWindow,
+  withDatabasePoolWindow,
   resetDatabasePoolTelemetry,
 } from "../../src/utils/pool-telemetry";
 
@@ -53,23 +53,24 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry under saturation", 
       instrumentDatabasePool(client, 2);
       const occupants = await holdConnections(client, 2);
 
-      const window = openDatabasePoolWindow();
-      const blocked = client.begin(async (transactionClient) => {
-        await (transactionClient.unsafe("select 98", []) as Promise<unknown>);
-        await (transactionClient.unsafe("select 99", []) as Promise<unknown>);
-      });
-      await new Promise((resolve) => {
-        setTimeout(resolve, 200);
-      });
-      expect(window().queryCount).toBe(0);
+      await withDatabasePoolWindow(async (window): Promise<void> => {
+        const blocked = client.begin(async (transactionClient) => {
+          await (transactionClient.unsafe("select 98", []) as Promise<unknown>);
+          await (transactionClient.unsafe("select 99", []) as Promise<unknown>);
+        });
+        await new Promise((resolve) => {
+          setTimeout(resolve, 200);
+        });
+        expect(window().queryCount).toBe(0);
 
-      await occupants.release();
-      await blocked;
+        await occupants.release();
+        await blocked;
 
-      const sample = window();
-      expect(sample.queryCount).toBe(2);
-      expect(sample.queuedQueryCount).toBe(1);
-      expect(sample.inFlight).toBe(0);
+        const sample = window();
+        expect(sample.queryCount).toBe(2);
+        expect(sample.queuedQueryCount).toBe(1);
+        expect(sample.inFlight).toBe(0);
+      });
     } finally {
       await sql.end();
     }
@@ -85,16 +86,17 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry under saturation", 
       const occupants = await holdConnections(client, 2);
       await occupants.release();
 
-      const window = openDatabasePoolWindow();
-      await (client.unsafe("select 1", []) as Promise<unknown>);
-      await client.begin(async (transactionClient) => {
-        await (transactionClient.unsafe("select 2", []) as Promise<unknown>);
-      });
+      await withDatabasePoolWindow(async (window): Promise<void> => {
+        await (client.unsafe("select 1", []) as Promise<unknown>);
+        await client.begin(async (transactionClient) => {
+          await (transactionClient.unsafe("select 2", []) as Promise<unknown>);
+        });
 
-      const sample = window();
-      expect(sample.queryCount).toBe(2);
-      expect(sample.queuedQueryCount).toBe(0);
-      expect(sample.inFlight).toBe(0);
+        const sample = window();
+        expect(sample.queryCount).toBe(2);
+        expect(sample.queuedQueryCount).toBe(0);
+        expect(sample.inFlight).toBe(0);
+      });
     } finally {
       await sql.end();
     }
@@ -108,27 +110,28 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry under saturation", 
       instrumentDatabasePool(client, 2);
       const occupants = await holdConnections(client, 2);
 
-      const window = openDatabasePoolWindow();
-      const blocked = client.begin(async (transactionClient) => {
-        const savepoint = transactionClient.savepoint as (
-          callback: (savepointClient: PoolClient) => Promise<unknown>,
-        ) => Promise<unknown>;
-        await savepoint(async (savepointClient) => {
-          await (savepointClient.unsafe("select 1", []) as Promise<unknown>);
+      await withDatabasePoolWindow(async (window): Promise<void> => {
+        const blocked = client.begin(async (transactionClient) => {
+          const savepoint = transactionClient.savepoint as (
+            callback: (savepointClient: PoolClient) => Promise<unknown>,
+          ) => Promise<unknown>;
+          await savepoint(async (savepointClient) => {
+            await (savepointClient.unsafe("select 1", []) as Promise<unknown>);
+          });
+          await (transactionClient.unsafe("select 2", []) as Promise<unknown>);
+          await (transactionClient.unsafe("select 3", []) as Promise<unknown>);
         });
-        await (transactionClient.unsafe("select 2", []) as Promise<unknown>);
-        await (transactionClient.unsafe("select 3", []) as Promise<unknown>);
-      });
-      await new Promise((resolve) => {
-        setTimeout(resolve, 200);
-      });
-      await occupants.release();
-      await blocked;
+        await new Promise((resolve) => {
+          setTimeout(resolve, 200);
+        });
+        await occupants.release();
+        await blocked;
 
-      const sample = window();
-      expect(sample.queryCount).toBe(3);
-      expect(sample.queuedQueryCount).toBe(1);
-      expect(sample.inFlight).toBe(0);
+        const sample = window();
+        expect(sample.queryCount).toBe(3);
+        expect(sample.queuedQueryCount).toBe(1);
+        expect(sample.inFlight).toBe(0);
+      });
     } finally {
       await sql.end();
     }

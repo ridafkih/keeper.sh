@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { tmpdir } from "node:os";
 import {
   instrumentDatabasePool,
-  openDatabasePoolWindow,
+  withDatabasePoolWindow,
   resetDatabasePoolTelemetry,
 } from "../../src/utils/pool-telemetry";
 
@@ -16,21 +16,20 @@ interface ThenableClient extends Record<string, unknown> {
  * the branch instrumentClient takes when it cannot read the outcome with
  * Bun.peek.status.
  */
-const createThenableClient = (): ThenableClient => {
-  const buildClient = (): ThenableClient => ({
-    begin: (callback) => {
-      const settled = (async () => await callback(buildClient()))();
-      return {
-        then: <TResult1 = unknown, TResult2 = never>(
-          onFulfilled?: ((value: unknown) => TResult1 | PromiseLike<TResult1>) | null,
-          onRejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
-        ): PromiseLike<TResult1 | TResult2> => settled.then(onFulfilled, onRejected),
-      };
-    },
-    unsafe: (): object => Promise.resolve([]),
-  });
-  return buildClient();
-};
+const createThenableClient = (): ThenableClient => ({
+  begin: (callback) => {
+    const settled = (async () => await callback(createThenableClient()))();
+    return {
+      // eslint-disable-next-line unicorn/no-thenable -- the fixture is a non-native thenable by construction
+      then: <TResult1 = unknown, TResult2 = never>(
+        onFulfilled?: ((value: unknown) => TResult1 | PromiseLike<TResult1>) | null,
+        onRejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+        // eslint-disable-next-line promise/prefer-catch -- forwarding both handlers is the thenable contract under test
+      ): PromiseLike<TResult1 | TResult2> => settled.then(onFulfilled, onRejected),
+    };
+  },
+  unsafe: (): object => Promise.resolve([]),
+});
 
 describe("database pool telemetry with a thenable transaction result", () => {
   beforeEach(() => {
@@ -87,13 +86,14 @@ describe("database pool telemetry with a thenable transaction result", () => {
       });
     }
 
-    const window = openDatabasePoolWindow();
-    await (client.unsafe("select 1", []) as Promise<unknown>);
-    const sample = window();
+    await withDatabasePoolWindow(async (window): Promise<void> => {
+      await (client.unsafe("select 1", []) as Promise<unknown>);
+      const sample = window();
 
-    expect(sample.queuedQueryCount).toBe(0);
-    expect(sample.inFlight).toBe(0);
-    expect(sample.queryCount).toBe(1);
+      expect(sample.queuedQueryCount).toBe(0);
+      expect(sample.inFlight).toBe(0);
+      expect(sample.queryCount).toBe(1);
+    });
   });
 
   it("keeps a transaction that runs no statement from ratcheting demand", async () => {
@@ -101,14 +101,15 @@ describe("database pool telemetry with a thenable transaction result", () => {
     instrumentDatabasePool(client, 2);
 
     for (let round = 0; round < 6; round++) {
-      await client.begin(async () => undefined);
+      await client.begin(() => Promise.resolve(null));
     }
 
-    const window = openDatabasePoolWindow();
-    await (client.unsafe("select 1", []) as Promise<unknown>);
-    const sample = window();
+    await withDatabasePoolWindow(async (window): Promise<void> => {
+      await (client.unsafe("select 1", []) as Promise<unknown>);
+      const sample = window();
 
-    expect(sample.queuedQueryCount).toBe(0);
-    expect(sample.inFlight).toBe(0);
+      expect(sample.queuedQueryCount).toBe(0);
+      expect(sample.inFlight).toBe(0);
+    });
   });
 });

@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/bun-sql";
 import { SQL } from "bun";
 import {
   instrumentDatabasePool,
-  openDatabasePoolWindow,
+  withDatabasePoolWindow,
   resetDatabasePoolTelemetry,
 } from "../../src/utils/pool-telemetry";
 
@@ -25,7 +25,7 @@ const createFakeClient = () => {
     const client: FakeClient = {
       begin: async (callback: (transactionClient: FakeClient) => Promise<unknown>) =>
         await callback(buildClient()),
-      savepoint: async function (
+      savepoint: async function savepoint(
         this: FakeClient,
         callback: (savepointClient: FakeClient) => Promise<unknown>,
       ) {
@@ -51,64 +51,67 @@ describe("database pool telemetry under nested transactions", () => {
     const { client, executed } = createFakeClient();
     instrumentDatabasePool(client, 10);
 
-    const readWindow = openDatabasePoolWindow();
-    await client.begin(async (transaction: FakeClient) => {
-      await transaction.unsafe("select 1");
-      await (transaction.savepoint as (
-        callback: (savepointClient: FakeClient) => Promise<unknown>,
-      ) => Promise<unknown>)(async (savepoint) => {
-        await savepoint.unsafe("select 2");
+    await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+      await client.begin(async (transaction: FakeClient) => {
+        await transaction.unsafe("select 1");
+        await (transaction.savepoint as (
+          callback: (savepointClient: FakeClient) => Promise<unknown>,
+        ) => Promise<unknown>)(async (savepoint) => {
+          await savepoint.unsafe("select 2");
+        });
+        await transaction.unsafe("select 3");
       });
-      await transaction.unsafe("select 3");
-    });
 
-    expect(executed).toEqual(["select 1", "select 2", "select 3"]);
-    expect(readWindow().queryCount).toBe(executed.length);
-    expect(readWindow().inFlight).toBe(0);
+      expect(executed).toEqual(["select 1", "select 2", "select 3"]);
+      expect(readWindow().queryCount).toBe(executed.length);
+      expect(readWindow().inFlight).toBe(0);
+    });
   });
 
   it("does not multiply counts as savepoints nest", async () => {
     const { client, executed } = createFakeClient();
     instrumentDatabasePool(client, 10);
 
-    const readWindow = openDatabasePoolWindow();
-    await client.begin(async (transaction: FakeClient) => {
-      const savepoint = transaction.savepoint as (
-        callback: (savepointClient: FakeClient) => Promise<unknown>,
-      ) => Promise<unknown>;
-      await savepoint(async (first) => {
-        await first.unsafe("select 1");
-        await (first.savepoint as typeof savepoint)(async (second) => {
-          await second.unsafe("select 2");
-          await (second.savepoint as typeof savepoint)(async (third) => {
-            await third.unsafe("select 3");
+    await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+      await client.begin(async (transaction: FakeClient) => {
+        const savepoint = transaction.savepoint as (
+          callback: (savepointClient: FakeClient) => Promise<unknown>,
+        ) => Promise<unknown>;
+        await savepoint(async (first) => {
+          await first.unsafe("select 1");
+          await (first.savepoint as typeof savepoint)(async (second) => {
+            await second.unsafe("select 2");
+            await (second.savepoint as typeof savepoint)(async (third) => {
+              await third.unsafe("select 3");
+            });
           });
         });
       });
-    });
 
-    expect(executed).toHaveLength(3);
-    expect(readWindow().queryCount).toBe(3);
+      expect(executed).toHaveLength(3);
+      expect(readWindow().queryCount).toBe(3);
+    });
   });
 
   it("does not report queued queries when only one query is ever in flight", async () => {
     const { client } = createFakeClient();
     instrumentDatabasePool(client, 4);
 
-    const readWindow = openDatabasePoolWindow();
-    await client.begin(async (transaction: FakeClient) => {
-      const savepoint = transaction.savepoint as (
-        callback: (savepointClient: FakeClient) => Promise<unknown>,
-      ) => Promise<unknown>;
-      for (let depth = 0; depth < 4; depth++) {
-        await savepoint(async (savepointClient) => {
-          await savepointClient.unsafe("select 1");
-        });
-      }
-    });
+    await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+      await client.begin(async (transaction: FakeClient) => {
+        const savepoint = transaction.savepoint as (
+          callback: (savepointClient: FakeClient) => Promise<unknown>,
+        ) => Promise<unknown>;
+        for (let depth = 0; depth < 4; depth++) {
+          await savepoint(async (savepointClient) => {
+            await savepointClient.unsafe("select 1");
+          });
+        }
+      });
 
-    expect(readWindow().queuedQueryCount).toBe(0);
-    expect(readWindow().inFlight).toBe(0);
+      expect(readWindow().queuedQueryCount).toBe(0);
+      expect(readWindow().inFlight).toBe(0);
+    });
   });
 
   it("reports the same counts for every repetition of an identical transaction", async () => {
@@ -117,16 +120,17 @@ describe("database pool telemetry under nested transactions", () => {
 
     const counts: number[] = [];
     for (let round = 0; round < 4; round++) {
-      const readWindow = openDatabasePoolWindow();
-      await client.begin(async (transaction: FakeClient) => {
-        await transaction.unsafe("select 1");
-        await (transaction.savepoint as (
-          callback: (savepointClient: FakeClient) => Promise<unknown>,
-        ) => Promise<unknown>)(async (savepoint) => {
-          await savepoint.unsafe("select 2");
+      await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+        await client.begin(async (transaction: FakeClient) => {
+          await transaction.unsafe("select 1");
+          await (transaction.savepoint as (
+            callback: (savepointClient: FakeClient) => Promise<unknown>,
+          ) => Promise<unknown>)(async (savepoint) => {
+            await savepoint.unsafe("select 2");
+          });
         });
+        counts.push(readWindow().queryCount);
       });
-      counts.push(readWindow().queryCount);
     }
 
     expect(counts).toEqual([2, 2, 2, 2]);
@@ -144,19 +148,20 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry against a real nest
       instrumentDatabasePool(sql as unknown as Parameters<typeof instrumentDatabasePool>[0], 3);
       const database = drizzle({ client: sql });
 
-      const readWindow = openDatabasePoolWindow();
-      await database.transaction(async (transaction) => {
-        await transaction.execute("select 1 as one");
-        await transaction.transaction(async (nested) => {
-          await nested.execute("select 2 as two");
+      await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+        await database.transaction(async (transaction) => {
+          await transaction.execute("select 1 as one");
+          await transaction.transaction(async (nested) => {
+            await nested.execute("select 2 as two");
+          });
+          await transaction.execute("select 3 as three");
         });
-        await transaction.execute("select 3 as three");
-      });
 
-      const sample = readWindow();
-      expect(sample.queryCount).toBe(3);
-      expect(sample.queuedQueryCount).toBe(0);
-      expect(sample.inFlight).toBe(0);
+        const sample = readWindow();
+        expect(sample.queryCount).toBe(3);
+        expect(sample.queuedQueryCount).toBe(0);
+        expect(sample.inFlight).toBe(0);
+      });
     } finally {
       await sql.end();
     }
@@ -168,14 +173,15 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry against a real nest
       instrumentDatabasePool(sql as unknown as Parameters<typeof instrumentDatabasePool>[0], 3);
       const client = sql as unknown as { unsafe: (query: string, params?: unknown[]) => object };
 
-      const readWindow = openDatabasePoolWindow();
-      await (client.unsafe("select 1", []) as Promise<unknown>).catch(() => undefined);
-      await (client.unsafe("selec bad", []) as Promise<unknown>).catch(() => undefined);
+      await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+        await (client.unsafe("select 1", []) as Promise<unknown>).catch(() => null);
+        await (client.unsafe("selec bad", []) as Promise<unknown>).catch(() => null);
 
-      const sample = readWindow();
-      expect(sample.queryCount).toBe(2);
-      expect(sample.inFlight).toBe(0);
-      expect(sample.failedQueryCount).toBe(1);
+        const sample = readWindow();
+        expect(sample.queryCount).toBe(2);
+        expect(sample.inFlight).toBe(0);
+        expect(sample.failedQueryCount).toBe(1);
+      });
     } finally {
       await sql.end();
     }
@@ -189,12 +195,13 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry against a real nest
 
       const samples: number[] = [];
       for (let round = 0; round < 3; round++) {
-        const readWindow = openDatabasePoolWindow();
-        await expect(database.transaction(async (transaction) => {
-          await transaction.execute("select 1 as one");
-          throw new Error("rolled back");
-        })).rejects.toThrow("rolled back");
-        samples.push(readWindow().inFlight);
+        await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+          await expect(database.transaction(async (transaction) => {
+            await transaction.execute("select 1 as one");
+            throw new Error("rolled back");
+          })).rejects.toThrow("rolled back");
+          samples.push(readWindow().inFlight);
+        });
       }
 
       expect(samples).toEqual([0, 0, 0]);

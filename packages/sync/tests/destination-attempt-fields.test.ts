@@ -48,7 +48,7 @@ describe("createDestinationAttemptWideEventFields", () => {
   it("emits exactly the expected low-cardinality numeric field set", () => {
     const fields = createDestinationAttemptWideEventFields(makeTimings());
 
-    expect(Object.keys(fields).sort()).toEqual([...EXPECTED_FIELDS].sort());
+    expect(Object.keys(fields).toSorted()).toEqual([...EXPECTED_FIELDS].toSorted());
     for (const field of EXPECTED_FIELDS) {
       expect(typeof fields[field], `${field} is a number`).toBe("number");
       expect(Number.isFinite(fields[field]), `${field} is finite`).toBe(true);
@@ -63,7 +63,7 @@ describe("createDestinationAttemptWideEventFields", () => {
       makeWindow({ inFlight: 11, queuedQueryCount: 4 }),
     ].map((readPoolWindow) =>
       Object.keys(createDestinationAttemptWideEventFields(makeTimings({ readPoolWindow })))
-        .sort()
+        .toSorted()
         .join("|"));
 
     expect(new Set(keySets).size).toBe(1);
@@ -98,7 +98,7 @@ describe("createDestinationAttemptWideEventFields", () => {
     });
     const busyUntil = performance.now() + 20;
     while (performance.now() < busyUntil) {
-      // burn wall time so the attempt total exceeds the named phases
+      // Burn wall time so the attempt total exceeds the named phases
     }
 
     const fields = createDestinationAttemptWideEventFields(timings);
@@ -131,7 +131,7 @@ describe("createDestinationAttemptWideEventFields", () => {
 
   it("rounds durations to at most two decimal places", () => {
     const fields = createDestinationAttemptWideEventFields(makeTimings({
-      attemptStartedAt: performance.now() - 12.3456789,
+      attemptStartedAt: performance.now() - 12.345_678_9,
     }));
     const total = fields["sync.attempt.duration_ms"] as number;
 

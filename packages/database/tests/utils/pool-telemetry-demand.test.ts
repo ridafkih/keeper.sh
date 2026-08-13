@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { SQL } from "bun";
 import {
   instrumentDatabasePool,
-  openDatabasePoolWindow,
+  withDatabasePoolWindow,
   resetDatabasePoolTelemetry,
 } from "../../src/utils/pool-telemetry";
 
@@ -16,11 +16,9 @@ const createDeferredClient = () => {
   const pending: { reject: (error: unknown) => void; resolve: (rows: unknown) => void }[] = [];
   const client: FakeClient = {
     unsafe: (): object => {
-      let settle: { reject: (error: unknown) => void; resolve: (rows: unknown) => void };
-      const promise = new Promise((resolve, reject) => {
-        settle = { reject, resolve };
-      });
-      pending.push(settle!);
+      const deferred = Promise.withResolvers<unknown>();
+      const { promise } = deferred;
+      pending.push({ reject: deferred.reject, resolve: deferred.resolve });
       return {
         catch(onRejected: (error: unknown) => unknown) {
           return promise.catch(onRejected);
@@ -28,6 +26,7 @@ const createDeferredClient = () => {
         finally(onFinally: () => unknown) {
           return promise.finally(onFinally);
         },
+        // eslint-disable-next-line unicorn/no-thenable -- the fixture stands in for Bun's lazy SQLQuery
         then(onFulfilled?: (rows: unknown) => unknown, onRejected?: (error: unknown) => unknown) {
           return promise.then(onFulfilled, onRejected);
         },
@@ -49,31 +48,34 @@ describe("database pool telemetry demand accounting", () => {
     const { client, pending } = createDeferredClient();
     instrumentDatabasePool(client, 10);
 
-    const outer = openDatabasePoolWindow();
-    const first = (client.unsafe("select 1") as Promise<unknown>).then((result) => result);
-    const inner = openDatabasePoolWindow();
-    const second = (client.unsafe("select 2") as Promise<unknown>).then((result) => result);
+    await withDatabasePoolWindow(async (outer): Promise<void> => {
+      const first = (client.unsafe("select 1") as Promise<unknown>).then((result) => result);
+      await withDatabasePoolWindow(async (inner): Promise<void> => {
+        const second = (client.unsafe("select 2") as Promise<unknown>).then((result) => result);
 
-    expect(outer().queryCount).toBe(1);
-    expect(inner().queryCount).toBe(1);
-    expect(outer().inFlight).toBe(2);
+        expect(outer().queryCount).toBe(1);
+        expect(inner().queryCount).toBe(1);
+        expect(outer().inFlight).toBe(2);
 
-    pending[0]?.resolve([]);
-    pending[1]?.resolve([]);
-    await Promise.all([first, second]);
+        pending[0]?.resolve([]);
+        pending[1]?.resolve([]);
+        await Promise.all([first, second]);
 
-    expect(outer().queryCount).toBe(1);
-    expect(inner().queryCount).toBe(1);
-    expect(outer().inFlight).toBe(0);
-    expect(inner().inFlight).toBe(0);
+        expect(outer().queryCount).toBe(1);
+        expect(inner().queryCount).toBe(1);
+        expect(outer().inFlight).toBe(0);
+        expect(inner().inFlight).toBe(0);
 
-    const after = openDatabasePoolWindow();
-    expect(after()).toEqual({
-      failedQueryCount: 0,
-      inFlight: 0,
-      queryCount: 0,
-      queryDurationMs: 0,
-      queuedQueryCount: 0,
+        withDatabasePoolWindow((after): void => {
+          expect(after()).toEqual({
+            failedQueryCount: 0,
+            inFlight: 0,
+            queryCount: 0,
+            queryDurationMs: 0,
+            queuedQueryCount: 0,
+          });
+        });
+      });
     });
   });
 
@@ -83,17 +85,18 @@ describe("database pool telemetry demand accounting", () => {
 
     const samples: number[] = [];
     for (let round = 0; round < 5; round += 1) {
-      const window = openDatabasePoolWindow();
-      const ok = client.unsafe("select ok") as Promise<unknown>;
-      const bad = client.unsafe("select bad") as Promise<unknown>;
-      pending[round * 2]?.resolve([]);
-      pending[round * 2 + 1]?.reject(new Error("boom"));
-      await ok;
-      await expect(bad).rejects.toThrow("boom");
-      const sample = window();
-      expect(sample.queryCount).toBe(2);
-      expect(sample.failedQueryCount).toBe(1);
-      samples.push(sample.inFlight);
+      await withDatabasePoolWindow(async (window): Promise<void> => {
+        const ok = client.unsafe("select ok") as Promise<unknown>;
+        const bad = client.unsafe("select bad") as Promise<unknown>;
+        pending[round * 2]?.resolve([]);
+        pending[round * 2 + 1]?.reject(new Error("boom"));
+        await ok;
+        await expect(bad).rejects.toThrow("boom");
+        const sample = window();
+        expect(sample.queryCount).toBe(2);
+        expect(sample.failedQueryCount).toBe(1);
+        samples.push(sample.inFlight);
+      });
     }
 
     expect(samples).toEqual([0, 0, 0, 0, 0]);
@@ -107,15 +110,30 @@ describe("database pool telemetry demand accounting", () => {
       const startedAt = performance.now();
       for (let index = 0; index < iterations; index += 1) {
         const query = client.unsafe("select 1") as { values: () => Promise<unknown> };
-        pending[pending.length - 1]?.resolve([]);
+        pending.at(-1)?.resolve([]);
         await query.values();
       }
       return performance.now() - startedAt;
     };
 
-    const plainMs = await runBatch();
+    /*
+     * A single batch each way measures whichever of the two paid for the JIT
+     * warm-up and the garbage collection that landed in it, which on a batch
+     * this short swamps the difference being measured. The fastest of several
+     * batches is the one least perturbed by both, so the comparison is between
+     * the steady state of each path.
+     */
+    const runFastestBatch = async (): Promise<number> => {
+      let fastestMs = Number.POSITIVE_INFINITY;
+      for (let round = 0; round < 4; round += 1) {
+        fastestMs = Math.min(fastestMs, await runBatch());
+      }
+      return fastestMs;
+    };
+
+    const plainMs = await runFastestBatch();
     instrumentDatabasePool(client, 10);
-    const instrumentedMs = await runBatch();
+    const instrumentedMs = await runFastestBatch();
 
     const overheadPerQueryUs = ((instrumentedMs - plainMs) / iterations) * 1000;
     expect(overheadPerQueryUs).toBeLessThan(5);
@@ -169,26 +187,27 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry against postgres", 
       }));
     await new Promise((resolve) => { setTimeout(resolve, 300); });
 
-    const window = openDatabasePoolWindow();
-    const startedAt = performance.now();
-    const blocked = (client.unsafe("select 99", []) as Promise<unknown>).then(
-      (result) => result,
-    );
-    await new Promise((resolve) => { setTimeout(resolve, 300); });
+    await withDatabasePoolWindow(async (window): Promise<void> => {
+      const startedAt = performance.now();
+      const blocked = (client.unsafe("select 99", []) as Promise<unknown>).then(
+        (result) => result,
+      );
+      await new Promise((resolve) => { setTimeout(resolve, 300); });
 
-    for (const release of releases) {
-      release();
-    }
-    await Promise.all(held);
-    await blocked;
-    const waitedMs = performance.now() - startedAt;
+      for (const release of releases) {
+        release();
+      }
+      await Promise.all(held);
+      await blocked;
+      const waitedMs = performance.now() - startedAt;
 
-    const sample = window();
-    expect(waitedMs).toBeGreaterThan(250);
-    expect(sample.queryDurationMs).toBeGreaterThan(250);
-    expect(sample.queuedQueryCount).toBeGreaterThan(0);
+      const sample = window();
+      expect(waitedMs).toBeGreaterThan(250);
+      expect(sample.queryDurationMs).toBeGreaterThan(250);
+      expect(sample.queuedQueryCount).toBeGreaterThan(0);
 
-    await sql.end();
+      await sql.end();
+    });
   });
 
   it("keeps counts identical across repeated identical transactions", async () => {
@@ -201,15 +220,16 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry against postgres", 
 
     const counts: number[] = [];
     for (let round = 0; round < 4; round += 1) {
-      const window = openDatabasePoolWindow();
-      await client.begin(async (transactionClient) => {
-        await (transactionClient.unsafe("select 1", []) as Promise<unknown>);
-        await (transactionClient.unsafe("select 2", []) as Promise<unknown>);
+      await withDatabasePoolWindow(async (window): Promise<void> => {
+        await client.begin(async (transactionClient) => {
+          await (transactionClient.unsafe("select 1", []) as Promise<unknown>);
+          await (transactionClient.unsafe("select 2", []) as Promise<unknown>);
+        });
+        const sample = window();
+        counts.push(sample.queryCount);
+        expect(sample.inFlight).toBe(0);
+        expect(sample.failedQueryCount).toBe(0);
       });
-      const sample = window();
-      counts.push(sample.queryCount);
-      expect(sample.inFlight).toBe(0);
-      expect(sample.failedQueryCount).toBe(0);
     }
 
     expect(counts).toEqual([2, 2, 2, 2]);

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { SQL } from "bun";
 import {
   instrumentDatabasePool,
-  openDatabasePoolWindow,
+  withDatabasePoolWindow,
   resetDatabasePoolTelemetry,
 } from "../../src/utils/pool-telemetry";
 
@@ -42,16 +42,17 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry under a burst of tr
       const client = sql as unknown as PoolClient;
       instrumentDatabasePool(client, POOL_MAX);
 
-      const window = openDatabasePoolWindow();
-      const burst = await runBurst(client, 6);
-      const sample = window();
+      await withDatabasePoolWindow(async (window): Promise<void> => {
+        const burst = await runBurst(client, 6);
+        const sample = window();
 
-      const waited = burst.startOffsetsMs.filter((offset) => offset > STATEMENT_SECONDS * 500);
+        const waited = burst.startOffsetsMs.filter((offset) => offset > STATEMENT_SECONDS * 500);
 
-      expect(waited.length).toBe(4);
-      expect(burst.wallMs).toBeGreaterThan(STATEMENT_SECONDS * 1000 * 2);
-      expect(sample.queryCount).toBe(6);
-      expect(sample.queuedQueryCount).toBeGreaterThanOrEqual(waited.length);
+        expect(waited.length).toBe(4);
+        expect(burst.wallMs).toBeGreaterThan(STATEMENT_SECONDS * 1000 * 2);
+        expect(sample.queryCount).toBe(6);
+        expect(sample.queuedQueryCount).toBeGreaterThanOrEqual(waited.length);
+      });
     } finally {
       await sql.end();
     }
@@ -64,25 +65,27 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry under a burst of tr
       const client = sql as unknown as PoolClient;
       instrumentDatabasePool(client, POOL_MAX);
 
-      const burstWindow = openDatabasePoolWindow();
-      await runBurst(client, 6);
-      const burstSample = burstWindow();
+      await withDatabasePoolWindow(async (burstWindow): Promise<void> => {
+        await runBurst(client, 6);
+        const burstSample = burstWindow();
 
-      const staggeredWindow = openDatabasePoolWindow();
-      const staggered: Promise<unknown>[] = [];
-      for (let index = 0; index < 6; index += 1) {
-        staggered.push(client.begin(async (transactionClient) => {
-          await (transactionClient.unsafe(`select pg_sleep(${STATEMENT_SECONDS})`, []) as Promise<unknown>);
-        }));
-        await new Promise((resolve) => {
-          setTimeout(resolve, 5);
+        await withDatabasePoolWindow(async (staggeredWindow): Promise<void> => {
+          const staggered: Promise<unknown>[] = [];
+          for (let index = 0; index < 6; index += 1) {
+            staggered.push(client.begin(async (transactionClient) => {
+              await (transactionClient.unsafe(`select pg_sleep(${STATEMENT_SECONDS})`, []) as Promise<unknown>);
+            }));
+            await new Promise((resolve) => {
+              setTimeout(resolve, 5);
+            });
+          }
+          await Promise.all(staggered);
+          const staggeredSample = staggeredWindow();
+
+          expect(staggeredSample.queuedQueryCount).toBeGreaterThan(0);
+          expect(burstSample.queuedQueryCount).toBe(staggeredSample.queuedQueryCount);
         });
-      }
-      await Promise.all(staggered);
-      const staggeredSample = staggeredWindow();
-
-      expect(staggeredSample.queuedQueryCount).toBeGreaterThan(0);
-      expect(burstSample.queuedQueryCount).toBe(staggeredSample.queuedQueryCount);
+      });
     } finally {
       await sql.end();
     }
@@ -97,24 +100,26 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry under a burst of tr
 
       const rounds: number[] = [];
       for (let round = 0; round < 3; round += 1) {
-        const window = openDatabasePoolWindow();
-        await runBurst(client, 4);
-        const sample = window();
-        expect(sample.queryCount).toBe(4);
-        expect(sample.inFlight).toBe(0);
-        expect(sample.failedQueryCount).toBe(0);
-        rounds.push(sample.queuedQueryCount);
+        await withDatabasePoolWindow(async (window): Promise<void> => {
+          await runBurst(client, 4);
+          const sample = window();
+          expect(sample.queryCount).toBe(4);
+          expect(sample.inFlight).toBe(0);
+          expect(sample.failedQueryCount).toBe(0);
+          rounds.push(sample.queuedQueryCount);
+        });
       }
 
       expect(new Set(rounds).size).toBe(1);
 
-      const idleWindow = openDatabasePoolWindow();
-      await (client.unsafe("select 1", []) as Promise<unknown>);
-      const idleSample = idleWindow();
+      await withDatabasePoolWindow(async (idleWindow): Promise<void> => {
+        await (client.unsafe("select 1", []) as Promise<unknown>);
+        const idleSample = idleWindow();
 
-      expect(idleSample.queryCount).toBe(1);
-      expect(idleSample.queuedQueryCount).toBe(0);
-      expect(idleSample.inFlight).toBe(0);
+        expect(idleSample.queryCount).toBe(1);
+        expect(idleSample.queuedQueryCount).toBe(0);
+        expect(idleSample.inFlight).toBe(0);
+      });
     } finally {
       await sql.end();
     }
@@ -138,14 +143,15 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry under a burst of tr
         })).rejects.toBeDefined();
       }
 
-      const window = openDatabasePoolWindow();
-      await (client.unsafe("select 1", []) as Promise<unknown>);
-      const sample = window();
+      await withDatabasePoolWindow(async (window): Promise<void> => {
+        await (client.unsafe("select 1", []) as Promise<unknown>);
+        const sample = window();
 
-      expect(sample.queryCount).toBe(1);
-      expect(sample.queuedQueryCount).toBe(0);
-      expect(sample.inFlight).toBe(0);
-      expect(sample.failedQueryCount).toBe(0);
+        expect(sample.queryCount).toBe(1);
+        expect(sample.queuedQueryCount).toBe(0);
+        expect(sample.inFlight).toBe(0);
+        expect(sample.failedQueryCount).toBe(0);
+      });
     } finally {
       await sql.end();
     }

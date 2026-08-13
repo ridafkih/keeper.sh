@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   instrumentDatabasePool,
-  openDatabasePoolWindow,
+  withDatabasePoolWindow,
   resetDatabasePoolTelemetry,
 } from "../../src/utils/pool-telemetry";
 
@@ -31,74 +31,78 @@ describe("database pool telemetry for queries that are never awaited", () => {
     const { client } = createFakeClient();
     instrumentDatabasePool(client, 2);
 
-    const readWindow = openDatabasePoolWindow();
-    for (let index = 0; index < 10; index += 1) {
-      client.unsafe();
-    }
+    withDatabasePoolWindow((readWindow): void => {
+      for (let index = 0; index < 10; index += 1) {
+        client.unsafe();
+      }
 
-    const sample = readWindow();
-    expect(sample.inFlight).toBe(0);
-    expect(sample.queryCount).toBe(0);
+      const sample = readWindow();
+      expect(sample.inFlight).toBe(0);
+      expect(sample.queryCount).toBe(0);
+    });
   });
 
   it("does not report a later query on an idle pool as queued after unawaited queries", async () => {
     const { client, pending } = createFakeClient();
     instrumentDatabasePool(client, 2);
 
-    const readWindow = openDatabasePoolWindow();
-    for (let index = 0; index < 10; index += 1) {
-      client.unsafe();
-    }
+    await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+      for (let index = 0; index < 10; index += 1) {
+        client.unsafe();
+      }
 
-    const query = client.unsafe() as FakeQuery;
-    const awaited = query.then((result) => result);
-    pending.at(-1)?.resolve([]);
-    await awaited;
+      const query = client.unsafe() as FakeQuery;
+      const awaited = query.then((result) => result);
+      pending.at(-1)?.resolve([]);
+      await awaited;
 
-    const sample = readWindow();
-    expect(sample.queuedQueryCount).toBe(0);
-    expect(sample.queryCount).toBe(1);
-    expect(sample.inFlight).toBe(0);
+      const sample = readWindow();
+      expect(sample.queuedQueryCount).toBe(0);
+      expect(sample.queryCount).toBe(1);
+      expect(sample.inFlight).toBe(0);
+    });
   });
 
   it("counts an awaited query exactly once across then, catch and finally", async () => {
     const { client, pending } = createFakeClient();
     instrumentDatabasePool(client, 2);
 
-    const readWindow = openDatabasePoolWindow();
-    const query = client.unsafe() as FakeQuery;
-    const viaThen = query.then((result) => result);
-    const viaCatch = query.catch(() => null);
-    const viaFinally = query.finally(() => undefined);
+    await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+      const query = client.unsafe() as FakeQuery;
+      const viaThen = query.then((result) => result);
+      const viaCatch = query.catch(() => null);
+      const viaFinally = query.finally(() => null);
 
-    expect(readWindow().inFlight).toBe(1);
-    expect(readWindow().queryCount).toBe(1);
+      expect(readWindow().inFlight).toBe(1);
+      expect(readWindow().queryCount).toBe(1);
 
-    pending[0]?.resolve([]);
-    await Promise.all([viaThen, viaCatch, viaFinally]);
+      pending[0]?.resolve([]);
+      await Promise.all([viaThen, viaCatch, viaFinally]);
 
-    const sample = readWindow();
-    expect(sample.inFlight).toBe(0);
-    expect(sample.queryCount).toBe(1);
-    expect(sample.failedQueryCount).toBe(0);
+      const sample = readWindow();
+      expect(sample.inFlight).toBe(0);
+      expect(sample.queryCount).toBe(1);
+      expect(sample.failedQueryCount).toBe(0);
+    });
   });
 
   it("counts a rejected query exactly once across repeated settlement handlers", async () => {
     const { client, pending } = createFakeClient();
     instrumentDatabasePool(client, 2);
 
-    const readWindow = openDatabasePoolWindow();
-    const query = client.unsafe() as FakeQuery;
-    const first = query.catch(() => "handled");
-    const second = query.catch(() => "handled");
+    await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+      const query = client.unsafe() as FakeQuery;
+      const first = query.catch(() => "handled");
+      const second = query.catch(() => "handled");
 
-    pending[0]?.reject(new Error("connection closed"));
-    expect(await first).toBe("handled");
-    expect(await second).toBe("handled");
+      pending[0]?.reject(new Error("connection closed"));
+      expect(await first).toBe("handled");
+      expect(await second).toBe("handled");
 
-    const sample = readWindow();
-    expect(sample.inFlight).toBe(0);
-    expect(sample.queryCount).toBe(1);
-    expect(sample.failedQueryCount).toBe(1);
+      const sample = readWindow();
+      expect(sample.inFlight).toBe(0);
+      expect(sample.queryCount).toBe(1);
+      expect(sample.failedQueryCount).toBe(1);
+    });
   });
 });

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   instrumentDatabasePool,
-  openDatabasePoolWindow,
+  withDatabasePoolWindow,
   resetDatabasePoolTelemetry,
 } from "../../src/utils/pool-telemetry";
 
@@ -37,14 +37,15 @@ describe("database pool telemetry window boundaries", () => {
     instrumentDatabasePool(client, 10);
 
     const early = client.unsafe() as PromiseLike<unknown>;
-    const window = openDatabasePoolWindow();
-    await settleAfter(pending[0], 25);
-    await early;
+    await withDatabasePoolWindow(async (window): Promise<void> => {
+      await settleAfter(pending[0], 25);
+      await early;
 
-    const sample = window();
+      const sample = window();
 
-    expect(sample.queryCount).toBe(0);
-    expect(sample.queryDurationMs).toBe(0);
+      expect(sample.queryCount).toBe(0);
+      expect(sample.queryDurationMs).toBe(0);
+    });
   });
 
   it("does not report a failure the window never counted a query for", async () => {
@@ -52,31 +53,33 @@ describe("database pool telemetry window boundaries", () => {
     instrumentDatabasePool(client, 10);
 
     const early = client.unsafe() as PromiseLike<unknown>;
-    const window = openDatabasePoolWindow();
-    pending[0]?.reject(new Error("connection terminated"));
-    await expect(early).rejects.toThrow("connection terminated");
+    await withDatabasePoolWindow(async (window): Promise<void> => {
+      pending[0]?.reject(new Error("connection terminated"));
+      await expect(early).rejects.toThrow("connection terminated");
 
-    const sample = window();
+      const sample = window();
 
-    expect(sample.queryCount).toBe(0);
-    expect(sample.failedQueryCount).toBe(0);
+      expect(sample.queryCount).toBe(0);
+      expect(sample.failedQueryCount).toBe(0);
+    });
   });
 
   it("reports an unsettled query as counted with no duration yet", async () => {
     const { client, pending } = createFakeClient();
     instrumentDatabasePool(client, 10);
 
-    const window = openDatabasePoolWindow();
-    const inflight = (client.unsafe() as PromiseLike<unknown>).then((result) => result);
-    const sample = window();
+    await withDatabasePoolWindow(async (window): Promise<void> => {
+      const inflight = (client.unsafe() as PromiseLike<unknown>).then((result) => result);
+      const sample = window();
 
-    expect(sample.queryCount).toBe(1);
-    expect(sample.queryDurationMs).toBe(0);
-    expect(sample.inFlight).toBe(1);
+      expect(sample.queryCount).toBe(1);
+      expect(sample.queryDurationMs).toBe(0);
+      expect(sample.inFlight).toBe(1);
 
-    pending[0]?.resolve([]);
-    await inflight;
-    expect(window().inFlight).toBe(0);
+      pending[0]?.resolve([]);
+      await inflight;
+      expect(window().inFlight).toBe(0);
+    });
   });
 
   it("keeps repeated identical windows on the same client identical", async () => {
@@ -85,17 +88,18 @@ describe("database pool telemetry window boundaries", () => {
 
     const samples: string[] = [];
     for (let round = 0; round < 5; round += 1) {
-      const window = openDatabasePoolWindow();
-      const query = client.unsafe() as PromiseLike<unknown>;
-      pending[round]?.resolve([]);
-      await query;
-      const sample = window();
-      samples.push([
-        sample.queryCount,
-        sample.failedQueryCount,
-        sample.queuedQueryCount,
-        sample.inFlight,
-      ].join("/"));
+      await withDatabasePoolWindow(async (window): Promise<void> => {
+        const query = client.unsafe() as PromiseLike<unknown>;
+        pending[round]?.resolve([]);
+        await query;
+        const sample = window();
+        samples.push([
+          sample.queryCount,
+          sample.failedQueryCount,
+          sample.queuedQueryCount,
+          sample.inFlight,
+        ].join("/"));
+      });
     }
 
     expect(new Set(samples).size).toBe(1);
@@ -107,13 +111,14 @@ describe("database pool telemetry window boundaries", () => {
     instrumentDatabasePool(client, 10);
     instrumentDatabasePool(client, 10);
 
-    const window = openDatabasePoolWindow();
-    const query = client.unsafe() as PromiseLike<unknown>;
-    pending[0]?.resolve([]);
-    await query;
-    const sample = window();
+    await withDatabasePoolWindow(async (window): Promise<void> => {
+      const query = client.unsafe() as PromiseLike<unknown>;
+      pending[0]?.resolve([]);
+      await query;
+      const sample = window();
 
-    expect(sample.queryCount).toBe(1);
-    expect(sample.inFlight).toBe(0);
+      expect(sample.queryCount).toBe(1);
+      expect(sample.inFlight).toBe(0);
+    });
   });
 });

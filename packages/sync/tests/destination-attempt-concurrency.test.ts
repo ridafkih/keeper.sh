@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   instrumentDatabasePool,
-  openDatabasePoolWindow,
   resetDatabasePoolTelemetry,
+  withDatabasePoolWindow,
 } from "@keeper.sh/database";
 import { createDestinationAttemptWideEventFields } from "../src/sync-user";
 
@@ -28,17 +28,18 @@ const runAttempt = async (
   statementCount: number,
 ): Promise<Record<string, number>> => {
   const attemptStartedAt = performance.now();
-  const readPoolWindow = openDatabasePoolWindow();
-  for (let statement = 0; statement < statementCount; statement++) {
-    await client.unsafe("select 1", []);
-  }
-  return createDestinationAttemptWideEventFields({
-    attemptStartedAt,
-    destinationLookupDurationMs: 0,
-    lockAcquireDurationMs: 0,
-    providerResolveDurationMs: 0,
-    readPoolWindow,
-    sourceAuthorityDurationMs: 0,
+  return await withDatabasePoolWindow(async (readPoolWindow) => {
+    for (let statement = 0; statement < statementCount; statement++) {
+      await client.unsafe("select 1", []);
+    }
+    return createDestinationAttemptWideEventFields({
+      attemptStartedAt,
+      destinationLookupDurationMs: 0,
+      lockAcquireDurationMs: 0,
+      providerResolveDurationMs: 0,
+      readPoolWindow,
+      sourceAuthorityDurationMs: 0,
+    });
   });
 };
 

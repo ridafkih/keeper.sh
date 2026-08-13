@@ -94,7 +94,10 @@ describe("syncCalendar phase attribution when the wall clock moves", () => {
     let calls = 0;
     vi.spyOn(Date, "now").mockImplementation(() => {
       calls += 1;
-      return calls === 1 ? baseline : baseline - 3_600_000;
+      if (calls === 1) {
+        return baseline;
+      }
+      return baseline - 3_600_000;
     });
 
     const event = await runSync(25);
@@ -115,7 +118,10 @@ describe("syncCalendar phase attribution when the wall clock moves", () => {
     let calls = 0;
     vi.spyOn(Date, "now").mockImplementation(() => {
       calls += 1;
-      return calls === 1 ? baseline : baseline + 3_600_000;
+      if (calls === 1) {
+        return baseline;
+      }
+      return baseline + 3_600_000;
     });
 
     const event = await runSync(25);

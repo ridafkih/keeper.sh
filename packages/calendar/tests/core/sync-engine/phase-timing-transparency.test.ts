@@ -146,14 +146,14 @@ describe("syncCalendar instrumentation transparency", () => {
     expect(provider.pushEvents).toBe(before.pushEvents);
     expect(provider.deleteEvents).toBe(before.deleteEvents);
     expect(provider.listRemoteEvents).toBe(before.listRemoteEvents);
-    expect(Object.keys(provider).sort()).toEqual(Object.keys(before).sort());
+    expect(Object.keys(provider).toSorted()).toEqual(Object.keys(before).toSorted());
   });
 
   it("hands the provider exactly the operations it would have received unwrapped", async () => {
     const calls: string[] = [];
     const pushed: MaterializedSyncableEvent[][] = [];
     const deleted: string[][] = [];
-    const localEvents = Array.from({ length: 120 }, (_, index) => makeEvent(`ev-${index}`));
+    const localEvents = Array.from({ length: 120 }, (_unused, index) => makeEvent(`ev-${index}`));
     const stale = localEvents.slice(0, 10);
 
     const provider = makeProvider({
@@ -176,11 +176,12 @@ describe("syncCalendar instrumentation transparency", () => {
       localEvents,
       provider,
       remoteEvents: stale.map((staleEvent) => ({
+        deleteId: `remote-${staleEvent.id}`,
         endTime: staleEvent.endTime,
-        id: `remote-${staleEvent.id}`,
+        isKeeperEvent: true,
         startTime: staleEvent.startTime,
         uid: `remote-${staleEvent.id}`,
-      } as RemoteEvent)),
+      })),
     });
 
     expect(pushed.flat().length).toBe(120);
@@ -214,11 +215,12 @@ describe("syncCalendar instrumentation transparency", () => {
         existingMappings: [makeMapping(localEvent)],
         localEvents: [localEvent],
         remoteEvents: [{
+          deleteId: "remote-ev-1",
           endTime: localEvent.endTime,
-          id: "remote-ev-1",
+          isKeeperEvent: true,
           startTime: localEvent.startTime,
           uid: "remote-ev-1",
-        } as RemoteEvent],
+        }],
       }),
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       userId: "user-1",
@@ -317,10 +319,10 @@ describe("syncCalendar instrumentation transparency", () => {
     const keySets = new Set<string>();
 
     for (let round = 0; round < 30; round += 1) {
-      const localEvents = Array.from({ length: round % 4 }, (_, index) =>
+      const localEvents = Array.from({ length: round % 4 }, (_unused, index) =>
         makeEvent(`ev-${round}-${index}`));
       const event = await runSync({
-        isInvalidated: round % 3 === 0 ? () => Promise.resolve(false) : undefined,
+        ...(round % 3 === 0 && { isInvalidated: () => Promise.resolve(false) }),
         localEvents,
         provider: makeProvider({
           pushEvents: (events) => Promise.resolve(
@@ -328,7 +330,7 @@ describe("syncCalendar instrumentation transparency", () => {
           ),
         }),
       });
-      keySets.add(Object.keys(event).filter((key) => key.startsWith("sync.")).sort().join("|"));
+      keySets.add(Object.keys(event).filter((key) => key.startsWith("sync.")).toSorted().join("|"));
       expectPhaseArithmetic(event);
     }
 

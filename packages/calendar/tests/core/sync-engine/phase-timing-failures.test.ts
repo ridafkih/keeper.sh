@@ -114,6 +114,9 @@ const expectBalanced = (event: Record<string, unknown>): number => {
   return attributed;
 };
 
+const phaseKeys = (event: Record<string, unknown>): string[] =>
+  Object.keys(event).filter((key) => key.startsWith("sync.")).toSorted();
+
 describe("syncCalendar phase attribution when a phase throws", () => {
   it("records the currency check that rejected", async () => {
     const { event, thrown } = await runSync({
@@ -184,9 +187,6 @@ describe("syncCalendar phase attribution when a phase throws", () => {
     const failure = await runSync({
       isCurrent: () => Promise.reject(new Error("nope")),
     });
-
-    const phaseKeys = (event: Record<string, unknown>): string[] =>
-      Object.keys(event).filter((key) => key.startsWith("sync.")).toSorted();
 
     expect(phaseKeys(failure.event)).toEqual(phaseKeys(success.event));
   });

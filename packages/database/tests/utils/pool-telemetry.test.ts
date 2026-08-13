@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/bun-sql";
 import { SQL } from "bun";
 import {
   instrumentDatabasePool,
-  openDatabasePoolWindow,
+  withDatabasePoolWindow,
   resetDatabasePoolTelemetry,
 } from "../../src/utils/pool-telemetry";
 
@@ -30,58 +30,61 @@ describe("database pool telemetry", () => {
     const { client, pending } = createFakeClient();
     instrumentDatabasePool(client, 2);
 
-    const readWindow = openDatabasePoolWindow();
-    const first = (client.unsafe() as PromiseLike<unknown>).then((result) => result);
-    const second = (client.unsafe() as PromiseLike<unknown>).then((result) => result);
+    await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+      const first = (client.unsafe() as PromiseLike<unknown>).then((result) => result);
+      const second = (client.unsafe() as PromiseLike<unknown>).then((result) => result);
 
-    expect(readWindow().inFlight).toBe(2);
-    expect(readWindow().queryCount).toBe(2);
+      expect(readWindow().inFlight).toBe(2);
+      expect(readWindow().queryCount).toBe(2);
 
-    pending[0]?.resolve([]);
-    pending[1]?.resolve([]);
-    await first;
-    await second;
+      pending[0]?.resolve([]);
+      pending[1]?.resolve([]);
+      await first;
+      await second;
 
-    const sample = readWindow();
-    expect(sample.inFlight).toBe(0);
-    expect(sample.queryCount).toBe(2);
-    expect(sample.queryDurationMs).toBeGreaterThanOrEqual(0);
-    expect(sample.failedQueryCount).toBe(0);
-    expect(sample.queuedQueryCount).toBe(0);
+      const sample = readWindow();
+      expect(sample.inFlight).toBe(0);
+      expect(sample.queryCount).toBe(2);
+      expect(sample.queryDurationMs).toBeGreaterThanOrEqual(0);
+      expect(sample.failedQueryCount).toBe(0);
+      expect(sample.queuedQueryCount).toBe(0);
+    });
   });
 
   it("counts a query issued beyond the pool maximum as queued", async () => {
     const { client, pending } = createFakeClient();
     instrumentDatabasePool(client, 2);
 
-    const readWindow = openDatabasePoolWindow();
-    const queries = ([client.unsafe(), client.unsafe(), client.unsafe()] as PromiseLike<unknown>[])
-      .map((query) => query.then((result) => result));
+    await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+      const queries = ([client.unsafe(), client.unsafe(), client.unsafe()] as PromiseLike<unknown>[])
+        .map((query) => query.then((result) => result));
 
-    expect(readWindow().queuedQueryCount).toBe(1);
+      expect(readWindow().queuedQueryCount).toBe(1);
 
-    for (const deferred of pending) {
-      deferred.resolve([]);
-    }
-    await Promise.all(queries);
+      for (const deferred of pending) {
+        deferred.resolve([]);
+      }
+      await Promise.all(queries);
 
-    expect(readWindow().queuedQueryCount).toBe(1);
-    expect(readWindow().inFlight).toBe(0);
+      expect(readWindow().queuedQueryCount).toBe(1);
+      expect(readWindow().inFlight).toBe(0);
+    });
   });
 
   it("releases in-flight and records a failure when a query rejects", async () => {
     const { client, pending } = createFakeClient();
     instrumentDatabasePool(client, 2);
 
-    const readWindow = openDatabasePoolWindow();
-    const query = client.unsafe() as PromiseLike<unknown>;
-    pending[0]?.reject(new Error("connection closed"));
-    await expect(Promise.resolve(query)).rejects.toThrow("connection closed");
+    await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+      const query = client.unsafe() as PromiseLike<unknown>;
+      pending[0]?.reject(new Error("connection closed"));
+      await expect(Promise.resolve(query)).rejects.toThrow("connection closed");
 
-    const sample = readWindow();
-    expect(sample.inFlight).toBe(0);
-    expect(sample.failedQueryCount).toBe(1);
-    expect(sample.queryCount).toBe(1);
+      const sample = readWindow();
+      expect(sample.inFlight).toBe(0);
+      expect(sample.failedQueryCount).toBe(1);
+      expect(sample.queryCount).toBe(1);
+    });
   });
 
   it("scopes counts to the window that was open", async () => {
@@ -92,14 +95,15 @@ describe("database pool telemetry", () => {
     pending[0]?.resolve([]);
     await before;
 
-    const readWindow = openDatabasePoolWindow();
-    expect(readWindow().queryCount).toBe(0);
+    await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+      expect(readWindow().queryCount).toBe(0);
 
-    const during = client.unsafe() as PromiseLike<unknown>;
-    pending[1]?.resolve([]);
-    await during;
+      const during = client.unsafe() as PromiseLike<unknown>;
+      pending[1]?.resolve([]);
+      await during;
 
-    expect(readWindow().queryCount).toBe(1);
+      expect(readWindow().queryCount).toBe(1);
+    });
   });
 });
 
@@ -117,20 +121,21 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry against a real pool
       );
       const database = drizzle({ client: sql });
 
-      const readWindow = openDatabasePoolWindow();
-      const rows = await database.execute("select 1 as one");
-      expect([...rows]).toEqual([{ one: 1 }]);
+      await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+        const rows = await database.execute("select 1 as one");
+        expect([...rows]).toEqual([{ one: 1 }]);
 
-      await database.transaction(async (transaction) => {
-        await transaction.execute("select 2 as two");
-        await transaction.execute("select 3 as three");
+        await database.transaction(async (transaction) => {
+          await transaction.execute("select 2 as two");
+          await transaction.execute("select 3 as three");
+        });
+
+        const sample = readWindow();
+        expect(sample.queryCount).toBeGreaterThanOrEqual(3);
+        expect(sample.inFlight).toBe(0);
+        expect(sample.failedQueryCount).toBe(0);
+        expect(sample.queryDurationMs).toBeGreaterThan(0);
       });
-
-      const sample = readWindow();
-      expect(sample.queryCount).toBeGreaterThanOrEqual(3);
-      expect(sample.inFlight).toBe(0);
-      expect(sample.failedQueryCount).toBe(0);
-      expect(sample.queryDurationMs).toBeGreaterThan(0);
     } finally {
       await sql.end();
     }
@@ -145,15 +150,16 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry against a real pool
       );
       const database = drizzle({ client: sql });
 
-      const readWindow = openDatabasePoolWindow();
-      await Promise.all(
-        Array.from({ length: 6 }, () => database.execute("select pg_sleep(0.05)")),
-      );
+      await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+        await Promise.all(
+          Array.from({ length: 6 }, () => database.execute("select pg_sleep(0.05)")),
+        );
 
-      const sample = readWindow();
-      expect(sample.queryCount).toBe(6);
-      expect(sample.queuedQueryCount).toBeGreaterThan(0);
-      expect(sample.inFlight).toBe(0);
+        const sample = readWindow();
+        expect(sample.queryCount).toBe(6);
+        expect(sample.queuedQueryCount).toBeGreaterThan(0);
+        expect(sample.inFlight).toBe(0);
+      });
     } finally {
       await sql.end();
     }

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   instrumentDatabasePool,
-  openDatabasePoolWindow,
+  withDatabasePoolWindow,
   resetDatabasePoolTelemetry,
 } from "../../src/utils/pool-telemetry";
 
@@ -35,7 +35,7 @@ const createHandOffClient = () => {
     begin: (callback: (transactionClient: FakeClient) => Promise<unknown>) =>
       new Promise<unknown>((resolve, reject) => {
         waiting.push(() => {
-          Promise.resolve(callback(buildClient())).then(resolve, reject);
+          Promise.resolve(callback(buildClient())).then(resolve).catch(reject);
         });
       }),
     unsafe: (): object => Promise.resolve([]),
@@ -48,16 +48,17 @@ const runUnitOfWork = async (
   statementCount: number,
 ): Promise<{ queryCount: number; queryDurationMs: number; wallMs: number }> => {
   const startedAt = performance.now();
-  const readWindow = openDatabasePoolWindow();
-  for (let statement = 0; statement < statementCount; statement++) {
-    await (client.unsafe("select 1", []) as Promise<unknown>);
-  }
-  const sample = readWindow();
-  return {
-    queryCount: sample.queryCount,
-    queryDurationMs: sample.queryDurationMs,
-    wallMs: performance.now() - startedAt,
-  };
+  return await withDatabasePoolWindow(async (readWindow) => {
+    for (let statement = 0; statement < statementCount; statement++) {
+      await (client.unsafe("select 1", []) as Promise<unknown>);
+    }
+    const sample = readWindow();
+    return {
+      queryCount: sample.queryCount,
+      queryDurationMs: sample.queryDurationMs,
+      wallMs: performance.now() - startedAt,
+    };
+  });
 };
 
 describe("database pool telemetry attribution across concurrent work", () => {
@@ -85,26 +86,28 @@ describe("database pool telemetry attribution across concurrent work", () => {
     const { client, waiting } = createHandOffClient();
     instrumentDatabasePool(client, 1);
 
-    const readWindow = openDatabasePoolWindow();
-    const blocked = client.begin(async (transaction) => {
-      await (transaction.unsafe("select 1", []) as Promise<unknown>);
-      await (transaction.unsafe("select 2", []) as Promise<unknown>);
+    await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+      const blocked = client.begin(async (transaction) => {
+        await (transaction.unsafe("select 1", []) as Promise<unknown>);
+        await (transaction.unsafe("select 2", []) as Promise<unknown>);
+      });
+
+      const releaseFromAnotherContext = async (): Promise<void> => {
+        await withDatabasePoolWindow(async (unrelated): Promise<void> => {
+          while (waiting.length === 0) {
+            await delay(1);
+          }
+          waiting.shift()?.();
+          await blocked;
+          expect(unrelated().queryCount).toBe(0);
+        });
+      };
+
+      await releaseFromAnotherContext();
+
+      const sample = readWindow();
+      expect(sample.queryCount).toBe(2);
+      expect(sample.inFlight).toBe(0);
     });
-
-    const releaseFromAnotherContext = async (): Promise<void> => {
-      const unrelated = openDatabasePoolWindow();
-      while (waiting.length === 0) {
-        await delay(1);
-      }
-      waiting.shift()?.();
-      await blocked;
-      expect(unrelated().queryCount).toBe(0);
-    };
-
-    await releaseFromAnotherContext();
-
-    const sample = readWindow();
-    expect(sample.queryCount).toBe(2);
-    expect(sample.inFlight).toBe(0);
   });
 });

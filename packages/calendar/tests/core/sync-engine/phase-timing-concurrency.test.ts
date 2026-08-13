@@ -93,7 +93,7 @@ const collectSync = async (
   options: RunOptions,
 ): Promise<{ emitted: Record<string, unknown>[]; error: unknown }> => {
   const emitted: Record<string, unknown>[] = [];
-  let error: unknown = null;
+  let thrownError: unknown = null;
   try {
     await syncCalendar({
       calendarId: options.calendarId ?? "dest-cal-1",
@@ -110,10 +110,10 @@ const collectSync = async (
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       userId: "user-1",
     });
-  } catch (thrown) {
-    error = thrown;
+  } catch (error) {
+    thrownError = error;
   }
-  return { emitted, error };
+  return { emitted, error: thrownError };
 };
 
 const runSync = async (options: RunOptions = {}): Promise<Record<string, unknown>> => {
@@ -123,16 +123,15 @@ const runSync = async (options: RunOptions = {}): Promise<Record<string, unknown
   return emitted[0] as Record<string, unknown>;
 };
 
+const fastPush = (): Promise<PushResult[]> =>
+  Promise.resolve([{ remoteId: "remote-fast", success: true }]);
+
 describe("syncCalendar phase attribution under stress", () => {
   it("keeps two interleaved runs from borrowing each other's phase time", async () => {
     const slowPush = async (): Promise<PushResult[]> => {
       await delay(40);
       return [{ remoteId: "remote-slow", success: true }];
     };
-    const fastPush = async (): Promise<PushResult[]> => [
-      { remoteId: "remote-fast", success: true },
-    ];
-
     const [slowEvent, fastEvent] = await Promise.all([
       runSync({
         calendarId: "dest-slow",
@@ -206,7 +205,7 @@ describe("syncCalendar phase attribution under stress", () => {
   });
 
   it("does not double count across many operation chunks", async () => {
-    const localEvents = Array.from({ length: 130 }, (_, index) =>
+    const localEvents = Array.from({ length: 130 }, (_unused, index) =>
       makeEvent(`bulk-${index}`,
         new Date(Date.UTC(2026, 2, 15, 9, index % 60)),
         new Date(Date.UTC(2026, 2, 15, 10, index % 60))));
@@ -241,11 +240,11 @@ describe("syncCalendar phase attribution under stress", () => {
       const event = await runSync({
         localEvents: [makeEvent("ev-repeat")],
         provider: makeProvider({
-          pushEvents: async () => [{ remoteId: "remote-repeat", success: true }],
+          pushEvents: () => Promise.resolve([{ remoteId: "remote-repeat", success: true }]),
         }),
       });
       expectPhaseArithmetic(event);
-      keySets.push(Object.keys(event).filter((key) => key.startsWith("sync.")).sort().join("|"));
+      keySets.push(Object.keys(event).filter((key) => key.startsWith("sync.")).toSorted().join("|"));
     }
     expect(new Set(keySets).size).toBe(1);
   });
@@ -258,7 +257,7 @@ describe("syncCalendar phase attribution under stress", () => {
       },
       localEvents: [makeEvent("ev-1")],
       provider: makeProvider({
-        pushEvents: async () => [{ remoteId: "remote-1", success: true }],
+        pushEvents: () => Promise.resolve([{ remoteId: "remote-1", success: true }]),
       }),
     });
 

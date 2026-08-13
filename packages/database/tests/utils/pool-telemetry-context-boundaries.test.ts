@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   instrumentDatabasePool,
-  openDatabasePoolWindow,
+  withDatabasePoolWindow,
   resetDatabasePoolTelemetry,
 } from "../../src/utils/pool-telemetry";
 
@@ -23,10 +23,12 @@ const createClient = (statementDurationMs = 0): FakeClient => {
       savepoint: async function savepoint(callback) {
         return await callback(client);
       },
-      unsafe: (): object =>
-        statementDurationMs === 0
-          ? Promise.resolve([])
-          : delay(statementDurationMs).then(() => []),
+      unsafe: (): object => {
+        if (statementDurationMs === 0) {
+          return Promise.resolve([]);
+        }
+        return delay(statementDurationMs).then(() => []);
+      },
     };
     return client;
   };
@@ -48,19 +50,36 @@ describe("database pool telemetry window context boundaries", () => {
 
     const nested = async (): Promise<number> => {
       await delay(1);
-      const readWindow = openDatabasePoolWindow();
-      await runQuery(client);
-      await runQuery(client);
-      return readWindow().queryCount;
+      return await withDatabasePoolWindow(async (readWindow) => {
+        await runQuery(client);
+        await runQuery(client);
+        return readWindow().queryCount;
+      });
     };
 
-    const outerWindow = openDatabasePoolWindow();
+    await withDatabasePoolWindow(async (outerWindow): Promise<void> => {
+      await runQuery(client);
+      const nestedCount = await nested();
+      await runQuery(client);
+
+      expect(nestedCount).toBe(2);
+      expect(outerWindow().queryCount).toBe(2);
+    });
+  });
+
+  it("stops charging a window once the body it was opened around has returned", async () => {
+    const client = createClient();
+    instrumentDatabasePool(client, 10);
+
+    const readWindow = await withDatabasePoolWindow(async (read) => {
+      await runQuery(client);
+      return read;
+    });
+
     await runQuery(client);
-    const nestedCount = await nested();
     await runQuery(client);
 
-    expect(nestedCount).toBe(2);
-    expect(outerWindow().queryCount).toBe(2);
+    expect(readWindow().queryCount).toBe(1);
   });
 
   it("does not charge a window for work that was already scheduled when it opened", async () => {
@@ -68,27 +87,28 @@ describe("database pool telemetry window context boundaries", () => {
     instrumentDatabasePool(client, 10);
 
     const pending = delay(5).then(() => runQuery(client));
-    const readWindow = openDatabasePoolWindow();
-    await runQuery(client);
-    await pending;
+    await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+      await runQuery(client);
+      await pending;
 
-    expect(readWindow().queryCount).toBe(1);
+      expect(readWindow().queryCount).toBe(1);
+    });
   });
 
   it("charges every attempt of every concurrent job only its own queries, repeatedly", async () => {
     const client = createClient(1);
     instrumentDatabasePool(client, 10);
 
-    const runAttempt = async (statementCount: number): Promise<number> => {
-      const readWindow = openDatabasePoolWindow();
-      await client.begin(async (transactionClient) => {
-        for (let statement = 0; statement < statementCount; statement++) {
-          await runQuery(transactionClient as FakeClient);
-        }
-        return null;
+    const runAttempt = async (statementCount: number): Promise<number> =>
+      await withDatabasePoolWindow(async (readWindow) => {
+        await client.begin(async (transactionClient) => {
+          for (let statement = 0; statement < statementCount; statement++) {
+            await runQuery(transactionClient as FakeClient);
+          }
+          return null;
+        });
+        return readWindow().queryCount;
       });
-      return readWindow().queryCount;
-    };
 
     const runJob = async (job: number): Promise<number[]> => {
       const counts: number[] = [];
@@ -114,19 +134,21 @@ describe("database pool telemetry window context boundaries", () => {
     instrumentDatabasePool(client, 10);
 
     for (let abandoned = 0; abandoned < 20; abandoned++) {
-      openDatabasePoolWindow();
-      await runQuery(client);
+      await withDatabasePoolWindow(async (): Promise<void> => {
+        await runQuery(client);
+      });
     }
 
-    const readWindow = openDatabasePoolWindow();
-    await runQuery(client);
+    await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+      await runQuery(client);
 
-    expect(readWindow()).toEqual({
-      failedQueryCount: 0,
-      inFlight: 0,
-      queryCount: 1,
-      queryDurationMs: expect.any(Number),
-      queuedQueryCount: 0,
+      expect(readWindow()).toEqual({
+        failedQueryCount: 0,
+        inFlight: 0,
+        queryCount: 1,
+        queryDurationMs: expect.any(Number),
+        queuedQueryCount: 0,
+      });
     });
   });
 
@@ -134,17 +156,18 @@ describe("database pool telemetry window context boundaries", () => {
     const client = createClient();
     instrumentDatabasePool(client, 10);
 
-    const readWindow = openDatabasePoolWindow();
-    await client.begin(async (transactionClient) => {
-      await runQuery(transactionClient as FakeClient);
-      await (transactionClient as FakeClient).savepoint(async (savepointClient) => {
-        await runQuery(savepointClient as FakeClient);
+    await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+      await client.begin(async (transactionClient) => {
+        await runQuery(transactionClient as FakeClient);
+        await (transactionClient as FakeClient).savepoint(async (savepointClient) => {
+          await runQuery(savepointClient as FakeClient);
+          return null;
+        });
         return null;
       });
-      return null;
-    });
 
-    expect(readWindow().queryCount).toBe(2);
+      expect(readWindow().queryCount).toBe(2);
+    });
   });
 
   it("returns process in-flight to zero after interleaved jobs and reports no residual queueing", async () => {
@@ -162,12 +185,13 @@ describe("database pool telemetry window context boundaries", () => {
       await Promise.all(Array.from({ length: 8 }, () => busy()));
     }
 
-    const readWindow = openDatabasePoolWindow();
-    await runQuery(client);
-    const sample = readWindow();
+    await withDatabasePoolWindow(async (readWindow): Promise<void> => {
+      await runQuery(client);
+      const sample = readWindow();
 
-    expect(sample.inFlight).toBe(0);
-    expect(sample.queuedQueryCount).toBe(0);
-    expect(sample.queryCount).toBe(1);
+      expect(sample.inFlight).toBe(0);
+      expect(sample.queuedQueryCount).toBe(0);
+      expect(sample.queryCount).toBe(1);
+    });
   });
 });

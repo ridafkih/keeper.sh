@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   instrumentDatabasePool,
-  openDatabasePoolWindow,
   resetDatabasePoolTelemetry,
+  withDatabasePoolWindow,
 } from "@keeper.sh/database";
 import { syncCalendar } from "@keeper.sh/calendar";
 import type { MaterializedSyncableEvent } from "@keeper.sh/calendar";
@@ -115,110 +115,110 @@ const runAttempt = async (
 ): Promise<AttemptOutcome> => {
   const issuedBefore = issued.length;
   const attemptStartedAt = performance.now();
-  const readPoolWindow = openDatabasePoolWindow();
-
-  const lockAcquire = await measurePhase(async () => {
-    await delay(1);
-    return !options.skip;
-  });
-  if (!lockAcquire.value) {
-    return {
-      fields: createDestinationAttemptWideEventFields({
-        attemptStartedAt,
-        destinationLookupDurationMs: 0,
-        lockAcquireDurationMs: lockAcquire.durationMs,
-        providerResolveDurationMs: 0,
-        readPoolWindow,
-        sourceAuthorityDurationMs: 0,
-      }),
-      issuedDuringAttempt: issued.length - issuedBefore,
-      syncEvent: null,
-      threw: false,
-    };
-  }
-
-  const destinationLookup = await measurePhase(
-    async () => await (client.unsafe("select destination", []) as Promise<unknown>),
-  );
-  const providerResolve = await measurePhase(
-    async () => await (client.unsafe("select account", []) as Promise<unknown>),
-  );
-  const sourceAuthority = await measurePhase(
-    async () => await (client.unsafe("select coverage", []) as Promise<unknown>),
-  );
-
-  let syncEvent: Record<string, unknown> | null = null;
-  let threw = false;
-  try {
-    await syncCalendar({
-      calendarId: "dest-cal-1",
-      flush: async () => {
-        await client.begin(async (transaction) => {
-          await (transaction.unsafe("insert mapping", []) as Promise<unknown>);
-          await transaction.savepoint(async (nested) => {
-            await (nested.unsafe("update checkpoint", []) as Promise<unknown>);
-            if (options.flushFails) {
-              throw new Error("flush rolled back");
-            }
-          });
-        });
-      },
-      isCurrent: async () => {
-        await (client.unsafe("select still current", []) as Promise<unknown>);
-        return true;
-      },
-      onSyncEvent: (event) => {
-        syncEvent = event as Record<string, unknown>;
-      },
-      provider: {
-        deleteEvents: () => Promise.resolve([]),
-        listRemoteEvents: () => Promise.resolve([]),
-        pushEvents: (events) =>
-          Promise.resolve(
-            events.map((event) => ({
-              deleteIdentifier: `del-${event.id}`,
-              eventId: event.id,
-              remoteEventUid: `remote-${event.id}`,
-              success: true as const,
-            })),
-          ),
-      },
-      readState: async () =>
-        await (client.begin(async (transaction) => {
-          await (transaction.unsafe("select local events", []) as Promise<unknown>);
-          await (transaction.unsafe("select mappings", []) as Promise<unknown>);
-          return {
-            existingMappings: [],
-            localEvents: options.eventIds.map((id) => makeLocalEvent(id)),
-            remoteEvents: [],
-          };
-        }) as Promise<{
-          existingMappings: never[];
-          localEvents: MaterializedSyncableEvent[];
-          remoteEvents: never[];
-        }>),
-      reconciliationScope: RECONCILIATION_SCOPE,
-      userId: "user-1",
+  return await withDatabasePoolWindow(async (readPoolWindow): Promise<AttemptOutcome> => {
+    const lockAcquire = await measurePhase(async () => {
+      await delay(1);
+      return !options.skip;
     });
-  } catch {
-    threw = true;
-  }
+    if (!lockAcquire.value) {
+      return {
+        fields: createDestinationAttemptWideEventFields({
+          attemptStartedAt,
+          destinationLookupDurationMs: 0,
+          lockAcquireDurationMs: lockAcquire.durationMs,
+          providerResolveDurationMs: 0,
+          readPoolWindow,
+          sourceAuthorityDurationMs: 0,
+        }),
+        issuedDuringAttempt: issued.length - issuedBefore,
+        syncEvent: null,
+        threw: false,
+      };
+    }
 
-  const fields = createDestinationAttemptWideEventFields({
-    attemptStartedAt,
-    destinationLookupDurationMs: destinationLookup.durationMs,
-    lockAcquireDurationMs: lockAcquire.durationMs,
-    providerResolveDurationMs: providerResolve.durationMs,
-    readPoolWindow,
-    sourceAuthorityDurationMs: sourceAuthority.durationMs,
+    const destinationLookup = await measurePhase(
+      async () => await (client.unsafe("select destination", []) as Promise<unknown>),
+    );
+    const providerResolve = await measurePhase(
+      async () => await (client.unsafe("select account", []) as Promise<unknown>),
+    );
+    const sourceAuthority = await measurePhase(
+      async () => await (client.unsafe("select coverage", []) as Promise<unknown>),
+    );
+
+    let syncEvent: Record<string, unknown> | null = null;
+    let threw = false;
+    try {
+      await syncCalendar({
+        calendarId: "dest-cal-1",
+        flush: async () => {
+          await client.begin(async (transaction) => {
+            await (transaction.unsafe("insert mapping", []) as Promise<unknown>);
+            await transaction.savepoint(async (nested) => {
+              await (nested.unsafe("update checkpoint", []) as Promise<unknown>);
+              if (options.flushFails) {
+                throw new Error("flush rolled back");
+              }
+            });
+          });
+        },
+        isCurrent: async () => {
+          await (client.unsafe("select still current", []) as Promise<unknown>);
+          return true;
+        },
+        onSyncEvent: (event) => {
+          syncEvent = event as Record<string, unknown>;
+        },
+        provider: {
+          deleteEvents: () => Promise.resolve([]),
+          listRemoteEvents: () => Promise.resolve([]),
+          pushEvents: (events) =>
+            Promise.resolve(
+              events.map((event) => ({
+                deleteIdentifier: `del-${event.id}`,
+                eventId: event.id,
+                remoteEventUid: `remote-${event.id}`,
+                success: true as const,
+              })),
+            ),
+        },
+        readState: async () =>
+          await (client.begin(async (transaction) => {
+            await (transaction.unsafe("select local events", []) as Promise<unknown>);
+            await (transaction.unsafe("select mappings", []) as Promise<unknown>);
+            return {
+              existingMappings: [],
+              localEvents: options.eventIds.map((id) => makeLocalEvent(id)),
+              remoteEvents: [],
+            };
+          }) as Promise<{
+            existingMappings: never[];
+            localEvents: MaterializedSyncableEvent[];
+            remoteEvents: never[];
+          }>),
+        reconciliationScope: RECONCILIATION_SCOPE,
+        userId: "user-1",
+      });
+    } catch {
+      threw = true;
+    }
+
+    const fields = createDestinationAttemptWideEventFields({
+      attemptStartedAt,
+      destinationLookupDurationMs: destinationLookup.durationMs,
+      lockAcquireDurationMs: lockAcquire.durationMs,
+      providerResolveDurationMs: providerResolve.durationMs,
+      readPoolWindow,
+      sourceAuthorityDurationMs: sourceAuthority.durationMs,
+    });
+
+    return {
+      fields,
+      issuedDuringAttempt: issued.length - issuedBefore,
+      syncEvent,
+      threw,
+    };
   });
-
-  return {
-    fields,
-    issuedDuringAttempt: issued.length - issuedBefore,
-    syncEvent,
-    threw,
-  };
 };
 
 const sumEnginePhases = (event: Record<string, unknown>): number =>

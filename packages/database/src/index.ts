@@ -2,8 +2,8 @@ export { createDatabase, closeDatabase } from "./utils/database";
 export { classifyDatabaseError, getDatabaseErrorDetails } from "./utils/errors";
 export {
   instrumentDatabasePool,
-  openDatabasePoolWindow,
   resetDatabasePoolTelemetry,
+  withDatabasePoolWindow,
 } from "./utils/pool-telemetry";
 export type { DatabasePoolWindow, DatabasePoolWindowSample } from "./utils/pool-telemetry";
 export type { DatabaseErrorClassification, DatabaseErrorDetails } from "./utils/errors";
