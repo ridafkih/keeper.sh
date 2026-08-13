@@ -46,4 +46,23 @@ describe("isCalDAVAuthenticationError", () => {
   it("returns false for non-auth operational errors", () => {
     expect(isCalDAVAuthenticationError(new Error("cannot find homeUrl"))).toBe(false);
   });
+
+  it("returns false when our own pool rejects the connection password", () => {
+    const postgresError = Object.assign(
+      new Error("password authentication failed for user \"keeper\""),
+      { code: "ERR_POSTGRES_SERVER_ERROR", errno: "28P01" },
+    );
+
+    expect(isCalDAVAuthenticationError(postgresError)).toBe(false);
+  });
+
+  it("returns false when a wrapped pool failure surfaces as the cause", () => {
+    const postgresError = Object.assign(
+      new Error("password authentication failed for user \"keeper\""),
+      { code: "ERR_POSTGRES_SERVER_ERROR", errno: "28P01" },
+    );
+    const wrapped = new Error("Failed query", { cause: postgresError });
+
+    expect(isCalDAVAuthenticationError(wrapped)).toBe(false);
+  });
 });

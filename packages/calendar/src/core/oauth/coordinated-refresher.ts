@@ -5,6 +5,7 @@ import {
   calendarAccountsTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
+import { REAUTHENTICATION_TOKEN_REFRESH } from "@keeper.sh/constants";
 import { eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
@@ -48,7 +49,10 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
           if (isOAuthReauthRequiredError(error)) {
             await database
               .update(calendarAccountsTable)
-              .set({ needsReauthentication: true })
+              .set({
+                needsReauthentication: true,
+                reauthenticationSource: REAUTHENTICATION_TOKEN_REFRESH,
+              })
               .where(eq(calendarAccountsTable.id, calendarAccountId));
           }
           throw error;

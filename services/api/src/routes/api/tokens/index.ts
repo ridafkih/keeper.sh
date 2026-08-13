@@ -4,6 +4,7 @@ import { desc, eq } from "drizzle-orm";
 import { database } from "@/context";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
+import { labelFailureResponse } from "@/utils/error-labelling";
 import {
   generateApiToken,
   hashApiToken,
@@ -67,7 +68,12 @@ const POST = withWideEvent(
         },
         { status: HTTP_STATUS.CREATED },
       );
-    } catch {
+    } catch (error) {
+      const databaseResponse = labelFailureResponse(error, { slug: "invalid-request-body" });
+      if (databaseResponse) {
+        return databaseResponse;
+      }
+
       return ErrorResponse.badRequest("Token name is required.").toResponse();
     }
   }),

@@ -12,6 +12,7 @@ import {
 } from "../../../core/source/write-event-states";
 import { buildCalDAVSourceEvents } from "./window";
 import type { SourceEvent } from "../../../core/types";
+import { REAUTHENTICATION_SOURCE_CREDENTIALS } from "@keeper.sh/constants";
 import { calendarAccountsTable, calendarsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import type { BunSQLClient } from "../../../core/database-client";
@@ -203,7 +204,10 @@ const createCalDAVSourceProvider = (
       if (isCalDAVAuthenticationError(error)) {
         await database
           .update(calendarAccountsTable)
-          .set({ needsReauthentication: true })
+          .set({
+            needsReauthentication: true,
+            reauthenticationSource: REAUTHENTICATION_SOURCE_CREDENTIALS,
+          })
           .where(eq(calendarAccountsTable.id, account.calendarAccountId));
       }
 

@@ -7,6 +7,7 @@ import { database, getCachedSyncAggregate, getCurrentSyncAggregate } from "@/con
 import { resolveSyncAggregatePayload } from "./websocket-payload";
 import { runSendInitialSyncStatus } from "./websocket-initial-status";
 import { context, widelog } from "@/utils/logging";
+import { labelFailure } from "@/utils/error-labelling";
 
 const selectLatestDestinationSyncedAt = async (userId: string): Promise<Date | null> => {
   const [aggregate] = await database
@@ -61,7 +62,7 @@ const runWebsocketBoundary = (
     try {
       await widelog.time.measure("duration_ms", () => callback());
     } catch (error) {
-      widelog.errorFields(error, { slug: "unclassified" });
+      labelFailure(error, { slug: "unclassified" });
       throw error;
     } finally {
       widelog.flush();
