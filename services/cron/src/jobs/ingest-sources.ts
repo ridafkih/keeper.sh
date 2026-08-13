@@ -69,6 +69,22 @@ const resetIngestBackoff = async (calendarId: string): Promise<void> => {
     .where(eq(calendarsTable.id, calendarId));
 };
 
+const clearReauthenticationDemand = async (
+  accountId: string,
+  isCurrent: () => Promise<boolean>,
+): Promise<void> => {
+  if (!await isCurrent()) {
+    return;
+  }
+  await database
+    .update(calendarAccountsTable)
+    .set({ needsReauthentication: false })
+    .where(and(
+      eq(calendarAccountsTable.id, accountId),
+      eq(calendarAccountsTable.needsReauthentication, true),
+    ));
+};
+
 const applyIngestBackoff = async (
   calendarId: string,
   currentFailureCount: number,
@@ -557,6 +573,7 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
                     });
                   },
                 });
+                await clearReauthenticationDemand(currentSource.accountId, isCurrent);
                 return {
                   eventsAdded: ingestionResult.eventsAdded,
                   eventsRemoved: ingestionResult.eventsRemoved,
@@ -756,6 +773,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                     });
                   },
                 });
+                await clearReauthenticationDemand(source.accountId, isCurrent);
                 return {
                   eventsAdded: ingestionResult.eventsAdded,
                   eventsRemoved: ingestionResult.eventsRemoved,

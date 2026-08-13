@@ -238,12 +238,12 @@ describe("caldav ingest labelling of our own pool failures", () => {
 
   it("leaves no re-authentication demand behind once the pool recovers", async () => {
     await runTick(rejectedPoolPassword);
-    const demandedReauth = updates.some((values) => values.needsReauthentication === true);
+    const demandedOnFailure = updates.some((values) => values.needsReauthentication === true);
 
     await runTick(SUCCESSFUL_INGEST);
-    const clearedReauth = updates.some((values) => values.needsReauthentication === false);
+    const demandedOnRecovery = updates.some((values) => values.needsReauthentication === true);
 
-    expect([demandedReauth, clearedReauth]).toEqual([false, false]);
+    expect([demandedOnFailure, demandedOnRecovery]).toEqual([false, false]);
   });
 
   it("converges on the same answer across repeated ticks of the same pool failure", async () => {

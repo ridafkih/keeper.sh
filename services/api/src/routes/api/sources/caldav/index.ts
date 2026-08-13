@@ -1,3 +1,4 @@
+import { TraversalError } from "arktype";
 import { createCalDAVSourceSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { withAuth, withWideEvent } from "@/utils/middleware";
@@ -11,6 +12,8 @@ import {
   getUserCalDAVSources,
   createCalDAVSource,
 } from "@/utils/caldav-sources";
+
+const SOURCE_CREATE_FAILED_MESSAGE = "Failed to create CalDAV source";
 
 const GET = withWideEvent(
   withAuth(async ({ request, userId }) => {
@@ -54,6 +57,11 @@ const POST = withWideEvent(
         return Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT });
       }
 
+      if (error instanceof TraversalError) {
+        widelog.errorFields(error, { slug: "invalid-request-body" });
+        return ErrorResponse.badRequest(error.message).toResponse();
+      }
+
       const databaseResponse = labelFailureResponse(error, {
         slug: "caldav-connection-failed",
       });
@@ -61,11 +69,7 @@ const POST = withWideEvent(
         return databaseResponse;
       }
 
-      const fallbackMessage = "Invalid request body";
-      if (error instanceof Error) {
-        return ErrorResponse.badRequest(error.message).toResponse();
-      }
-      return ErrorResponse.badRequest(fallbackMessage).toResponse();
+      return ErrorResponse.internal(SOURCE_CREATE_FAILED_MESSAGE).toResponse();
     }
   }),
 );
