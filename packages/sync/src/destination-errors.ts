@@ -49,5 +49,39 @@ const hasNoSuccessfulOperations = (result: DestinationOperationCounts): boolean 
   && result.conflictsResolved === 0
   && result.addFailed + result.removeFailed > 0;
 
-export { getErrorMessage, hasNoSuccessfulOperations, isBackoffEligibleError, BACKOFF_ERROR_PATTERNS };
-export type { DestinationOperationCounts };
+const hasAttemptedOperations = (result: DestinationOperationCounts): boolean =>
+  result.added
+  + result.removed
+  + result.conflictsResolved
+  + result.addFailed
+  + result.removeFailed > 0;
+
+type DestinationAttemptVerdict = "failed" | "inconclusive" | "succeeded";
+
+/**
+ * A superseded run that never attempted an operation proves nothing about the
+ * destination, so it must neither escalate nor clear the backoff. Escalating
+ * would punish a healthy destination for a busy worker; clearing would let a
+ * broken one oscillate between failureCount 1 and 0 forever.
+ */
+const resolveDestinationAttemptVerdict = (
+  result: DestinationOperationCounts,
+  superseded: boolean,
+): DestinationAttemptVerdict => {
+  if (superseded && !hasAttemptedOperations(result)) {
+    return "inconclusive";
+  }
+  if (hasNoSuccessfulOperations(result)) {
+    return "failed";
+  }
+  return "succeeded";
+};
+
+export {
+  BACKOFF_ERROR_PATTERNS,
+  getErrorMessage,
+  hasNoSuccessfulOperations,
+  isBackoffEligibleError,
+  resolveDestinationAttemptVerdict,
+};
+export type { DestinationAttemptVerdict, DestinationOperationCounts };

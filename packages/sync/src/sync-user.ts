@@ -31,7 +31,12 @@ import {
 import { and, arrayContains, eq, inArray } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
-import { getErrorMessage, hasNoSuccessfulOperations, isBackoffEligibleError } from "./destination-errors";
+import {
+  getErrorMessage,
+  isBackoffEligibleError,
+  resolveDestinationAttemptVerdict,
+} from "./destination-errors";
+import type { DestinationAttemptVerdict } from "./destination-errors";
 import { resolveSyncProvider } from "./resolve-provider";
 import type { OAuthConfig } from "./resolve-provider";
 import {
@@ -429,6 +434,27 @@ const isDestinationAttemptEligible = (
 ): boolean =>
   destination.nextAttemptAt === null || destination.nextAttemptAt <= now;
 
+/**
+ * The conditions under which this worker must stop touching the destination
+ * even though it still holds the lock. Shared by the in-flight check handed to
+ * syncCalendar and the post-run verdict, so both read the same run as superseded.
+ */
+const isDestinationAttemptSuperseded = (
+  config: SyncConfig,
+  sourceCalendarsChanged: boolean,
+): boolean => {
+  if (sourceCalendarsChanged) {
+    return true;
+  }
+  if (config.abortSignal?.aborted === true) {
+    return true;
+  }
+  if (!config.deadlineMs) {
+    return false;
+  }
+  return Date.now() >= config.deadlineMs;
+};
+
 const isCompletedAttemptCurrent = async (
   handle: SyncLockHandle,
   redis: Redis,
@@ -442,6 +468,20 @@ const resetDestinationBackoffIfNeeded = async (
 ): Promise<void> => {
   if (destination.failureCount > 0) {
     await resetDestinationBackoff(database, destination.calendarId);
+  }
+};
+
+const applyDestinationAttemptVerdict = async (
+  database: BunSQLDatabase,
+  destination: DestinationAttempt,
+  verdict: DestinationAttemptVerdict,
+): Promise<void> => {
+  if (verdict === "failed") {
+    await applyDestinationBackoff(database, destination.calendarId, destination.failureCount);
+    return;
+  }
+  if (verdict === "succeeded") {
+    await resetDestinationBackoffIfNeeded(database, destination);
   }
 };
 
@@ -659,23 +699,20 @@ const syncDestinationsForUser = async (
         sourceCalendarIdsBeforeRemoteRead: sourceCalendarIds,
         verifiedSourceCalendarCount: authoritativeSourceWindows.size,
       });
+      const isAttemptSuperseded = (): boolean =>
+        isDestinationAttemptSuperseded(config, sourceCalendarsChangedDuringRemoteRead);
+      const isAttemptCurrent = (): Promise<boolean> => {
+        if (isAttemptSuperseded()) {
+          return Promise.resolve(false);
+        }
+        return handle.isCurrent();
+      };
       const result = await syncCalendar({
         userId: destination.userId,
         calendarId: destination.calendarId,
         provider: providerRef,
         readState: () => Promise.resolve(reconciliationState),
-        isCurrent: () => {
-          if (sourceCalendarsChangedDuringRemoteRead) {
-            return Promise.resolve(false);
-          }
-          if (config.abortSignal?.aborted) {
-            return Promise.resolve(false);
-          }
-          if (config.deadlineMs && Date.now() >= config.deadlineMs) {
-            return Promise.resolve(false);
-          }
-          return handle.isCurrent();
-        },
+        isCurrent: isAttemptCurrent,
         isInvalidated: () => isCalendarInvalidated(redis, destination.calendarId),
         flush: createDatabaseFlush(database),
         onProgress: callbacks?.onProgress,
@@ -722,11 +759,11 @@ const syncDestinationsForUser = async (
         continue;
       }
 
-      if (hasNoSuccessfulOperations(result)) {
-        await applyDestinationBackoff(database, destination.calendarId, destination.failureCount);
-      } else {
-        await resetDestinationBackoffIfNeeded(database, destination);
-      }
+      await applyDestinationAttemptVerdict(
+        database,
+        destination,
+        resolveDestinationAttemptVerdict(result, isAttemptSuperseded()),
+      );
 
       added += result.added;
       addFailed += result.addFailed;
