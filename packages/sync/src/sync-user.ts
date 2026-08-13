@@ -4,6 +4,7 @@ import {
   getEventMappingsForDestination,
   createDatabaseFlush,
   createGoogleUserRateLimiter,
+  createRedisRateLimiter,
   buildCalendarBackoffState,
   RESET_CALENDAR_BACKOFF_STATE,
   createSyncWindow,
@@ -12,6 +13,7 @@ import {
   getConfigurableSyncWindow,
   intersectSyncWindows,
 } from "@keeper.sh/calendar";
+import { OUTLOOK_REQUESTS_PER_MINUTE } from "@keeper.sh/constants";
 import { syncRangeSchema } from "@keeper.sh/data-schemas";
 import type { Plan } from "@keeper.sh/data-schemas";
 import type { RedisRateLimiter } from "@keeper.sh/calendar";
@@ -42,24 +44,25 @@ import {
   type SyncLockHandle,
 } from "./sync-lock";
 
-const GOOGLE_REQUESTS_PER_MINUTE = 500;
-const OUTLOOK_REQUESTS_PER_MINUTE = 300;
-
-const PROVIDER_REQUESTS_PER_MINUTE: Record<string, number> = {
-  google: GOOGLE_REQUESTS_PER_MINUTE,
-  outlook: OUTLOOK_REQUESTS_PER_MINUTE,
-};
-
+/*
+ * Google's quota is shared across ingest and push, so the push lane claims only its
+ * reserved share of the one per-user key. Outlook throttles per mailbox instead, so it
+ * gets a key of its own at the mailbox ceiling.
+ */
 const createProviderRateLimiter = (
   redis: Redis,
   userId: string,
   provider: string,
 ): RedisRateLimiter | undefined => {
-  const requestsPerMinute = PROVIDER_REQUESTS_PER_MINUTE[provider];
-  if (!requestsPerMinute) {
+  if (provider === "google") {
+    return createGoogleUserRateLimiter(redis, userId, "push");
+  }
+  if (provider !== "outlook") {
     return;
   }
-  return createRedisRateLimiter(redis, `ratelimit:${userId}:${provider}`, { requestsPerMinute });
+  return createRedisRateLimiter(redis, `ratelimit:${userId}:outlook`, {
+    requestsPerMinute: OUTLOOK_REQUESTS_PER_MINUTE,
+  });
 };
 
 const resetDestinationBackoff = async (
@@ -499,8 +502,6 @@ const syncDestinationsForUser = async (
   let removeFailed = 0;
   const errors: string[] = [];
   const syncEvents: Record<string, unknown>[] = [];
-
-  const rateLimiter = createGoogleUserRateLimiter(redis, userId, "push");
 
   for (const destinationCandidate of destinations) {
     if (config.abortSignal?.aborted) {
