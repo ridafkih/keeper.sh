@@ -32,6 +32,30 @@ describe("getDatabaseErrorDetails", () => {
     });
   });
 
+  it("classifies a rejected database credential wrapped by the query builder", () => {
+    const cause = Object.assign(new Error('password authentication failed for user "keeper"'), {
+      errno: "28P01",
+      name: "PostgresError",
+    });
+
+    expect(classifyDatabaseError(new Error("Failed query", { cause }))).toEqual({
+      slug: "db-connection-unavailable",
+      sqlState: "28P01",
+    });
+  });
+
+  it("classifies a pg_hba rejection raised directly by the driver", () => {
+    const error = Object.assign(new Error('no pg_hba.conf entry for host "10.0.0.4"'), {
+      errno: "28000",
+      name: "PostgresError",
+    });
+
+    expect(classifyDatabaseError(error)).toEqual({
+      slug: "db-connection-unavailable",
+      sqlState: "28000",
+    });
+  });
+
   it("classifies a pool connection closed by the driver", () => {
     const error = Object.assign(new Error("Connection closed"), {
       code: "ERR_POSTGRES_CONNECTION_CLOSED",

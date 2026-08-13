@@ -23,11 +23,6 @@ const USER_ID = "user-1";
 const CALENDAR_ID = "destination-1";
 const SOURCE_ID = "source-1";
 
-/*
- * Mappings are the memory that makes a second run different from the first, so
- * a convergence test that stubs the flush proves nothing. This store plays the
- * part of the mapping table across runs.
- */
 const mappingStore = new Map<string, EventMapping>();
 let mappingSequence = 0;
 
@@ -257,11 +252,6 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-/*
- * The scheduler enqueues a push job on a fixed cadence regardless of the stored
- * backoff, so the only thing standing between a broken destination and a
- * request per minute is nextAttemptAt.
- */
 const tickForHours = async (
   database: unknown,
   hours: number,
@@ -377,12 +367,6 @@ describe("a destination the provider always rejects, driven by the real schedule
   });
 });
 
-/*
- * Treating a truncated run as inconclusive protects a healthy destination from
- * a busy worker, and the price is that a destination truncated every single
- * time keeps its slot at full cadence. Pin the price so it cannot grow into an
- * escalation nobody asked for or a backoff nobody can clear.
- */
 describe("a destination whose every run is cut short by the worker deadline", () => {
   it("neither escalates nor clears, and keeps being attempted", async () => {
     const { database, row, writes } = createHarness({
@@ -542,13 +526,6 @@ describe("a destination that disappears from the eligible set mid-run", () => {
   });
 });
 
-/*
- * A push accepted without a remote id counts as neither a success nor a
- * failure, so the run comes back with every counter at zero even though it
- * attempted an operation. The only event Google refuses to serialize is a
- * working-location event, and the sync policy drops those before they are ever
- * read, so the verdict for that shape is pinned rather than fixed.
- */
 describe("a run whose only push was accepted without a remote id", () => {
   it("cannot be reached by a working location event, which never leaves the source", () => {
     expect(serializeGoogleEvent(
@@ -605,11 +582,6 @@ describe("a run whose only push was accepted without a remote id", () => {
   });
 });
 
-/*
- * The same silent no-op reached through a replace: the mirror is deleted first
- * and the re-push comes back accepted without a remote id, so nothing is
- * flushed and the mapping still points at the mirror that was just removed.
- */
 describe("a mirror replaced by a push the provider accepts without a remote id", () => {
   it("does not delete the same mirror again on every subsequent run", async () => {
     const { database, row } = createHarness();
@@ -649,11 +621,6 @@ describe("a mirror replaced by a push the provider accepts without a remote id",
   });
 });
 
-/*
- * A mirror the provider will not delete is the mirror image of a poison add:
- * the destination is otherwise healthy, and the only pending operation can
- * never succeed.
- */
 describe("a mirror the provider refuses to delete", () => {
   it("does not re-create the mirror it just failed to remove", async () => {
     const { database } = createHarness();

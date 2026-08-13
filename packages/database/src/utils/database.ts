@@ -1,6 +1,7 @@
 import type { SQL } from "bun";
 import { drizzle } from "drizzle-orm/bun-sql";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { instrumentDatabasePool } from "./pool-telemetry";
 
 interface DatabasePoolOptions {
   statementTimeoutMs?: number;
@@ -72,6 +73,10 @@ const createDatabase = async (url: string, options?: DatabasePoolOptions): Promi
       prepare: PREPARED_STATEMENTS_ENABLED,
     },
   });
+  instrumentDatabasePool(
+    database.$client as unknown as Parameters<typeof instrumentDatabasePool>[0],
+    POOL_MAX_CONNECTIONS,
+  );
   await waitForConnection(database);
   return database;
 };

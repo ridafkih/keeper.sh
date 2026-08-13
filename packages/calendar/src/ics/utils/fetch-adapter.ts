@@ -3,7 +3,7 @@ import type { FetchEventsResult } from "../../core/sync-engine/ingest";
 import type { SafeFetchOptions } from "../../utils/safe-fetch";
 import { coerceCompliantDate } from "../patches/coerce-compliant-date";
 import { parseIcsCalendarLenient } from "./lenient-parser";
-import { parseIcsEvents } from "./parse-ics-events";
+import { parseIcsEventsWithDiagnostics } from "./parse-ics-events";
 import { pullRemoteCalendar } from "./pull-remote-calendar";
 import { prepareCalendarSnapshot } from "./create-snapshot";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
@@ -71,6 +71,16 @@ interface EventTimeZoneContext {
 interface IcsLineBlock {
   insideEvent: boolean;
   lines: string[];
+}
+
+interface FloatingEventFailure {
+  error: RangeError;
+  uid?: string;
+}
+
+interface NormalizedFloatingCalendar {
+  failures: FloatingEventFailure[];
+  ical: string;
 }
 
 interface EventFloatingZones {
@@ -253,19 +263,51 @@ const normalizeFloatingEventBlock = (
   });
 };
 
+const readEventUid = (lines: readonly string[]): string | undefined => lines
+  .map((line) => parseIcsPropertyParts(line))
+  .find((parts) => parts?.propertyName === "UID")?.value;
+
+const normalizeFloatingEventDates = (
+  ical: string,
+  calendarTimeZone: string | undefined,
+): NormalizedFloatingCalendar => {
+  const unfolded = ical.replaceAll(/\r?\n[\t ]/g, "");
+  const declaredOffsets = readDeclaredTimeZoneOffsets(unfolded);
+  const failures: FloatingEventFailure[] = [];
+
+  const lines = splitIcsLineBlocks(unfolded.split(/\r?\n/)).flatMap((block) => {
+    if (!block.insideEvent) {
+      return block.lines;
+    }
+    try {
+      return normalizeFloatingEventBlock(block, calendarTimeZone, declaredOffsets);
+    } catch (error) {
+      if (!(error instanceof RangeError)) {
+        throw error;
+      }
+      const uid = readEventUid(block.lines);
+      failures.push({ error, ...uid && { uid } });
+      return block.lines;
+    }
+  });
+
+  return { failures, ical: lines.join("\r\n") };
+};
+
+/*
+ * For CalDAV, which reads one resource at a time and already quarantines and
+ * counts the resources it cannot read.
+ */
 const applyCalendarTimeZoneToFloatingEventDates = (
   ical: string,
   calendarTimeZone: string | undefined,
 ): string => {
-  const unfolded = ical.replaceAll(/\r?\n[\t ]/g, "");
-  const declaredOffsets = readDeclaredTimeZoneOffsets(unfolded);
-
-  return splitIcsLineBlocks(unfolded.split(/\r?\n/)).flatMap((block) => {
-    if (!block.insideEvent) {
-      return block.lines;
-    }
-    return normalizeFloatingEventBlock(block, calendarTimeZone, declaredOffsets);
-  }).join("\r\n");
+  const normalized = normalizeFloatingEventDates(ical, calendarTimeZone);
+  const [failure] = normalized.failures;
+  if (failure) {
+    throw failure.error;
+  }
+  return normalized.ical;
 };
 
 const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetcher => {
@@ -299,17 +341,17 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
       patches: [coerceCompliantDate],
     });
     const calendarTimeZone = normalizeTimezone(initialCalendar.nonStandard?.wrTimezone);
-    const normalizedIcal = applyCalendarTimeZoneToFloatingEventDates(ical, calendarTimeZone);
+    const normalized = normalizeFloatingEventDates(ical, calendarTimeZone);
     let calendar = initialCalendar;
-    if (normalizedIcal !== ical) {
+    if (normalized.ical !== ical) {
       calendar = parseIcsCalendarLenient({
-        icsString: normalizedIcal,
+        icsString: normalized.ical,
         patches: [coerceCompliantDate],
       });
     }
-    const parsed = parseIcsEvents(calendar);
+    const parsed = parseIcsEventsWithDiagnostics(calendar);
     const recurrenceTimeZones = resolveRecurrenceTimeZones(
-      parsed,
+      parsed.events,
       readDeclaredTimeZoneOffsets(ical),
     );
     let events: SourceEvent[] = recurrenceTimeZones.events.map((event) => ({
@@ -347,9 +389,17 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
     const unsupportedEventUids = [...new Set([
       ...recurrenceDateUids,
       ...recurrenceTimeZones.unsupportedUids,
+      ...parsed.unsupportedEvents.map(({ uid }) => uid),
+      ...normalized.failures.flatMap(({ uid }) => uid ?? []),
     ])];
     const result: FetchEventsResult = {
       events,
+      // Zero outside the window: an ICS feed is retained whole, never filtered.
+      discardedEventCounts: {
+        outsideSyncWindow: 0,
+        unrepresentable: parsed.unrepresentableCount,
+      },
+      selfAuthoredEventCount: parsed.selfAuthoredCount,
       syncWindow,
       coverage: {
         futureRange,

@@ -21,12 +21,23 @@ const CALENDAR_NON_STANDARD_VALUES: ParseNonStandardValues<CalendarNonStandardVa
   },
 };
 
-const parseIcsCalendar = (options: ParseIcsCalendarOptions) =>
-  resolveCalendarZonedInstants(convertIcsCalendar<CalendarNonStandardValues>(
+const CALENDAR_BEGIN_PATTERN = /(?:^|[\r\n])BEGIN:VCALENDAR[ \t]*(?:[\r\n]|$)/i;
+
+/*
+ * A body that never opened a VCALENDAR is unreadable, not empty; parsing it
+ * into zero events would read downstream as "delete everything".
+ */
+const parseIcsCalendar = (options: ParseIcsCalendarOptions) => {
+  const icsString = synthesizeMissingVtimezones(stripIcsByteOrderMark(options.icsString));
+  if (!CALENDAR_BEGIN_PATTERN.test(icsString)) {
+    throw new Error("Not an iCalendar document: no BEGIN:VCALENDAR line");
+  }
+  return resolveCalendarZonedInstants(convertIcsCalendar<CalendarNonStandardValues>(
     globalThis.undefined,
-    synthesizeMissingVtimezones(stripIcsByteOrderMark(options.icsString)),
+    icsString,
     { nonStandard: CALENDAR_NON_STANDARD_VALUES },
   ));
+};
 
 export { parseIcsCalendar };
 export type { CalendarNonStandardValues };

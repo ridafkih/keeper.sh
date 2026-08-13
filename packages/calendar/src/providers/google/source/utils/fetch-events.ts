@@ -13,7 +13,7 @@ import {
 import { isAuthError } from "../../shared/errors";
 import type { GoogleApiError } from "../../types";
 import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
-import { parseEventDateTime } from "../../shared/date-time";
+import { parseEventTime } from "../../shared/date-time";
 import { isKeeperEvent } from "../../../../core/events/identity";
 import { withBackoff } from "../../../../core/utils/backoff";
 import { isRateLimitApiError } from "../../shared/errors";
@@ -336,32 +336,58 @@ const resolveSourceEventType = (
   return "default";
 };
 
-const parseGoogleEvents = (events: GoogleCalendarEvent[]): EventTimeSlot[] => {
+interface ParsedSourceEventDiagnostics {
+  events: EventTimeSlot[];
+  selfAuthoredCount: number;
+  unrepresentableCount: number;
+}
+
+const parseGoogleEventsWithDiagnostics = (
+  events: GoogleCalendarEvent[],
+): ParsedSourceEventDiagnostics => {
   const result: EventTimeSlot[] = [];
+  let selfAuthoredCount = 0;
+  let unrepresentableCount = 0;
 
   for (const event of events) {
-    if (!event.start || !event.end || !event.iCalUID) {
+    /*
+     * Every member of a Google time object is optional, so `{ timeZone: "UTC" }`
+     * reaches here; guarding on the object alone would let it through.
+     */
+    const startTime = parseEventTime(event.start);
+    const endTime = parseEventTime(event.end);
+    if (!startTime || !endTime || !event.iCalUID) {
+      unrepresentableCount += 1;
       continue;
     }
     if (isKeeperEvent(event.iCalUID)) {
+      selfAuthoredCount += 1;
       continue;
     }
     result.push({
       availability: resolveGoogleAvailability(event),
       description: event.description,
-      endTime: parseEventDateTime(event.end),
+      endTime,
       isAllDay: isAllDayGoogleEvent(event),
       location: resolveGoogleLocation(event),
       sourceEventType: resolveSourceEventType(event.eventType),
-      startTime: parseEventDateTime(event.start),
-      startTimeZone: event.start.timeZone ?? event.end.timeZone,
+      startTime,
+      startTimeZone: event.start?.timeZone ?? event.end?.timeZone,
       sourceEventId: event.id,
       title: event.summary,
       uid: event.iCalUID,
     });
   }
 
-  return result;
+  return { events: result, selfAuthoredCount, unrepresentableCount };
 };
 
-export { fetchCalendarEvents, parseGoogleEvents, EventsFetchError };
+const parseGoogleEvents = (events: GoogleCalendarEvent[]): EventTimeSlot[] =>
+  parseGoogleEventsWithDiagnostics(events).events;
+
+export {
+  fetchCalendarEvents,
+  parseGoogleEvents,
+  parseGoogleEventsWithDiagnostics,
+  EventsFetchError,
+};

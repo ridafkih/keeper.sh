@@ -67,6 +67,8 @@ interface FetchEventsResult {
   isDeltaSync?: boolean;
   changedEventIds?: string[];
   cancelledEventIds?: string[];
+  /** Series masters whose instance expansion returned nothing for the range. */
+  unexpandedSeriesMasterCount?: number;
 }
 
 interface EventTimeSlot {

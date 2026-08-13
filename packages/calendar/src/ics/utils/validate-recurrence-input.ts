@@ -1,6 +1,6 @@
 import type { IcsRecurrenceRule } from "ts-ics";
 import { visitIcsProperties } from "./apply-patches";
-import { resolveTimeZone } from "./timezone-instant";
+import { isSupportedTimeZone } from "./timezone-instant";
 import { resolveDeclaredTimeZone } from "./resolve-timezone-identifier";
 import type { DeclaredTimeZoneOffsets } from "./resolve-timezone-identifier";
 
@@ -13,6 +13,11 @@ interface RecurrenceTimeZoneInput {
 interface RecurrenceTimeZoneResolution<Event> {
   events: Event[];
   unsupportedUids: string[];
+}
+
+interface UnsupportedRecurrenceEvent {
+  reason: string;
+  uid: string;
 }
 
 interface EventRecurrenceDateState {
@@ -56,14 +61,21 @@ const collectRecurrenceDateEventUids = (ical: string): string[] => {
     .map((state) => state.uid);
 };
 
-const assertSupportedRecurrenceTimeZones = (
-  events: Pick<RecurrenceTimeZoneInput, "recurrenceRule" | "startTimeZone">[],
-): void => {
+/** Recurring events whose TZID no runtime can interpret. */
+const collectUnsupportedRecurrenceTimeZones = (
+  events: readonly RecurrenceTimeZoneInput[],
+): UnsupportedRecurrenceEvent[] => {
+  const unsupported = new Map<string, UnsupportedRecurrenceEvent>();
   for (const event of events) {
-    if (event.recurrenceRule) {
-      resolveTimeZone(event.startTimeZone);
+    if (!event.recurrenceRule || isSupportedTimeZone(event.startTimeZone)) {
+      continue;
     }
+    unsupported.set(event.uid, {
+      reason: `Unsupported calendar timezone: ${event.startTimeZone ?? ""}`,
+      uid: event.uid,
+    });
   }
+  return [...unsupported.values()];
 };
 
 /**
@@ -97,7 +109,8 @@ const resolveRecurrenceTimeZones = <Event extends RecurrenceTimeZoneInput>(
 
 export {
   assertNoUnsupportedRecurrenceDates,
-  assertSupportedRecurrenceTimeZones,
   collectRecurrenceDateEventUids,
+  collectUnsupportedRecurrenceTimeZones,
   resolveRecurrenceTimeZones,
 };
+export type { UnsupportedRecurrenceEvent };

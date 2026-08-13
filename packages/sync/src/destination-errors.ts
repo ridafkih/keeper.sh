@@ -25,6 +25,7 @@ const isBackoffEligibleError = (error: unknown): boolean => {
     return true;
   }
 
+  // A query error's message inlines the SQL and its bound parameters, so customer data can match the patterns below.
   if (isDatabaseError(error)) {
     return false;
   }
@@ -63,12 +64,7 @@ const hasAttemptedOperations = (result: DestinationOperationCounts): boolean =>
 
 type DestinationAttemptVerdict = "failed" | "inconclusive" | "succeeded";
 
-/**
- * A superseded run that never attempted an operation proves nothing about the
- * destination, so it must neither escalate nor clear the backoff. Escalating
- * would punish a healthy destination for a busy worker; clearing would let a
- * broken one oscillate between failureCount 1 and 0 forever.
- */
+// Escalating an unattempted run punishes a healthy destination; clearing lets a broken one oscillate between failureCount 1 and 0 forever.
 const resolveDestinationAttemptVerdict = (
   result: DestinationOperationCounts,
   superseded: boolean,

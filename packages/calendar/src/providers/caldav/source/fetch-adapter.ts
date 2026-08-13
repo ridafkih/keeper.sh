@@ -1,7 +1,7 @@
 import type { SourceIngestionPlan } from "../../../core/sync/sync-range";
 import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
-import { buildCalDAVSourceEvents, isCalDAVEventInSyncWindow } from "./window";
+import { isCalDAVEventInSyncWindow, partitionCalDAVSourceEvents } from "./window";
 import { CalDAVClient } from "../shared/client";
 import { parseICalCalendarsToRemoteEvents } from "../shared/ics";
 
@@ -38,18 +38,23 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
       },
     });
 
-    const resources = parseICalCalendarsToRemoteEvents(
-      objects.flatMap(({ data }) => {
-        if (!data) {
-          return [];
-        }
-        return [data];
-      }),
+    /*
+     * An empty body is an unread resource, not an absent one; it must reach the
+     * parser to be counted as skipped.
+     */
+    const resources = parseICalCalendarsToRemoteEvents(objects.map(({ data }) => data ?? ""));
+    const { events, outsideSyncWindowCount, selfAuthoredEventCount } = partitionCalDAVSourceEvents(
+      resources.events,
+      syncWindow,
     );
-    const events = buildCalDAVSourceEvents(resources.events, syncWindow);
 
     return {
       events,
+      discardedEventCounts: {
+        outsideSyncWindow: outsideSyncWindowCount,
+        unrepresentable: resources.unrepresentableEventCount,
+      },
+      selfAuthoredEventCount,
       syncWindow,
       coverage: {
         futureRange,
@@ -58,6 +63,9 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
       },
       skippedResourceCount: resources.skippedResourceCount,
       skippedResourceReasons: resources.skippedResourceReasons,
+      ...resources.unsupportedEvents.length > 0 && {
+        unsupportedEventUids: resources.unsupportedEvents.map(({ uid }) => uid),
+      },
     };
   };
 

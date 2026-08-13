@@ -16,8 +16,55 @@ import {
   type StoredSourceEventState,
 } from "../source/stored-event-state";
 
+type IngestWideEventFields = Record<string, boolean | number | string>;
+
+/*
+ * Identifier lists are a capped sample; an uncapped one would push the line
+ * past what the log pipeline keeps and take the counters with it.
+ */
+const WIDE_EVENT_LIST_LIMIT = 20;
+const WIDE_EVENT_LIST_MAX_LENGTH = 2048;
+
+const buildOmittedSuffix = (omittedCount: number): string => {
+  if (omittedCount <= 0) {
+    return "";
+  }
+  return ` (+${String(omittedCount)} more)`;
+};
+
+const truncateWideEventList = (list: string, omittedCount: number): string => {
+  const suffix = buildOmittedSuffix(omittedCount);
+  if (list.length <= WIDE_EVENT_LIST_MAX_LENGTH) {
+    return `${list}${suffix}`;
+  }
+  return `${list.slice(0, WIDE_EVENT_LIST_MAX_LENGTH)}... (truncated)${suffix}`;
+};
+
+const summarizeWideEventList = (
+  values: readonly string[],
+  separator = ",",
+): string => truncateWideEventList(
+  values.slice(0, WIDE_EVENT_LIST_LIMIT).join(separator),
+  Math.max(values.length - WIDE_EVENT_LIST_LIMIT, 0),
+);
+
+/**
+ * Events the provider reported that never reach the diff, so the diff removes
+ * their stored state. These counts are the only trace that removal leaves.
+ */
+interface DiscardedSourceEventCounts {
+  outsideSyncWindow: number;
+  unrepresentable: number;
+}
+
 interface FetchEventsResult {
   events: SourceEvent[];
+  discardedEventCounts?: DiscardedSourceEventCounts;
+  /**
+   * Keeper's own mirrored events, skipped on purpose. Kept out of
+   * `discardedEventCounts` so those stay zero on a healthy mirrored calendar.
+   */
+  selfAuthoredEventCount?: number;
   changedEventIds?: string[];
   snapshot?: CalendarSnapshotChange;
   nextSyncToken?: string;
@@ -67,7 +114,7 @@ interface BaseIngestSourceOptions {
   calendarId: string;
   fetchEvents: () => Promise<FetchEventsResult>;
   isCurrent?: () => Promise<boolean>;
-  onIngestEvent?: (event: Record<string, unknown>) => void;
+  onIngestEvent?: (event: IngestWideEventFields) => void;
 }
 
 interface DirectIngestSourceOptions extends BaseIngestSourceOptions {
@@ -131,7 +178,7 @@ const getNonRecurringStoredEventIdsOutsideWindow = (
 const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResult> => {
   const { calendarId, fetchEvents, isCurrent, onIngestEvent } = options;
 
-  const wideEvent: Record<string, unknown> = {
+  const wideEvent: IngestWideEventFields = {
     "calendar.id": calendarId,
     "operation.name": "ingest:source",
     "operation.type": "ingest",
@@ -144,12 +191,27 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     const withPersistenceTransaction = resolvePersistenceTransaction(options);
     const fetchResult = await fetchEvents();
     wideEvent["source_events.count"] = fetchResult.events.length;
+    if (fetchResult.discardedEventCounts) {
+      wideEvent["source_events.discarded_outside_window"] =
+        fetchResult.discardedEventCounts.outsideSyncWindow;
+      wideEvent["source_events.discarded_unrepresentable"] =
+        fetchResult.discardedEventCounts.unrepresentable;
+    }
+    if (typeof fetchResult.selfAuthoredEventCount === "number") {
+      wideEvent["source_events.skipped_self_authored"] = fetchResult.selfAuthoredEventCount;
+    }
+    if (fetchResult.skippedResourceCount) {
+      wideEvent["source_events.skipped_resources"] = fetchResult.skippedResourceCount;
+      wideEvent["source_events.skipped_resource_reasons"] =
+        summarizeWideEventList(fetchResult.skippedResourceReasons ?? [], "; ");
+    }
     let sourceEvents = fetchResult.events;
     const unsupportedEventUids = new Set(fetchResult.unsupportedEventUids);
     if (unsupportedEventUids.size > 0) {
       sourceEvents = sourceEvents.filter(({ uid }) => !unsupportedEventUids.has(uid));
       wideEvent["source_events.unsupported_count"] = unsupportedEventUids.size;
-      wideEvent["source_events.unsupported_uids"] = [...unsupportedEventUids].join(",");
+      wideEvent["source_events.unsupported_uids"] =
+        summarizeWideEventList([...unsupportedEventUids]);
     }
     if (sourceEvents.some((event) => event.recurrenceRule)) {
       if (!fetchResult.syncWindow) {
@@ -172,7 +234,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
         const overBudgetUids = new Set(overBudget.map(({ uid }) => uid));
         sourceEvents = sourceEvents.filter(({ uid }) => !overBudgetUids.has(uid));
         wideEvent["recurrence.over_budget_count"] = overBudget.length;
-        wideEvent["recurrence.over_budget_uids"] = [...overBudgetUids].join(",");
+        wideEvent["recurrence.over_budget_uids"] = summarizeWideEventList([...overBudgetUids]);
       }
     }
 
@@ -206,9 +268,10 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       const invalidStoredEventIds = parseResult.failures.map((failure) => failure.eventId);
       if (parseResult.failures.length > 0) {
         wideEvent["stored_events.invalid_count"] = parseResult.failures.length;
-        wideEvent["stored_events.invalid_ids"] = invalidStoredEventIds;
-        wideEvent["stored_events.validation_errors"] = parseResult.failures.map(
-          (failure) => failure.error.message,
+        wideEvent["stored_events.invalid_ids"] = summarizeWideEventList(invalidStoredEventIds);
+        wideEvent["stored_events.validation_errors"] = summarizeWideEventList(
+          parseResult.failures.map((failure) => failure.error.message),
+          "; ",
         );
       }
 
@@ -314,7 +377,9 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     if (error instanceof RecurrenceMaterializationLimitError) {
       wideEvent["recurrence.calendar_id"] = error.calendarId;
       wideEvent["recurrence.event_id"] = error.eventId;
-      wideEvent["recurrence.event_state_id"] = error.eventStateId;
+      if (error.eventStateId) {
+        wideEvent["recurrence.event_state_id"] = error.eventStateId;
+      }
       wideEvent["recurrence.limit"] = error.limit;
       wideEvent["recurrence.source_event_uid"] = error.sourceEventUid;
     }
@@ -329,6 +394,8 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
 export { ingestSource };
 export type {
   CalendarSnapshotChange,
+  DiscardedSourceEventCounts,
+  IngestWideEventFields,
   IngestSourceOptions,
   IngestionPersistence,
   IngestionPersistenceWork,

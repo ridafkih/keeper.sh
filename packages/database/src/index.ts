@@ -5,6 +5,12 @@ export {
   isDatabaseError,
   resolveDatabaseErrorClassification,
 } from "./utils/errors";
+export {
+  instrumentDatabasePool,
+  resetDatabasePoolTelemetry,
+  withDatabasePoolWindow,
+} from "./utils/pool-telemetry";
+export type { DatabasePoolWindow, DatabasePoolWindowSample } from "./utils/pool-telemetry";
 export type { DatabaseErrorClassification, DatabaseErrorDetails } from "./utils/errors";
 export { account, user } from "./database/auth-schema";
 export { encryptPassword, decryptPassword } from "./encryption";

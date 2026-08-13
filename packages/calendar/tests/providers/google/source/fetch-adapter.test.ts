@@ -34,6 +34,16 @@ const fetchGoogleDeltaWithoutSuccessor = (): Promise<Response> => Promise.resolv
   }],
 }));
 fetchGoogleDeltaWithoutSuccessor.preconnect = originalFetch.preconnect;
+const fetchGoogleDeltaWithoutUid = (): Promise<Response> => Promise.resolve(Response.json({
+  items: [{
+    end: { dateTime: "2026-03-08T15:00:00.000Z", timeZone: "UTC" },
+    id: "google-event-id-1",
+    start: { dateTime: "2026-03-08T14:00:00.000Z", timeZone: "UTC" },
+    status: "confirmed",
+  }],
+  nextSyncToken: "next-google-token",
+}));
+fetchGoogleDeltaWithoutUid.preconnect = originalFetch.preconnect;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -99,6 +109,42 @@ describe("createGoogleSourceFetcher", () => {
       events: [],
       fullSyncRequired: true,
       syncWindow: TEST_PLAN.window,
+    });
+  });
+
+  it("counts the delta events it drops for falling outside the sync window", async () => {
+    globalThis.fetch = fetchOutOfWindowGoogleDelta;
+
+    const result = await createGoogleSourceFetcher({
+      accessToken: "test-token",
+      calendarId: CALENDAR_ID,
+      plan: TEST_PLAN,
+      externalCalendarId: "primary",
+      syncToken: encodeStoredSyncToken("current-google-token", SYNC_TOKEN_VERSION),
+    }).fetchEvents();
+
+    expect(result.discardedEventCounts).toEqual({
+      outsideSyncWindow: 1,
+      unrepresentable: 0,
+    });
+  });
+
+  it("counts the delta events it drops for carrying no usable identity", async () => {
+    globalThis.fetch = fetchGoogleDeltaWithoutUid;
+
+    const result = await createGoogleSourceFetcher({
+      accessToken: "test-token",
+      calendarId: CALENDAR_ID,
+      plan: TEST_PLAN,
+      externalCalendarId: "primary",
+      syncToken: encodeStoredSyncToken("current-google-token", SYNC_TOKEN_VERSION),
+    }).fetchEvents();
+
+    expect(result.events).toEqual([]);
+    expect(result.changedEventIds).toEqual(["google-event-id-1"]);
+    expect(result.discardedEventCounts).toEqual({
+      outsideSyncWindow: 0,
+      unrepresentable: 1,
     });
   });
 });

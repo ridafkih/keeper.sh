@@ -34,15 +34,6 @@ const getDateTimeFormatter = (timeZone: string): Intl.DateTimeFormat => {
   return formatter;
 };
 
-const isSupportedTimeZone = (timeZone: string): boolean => {
-  try {
-    getDateTimeFormatter(timeZone).format(0);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
 const formatIcsUtcOffset = (offsetMinutes: number): string => {
   let sign = "+";
   if (offsetMinutes < 0) {
@@ -54,15 +45,26 @@ const formatIcsUtcOffset = (offsetMinutes: number): string => {
   return `${sign}${hours}${minutes}`;
 };
 
-const resolveTimeZone = (timeZone: string | undefined): string | undefined => {
+const isSupportedTimeZone = (timeZone: string | undefined): boolean => {
   const normalizedTimeZone = normalizeTimezone(timeZone);
   if (!normalizedTimeZone) {
-    return;
+    return true;
   }
 
   try {
     getDateTimeFormatter(normalizedTimeZone).format(0);
   } catch {
+    return false;
+  }
+  return true;
+};
+
+const resolveTimeZone = (timeZone: string | undefined): string | undefined => {
+  const normalizedTimeZone = normalizeTimezone(timeZone);
+  if (!normalizedTimeZone) {
+    return;
+  }
+  if (!isSupportedTimeZone(normalizedTimeZone)) {
     throw new RangeError(`Unsupported calendar timezone: ${timeZone}`);
   }
   return normalizedTimeZone;

@@ -5,7 +5,7 @@ import type {
   OutlookEventsListResponse,
   EventTimeSlot,
 } from "../types";
-import type { MicrosoftApiError } from "../../types";
+import type { MicrosoftApiError, OutlookDateTime } from "../../types";
 import { MICROSOFT_GRAPH_API, GONE_STATUS } from "../../shared/api";
 import { isAuthError, isSimpleAuthError } from "../../shared/errors";
 import { parseEventTime } from "../../shared/date-time";
@@ -253,6 +253,11 @@ const fetchSeriesMasterInstances = async (
   return instances;
 };
 
+interface ExpandedSeriesMasters {
+  events: OutlookCalendarEvent[];
+  unexpandedSeriesMasterCount: number;
+}
+
 const expandSeriesMasters = async (
   accessToken: string,
   calendarId: string,
@@ -260,23 +265,29 @@ const expandSeriesMasters = async (
   timeMin: Date,
   timeMax: Date,
   signal?: AbortSignal,
-): Promise<OutlookCalendarEvent[]> => {
+): Promise<ExpandedSeriesMasters> => {
   const expanded: OutlookCalendarEvent[] = [];
+  let unexpandedSeriesMasterCount = 0;
   for (const event of events) {
     if (event.type !== SERIES_MASTER_TYPE || !event.id) {
       expanded.push(event);
       continue;
     }
-    expanded.push(...await fetchSeriesMasterInstances(
+    const instances = await fetchSeriesMasterInstances(
       accessToken,
       calendarId,
       event.id,
       timeMin,
       timeMax,
       signal,
-    ));
+    );
+    if (instances.length === 0) {
+      unexpandedSeriesMasterCount += 1;
+      continue;
+    }
+    expanded.push(...instances);
   }
-  return expanded;
+  return { events: expanded, unexpandedSeriesMasterCount };
 };
 
 const deduplicateOutlookEvents = (events: OutlookCalendarEvent[]): OutlookCalendarEvent[] => {
@@ -372,21 +383,25 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
      */
     return { events: [], fullSyncRequired: true };
   }
+  let unexpandedSeriesMasterCount = 0;
   if (timeMin && timeMax) {
-    latestChangedEvents = deduplicateOutlookEvents(await expandSeriesMasters(
+    const expansion = await expandSeriesMasters(
       accessToken,
       calendarId,
       latestChangedEvents,
       timeMin,
       timeMax,
       signal,
-    ));
+    );
+    latestChangedEvents = deduplicateOutlookEvents(expansion.events);
+    ({ unexpandedSeriesMasterCount } = expansion);
   }
   const result: FetchEventsResult = {
     events: latestChangedEvents.filter((event) => !event["@removed"] && !event.isCancelled),
     fullSyncRequired: false,
     isDeltaSync,
     nextDeltaLink: lastDeltaLink,
+    unexpandedSeriesMasterCount,
   };
 
   if (isDeltaSync) {
@@ -486,8 +501,52 @@ const resolveOutlookStartTimeZone = (
   return resolvedResponseTimeZone;
 };
 
-const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => {
+interface OutlookEventInstant {
+  endTime: Date;
+  startTime: Date;
+  startTimeZone: string;
+}
+
+/*
+ * Graph answers with zones it cannot name (`tzone://Microsoft/Custom`) and with
+ * dateTime shapes outside its own contract; both raise RangeError.
+ */
+const parseOutlookEventInstant = (
+  event: OutlookCalendarEvent,
+  start: OutlookDateTime,
+  end: OutlookDateTime,
+): OutlookEventInstant | null => {
+  try {
+    const startTime = parseEventTime(start, event.isAllDay);
+    const endTime = parseEventTime(end, event.isAllDay);
+    if (!startTime || !endTime) {
+      return null;
+    }
+    return {
+      endTime,
+      startTime,
+      startTimeZone: resolveOutlookStartTimeZone(event.originalStartTimeZone, start.timeZone),
+    };
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return null;
+    }
+    throw error;
+  }
+};
+
+interface ParsedOutlookEventDiagnostics {
+  events: EventTimeSlot[];
+  selfAuthoredCount: number;
+  unrepresentableCount: number;
+}
+
+const parseOutlookEventsWithDiagnostics = (
+  events: OutlookCalendarEvent[],
+): ParsedOutlookEventDiagnostics => {
   const result: EventTimeSlot[] = [];
+  let selfAuthoredCount = 0;
+  let unrepresentableCount = 0;
 
   for (const event of events) {
     if (
@@ -497,12 +556,15 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
       || !event.end.timeZone
       || !event.iCalUId
     ) {
+      unrepresentableCount += 1;
       continue;
     }
     if (isKeeperEvent(event.iCalUId)) {
+      selfAuthoredCount += 1;
       continue;
     }
     if (event.categories?.includes(KEEPER_CATEGORY)) {
+      selfAuthoredCount += 1;
       continue;
     }
 
@@ -518,30 +580,36 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
 
     const availability = parseAvailability(event.showAs);
 
-    const startTime = parseEventTime(start, event.isAllDay);
-    const endTime = parseEventTime(end, event.isAllDay);
-    if (!startTime || !endTime) {
+    const instant = parseOutlookEventInstant(event, start, end);
+    if (!instant) {
+      unrepresentableCount += 1;
       continue;
     }
 
     result.push({
       ...availability && { availability },
       description: event.body?.content,
-      endTime,
+      endTime: instant.endTime,
       isAllDay: event.isAllDay ?? false,
       location: event.location?.displayName,
       sourceEventId: event.id,
-      startTime,
-      startTimeZone: resolveOutlookStartTimeZone(
-        event.originalStartTimeZone,
-        start.timeZone,
-      ),
+      startTime: instant.startTime,
+      startTimeZone: instant.startTimeZone,
       ...event.subject && { title: event.subject },
       uid: event.iCalUId,
     });
   }
 
-  return result;
+  return { events: result, selfAuthoredCount, unrepresentableCount };
 };
 
-export { fetchCalendarEvents, fetchCalendarName, parseOutlookEvents, EventsFetchError };
+const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] =>
+  parseOutlookEventsWithDiagnostics(events).events;
+
+export {
+  fetchCalendarEvents,
+  fetchCalendarName,
+  parseOutlookEvents,
+  parseOutlookEventsWithDiagnostics,
+  EventsFetchError,
+};

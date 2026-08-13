@@ -1,3 +1,4 @@
+import { RequestTimeoutError } from "@keeper.sh/calendar";
 import { DrizzleQueryError } from "drizzle-orm/errors";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -192,6 +193,23 @@ const transientProviderUnauthorized = (): IngestionCounts => {
   throw Object.assign(new Error("CalDAV request failed"), { status: 401 });
 };
 
+const providerTimeout = (): IngestionCounts => {
+  throw new RequestTimeoutError(90_000);
+};
+
+const providerTimeoutCarryingStaleAuthText = (): IngestionCounts => {
+  throw Object.assign(new RequestTimeoutError(90_000), {
+    cause: new Error("Invalid credentials"),
+  });
+};
+
+const poolCredentialRejection = (): IngestionCounts => {
+  throw wrapQuery(postgresError(
+    "password authentication failed for user \"keeper\"",
+    { code: "ERR_POSTGRES_SERVER_ERROR", errno: "28P01" },
+  ));
+};
+
 const deadlock = (): IngestionCounts => {
   throw wrapQuery(postgresError(
     "deadlock detected",
@@ -252,6 +270,42 @@ describe("caldav re-authentication demands across failure and recovery", () => {
     }
 
     expect(accountNeedsReauthentication).toBe(false);
+  });
+
+  it("does not raise the demand when the provider request timed out", async () => {
+    await runTick(providerTimeout);
+
+    expect(sourceEvent().fields.slug).not.toBe("provider-auth-failed");
+    expect(accountNeedsReauthentication).toBe(false);
+    expect(updates.some((values) => values.needsReauthentication === true)).toBe(false);
+  });
+
+  it("does not raise the demand when a timeout still carries auth text from an earlier request", async () => {
+    await runTick(providerTimeoutCarryingStaleAuthText);
+
+    expect(sourceEvent().fields.slug).not.toBe("provider-auth-failed");
+    expect(accountNeedsReauthentication).toBe(false);
+    expect(updates.some((values) => values.needsReauthentication === true)).toBe(false);
+  });
+
+  it("does not raise the demand when our own pool rejects the connection password", async () => {
+    await runTick(poolCredentialRejection);
+
+    expect(sourceEvent().fields.slug).toBe("db-connection-unavailable");
+    expect(accountNeedsReauthentication).toBe(false);
+    expect(updates.some((values) => values.needsReauthentication === true)).toBe(false);
+  });
+
+  it("still raises the demand on a genuine provider 401 after those failures", async () => {
+    await runTick(poolCredentialRejection);
+    allowImmediateRetry();
+    await runTick(providerTimeout);
+    allowImmediateRetry();
+
+    await runTick(transientProviderUnauthorized);
+
+    expect(sourceEvent().fields.slug).toBe("provider-auth-failed");
+    expect(accountNeedsReauthentication).toBe(true);
   });
 
   it("does not raise the demand when only our own database is failing", async () => {

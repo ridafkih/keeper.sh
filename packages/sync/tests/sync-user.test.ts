@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { computeSyncOperations } from "@keeper.sh/calendar";
 import type { EventMapping } from "@keeper.sh/calendar";
 import {
+  createDestinationAttemptWideEventFields,
   createDestinationReconciliationScope,
   createDestinationReconciliationWideEventFields,
   OVER_BUDGET_SERIES_UID_SAMPLE_SIZE,
@@ -79,6 +80,50 @@ describe("readDestinationReconciliationState", () => {
     )).rejects.toThrow("remote read failed");
 
     expect(readLocalState).not.toHaveBeenCalled();
+  });
+});
+
+describe("createDestinationAttemptWideEventFields", () => {
+  const POOL_SAMPLE = {
+    failedQueryCount: 1,
+    inFlight: 4,
+    queryCount: 17,
+    queryDurationMs: 63.5,
+    queuedQueryCount: 3,
+  };
+
+  it("reports a total that covers every phase leading up to the reconcile", () => {
+    const fields = createDestinationAttemptWideEventFields({
+      attemptStartedAt: performance.now() - 500,
+      destinationLookupDurationMs: 4.5,
+      lockAcquireDurationMs: 2.25,
+      providerResolveDurationMs: 31,
+      readPoolWindow: () => POOL_SAMPLE,
+      sourceAuthorityDurationMs: 12,
+    });
+
+    expect(fields["sync.attempt.duration_ms"]).toBeGreaterThanOrEqual(500);
+    expect(fields["sync.phase.lock_acquire.duration_ms"]).toBe(2.25);
+    expect(fields["sync.phase.destination_lookup.duration_ms"]).toBe(4.5);
+    expect(fields["sync.phase.provider_resolve.duration_ms"]).toBe(31);
+    expect(fields["sync.phase.source_authority.duration_ms"]).toBe(12);
+  });
+
+  it("carries the database pool sample read at emit time", () => {
+    const fields = createDestinationAttemptWideEventFields({
+      attemptStartedAt: performance.now(),
+      destinationLookupDurationMs: 0,
+      lockAcquireDurationMs: 0,
+      providerResolveDurationMs: 0,
+      readPoolWindow: () => POOL_SAMPLE,
+      sourceAuthorityDurationMs: 0,
+    });
+
+    expect(fields["database.pool.in_flight"]).toBe(4);
+    expect(fields["database.queries.count"]).toBe(17);
+    expect(fields["database.queries.duration_ms"]).toBe(63.5);
+    expect(fields["database.queries.queued_count"]).toBe(3);
+    expect(fields["database.queries.failed_count"]).toBe(1);
   });
 });
 
@@ -248,12 +293,6 @@ describe("createDestinationReconciliationScope", () => {
     syncEventId: `over-budget-series::occurrence-${index}`,
   }));
 
-  /*
-   * The reconciliation scope is what stops a series withheld for exceeding the
-   * occurrence budget from reading as deleted at the source. Dropping or renaming
-   * the field mass-deletes every mirror of that series and mass-re-adds them once
-   * the series recovers, so the wiring is asserted through its real consumer.
-   */
   it("withholds an over-budget series from removal when its state ids are threaded through", () => {
     const scope = createScope(["over-budget-series"]);
 

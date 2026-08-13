@@ -1,6 +1,8 @@
+import { isTimeoutError } from "@keeper.sh/calendar";
 import {
   CalDAVIncompleteMultiGetError,
   CalDAVUnreadableResourceError,
+  isCalDAVAuthenticationError,
 } from "@keeper.sh/calendar/caldav";
 import { isDatabaseError } from "@keeper.sh/database";
 import { requiresReauthentication } from "@/utils/error-flags";
@@ -38,6 +40,7 @@ const resolveMissingCalendarFailure = (error: unknown): MissingCalendarFailure |
     return null;
   }
 
+  // DrizzleQueryError.message inlines the SQL and every bound parameter, so a UID holding "404" satisfies the substring test below.
   if (!(error instanceof Error) || isDatabaseError(error) || requiresReauthentication(error)) {
     return null;
   }
@@ -57,5 +60,16 @@ const resolveMissingCalendarFailure = (error: unknown): MissingCalendarFailure |
   return null;
 };
 
-export { resolveMissingCalendarFailure };
+const hasOwnSlug = (error: unknown): boolean =>
+  error instanceof CalDAVIncompleteMultiGetError
+  || error instanceof CalDAVUnreadableResourceError;
+
+const shouldTreatAsProviderAuthFailure = (error: unknown): boolean => {
+  if (isTimeoutError(error) || hasOwnSlug(error) || isDatabaseError(error)) {
+    return false;
+  }
+  return isCalDAVAuthenticationError(error);
+};
+
+export { resolveMissingCalendarFailure, shouldTreatAsProviderAuthFailure };
 export type { MissingCalendarFailure };

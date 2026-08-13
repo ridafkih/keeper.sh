@@ -21,7 +21,7 @@ import {
   parseICalCalendarsToRemoteEvents,
 } from "../../../src/providers/caldav/shared/ics";
 import { parseIcsCalendar } from "../../../src/ics/utils/parse-ics-calendar";
-import { parseIcsEvents } from "../../../src/ics/utils/parse-ics-events";
+import { parseIcsEvents, parseIcsEventsWithDiagnostics } from "../../../src/ics/utils/parse-ics-events";
 
 const DESTINATION_CALENDAR_ID = "destination-calendar";
 
@@ -483,16 +483,20 @@ describe("repeated runs over an all-day range that is not a whole UTC day", () =
 });
 
 describe("an ICS source stating an all-day event with a date-time end", () => {
-  const readFeed = (lines: string[]) => {
-    const icsString = [
+  const parseFeed = (lines: string[]) => parseIcsCalendar({
+    icsString: [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
       "PRODID:-//keeper//probe//EN",
       ...lines,
       "END:VCALENDAR",
-    ].join("\r\n");
-    return parseIcsEvents(parseIcsCalendar({ icsString }));
-  };
+    ].join("\r\n"),
+  });
+
+  const readFeed = (lines: string[]) => parseIcsEvents(parseFeed(lines));
+
+  const readFeedWithDiagnostics = (lines: string[]) =>
+    parseIcsEventsWithDiagnostics(parseFeed(lines));
 
   it("stores a whole number of days for a date-valued end", () => {
     const [event] = readFeed([
@@ -510,7 +514,14 @@ describe("an ICS source stating an all-day event with a date-time end", () => {
   });
 
   it("rejects a sub-day DURATION on an all-day event", () => {
-    expect(() => readFeed([
+    const parsed = readFeedWithDiagnostics([
+      "BEGIN:VEVENT",
+      "UID:aligned",
+      "DTSTAMP:20270301T000000Z",
+      "DTSTART;VALUE=DATE:20270308",
+      "DTEND;VALUE=DATE:20270309",
+      "SUMMARY:Aligned",
+      "END:VEVENT",
       "BEGIN:VEVENT",
       "UID:sub-day-duration",
       "DTSTAMP:20270301T000000Z",
@@ -518,7 +529,10 @@ describe("an ICS source stating an all-day event with a date-time end", () => {
       "DURATION:PT36H",
       "SUMMARY:Sub-day duration",
       "END:VEVENT",
-    ])).toThrow(RangeError);
+    ]);
+
+    expect(parsed.events.map((event) => event.uid)).toEqual(["aligned"]);
+    expect(parsed.unrepresentableCount).toBe(1);
   });
 
   it("stores an all-day range that no destination can hold when the end is a date-time", () => {

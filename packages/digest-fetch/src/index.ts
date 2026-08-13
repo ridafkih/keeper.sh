@@ -3,6 +3,62 @@ import { CryptoHasher } from "bun";
 const md5 = (data: string): string =>
   new CryptoHasher("md5").update(data).digest("hex");
 
+interface AuthChallenge {
+  scheme: string;
+  params: string;
+}
+
+const AUTH_PARAM_PATTERN = /^[A-Za-z0-9!#$%&'*+\-.^_`|~]+\s*=/;
+const AUTH_SCHEME_PATTERN =
+  /^([A-Za-z][A-Za-z0-9!#$%&'*+\-.^_`|~]*)(?:\s+([\S\s]*))?$/;
+
+const CHALLENGE_SEGMENT_PATTERN = /(?:[^,"]|"[^"]*")+/g;
+
+const splitChallengeSegments = (header: string): string[] =>
+  (header.match(CHALLENGE_SEGMENT_PATTERN) ?? [])
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+
+const parseChallengeList = (header: string): AuthChallenge[] => {
+  const segments = splitChallengeSegments(header);
+  const schemeIndexes = segments
+    .map((segment, index) => ({ index, segment }))
+    .filter(({ segment }) => !AUTH_PARAM_PATTERN.test(segment))
+    .map(({ index }) => index);
+
+  return schemeIndexes.flatMap((start, position) => {
+    const match = AUTH_SCHEME_PATTERN.exec(segments[start] ?? "");
+
+    if (!match?.[1]) {
+      return [];
+    }
+
+    const end = schemeIndexes[position + 1] ?? segments.length;
+    const params = [match[2] ?? "", ...segments.slice(start + 1, end)]
+      .filter(Boolean)
+      .join(", ");
+
+    return [{ params, scheme: match[1] }];
+  });
+};
+
+const selectChallenge = (
+  header: string | null,
+  scheme: string,
+): AuthChallenge | null => {
+  if (!header) {
+    return null;
+  }
+
+  const target = scheme.toLowerCase();
+
+  return (
+    parseChallengeList(header).find(
+      (challenge) => challenge.scheme.toLowerCase() === target,
+    ) ?? null
+  );
+};
+
 const parseField = (
   header: string,
   field: string,
@@ -64,7 +120,6 @@ const generateClientNonce = (size = 32): string => {
 };
 
 interface DigestChallenge {
-  nonceCount: number;
   scheme: string;
   realm: string;
   nonce: string;
@@ -73,13 +128,12 @@ interface DigestChallenge {
   opaque: string | null;
 }
 
-const parseChallenge = (header: string): DigestChallenge => ({
-  nonceCount: 1,
-  scheme: header.split(/\s/)[0] ?? "Digest",
-  realm: parseRealm(header),
-  qualityOfProtection: parseQualityOfProtection(header),
-  opaque: parseField(header, "opaque"),
-  nonce: parseField(header, "nonce") ?? "",
+const parseChallenge = (challenge: AuthChallenge): DigestChallenge => ({
+  scheme: challenge.scheme,
+  realm: parseRealm(challenge.params),
+  qualityOfProtection: parseQualityOfProtection(challenge.params),
+  opaque: parseField(challenge.params, "opaque"),
+  nonce: parseField(challenge.params, "nonce") ?? "",
   clientNonce: generateClientNonce(),
 });
 
@@ -104,10 +158,11 @@ const buildAuthorizationHeader = (
   password: string,
   method: string,
   uri: string,
+  nonceCountValue: number,
 ): string => {
   const hashA1 = md5(`${username}:${challenge.realm}:${password}`);
   const hashA2 = md5(`${method}:${uri}`);
-  const nonceCount = String(challenge.nonceCount).padStart(8, "0");
+  const nonceCount = String(nonceCountValue).padStart(8, "0");
   const responseHash = computeResponseHash(
     challenge,
     hashA1,
@@ -150,36 +205,66 @@ interface DigestClientOptions {
   fetch: FetchFunction;
 }
 
-const isDigestChallenge = (header: string | null): header is string => {
-  if (!header) {
-    return false;
-  }
+const selectDigestChallenge = (header: string | null): AuthChallenge | null =>
+  selectChallenge(header, "Digest");
 
-  return /^Digest\s/i.test(header);
-};
+interface DigestSession {
+  challenge: DigestChallenge;
+  nonceCount: number;
+}
 
 const createDigestClient = (options: DigestClientOptions) => {
   const { user, password } = options;
   const baseFetch = options.fetch;
-  let challenge: DigestChallenge | null = null;
+  let session: DigestSession | null = null;
+
+  const openSession = (parsed: AuthChallenge): DigestSession => {
+    const challenge = parseChallenge(parsed);
+
+    if (session && session.challenge.nonce === challenge.nonce) {
+      return session;
+    }
+
+    session = { challenge, nonceCount: 0 };
+    return session;
+  };
 
   const authenticatedFetch = (
-    currentChallenge: DigestChallenge,
+    current: DigestSession,
     input: string | Request | URL,
     init: RequestInit | undefined,
     method: string,
     uri: string,
   ): Promise<Response> => {
+    current.nonceCount += 1;
     const authorization = buildAuthorizationHeader(
-      currentChallenge,
+      current.challenge,
       user,
       password,
       method,
       uri,
+      current.nonceCount,
     );
     const headers = new Headers(init?.headers);
     headers.set("authorization", authorization);
     return baseFetch(input, { ...init, headers });
+  };
+
+  const renegotiate = async (
+    response: Response,
+    input: string | Request | URL,
+    init: RequestInit | undefined,
+    method: string,
+    uri: string,
+  ): Promise<Response> => {
+    const parsed = selectDigestChallenge(response.headers.get("www-authenticate"));
+
+    if (!parsed) {
+      return response;
+    }
+
+    await response.body?.cancel();
+    return authenticatedFetch(openSession(parsed), input, init, method, uri);
   };
 
   const digestFetch: FetchFunction = async (input, init) => {
@@ -187,67 +272,26 @@ const createDigestClient = (options: DigestClientOptions) => {
     const parsed = new URL(url);
     const uri = `${parsed.pathname}${parsed.search}`;
     const method = init?.method?.toUpperCase() ?? "GET";
+    const current = session;
 
-    if (challenge) {
-      const response = await authenticatedFetch(
-        challenge,
-        input,
-        init,
-        method,
-        uri,
-      );
-
-      if (response.status !== 401) {
-        challenge.nonceCount++;
-        return response;
+    const attempt = (): Promise<Response> => {
+      if (!current) {
+        return baseFetch(input, init);
       }
+      return authenticatedFetch(current, input, init, method, uri);
+    };
 
-      const wwwAuthenticate = response.headers.get("www-authenticate");
+    const response = await attempt();
 
-      if (!isDigestChallenge(wwwAuthenticate)) {
-        return response;
-      }
-
-      await response.body?.cancel();
-      challenge = parseChallenge(wwwAuthenticate);
-      const retryResponse = await authenticatedFetch(
-        challenge,
-        input,
-        init,
-        method,
-        uri,
-      );
-      challenge.nonceCount++;
-      return retryResponse;
+    if (response.status !== 401) {
+      return response;
     }
 
-    const initialResponse = await baseFetch(input, init);
-
-    if (initialResponse.status !== 401) {
-      return initialResponse;
-    }
-
-    const wwwAuthenticate = initialResponse.headers.get("www-authenticate");
-
-    if (!isDigestChallenge(wwwAuthenticate)) {
-      return initialResponse;
-    }
-
-    await initialResponse.body?.cancel();
-    challenge = parseChallenge(wwwAuthenticate);
-    const retryResponse = await authenticatedFetch(
-      challenge,
-      input,
-      init,
-      method,
-      uri,
-    );
-    challenge.nonceCount++;
-    return retryResponse;
+    return renegotiate(response, input, init, method, uri);
   };
 
   return { fetch: digestFetch };
 };
 
-export { createDigestClient };
-export type { FetchFunction };
+export { createDigestClient, selectChallenge };
+export type { AuthChallenge, FetchFunction };

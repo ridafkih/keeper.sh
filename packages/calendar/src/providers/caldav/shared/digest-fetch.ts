@@ -1,4 +1,5 @@
-import { createDigestClient } from "@keeper.sh/digest-fetch";
+import { createDigestClient, selectChallenge } from "@keeper.sh/digest-fetch";
+import { recordRequest } from "./response-status-scope";
 
 type FetchFunction = (input: string | Request | URL, init?: RequestInit) => Promise<Response>;
 
@@ -31,13 +32,8 @@ const mergeHeaders = (
   return merged;
 };
 
-const isDigestChallenge = (response: Response): boolean => {
-  const header = response.headers.get("www-authenticate");
-  if (!header) {
-    return false;
-  }
-  return /^Digest\s/i.test(header);
-};
+const offersScheme = (response: Response, scheme: string): boolean =>
+  selectChallenge(response.headers.get("www-authenticate"), scheme) !== null;
 
 interface DigestAwareFetchOptions {
   credentials: DigestFetchCredentials;
@@ -48,7 +44,6 @@ interface DigestAwareFetchOptions {
 interface DigestAwareFetchResult {
   fetch: FetchFunction;
   getResolvedMethod: () => CalDAVAuthMethod | null;
-  getLastResponseStatus: () => number | null;
 }
 
 const createDigestAwareFetch = (options: DigestAwareFetchOptions): DigestAwareFetchResult => {
@@ -60,31 +55,44 @@ const createDigestAwareFetch = (options: DigestAwareFetchOptions): DigestAwareFe
     fetch: baseFetch,
   });
 
-  const state: { method: AuthMethod; lastResponseStatus: number | null } = {
+  const state: { method: AuthMethod } = {
     method: knownAuthMethod ?? "unknown",
-    lastResponseStatus: null,
+  };
+
+  const basicFetch: FetchFunction = (input, init) =>
+    baseFetch(input, { ...init, headers: mergeHeaders(init, { authorization: basicAuth }) });
+
+  const fetchWithDigest: FetchFunction = async (input, init) => {
+    const response = await digestClient.fetch(input, init);
+
+    if (response.status !== HTTP_UNAUTHORIZED) {
+      return response;
+    }
+
+    if (offersScheme(response, "Digest") || !offersScheme(response, "Basic")) {
+      return response;
+    }
+
+    await response.body?.cancel();
+    state.method = "basic";
+    return basicFetch(input, init);
   };
 
   const authenticatedFetch: FetchFunction = async (input, init) => {
     if (state.method === "digest") {
-      return digestClient.fetch(input, init);
+      return fetchWithDigest(input, init);
     }
 
-    const headers = mergeHeaders(init, { authorization: basicAuth });
-    const response = await baseFetch(input, { ...init, headers });
-
-    if (state.method === "basic") {
-      return response;
-    }
+    const response = await basicFetch(input, init);
 
     if (response.status !== HTTP_UNAUTHORIZED) {
-      if (state.method === "unknown" && response.ok) {
+      if (response.ok) {
         state.method = "basic";
       }
       return response;
     }
 
-    if (!isDigestChallenge(response)) {
+    if (!offersScheme(response, "Digest")) {
       return response;
     }
 
@@ -93,11 +101,8 @@ const createDigestAwareFetch = (options: DigestAwareFetchOptions): DigestAwareFe
     return digestClient.fetch(input, init);
   };
 
-  const performFetch: FetchFunction = async (input, init) => {
-    const response = await authenticatedFetch(input, init);
-    state.lastResponseStatus = response.status;
-    return response;
-  };
+  const performFetch: FetchFunction = (input, init) =>
+    recordRequest(() => authenticatedFetch(input, init));
 
   const getResolvedMethod = (): CalDAVAuthMethod | null => {
     if (state.method === "unknown") {
@@ -106,9 +111,7 @@ const createDigestAwareFetch = (options: DigestAwareFetchOptions): DigestAwareFe
     return state.method;
   };
 
-  const getLastResponseStatus = (): number | null => state.lastResponseStatus;
-
-  return { fetch: performFetch, getLastResponseStatus, getResolvedMethod };
+  return { fetch: performFetch, getResolvedMethod };
 };
 
 type CalDAVAuthMethod = "basic" | "digest";

@@ -25,6 +25,7 @@ const router = new Bun.FileSystemRouter({
 await entry({
   main: async () => {
     const server = Bun.serve<BroadcastData>({
+      // Bun's dev error page renders the thrown error, leaking query text and bound parameters.
       development: false,
       port: env.API_PORT,
       websocket: websocketHandler,

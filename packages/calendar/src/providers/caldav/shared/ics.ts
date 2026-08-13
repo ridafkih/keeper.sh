@@ -5,7 +5,7 @@ import {
   buildZonedIcsDate,
   normalizeTimezone,
   parseIcsCalendar,
-  parseIcsEvents,
+  parseIcsEventsWithDiagnostics,
 } from "../../../ics";
 import type {
   IcsCalendar,
@@ -19,8 +19,9 @@ import { isKeeperEvent } from "../../../core/events/identity";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
 import {
   assertNoUnsupportedRecurrenceDates,
-  assertSupportedRecurrenceTimeZones,
+  collectUnsupportedRecurrenceTimeZones,
 } from "../../../ics/utils/validate-recurrence-input";
+import type { UnsupportedRecurrenceEvent } from "../../../ics/utils/validate-recurrence-input";
 
 const normalizeIcsText = (value: string | undefined): string | undefined =>
   value?.replaceAll(/\r\n?/g, "\n");
@@ -93,8 +94,15 @@ interface ParseICalCalendarsOptions {
 
 interface ParsedCalendarResources {
   events: ParsedCalendarEvent[];
+  /** VEVENTs in a readable resource that `skippedResourceCount` cannot see. */
+  unrepresentableEventCount: number;
   skippedResourceCount: number;
   skippedResourceReasons: string[];
+  /**
+   * Withheld from ingestion, yet kept in `events` so a snapshot diff does not
+   * read them as deleted.
+   */
+  unsupportedEvents: UnsupportedRecurrenceEvent[];
 }
 
 class CalDAVUnreadableResourceError extends Error {
@@ -113,6 +121,21 @@ class CalDAVUnreadableResourceError extends Error {
     this.skippedResourceReasons = resources.skippedResourceReasons;
   }
 }
+
+/*
+ * For callers with no wide event to report a partial read on: returning the
+ * series quietly would sync it at a stale time.
+ */
+const assertAllEventsSupported = (
+  resources: Pick<ParsedCalendarResources, "unsupportedEvents">,
+): void => {
+  if (resources.unsupportedEvents.length === 0) {
+    return;
+  }
+  throw new RangeError(
+    resources.unsupportedEvents.map(({ reason }) => reason).join("; "),
+  );
+};
 
 /*
  * Skipping is only safe where a missing event means "stale", never where it
@@ -179,15 +202,24 @@ const parseICalCalendarsToRemoteEvents = (
         skippedResourceReasons,
       });
     }
-    return { events: [], skippedResourceCount: 0, skippedResourceReasons };
+    return {
+      events: [],
+      skippedResourceCount: 0,
+      skippedResourceReasons,
+      unrepresentableEventCount: 0,
+      unsupportedEvents: [],
+    };
   }
   const calendar = {
     ...firstCalendar,
     events: calendars.flatMap((entry) => entry.events ?? []),
   };
-  const parsedEvents = parseIcsEvents(calendar, { includeKeeperEvents: true });
-  assertSupportedRecurrenceTimeZones(parsedEvents);
-  const events = parsedEvents.map((event) => ({
+  const parsed = parseIcsEventsWithDiagnostics(calendar, { includeKeeperEvents: true });
+  const unsupportedEvents = [
+    ...parsed.unsupportedEvents,
+    ...collectUnsupportedRecurrenceTimeZones(parsed.events),
+  ];
+  const events = parsed.events.map((event) => ({
     availability: event.availability ?? "busy",
     deleteId: event.uid,
     description: event.description,
@@ -208,11 +240,16 @@ const parseICalCalendarsToRemoteEvents = (
     events,
     skippedResourceCount: skippedResourceReasons.length,
     skippedResourceReasons,
+    unrepresentableEventCount: parsed.unrepresentableCount,
+    unsupportedEvents,
   };
 };
 
-const parseICalToRemoteEvents = (icsString: string): ParsedCalendarEvent[] =>
-  parseICalCalendarsToRemoteEvents([icsString]).events;
+const parseICalToRemoteEvents = (icsString: string): ParsedCalendarEvent[] => {
+  const resources = parseICalCalendarsToRemoteEvents([icsString]);
+  assertAllEventsSupported(resources);
+  return resources.events;
+};
 
 const parseICalToRemoteEvent = (icsString: string): ParsedCalendarEvent | null => {
   const [event] = parseICalToRemoteEvents(icsString);
@@ -220,6 +257,7 @@ const parseICalToRemoteEvent = (icsString: string): ParsedCalendarEvent | null =
 };
 
 export {
+  assertAllEventsSupported,
   assertAllResourcesRead,
   CalDAVUnreadableResourceError,
   eventToICalString,

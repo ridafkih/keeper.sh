@@ -4,7 +4,7 @@ import type { SourceIngestionPlan } from "../../../core/sync/sync-range";
 import { encodeStoredSyncToken, resolveSyncTokenForWindow } from "../../../core/oauth/sync-token";
 import { getOAuthSyncTokenVersion } from "../../../core/oauth/sync-window";
 import { filterSourceEventsToSyncWindow } from "../../../core/source/sync-diagnostics";
-import { fetchCalendarEvents, parseGoogleEvents } from "./utils/fetch-events";
+import { fetchCalendarEvents, parseGoogleEventsWithDiagnostics } from "./utils/fetch-events";
 
 interface GoogleSourceFetcherConfig {
   accessToken: string;
@@ -52,11 +52,16 @@ const createGoogleSourceFetcher = (config: GoogleSourceFetcherConfig): GoogleSou
       return { events: [], fullSyncRequired: true, syncWindow };
     }
 
-    const parsedEvents = parseGoogleEvents(result.events);
-    const { events } = filterSourceEventsToSyncWindow(parsedEvents, syncWindow);
+    const parsed = parseGoogleEventsWithDiagnostics(result.events);
+    const { events, filteredCount } = filterSourceEventsToSyncWindow(parsed.events, syncWindow);
 
     return {
       events,
+      discardedEventCounts: {
+        outsideSyncWindow: filteredCount,
+        unrepresentable: parsed.unrepresentableCount,
+      },
+      selfAuthoredEventCount: parsed.selfAuthoredCount,
       changedEventIds: result.changedEventIds,
       cancelledEventIds: result.cancelledEventIds,
       isDeltaSync: result.isDeltaSync,

@@ -3,7 +3,7 @@ import type { SourceIngestionPlan } from "../../../core/sync/sync-range";
 import { encodeStoredSyncToken, resolveSyncTokenForWindow } from "../../../core/oauth/sync-token";
 import { getOAuthSyncTokenVersion } from "../../../core/oauth/sync-window";
 import { filterSourceEventsToSyncWindow } from "../../../core/source/sync-diagnostics";
-import { fetchCalendarEvents, parseOutlookEvents } from "./utils/fetch-events";
+import { fetchCalendarEvents, parseOutlookEventsWithDiagnostics } from "./utils/fetch-events";
 
 const OUTLOOK_ADAPTER_VERSION = 1;
 
@@ -55,11 +55,20 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
       return { events: [], fullSyncRequired: true, syncWindow };
     }
 
-    const parsedEvents = parseOutlookEvents(result.events);
-    const { events } = filterSourceEventsToSyncWindow(parsedEvents, syncWindow);
+    const parsed = parseOutlookEventsWithDiagnostics(result.events);
+    const { events, filteredCount } = filterSourceEventsToSyncWindow(parsed.events, syncWindow);
 
     return {
       events,
+      /*
+       * An empty expansion was asked for over the sync window itself, so it
+       * means "no occurrence in the window" like any other filtered event.
+       */
+      discardedEventCounts: {
+        outsideSyncWindow: filteredCount + (result.unexpandedSeriesMasterCount ?? 0),
+        unrepresentable: parsed.unrepresentableCount,
+      },
+      selfAuthoredEventCount: parsed.selfAuthoredCount,
       changedEventIds: result.changedEventIds,
       cancelledEventIds: result.cancelledEventIds,
       isDeltaSync: result.isDeltaSync,

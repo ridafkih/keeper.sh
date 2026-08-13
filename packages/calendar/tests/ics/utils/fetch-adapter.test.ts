@@ -136,17 +136,29 @@ describe("createIcsSourceFetcher", () => {
     );
   });
 
-  it("rejects floating RRULE UNTIL without calendar timezone context", async () => {
+  it("reports a floating RRULE UNTIL as unsupported instead of failing the feed", async () => {
     const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
     const floatingIcs = MINIMAL_ICS.replace(
-      "SUMMARY:Test",
-      "RRULE:FREQ=DAILY;UNTIL=20260519T120000\r\nSUMMARY:Test",
+      "END:VCALENDAR",
+      [
+        "BEGIN:VEVENT",
+        "UID:floating-until@test",
+        "DTSTAMP:20260517T000000Z",
+        "DTSTART:20260518T120000Z",
+        "DTEND:20260518T130000Z",
+        "RRULE:FREQ=DAILY;UNTIL=20260519T120000",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n"),
     );
     mockPullRemoteCalendar.mockResolvedValueOnce({ ical: floatingIcs });
     mockPrepareCalendarSnapshot.mockResolvedValueOnce({ changed: false });
 
-    await expect(createIcsSourceFetcher(buildConfig()).fetchEvents())
-      .rejects.toThrow("Floating ICS RRULE UNTIL requires an explicit X-WR-TIMEZONE");
+    const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+    expect(result.events.map(({ uid }) => uid))
+      .toEqual(["event-1@test", "floating-until@test"]);
+    expect(result.unsupportedEventUids).toEqual(["floating-until@test"]);
   });
 
   it("treats VALUE=DATE-TIME as floating rather than all-day", async () => {
@@ -174,7 +186,7 @@ describe("createIcsSourceFetcher", () => {
     expect(result.events[0]?.startTime).toEqual(new Date("2026-03-10T15:00:00.000Z"));
   });
 
-  it("rejects floating event times without calendar timezone context", async () => {
+  it("reports floating event times without zone context as unsupported", async () => {
     const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
     const floatingIcs = [
       "BEGIN:VCALENDAR",
@@ -193,8 +205,10 @@ describe("createIcsSourceFetcher", () => {
       snapshot: { contentHash: "hash-ambiguous", ical: floatingIcs },
     });
 
-    await expect(createIcsSourceFetcher(buildConfig()).fetchEvents())
-      .rejects.toThrow("Floating ICS DTSTART requires an explicit TZID or X-WR-TIMEZONE");
+    const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+    expect(result.events.map(({ uid }) => uid)).toEqual(["ambiguous-floating-event@test"]);
+    expect(result.unsupportedEventUids).toEqual(["ambiguous-floating-event@test"]);
   });
 
   it("passes calendar timezone metadata to event interpretation", async () => {
@@ -536,7 +550,7 @@ describe("createIcsSourceFetcher", () => {
     );
   });
 
-  it("rejects a floating EXDATE when no event or calendar timezone exists", async () => {
+  it("reports a floating EXDATE with no zone context as unsupported", async () => {
     const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
     const ambiguousIcs = MINIMAL_ICS.replace(
       "SUMMARY:Test",
@@ -545,8 +559,10 @@ describe("createIcsSourceFetcher", () => {
     mockPullRemoteCalendar.mockResolvedValueOnce({ ical: ambiguousIcs });
     mockPrepareCalendarSnapshot.mockResolvedValueOnce({ changed: false });
 
-    await expect(createIcsSourceFetcher(buildConfig()).fetchEvents())
-      .rejects.toThrow("Floating ICS EXDATE requires an explicit TZID or X-WR-TIMEZONE");
+    const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+    expect(result.events.map(({ uid }) => uid)).toEqual(["event-1@test"]);
+    expect(result.unsupportedEventUids).toEqual(["event-1@test"]);
   });
 
   it("returns events far outside the sync window so stored history stays unbounded", async () => {

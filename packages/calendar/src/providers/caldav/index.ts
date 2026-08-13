@@ -9,6 +9,7 @@ export {
   CalDAVAuthenticationError,
   CalDAVClient,
   CalDAVIncompleteMultiGetError,
+  CalDAVWithheldCredentialsError,
   createCalDAVClient,
 } from "./shared/client";
 export {

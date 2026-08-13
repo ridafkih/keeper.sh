@@ -8,8 +8,9 @@ import {
   isCalendarObjectPath,
 } from "./api";
 import { createDigestAwareFetch } from "./digest-fetch";
+import { runInRequestScope } from "./response-status-scope";
 import type { CalDAVAuthMethod } from "./digest-fetch";
-import type { SafeFetchOptions } from "../../../utils/safe-fetch";
+import type { SafeFetchOptions, WithheldCredentials } from "../../../utils/safe-fetch";
 import type { CalDAVClientConfig, CalendarInfo } from "../types";
 
 const MISSING_HREF_SAMPLE_SIZE = 5;
@@ -71,6 +72,19 @@ class CalDAVAuthenticationError extends Error {
   }
 }
 
+class CalDAVWithheldCredentialsError extends Error {
+  readonly redirectedTo: string;
+
+  constructor(details: WithheldCredentials, cause: unknown) {
+    super(
+      `CalDAV redirect to ${details.redirectedTo} crossed a security boundary, so the request was sent without credentials and the server refused it`,
+      { cause },
+    );
+    this.name = "CalDAVWithheldCredentialsError";
+    this.redirectedTo = details.redirectedTo;
+  }
+}
+
 class CalDAVCreateConflictError extends CalDAVHttpError {
   constructor(response: Response) {
     super(response, "create");
@@ -93,6 +107,44 @@ const assertSuccessfulResponse = async (
 };
 
 type DAVClientInstance = Awaited<ReturnType<typeof createDAVClient>>;
+
+class CalDAVUnauthorizedResponseError extends Error {
+  readonly status = HTTP_STATUS.UNAUTHORIZED;
+
+  constructor() {
+    super("CalDAV operation completed on an unauthorized response");
+    this.name = "CalDAVUnauthorizedResponseError";
+  }
+}
+
+const mapAuthenticationFailure = <Result>(operation: () => Promise<Result>): Promise<Result> =>
+  runInRequestScope(async (requests) => {
+    const raiseUnauthorizedVerdict = (cause: unknown): never => {
+      if (requests.hasUnrefutedUnauthorized()) {
+        throw new CalDAVAuthenticationError(cause);
+      }
+
+      const withheld = requests.findUnrefutedWithheldCredentials();
+      if (withheld) {
+        throw new CalDAVWithheldCredentialsError(withheld, cause);
+      }
+
+      throw cause;
+    };
+
+    const result = await operation().catch((error: unknown) => {
+      if (requests.isPropagatedTransportFailure(error)) {
+        throw error;
+      }
+      return raiseUnauthorizedVerdict(error);
+    });
+
+    if (requests.hasUnrefutedUnauthorized() || requests.findUnrefutedWithheldCredentials()) {
+      return raiseUnauthorizedVerdict(new CalDAVUnauthorizedResponseError());
+    }
+
+    return result;
+  });
 
 const getDisplayName = (name: unknown): string => {
   if (typeof name === "string") {
@@ -117,7 +169,6 @@ class CalDAVClient {
   private config: CalDAVClientConfig;
   private safeFetchOptions?: SafeFetchOptions;
   private resolvedAuthMethod: (() => CalDAVAuthMethod | null) | null = null;
-  private lastResponseStatus: (() => number | null) | null = null;
 
   constructor(config: CalDAVClientConfig, safeFetchOptions?: SafeFetchOptions) {
     this.config = config;
@@ -131,13 +182,12 @@ class CalDAVClient {
   private async getClient(): Promise<DAVClientInstance> {
     if (!this.client) {
       const safeFetch = createSafeFetch(this.safeFetchOptions);
-      const { fetch: digestAwareFetch, getLastResponseStatus, getResolvedMethod } = createDigestAwareFetch({
+      const { fetch: digestAwareFetch, getResolvedMethod } = createDigestAwareFetch({
         credentials: this.config.credentials,
         baseFetch: safeFetch,
         knownAuthMethod: this.config.authMethod,
       });
       this.resolvedAuthMethod = getResolvedMethod;
-      this.lastResponseStatus = getLastResponseStatus;
       this.client = await createDAVClient({
         authMethod: "Custom",
         authFunction: () => Promise.resolve({}),
@@ -150,19 +200,8 @@ class CalDAVClient {
     return this.client;
   }
 
-  private async mapAuthenticationFailure<Result>(operation: () => Promise<Result>): Promise<Result> {
-    try {
-      return await operation();
-    } catch (error) {
-      if (this.lastResponseStatus?.() === HTTP_STATUS.UNAUTHORIZED) {
-        throw new CalDAVAuthenticationError(error);
-      }
-      throw error;
-    }
-  }
-
   async discoverCalendars(): Promise<CalendarInfo[]> {
-    const calendars = await this.mapAuthenticationFailure(async () => {
+    const calendars = await mapAuthenticationFailure(async () => {
       const client = await this.getClient();
       return client.fetchCalendars();
     });
@@ -233,25 +272,27 @@ class CalDAVClient {
     await assertSuccessfulResponse(response, "delete");
   }
 
-  async fetchCalendarObject(params: {
+  fetchCalendarObject(params: {
     calendarUrl: string;
     filename: string;
   }): Promise<CalendarObject | null> {
-    const client = await this.getClient();
-    const objectUrl = CalDAVClient.normalizeUrl(params.calendarUrl, params.filename);
-    const objects = await client.fetchCalendarObjects({
-      calendar: { url: params.calendarUrl },
-      objectUrls: [objectUrl],
-    });
+    return mapAuthenticationFailure(async () => {
+      const client = await this.getClient();
+      const objectUrl = CalDAVClient.normalizeUrl(params.calendarUrl, params.filename);
+      const objects = await client.fetchCalendarObjects({
+        calendar: { url: params.calendarUrl },
+        objectUrls: [objectUrl],
+      });
 
-    return objects[0] ?? null;
+      return objects[0] ?? null;
+    });
   }
 
   fetchCalendarObjects(params: {
     calendarUrl: string;
     timeRange?: { start: string; end: string };
   }): Promise<CalendarObject[]> {
-    return this.mapAuthenticationFailure(async () => {
+    return mapAuthenticationFailure(async () => {
       const client = await this.getClient();
 
       const queryResponses = await client.calendarQuery({
@@ -330,5 +371,6 @@ export {
   CalDAVCreateConflictError,
   CalDAVHttpError,
   CalDAVIncompleteMultiGetError,
+  CalDAVWithheldCredentialsError,
   createCalDAVClient,
 };
