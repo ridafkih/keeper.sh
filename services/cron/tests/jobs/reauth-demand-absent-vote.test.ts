@@ -67,7 +67,13 @@ const HEALTHY_CALENDAR = {
   calendarUrl: "https://dav.example.com/personal/",
 };
 
-type RevokedOutcome = "unauthorized" | "unavailable" | "locked";
+type RevokedOutcome =
+  | "unauthorized"
+  | "unavailable"
+  | "locked"
+  | "account-unauthorized"
+  | "account-unavailable"
+  | "account-locked";
 
 let revokedOutcome: RevokedOutcome = "unauthorized";
 
@@ -155,20 +161,23 @@ vi.mock("@/context", () => ({
 
 let lockedCalendarIds = new Set<string>();
 
+const acquireLock = (key: string): Record<string, unknown> => {
+  if ([...lockedCalendarIds].some((calendarId) => key.endsWith(calendarId))) {
+    return { acquired: false };
+  }
+  return {
+    acquired: true,
+    handle: {
+      isCurrent: () => Promise.resolve(true),
+      release: () => Promise.resolve(null),
+    },
+  };
+};
+
 vi.mock("@keeper.sh/sync", async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(),
   createSyncLock: () => ({
-    acquire: (key: string) => Promise.resolve(
-      [...lockedCalendarIds].some((calendarId) => key.endsWith(calendarId))
-        ? { acquired: false }
-        : {
-          acquired: true,
-          handle: {
-            isCurrent: () => Promise.resolve(true),
-            release: () => Promise.resolve(null),
-          },
-        },
-    ),
+    acquire: (key: string) => Promise.resolve(acquireLock(key)),
   }),
 }));
 
@@ -179,17 +188,19 @@ vi.mock("@keeper.sh/database", async (importOriginal) => ({
 }));
 
 const createRevokedFailure = (): Error => {
-  if (revokedOutcome === "unavailable") {
+  if (revokedOutcome === "unavailable" || revokedOutcome === "account-unavailable") {
     return Object.assign(new Error("CalDAV request failed"), { status: 503 });
   }
   return Object.assign(new Error("CalDAV request failed"), { status: 401 });
 };
 
+const failsEveryCalendar = (): boolean => revokedOutcome.startsWith("account-");
+
 vi.mock("@keeper.sh/calendar", async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(),
   ingestSource: ({ calendarId }: { calendarId: string }) =>
     Promise.resolve().then(() => {
-      if (calendarId === REVOKED_SHARE_CALENDAR.calendarId) {
+      if (failsEveryCalendar() || calendarId === REVOKED_SHARE_CALENDAR.calendarId) {
         throw createRevokedFailure();
       }
       return { eventsAdded: 1, eventsRemoved: 0 };
@@ -199,12 +210,20 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => ({
 const ingestSourcesModule = await import("../../src/jobs/ingest-sources");
 const ingestSourcesJob = ingestSourcesModule.default;
 
+const resolveLockedCalendarIds = (outcome: RevokedOutcome): Set<string> => {
+  if (outcome === "locked") {
+    return new Set([REVOKED_SHARE_CALENDAR.calendarId]);
+  }
+  if (outcome === "account-locked") {
+    return new Set([REVOKED_SHARE_CALENDAR.calendarId, HEALTHY_CALENDAR.calendarId]);
+  }
+  return new Set();
+};
+
 const runTick = async (outcome: RevokedOutcome): Promise<void> => {
   emitted.length = 0;
   revokedOutcome = outcome;
-  lockedCalendarIds = outcome === "locked"
-    ? new Set([REVOKED_SHARE_CALENDAR.calendarId])
-    : new Set();
+  lockedCalendarIds = resolveLockedCalendarIds(outcome);
   await ingestSourcesJob.callback().catch(() => null);
 };
 
@@ -217,33 +236,53 @@ describe("an account whose rejecting calendar cannot always cast a vote", () => 
     lockedCalendarIds = new Set();
   });
 
-  it("keeps the demand raised across a tick where the rejecting calendar fails for another reason", async () => {
-    await runTick("unauthorized");
+  it("keeps the demand raised across a tick where no calendar of the account could vote", async () => {
+    await runTick("account-unauthorized");
     expect(accountNeedsReauthentication).toBe(true);
 
-    await runTick("unavailable");
+    await runTick("account-unavailable");
 
     expect(accountNeedsReauthentication).toBe(true);
   });
 
-  it("does not oscillate when the provider alternates between 401 and 503", async () => {
-    await runTick("unauthorized");
-    flagWrites.length = 0;
+  it("clears the demand on a tick where a sibling authenticates and the rejecting calendar fails for another reason", async () => {
+    await runTick("account-unauthorized");
+    expect(accountNeedsReauthentication).toBe(true);
 
     await runTick("unavailable");
+
+    expect(accountNeedsReauthentication).toBe(false);
+  });
+
+  it("does not oscillate when the provider alternates between 401 and 503", async () => {
+    await runTick("account-unauthorized");
+    await runTick("unavailable");
+    expect(flagWrites).toEqual([true, false]);
+    flagWrites.length = 0;
+
     await runTick("unauthorized");
     await runTick("unavailable");
     await runTick("unauthorized");
+    await runTick("unavailable");
 
     expect(flagWrites).toEqual([]);
   });
 
-  it("keeps the demand raised across a tick where another replica holds the rejecting calendar's lock", async () => {
-    await runTick("unauthorized");
+  it("keeps the demand raised across a tick where another replica holds every calendar's lock", async () => {
+    await runTick("account-unauthorized");
+    expect(accountNeedsReauthentication).toBe(true);
+
+    await runTick("account-locked");
+
+    expect(accountNeedsReauthentication).toBe(true);
+  });
+
+  it("clears the demand on a tick where a sibling authenticates and another replica holds the rejecting calendar's lock", async () => {
+    await runTick("account-unauthorized");
     expect(accountNeedsReauthentication).toBe(true);
 
     await runTick("locked");
 
-    expect(accountNeedsReauthentication).toBe(true);
+    expect(accountNeedsReauthentication).toBe(false);
   });
 });

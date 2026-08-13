@@ -65,9 +65,9 @@ const REVOKED_CALENDAR = {
   externalCalendarId: "AAMkAGI2TG93AAA=",
 };
 
-const HEALTHY_CALENDAR = {
+const SECOND_CALENDAR = {
   ...baseSource,
-  calendarId: "calendar-healthy",
+  calendarId: "calendar-second",
   externalCalendarId: "AAMkAGI2TG94AAA=",
 };
 
@@ -109,7 +109,7 @@ const resolveSelect = (projection: Record<string, unknown>): unknown[] => {
     return [];
   }
   if (keys.has("oauthCredentialId") && keys.has("calendarId")) {
-    return [REVOKED_CALENDAR, HEALTHY_CALENDAR];
+    return [REVOKED_CALENDAR, SECOND_CALENDAR];
   }
   if (keys.has("oauthCredentialId")) {
     return [REVOKED_CALENDAR];
@@ -197,13 +197,9 @@ vi.mock("@keeper.sh/database", async (importOriginal) => ({
 
 vi.mock("@keeper.sh/calendar", async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(),
-  ingestSource: ({ calendarId }: { calendarId: string }) =>
-    Promise.resolve().then(() => {
-      if (calendarId === REVOKED_CALENDAR.calendarId) {
-        throw createAuthFailure();
-      }
-      return { eventsAdded: 1, eventsRemoved: 0 };
-    }),
+  ingestSource: () => Promise.resolve().then(() => {
+    throw createAuthFailure();
+  }),
 }));
 
 const ingestSourcesModule = await import("../../src/jobs/ingest-sources");

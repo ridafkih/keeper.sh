@@ -381,7 +381,22 @@ const resolveOAuthFetcher = (
   return null;
 };
 
-type ReauthenticationDemand = "raise" | "clear" | "abstain";
+type ReauthenticationDemand =
+  | "credential-rejected"
+  | "authenticated"
+  | "request-rejected"
+  | "abstain";
+
+type AuthenticationRejection = Extract<
+  ReauthenticationDemand,
+  "credential-rejected" | "request-rejected"
+>;
+
+const REAUTHENTICATION_DEMAND_PRECEDENCE: ReauthenticationDemand[] = [
+  "credential-rejected",
+  "authenticated",
+  "request-rejected",
+];
 
 interface ReauthenticationDemandRecord {
   accountId: string;
@@ -400,20 +415,26 @@ interface IngestionSourceResult {
 const resolveReauthenticationDemands = (
   demands: ReauthenticationDemandRecord[],
 ): Map<string, boolean> => {
-  const raisedAccountIds = new Set(
-    demands.filter(({ demand }) => demand === "raise").map(({ accountId }) => accountId),
-  );
-  const abstainedAccountIds = new Set(
-    demands.filter(({ demand }) => demand === "abstain").map(({ accountId }) => accountId),
+  const castByAccount = new Map(
+    [...new Set(demands.map(({ accountId }) => accountId))].map((
+      accountId,
+    ): [string, Set<ReauthenticationDemand>] => [
+      accountId,
+      new Set(
+        demands
+          .filter((record) => record.accountId === accountId)
+          .map(({ demand }) => demand),
+      ),
+    ]),
   );
   return new Map(
-    demands
-      .filter(({ accountId }) =>
-        raisedAccountIds.has(accountId) || !abstainedAccountIds.has(accountId))
-      .map(({ accountId }): [string, boolean] => [
-        accountId,
-        raisedAccountIds.has(accountId),
-      ]),
+    [...castByAccount].flatMap(([accountId, cast]): [string, boolean][] => {
+      const decisive = REAUTHENTICATION_DEMAND_PRECEDENCE.find((demand) => cast.has(demand));
+      if (!decisive) {
+        return [];
+      }
+      return [[accountId, decisive !== "authenticated"]];
+    }),
   );
 };
 
@@ -458,9 +479,10 @@ const createSkippedIngestionResult = (userId: string): IngestionSourceResult => 
 const createRejectedIngestionResult = (
   userId: string,
   accountId: string,
+  demand: AuthenticationRejection,
 ): IngestionSourceResult => ({
   ...createSkippedIngestionResult(userId),
-  reauthentication: { accountId, demand: "raise" },
+  reauthentication: { accountId, demand },
 });
 
 const collectReauthenticationDemands = (
@@ -648,7 +670,7 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
                   ingestEvents,
                   reauthentication: {
                     accountId: currentSource.accountId,
-                    demand: "clear" as const,
+                    demand: "authenticated" as const,
                   },
                   shouldPush: ingestionState.authorityChanged
                     || ingestionResult.eventsAdded > 0
@@ -675,13 +697,13 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
             if (hasErrorFlag(error, "authRequired")) {
               widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
 
-              return createRejectedIngestionResult(source.userId, source.accountId);
+              return createRejectedIngestionResult(source.userId, source.accountId, "request-rejected");
             }
 
             if (hasErrorFlag(error, "oauthReauthRequired")) {
               widelog.errorFields(error, { slug: "provider-token-refresh-failed", retriable: false, requiresReauth: true });
 
-              return createRejectedIngestionResult(source.userId, source.accountId);
+              return createRejectedIngestionResult(source.userId, source.accountId, "credential-rejected");
             }
 
             const missingCalendarFailure = resolveMissingCalendarFailure(error);
@@ -822,7 +844,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                   ingestEvents,
                   reauthentication: {
                     accountId: source.accountId,
-                    demand: "clear" as const,
+                    demand: "authenticated" as const,
                   },
                   shouldPush: hasSourceAuthorityChanged(currentSource, ranges)
                     || ingestionResult.eventsAdded > 0
@@ -849,7 +871,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
             if (isCalDAVAuthenticationError(error)) {
               widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
 
-              return createRejectedIngestionResult(source.userId, source.accountId);
+              return createRejectedIngestionResult(source.userId, source.accountId, "request-rejected");
             }
 
             const missingCalendarFailure = resolveMissingCalendarFailure(error);

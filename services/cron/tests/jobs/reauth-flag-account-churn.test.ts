@@ -170,11 +170,13 @@ vi.mock("@keeper.sh/database", async (importOriginal) => ({
   decryptPassword: () => "plaintext",
 }));
 
+let credentialsRejectedForEveryCalendar = false;
+
 vi.mock("@keeper.sh/calendar", async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(),
   ingestSource: ({ calendarId }: { calendarId: string }): Promise<IngestionCounts> =>
     Promise.resolve().then(() => {
-      if (calendarId === REVOKED_SHARE_CALENDAR.calendarId) {
+      if (credentialsRejectedForEveryCalendar || calendarId === REVOKED_SHARE_CALENDAR.calendarId) {
         throw Object.assign(new Error("CalDAV request failed"), { status: 401 });
       }
       return { eventsAdded: 1, eventsRemoved: 0 };
@@ -195,6 +197,7 @@ describe("one account whose calendars disagree about its credentials", () => {
     flagWrites.length = 0;
     current = { fields: {}, values: {} };
     accountNeedsReauthentication = false;
+    credentialsRejectedForEveryCalendar = false;
   });
 
   it("labels the rejected calendar as a provider auth failure", async () => {
@@ -203,14 +206,35 @@ describe("one account whose calendars disagree about its credentials", () => {
     expect(emitted.some(({ fields }) => fields.slug === "provider-auth-failed")).toBe(true);
   });
 
-  it("keeps the demand raised while one of the account's calendars still rejects the credentials", async () => {
+  it("does not demand re-authentication while another calendar of the account authenticates with the same credentials", async () => {
+    await runTick();
+
+    expect(accountNeedsReauthentication).toBe(false);
+  });
+
+  it("demands re-authentication once every calendar of the account is rejected", async () => {
+    credentialsRejectedForEveryCalendar = true;
+
     await runTick();
 
     expect(accountNeedsReauthentication).toBe(true);
   });
 
-  it("stops rewriting the demand once it has settled", async () => {
+  it("clears the demand again as soon as one calendar of the account authenticates", async () => {
+    credentialsRejectedForEveryCalendar = true;
     await runTick();
+    expect(accountNeedsReauthentication).toBe(true);
+
+    credentialsRejectedForEveryCalendar = false;
+    await runTick();
+
+    expect(accountNeedsReauthentication).toBe(false);
+  });
+
+  it("stops rewriting the demand once it has settled", async () => {
+    credentialsRejectedForEveryCalendar = true;
+    await runTick();
+    expect(flagWrites).toEqual([true]);
     flagWrites.length = 0;
 
     for (let tick = 0; tick < 3; tick += 1) {
