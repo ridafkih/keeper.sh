@@ -1,4 +1,4 @@
-import { createDigestClient } from "@keeper.sh/digest-fetch";
+import { createDigestClient, selectChallenge } from "@keeper.sh/digest-fetch";
 import { recordRequest } from "./response-status-scope";
 
 type FetchFunction = (input: string | Request | URL, init?: RequestInit) => Promise<Response>;
@@ -32,13 +32,8 @@ const mergeHeaders = (
   return merged;
 };
 
-const isDigestChallenge = (response: Response): boolean => {
-  const header = response.headers.get("www-authenticate");
-  if (!header) {
-    return false;
-  }
-  return /^Digest\s/i.test(header);
-};
+const offersScheme = (response: Response, scheme: string): boolean =>
+  selectChallenge(response.headers.get("www-authenticate"), scheme) !== null;
 
 interface DigestAwareFetchOptions {
   credentials: DigestFetchCredentials;
@@ -64,26 +59,40 @@ const createDigestAwareFetch = (options: DigestAwareFetchOptions): DigestAwareFe
     method: knownAuthMethod ?? "unknown",
   };
 
-  const authenticatedFetch: FetchFunction = async (input, init) => {
-    if (state.method === "digest") {
-      return digestClient.fetch(input, init);
-    }
+  const basicFetch: FetchFunction = (input, init) =>
+    baseFetch(input, { ...init, headers: mergeHeaders(init, { authorization: basicAuth }) });
 
-    const headers = mergeHeaders(init, { authorization: basicAuth });
-    const response = await baseFetch(input, { ...init, headers });
+  const fetchWithDigest: FetchFunction = async (input, init) => {
+    const response = await digestClient.fetch(input, init);
 
-    if (state.method === "basic") {
+    if (response.status !== HTTP_UNAUTHORIZED) {
       return response;
     }
 
+    if (offersScheme(response, "Digest") || !offersScheme(response, "Basic")) {
+      return response;
+    }
+
+    await response.body?.cancel();
+    state.method = "basic";
+    return basicFetch(input, init);
+  };
+
+  const authenticatedFetch: FetchFunction = async (input, init) => {
+    if (state.method === "digest") {
+      return fetchWithDigest(input, init);
+    }
+
+    const response = await basicFetch(input, init);
+
     if (response.status !== HTTP_UNAUTHORIZED) {
-      if (state.method === "unknown" && response.ok) {
+      if (response.ok) {
         state.method = "basic";
       }
       return response;
     }
 
-    if (!isDigestChallenge(response)) {
+    if (!offersScheme(response, "Digest")) {
       return response;
     }
 

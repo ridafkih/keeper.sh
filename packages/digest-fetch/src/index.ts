@@ -3,6 +3,62 @@ import { CryptoHasher } from "bun";
 const md5 = (data: string): string =>
   new CryptoHasher("md5").update(data).digest("hex");
 
+interface AuthChallenge {
+  scheme: string;
+  params: string;
+}
+
+const AUTH_PARAM_PATTERN = /^[A-Za-z0-9!#$%&'*+\-.^_`|~]+\s*=/;
+const AUTH_SCHEME_PATTERN =
+  /^([A-Za-z][A-Za-z0-9!#$%&'*+\-.^_`|~]*)(?:\s+([\S\s]*))?$/;
+
+const CHALLENGE_SEGMENT_PATTERN = /(?:[^,"]|"[^"]*")+/g;
+
+const splitChallengeSegments = (header: string): string[] =>
+  (header.match(CHALLENGE_SEGMENT_PATTERN) ?? [])
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+
+const parseChallengeList = (header: string): AuthChallenge[] => {
+  const segments = splitChallengeSegments(header);
+  const schemeIndexes = segments
+    .map((segment, index) => ({ index, segment }))
+    .filter(({ segment }) => !AUTH_PARAM_PATTERN.test(segment))
+    .map(({ index }) => index);
+
+  return schemeIndexes.flatMap((start, position) => {
+    const match = AUTH_SCHEME_PATTERN.exec(segments[start] ?? "");
+
+    if (!match?.[1]) {
+      return [];
+    }
+
+    const end = schemeIndexes[position + 1] ?? segments.length;
+    const params = [match[2] ?? "", ...segments.slice(start + 1, end)]
+      .filter(Boolean)
+      .join(", ");
+
+    return [{ params, scheme: match[1] }];
+  });
+};
+
+const selectChallenge = (
+  header: string | null,
+  scheme: string,
+): AuthChallenge | null => {
+  if (!header) {
+    return null;
+  }
+
+  const target = scheme.toLowerCase();
+
+  return (
+    parseChallengeList(header).find(
+      (challenge) => challenge.scheme.toLowerCase() === target,
+    ) ?? null
+  );
+};
+
 const parseField = (
   header: string,
   field: string,
@@ -73,13 +129,13 @@ interface DigestChallenge {
   opaque: string | null;
 }
 
-const parseChallenge = (header: string): DigestChallenge => ({
+const parseChallenge = (challenge: AuthChallenge): DigestChallenge => ({
   nonceCount: 1,
-  scheme: header.split(/\s/)[0] ?? "Digest",
-  realm: parseRealm(header),
-  qualityOfProtection: parseQualityOfProtection(header),
-  opaque: parseField(header, "opaque"),
-  nonce: parseField(header, "nonce") ?? "",
+  scheme: challenge.scheme,
+  realm: parseRealm(challenge.params),
+  qualityOfProtection: parseQualityOfProtection(challenge.params),
+  opaque: parseField(challenge.params, "opaque"),
+  nonce: parseField(challenge.params, "nonce") ?? "",
   clientNonce: generateClientNonce(),
 });
 
@@ -150,13 +206,8 @@ interface DigestClientOptions {
   fetch: FetchFunction;
 }
 
-const isDigestChallenge = (header: string | null): header is string => {
-  if (!header) {
-    return false;
-  }
-
-  return /^Digest\s/i.test(header);
-};
+const selectDigestChallenge = (header: string | null): AuthChallenge | null =>
+  selectChallenge(header, "Digest");
 
 const createDigestClient = (options: DigestClientOptions) => {
   const { user, password } = options;
@@ -202,14 +253,16 @@ const createDigestClient = (options: DigestClientOptions) => {
         return response;
       }
 
-      const wwwAuthenticate = response.headers.get("www-authenticate");
+      const digestChallenge = selectDigestChallenge(
+        response.headers.get("www-authenticate"),
+      );
 
-      if (!isDigestChallenge(wwwAuthenticate)) {
+      if (!digestChallenge) {
         return response;
       }
 
       await response.body?.cancel();
-      challenge = parseChallenge(wwwAuthenticate);
+      challenge = parseChallenge(digestChallenge);
       const retryResponse = await authenticatedFetch(
         challenge,
         input,
@@ -227,14 +280,16 @@ const createDigestClient = (options: DigestClientOptions) => {
       return initialResponse;
     }
 
-    const wwwAuthenticate = initialResponse.headers.get("www-authenticate");
+    const digestChallenge = selectDigestChallenge(
+      initialResponse.headers.get("www-authenticate"),
+    );
 
-    if (!isDigestChallenge(wwwAuthenticate)) {
+    if (!digestChallenge) {
       return initialResponse;
     }
 
     await initialResponse.body?.cancel();
-    challenge = parseChallenge(wwwAuthenticate);
+    challenge = parseChallenge(digestChallenge);
     const retryResponse = await authenticatedFetch(
       challenge,
       input,
@@ -249,5 +304,5 @@ const createDigestClient = (options: DigestClientOptions) => {
   return { fetch: digestFetch };
 };
 
-export { createDigestClient };
-export type { FetchFunction };
+export { createDigestClient, selectChallenge };
+export type { AuthChallenge, FetchFunction };
