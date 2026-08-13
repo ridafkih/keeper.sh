@@ -29,6 +29,19 @@ describe("selectIngestWideEventFields", () => {
       "operation.name": "ingest:source",
       "operation.type": "ingest",
       "outcome": "error",
-    })).toEqual({ "events.added": 0 });
+    })).toEqual({
+      "events.added": 0,
+      "ingest.duration_ms": 12,
+      "ingest.outcome": "error",
+    });
+  });
+
+  it("keeps the ingest-specific outcomes distinguishable under their own key", () => {
+    for (const outcome of ["superseded", "unchanged", "in-sync", "full-sync-required"]) {
+      expect(selectIngestWideEventFields({ flushed: false, outcome })).toEqual({
+        "flushed": false,
+        "ingest.outcome": outcome,
+      });
+    }
   });
 });

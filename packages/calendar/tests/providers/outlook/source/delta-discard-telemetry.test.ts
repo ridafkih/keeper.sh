@@ -25,13 +25,19 @@ interface OutlookItem {
   type?: string;
 }
 
+const describeThrow = (error: unknown): string => {
+  if (error instanceof Error) {
+    return `throw:${error.message}`;
+  }
+  return "throw";
+};
+
 let deltaCallCount = 0;
 
 const answerWith = (items: OutlookItem[], deltaLink: string): void => {
   deltaCallCount = 0;
-  const stub = (input: string | URL | Request): Promise<Response> => {
+  const stub = (): Promise<Response> => {
     deltaCallCount += 1;
-    void input;
     return Promise.resolve(Response.json({
       "@odata.deltaLink": deltaLink,
       value: items,
@@ -159,6 +165,15 @@ const DINNER: OutlookItem = {
   type: "singleInstance",
 };
 
+const DINNER_WITHOUT_ICAL_UID: OutlookItem = {
+  end: DINNER.end,
+  id: DINNER.id,
+  lastModifiedDateTime: DINNER.lastModifiedDateTime,
+  start: DINNER.start,
+  subject: DINNER.subject,
+  type: DINNER.type,
+};
+
 const seedFullSync = async (store: ReturnType<typeof createStore>): Promise<RunOutcome> => {
   const first = await ingestOutlook(store, [STANDUP, DINNER], null);
   expect(first.inserts.toSorted()).toEqual(["state-outlook-dinner", "state-outlook-standup"]);
@@ -185,7 +200,7 @@ describe("Outlook delta discards", () => {
 
     const run = await ingestOutlook(
       store,
-      [{ ...DINNER, iCalUId: undefined, lastModifiedDateTime: "2026-06-10T00:00:00Z" }],
+      [{ ...DINNER_WITHOUT_ICAL_UID, lastModifiedDateTime: "2026-06-10T00:00:00Z" }],
       deltaToken(seeded),
     );
 
@@ -277,7 +292,7 @@ describe("Outlook delta discards", () => {
     for (let attempt = 0; attempt < 4; attempt += 1) {
       const run = await ingestOutlook(
         store,
-        [{ ...DINNER, iCalUId: undefined }],
+        [DINNER_WITHOUT_ICAL_UID],
         token,
       );
       timeline.push({ deletes: run.deletes.length, inserts: run.inserts.length });
@@ -337,7 +352,7 @@ describe("Outlook delta discards", () => {
         [CUSTOM_ZONE_EVENT, { ...STANDUP, subject: "Standup (renamed)" }],
         token,
       ).catch((error: unknown) => {
-        outcomes.push(error instanceof Error ? `throw:${error.message}` : "throw");
+        outcomes.push(describeThrow(error));
         return null;
       });
       if (!run) {

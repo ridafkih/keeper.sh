@@ -441,6 +441,60 @@ const buildInstanceIdentity = (uid: string, recurrenceDate: Date | undefined): s
   return buildRecurrenceIdentity(uid, recurrenceDate);
 };
 
+interface StaleRevisions {
+  identities: Set<string>;
+  unsupported: UnsupportedIcsEvent[];
+}
+
+/*
+ * An unbuildable VEVENT is dropped before revision selection runs, so an older
+ * revision of the same instance wins the group and the instance would sync at
+ * the time the publisher already moved it away from. Withholding the UID keeps
+ * the rule the ranged-override path already follows — nothing is ever synced at
+ * a stale time — and the identity is reported so the drop is still counted.
+ */
+const collectStaleRevisions = (
+  rawEvents: readonly IcsEvent[],
+  canonicalEvents: readonly IcsEvent[],
+): StaleRevisions => {
+  const canonicalByIdentity = new Map<string, IcsEvent>();
+  for (const event of canonicalEvents) {
+    if (!event.uid) {
+      continue;
+    }
+    canonicalByIdentity.set(
+      buildInstanceIdentity(event.uid, event.recurrenceId?.value.date),
+      event,
+    );
+  }
+
+  const identities = new Set<string>();
+  const unsupported = new Map<string, UnsupportedIcsEvent>();
+  for (const event of rawEvents) {
+    if (!event.uid || !isUnbuildableEvent(event)) {
+      continue;
+    }
+    const identity = buildInstanceIdentity(event.uid, event.recurrenceId?.value.date);
+    const superseded = canonicalByIdentity.get(identity);
+    if (!superseded || !isNewerEventRevision(event, superseded)) {
+      continue;
+    }
+    identities.add(identity);
+    unsupported.set(event.uid, {
+      reason: `The newest revision of event ${event.uid} has a span Keeper cannot represent`,
+      uid: event.uid,
+    });
+  }
+
+  return { identities, unsupported: [...unsupported.values()] };
+};
+
+const mergeUnsupportedEvents = (
+  ...groups: readonly UnsupportedIcsEvent[][]
+): UnsupportedIcsEvent[] => [
+  ...new Map(groups.flat().map((event) => [event.uid, event])).values(),
+];
+
 /*
  * A VEVENT with no UID, no DTSTART, or a span Keeper cannot build is dropped
  * before it ever reaches the output, and every snapshot source reads that
@@ -498,17 +552,21 @@ const parseIcsEventsWithDiagnostics = (
     return [convertCanonicalEvent(event, cancellations)];
   });
 
-  const discarded = countDiscardedIcsEvents(
-    rawEvents,
-    options,
-    new Set(events.map(({ recurrenceId, uid }) => buildInstanceIdentity(uid, recurrenceId))),
-  );
+  const stale = collectStaleRevisions(rawEvents, canonicalEvents);
+  const parsedIdentities = events
+    .map(({ recurrenceId, uid }) => buildInstanceIdentity(uid, recurrenceId))
+    .filter((identity) => !stale.identities.has(identity));
+
+  const discarded = countDiscardedIcsEvents(rawEvents, options, new Set(parsedIdentities));
 
   return {
     events,
     selfAuthoredCount: discarded.selfAuthoredCount,
     unrepresentableCount: discarded.unrepresentableCount + collapsedSlotCount,
-    unsupportedEvents: collectRangedOverrideEvents(canonicalEvents),
+    unsupportedEvents: mergeUnsupportedEvents(
+      collectRangedOverrideEvents(canonicalEvents),
+      stale.unsupported,
+    ),
   };
 };
 
