@@ -21,6 +21,9 @@ interface ExpandedObservance {
   offsetToMilliseconds: number;
 }
 
+const MS_PER_MINUTE = 60 * 1000;
+const MINUTES_PER_HOUR = 60;
+
 const WEEKDAYS: Record<string, Weekday> = {
   FR: RRule.FR,
   MO: RRule.MO,
@@ -119,6 +122,77 @@ const resolveWallTimeFromEmittedTimezone = (
 
 const REFERENCE = new Date("2026-06-17T12:00:00.000Z");
 
+const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
+
+const getOffsetFormatter = (timeZone: string): Intl.DateTimeFormat => {
+  const cached = offsetFormatters.get(timeZone);
+  if (cached) {
+    return cached;
+  }
+  const formatter = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" });
+  offsetFormatters.set(timeZone, formatter);
+  return formatter;
+};
+
+const offsetMillisecondsAt = (instant: Date, timeZone: string): number => {
+  const timeZoneName = getOffsetFormatter(timeZone)
+    .formatToParts(instant)
+    .find((part) => part.type === "timeZoneName")?.value;
+  if (!timeZoneName) {
+    throw new Error(`No offset name for ${timeZone} at ${instant.toISOString()}`);
+  }
+  if (timeZoneName === "GMT") {
+    return 0;
+  }
+  const match = /^GMT([+-])(\d{2}):(\d{2})$/.exec(timeZoneName);
+  if (!match) {
+    throw new Error(`Unparseable offset name ${timeZoneName}`);
+  }
+  const [, sign, hours, minutes] = match;
+  const magnitude = (Number(hours) * MINUTES_PER_HOUR + Number(minutes)) * MS_PER_MINUTE;
+  if (sign === "-") {
+    return -magnitude;
+  }
+  return magnitude;
+};
+
+interface ScannedTransition {
+  instant: Date;
+  offsetFromMilliseconds: number;
+  offsetToMilliseconds: number;
+}
+
+const MS_PER_DAY = 24 * 60 * MS_PER_MINUTE;
+
+const scanIntlTransitions = (timeZone: string, start: Date, end: Date): ScannedTransition[] => {
+  const transitions: ScannedTransition[] = [];
+  let previousProbe = start.getTime();
+  let previousOffset = offsetMillisecondsAt(start, timeZone);
+  for (let probe = previousProbe + MS_PER_DAY; probe <= end.getTime(); probe += MS_PER_DAY) {
+    const offset = offsetMillisecondsAt(new Date(probe), timeZone);
+    if (offset !== previousOffset) {
+      let low = previousProbe;
+      let high = probe;
+      while (high - low > 1) {
+        const middle = Math.floor((low + high) / 2);
+        if (offsetMillisecondsAt(new Date(middle), timeZone) === previousOffset) {
+          low = middle;
+        } else {
+          high = middle;
+        }
+      }
+      transitions.push({
+        instant: new Date(high),
+        offsetFromMilliseconds: previousOffset,
+        offsetToMilliseconds: offset,
+      });
+    }
+    previousProbe = probe;
+    previousOffset = offset;
+  }
+  return transitions;
+};
+
 describe("buildVtimezone", () => {
   it("emits Outlook-compatible annual rules only after validating the full projection", () => {
     const { ics, timezone } = renderAndParseVtimezone("Europe/Berlin", REFERENCE);
@@ -134,16 +208,58 @@ describe("buildVtimezone", () => {
   });
 
   it("does not invent a perpetual rule for Morocco's moving Ramadan transitions", () => {
-    const { ics, timezone } = renderAndParseVtimezone("Africa/Casablanca", REFERENCE);
+    // Casablanca's Ramadan transition dates differ across tzdata releases, so expectations derive from the runtime's own zone data via Intl.
+    const zone = "Africa/Casablanca";
+    const { ics, timezone } = renderAndParseVtimezone(zone, REFERENCE);
 
-    expect(ics).toContain("DTSTART:20260215T030000");
-    expect(ics).toContain("DTSTART:20260322T020000");
-    expect(ics).toContain("DTSTART:20270207T030000");
-    expect(ics).toContain("DTSTART:20270314T020000");
-    expect(ics).toContain("DTSTART:20280123T030000");
-    expect(ics).toContain("DTSTART:20280305T020000");
     expect(ics).not.toContain("RRULE");
-    expect(timezone.props.length).toBeGreaterThan(100);
+
+    const emitted = timezone.props
+      .filter((prop) => prop.offsetFrom !== prop.offsetTo)
+      .map((prop) => {
+        const offsetFromMilliseconds = timeZoneOffsetToMilliseconds(prop.offsetFrom);
+        const offsetToMilliseconds = timeZoneOffsetToMilliseconds(prop.offsetTo);
+        return {
+          instant: new Date(
+            prop.start.getTime() + offsetToMilliseconds - offsetFromMilliseconds,
+          ),
+          offsetFromMilliseconds,
+          offsetToMilliseconds,
+        };
+      });
+
+    for (const transition of emitted) {
+      expect(offsetMillisecondsAt(new Date(transition.instant.getTime() - 1), zone))
+        .toBe(transition.offsetFromMilliseconds);
+      expect(offsetMillisecondsAt(transition.instant, zone))
+        .toBe(transition.offsetToMilliseconds);
+    }
+
+    const referenceYear = REFERENCE.getUTCFullYear();
+    const scanned = scanIntlTransitions(
+      zone,
+      new Date(Date.UTC(referenceYear, 0, 1)),
+      new Date(Date.UTC(referenceYear + 50, 0, 1)),
+    );
+
+    expect(scanned.length).toBeGreaterThan(0);
+
+    const onsetDates = new Set(scanned.map(({ instant, offsetFromMilliseconds }) => {
+      const localOnset = new Date(instant.getTime() + offsetFromMilliseconds);
+      return `${localOnset.getUTCMonth()}-${localOnset.getUTCDate()}`;
+    }));
+    expect(onsetDates.size).toBeGreaterThan(2);
+
+    const emittedByInstant = new Map(emitted.map((transition) => [
+      transition.instant.getTime(),
+      transition,
+    ]));
+    for (const transition of scanned) {
+      expect(emittedByInstant.get(transition.instant.getTime())).toMatchObject({
+        offsetFromMilliseconds: transition.offsetFromMilliseconds,
+        offsetToMilliseconds: transition.offsetToMilliseconds,
+      });
+    }
   });
 
   it("preserves southern-hemisphere transition direction", () => {
