@@ -82,6 +82,48 @@ describe("classifyDatabaseError server-side connection lifecycle", () => {
 
     expect(classifyDatabaseError(error)).not.toBeNull();
   });
+
+  it("still finds the SQLSTATE when the wrapper carries a non-SQLSTATE errno", () => {
+    const error = Object.assign(drizzleWrapped(
+      postgresError("terminating connection due to administrator command", {
+        code: "ERR_POSTGRES_SERVER_ERROR",
+        errno: "57P01",
+      }),
+    ), { errno: "ECONNRESET" });
+
+    expect(classifyDatabaseError(error)).toEqual({
+      slug: "db-connection-unavailable",
+      sqlState: "57P01",
+    });
+  });
+
+  it("still finds the SQLSTATE when the wrapper carries an unrelated SQLSTATE", () => {
+    const error = Object.assign(drizzleWrapped(
+      postgresError("too many connections for role \"keeper\"", {
+        code: "ERR_POSTGRES_SERVER_ERROR",
+        errno: "53300",
+      }),
+    ), { errno: "23505" });
+
+    expect(classifyDatabaseError(error)).toEqual({
+      slug: "db-connection-unavailable",
+      sqlState: "53300",
+    });
+  });
+
+  it("still finds a cancelled statement behind a wrapper errno", () => {
+    const error = Object.assign(drizzleWrapped(
+      postgresError("canceling statement due to statement timeout", {
+        code: "ERR_POSTGRES_SERVER_ERROR",
+        errno: "57014",
+      }),
+    ), { errno: "ECONNRESET" });
+
+    expect(classifyDatabaseError(error)).toEqual({
+      slug: "db-statement-timeout",
+      sqlState: "57014",
+    });
+  });
 });
 
 describe("classifyDatabaseError non-database failures", () => {

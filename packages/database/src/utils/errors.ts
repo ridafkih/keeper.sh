@@ -142,13 +142,16 @@ const hasDriverCode = (chain: unknown[], matches: (code: string) => boolean): bo
     return code !== null && matches(code);
   });
 
+const readChainSqlStates = (chain: unknown[]): string[] =>
+  chain
+    .map((link) => readSqlState(link))
+    .filter((sqlState): sqlState is string => sqlState !== null);
+
 const classifyDatabaseError = (error: unknown): DatabaseErrorClassification | null => {
   const chain = readErrorChain(error);
-  const sqlState = chain
-    .map((link) => readField(link, "errno"))
-    .find((value) => value !== null) ?? null;
+  const sqlStates = readChainSqlStates(chain);
 
-  if (sqlState === STATEMENT_TIMEOUT_SQLSTATE) {
+  if (sqlStates.includes(STATEMENT_TIMEOUT_SQLSTATE)) {
     return { slug: "db-statement-timeout", sqlState: STATEMENT_TIMEOUT_SQLSTATE };
   }
 
@@ -160,8 +163,10 @@ const classifyDatabaseError = (error: unknown): DatabaseErrorClassification | nu
     return { slug: "db-connection-unavailable", sqlState: null };
   }
 
-  if (sqlState !== null && CONNECTION_UNAVAILABLE_SQLSTATES.has(sqlState)) {
-    return { slug: "db-connection-unavailable", sqlState };
+  const connectionSqlState = sqlStates.find((value) =>
+    CONNECTION_UNAVAILABLE_SQLSTATES.has(value)) ?? null;
+  if (connectionSqlState !== null) {
+    return { slug: "db-connection-unavailable", sqlState: connectionSqlState };
   }
 
   return null;
