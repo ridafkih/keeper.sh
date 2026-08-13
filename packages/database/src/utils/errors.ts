@@ -16,6 +16,9 @@ const CONNECTION_UNAVAILABLE_SQLSTATES = new Set([
   "08006",
   "08007",
   "25P03",
+  "28000",
+  "28P01",
+  "3D000",
   "53300",
   "57P01",
   "57P02",
@@ -26,6 +29,10 @@ const CONNECTION_UNAVAILABLE_SQLSTATES = new Set([
 interface DatabaseErrorClassification {
   slug: string;
   sqlState: string | null;
+}
+
+interface DatabaseErrorSource extends DatabaseErrorClassification {
+  link: unknown;
 }
 
 interface DatabaseErrorDetails {
@@ -109,8 +116,70 @@ const isDatabaseErrorShape = (value: unknown): boolean => {
   return code !== null && code.startsWith(DRIVER_CODE_PREFIX);
 };
 
-const readDetailSource = (error: unknown): unknown =>
-  readErrorChain(error).find((link) => isDatabaseErrorShape(link)) ?? null;
+const isConnectionTerminatedCode = (code: string): boolean =>
+  code === CONNECTION_TERMINATED_CODE;
+
+const isConnectionUnavailableCode = (code: string): boolean =>
+  CONNECTION_UNAVAILABLE_CODES.has(code);
+
+const hasDriverCode = (link: unknown, matches: (code: string) => boolean): boolean => {
+  const code = readField(link, "code");
+  return code !== null && matches(code);
+};
+
+const findLink = (chain: unknown[], matches: (link: unknown) => boolean): unknown =>
+  chain.find((link) => matches(link)) ?? null;
+
+const classifyErrorChain = (chain: unknown[]): DatabaseErrorSource | null => {
+  const timeoutLink = findLink(
+    chain,
+    (link) => readSqlState(link) === STATEMENT_TIMEOUT_SQLSTATE,
+  );
+  if (timeoutLink !== null) {
+    return {
+      link: timeoutLink,
+      slug: "db-statement-timeout",
+      sqlState: STATEMENT_TIMEOUT_SQLSTATE,
+    };
+  }
+
+  const terminatedLink = findLink(
+    chain,
+    (link) => hasDriverCode(link, isConnectionTerminatedCode),
+  );
+  if (terminatedLink !== null) {
+    return { link: terminatedLink, slug: "db-connection-terminated", sqlState: null };
+  }
+
+  const unavailableCodeLink = findLink(
+    chain,
+    (link) => hasDriverCode(link, isConnectionUnavailableCode),
+  );
+  if (unavailableCodeLink !== null) {
+    return { link: unavailableCodeLink, slug: "db-connection-unavailable", sqlState: null };
+  }
+
+  const unavailableSqlStateLink = findLink(chain, (link) => {
+    const sqlState = readSqlState(link);
+    return sqlState !== null && CONNECTION_UNAVAILABLE_SQLSTATES.has(sqlState);
+  });
+  if (unavailableSqlStateLink !== null) {
+    return {
+      link: unavailableSqlStateLink,
+      slug: "db-connection-unavailable",
+      sqlState: readSqlState(unavailableSqlStateLink),
+    };
+  }
+
+  return null;
+};
+
+const readDetailSource = (error: unknown): unknown => {
+  const chain = readErrorChain(error);
+  return classifyErrorChain(chain)?.link
+    ?? chain.find((link) => isDatabaseErrorShape(link))
+    ?? null;
+};
 
 const getDatabaseErrorDetails = (error: unknown): DatabaseErrorDetails | null => {
   const source = readDetailSource(error);
@@ -130,46 +199,12 @@ const getDatabaseErrorDetails = (error: unknown): DatabaseErrorDetails | null =>
   return details;
 };
 
-const isConnectionTerminatedCode = (code: string): boolean =>
-  code === CONNECTION_TERMINATED_CODE;
-
-const isConnectionUnavailableCode = (code: string): boolean =>
-  CONNECTION_UNAVAILABLE_CODES.has(code);
-
-const hasDriverCode = (chain: unknown[], matches: (code: string) => boolean): boolean =>
-  chain.some((link) => {
-    const code = readField(link, "code");
-    return code !== null && matches(code);
-  });
-
-const readChainSqlStates = (chain: unknown[]): string[] =>
-  chain
-    .map((link) => readSqlState(link))
-    .filter((sqlState): sqlState is string => sqlState !== null);
-
 const classifyDatabaseError = (error: unknown): DatabaseErrorClassification | null => {
-  const chain = readErrorChain(error);
-  const sqlStates = readChainSqlStates(chain);
-
-  if (sqlStates.includes(STATEMENT_TIMEOUT_SQLSTATE)) {
-    return { slug: "db-statement-timeout", sqlState: STATEMENT_TIMEOUT_SQLSTATE };
+  const source = classifyErrorChain(readErrorChain(error));
+  if (source === null) {
+    return null;
   }
-
-  if (hasDriverCode(chain, isConnectionTerminatedCode)) {
-    return { slug: "db-connection-terminated", sqlState: null };
-  }
-
-  if (hasDriverCode(chain, isConnectionUnavailableCode)) {
-    return { slug: "db-connection-unavailable", sqlState: null };
-  }
-
-  const connectionSqlState = sqlStates.find((value) =>
-    CONNECTION_UNAVAILABLE_SQLSTATES.has(value)) ?? null;
-  if (connectionSqlState !== null) {
-    return { slug: "db-connection-unavailable", sqlState: connectionSqlState };
-  }
-
-  return null;
+  return { slug: source.slug, sqlState: source.sqlState };
 };
 
 export { classifyDatabaseError, getDatabaseErrorDetails };
