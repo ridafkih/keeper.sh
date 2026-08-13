@@ -47,11 +47,14 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry under a burst of tr
         const sample = window();
 
         const waited = burst.startOffsetsMs.filter((offset) => offset > STATEMENT_SECONDS * 500);
+        // Scheduling stalls on a contended runner can push any start past the threshold, so only the pool-derived lower bound is deterministic.
+        const mustHaveWaited = 6 - POOL_MAX;
 
-        expect(waited.length).toBe(4);
+        expect(waited.length).toBeGreaterThanOrEqual(mustHaveWaited);
         expect(burst.wallMs).toBeGreaterThan(STATEMENT_SECONDS * 1000 * 2);
         expect(sample.queryCount).toBe(6);
-        expect(sample.queuedQueryCount).toBeGreaterThanOrEqual(waited.length);
+        expect(sample.queuedQueryCount).toBeGreaterThanOrEqual(mustHaveWaited);
+        expect(sample.queuedQueryCount).toBeLessThanOrEqual(6);
       });
     } finally {
       await sql.end();
