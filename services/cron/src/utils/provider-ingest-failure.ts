@@ -1,7 +1,10 @@
+import { isTimeoutError } from "@keeper.sh/calendar";
 import {
   CalDAVIncompleteMultiGetError,
   CalDAVUnreadableResourceError,
+  isCalDAVAuthenticationError,
 } from "@keeper.sh/calendar/caldav";
+import { classifyDatabaseError } from "@keeper.sh/database";
 
 interface MissingCalendarFailure {
   disableCalendar: false;
@@ -31,5 +34,16 @@ const resolveMissingCalendarFailure = (error: unknown): MissingCalendarFailure |
   };
 };
 
-export { resolveMissingCalendarFailure };
+const hasOwnSlug = (error: unknown): boolean =>
+  error instanceof CalDAVIncompleteMultiGetError
+  || error instanceof CalDAVUnreadableResourceError;
+
+const shouldTreatAsProviderAuthFailure = (error: unknown): boolean => {
+  if (isTimeoutError(error) || hasOwnSlug(error) || classifyDatabaseError(error)) {
+    return false;
+  }
+  return isCalDAVAuthenticationError(error);
+};
+
+export { resolveMissingCalendarFailure, shouldTreatAsProviderAuthFailure };
 export type { MissingCalendarFailure };
