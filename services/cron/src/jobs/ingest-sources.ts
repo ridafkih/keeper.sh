@@ -30,7 +30,7 @@ import {
   createCalDAVSourceFetcher,
   isCalDAVAuthenticationError,
 } from "@keeper.sh/calendar/caldav";
-import { decryptPassword } from "@keeper.sh/database";
+import { classifyDatabaseError, decryptPassword } from "@keeper.sh/database";
 import {
   calendarAccountsTable,
   calendarsTable,
@@ -151,7 +151,22 @@ const recordSkippedResources = (skippedResourceCount: number, reasons: string[])
   widelog.set("provider.resources_skipped_reasons", reasons.join("; "));
 };
 
+const resolveDatabaseIngestErrorSlug = (error: unknown): string | null => {
+  const databaseError = classifyDatabaseError(error);
+  if (!databaseError) {
+    return null;
+  }
+  if (databaseError.sqlState) {
+    widelog.set("db.error_sqlstate", databaseError.sqlState);
+  }
+  return databaseError.slug;
+};
+
 const resolveIngestErrorSlug = (error: unknown): string => {
+  const databaseErrorSlug = resolveDatabaseIngestErrorSlug(error);
+  if (databaseErrorSlug) {
+    return databaseErrorSlug;
+  }
   if (error instanceof CalDAVIncompleteMultiGetError) {
     return "provider-response-incomplete";
   }

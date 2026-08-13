@@ -31,4 +31,46 @@ describe("getDatabaseErrorDetails", () => {
       sqlState: null,
     });
   });
+
+  it("classifies a pool connection closed by the driver", () => {
+    const error = Object.assign(new Error("Connection closed"), {
+      code: "ERR_POSTGRES_CONNECTION_CLOSED",
+      name: "PostgresError",
+    });
+
+    expect(classifyDatabaseError(error)).toEqual({
+      slug: "db-connection-unavailable",
+      sqlState: null,
+    });
+  });
+
+  it("classifies an idle connection timeout wrapped by the query builder", () => {
+    const cause = Object.assign(new Error("Idle timeout reached after 30s"), {
+      code: "ERR_POSTGRES_IDLE_TIMEOUT",
+      name: "PostgresError",
+    });
+
+    expect(classifyDatabaseError(new Error("Failed query", { cause }))).toEqual({
+      slug: "db-connection-unavailable",
+      sqlState: null,
+    });
+  });
+
+  it("classifies a connection that never established within the timeout", () => {
+    const error = Object.assign(new Error("Connection timeout after 30s"), {
+      code: "ERR_POSTGRES_CONNECTION_TIMEOUT",
+      name: "PostgresError",
+    });
+
+    expect(classifyDatabaseError(error)).toEqual({
+      slug: "db-connection-unavailable",
+      sqlState: null,
+    });
+  });
+
+  it("leaves a server-side constraint violation unclassified", () => {
+    const cause = Object.assign(new Error("duplicate key"), { errno: "23505" });
+
+    expect(classifyDatabaseError(new Error("Failed query", { cause }))).toBeNull();
+  });
 });
