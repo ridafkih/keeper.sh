@@ -148,7 +148,7 @@ describe("a recurring all-day event as Google states it", () => {
       recurrence: ["RRULE:FREQ=DAILY;COUNT=8"],
       start: { date: "2027-03-12", timeZone: "America/New_York" },
       summary: "Daily all-day standup",
-    }] as Parameters<typeof parseGoogleEvents>[0]);
+    }] as unknown as Parameters<typeof parseGoogleEvents>[0]);
 
     expect({
       allDay: parsed?.isAllDay,

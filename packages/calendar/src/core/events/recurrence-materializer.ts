@@ -12,6 +12,7 @@ import {
   getIcsDurationNominalMilliseconds,
 } from "../../ics/utils/recurrence-duration";
 import { overlapsTimeWindow } from "./time-range";
+import { resolveIsAllDayEvent } from "./all-day";
 import { MS_PER_DAY } from "@keeper.sh/constants";
 
 interface RecurrenceMaterializationWindow {
@@ -359,6 +360,24 @@ const getOverriddenSlotsByMaster = (
   return slotsByMaster;
 };
 
+/*
+ * A DATE-valued series is floating: RFC 5545 §3.3.10 expands it against the dates
+ * themselves, not against any zone's wall clock, and a source that states a calendar
+ * timezone alongside the DATE — Google does so on every recurring event — is naming the
+ * calendar, not a rule for shifting the days. Expanding such a series in that zone drags
+ * every occurrence after a daylight transition off UTC midnight, and the whole-day snap
+ * then publishes it as a two-day span over a day its predecessor already holds. The zone
+ * is still resolved so an unsupported one is rejected wherever it appears.
+ */
+const resolveExpansionTimeZone = (master: SyncableEvent): string | undefined => {
+  const timeZone = resolveTimeZone(master.startTimeZone);
+  if (resolveIsAllDayEvent(master)) {
+    return;
+  }
+
+  return timeZone;
+};
+
 const materializeMaster = (
   master: SyncableEvent,
   overriddenSlots: Set<number>,
@@ -368,7 +387,7 @@ const materializeMaster = (
     return [];
   }
 
-  const timeZone = resolveTimeZone(master.startTimeZone);
+  const timeZone = resolveExpansionTimeZone(master);
   const recurrenceStart = toRecurrenceWallTime(master.startTime, timeZone);
   const recurrenceEnd = toRecurrenceWallTime(window.end, timeZone);
   let durationForWindowLookback = master.endTime.getTime() - master.startTime.getTime();
