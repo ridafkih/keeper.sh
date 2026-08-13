@@ -369,17 +369,6 @@ describe("a thrown backoff-eligible error on a run this worker no longer owns", 
     expect(writes).toEqual([]);
   });
 
-  it("does not write backoff after the calendar was invalidated", async () => {
-    const { database, writes } = createHarness({ failureCount: 0 });
-    isCalendarInvalidatedMock.mockImplementation(() => Promise.resolve(true));
-    syncCalendarMock.mockImplementation(
-      () => Promise.reject(new Error("404 Not Found")),
-    );
-
-    await syncDestinationsForUser(USER_ID, config(database));
-
-    expect(writes).toEqual([]);
-  });
 });
 
 describe("eligibility of a wrapped provider error", () => {

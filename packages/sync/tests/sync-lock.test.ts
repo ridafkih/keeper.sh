@@ -139,9 +139,8 @@ const createMockRedis = () => {
   const runIsCurrent = (args: string[]): unknown => {
     const lockKey = args[0] ?? "";
     const waiterKey = args[1] ?? "";
-    const invalidationKey = args[2] ?? "";
-    const holderId = args[3] ?? "";
-    if (readValue(lockKey) !== holderId || readValue(invalidationKey) !== null) {
+    const holderId = args[2] ?? "";
+    if (readValue(lockKey) !== holderId) {
       return 0;
     }
     const waiters = lists.get(waiterKey) ?? [];

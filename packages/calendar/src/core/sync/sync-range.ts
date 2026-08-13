@@ -126,6 +126,7 @@ export {
   createSourceIngestionPlan,
   getConfigurableSyncWindow,
   getStartOfToday,
+  getSyncRangeOrder,
   getWiderSyncRange,
   intersectSyncWindows,
 };

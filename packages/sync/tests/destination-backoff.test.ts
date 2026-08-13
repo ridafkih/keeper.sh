@@ -344,18 +344,6 @@ describe("runs that were superseded", () => {
     expect(row.failureCount).toBe(3);
   });
 
-  it("does not clear backoff for an empty run that was invalidated mid-flight", async () => {
-    const { database, row, writes } = createHarness({
-      failureCount: 3,
-      nextAttemptAt: new Date(START.getTime() - 1),
-    });
-    isCalendarInvalidatedMock.mockImplementation(() => Promise.resolve(true));
-
-    await syncDestinationsForUser(USER_ID, config(database));
-
-    expect(writes).toEqual([]);
-    expect(row.failureCount).toBe(3);
-  });
 });
 
 describe("a run that did no work because it was superseded", () => {

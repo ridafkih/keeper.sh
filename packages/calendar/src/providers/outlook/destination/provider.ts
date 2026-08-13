@@ -8,12 +8,24 @@ import type {
   DeleteResult,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
+  ProviderThrottleMetrics,
   PushResult,
   RemoteEvent,
 } from "../../../core/types";
 import { getErrorMessage } from "../../../core/utils/error";
 import { ensureValidToken } from "../../../core/oauth/ensure-valid-token";
 import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-valid-token";
+import { withBackoff } from "../../../core/utils/backoff";
+import type { BackoffRetry } from "../../../core/utils/backoff";
+import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
+import {
+  getThrottleRetryDelayMs,
+  isThrottledError,
+  isThrottleStatus,
+  OUTLOOK_MAX_THROTTLE_RETRIES,
+  OutlookThrottledError,
+  parseRetryAfterMs,
+} from "../shared/throttle";
 import { MICROSOFT_GRAPH_API, OUTLOOK_PAGE_SIZE } from "../shared/api";
 import { parseEventTime } from "../shared/date-time";
 import { serializeOutlookEvent } from "./serialize-event";
@@ -28,15 +40,37 @@ interface OutlookSyncProviderConfig {
   calendarId: string;
   userId: string;
   refreshAccessToken?: TokenRefresher;
+  rateLimiter?: RedisRateLimiter;
   signal?: AbortSignal;
 }
 
 const createCaughtFailure = (error: unknown): PushResult | DeleteResult => {
+  if (isThrottledError(error)) {
+    return {
+      error: error.message,
+      errorType: error.name,
+      statusCode: error.status,
+      success: false,
+    };
+  }
   let errorType = "UnknownError";
   if (error instanceof Error) {
     errorType = error.name;
   }
   return { error: getErrorMessage(error), errorType, success: false };
+};
+
+const readGraphErrorMessage = async (response: Response): Promise<string> => {
+  const text = await response.text();
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (microsoftApiErrorSchema.allows(parsed)) {
+      return microsoftApiErrorSchema.assert(parsed).error?.message ?? response.statusText;
+    }
+    return response.statusText;
+  } catch {
+    return response.statusText;
+  }
 };
 
 const parseRemoteAvailability = (
@@ -68,6 +102,46 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
 
   const calendarEventsUrl = `${MICROSOFT_GRAPH_API}/me/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
 
+  const throttleMetrics: ProviderThrottleMetrics = { retryAfterMs: 0, retryCount: 0 };
+
+  const recordThrottleRetry = (retry: BackoffRetry): void => {
+    throttleMetrics.retryCount += 1;
+    throttleMetrics.retryAfterMs += retry.delayMs;
+  };
+
+  const sendRequest = async (url: URL, init: RequestInit): Promise<Response> => {
+    if (config.rateLimiter) {
+      await config.rateLimiter.acquire(1, config.signal);
+    }
+
+    const response = await fetchWithTimeout(
+      url,
+      init,
+      PROVIDER_PUSH_REQUEST_TIMEOUT_MS,
+      config.signal,
+    );
+
+    if (!isThrottleStatus(response.status)) {
+      return response;
+    }
+
+    const retryAfterMs = parseRetryAfterMs(response.headers.get("Retry-After"));
+    throw new OutlookThrottledError(
+      response.status,
+      retryAfterMs,
+      await readGraphErrorMessage(response),
+    );
+  };
+
+  const sendRequestWithRetry = (url: URL, init: RequestInit): Promise<Response> =>
+    withBackoff(() => sendRequest(url, init), {
+      getRetryDelayMs: getThrottleRetryDelayMs,
+      maxRetries: OUTLOOK_MAX_THROTTLE_RETRIES,
+      onRetry: recordThrottleRetry,
+      shouldRetry: isThrottledError,
+      signal: config.signal,
+    });
+
   const pushEvents = async (events: MaterializedSyncableEvent[]): Promise<PushResult[]> => {
     await refreshIfNeeded();
     const results: PushResult[] = [];
@@ -77,17 +151,15 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
         const resource = serializeOutlookEvent(event);
         const url = new URL(calendarEventsUrl);
 
-        const response = await fetchWithTimeout(url, {
+        const response = await sendRequestWithRetry(url, {
           body: JSON.stringify(resource),
           headers: getHeaders(),
           method: "POST",
-        }, PROVIDER_PUSH_REQUEST_TIMEOUT_MS, config.signal);
+        });
 
         if (!response.ok) {
-          const body = await response.json();
-          const { error } = microsoftApiErrorSchema.assert(body);
           results.push({
-            error: error?.message ?? response.statusText,
+            error: await readGraphErrorMessage(response),
             errorType: "MicrosoftGraphHttpError",
             statusCode: response.status,
             success: false,
@@ -117,16 +189,14 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       try {
         const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${eventId}`);
 
-        const response = await fetchWithTimeout(url, {
+        const response = await sendRequestWithRetry(url, {
           headers: { Authorization: `Bearer ${tokenState.accessToken}` },
           method: "DELETE",
-        }, PROVIDER_PUSH_REQUEST_TIMEOUT_MS, config.signal);
+        });
 
         if (!response.ok && response.status !== HTTP_STATUS.NOT_FOUND) {
-          const body = await response.json();
-          const { error } = microsoftApiErrorSchema.assert(body);
           results.push({
-            error: error?.message ?? response.statusText,
+            error: await readGraphErrorMessage(response),
             errorType: "MicrosoftGraphHttpError",
             statusCode: response.status,
             success: false,
@@ -176,18 +246,16 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     do {
       const url = buildOutlookEventsUrl(options.timeMin, nextLink);
 
-      const response = await fetchWithTimeout(url, {
+      const response = await sendRequestWithRetry(url, {
         headers: {
           Authorization: `Bearer ${tokenState.accessToken}`,
           Prefer: `outlook.body-content-type="text"`,
         },
         method: "GET",
-      }, PROVIDER_PUSH_REQUEST_TIMEOUT_MS, config.signal);
+      });
 
       if (!response.ok) {
-        const body = await response.json();
-        const { error } = microsoftApiErrorSchema.assert(body);
-        throw new Error(error?.message ?? response.statusText);
+        throw new Error(await readGraphErrorMessage(response));
       }
 
       const body = await response.json();
@@ -228,7 +296,9 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     return remoteEvents;
   };
 
-  return { pushEvents, deleteEvents, listRemoteEvents };
+  const getThrottleMetrics = (): ProviderThrottleMetrics => ({ ...throttleMetrics });
+
+  return { pushEvents, deleteEvents, listRemoteEvents, getThrottleMetrics };
 };
 
 export { createOutlookSyncProvider };
