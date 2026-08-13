@@ -99,18 +99,35 @@ describe("isEventInDestinationReconciliationWindow", () => {
   it("includes an event that starts before the boundary but overlaps it", () => {
     expect(isEventInDestinationReconciliationWindow({
       endTime: new Date("2026-07-10T01:00:00.000Z"),
+      startTime: new Date("2026-07-09T23:00:00.000Z"),
     }, timeMin)).toBe(true);
   });
 
   it("includes ordinary events arbitrarily far in the future", () => {
     expect(isEventInDestinationReconciliationWindow({
       endTime: new Date("2040-03-15T10:00:00.000Z"),
+      startTime: new Date("2040-03-15T09:00:00.000Z"),
     }, timeMin)).toBe(true);
   });
 
   it("excludes events that ended before the boundary", () => {
     expect(isEventInDestinationReconciliationWindow({
       endTime: new Date("2026-07-09T23:59:59.999Z"),
+      startTime: new Date("2026-07-09T22:00:00.000Z"),
+    }, timeMin)).toBe(false);
+  });
+
+  it("includes an inverted event whose start is past the boundary but whose end is not", () => {
+    expect(isEventInDestinationReconciliationWindow({
+      endTime: new Date("2026-01-01T00:00:00.000Z"),
+      startTime: new Date("2026-08-01T00:00:00.000Z"),
+    }, timeMin)).toBe(true);
+  });
+
+  it("excludes an inverted event whose start is also before the boundary", () => {
+    expect(isEventInDestinationReconciliationWindow({
+      endTime: new Date("2026-01-01T00:00:00.000Z"),
+      startTime: new Date("2026-02-01T00:00:00.000Z"),
     }, timeMin)).toBe(false);
   });
 });

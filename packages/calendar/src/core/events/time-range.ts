@@ -36,6 +36,21 @@ const resolvePointInTimeRange = ({ endTime, startTime }: EventTimeRange): EventT
   return { endTime: new Date(startTime.getTime() + POINT_IN_TIME_DURATION_MS), startTime };
 };
 
+/*
+ * The last instant a range reaches. A range that does not end after it starts covers no
+ * interval, so its end says nothing about where it sits — it reaches only the one instant
+ * it names: the start the source states outright. Judging a window bound against this
+ * instant keeps an inverted range from being discarded for an end that predates a window
+ * its start sits inside.
+ */
+const resolveTimeRangeEnd = ({ endTime, startTime }: EventTimeRange): Date => {
+  if (endTime.getTime() > startTime.getTime()) {
+    return endTime;
+  }
+
+  return startTime;
+};
+
 const isEmptyTimeRange =({ endTime, startTime }: EventTimeRange): boolean =>
   endTime.getTime() === startTime.getTime();
 
@@ -67,6 +82,7 @@ export {
   overlapsTimeWindow,
   POINT_IN_TIME_DURATION_MS,
   resolvePointInTimeRange,
+  resolveTimeRangeEnd,
   resolveWholeDayTimeRange,
 };
 export type { EventTimeRange };

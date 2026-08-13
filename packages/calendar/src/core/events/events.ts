@@ -14,7 +14,7 @@ import type {
 import type { SyncWindow } from "../sync/sync-range";
 import { parseStoredRecurrenceForMaterialization } from "./stored-recurrence";
 import { materializeRecurrenceEvents } from "./recurrence-materializer";
-import { isEmptyTimeRange, isInvertedTimeRange } from "./time-range";
+import { isEmptyTimeRange, isInvertedTimeRange, resolveTimeRangeEnd } from "./time-range";
 
 const EMPTY_SOURCES_COUNT = 0;
 
@@ -50,9 +50,9 @@ const EMPTY_DESTINATION_EVENT_READ_DIAGNOSTICS: DestinationEventReadDiagnostics 
 };
 
 const isEventInDestinationReconciliationWindow = (
-  event: Pick<SyncableEvent, "endTime">,
+  event: Pick<SyncableEvent, "endTime" | "startTime">,
   timeMin: Date,
-): boolean => event.endTime >= timeMin;
+): boolean => resolveTimeRangeEnd(event) >= timeMin;
 
 const orAbsent = <TValue>(value: TValue | null): TValue | undefined => {
   if (value === null) {
@@ -203,8 +203,15 @@ const getEventsForCalendarsWithDiagnostics = async (
     .where(
       and(
         inArray(eventStatesTable.calendarId, calendarIds),
+        /*
+         * A row whose end predates the window is fetched anyway when its start does not,
+         * because an inverted range says nothing about where it sits through its end.
+         * The lower bound is decided in memory by the one predicate every layer shares;
+         * this clause only keeps the scan off rows no predicate could admit.
+         */
         or(
           gte(eventStatesTable.endTime, syncWindow.timeMin),
+          gte(eventStatesTable.startTime, syncWindow.timeMin),
           isNotNull(eventStatesTable.recurrenceRule),
           isNotNull(eventStatesTable.recurrenceId),
         ),
