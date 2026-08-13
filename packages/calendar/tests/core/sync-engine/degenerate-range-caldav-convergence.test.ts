@@ -63,21 +63,40 @@ interface CalDAVHarness {
   }>;
 }
 
-const getIcsLine = (ics: string, name: string): string =>
-  ics.split(/\r?\n/).find((line) => line.startsWith(name)) ?? "";
+/*
+ * A VTIMEZONE observance carries its own DTSTART, so a resource is only readable by
+ * scanning the VEVENT component itself.
+ */
+const getIcsLine = (ics: string, name: string): string => {
+  const lines = ics.split(/\r?\n/);
+  const begin = lines.indexOf("BEGIN:VEVENT");
+  const end = lines.indexOf("END:VEVENT");
+  if (begin === -1 || end === -1) {
+    return "";
+  }
+  return lines.slice(begin, end).find((line) => line.startsWith(name)) ?? "";
+};
 
 /*
  * RFC 5545 §3.6.1 requires DTEND to be later in time than DTSTART whenever both are
  * present. A server is entitled to reject anything else, so the store records every
  * resource that violates it rather than accepting it silently.
+ *
+ * DTSTART and DTEND can each be written as a UTC instant or as a TZID-qualified wall
+ * time, so conformance is decided on the instants a reader resolves rather than on the
+ * text, where comparing the two forms lexically would be meaningless.
  */
 const isNonConformantResource = (ics: string): boolean => {
-  const start = getIcsLine(ics, "DTSTART");
-  const end = getIcsLine(ics, "DTEND");
-  if (!start || !end) {
+  if (!getIcsLine(ics, "DTSTART") || !getIcsLine(ics, "DTEND")) {
     return false;
   }
-  return (end.split(":").at(-1) ?? "") <= (start.split(":").at(-1) ?? "");
+  const [parsed] = parseICalCalendarsToRemoteEvents([ics], {
+    rejectUnsupportedRecurrenceDates: false,
+  }).events;
+  if (!parsed) {
+    return true;
+  }
+  return parsed.endTime.getTime() <= parsed.startTime.getTime();
 };
 
 const createCalDAVHarness = (options: HarnessOptions): CalDAVHarness => {

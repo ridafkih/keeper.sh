@@ -1,8 +1,6 @@
 import { normalizeTimezone } from "./normalize-timezone";
 
 const dateTimeFormatters = new Map<string, Intl.DateTimeFormat>();
-const HOURS_TO_SAMPLE = 36;
-const SAMPLE_INTERVAL_HOURS = 6;
 const MINUTES_PER_HOUR = 60;
 const MS_PER_HOUR = 60 * 60 * 1000;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
@@ -88,8 +86,11 @@ const instantToWallTime = (date: Date, timeZone: string): Date => {
   ));
 };
 
+const getTimeZoneOffsetMilliseconds = (instant: Date, timeZone: string): number =>
+  instantToWallTime(instant, timeZone).getTime() - instant.getTime();
+
 const getTimeZoneOffsetMinutes = (instant: Date, timeZone: string): number =>
-  Math.round((instantToWallTime(instant, timeZone).getTime() - instant.getTime()) / 60_000);
+  Math.round(getTimeZoneOffsetMilliseconds(instant, timeZone) / 60_000);
 
 const findTransitionInstant = (
   lowerBound: number,
@@ -157,40 +158,45 @@ const findTimeZoneTransitions = (
   return transitions;
 };
 
+/*
+ * A UTC offset applying to a wall time is one of the two the zone is in a day either
+ * side of it: no zone transitions twice within that span, and no offset is far enough
+ * from UTC for the instant to fall outside the bracket. Two probes therefore name every
+ * candidate, which keeps this off the critical path of parsing a TZID-heavy feed — the
+ * calendar-wide sweep it used to take cost tens of microseconds on every event.
+ */
 const wallTimeToInstant = (wallTime: Date, timeZone: string): Date => {
   const desiredTime = wallTime.getTime();
-  const offsets = new Set<number>();
-  for (
-    let hours = -HOURS_TO_SAMPLE;
-    hours <= HOURS_TO_SAMPLE;
-    hours += SAMPLE_INTERVAL_HOURS
-  ) {
-    const sampleTime = desiredTime + hours * MS_PER_HOUR;
-    const observedTime = instantToWallTime(new Date(sampleTime), timeZone).getTime();
-    offsets.add(observedTime - sampleTime);
+  const offsetBefore = getTimeZoneOffsetMilliseconds(
+    new Date(desiredTime - MS_PER_DAY),
+    timeZone,
+  );
+  const offsetAfter = getTimeZoneOffsetMilliseconds(
+    new Date(desiredTime + MS_PER_DAY),
+    timeZone,
+  );
+  if (offsetBefore === offsetAfter) {
+    /*
+     * No transition brackets the wall time, so the one offset the zone is in holds at
+     * the instant it names as well — that instant sits inside the bracket, no zone
+     * being more than a day from UTC. Re-reading the offset there would only confirm
+     * what the two probes already agree on.
+     */
+    return new Date(desiredTime - offsetBefore);
   }
 
-  const candidates = [...offsets].map((offset) => {
-    const instant = desiredTime - offset;
-    const observedWallTime = instantToWallTime(new Date(instant), timeZone).getTime();
-    return { instant, observedWallTime };
-  });
-  const exactMatches = candidates
-    .filter((candidate) => candidate.observedWallTime === desiredTime)
-    .toSorted((first, second) => first.instant - second.instant);
-  if (exactMatches[0]) {
+  const matches = [offsetBefore, offsetAfter]
+    .map((offset) => desiredTime - offset)
+    .filter((instant) =>
+      getTimeZoneOffsetMilliseconds(new Date(instant), timeZone) === desiredTime - instant);
+  if (matches.length > 0) {
     // During a fold, choose the earlier of the two valid instants.
-    return new Date(exactMatches[0].instant);
+    return new Date(Math.min(...matches));
   }
 
-  const [firstValidTimeAfterGap] = candidates
-    .filter((candidate) => candidate.observedWallTime > desiredTime)
-    .toSorted((first, second) =>
-      first.observedWallTime - second.observedWallTime
-      || first.instant - second.instant);
-  if (firstValidTimeAfterGap) {
+  if (offsetAfter > offsetBefore) {
     // During a gap, shift forward by the size of the timezone transition.
-    return new Date(firstValidTimeAfterGap.instant);
+    return new Date(desiredTime - offsetBefore);
   }
 
   throw new RangeError(`Unable to resolve wall time in timezone ${timeZone}`);
