@@ -17,12 +17,21 @@ interface InstrumentableClient extends Record<string, unknown> {
 const counters = {
   inFlight: 0,
   heldConnections: 0,
+  pendingAcquisitions: 0,
   pooledQueriesInFlight: 0,
   queriesStarted: 0,
   queriesFailed: 0,
   queriesQueued: 0,
   queryDurationMs: 0,
 };
+
+interface QueryRecord {
+  settled: boolean;
+  failed: boolean;
+  durationMs: number;
+}
+
+const inFlightQueries = new Set<QueryRecord>();
 
 let maxConnections = 0;
 
@@ -35,8 +44,16 @@ const roundDuration = (durationMs: number): number => Math.round(durationMs * 10
  * open transactions can exhaust a `max: 2` pool while a single statement is in
  * flight. Occupancy is held transactions plus the queries issued outside any
  * transaction, and that is what a newly issued unit of work has to get past.
+ *
+ * Demand that has been requested but not yet granted counts too. A transaction
+ * only raises `heldConnections` once the pool hands it a connection and its
+ * callback runs, which is at best a tick after `begin` was called, so a burst
+ * issued in a single tick would otherwise all read the occupancy that preceded
+ * the burst and every member of it would look unqueued no matter how long the
+ * pool actually made it wait.
  */
-const occupiedConnections = (): number => counters.heldConnections + counters.pooledQueriesInFlight;
+const occupiedConnections = (): number =>
+  counters.heldConnections + counters.pooledQueriesInFlight + counters.pendingAcquisitions;
 
 const waitsForConnection = (): boolean =>
   maxConnections > 0 && occupiedConnections() >= maxConnections;
@@ -85,17 +102,21 @@ const instrumentQuery = (
   }
 
   const startedAt = performance.now();
-  let settled = false;
+  const record: QueryRecord = { settled: false, failed: false, durationMs: 0 };
+  inFlightQueries.add(record);
   const settle = (failed: boolean): void => {
-    if (settled) {
+    if (record.settled) {
       return;
     }
-    settled = true;
+    record.settled = true;
+    record.failed = failed;
+    record.durationMs = performance.now() - startedAt;
+    inFlightQueries.delete(record);
     counters.inFlight -= 1;
     if (!transactional) {
       counters.pooledQueriesInFlight -= 1;
     }
-    counters.queryDurationMs += performance.now() - startedAt;
+    counters.queryDurationMs += record.durationMs;
     if (failed) {
       counters.queriesFailed += 1;
     }
@@ -206,16 +227,38 @@ const instrumentClient = (
      */
     const acquiresConnection = !transactional && method !== "savepoint";
     client[method] = (...args: unknown[]): unknown => {
-      const queued = acquiresConnection && waitsForConnection();
+      if (!acquiresConnection) {
+        const instrumentNested = (argument: unknown): unknown => {
+          if (typeof argument !== "function") {
+            return argument;
+          }
+          const callback = argument as (transactionClient: InstrumentableClient) => unknown;
+          return (inner: InstrumentableClient): unknown => callback(instrumentClient(inner, true));
+        };
+        return (original as AnyFunction).apply(
+          client,
+          args.map((argument) => instrumentNested(argument)),
+        );
+      }
+
+      const queued = waitsForConnection();
+      counters.pendingAcquisitions += 1;
+      let acquisitionResolved = false;
+      const resolveAcquisition = (): void => {
+        if (acquisitionResolved) {
+          return;
+        }
+        acquisitionResolved = true;
+        counters.pendingAcquisitions -= 1;
+      };
+
       const instrumentArgument = (argument: unknown): unknown => {
         if (typeof argument !== "function") {
           return argument;
         }
         const callback = argument as (transactionClient: InstrumentableClient) => unknown;
-        if (!acquiresConnection) {
-          return (inner: InstrumentableClient): unknown => callback(instrumentClient(inner, true));
-        }
         return async (inner: InstrumentableClient): Promise<unknown> => {
+          resolveAcquisition();
           counters.heldConnections += 1;
           transactionStates.set(inner, { pendingQueued: queued });
           try {
@@ -225,10 +268,28 @@ const instrumentClient = (
           }
         };
       };
-      return (original as AnyFunction).apply(
-        client,
-        args.map((argument) => instrumentArgument(argument)),
-      );
+
+      /*
+       * The callback is the normal end of an acquisition, but a transaction can
+       * fail before the pool ever grants it a connection, in which case the
+       * callback never runs and the demand has to be released from the outcome
+       * instead or it would inflate occupancy for the rest of the process.
+       */
+      try {
+        const returned = (original as AnyFunction).apply(
+          client,
+          args.map((argument) => instrumentArgument(argument)),
+        );
+        if (typeof (returned as PromiseLike<unknown> | undefined)?.then === "function") {
+          (returned as PromiseLike<unknown>).then(resolveAcquisition, resolveAcquisition);
+        } else {
+          resolveAcquisition();
+        }
+        return returned;
+      } catch (error) {
+        resolveAcquisition();
+        throw error;
+      }
     };
   }
 
@@ -253,19 +314,46 @@ const openDatabasePoolWindow = (): DatabasePoolWindow => {
   const startedFailures = counters.queriesFailed;
   const startedQueued = counters.queriesQueued;
   const startedDurationMs = counters.queryDurationMs;
+  /*
+   * A query is counted when it is issued but its duration and its failure land
+   * on the process counters when it settles, so a query already in flight when
+   * the window opened would otherwise charge this window for work it never
+   * counted -- a window reporting one failure and zero queries. Those queries
+   * are known at open time, so their contributions are subtracted back out and
+   * every field describes the same population: the queries this window counted.
+   */
+  const inheritedQueries = [...inFlightQueries];
 
-  return () => ({
-    inFlight: counters.inFlight,
-    queryCount: counters.queriesStarted - startedQueries,
-    queryDurationMs: roundDuration(counters.queryDurationMs - startedDurationMs),
-    queuedQueryCount: counters.queriesQueued - startedQueued,
-    failedQueryCount: counters.queriesFailed - startedFailures,
-  });
+  return () => {
+    let inheritedDurationMs = 0;
+    let inheritedFailures = 0;
+    for (const record of inheritedQueries) {
+      if (!record.settled) {
+        continue;
+      }
+      inheritedDurationMs += record.durationMs;
+      if (record.failed) {
+        inheritedFailures += 1;
+      }
+    }
+
+    return {
+      inFlight: counters.inFlight,
+      queryCount: counters.queriesStarted - startedQueries,
+      queryDurationMs: roundDuration(
+        counters.queryDurationMs - startedDurationMs - inheritedDurationMs,
+      ),
+      queuedQueryCount: counters.queriesQueued - startedQueued,
+      failedQueryCount: counters.queriesFailed - startedFailures - inheritedFailures,
+    };
+  };
 };
 
 const resetDatabasePoolTelemetry = (): void => {
+  inFlightQueries.clear();
   counters.inFlight = 0;
   counters.heldConnections = 0;
+  counters.pendingAcquisitions = 0;
   counters.pooledQueriesInFlight = 0;
   counters.queriesStarted = 0;
   counters.queriesFailed = 0;
