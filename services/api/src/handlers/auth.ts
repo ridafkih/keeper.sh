@@ -3,6 +3,7 @@ import { auth, authCapabilities, env } from "@/context";
 import { prepareOAuthTokenRequest } from "./auth-oauth-resource";
 import { context, widelog } from "@/utils/logging";
 import { resolveOutcome } from "@/utils/middleware";
+import { labelFailure } from "@/utils/error-labelling";
 
 const COMPANION_COOKIE_NAME = "keeper.has_session";
 const COMPANION_COOKIE_SET = `${COMPANION_COOKIE_NAME}=1; Path=/; SameSite=Lax`;
@@ -180,7 +181,7 @@ const handleAuthRequest = (pathname: string, request: Request): Promise<Response
     } catch (error) {
       widelog.set("status_code", 500);
       widelog.set("outcome", "error");
-      widelog.errorFields(error, { slug: "auth-request-failed" });
+      labelFailure(error, { slug: "auth-request-failed" });
       throw error;
     } finally {
       widelog.flush();

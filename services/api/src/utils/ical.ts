@@ -1,103 +1,145 @@
 import { calendarsTable, eventStatesTable, icalFeedSettingsTable } from "@keeper.sh/database/schema";
-import {
-  parseStoredIcsExceptionDates,
-  parseStoredIcsRecurrence,
-} from "@keeper.sh/calendar";
-import { and, asc, eq, inArray, ne, or, isNull } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, lte, ne, or, isNull, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import { resolveUserIdentifier } from "./user";
 import { database } from "@/context";
-import { formatEventsAsIcal } from "./ical-format";
-import type { CalendarEvent, FeedSettings } from "./ical-format";
+import { generateCalendarFeed } from "./ical-feed";
+import type { FeedResponse, IcalFeedQuery, StoredFeedEvent } from "./ical-feed";
+import type { FeedSettings } from "./ical-format";
 
-const DEFAULT_FEED_SETTINGS: FeedSettings = {
-  includeEventName: false,
-  includeEventDescription: false,
-  includeEventLocation: false,
-  excludeAllDayEvents: false,
-  customEventName: "Busy",
-};
+const FIRST_RESULT_LIMIT = 1;
 
-const getFeedSettings = async (userId: string): Promise<FeedSettings> => {
+const readFeedSettings = async (userId: string): Promise<FeedSettings | null> => {
   const [settings] = await database
     .select()
     .from(icalFeedSettingsTable)
     .where(eq(icalFeedSettingsTable.userId, userId))
-    .limit(1);
+    .limit(FIRST_RESULT_LIMIT);
 
-  return settings ?? DEFAULT_FEED_SETTINGS;
+  return settings ?? null;
 };
 
-const generateUserCalendar = async (identifier: string): Promise<string | null> => {
-  const userId = await resolveUserIdentifier(identifier);
-
-  if (!userId) {
-    return null;
-  }
-
-  const [settings, sources] = await Promise.all([
-    getFeedSettings(userId),
-    database
-      .select({ id: calendarsTable.id })
-      .from(calendarsTable)
-      .where(
-        and(
-          eq(calendarsTable.userId, userId),
-          eq(calendarsTable.includeInIcalFeed, true),
-        ),
-      ),
-  ]);
-
-  if (sources.length === 0) {
-    return formatEventsAsIcal([], settings);
-  }
-
-  const calendarIds = sources.map(({ id }) => id);
-  const rows = await database
+const readFeedCalendars = async (userId: string) => {
+  const calendars = await database
     .select({
-      calendarId: eventStatesTable.calendarId,
-      id: eventStatesTable.id,
-      title: eventStatesTable.title,
-      description: eventStatesTable.description,
-      location: eventStatesTable.location,
-      startTime: eventStatesTable.startTime,
-      endTime: eventStatesTable.endTime,
-      availability: eventStatesTable.availability,
-      startTimeZone: eventStatesTable.startTimeZone,
-      isAllDay: eventStatesTable.isAllDay,
-      recurrenceRule: eventStatesTable.recurrenceRule,
-      exceptionDates: eventStatesTable.exceptionDates,
-      recurrenceId: eventStatesTable.recurrenceId,
-      sourceEventUid: eventStatesTable.sourceEventUid,
-      calendarName: calendarsTable.name,
+      id: calendarsTable.id,
+      syncFutureRange: calendarsTable.syncFutureRange,
+      syncHistoricRange: calendarsTable.syncHistoricRange,
+    })
+    .from(calendarsTable)
+    .where(
+      and(
+        eq(calendarsTable.userId, userId),
+        eq(calendarsTable.includeInIcalFeed, true),
+      ),
+    );
+
+  return calendars;
+};
+
+/*
+ * The revision digest and the event read share this filter deliberately. If the
+ * two ever selected different rows the digest would stop tracking the body, and
+ * a subscriber would be handed a 304 for a feed that had in fact changed.
+ */
+const buildFeedEventFilter = (calendarIds: string[], query: IcalFeedQuery): SQL | undefined => and(
+  inArray(eventStatesTable.calendarId, calendarIds),
+  or(
+    isNull(eventStatesTable.sourceEventType),
+    ne(eventStatesTable.sourceEventType, "workingLocation"),
+  ),
+  or(
+    isNull(eventStatesTable.availability),
+    ne(eventStatesTable.availability, "workingElsewhere"),
+  ),
+  lte(eventStatesTable.startTime, query.windowEnd),
+  or(
+    gte(eventStatesTable.endTime, query.windowStart),
+    isNotNull(eventStatesTable.recurrenceRule),
+  ),
+);
+
+const readFeedEvents = (
+  calendarIds: string[],
+  query: IcalFeedQuery,
+): Promise<StoredFeedEvent[]> => database
+  .select({
+    calendarId: eventStatesTable.calendarId,
+    id: eventStatesTable.id,
+    title: eventStatesTable.title,
+    description: eventStatesTable.description,
+    location: eventStatesTable.location,
+    startTime: eventStatesTable.startTime,
+    endTime: eventStatesTable.endTime,
+    availability: eventStatesTable.availability,
+    startTimeZone: eventStatesTable.startTimeZone,
+    isAllDay: eventStatesTable.isAllDay,
+    recurrenceRule: eventStatesTable.recurrenceRule,
+    exceptionDates: eventStatesTable.exceptionDates,
+    recurrenceId: eventStatesTable.recurrenceId,
+    sourceEventUid: eventStatesTable.sourceEventUid,
+    calendarName: calendarsTable.name,
+  })
+  .from(eventStatesTable)
+  .innerJoin(calendarsTable, eq(eventStatesTable.calendarId, calendarsTable.id))
+  .where(buildFeedEventFilter(calendarIds, query))
+  .orderBy(asc(eventStatesTable.startTime));
+
+/*
+ * Every column that reaches the rendered feed is folded in, each coalesced to a
+ * concrete string so a null can never shift one field's value into another's
+ * position. Postgres does the hashing so an unchanged feed costs one aggregate
+ * rather than reading every row into the process and serialising it.
+ */
+const FEED_REVISION_COLUMNS = [
+  eventStatesTable.id,
+  eventStatesTable.title,
+  eventStatesTable.description,
+  eventStatesTable.location,
+  eventStatesTable.startTime,
+  eventStatesTable.endTime,
+  eventStatesTable.availability,
+  eventStatesTable.startTimeZone,
+  eventStatesTable.isAllDay,
+  eventStatesTable.recurrenceRule,
+  eventStatesTable.exceptionDates,
+  eventStatesTable.recurrenceId,
+  eventStatesTable.sourceEventUid,
+  calendarsTable.name,
+];
+
+const readFeedRevision = async (
+  calendarIds: string[],
+  query: IcalFeedQuery,
+): Promise<string> => {
+  const fields = sql.join(
+    FEED_REVISION_COLUMNS.map((column) => sql`coalesce(${column}::text, '')`),
+    sql`, `,
+  );
+
+  const [row] = await database
+    .select({
+      revision: sql<string>`encode(sha256(convert_to(coalesce(string_agg(
+        concat_ws(chr(31), ${fields}), chr(30) order by ${eventStatesTable.id}
+      ), ''), 'UTF8')), 'hex')`,
     })
     .from(eventStatesTable)
     .innerJoin(calendarsTable, eq(eventStatesTable.calendarId, calendarsTable.id))
-    .where(
-      and(
-        inArray(eventStatesTable.calendarId, calendarIds),
-        or(
-          isNull(eventStatesTable.sourceEventType),
-          ne(eventStatesTable.sourceEventType, "workingLocation"),
-        ),
-        or(
-          isNull(eventStatesTable.availability),
-          ne(eventStatesTable.availability, "workingElsewhere"),
-        ),
-      ),
-    )
-    .orderBy(asc(eventStatesTable.startTime));
+    .where(buildFeedEventFilter(calendarIds, query));
 
-  const events: CalendarEvent[] = rows.map((row) => {
-    const recurrence = parseStoredIcsRecurrence(row.recurrenceRule, row.id);
-    return {
-      ...row,
-      recurrenceDuration: recurrence?.recurrenceDuration ?? null,
-      recurrenceRule: recurrence?.recurrenceRule ?? null,
-      exceptionDates: parseStoredIcsExceptionDates(row.exceptionDates, row.id),
-    };
-  });
-
-  return formatEventsAsIcal(events, settings);
+  return row?.revision ?? "";
 };
+
+const generateUserCalendar = (
+  identifier: string,
+  ifNoneMatch: string | null,
+): Promise<FeedResponse | null> =>
+  generateCalendarFeed(identifier, {
+    readFeedCalendars,
+    readFeedEvents,
+    readFeedRevision,
+    readFeedSettings,
+    resolveUserIdentifier,
+  }, ifNoneMatch);
 
 export { generateUserCalendar };

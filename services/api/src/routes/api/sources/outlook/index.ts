@@ -3,6 +3,7 @@ import { HTTP_STATUS } from "@keeper.sh/constants";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { widelog } from "@/utils/logging";
+import { labelFailureResponse } from "@/utils/error-labelling";
 import {
   OAuthSourceLimitError,
   DestinationNotFoundError,
@@ -51,6 +52,11 @@ const POST = withWideEvent(
       if (error instanceof DuplicateSourceError) {
         widelog.errorFields(error, { slug: "duplicate-source" });
         return Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT });
+      }
+
+      const databaseResponse = labelFailureResponse(error, { slug: "invalid-request-body" });
+      if (databaseResponse) {
+        return databaseResponse;
       }
 
       return ErrorResponse.badRequest("Invalid request body").toResponse();

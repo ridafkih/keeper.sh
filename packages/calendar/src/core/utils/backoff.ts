@@ -44,11 +44,32 @@ const abortableSleep = (delayMs: number, signal?: AbortSignal): Promise<void> =>
   });
 };
 
+interface BackoffRetry {
+  attempt: number;
+  delayMs: number;
+  error: unknown;
+}
+
 interface BackoffOptions {
   maxRetries?: number;
   signal?: AbortSignal;
   shouldRetry: (error: unknown) => boolean;
+  // A provider that tells us how long to wait knows better than the exponential curve does.
+  getRetryDelayMs?: (error: unknown) => number | null;
+  onRetry?: (retry: BackoffRetry) => void;
 }
+
+const resolveRetryDelayMs = (
+  options: BackoffOptions,
+  error: unknown,
+  attempt: number,
+): number => {
+  const providedDelayMs = options.getRetryDelayMs?.(error) ?? null;
+  if (providedDelayMs === null) {
+    return computeDelay(attempt);
+  }
+  return Math.min(providedDelayMs, MAX_BACKOFF_MS);
+};
 
 const withBackoff = async <TResult>(
   operation: () => Promise<TResult>,
@@ -64,7 +85,9 @@ const withBackoff = async <TResult>(
       if (isLastAttempt || !options.shouldRetry(error)) {
         throw error;
       }
-      await abortableSleep(computeDelay(attempt), options.signal);
+      const delayMs = resolveRetryDelayMs(options, error, attempt);
+      options.onRetry?.({ attempt, delayMs, error });
+      await abortableSleep(delayMs, options.signal);
     }
   }
 
@@ -72,4 +95,4 @@ const withBackoff = async <TResult>(
 };
 
 export { withBackoff, abortableSleep, computeDelay, DEFAULT_MAX_RETRIES };
-export type { BackoffOptions };
+export type { BackoffOptions, BackoffRetry };

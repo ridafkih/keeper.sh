@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MaterializedSyncableEvent } from "../../../../src/core/types";
 import { createOutlookSyncProvider } from "../../../../src/providers/outlook/destination/provider";
+import type { RedisRateLimiter } from "../../../../src/core/utils/redis-rate-limiter";
 import { KEEPER_CATEGORY } from "@keeper.sh/constants";
 
-const createProvider = (signal?: AbortSignal) =>
+const createProvider = (options: {
+  rateLimiter?: RedisRateLimiter;
+  signal?: AbortSignal;
+} = {}) =>
   createOutlookSyncProvider({
     accessToken: "test-token",
     refreshToken: "test-refresh",
@@ -11,8 +15,15 @@ const createProvider = (signal?: AbortSignal) =>
     externalCalendarId: "external-cal-1",
     calendarId: "cal-1",
     userId: "user-1",
-    signal,
+    rateLimiter: options.rateLimiter,
+    signal: options.signal,
   });
+
+const throttledResponse = (status: number, retryAfter: string): Response =>
+  Response.json(
+    { error: { code: "ApplicationThrottled", message: "Application is over its MailboxConcurrency limit." } },
+    { headers: { "Retry-After": retryAfter }, status },
+  );
 
 const createEvent = (): MaterializedSyncableEvent => ({
   calendarId: "source-calendar-id",
@@ -53,7 +64,7 @@ describe("createOutlookSyncProvider", () => {
   it("aborts a pending Graph event creation", async () => {
     installAbortableFetch();
     const controller = new AbortController();
-    const provider = createProvider(controller.signal);
+    const provider = createProvider({ signal: controller.signal });
     const abortError = new Error("job deadline exceeded");
 
     const pending = provider.pushEvents([createEvent()]);
@@ -82,7 +93,7 @@ describe("createOutlookSyncProvider", () => {
   it("aborts a pending Graph event deletion", async () => {
     installAbortableFetch();
     const controller = new AbortController();
-    const provider = createProvider(controller.signal);
+    const provider = createProvider({ signal: controller.signal });
     const abortError = new Error("job deadline exceeded");
 
     const pending = provider.deleteEvents(["outlook-event-id"]);
@@ -95,7 +106,7 @@ describe("createOutlookSyncProvider", () => {
   it("aborts a pending Graph event listing request", async () => {
     installAbortableFetch();
     const controller = new AbortController();
-    const provider = createProvider(controller.signal);
+    const provider = createProvider({ signal: controller.signal });
     const abortError = new Error("job deadline exceeded");
 
     const pending = provider.listRemoteEvents({
@@ -229,5 +240,104 @@ describe("createOutlookSyncProvider", () => {
     });
 
     expect(events.map((event) => event.uid)).toEqual(["titled-uid", "untitled-uid"]);
+  });
+
+  it("retries a throttled event creation after the Retry-After delay and reports success", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(throttledResponse(429, "0.05"))
+      .mockResolvedValueOnce(Response.json({
+        iCalUId: "created-event-uid",
+        id: "created-event-id",
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = createProvider();
+
+    await expect(provider.pushEvents([createEvent()])).resolves.toEqual([{
+      deleteId: "created-event-id",
+      remoteId: "created-event-uid",
+      success: true,
+    }]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(provider.getThrottleMetrics()).toEqual({ retryAfterMs: 50, retryCount: 1 });
+  });
+
+  it("retries a MailboxConcurrency 503 before giving up on the occurrence", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(throttledResponse(503, "0"))
+      .mockResolvedValueOnce(throttledResponse(503, "0"))
+      .mockResolvedValueOnce(Response.json({
+        iCalUId: "created-event-uid",
+        id: "created-event-id",
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = createProvider();
+
+    const [result] = await provider.pushEvents([createEvent()]);
+
+    expect(result).toEqual({
+      deleteId: "created-event-id",
+      remoteId: "created-event-uid",
+      success: true,
+    });
+    expect(provider.getThrottleMetrics().retryCount).toBe(2);
+  });
+
+  it("reports an occurrence that stays throttled through every retry", async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(throttledResponse(429, "0")));
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = createProvider();
+
+    const [result] = await provider.pushEvents([createEvent()]);
+
+    expect(result).toMatchObject({
+      errorType: "OutlookThrottledError",
+      statusCode: 429,
+      success: false,
+    });
+    expect(result?.error).toContain("MailboxConcurrency");
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it("reports a non-throttle write failure without retrying it", async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(Response.json(
+      { error: { code: "ErrorInvalidItem", message: "Invalid event payload." } },
+      { status: 400 },
+    )));
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = createProvider();
+
+    await expect(provider.pushEvents([createEvent()])).resolves.toEqual([{
+      error: "Invalid event payload.",
+      errorType: "MicrosoftGraphHttpError",
+      statusCode: 400,
+      success: false,
+    }]);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(provider.getThrottleMetrics().retryCount).toBe(0);
+  });
+
+  it("paces bulk pushes through the rate limiter, one slot per request", async () => {
+    const acquire = vi.fn((_count: number, _signal?: AbortSignal) => Promise.resolve());
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(throttledResponse(429, "0"))
+      .mockImplementation(() => Promise.resolve(Response.json({ iCalUId: "uid", id: "id" })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createProvider({ rateLimiter: { acquire } }).pushEvents([createEvent(), createEvent()]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(acquire.mock.calls.map((call) => call[0])).toEqual([1, 1, 1]);
+  });
+
+  it("retries a throttled delete rather than dropping it", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(throttledResponse(429, "0"))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(createProvider().deleteEvents(["outlook-event-id"])).resolves.toEqual([
+      { success: true },
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

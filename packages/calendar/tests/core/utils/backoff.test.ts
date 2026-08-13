@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { withBackoff, abortableSleep, computeDelay } from "../../../../src/providers/google/shared/backoff";
+import { withBackoff, abortableSleep, computeDelay } from "../../../src/core/utils/backoff";
 
 const flushAsync = async (): Promise<void> => {
   for (let tick = 0; tick < 5; tick++) {
@@ -143,6 +143,50 @@ describe("withBackoff", () => {
     await expect(promise).rejects.toThrow("rate limited");
 
     expect(callCount).toBe(3);
+  });
+
+  it("waits the delay the provider asks for and reports each retry", async () => {
+    let callCount = 0;
+    const operation = () => {
+      callCount++;
+      if (callCount < 2) {
+        return Promise.reject(new Error("rate limited"));
+      }
+      return Promise.resolve("recovered");
+    };
+    const retries: { attempt: number; delayMs: number }[] = [];
+
+    const promise = withBackoff(operation, {
+      getRetryDelayMs: () => 250,
+      onRetry: (retry) => { retries.push({ attempt: retry.attempt, delayMs: retry.delayMs }); },
+      shouldRetry: () => true,
+    });
+
+    vi.advanceTimersByTime(250);
+    await flushAsync();
+
+    expect(await promise).toBe("recovered");
+    expect(retries).toEqual([{ attempt: 0, delayMs: 250 }]);
+  });
+
+  it("caps a provider-supplied delay at the maximum backoff", async () => {
+    const operation = vi.fn()
+      .mockRejectedValueOnce(new Error("rate limited"))
+      .mockResolvedValue("recovered");
+    const retries: number[] = [];
+
+    const promise = withBackoff(operation, {
+      getRetryDelayMs: () => 600_000,
+      onRetry: (retry) => { retries.push(retry.delayMs); },
+      shouldRetry: () => true,
+      signal: new AbortController().signal,
+    });
+
+    await flushAsync();
+    await advanceBackoff();
+
+    expect(await promise).toBe("recovered");
+    expect(retries).toEqual([64_000]);
   });
 
   it("aborts during backoff sleep when signal is triggered", async () => {
