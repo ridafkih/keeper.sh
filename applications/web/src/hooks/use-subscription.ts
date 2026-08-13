@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { type } from "arktype";
 import useSWR from "swr";
 import { planSchema } from "@keeper.sh/data-schemas";
 import { fetcher, HttpError } from "@/lib/fetcher";
 import { getCommercialMode } from "@/config/commercial";
+import { retainKnownInterval } from "@/lib/upgrade-mode";
 
 export interface SubscriptionState {
   plan: "free" | "pro";
@@ -72,7 +74,18 @@ export function useSubscription(options: UseSubscriptionOptions = {}) {
     fetchSubscriptionState,
     { fallbackData },
   );
-  return { data, error, isLoading, mutate };
+
+  const [lastKnown, setLastKnown] = useState(fallbackData);
+  const subscription = retainKnownInterval(lastKnown, data);
+
+  if (
+    subscription?.plan !== lastKnown?.plan ||
+    subscription?.interval !== lastKnown?.interval
+  ) {
+    setLastKnown(subscription);
+  }
+
+  return { data: subscription, error, isLoading, mutate };
 }
 
 export async function fetchSubscriptionStateWithApi(
