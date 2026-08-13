@@ -1,4 +1,7 @@
-import { classifyDatabaseError, type DatabaseErrorClassification } from "@keeper.sh/database";
+import {
+  resolveDatabaseErrorClassification,
+  type DatabaseErrorClassification,
+} from "@keeper.sh/database";
 import { widelog } from "@/utils/logging";
 import { ErrorResponse } from "@/utils/responses";
 
@@ -8,7 +11,7 @@ const labelFailure = (
   error: unknown,
   fields: Record<string, unknown> & { slug: string },
 ): DatabaseErrorClassification | null => {
-  const databaseError = classifyDatabaseError(error);
+  const databaseError = resolveDatabaseErrorClassification(error);
   if (databaseError?.sqlState) {
     widelog.set("db.error_sqlstate", databaseError.sqlState);
   }
