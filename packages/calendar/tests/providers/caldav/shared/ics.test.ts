@@ -248,8 +248,8 @@ describe("parseICalToRemoteEvents", () => {
       STATUS: "CANCELLED",
     })]);
 
-    expect(parseICalCalendarsToRemoteEvents([active, cancellation])).toEqual([]);
-    expect(parseICalCalendarsToRemoteEvents([cancellation, active])).toEqual([]);
+    expect(parseICalCalendarsToRemoteEvents([active, cancellation]).events).toEqual([]);
+    expect(parseICalCalendarsToRemoteEvents([cancellation, active]).events).toEqual([]);
   });
 
   it("returns both master and modified occurrence from a recurring event", () => {

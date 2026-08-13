@@ -247,20 +247,42 @@ describe("createIcsSourceFetcher", () => {
     expect(result.unchanged).toBeUndefined();
   });
 
-  it("rejects RDATE instead of silently dropping additional occurrences", async () => {
+  it("reports the RDATE event as unsupported instead of failing the whole feed", async () => {
     const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
     const rdateIcs = MINIMAL_ICS.replace(
-      "DTEND:20260517T130000Z",
-      "DTEND:20260517T130000Z\r\nRDATE:20260519T120000Z",
+      "END:VCALENDAR",
+      [
+        "BEGIN:VEVENT",
+        "UID:rdate@test",
+        "DTSTAMP:20260517T000000Z",
+        "DTSTART:20260518T120000Z",
+        "DTEND:20260518T130000Z",
+        "RDATE:20260519T120000Z",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n"),
     );
     mockPullRemoteCalendar.mockResolvedValueOnce({ ical: rdateIcs });
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({ changed: false });
+
+    const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+    expect(result.events.map(({ uid }) => uid)).toEqual(["event-1@test", "rdate@test"]);
+    expect(result.unsupportedEventUids).toEqual(["rdate@test"]);
+    expect(mockPrepareCalendarSnapshot).toHaveBeenCalled();
+  });
+
+  it("still rejects a malformed component boundary that could hide an RDATE", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const malformedIcs = MINIMAL_ICS.replace("END:VEVENT", "END:VALARM");
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: malformedIcs });
 
     await expect(createIcsSourceFetcher(buildConfig()).fetchEvents())
-      .rejects.toThrow("ICS RDATE recurrence is not supported");
+      .rejects.toThrow("expected END:VEVENT, received END:VALARM");
     expect(mockPrepareCalendarSnapshot).not.toHaveBeenCalled();
   });
 
-  it("rejects custom-timezone recurrence before it can poison destination sync", async () => {
+  it("resolves an unrecognised fixed-offset TZID from its declared VTIMEZONE", async () => {
     const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
     const customTimezoneIcs = [
       "BEGIN:VCALENDAR",
@@ -283,13 +305,248 @@ describe("createIcsSourceFetcher", () => {
       "END:VCALENDAR",
     ].join("\r\n");
     mockPullRemoteCalendar.mockResolvedValueOnce({ ical: customTimezoneIcs });
-    mockPrepareCalendarSnapshot.mockResolvedValueOnce({
-      changed: true,
-      snapshot: { contentHash: "custom-timezone", ical: customTimezoneIcs },
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({ changed: false });
+
+    const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+    expect(result.events[0]).toMatchObject({
+      startTime: new Date("2026-07-01T14:00:00.000Z"),
+      startTimeZone: "Etc/GMT+5",
     });
+    expect(result.unsupportedEventUids).toBeUndefined();
+  });
+
+  it("resolves a tzurl-style TZID to the IANA zone it carries", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const mozillaIcs = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//test//test//EN",
+      "BEGIN:VTIMEZONE",
+      "TZID:/mozilla.org/20050126_1/America/Denver",
+      "BEGIN:STANDARD",
+      "DTSTART:19701101T020000",
+      "TZOFFSETFROM:-0600",
+      "TZOFFSETTO:-0700",
+      "END:STANDARD",
+      "BEGIN:DAYLIGHT",
+      "DTSTART:19700308T020000",
+      "TZOFFSETFROM:-0700",
+      "TZOFFSETTO:-0600",
+      "END:DAYLIGHT",
+      "END:VTIMEZONE",
+      "BEGIN:VEVENT",
+      "UID:thunderbird@test",
+      "DTSTART;TZID=/mozilla.org/20050126_1/America/Denver:20260701T090000",
+      "DTEND;TZID=/mozilla.org/20050126_1/America/Denver:20260701T100000",
+      "RRULE:FREQ=DAILY;COUNT=2",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: mozillaIcs });
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({ changed: false });
+
+    const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+    expect(result.events[0]?.startTimeZone).toBe("America/Denver");
+    expect(result.unsupportedEventUids).toBeUndefined();
+  });
+
+  it("reports a recurring event whose timezone cannot be recovered without failing the feed", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const exchangeIcs = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//test//test//EN",
+      "BEGIN:VTIMEZONE",
+      "TZID:Customized Time Zone",
+      "BEGIN:STANDARD",
+      "DTSTART:19701101T020000",
+      "TZOFFSETFROM:-0600",
+      "TZOFFSETTO:-0700",
+      "END:STANDARD",
+      "BEGIN:DAYLIGHT",
+      "DTSTART:19700308T020000",
+      "TZOFFSETFROM:-0700",
+      "TZOFFSETTO:-0600",
+      "END:DAYLIGHT",
+      "END:VTIMEZONE",
+      "BEGIN:VEVENT",
+      "UID:exchange-custom@test",
+      "DTSTART;TZID=Customized Time Zone:20260701T090000",
+      "DTEND;TZID=Customized Time Zone:20260701T100000",
+      "RRULE:FREQ=DAILY;COUNT=2",
+      "END:VEVENT",
+      "BEGIN:VEVENT",
+      "UID:healthy@test",
+      "DTSTAMP:20260517T000000Z",
+      "DTSTART:20260517T120000Z",
+      "DTEND:20260517T130000Z",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: exchangeIcs });
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({ changed: false });
+
+    const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+    expect(result.events.map(({ uid }) => uid)).toEqual([
+      "exchange-custom@test",
+      "healthy@test",
+    ]);
+    expect(result.unsupportedEventUids).toEqual(["exchange-custom@test"]);
+  });
+
+  it("resolves a floating RRULE UNTIL against the event's own DTSTART timezone", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const zonedIcs = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//test//test//EN",
+      "BEGIN:VEVENT",
+      "UID:zoned-until@test",
+      "DTSTAMP:20260101T000000Z",
+      "DTSTART;TZID=America/Denver:20260105T090000",
+      "DTEND;TZID=America/Denver:20260105T100000",
+      "RRULE:FREQ=DAILY;UNTIL=20260112T090000",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: zonedIcs });
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({ changed: false });
+
+    const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+    expect(result.events[0]?.recurrenceRule?.until?.date).toEqual(
+      new Date("2026-01-12T16:00:00.000Z"),
+    );
+  });
+
+  it("resolves a floating EXDATE against the event's own DTSTART timezone", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const zonedIcs = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//test//test//EN",
+      "BEGIN:VEVENT",
+      "UID:zoned-exdate@test",
+      "DTSTAMP:20260101T000000Z",
+      "DTSTART;TZID=America/Denver:20260105T090000",
+      "DTEND;TZID=America/Denver:20260105T100000",
+      "RRULE:FREQ=DAILY;COUNT=5",
+      "EXDATE:20260106T090000",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: zonedIcs });
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({ changed: false });
+
+    const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+    expect(result.events[0]?.exceptionDates?.map(({ date }) => date)).toEqual([
+      new Date("2026-01-06T16:00:00.000Z"),
+    ]);
+  });
+
+  it("resolves only the floating entries of a mixed multi-value EXDATE", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const zonedIcs = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//test//test//EN",
+      "BEGIN:VEVENT",
+      "UID:mixed-exdate@test",
+      "DTSTAMP:20260101T000000Z",
+      "DTSTART;TZID=America/Denver:20260105T090000",
+      "DTEND;TZID=America/Denver:20260105T100000",
+      "RRULE:FREQ=DAILY;COUNT=5",
+      "EXDATE:20260106T090000,20260107T160000Z",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: zonedIcs });
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({ changed: false });
+
+    const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+    expect(result.events[0]?.exceptionDates?.map(({ date }) => date)).toEqual([
+      new Date("2026-01-06T16:00:00.000Z"),
+      new Date("2026-01-07T16:00:00.000Z"),
+    ]);
+  });
+
+  it("resolves a floating RECURRENCE-ID against the event's own DTSTART timezone", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const zonedIcs = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//test//test//EN",
+      "BEGIN:VEVENT",
+      "UID:zoned-override@test",
+      "DTSTAMP:20260101T000000Z",
+      "DTSTART;TZID=America/Denver:20260105T090000",
+      "DTEND;TZID=America/Denver:20260105T100000",
+      "RRULE:FREQ=DAILY;COUNT=5",
+      "END:VEVENT",
+      "BEGIN:VEVENT",
+      "UID:zoned-override@test",
+      "DTSTAMP:20260101T000000Z",
+      "RECURRENCE-ID:20260106T090000",
+      "DTSTART;TZID=America/Denver:20260106T110000",
+      "DTEND;TZID=America/Denver:20260106T120000",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: zonedIcs });
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({ changed: false });
+
+    const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+    expect(result.events.find(({ recurrenceId }) => recurrenceId)?.recurrenceId).toEqual(
+      new Date("2026-01-06T16:00:00.000Z"),
+    );
+  });
+
+  it("leaves an all-day series with a date-time UNTIL alone", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const allDayIcs = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//test//test//EN",
+      "BEGIN:VEVENT",
+      "UID:all-day-series@test",
+      "DTSTAMP:20260101T000000Z",
+      "DTSTART;VALUE=DATE:20260105",
+      "DTEND;VALUE=DATE:20260106",
+      "RRULE:FREQ=WEEKLY;UNTIL=20260112T090000",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: allDayIcs });
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({ changed: false });
+
+    const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+    expect(result.events[0]).toMatchObject({
+      isAllDay: true,
+      uid: "all-day-series@test",
+    });
+    expect(result.events[0]?.recurrenceRule?.until?.date).toEqual(
+      new Date("2026-01-12T09:00:00.000Z"),
+    );
+  });
+
+  it("rejects a floating EXDATE when no event or calendar timezone exists", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const ambiguousIcs = MINIMAL_ICS.replace(
+      "SUMMARY:Test",
+      "RRULE:FREQ=DAILY;COUNT=3\r\nEXDATE:20260518T120000\r\nSUMMARY:Test",
+    );
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: ambiguousIcs });
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({ changed: false });
 
     await expect(createIcsSourceFetcher(buildConfig()).fetchEvents())
-      .rejects.toThrow("Unsupported calendar timezone: Custom/Eastern");
+      .rejects.toThrow("Floating ICS EXDATE requires an explicit TZID or X-WR-TIMEZONE");
   });
 
   it("returns events far outside the sync window so stored history stays unbounded", async () => {

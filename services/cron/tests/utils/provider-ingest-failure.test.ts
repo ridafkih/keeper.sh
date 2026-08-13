@@ -1,4 +1,7 @@
-import { CalDAVIncompleteMultiGetError } from "@keeper.sh/calendar/caldav";
+import {
+  CalDAVIncompleteMultiGetError,
+  CalDAVUnreadableResourceError,
+} from "@keeper.sh/calendar/caldav";
 import { describe, expect, it } from "vitest";
 import { resolveMissingCalendarFailure } from "../../src/utils/provider-ingest-failure";
 
@@ -37,5 +40,18 @@ describe("resolveMissingCalendarFailure", () => {
       expect(error.message).toContain("404");
       expect(resolveMissingCalendarFailure(error)).toBeNull();
     }
+  });
+
+  it("leaves an unreadable-resource failure to its own slug", () => {
+    const error = new CalDAVUnreadableResourceError({
+      skippedResourceCount: 2,
+      skippedResourceReasons: [
+        "Malformed ICS component boundary: missing END:VEVENT",
+        "Collection query failed: 404 Not Found",
+      ],
+    });
+
+    expect(error.message).toContain("404");
+    expect(resolveMissingCalendarFailure(error)).toBeNull();
   });
 });

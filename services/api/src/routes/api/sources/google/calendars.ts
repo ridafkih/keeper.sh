@@ -16,7 +16,11 @@ const GET = withWideEvent(
       isCalendarListError: (error): error is CalendarListError =>
         error instanceof CalendarListError,
       listCalendars: async (accessToken) => {
-        const calendars = await listUserCalendars(accessToken);
+        const calendars = await listUserCalendars(accessToken, {
+          onInvalidEntries: (count) => {
+            widelog.set("provider.calendar_entries_invalid", count);
+          },
+        });
         return calendars.map((calendar) => ({
           id: calendar.id,
           primary: calendar.primary,

@@ -1,3 +1,8 @@
+import {
+  GOOGLE_PUSH_REQUESTS_PER_MINUTE,
+  GOOGLE_REQUESTS_PER_MINUTE,
+} from "@keeper.sh/constants";
+
 const MS_PER_MINUTE = 60_000;
 const RETRY_POLL_MS = 100;
 
@@ -106,5 +111,33 @@ const createRedisRateLimiter = (
   return { acquire };
 };
 
-export { createRedisRateLimiter };
-export type { RedisRateLimiter, RedisRateLimiterConfig, RedisScriptClient };
+type GoogleRateLimitLane = "ingest" | "push";
+
+const GOOGLE_LANE_REQUESTS_PER_MINUTE: Record<GoogleRateLimitLane, number> = {
+  ingest: GOOGLE_REQUESTS_PER_MINUTE,
+  push: GOOGLE_PUSH_REQUESTS_PER_MINUTE,
+};
+
+/*
+ * One key for both lanes: Google's quota is per user however it is spent, so separate
+ * keys would let the two jobs together sail past the real limit. The lanes differ only
+ * in how much of that shared key each may claim, which reserves headroom for ingestion
+ * without raising the total.
+ */
+const createGoogleUserRateLimiter = (
+  redis: RedisScriptClient,
+  userId: string,
+  lane: GoogleRateLimitLane,
+): RedisRateLimiter => createRedisRateLimiter(
+  redis,
+  `ratelimit:${userId}:google`,
+  { requestsPerMinute: GOOGLE_LANE_REQUESTS_PER_MINUTE[lane] },
+);
+
+export { createGoogleUserRateLimiter, createRedisRateLimiter };
+export type {
+  GoogleRateLimitLane,
+  RedisRateLimiter,
+  RedisRateLimiterConfig,
+  RedisScriptClient,
+};

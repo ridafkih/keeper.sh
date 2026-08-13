@@ -226,13 +226,23 @@ class GoogleBatchApiError extends Error {
   }
 }
 
+/*
+ * Quota is acquired inside the retried operation rather than around it: a whole-batch
+ * 429 re-sends every sub-request, and Google charges its per-user quota for each of
+ * those attempts. Acquiring once outside would let a batch that retries five times
+ * spend six times the slots the limiter believes it handed out.
+ */
 const executeBatch = (
   subRequests: BatchSubRequest[],
   accessToken: string,
-  options?: { signal?: AbortSignal; timeoutMs?: number },
+  options?: { rateLimiter?: RedisRateLimiter; signal?: AbortSignal; timeoutMs?: number },
 ): Promise<BatchSubResponse[]> =>
   withBackoff(
     async () => {
+      if (options?.rateLimiter) {
+        await options.rateLimiter.acquire(subRequests.length, options.signal);
+      }
+
       const boundary = generateBoundary();
       const requestBody = buildBatchRequestBody(subRequests, boundary);
 
@@ -308,10 +318,8 @@ const retryRateLimitedSubRequests = async (
     await abortableSleep(computeDelay(attempt), options?.signal);
 
     const retryBatch = pending.map((entry) => entry.request);
-    if (options?.rateLimiter) {
-      await options.rateLimiter.acquire(retryBatch.length, options.signal);
-    }
     const responses = await executeBatch(retryBatch, accessToken, {
+      rateLimiter: options?.rateLimiter,
       signal: options?.signal,
       timeoutMs: options?.timeoutMs,
     });
@@ -354,10 +362,8 @@ const executeBatchChunked = async (
   const allResponses: BatchSubResponse[] = [];
 
   for (const chunk of chunks) {
-    if (options?.rateLimiter) {
-      await options.rateLimiter.acquire(chunk.length, options.signal);
-    }
     const responses = await executeBatch(chunk, accessToken, {
+      rateLimiter: options?.rateLimiter,
       signal: options?.signal,
       timeoutMs: options?.timeoutMs,
     });

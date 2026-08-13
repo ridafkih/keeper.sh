@@ -17,6 +17,8 @@ const WINDOW = {
   start: new Date("2026-01-01T00:00:00.000Z"),
 };
 
+const EXPIRED_SERIES_BUDGET_MS = 50;
+
 const createEvent = (overrides: Partial<SyncableEvent> = {}): SyncableEvent => ({
   calendarId: "calendar-1",
   calendarName: "Primary",
@@ -622,6 +624,110 @@ describe("materializeRecurrenceEvents", () => {
         endTime: new Date("2020-01-01T00:00:00.500Z"),
         recurrenceRule: { count: 20_000, frequency: "SECONDLY" },
         startTime: new Date("2020-01-01T00:00:00.000Z"),
+      }),
+    ], WINDOW);
+
+    expect(result).toEqual([]);
+  });
+
+  it("does not walk a pathological series whose UNTIL precedes the window", () => {
+    const expired = createEvent({
+      endTime: new Date("2019-01-01T09:05:00.000Z"),
+      recurrenceRule: {
+        byDay: [{ day: "MO" }, { day: "TU" }, { day: "WE" }, { day: "TH" }, { day: "FR" }],
+        frequency: "MINUTELY",
+        until: { date: new Date("2021-01-01T00:00:00.000Z"), type: "DATE-TIME" },
+      },
+      sourceEventUid: "expired-minutely-series",
+      startTime: new Date("2019-01-01T09:00:00.000Z"),
+    });
+
+    const readStarted = performance.now();
+    const result = materializeRecurrenceEvents([expired], WINDOW);
+    const readElapsed = performance.now() - readStarted;
+
+    const source: SourceEvent = {
+      endTime: expired.endTime,
+      recurrenceRule: expired.recurrenceRule,
+      sourceEventId: expired.id,
+      startTime: expired.startTime,
+      uid: expired.sourceEventUid,
+    };
+    const scanStarted = performance.now();
+    const overBudget = findSourceEventsExceedingRecurrenceBudget(
+      "source-calendar-id",
+      [source],
+      WINDOW,
+    );
+    const scanElapsed = performance.now() - scanStarted;
+
+    expect(result).toEqual([]);
+    expect(overBudget).toEqual([]);
+    expect(readElapsed).toBeLessThan(EXPIRED_SERIES_BUDGET_MS);
+    expect(scanElapsed).toBeLessThan(EXPIRED_SERIES_BUDGET_MS);
+  });
+
+  it("keeps an override inside the window when its master's rule has already expired", () => {
+    const expiredMaster = createEvent({
+      recurrenceRule: {
+        frequency: "WEEKLY",
+        until: { date: new Date("2025-06-01T09:00:00.000Z"), type: "DATE-TIME" },
+      },
+      sourceEventUid: "expired-weekly-series",
+    });
+    const override = createEvent({
+      endTime: new Date("2026-01-15T15:00:00.000Z"),
+      id: "override-row-1",
+      recurrenceId: new Date("2025-05-05T09:00:00.000Z"),
+      sourceEventUid: "expired-weekly-series",
+      startTime: new Date("2026-01-15T14:00:00.000Z"),
+      summary: "Moved into the window",
+    });
+
+    const result = materializeRecurrenceEvents([expiredMaster, override], WINDOW);
+
+    expect(semanticOccurrences(result)).toEqual([
+      "override-row-1|2026-01-15T14:00:00.000Z|2026-01-15T15:00:00.000Z|Moved into the window",
+    ]);
+  });
+
+  it("materializes an occurrence that starts before the window and ends inside it", () => {
+    const result = materializeRecurrenceEvents([
+      createEvent({
+        endTime: new Date("2025-12-21T01:00:00.000Z"),
+        recurrenceRule: {
+          frequency: "DAILY",
+          until: { date: new Date("2025-12-31T23:00:00.000Z"), type: "DATE-TIME" },
+        },
+        startTime: new Date("2025-12-20T23:00:00.000Z"),
+      }),
+    ], WINDOW);
+
+    expect(occurrenceStarts(result)).toEqual(["2025-12-31T23:00:00.000Z"]);
+  });
+
+  it("compares a zoned UNTIL in the same wall time the expansion runs in", () => {
+    const result = materializeRecurrenceEvents([
+      createEvent({
+        endTime: new Date("2025-12-28T01:00:00.000Z"),
+        recurrenceRule: {
+          frequency: "DAILY",
+          until: { date: new Date("2026-01-01T01:00:00.000Z"), type: "DATE-TIME" },
+        },
+        startTime: new Date("2025-12-28T00:00:00.000Z"),
+        startTimeZone: "Pacific/Kiritimati",
+      }),
+    ], WINDOW);
+
+    expect(occurrenceStarts(result)).toEqual(["2026-01-01T00:00:00.000Z"]);
+  });
+
+  it("still expands a COUNT-bounded series that ran out before the window", () => {
+    const result = materializeRecurrenceEvents([
+      createEvent({
+        endTime: new Date("2025-01-06T10:00:00.000Z"),
+        recurrenceRule: { count: 4, frequency: "WEEKLY" },
+        startTime: new Date("2025-01-06T09:00:00.000Z"),
       }),
     ], WINDOW);
 

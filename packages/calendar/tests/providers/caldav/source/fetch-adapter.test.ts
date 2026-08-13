@@ -145,3 +145,43 @@ describe("createCalDAVSourceFetcher against a capped multiget", () => {
     expect(result.events[0]?.uid).toBe(NATIVE_UID);
   });
 });
+
+const TRUNCATED_ICS = [
+  "BEGIN:VCALENDAR",
+  "VERSION:2.0",
+  "PRODID:-//keeper.sh//test//EN",
+  "BEGIN:VEVENT",
+  "UID:truncated@example.com",
+  "DTSTART:20260620T090000Z",
+].join("\r\n");
+
+const dataForNativeObject = (index: number): string => {
+  if (index === 1) {
+    return TRUNCATED_ICS;
+  }
+  return icsFor(`native-${index}@example.com`);
+};
+
+describe("createCalDAVSourceFetcher against an unreadable resource", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    davMocks.fetchCalendars.mockResolvedValue([]);
+  });
+
+  it("ingests the readable resources and reports the skipped count", async () => {
+    answerQueryWith(objectPaths(3));
+    answerMultigetWith((objectUrls) =>
+      objectUrls.map((path, index) => ({
+        data: dataForNativeObject(index),
+        url: `${SERVER_URL}${path}`,
+      })));
+
+    const result = await createFetcher().fetchEvents();
+
+    expect(result.events.map(({ uid }) => uid))
+      .toEqual(["native-0@example.com", "native-2@example.com"]);
+    expect(result.skippedResourceCount).toBe(1);
+    expect(result.skippedResourceReasons)
+      .toEqual(["Malformed ICS component boundary: missing END:VEVENT"]);
+  });
+});

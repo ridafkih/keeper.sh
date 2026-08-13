@@ -1,5 +1,6 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { createKeeperApi } from "@/read-models";
+import { handleGetEventRoute } from "@/handlers/event-routes";
 import { withV1Auth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { eventPatchBodySchema } from "@/utils/request-body";
@@ -12,19 +13,7 @@ const keeperApi = createKeeperApi(database, {
 });
 
 const GET = withWideEvent(
-  withV1Auth(async ({ params, userId }) => {
-    const eventId = params.id;
-    if (!eventId) {
-      return ErrorResponse.badRequest("Event ID is required.").toResponse();
-    }
-    const event = await keeperApi.getEvent(userId, eventId);
-
-    if (!event) {
-      return ErrorResponse.notFound("Event not found.").toResponse();
-    }
-
-    return Response.json(event);
-  }),
+  withV1Auth(({ params, userId }) => handleGetEventRoute(params.id ?? null, userId, keeperApi)),
 );
 
 const PATCH = withWideEvent(
