@@ -28,10 +28,15 @@ interface OutlookEventResult {
 }
 
 const formatDateTime = (isoString: string, isAllDay: boolean): string => {
-  if (isAllDay) {
-    return isoString.replace("Z", "");
+  const instant = new Date(isoString);
+  if (Number.isNaN(instant.getTime())) {
+    throw new TypeError(`Event time is not an instant: ${isoString}`);
   }
-  return isoString;
+  const utcIsoString = instant.toISOString();
+  if (isAllDay) {
+    return utcIsoString.replace("Z", "");
+  }
+  return utcIsoString;
 };
 
 const resolveOutlookShowAs = (availability?: string | null): string => {

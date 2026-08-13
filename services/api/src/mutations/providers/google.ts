@@ -40,7 +40,11 @@ const buildGoogleDateField = (
   isAllDay: boolean,
 ): { date: string } | { dateTime: string } => {
   if (isAllDay) {
-    return { date: dateTime.slice(0, 10) };
+    const instant = new Date(dateTime);
+    if (Number.isNaN(instant.getTime())) {
+      throw new TypeError(`All-day event time is not an instant: ${dateTime}`);
+    }
+    return { date: instant.toISOString().slice(0, 10) };
   }
 
   return { dateTime };
