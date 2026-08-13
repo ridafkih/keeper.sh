@@ -16,6 +16,7 @@ import { ensureValidToken } from "../../../core/oauth/ensure-valid-token";
 import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-valid-token";
 import { MICROSOFT_GRAPH_API, OUTLOOK_PAGE_SIZE } from "../shared/api";
 import { parseEventTime } from "../shared/date-time";
+import { normalizeOutlookEvent } from "./normalize-event";
 import { serializeOutlookEvent } from "./serialize-event";
 import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
 import { createEditableEventContentHash } from "../../../core/events/content-hash";
@@ -228,7 +229,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     return remoteEvents;
   };
 
-  return { pushEvents, deleteEvents, listRemoteEvents };
+  return { deleteEvents, listRemoteEvents, normalizeEvent: normalizeOutlookEvent, pushEvents };
 };
 
 export { createOutlookSyncProvider };

@@ -18,6 +18,7 @@ import { executeBatchChunked } from "../shared/batch";
 import { isRateLimitApiError, parseGoogleApiError } from "../shared/errors";
 import type { BatchSubRequest, BatchSubResponse } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
+import { normalizeGoogleEvent } from "./normalize-event";
 import { serializeGoogleEvent } from "./serialize-event";
 import { createEditableEventContentHash } from "../../../core/events/content-hash";
 
@@ -454,7 +455,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     return remoteEvents;
   };
 
-  return { pushEvents, deleteEvents, listRemoteEvents };
+  return { deleteEvents, listRemoteEvents, normalizeEvent: normalizeGoogleEvent, pushEvents };
 };
 
 export { createGoogleSyncProvider };

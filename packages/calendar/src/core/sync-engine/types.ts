@@ -7,6 +7,14 @@ import type {
 } from "../types";
 
 interface CalendarSyncProvider {
+  /*
+   * Reconciliation compares mapped times against the times the destination reports, so a
+   * range the provider rewrites on the way out has to be rewritten here too. Normalizing
+   * before the diff keeps the mapping, the content hash, and the pushed resource agreeing
+   * on one range; normalizing inside the serializer alone would make every later run read
+   * the remote event as changed and replace it.
+   */
+  normalizeEvent?: (event: MaterializedSyncableEvent) => MaterializedSyncableEvent;
   pushEvents: (events: MaterializedSyncableEvent[]) => Promise<PushResult[]>;
   deleteEvents: (eventIds: string[]) => Promise<DeleteResult[]>;
   listRemoteEvents: (options: ListRemoteEventsOptions) => Promise<RemoteEvent[]>;

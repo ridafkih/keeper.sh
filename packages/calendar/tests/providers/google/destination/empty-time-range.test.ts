@@ -38,10 +38,24 @@ describe("serializeGoogleEvent rejects ranges Google cannot accept", () => {
       }),
       "destination-uid",
     );
-    expect(event).toBeNull();
+    expect(event?.start?.dateTime).not.toBe(event?.end?.dateTime);
+  });
+});
+
+describe("serializeGoogleEvent still mirrors the event", () => {
+  it("mirrors a zero-duration event as a point in time at its start", () => {
+    const event = serializeGoogleEvent(
+      baseEvent({
+        endTime: new Date("2026-03-08T09:00:00.000Z"),
+        startTime: new Date("2026-03-08T09:00:00.000Z"),
+      }),
+      "destination-uid",
+    );
+    expect(event?.start?.dateTime).toBe("2026-03-08T09:00:00.000Z");
+    expect(event?.end?.dateTime).toBe("2026-03-08T09:01:00.000Z");
   });
 
-  it("does not emit a timed event whose end instant precedes its start instant", () => {
+  it("mirrors an event whose end precedes its start at its start", () => {
     const event = serializeGoogleEvent(
       baseEvent({
         endTime: new Date("2026-03-08T08:00:00.000Z"),
@@ -49,13 +63,14 @@ describe("serializeGoogleEvent rejects ranges Google cannot accept", () => {
       }),
       "destination-uid",
     );
-    expect(event).toBeNull();
+    expect(event?.start?.dateTime).toBe("2026-03-08T09:00:00.000Z");
+    expect(event?.end?.dateTime).toBe("2026-03-08T09:01:00.000Z");
   });
 
-  it("emits an all-day event that spans less than a day as a single full day", () => {
+  it("mirrors a same-date all-day event as the single day it names", () => {
     const event = serializeGoogleEvent(
       baseEvent({
-        endTime: new Date("2026-03-08T11:00:00.000Z"),
+        endTime: new Date("2026-03-08T00:00:00.000Z"),
         isAllDay: true,
         startTime: new Date("2026-03-08T00:00:00.000Z"),
       }),
@@ -63,5 +78,17 @@ describe("serializeGoogleEvent rejects ranges Google cannot accept", () => {
     );
     expect(event?.start?.date).toBe("2026-03-08");
     expect(event?.end?.date).toBe("2026-03-09");
+  });
+
+  it("leaves a range that already ends after it starts untouched", () => {
+    const event = serializeGoogleEvent(
+      baseEvent({
+        endTime: new Date("2026-03-08T10:30:00.000Z"),
+        startTime: new Date("2026-03-08T09:00:00.000Z"),
+      }),
+      "destination-uid",
+    );
+    expect(event?.start?.dateTime).toBe("2026-03-08T09:00:00.000Z");
+    expect(event?.end?.dateTime).toBe("2026-03-08T10:30:00.000Z");
   });
 });
