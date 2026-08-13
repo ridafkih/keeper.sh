@@ -122,6 +122,7 @@ export {
   type EventStateInsertClient,
 } from "./core/source/write-event-states";
 export { computeSyncOperations } from "./core/sync/operations";
+export type { ReconciliationScope } from "./core/sync/operations";
 export {
   DEFAULT_FUTURE_SYNC_RANGE,
   DEFAULT_HISTORIC_SYNC_RANGE,

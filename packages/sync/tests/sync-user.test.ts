@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import { computeSyncOperations } from "@keeper.sh/calendar";
+import type { EventMapping } from "@keeper.sh/calendar";
 import {
+  createDestinationReconciliationScope,
   createDestinationReconciliationWideEventFields,
   OVER_BUDGET_SERIES_UID_SAMPLE_SIZE,
   readDestinationReconciliationState,
@@ -196,5 +199,76 @@ describe("createDestinationReconciliationWideEventFields", () => {
 
     expect(reordered["reconciliation.source_calendars.changed_during_remote_read"]).toBe(false);
     expect(replaced["reconciliation.source_calendars.changed_during_remote_read"]).toBe(true);
+  });
+});
+
+describe("createDestinationReconciliationScope", () => {
+  const SOURCE_CALENDAR_ID = "source-1";
+  const WINDOW = {
+    timeMax: new Date("2028-01-01T00:00:00.000Z"),
+    timeMin: new Date("2026-01-01T00:00:00.000Z"),
+  };
+
+  const baseDiagnostics = {
+    candidateEventStateCount: 3,
+    excludedBySyncPolicyCount: 0,
+    materializedEventCount: 0,
+    missingSourceEventUidCount: 0,
+    outsideReconciliationWindowCount: 0,
+    overBudgetSourceEventStateIds: [] as string[],
+    overBudgetSourceEventUids: [] as string[],
+    syncableEventCount: 0,
+  };
+
+  const createScope = (overBudgetSourceEventStateIds: string[]) =>
+    createDestinationReconciliationScope({
+      authoritativeSourceWindows: new Map([[SOURCE_CALENDAR_ID, WINDOW]]),
+      authoritativeWindow: WINDOW,
+      eventReadDiagnostics: { ...baseDiagnostics, overBudgetSourceEventStateIds },
+      requestedWindow: WINDOW,
+      sourceCalendarIdsAtLocalRead: [SOURCE_CALENDAR_ID],
+    });
+
+  const occurrenceMappings: EventMapping[] = [1, 2, 3].map((index) => ({
+    calendarId: "destination-1",
+    deleteIdentifier: `delete-identifier-${index}`,
+    destinationEventUid: `destination-uid-${index}`,
+    endTime: new Date(`2026-03-0${index}T15:00:00.000Z`),
+    eventStateId: "over-budget-series",
+    id: `over-budget-mapping-${index}`,
+    sourceCalendarId: SOURCE_CALENDAR_ID,
+    startTime: new Date(`2026-03-0${index}T14:00:00.000Z`),
+    syncEventHash: `hash-${index}`,
+    syncEventId: `over-budget-series::occurrence-${index}`,
+  }));
+
+  /*
+   * The reconciliation scope is what stops a series withheld for exceeding the
+   * occurrence budget from reading as deleted at the source. Dropping or renaming
+   * the field mass-deletes every mirror of that series and mass-re-adds them once
+   * the series recovers, so the wiring is asserted through its real consumer.
+   */
+  it("withholds an over-budget series from removal when its state ids are threaded through", () => {
+    const scope = createScope(["over-budget-series"]);
+
+    expect(scope.withheldSourceEventStateIds).toEqual(new Set(["over-budget-series"]));
+    expect(computeSyncOperations([], occurrenceMappings, [], scope).operations).toEqual([]);
+  });
+
+  it("removes the same mirrors when the series was never withheld", () => {
+    const scope = createScope([]);
+
+    expect(computeSyncOperations([], occurrenceMappings, [], scope).operations).toHaveLength(
+      occurrenceMappings.length,
+    );
+  });
+
+  it("carries the remaining reconciliation boundaries onto the scope", () => {
+    const scope = createScope([]);
+
+    expect(scope.authoritativeWindow).toEqual(WINDOW);
+    expect(scope.requestedWindow).toEqual(WINDOW);
+    expect(scope.configuredSourceCalendarIds).toEqual(new Set([SOURCE_CALENDAR_ID]));
+    expect(scope.authoritativeSourceWindows).toEqual(new Map([[SOURCE_CALENDAR_ID, WINDOW]]));
   });
 });
