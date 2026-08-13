@@ -13,6 +13,7 @@
     "migrate": "bun scripts/migrate.ts",
     "types": "tsc --noEmit",
     "test": "bun x --bun vitest run",
+    "test:migrations": "bun x --bun vitest run --config vitest.migrations.config.ts",
     "lint": "oxlint ."
   },
   "dependencies": {

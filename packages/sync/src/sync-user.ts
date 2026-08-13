@@ -3,7 +3,7 @@ import {
   getEventsForCalendarsWithDiagnostics,
   getEventMappingsForDestination,
   createDatabaseFlush,
-  createRedisRateLimiter,
+  createGoogleUserRateLimiter,
   buildCalendarBackoffState,
   RESET_CALENDAR_BACKOFF_STATE,
   createSyncWindow,
@@ -18,6 +18,7 @@ import type {
   EventMapping,
   DestinationEventReadDiagnostics,
   MaterializedSyncableEvent,
+  ReconciliationScope,
   RefreshLockStore,
   RemoteEvent,
   SyncProgressUpdate,
@@ -37,8 +38,6 @@ import {
   createMappingMutationLockId,
   createSyncLock,
 } from "./sync-lock";
-
-const GOOGLE_REQUESTS_PER_MINUTE = 500;
 
 const resetDestinationBackoff = async (
   database: BunSQLDatabase,
@@ -277,6 +276,40 @@ const haveSourceCalendarsChanged = (
   );
 };
 
+/*
+ * Every series a calendar withholds for exceeding the occurrence budget lands in this
+ * list, so a pathological source can push thousands of UIDs onto one log line. The
+ * adjacent over_budget_series_count still carries the uncapped total, which is what
+ * makes a truncated sample safe to read.
+ */
+const OVER_BUDGET_SERIES_UID_SAMPLE_SIZE = 20;
+
+interface DestinationReconciliationScopeContext {
+  authoritativeSourceWindows: ReadonlyMap<string, SyncWindow>;
+  authoritativeWindow: SyncWindow | null;
+  eventReadDiagnostics: DestinationEventReadDiagnostics;
+  requestedWindow: SyncWindow;
+  sourceCalendarIdsAtLocalRead: string[];
+}
+
+/*
+ * A series withheld for exceeding the occurrence budget is absent from the local read
+ * for a technical limit, not because the source dropped it. Reconciliation needs that
+ * distinction, or every mirror of the series is deleted at the provider and re-added
+ * the moment the series comes back under budget.
+ */
+const createDestinationReconciliationScope = (
+  context: DestinationReconciliationScopeContext,
+): ReconciliationScope => ({
+  authoritativeSourceWindows: context.authoritativeSourceWindows,
+  authoritativeWindow: context.authoritativeWindow,
+  configuredSourceCalendarIds: new Set(context.sourceCalendarIdsAtLocalRead),
+  requestedWindow: context.requestedWindow,
+  withheldSourceEventStateIds: new Set(
+    context.eventReadDiagnostics.overBudgetSourceEventStateIds,
+  ),
+});
+
 const createDestinationReconciliationWideEventFields = (
   context: DestinationReconciliationContext,
 ): Record<string, string | number | boolean> => ({
@@ -286,7 +319,9 @@ const createDestinationReconciliationWideEventFields = (
   "local_event_states.missing_source_event_uid_count": context.eventReadDiagnostics.missingSourceEventUidCount,
   "local_event_states.outside_reconciliation_window_count": context.eventReadDiagnostics.outsideReconciliationWindowCount,
   "local_event_states.over_budget_series_count": context.eventReadDiagnostics.overBudgetSourceEventUids.length,
-  "local_event_states.over_budget_series_uids": context.eventReadDiagnostics.overBudgetSourceEventUids.join(","),
+  "local_event_states.over_budget_series_uids": context.eventReadDiagnostics.overBudgetSourceEventUids
+    .slice(0, OVER_BUDGET_SERIES_UID_SAMPLE_SIZE)
+    .join(","),
   "local_event_states.syncable_count": context.eventReadDiagnostics.syncableEventCount,
   "reconciliation.local_read.duration_ms": context.localReadDurationMs,
   "reconciliation.remote_read.duration_ms": context.remoteReadDurationMs,
@@ -426,7 +461,7 @@ const syncDestinationsForUser = async (
     return EMPTY_RESULT;
   }
 
-  const syncLock = createSyncLock(redis);
+  const syncLock = createSyncLock(redis, "background");
 
   let added = 0;
   let addFailed = 0;
@@ -435,11 +470,7 @@ const syncDestinationsForUser = async (
   const errors: string[] = [];
   const syncEvents: Record<string, unknown>[] = [];
 
-  const rateLimiter = createRedisRateLimiter(
-    redis,
-    `ratelimit:${userId}:google`,
-    { requestsPerMinute: GOOGLE_REQUESTS_PER_MINUTE },
-  );
+  const rateLimiter = createGoogleUserRateLimiter(redis, userId, "push");
 
   for (const destinationCandidate of destinations) {
     if (config.abortSignal?.aborted) {
@@ -653,15 +684,13 @@ const syncDestinationsForUser = async (
             callbacks.onSyncEvent(enrichedEvent);
           }
         },
-        reconciliationScope: {
-          authoritativeWindow,
+        reconciliationScope: createDestinationReconciliationScope({
           authoritativeSourceWindows,
-          configuredSourceCalendarIds: new Set(sourceCalendarIdsAtLocalRead),
+          authoritativeWindow,
+          eventReadDiagnostics,
           requestedWindow,
-          withheldSourceEventStateIds: new Set(
-            eventReadDiagnostics.overBudgetSourceEventStateIds,
-          ),
-        },
+          sourceCalendarIdsAtLocalRead,
+        }),
       });
 
       callbacks?.onCalendarComplete?.({
@@ -716,7 +745,9 @@ const syncDestinationsForUser = async (
 };
 
 export {
+  createDestinationReconciliationScope,
   createDestinationReconciliationWideEventFields,
+  OVER_BUDGET_SERIES_UID_SAMPLE_SIZE,
   readDestinationReconciliationState,
   resolveStoredSourceCoverage,
   syncDestinationsForUser,

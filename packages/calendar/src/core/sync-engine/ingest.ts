@@ -24,6 +24,14 @@ interface FetchEventsResult {
   isDeltaSync?: boolean;
   fullSyncRequired?: boolean;
   unchanged?: boolean;
+  skippedResourceCount?: number;
+  skippedResourceReasons?: string[];
+  /**
+   * Events the provider returned that Keeper cannot represent (an RDATE series,
+   * a timezone no runtime can interpret). They stay in `events` so removal stays
+   * computed against the full feed; only ingestion withholds them.
+   */
+  unsupportedEventUids?: string[];
   syncWindow?: SyncWindow;
   coverage?: {
     futureRange: SyncRange;
@@ -139,6 +147,12 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     const fetchResult = await fetchEvents();
     wideEvent["source_events.count"] = fetchResult.events.length;
     let sourceEvents = fetchResult.events;
+    const unsupportedEventUids = new Set(fetchResult.unsupportedEventUids);
+    if (unsupportedEventUids.size > 0) {
+      sourceEvents = sourceEvents.filter(({ uid }) => !unsupportedEventUids.has(uid));
+      wideEvent["source_events.unsupported_count"] = unsupportedEventUids.size;
+      wideEvent["source_events.unsupported_uids"] = [...unsupportedEventUids].join(",");
+    }
     if (sourceEvents.some((event) => event.recurrenceRule)) {
       if (!fetchResult.syncWindow) {
         throw new RangeError("Recurring source ingestion requires an explicit sync window");

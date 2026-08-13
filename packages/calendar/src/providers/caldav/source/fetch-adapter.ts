@@ -52,7 +52,7 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
     });
 
     const events: SourceEvent[] = [];
-    const parsedEvents = parseICalCalendarsToRemoteEvents(
+    const resources = parseICalCalendarsToRemoteEvents(
       objects.flatMap(({ data }) => {
         if (!data) {
           return [];
@@ -61,7 +61,7 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
       }),
     );
 
-    for (const parsed of parsedEvents) {
+    for (const parsed of resources.events) {
       if (isKeeperEvent(parsed.uid)) {
         continue;
       }
@@ -94,6 +94,8 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
         historicRange,
         window: syncWindow,
       },
+      skippedResourceCount: resources.skippedResourceCount,
+      skippedResourceReasons: resources.skippedResourceReasons,
     };
   };
 

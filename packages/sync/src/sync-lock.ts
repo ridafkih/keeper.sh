@@ -7,6 +7,22 @@ const SIGNAL_TTL_SECONDS = 320;
 const POLL_INTERVAL_MS = 250;
 const POLL_TIMEOUT_MS = 310_000;
 const MAPPING_MUTATION_LOCK_PREFIX = "mapping-mutation:";
+const BACKGROUND_HOLDER_PREFIX = "background:";
+const PREEMPTING_HOLDER_PREFIX = "preempting:";
+
+/**
+ * Supersession means "a waiter needs the holder to stop", not "a waiter exists".
+ * A routine background sync queued behind an identical run is not a reason to
+ * abandon reads already paid for; a mapping mutation is. The class rides inside
+ * the holder id because every script here compares holder ids as opaque strings.
+ * An unprefixed id from an older deployment is treated as preempting.
+ */
+type SyncLockAcquisition = "background" | "preempting";
+
+const HOLDER_PREFIXES: Record<SyncLockAcquisition, string> = {
+  background: BACKGROUND_HOLDER_PREFIX,
+  preempting: PREEMPTING_HOLDER_PREFIX,
+};
 
 interface SyncLockRedis {
   get: (key: string) => Promise<string | null>;
@@ -141,11 +157,38 @@ const CONFIRM_ACQUISITION_SCRIPT = `
   return 0
 `;
 
+/**
+ * Report whether the caller is still the current holder.
+ *
+ * KEYS[1] = lock key
+ * KEYS[2] = waiter stack key
+ * ARGV[1] = holder ID
+ *
+ * The waiter stack is read rather than the signal key because
+ * ACQUIRE_OR_SIGNAL_SCRIPT overwrites the signal on every new waiter, so a
+ * preempting waiter is masked there as soon as a background one arrives behind it.
+ */
+const IS_CURRENT_SCRIPT = `
+  local holder = redis.call('GET', KEYS[1])
+  if holder ~= ARGV[1] then
+    return 0
+  end
+  local prefix = '${BACKGROUND_HOLDER_PREFIX}'
+  local waiters = redis.call('LRANGE', KEYS[2], 0, -1)
+  for index = 1, #waiters do
+    local waiter = waiters[index]
+    if waiter ~= ARGV[1] and string.sub(waiter, 1, #prefix) ~= prefix then
+      return 0
+    end
+  end
+  return 1
+`;
+
 const createLockHandle = (
   redis: SyncLockRedis,
   calendarId: string,
   lockKey: string,
-  signalKey: string,
+  waiterKey: string,
   holderId: string,
 ): SyncLockHandle => {
   const renewalState: { error?: unknown } = {};
@@ -177,16 +220,15 @@ const createLockHandle = (
   const isCurrent = async (): Promise<boolean> => {
     throwIfRenewalFailed();
 
-    const [lockHolder, pendingWaiter] = await Promise.all([
-      redis.get(lockKey),
-      redis.get(signalKey),
-    ]);
+    const current = await redis.eval(
+      IS_CURRENT_SCRIPT,
+      2,
+      lockKey,
+      waiterKey,
+      holderId,
+    );
 
-    if (lockHolder !== holderId) {
-      return false;
-    }
-
-    return pendingWaiter === null;
+    return current === 1;
   };
 
   const release = async (): Promise<void> => {
@@ -197,7 +239,10 @@ const createLockHandle = (
   return { isCurrent, isHeld, release };
 };
 
-const createSyncLock = (redis: SyncLockRedis) => {
+const createSyncLock = (
+  redis: SyncLockRedis,
+  acquisition: SyncLockAcquisition = "preempting",
+) => {
   const acquire = async (
     calendarId: string,
     abortSignal?: AbortSignal,
@@ -207,7 +252,7 @@ const createSyncLock = (redis: SyncLockRedis) => {
     const signalKey = `${SIGNAL_PREFIX}${calendarId}`;
     const waiterKey = `${WAITER_PREFIX}${calendarId}`;
     const blockerLockKey = `${LOCK_PREFIX}${blockerCalendarId ?? calendarId}`;
-    const holderId = crypto.randomUUID();
+    const holderId = `${HOLDER_PREFIXES[acquisition]}${crypto.randomUUID()}`;
     let checkBlocker = "0";
     if (blockerCalendarId) {
       checkBlocker = "1";
@@ -250,7 +295,7 @@ const createSyncLock = (redis: SyncLockRedis) => {
         redis,
         calendarId,
         lockKey,
-        signalKey,
+        waiterKey,
         holderId,
       );
     };
@@ -342,5 +387,5 @@ const createSyncLock = (redis: SyncLockRedis) => {
 const createMappingMutationLockId = (userId: string): string =>
   `${MAPPING_MUTATION_LOCK_PREFIX}${userId}`;
 
-export { createSyncLock, createMappingMutationLockId, SyncLockRenewalError, LOCK_PREFIX, SIGNAL_PREFIX, LOCK_TTL_SECONDS, LOCK_RENEW_INTERVAL_MS, POLL_INTERVAL_MS };
-export type { SyncLockHandle, SyncLockRedis, AcquireSyncLockResult, SyncLockSkippedResult };
+export { createSyncLock, createMappingMutationLockId, SyncLockRenewalError, LOCK_PREFIX, SIGNAL_PREFIX, WAITER_PREFIX, LOCK_TTL_SECONDS, LOCK_RENEW_INTERVAL_MS, POLL_INTERVAL_MS, BACKGROUND_HOLDER_PREFIX };
+export type { SyncLockAcquisition, SyncLockHandle, SyncLockRedis, AcquireSyncLockResult, SyncLockSkippedResult };

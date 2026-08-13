@@ -7,15 +7,16 @@ import {
   createGoogleTokenRefresher,
   createMicrosoftTokenRefresher,
   createCoordinatedRefresher,
-  createRedisRateLimiter,
+  createGoogleUserRateLimiter,
   ensureValidToken,
   isTimeoutError,
   buildCalendarBackoffState,
   SOURCE_INGEST_LOCK_NAMESPACE,
+  createRequiredSourceRanges,
   createSourceIngestionPlan,
 } from "@keeper.sh/calendar";
 import { INGEST_SOURCE_TIMEOUT_MS, PROVIDER_INGEST_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
-import type { CalendarBackoffState, IngestionFetchEventsResult, IngestionPersistenceWork, RedisRateLimiter, TokenState } from "@keeper.sh/calendar";
+import type { CalendarBackoffState, IngestionFetchEventsResult, IngestionPersistenceWork, RedisRateLimiter, RequiredSourceRanges, TokenState } from "@keeper.sh/calendar";
 import {
   createIcsSourceFetcher,
   interpretFullDayTimedEventsAsAllDay,
@@ -25,6 +26,7 @@ import { createGoogleSourceFetcher } from "@keeper.sh/calendar/google";
 import { createOutlookSourceFetcher } from "@keeper.sh/calendar/outlook";
 import {
   CalDAVIncompleteMultiGetError,
+  CalDAVUnreadableResourceError,
   createCalDAVSourceFetcher,
   isCalDAVAuthenticationError,
 } from "@keeper.sh/calendar/caldav";
@@ -44,14 +46,10 @@ import { database, refreshLockRedis, refreshLockStore } from "@/context";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import { resolveMissingCalendarFailure } from "@/utils/provider-ingest-failure";
-import {
-  resolveOAuthIngestionState,
-  type RequiredSourceRanges,
-} from "@/utils/oauth-ingestion-state";
+import { resolveOAuthIngestionState } from "@/utils/oauth-ingestion-state";
 import { withAbortTimeout } from "@/utils/with-abort-timeout";
 import { createSyncLock } from "@keeper.sh/sync";
 import { enqueueDestinationSyncsForUsers } from "@/utils/enqueue-destination-syncs";
-import { createRequiredSourceRanges } from "@/utils/source-ingestion-ranges";
 import { deleteEventStatesInChunks } from "@/utils/delete-event-states";
 
 const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
@@ -145,9 +143,21 @@ const hasErrorFlag = (error: unknown, key: string): boolean =>
 const shouldApplyOAuthIngestBackoff = (error: unknown): boolean =>
   !hasErrorFlag(error, "authRequired") && !hasErrorFlag(error, "oauthReauthRequired");
 
+const recordSkippedResources = (skippedResourceCount: number, reasons: string[]): void => {
+  if (skippedResourceCount === 0) {
+    return;
+  }
+  widelog.set("provider.resources_skipped", skippedResourceCount);
+  widelog.set("provider.resources_skipped_reasons", reasons.join("; "));
+};
+
 const resolveIngestErrorSlug = (error: unknown): string => {
   if (error instanceof CalDAVIncompleteMultiGetError) {
     return "provider-response-incomplete";
+  }
+  if (error instanceof CalDAVUnreadableResourceError) {
+    recordSkippedResources(error.skippedResourceCount, error.skippedResourceReasons);
+    return "provider-partial-response";
   }
   if (!isTimeoutError(error)) {
     return "provider-api-error";
@@ -157,7 +167,6 @@ const resolveIngestErrorSlug = (error: unknown): string => {
   widelog.set("timeout.limit_ms", PROVIDER_INGEST_REQUEST_TIMEOUT_MS);
   return "provider-request-timeout";
 };
-const GOOGLE_REQUESTS_PER_MINUTE = 500;
 
 const createIngestionPersistenceTransaction = (
   calendarId: string,
@@ -303,11 +312,7 @@ const resolveRateLimiter = (provider: string, userId: string): RedisRateLimiter 
     return;
   }
 
-  return createRedisRateLimiter(
-    refreshLockRedis,
-    `ratelimit:${userId}:google`,
-    { requestsPerMinute: GOOGLE_REQUESTS_PER_MINUTE },
-  );
+  return createGoogleUserRateLimiter(refreshLockRedis, userId, "ingest");
 };
 
 const getRequiredSourceRanges = async (
@@ -718,7 +723,14 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                 const ingestEvents: Record<string, unknown>[] = [];
                 const ingestionResult = await ingestSource({
                   calendarId: source.calendarId,
-                  fetchEvents: () => fetcher.fetchEvents(),
+                  fetchEvents: async () => {
+                    const fetchResult = await fetcher.fetchEvents();
+                    recordSkippedResources(
+                      fetchResult.skippedResourceCount ?? 0,
+                      fetchResult.skippedResourceReasons ?? [],
+                    );
+                    return fetchResult;
+                  },
                   isCurrent,
                   withPersistenceTransaction:
                     createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),

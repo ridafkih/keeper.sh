@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BASE_SOURCE_SYNC_RANGES,
   createRequiredSourceRanges,
-} from "../../src/utils/source-ingestion-ranges";
+} from "../../../src/core/sync/required-source-ranges";
 
 describe("createRequiredSourceRanges", () => {
   it("does not let a narrow destination prune the shared source baseline", () => {

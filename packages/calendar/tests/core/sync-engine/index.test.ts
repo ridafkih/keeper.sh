@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { executeRemoteOperations } from "../../../src/core/sync-engine/index";
+import { executeRemoteOperations, OPERATION_ERROR_SAMPLE_SIZE } from "../../../src/core/sync-engine/index";
 import type {
   DeleteResult,
   MaterializedSyncableEvent,
@@ -893,6 +893,65 @@ describe("syncCalendar", () => {
     expect(emittedEvents).toHaveLength(1);
     expect(emittedEvents[0]?.["outcome"]).toBe("in-sync");
     expect(emittedEvents[0]?.["flushed"]).toBe(false);
+  });
+
+  it("caps operation_errors on the wide event and reports the uncapped total", async () => {
+    const { syncCalendar } = await import("../../../src/core/sync-engine/index");
+    const failingEventCount = 60;
+    const localEvents = Array.from({ length: failingEventCount }, (_unused, index) =>
+      makeEvent(`ev-${index}`, new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z")));
+    const provider = makeProvider({
+      pushEvents: (events) => Promise.resolve(events.map(() => ({
+        success: false as const,
+        error: "provider rejected the push",
+      }))),
+    });
+
+    const emittedEvents: Record<string, unknown>[] = [];
+
+    await syncCalendar({
+      userId: "user-1",
+      calendarId: "dest-cal-1",
+      reconciliationScope: TEST_RECONCILIATION_SCOPE,
+      provider,
+      readState: () => Promise.resolve({ localEvents, existingMappings: [], remoteEvents: [] }),
+      isCurrent: () => Promise.resolve(true),
+      flush: () => Promise.resolve(),
+      onSyncEvent: (event) => { emittedEvents.push(event); },
+    });
+
+    const [event] = emittedEvents;
+    expect(event?.["events.add_failed"]).toBe(failingEventCount);
+    expect(event?.["operation_errors.count"]).toBe(failingEventCount);
+    expect(Array.isArray(event?.["operation_errors"])).toBe(true);
+    expect(event?.["operation_errors"]).toHaveLength(OPERATION_ERROR_SAMPLE_SIZE);
+    expect(event?.["operation_errors.truncated"]).toBe(true);
+  });
+
+  it("leaves operation_errors untruncated when the sample size is not exceeded", async () => {
+    const { syncCalendar } = await import("../../../src/core/sync-engine/index");
+    const localEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
+    const provider = makeProvider({
+      pushEvents: () => Promise.resolve([{ success: false, error: "provider rejected the push" }]),
+    });
+
+    const emittedEvents: Record<string, unknown>[] = [];
+
+    await syncCalendar({
+      userId: "user-1",
+      calendarId: "dest-cal-1",
+      reconciliationScope: TEST_RECONCILIATION_SCOPE,
+      provider,
+      readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
+      isCurrent: () => Promise.resolve(true),
+      flush: () => Promise.resolve(),
+      onSyncEvent: (event) => { emittedEvents.push(event); },
+    });
+
+    const [event] = emittedEvents;
+    expect(event?.["operation_errors"]).toHaveLength(1);
+    expect(event?.["operation_errors.count"]).toBe(1);
+    expect(event?.["operation_errors.truncated"]).toBe(false);
   });
 
   it("emits a wide event with error details when sync throws", async () => {

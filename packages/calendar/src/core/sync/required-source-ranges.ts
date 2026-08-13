@@ -1,10 +1,14 @@
+import { syncRangeSchema, type SyncRange } from "@keeper.sh/data-schemas";
 import {
   DEFAULT_FUTURE_SYNC_RANGE,
   DEFAULT_HISTORIC_SYNC_RANGE,
   getWiderSyncRange,
-} from "@keeper.sh/calendar";
-import { syncRangeSchema } from "@keeper.sh/data-schemas";
-import type { RequiredSourceRanges } from "./oauth-ingestion-state";
+} from "./sync-range";
+
+interface RequiredSourceRanges {
+  futureRange: SyncRange;
+  historicRange: SyncRange;
+}
 
 interface StoredDestinationRanges {
   syncFutureRange: string;
@@ -36,4 +40,4 @@ const createRequiredSourceRanges = (
 };
 
 export { BASE_SOURCE_SYNC_RANGES, createRequiredSourceRanges };
-export type { StoredDestinationRanges };
+export type { RequiredSourceRanges, StoredDestinationRanges };

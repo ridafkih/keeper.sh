@@ -110,6 +110,7 @@ const buildRemoveOperations = (
   remoteEvents,
   localEventIds,
   mappedRemoteIdentities,
+  matchRemoteEventsToMappings(mappings, remoteEvents),
   toReconciliationScope(boundary),
 );
 
@@ -269,6 +270,56 @@ describe("buildRemoveOperations", () => {
 });
 
 describe("computeSyncOperations", () => {
+  it("removes a legacy uid mapping by the provider event id already listed remotely", () => {
+    const mapping = createEventMapping({
+      deleteIdentifier: "legacy-uid@google.com",
+      destinationEventUid: "legacy-uid@google.com",
+    });
+    const remoteEvent = createRemoteEvent({
+      deleteId: "google-event-id",
+      endTime: mapping.endTime,
+      isKeeperEvent: true,
+      startTime: mapping.startTime,
+      uid: mapping.destinationEventUid,
+    });
+
+    const { operations } = computeSyncOperations([], [mapping], [remoteEvent]);
+
+    expect(operations).toEqual([
+      {
+        deleteId: "google-event-id",
+        startTime: mapping.startTime,
+        type: "remove",
+        uid: "legacy-uid@google.com",
+      },
+    ]);
+  });
+
+  it("replaces a legacy uid mapping by the provider event id already listed remotely", () => {
+    const event = createLocalEvent({});
+    const mapping = createEventMapping({
+      deleteIdentifier: "legacy-uid@google.com",
+      destinationEventUid: "legacy-uid@google.com",
+      syncEventHash: createSyncEventContentHash(event),
+    });
+    const remoteEvent = createRemoteEvent({
+      deleteId: "google-event-id",
+      endTime: new Date("2026-03-08T16:00:00.000Z"),
+      isKeeperEvent: true,
+      startTime: new Date("2026-03-08T15:00:00.000Z"),
+      uid: mapping.destinationEventUid,
+    });
+
+    const { operations } = computeSyncOperations([event], [mapping], [remoteEvent]);
+
+    expect(operations).toHaveLength(1);
+    expect(operations[0]).toMatchObject({
+      deleteId: "google-event-id",
+      type: "replace",
+      uid: "legacy-uid@google.com",
+    });
+  });
+
   it("keeps a matching mapped far-future event without requiring an orphan marker", () => {
     const event = createLocalEvent({
       endTime: new Date("2040-03-15T10:00:00.000Z"),
@@ -737,7 +788,7 @@ describe("computeSyncOperations", () => {
       },
     ]);
     expect(result.operations).toEqual([{
-      deleteId: "legacy-1@keeper.sh",
+      deleteId: "google-provider-id-1",
       startTime: removedSlot.startTime,
       type: "remove",
       uid: "legacy-1@keeper.sh",
@@ -777,7 +828,7 @@ describe("computeSyncOperations", () => {
       occurrenceReassigned: 1,
     });
     expect(result.operations).toEqual([{
-      deleteId: mapping.deleteIdentifier,
+      deleteId: remoteEvent.deleteId,
       event,
       staleMappingId: mapping.id,
       type: "replace",

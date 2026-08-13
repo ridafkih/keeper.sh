@@ -12,6 +12,17 @@ const DEFAULT_IDLE_IN_TRANSACTION_TIMEOUT_MS = 30_000;
 const POOL_MAX_CONNECTIONS = 10;
 const POOL_IDLE_TIMEOUT_SECONDS = 30;
 const POOL_MAX_LIFETIME_SECONDS = 1800;
+/*
+ * Bun 1.3.14 delivers one query's DataRows to a different query on the same
+ * connection: an already-prepared query's Bind+Execute is written ahead of an
+ * earlier queued-but-unwritten one while reply attribution stays FIFO, so every
+ * reply shifts a position. Production saw a sync range column arrive holding the
+ * return value of a set_config issued moments earlier on the same connection.
+ * Reproduced at 500 wrong rows in 1000 against Postgres 16; oven-sh/bun#33627
+ * fixes it but has not shipped in any release. Disabling prepared statements is
+ * the only mitigation that held, and costs roughly 14% on a hot read.
+ */
+const PREPARED_STATEMENTS_ENABLED = false;
 
 const appendServerSettings = (
   url: string,
@@ -58,6 +69,7 @@ const createDatabase = async (url: string, options?: DatabasePoolOptions): Promi
       max: POOL_MAX_CONNECTIONS,
       idleTimeout: POOL_IDLE_TIMEOUT_SECONDS,
       maxLifetime: POOL_MAX_LIFETIME_SECONDS,
+      prepare: PREPARED_STATEMENTS_ENABLED,
     },
   });
   await waitForConnection(database);

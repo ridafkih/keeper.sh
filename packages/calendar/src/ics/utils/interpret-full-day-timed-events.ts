@@ -56,29 +56,44 @@ const isMidnight = (parts: WallClockParts): boolean =>
 const localDateKey = (parts: WallClockParts): string =>
   `${parts.year}-${parts.month.toString().padStart(2, "0")}-${parts.day.toString().padStart(2, "0")}`;
 
-const isLocalMidnightSpan = (
+const utcMidnight = (parts: WallClockParts): Date =>
+  new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+
+/*
+ * Every destination reads an all-day instant as UTC midnight: Outlook emits the
+ * bare UTC wall time, Google and CalDAV take the UTC date. Leaving the event on
+ * its local-midnight instant would therefore write a wrong value that Keeper
+ * cannot read back, so each run would see drift and delete-and-recreate the
+ * event forever. Anchoring on the local calendar day expressed as UTC midnight
+ * gives the interpreted event the same shape as a plain VALUE=DATE one.
+ */
+const resolveInterpretedAllDaySpan = (
   event: SourceEvent,
   calendarTimeZone: string | undefined,
-): boolean => {
+): Pick<SourceEvent, "endTime" | "startTime"> | null => {
   if (event.isAllDay || event.endTime <= event.startTime) {
-    return false;
+    return null;
   }
 
   const timezone = event.startTimeZone ?? normalizeTimezone(calendarTimeZone);
   if (!timezone) {
-    return false;
+    return null;
   }
 
   try {
     const startParts = partsInTimeZone(event.startTime, timezone);
     const endParts = partsInTimeZone(event.endTime, timezone);
-    return (
-      isMidnight(startParts)
-      && isMidnight(endParts)
-      && localDateKey(startParts) !== localDateKey(endParts)
-    );
+    if (
+      !isMidnight(startParts)
+      || !isMidnight(endParts)
+      || localDateKey(startParts) === localDateKey(endParts)
+    ) {
+      return null;
+    }
+
+    return { endTime: utcMidnight(endParts), startTime: utcMidnight(startParts) };
   } catch {
-    return false;
+    return null;
   }
 };
 
@@ -91,11 +106,18 @@ const interpretFullDayTimedEventsAsAllDay = (
   }
 
   return events.map((event) => {
-    if (!isLocalMidnightSpan(event, options.calendarTimeZone)) {
+    const span = resolveInterpretedAllDaySpan(event, options.calendarTimeZone);
+    if (!span) {
       return event;
     }
 
-    return { ...event, isAllDay: true };
+    /*
+     * The originating timezone is dropped along with the times it described.
+     * Recurrence expansion walks wall clock in `startTimeZone`, so keeping it
+     * would re-introduce an hour of drift on every occurrence past a DST
+     * transition, pushing those occurrences back off UTC midnight.
+     */
+    return { ...event, ...span, isAllDay: true, startTimeZone: globalThis.undefined };
   });
 };
 

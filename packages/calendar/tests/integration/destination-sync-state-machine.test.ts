@@ -395,6 +395,65 @@ it("repairs Keeper orphans, retains user events, and converges", async () => {
   expect(provider.calls).toEqual({ deletes: [], pushes: [] });
 });
 
+/*
+ * Retirement past the upper edge is the counterpart to the lower-edge cleanup below.
+ * The source event is deliberately left in the local read, so only the window can
+ * explain the removal — a mirror the window no longer covers stops receiving updates
+ * and would otherwise sit at the destination as a stale copy forever.
+ */
+it("retires a mirror that falls past the sync window's upper edge and converges", async () => {
+  const eventStates = new InMemoryEventStateStore();
+  const mappings = new InMemoryMappingStore();
+  const provider = new StatefulDestinationProvider();
+  const farFutureEvent = makeSourceEvent(
+    "ordinary event",
+    new Date("2028-03-15T09:00:00.000Z"),
+    new Date("2028-03-15T10:00:00.000Z"),
+  );
+  let syncWindowEnd = new Date("2029-01-01T00:00:00.000Z");
+  const runSync = () => syncCalendar({
+    calendarId: DESTINATION_CALENDAR_ID,
+    flush: mappings.flush,
+    isCurrent: () => Promise.resolve(true),
+    provider,
+    readState: async () => ({
+      existingMappings: [...mappings.mappings.values()],
+      localEvents: eventStates.syncableEvents(),
+      remoteEvents: await provider.listRemoteEvents(),
+    }),
+    reconciliationScope: {
+      authoritativeWindow: {
+        timeMax: syncWindowEnd,
+        timeMin: new Date("2026-01-01T00:00:00.000Z"),
+      },
+      requestedWindow: {
+        timeMax: syncWindowEnd,
+        timeMin: new Date("2026-01-01T00:00:00.000Z"),
+      },
+    },
+    userId: "user-1",
+  });
+
+  await ingest(eventStates, farFutureEvent);
+  await expect(runSync()).resolves.toMatchObject({ added: 1, removed: 0 });
+  expect(provider.remoteEvents).toHaveLength(1);
+  expect(mappings.mappings).toHaveLength(1);
+
+  syncWindowEnd = new Date("2027-01-01T00:00:00.000Z");
+  provider.resetCalls();
+
+  await expect(runSync()).resolves.toMatchObject({ added: 0, removed: 1 });
+  expect(provider.calls.deletes).toHaveLength(1);
+  expect(provider.calls.pushes).toEqual([]);
+  expect(provider.remoteEvents).toHaveLength(0);
+  expect(mappings.mappings).toHaveLength(0);
+  expect(eventStates.rows.size).toBe(1);
+
+  provider.resetCalls();
+  await expect(runSync()).resolves.toMatchObject({ added: 0, removed: 0 });
+  expect(provider.calls).toEqual({ deletes: [], pushes: [] });
+});
+
 it("migrates a legacy recurring Google mapping in place and converges", async () => {
   const occurrence: MaterializedSyncableEvent = {
     calendarId: SOURCE_CALENDAR_ID,

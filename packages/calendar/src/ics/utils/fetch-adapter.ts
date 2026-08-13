@@ -10,9 +10,14 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { SourceIngestionPlan } from "../../core/sync/sync-range";
 import { normalizeTimezone } from "./normalize-timezone";
 import {
-  assertNoUnsupportedRecurrenceDates,
-  assertSupportedRecurrenceTimeZones,
+  collectRecurrenceDateEventUids,
+  resolveRecurrenceTimeZones,
 } from "./validate-recurrence-input";
+import {
+  readDeclaredTimeZoneOffsets,
+  resolveDeclaredTimeZone,
+} from "./resolve-timezone-identifier";
+import type { DeclaredTimeZoneOffsets } from "./resolve-timezone-identifier";
 import { wallTimeToInstant } from "./timezone-instant";
 
 interface IcsSourceFetcherConfig {
@@ -44,35 +49,110 @@ const FLOATING_DATE_PROPERTIES = new Set([
 ]);
 
 const FLOATING_UNTIL_PATTERN = /(^|;)UNTIL=(\d{8}T\d{6})(?=;|$)/i;
+const TZID_PARAMETER_PATTERN = /;TZID=(?:"([^"]*)"|([^;:]*))/i;
+
+interface IcsPropertyParts {
+  parameters: string[];
+  property: string;
+  propertyName: string;
+  value: string;
+}
+
+/**
+ * The zone a VEVENT's own DTSTART declares. Recurrence properties that carry no
+ * zone of their own are anchored to it, which is what every client means by a
+ * floating EXDATE/UNTIL on a zoned series.
+ */
+interface EventTimeZoneContext {
+  isAllDay: boolean;
+  timeZone?: string;
+}
+
+interface IcsLineBlock {
+  insideEvent: boolean;
+  lines: string[];
+}
+
+interface EventFloatingZones {
+  declared?: string;
+  resolved?: string;
+}
 
 const formatUtcIcsDateTime = (date: Date): string =>
   date.toISOString().replaceAll(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
 
-const applyCalendarTimeZoneToFloatingUntil = (
+const readFloatingWallTime = (recurrenceRuleValue: string): Date => {
+  const floatingUntil = FLOATING_UNTIL_PATTERN.exec(recurrenceRuleValue)?.[2] ?? "";
+  return new Date(Date.UTC(
+    Number(floatingUntil.slice(0, 4)),
+    Number(floatingUntil.slice(4, 6)) - 1,
+    Number(floatingUntil.slice(6, 8)),
+    Number(floatingUntil.slice(9, 11)),
+    Number(floatingUntil.slice(11, 13)),
+    Number(floatingUntil.slice(13, 15)),
+  ));
+};
+
+const parseIcsPropertyParts = (line: string): IcsPropertyParts | null => {
+  const separatorIndex = line.indexOf(":");
+  if (separatorIndex === -1) {
+    return null;
+  }
+  const property = line.slice(0, separatorIndex);
+  const [propertyName, ...parameters] = property.toUpperCase().split(";");
+  if (!propertyName) {
+    return null;
+  }
+  return {
+    parameters,
+    property,
+    propertyName,
+    value: line.slice(separatorIndex + 1),
+  };
+};
+
+const readEventTimeZoneContext = (lines: readonly string[]): EventTimeZoneContext => {
+  for (const line of lines) {
+    const parts = parseIcsPropertyParts(line);
+    if (!parts || parts.propertyName !== "DTSTART") {
+      continue;
+    }
+    if (parts.parameters.includes("VALUE=DATE")) {
+      return { isAllDay: true };
+    }
+    const match = TZID_PARAMETER_PATTERN.exec(parts.property);
+    const timeZone = match?.[1] ?? match?.[2];
+    if (!timeZone) {
+      return { isAllDay: false };
+    }
+    return { isAllDay: false, timeZone };
+  }
+  return { isAllDay: false };
+};
+
+const splitIcsLineBlocks = (lines: readonly string[]): IcsLineBlock[] => {
+  const blocks: IcsLineBlock[] = [{ insideEvent: false, lines: [] }];
+  for (const line of lines) {
+    const upperLine = line.toUpperCase();
+    if (upperLine === "BEGIN:VEVENT") {
+      blocks.push({ insideEvent: true, lines: [line] });
+      continue;
+    }
+    blocks.at(-1)?.lines.push(line);
+    if (upperLine === "END:VEVENT") {
+      blocks.push({ insideEvent: false, lines: [] });
+    }
+  }
+  return blocks;
+};
+
+const applyTimeZoneToFloatingUntil = (
   line: string,
-  calendarTimeZone: string | undefined,
+  timeZone: string,
 ): string => {
   const separatorIndex = line.indexOf(":");
-  if (separatorIndex === -1 || line.slice(0, separatorIndex).toUpperCase() !== "RRULE") {
-    return line;
-  }
   const value = line.slice(separatorIndex + 1);
-  const match = FLOATING_UNTIL_PATTERN.exec(value);
-  const floatingUntil = match?.[2];
-  if (!floatingUntil) {
-    return line;
-  }
-  if (!calendarTimeZone) {
-    throw new RangeError("Floating ICS RRULE UNTIL requires an explicit X-WR-TIMEZONE");
-  }
-  const year = Number(floatingUntil.slice(0, 4));
-  const month = Number(floatingUntil.slice(4, 6));
-  const day = Number(floatingUntil.slice(6, 8));
-  const hour = Number(floatingUntil.slice(9, 11));
-  const minute = Number(floatingUntil.slice(11, 13));
-  const second = Number(floatingUntil.slice(13, 15));
-  const wallTime = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-  const instant = wallTimeToInstant(wallTime, calendarTimeZone);
+  const instant = wallTimeToInstant(readFloatingWallTime(value), timeZone);
   const normalizedValue = value.replace(
     FLOATING_UNTIL_PATTERN,
     (matched, prefix: string) => `${prefix}UNTIL=${formatUtcIcsDateTime(instant)}`,
@@ -80,53 +160,111 @@ const applyCalendarTimeZoneToFloatingUntil = (
   return `${line.slice(0, separatorIndex + 1)}${normalizedValue}`;
 };
 
+const normalizeFloatingRecurrenceRule = (
+  line: string,
+  zones: EventFloatingZones,
+): string => {
+  const separatorIndex = line.indexOf(":");
+  const match = FLOATING_UNTIL_PATTERN.exec(line.slice(separatorIndex + 1));
+  if (!match?.[2]) {
+    return line;
+  }
+  if (!zones.declared) {
+    throw new RangeError("Floating ICS RRULE UNTIL requires an explicit X-WR-TIMEZONE");
+  }
+  if (!zones.resolved) {
+    /*
+     * The event declares a zone this runtime cannot interpret. Leaving UNTIL
+     * alone keeps the feed parseable; resolveRecurrenceTimeZones reports the
+     * same event as unsupported so it is withheld and counted, not synced with
+     * a guessed offset.
+     */
+    return line;
+  }
+  return applyTimeZoneToFloatingUntil(line, zones.resolved);
+};
+
+const isAbsoluteDateEntry = (entry: string): boolean =>
+  entry.endsWith("Z") || /^\d{8}$/.test(entry);
+
+const normalizeFloatingDateProperty = (
+  line: string,
+  parts: IcsPropertyParts,
+  zones: EventFloatingZones,
+): string[] => {
+  if (
+    !FLOATING_DATE_PROPERTIES.has(parts.propertyName)
+    || parts.property.toUpperCase().includes("TZID=")
+    || parts.parameters.includes("VALUE=DATE")
+  ) {
+    return [line];
+  }
+  const entries = parts.value.split(",");
+  const floatingEntries = entries.filter((entry) => !isAbsoluteDateEntry(entry));
+  if (floatingEntries.length === 0) {
+    return [line];
+  }
+  if (!zones.declared) {
+    throw new RangeError(
+      `Floating ICS ${parts.propertyName} requires an explicit TZID or X-WR-TIMEZONE`,
+    );
+  }
+  const zonedLine = `${parts.property};TZID=${zones.declared}:${floatingEntries.join(",")}`;
+  const absoluteEntries = entries.filter((entry) => isAbsoluteDateEntry(entry));
+  if (absoluteEntries.length === 0) {
+    return [zonedLine];
+  }
+  /*
+   * A TZID parameter applies to every value on the property, so the absolute
+   * entries of a mixed multi-value list are re-emitted on their own line rather
+   * than being reinterpreted in the event's zone.
+   */
+  return [zonedLine, `${parts.property}:${absoluteEntries.join(",")}`];
+};
+
+const normalizeFloatingEventBlock = (
+  block: IcsLineBlock,
+  calendarTimeZone: string | undefined,
+  declaredOffsets: DeclaredTimeZoneOffsets,
+): string[] => {
+  const context = readEventTimeZoneContext(block.lines);
+  /*
+   * An all-day series has no wall-clock zone to resolve against: DTSTART is a
+   * date, so a date-time UNTIL or EXDATE on it is compared as a date anyway.
+   */
+  if (context.isAllDay) {
+    return block.lines;
+  }
+  const declared = context.timeZone ?? calendarTimeZone;
+  const zones: EventFloatingZones = {
+    declared,
+    resolved: resolveDeclaredTimeZone(declared, declaredOffsets),
+  };
+
+  return block.lines.flatMap((line) => {
+    const parts = parseIcsPropertyParts(line);
+    if (!parts) {
+      return [line];
+    }
+    if (parts.propertyName === "RRULE") {
+      return [normalizeFloatingRecurrenceRule(line, zones)];
+    }
+    return normalizeFloatingDateProperty(line, parts, zones);
+  });
+};
+
 const applyCalendarTimeZoneToFloatingEventDates = (
   ical: string,
   calendarTimeZone: string | undefined,
 ): string => {
   const unfolded = ical.replaceAll(/\r?\n[\t ]/g, "");
-  let insideEvent = false;
+  const declaredOffsets = readDeclaredTimeZoneOffsets(unfolded);
 
-  return unfolded.split(/\r?\n/).map((line) => {
-    if (line.toUpperCase() === "BEGIN:VEVENT") {
-      insideEvent = true;
-      return line;
+  return splitIcsLineBlocks(unfolded.split(/\r?\n/)).flatMap((block) => {
+    if (!block.insideEvent) {
+      return block.lines;
     }
-    if (line.toUpperCase() === "END:VEVENT") {
-      insideEvent = false;
-      return line;
-    }
-    if (!insideEvent) {
-      return line;
-    }
-
-    if (line.slice(0, line.indexOf(":")).toUpperCase() === "RRULE") {
-      return applyCalendarTimeZoneToFloatingUntil(line, calendarTimeZone);
-    }
-
-    const separatorIndex = line.indexOf(":");
-    if (separatorIndex === -1) {
-      return line;
-    }
-    const property = line.slice(0, separatorIndex);
-    const [propertyName, ...parameters] = property.toUpperCase().split(";");
-    const value = line.slice(separatorIndex + 1);
-    if (
-      !propertyName
-      || !FLOATING_DATE_PROPERTIES.has(propertyName)
-      || property.toUpperCase().includes("TZID=")
-      || parameters.includes("VALUE=DATE")
-      || value.split(",").every((entry) => entry.endsWith("Z") || /^\d{8}$/.test(entry))
-    ) {
-      return line;
-    }
-
-    if (!calendarTimeZone) {
-      throw new RangeError(
-        `Floating ICS ${propertyName} requires an explicit TZID or X-WR-TIMEZONE`,
-      );
-    }
-    return `${property};TZID=${calendarTimeZone}:${value}`;
+    return normalizeFloatingEventBlock(block, calendarTimeZone, declaredOffsets);
   }).join("\r\n");
 };
 
@@ -154,7 +292,7 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
        */
       return { events: [], syncWindow, unchanged: true };
     }
-    assertNoUnsupportedRecurrenceDates(ical);
+    const recurrenceDateUids = collectRecurrenceDateEventUids(ical);
     const snapshotResult = await prepareCalendarSnapshot(config.database, config.calendarId, ical);
     const initialCalendar = parseIcsCalendarLenient({
       icsString: ical,
@@ -170,8 +308,11 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
       });
     }
     const parsed = parseIcsEvents(calendar);
-    assertSupportedRecurrenceTimeZones(parsed);
-    let events: SourceEvent[] = parsed.map((event) => ({
+    const recurrenceTimeZones = resolveRecurrenceTimeZones(
+      parsed,
+      readDeclaredTimeZoneOffsets(ical),
+    );
+    let events: SourceEvent[] = recurrenceTimeZones.events.map((event) => ({
       availability: event.availability,
       description: event.description,
       endTime: event.endTime,
@@ -197,6 +338,16 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
      * Filtering here would make the snapshot diff delete the stored state of
      * every historic event on the next ingest.
      */
+    /*
+     * Unsupported events stay in the returned feed so the snapshot diff still
+     * sees them as present: ingestion withholds them from inserts, but treating
+     * them as absent would delete the stored state they already have. One event
+     * Keeper cannot represent must not fail, or silently empty, the whole feed.
+     */
+    const unsupportedEventUids = [...new Set([
+      ...recurrenceDateUids,
+      ...recurrenceTimeZones.unsupportedUids,
+    ])];
     const result: FetchEventsResult = {
       events,
       syncWindow,
@@ -205,6 +356,7 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
         historicRange,
         window: syncWindow,
       },
+      ...unsupportedEventUids.length > 0 && { unsupportedEventUids },
     };
     if (snapshotResult.changed && snapshotResult.snapshot) {
       result.snapshot = snapshotResult.snapshot;

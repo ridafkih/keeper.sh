@@ -1,10 +1,6 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import { RecurrenceMaterializationLimitError } from "@keeper.sh/calendar";
-import {
-  EventRangeValidationError,
-  normalizeDateRange,
-  parseDateRangeParams,
-} from "@/utils/date-range";
+import { normalizeDateRange, parseDateRangeParams } from "@/utils/date-range";
+import { withEventReadErrorHandling } from "@/utils/event-read-errors";
 import { createKeeperApi } from "@/read-models";
 import type { KeeperEventFilters } from "@/types";
 import { withV1Auth, withWideEvent } from "@/utils/middleware";
@@ -42,35 +38,25 @@ const parseEventFilters = (url: URL): KeeperEventFilters => {
 };
 
 const GET = withWideEvent(
-  withV1Auth(async ({ request, userId }) => {
+  withV1Auth(({ request, userId }) => withEventReadErrorHandling(async () => {
     const url = new URL(request.url);
-    try {
-      const { from, to } = parseDateRangeParams(url);
-      const { end, start } = normalizeDateRange(from, to);
-      const shouldCount = url.searchParams.get("count") === "true";
+    const { from, to } = parseDateRangeParams(url);
+    const { end, start } = normalizeDateRange(from, to);
+    const shouldCount = url.searchParams.get("count") === "true";
 
-      if (shouldCount) {
-        const count = await keeperApi.getEventCount(userId, { from: start, to: end });
-        return Response.json({ count });
-      }
-
-      const filters = parseEventFilters(url);
-      const events = await keeperApi.getEventsInRange(
-        userId,
-        { from: start, to: end },
-        filters,
-      );
-      return Response.json(events);
-    } catch (error) {
-      if (
-        error instanceof RecurrenceMaterializationLimitError
-        || error instanceof EventRangeValidationError
-      ) {
-        return ErrorResponse.badRequest(error.message).toResponse();
-      }
-      throw error;
+    if (shouldCount) {
+      const count = await keeperApi.getEventCount(userId, { from: start, to: end });
+      return Response.json({ count });
     }
-  }),
+
+    const filters = parseEventFilters(url);
+    const events = await keeperApi.getEventsInRange(
+      userId,
+      { from: start, to: end },
+      filters,
+    );
+    return Response.json(events);
+  })),
 );
 
 const POST = withWideEvent(

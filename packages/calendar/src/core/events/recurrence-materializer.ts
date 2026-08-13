@@ -151,6 +151,24 @@ const fromRecurrenceWallTime = (date: Date, timeZone: string | undefined): Date 
   return wallTimeToInstant(date, timeZone);
 };
 
+/*
+ * `until` is the only termination a rule states up front. `count` also terminates, but
+ * finding its last occurrence means walking the series, which is the work being avoided.
+ * Both sides move into the wall-time space the expansion runs in, so this answers exactly
+ * what `RRule.between(recurrenceWindowStart, ...)` would, without timezone skew.
+ */
+const isSeriesExhaustedBeforeWindow = (
+  rule: IcsRecurrenceRule,
+  recurrenceWindowStart: Date,
+  timeZone: string | undefined,
+): boolean => {
+  if (!rule.until) {
+    return false;
+  }
+
+  return toRecurrenceWallTime(rule.until.date, timeZone) < recurrenceWindowStart;
+};
+
 const FREQUENCIES: Record<IcsRecurrenceRule["frequency"], Frequency> = {
   DAILY: RRule.DAILY,
   HOURLY: RRule.HOURLY,
@@ -361,6 +379,9 @@ const materializeMaster = (
     new Date(window.start.getTime() - Math.max(durationForWindowLookback, 0)),
     timeZone,
   );
+  if (isSeriesExhaustedBeforeWindow(master.recurrenceRule, recurrenceWindowStart, timeZone)) {
+    return [];
+  }
   assertUnfilteredHighFrequencyRuleWithinBudget(
     master,
     recurrenceStart,

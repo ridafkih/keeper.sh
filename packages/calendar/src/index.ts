@@ -50,7 +50,7 @@ export {
   wallTimeToInstant,
 } from "./ics/utils/timezone-instant";
 export { RateLimiter, type RateLimiterConfig } from "./core/utils/rate-limiter";
-export { createRedisRateLimiter, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
+export { createGoogleUserRateLimiter, createRedisRateLimiter, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
 export { allSettledWithConcurrency, type AllSettledWithConcurrencyOptions } from "./core/utils/concurrency";
 export { getErrorMessage } from "./core/utils/error";
 export {
@@ -122,6 +122,7 @@ export {
   type EventStateInsertClient,
 } from "./core/source/write-event-states";
 export { computeSyncOperations } from "./core/sync/operations";
+export type { ReconciliationScope } from "./core/sync/operations";
 export {
   DEFAULT_FUTURE_SYNC_RANGE,
   DEFAULT_HISTORIC_SYNC_RANGE,
@@ -133,6 +134,12 @@ export {
   type SourceIngestionPlan,
   type SyncWindow,
 } from "./core/sync/sync-range";
+export {
+  BASE_SOURCE_SYNC_RANGES,
+  createRequiredSourceRanges,
+  type RequiredSourceRanges,
+  type StoredDestinationRanges,
+} from "./core/sync/required-source-ranges";
 export {
   type DestinationSyncResult,
   type SyncProgressUpdate,
