@@ -67,7 +67,7 @@ describe("database pool telemetry window boundaries", () => {
     instrumentDatabasePool(client, 10);
 
     const window = openDatabasePoolWindow();
-    const inflight = client.unsafe() as PromiseLike<unknown>;
+    const inflight = (client.unsafe() as PromiseLike<unknown>).then((result) => result);
     const sample = window();
 
     expect(sample.queryCount).toBe(1);

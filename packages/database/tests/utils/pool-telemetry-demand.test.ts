@@ -50,9 +50,9 @@ describe("database pool telemetry demand accounting", () => {
     instrumentDatabasePool(client, 10);
 
     const outer = openDatabasePoolWindow();
-    const first = client.unsafe("select 1") as Promise<unknown>;
+    const first = (client.unsafe("select 1") as Promise<unknown>).then((result) => result);
     const inner = openDatabasePoolWindow();
-    const second = client.unsafe("select 2") as Promise<unknown>;
+    const second = (client.unsafe("select 2") as Promise<unknown>).then((result) => result);
 
     expect(outer().queryCount).toBe(1);
     expect(inner().queryCount).toBe(1);
@@ -171,7 +171,9 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry against postgres", 
 
     const window = openDatabasePoolWindow();
     const startedAt = performance.now();
-    const blocked = client.unsafe("select 99", []) as Promise<unknown>;
+    const blocked = (client.unsafe("select 99", []) as Promise<unknown>).then(
+      (result) => result,
+    );
     await new Promise((resolve) => { setTimeout(resolve, 300); });
 
     for (const release of releases) {

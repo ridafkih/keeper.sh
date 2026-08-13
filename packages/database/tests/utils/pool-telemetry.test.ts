@@ -31,8 +31,8 @@ describe("database pool telemetry", () => {
     instrumentDatabasePool(client, 2);
 
     const readWindow = openDatabasePoolWindow();
-    const first = client.unsafe() as PromiseLike<unknown>;
-    const second = client.unsafe() as PromiseLike<unknown>;
+    const first = (client.unsafe() as PromiseLike<unknown>).then((result) => result);
+    const second = (client.unsafe() as PromiseLike<unknown>).then((result) => result);
 
     expect(readWindow().inFlight).toBe(2);
     expect(readWindow().queryCount).toBe(2);
@@ -55,7 +55,8 @@ describe("database pool telemetry", () => {
     instrumentDatabasePool(client, 2);
 
     const readWindow = openDatabasePoolWindow();
-    const queries = [client.unsafe(), client.unsafe(), client.unsafe()] as PromiseLike<unknown>[];
+    const queries = ([client.unsafe(), client.unsafe(), client.unsafe()] as PromiseLike<unknown>[])
+      .map((query) => query.then((result) => result));
 
     expect(readWindow().queuedQueryCount).toBe(1);
 

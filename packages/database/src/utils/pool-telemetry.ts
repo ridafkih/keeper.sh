@@ -127,44 +127,66 @@ const transactionStates = new WeakMap<object, TransactionState>();
  * `catch` and `finally` are own methods on Bun's SQLQuery that reach the raw
  * `then`, so they are routed back through the hooked one; leaving them to the
  * generic forwarder would let a query settle without ever releasing in-flight.
+ *
+ * A lazy query only reaches the wire when something subscribes to it, and only a
+ * subscription can ever settle it, so issue is counted on the first subscription
+ * rather than on construction. Counting at construction would pair an increment
+ * that always happens with a decrement that happens only if the query is
+ * awaited: a query built and dropped would hold `inFlight` and
+ * `pooledQueriesInFlight` for the life of the process, and enough of them would
+ * park `waitsForConnection` at true and report every later query on an idle pool
+ * as queued. Both counters now move on the same guaranteed-paired event, the
+ * transition of one query through issued and then settled, which each happen at
+ * most once however many times `then`, `catch` and `finally` are called.
  */
 const instrumentQuery = (
   query: object,
   transactional: boolean,
   transactionState: TransactionState | undefined,
 ): object => {
-  counters.inFlight += 1;
-  let queued = false;
-  if (transactional) {
-    /*
-     * A statement inside a transaction runs on a connection the transaction
-     * already owns, so it never queues; the wait its transaction served before
-     * the pool let it start is charged to the first statement that follows.
-     */
-    if (transactionState?.pendingQueued) {
-      transactionState.pendingQueued = false;
-      queued = true;
-    }
-  } else {
-    queued = waitsForConnection();
-    counters.pooledQueriesInFlight += 1;
-  }
-
   const scope = windowScopes.getStore() ?? null;
-  if (scope) {
-    scope.queryCount += 1;
-    if (queued) {
-      scope.queuedQueryCount += 1;
-    }
-  }
 
-  const startedAt = performance.now();
-  let settled = false;
-  const settle = (failed: boolean): void => {
-    if (settled) {
+  let state: "unissued" | "issued" | "settled" = "unissued";
+  let startedAt = 0;
+
+  const issue = (): void => {
+    if (state !== "unissued") {
       return;
     }
-    settled = true;
+    state = "issued";
+
+    let queued = false;
+    if (transactional) {
+      /*
+       * A statement inside a transaction runs on a connection the transaction
+       * already owns, so it never queues; the wait its transaction served before
+       * the pool let it start is charged to the first statement that follows.
+       */
+      if (transactionState?.pendingQueued) {
+        transactionState.pendingQueued = false;
+        queued = true;
+      }
+    } else {
+      queued = waitsForConnection();
+      counters.pooledQueriesInFlight += 1;
+    }
+
+    counters.inFlight += 1;
+    if (scope) {
+      scope.queryCount += 1;
+      if (queued) {
+        scope.queuedQueryCount += 1;
+      }
+    }
+
+    startedAt = performance.now();
+  };
+
+  const settle = (failed: boolean): void => {
+    if (state !== "issued") {
+      return;
+    }
+    state = "settled";
     const durationMs = performance.now() - startedAt;
     counters.inFlight -= 1;
     if (!transactional) {
@@ -204,12 +226,14 @@ const instrumentQuery = (
     target: object,
     onFulfilled?: (result: unknown) => unknown,
     onRejected?: (error: unknown) => unknown,
-  ): Promise<unknown> =>
-    (Reflect.get(target, "then") as AnyFunction).call(
+  ): Promise<unknown> => {
+    issue();
+    return (Reflect.get(target, "then") as AnyFunction).call(
       target,
       (result: unknown) => settleFulfilled(onFulfilled, result),
       (error: unknown) => settleRejected(onRejected, error),
     ) as Promise<unknown>;
+  };
 
   return new Proxy(query, {
     get(target, property, receiver) {
