@@ -48,46 +48,39 @@ interface DatabaseErrorDetails {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-const MAX_CAUSE_DEPTH = 4;
+const NESTED_ERROR_KEYS = ["cause", "error", "Error"];
+const NESTED_ERROR_LIST_KEYS = ["errors", "messages"];
 
-const readCauseLinks = (error: unknown): unknown[] => {
-  if (isRecord(error) && isRecord(error.cause)) {
-    return [error.cause];
-  }
-  return [];
-};
-
-const readAggregateLinks = (error: unknown): unknown[] => {
-  if (error instanceof AggregateError && Array.isArray(error.errors)) {
-    return [...error.errors];
-  }
-  return [];
-};
-
-const readLinkedErrors = (error: unknown): unknown[] => [
-  ...readCauseLinks(error),
-  ...readAggregateLinks(error),
-];
-
-const collectErrorChain = (
-  links: unknown[],
-  depth: number,
-  seen: Set<unknown>,
-): unknown[] => {
-  if (depth > MAX_CAUSE_DEPTH) {
+const readLinkedErrors = (error: unknown): unknown[] => {
+  if (!isRecord(error)) {
     return [];
   }
-  return links.flatMap((link) => {
-    if (!isRecord(link) || seen.has(link)) {
-      return [];
-    }
-    seen.add(link);
-    return [link, ...collectErrorChain(readLinkedErrors(link), depth + 1, seen)];
-  });
+  return [
+    ...NESTED_ERROR_KEYS.flatMap((key) => (key in error ? [error[key]] : [])),
+    ...NESTED_ERROR_LIST_KEYS.flatMap((key) => {
+      const value = error[key];
+      return Array.isArray(value) ? value : [];
+    }),
+  ];
 };
 
-const readErrorChain = (error: unknown): unknown[] =>
-  collectErrorChain([error], 0, new Set());
+const readErrorChain = (error: unknown): unknown[] => {
+  const chain: unknown[] = [];
+  const seen = new Set<unknown>();
+  const queue: unknown[] = [error];
+
+  while (queue.length > 0) {
+    const link = queue.shift();
+    if (!isRecord(link) || seen.has(link)) {
+      continue;
+    }
+    seen.add(link);
+    chain.push(link);
+    queue.push(...readLinkedErrors(link));
+  }
+
+  return chain;
+};
 
 const readString = (value: unknown): string | null => {
   if (typeof value === "string" && value.length > 0) {
