@@ -73,6 +73,16 @@ interface IcsLineBlock {
   lines: string[];
 }
 
+interface FloatingEventFailure {
+  error: RangeError;
+  uid?: string;
+}
+
+interface NormalizedFloatingCalendar {
+  failures: FloatingEventFailure[];
+  ical: string;
+}
+
 interface EventFloatingZones {
   declared?: string;
   resolved?: string;
@@ -253,19 +263,58 @@ const normalizeFloatingEventBlock = (
   });
 };
 
+const readEventUid = (lines: readonly string[]): string | undefined => lines
+  .map((line) => parseIcsPropertyParts(line))
+  .find((parts) => parts?.propertyName === "UID")?.value;
+
+/*
+ * Anchoring a feed's floating dates is not an all-or-nothing pass: a VEVENT
+ * whose dates cannot be anchored keeps its own lines and is reported, so one
+ * zoneless EXDATE cannot stop every other event in the feed from ever syncing
+ * again. The reported event is withheld from ingestion rather than synced at a
+ * guessed offset.
+ */
+const normalizeFloatingEventDates = (
+  ical: string,
+  calendarTimeZone: string | undefined,
+): NormalizedFloatingCalendar => {
+  const unfolded = ical.replaceAll(/\r?\n[\t ]/g, "");
+  const declaredOffsets = readDeclaredTimeZoneOffsets(unfolded);
+  const failures: FloatingEventFailure[] = [];
+
+  const lines = splitIcsLineBlocks(unfolded.split(/\r?\n/)).flatMap((block) => {
+    if (!block.insideEvent) {
+      return block.lines;
+    }
+    try {
+      return normalizeFloatingEventBlock(block, calendarTimeZone, declaredOffsets);
+    } catch (error) {
+      if (!(error instanceof RangeError)) {
+        throw error;
+      }
+      const uid = readEventUid(block.lines);
+      failures.push({ error, ...uid && { uid } });
+      return block.lines;
+    }
+  });
+
+  return { failures, ical: lines.join("\r\n") };
+};
+
+/*
+ * CalDAV reads one resource at a time and already quarantines and counts a
+ * resource it cannot read, so that path keeps the loud failure.
+ */
 const applyCalendarTimeZoneToFloatingEventDates = (
   ical: string,
   calendarTimeZone: string | undefined,
 ): string => {
-  const unfolded = ical.replaceAll(/\r?\n[\t ]/g, "");
-  const declaredOffsets = readDeclaredTimeZoneOffsets(unfolded);
-
-  return splitIcsLineBlocks(unfolded.split(/\r?\n/)).flatMap((block) => {
-    if (!block.insideEvent) {
-      return block.lines;
-    }
-    return normalizeFloatingEventBlock(block, calendarTimeZone, declaredOffsets);
-  }).join("\r\n");
+  const normalized = normalizeFloatingEventDates(ical, calendarTimeZone);
+  const [failure] = normalized.failures;
+  if (failure) {
+    throw failure.error;
+  }
+  return normalized.ical;
 };
 
 const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetcher => {
@@ -299,11 +348,11 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
       patches: [coerceCompliantDate],
     });
     const calendarTimeZone = normalizeTimezone(initialCalendar.nonStandard?.wrTimezone);
-    const normalizedIcal = applyCalendarTimeZoneToFloatingEventDates(ical, calendarTimeZone);
+    const normalized = normalizeFloatingEventDates(ical, calendarTimeZone);
     let calendar = initialCalendar;
-    if (normalizedIcal !== ical) {
+    if (normalized.ical !== ical) {
       calendar = parseIcsCalendarLenient({
-        icsString: normalizedIcal,
+        icsString: normalized.ical,
         patches: [coerceCompliantDate],
       });
     }
@@ -347,6 +396,8 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
     const unsupportedEventUids = [...new Set([
       ...recurrenceDateUids,
       ...recurrenceTimeZones.unsupportedUids,
+      ...parsed.unsupportedEvents.map(({ uid }) => uid),
+      ...normalized.failures.flatMap(({ uid }) => uid ?? []),
     ])];
     const result: FetchEventsResult = {
       events,

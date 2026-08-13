@@ -35,15 +35,26 @@ const getDateTimeFormatter = (timeZone: string): Intl.DateTimeFormat => {
   return formatter;
 };
 
-const resolveTimeZone = (timeZone: string | undefined): string | undefined => {
+const isSupportedTimeZone = (timeZone: string | undefined): boolean => {
   const normalizedTimeZone = normalizeTimezone(timeZone);
   if (!normalizedTimeZone) {
-    return;
+    return true;
   }
 
   try {
     getDateTimeFormatter(normalizedTimeZone).format(0);
   } catch {
+    return false;
+  }
+  return true;
+};
+
+const resolveTimeZone = (timeZone: string | undefined): string | undefined => {
+  const normalizedTimeZone = normalizeTimezone(timeZone);
+  if (!normalizedTimeZone) {
+    return;
+  }
+  if (!isSupportedTimeZone(normalizedTimeZone)) {
     throw new RangeError(`Unsupported calendar timezone: ${timeZone}`);
   }
   return normalizedTimeZone;
@@ -179,6 +190,7 @@ export {
   findTimeZoneTransitions,
   getTimeZoneOffsetMinutes,
   instantToWallTime,
+  isSupportedTimeZone,
   resolveTimeZone,
   wallTimeToInstant,
 };

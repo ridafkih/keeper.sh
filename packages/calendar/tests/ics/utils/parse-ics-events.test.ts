@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { parseIcsCalendar } from "../../../src/ics/utils/parse-ics-calendar";
-import { parseIcsEvents } from "../../../src/ics/utils/parse-ics-events";
+import {
+  parseIcsEvents,
+  parseIcsEventsWithDiagnostics,
+} from "../../../src/ics/utils/parse-ics-events";
 
 const createCalendarIcsString = (): string =>
   [
@@ -113,20 +116,23 @@ describe("parseIcsEvents", () => {
   it.each([
     {
       duration: "-P1D",
-      expectedError: "VEVENT DURATION must be positive",
       start: "DTSTART;TZID=America/New_York:20260301T003000",
     },
     {
       duration: "PT24H",
-      expectedError: "All-day VEVENT DURATION must use weeks or days",
       start: "DTSTART;VALUE=DATE:20260301",
     },
-  ])("rejects invalid event duration $duration", ({ duration, expectedError, start }) => {
+  ])("drops and counts the event carrying invalid duration $duration", ({ duration, start }) => {
     const calendar = parseIcsCalendar({
       icsString: [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
         "PRODID:-//Keeper Test//EN",
+        "BEGIN:VEVENT",
+        "UID:healthy",
+        "DTSTART:20260301T090000Z",
+        "DTEND:20260301T093000Z",
+        "END:VEVENT",
         "BEGIN:VEVENT",
         "UID:invalid-duration",
         start,
@@ -137,7 +143,10 @@ describe("parseIcsEvents", () => {
       ].join("\r\n"),
     });
 
-    expect(() => parseIcsEvents(calendar)).toThrow(expectedError);
+    const parsed = parseIcsEventsWithDiagnostics(calendar);
+
+    expect(parsed.events.map((event) => event.uid)).toEqual(["healthy"]);
+    expect(parsed.unrepresentableCount).toBe(1);
   });
 
   it("keeps duplicate UIDs and preserves adversarial time ranges", () => {
@@ -257,7 +266,7 @@ describe("parseIcsEvents", () => {
     expect(parseIcsEvents(calendar)).toEqual([]);
   });
 
-  it("rejects THISANDFUTURE instead of silently changing its meaning", () => {
+  it("reports THISANDFUTURE as unsupported instead of changing its meaning", () => {
     const calendar = parseIcsCalendar({
       icsString: [
         "BEGIN:VCALENDAR",
@@ -273,9 +282,14 @@ describe("parseIcsEvents", () => {
       ].join("\r\n"),
     });
 
-    expect(() => parseIcsEvents(calendar)).toThrow(
-      "RECURRENCE-ID;RANGE=THISANDFUTURE is not supported for event ranged-series",
-    );
+    const parsed = parseIcsEventsWithDiagnostics(calendar);
+
+    expect(parsed.unsupportedEvents).toEqual([{
+      reason:
+        "RECURRENCE-ID;RANGE=THISANDFUTURE is not supported for event ranged-series",
+      uid: "ranged-series",
+    }]);
+    expect(parsed.events.map((event) => event.uid)).toEqual(["ranged-series"]);
   });
 
   it.each([

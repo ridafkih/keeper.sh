@@ -14,6 +14,7 @@ import type {
 } from "../../../core/types";
 import { CalDAVClient, CalDAVCreateConflictError, CalDAVHttpError } from "../shared/client";
 import {
+  assertAllEventsSupported,
   assertAllResourcesRead,
   eventToICalString,
   parseICalCalendarsToRemoteEvents,
@@ -231,6 +232,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
       { rejectUnsupportedRecurrenceDates: false },
     );
     assertAllResourcesRead(resources);
+    assertAllEventsSupported(resources);
     for (const parsed of resources.events) {
       if (!isKeeperEvent(parsed.uid) || parsed.endTime < options.timeMin) {
         continue;

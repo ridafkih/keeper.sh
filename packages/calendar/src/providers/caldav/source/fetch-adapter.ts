@@ -110,6 +110,14 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
       },
       skippedResourceCount: resources.skippedResourceCount,
       skippedResourceReasons: resources.skippedResourceReasons,
+      /*
+       * Withheld from ingestion but left in `events`: a collection is a
+       * snapshot, so treating a series Keeper cannot honour as absent would
+       * delete the stored rows the server still serves.
+       */
+      ...resources.unsupportedEvents.length > 0 && {
+        unsupportedEventUids: resources.unsupportedEvents.map(({ uid }) => uid),
+      },
     };
   };
 

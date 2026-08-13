@@ -13,7 +13,13 @@ import { MS_PER_DAY } from "@keeper.sh/constants";
 const getEventStartTimeZone = (event: IcsEvent): string | undefined =>
   normalizeTimezone(event.start.local?.timezone);
 
-const getEventEndTime = (event: IcsEvent, startTime: Date): Date => {
+/*
+ * Total on purpose: a DURATION shape Keeper cannot represent resolves to null
+ * so the single VEVENT carrying it can be counted and dropped. Throwing would
+ * take the whole calendar down with it, and a snapshot source that never
+ * finishes a parse never applies another change the publisher made either.
+ */
+const resolveEventEndTime = (event: IcsEvent, startTime: Date): Date | null => {
   const isAllDay = event.start.type === "DATE";
   if ("end" in event && event.end) {
     return event.end.date;
@@ -21,13 +27,13 @@ const getEventEndTime = (event: IcsEvent, startTime: Date): Date => {
 
   if ("duration" in event && event.duration) {
     if (event.duration.before) {
-      throw new RangeError("VEVENT DURATION must be positive");
+      return null;
     }
     if (
       isAllDay
       && (event.duration.hours || event.duration.minutes || event.duration.seconds)
     ) {
-      throw new RangeError("All-day VEVENT DURATION must use weeks or days");
+      return null;
     }
     return addIcsDuration(startTime, event.duration, getEventStartTimeZone(event));
   }
@@ -37,6 +43,22 @@ const getEventEndTime = (event: IcsEvent, startTime: Date): Date => {
   }
 
   return startTime;
+};
+
+const isUnbuildableEvent = (event: IcsEvent): boolean => {
+  const startTime = event.start?.date;
+  if (!startTime) {
+    return false;
+  }
+  return resolveEventEndTime(event, startTime) === null;
+};
+
+const getEventEndTime = (event: IcsEvent, startTime: Date): Date => {
+  const endTime = resolveEventEndTime(event, startTime);
+  if (!endTime) {
+    throw new TypeError("An unbuildable VEVENT must be dropped before it is converted");
+  }
+  return endTime;
 };
 
 const getRecurrenceDuration = (
@@ -272,15 +294,27 @@ interface CancellationState {
   cancelledRecurrenceIdentities: Set<string>;
 }
 
-const assertNoRangedOverrides = (events: IcsEvent[]): void => {
-  const rangedOverride = events.find(
-    (event) => event.recurrenceId?.range === "THISANDFUTURE",
-  );
-  if (rangedOverride) {
-    throw new RangeError(
-      `RECURRENCE-ID;RANGE=THISANDFUTURE is not supported for event ${rangedOverride.uid ?? "<missing UID>"}`,
-    );
+/*
+ * A ranged override rewrites every later occurrence of its series, which the
+ * recurrence materializer cannot express. Reporting the series instead of
+ * throwing keeps the rejection scoped to that one UID: the caller withholds it
+ * — master and overrides together, so nothing is synced at a stale time — while
+ * every other event in the feed still syncs.
+ */
+const collectRangedOverrideEvents = (
+  events: readonly IcsEvent[],
+): UnsupportedIcsEvent[] => {
+  const unsupported = new Map<string, UnsupportedIcsEvent>();
+  for (const event of events) {
+    if (event.recurrenceId?.range !== "THISANDFUTURE" || !event.uid) {
+      continue;
+    }
+    unsupported.set(event.uid, {
+      reason: `RECURRENCE-ID;RANGE=THISANDFUTURE is not supported for event ${event.uid}`,
+      uid: event.uid,
+    });
   }
+  return [...unsupported.values()];
 };
 
 const collectCancellationState = (events: IcsEvent[]): CancellationState => {
@@ -377,10 +411,21 @@ const convertCanonicalEvent = (
  * Counting the two together would leave `unrepresentable` permanently non-zero
  * on any mirrored calendar, drowning the one-off drop it exists to surface.
  */
+/**
+ * An event Keeper parsed but must not sync. It stays in `events` so a snapshot
+ * diff still sees it as present — dropping it would delete the stored row the
+ * publisher never removed — and the caller withholds it from ingestion.
+ */
+interface UnsupportedIcsEvent {
+  reason: string;
+  uid: string;
+}
+
 interface ParsedIcsEventDiagnostics {
   events: EventTimeSlot[];
   selfAuthoredCount: number;
   unrepresentableCount: number;
+  unsupportedEvents: UnsupportedIcsEvent[];
 }
 
 /*
@@ -397,11 +442,12 @@ const buildInstanceIdentity = (uid: string, recurrenceDate: Date | undefined): s
 };
 
 /*
- * A VEVENT with no UID or no DTSTART is dropped before it ever reaches the
- * output, and every snapshot source reads that absence as "the publisher
- * removed it" and deletes the stored row. Counting the drop here is what keeps
- * that deletion from being silent. Revisions of the same instance are counted
- * once, and an instance that still produced an event is not a loss.
+ * A VEVENT with no UID, no DTSTART, or a span Keeper cannot build is dropped
+ * before it ever reaches the output, and every snapshot source reads that
+ * absence as "the publisher removed it" and deletes the stored row. Counting
+ * the drop here is what keeps that deletion from being silent. Revisions of the
+ * same instance are counted once, and an instance that still produced an event
+ * is not a loss.
  */
 const countDiscardedIcsEvents = (
   rawEvents: readonly IcsEvent[],
@@ -422,7 +468,10 @@ const countDiscardedIcsEvents = (
       continue;
     }
     const identity = buildInstanceIdentity(event.uid, event.recurrenceId?.value.date);
-    if (!event.start?.date && !parsedIdentities.has(identity)) {
+    if (
+      (!event.start?.date || isUnbuildableEvent(event))
+      && !parsedIdentities.has(identity)
+    ) {
       unrepresentableIdentities.add(identity);
     }
   }
@@ -438,9 +487,9 @@ const parseIcsEventsWithDiagnostics = (
   options: ParseIcsEventsOptions = {},
 ): ParsedIcsEventDiagnostics => {
   const rawEvents = calendar.events ?? [];
-  const { collapsedSlotCount, events: canonicalEvents } =
-    selectCanonicalEventRevisions(rawEvents);
-  assertNoRangedOverrides(canonicalEvents);
+  const { collapsedSlotCount, events: canonicalEvents } = selectCanonicalEventRevisions(
+    rawEvents.filter((event) => !isUnbuildableEvent(event)),
+  );
   const cancellations = collectCancellationState(canonicalEvents);
   const events = canonicalEvents.flatMap((event) => {
     if (shouldSkipEvent(event, options, cancellations)) {
@@ -459,6 +508,7 @@ const parseIcsEventsWithDiagnostics = (
     events,
     selfAuthoredCount: discarded.selfAuthoredCount,
     unrepresentableCount: discarded.unrepresentableCount + collapsedSlotCount,
+    unsupportedEvents: collectRangedOverrideEvents(canonicalEvents),
   };
 };
 
@@ -468,4 +518,4 @@ const parseIcsEvents = (
 ): EventTimeSlot[] => parseIcsEventsWithDiagnostics(calendar, options).events;
 
 export { parseIcsEvents, parseIcsEventsWithDiagnostics };
-export type { ParsedIcsEventDiagnostics };
+export type { ParsedIcsEventDiagnostics, UnsupportedIcsEvent };
