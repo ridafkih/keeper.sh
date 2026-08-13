@@ -24,11 +24,6 @@ describe("classifyDatabaseError sqlstate boundaries", () => {
     expect(classifyDatabaseError(Object.assign(new Error("x"), { errno: 28_000 }))).toBeNull();
   });
 
-  /*
-   * SQLSTATE values are uppercase alphanumerics. A lowercase five-character
-   * code beginning with "28" is not one, and claiming it is turns unrelated
-   * failures into "our database rejected our credentials".
-   */
   it("does not treat a lowercase five-character code as an authorization sqlstate", () => {
     expect(classifyDatabaseError(Object.assign(new Error("x"), { code: "28p01" }))).toBeNull();
   });

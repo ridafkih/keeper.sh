@@ -103,12 +103,6 @@ describe("shouldTreatAsProviderAuthFailure convergence and edges", () => {
       .toEqual([true, true, true]);
   });
 
-  /*
-   * The two class-28 checks disagree on case: the calendar-side sqlstate
-   * pattern is anchored to [0-9A-Z], the database-side one only checks the "28"
-   * prefix and a length of five. A lowercase five-character code therefore
-   * suppresses a genuine 401 in the cron helper but not in the calendar helper.
-   */
   it("agrees with itself about whether a lowercase sqlstate-shaped code is a database failure", () => {
     const error = Object.assign(new Error("Unauthorized"), { code: "28p01", status: 401 });
 
