@@ -101,13 +101,21 @@ const flattenSyncedEvents = (
  * to [start, end]: overlapping one-offs, recurring masters whose first
  * occurrence is at-or-before the window end, and detached overrides that either
  * overlap the range at their moved time or originally occupied a slot in it.
+ *
+ * A one-off whose end predates the window is scanned anyway when its start does
+ * not, because an inverted range says nothing about where it sits through its
+ * end. Membership is decided in memory by the one predicate every layer shares;
+ * this clause only keeps the scan off rows no predicate could admit.
  */
 const buildSyncedRangeCondition = (start: Date, end: Date): SQL | undefined =>
   or(
     and(
       isNull(eventStatesTable.recurrenceRule),
       isNull(eventStatesTable.recurrenceId),
-      gte(eventStatesTable.endTime, start),
+      or(
+        gte(eventStatesTable.endTime, start),
+        gte(eventStatesTable.startTime, start),
+      ),
       lte(eventStatesTable.startTime, end),
     ),
     and(
