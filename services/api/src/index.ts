@@ -25,6 +25,7 @@ const router = new Bun.FileSystemRouter({
 await entry({
   main: async () => {
     const server = Bun.serve<BroadcastData>({
+      development: false,
       port: env.API_PORT,
       websocket: websocketHandler,
       fetch: withCors(async (request) => {
