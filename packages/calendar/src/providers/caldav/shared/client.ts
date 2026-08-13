@@ -8,6 +8,7 @@ import {
   isCalendarObjectPath,
 } from "./api";
 import { createDigestAwareFetch } from "./digest-fetch";
+import { runInResponseStatusScope } from "./response-status-scope";
 import type { CalDAVAuthMethod } from "./digest-fetch";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import type { CalDAVClientConfig, CalendarInfo } from "../types";
@@ -94,6 +95,18 @@ const assertSuccessfulResponse = async (
 
 type DAVClientInstance = Awaited<ReturnType<typeof createDAVClient>>;
 
+const mapAuthenticationFailure = <Result>(operation: () => Promise<Result>): Promise<Result> =>
+  runInResponseStatusScope(async (getResponseStatus) => {
+    try {
+      return await operation();
+    } catch (error) {
+      if (getResponseStatus() === HTTP_STATUS.UNAUTHORIZED) {
+        throw new CalDAVAuthenticationError(error);
+      }
+      throw error;
+    }
+  });
+
 const getDisplayName = (name: unknown): string => {
   if (typeof name === "string") {
     return name;
@@ -117,7 +130,6 @@ class CalDAVClient {
   private config: CalDAVClientConfig;
   private safeFetchOptions?: SafeFetchOptions;
   private resolvedAuthMethod: (() => CalDAVAuthMethod | null) | null = null;
-  private lastResponseStatus: (() => number | null) | null = null;
 
   constructor(config: CalDAVClientConfig, safeFetchOptions?: SafeFetchOptions) {
     this.config = config;
@@ -131,13 +143,12 @@ class CalDAVClient {
   private async getClient(): Promise<DAVClientInstance> {
     if (!this.client) {
       const safeFetch = createSafeFetch(this.safeFetchOptions);
-      const { fetch: digestAwareFetch, getLastResponseStatus, getResolvedMethod } = createDigestAwareFetch({
+      const { fetch: digestAwareFetch, getResolvedMethod } = createDigestAwareFetch({
         credentials: this.config.credentials,
         baseFetch: safeFetch,
         knownAuthMethod: this.config.authMethod,
       });
       this.resolvedAuthMethod = getResolvedMethod;
-      this.lastResponseStatus = getLastResponseStatus;
       this.client = await createDAVClient({
         authMethod: "Custom",
         authFunction: () => Promise.resolve({}),
@@ -150,19 +161,8 @@ class CalDAVClient {
     return this.client;
   }
 
-  private async mapAuthenticationFailure<Result>(operation: () => Promise<Result>): Promise<Result> {
-    try {
-      return await operation();
-    } catch (error) {
-      if (this.lastResponseStatus?.() === HTTP_STATUS.UNAUTHORIZED) {
-        throw new CalDAVAuthenticationError(error);
-      }
-      throw error;
-    }
-  }
-
   async discoverCalendars(): Promise<CalendarInfo[]> {
-    const calendars = await this.mapAuthenticationFailure(async () => {
+    const calendars = await mapAuthenticationFailure(async () => {
       const client = await this.getClient();
       return client.fetchCalendars();
     });
@@ -251,7 +251,7 @@ class CalDAVClient {
     calendarUrl: string;
     timeRange?: { start: string; end: string };
   }): Promise<CalendarObject[]> {
-    return this.mapAuthenticationFailure(async () => {
+    return mapAuthenticationFailure(async () => {
       const client = await this.getClient();
 
       const queryResponses = await client.calendarQuery({
