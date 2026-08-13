@@ -344,7 +344,10 @@ const instrumentClient = (
        * fallback for the transaction that dies before the pool grants it one,
        * and it is read by sweeping rather than by subscribing so that the
        * caller's promise keeps exactly the rejection semantics it had
-       * uninstrumented.
+       * uninstrumented. An outcome that is not a native promise cannot be swept
+       * -- reading it at all means calling its `then`, which would mark its
+       * rejection handled -- so its demand is dropped immediately rather than
+       * bought at the price of changing what the process observes.
        */
       try {
         const returned = (original as AnyFunction).apply(
@@ -353,8 +356,6 @@ const instrumentClient = (
         );
         if (returned instanceof Promise) {
           acquisition.awaited = returned;
-        } else if (typeof (returned as PromiseLike<unknown> | undefined)?.then === "function") {
-          (returned as PromiseLike<unknown>).then(resolveAcquisition, resolveAcquisition);
         } else {
           resolveAcquisition();
         }

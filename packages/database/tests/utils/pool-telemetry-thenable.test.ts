@@ -21,11 +21,10 @@ const createThenableClient = (): ThenableClient => {
     begin: (callback) => {
       const settled = (async () => await callback(buildClient()))();
       return {
-        then: (onFulfilled?: unknown, onRejected?: unknown) =>
-          settled.then(
-            onFulfilled as ((value: unknown) => unknown) | undefined,
-            onRejected as ((reason: unknown) => unknown) | undefined,
-          ),
+        then: <TResult1 = unknown, TResult2 = never>(
+          onFulfilled?: ((value: unknown) => TResult1 | PromiseLike<TResult1>) | null,
+          onRejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+        ): PromiseLike<TResult1 | TResult2> => settled.then(onFulfilled, onRejected),
       };
     },
     unsafe: (): object => Promise.resolve([]),
