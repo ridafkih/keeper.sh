@@ -46,6 +46,7 @@ import { database, refreshLockRedis, refreshLockStore } from "@/context";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import { resolveMissingCalendarFailure } from "@/utils/provider-ingest-failure";
+import { hasErrorFlag, requiresReauthentication } from "@/utils/error-flags";
 import { resolveOAuthIngestionState } from "@/utils/oauth-ingestion-state";
 import { withAbortTimeout } from "@/utils/with-abort-timeout";
 import { createSyncLock } from "@keeper.sh/sync";
@@ -135,13 +136,8 @@ const runSourceIngest = async <TResult>(
   }
 };
 
-const hasErrorFlag = (error: unknown, key: string): boolean =>
-  error instanceof Error
-  && key in error
-  && (error as Error & Record<string, unknown>)[key] === true;
-
 const shouldApplyOAuthIngestBackoff = (error: unknown): boolean =>
-  !hasErrorFlag(error, "authRequired") && !hasErrorFlag(error, "oauthReauthRequired");
+  !requiresReauthentication(error);
 
 const recordSkippedResources = (skippedResourceCount: number, reasons: string[]): void => {
   if (skippedResourceCount === 0) {
@@ -385,7 +381,7 @@ const resolveOAuthFetcher = (
   return null;
 };
 
-type ReauthenticationDemand = "raise" | "clear";
+type ReauthenticationDemand = "raise" | "clear" | "abstain";
 
 interface ReauthenticationDemandRecord {
   accountId: string;
@@ -407,11 +403,17 @@ const resolveReauthenticationDemands = (
   const raisedAccountIds = new Set(
     demands.filter(({ demand }) => demand === "raise").map(({ accountId }) => accountId),
   );
+  const abstainedAccountIds = new Set(
+    demands.filter(({ demand }) => demand === "abstain").map(({ accountId }) => accountId),
+  );
   return new Map(
-    demands.map(({ accountId }): [string, boolean] => [
-      accountId,
-      raisedAccountIds.has(accountId),
-    ]),
+    demands
+      .filter(({ accountId }) =>
+        raisedAccountIds.has(accountId) || !abstainedAccountIds.has(accountId))
+      .map(({ accountId }): [string, boolean] => [
+        accountId,
+        raisedAccountIds.has(accountId),
+      ]),
   );
 };
 
@@ -461,17 +463,31 @@ const createRejectedIngestionResult = (
   reauthentication: { accountId, demand: "raise" },
 });
 
+const collectReauthenticationDemands = (
+  settlements: PromiseSettledResult<IngestionSourceResult>[],
+  accountIds: (string | null)[],
+): ReauthenticationDemandRecord[] =>
+  settlements.flatMap((settlement, index): ReauthenticationDemandRecord[] => {
+    if (settlement.status === "fulfilled" && settlement.value.reauthentication) {
+      return [settlement.value.reauthentication];
+    }
+    const accountId = accountIds[index];
+    if (!accountId) {
+      return [];
+    }
+    return [{ accountId, demand: "abstain" }];
+  });
+
 const summariseIngestionSettlements = async (
   settlements: PromiseSettledResult<IngestionSourceResult>[],
+  accountIds: (string | null)[],
 ): Promise<IngestionBatchResult> => {
   const results = settlements
     .filter((settlement): settlement is PromiseFulfilledResult<IngestionSourceResult> =>
       settlement.status === "fulfilled")
     .map(({ value }) => value);
 
-  await applyReauthenticationDemands(
-    results.flatMap(({ reauthentication }) => reauthentication ?? []),
-  );
+  await applyReauthenticationDemands(collectReauthenticationDemands(settlements, accountIds));
 
   return {
     added: results.reduce((total, { eventsAdded }) => total + eventsAdded, 0),
@@ -656,22 +672,22 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
 
             widelog.set("outcome", "error");
 
-            const missingCalendarFailure = resolveMissingCalendarFailure(error);
-            if (missingCalendarFailure) {
-              widelog.errorFields(error, missingCalendarFailure);
-              throw error;
-            }
-
-            if (error instanceof Error && "authRequired" in error && error.authRequired === true) {
+            if (hasErrorFlag(error, "authRequired")) {
               widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
 
               return createRejectedIngestionResult(source.userId, source.accountId);
             }
 
-            if (error instanceof Error && "oauthReauthRequired" in error && error.oauthReauthRequired === true) {
+            if (hasErrorFlag(error, "oauthReauthRequired")) {
               widelog.errorFields(error, { slug: "provider-token-refresh-failed", retriable: false, requiresReauth: true });
 
               return createRejectedIngestionResult(source.userId, source.accountId);
+            }
+
+            const missingCalendarFailure = resolveMissingCalendarFailure(error);
+            if (missingCalendarFailure) {
+              widelog.errorFields(error, missingCalendarFailure);
+              throw error;
             }
 
             widelog.errorFields(error, {
@@ -688,7 +704,7 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
     { concurrency: SOURCE_CONCURRENCY },
   );
 
-  return summariseIngestionSettlements(settlements);
+  return summariseIngestionSettlements(settlements, oauthSources.map(({ accountId }) => accountId));
 };
 
 const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
@@ -856,7 +872,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
     { concurrency: SOURCE_CONCURRENCY },
   );
 
-  return summariseIngestionSettlements(settlements);
+  return summariseIngestionSettlements(settlements, caldavSources.map(({ accountId }) => accountId));
 };
 
 const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
@@ -984,7 +1000,7 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
     { concurrency: SOURCE_CONCURRENCY },
   );
 
-  return summariseIngestionSettlements(settlements);
+  return summariseIngestionSettlements(settlements, icsSources.map(() => null));
 };
 
 export default withCronWideEvent({

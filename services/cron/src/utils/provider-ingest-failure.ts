@@ -3,6 +3,7 @@ import {
   CalDAVUnreadableResourceError,
 } from "@keeper.sh/calendar/caldav";
 import { isDatabaseError } from "@keeper.sh/database";
+import { requiresReauthentication } from "@/utils/error-flags";
 
 interface MissingCalendarFailure {
   disableCalendar: false;
@@ -10,8 +11,24 @@ interface MissingCalendarFailure {
   slug: "provider-calendar-not-found";
 }
 
-const hasNotFoundStatus = (error: Error): boolean =>
-  "status" in error && error.status === 404;
+const NOT_FOUND_STATUS = 404;
+
+const missingCalendarFailure: MissingCalendarFailure = {
+  disableCalendar: false,
+  retriable: true,
+  slug: "provider-calendar-not-found",
+};
+
+const resolveResponseStatus = (error: Error): number | null => {
+  const candidate = error as Error & Record<string, unknown>;
+  if (typeof candidate.status === "number") {
+    return candidate.status;
+  }
+  if (typeof candidate.statusCode === "number") {
+    return candidate.statusCode;
+  }
+  return null;
+};
 
 const resolveMissingCalendarFailure = (error: unknown): MissingCalendarFailure | null => {
   if (
@@ -21,21 +38,23 @@ const resolveMissingCalendarFailure = (error: unknown): MissingCalendarFailure |
     return null;
   }
 
-  if (!(error instanceof Error)) {
+  if (!(error instanceof Error) || isDatabaseError(error) || requiresReauthentication(error)) {
     return null;
   }
 
-  const mentionsNotFound = error.message.includes("404") && !isDatabaseError(error);
-
-  if (!hasNotFoundStatus(error) && !mentionsNotFound) {
+  const responseStatus = resolveResponseStatus(error);
+  if (responseStatus !== null) {
+    if (responseStatus === NOT_FOUND_STATUS) {
+      return missingCalendarFailure;
+    }
     return null;
   }
 
-  return {
-    disableCalendar: false,
-    retriable: true,
-    slug: "provider-calendar-not-found",
-  };
+  if (error.message.includes(String(NOT_FOUND_STATUS))) {
+    return missingCalendarFailure;
+  }
+
+  return null;
 };
 
 export { resolveMissingCalendarFailure };
