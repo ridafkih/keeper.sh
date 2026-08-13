@@ -9,22 +9,42 @@ const WINDOW = {
 };
 
 const buildSourceEvent = (overrides: Partial<SourceEvent>): SourceEvent => ({
-  availability: "busy",
+  endTime: new Date("2027-03-13T05:00:00.000Z"),
+  sourceEventId: "event-state-1",
+  startTime: new Date("2027-03-12T05:00:00.000Z"),
+  startTimeZone: "America/New_York",
+  title: "Nightly rota",
+  uid: "series-uid",
+  ...overrides,
+});
+
+/*
+ * The persisted event state hands the materializer the same recurrence properties the
+ * source event carries, with each exception date unwrapped to the instant it names.
+ */
+const toSyncableEvent = (event: SourceEvent): SyncableEvent => ({
+  availability: event.availability,
   calendarId: "calendar-1",
   calendarName: "Feed",
   calendarUrl: null,
-  endTime: new Date("2027-03-13T05:00:00.000Z"),
-  eventStateId: "event-state-1",
-  id: "event-state-1",
-  sourceEventUid: "series-uid",
-  startTime: new Date("2027-03-12T05:00:00.000Z"),
-  startTimeZone: "America/New_York",
-  summary: "Nightly rota",
-  ...overrides,
-} as SourceEvent);
+  endTime: event.endTime,
+  eventStateId: event.sourceEventId,
+  id: event.sourceEventId ?? event.uid,
+  isAllDay: event.isAllDay,
+  sourceEventUid: event.uid,
+  startTime: event.startTime,
+  startTimeZone: event.startTimeZone,
+  summary: event.title ?? "",
+  ...(event.exceptionDates && {
+    exceptionDates: event.exceptionDates.map((exceptionDate) => exceptionDate.date),
+  }),
+  ...(event.recurrenceDuration && { recurrenceDuration: event.recurrenceDuration }),
+  ...(event.recurrenceId && { recurrenceId: event.recurrenceId }),
+  ...(event.recurrenceRule && { recurrenceRule: event.recurrenceRule }),
+});
 
 const occurrenceStarts = (events: SourceEvent[]): string[] =>
-  materializeRecurrenceEvents(events as unknown as SyncableEvent[], WINDOW)
+  materializeRecurrenceEvents(events.map((event) => toSyncableEvent(event)), WINDOW)
     .map((occurrence) => occurrence.startTime.toISOString())
     .toSorted();
 
@@ -44,9 +64,9 @@ const interpret = (events: SourceEvent[], calendarTimeZone?: string): SourceEven
 describe("re-anchoring a recurring full-day timed series onto UTC midnight", () => {
   it("keeps a cancelled day cancelled", () => {
     const master = buildSourceEvent({
-      exceptionDates: [new Date("2027-03-15T04:00:00.000Z")],
+      exceptionDates: [{ date: new Date("2027-03-15T04:00:00.000Z") }],
       recurrenceRule: { count: 6, frequency: "DAILY" },
-    } as Partial<SourceEvent>);
+    });
 
     const starts = occurrenceStarts(interpret([master]));
 
@@ -57,11 +77,11 @@ describe("re-anchoring a recurring full-day timed series onto UTC midnight", () 
   it("keeps a cancelled day cancelled in a zone ahead of UTC", () => {
     const master = buildSourceEvent({
       endTime: new Date("2027-03-12T23:00:00.000Z"),
-      exceptionDates: [new Date("2027-03-13T23:00:00.000Z")],
+      exceptionDates: [{ date: new Date("2027-03-13T23:00:00.000Z") }],
       recurrenceRule: { count: 6, frequency: "DAILY" },
       startTime: new Date("2027-03-11T23:00:00.000Z"),
       startTimeZone: "Europe/Berlin",
-    } as Partial<SourceEvent>);
+    });
 
     const starts = occurrenceStarts(interpret([master]));
 
@@ -72,20 +92,39 @@ describe("re-anchoring a recurring full-day timed series onto UTC midnight", () 
   it("lets a detached instance replace the day it was moved from", () => {
     const master = buildSourceEvent({
       recurrenceRule: { count: 6, frequency: "DAILY" },
-    } as Partial<SourceEvent>);
+    });
     const override = buildSourceEvent({
       endTime: new Date("2027-03-21T04:00:00.000Z"),
-      eventStateId: "event-state-2",
-      id: "event-state-2",
       recurrenceId: new Date("2027-03-16T04:00:00.000Z"),
+      sourceEventId: "event-state-2",
       startTime: new Date("2027-03-20T04:00:00.000Z"),
-      summary: "Nightly rota (moved)",
-    } as Partial<SourceEvent>);
+      title: "Nightly rota (moved)",
+    });
 
     const starts = occurrenceStarts(interpret([master, override]));
 
     expect(starts).not.toContain("2027-03-16T00:00:00.000Z");
-    expect(starts).toHaveLength(5);
+    expect(starts).toContain("2027-03-20T00:00:00.000Z");
+    expect(starts).toHaveLength(6);
+  });
+
+  it("re-anchors the slot a timed detached instance replaces", () => {
+    const master = buildSourceEvent({
+      recurrenceRule: { count: 6, frequency: "DAILY" },
+    });
+    const override = buildSourceEvent({
+      endTime: new Date("2027-03-16T19:00:00.000Z"),
+      recurrenceId: new Date("2027-03-16T04:00:00.000Z"),
+      sourceEventId: "event-state-2",
+      startTime: new Date("2027-03-16T18:00:00.000Z"),
+      title: "Nightly rota (rescheduled)",
+    });
+
+    const starts = occurrenceStarts(interpret([master, override]));
+
+    expect(starts).not.toContain("2027-03-16T00:00:00.000Z");
+    expect(starts).toContain("2027-03-16T18:00:00.000Z");
+    expect(starts).toHaveLength(6);
   });
 
   it("stops on the day the series says it stops", () => {
@@ -97,7 +136,7 @@ describe("re-anchoring a recurring full-day timed series onto UTC midnight", () 
       },
       startTime: new Date("2027-03-11T23:00:00.000Z"),
       startTimeZone: "Europe/Berlin",
-    } as Partial<SourceEvent>);
+    });
 
     const starts = occurrenceStarts(interpret([master]));
 
@@ -107,7 +146,7 @@ describe("re-anchoring a recurring full-day timed series onto UTC midnight", () 
   it("re-anchors a series with no recurrence properties to touch", () => {
     const master = buildSourceEvent({
       recurrenceRule: { count: 3, frequency: "DAILY" },
-    } as Partial<SourceEvent>);
+    });
 
     expect(occurrenceStarts(interpret([master]))).toEqual([
       "2027-03-12T00:00:00.000Z",
@@ -118,12 +157,19 @@ describe("re-anchoring a recurring full-day timed series onto UTC midnight", () 
 
   it("answers the same way when the same feed is ingested twice", () => {
     const master = buildSourceEvent({
-      exceptionDates: [new Date("2027-03-15T04:00:00.000Z")],
+      exceptionDates: [{ date: new Date("2027-03-15T04:00:00.000Z") }],
       recurrenceRule: { count: 6, frequency: "DAILY" },
-    } as Partial<SourceEvent>);
+    });
+    const override = buildSourceEvent({
+      endTime: new Date("2027-03-21T04:00:00.000Z"),
+      recurrenceId: new Date("2027-03-16T04:00:00.000Z"),
+      sourceEventId: "event-state-2",
+      startTime: new Date("2027-03-20T04:00:00.000Z"),
+      title: "Nightly rota (moved)",
+    });
 
-    const first = occurrenceStarts(interpret([master]));
-    const second = occurrenceStarts(interpret(interpret([master])));
+    const first = occurrenceStarts(interpret([master, override]));
+    const second = occurrenceStarts(interpret(interpret([master, override])));
 
     expect(second).toEqual(first);
   });

@@ -22,7 +22,7 @@ describe("serializeOutlookEvent", () => {
     expect(event.end).toEqual({ dateTime: "2026-03-09T00:00:00.000", timeZone: "UTC" });
   });
 
-  it("preserves all-day dates when the source carries a named timezone", () => {
+  it("states all-day dates in UTC when the source carries a named timezone", () => {
     const event = serializeOutlookEvent({
       calendarId: "calendar-id",
       calendarName: "Calendar",
@@ -38,11 +38,11 @@ describe("serializeOutlookEvent", () => {
 
     expect(event.start).toEqual({
       dateTime: "2026-03-08T00:00:00.000",
-      timeZone: "America/Edmonton",
+      timeZone: "UTC",
     });
     expect(event.end).toEqual({
       dateTime: "2026-03-09T00:00:00.000",
-      timeZone: "America/Edmonton",
+      timeZone: "UTC",
     });
   });
 

@@ -18,6 +18,11 @@ const toGraphWallValue = (value: Date): string => value.toISOString().replace("Z
  * zone name two instants and cannot say which is meant. Sending the instant in UTC names
  * it exactly; reading the resource back otherwise resolves it to the first pass, moving
  * the mirror off the source and making it look changed on every run.
+ *
+ * An all-day range is snapped onto UTC day boundaries before it reaches here, so its value
+ * is already a UTC wall time and only UTC names the day it covers. Labelling that value
+ * with the source calendar's zone would name local midnight there, an instant that falls on
+ * the previous UTC day for every zone ahead of UTC.
  */
 const buildOutlookDateTime = (
   value: Date,
@@ -25,7 +30,7 @@ const buildOutlookDateTime = (
   isAllDay: boolean,
 ): OutlookDateTime => {
   if (isAllDay) {
-    return { dateTime: toGraphWallValue(value), timeZone };
+    return { dateTime: toGraphWallValue(value), timeZone: UTC_TIME_ZONE };
   }
 
   const resolvedTimeZone = resolveTimeZone(timeZone);

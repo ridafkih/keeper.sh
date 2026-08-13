@@ -1,3 +1,4 @@
+import type { IcsDateObject, IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
 import type { SourceEvent } from "../../core/types";
 import { normalizeTimezone } from "./normalize-timezone";
 
@@ -69,14 +70,9 @@ const utcMidnight = (parts: WallClockParts): Date =>
  */
 const resolveInterpretedAllDaySpan = (
   event: SourceEvent,
-  calendarTimeZone: string | undefined,
+  timezone: string,
 ): Pick<SourceEvent, "endTime" | "startTime"> | null => {
   if (event.isAllDay || event.endTime <= event.startTime) {
-    return null;
-  }
-
-  const timezone = event.startTimeZone ?? normalizeTimezone(calendarTimeZone);
-  if (!timezone) {
     return null;
   }
 
@@ -97,6 +93,45 @@ const resolveInterpretedAllDaySpan = (
   }
 };
 
+const reanchorToUtcDay = (instant: Date, timeZone: string): Date => {
+  if (Number.isNaN(instant.getTime())) {
+    return instant;
+  }
+
+  return utcMidnight(partsInTimeZone(instant, timeZone));
+};
+
+const reanchorDateObject = (value: IcsDateObject, timeZone: string): IcsDateObject => ({
+  ...value,
+  date: reanchorToUtcDay(value.date, timeZone),
+});
+
+const reanchorExceptionDates = (
+  exceptionDates: IcsExceptionDates,
+  timeZone: string,
+): IcsExceptionDates =>
+  exceptionDates.map((exceptionDate) => reanchorDateObject(exceptionDate, timeZone));
+
+const reanchorRecurrenceRule = (
+  recurrenceRule: IcsRecurrenceRule,
+  timeZone: string,
+): IcsRecurrenceRule => ({
+  ...recurrenceRule,
+  ...(recurrenceRule.until && { until: reanchorDateObject(recurrenceRule.until, timeZone) }),
+});
+
+interface InterpretedSpan {
+  span: Pick<SourceEvent, "endTime" | "startTime">;
+  timeZone: string;
+}
+
+/*
+ * The days a series cancels, the slot a detached instance replaces and the day the rule
+ * stops on are all stated as occurrence starts in the source's zone, so they name the same
+ * local midnights the range does. Expansion matches them against the re-anchored slots by
+ * exact instant, so leaving them behind resurrects a cancelled day, double-books an
+ * overridden one and trims the last day off the series.
+ */
 const interpretFullDayTimedEventsAsAllDay = (
   events: SourceEvent[],
   options: InterpretFullDayTimedEventsOptions,
@@ -105,19 +140,55 @@ const interpretFullDayTimedEventsAsAllDay = (
     return events;
   }
 
-  return events.map((event) => {
-    const span = resolveInterpretedAllDaySpan(event, options.calendarTimeZone);
+  const interpretedSpans = new Map<SourceEvent, InterpretedSpan>();
+  const seriesTimeZones = new Map<string, string>();
+  for (const event of events) {
+    const timeZone = event.startTimeZone ?? normalizeTimezone(options.calendarTimeZone);
+    if (!timeZone) {
+      continue;
+    }
+
+    const span = resolveInterpretedAllDaySpan(event, timeZone);
     if (!span) {
+      continue;
+    }
+
+    interpretedSpans.set(event, { span, timeZone });
+    if (!event.recurrenceId) {
+      seriesTimeZones.set(event.uid, timeZone);
+    }
+  }
+
+  return events.map((event) => {
+    const interpreted = interpretedSpans.get(event);
+    const seriesTimeZone = event.recurrenceId && seriesTimeZones.get(event.uid);
+    if (!interpreted && !seriesTimeZone) {
       return event;
     }
 
-    /*
-     * The originating timezone is dropped along with the times it described.
-     * Recurrence expansion walks wall clock in `startTimeZone`, so keeping it
-     * would re-introduce an hour of drift on every occurrence past a DST
-     * transition, pushing those occurrences back off UTC midnight.
-     */
-    return { ...event, ...span, isAllDay: true, startTimeZone: globalThis.undefined };
+    return {
+      ...event,
+      ...(event.recurrenceId && seriesTimeZone && {
+        recurrenceId: reanchorToUtcDay(event.recurrenceId, seriesTimeZone),
+      }),
+      /*
+       * The originating timezone is dropped along with the times it described.
+       * Recurrence expansion walks wall clock in `startTimeZone`, so keeping it
+       * would re-introduce an hour of drift on every occurrence past a DST
+       * transition, pushing those occurrences back off UTC midnight.
+       */
+      ...(interpreted && {
+        ...interpreted.span,
+        isAllDay: true,
+        startTimeZone: globalThis.undefined,
+        ...(event.exceptionDates && {
+          exceptionDates: reanchorExceptionDates(event.exceptionDates, interpreted.timeZone),
+        }),
+        ...(event.recurrenceRule && {
+          recurrenceRule: reanchorRecurrenceRule(event.recurrenceRule, interpreted.timeZone),
+        }),
+      }),
+    };
   });
 };
 
