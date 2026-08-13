@@ -11,6 +11,8 @@ import {
   ensureValidToken,
   isTimeoutError,
   buildCalendarBackoffState,
+  buildReauthenticationDemandFields,
+  resolveReauthenticationDemandAction,
   SOURCE_INGEST_LOCK_NAMESPACE,
   createRequiredSourceRanges,
   createSourceIngestionPlan,
@@ -468,32 +470,113 @@ const resolveReauthenticationDemands = (
   );
 };
 
+const REAUTHENTICATION_VOTE_FIELDS: [ReauthenticationDemand, string][] = [
+  ["credential-rejected", "reauth.votes.credential_rejected"],
+  ["authenticated", "reauth.votes.authenticated"],
+  ["request-rejected", "reauth.votes.request_rejected"],
+  ["abstain", "reauth.votes.abstain"],
+];
+
+const recordReauthenticationDemandVotes = (
+  cast: ReauthenticationDemand[],
+): ReauthenticationDemand | undefined => {
+  for (const [demand, field] of REAUTHENTICATION_VOTE_FIELDS) {
+    widelog.set(field, cast.filter((vote) => vote === demand).length);
+  }
+  const decidingVote = REAUTHENTICATION_DEMAND_PRECEDENCE.find(
+    (demand) => cast.includes(demand),
+  );
+  if (decidingVote) {
+    widelog.set("reauth.deciding_vote", decidingVote);
+  }
+  return decidingVote;
+};
+
+const recordReauthenticationDemandFields = (
+  fields: Record<string, string | number | boolean>,
+): void => {
+  for (const [key, value] of Object.entries(fields)) {
+    widelog.set(key, value);
+  }
+};
+
+const resolvePreviousFlag = (
+  transitioned: boolean,
+  needsReauthentication: boolean,
+): boolean => {
+  if (transitioned) {
+    return !needsReauthentication;
+  }
+  return needsReauthentication;
+};
+
+const resolveRaiseSignal = (
+  needsReauthentication: boolean,
+  decidingVote: ReauthenticationDemand | undefined,
+): string | undefined => {
+  if (!needsReauthentication || !decidingVote) {
+    return;
+  }
+  return decidingVote;
+};
+
 const applyReauthenticationDemands = async (
   demands: ReauthenticationDemandRecord[],
   recordedDemandSources: Map<string, string | null>,
 ): Promise<void> => {
   for (const [accountId, needsReauthentication] of resolveReauthenticationDemands(demands)) {
     const recordedDemandSource = recordedDemandSources.get(accountId) ?? null;
-    if (!needsReauthentication && !isIngestAdjudicableDemand(recordedDemandSource)) {
-      continue;
-    }
-    try {
-      await database
-        .update(calendarAccountsTable)
-        .set({
-          needsReauthentication,
-          reauthenticationSource: resolveRecordedDemandSource(needsReauthentication),
-        })
-        .where(and(
-          eq(calendarAccountsTable.id, accountId),
-          ne(calendarAccountsTable.needsReauthentication, needsReauthentication),
-        ));
-    } catch (error) {
-      widelog.errorFields(error, {
-        retriable: true,
-        slug: resolveDatabaseIngestErrorSlug(error) ?? "reauthentication-demand-write-failed",
-      });
-    }
+    const cast = demands
+      .filter((record) => record.accountId === accountId)
+      .map(({ demand }) => demand);
+    await context(async () => {
+      widelog.set("operation.name", "reauthentication-demand");
+      widelog.set("operation.type", "job");
+      const decidingVote = recordReauthenticationDemandVotes(cast);
+      try {
+        if (!needsReauthentication && !isIngestAdjudicableDemand(recordedDemandSource)) {
+          recordReauthenticationDemandFields(buildReauthenticationDemandFields({
+            accountId,
+            action: "clear",
+            previous: null,
+            provenance: REAUTHENTICATION_SOURCE_INGEST,
+            recordedProvenance: recordedDemandSource,
+          }));
+          widelog.set("reauth.suppressed", true);
+          widelog.set("outcome", "skipped");
+          return;
+        }
+        const written = await database
+          .update(calendarAccountsTable)
+          .set({
+            needsReauthentication,
+            reauthenticationSource: resolveRecordedDemandSource(needsReauthentication),
+          })
+          .where(and(
+            eq(calendarAccountsTable.id, accountId),
+            ne(calendarAccountsTable.needsReauthentication, needsReauthentication),
+          ))
+          .returning({ id: calendarAccountsTable.id });
+        const transitioned = written.length > 0;
+        recordReauthenticationDemandFields(buildReauthenticationDemandFields({
+          accountId,
+          action: resolveReauthenticationDemandAction(needsReauthentication),
+          previous: resolvePreviousFlag(transitioned, needsReauthentication),
+          provenance: REAUTHENTICATION_SOURCE_INGEST,
+          recordedProvenance: recordedDemandSource,
+          signal: resolveRaiseSignal(needsReauthentication, decidingVote),
+        }));
+        widelog.set("outcome", "success");
+      } catch (error) {
+        widelog.set("outcome", "error");
+        widelog.errorFields(error, {
+          retriable: true,
+          slug: resolveDatabaseIngestErrorSlug(error) ?? "reauthentication-demand-write-failed",
+        });
+      } finally {
+        widelog.flush();
+      }
+    });
   }
 };
 
