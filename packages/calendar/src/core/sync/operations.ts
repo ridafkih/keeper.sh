@@ -6,6 +6,7 @@ import type {
 } from "../types";
 import {
   createEditableEventContentHash,
+  createEditableEventContentSnapshot,
   createSyncEventContentHash,
 } from "../events/content-hash";
 import { overlapsTimeWindow } from "../events/time-range";
@@ -38,13 +39,25 @@ interface StaleReasonCounts {
   occurrenceReassigned: number;
   remoteAvailabilityChanged: number;
   remoteContentChanged: number;
+  remoteContentAllDayChanged: number;
+  remoteContentDescriptionChanged: number;
+  remoteContentLocationChanged: number;
+  remoteContentSummaryChanged: number;
   remoteMissing: number;
   remoteTimeChanged: number;
+}
+
+interface RemoteContentFieldChanges {
+  allDay: boolean;
+  description: boolean;
+  location: boolean;
+  summary: boolean;
 }
 
 interface RemoteStateChanges {
   availability: boolean;
   content: boolean;
+  contentFields: RemoteContentFieldChanges | null;
   time: boolean;
 }
 
@@ -65,6 +78,10 @@ const createStaleReasonCounts = (): StaleReasonCounts => ({
   occurrenceReassigned: 0,
   remoteAvailabilityChanged: 0,
   remoteContentChanged: 0,
+  remoteContentAllDayChanged: 0,
+  remoteContentDescriptionChanged: 0,
+  remoteContentLocationChanged: 0,
+  remoteContentSummaryChanged: 0,
   remoteMissing: 0,
   remoteTimeChanged: 0,
 });
@@ -244,6 +261,16 @@ const getRemoteStateChanges = (
 ): RemoteStateChanges => {
   const remoteContentChanged = typeof remoteEvent.editableContentHash === "string"
     && remoteEvent.editableContentHash !== createEditableEventContentHash(localEvent);
+  let contentFields: RemoteContentFieldChanges | null = null;
+  if (remoteContentChanged && remoteEvent.editableContent) {
+    const localContent = createEditableEventContentSnapshot(localEvent);
+    contentFields = {
+      allDay: remoteEvent.editableContent.isAllDay !== localContent.isAllDay,
+      description: remoteEvent.editableContent.description !== localContent.description,
+      location: remoteEvent.editableContent.location !== localContent.location,
+      summary: remoteEvent.editableContent.summary !== localContent.summary,
+    };
+  }
   const localAvailability = localEvent.availability ?? "busy";
   const supportedAvailabilities = remoteEvent.supportedAvailabilities ?? [];
   let expectedRemoteAvailability: MaterializedSyncableEvent["availability"] = "busy";
@@ -258,6 +285,7 @@ const getRemoteStateChanges = (
   return {
     availability: remoteAvailabilityChanged,
     content: remoteContentChanged,
+    contentFields,
     time: remoteTimeChanged,
   };
 };
@@ -269,6 +297,37 @@ const hasRemoteStateChanged = (
 ): boolean => {
   const changes = getRemoteStateChanges(mapping, localEvent, remoteEvent);
   return changes.availability || changes.content || changes.time;
+};
+
+const recordStaleReasons = (
+  staleReasonCounts: StaleReasonCounts,
+  localHashChanged: boolean,
+  remoteChanges: RemoteStateChanges,
+): void => {
+  if (localHashChanged) {
+    staleReasonCounts.localHashChanged += 1;
+  }
+  if (remoteChanges.availability) {
+    staleReasonCounts.remoteAvailabilityChanged += 1;
+  }
+  if (remoteChanges.content) {
+    staleReasonCounts.remoteContentChanged += 1;
+  }
+  if (remoteChanges.contentFields?.allDay) {
+    staleReasonCounts.remoteContentAllDayChanged += 1;
+  }
+  if (remoteChanges.contentFields?.description) {
+    staleReasonCounts.remoteContentDescriptionChanged += 1;
+  }
+  if (remoteChanges.contentFields?.location) {
+    staleReasonCounts.remoteContentLocationChanged += 1;
+  }
+  if (remoteChanges.contentFields?.summary) {
+    staleReasonCounts.remoteContentSummaryChanged += 1;
+  }
+  if (remoteChanges.time) {
+    staleReasonCounts.remoteTimeChanged += 1;
+  }
 };
 
 const identifyStaleMappings = (
@@ -311,18 +370,7 @@ const identifyStaleMappings = (
       || remoteChanges.time;
 
     if (localHashChanged || remoteStateChanged) {
-      if (localHashChanged) {
-        staleReasonCounts.localHashChanged += 1;
-      }
-      if (remoteChanges.availability) {
-        staleReasonCounts.remoteAvailabilityChanged += 1;
-      }
-      if (remoteChanges.content) {
-        staleReasonCounts.remoteContentChanged += 1;
-      }
-      if (remoteChanges.time) {
-        staleReasonCounts.remoteTimeChanged += 1;
-      }
+      recordStaleReasons(staleReasonCounts, localHashChanged, remoteChanges);
       staleMappingIds.push(mapping.id);
       staleMappedEventIds.add(syncEventId);
       staleRemoteMappings.push(mapping);

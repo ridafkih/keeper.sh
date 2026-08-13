@@ -600,6 +600,13 @@ const appendStaleReasonFields = (
     ["stale_mappings.occurrence_reassigned_count", counts.occurrenceReassigned],
     ["stale_mappings.remote_availability_changed_count", counts.remoteAvailabilityChanged],
     ["stale_mappings.remote_content_changed_count", counts.remoteContentChanged],
+    ["stale_mappings.remote_content_all_day_changed_count", counts.remoteContentAllDayChanged],
+    [
+      "stale_mappings.remote_content_description_changed_count",
+      counts.remoteContentDescriptionChanged,
+    ],
+    ["stale_mappings.remote_content_location_changed_count", counts.remoteContentLocationChanged],
+    ["stale_mappings.remote_content_summary_changed_count", counts.remoteContentSummaryChanged],
     ["stale_mappings.remote_missing_count", counts.remoteMissing],
     ["stale_mappings.remote_time_changed_count", counts.remoteTimeChanged],
   ];

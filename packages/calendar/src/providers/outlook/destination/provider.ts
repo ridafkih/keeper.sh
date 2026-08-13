@@ -31,7 +31,10 @@ import { parseEventTime } from "../shared/date-time";
 import { normalizeOutlookEvent } from "./normalize-event";
 import { serializeOutlookEvent } from "./serialize-event";
 import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
-import { createEditableEventContentHash } from "../../../core/events/content-hash";
+import {
+  createEditableEventContentSnapshot,
+  hashEditableEventContentSnapshot,
+} from "../../../core/events/content-hash";
 
 interface OutlookSyncProviderConfig {
   accessToken: string;
@@ -271,18 +274,20 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
         }
 
         const availability = parseRemoteAvailability(event.showAs);
+        const editableContent = createEditableEventContentSnapshot({
+          availability,
+          description: event.body?.content,
+          endTime,
+          isAllDay: event.isAllDay,
+          location: event.location?.displayName,
+          startTime,
+          summary: event.subject ?? "",
+        });
         remoteEvents.push({
           deleteId: event.id,
           editableAvailability: availability,
-          editableContentHash: createEditableEventContentHash({
-            availability,
-            description: event.body?.content,
-            endTime,
-            isAllDay: event.isAllDay,
-            location: event.location?.displayName,
-            startTime,
-            summary: event.subject ?? "",
-          }),
+          editableContent,
+          editableContentHash: hashEditableEventContentSnapshot(editableContent),
           endTime,
           isKeeperEvent: event.categories?.includes(KEEPER_CATEGORY) ?? false,
           supportedAvailabilities: ["busy", "free", "oof", "workingElsewhere"],

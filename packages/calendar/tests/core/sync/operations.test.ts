@@ -12,7 +12,9 @@ import {
 } from "../../../src/core/sync/sync-range";
 import {
   createEditableEventContentHash,
+  createEditableEventContentSnapshot,
   createSyncEventContentHash,
+  hashEditableEventContentSnapshot,
 } from "../../../src/core/events/content-hash";
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type {
@@ -62,6 +64,10 @@ const EMPTY_STALE_REASON_COUNTS = {
   occurrenceReassigned: 0,
   remoteAvailabilityChanged: 0,
   remoteContentChanged: 0,
+  remoteContentAllDayChanged: 0,
+  remoteContentDescriptionChanged: 0,
+  remoteContentLocationChanged: 0,
+  remoteContentSummaryChanged: 0,
   remoteMissing: 0,
   remoteTimeChanged: 0,
 };
@@ -583,6 +589,98 @@ describe("computeSyncOperations", () => {
       type: "replace",
       uid: mapping.destinationEventUid,
     }]);
+  });
+
+  it("attributes a remote content change to the field the provider rewrote", () => {
+    const event = createLocalEvent({ description: "agenda v2", location: "Room 1" });
+    const mapping = createEventMapping({
+      endTime: event.endTime,
+      startTime: event.startTime,
+      syncEventHash: createSyncEventContentHash(event),
+    });
+    const rewrittenContent = createEditableEventContentSnapshot({
+      ...event,
+      description: "agenda v1",
+    });
+    const remoteEvent = createRemoteEvent({
+      deleteId: mapping.deleteIdentifier,
+      editableAvailability: "busy",
+      editableContent: rewrittenContent,
+      editableContentHash: hashEditableEventContentSnapshot(rewrittenContent),
+      endTime: event.endTime,
+      isKeeperEvent: true,
+      startTime: event.startTime,
+      uid: mapping.destinationEventUid,
+    });
+
+    const result = computeSyncOperations([event], [mapping], [remoteEvent]);
+
+    expect(result.staleReasonCounts).toEqual({
+      ...EMPTY_STALE_REASON_COUNTS,
+      remoteContentChanged: 1,
+      remoteContentDescriptionChanged: 1,
+    });
+  });
+
+  it("attributes summary and all-day drift independently", () => {
+    const event = createLocalEvent({ isAllDay: false, summary: "Busy" });
+    const mapping = createEventMapping({
+      endTime: event.endTime,
+      startTime: event.startTime,
+      syncEventHash: createSyncEventContentHash(event),
+    });
+    const rewrittenContent = createEditableEventContentSnapshot({
+      ...event,
+      isAllDay: true,
+      summary: "Busy (copy)",
+    });
+    const remoteEvent = createRemoteEvent({
+      deleteId: mapping.deleteIdentifier,
+      editableAvailability: "busy",
+      editableContent: rewrittenContent,
+      editableContentHash: hashEditableEventContentSnapshot(rewrittenContent),
+      endTime: event.endTime,
+      isKeeperEvent: true,
+      startTime: event.startTime,
+      uid: mapping.destinationEventUid,
+    });
+
+    const result = computeSyncOperations([event], [mapping], [remoteEvent]);
+
+    expect(result.staleReasonCounts).toEqual({
+      ...EMPTY_STALE_REASON_COUNTS,
+      remoteContentChanged: 1,
+      remoteContentAllDayChanged: 1,
+      remoteContentSummaryChanged: 1,
+    });
+  });
+
+  it("counts only the aggregate when a provider reports no content snapshot", () => {
+    const event = createLocalEvent({ description: "agenda v2" });
+    const mapping = createEventMapping({
+      endTime: event.endTime,
+      startTime: event.startTime,
+      syncEventHash: createSyncEventContentHash(event),
+    });
+    const remoteEvent = createRemoteEvent({
+      deleteId: mapping.deleteIdentifier,
+      editableAvailability: "busy",
+      editableContentHash: createEditableEventContentHash({
+        ...event,
+        description: "agenda v1",
+      }),
+      endTime: event.endTime,
+      isKeeperEvent: true,
+      startTime: event.startTime,
+      uid: mapping.destinationEventUid,
+    });
+
+    const result = computeSyncOperations([event], [mapping], [remoteEvent]);
+
+    expect(result.staleReasonCounts).toEqual({
+      ...EMPTY_STALE_REASON_COUNTS,
+      remoteContentChanged: 1,
+    });
   });
 
   it("does not churn when a destination serializes timestamps to whole seconds", () => {

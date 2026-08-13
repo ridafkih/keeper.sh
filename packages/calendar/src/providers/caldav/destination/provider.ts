@@ -1,8 +1,9 @@
 import { RateLimiter } from "../../../core/utils/rate-limiter";
 import { generateDeterministicEventUid, isKeeperEvent } from "../../../core/events/identity";
 import {
-  createEditableEventContentHash,
+  createEditableEventContentSnapshot,
   createSyncEventContentHash,
+  hashEditableEventContentSnapshot,
 } from "../../../core/events/content-hash";
 import { getErrorMessage } from "../../../core/utils/error";
 import { resolveTimeRangeEnd } from "../../../core/events/time-range";
@@ -240,18 +241,20 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
         continue;
       }
 
+      const editableContent = createEditableEventContentSnapshot({
+        availability: parsed.availability,
+        description: parsed.description,
+        endTime: parsed.endTime,
+        isAllDay: parsed.isAllDay,
+        location: parsed.location,
+        startTime: parsed.startTime,
+        summary: parsed.title ?? "",
+      });
       remoteEvents.push({
         ...parsed,
         editableAvailability: parsed.availability,
-        editableContentHash: createEditableEventContentHash({
-          availability: parsed.availability,
-          description: parsed.description,
-          endTime: parsed.endTime,
-          isAllDay: parsed.isAllDay,
-          location: parsed.location,
-          startTime: parsed.startTime,
-          summary: parsed.title ?? "",
-        }),
+        editableContent,
+        editableContentHash: hashEditableEventContentSnapshot(editableContent),
         supportedAvailabilities: ["busy", "free"],
       });
     }

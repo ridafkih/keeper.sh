@@ -1,5 +1,6 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { IcsDuration, IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
+import type { EditableEventContentSnapshot } from "./events/content-hash";
 import type { RefreshLockStore } from "./oauth/refresh-coordinator";
 
 type AuthType = "oauth" | "caldav" | "none";
@@ -113,6 +114,7 @@ interface RemoteEvent {
   startTime: Date;
   endTime: Date;
   isKeeperEvent: boolean;
+  editableContent?: EditableEventContentSnapshot;
   editableContentHash?: string;
   editableAvailability?: EventAvailability;
   supportedAvailabilities?: EventAvailability[];

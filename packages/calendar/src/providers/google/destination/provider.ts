@@ -20,7 +20,10 @@ import type { BatchSubRequest, BatchSubResponse } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
 import { normalizeGoogleEvent } from "./normalize-event";
 import { serializeGoogleEvent } from "./serialize-event";
-import { createEditableEventContentHash } from "../../../core/events/content-hash";
+import {
+  createEditableEventContentSnapshot,
+  hashEditableEventContentSnapshot,
+} from "../../../core/events/content-hash";
 
 interface GoogleSyncProviderConfig {
   accessToken: string;
@@ -408,18 +411,20 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       if (event.transparency === "transparent") {
         availability = "free";
       }
+      const editableContent = createEditableEventContentSnapshot({
+        availability,
+        description: event.description,
+        endTime,
+        isAllDay: Boolean(event.start?.date),
+        location: event.location,
+        startTime,
+        summary: event.summary ?? "",
+      });
       items.push({
         deleteId: event.id ?? event.iCalUID,
         editableAvailability: availability,
-        editableContentHash: createEditableEventContentHash({
-          availability,
-          description: event.description,
-          endTime,
-          isAllDay: Boolean(event.start?.date),
-          location: event.location,
-          startTime,
-          summary: event.summary ?? "",
-        }),
+        editableContent,
+        editableContentHash: hashEditableEventContentSnapshot(editableContent),
         endTime,
         isKeeperEvent: true,
         supportedAvailabilities: ["busy", "free"],
