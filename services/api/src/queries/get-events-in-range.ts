@@ -7,7 +7,10 @@ import {
 import { normalizeDateRange } from "@/utils/date-range";
 import { and, arrayContains, asc, eq, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import { overlapsTimeWindow } from "@keeper.sh/calendar";
+import {
+  overlapsRepresentableTimeWindow,
+  REPRESENTABLE_RANGE_SLACK_MS,
+} from "@keeper.sh/calendar";
 import type { KeeperDatabase, KeeperEvent, KeeperEventFilters, KeeperEventRangeInput } from "@/types";
 import { projectSyncedEvents, toKeeperEvent, toUserProjection } from "./event-read-model";
 import type {
@@ -88,6 +91,17 @@ const flattenSyncedEvents = (
   filters,
 );
 
+/*
+ * A read publishes the shaped range, so the scan has to reach every row whose shaped range
+ * could touch the window even though the clause can only compare the stored columns. The
+ * bounds are therefore loosened by the furthest shaping can carry either of them, and the
+ * rows that widening pulls in are dropped in memory by isWithinReadWindow.
+ */
+const toScanBounds = (start: Date, end: Date): { scanEnd: Date; scanStart: Date } => ({
+  scanEnd: new Date(end.getTime() + REPRESENTABLE_RANGE_SLACK_MS),
+  scanStart: new Date(start.getTime() - REPRESENTABLE_RANGE_SLACK_MS),
+});
+
 /**
  * Build the WHERE clause for fetching synced rows that may contribute events
  * to [start, end]: overlapping one-offs, recurring masters whose first
@@ -99,37 +113,43 @@ const flattenSyncedEvents = (
  * end. Membership is decided in memory by the one predicate every layer shares;
  * this clause only keeps the scan off rows no predicate could admit.
  */
-const buildSyncedRangeCondition = (start: Date, end: Date): SQL | undefined =>
-  or(
+const buildSyncedRangeCondition = (start: Date, end: Date): SQL | undefined => {
+  const { scanEnd, scanStart } = toScanBounds(start, end);
+
+  return or(
     and(
       isNull(eventStatesTable.recurrenceRule),
       isNull(eventStatesTable.recurrenceId),
       or(
-        gte(eventStatesTable.endTime, start),
-        gte(eventStatesTable.startTime, start),
+        gte(eventStatesTable.endTime, scanStart),
+        gte(eventStatesTable.startTime, scanStart),
       ),
-      lte(eventStatesTable.startTime, end),
+      lte(eventStatesTable.startTime, scanEnd),
     ),
     and(
       isNotNull(eventStatesTable.recurrenceRule),
-      lte(eventStatesTable.startTime, end),
+      lte(eventStatesTable.startTime, scanEnd),
     ),
     isNotNull(eventStatesTable.recurrenceId),
   );
+};
 
 /**
  * The same scan for locally created rows: one whose end predates the window is scanned
  * anyway when its start does not, because an inverted range says nothing about where it
  * sits through its end. Membership is decided in memory by isWithinReadWindow.
  */
-const buildUserRangeCondition = (start: Date, end: Date): SQL | undefined =>
-  and(
+const buildUserRangeCondition = (start: Date, end: Date): SQL | undefined => {
+  const { scanEnd, scanStart } = toScanBounds(start, end);
+
+  return and(
     or(
-      gte(userEventsTable.endTime, start),
-      gte(userEventsTable.startTime, start),
+      gte(userEventsTable.endTime, scanStart),
+      gte(userEventsTable.startTime, scanStart),
     ),
-    lte(userEventsTable.startTime, end),
+    lte(userEventsTable.startTime, scanEnd),
   );
+};
 
 /*
  * The window bound a read publishes is inclusive of its end, while the shared predicate
@@ -139,10 +159,18 @@ const buildUserRangeCondition = (start: Date, end: Date): SQL | undefined =>
 const INCLUSIVE_WINDOW_END_MS = 1;
 
 const isWithinReadWindow = (
-  row: { endTime: Date; startTime: Date },
+  row: { endTime: Date; isAllDay?: boolean | null; startTime: Date },
   start: Date,
   end: Date,
-): boolean => overlapsTimeWindow(row, start, new Date(end.getTime() + INCLUSIVE_WINDOW_END_MS));
+): boolean => overlapsRepresentableTimeWindow(
+  {
+    endTime: row.endTime,
+    startTime: row.startTime,
+    ...(typeof row.isAllDay === "boolean" && { isAllDay: row.isAllDay }),
+  },
+  start,
+  new Date(end.getTime() + INCLUSIVE_WINDOW_END_MS),
+);
 
 const getEventsInRange = async (
   database: KeeperDatabase,

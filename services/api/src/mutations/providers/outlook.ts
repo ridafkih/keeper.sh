@@ -8,6 +8,7 @@ import type {
   ProviderEventReference,
   RsvpStatus,
 } from "@/types";
+import { resolveRepresentableIsoRange } from "./representable-range";
 
 const MICROSOFT_GRAPH_API = "https://graph.microsoft.com/v1.0";
 
@@ -47,15 +48,20 @@ const createOutlookEvent = async (
 ): Promise<EventActionResult & Partial<OutlookEventResult>> => {
   const url = new URL(`${MICROSOFT_GRAPH_API}/me/calendar/events`);
   const isAllDay = input.isAllDay ?? false;
+  const range = resolveRepresentableIsoRange({
+    endTime: input.endTime,
+    isAllDay,
+    startTime: input.startTime,
+  });
 
   const resource: Record<string, unknown> = {
     subject: input.title,
     start: {
-      dateTime: formatDateTime(input.startTime, isAllDay),
+      dateTime: formatDateTime(range.startTime, isAllDay),
       timeZone: "UTC",
     },
     end: {
-      dateTime: formatDateTime(input.endTime, isAllDay),
+      dateTime: formatDateTime(range.endTime, isAllDay),
       timeZone: "UTC",
     },
     isAllDay,
@@ -132,15 +138,27 @@ const updateOutlookEvent = async (
   }
 
   const isAllDay = updates.isAllDay ?? existing.isAllDay ?? false;
-  if ("startTime" in updates && updates.startTime) {
+  let range: { endTime?: string; startTime?: string } = {
+    endTime: updates.endTime,
+    startTime: updates.startTime,
+  };
+  if (updates.startTime && updates.endTime) {
+    range = resolveRepresentableIsoRange({
+      endTime: updates.endTime,
+      isAllDay,
+      startTime: updates.startTime,
+    });
+  }
+
+  if (range.startTime) {
     patch.start = {
-      dateTime: formatDateTime(updates.startTime, isAllDay),
+      dateTime: formatDateTime(range.startTime, isAllDay),
       timeZone: "UTC",
     };
   }
-  if ("endTime" in updates && updates.endTime) {
+  if (range.endTime) {
     patch.end = {
-      dateTime: formatDateTime(updates.endTime, isAllDay),
+      dateTime: formatDateTime(range.endTime, isAllDay),
       timeZone: "UTC",
     };
   }

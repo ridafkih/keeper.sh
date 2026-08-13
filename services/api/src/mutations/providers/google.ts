@@ -13,6 +13,7 @@ import type {
   ProviderEventReference,
   RsvpStatus,
 } from "@/types";
+import { resolveRepresentableIsoRange } from "./representable-range";
 
 const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3/";
 
@@ -34,6 +35,17 @@ interface GoogleEventResult {
   sourceEventUid: string;
 }
 
+const buildGoogleDateField = (
+  dateTime: string,
+  isAllDay: boolean,
+): { date: string } | { dateTime: string } => {
+  if (isAllDay) {
+    return { date: dateTime.slice(0, 10) };
+  }
+
+  return { dateTime };
+};
+
 const createGoogleEvent = async (
   accessToken: string,
   externalCalendarId: string | null,
@@ -49,13 +61,14 @@ const createGoogleEvent = async (
     location: input.location,
   };
 
-  if (isAllDay) {
-    resource.start = { date: input.startTime.slice(0, 10) };
-    resource.end = { date: input.endTime.slice(0, 10) };
-  } else {
-    resource.start = { dateTime: input.startTime };
-    resource.end = { dateTime: input.endTime };
-  }
+  const { endTime, startTime } = resolveRepresentableIsoRange({
+    endTime: input.endTime,
+    isAllDay,
+    startTime: input.startTime,
+  });
+
+  resource.start = buildGoogleDateField(startTime, isAllDay);
+  resource.end = buildGoogleDateField(endTime, isAllDay);
 
   if (input.availability === "free") {
     resource.transparency = "transparent";
@@ -140,17 +153,6 @@ const resolveGoogleEvent = (
   );
 };
 
-const buildGoogleDateField = (
-  dateTime: string,
-  isAllDay: boolean,
-): { date: string } | { dateTime: string } => {
-  if (isAllDay) {
-    return { date: dateTime.slice(0, 10) };
-  }
-
-  return { dateTime };
-};
-
 const resolveGoogleTransparency = (availability: string): string => {
   if (availability === "free") {
     return "transparent";
@@ -190,10 +192,17 @@ const updateGoogleEvent = async (
 
   const hasExistingDateStart = existing.start && "date" in existing.start;
   const isAllDay = updates.isAllDay ?? (hasExistingDateStart === true);
-  if ("startTime" in updates && updates.startTime) {
+  if (updates.startTime && updates.endTime) {
+    const { endTime, startTime } = resolveRepresentableIsoRange({
+      endTime: updates.endTime,
+      isAllDay,
+      startTime: updates.startTime,
+    });
+    patch.start = buildGoogleDateField(startTime, isAllDay);
+    patch.end = buildGoogleDateField(endTime, isAllDay);
+  } else if (updates.startTime) {
     patch.start = buildGoogleDateField(updates.startTime, isAllDay);
-  }
-  if ("endTime" in updates && updates.endTime) {
+  } else if (updates.endTime) {
     patch.end = buildGoogleDateField(updates.endTime, isAllDay);
   }
   if ("availability" in updates && updates.availability) {

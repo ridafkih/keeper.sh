@@ -46,7 +46,9 @@ export { generateDeterministicEventUid, isKeeperEvent } from "./core/events/iden
 export { inferAllDayEvent, resolveIsAllDayEvent } from "./core/events/all-day";
 export {
   type EventTimeRange,
+  overlapsRepresentableTimeWindow,
   overlapsTimeWindow,
+  REPRESENTABLE_RANGE_SLACK_MS,
   resolvePointInTimeRange,
   resolveRepresentableTimeRange,
   resolveWholeDayTimeRange,

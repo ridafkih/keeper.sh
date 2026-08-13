@@ -1,6 +1,8 @@
 import {
   materializeRecurrenceEvents,
+  overlapsRepresentableTimeWindow,
   parseStoredRecurrenceForMaterialization,
+  REPRESENTABLE_RANGE_SLACK_MS,
   resolveRepresentableTimeRange,
 } from "@keeper.sh/calendar";
 import type { MaterializedSyncableEvent, SyncableEvent } from "@keeper.sh/calendar";
@@ -234,10 +236,19 @@ const materializeSyncedEvents = (
   });
   const exclusiveWindowEnd = new Date(windowEnd.getTime() + 1);
 
-  return materializeRecurrenceEvents(events, {
-    end: exclusiveWindowEnd,
-    start: windowStart,
+  /*
+   * The materializer judges an occurrence by its stored range, while this read publishes
+   * the shaped one. Occurrences are therefore generated over a window loosened by the
+   * furthest shaping can carry a bound, and the window a caller actually asked for is
+   * applied afterwards against the span the read goes on to publish.
+   */
+  const occurrences = materializeRecurrenceEvents(events, {
+    end: new Date(exclusiveWindowEnd.getTime() + REPRESENTABLE_RANGE_SLACK_MS),
+    start: new Date(windowStart.getTime() - REPRESENTABLE_RANGE_SLACK_MS),
   });
+
+  return occurrences.filter((occurrence) =>
+    overlapsRepresentableTimeWindow(occurrence, windowStart, exclusiveWindowEnd));
 };
 
 const projectSyncedEvents = (

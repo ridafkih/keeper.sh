@@ -11,6 +11,7 @@ import { buildZonedIcsDate, parseIcsEvents } from "@keeper.sh/calendar/ics";
 import { createDAVClient } from "tsdav";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import type { EventInput, EventUpdateInput, EventActionResult, RsvpStatus } from "@/types";
+import { resolveRepresentableIsoRange } from "./representable-range";
 
 interface CalDAVCredentials {
   serverUrl: string;
@@ -58,14 +59,19 @@ const resolveIsAllDay = (input: { isAllDay?: boolean }): boolean => {
 
 const buildIcsEvent = (uid: string, input: EventInput): IcsEvent => {
   const isAllDay = resolveIsAllDay(input);
+  const { endTime, startTime } = resolveRepresentableIsoRange({
+    endTime: input.endTime,
+    isAllDay,
+    startTime: input.startTime,
+  });
 
   const event: IcsEvent = {
     uid,
     summary: input.title,
     description: input.description,
     location: input.location,
-    start: buildZonedIcsDate(new Date(input.startTime), input.startTimeZone, isAllDay),
-    end: buildZonedIcsDate(new Date(input.endTime), input.startTimeZone, isAllDay),
+    start: buildZonedIcsDate(new Date(startTime), input.startTimeZone, isAllDay),
+    end: buildZonedIcsDate(new Date(endTime), input.startTimeZone, isAllDay),
     stamp: { date: new Date() },
   };
 
@@ -171,12 +177,18 @@ const applyUpdatesToEvent = (event: IcsEvent, updates: EventUpdateInput): IcsEve
   if ("location" in updates) {
     updated.location = updates.location;
   }
-  if ("startTime" in updates && typeof updates.startTime === "string") {
-    const isAllDay = resolveEventIsAllDay(updates, event);
+  const isAllDay = resolveEventIsAllDay(updates, event);
+  if (typeof updates.startTime === "string" && typeof updates.endTime === "string") {
+    const range = resolveRepresentableIsoRange({
+      endTime: updates.endTime,
+      isAllDay,
+      startTime: updates.startTime,
+    });
+    updated.start = buildZonedIcsDate(new Date(range.startTime), timezone, isAllDay);
+    updated.end = buildZonedIcsDate(new Date(range.endTime), timezone, isAllDay);
+  } else if (typeof updates.startTime === "string") {
     updated.start = buildZonedIcsDate(new Date(updates.startTime), timezone, isAllDay);
-  }
-  if ("endTime" in updates && typeof updates.endTime === "string") {
-    const isAllDay = resolveEventIsAllDay(updates, event);
+  } else if (typeof updates.endTime === "string") {
     updated.end = buildZonedIcsDate(new Date(updates.endTime), timezone, isAllDay);
   }
   if ("availability" in updates && typeof updates.availability === "string") {

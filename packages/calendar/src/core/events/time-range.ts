@@ -103,11 +103,34 @@ const resolveRepresentableTimeRange = (range: AllDayEventShape): EventTimeRange 
   return resolvePointInTimeRange(range);
 };
 
+/*
+ * A surface that publishes a shaped range owes the same range to the question "is this
+ * event in that window?". Deciding membership on the stored range instead makes one row
+ * two different events depending on how wide the caller's window is — a whole-day read
+ * reports an off-grid all-day event across the day it snaps to, while a read of one hour
+ * inside that day reports nothing. The published span is the answer to both.
+ */
+const overlapsRepresentableTimeWindow = (
+  range: AllDayEventShape,
+  windowStart: Date,
+  windowEnd: Date,
+): boolean => overlapsTimeWindow(resolveRepresentableTimeRange(range), windowStart, windowEnd);
+
+/*
+ * The furthest shaping can carry either bound away from the stored one: a whole-day snap
+ * pulls a start back to its UTC midnight and pushes an end on to the next, and a point in
+ * time extends an end by a minute. A scan that wants every row whose published span could
+ * reach a window widens the window by this much and leaves the rest to the predicate.
+ */
+const REPRESENTABLE_RANGE_SLACK_MS = MS_PER_DAY;
+
 export {
   isEmptyTimeRange,
   isInvertedTimeRange,
+  overlapsRepresentableTimeWindow,
   overlapsTimeWindow,
   POINT_IN_TIME_DURATION_MS,
+  REPRESENTABLE_RANGE_SLACK_MS,
   resolvePointInTimeRange,
   resolveRepresentableTimeRange,
   resolveTimeRangeEnd,
