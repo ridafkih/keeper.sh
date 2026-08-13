@@ -270,6 +270,52 @@ describe("buildRemoveOperations", () => {
 });
 
 describe("computeSyncOperations", () => {
+  it("adds a zero-duration event that sits exactly on the window lower edge", () => {
+    const edge = new Date("2026-03-08T00:00:00.000Z");
+    const event = createLocalEvent({ endTime: edge, startTime: edge });
+    const window = { timeMax: new Date("2026-06-01T00:00:00.000Z"), timeMin: edge };
+
+    const { operations } = computeSyncOperations([event], [], [], {
+      authoritativeWindow: window,
+      requestedWindow: window,
+    });
+
+    expect(operations).toEqual([{ event, type: "add" }]);
+  });
+
+  it("leaves a zero-duration event before the window lower edge out", () => {
+    const edge = new Date("2026-03-08T00:00:00.000Z");
+    const before = new Date(edge.getTime() - 1);
+    const event = createLocalEvent({ endTime: before, startTime: before });
+    const window = { timeMax: new Date("2026-06-01T00:00:00.000Z"), timeMin: edge };
+
+    const { operations } = computeSyncOperations([event], [], [], {
+      authoritativeWindow: window,
+      requestedWindow: window,
+    });
+
+    expect(operations).toEqual([]);
+  });
+
+  it("adds an inverted event whose start sits inside the window", () => {
+    const start = new Date("2026-03-09T00:00:00.000Z");
+    const event = createLocalEvent({
+      endTime: new Date("2026-03-04T00:00:00.000Z"),
+      startTime: start,
+    });
+    const window = {
+      timeMax: new Date("2026-06-01T00:00:00.000Z"),
+      timeMin: new Date("2026-03-08T00:00:00.000Z"),
+    };
+
+    const { operations } = computeSyncOperations([event], [], [], {
+      authoritativeWindow: window,
+      requestedWindow: window,
+    });
+
+    expect(operations).toEqual([{ event, type: "add" }]);
+  });
+
   it("removes a legacy uid mapping by the provider event id already listed remotely", () => {
     const mapping = createEventMapping({
       deleteIdentifier: "legacy-uid@google.com",

@@ -20,6 +20,7 @@ import {
   parseICalToRemoteEvent,
 } from "../shared/ics";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
+import { normalizeCalDAVEvent } from "./normalize-event";
 
 const CALDAV_RATE_LIMIT_CONCURRENCY = 5;
 
@@ -255,7 +256,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     return remoteEvents;
   };
 
-  return { pushEvents, deleteEvents, listRemoteEvents };
+  return { pushEvents, deleteEvents, listRemoteEvents, normalizeEvent: normalizeCalDAVEvent };
 };
 
 export { createCalDAVSyncProvider };

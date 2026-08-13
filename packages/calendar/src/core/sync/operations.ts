@@ -70,11 +70,23 @@ const createStaleReasonCounts = (): StaleReasonCounts => ({
 
 const getMappingSyncEventId = (mapping: EventMapping): string => mapping.syncEventId;
 
+/*
+ * A range that does not end after it starts covers no interval, so a half-open interval
+ * test would place it outside every window — including the one it starts on. Window
+ * membership must not depend on whether a particular destination happens to widen the
+ * range before reconciliation runs, so a degenerate range is judged by the one instant it
+ * names: the start the source states outright.
+ */
 const overlapsWindow = (
   value: Pick<EventMapping, "startTime" | "endTime">,
   start: Date,
   end: Date,
-): boolean => value.endTime > start && value.startTime < end;
+): boolean => {
+  if (value.endTime <= value.startTime) {
+    return value.startTime >= start && value.startTime < end;
+  }
+  return value.endTime > start && value.startTime < end;
+};
 
 const getSourceAuthoritativeWindow = (
   scope: ReconciliationScope,
