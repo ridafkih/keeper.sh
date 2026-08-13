@@ -3,6 +3,7 @@ import type { SourceIngestionPlan, SyncWindow } from "../../../core/sync/sync-ra
 import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import { isKeeperEvent } from "../../../core/events/identity";
+import { overlapsTimeWindow } from "../../../core/events/time-range";
 import { CalDAVClient } from "../shared/client";
 import { parseICalCalendarsToRemoteEvents } from "../shared/ics";
 
@@ -22,15 +23,15 @@ interface CalDAVSourceFetcher {
 
 /*
  * Recurring masters are kept regardless of their own start/end: the CalDAV
- * time-range filter already returned their in-window occurrences. Non-recurring
- * events use the same overlap test the rest of the pipeline uses, so a boundary
+ * time-range filter already returned their in-window occurrences. Non-recurring events
+ * go through the one shared window predicate every other layer applies, so a boundary
  * event is treated identically wherever the window is applied.
  */
 const isCalDAVEventInSyncWindow = (
   event: { endTime: Date; recurrenceRule?: unknown; startTime: Date },
   syncWindow: SyncWindow,
 ): boolean => Boolean(event.recurrenceRule)
-  || event.endTime > syncWindow.timeMin && event.startTime < syncWindow.timeMax;
+  || overlapsTimeWindow(event, syncWindow.timeMin, syncWindow.timeMax);
 
 const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSourceFetcher => {
   const client = new CalDAVClient({

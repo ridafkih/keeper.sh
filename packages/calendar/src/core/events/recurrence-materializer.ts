@@ -11,6 +11,7 @@ import {
   addIcsDuration,
   getIcsDurationNominalMilliseconds,
 } from "../../ics/utils/recurrence-duration";
+import { overlapsTimeWindow } from "./time-range";
 import { MS_PER_DAY } from "@keeper.sh/constants";
 
 interface RecurrenceMaterializationWindow {
@@ -135,7 +136,7 @@ const assertValidWindow = (window: RecurrenceMaterializationWindow): void => {
 const overlapsWindow = (
   event: Pick<SyncableEvent, "startTime" | "endTime">,
   window: RecurrenceMaterializationWindow,
-): boolean => event.endTime > window.start && event.startTime < window.end;
+): boolean => overlapsTimeWindow(event, window.start, window.end);
 
 const toRecurrenceWallTime = (date: Date, timeZone: string | undefined): Date => {
   if (!timeZone) {

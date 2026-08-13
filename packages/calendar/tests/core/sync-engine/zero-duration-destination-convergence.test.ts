@@ -28,6 +28,13 @@ const WIDE_SCOPE = {
   },
 };
 
+const toAvailability = (isFree: boolean): "busy" | "free" => {
+  if (isFree) {
+    return "free";
+  }
+  return "busy";
+};
+
 const buildEvent = (
   overrides: Partial<MaterializedSyncableEvent>,
 ): MaterializedSyncableEvent => ({
@@ -91,7 +98,7 @@ const createGoogleHarness = (options: HarnessOptions): Harness => {
       if (!startTime || !endTime) {
         return [];
       }
-      const availability = event.transparency === "transparent" ? "free" as const : "busy" as const;
+      const availability = toAvailability(event.transparency === "transparent");
       return [{
         deleteId: event.id,
         editableAvailability: availability,
@@ -193,7 +200,7 @@ const createOutlookHarness = (options: HarnessOptions): Harness => {
       if (!startTime || !endTime) {
         return [];
       }
-      const availability = event.showAs === "free" ? "free" as const : "busy" as const;
+      const availability = toAvailability(event.showAs === "free");
       return [{
         deleteId: event.id,
         editableAvailability: availability,

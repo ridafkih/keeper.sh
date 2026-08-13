@@ -3,6 +3,7 @@ import type { SyncWindow } from "../sync/sync-range";
 import type { ExistingSourceEventState } from "./event-diff";
 import { buildSourceEventInstanceKey } from "./event-instance";
 import { materializeRecurrenceEvents } from "../events/recurrence-materializer";
+import { overlapsTimeWindow } from "../events/time-range";
 
 interface SourceEventsInWindowResult {
   events: SourceEvent[];
@@ -21,7 +22,7 @@ interface SourceSyncTokenAction {
 
 const isSourceEventInWindow = (event: SourceEvent, syncWindow: SyncWindow): boolean => {
   if (!event.recurrenceRule || event.recurrenceId) {
-    return event.endTime > syncWindow.timeMin && event.startTime < syncWindow.timeMax;
+    return overlapsTimeWindow(event, syncWindow.timeMin, syncWindow.timeMax);
   }
 
   let isOverBudget = false;

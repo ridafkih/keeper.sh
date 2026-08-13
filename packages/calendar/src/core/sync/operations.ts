@@ -8,6 +8,7 @@ import {
   createEditableEventContentHash,
   createSyncEventContentHash,
 } from "../events/content-hash";
+import { overlapsTimeWindow } from "../events/time-range";
 import type { SyncWindow } from "./sync-range";
 
 interface ReconciliationScope {
@@ -70,24 +71,6 @@ const createStaleReasonCounts = (): StaleReasonCounts => ({
 
 const getMappingSyncEventId = (mapping: EventMapping): string => mapping.syncEventId;
 
-/*
- * A range that does not end after it starts covers no interval, so a half-open interval
- * test would place it outside every window — including the one it starts on. Window
- * membership must not depend on whether a particular destination happens to widen the
- * range before reconciliation runs, so a degenerate range is judged by the one instant it
- * names: the start the source states outright.
- */
-const overlapsWindow = (
-  value: Pick<EventMapping, "startTime" | "endTime">,
-  start: Date,
-  end: Date,
-): boolean => {
-  if (value.endTime <= value.startTime) {
-    return value.startTime >= start && value.startTime < end;
-  }
-  return value.endTime > start && value.startTime < end;
-};
-
 const getSourceAuthoritativeWindow = (
   scope: ReconciliationScope,
   sourceCalendarId: string | null,
@@ -110,7 +93,7 @@ const isInsideSourceAuthoritativeWindow = (
   scope: ReconciliationScope,
 ): boolean => {
   const sourceWindow = getSourceAuthoritativeWindow(scope, sourceCalendarId);
-  return sourceWindow !== null && overlapsWindow(
+  return sourceWindow !== null && overlapsTimeWindow(
     value,
     sourceWindow.timeMin,
     sourceWindow.timeMax,
@@ -468,7 +451,7 @@ const buildRemoveOperations = (
      * itself is retained in Keeper's own store, so retiring the mirror narrows scope
      * rather than losing data.
      */
-    const outsideCleanupWindow = !overlapsWindow(
+    const outsideCleanupWindow = !overlapsTimeWindow(
       mapping,
       scope.requestedWindow.timeMin,
       scope.requestedWindow.timeMax,
@@ -510,7 +493,7 @@ const buildRemoveOperations = (
       continue;
     }
 
-    if (!scope.authoritativeWindow || !overlapsWindow(
+    if (!scope.authoritativeWindow || !overlapsTimeWindow(
       remoteEvent,
       scope.authoritativeWindow.timeMin,
       scope.authoritativeWindow.timeMax,

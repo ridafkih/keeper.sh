@@ -42,9 +42,29 @@ const isEmptyTimeRange =({ endTime, startTime }: EventTimeRange): boolean =>
 const isInvertedTimeRange = ({ endTime, startTime }: EventTimeRange): boolean =>
   endTime.getTime() < startTime.getTime();
 
+/*
+ * A range that does not end after it starts covers no interval, so a half-open overlap
+ * test would place it outside every window — including the one it starts on. Window
+ * membership must not depend on whether a particular layer happens to widen the range
+ * first, so a degenerate range is judged by the one instant it names: the start the
+ * source states outright. Every layer that applies a sync window uses this predicate, so
+ * an event that survives ingest also survives materialization and reconciliation.
+ */
+const overlapsTimeWindow = (
+  { endTime, startTime }: EventTimeRange,
+  windowStart: Date,
+  windowEnd: Date,
+): boolean => {
+  if (endTime.getTime() <= startTime.getTime()) {
+    return startTime >= windowStart && startTime < windowEnd;
+  }
+  return endTime > windowStart && startTime < windowEnd;
+};
+
 export {
   isEmptyTimeRange,
   isInvertedTimeRange,
+  overlapsTimeWindow,
   POINT_IN_TIME_DURATION_MS,
   resolvePointInTimeRange,
   resolveWholeDayTimeRange,
