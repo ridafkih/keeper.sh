@@ -22,6 +22,75 @@ import type { CalendarSyncProvider, PendingChanges } from "./types";
  */
 const OPERATION_ERROR_SAMPLE_SIZE = 20;
 
+/*
+ * The duration_ms field has always measured only the reconcile call, which starts
+ * after the local and remote reads have completed. Every phase below is timed
+ * separately so the wall-time of a sync can be attributed instead of guessed, and
+ * unattributed carries whatever the named phases do not account for.
+ */
+const SYNC_PHASES = [
+  "read_state",
+  "currency_check",
+  "compute_operations",
+  "provider_push",
+  "provider_delete",
+  "checkpoint_flush",
+  "invalidation_check",
+  "mapping_flush",
+] as const;
+
+type SyncPhase = (typeof SYNC_PHASES)[number];
+
+const roundDuration = (durationMs: number): number => Math.round(durationMs * 100) / 100;
+
+const createPhaseTimer = () => {
+  const totals = new Map<SyncPhase, number>();
+
+  const record = (phase: SyncPhase, startedAt: number): void => {
+    totals.set(phase, (totals.get(phase) ?? 0) + (performance.now() - startedAt));
+  };
+
+  const measure = async <TResult>(phase: SyncPhase, run: () => Promise<TResult>): Promise<TResult> => {
+    const startedAt = performance.now();
+    try {
+      return await run();
+    } finally {
+      record(phase, startedAt);
+    }
+  };
+
+  const measureSync = <TResult>(phase: SyncPhase, run: () => TResult): TResult => {
+    const startedAt = performance.now();
+    try {
+      return run();
+    } finally {
+      record(phase, startedAt);
+    }
+  };
+
+  const appendFields = (event: Record<string, unknown>, totalDurationMs: number): void => {
+    let attributed = 0;
+    for (const phase of SYNC_PHASES) {
+      const phaseDurationMs = totals.get(phase) ?? 0;
+      attributed += phaseDurationMs;
+      event[`sync.phase.${phase}.duration_ms`] = roundDuration(phaseDurationMs);
+    }
+    event["sync.reconcile.duration_ms"] = roundDuration(totalDurationMs);
+    event["sync.phase.unattributed.duration_ms"] = roundDuration(totalDurationMs - attributed);
+  };
+
+  return { appendFields, measure, measureSync };
+};
+
+const createTimedProvider = (
+  provider: CalendarSyncProvider,
+  timer: ReturnType<typeof createPhaseTimer>,
+): CalendarSyncProvider => ({
+  deleteEvents: (eventIds) => timer.measure("provider_delete", () => provider.deleteEvents(eventIds)),
+  listRemoteEvents: (options) => provider.listRemoteEvents(options),
+  pushEvents: (events) => timer.measure("provider_push", () => provider.pushEvents(events)),
+});
+
 const resolveOutcome = (superseded: boolean, invalidated: boolean): string => {
   if (invalidated) {
     return "invalidated";
@@ -569,6 +638,12 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
   };
 
   const startTime = Date.now();
+  const reconcileStartedAt = performance.now();
+  const timer = createPhaseTimer();
+  const timedProvider = createTimedProvider(provider, timer);
+  const timedIsCurrent = () => timer.measure("currency_check", isCurrent);
+  const timedIsInvalidated = () =>
+    timer.measure("invalidation_check", async () => await isInvalidated?.() ?? false);
   let flushed = false;
   let checkpointInvalidated = false;
 
@@ -590,13 +665,13 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
 
   try {
     emitProgress("fetching", 0, 0);
-    const state = await readState();
+    const state = await timer.measure("read_state", readState);
 
     wideEvent["local_events.count"] = state.localEvents.length;
     wideEvent["existing_mappings.count"] = state.existingMappings.length;
     wideEvent["remote_events.count"] = state.remoteEvents.length;
 
-    const stillCurrent = await isCurrent();
+    const stillCurrent = await timedIsCurrent();
     if (!stillCurrent) {
       wideEvent["outcome"] = "superseded";
       wideEvent["flushed"] = false;
@@ -609,12 +684,12 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       operations,
       staleMappingIds,
       staleReasonCounts,
-    } = computeSyncOperations(
+    } = timer.measureSync("compute_operations", () => computeSyncOperations(
       state.localEvents,
       state.existingMappings,
       state.remoteEvents,
       reconciliationScope,
-    );
+    ));
 
     const addCount = operations.filter((op) => op.type === "add" || op.type === "replace").length;
     const removeCount = operations.filter((op) => op.type === "remove" || op.type === "replace").length;
@@ -649,18 +724,18 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       operations,
       state.existingMappings,
       calendarId,
-      provider,
-      isCurrent,
+      timedProvider,
+      timedIsCurrent,
       (processed, total) => {
         emitProgress("processing", state.localEvents.length, state.remoteEvents.length, { current: processed, total });
       },
       async (changes) => {
-        const invalidated = await isInvalidated?.() ?? false;
+        const invalidated = await timedIsInvalidated();
         if (invalidated) {
           checkpointInvalidated = true;
           return false;
         }
-        await flush(changes);
+        await timer.measure("checkpoint_flush", () => flush(changes));
         flushed = true;
         return true;
       },
@@ -679,10 +754,13 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       wideEvent["operation_errors.truncated"] = outcome.errors.length > OPERATION_ERROR_SAMPLE_SIZE;
     }
 
-    const invalidated = checkpointInvalidated || outcome.checkpointRejected || (await isInvalidated?.() ?? false);
+    const invalidated = checkpointInvalidated || outcome.checkpointRejected || (await timedIsInvalidated());
 
     if (!invalidated && mappingUpdates.length > 0) {
-      await flush({ deletes: [], inserts: [], updates: mappingUpdates });
+      await timer.measure(
+        "mapping_flush",
+        () => flush({ deletes: [], inserts: [], updates: mappingUpdates }),
+      );
       flushed = true;
     }
 
@@ -708,6 +786,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     throw error;
   } finally {
     wideEvent["duration_ms"] = Date.now() - startTime;
+    timer.appendFields(wideEvent, performance.now() - reconcileStartedAt);
     onSyncEvent?.(wideEvent);
   }
 };

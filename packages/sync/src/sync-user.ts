@@ -28,6 +28,8 @@ import {
   calendarAccountsTable,
   calendarsTable,
 } from "@keeper.sh/database/schema";
+import { openDatabasePoolWindow } from "@keeper.sh/database";
+import type { DatabasePoolWindow } from "@keeper.sh/database";
 import { and, arrayContains, eq, inArray } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
@@ -123,6 +125,14 @@ interface DestinationReconciliationContext {
 
 const roundDuration = (durationMs: number): number =>
   Math.round(durationMs * 100) / 100;
+
+const measurePhase = async <TResult>(
+  run: () => Promise<TResult>,
+): Promise<{ durationMs: number; value: TResult }> => {
+  const startedAt = performance.now();
+  const value = await run();
+  return { durationMs: roundDuration(performance.now() - startedAt), value };
+};
 
 interface StoredSourceCoverage {
   ingestFutureRange: string | null;
@@ -343,6 +353,39 @@ const createDestinationReconciliationWideEventFields = (
   }),
 });
 
+interface DestinationAttemptTimings {
+  attemptStartedAt: number;
+  destinationLookupDurationMs: number;
+  lockAcquireDurationMs: number;
+  providerResolveDurationMs: number;
+  readPoolWindow: DatabasePoolWindow;
+  sourceAuthorityDurationMs: number;
+}
+
+/*
+ * The duration_ms field on a sync event covers the reconcile call alone, which
+ * begins only after the lock, the provider resolve and both reconciliation reads
+ * have finished. sync.attempt.duration_ms is the unambiguous total for one
+ * destination attempt, and the phase fields beside it say where that total went.
+ */
+const createDestinationAttemptWideEventFields = (
+  timings: DestinationAttemptTimings,
+): Record<string, number> => {
+  const pool = timings.readPoolWindow();
+  return {
+    "database.pool.in_flight": pool.inFlight,
+    "database.queries.count": pool.queryCount,
+    "database.queries.duration_ms": pool.queryDurationMs,
+    "database.queries.failed_count": pool.failedQueryCount,
+    "database.queries.queued_count": pool.queuedQueryCount,
+    "sync.attempt.duration_ms": roundDuration(performance.now() - timings.attemptStartedAt),
+    "sync.phase.destination_lookup.duration_ms": timings.destinationLookupDurationMs,
+    "sync.phase.lock_acquire.duration_ms": timings.lockAcquireDurationMs,
+    "sync.phase.provider_resolve.duration_ms": timings.providerResolveDurationMs,
+    "sync.phase.source_authority.duration_ms": timings.sourceAuthorityDurationMs,
+  };
+};
+
 const readDestinationReconciliationState = async (
   readRemoteEvents: () => Promise<RemoteEvent[]>,
   readLocalState: () => Promise<DestinationLocalState>,
@@ -486,11 +529,14 @@ const syncDestinationsForUser = async (
       break;
     }
 
-    const lockResult = await syncLock.acquire(
+    const attemptStartedAt = performance.now();
+    const readPoolWindow = openDatabasePoolWindow();
+    const lockAcquire = await measurePhase(() => syncLock.acquire(
       destinationCandidate.calendarId,
       config.abortSignal,
       createMappingMutationLockId(userId),
-    );
+    ));
+    const lockResult = lockAcquire.value;
     if (!lockResult.acquired) {
       continue;
     }
@@ -500,18 +546,19 @@ const syncDestinationsForUser = async (
     let attemptedDestination: DestinationAttempt | null = null;
 
     try {
-      const currentDestination = await getDestinationAttempt(
+      const destinationLookup = await measurePhase(() => getDestinationAttempt(
         database,
         userId,
         destinationCandidate.calendarId,
-      );
+      ));
+      const currentDestination = destinationLookup.value;
       if (!currentDestination || !isDestinationAttemptEligible(currentDestination)) {
         continue;
       }
       const destination = currentDestination;
       attemptedDestination = destination;
 
-      const syncProvider = await resolveSyncProvider({
+      const providerResolve = await measurePhase(() => resolveSyncProvider({
         database,
         provider: destination.provider,
         calendarId: destination.calendarId,
@@ -522,7 +569,8 @@ const syncDestinationsForUser = async (
         refreshLockStore: config.refreshLockStore,
         rateLimiter,
         signal: config.abortSignal,
-      });
+      }));
+      const syncProvider = providerResolve.value;
 
       if (!syncProvider) {
         continue;
@@ -530,6 +578,7 @@ const syncDestinationsForUser = async (
 
       const providerRef = syncProvider;
 
+      const sourceAuthorityStartedAt = performance.now();
       const sourceCalendarIds = await getMappedSourceCalendarIds(
         database,
         destination.calendarId,
@@ -549,6 +598,7 @@ const syncDestinationsForUser = async (
         sourceCalendarIds,
         requestedWindow,
       );
+      const sourceAuthorityDurationMs = roundDuration(performance.now() - sourceAuthorityStartedAt);
       let authoritativeSourceWindows = initialSourceAuthority.sourceWindows;
       let authoritativeWindow = initialSourceAuthority.aggregateWindow;
       let eventReadDiagnostics: DestinationEventReadDiagnostics = {
@@ -683,6 +733,14 @@ const syncDestinationsForUser = async (
           const enrichedEvent = {
             ...event,
             ...reconciliationWideEventFields,
+            ...createDestinationAttemptWideEventFields({
+              attemptStartedAt,
+              destinationLookupDurationMs: destinationLookup.durationMs,
+              lockAcquireDurationMs: lockAcquire.durationMs,
+              providerResolveDurationMs: providerResolve.durationMs,
+              readPoolWindow,
+              sourceAuthorityDurationMs,
+            }),
             "provider.name": destination.provider,
             "provider.account_id": destination.accountId,
             "provider.calendar_id": destination.calendarId,
@@ -755,6 +813,7 @@ const syncDestinationsForUser = async (
 };
 
 export {
+  createDestinationAttemptWideEventFields,
   createDestinationReconciliationScope,
   createDestinationReconciliationWideEventFields,
   OVER_BUDGET_SERIES_UID_SAMPLE_SIZE,
