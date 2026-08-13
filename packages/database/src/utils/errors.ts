@@ -1,4 +1,5 @@
 const SQLSTATE_PATTERN = /^[0-9A-Z]{5}$/;
+// Postgres SQLSTATE classes, Appendix A; a five-character code outside these is not a SQLSTATE.
 const SQLSTATE_CLASSES = new Set([
   "00", "01", "02", "03", "07", "08", "09", "0A", "0B", "0F", "0K", "0L", "0N",
   "0P", "0S", "0T", "0U", "0V", "0W", "0X", "0Y", "0Z", "10", "20", "21", "22",
@@ -7,8 +8,10 @@ const SQLSTATE_CLASSES = new Set([
   "45", "46", "53", "54", "55", "57", "58", "F0", "HV", "HW", "HZ", "P0", "XX",
 ]);
 const DRIVER_CODE_PREFIX = "ERR_POSTGRES_";
+// SQLSTATE 57014 (query_canceled) — Postgres raises this when statement_timeout fires.
 const STATEMENT_TIMEOUT_SQLSTATE = "57014";
 const UNCLASSIFIED_DATABASE_SLUG = "db-query-failed";
+// Bun's code for a backend terminated mid-flight (idle-in-transaction timeout, shutdown, drop).
 const CONNECTION_TERMINATED_CODE = "ERR_POSTGRES_EXPECTED_REQUEST";
 const CONNECTION_UNAVAILABLE_CODES = new Set([
   "ERR_POSTGRES_CONNECTION_CLOSED",
@@ -18,6 +21,7 @@ const CONNECTION_UNAVAILABLE_CODES = new Set([
   "ERR_POSTGRES_TLS_NOT_AVAILABLE",
   "ERR_POSTGRES_TLS_UPGRADE_FAILED",
 ]);
+// Class 08 connection exception, class 28 authentication, 53300 too_many_connections, 57Pxx server shutdown.
 const CONNECTION_UNAVAILABLE_SQLSTATES = new Set([
   "08000",
   "08001",

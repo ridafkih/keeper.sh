@@ -25,6 +25,7 @@ const isBackoffEligibleError = (error: unknown): boolean => {
     return true;
   }
 
+  // A query error's message inlines the SQL and its bound parameters, so customer data can match the patterns below.
   if (isDatabaseError(error)) {
     return false;
   }

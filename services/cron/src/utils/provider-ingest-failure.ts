@@ -38,6 +38,7 @@ const resolveMissingCalendarFailure = (error: unknown): MissingCalendarFailure |
     return null;
   }
 
+  // DrizzleQueryError.message inlines the SQL and every bound parameter, so a UID holding "404" satisfies the substring test below.
   if (!(error instanceof Error) || isDatabaseError(error) || requiresReauthentication(error)) {
     return null;
   }

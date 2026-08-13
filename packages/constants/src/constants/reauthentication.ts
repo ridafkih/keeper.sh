@@ -3,6 +3,7 @@ const REAUTHENTICATION_SOURCE_CREDENTIALS = "source-credentials";
 const REAUTHENTICATION_TOKEN_REFRESH = "token-refresh";
 const REAUTHENTICATION_DESTINATION_GRANT = "destination-grant";
 
+// A source pull proves only the source credential; only a fresh grant clears a grant-raised demand.
 const INGEST_UNADJUDICABLE_REAUTHENTICATION_SOURCES = [REAUTHENTICATION_DESTINATION_GRANT];
 
 export {

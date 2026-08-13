@@ -66,6 +66,7 @@ const collectNestedCandidates = (value: Record<string, unknown>): unknown[] => {
 };
 
 const isCalDAVAuthenticationError = (error: unknown): boolean => {
+  // A query error's message inlines the SQL and its bound parameters, so customer data can match AUTH_ERROR_PATTERNS.
   if (isDatabaseError(error)) {
     return false;
   }

@@ -69,6 +69,7 @@ const POST = withWideEvent(
         return databaseResponse;
       }
 
+      // Fixed message: an arbitrary error's message here may carry SQL text and bound parameters.
       return ErrorResponse.internal(SOURCE_CREATE_FAILED_MESSAGE).toResponse();
     }
   }),

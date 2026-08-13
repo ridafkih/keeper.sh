@@ -22,6 +22,7 @@ const router = new Bun.FileSystemRouter({
 await entry({
   main: () => {
     const server = Bun.serve({
+      // Bun's dev error page renders the thrown error, leaking query text and bound parameters.
       development: false,
       port: env.MCP_PORT,
       fetch: async (request) => {
