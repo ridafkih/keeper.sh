@@ -7,6 +7,8 @@ const CONNECTION_UNAVAILABLE_CODES = new Set([
   "ERR_POSTGRES_CONNECTION_TIMEOUT",
   "ERR_POSTGRES_IDLE_TIMEOUT",
   "ERR_POSTGRES_LIFETIME_TIMEOUT",
+  "ERR_POSTGRES_TLS_NOT_AVAILABLE",
+  "ERR_POSTGRES_TLS_UPGRADE_FAILED",
 ]);
 const CONNECTION_UNAVAILABLE_SQLSTATES = new Set([
   "08000",
@@ -199,6 +201,9 @@ const getDatabaseErrorDetails = (error: unknown): DatabaseErrorDetails | null =>
   return details;
 };
 
+const isDatabaseError = (error: unknown): boolean =>
+  readErrorChain(error).some((link) => isDatabaseErrorShape(link));
+
 const classifyDatabaseError = (error: unknown): DatabaseErrorClassification | null => {
   const source = classifyErrorChain(readErrorChain(error));
   if (source === null) {
@@ -207,5 +212,5 @@ const classifyDatabaseError = (error: unknown): DatabaseErrorClassification | nu
   return { slug: source.slug, sqlState: source.sqlState };
 };
 
-export { classifyDatabaseError, getDatabaseErrorDetails };
+export { classifyDatabaseError, getDatabaseErrorDetails, isDatabaseError };
 export type { DatabaseErrorClassification, DatabaseErrorDetails };
