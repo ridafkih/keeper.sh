@@ -23,6 +23,8 @@ import { openCheckout, openCustomerPortal } from "@/utils/checkout";
 import { getPlans } from "@/config/plans";
 import type { PlanConfig } from "@/config/plans";
 import { resolveUpgradeRedirect } from "@/lib/route-access-guards";
+import { resolveUpgradeMode } from "@/lib/upgrade-mode";
+import type { UpgradeMode } from "@/lib/upgrade-mode";
 import type { PublicRuntimeConfig } from "@/lib/runtime-config";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/upgrade/")({
@@ -86,13 +88,6 @@ function UpgradePage() {
   };
   const [isPending, startTransition] = useTransition();
 
-  const currentPlan = subscription?.plan ?? "free";
-  const currentInterval = subscription?.interval;
-  const isCurrent = currentPlan === "pro";
-  const isCurrentInterval =
-    (currentInterval === "year" && yearly) ||
-    (currentInterval === "month" && !yearly);
-
   const price = yearly ? (proPlan.yearlyPrice / 12).toFixed(2) : proPlan.monthlyPrice.toFixed(2);
   const period = yearly ? "per month, billed annually" : "per month";
   const productId = yearly ? proPlan.yearlyProductId : proPlan.monthlyProductId;
@@ -121,7 +116,7 @@ function UpgradePage() {
   };
 
   const busy = isLoading || isPending;
-  const mode = !isCurrent ? "upgrade" : isCurrentInterval ? "manage" : "switch-interval";
+  const mode = resolveUpgradeMode(subscription, yearly);
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -167,7 +162,7 @@ type UpgradeActionProps = {
   isLoading: boolean;
   onUpgrade: () => void;
   onManage: () => void;
-  mode: "upgrade" | "manage" | "switch-interval";
+  mode: UpgradeMode;
 };
 
 function UpgradeAction({ mode, isLoading, onUpgrade, onManage }: UpgradeActionProps) {

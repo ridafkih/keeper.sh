@@ -37,7 +37,7 @@ describe("classifyDatabaseError sqlstate boundaries", () => {
     const runs = Array.from({ length: 4 }, () => classifyDatabaseError(error));
 
     expect(runs).toEqual(Array.from({ length: 4 }, () => ({
-      slug: "db-authentication-failed",
+      slug: "db-connection-unavailable",
       sqlState: "28P01",
     })));
   });

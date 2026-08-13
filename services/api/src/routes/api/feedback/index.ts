@@ -4,6 +4,7 @@ import { user as userTable } from "@keeper.sh/database/auth-schema";
 import { eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
+import { labelFailureResponse } from "@/utils/error-labelling";
 import { database, resend, feedbackEmail } from "@/context";
 
 const TEMPLATE_ID = {
@@ -55,7 +56,12 @@ const POST = withWideEvent(
       });
 
       return Response.json({ success: true });
-    } catch {
+    } catch (error) {
+      const databaseResponse = labelFailureResponse(error, { slug: "invalid-request-body" });
+      if (databaseResponse) {
+        return databaseResponse;
+      }
+
       return ErrorResponse.badRequest("Invalid feedback request.").toResponse();
     }
   }),

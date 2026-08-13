@@ -1,9 +1,12 @@
+import { isDatabaseError } from "@keeper.sh/database";
+
 const AUTH_ERROR_STATUS_CODES = new Set([401]);
 
 const AUTH_ERROR_PATTERNS = [
   /\binvalid credentials\b/i,
   /\b(?:401|authentication)\s+unauthorized\b/i,
   /\bauthentication required\b/i,
+  /\bauthentication failed\b/i,
   /\bnot authenticated\b/i,
 ];
 
@@ -98,7 +101,33 @@ const collectNestedCandidates = (value: Record<string, unknown>): unknown[] => {
   return candidates;
 };
 
+const isOpaqueToAuthClassification = (candidate: Record<string, unknown>): boolean =>
+  isDatabaseFailure(candidate)
+  || (typeof candidate.name === "string" && CALDAV_NON_AUTH_ERROR_NAMES.has(candidate.name));
+
+const namesAuthFailure = (candidate: Record<string, unknown>): boolean => {
+  if (candidate.name === CALDAV_AUTH_ERROR_NAME) {
+    return true;
+  }
+
+  if ("status" in candidate && hasAuthStatusCode(candidate.status)) {
+    return true;
+  }
+
+  if ("statusCode" in candidate && hasAuthStatusCode(candidate.statusCode)) {
+    return true;
+  }
+
+  return isCalDAVTransportCandidate(candidate)
+    && typeof candidate.message === "string"
+    && hasAuthMessage(candidate.message);
+};
+
 const isCalDAVAuthenticationError = (error: unknown): boolean => {
+  if (isDatabaseError(error)) {
+    return false;
+  }
+
   const queue: unknown[] = [error];
   const visited = new Set<unknown>();
 
@@ -115,47 +144,27 @@ const isCalDAVAuthenticationError = (error: unknown): boolean => {
       continue;
     }
 
-    if (isRecord(candidate)) {
-      if (visited.has(candidate)) {
-        continue;
-      }
-      visited.add(candidate);
-
-      if (isDatabaseFailure(candidate)) {
-        continue;
-      }
-
-      if (typeof candidate.name === "string" && CALDAV_NON_AUTH_ERROR_NAMES.has(candidate.name)) {
-        continue;
-      }
-
-      if (candidate.name === CALDAV_AUTH_ERROR_NAME) {
+    if (!isRecord(candidate)) {
+      if (candidate instanceof Error && hasAuthMessage(candidate.message)) {
         return true;
       }
-
-      if ("status" in candidate && hasAuthStatusCode(candidate.status)) {
-        return true;
-      }
-
-      if ("statusCode" in candidate && hasAuthStatusCode(candidate.statusCode)) {
-        return true;
-      }
-
-      if (
-        isCalDAVTransportCandidate(candidate)
-        && typeof candidate.message === "string"
-        && hasAuthMessage(candidate.message)
-      ) {
-        return true;
-      }
-
-      queue.push(...collectNestedCandidates(candidate));
       continue;
     }
 
-    if (candidate instanceof Error && hasAuthMessage(candidate.message)) {
+    if (visited.has(candidate)) {
+      continue;
+    }
+    visited.add(candidate);
+
+    if (isOpaqueToAuthClassification(candidate)) {
+      continue;
+    }
+
+    if (namesAuthFailure(candidate)) {
       return true;
     }
+
+    queue.push(...collectNestedCandidates(candidate));
   }
 
   return false;

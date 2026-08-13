@@ -15,7 +15,12 @@ import {
   createRequiredSourceRanges,
   createSourceIngestionPlan,
 } from "@keeper.sh/calendar";
-import { INGEST_SOURCE_TIMEOUT_MS, PROVIDER_INGEST_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
+import {
+  INGEST_SOURCE_TIMEOUT_MS,
+  INGEST_UNADJUDICABLE_REAUTHENTICATION_SOURCES,
+  PROVIDER_INGEST_REQUEST_TIMEOUT_MS,
+  REAUTHENTICATION_SOURCE_INGEST,
+} from "@keeper.sh/constants";
 import type { CalendarBackoffState, IngestionFetchEventsResult, IngestionPersistenceWork, RedisRateLimiter, RequiredSourceRanges, TokenState } from "@keeper.sh/calendar";
 import {
   createIcsSourceFetcher,
@@ -29,7 +34,7 @@ import {
   CalDAVUnreadableResourceError,
   createCalDAVSourceFetcher,
 } from "@keeper.sh/calendar/caldav";
-import { decryptPassword } from "@keeper.sh/database";
+import { decryptPassword, resolveDatabaseErrorClassification } from "@keeper.sh/database";
 import {
   calendarAccountsTable,
   calendarsTable,
@@ -48,6 +53,7 @@ import {
   resolveMissingCalendarFailure,
   shouldTreatAsProviderAuthFailure,
 } from "@/utils/provider-ingest-failure";
+import { hasErrorFlag, requiresReauthentication } from "@/utils/error-flags";
 import { resolveOAuthIngestionState } from "@/utils/oauth-ingestion-state";
 import { withAbortTimeout } from "@/utils/with-abort-timeout";
 import { createSyncLock } from "@keeper.sh/sync";
@@ -137,13 +143,8 @@ const runSourceIngest = async <TResult>(
   }
 };
 
-const hasErrorFlag = (error: unknown, key: string): boolean =>
-  error instanceof Error
-  && key in error
-  && (error as Error & Record<string, unknown>)[key] === true;
-
 const shouldApplyOAuthIngestBackoff = (error: unknown): boolean =>
-  !hasErrorFlag(error, "authRequired") && !hasErrorFlag(error, "oauthReauthRequired");
+  !requiresReauthentication(error);
 
 const recordSkippedResources = (skippedResourceCount: number, reasons: string[]): void => {
   if (skippedResourceCount === 0) {
@@ -153,7 +154,22 @@ const recordSkippedResources = (skippedResourceCount: number, reasons: string[])
   widelog.set("provider.resources_skipped_reasons", reasons.join("; "));
 };
 
+const resolveDatabaseIngestErrorSlug = (error: unknown): string | null => {
+  const databaseError = resolveDatabaseErrorClassification(error);
+  if (!databaseError) {
+    return null;
+  }
+  if (databaseError.sqlState) {
+    widelog.set("db.error_sqlstate", databaseError.sqlState);
+  }
+  return databaseError.slug;
+};
+
 const resolveIngestErrorSlug = (error: unknown): string => {
+  const databaseErrorSlug = resolveDatabaseIngestErrorSlug(error);
+  if (databaseErrorSlug) {
+    return databaseErrorSlug;
+  }
   if (error instanceof CalDAVIncompleteMultiGetError) {
     return "provider-response-incomplete";
   }
@@ -372,13 +388,114 @@ const resolveOAuthFetcher = (
   return null;
 };
 
+type ReauthenticationDemand =
+  | "credential-rejected"
+  | "authenticated"
+  | "request-rejected"
+  | "abstain";
+
+type AuthenticationRejection = Extract<
+  ReauthenticationDemand,
+  "credential-rejected" | "request-rejected"
+>;
+
+const REAUTHENTICATION_DEMAND_PRECEDENCE: ReauthenticationDemand[] = [
+  "credential-rejected",
+  "authenticated",
+  "request-rejected",
+];
+
+interface ReauthenticationDemandRecord {
+  accountId: string;
+  demand: ReauthenticationDemand;
+}
+
+interface SourceAccountContext {
+  accountId: string | null;
+  recordedDemandSource: string | null;
+}
+
+const INGEST_UNADJUDICABLE_DEMAND_SOURCES = new Set(
+  INGEST_UNADJUDICABLE_REAUTHENTICATION_SOURCES,
+);
+
+const isIngestAdjudicableDemand = (recordedDemandSource: string | null): boolean => {
+  if (recordedDemandSource === null) {
+    return true;
+  }
+  return !INGEST_UNADJUDICABLE_DEMAND_SOURCES.has(recordedDemandSource);
+};
+
+const resolveRecordedDemandSource = (needsReauthentication: boolean): string | null => {
+  if (needsReauthentication) {
+    return REAUTHENTICATION_SOURCE_INGEST;
+  }
+  return null;
+};
+
 interface IngestionSourceResult {
   eventsAdded: number;
   eventsRemoved: number;
   ingestEvents: Record<string, unknown>[];
+  reauthentication: ReauthenticationDemandRecord | null;
   shouldPush: boolean;
   userId: string;
 }
+
+const resolveReauthenticationDemands = (
+  demands: ReauthenticationDemandRecord[],
+): Map<string, boolean> => {
+  const castByAccount = new Map(
+    [...new Set(demands.map(({ accountId }) => accountId))].map((
+      accountId,
+    ): [string, Set<ReauthenticationDemand>] => [
+      accountId,
+      new Set(
+        demands
+          .filter((record) => record.accountId === accountId)
+          .map(({ demand }) => demand),
+      ),
+    ]),
+  );
+  return new Map(
+    [...castByAccount].flatMap(([accountId, cast]): [string, boolean][] => {
+      const decisive = REAUTHENTICATION_DEMAND_PRECEDENCE.find((demand) => cast.has(demand));
+      if (!decisive) {
+        return [];
+      }
+      return [[accountId, decisive !== "authenticated"]];
+    }),
+  );
+};
+
+const applyReauthenticationDemands = async (
+  demands: ReauthenticationDemandRecord[],
+  recordedDemandSources: Map<string, string | null>,
+): Promise<void> => {
+  for (const [accountId, needsReauthentication] of resolveReauthenticationDemands(demands)) {
+    const recordedDemandSource = recordedDemandSources.get(accountId) ?? null;
+    if (!needsReauthentication && !isIngestAdjudicableDemand(recordedDemandSource)) {
+      continue;
+    }
+    try {
+      await database
+        .update(calendarAccountsTable)
+        .set({
+          needsReauthentication,
+          reauthenticationSource: resolveRecordedDemandSource(needsReauthentication),
+        })
+        .where(and(
+          eq(calendarAccountsTable.id, accountId),
+          ne(calendarAccountsTable.needsReauthentication, needsReauthentication),
+        ));
+    } catch (error) {
+      widelog.errorFields(error, {
+        retriable: true,
+        slug: resolveDatabaseIngestErrorSlug(error) ?? "reauthentication-demand-write-failed",
+      });
+    }
+  }
+};
 
 interface IngestionBatchResult {
   added: number;
@@ -392,9 +509,71 @@ const createSkippedIngestionResult = (userId: string): IngestionSourceResult => 
   eventsAdded: 0,
   eventsRemoved: 0,
   ingestEvents: [],
+  reauthentication: null,
   shouldPush: false,
   userId,
 });
+
+const createRejectedIngestionResult = (
+  userId: string,
+  accountId: string,
+  demand: AuthenticationRejection,
+): IngestionSourceResult => ({
+  ...createSkippedIngestionResult(userId),
+  reauthentication: { accountId, demand },
+});
+
+const collectReauthenticationDemands = (
+  settlements: PromiseSettledResult<IngestionSourceResult>[],
+  accounts: SourceAccountContext[],
+): ReauthenticationDemandRecord[] =>
+  settlements.flatMap((settlement, index): ReauthenticationDemandRecord[] => {
+    if (settlement.status === "fulfilled" && settlement.value.reauthentication) {
+      return [settlement.value.reauthentication];
+    }
+    const accountId = accounts[index]?.accountId;
+    if (!accountId) {
+      return [];
+    }
+    return [{ accountId, demand: "abstain" }];
+  });
+
+const collectRecordedDemandSources = (
+  accounts: SourceAccountContext[],
+): Map<string, string | null> =>
+  new Map(
+    accounts.flatMap(({ accountId, recordedDemandSource }): [string, string | null][] => {
+      if (!accountId) {
+        return [];
+      }
+      return [[accountId, recordedDemandSource]];
+    }),
+  );
+
+const summariseIngestionSettlements = async (
+  settlements: PromiseSettledResult<IngestionSourceResult>[],
+  accounts: SourceAccountContext[],
+): Promise<IngestionBatchResult> => {
+  const results = settlements
+    .filter((settlement): settlement is PromiseFulfilledResult<IngestionSourceResult> =>
+      settlement.status === "fulfilled")
+    .map(({ value }) => value);
+
+  await applyReauthenticationDemands(
+    collectReauthenticationDemands(settlements, accounts),
+    collectRecordedDemandSources(accounts),
+  );
+
+  return {
+    added: results.reduce((total, { eventsAdded }) => total + eventsAdded, 0),
+    affectedUserIds: [
+      ...new Set(results.filter(({ shouldPush }) => shouldPush).map(({ userId }) => userId)),
+    ],
+    errors: settlements.length - results.length,
+    ingestEvents: results.flatMap(({ ingestEvents }) => ingestEvents),
+    removed: results.reduce((total, { eventsRemoved }) => total + eventsRemoved, 0),
+  };
+};
 
 const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
   const oauthSources = await database
@@ -402,6 +581,7 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
       accountId: calendarAccountsTable.id,
       calendarId: calendarsTable.id,
       provider: calendarAccountsTable.provider,
+      reauthenticationSource: calendarAccountsTable.reauthenticationSource,
       externalCalendarId: calendarsTable.externalCalendarId,
       syncToken: calendarsTable.syncToken,
       oauthCredentialId: oauthCredentialsTable.id,
@@ -424,12 +604,6 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
         eq(calendarsTable.disabled, false),
       ),
     );
-
-  let added = 0;
-  let removed = 0;
-  let errors = 0;
-  const allIngestEvents: Record<string, unknown>[] = [];
-  const affectedUserIds = new Set<string>();
 
   const settlements = await allSettledWithConcurrency(
     oauthSources.map((source) => () =>
@@ -548,6 +722,10 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
                   eventsAdded: ingestionResult.eventsAdded,
                   eventsRemoved: ingestionResult.eventsRemoved,
                   ingestEvents,
+                  reauthentication: {
+                    accountId: currentSource.accountId,
+                    demand: "authenticated" as const,
+                  },
                   shouldPush: ingestionState.authorityChanged
                     || ingestionResult.eventsAdded > 0
                     || ingestionResult.eventsRemoved > 0,
@@ -570,32 +748,22 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
 
             widelog.set("outcome", "error");
 
+            if (hasErrorFlag(error, "authRequired")) {
+              widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
+
+              return createRejectedIngestionResult(source.userId, source.accountId, "request-rejected");
+            }
+
+            if (hasErrorFlag(error, "oauthReauthRequired")) {
+              widelog.errorFields(error, { slug: "provider-token-refresh-failed", retriable: false, requiresReauth: true });
+
+              return createRejectedIngestionResult(source.userId, source.accountId, "credential-rejected");
+            }
+
             const missingCalendarFailure = resolveMissingCalendarFailure(error);
             if (missingCalendarFailure) {
               widelog.errorFields(error, missingCalendarFailure);
               throw error;
-            }
-
-            if (error instanceof Error && "authRequired" in error && error.authRequired === true) {
-              widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
-
-              await database
-                .update(calendarAccountsTable)
-                .set({ needsReauthentication: true })
-                .where(eq(calendarAccountsTable.id, source.accountId));
-
-              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [], shouldPush: false, userId: source.userId };
-            }
-
-            if (error instanceof Error && "oauthReauthRequired" in error && error.oauthReauthRequired === true) {
-              widelog.errorFields(error, { slug: "provider-token-refresh-failed", retriable: false, requiresReauth: true });
-
-              await database
-                .update(calendarAccountsTable)
-                .set({ needsReauthentication: true })
-                .where(eq(calendarAccountsTable.id, source.accountId));
-
-              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [], shouldPush: false, userId: source.userId };
             }
 
             widelog.errorFields(error, {
@@ -612,20 +780,13 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
     { concurrency: SOURCE_CONCURRENCY },
   );
 
-  for (const settlement of settlements) {
-    if (settlement.status === "fulfilled") {
-      added += settlement.value.eventsAdded;
-      removed += settlement.value.eventsRemoved;
-      allIngestEvents.push(...settlement.value.ingestEvents);
-      if (settlement.value.shouldPush) {
-        affectedUserIds.add(settlement.value.userId);
-      }
-    } else {
-      errors += 1;
-    }
-  }
-
-  return { added, affectedUserIds: [...affectedUserIds], removed, errors, ingestEvents: allIngestEvents };
+  return summariseIngestionSettlements(
+    settlements,
+    oauthSources.map(({ accountId, reauthenticationSource }) => ({
+      accountId,
+      recordedDemandSource: reauthenticationSource,
+    })),
+  );
 };
 
 const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
@@ -641,6 +802,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
       calendarId: calendarsTable.id,
       calendarUrl: calendarsTable.calendarUrl,
       provider: calendarAccountsTable.provider,
+      reauthenticationSource: calendarAccountsTable.reauthenticationSource,
       username: caldavCredentialsTable.username,
       encryptedPassword: caldavCredentialsTable.encryptedPassword,
       serverUrl: caldavCredentialsTable.serverUrl,
@@ -658,12 +820,6 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
         eq(calendarsTable.disabled, false),
       ),
     );
-
-  let added = 0;
-  let removed = 0;
-  let errors = 0;
-  const allIngestEvents: Record<string, unknown>[] = [];
-  const affectedUserIds = new Set<string>();
 
   const settlements = await allSettledWithConcurrency(
     caldavSources.map((source) => () =>
@@ -747,6 +903,10 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                   eventsAdded: ingestionResult.eventsAdded,
                   eventsRemoved: ingestionResult.eventsRemoved,
                   ingestEvents,
+                  reauthentication: {
+                    accountId: source.accountId,
+                    demand: "authenticated" as const,
+                  },
                   shouldPush: hasSourceAuthorityChanged(currentSource, ranges)
                     || ingestionResult.eventsAdded > 0
                     || ingestionResult.eventsRemoved > 0,
@@ -772,12 +932,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
             if (shouldTreatAsProviderAuthFailure(error)) {
               widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
 
-              await database
-                .update(calendarAccountsTable)
-                .set({ needsReauthentication: true })
-                .where(eq(calendarAccountsTable.id, source.accountId));
-
-              return { eventsAdded: 0, eventsRemoved: 0, ingestEvents: [], shouldPush: false, userId: source.userId };
+              return createRejectedIngestionResult(source.userId, source.accountId, "request-rejected");
             }
 
             const missingCalendarFailure = resolveMissingCalendarFailure(error);
@@ -800,20 +955,13 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
     { concurrency: SOURCE_CONCURRENCY },
   );
 
-  for (const settlement of settlements) {
-    if (settlement.status === "fulfilled") {
-      added += settlement.value.eventsAdded;
-      removed += settlement.value.eventsRemoved;
-      allIngestEvents.push(...settlement.value.ingestEvents);
-      if (settlement.value.shouldPush) {
-        affectedUserIds.add(settlement.value.userId);
-      }
-    } else {
-      errors += 1;
-    }
-  }
-
-  return { added, affectedUserIds: [...affectedUserIds], removed, errors, ingestEvents: allIngestEvents };
+  return summariseIngestionSettlements(
+    settlements,
+    caldavSources.map(({ accountId, reauthenticationSource }) => ({
+      accountId,
+      recordedDemandSource: reauthenticationSource,
+    })),
+  );
 };
 
 const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
@@ -834,12 +982,6 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
         eq(calendarsTable.disabled, false),
       ),
     );
-
-  let added = 0;
-  let removed = 0;
-  let errors = 0;
-  const allIngestEvents: Record<string, unknown>[] = [];
-  const affectedUserIds = new Set<string>();
 
   const settlements = await allSettledWithConcurrency(
     icsSources.map((source) => () =>
@@ -911,6 +1053,7 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
                   eventsAdded: ingestionResult.eventsAdded,
                   eventsRemoved: ingestionResult.eventsRemoved,
                   ingestEvents,
+                  reauthentication: null,
                   shouldPush: hasSourceAuthorityChanged(currentSource, ranges)
                     || ingestionResult.eventsAdded > 0
                     || ingestionResult.eventsRemoved > 0,
@@ -946,20 +1089,10 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
     { concurrency: SOURCE_CONCURRENCY },
   );
 
-  for (const settlement of settlements) {
-    if (settlement.status === "fulfilled") {
-      added += settlement.value.eventsAdded;
-      removed += settlement.value.eventsRemoved;
-      allIngestEvents.push(...settlement.value.ingestEvents);
-      if (settlement.value.shouldPush) {
-        affectedUserIds.add(settlement.value.userId);
-      }
-    } else {
-      errors += 1;
-    }
-  }
-
-  return { added, affectedUserIds: [...affectedUserIds], removed, errors, ingestEvents: allIngestEvents };
+  return summariseIngestionSettlements(
+    settlements,
+    icsSources.map(() => ({ accountId: null, recordedDemandSource: null })),
+  );
 };
 
 export default withCronWideEvent({

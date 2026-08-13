@@ -6,6 +6,7 @@ import {
   sourceDestinationMappingsTable,
   syncStatusTable,
 } from "@keeper.sh/database/schema";
+import { REAUTHENTICATION_DESTINATION_GRANT } from "@keeper.sh/constants";
 import { and, eq, inArray } from "drizzle-orm";
 import type {
   AuthorizationUrlOptions,
@@ -130,6 +131,13 @@ interface AccountInsertData {
   needsReauthentication?: boolean;
 }
 
+const resolveGrantDemandSource = (needsReauthentication: boolean): string | null => {
+  if (needsReauthentication) {
+    return REAUTHENTICATION_DESTINATION_GRANT;
+  }
+  return null;
+};
+
 const upsertAccountAndCalendarWithDatabase = async (
   databaseClient: DestinationDatabase,
   data: AccountInsertData,
@@ -141,6 +149,7 @@ const upsertAccountAndCalendarWithDatabase = async (
   if (oauthCredentialId) {
     setClause.oauthCredentialId = oauthCredentialId;
     setClause.needsReauthentication = needsReauthentication ?? false;
+    setClause.reauthenticationSource = resolveGrantDemandSource(needsReauthentication ?? false);
   }
   if (caldavCredentialId) {
     setClause.caldavCredentialId = caldavCredentialId;
@@ -161,6 +170,7 @@ const upsertAccountAndCalendarWithDatabase = async (
       needsReauthentication,
       oauthCredentialId,
       provider: base.provider,
+      reauthenticationSource: resolveGrantDemandSource(needsReauthentication ?? false),
       userId: base.userId,
     })
     .onConflictDoUpdate({
@@ -228,7 +238,11 @@ const saveCalendarDestinationWithDatabase = async (
 
     await databaseClient
       .update(calendarAccountsTable)
-      .set({ email, needsReauthentication })
+      .set({
+        email,
+        needsReauthentication,
+        reauthenticationSource: resolveGrantDemandSource(needsReauthentication),
+      })
       .where(eq(calendarAccountsTable.id, existingAccount.id));
 
     const [existingCalendar] = await databaseClient

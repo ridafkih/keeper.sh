@@ -792,6 +792,32 @@ describe("syncCalendar", () => {
     expect(event?.["outcome"]).toBe("success");
     expect(event?.["flushed"]).toBe(true);
     expect(typeof event?.["duration_ms"]).toBe("number");
+    expect(event?.["provider.retry_count"]).toBeUndefined();
+  });
+
+  it("emits provider throttle retries on the wide event", async () => {
+    const { syncCalendar } = await import("../../../src/core/sync-engine/index");
+    const localEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
+    const provider = {
+      ...makeProvider({ pushEvents: () => Promise.resolve([{ success: true, remoteId: "remote-1" }]) }),
+      getThrottleMetrics: () => ({ retryAfterMs: 4200, retryCount: 3 }),
+    };
+
+    const emittedEvents: Record<string, unknown>[] = [];
+
+    await syncCalendar({
+      userId: "user-1",
+      calendarId: "dest-cal-1",
+      reconciliationScope: TEST_RECONCILIATION_SCOPE,
+      provider,
+      readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
+      isCurrent: () => Promise.resolve(true),
+      flush: () => Promise.resolve(),
+      onSyncEvent: (event) => { emittedEvents.push(event); },
+    });
+
+    expect(emittedEvents[0]?.["provider.retry_count"]).toBe(3);
+    expect(emittedEvents[0]?.["provider.retry_after_ms"]).toBe(4200);
   });
 
   it("emits only nonzero stale mapping reason counts", async () => {

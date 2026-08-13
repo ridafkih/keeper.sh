@@ -568,6 +568,13 @@
       "when": 1786575131988,
       "tag": "0080_parallel_jack_power",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1786614075691,
+      "tag": "0081_sparkling_sentry",
+      "breakpoints": true
     }
   ]
 }

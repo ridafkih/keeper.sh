@@ -4,7 +4,8 @@ import {
   CalDAVUnreadableResourceError,
   isCalDAVAuthenticationError,
 } from "@keeper.sh/calendar/caldav";
-import { classifyDatabaseError } from "@keeper.sh/database";
+import { isDatabaseError } from "@keeper.sh/database";
+import { requiresReauthentication } from "@/utils/error-flags";
 
 interface MissingCalendarFailure {
   disableCalendar: false;
@@ -12,8 +13,24 @@ interface MissingCalendarFailure {
   slug: "provider-calendar-not-found";
 }
 
-const hasNotFoundStatus = (error: Error): boolean =>
-  "status" in error && error.status === 404;
+const NOT_FOUND_STATUS = 404;
+
+const missingCalendarFailure: MissingCalendarFailure = {
+  disableCalendar: false,
+  retriable: true,
+  slug: "provider-calendar-not-found",
+};
+
+const resolveResponseStatus = (error: Error): number | null => {
+  const candidate = error as Error & Record<string, unknown>;
+  if (typeof candidate.status === "number") {
+    return candidate.status;
+  }
+  if (typeof candidate.statusCode === "number") {
+    return candidate.statusCode;
+  }
+  return null;
+};
 
 const resolveMissingCalendarFailure = (error: unknown): MissingCalendarFailure | null => {
   if (
@@ -23,15 +40,23 @@ const resolveMissingCalendarFailure = (error: unknown): MissingCalendarFailure |
     return null;
   }
 
-  if (!(error instanceof Error) || (!hasNotFoundStatus(error) && !error.message.includes("404"))) {
+  if (!(error instanceof Error) || isDatabaseError(error) || requiresReauthentication(error)) {
     return null;
   }
 
-  return {
-    disableCalendar: false,
-    retriable: true,
-    slug: "provider-calendar-not-found",
-  };
+  const responseStatus = resolveResponseStatus(error);
+  if (responseStatus !== null) {
+    if (responseStatus === NOT_FOUND_STATUS) {
+      return missingCalendarFailure;
+    }
+    return null;
+  }
+
+  if (error.message.includes(String(NOT_FOUND_STATUS))) {
+    return missingCalendarFailure;
+  }
+
+  return null;
 };
 
 const hasOwnSlug = (error: unknown): boolean =>
@@ -39,7 +64,7 @@ const hasOwnSlug = (error: unknown): boolean =>
   || error instanceof CalDAVUnreadableResourceError;
 
 const shouldTreatAsProviderAuthFailure = (error: unknown): boolean => {
-  if (isTimeoutError(error) || hasOwnSlug(error) || classifyDatabaseError(error)) {
+  if (isTimeoutError(error) || hasOwnSlug(error) || isDatabaseError(error)) {
     return false;
   }
   return isCalDAVAuthenticationError(error);
