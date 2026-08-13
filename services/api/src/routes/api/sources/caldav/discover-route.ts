@@ -1,6 +1,6 @@
 import { CalDAVAuthenticationError } from "@keeper.sh/calendar/caldav";
 import { ErrorResponse } from "@/utils/responses";
-import { widelog } from "@/utils/logging";
+import { labelFailure, labelFailureResponse } from "@/utils/error-labelling";
 import type { CalendarInfo } from "@keeper.sh/calendar/caldav";
 
 interface CalDAVDiscoverCredentials {
@@ -34,11 +34,15 @@ const handleCalDAVDiscoverRoute = async (
     return Response.json({ calendars, authMethod });
   } catch (error) {
     if (error instanceof CalDAVAuthenticationError) {
-      widelog.errorFields(error, { slug: "caldav-auth-failed" });
+      labelFailure(error, { slug: "caldav-auth-failed" });
       return ErrorResponse.unauthorized("Invalid credentials").toResponse();
     }
 
-    widelog.errorFields(error, { slug: "caldav-connection-failed" });
+    const databaseResponse = labelFailureResponse(error, { slug: "caldav-connection-failed" });
+    if (databaseResponse) {
+      return databaseResponse;
+    }
+
     return ErrorResponse.badRequest("Failed to discover calendars").toResponse();
   }
 };

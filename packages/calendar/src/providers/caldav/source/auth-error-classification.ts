@@ -1,3 +1,5 @@
+import { isDatabaseError } from "@keeper.sh/database";
+
 const AUTH_ERROR_STATUS_CODES = new Set([401]);
 
 const AUTH_ERROR_PATTERNS = [
@@ -64,6 +66,10 @@ const collectNestedCandidates = (value: Record<string, unknown>): unknown[] => {
 };
 
 const isCalDAVAuthenticationError = (error: unknown): boolean => {
+  if (isDatabaseError(error)) {
+    return false;
+  }
+
   const queue: unknown[] = [error];
   const visited = new Set<unknown>();
 

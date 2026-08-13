@@ -1,6 +1,7 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { ErrorResponse } from "@/utils/responses";
 import { widelog } from "@/utils/logging";
+import { labelFailureResponse } from "@/utils/error-labelling";
 
 interface IcsRouteContext {
   userId: string;
@@ -65,6 +66,11 @@ const handlePostIcsSourceRoute = async (
         },
         { status: HTTP_STATUS.BAD_REQUEST },
       );
+    }
+
+    const databaseResponse = labelFailureResponse(error, { slug: "invalid-request-body" });
+    if (databaseResponse) {
+      return databaseResponse;
     }
 
     return ErrorResponse.badRequest("Name and URL are required").toResponse();

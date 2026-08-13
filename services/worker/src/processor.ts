@@ -10,7 +10,10 @@ import {
 import { syncDestinationsForUser, SyncLockRenewalError } from "@keeper.sh/sync";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { syncStatusTable } from "@keeper.sh/database/schema";
-import { classifyDatabaseError, getDatabaseErrorDetails } from "@keeper.sh/database";
+import {
+  getDatabaseErrorDetails,
+  resolveDatabaseErrorClassification,
+} from "@keeper.sh/database";
 import { database, refreshLockRedis, refreshLockStore } from "./context";
 import { context, widelog } from "./utils/logging";
 import env from "./env";
@@ -59,7 +62,7 @@ const resolveErrorStatusCode = (error: unknown): number | null => {
 };
 
 const classifyKnownSyncError = (error: unknown): string | null => {
-  const databaseError = classifyDatabaseError(error);
+  const databaseError = resolveDatabaseErrorClassification(error);
   if (databaseError) {
     return databaseError.slug;
   }
@@ -356,6 +359,7 @@ const processJob = (
           widelog.set("duration_ms", failure.durationMs);
           widelog.set("retry.backoff_applied", true);
           widelog.set("outcome", "error");
+          applyDatabaseErrorFields(failure.error);
           widelog.errorFields(failure.error, { slug: classifySyncError(failure.error) });
           widelog.flush();
           needsFlush = false;

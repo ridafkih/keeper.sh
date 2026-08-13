@@ -1,6 +1,7 @@
 import { caldavConnectRequestSchema } from "@keeper.sh/data-schemas";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
+import { labelFailureResponse } from "@/utils/error-labelling";
 import {
   CalDAVConnectionError,
   DestinationLimitError,
@@ -36,6 +37,11 @@ const POST = withWideEvent(
       }
       if (error instanceof CalDAVConnectionError) {
         return ErrorResponse.badRequest(error.message).toResponse();
+      }
+
+      const databaseResponse = labelFailureResponse(error, { slug: "invalid-request-body" });
+      if (databaseResponse) {
+        return databaseResponse;
       }
 
       return ErrorResponse.badRequest("All fields are required").toResponse();

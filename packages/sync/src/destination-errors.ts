@@ -1,4 +1,5 @@
 import { RecurrenceMaterializationLimitError } from "@keeper.sh/calendar";
+import { isDatabaseError } from "@keeper.sh/database";
 
 /**
  * Patterns that indicate a destination calendar is fundamentally
@@ -22,6 +23,10 @@ const getErrorMessage = (error: unknown): string => {
 const isBackoffEligibleError = (error: unknown): boolean => {
   if (error instanceof RecurrenceMaterializationLimitError) {
     return true;
+  }
+
+  if (isDatabaseError(error)) {
+    return false;
   }
 
   const message = getErrorMessage(error);
