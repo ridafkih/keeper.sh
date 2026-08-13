@@ -8,4 +8,15 @@
 const GOOGLE_REQUESTS_PER_MINUTE = 500;
 const GOOGLE_PUSH_REQUESTS_PER_MINUTE = 350;
 
-export { GOOGLE_PUSH_REQUESTS_PER_MINUTE, GOOGLE_REQUESTS_PER_MINUTE };
+/*
+ * Microsoft Graph throttles per mailbox rather than per application, so the ceiling is
+ * a property of the destination account. Pacing under MailboxConcurrency keeps a large
+ * drain from earning the 429s the retry path would otherwise have to absorb.
+ */
+const OUTLOOK_REQUESTS_PER_MINUTE = 300;
+
+export {
+  GOOGLE_PUSH_REQUESTS_PER_MINUTE,
+  GOOGLE_REQUESTS_PER_MINUTE,
+  OUTLOOK_REQUESTS_PER_MINUTE,
+};

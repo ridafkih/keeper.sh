@@ -74,8 +74,8 @@ const createMockRedis = () => {
   };
 
   const isCurrent = (args: string[]): Promise<unknown> => {
-    const [lockKey = "", waiterKey = "", invalidationKey = "", holderId = ""] = args;
-    if (store.get(lockKey) !== holderId || store.has(invalidationKey)) {
+    const [lockKey = "", waiterKey = "", holderId = ""] = args;
+    if (store.get(lockKey) !== holderId) {
       return Promise.resolve(0);
     }
     const waiters = lists.get(waiterKey) ?? [];

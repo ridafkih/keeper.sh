@@ -141,6 +141,7 @@
     "packages/database": {
       "name": "@keeper.sh/database",
       "dependencies": {
+        "@keeper.sh/data-schemas": "workspace:*",
         "drizzle-orm": "0.45.1",
         "pg": "8.16.3",
         "tweetnacl": "^1.0.3",
@@ -221,6 +222,7 @@
       "dependencies": {
         "@keeper.sh/calendar": "workspace:*",
         "@keeper.sh/constants": "workspace:*",
+        "@keeper.sh/data-schemas": "workspace:*",
         "@keeper.sh/database": "workspace:*",
         "drizzle-orm": "^0.45.1",
         "ioredis": "^5.6.1",

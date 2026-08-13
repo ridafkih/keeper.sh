@@ -95,6 +95,11 @@ interface DeleteResult {
   shouldContinue?: boolean;
 }
 
+interface ProviderThrottleMetrics {
+  retryCount: number;
+  retryAfterMs: number;
+}
+
 interface SyncResult {
   added: number;
   addFailed: number;
@@ -190,6 +195,7 @@ export type {
   SourcePreferencesConfig,
   SyncableEvent,
   MaterializedSyncableEvent,
+  ProviderThrottleMetrics,
   PushResult,
   DeleteResult,
   SyncResult,

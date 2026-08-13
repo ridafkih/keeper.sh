@@ -22,6 +22,7 @@ const router = new Bun.FileSystemRouter({
 await entry({
   main: () => {
     const server = Bun.serve({
+      development: false,
       port: env.MCP_PORT,
       fetch: async (request) => {
         const match = router.match(request);

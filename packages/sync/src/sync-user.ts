@@ -4,6 +4,7 @@ import {
   getEventMappingsForDestination,
   createDatabaseFlush,
   createGoogleUserRateLimiter,
+  createRedisRateLimiter,
   buildCalendarBackoffState,
   RESET_CALENDAR_BACKOFF_STATE,
   createSyncWindow,
@@ -12,8 +13,10 @@ import {
   getConfigurableSyncWindow,
   intersectSyncWindows,
 } from "@keeper.sh/calendar";
+import { OUTLOOK_REQUESTS_PER_MINUTE } from "@keeper.sh/constants";
 import { syncRangeSchema } from "@keeper.sh/data-schemas";
 import type { Plan } from "@keeper.sh/data-schemas";
+import type { RedisRateLimiter } from "@keeper.sh/calendar";
 import type {
   EventMapping,
   DestinationEventReadDiagnostics,
@@ -37,9 +40,28 @@ import type { OAuthConfig } from "./resolve-provider";
 import {
   createMappingMutationLockId,
   createSyncLock,
-  isCalendarInvalidated,
-  type SyncLockHandle,
 } from "./sync-lock";
+
+/*
+ * Google's quota is shared across ingest and push, so the push lane claims only its
+ * reserved share of the one per-user key. Outlook throttles per mailbox instead, so it
+ * gets a key of its own at the mailbox ceiling.
+ */
+const createProviderRateLimiter = (
+  redis: Redis,
+  userId: string,
+  provider: string,
+): RedisRateLimiter | undefined => {
+  if (provider === "google") {
+    return createGoogleUserRateLimiter(redis, userId, "push");
+  }
+  if (provider !== "outlook") {
+    return;
+  }
+  return createRedisRateLimiter(redis, `ratelimit:${userId}:outlook`, {
+    requestsPerMinute: OUTLOOK_REQUESTS_PER_MINUTE,
+  });
+};
 
 const resetDestinationBackoff = async (
   database: BunSQLDatabase,
@@ -431,13 +453,6 @@ const isDestinationAttemptEligible = (
 ): boolean =>
   destination.nextAttemptAt === null || destination.nextAttemptAt <= now;
 
-const isCompletedAttemptCurrent = async (
-  handle: SyncLockHandle,
-  redis: Redis,
-  calendarId: string,
-): Promise<boolean> =>
-  await handle.isCurrent() && !await isCalendarInvalidated(redis, calendarId);
-
 const resetDestinationBackoffIfNeeded = async (
   database: BunSQLDatabase,
   destination: DestinationAttempt,
@@ -481,8 +496,6 @@ const syncDestinationsForUser = async (
   const errors: string[] = [];
   const syncEvents: Record<string, unknown>[] = [];
 
-  const rateLimiter = createGoogleUserRateLimiter(redis, userId, "push");
-
   for (const destinationCandidate of destinations) {
     if (config.abortSignal?.aborted) {
       break;
@@ -522,7 +535,7 @@ const syncDestinationsForUser = async (
         oauthConfig: config.oauthConfig,
         encryptionKey: config.encryptionKey,
         refreshLockStore: config.refreshLockStore,
-        rateLimiter,
+        rateLimiter: createProviderRateLimiter(redis, userId, destination.provider),
         signal: config.abortSignal,
       });
 
@@ -680,7 +693,6 @@ const syncDestinationsForUser = async (
           }
           return handle.isCurrent();
         },
-        isInvalidated: () => isCalendarInvalidated(redis, destination.calendarId),
         flush: createDatabaseFlush(database),
         onProgress: callbacks?.onProgress,
         onSyncEvent: (event) => {
@@ -722,7 +734,7 @@ const syncDestinationsForUser = async (
         ...(calendarAttempt.syncEvent && { syncEvent: calendarAttempt.syncEvent }),
       });
 
-      if (!(await isCompletedAttemptCurrent(handle, redis, destination.calendarId))) {
+      if (!(await handle.isCurrent())) {
         continue;
       }
 

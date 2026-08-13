@@ -15,7 +15,7 @@ import type { GoogleApiError } from "../../types";
 import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
 import { parseEventDateTime } from "../../shared/date-time";
 import { isKeeperEvent } from "../../../../core/events/identity";
-import { withBackoff } from "../../shared/backoff";
+import { withBackoff } from "../../../../core/utils/backoff";
 import { isRateLimitApiError } from "../../shared/errors";
 import { buildTimeoutSignal } from "../../../../core/utils/fetch-with-timeout";
 
