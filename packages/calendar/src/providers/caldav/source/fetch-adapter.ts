@@ -1,9 +1,7 @@
-import type { SourceEvent } from "../../../core/types";
-import type { SourceIngestionPlan, SyncWindow } from "../../../core/sync/sync-range";
+import type { SourceIngestionPlan } from "../../../core/sync/sync-range";
 import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
-import { isKeeperEvent } from "../../../core/events/identity";
-import { overlapsTimeWindow } from "../../../core/events/time-range";
+import { buildCalDAVSourceEvents, isCalDAVEventInSyncWindow } from "./window";
 import { CalDAVClient } from "../shared/client";
 import { parseICalCalendarsToRemoteEvents } from "../shared/ics";
 
@@ -20,18 +18,6 @@ interface CalDAVSourceFetcherConfig {
 interface CalDAVSourceFetcher {
   fetchEvents: () => Promise<FetchEventsResult>;
 }
-
-/*
- * Recurring masters are kept regardless of their own start/end: the CalDAV
- * time-range filter already returned their in-window occurrences. Non-recurring events
- * go through the one shared window predicate every other layer applies, so a boundary
- * event is treated identically wherever the window is applied.
- */
-const isCalDAVEventInSyncWindow = (
-  event: { endTime: Date; recurrenceRule?: unknown; startTime: Date },
-  syncWindow: SyncWindow,
-): boolean => Boolean(event.recurrenceRule)
-  || overlapsTimeWindow(event, syncWindow.timeMin, syncWindow.timeMax);
 
 const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSourceFetcher => {
   const client = new CalDAVClient({
@@ -52,7 +38,6 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
       },
     });
 
-    const events: SourceEvent[] = [];
     const resources = parseICalCalendarsToRemoteEvents(
       objects.flatMap(({ data }) => {
         if (!data) {
@@ -61,31 +46,7 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
         return [data];
       }),
     );
-
-    for (const parsed of resources.events) {
-      if (isKeeperEvent(parsed.uid)) {
-        continue;
-      }
-      if (!isCalDAVEventInSyncWindow(parsed, syncWindow)) {
-        continue;
-      }
-
-      events.push({
-        availability: parsed.availability,
-        description: parsed.description,
-        endTime: parsed.endTime,
-        exceptionDates: parsed.exceptionDates,
-        recurrenceId: parsed.recurrenceId,
-        isAllDay: parsed.isAllDay,
-        location: parsed.location,
-        recurrenceDuration: parsed.recurrenceDuration,
-        recurrenceRule: parsed.recurrenceRule,
-        startTime: parsed.startTime,
-        startTimeZone: parsed.startTimeZone,
-        title: parsed.title,
-        uid: parsed.uid,
-      });
-    }
+    const events = buildCalDAVSourceEvents(resources.events, syncWindow);
 
     return {
       events,

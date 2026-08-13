@@ -5,7 +5,11 @@ import {
   resolvePointInTimeRange,
   resolveWholeDayTimeRange,
 } from "@keeper.sh/calendar";
-import { buildVtimezone, buildZonedIcsDate } from "@keeper.sh/calendar/ics";
+import {
+  buildVtimezone,
+  buildZonedIcsDate,
+  getIcsDurationNominalMilliseconds,
+} from "@keeper.sh/calendar/ics";
 import { generateIcsCalendar } from "ts-ics";
 import type { IcsCalendar, IcsDateObject, IcsDuration, IcsEvent, IcsRecurrenceRule, IcsTimezone } from "ts-ics";
 
@@ -139,10 +143,11 @@ const groupEventsBySourceUid = (events: CalendarEvent[]): EventGroup[] => {
 };
 
 /*
- * The feed always writes both DTSTART and DTEND, and RFC 5545 §3.6.1 requires DTEND to be
- * later in time than DTSTART — for a DATE-valued pair too, where DTEND is the exclusive
- * end of the last day. A stored range that does not end after it starts therefore gets
- * the same widening the destinations apply, so every subscriber mounts a legal resource.
+ * RFC 5545 §3.6.1 requires the span a VEVENT states to be positive, whichever property
+ * carries it: DTEND must be later in time than DTSTART — for a DATE-valued pair too,
+ * where DTEND is the exclusive end of the last day — and DURATION must be positive. A
+ * stored range that does not end after it starts therefore gets the same widening the
+ * destinations apply, so every subscriber mounts a legal resource.
  */
 const resolveFeedTimeRange = (event: CalendarEvent, isAllDay: boolean): EventTimeRange => {
   if (isAllDay) {
@@ -151,6 +156,9 @@ const resolveFeedTimeRange = (event: CalendarEvent, isAllDay: boolean): EventTim
 
   return resolvePointInTimeRange(event);
 };
+
+const isPositiveIcsDuration = (duration: IcsDuration): boolean =>
+  !duration.before && getIcsDurationNominalMilliseconds(duration) > 0;
 
 const buildBaseIcsEvent = (event: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => {
   const isAllDay = resolveIsAllDayEvent(toAllDayShape(event));
@@ -165,7 +173,7 @@ const buildBaseIcsEvent = (event: CalendarEvent, uid: string, settings: FeedSett
     ...(settings.includeEventDescription && event.description && { description: event.description }),
     ...(settings.includeEventLocation && event.location && { location: event.location }),
   };
-  if (event.recurrenceRule && event.recurrenceDuration) {
+  if (event.recurrenceRule && event.recurrenceDuration && isPositiveIcsDuration(event.recurrenceDuration)) {
     return { ...common, duration: event.recurrenceDuration };
   }
   return { ...common, end: buildZonedIcsDate(endTime, timezone, isAllDay) };

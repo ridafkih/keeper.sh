@@ -18,3 +18,4 @@ export { interpretFullDayTimedEventsAsAllDay } from "./utils/interpret-full-day-
 export { buildZonedIcsDate, formatTzOffset } from "./utils/build-zoned-date";
 export { buildVtimezone } from "./utils/build-vtimezone";
 export { normalizeTimezone } from "./utils/normalize-timezone";
+export { getIcsDurationNominalMilliseconds } from "./utils/recurrence-duration";
