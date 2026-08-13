@@ -1,6 +1,7 @@
 import type { GoogleEvent } from "@keeper.sh/data-schemas";
 import type { MaterializedSyncableEvent } from "../../../core/types";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
+import { resolveMirrorableTimeRange } from "../../../core/events/time-range";
 
 const formatDateOnly = (value: Date): string => value.toISOString().slice(0, 10);
 
@@ -39,13 +40,18 @@ const serializeGoogleEvent = (
   }
 
   const isAllDay = resolveIsAllDayEvent(event);
+  const range = resolveMirrorableTimeRange(event);
+
+  if (!range) {
+    return null;
+  }
 
   return {
     description: event.description,
-    end: buildDateField(event.endTime, isAllDay, event.startTimeZone, recurrenceRule),
+    end: buildDateField(range.endTime, isAllDay, event.startTimeZone, recurrenceRule),
     iCalUID: uid,
     location: event.location,
-    start: buildDateField(event.startTime, isAllDay, event.startTimeZone, recurrenceRule),
+    start: buildDateField(range.startTime, isAllDay, event.startTimeZone, recurrenceRule),
     summary: event.summary,
     ...(event.availability === "free" && { transparency: "transparent" }),
     ...(recurrenceRule && { recurrence: [`RRULE:${recurrenceRule}`] }),

@@ -14,11 +14,13 @@ import type {
 import type { SyncWindow } from "../sync/sync-range";
 import { parseStoredRecurrenceForMaterialization } from "./stored-recurrence";
 import { materializeRecurrenceEvents } from "./recurrence-materializer";
+import { resolveMirrorableTimeRange } from "./time-range";
 
 const EMPTY_SOURCES_COUNT = 0;
 
 interface DestinationEventReadDiagnostics {
   candidateEventStateCount: number;
+  emptyTimeRangeCount: number;
   excludedBySyncPolicyCount: number;
   materializedEventCount: number;
   missingSourceEventUidCount: number;
@@ -35,6 +37,7 @@ interface DestinationEventReadResult {
 
 const EMPTY_DESTINATION_EVENT_READ_DIAGNOSTICS: DestinationEventReadDiagnostics = {
   candidateEventStateCount: 0,
+  emptyTimeRangeCount: 0,
   excludedBySyncPolicyCount: 0,
   materializedEventCount: 0,
   missingSourceEventUidCount: 0,
@@ -276,7 +279,7 @@ const getEventsForCalendarsWithDiagnostics = async (
    */
   const overBudgetSourceEventStateIds: string[] = [];
   const overBudgetSourceEventUids: string[] = [];
-  const events = materializeRecurrenceEvents(syncableEvents, {
+  const materializedEvents = materializeRecurrenceEvents(syncableEvents, {
     end: syncWindow.timeMax,
     start: syncWindow.timeMin,
   }, {
@@ -286,11 +289,28 @@ const getEventsForCalendarsWithDiagnostics = async (
     },
   });
 
+  /*
+   * A destination cannot represent an occurrence that ends when it starts, so pushing one
+   * fails on every run and never records a mapping. Dropping it here keeps the poison
+   * occurrence out of the operation set for every provider, and the count reports it.
+   */
+  const events: MaterializedSyncableEvent[] = [];
+  let emptyTimeRangeCount = 0;
+  for (const event of materializedEvents) {
+    const range = resolveMirrorableTimeRange(event);
+    if (!range) {
+      emptyTimeRangeCount += 1;
+      continue;
+    }
+    events.push({ ...event, ...range });
+  }
+
   return {
     diagnostics: {
       candidateEventStateCount: results.length,
+      emptyTimeRangeCount,
       excludedBySyncPolicyCount,
-      materializedEventCount: events.length,
+      materializedEventCount: materializedEvents.length,
       missingSourceEventUidCount,
       outsideReconciliationWindowCount,
       overBudgetSourceEventStateIds,

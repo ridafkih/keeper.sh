@@ -316,6 +316,7 @@ const createDestinationReconciliationWideEventFields = (
   context: DestinationReconciliationContext,
 ): Record<string, string | number | boolean> => ({
   "local_event_states.candidate_count": context.eventReadDiagnostics.candidateEventStateCount,
+  "local_event_states.empty_time_range_count": context.eventReadDiagnostics.emptyTimeRangeCount,
   "local_event_states.excluded_by_sync_policy_count": context.eventReadDiagnostics.excludedBySyncPolicyCount,
   "local_event_states.materialized_count": context.eventReadDiagnostics.materializedEventCount,
   "local_event_states.missing_source_event_uid_count": context.eventReadDiagnostics.missingSourceEventUidCount,
@@ -553,6 +554,7 @@ const syncDestinationsForUser = async (
       let authoritativeWindow = initialSourceAuthority.aggregateWindow;
       let eventReadDiagnostics: DestinationEventReadDiagnostics = {
         candidateEventStateCount: 0,
+        emptyTimeRangeCount: 0,
         excludedBySyncPolicyCount: 0,
         materializedEventCount: 0,
         missingSourceEventUidCount: 0,
