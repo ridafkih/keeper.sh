@@ -30,7 +30,7 @@
       "passThroughEnv": ["KEEPER_TEST_DATABASE_URL"]
     },
     "lint": {
-      "inputs": ["src/**", ".oxlintrc.json", "../../.oxlintrc.json"],
+      "inputs": ["src/**", "tests/**", ".oxlintrc.json", "../../.oxlintrc.json"],
       "cache": true
     }
   }
