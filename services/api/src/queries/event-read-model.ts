@@ -1,6 +1,7 @@
 import {
   materializeRecurrenceEvents,
   parseStoredRecurrenceForMaterialization,
+  resolveRepresentableTimeRange,
 } from "@keeper.sh/calendar";
 import type { MaterializedSyncableEvent, SyncableEvent } from "@keeper.sh/calendar";
 
@@ -138,6 +139,12 @@ const toSyncableEvent = (
   };
 };
 
+/*
+ * The read model is the surface get_events, get_event and find_free_time answer from, so
+ * it owes a caller the same range every other outbound surface publishes. The occurrence
+ * identifier stays keyed to the stored start, so widening the published range does not
+ * move the event a caller can look up again.
+ */
 const toSyncedProjection = (
   occurrence: MaterializedSyncableEvent,
 ): KeeperEventProjection => {
@@ -152,12 +159,11 @@ const toSyncedProjection = (
   return {
     calendarId: occurrence.calendarId,
     description: occurrence.description ?? null,
-    endTime: occurrence.endTime,
     eventStateId,
     id,
     location: occurrence.location ?? null,
-    startTime: occurrence.startTime,
     title: occurrence.summary || null,
+    ...resolveRepresentableTimeRange(occurrence),
   };
 };
 

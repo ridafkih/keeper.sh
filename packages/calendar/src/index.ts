@@ -47,6 +47,7 @@ export { inferAllDayEvent, resolveIsAllDayEvent } from "./core/events/all-day";
 export {
   type EventTimeRange,
   resolvePointInTimeRange,
+  resolveRepresentableTimeRange,
   resolveWholeDayTimeRange,
 } from "./core/events/time-range";
 export {

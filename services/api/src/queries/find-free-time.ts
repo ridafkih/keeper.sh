@@ -1,5 +1,6 @@
 import { eventStatesTable, userEventsTable } from "@keeper.sh/database/schema";
 import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
+import { resolveRepresentableTimeRange } from "@keeper.sh/calendar";
 import type { SQL } from "drizzle-orm";
 import type {
   KeeperDatabase,
@@ -38,10 +39,25 @@ const isBlocking = (candidate: BusyCandidate, ignoreAllDayEvents: boolean): bool
   return !NON_BLOCKING_AVAILABILITY.has(candidate.availability);
 };
 
-const toBusyInterval = (candidate: BusyCandidate, range: TimeInterval): TimeInterval => ({
-  end: new Date(Math.min(candidate.endTime.getTime(), range.end.getTime())),
-  start: new Date(Math.max(candidate.startTime.getTime(), range.start.getTime())),
-});
+/*
+ * Merging keeps only an interval that ends after it starts, so a candidate whose
+ * stored range is degenerate would contribute no busy time and leave the day it occupies
+ * reported as free — while the feed and every destination mirror report it as busy. The
+ * candidate is shaped by the same rule those surfaces publish before it becomes an
+ * interval, so one stored event blocks one span everywhere it is read.
+ */
+const toBusyInterval = (candidate: BusyCandidate, range: TimeInterval): TimeInterval => {
+  const { endTime, startTime } = resolveRepresentableTimeRange({
+    endTime: candidate.endTime,
+    startTime: candidate.startTime,
+    ...(typeof candidate.isAllDay === "boolean" && { isAllDay: candidate.isAllDay }),
+  });
+
+  return {
+    end: new Date(Math.min(endTime.getTime(), range.end.getTime())),
+    start: new Date(Math.max(startTime.getTime(), range.start.getTime())),
+  };
+};
 
 const collectBusyIntervals = async (
   database: KeeperDatabase,
@@ -138,4 +154,4 @@ const findFreeTime = async (
   };
 };
 
-export { findFreeTime, isBlocking };
+export { findFreeTime, isBlocking, toBusyInterval };

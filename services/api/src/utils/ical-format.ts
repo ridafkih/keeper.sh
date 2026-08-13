@@ -1,9 +1,7 @@
 import { KEEPER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import {
-  type EventTimeRange,
   resolveIsAllDayEvent,
-  resolvePointInTimeRange,
-  resolveWholeDayTimeRange,
+  resolveRepresentableTimeRange,
 } from "@keeper.sh/calendar";
 import {
   buildVtimezone,
@@ -142,28 +140,13 @@ const groupEventsBySourceUid = (events: CalendarEvent[]): EventGroup[] => {
   return [...groups, ...ungrouped];
 };
 
-/*
- * RFC 5545 §3.6.1 requires the span a VEVENT states to be positive, whichever property
- * carries it: DTEND must be later in time than DTSTART — for a DATE-valued pair too,
- * where DTEND is the exclusive end of the last day — and DURATION must be positive. A
- * stored range that does not end after it starts therefore gets the same widening the
- * destinations apply, so every subscriber mounts a legal resource.
- */
-const resolveFeedTimeRange = (event: CalendarEvent, isAllDay: boolean): EventTimeRange => {
-  if (isAllDay) {
-    return resolveWholeDayTimeRange(event);
-  }
-
-  return resolvePointInTimeRange(event);
-};
-
 const isPositiveIcsDuration = (duration: IcsDuration): boolean =>
   !duration.before && getIcsDurationNominalMilliseconds(duration) > 0;
 
 const buildBaseIcsEvent = (event: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => {
   const isAllDay = resolveIsAllDayEvent(toAllDayShape(event));
   const timezone = event.startTimeZone ?? "";
-  const { endTime, startTime } = resolveFeedTimeRange(event, isAllDay);
+  const { endTime, startTime } = resolveRepresentableTimeRange(toAllDayShape(event));
   const common = {
     stamp: { date: new Date() },
     start: buildZonedIcsDate(startTime, timezone, isAllDay),

@@ -1,9 +1,7 @@
 import type { MaterializedSyncableEvent } from "../../../core/types";
-import { resolveIsAllDayEvent } from "../../../core/events/all-day";
 import {
   POINT_IN_TIME_DURATION_MS,
-  resolvePointInTimeRange,
-  resolveWholeDayTimeRange,
+  resolveRepresentableTimeRange,
 } from "../../../core/events/time-range";
 
 /*
@@ -14,12 +12,7 @@ import {
  * instead of legal, but its start is still the instant the source states outright.
  * Both become a point in time so the event reaches the destination.
  */
-const normalizeGoogleEvent = (event: MaterializedSyncableEvent): MaterializedSyncableEvent => {
-  if (resolveIsAllDayEvent(event)) {
-    return { ...event, ...resolveWholeDayTimeRange(event) };
-  }
-
-  return { ...event, ...resolvePointInTimeRange(event) };
-};
+const normalizeGoogleEvent = (event: MaterializedSyncableEvent): MaterializedSyncableEvent =>
+  ({ ...event, ...resolveRepresentableTimeRange(event) });
 
 export { normalizeGoogleEvent, POINT_IN_TIME_DURATION_MS };

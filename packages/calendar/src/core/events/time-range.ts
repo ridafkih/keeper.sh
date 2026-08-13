@@ -1,4 +1,6 @@
 import { MS_PER_DAY, MS_PER_MINUTE } from "@keeper.sh/constants";
+import type { AllDayEventShape } from "./all-day";
+import { resolveIsAllDayEvent } from "./all-day";
 
 interface EventTimeRange {
   startTime: Date;
@@ -6,16 +8,28 @@ interface EventTimeRange {
 }
 
 /*
- * An all-day range carries an exclusive end date, so anything shorter than a day names
- * the single day it starts on — the reading RFC 5545 §3.6.1 gives a DATE-valued DTSTART
- * with no DTEND. Destinations that require whole days cannot take the shorter form.
+ * An all-day range is a pair of RFC 5545 §3.6.1 DATEs: an inclusive first day and an
+ * exclusive end day. Every destination serializes one that way and every read-back parses
+ * those DATEs as UTC midnights, so a range that does not sit on UTC day boundaries comes
+ * back narrower than it was written and the mirror is judged changed on every run. The
+ * range is therefore snapped onto the days it actually touches — the start floored to its
+ * UTC midnight, the end raised to the next UTC midnight at or after it — and a range that
+ * covers no whole day still names the single day it starts on.
  */
+const floorToUtcDay = (time: Date): Date =>
+  new Date(Math.floor(time.getTime() / MS_PER_DAY) * MS_PER_DAY);
+
+const ceilToUtcDay = (time: Date): Date =>
+  new Date(Math.ceil(time.getTime() / MS_PER_DAY) * MS_PER_DAY);
+
 const resolveWholeDayTimeRange = ({ endTime, startTime }: EventTimeRange): EventTimeRange => {
-  if (endTime.getTime() - startTime.getTime() >= MS_PER_DAY) {
-    return { endTime, startTime };
+  const dayStart = floorToUtcDay(startTime);
+  const dayEnd = ceilToUtcDay(endTime);
+  if (dayEnd.getTime() > dayStart.getTime()) {
+    return { endTime: dayEnd, startTime: dayStart };
   }
 
-  return { endTime: new Date(startTime.getTime() + MS_PER_DAY), startTime };
+  return { endTime: new Date(dayStart.getTime() + MS_PER_DAY), startTime: dayStart };
 };
 
 /*
@@ -76,12 +90,26 @@ const overlapsTimeWindow = (
   return endTime > windowStart && startTime < windowEnd;
 };
 
+/*
+ * The one shaping every outbound surface owes a range before it publishes it: an all-day
+ * range onto the UTC days it touches, a timed range onto a positive span. Destinations
+ * whose API accepts a shape this would rewrite state that exception at their own seam.
+ */
+const resolveRepresentableTimeRange = (range: AllDayEventShape): EventTimeRange => {
+  if (resolveIsAllDayEvent(range)) {
+    return resolveWholeDayTimeRange(range);
+  }
+
+  return resolvePointInTimeRange(range);
+};
+
 export {
   isEmptyTimeRange,
   isInvertedTimeRange,
   overlapsTimeWindow,
   POINT_IN_TIME_DURATION_MS,
   resolvePointInTimeRange,
+  resolveRepresentableTimeRange,
   resolveTimeRangeEnd,
   resolveWholeDayTimeRange,
 };
