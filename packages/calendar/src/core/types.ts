@@ -1,5 +1,6 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { IcsDuration, IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
+import type { EditableEventContentSnapshot } from "./events/content-hash";
 import type { RefreshLockStore } from "./oauth/refresh-coordinator";
 
 type AuthType = "oauth" | "caldav" | "none";
@@ -80,12 +81,32 @@ interface PushResult {
   success: boolean;
   remoteId?: string;
   deleteId?: string;
+  echo?: PushEchoComparison;
   error?: string;
   errorType?: string;
   statusCode?: number;
   shouldContinue?: boolean;
   conflictResolved?: boolean;
 }
+
+interface PushEchoFieldDivergence {
+  allDay: boolean;
+  description: boolean;
+  end: boolean;
+  location: boolean;
+  start: boolean;
+  summary: boolean;
+}
+
+type PushEchoUncomparableReason =
+  | "echo-body-missing"
+  | "echo-not-parseable"
+  | "echo-times-missing"
+  | "echo-body-not-text";
+
+type PushEchoComparison =
+  | { comparable: true; divergence: PushEchoFieldDivergence }
+  | { comparable: false; reason: PushEchoUncomparableReason };
 
 interface DeleteResult {
   success: boolean;
@@ -113,6 +134,7 @@ interface RemoteEvent {
   startTime: Date;
   endTime: Date;
   isKeeperEvent: boolean;
+  editableContent?: EditableEventContentSnapshot;
   editableContentHash?: string;
   editableAvailability?: EventAvailability;
   supportedAvailabilities?: EventAvailability[];
@@ -196,6 +218,9 @@ export type {
   SyncableEvent,
   MaterializedSyncableEvent,
   ProviderThrottleMetrics,
+  PushEchoComparison,
+  PushEchoFieldDivergence,
+  PushEchoUncomparableReason,
   PushResult,
   DeleteResult,
   SyncResult,

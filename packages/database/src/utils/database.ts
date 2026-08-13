@@ -12,7 +12,16 @@ const DEFAULT_STATEMENT_TIMEOUT_MS = 30_000;
 const DEFAULT_IDLE_IN_TRANSACTION_TIMEOUT_MS = 30_000;
 const POOL_MAX_CONNECTIONS = 10;
 const POOL_IDLE_TIMEOUT_SECONDS = 30;
-const POOL_MAX_LIFETIME_SECONDS = 1800;
+/*
+ * Bun 1.3.14 retires a connection the moment maxLifetime elapses even with a
+ * query in flight — onMaxLifetimeTimeout never checks hasQueryRunning — so the
+ * healthy query dies with ERR_POSTGRES_LIFETIME_TIMEOUT and is never retried
+ * (oven-sh/bun#30646; fix #30648 unmerged). With 1800 this killed better-auth
+ * session reads on a 30-minute cadence, turning every authed route into a 500.
+ * 0 disables age-based retirement; idle connections are still reaped by
+ * idleTimeout, so the pool does not accumulate stale connections.
+ */
+const POOL_MAX_LIFETIME_SECONDS = 0;
 /*
  * Bun 1.3.14 delivers one query's DataRows to a different query on the same
  * connection: an already-prepared query's Bind+Execute is written ahead of an

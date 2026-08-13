@@ -73,6 +73,96 @@ describe("createGoogleSyncProvider", () => {
     });
   });
 
+  it("reports a matching import echo as compared with no divergence", async () => {
+    batchMocks.executeBatchChunked.mockResolvedValueOnce([
+      batchResponse(200, {
+        end: { dateTime: "2026-03-15T10:00:00Z" },
+        id: "google-event-id",
+        start: { dateTime: "2026-03-15T09:00:00Z" },
+        summary: "Meeting",
+      }),
+    ]);
+
+    const [result] = await createProvider().pushEvents([{
+      calendarId: "source-calendar",
+      calendarName: "Source",
+      calendarUrl: null,
+      endTime: new Date("2026-03-15T10:00:00Z"),
+      id: "event-state-id",
+      sourceEventUid: "source-event-uid",
+      startTime: new Date("2026-03-15T09:00:00Z"),
+      summary: "Meeting",
+    }]);
+
+    expect(result?.echo).toEqual({
+      comparable: true,
+      divergence: {
+        allDay: false,
+        description: false,
+        end: false,
+        location: false,
+        start: false,
+        summary: false,
+      },
+    });
+  });
+
+  it("names the fields the import echo rewrote", async () => {
+    batchMocks.executeBatchChunked.mockResolvedValueOnce([
+      batchResponse(200, {
+        description: "sanitized description",
+        end: { dateTime: "2026-03-15T10:00:00Z" },
+        id: "google-event-id",
+        start: { dateTime: "2026-03-15T09:30:00Z" },
+        summary: "Meeting",
+      }),
+    ]);
+
+    const [result] = await createProvider().pushEvents([{
+      calendarId: "source-calendar",
+      calendarName: "Source",
+      calendarUrl: null,
+      description: "original description",
+      endTime: new Date("2026-03-15T10:00:00Z"),
+      id: "event-state-id",
+      sourceEventUid: "source-event-uid",
+      startTime: new Date("2026-03-15T09:00:00Z"),
+      summary: "Meeting",
+    }]);
+
+    expect(result?.echo).toEqual({
+      comparable: true,
+      divergence: {
+        allDay: false,
+        description: true,
+        end: false,
+        location: false,
+        start: true,
+        summary: false,
+      },
+    });
+  });
+
+  it("marks an echo without times as uncomparable instead of guessing", async () => {
+    batchMocks.executeBatchChunked.mockResolvedValueOnce([
+      batchResponse(200, { id: "google-event-id" }),
+    ]);
+
+    const [result] = await createProvider().pushEvents([{
+      calendarId: "source-calendar",
+      calendarName: "Source",
+      calendarUrl: null,
+      endTime: new Date("2026-03-15T10:00:00Z"),
+      id: "event-state-id",
+      sourceEventUid: "source-event-uid",
+      startTime: new Date("2026-03-15T09:00:00Z"),
+      summary: "Meeting",
+    }]);
+
+    expect(result?.success).toBe(true);
+    expect(result?.echo).toEqual({ comparable: false, reason: "echo-times-missing" });
+  });
+
   it("converges when import and listing use Google's two different identifiers", async () => {
     const event: MaterializedSyncableEvent = {
       calendarId: "source-calendar",
@@ -137,6 +227,10 @@ describe("createGoogleSyncProvider", () => {
         occurrenceReassigned: 0,
         remoteAvailabilityChanged: 0,
         remoteContentChanged: 0,
+        remoteContentAllDayChanged: 0,
+        remoteContentDescriptionChanged: 0,
+        remoteContentLocationChanged: 0,
+        remoteContentSummaryChanged: 0,
         remoteMissing: 0,
         remoteTimeChanged: 0,
       },
@@ -166,6 +260,10 @@ describe("createGoogleSyncProvider", () => {
         occurrenceReassigned: 0,
         remoteAvailabilityChanged: 0,
         remoteContentChanged: 0,
+        remoteContentAllDayChanged: 0,
+        remoteContentDescriptionChanged: 0,
+        remoteContentLocationChanged: 0,
+        remoteContentSummaryChanged: 0,
         remoteMissing: 0,
         remoteTimeChanged: 0,
       },

@@ -85,9 +85,98 @@ describe("createOutlookSyncProvider", () => {
 
     await expect(createProvider().pushEvents([createEvent()])).resolves.toEqual([{
       deleteId: "created-event-id",
+      echo: { comparable: false, reason: "echo-times-missing" },
       remoteId: "created-event-uid",
       success: true,
     }]);
+  });
+
+  it("compares the creation echo field by field and requests a text body echo", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({
+      body: { content: "agenda", contentType: "text" },
+      end: { dateTime: "2026-07-17T19:00:00.0000000", timeZone: "UTC" },
+      iCalUId: "created-event-uid",
+      id: "created-event-id",
+      isAllDay: false,
+      showAs: "busy",
+      start: { dateTime: "2026-07-17T18:00:00.0000000", timeZone: "UTC" },
+      subject: "Meeting",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const [result] = await createProvider().pushEvents([{
+      ...createEvent(),
+      description: "agenda",
+    }]);
+
+    expect(result?.echo).toEqual({
+      comparable: true,
+      divergence: {
+        allDay: false,
+        description: false,
+        end: false,
+        location: false,
+        start: false,
+        summary: false,
+      },
+    });
+    const [, requestInit] = fetchMock.mock.calls[0] as [unknown, RequestInit];
+    expect(new Headers(requestInit.headers).get("Prefer")).toContain(
+      'outlook.body-content-type="text"',
+    );
+  });
+
+  it("names the fields the creation echo rewrote", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({
+      body: { content: "agenda rewritten", contentType: "text" },
+      end: { dateTime: "2026-07-17T19:30:00.0000000", timeZone: "UTC" },
+      iCalUId: "created-event-uid",
+      id: "created-event-id",
+      isAllDay: false,
+      showAs: "busy",
+      start: { dateTime: "2026-07-17T18:00:00.0000000", timeZone: "UTC" },
+      subject: "Meeting",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const [result] = await createProvider().pushEvents([{
+      ...createEvent(),
+      description: "agenda",
+    }]);
+
+    expect(result?.echo).toEqual({
+      comparable: true,
+      divergence: {
+        allDay: false,
+        description: true,
+        end: true,
+        location: false,
+        start: false,
+        summary: false,
+      },
+    });
+  });
+
+  it("marks a non-text body echo as uncomparable instead of diffing across formats", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({
+      body: { content: "<html><body>agenda</body></html>", contentType: "html" },
+      end: { dateTime: "2026-07-17T19:00:00.0000000", timeZone: "UTC" },
+      iCalUId: "created-event-uid",
+      id: "created-event-id",
+      isAllDay: false,
+      showAs: "busy",
+      start: { dateTime: "2026-07-17T18:00:00.0000000", timeZone: "UTC" },
+      subject: "Meeting",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const [result] = await createProvider().pushEvents([{
+      ...createEvent(),
+      description: "agenda",
+    }]);
+
+    expect(result?.success).toBe(true);
+    expect(result?.echo).toEqual({ comparable: false, reason: "echo-body-not-text" });
   });
 
   it("aborts a pending Graph event deletion", async () => {
@@ -254,6 +343,7 @@ describe("createOutlookSyncProvider", () => {
 
     await expect(provider.pushEvents([createEvent()])).resolves.toEqual([{
       deleteId: "created-event-id",
+      echo: { comparable: false, reason: "echo-times-missing" },
       remoteId: "created-event-uid",
       success: true,
     }]);
@@ -276,6 +366,7 @@ describe("createOutlookSyncProvider", () => {
 
     expect(result).toEqual({
       deleteId: "created-event-id",
+      echo: { comparable: false, reason: "echo-times-missing" },
       remoteId: "created-event-uid",
       success: true,
     });

@@ -4,7 +4,7 @@ import type { SQL } from "drizzle-orm";
 import { resolveUserIdentifier } from "./user";
 import { database } from "@/context";
 import { generateCalendarFeed } from "./ical-feed";
-import type { FeedResponse, IcalFeedQuery, StoredFeedEvent } from "./ical-feed";
+import type { FeedExclusionCounts, FeedResponse, IcalFeedQuery, StoredFeedEvent } from "./ical-feed";
 import type { FeedSettings } from "./ical-format";
 
 const FIRST_RESULT_LIMIT = 1;
@@ -37,13 +37,22 @@ const readFeedCalendars = async (userId: string) => {
   return calendars;
 };
 
+const buildFeedWindowFilter = (calendarIds: string[], query: IcalFeedQuery): SQL | undefined => and(
+  inArray(eventStatesTable.calendarId, calendarIds),
+  lte(eventStatesTable.startTime, query.windowEnd),
+  or(
+    gte(eventStatesTable.endTime, query.windowStart),
+    isNotNull(eventStatesTable.recurrenceRule),
+  ),
+);
+
 /*
  * The revision digest and the event read share this filter deliberately. If the
  * two ever selected different rows the digest would stop tracking the body, and
  * a subscriber would be handed a 304 for a feed that had in fact changed.
  */
 const buildFeedEventFilter = (calendarIds: string[], query: IcalFeedQuery): SQL | undefined => and(
-  inArray(eventStatesTable.calendarId, calendarIds),
+  buildFeedWindowFilter(calendarIds, query),
   or(
     isNull(eventStatesTable.sourceEventType),
     ne(eventStatesTable.sourceEventType, "workingLocation"),
@@ -52,12 +61,36 @@ const buildFeedEventFilter = (calendarIds: string[], query: IcalFeedQuery): SQL 
     isNull(eventStatesTable.availability),
     ne(eventStatesTable.availability, "workingElsewhere"),
   ),
-  lte(eventStatesTable.startTime, query.windowEnd),
-  or(
-    gte(eventStatesTable.endTime, query.windowStart),
-    isNotNull(eventStatesTable.recurrenceRule),
-  ),
 );
+
+/*
+ * Counts the in-window rows the filter above keeps out of the feed, one bucket
+ * per reason, so a row excluded by both predicates is counted once.
+ */
+const readFeedExclusions = async (
+  calendarIds: string[],
+  query: IcalFeedQuery,
+): Promise<FeedExclusionCounts> => {
+  const [row] = await database
+    .select({
+      workingElsewhere: sql<number>`count(*) filter (where
+        ${eventStatesTable.availability} = 'workingElsewhere'
+        and (${eventStatesTable.sourceEventType} is null
+          or ${eventStatesTable.sourceEventType} <> 'workingLocation')
+      )`.mapWith(Number),
+      workingLocation: sql<number>`count(*) filter (where
+        ${eventStatesTable.sourceEventType} = 'workingLocation'
+      )`.mapWith(Number),
+    })
+    .from(eventStatesTable)
+    .where(buildFeedWindowFilter(calendarIds, query));
+
+  if (!row) {
+    throw new Error("Feed exclusion count aggregate returned no row");
+  }
+
+  return row;
+};
 
 const readFeedEvents = (
   calendarIds: string[],
@@ -137,6 +170,7 @@ const generateUserCalendar = (
   generateCalendarFeed(identifier, {
     readFeedCalendars,
     readFeedEvents,
+    readFeedExclusions,
     readFeedRevision,
     readFeedSettings,
     resolveUserIdentifier,

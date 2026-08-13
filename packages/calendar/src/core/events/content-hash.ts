@@ -50,16 +50,40 @@ const createSyncEventContentHash = (event: SyncableEventContent): string => {
   return new Bun.CryptoHasher("sha256").update(payload).digest("hex");
 };
 
-const createEditableEventContentHash = (event: SyncableEventContent): string => {
+interface EditableEventContentSnapshot {
+  summary: string;
+  description: string;
+  location: string;
+  isAllDay: boolean;
+}
+
+const createEditableEventContentSnapshot = (
+  event: SyncableEventContent,
+): EditableEventContentSnapshot => ({
+  description: normalizeText(event.description),
+  isAllDay: resolveHashedAllDay(event),
+  location: normalizeText(event.location),
+  summary: normalizeText(event.summary),
+});
+
+const hashEditableEventContentSnapshot = (snapshot: EditableEventContentSnapshot): string => {
   const payload = JSON.stringify([
-    normalizeText(event.summary),
-    normalizeText(event.description),
-    normalizeText(event.location),
-    resolveHashedAllDay(event),
+    snapshot.summary,
+    snapshot.description,
+    snapshot.location,
+    snapshot.isAllDay,
   ]);
 
   return new Bun.CryptoHasher("sha256").update(payload).digest("hex");
 };
 
-export { createEditableEventContentHash, createSyncEventContentHash };
-export type { SyncableEventContent };
+const createEditableEventContentHash = (event: SyncableEventContent): string =>
+  hashEditableEventContentSnapshot(createEditableEventContentSnapshot(event));
+
+export {
+  createEditableEventContentHash,
+  createEditableEventContentSnapshot,
+  createSyncEventContentHash,
+  hashEditableEventContentSnapshot,
+};
+export type { EditableEventContentSnapshot, SyncableEventContent };

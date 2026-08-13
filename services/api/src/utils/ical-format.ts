@@ -271,5 +271,5 @@ const formatEventsAsIcal = (events: CalendarEvent[], settings: FeedSettings): st
   return generateIcsCalendar(calendar);
 };
 
-export { formatEventsAsIcal };
+export { formatEventsAsIcal, shouldIncludeEvent };
 export type { CalendarEvent, FeedSettings };

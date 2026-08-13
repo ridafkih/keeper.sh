@@ -8,7 +8,7 @@ import {
 } from "@keeper.sh/calendar";
 import { syncRangeSchema } from "@keeper.sh/data-schemas";
 import type { SyncRange } from "@keeper.sh/data-schemas";
-import { formatEventsAsIcal } from "./ical-format";
+import { formatEventsAsIcal, shouldIncludeEvent } from "./ical-format";
 import type { CalendarEvent, FeedSettings } from "./ical-format";
 
 /**
@@ -85,6 +85,16 @@ type StoredFeedEvent = Omit<
   recurrenceRule: string | null;
 };
 
+/* Rows the feed's own policy keeps out of the body, counted per reason. */
+interface FeedExclusionCounts {
+  workingLocation: number;
+  workingElsewhere: number;
+}
+
+interface FeedWithheldCounts extends FeedExclusionCounts {
+  allDay: number;
+}
+
 interface FeedDependencies {
   now?: Date;
   resolveUserIdentifier: (identifier: string) => Promise<string | null>;
@@ -94,6 +104,10 @@ interface FeedDependencies {
     calendarIds: string[],
     query: IcalFeedQuery,
   ) => Promise<StoredFeedEvent[]>;
+  readFeedExclusions: (
+    calendarIds: string[],
+    query: IcalFeedQuery,
+  ) => Promise<FeedExclusionCounts>;
   readFeedRevision: (
     calendarIds: string[],
     query: IcalFeedQuery,
@@ -105,7 +119,14 @@ interface FeedResponse {
   body: string | null;
   etag: string;
   eventCount: number;
+  withheld: FeedWithheldCounts;
 }
+
+const NOTHING_WITHHELD: FeedWithheldCounts = {
+  allDay: 0,
+  workingElsewhere: 0,
+  workingLocation: 0,
+};
 
 /*
  * Settings decide what each event renders as, so two feeds over identical rows
@@ -159,7 +180,12 @@ const generateCalendarFeed = async (
 
   if (calendars.length === 0) {
     const body = formatEventsAsIcal([], feedSettings);
-    return { body, etag: buildFeedEtag("", feedSettings), eventCount: 0 };
+    return {
+      body,
+      etag: buildFeedEtag("", feedSettings),
+      eventCount: 0,
+      withheld: NOTHING_WITHHELD,
+    };
   }
 
   const calendarIds = calendars.map(({ id }) => id);
@@ -170,15 +196,22 @@ const generateCalendarFeed = async (
   );
 
   if (ifNoneMatch === etag) {
-    return { body: null, etag, eventCount: 0 };
+    return { body: null, etag, eventCount: 0, withheld: NOTHING_WITHHELD };
   }
 
-  const rows = await dependencies.readFeedEvents(calendarIds, query);
+  const [rows, exclusions] = await Promise.all([
+    dependencies.readFeedEvents(calendarIds, query),
+    dependencies.readFeedExclusions(calendarIds, query),
+  ]);
+
+  const events = rows.map((row) => toCalendarEvent(row));
+  const allDay = events.filter((event) => !shouldIncludeEvent(event, feedSettings)).length;
 
   return {
-    body: formatEventsAsIcal(rows.map((row) => toCalendarEvent(row)), feedSettings),
+    body: formatEventsAsIcal(events, feedSettings),
     etag,
     eventCount: rows.length,
+    withheld: { ...exclusions, allDay },
   };
 };
 
@@ -187,4 +220,11 @@ export {
   createIcalFeedQuery,
   generateCalendarFeed,
 };
-export type { FeedDependencies, FeedResponse, IcalFeedQuery, StoredFeedEvent };
+export type {
+  FeedDependencies,
+  FeedExclusionCounts,
+  FeedResponse,
+  FeedWithheldCounts,
+  IcalFeedQuery,
+  StoredFeedEvent,
+};

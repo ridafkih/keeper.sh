@@ -275,6 +275,22 @@ describe("caldav convergence near a dst transition", () => {
     },
     {
       event: buildEvent({
+        endTime: new Date("2026-11-01T06:00:00.000Z"),
+        startTime: new Date("2026-11-01T05:30:00.000Z"),
+        startTimeZone: "America/New_York",
+      }),
+      name: "thirty-minute event on the first pass of a fall-back repeated hour",
+    },
+    {
+      event: buildEvent({
+        endTime: new Date("2026-11-01T07:00:00.000Z"),
+        startTime: new Date("2026-11-01T06:30:00.000Z"),
+        startTimeZone: "America/New_York",
+      }),
+      name: "thirty-minute event on the second pass of a fall-back repeated hour",
+    },
+    {
+      event: buildEvent({
         endTime: new Date("2027-03-14T06:59:30.000Z"),
         startTime: new Date("2027-03-14T06:59:30.000Z"),
         startTimeZone: "America/New_York",

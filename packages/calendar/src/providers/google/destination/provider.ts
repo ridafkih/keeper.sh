@@ -6,10 +6,16 @@ import type {
   DeleteResult,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
+  PushEchoComparison,
   PushResult,
   RemoteEvent,
 } from "../../../core/types";
-import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
+import {
+  googleApiErrorSchema,
+  googleEventListSchema,
+  googleEventSchema,
+} from "@keeper.sh/data-schemas";
+import type { GoogleEvent } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS, PROVIDER_PUSH_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
 import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
 import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS, GONE_STATUS } from "../shared/api";
@@ -20,7 +26,12 @@ import type { BatchSubRequest, BatchSubResponse } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
 import { normalizeGoogleEvent } from "./normalize-event";
 import { serializeGoogleEvent } from "./serialize-event";
-import { createEditableEventContentHash } from "../../../core/events/content-hash";
+import {
+  createEditableEventContentSnapshot,
+  hashEditableEventContentSnapshot,
+} from "../../../core/events/content-hash";
+import { comparePushEchoObservations } from "../../../core/events/push-echo";
+import type { PushEchoObservation } from "../../../core/events/push-echo";
 
 interface GoogleSyncProviderConfig {
   accessToken: string;
@@ -55,6 +66,51 @@ const extractBatchErrorMessage = (body: unknown, fallbackStatus: number): string
   return googleApiErrorSchema.assert(body).error?.message ?? fallback;
 };
 
+const parseGoogleAvailability = (
+  resource: GoogleEvent,
+): MaterializedSyncableEvent["availability"] => {
+  if (resource.transparency === "transparent") {
+    return "free";
+  }
+  return "busy";
+};
+
+const buildGoogleEchoObservation = (resource: GoogleEvent): PushEchoObservation | null => {
+  const startTime = parseEventTime(resource.start);
+  const endTime = parseEventTime(resource.end);
+  if (!startTime || !endTime) {
+    return null;
+  }
+  return {
+    content: createEditableEventContentSnapshot({
+      availability: parseGoogleAvailability(resource),
+      description: resource.description,
+      endTime,
+      isAllDay: Boolean(resource.start?.date),
+      location: resource.location,
+      startTime,
+      summary: resource.summary ?? "",
+    }),
+    endTime,
+    startTime,
+  };
+};
+
+const compareGoogleImportEcho = (sent: GoogleEvent, body: unknown): PushEchoComparison => {
+  if (!googleEventSchema.allows(body)) {
+    return { comparable: false, reason: "echo-not-parseable" };
+  }
+  const echoObservation = buildGoogleEchoObservation(googleEventSchema.assert(body));
+  const sentObservation = buildGoogleEchoObservation(sent);
+  if (!echoObservation || !sentObservation) {
+    return { comparable: false, reason: "echo-times-missing" };
+  }
+  return {
+    comparable: true,
+    divergence: comparePushEchoObservations(sentObservation, echoObservation),
+  };
+};
+
 const getImportedEventId = (body: unknown): string | null => {
   if (typeof body !== "object" || body === null || !("id" in body)) {
     return null;
@@ -69,9 +125,10 @@ const createImportResult = (
   deleteId: string | null,
   remoteId: string,
   statusCode: number,
+  echo: PushEchoComparison,
 ): PushResult => {
   if (deleteId) {
-    return { deleteId, remoteId, success: true };
+    return { deleteId, echo, remoteId, success: true };
   }
   return {
     error: "Google import response is missing the event ID",
@@ -164,7 +221,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   // Writes go through events.import, which upserts by iCalUID: re-pushing an existing event updates it rather than 409ing.
   const buildPushRequest = (
     event: MaterializedSyncableEvent,
-  ): { uid: string; request: BatchSubRequest } | null => {
+  ): { uid: string; resource: GoogleEvent; request: BatchSubRequest } | null => {
     const uid = generateDeterministicEventUid(`${event.id}:${config.externalCalendarId}`);
     const resource = serializeGoogleEvent(event, uid);
     if (!resource) {
@@ -172,6 +229,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     }
     return {
       uid,
+      resource,
       request: {
         method: "POST",
         path: `${eventsPath}/import`,
@@ -185,7 +243,12 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     await refreshIfNeeded();
 
     const results: PushResult[] = Array.from({ length: events.length });
-    const pending: { index: number; uid: string; batchIndex: number }[] = [];
+    const pending: {
+      index: number;
+      uid: string;
+      resource: GoogleEvent;
+      batchIndex: number;
+    }[] = [];
     const requests: BatchSubRequest[] = [];
 
     for (let index = 0; index < events.length; index++) {
@@ -201,7 +264,12 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         continue;
       }
 
-      pending.push({ index, uid: built.uid, batchIndex: requests.length });
+      pending.push({
+        index,
+        uid: built.uid,
+        resource: built.resource,
+        batchIndex: requests.length,
+      });
       requests.push(built.request);
     }
 
@@ -225,6 +293,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
           deleteId,
           entry.uid,
           response.statusCode,
+          compareGoogleImportEcho(entry.resource, response.body),
         );
       } else {
         results[entry.index] = {
@@ -399,31 +468,19 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       if (!event.iCalUID || !isKeeperEvent(event.iCalUID)) {
         continue;
       }
-      const startTime = parseEventTime(event.start);
-      const endTime = parseEventTime(event.end);
-      if (!startTime || !endTime) {
+      const observation = buildGoogleEchoObservation(event);
+      if (!observation) {
         continue;
-      }
-      let availability: MaterializedSyncableEvent["availability"] = "busy";
-      if (event.transparency === "transparent") {
-        availability = "free";
       }
       items.push({
         deleteId: event.id ?? event.iCalUID,
-        editableAvailability: availability,
-        editableContentHash: createEditableEventContentHash({
-          availability,
-          description: event.description,
-          endTime,
-          isAllDay: Boolean(event.start?.date),
-          location: event.location,
-          startTime,
-          summary: event.summary ?? "",
-        }),
-        endTime,
+        editableAvailability: parseGoogleAvailability(event),
+        editableContent: observation.content,
+        editableContentHash: hashEditableEventContentSnapshot(observation.content),
+        endTime: observation.endTime,
         isKeeperEvent: true,
         supportedAvailabilities: ["busy", "free"],
-        startTime,
+        startTime: observation.startTime,
         uid: event.iCalUID,
       });
     }

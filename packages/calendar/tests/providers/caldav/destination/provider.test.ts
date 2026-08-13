@@ -81,6 +81,15 @@ describe("createCalDAVSyncProvider", () => {
     expect(typeof provider.listRemoteEvents).toBe("function");
   });
 
+  it("declares a CalDAV push echo uncomparable because PUT returns no body", async () => {
+    clientMocks.createCalendarObject.mockResolvedValueOnce(null);
+
+    const [result] = await createProvider().pushEvents([createEvent()]);
+
+    expect(result?.success).toBe(true);
+    expect(result?.echo).toEqual({ comparable: false, reason: "echo-body-missing" });
+  });
+
   it("lists far-future Keeper objects without imposing a two-year CalDAV report cutoff", async () => {
     const farFuture = createEvent({
       endTime: new Date("2040-03-15T10:00:00.000Z"),
