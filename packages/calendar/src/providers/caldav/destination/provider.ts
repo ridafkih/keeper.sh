@@ -5,6 +5,7 @@ import {
   createSyncEventContentHash,
 } from "../../../core/events/content-hash";
 import { getErrorMessage } from "../../../core/utils/error";
+import { resolveTimeRangeEnd } from "../../../core/events/time-range";
 import type {
   DeleteResult,
   ListRemoteEventsOptions,
@@ -233,7 +234,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     );
     assertAllResourcesRead(resources);
     for (const parsed of resources.events) {
-      if (!isKeeperEvent(parsed.uid) || parsed.endTime < options.timeMin) {
+      if (!isKeeperEvent(parsed.uid) || resolveTimeRangeEnd(parsed) < options.timeMin) {
         continue;
       }
 

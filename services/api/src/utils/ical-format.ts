@@ -1,5 +1,10 @@
 import { KEEPER_EVENT_SUFFIX } from "@keeper.sh/constants";
-import { resolveIsAllDayEvent } from "@keeper.sh/calendar";
+import {
+  type EventTimeRange,
+  resolveIsAllDayEvent,
+  resolvePointInTimeRange,
+  resolveWholeDayTimeRange,
+} from "@keeper.sh/calendar";
 import { buildVtimezone, buildZonedIcsDate } from "@keeper.sh/calendar/ics";
 import { generateIcsCalendar } from "ts-ics";
 import type { IcsCalendar, IcsDateObject, IcsDuration, IcsEvent, IcsRecurrenceRule, IcsTimezone } from "ts-ics";
@@ -133,12 +138,27 @@ const groupEventsBySourceUid = (events: CalendarEvent[]): EventGroup[] => {
   return [...groups, ...ungrouped];
 };
 
+/*
+ * The feed always writes both DTSTART and DTEND, and RFC 5545 §3.6.1 requires DTEND to be
+ * later in time than DTSTART — for a DATE-valued pair too, where DTEND is the exclusive
+ * end of the last day. A stored range that does not end after it starts therefore gets
+ * the same widening the destinations apply, so every subscriber mounts a legal resource.
+ */
+const resolveFeedTimeRange = (event: CalendarEvent, isAllDay: boolean): EventTimeRange => {
+  if (isAllDay) {
+    return resolveWholeDayTimeRange(event);
+  }
+
+  return resolvePointInTimeRange(event);
+};
+
 const buildBaseIcsEvent = (event: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => {
   const isAllDay = resolveIsAllDayEvent(toAllDayShape(event));
   const timezone = event.startTimeZone ?? "";
+  const { endTime, startTime } = resolveFeedTimeRange(event, isAllDay);
   const common = {
     stamp: { date: new Date() },
-    start: buildZonedIcsDate(event.startTime, timezone, isAllDay),
+    start: buildZonedIcsDate(startTime, timezone, isAllDay),
     summary: resolveEventSummary(event, settings),
     uid,
     ...buildTransparency(event.availability),
@@ -148,7 +168,7 @@ const buildBaseIcsEvent = (event: CalendarEvent, uid: string, settings: FeedSett
   if (event.recurrenceRule && event.recurrenceDuration) {
     return { ...common, duration: event.recurrenceDuration };
   }
-  return { ...common, end: buildZonedIcsDate(event.endTime, timezone, isAllDay) };
+  return { ...common, end: buildZonedIcsDate(endTime, timezone, isAllDay) };
 };
 
 const buildMasterIcsEvent = (master: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => {

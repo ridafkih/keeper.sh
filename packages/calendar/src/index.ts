@@ -45,6 +45,11 @@ export {
 export { generateDeterministicEventUid, isKeeperEvent } from "./core/events/identity";
 export { inferAllDayEvent, resolveIsAllDayEvent } from "./core/events/all-day";
 export {
+  type EventTimeRange,
+  resolvePointInTimeRange,
+  resolveWholeDayTimeRange,
+} from "./core/events/time-range";
+export {
   instantToWallTime,
   resolveTimeZone,
   wallTimeToInstant,

@@ -5,6 +5,7 @@ import {
   findSourceEventsExceedingRecurrenceBudget,
   RecurrenceMaterializationLimitError,
 } from "../events/recurrence-materializer";
+import { overlapsTimeWindow } from "../events/time-range";
 import {
   buildSourceEventsToAdd,
   buildSourceEventStateIdsToRemove,
@@ -120,10 +121,7 @@ const getNonRecurringStoredEventIdsOutsideWindow = (
   }
   const eventIds: string[] = [];
   for (const event of events) {
-    if (
-      !event.recurrenceRule
-      && (event.endTime <= window.timeMin || event.startTime >= window.timeMax)
-    ) {
+    if (!event.recurrenceRule && !overlapsTimeWindow(event, window.timeMin, window.timeMax)) {
       eventIds.push(event.id);
     }
   }
