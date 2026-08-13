@@ -28,7 +28,6 @@ const PHASE_FIELDS = [
   "sync.phase.provider_push.duration_ms",
   "sync.phase.provider_delete.duration_ms",
   "sync.phase.checkpoint_flush.duration_ms",
-  "sync.phase.invalidation_check.duration_ms",
   "sync.phase.mapping_flush.duration_ms",
 ] as const;
 
@@ -82,7 +81,6 @@ interface RunOptions {
   existingMappings?: EventMapping[];
   flush?: (changes: PendingChanges) => Promise<void>;
   isCurrent?: () => Promise<boolean>;
-  isInvalidated?: () => Promise<boolean>;
   localEvents?: MaterializedSyncableEvent[];
   provider?: ReturnType<typeof makeProvider>;
   remoteEvents?: RemoteEvent[];
@@ -94,7 +92,6 @@ const runSync = async (options: RunOptions = {}): Promise<Record<string, unknown
     calendarId: "dest-cal-1",
     flush: options.flush ?? (() => Promise.resolve()),
     isCurrent: options.isCurrent ?? (() => Promise.resolve(true)),
-    isInvalidated: options.isInvalidated,
     onSyncEvent: (event) => { emitted.push(event); },
     provider: options.provider ?? makeProvider(),
     readState: () => Promise.resolve({
@@ -190,25 +187,6 @@ describe("syncCalendar phase attribution", () => {
     expectPhaseArithmetic(event);
   });
 
-  it("balances the phases when a checkpoint is rejected by invalidation", async () => {
-    const event = await runSync({
-      isInvalidated: async () => {
-        await delay(5);
-        return true;
-      },
-      localEvents: [makeEvent("ev-1")],
-      provider: makeProvider({
-        pushEvents: () => Promise.resolve([{ remoteId: "remote-1", success: true }]),
-      }),
-    });
-
-    expect(event["invalidated"]).toBe(true);
-    expect(event["sync.phase.checkpoint_flush.duration_ms"]).toBe(0);
-    expect(event["sync.phase.invalidation_check.duration_ms"] as number)
-      .toBeGreaterThanOrEqual(5);
-    expectPhaseArithmetic(event);
-  });
-
   it("balances the phases when the provider push rejects", async () => {
     const failure = new Error("provider exploded");
     const emitted: Record<string, unknown>[] = [];
@@ -297,7 +275,7 @@ describe("syncCalendar phase attribution", () => {
     expect(event["events.added"]).toBe(1);
   });
 
-  it("records an invalidation check even when no invalidation hook is supplied", async () => {
+  it("emits a phase field for every phase on a run that pushes", async () => {
     const event = await runSync({
       localEvents: [makeEvent("ev-1")],
       provider: makeProvider({
@@ -305,7 +283,9 @@ describe("syncCalendar phase attribution", () => {
       }),
     });
 
-    expect(event["sync.phase.invalidation_check.duration_ms"]).toBeGreaterThanOrEqual(0);
+    for (const field of PHASE_FIELDS) {
+      expect(event[field]).toBeTypeOf("number");
+    }
     expect(createSyncEventContentHash).toBeTypeOf("function");
     expectPhaseArithmetic(event);
   });

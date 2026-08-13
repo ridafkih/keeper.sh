@@ -1,8 +1,10 @@
+import { TraversalError } from "arktype";
 import { createCalDAVSourceSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { widelog } from "@/utils/logging";
+import { labelFailureResponse } from "@/utils/error-labelling";
 import { caldavSourcesQuerySchema } from "@/utils/request-query";
 import {
   CalDAVSourceLimitError,
@@ -10,6 +12,8 @@ import {
   getUserCalDAVSources,
   createCalDAVSource,
 } from "@/utils/caldav-sources";
+
+const SOURCE_CREATE_FAILED_MESSAGE = "Failed to create CalDAV source";
 
 const GET = withWideEvent(
   withAuth(async ({ request, userId }) => {
@@ -53,12 +57,19 @@ const POST = withWideEvent(
         return Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT });
       }
 
-      widelog.errorFields(error, { slug: "caldav-connection-failed" });
-      const fallbackMessage = "Invalid request body";
-      if (error instanceof Error) {
+      if (error instanceof TraversalError) {
+        widelog.errorFields(error, { slug: "invalid-request-body" });
         return ErrorResponse.badRequest(error.message).toResponse();
       }
-      return ErrorResponse.badRequest(fallbackMessage).toResponse();
+
+      const databaseResponse = labelFailureResponse(error, {
+        slug: "caldav-connection-failed",
+      });
+      if (databaseResponse) {
+        return databaseResponse;
+      }
+
+      return ErrorResponse.internal(SOURCE_CREATE_FAILED_MESSAGE).toResponse();
     }
   }),
 );

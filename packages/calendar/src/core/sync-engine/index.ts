@@ -1,6 +1,7 @@
 import type {
   DeleteResult,
   MaterializedSyncableEvent,
+  ProviderThrottleMetrics,
   PushResult,
   RemoteEvent,
   SyncOperation,
@@ -29,7 +30,6 @@ const SYNC_PHASES = [
   "provider_push",
   "provider_delete",
   "checkpoint_flush",
-  "invalidation_check",
   "mapping_flush",
 ] as const;
 
@@ -79,16 +79,17 @@ const createPhaseTimer = () => {
 const createTimedProvider = (
   provider: CalendarSyncProvider,
   timer: ReturnType<typeof createPhaseTimer>,
-): CalendarSyncProvider => ({
-  deleteEvents: (eventIds) => timer.measure("provider_delete", () => provider.deleteEvents(eventIds)),
-  listRemoteEvents: (options) => provider.listRemoteEvents(options),
-  pushEvents: (events) => timer.measure("provider_push", () => provider.pushEvents(events)),
-});
+): CalendarSyncProvider => {
+  const { getThrottleMetrics } = provider;
+  return {
+    deleteEvents: (eventIds) => timer.measure("provider_delete", () => provider.deleteEvents(eventIds)),
+    listRemoteEvents: (options) => provider.listRemoteEvents(options),
+    pushEvents: (events) => timer.measure("provider_push", () => provider.pushEvents(events)),
+    ...(getThrottleMetrics && { getThrottleMetrics: () => getThrottleMetrics() }),
+  };
+};
 
-const resolveOutcome = (superseded: boolean, invalidated: boolean): string => {
-  if (invalidated) {
-    return "invalidated";
-  }
+const resolveOutcome = (superseded: boolean): string => {
   if (superseded) {
     return "superseded";
   }
@@ -555,7 +556,6 @@ interface SyncCalendarOptions {
     remoteEvents: RemoteEvent[];
   }>;
   isCurrent: () => Promise<boolean>;
-  isInvalidated?: () => Promise<boolean>;
   flush: (changes: PendingChanges) => Promise<void>;
   onSyncEvent?: (event: Record<string, unknown>) => void;
   onProgress?: (update: SyncProgressUpdate) => void;
@@ -611,6 +611,17 @@ const appendStaleReasonFields = (
   }
 };
 
+const appendThrottleFields = (
+  event: Record<string, unknown>,
+  metrics?: ProviderThrottleMetrics,
+): void => {
+  if (!metrics || metrics.retryCount === 0) {
+    return;
+  }
+  event["provider.retry_count"] = metrics.retryCount;
+  event["provider.retry_after_ms"] = metrics.retryAfterMs;
+};
+
 const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarResult> => {
   const {
     userId,
@@ -618,7 +629,6 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     provider,
     readState,
     isCurrent,
-    isInvalidated,
     flush,
     onSyncEvent,
     onProgress,
@@ -636,10 +646,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
   const timer = createPhaseTimer();
   const timedProvider = createTimedProvider(provider, timer);
   const timedIsCurrent = () => timer.measure("currency_check", isCurrent);
-  const timedIsInvalidated = () =>
-    timer.measure("invalidation_check", async () => await isInvalidated?.() ?? false);
   let flushed = false;
-  let checkpointInvalidated = false;
 
   const emitProgress = (stage: SyncProgressUpdate["stage"], localEventCount: number, remoteEventCount: number, progress?: { current: number; total: number }): void => {
     if (!onProgress) {
@@ -724,11 +731,6 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
         emitProgress("processing", state.localEvents.length, state.remoteEvents.length, { current: processed, total });
       },
       async (changes) => {
-        const invalidated = await timedIsInvalidated();
-        if (invalidated) {
-          checkpointInvalidated = true;
-          return false;
-        }
         await timer.measure("checkpoint_flush", () => flush(changes));
         flushed = true;
         return true;
@@ -748,9 +750,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       wideEvent["operation_errors.truncated"] = outcome.errors.length > OPERATION_ERROR_SAMPLE_SIZE;
     }
 
-    const invalidated = checkpointInvalidated || outcome.checkpointRejected || (await timedIsInvalidated());
-
-    if (!invalidated && mappingUpdates.length > 0) {
+    if (mappingUpdates.length > 0) {
       await timer.measure(
         "mapping_flush",
         () => flush({ deletes: [], inserts: [], updates: mappingUpdates }),
@@ -758,8 +758,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       flushed = true;
     }
 
-    wideEvent["invalidated"] = invalidated;
-    wideEvent["outcome"] = resolveOutcome(outcome.superseded, invalidated);
+    wideEvent["outcome"] = resolveOutcome(outcome.superseded);
     wideEvent["flushed"] = flushed;
     wideEvent["flush.inserts"] = outcome.changes.inserts.length;
     wideEvent["flush.deletes"] = outcome.changes.deletes.length;
@@ -785,6 +784,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
      */
     wideEvent["duration_ms"] = Date.now() - startTime;
     timer.appendFields(wideEvent, performance.now() - reconcileStartedAt);
+    appendThrottleFields(wideEvent, provider.getThrottleMetrics?.());
     onSyncEvent?.(wideEvent);
   }
 };

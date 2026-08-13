@@ -1,6 +1,7 @@
 import { withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { widelog } from "@/utils/logging";
+import { labelFailure } from "@/utils/error-labelling";
 import { buildRedirectUrl, OAuthError } from "@/utils/oauth";
 import { oauthCallbackQuerySchema, providerParamSchema } from "@/utils/request-query";
 import {
@@ -88,7 +89,7 @@ const GET = withWideEvent(async ({ request, params }) => {
       return Response.redirect(error.redirectUrl.toString());
     }
 
-    widelog.errorFields(error, { slug: "unclassified" });
+    labelFailure(error, { slug: "unclassified" });
     return Response.redirect(errorUrl.toString());
   }
 });

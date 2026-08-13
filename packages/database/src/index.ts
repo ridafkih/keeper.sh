@@ -1,5 +1,10 @@
 export { createDatabase, closeDatabase } from "./utils/database";
-export { classifyDatabaseError, getDatabaseErrorDetails } from "./utils/errors";
+export {
+  classifyDatabaseError,
+  getDatabaseErrorDetails,
+  isDatabaseError,
+  resolveDatabaseErrorClassification,
+} from "./utils/errors";
 export {
   instrumentDatabasePool,
   resetDatabasePoolTelemetry,

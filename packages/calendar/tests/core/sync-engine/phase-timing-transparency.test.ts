@@ -27,7 +27,6 @@ const PHASE_FIELDS = [
   "sync.phase.provider_push.duration_ms",
   "sync.phase.provider_delete.duration_ms",
   "sync.phase.checkpoint_flush.duration_ms",
-  "sync.phase.invalidation_check.duration_ms",
   "sync.phase.mapping_flush.duration_ms",
 ] as const;
 
@@ -80,7 +79,6 @@ interface RunOptions {
   existingMappings?: EventMapping[];
   flush?: (changes: PendingChanges) => Promise<void>;
   isCurrent?: () => Promise<boolean>;
-  isInvalidated?: () => Promise<boolean>;
   localEvents?: MaterializedSyncableEvent[];
   provider?: ReturnType<typeof makeProvider>;
   readState?: () => Promise<{
@@ -97,7 +95,6 @@ const runSync = async (options: RunOptions = {}): Promise<Record<string, unknown
     calendarId: "dest-cal-1",
     flush: options.flush ?? (() => Promise.resolve()),
     isCurrent: options.isCurrent ?? (() => Promise.resolve(true)),
-    isInvalidated: options.isInvalidated,
     onSyncEvent: (event) => { emitted.push(event); },
     provider: options.provider ?? makeProvider(),
     readState: options.readState ?? (() => Promise.resolve({
@@ -322,7 +319,6 @@ describe("syncCalendar instrumentation transparency", () => {
       const localEvents = Array.from({ length: round % 4 }, (_unused, index) =>
         makeEvent(`ev-${round}-${index}`));
       const event = await runSync({
-        ...(round % 3 === 0 && { isInvalidated: () => Promise.resolve(false) }),
         localEvents,
         provider: makeProvider({
           pushEvents: (events) => Promise.resolve(

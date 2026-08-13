@@ -47,7 +47,8 @@ async function loadSubscription(context: { runtimeConfig: { commercialMode: bool
   if (!context.runtimeConfig.commercialMode) return undefined;
   try {
     return await fetchSubscriptionStateWithApi(context.fetchApi);
-  } catch {
+  } catch (error) {
+    console.error("[subscription] settings loader preload failed, deferring to the client read:", error);
     return undefined;
   }
 }

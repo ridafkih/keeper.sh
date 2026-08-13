@@ -26,7 +26,6 @@ const PHASE_FIELDS = [
   "sync.phase.provider_push.duration_ms",
   "sync.phase.provider_delete.duration_ms",
   "sync.phase.checkpoint_flush.duration_ms",
-  "sync.phase.invalidation_check.duration_ms",
   "sync.phase.mapping_flush.duration_ms",
 ] as const;
 
@@ -49,7 +48,6 @@ const makeEvent = (id: string): MaterializedSyncableEvent => ({
 interface RunOptions {
   flush?: (changes: PendingChanges) => Promise<void>;
   isCurrent?: () => Promise<boolean>;
-  isInvalidated?: () => Promise<boolean>;
   localEvents?: MaterializedSyncableEvent[];
   provider?: {
     deleteEvents: (eventIds: string[]) => Promise<DeleteResult[]>;
@@ -68,7 +66,6 @@ const runSync = async (
       calendarId: "dest-cal-1",
       flush: options.flush ?? (() => Promise.resolve()),
       isCurrent: options.isCurrent ?? (() => Promise.resolve(true)),
-      isInvalidated: options.isInvalidated,
       onSyncEvent: (event) => {
         emitted.push(event);
       },
@@ -128,21 +125,6 @@ describe("syncCalendar phase attribution when a phase throws", () => {
 
     expect((thrown as Error).message).toBe("currency check failed");
     expect(event["sync.phase.currency_check.duration_ms"] as number).toBeGreaterThanOrEqual(15);
-    expectBalanced(event);
-  });
-
-  it("records the invalidation check that rejected after the operations ran", async () => {
-    const { event, thrown } = await runSync({
-      isInvalidated: async () => {
-        await delay(20);
-        throw new Error("invalidation check failed");
-      },
-      localEvents: [makeEvent("event-1")],
-    });
-
-    expect((thrown as Error).message).toBe("invalidation check failed");
-    expect(event["sync.phase.invalidation_check.duration_ms"] as number).toBeGreaterThanOrEqual(15);
-    expect(event["sync.phase.provider_push.duration_ms"] as number).toBeGreaterThanOrEqual(0);
     expectBalanced(event);
   });
 

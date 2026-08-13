@@ -1,11 +1,9 @@
 const LOCK_PREFIX = "sync:lock:";
 const SIGNAL_PREFIX = "sync:signal:";
 const WAITER_PREFIX = "sync:waiters:";
-const INVALIDATION_PREFIX = "sync:invalidated:";
 const LOCK_TTL_SECONDS = 120;
 const LOCK_RENEW_INTERVAL_MS = (LOCK_TTL_SECONDS * 1000) / 3;
 const SIGNAL_TTL_SECONDS = 320;
-const INVALIDATION_TTL_SECONDS = 300;
 const POLL_INTERVAL_MS = 250;
 const POLL_TIMEOUT_MS = 310_000;
 const MAPPING_MUTATION_LOCK_PREFIX = "mapping-mutation:";
@@ -29,10 +27,6 @@ const HOLDER_PREFIXES: Record<SyncLockAcquisition, string> = {
 interface SyncLockRedis {
   get: (key: string) => Promise<string | null>;
   eval: (script: string, keyCount: number, ...args: string[]) => Promise<unknown>;
-}
-
-interface InvalidationRedis {
-  set: (...args: [string, string, string, number]) => Promise<unknown>;
 }
 
 interface SyncLockHandle {
@@ -168,7 +162,6 @@ const CONFIRM_ACQUISITION_SCRIPT = `
  *
  * KEYS[1] = lock key
  * KEYS[2] = waiter stack key
- * KEYS[3] = invalidation key
  * ARGV[1] = holder ID
  *
  * The waiter stack is read rather than the signal key because
@@ -178,9 +171,6 @@ const CONFIRM_ACQUISITION_SCRIPT = `
 const IS_CURRENT_SCRIPT = `
   local holder = redis.call('GET', KEYS[1])
   if holder ~= ARGV[1] then
-    return 0
-  end
-  if redis.call('GET', KEYS[3]) then
     return 0
   end
   local prefix = '${BACKGROUND_HOLDER_PREFIX}'
@@ -199,7 +189,6 @@ const createLockHandle = (
   calendarId: string,
   lockKey: string,
   waiterKey: string,
-  invalidationKey: string,
   holderId: string,
 ): SyncLockHandle => {
   const renewalState: { error?: unknown } = {};
@@ -233,10 +222,9 @@ const createLockHandle = (
 
     const current = await redis.eval(
       IS_CURRENT_SCRIPT,
-      3,
+      2,
       lockKey,
       waiterKey,
-      invalidationKey,
       holderId,
     );
 
@@ -263,7 +251,6 @@ const createSyncLock = (
     const lockKey = `${LOCK_PREFIX}${calendarId}`;
     const signalKey = `${SIGNAL_PREFIX}${calendarId}`;
     const waiterKey = `${WAITER_PREFIX}${calendarId}`;
-    const invalidationKey = `${INVALIDATION_PREFIX}${calendarId}`;
     const blockerLockKey = `${LOCK_PREFIX}${blockerCalendarId ?? calendarId}`;
     const holderId = `${HOLDER_PREFIXES[acquisition]}${crypto.randomUUID()}`;
     let checkBlocker = "0";
@@ -309,7 +296,6 @@ const createSyncLock = (
         calendarId,
         lockKey,
         waiterKey,
-        invalidationKey,
         holderId,
       );
     };
@@ -401,16 +387,5 @@ const createSyncLock = (
 const createMappingMutationLockId = (userId: string): string =>
   `${MAPPING_MUTATION_LOCK_PREFIX}${userId}`;
 
-const invalidateCalendar = async (redis: InvalidationRedis, calendarId: string): Promise<void> => {
-  const key = `${INVALIDATION_PREFIX}${calendarId}`;
-  await redis.set(key, "1", "EX", INVALIDATION_TTL_SECONDS);
-};
-
-const isCalendarInvalidated = async (redis: SyncLockRedis, calendarId: string): Promise<boolean> => {
-  const key = `${INVALIDATION_PREFIX}${calendarId}`;
-  const value = await redis.get(key);
-  return value !== null;
-};
-
-export { createSyncLock, createMappingMutationLockId, invalidateCalendar, isCalendarInvalidated, SyncLockRenewalError, LOCK_PREFIX, SIGNAL_PREFIX, WAITER_PREFIX, INVALIDATION_PREFIX, LOCK_TTL_SECONDS, LOCK_RENEW_INTERVAL_MS, INVALIDATION_TTL_SECONDS, POLL_INTERVAL_MS, BACKGROUND_HOLDER_PREFIX };
-export type { SyncLockAcquisition, SyncLockHandle, SyncLockRedis, InvalidationRedis, AcquireSyncLockResult, SyncLockSkippedResult };
+export { createSyncLock, createMappingMutationLockId, SyncLockRenewalError, LOCK_PREFIX, SIGNAL_PREFIX, WAITER_PREFIX, LOCK_TTL_SECONDS, LOCK_RENEW_INTERVAL_MS, POLL_INTERVAL_MS, BACKGROUND_HOLDER_PREFIX };
+export type { SyncLockAcquisition, SyncLockHandle, SyncLockRedis, AcquireSyncLockResult, SyncLockSkippedResult };

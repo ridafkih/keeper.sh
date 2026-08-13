@@ -1,6 +1,7 @@
 import { withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { widelog } from "@/utils/logging";
+import { labelFailure } from "@/utils/error-labelling";
 import {
   OAuthError,
   buildRedirectUrl,
@@ -26,7 +27,7 @@ const GET = withWideEvent(async ({ request, params }) => {
       return Response.redirect(error.redirectUrl.toString());
     }
 
-    widelog.errorFields(error, { slug: "unclassified" });
+    labelFailure(error, { slug: "unclassified" });
     const errorUrl = buildRedirectUrl("/dashboard/integrations", baseUrl, {
       destination: "error",
       error: "Failed to connect",

@@ -5,6 +5,7 @@ import { createKeeperApi } from "@/read-models";
 import type { KeeperEventFilters } from "@/types";
 import { withV1Auth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
+import { labelFailureResponse } from "@/utils/error-labelling";
 import { eventCreateBodySchema } from "@/utils/request-body";
 import { database, oauthProviders, refreshLockStore, encryptionKey } from "@/context";
 
@@ -73,7 +74,12 @@ const POST = withWideEvent(
       }
 
       return Response.json(result.event ?? { created: true }, { status: HTTP_STATUS.CREATED });
-    } catch {
+    } catch (error) {
+      const databaseResponse = labelFailureResponse(error, { slug: "invalid-request-body" });
+      if (databaseResponse) {
+        return databaseResponse;
+      }
+
       return ErrorResponse.badRequest("Invalid event data. calendarId, title, startTime, and endTime are required.").toResponse();
     }
   }),

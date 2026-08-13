@@ -13,7 +13,7 @@ import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-sch
 import { HTTP_STATUS, PROVIDER_PUSH_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
 import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
 import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS, GONE_STATUS } from "../shared/api";
-import { withBackoff } from "../shared/backoff";
+import { withBackoff } from "../../../core/utils/backoff";
 import { executeBatchChunked } from "../shared/batch";
 import { isRateLimitApiError, parseGoogleApiError } from "../shared/errors";
 import type { BatchSubRequest, BatchSubResponse } from "../shared/batch";

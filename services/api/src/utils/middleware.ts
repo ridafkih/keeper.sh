@@ -2,13 +2,13 @@ import type { MaybePromise } from "bun";
 import { isKeeperMcpEnabledAuth } from "@keeper.sh/auth";
 import { ErrorResponse } from "./responses";
 import { apiTokensTable } from "@keeper.sh/database/schema";
-import { classifyDatabaseError } from "@keeper.sh/database";
 import { isApiToken, hashApiToken } from "./api-tokens";
 import { user as userTable } from "@keeper.sh/database/auth-schema";
 import { eq } from "drizzle-orm";
 import { auth, database, premiumService, redis } from "@/context";
 import { checkAndIncrementApiUsage } from "./api-rate-limit";
 import { context, widelog } from "./logging";
+import { labelFailure } from "./error-labelling";
 
 const MS_PER_DAY = 86_400_000;
 
@@ -118,11 +118,7 @@ const withWideEvent =
       } catch (error) {
         widelog.set("status_code", 500);
         widelog.set("outcome", "error");
-        const databaseError = classifyDatabaseError(error);
-        if (databaseError?.sqlState) {
-          widelog.set("db.error_sqlstate", databaseError.sqlState);
-        }
-        widelog.errorFields(error, { slug: databaseError?.slug ?? "unclassified" });
+        labelFailure(error, { slug: "unclassified" });
         throw error;
       } finally {
         widelog.flush();

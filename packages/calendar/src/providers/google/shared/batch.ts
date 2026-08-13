@@ -3,7 +3,7 @@ import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import { chunkArray } from "../../../core/utils/chunk";
 import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
 import { GOOGLE_BATCH_API, GOOGLE_BATCH_MAX_SIZE } from "./api";
-import { withBackoff, abortableSleep, computeDelay, DEFAULT_MAX_RETRIES } from "./backoff";
+import { withBackoff, abortableSleep, computeDelay, DEFAULT_MAX_RETRIES } from "../../../core/utils/backoff";
 import { isRateLimitApiError, parseGoogleApiError, parseGoogleApiErrorFromBody } from "./errors";
 
 interface BatchSubRequest {

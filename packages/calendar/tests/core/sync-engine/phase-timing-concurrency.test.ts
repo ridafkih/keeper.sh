@@ -27,7 +27,6 @@ const PHASE_FIELDS = [
   "sync.phase.provider_push.duration_ms",
   "sync.phase.provider_delete.duration_ms",
   "sync.phase.checkpoint_flush.duration_ms",
-  "sync.phase.invalidation_check.duration_ms",
   "sync.phase.mapping_flush.duration_ms",
 ] as const;
 
@@ -83,7 +82,6 @@ interface RunOptions {
   existingMappings?: EventMapping[];
   flush?: (changes: PendingChanges) => Promise<void>;
   isCurrent?: () => Promise<boolean>;
-  isInvalidated?: () => Promise<boolean>;
   localEvents?: MaterializedSyncableEvent[];
   provider?: ReturnType<typeof makeProvider>;
   remoteEvents?: RemoteEvent[];
@@ -99,7 +97,6 @@ const collectSync = async (
       calendarId: options.calendarId ?? "dest-cal-1",
       flush: options.flush ?? (() => Promise.resolve()),
       isCurrent: options.isCurrent ?? (() => Promise.resolve(true)),
-      isInvalidated: options.isInvalidated,
       onSyncEvent: (event) => { emitted.push(event); },
       provider: options.provider ?? makeProvider(),
       readState: () => Promise.resolve({
@@ -249,11 +246,10 @@ describe("syncCalendar phase attribution under stress", () => {
     expect(new Set(keySets).size).toBe(1);
   });
 
-  it("keeps the invalidation check inside the reconcile total when it is slow", async () => {
+  it("keeps a slow checkpoint flush inside the reconcile total", async () => {
     const event = await runSync({
-      isInvalidated: async () => {
+      flush: async () => {
         await delay(25);
-        return false;
       },
       localEvents: [makeEvent("ev-1")],
       provider: makeProvider({
@@ -261,7 +257,7 @@ describe("syncCalendar phase attribution under stress", () => {
       }),
     });
 
-    expect(event["sync.phase.invalidation_check.duration_ms"] as number)
+    expect(event["sync.phase.checkpoint_flush.duration_ms"] as number)
       .toBeGreaterThanOrEqual(20);
     expectPhaseArithmetic(event);
   });

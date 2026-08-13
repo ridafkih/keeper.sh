@@ -32,7 +32,6 @@ const ENGINE_PHASE_FIELDS = [
   "sync.phase.provider_push.duration_ms",
   "sync.phase.provider_delete.duration_ms",
   "sync.phase.checkpoint_flush.duration_ms",
-  "sync.phase.invalidation_check.duration_ms",
   "sync.phase.mapping_flush.duration_ms",
 ] as const;
 

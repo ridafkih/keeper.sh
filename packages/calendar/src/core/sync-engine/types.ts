@@ -2,6 +2,7 @@ import type {
   DeleteResult,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
+  ProviderThrottleMetrics,
   PushResult,
   RemoteEvent,
 } from "../types";
@@ -10,6 +11,7 @@ interface CalendarSyncProvider {
   pushEvents: (events: MaterializedSyncableEvent[]) => Promise<PushResult[]>;
   deleteEvents: (eventIds: string[]) => Promise<DeleteResult[]>;
   listRemoteEvents: (options: ListRemoteEventsOptions) => Promise<RemoteEvent[]>;
+  getThrottleMetrics?: () => ProviderThrottleMetrics;
 }
 
 interface PendingInsert {

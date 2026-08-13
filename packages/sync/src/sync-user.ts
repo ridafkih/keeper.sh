@@ -4,6 +4,7 @@ import {
   getEventMappingsForDestination,
   createDatabaseFlush,
   createGoogleUserRateLimiter,
+  createRedisRateLimiter,
   buildCalendarBackoffState,
   RESET_CALENDAR_BACKOFF_STATE,
   createSyncWindow,
@@ -12,8 +13,10 @@ import {
   getConfigurableSyncWindow,
   intersectSyncWindows,
 } from "@keeper.sh/calendar";
+import { OUTLOOK_REQUESTS_PER_MINUTE } from "@keeper.sh/constants";
 import { syncRangeSchema } from "@keeper.sh/data-schemas";
 import type { Plan } from "@keeper.sh/data-schemas";
+import type { RedisRateLimiter } from "@keeper.sh/calendar";
 import type {
   EventMapping,
   DestinationEventReadDiagnostics,
@@ -30,18 +33,43 @@ import {
 } from "@keeper.sh/database/schema";
 import { withDatabasePoolWindow } from "@keeper.sh/database";
 import type { DatabasePoolWindow } from "@keeper.sh/database";
-import { and, arrayContains, eq, inArray } from "drizzle-orm";
+import { and, arrayContains, eq, inArray, isNull } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
-import { getErrorMessage, isBackoffEligibleError } from "./destination-errors";
+import {
+  getErrorMessage,
+  isBackoffEligibleError,
+  resolveDestinationAttemptVerdict,
+} from "./destination-errors";
+import type { DestinationAttemptVerdict } from "./destination-errors";
 import { resolveSyncProvider } from "./resolve-provider";
 import type { OAuthConfig } from "./resolve-provider";
 import {
   createMappingMutationLockId,
   createSyncLock,
-  isCalendarInvalidated,
-  type SyncLockHandle,
 } from "./sync-lock";
+import type { SyncLockHandle } from "./sync-lock";
+
+/*
+ * Google's quota is shared across ingest and push, so the push lane claims only its
+ * reserved share of the one per-user key. Outlook throttles per mailbox instead, so it
+ * gets a key of its own at the mailbox ceiling.
+ */
+const createProviderRateLimiter = (
+  redis: Redis,
+  userId: string,
+  provider: string,
+): RedisRateLimiter | undefined => {
+  if (provider === "google") {
+    return createGoogleUserRateLimiter(redis, userId, "push");
+  }
+  if (provider !== "outlook") {
+    return;
+  }
+  return createRedisRateLimiter(redis, `ratelimit:${userId}:outlook`, {
+    requestsPerMinute: OUTLOOK_REQUESTS_PER_MINUTE,
+  });
+};
 
 const resetDestinationBackoff = async (
   database: BunSQLDatabase,
@@ -53,17 +81,36 @@ const resetDestinationBackoff = async (
     .where(eq(calendarsTable.id, calendarId));
 };
 
+/**
+ * The escalation is a compare-and-set against the retry state the run was
+ * judged on. Anything that resets the row while the run is in flight — a
+ * reconnect, another worker's verdict — must win over a verdict computed
+ * against credentials or a counter that no longer exist.
+ */
+const matchesObservedNextAttempt = (nextAttemptAt: Date | null) => {
+  if (nextAttemptAt === null) {
+    return isNull(calendarsTable.nextAttemptAt);
+  }
+  return eq(calendarsTable.nextAttemptAt, nextAttemptAt);
+};
+
+const matchesObservedRetryState = (destination: DestinationAttempt) =>
+  and(
+    eq(calendarsTable.id, destination.calendarId),
+    eq(calendarsTable.failureCount, destination.failureCount),
+    matchesObservedNextAttempt(destination.nextAttemptAt),
+  );
+
 const applyDestinationBackoff = async (
   database: BunSQLDatabase,
-  calendarId: string,
-  currentFailureCount: number,
+  destination: DestinationAttempt,
 ): Promise<void> => {
-  const backoffState = buildCalendarBackoffState(currentFailureCount);
+  const backoffState = buildCalendarBackoffState(destination.failureCount);
 
   await database
     .update(calendarsTable)
     .set(backoffState)
-    .where(eq(calendarsTable.id, calendarId));
+    .where(matchesObservedRetryState(destination));
 };
 
 const extractNumericField = (event: Record<string, unknown> | null | undefined, key: string): number => {
@@ -466,12 +513,29 @@ const isDestinationAttemptEligible = (
 ): boolean =>
   destination.nextAttemptAt === null || destination.nextAttemptAt <= now;
 
-const isCompletedAttemptCurrent = async (
-  handle: SyncLockHandle,
-  redis: Redis,
-  calendarId: string,
-): Promise<boolean> =>
-  await handle.isCurrent() && !await isCalendarInvalidated(redis, calendarId);
+/**
+ * The conditions under which this worker must stop touching the destination
+ * even though it still holds the lock. Read only by the in-flight check handed
+ * to syncCalendar: the post-run verdict uses whether that check ever fired,
+ * because a run that read both sides and found nothing to do returns the same
+ * all-zero result as a run truncated at the gate, and re-reading the clock
+ * afterwards cannot tell the two apart.
+ */
+const isDestinationAttemptSuperseded = (
+  config: SyncConfig,
+  sourceCalendarsChanged: boolean,
+): boolean => {
+  if (sourceCalendarsChanged) {
+    return true;
+  }
+  if (config.abortSignal?.aborted === true) {
+    return true;
+  }
+  if (!config.deadlineMs) {
+    return false;
+  }
+  return Date.now() >= config.deadlineMs;
+};
 
 const resetDestinationBackoffIfNeeded = async (
   database: BunSQLDatabase,
@@ -480,6 +544,95 @@ const resetDestinationBackoffIfNeeded = async (
   if (destination.failureCount > 0) {
     await resetDestinationBackoff(database, destination.calendarId);
   }
+};
+
+const hasSameRetryState = (
+  observed: DestinationAttempt,
+  current: DestinationAttempt | null,
+): boolean =>
+  current !== null
+  && current.failureCount === observed.failureCount
+  && (current.nextAttemptAt?.getTime() ?? null) === (observed.nextAttemptAt?.getTime() ?? null);
+
+const escalateDestinationBackoff = async (
+  database: BunSQLDatabase,
+  destination: DestinationAttempt,
+): Promise<void> => {
+  const current = await getDestinationAttempt(
+    database,
+    destination.userId,
+    destination.calendarId,
+  );
+  if (!hasSameRetryState(destination, current)) {
+    return;
+  }
+  await applyDestinationBackoff(database, destination);
+};
+
+/**
+ * The one place a run's verdict reaches the database, so the throwing and
+ * non-throwing paths cannot disagree about who owns the calendar. Reports
+ * whether this run still owned it, which is also the gate on folding the run's
+ * counts and errors into the aggregate result.
+ */
+const applyDestinationAttemptVerdict = async (
+  options: {
+    database: BunSQLDatabase;
+    destination: DestinationAttempt;
+    handle: SyncLockHandle;
+    verdict: DestinationAttemptVerdict;
+  },
+): Promise<boolean> => {
+  const { database, destination, handle, verdict } = options;
+  if (!await handle.isCurrent()) {
+    return false;
+  }
+  if (verdict === "failed") {
+    await escalateDestinationBackoff(database, destination);
+  } else if (verdict === "succeeded") {
+    await resetDestinationBackoffIfNeeded(database, destination);
+  }
+  return true;
+};
+
+/**
+ * A run that lost the calendar mid-flight wrote no backoff, so it must not
+ * announce one either: the worker turns onCalendarError into a
+ * retry.backoff_applied claim, and the worker that still owns the calendar
+ * reports the same run.
+ */
+const recordDestinationAttemptFailure = async (
+  options: {
+    callbacks?: SyncCallbacks;
+    database: BunSQLDatabase;
+    destination: DestinationAttempt;
+    durationMs: number;
+    error: unknown;
+    handle: SyncLockHandle;
+    syncEvent: Record<string, unknown> | null;
+  },
+): Promise<string[]> => {
+  const { callbacks, database, destination, durationMs, error, handle, syncEvent } = options;
+  const stillOwned = await applyDestinationAttemptVerdict({
+    database,
+    destination,
+    handle,
+    verdict: "failed",
+  });
+  if (!stillOwned) {
+    return [];
+  }
+
+  callbacks?.onCalendarError?.({
+    provider: destination.provider,
+    accountId: destination.accountId,
+    calendarId: destination.calendarId,
+    userId: destination.userId,
+    error,
+    durationMs,
+    ...(syncEvent && { syncEvent }),
+  });
+  return [getErrorMessage(error)];
 };
 
 const syncDestinationsForUser = async (
@@ -516,8 +669,6 @@ const syncDestinationsForUser = async (
   const errors: string[] = [];
   const syncEvents: Record<string, unknown>[] = [];
 
-  const rateLimiter = createGoogleUserRateLimiter(redis, userId, "push");
-
   const runDestinationAttempt = async (
     destinationCandidate: (typeof destinations)[number],
   ): Promise<void> => {
@@ -534,7 +685,10 @@ const syncDestinationsForUser = async (
       }
 
       const { handle } = lockResult;
-      const calendarAttempt: { syncEvent: Record<string, unknown> | null } = { syncEvent: null };
+      const calendarAttempt: {
+        superseded: boolean;
+        syncEvent: Record<string, unknown> | null;
+      } = { superseded: false, syncEvent: null };
       let attemptedDestination: DestinationAttempt | null = null;
 
       try {
@@ -559,7 +713,7 @@ const syncDestinationsForUser = async (
           oauthConfig: config.oauthConfig,
           encryptionKey: config.encryptionKey,
           refreshLockStore: config.refreshLockStore,
-          rateLimiter,
+          rateLimiter: createProviderRateLimiter(redis, userId, destination.provider),
           signal: config.abortSignal,
         }));
         const syncProvider = providerResolve.value;
@@ -701,24 +855,19 @@ const syncDestinationsForUser = async (
           sourceCalendarIdsBeforeRemoteRead: sourceCalendarIds,
           verifiedSourceCalendarCount: authoritativeSourceWindows.size,
         });
+        const isAttemptCurrent = (): Promise<boolean> => {
+          if (isDestinationAttemptSuperseded(config, sourceCalendarsChangedDuringRemoteRead)) {
+            calendarAttempt.superseded = true;
+            return Promise.resolve(false);
+          }
+          return handle.isCurrent();
+        };
         const result = await syncCalendar({
           userId: destination.userId,
           calendarId: destination.calendarId,
           provider: providerRef,
           readState: () => Promise.resolve(reconciliationState),
-          isCurrent: () => {
-            if (sourceCalendarsChangedDuringRemoteRead) {
-              return Promise.resolve(false);
-            }
-            if (config.abortSignal?.aborted) {
-              return Promise.resolve(false);
-            }
-            if (config.deadlineMs && Date.now() >= config.deadlineMs) {
-              return Promise.resolve(false);
-            }
-            return handle.isCurrent();
-          },
-          isInvalidated: () => isCalendarInvalidated(redis, destination.calendarId),
+          isCurrent: isAttemptCurrent,
           flush: createDatabaseFlush(database),
           onProgress: callbacks?.onProgress,
           onSyncEvent: (event) => {
@@ -768,11 +917,15 @@ const syncDestinationsForUser = async (
           ...(calendarAttempt.syncEvent && { syncEvent: calendarAttempt.syncEvent }),
         });
 
-        if (!(await isCompletedAttemptCurrent(handle, redis, destination.calendarId))) {
+        const stillOwned = await applyDestinationAttemptVerdict({
+          database,
+          destination,
+          handle,
+          verdict: resolveDestinationAttemptVerdict(result, calendarAttempt.superseded),
+        });
+        if (!stillOwned) {
           return;
         }
-
-        await resetDestinationBackoffIfNeeded(database, destination);
 
         added += result.added;
         addFailed += result.addFailed;
@@ -785,17 +938,15 @@ const syncDestinationsForUser = async (
           throw error;
         }
 
-        await applyDestinationBackoff(database, destination.calendarId, destination.failureCount);
-        errors.push(getErrorMessage(error));
-        callbacks?.onCalendarError?.({
-          provider: destination.provider,
-          accountId: destination.accountId,
-          calendarId: destination.calendarId,
-          userId: destination.userId,
-          error,
+        errors.push(...await recordDestinationAttemptFailure({
+          callbacks,
+          database,
+          destination,
           durationMs: extractNumericField(calendarAttempt.syncEvent, "duration_ms"),
-          ...(calendarAttempt.syncEvent && { syncEvent: calendarAttempt.syncEvent }),
-        });
+          error,
+          handle,
+          syncEvent: calendarAttempt.syncEvent,
+        }));
       } finally {
         await handle.release();
       }
