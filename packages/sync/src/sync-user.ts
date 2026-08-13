@@ -28,7 +28,7 @@ import {
   calendarAccountsTable,
   calendarsTable,
 } from "@keeper.sh/database/schema";
-import { and, arrayContains, eq, inArray } from "drizzle-orm";
+import { and, arrayContains, eq, inArray, isNull } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
 import {
@@ -56,17 +56,36 @@ const resetDestinationBackoff = async (
     .where(eq(calendarsTable.id, calendarId));
 };
 
+/**
+ * The escalation is a compare-and-set against the retry state the run was
+ * judged on. Anything that resets the row while the run is in flight — a
+ * reconnect, another worker's verdict — must win over a verdict computed
+ * against credentials or a counter that no longer exist.
+ */
+const matchesObservedNextAttempt = (nextAttemptAt: Date | null) => {
+  if (nextAttemptAt === null) {
+    return isNull(calendarsTable.nextAttemptAt);
+  }
+  return eq(calendarsTable.nextAttemptAt, nextAttemptAt);
+};
+
+const matchesObservedRetryState = (destination: DestinationAttempt) =>
+  and(
+    eq(calendarsTable.id, destination.calendarId),
+    eq(calendarsTable.failureCount, destination.failureCount),
+    matchesObservedNextAttempt(destination.nextAttemptAt),
+  );
+
 const applyDestinationBackoff = async (
   database: BunSQLDatabase,
-  calendarId: string,
-  currentFailureCount: number,
+  destination: DestinationAttempt,
 ): Promise<void> => {
-  const backoffState = buildCalendarBackoffState(currentFailureCount);
+  const backoffState = buildCalendarBackoffState(destination.failureCount);
 
   await database
     .update(calendarsTable)
     .set(backoffState)
-    .where(eq(calendarsTable.id, calendarId));
+    .where(matchesObservedRetryState(destination));
 };
 
 const extractNumericField = (event: Record<string, unknown> | null | undefined, key: string): number => {
@@ -474,11 +493,34 @@ const resetDestinationBackoffIfNeeded = async (
   }
 };
 
+const hasSameRetryState = (
+  observed: DestinationAttempt,
+  current: DestinationAttempt | null,
+): boolean =>
+  current !== null
+  && current.failureCount === observed.failureCount
+  && (current.nextAttemptAt?.getTime() ?? null) === (observed.nextAttemptAt?.getTime() ?? null);
+
+const escalateDestinationBackoff = async (
+  database: BunSQLDatabase,
+  destination: DestinationAttempt,
+): Promise<void> => {
+  const current = await getDestinationAttempt(
+    database,
+    destination.userId,
+    destination.calendarId,
+  );
+  if (!hasSameRetryState(destination, current)) {
+    return;
+  }
+  await applyDestinationBackoff(database, destination);
+};
+
 /**
  * The one place a run's verdict reaches the database, so the throwing and
  * non-throwing paths cannot disagree about who owns the calendar. Reports
  * whether this run still owned it, which is also the gate on folding the run's
- * counts into the aggregate result.
+ * counts and errors into the aggregate result.
  */
 const applyDestinationAttemptVerdict = async (
   options: {
@@ -494,11 +536,53 @@ const applyDestinationAttemptVerdict = async (
     return false;
   }
   if (verdict === "failed") {
-    await applyDestinationBackoff(database, destination.calendarId, destination.failureCount);
+    await escalateDestinationBackoff(database, destination);
   } else if (verdict === "succeeded") {
     await resetDestinationBackoffIfNeeded(database, destination);
   }
   return true;
+};
+
+/**
+ * A run that lost the calendar mid-flight wrote no backoff, so it must not
+ * announce one either: the worker turns onCalendarError into a
+ * retry.backoff_applied claim, and the worker that still owns the calendar
+ * reports the same run.
+ */
+const recordDestinationAttemptFailure = async (
+  options: {
+    callbacks?: SyncCallbacks;
+    database: BunSQLDatabase;
+    destination: DestinationAttempt;
+    durationMs: number;
+    error: unknown;
+    handle: SyncLockHandle;
+    redis: Redis;
+    syncEvent: Record<string, unknown> | null;
+  },
+): Promise<string[]> => {
+  const { callbacks, database, destination, durationMs, error, handle, redis, syncEvent } = options;
+  const stillOwned = await applyDestinationAttemptVerdict({
+    database,
+    destination,
+    handle,
+    redis,
+    verdict: "failed",
+  });
+  if (!stillOwned) {
+    return [];
+  }
+
+  callbacks?.onCalendarError?.({
+    provider: destination.provider,
+    accountId: destination.accountId,
+    calendarId: destination.calendarId,
+    userId: destination.userId,
+    error,
+    durationMs,
+    ...(syncEvent && { syncEvent }),
+  });
+  return [getErrorMessage(error)];
 };
 
 const syncDestinationsForUser = async (
@@ -795,23 +879,16 @@ const syncDestinationsForUser = async (
         throw error;
       }
 
-      await applyDestinationAttemptVerdict({
+      errors.push(...await recordDestinationAttemptFailure({
+        callbacks,
         database,
         destination,
+        durationMs: extractNumericField(calendarAttempt.syncEvent, "duration_ms"),
+        error,
         handle,
         redis,
-        verdict: "failed",
-      });
-      errors.push(getErrorMessage(error));
-      callbacks?.onCalendarError?.({
-        provider: destination.provider,
-        accountId: destination.accountId,
-        calendarId: destination.calendarId,
-        userId: destination.userId,
-        error,
-        durationMs: extractNumericField(calendarAttempt.syncEvent, "duration_ms"),
-        ...(calendarAttempt.syncEvent && { syncEvent: calendarAttempt.syncEvent }),
-      });
+        syncEvent: calendarAttempt.syncEvent,
+      }));
     } finally {
       await handle.release();
     }
