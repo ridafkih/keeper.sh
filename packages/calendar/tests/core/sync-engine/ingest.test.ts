@@ -1023,6 +1023,44 @@ describe("ingestSource", () => {
     expect(emittedEvents[0]?.["outcome"]).not.toBe("error");
   });
 
+  it("withholds unsupported events, counts them, and keeps their stored state", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const unsupported = makeSourceEvent(
+      "unsupported-series",
+      new Date("2026-03-02T09:00:00.000Z"),
+      new Date("2026-03-02T10:00:00.000Z"),
+    );
+    const healthy = makeSourceEvent(
+      "healthy-event",
+      new Date("2026-03-03T09:00:00.000Z"),
+      new Date("2026-03-03T10:00:00.000Z"),
+    );
+    const emittedEvents: Record<string, unknown>[] = [];
+    const flushes: IngestionChanges[] = [];
+
+    const result = await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({
+        events: [unsupported, healthy],
+        unsupportedEventUids: ["unsupported-series"],
+      }),
+      flush: (changes) => {
+        flushes.push(changes);
+        return Promise.resolve();
+      },
+      onIngestEvent: (event) => emittedEvents.push(event),
+      readExistingEvents: () => Promise.resolve([
+        toExistingEvent("unsupported-state", unsupported),
+      ]),
+    });
+
+    expect(flushes[0]?.inserts.map(({ uid }) => uid)).toEqual(["healthy-event"]);
+    expect(flushes[0]?.deletes).toEqual([]);
+    expect(result.eventsAdded).toBe(1);
+    expect(emittedEvents[0]?.["source_events.unsupported_count"]).toBe(1);
+    expect(emittedEvents[0]?.["source_events.unsupported_uids"]).toBe("unsupported-series");
+  });
+
   it("keeps the stored events of an over-budget series instead of deleting them", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
     const pathological: SourceEvent = {

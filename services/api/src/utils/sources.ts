@@ -10,9 +10,6 @@ import {
   ingestSource,
   insertEventStatesWithConflictResolution,
   withSourceIngestLock,
-  createSourceIngestionPlan,
-  DEFAULT_FUTURE_SYNC_RANGE,
-  DEFAULT_HISTORIC_SYNC_RANGE,
 } from "@keeper.sh/calendar";
 import type { IngestionPersistenceWork } from "@keeper.sh/calendar";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
@@ -24,6 +21,10 @@ import {
   runCreateSource,
 } from "./source-lifecycle";
 import { applySourceSyncDefaults } from "./source-sync-defaults";
+import {
+  buildSourceIngestionPlan,
+  createDestinationRangesReader,
+} from "./source-ingestion-ranges";
 import { safeFetchOptions } from "./safe-fetch-options";
 
 import { spawnBackgroundJob } from "./background-task";
@@ -33,6 +34,7 @@ import { createSyncLock } from "@keeper.sh/sync";
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
 const SOURCE_INGEST_LOCK_KEY_PREFIX = "source-ingest:";
 const sourceIngestLock = createSyncLock(redis);
+const destinationRangesReader = createDestinationRangesReader(database);
 
 const FIRST_RESULT_LIMIT = 1;
 const ICAL_CALENDAR_TYPE = "ical";
@@ -111,10 +113,7 @@ const ingestIcsSource = async (source: Source): Promise<void> => {
     calendarId: source.id,
     url: source.url,
     database,
-    plan: createSourceIngestionPlan(
-      DEFAULT_HISTORIC_SYNC_RANGE,
-      DEFAULT_FUTURE_SYNC_RANGE,
-    ),
+    plan: await buildSourceIngestionPlan(source.id, destinationRangesReader),
     safeFetchOptions,
   });
 

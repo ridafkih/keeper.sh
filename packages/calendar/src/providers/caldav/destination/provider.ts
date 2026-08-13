@@ -14,6 +14,7 @@ import type {
 } from "../../../core/types";
 import { CalDAVClient, CalDAVCreateConflictError, CalDAVHttpError } from "../shared/client";
 import {
+  assertAllResourcesRead,
   eventToICalString,
   parseICalCalendarsToRemoteEvents,
   parseICalToRemoteEvent,
@@ -220,7 +221,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
     const remoteEvents: RemoteEvent[] = [];
 
-    const parsedEvents = parseICalCalendarsToRemoteEvents(
+    const resources = parseICalCalendarsToRemoteEvents(
       objects.flatMap(({ data, url }) => {
         if (!data || !isKeeperCalendarObjectUrl(url)) {
           return [];
@@ -229,7 +230,8 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
       }),
       { rejectUnsupportedRecurrenceDates: false },
     );
-    for (const parsed of parsedEvents) {
+    assertAllResourcesRead(resources);
+    for (const parsed of resources.events) {
       if (!isKeeperEvent(parsed.uid) || parsed.endTime < options.timeMin) {
         continue;
       }

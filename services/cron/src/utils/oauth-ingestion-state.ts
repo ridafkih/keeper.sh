@@ -1,9 +1,5 @@
-import { syncRangeSchema, type SyncRange } from "@keeper.sh/data-schemas";
-
-interface RequiredSourceRanges {
-  futureRange: SyncRange;
-  historicRange: SyncRange;
-}
+import { syncRangeSchema } from "@keeper.sh/data-schemas";
+import type { RequiredSourceRanges } from "@keeper.sh/calendar";
 
 interface StoredOAuthIngestionState {
   futureRange: string;
@@ -91,4 +87,4 @@ const resolveOAuthIngestionState = (
 };
 
 export { resolveOAuthIngestionState };
-export type { OAuthIngestionState, RequiredSourceRanges, StoredOAuthIngestionState };
+export type { OAuthIngestionState, StoredOAuthIngestionState };

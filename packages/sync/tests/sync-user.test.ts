@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createDestinationReconciliationWideEventFields,
+  OVER_BUDGET_SERIES_UID_SAMPLE_SIZE,
   readDestinationReconciliationState,
   resolveStoredSourceCoverage,
 } from "../src/sync-user";
@@ -127,6 +128,36 @@ describe("createDestinationReconciliationWideEventFields", () => {
       "reconciliation.window.requested_time_max": "2028-07-18T00:00:00.000Z",
       "reconciliation.window.requested_time_min": "2026-07-11T00:00:00.000Z",
     });
+  });
+
+  it("caps the over-budget series UID list while still reporting the uncapped count", () => {
+    const overBudgetCount = 40;
+    const fields = createDestinationReconciliationWideEventFields({
+      eventReadDiagnostics: {
+        ...eventReadDiagnostics,
+        overBudgetSourceEventUids: Array.from(
+          { length: overBudgetCount },
+          (_unused, index) => `pathological-series-${index}`,
+        ),
+      },
+      localReadDurationMs: 1,
+      authoritativeWindow: null,
+      requestedWindow: {
+        timeMax: new Date("2028-07-18T00:00:00.000Z"),
+        timeMin: new Date("2026-07-11T00:00:00.000Z"),
+      },
+      remoteReadDurationMs: 2,
+      sourceCalendarIdsAtLocalRead: ["source-1"],
+      sourceCalendarIdsBeforeRemoteRead: ["source-1"],
+      verifiedSourceCalendarCount: 1,
+    });
+
+    expect(overBudgetCount).toBeGreaterThan(OVER_BUDGET_SERIES_UID_SAMPLE_SIZE);
+
+    const uids = String(fields["local_event_states.over_budget_series_uids"]).split(",");
+    expect(uids).toHaveLength(OVER_BUDGET_SERIES_UID_SAMPLE_SIZE);
+    expect(uids.at(-1)).toBe(`pathological-series-${OVER_BUDGET_SERIES_UID_SAMPLE_SIZE - 1}`);
+    expect(fields["local_event_states.over_budget_series_count"]).toBe(overBudgetCount);
   });
 
   it("detects a same-sized source mapping replacement without depending on query order", () => {
