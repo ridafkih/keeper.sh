@@ -23,7 +23,7 @@ import { openCheckout, openCustomerPortal } from "@/utils/checkout";
 import { getPlans } from "@/config/plans";
 import type { PlanConfig } from "@/config/plans";
 import { resolveUpgradeRedirect } from "@/lib/route-access-guards";
-import { resolveUpgradeMode } from "@/lib/upgrade-mode";
+import { resolveUpgradeMode, retainKnownInterval } from "@/lib/upgrade-mode";
 import type { UpgradeMode } from "@/lib/upgrade-mode";
 import type { PublicRuntimeConfig } from "@/lib/runtime-config";
 
@@ -116,7 +116,10 @@ function UpgradePage() {
   };
 
   const busy = isLoading || isPending;
-  const mode = resolveUpgradeMode(subscription, yearly);
+  const mode = resolveUpgradeMode(
+    retainKnownInterval(loaderSubscription, subscription),
+    yearly,
+  );
 
   return (
     <div className="flex flex-col gap-1.5">

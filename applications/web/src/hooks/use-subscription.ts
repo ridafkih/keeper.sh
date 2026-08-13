@@ -34,9 +34,14 @@ export const resolveSubscriptionState = (
     return { plan: "free", interval: null };
   }
 
+  const { recurringInterval } = active;
+
   return {
     plan: "pro",
-    interval: active.recurringInterval === "year" ? "year" : "month",
+    interval:
+      recurringInterval === "year" || recurringInterval === "month"
+        ? recurringInterval
+        : null,
   };
 };
 

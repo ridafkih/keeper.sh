@@ -263,12 +263,12 @@ describe("repeated runs converge", () => {
 });
 
 describe("interval resolution edges", () => {
-  it("defaults a subscription with no recurring interval to month", async () => {
+  it("reports a subscription with no recurring interval as pro on an unknown interval", async () => {
     const { fetchApi } = createApi(() => ({ activeSubscriptions: [{}] }));
 
     await expect(fetchSubscriptionStateWithApi(fetchApi)).resolves.toEqual({
       plan: "pro",
-      interval: "month",
+      interval: null,
     });
   });
 
