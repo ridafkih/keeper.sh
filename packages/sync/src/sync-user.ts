@@ -79,12 +79,6 @@ const resetDestinationBackoff = async (
     .where(eq(calendarsTable.id, calendarId));
 };
 
-/**
- * The escalation is a compare-and-set against the retry state the run was
- * judged on. Anything that resets the row while the run is in flight — a
- * reconnect, another worker's verdict — must win over a verdict computed
- * against credentials or a counter that no longer exist.
- */
 const matchesObservedNextAttempt = (nextAttemptAt: Date | null) => {
   if (nextAttemptAt === null) {
     return isNull(calendarsTable.nextAttemptAt);
@@ -92,6 +86,7 @@ const matchesObservedNextAttempt = (nextAttemptAt: Date | null) => {
   return eq(calendarsTable.nextAttemptAt, nextAttemptAt);
 };
 
+// Compare-and-set: a reconnect or another worker's verdict landing mid-run must beat a verdict computed against retry state that no longer exists.
 const matchesObservedRetryState = (destination: DestinationAttempt) =>
   and(
     eq(calendarsTable.id, destination.calendarId),
@@ -476,14 +471,7 @@ const isDestinationAttemptEligible = (
 ): boolean =>
   destination.nextAttemptAt === null || destination.nextAttemptAt <= now;
 
-/**
- * The conditions under which this worker must stop touching the destination
- * even though it still holds the lock. Read only by the in-flight check handed
- * to syncCalendar: the post-run verdict uses whether that check ever fired,
- * because a run that read both sides and found nothing to do returns the same
- * all-zero result as a run truncated at the gate, and re-reading the clock
- * afterwards cannot tell the two apart.
- */
+// The verdict records whether this fired rather than re-reading the clock: a run that found nothing to do and a run truncated at the gate both return all zeros.
 const isDestinationAttemptSuperseded = (
   config: SyncConfig,
   sourceCalendarsChanged: boolean,
@@ -532,12 +520,6 @@ const escalateDestinationBackoff = async (
   await applyDestinationBackoff(database, destination);
 };
 
-/**
- * The one place a run's verdict reaches the database, so the throwing and
- * non-throwing paths cannot disagree about who owns the calendar. Reports
- * whether this run still owned it, which is also the gate on folding the run's
- * counts and errors into the aggregate result.
- */
 const applyDestinationAttemptVerdict = async (
   options: {
     database: BunSQLDatabase;
@@ -558,12 +540,7 @@ const applyDestinationAttemptVerdict = async (
   return true;
 };
 
-/**
- * A run that lost the calendar mid-flight wrote no backoff, so it must not
- * announce one either: the worker turns onCalendarError into a
- * retry.backoff_applied claim, and the worker that still owns the calendar
- * reports the same run.
- */
+// A run that lost the calendar wrote no backoff, so it must not fire onCalendarError either: the worker reads that as a retry.backoff_applied claim.
 const recordDestinationAttemptFailure = async (
   options: {
     callbacks?: SyncCallbacks;

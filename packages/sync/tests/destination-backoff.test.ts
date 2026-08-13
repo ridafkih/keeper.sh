@@ -136,11 +136,6 @@ const EMPTY_SYNC_RESULT = {
   errors: [],
 };
 
-/*
- * SyncCalendar checks isCurrent() before touching the provider and returns an
- * all-zero result when the run has been superseded, so the double is only
- * faithful if it does the same.
- */
 const setOutcome = (outcome: SyncOutcome) => {
   syncCalendarMock.mockImplementation(async (options: {
     isCurrent: () => Promise<boolean>;

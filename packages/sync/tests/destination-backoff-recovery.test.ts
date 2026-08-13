@@ -148,11 +148,6 @@ const setOutcome = (outcome: SyncOutcome) => {
   });
 };
 
-/*
- * A run whose reconciliation finds nothing to do returns all zeros after having
- * read both sides, and it consults isCurrent() before that read completes, not
- * after. Model the clock crossing the worker deadline while the run is in flight.
- */
 const setInSyncRunThatOverrunsDeadline = (elapsedMs: number) => {
   syncCalendarMock.mockImplementation(async (options: {
     isCurrent: () => Promise<boolean>;
@@ -165,11 +160,6 @@ const setInSyncRunThatOverrunsDeadline = (elapsedMs: number) => {
   });
 };
 
-/*
- * The provider is handed config.abortSignal, so a worker shutdown mid-flight
- * rejects the in-flight writes. syncCalendar counts those rejections as
- * addFailed and only then notices the supersession.
- */
 const setRunAbortedMidOperations = (
   controller: AbortController,
   outcome: SyncOutcome,
@@ -248,11 +238,6 @@ describe("a repaired destination that is already in sync", () => {
     expect(row.nextAttemptAt).toEqual(new Date(failedAt.getTime() + FIVE_MINUTES_MS));
   });
 
-  /*
-   * The counter the healthy runs above cleared is the one the next failure
-   * escalates from, so that failure is charged the first step rather than
-   * resuming the series the destination accumulated before it was repaired.
-   */
   it("charges the first backoff step on its next failure", async () => {
     const { database, row } = createHarness({
       failureCount: 5,
@@ -294,11 +279,6 @@ describe("a repaired destination that is already in sync", () => {
 });
 
 describe("a healthy destination interrupted by a worker shutdown", () => {
-  /*
-   * Every destination provider rethrows once its signal is aborted rather than
-   * reporting per-event failures, so a shutdown surfaces as a thrown AbortError
-   * and must not be mistaken for a destination that is refusing writes.
-   */
   it("leaves the backoff untouched when the abort surfaces as a thrown error", async () => {
     const { database, row, writes } = createHarness({
       failureCount: 2,
