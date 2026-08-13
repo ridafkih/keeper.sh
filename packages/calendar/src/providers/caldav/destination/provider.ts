@@ -182,14 +182,21 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
   const rateLimiter = new RateLimiter({ concurrency: CALDAV_RATE_LIMIT_CONCURRENCY });
 
-  const isKeeperCalendarObjectUrl = (objectUrl: string): boolean => {
+  const isKeeperCalendarObjectPath = (path: string): boolean => {
     try {
-      const url = new URL(objectUrl, config.calendarUrl);
-      const filename = decodeURIComponent(url.pathname.split("/").at(-1) ?? "");
+      const filename = decodeURIComponent(path.split("/").at(-1) ?? "");
       if (!filename.endsWith(".ics")) {
         return false;
       }
       return isKeeperEvent(filename.slice(0, -4));
+    } catch {
+      return false;
+    }
+  };
+
+  const isKeeperCalendarObjectUrl = (objectUrl: string): boolean => {
+    try {
+      return isKeeperCalendarObjectPath(new URL(objectUrl, config.calendarUrl).pathname);
     } catch {
       return false;
     }
@@ -298,6 +305,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     const objects = await client.fetchCalendarObjects({
       calendarUrl,
       onListing: (stats) => { listing = stats; },
+      pathFilter: isKeeperCalendarObjectPath,
     });
 
     const remoteEvents: RemoteEvent[] = [];

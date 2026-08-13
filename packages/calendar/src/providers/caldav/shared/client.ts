@@ -298,6 +298,7 @@ class CalDAVClient {
   fetchCalendarObjects(params: {
     calendarUrl: string;
     onListing?: (stats: CalDAVListingStats) => void;
+    pathFilter?: (path: string) => boolean;
     timeRange?: { start: string; end: string };
   }): Promise<CalendarObject[]> {
     return mapAuthenticationFailure(async () => {
@@ -311,7 +312,7 @@ class CalDAVClient {
       });
 
       const listedPaths = toCalendarObjectPaths(queryResponses, params.calendarUrl);
-      const requestedPaths = listedPaths;
+      const requestedPaths = listedPaths.filter((path) => params.pathFilter?.(path) ?? true);
       if (requestedPaths.length === 0) {
         params.onListing?.({
           listedCount: listedPaths.length,

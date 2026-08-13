@@ -288,6 +288,51 @@ describe("CalDAVClient.fetchCalendarObjects listing diagnostics", () => {
   });
 });
 
+describe("CalDAVClient.fetchCalendarObjects with a path filter", () => {
+  const acceptedPath = `${CALENDAR_PATH}accepted.ics`;
+  const rejectedPath = `${CALENDAR_PATH}rejected.ics`;
+  const acceptOnly = (path: string): boolean => path === acceptedPath;
+
+  const fetchFilteredObjects = () =>
+    createClient().fetchCalendarObjects({ calendarUrl: CALENDAR_URL, pathFilter: acceptOnly });
+
+  it("downloads only the hrefs the filter accepts", async () => {
+    answerQueryWith([rejectedPath, acceptedPath]);
+
+    const objects = await fetchFilteredObjects();
+
+    expect(requestedBatches()).toEqual([[acceptedPath]]);
+    expect(pathsOf(objects)).toEqual([acceptedPath]);
+  });
+
+  it("issues no multiget when the filter rejects every href", async () => {
+    answerQueryWith([rejectedPath]);
+
+    await expect(fetchFilteredObjects()).resolves.toEqual([]);
+    expect(davMocks.fetchCalendarObjects).not.toHaveBeenCalled();
+  });
+
+  it("does not count filtered-out hrefs as missing", async () => {
+    answerQueryWith([rejectedPath, acceptedPath]);
+    answerMultigetWith((objectUrls) => rowsFor(objectUrls));
+
+    await expect(fetchFilteredObjects()).resolves.toHaveLength(1);
+  });
+
+  it("still rejects when an accepted href is never returned", async () => {
+    answerQueryWith([rejectedPath, acceptedPath]);
+    answerMultigetWith(() => []);
+
+    const error = await captureRejection(fetchFilteredObjects);
+
+    expect(error).toMatchObject({
+      hrefsRequested: 1,
+      name: "CalDAVIncompleteMultiGetError",
+    });
+    expect((error as { missingHrefs: string[] }).missingHrefs).toEqual([acceptedPath]);
+  });
+});
+
 describe("CalDAVIncompleteMultiGetError", () => {
   const createError = () =>
     new CalDAVIncompleteMultiGetError({

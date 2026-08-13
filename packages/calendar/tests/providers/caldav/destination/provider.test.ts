@@ -116,7 +116,26 @@ describe("createCalDAVSyncProvider", () => {
     expect(clientMocks.fetchCalendarObjects).toHaveBeenCalledWith({
       calendarUrl: "https://caldav.example.com/calendar/",
       onListing: expect.any(Function),
+      pathFilter: expect.any(Function),
     });
+  });
+
+  it("asks the server for Keeper-named objects only", async () => {
+    const keeperUid = generateDeterministicEventUid("any-event-id");
+    clientMocks.resolveCalendarUrl.mockResolvedValueOnce(
+      "https://caldav.example.com/calendar/",
+    );
+    clientMocks.fetchCalendarObjects.mockResolvedValueOnce([]);
+
+    await createProvider().listRemoteEvents({
+      timeMin: new Date("2026-07-10T00:00:00.000Z"),
+    });
+
+    const { pathFilter } = clientMocks.fetchCalendarObjects.mock.calls[0]?.[0] ?? {};
+    expect(pathFilter(`/calendar/${keeperUid}.ics`)).toBe(true);
+    expect(pathFilter(`/calendar/${encodeURIComponent(keeperUid)}.ics`)).toBe(true);
+    expect(pathFilter("/calendar/user-owned.ics")).toBe(false);
+    expect(pathFilter(`/calendar/${keeperUid}.txt`)).toBe(false);
   });
 
   it("does not let an unrelated user RDATE abort Keeper reconciliation", async () => {
