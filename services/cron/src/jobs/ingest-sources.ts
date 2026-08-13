@@ -45,7 +45,7 @@ import {
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
-import { and, arrayContains, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { and, arrayContains, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import { database, refreshLockRedis, refreshLockStore } from "@/context";
@@ -661,7 +661,32 @@ const summariseIngestionSettlements = async (
   };
 };
 
-const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
+const createEmptyIngestionBatchResult = (): IngestionBatchResult => ({
+  added: 0,
+  affectedUserIds: [],
+  errors: 0,
+  removed: 0,
+});
+
+const buildOAuthSourceIdFilter = (calendarIds: string[] | undefined) => {
+  if (!calendarIds) {
+    return [];
+  }
+  return [inArray(calendarsTable.id, calendarIds)];
+};
+
+const resolveIngestTrigger = (calendarIds: string[] | undefined): string => {
+  if (calendarIds) {
+    return "push";
+  }
+  return "cron";
+};
+
+const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatchResult> => {
+  if (calendarIds && calendarIds.length === 0) {
+    return createEmptyIngestionBatchResult();
+  }
+
   const oauthSources = await database
     .select({
       accountId: calendarAccountsTable.id,
@@ -688,6 +713,7 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
       and(
         arrayContains(calendarsTable.capabilities, ["pull"]),
         eq(calendarsTable.disabled, false),
+        ...buildOAuthSourceIdFilter(calendarIds),
       ),
     );
 
@@ -695,6 +721,7 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
     oauthSources.map((source) => () =>
       withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
         context(async () => {
+          widelog.set("ingest.trigger", resolveIngestTrigger(calendarIds));
           widelog.set("operation.name", "ingest-source");
           widelog.set("operation.type", "job");
           widelog.set("sync.direction", "ingest");
@@ -1196,3 +1223,6 @@ export default withCronWideEvent({
   name: "ingest-sources",
   overrunProtection: false,
 }) satisfies CronOptions;
+
+export { ingestOAuthSources };
+export type { IngestionBatchResult };

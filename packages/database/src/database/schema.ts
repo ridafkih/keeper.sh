@@ -169,6 +169,48 @@ const calendarsTable = pgTable(
   ],
 );
 
+const calendarPushChannelsTable = pgTable(
+  "calendar_push_channels",
+  {
+    accountId: uuid()
+      .notNull()
+      .references(() => calendarAccountsTable.id, { onDelete: "cascade" }),
+    calendarId: uuid().references(() => calendarsTable.id, { onDelete: "cascade" }),
+    createdAt: timestamp().notNull().defaultNow(),
+    expiresAt: timestamp(),
+    failureCount: integer().notNull().default(0),
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    lastFailureAt: timestamp(),
+    lastNotificationAt: timestamp(),
+    nextAttemptAt: timestamp(),
+    provider: text().notNull(),
+    providerChannelId: text(),
+    providerResourceId: text(),
+    reauthorizeRequestedAt: timestamp(),
+    resourcePath: text(),
+    secretHash: text().notNull(),
+    state: text().notNull().default("registering"),
+    updatedAt: timestamp()
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    verifiedAt: timestamp(),
+  },
+  (table) => [
+    index("calendar_push_channels_account_idx").on(table.accountId),
+    index("calendar_push_channels_expiry_idx").on(table.state, table.expiresAt),
+    uniqueIndex("calendar_push_channels_provider_channel_idx")
+      .on(table.provider, table.providerChannelId)
+      .where(isNotNull(table.providerChannelId)),
+    uniqueIndex("calendar_push_channels_scope_idx")
+      .on(table.provider, table.calendarId)
+      .where(sql`${table.calendarId} is not null and ${table.state} in ('registering', 'active', 'degraded')`),
+  ],
+);
+
 const calendarSnapshotsTable = pgTable("calendar_snapshots", {
   calendarId: uuid()
     .notNull()
@@ -466,6 +508,7 @@ export {
   apiTokensTable,
   caldavCredentialsTable,
   calendarAccountsTable,
+  calendarPushChannelsTable,
   calendarSnapshotsTable,
   calendarsTable,
   eventMappingsTable,

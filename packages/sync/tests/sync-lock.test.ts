@@ -882,3 +882,90 @@ describe("createSyncLock", () => {
     });
   });
 });
+
+describe("push trigger namespaces", () => {
+  const makePushSyncLock = () => {
+    const redis = createMockRedis();
+    return { redis, syncLock: createSyncLock(redis) };
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("supersedes an in-flight source ingest when a webhook-triggered ingest queues behind it", async () => {
+    const { syncLock } = makePushSyncLock();
+
+    const holder = await syncLock.acquire("source-ingest:cal-1");
+    if (!holder.acquired) {
+      throw new Error("expected acquired");
+    }
+    expect(await holder.handle.isCurrent()).toBe(true);
+
+    const waiterPromise = syncLock.acquire("source-ingest:cal-1");
+    await flushAsync();
+
+    expect(await holder.handle.isCurrent()).toBe(false);
+    expect(await holder.handle.isHeld()).toBe(true);
+
+    await holder.handle.release();
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
+
+    const waiter = await waiterPromise;
+    expect(waiter.acquired).toBe(true);
+    if (waiter.acquired) {
+      expect(await waiter.handle.isCurrent()).toBe(true);
+      await waiter.handle.release();
+    }
+  });
+
+  it("lets only one caller hold a push channel scope at a time", async () => {
+    const { syncLock } = makePushSyncLock();
+    const outcomes: string[] = [];
+
+    const first = await syncLock.acquire("push-channel:calendar:cal-1");
+    if (!first.acquired) {
+      throw new Error("expected acquired");
+    }
+    outcomes.push("first:acquired");
+
+    const secondPromise = syncLock.acquire("push-channel:calendar:cal-1")
+      .then((result) => {
+        outcomes.push(`second:${String(result.acquired)}`);
+        return result;
+      });
+    await flushAsync();
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 4);
+
+    expect(outcomes).toEqual(["first:acquired"]);
+    expect(await first.handle.isHeld()).toBe(true);
+
+    await first.handle.release();
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
+    const second = await secondPromise;
+    if (second.acquired) {
+      await second.handle.release();
+    }
+  });
+
+  it("keeps the source ingest and push channel namespaces independent", async () => {
+    const { syncLock } = makePushSyncLock();
+
+    const ingest = await syncLock.acquire("source-ingest:cal-1");
+    const channel = await syncLock.acquire("push-channel:calendar:cal-1");
+
+    expect(ingest.acquired).toBe(true);
+    expect(channel.acquired).toBe(true);
+    if (ingest.acquired) {
+      expect(await ingest.handle.isCurrent()).toBe(true);
+      await ingest.handle.release();
+    }
+    if (channel.acquired) {
+      await channel.handle.release();
+    }
+  });
+});

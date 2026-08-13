@@ -472,6 +472,37 @@ const readApiErrorMessage = (body: unknown): string | null => {
   }
   return body.error;
 };
+const pushChannelStateSchema = type(
+  "'active' | 'degraded' | 'failed' | 'registering' | 'removed'",
+);
+type PushChannelStateValue = typeof pushChannelStateSchema.infer;
+
+const graphNotificationSchema = type({
+  subscriptionId: "string",
+  "changeType?": "string",
+  "clientState?": "string | null",
+  "id?": "string",
+  "lifecycleEvent?": "string",
+  "resource?": "string",
+  "resourceData?": "unknown",
+  "subscriptionExpirationDateTime?": "string",
+  "tenantId?": "string",
+});
+type GraphNotification = typeof graphNotificationSchema.infer;
+
+const graphNotificationCollectionSchema = type({
+  value: graphNotificationSchema.array(),
+});
+type GraphNotificationCollection = typeof graphNotificationCollectionSchema.infer;
+
+const googleWatchHeadersSchema = type({
+  channelId: "string",
+  token: "string",
+  "messageNumber?": "string",
+  "resourceId?": "string",
+  "resourceState?": "string",
+});
+type GoogleWatchHeaders = typeof googleWatchHeadersSchema.infer;
 
 export {
   DEFAULT_FEED_NAME,
@@ -532,6 +563,10 @@ export {
   icsRecurrenceRuleSchema,
   storedIcsRecurrenceRuleSchema,
   icsExceptionDatesSchema,
+  googleWatchHeadersSchema,
+  graphNotificationCollectionSchema,
+  graphNotificationSchema,
+  pushChannelStateSchema,
 };
 
 export type {
@@ -580,4 +615,8 @@ export type {
   StoredIcsRecurrenceRule,
   StoredIcsExceptionDates,
   ApiErrorBody,
+  GoogleWatchHeaders,
+  GraphNotification,
+  GraphNotificationCollection,
+  PushChannelStateValue,
 };

@@ -5,12 +5,8 @@ import { ErrorResponse } from "@/utils/responses";
 import { idParamSchema } from "@/utils/request-query";
 import { database } from "@/context";
 import { withAccountDisplay } from "@/utils/provider-display";
-import { getCalendarsAffectedByAccountMutation } from "@/utils/invalidate-calendars";
-import {
-  requestUserSync,
-  scheduleMappingReplacementSync,
-  withMappingMutationLocks,
-} from "@/utils/source-destination-mappings";
+import { runDeleteCalendarAccount } from "@/utils/delete-calendar-account";
+import { createDeleteCalendarAccountDependencies } from "@/utils/delete-calendar-account-dependencies";
 
 const GET = withWideEvent(
   withAuth(async ({ params, userId }) => {
@@ -58,41 +54,14 @@ const DELETE = withWideEvent(
     }
     const { id } = params;
 
-    const affected = await getCalendarsAffectedByAccountMutation(database, userId, id);
-    if (!affected.owned) {
-      return ErrorResponse.notFound("Account not found").toResponse();
-    }
-
-    const { result: deleted } = await withMappingMutationLocks(
-      userId,
-      async () => {
-        const currentAffected = await getCalendarsAffectedByAccountMutation(
-          database,
-          userId,
-          id,
-        );
-        return currentAffected.calendarIds;
-      },
-      () => database.transaction(async (transaction) => {
-        await requestUserSync(transaction, userId);
-        const [deletedAccount] = await transaction
-          .delete(calendarAccountsTable)
-          .where(
-            and(
-              eq(calendarAccountsTable.id, id),
-              eq(calendarAccountsTable.userId, userId),
-            ),
-          )
-          .returning({ id: calendarAccountsTable.id });
-        return deletedAccount;
-      }),
+    const deleted = await runDeleteCalendarAccount(
+      { accountId: id, userId },
+      createDeleteCalendarAccountDependencies(),
     );
 
     if (!deleted) {
       return ErrorResponse.notFound("Account not found").toResponse();
     }
-
-    scheduleMappingReplacementSync(userId);
 
     return Response.json({ success: true });
   }),

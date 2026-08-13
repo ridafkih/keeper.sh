@@ -25,6 +25,7 @@ const schema = {
   PRIVATE_RESOLUTION_WHITELIST: "string?",
   BLOCK_PRIVATE_RESOLUTION: "boolean?",
   TRUSTED_ORIGINS: "string?",
+  WEBHOOK_PUBLIC_URL: "string.url?",
   WEBSOCKET_URL: "string.url?",
 } as const;
 

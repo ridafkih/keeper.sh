@@ -2,10 +2,12 @@ import env from "./env";
 import { createDatabase } from "@keeper.sh/database";
 import Redis from "ioredis";
 import { createPremiumService } from "@keeper.sh/premium";
+import { resolveWebhookConfig } from "@keeper.sh/calendar";
 import type { RefreshLockStore } from "@keeper.sh/calendar";
 import { Polar } from "@polar-sh/sdk";
 
 const database = await createDatabase(env.DATABASE_URL);
+const webhookConfig = resolveWebhookConfig(env.WEBHOOK_PUBLIC_URL);
 
 const premiumService = createPremiumService({
   commercialMode: env.COMMERCIAL_MODE ?? false,
@@ -48,4 +50,12 @@ const createPolarClient = (): Polar | null => {
 
 const polarClient = createPolarClient();
 
-export { database, premiumService, polarClient, refreshLockRedis, refreshLockStore, shutdownRefreshLockRedis };
+export {
+  database,
+  premiumService,
+  polarClient,
+  refreshLockRedis,
+  refreshLockStore,
+  shutdownRefreshLockRedis,
+  webhookConfig,
+};

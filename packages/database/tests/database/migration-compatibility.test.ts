@@ -307,6 +307,35 @@ describe("ical feed backfill migration", () => {
   });
 });
 
+const readPushChannelsMigration = (): Promise<string> =>
+  readMigrationContaining('CREATE TABLE IF NOT EXISTS "calendar_push_channels"');
+
+describe("push channels upgrade compatibility", () => {
+  /* The runner replays the newest migration against databases that have it. */
+  it("re-applies cleanly against a database that already has the table", async () => {
+    const migration = await readPushChannelsMigration();
+
+    const creations = migration.match(/CREATE (?:UNIQUE )?(?:TABLE|INDEX) /g) ?? [];
+    const guarded = migration.match(/CREATE (?:UNIQUE )?(?:TABLE|INDEX) IF NOT EXISTS /g) ?? [];
+    expect(creations).toHaveLength(guarded.length);
+
+    for (const statement of migration.split("--> statement-breakpoint")) {
+      if (statement.includes("ADD CONSTRAINT")) {
+        expect(statement).toContain("IF NOT EXISTS (");
+        expect(statement).toContain("pg_constraint");
+      }
+    }
+  });
+
+  it("stays additive so a rolled-back api keeps working", async () => {
+    const migration = await readPushChannelsMigration();
+
+    expect(migration).not.toContain("DROP TABLE");
+    expect(migration).not.toContain("DROP COLUMN");
+    expect(migration).not.toContain("SET NOT NULL");
+  });
+});
+
 const readCalendarRediscoveryMigration = (): Promise<string> =>
   readMigrationContaining('ADD COLUMN IF NOT EXISTS "calendarsRefreshedAt"');
 

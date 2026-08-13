@@ -21,19 +21,14 @@ import type {
 } from "@keeper.sh/calendar";
 import { database, oauthProviders } from "@/context";
 import { widelog } from "@/utils/logging";
-import { getCalendarsAffectedByAccountMutation } from "@/utils/invalidate-calendars";
-import {
-  requestUserSync,
-  scheduleMappingReplacementSync,
-  withMappingMutationLocks,
-} from "./source-destination-mappings";
 import {
   buildReconnectedCalendarState,
   RECONNECTED_CALENDAR_STATE,
 } from "@/utils/calendar-state";
+import { runDeleteCalendarAccount } from "@/utils/delete-calendar-account";
+import { createDeleteCalendarAccountDependencies } from "@/utils/delete-calendar-account-dependencies";
 
 const FIRST_RESULT_LIMIT = 1;
-const EMPTY_RESULT_COUNT = 0;
 type DestinationDatabase = Pick<typeof database, "delete" | "insert" | "select" | "selectDistinct" | "update">;
 
 const isOAuthProvider = (provider: string): boolean => oauthProviders.isOAuthProvider(provider);
@@ -419,45 +414,14 @@ const listCalendarDestinations = async (userId: string): Promise<CalendarDestina
   return accounts;
 };
 
-const deleteCalendarDestination = async (
+const deleteCalendarDestination = (
   userId: string,
   accountId: string,
-): Promise<boolean> => {
-  const affected = await getCalendarsAffectedByAccountMutation(database, userId, accountId);
-  if (!affected.owned) {
-    return false;
-  }
-
-  const { result } = await withMappingMutationLocks(
-    userId,
-    async () => {
-      const currentAffected = await getCalendarsAffectedByAccountMutation(
-        database,
-        userId,
-        accountId,
-      );
-      return currentAffected.calendarIds;
-    },
-    () => database.transaction(async (transaction) => {
-      await requestUserSync(transaction, userId);
-      return transaction
-        .delete(calendarAccountsTable)
-        .where(
-          and(
-            eq(calendarAccountsTable.userId, userId),
-            eq(calendarAccountsTable.id, accountId),
-          ),
-        )
-        .returning({ id: calendarAccountsTable.id });
-    }),
+): Promise<boolean> =>
+  runDeleteCalendarAccount(
+    { accountId, userId },
+    createDeleteCalendarAccountDependencies(),
   );
-
-  if (result.length > EMPTY_RESULT_COUNT) {
-    scheduleMappingReplacementSync(userId);
-  }
-
-  return result.length > EMPTY_RESULT_COUNT;
-};
 
 const getAccountExternalId = async (userId: string, accountId: string): Promise<string | null> => {
   const [account] = await database

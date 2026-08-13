@@ -15,9 +15,22 @@ interface Entitlements {
   mappings: EntitlementLimit;
   canCustomizeIcalFeed: boolean;
   canUseEventFilters: boolean;
+  realtimeSync: boolean;
 }
 
 const USAGE_CACHE_KEY = "/api/entitlements";
+
+function buildOptimisticProEntitlements(): Entitlements {
+  return {
+    plan: "pro",
+    accounts: { current: 0, limit: null },
+    feeds: { current: 0, limit: null },
+    mappings: { current: 0, limit: null },
+    canCustomizeIcalFeed: true,
+    canUseEventFilters: true,
+    realtimeSync: false,
+  };
+}
 
 function useEntitlements() {
   const { data: subscription } = useSubscription();
@@ -37,14 +50,7 @@ function useEntitlements() {
       return undefined;
     }
 
-    return {
-      plan: "pro",
-      accounts: { current: 0, limit: null },
-      feeds: { current: 0, limit: null },
-      mappings: { current: 0, limit: null },
-      canCustomizeIcalFeed: true,
-      canUseEventFilters: true,
-    };
+    return buildOptimisticProEntitlements();
   }, [serverEntitlements, subscription?.plan]);
 
   return { data, mutate, isLoading, error };
@@ -88,5 +94,11 @@ function canAddMore(entitlement: EntitlementLimit | undefined): boolean {
   return entitlement.current < entitlement.limit;
 }
 
-export { useEntitlements, useMutateEntitlements, canAddMore, USAGE_CACHE_KEY };
+export {
+  buildOptimisticProEntitlements,
+  canAddMore,
+  useEntitlements,
+  useMutateEntitlements,
+  USAGE_CACHE_KEY,
+};
 export type { Entitlements, EntitlementLimit };

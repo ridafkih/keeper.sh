@@ -42,8 +42,71 @@ export {
 } from "./core/oauth/coordinated-refresher";
 export {
   OAUTH_SYNC_WINDOW_VERSION,
+  getDeterministicRefreshOffset,
   getOAuthSyncTokenVersion,
 } from "./core/oauth/sync-window";
+export {
+  FULL_POLL_INTERVAL_MS,
+  LIVE_PUSH_CHANNEL_STATES,
+  PUSH_HEALTHY_POLL_FLOOR_MS,
+  STALE_REGISTERING_MS,
+  isPushChannelGoneError,
+  planPushChannelActions,
+  resolveAffectedCalendarIds,
+  resolveIngestPollFloorMs,
+  resolvePushChannelHealth,
+  shouldRetainPushChannelAction,
+  toPushChannelState,
+} from "./core/source/push-channel";
+export type {
+  AccountCalendarRow,
+  AffectedCalendarDependencies,
+  EligibleSourceCalendar,
+  ListedPushChannel,
+  PushChannelAction,
+  PushChannelActionType,
+  PushChannelHealth,
+  PushChannelRegistration,
+  PushChannelRenewalMode,
+  PushChannelScope,
+  PushChannelState,
+  PushClaimKind,
+  PushRateLimiter,
+  RegistrarContext,
+  SourcePushRegistrar,
+  StoredPushChannel,
+} from "./core/source/push-channel";
+export {
+  clampToProviderLifetime,
+  resolvePushProviderProfile,
+  resolveRenewalLeadMs,
+} from "./core/source/push-provider-profile";
+export type { PushProviderProfile } from "./core/source/push-provider-profile";
+export {
+  buildUnknownChannelKey,
+  PENDING_FAILURES_KEY,
+  PENDING_INGEST_KEY,
+  UNKNOWN_CHANNEL_PREFIX,
+} from "./core/source/push-keys";
+export { resolvePushRegistrar } from "./core/source/push-registry";
+export {
+  generatePushSecret,
+  hashPushSecret,
+  verifyPushSecret,
+} from "./core/source/push-secret";
+export { resolveWebhookConfig } from "./core/source/push-webhook-url";
+export type { WebhookConfig } from "./core/source/push-webhook-url";
+export type {
+  PushClaim,
+  PushHttpRequest,
+  PushParseFailureReason,
+  PushParseResult,
+} from "./core/source/push-notification";
+export { parseGooglePushNotification } from "./providers/google/push/receiver";
+export {
+  parseOutlookPushNotification,
+  readGraphValidationToken,
+} from "./providers/outlook/push/receiver";
 export {
   decodeStoredSyncToken,
   encodeStoredSyncToken,

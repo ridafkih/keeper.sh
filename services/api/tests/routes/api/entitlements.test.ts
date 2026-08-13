@@ -1,123 +1,97 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { getTableName } from "drizzle-orm";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import type { handleEntitlementsRoute as handleEntitlementsRouteFn } from "../../../src/routes/api/entitlements";
 
-const rowsByTable = new Map<string, unknown[]>();
-const insertCalls: string[] = [];
-let plan: "free" | "pro" = "free";
+let handleEntitlementsRoute: typeof handleEntitlementsRouteFn = () =>
+  Promise.reject(new Error("Module not loaded"));
 
-const resolveLimit = (resolvedPlan: string, freeLimit: number): number => {
-  if (resolvedPlan === "pro") {
-    return Infinity;
-  }
-  return freeLimit;
-};
+const makeDependencies = (
+  overrides: Record<string, unknown> = {},
+) => ({
+  getAccountCount: () => Promise.resolve(2),
+  getAccountLimit: () => Number.POSITIVE_INFINITY,
+  getFeedCount: () => Promise.resolve(1),
+  getFeedLimit: () => Number.POSITIVE_INFINITY,
+  getMappingCount: () => Promise.resolve(3),
+  getMappingLimit: () => Number.POSITIVE_INFINITY,
+  getUserPlan: () => Promise.resolve("pro" as const),
+  webhookConfigured: true,
+  ...overrides,
+});
 
-const database = {
-  select: () => ({
-    from: (table: unknown) => {
-      const rows = rowsByTable.get(getTableName(table as never)) ?? [];
-      return Object.assign(Promise.resolve(rows), {
-        where: () => Promise.resolve(rows),
-      });
-    },
-  }),
-  insert: (table: unknown) => {
-    insertCalls.push(getTableName(table as never));
-    throw new Error("/api/entitlements must not write");
-  },
-};
-
-const premiumService = {
-  getUserPlan: () => Promise.resolve(plan),
-  getAccountLimit: (resolvedPlan: string) => resolveLimit(resolvedPlan, 2),
-  getMappingLimit: (resolvedPlan: string) => resolveLimit(resolvedPlan, 3),
-  getFeedLimit: (resolvedPlan: string) => resolveLimit(resolvedPlan, 1),
-};
+const readJson = (response: Response): Promise<Record<string, unknown>> =>
+  response.json() as Promise<Record<string, unknown>>;
 
 vi.mock("../../../src/utils/middleware", () => ({
   withAuth: (handler: unknown) => handler,
   withWideEvent: (handler: unknown) => handler,
 }));
 vi.mock("../../../src/context", () => ({
-  baseUrl: "https://keeper.sh",
-  database,
-  premiumService,
+  database: {},
+  premiumService: {},
+  webhookConfig: null,
 }));
-vi.mock("../../../src/utils/source-destination-mappings", () => ({
-  getUserMappings: () => Promise.resolve([]),
-}));
-
-type EntitlementsHandler = (context: { userId: string }) => Promise<Response>;
-
-interface EntitlementsBody {
-  plan: string;
-  accounts: { current: number; limit: number | null };
-  mappings: { current: number; limit: number | null };
-  feeds?: { current: number; limit: number | null };
-}
-
-let readEntitlements: EntitlementsHandler = () =>
-  Promise.reject(new Error("Module not loaded"));
-
-const readBody = async (): Promise<EntitlementsBody> => {
-  const response = await readEntitlements({ userId: "user-1" });
-  return await response.json() as EntitlementsBody;
-};
 
 beforeAll(async () => {
-  const module = await import("../../../src/routes/api/entitlements") as unknown as {
-    GET: EntitlementsHandler;
-  };
-  readEntitlements = module.GET;
+  ({ handleEntitlementsRoute } = await import("../../../src/routes/api/entitlements"));
 });
 
-afterEach(() => {
-  rowsByTable.clear();
-  insertCalls.length = 0;
-  plan = "free";
+describe("handleEntitlementsRoute realtimeSync", () => {
+  it("is true only for a pro plan on a configured deployment", async () => {
+    const response = await handleEntitlementsRoute({ userId: "user-1" }, makeDependencies());
+
+    expect(await readJson(response)).toMatchObject({ plan: "pro", realtimeSync: true });
+  });
+
+  it("is false for a pro plan when the deployment has no public webhook url", async () => {
+    const response = await handleEntitlementsRoute(
+      { userId: "user-1" },
+      makeDependencies({ webhookConfigured: false }),
+    );
+
+    expect(await readJson(response)).toMatchObject({ plan: "pro", realtimeSync: false });
+  });
+
+  it("is false for a free plan even on a configured deployment", async () => {
+    const response = await handleEntitlementsRoute(
+      { userId: "user-1" },
+      makeDependencies({ getUserPlan: () => Promise.resolve("free" as const) }),
+    );
+
+    expect(await readJson(response)).toMatchObject({ plan: "free", realtimeSync: false });
+  });
+
+  it("keeps reporting the existing entitlement shape", async () => {
+    const response = await handleEntitlementsRoute({ userId: "user-1" }, makeDependencies());
+
+    expect(await readJson(response)).toEqual({
+      accounts: { current: 2, limit: null },
+      canCustomizeIcalFeed: true,
+      canUseEventFilters: true,
+      feeds: { current: 1, limit: null },
+      mappings: { current: 3, limit: null },
+      plan: "pro",
+      realtimeSync: true,
+    });
+  });
 });
 
-describe("GET /api/entitlements", () => {
-  it("reports the free feed allowance alongside the existing limits", async () => {
-    rowsByTable.set("calendar_accounts", [{ id: "account-1" }]);
-    rowsByTable.set("ical_feeds", [{ id: "feed-default" }]);
+describe("handleEntitlementsRoute feeds", () => {
+  it("reports the feed count and an unlimited pro allowance", async () => {
+    const response = await handleEntitlementsRoute({ userId: "user-1" }, makeDependencies());
 
-    const body = await readBody();
-
-    expect(body.feeds).toEqual({ current: 1, limit: 1 });
+    expect(await readJson(response)).toMatchObject({
+      feeds: { current: 1, limit: null },
+    });
   });
 
-  it("serialises an unlimited pro feed allowance as null", async () => {
-    plan = "pro";
-    rowsByTable.set("calendar_accounts", []);
-    rowsByTable.set("ical_feeds", [
-      { id: "feed-default" },
-      { id: "feed-work" },
-      { id: "feed-family" },
-    ]);
+  it("reports the finite free allowance", async () => {
+    const response = await handleEntitlementsRoute({ userId: "user-1" }, makeDependencies({
+      getFeedLimit: () => 1,
+      getUserPlan: () => Promise.resolve("free" as const),
+    }));
 
-    const body = await readBody();
-
-    expect(body.feeds).toEqual({ current: 3, limit: null });
-    expect(body.accounts.limit).toBeNull();
-  });
-
-  it("counts every feed the user owns, including the backfilled default", async () => {
-    rowsByTable.set("calendar_accounts", []);
-    rowsByTable.set("ical_feeds", [{ id: "feed-default" }, { id: "feed-work" }]);
-
-    const body = await readBody();
-
-    expect(body.feeds?.current).toBe(2);
-  });
-
-  it("never creates a feed from the reporting endpoint", async () => {
-    rowsByTable.set("calendar_accounts", []);
-    rowsByTable.set("ical_feeds", []);
-
-    const body = await readBody();
-
-    expect(insertCalls).toEqual([]);
-    expect(body.feeds).toEqual({ current: 0, limit: 1 });
+    expect(await readJson(response)).toMatchObject({
+      feeds: { current: 1, limit: 1 },
+    });
   });
 });

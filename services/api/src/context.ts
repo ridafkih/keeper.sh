@@ -10,6 +10,7 @@ import {
   createOAuthProviders,
   buildOAuthConfigs,
   createSyncAggregateRuntime,
+  resolveWebhookConfig,
 } from "@keeper.sh/calendar";
 import { widelog } from "@/utils/logging";
 import type { OAuthStateStore, RefreshLockStore, DestinationSyncResult } from "@keeper.sh/calendar";
@@ -154,11 +155,13 @@ const feedbackEmail = env.FEEDBACK_EMAIL ?? null;
 
 const baseUrl = env.BETTER_AUTH_URL;
 const encryptionKey = env.ENCRYPTION_KEY;
+const webhookConfig = resolveWebhookConfig(env.WEBHOOK_PUBLIC_URL);
 
 export {
   database,
   redis,
   env,
+  webhookConfig,
   trustedOrigins,
   auth,
   authCapabilities,
