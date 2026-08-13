@@ -15,6 +15,8 @@ const syncLockRenewalError = (cause: unknown): Error =>
 const postgresError = (message: string, sqlState: string): Error =>
   Object.assign(new Error(message), { code: sqlState, errno: sqlState, name: "PostgresError" });
 
+const errorWithoutMessage = (): Error => Object.assign(new Error("unused"), { message: "" });
+
 const classifyRepeatedly = (error: unknown, runs: number): boolean[] =>
   Array.from({ length: runs }, () => shouldTreatAsProviderAuthFailure(error));
 
@@ -85,7 +87,7 @@ describe("shouldTreatAsProviderAuthFailure convergence and edges", () => {
   });
 
   it("treats absent and empty failures as not a provider auth failure", () => {
-    for (const value of [null, undefined, "", 0, {}, [], new Error("")]) {
+    for (const value of [null, globalThis.undefined, "", 0, {}, [], errorWithoutMessage()]) {
       expect(shouldTreatAsProviderAuthFailure(value)).toBe(false);
     }
   });

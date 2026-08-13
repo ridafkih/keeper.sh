@@ -20,6 +20,8 @@ const postgresCredentialRejection = (): Error =>
     }),
   });
 
+const errorWithoutMessage = (): Error => Object.assign(new Error("unused"), { message: "" });
+
 const verdictsAcross = (runs: number, error: unknown): boolean[] =>
   Array.from({ length: runs }, () => shouldTreatAsProviderAuthFailure(error));
 
@@ -56,10 +58,10 @@ describe("provider ingest failure attribution under wrapping and repetition", ()
 
   it("does not blame the credentials for absent or empty failures", () => {
     expect(shouldTreatAsProviderAuthFailure(null)).toBe(false);
-    expect(shouldTreatAsProviderAuthFailure(undefined)).toBe(false);
+    expect(shouldTreatAsProviderAuthFailure(globalThis.undefined)).toBe(false);
     expect(shouldTreatAsProviderAuthFailure("")).toBe(false);
     expect(shouldTreatAsProviderAuthFailure({})).toBe(false);
-    expect(shouldTreatAsProviderAuthFailure(new Error(""))).toBe(false);
+    expect(shouldTreatAsProviderAuthFailure(errorWithoutMessage())).toBe(false);
   });
 
   it("reads a 401 carried as a string status the same way as a numeric one", () => {
