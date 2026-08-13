@@ -2,33 +2,23 @@ import type { IcsRecurrenceRule, IcsTimezone, IcsTimezoneProp } from "ts-ics";
 import { normalizeTimezone } from "./normalize-timezone";
 import {
   findTimeZoneTransitions,
+  formatIcsUtcOffset,
   getTimeZoneOffsetMinutes,
+  isSupportedTimeZone,
 } from "./timezone-instant";
 import type { TimeZoneTransition } from "./timezone-instant";
 
 const MS_PER_MINUTE = 60 * 1000;
-const MINUTES_PER_HOUR = 60;
 const PROJECTION_YEARS_AFTER_REFERENCE = 100;
 const PROJECTION_YEARS_BEFORE_REFERENCE = 1;
 const DAYS_OF_WEEK = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const;
 const vtimezoneCache = new Map<string, IcsTimezone>();
 
-const padTwo = (value: number): string => Math.trunc(value).toString().padStart(2, "0");
-
-const formatOffset = (minutes: number): string => {
-  let sign = "+";
-  if (minutes < 0) {
-    sign = "-";
-  }
-  const absolute = Math.abs(minutes);
-  return `${sign}${padTwo(Math.floor(absolute / MINUTES_PER_HOUR))}${padTwo(absolute % MINUTES_PER_HOUR)}`;
-};
-
 const buildBaselineObservance = (
   firstWallTime: Date,
   offsetMinutes: number,
 ): IcsTimezoneProp => {
-  const offset = formatOffset(offsetMinutes);
+  const offset = formatIcsUtcOffset(offsetMinutes);
   return {
     type: "STANDARD",
     start: new Date(firstWallTime.getTime() - offsetMinutes * MS_PER_MINUTE),
@@ -48,8 +38,8 @@ const buildTransitionObservance = (transition: TimeZoneTransition): IcsTimezoneP
   return {
     type,
     start: new Date(generatorStart),
-    offsetFrom: formatOffset(transition.offsetFromMinutes),
-    offsetTo: formatOffset(transition.offsetToMinutes),
+    offsetFrom: formatIcsUtcOffset(transition.offsetFromMinutes),
+    offsetTo: formatIcsUtcOffset(transition.offsetToMinutes),
   };
 };
 
@@ -138,18 +128,9 @@ const buildRecurringObservance = (transition: TimeZoneTransition): IcsTimezonePr
   recurrenceRule: buildAnnualRecurrenceRule(transition),
 });
 
-const isValidTimeZone = (timeZone: string): boolean => {
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone }).format(0);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
 const buildVtimezone = (timezone: string | undefined, referenceInstant: Date): IcsTimezone | undefined => {
   const resolved = normalizeTimezone(timezone);
-  if (!resolved || !isValidTimeZone(resolved) || Number.isNaN(referenceInstant.getTime())) {
+  if (!resolved || !isSupportedTimeZone(resolved) || Number.isNaN(referenceInstant.getTime())) {
     return;
   }
 

@@ -3,6 +3,7 @@ import { normalizeTimezone } from "./normalize-timezone";
 const dateTimeFormatters = new Map<string, Intl.DateTimeFormat>();
 const HOURS_TO_SAMPLE = 36;
 const SAMPLE_INTERVAL_HOURS = 6;
+const MINUTES_PER_HOUR = 60;
 const MS_PER_HOUR = 60 * 60 * 1000;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
 
@@ -33,6 +34,26 @@ const getDateTimeFormatter = (timeZone: string): Intl.DateTimeFormat => {
   });
   dateTimeFormatters.set(timeZone, formatter);
   return formatter;
+};
+
+const isSupportedTimeZone = (timeZone: string): boolean => {
+  try {
+    getDateTimeFormatter(timeZone).format(0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const formatIcsUtcOffset = (offsetMinutes: number): string => {
+  let sign = "+";
+  if (offsetMinutes < 0) {
+    sign = "-";
+  }
+  const absolute = Math.abs(offsetMinutes);
+  const hours = Math.floor(absolute / MINUTES_PER_HOUR).toString().padStart(2, "0");
+  const minutes = (absolute % MINUTES_PER_HOUR).toString().padStart(2, "0");
+  return `${sign}${hours}${minutes}`;
 };
 
 const resolveTimeZone = (timeZone: string | undefined): string | undefined => {
@@ -177,8 +198,10 @@ const wallTimeToInstant = (wallTime: Date, timeZone: string): Date => {
 
 export {
   findTimeZoneTransitions,
+  formatIcsUtcOffset,
   getTimeZoneOffsetMinutes,
   instantToWallTime,
+  isSupportedTimeZone,
   resolveTimeZone,
   wallTimeToInstant,
 };

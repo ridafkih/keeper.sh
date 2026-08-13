@@ -1,53 +1,13 @@
 import type { IcsDateObject } from "ts-ics";
 import { normalizeTimezone } from "./normalize-timezone";
+import {
+  instantToWallTime,
+  isSupportedTimeZone,
+  wallTimeToInstant,
+} from "./timezone-instant";
 
 const MINUTES_PER_HOUR = 60;
 const MS_PER_MINUTE = 60 * 1000;
-const HOURS_IN_DAY = 24;
-
-interface WallClockParts {
-  year: number;
-  month: number;
-  day: number;
-  hour: number;
-  minute: number;
-  second: number;
-}
-
-const partsInTimeZone = (instant: Date, timeZone: string): WallClockParts => {
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
-
-  const lookup = new Map<string, string>();
-  for (const part of formatter.formatToParts(instant)) {
-    lookup.set(part.type, part.value);
-  }
-
-  const read = (type: string): number => Number.parseInt(lookup.get(type) ?? "0", 10);
-
-  // Intl can report midnight as hour "24"; normalize it back to 0.
-  let hour = read("hour");
-  if (hour === HOURS_IN_DAY) {
-    hour = 0;
-  }
-
-  return {
-    year: read("year"),
-    month: read("month"),
-    day: read("day"),
-    hour,
-    minute: read("minute"),
-    second: read("second"),
-  };
-};
 
 const padTwo = (value: number): string => value.toString().padStart(2, "0");
 
@@ -90,29 +50,30 @@ const buildZonedIcsDate = (
   }
 
   const resolved = normalizeTimezone(timezone);
-  if (!resolved) {
+  if (!resolved || !isSupportedTimeZone(resolved)) {
     return { date: instant };
   }
 
-  try {
-    const parts = partsInTimeZone(instant, resolved);
-    const localDate = new Date(
-      Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second),
-    );
-    const offsetMs = localDate.getTime() - instant.getTime();
-
-    return {
-      date: instant,
-      local: {
-        date: localDate,
-        timezone: resolved,
-        tzoffset: formatTzOffset(offsetMs),
-      },
-    };
-  } catch {
-    // Unknown/invalid timezone — fall back to a bare UTC datetime.
+  const localDate = instantToWallTime(instant, resolved);
+  /*
+   * A wall clock repeats an hour at a fall-back transition, so an instant in the
+   * second pass through it cannot be recovered from the local value alone: RFC 5545
+   * gives no way to say which pass is meant, and reading the resource back would
+   * move the event to the first pass, making the mirror look changed on every run.
+   * Writing that instant in UTC names it exactly.
+   */
+  if (wallTimeToInstant(localDate, resolved).getTime() !== instant.getTime()) {
     return { date: instant };
   }
+
+  return {
+    date: instant,
+    local: {
+      date: localDate,
+      timezone: resolved,
+      tzoffset: formatTzOffset(localDate.getTime() - instant.getTime()),
+    },
+  };
 };
 
 export { buildZonedIcsDate, formatTzOffset };
