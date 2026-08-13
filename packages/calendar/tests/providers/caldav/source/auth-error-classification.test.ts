@@ -57,6 +57,33 @@ describe("isCalDAVAuthenticationError", () => {
     expect(isCalDAVAuthenticationError(new Error("Failed query", { cause }))).toBe(false);
   });
 
+  it("returns true for the bare 401 error tsdav raises from a principal propfind", () => {
+    expect(isCalDAVAuthenticationError(new Error("Collection query failed: 401 Unauthorized."))).toBe(true);
+  });
+
+  it("returns false for a Redis reply demanding authentication", () => {
+    const replyError = Object.assign(new Error("NOAUTH Authentication required."), {
+      command: { args: [], name: "eval" },
+      name: "ReplyError",
+    });
+
+    expect(isCalDAVAuthenticationError(replyError)).toBe(false);
+    expect(isCalDAVAuthenticationError(
+      Object.assign(new Error("Failed to renew sync lock for calendar cal-1", { cause: replyError }), {
+        name: "SyncLockRenewalError",
+      }),
+    )).toBe(false);
+  });
+
+  it("returns false when the message reports a non-401 HTTP status", () => {
+    expect(isCalDAVAuthenticationError(new Error(
+      "Collection query failed: 407 Proxy Authentication Required. Raw response: <html>407</html>",
+    ))).toBe(false);
+    expect(isCalDAVAuthenticationError(new Error(
+      "Collection query failed: 511 Network Authentication Required.",
+    ))).toBe(false);
+  });
+
   it("returns false for a Postgres pg_hba rejection", () => {
     const cause = Object.assign(
       new Error('no pg_hba.conf entry for host "10.0.0.4", SSL off'),

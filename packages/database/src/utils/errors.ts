@@ -4,7 +4,7 @@ const STATEMENT_TIMEOUT_SQLSTATE = "57014";
 const CONNECTION_TERMINATED_CODE = "ERR_POSTGRES_EXPECTED_REQUEST";
 // SQLSTATE class 28 (invalid_authorization_specification) — Postgres rejected our own credentials.
 const AUTHORIZATION_SQLSTATE_CLASS = "28";
-const SQLSTATE_LENGTH = 5;
+const SQLSTATE_PATTERN = /^[0-9A-Z]{5}$/;
 
 interface DatabaseErrorClassification {
   slug: string;
@@ -70,7 +70,7 @@ const classifyDatabaseError = (error: unknown): DatabaseErrorClassification | nu
   }
 
   const sqlState = findSqlState(error, cause);
-  if (sqlState && sqlState.startsWith(AUTHORIZATION_SQLSTATE_CLASS) && sqlState.length === SQLSTATE_LENGTH) {
+  if (sqlState && SQLSTATE_PATTERN.test(sqlState) && sqlState.startsWith(AUTHORIZATION_SQLSTATE_CLASS)) {
     return { slug: "db-authentication-failed", sqlState };
   }
 

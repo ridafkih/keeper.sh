@@ -9,6 +9,10 @@ const AUTH_ERROR_PATTERNS = [
 
 const CALDAV_AUTH_ERROR_NAME = "CalDAVAuthenticationError";
 
+const CALDAV_TRANSPORT_ERROR_NAMES = new Set(["Error", CALDAV_AUTH_ERROR_NAME]);
+
+const HTTP_FAILURE_STATUS_PATTERN = /\b[45]\d{2}\b/g;
+
 const SQLSTATE_PATTERN = /^[0-9A-Z]{5}$/;
 
 const DATABASE_ERROR_NAMES = new Set(["DrizzleQueryError", "PostgresError"]);
@@ -49,8 +53,21 @@ const hasAuthStatusCode = (value: unknown): boolean => {
   return AUTH_ERROR_STATUS_CODES.has(statusCode);
 };
 
+const namesNonAuthHttpFailure = (message: string): boolean => {
+  const statuses = [...message.matchAll(HTTP_FAILURE_STATUS_PATTERN)]
+    .map(([status]) => Number(status));
+  if (statuses.length === 0) {
+    return false;
+  }
+  return !statuses.some((status) => AUTH_ERROR_STATUS_CODES.has(status));
+};
+
 const hasAuthMessage = (message: string): boolean =>
-  AUTH_ERROR_PATTERNS.some((pattern) => pattern.test(message));
+  AUTH_ERROR_PATTERNS.some((pattern) => pattern.test(message))
+  && !namesNonAuthHttpFailure(message);
+
+const isCalDAVTransportCandidate = (value: Record<string, unknown>): boolean =>
+  typeof value.name !== "string" || CALDAV_TRANSPORT_ERROR_NAMES.has(value.name);
 
 const collectNestedCandidates = (value: Record<string, unknown>): unknown[] => {
   const candidates: unknown[] = [];
@@ -117,7 +134,11 @@ const isCalDAVAuthenticationError = (error: unknown): boolean => {
         return true;
       }
 
-      if ("message" in candidate && typeof candidate.message === "string" && hasAuthMessage(candidate.message)) {
+      if (
+        isCalDAVTransportCandidate(candidate)
+        && typeof candidate.message === "string"
+        && hasAuthMessage(candidate.message)
+      ) {
         return true;
       }
 
