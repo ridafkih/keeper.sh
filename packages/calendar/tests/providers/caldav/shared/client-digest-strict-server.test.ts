@@ -15,6 +15,20 @@ const REALM = "caldav";
 
 const XML_HEADERS = { "content-type": "text/xml; charset=utf-8" };
 
+const errorName = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.name;
+  }
+  return typeof error;
+};
+
+const staleDirectiveFor = (stale: boolean): string => {
+  if (stale) {
+    return ", stale=true";
+  }
+  return "";
+};
+
 const md5 = (value: string): string => new CryptoHasher("md5").update(value).digest("hex");
 
 const multistatus = (body: string): Response =>
@@ -91,7 +105,7 @@ const createStrictDigestServer = (options: DigestServerOptions): DigestServer =>
 
   const challenge = (stale: boolean): Response => {
     state.challengeCount += 1;
-    const staleDirective = stale ? ", stale=true" : "";
+    const staleDirective = staleDirectiveFor(stale);
     return new Response("<html>401</html>", {
       headers: {
         "content-type": "text/html",
@@ -161,12 +175,19 @@ interface RecordedRequest {
   path: string;
 }
 
-let originalFetch: typeof globalThis.fetch;
+const requestUrl = (input: string | Request | URL): URL => {
+  if (input instanceof Request) {
+    return new URL(input.url);
+  }
+  return new URL(input.toString());
+};
+
+let originalFetch: typeof globalThis.fetch = globalThis.fetch;
 let requestLog: RecordedRequest[] = [];
 
 const serveDigest = (server: DigestServer, delayFor?: (path: string) => number): void => {
   globalThis.fetch = (async (input: string | Request | URL, init?: RequestInit) => {
-    const url = new URL(input instanceof Request ? input.url : input.toString());
+    const url = requestUrl(input);
     const authorization = new Headers(init?.headers).get("authorization") ?? "";
     const method = init?.method ?? "GET";
     requestLog.push({ authorization, method, path: url.pathname });
@@ -196,7 +217,7 @@ const settle = async <Result>(
     return {
       authenticationError: error instanceof CalDAVAuthenticationError,
       kind: "rejected",
-      name: error instanceof Error ? error.name : typeof error,
+      name: errorName(error),
     };
   }
 };

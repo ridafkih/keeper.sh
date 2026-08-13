@@ -4,15 +4,14 @@ import {
   runInRequestScope,
 } from "../../../../src/providers/caldav/shared/response-status-scope";
 
-const deferred = <Value>(): {
-  promise: Promise<Value>;
-  resolve: (value: Value) => void;
-} => {
-  let resolve: (value: Value) => void = () => undefined;
-  const promise = new Promise<Value>((settle) => {
-    resolve = settle;
-  });
-  return { promise, resolve };
+const signal = (): { open: () => void; promise: Promise<boolean> } => {
+  const { promise, resolve } = Promise.withResolvers<boolean>();
+  return {
+    open: () => {
+      resolve(true);
+    },
+    promise,
+  };
 };
 
 const respond = (status: number): Promise<Response> =>
@@ -42,12 +41,12 @@ describe("CalDAV request scope", () => {
   });
 
   it("keeps concurrent scopes isolated from each other", async () => {
-    const first = deferred<void>();
-    const second = deferred<void>();
+    const first = signal();
+    const second = signal();
 
     const healthyScope = runInRequestScope(async (requests) => {
       await request(207);
-      first.resolve();
+      first.open();
       await second.promise;
       return requests.hasUnrefutedUnauthorized();
     });
@@ -55,7 +54,7 @@ describe("CalDAV request scope", () => {
     const deniedScope = runInRequestScope(async (requests) => {
       await first.promise;
       await request(401);
-      second.resolve();
+      second.open();
       return requests.hasUnrefutedUnauthorized();
     });
 
@@ -135,7 +134,7 @@ describe("CalDAV request scope", () => {
   });
 
   it("does not let an unsettled request refute a 401", async () => {
-    const release = deferred<Response>();
+    const release = Promise.withResolvers<Response>();
 
     const unauthorized = await runInRequestScope(async (requests) => {
       const pending = recordRequest(() => release.promise);

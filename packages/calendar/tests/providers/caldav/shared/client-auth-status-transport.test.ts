@@ -14,6 +14,13 @@ const OBJECT_PATH = `${CALENDAR_PATH}event-0001.ics`;
 
 const XML_HEADERS = { "content-type": "text/xml; charset=utf-8" };
 
+const attributionOf = (error: unknown): string => {
+  if (error instanceof CalDAVAuthenticationError) {
+    return "auth";
+  }
+  return "transport";
+};
+
 const multistatus = (body: string): Response =>
   new Response(
     `<?xml version="1.0" encoding="utf-8" ?><d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:cs="http://calendarserver.org/ns/">${body}</d:multistatus>`,
@@ -119,19 +126,34 @@ const healthyServer: Responder = (request) => {
 };
 
 let requests: RecordedRequest[] = [];
-let originalFetch: typeof globalThis.fetch;
+
+const requestUrl = (input: string | Request | URL): URL => {
+  if (input instanceof Request) {
+    return new URL(input.url);
+  }
+  return new URL(input.toString());
+};
+
+const requestBody = (init?: RequestInit): string => {
+  if (typeof init?.body === "string") {
+    return init.body;
+  }
+  return "";
+};
+
+let originalFetch: typeof globalThis.fetch = globalThis.fetch;
 
 const serve = (responder: Responder): void => {
   globalThis.fetch = (async (input: string | Request | URL, init?: RequestInit) => {
-    const url = new URL(input instanceof Request ? input.url : input.toString());
+    const url = requestUrl(input);
     const recorded: RecordedRequest = {
-      body: typeof init?.body === "string" ? init.body : "",
+      body: requestBody(init),
       method: init?.method ?? "GET",
       path: url.pathname,
       username: readUsername(init?.headers),
     };
     requests.push(recorded);
-    return responder(recorded);
+    return await responder(recorded);
   }) as unknown as typeof globalThis.fetch;
 };
 
@@ -246,7 +268,7 @@ describe("CalDAVClient against a scripted CalDAV transport", () => {
     for (let run = 0; run < 3; run++) {
       const error = await captureRejection(() =>
         client.fetchCalendarObjects({ calendarUrl: CALENDAR_URL }));
-      verdicts.push(error instanceof CalDAVAuthenticationError ? "auth" : "transport");
+      verdicts.push(attributionOf(error));
     }
 
     expect(verdicts).toEqual(["transport", "transport", "transport"]);
@@ -262,7 +284,7 @@ describe("CalDAVClient against a scripted CalDAV transport", () => {
       if (request.username === "timing-out-user") {
         if (isCalendarQuery(request)) {
           await gate;
-          return Promise.reject(new RequestTimeoutError(90_000));
+          throw new RequestTimeoutError(90_000);
         }
         return healthyServer(request);
       }

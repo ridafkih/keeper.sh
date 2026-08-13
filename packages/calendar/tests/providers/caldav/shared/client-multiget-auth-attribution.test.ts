@@ -92,19 +92,39 @@ const isCalendarQuery = (request: RecordedRequest): boolean =>
 const isMultiGet = (request: RecordedRequest): boolean =>
   request.method === "REPORT" && request.body.includes("calendar-multiget");
 
+const errorName = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.name;
+  }
+  return "unknown";
+};
+
+const requestUrl = (input: string | Request | URL): URL => {
+  if (input instanceof Request) {
+    return new URL(input.url);
+  }
+  return new URL(input.toString());
+};
+
+const requestBody = (init?: RequestInit): string => {
+  if (typeof init?.body === "string") {
+    return init.body;
+  }
+  return "";
+};
+
 let requests: RecordedRequest[] = [];
-let originalFetch: typeof globalThis.fetch;
+let originalFetch: typeof globalThis.fetch = globalThis.fetch;
 
 const serve = (responder: Responder): void => {
   globalThis.fetch = (async (input: string | Request | URL, init?: RequestInit) => {
-    const url = new URL(input instanceof Request ? input.url : input.toString());
     const recorded: RecordedRequest = {
-      body: typeof init?.body === "string" ? init.body : "",
+      body: requestBody(init),
       method: init?.method ?? "GET",
-      path: url.pathname,
+      path: requestUrl(input).pathname,
     };
     requests.push(recorded);
-    return responder(recorded);
+    return await responder(recorded);
   }) as unknown as typeof globalThis.fetch;
 };
 
@@ -113,6 +133,15 @@ interface ServerOptions {
   multigetOutcome?: (batchIndex: number) => Response | Error | null;
   wellKnownUnauthorized?: boolean;
 }
+
+const outcomeAtBatch =
+  (deniedIndex: number, outcome: () => Response | Error) =>
+  (batchIndex: number): Response | Error | null => {
+    if (batchIndex === deniedIndex) {
+      return outcome();
+    }
+    return null;
+  };
 
 const scriptedServer = (options: ServerOptions): Responder => {
   let multigetCount = 0;
@@ -173,7 +202,7 @@ const runRead = async (client: CalDAVClient): Promise<Verdict> => {
     return {
       authenticationError: error instanceof CalDAVAuthenticationError,
       kind: "rejected",
-      name: error instanceof Error ? error.name : "unknown",
+      name: errorName(error),
     };
   }
 };
@@ -192,13 +221,13 @@ describe("a multiget that spans several batches", () => {
     serve(scriptedServer({ hrefCount: BATCH_SIZE * 2 + 1 }));
 
     expect(await runRead(createClient())).toEqual({ count: BATCH_SIZE * 2 + 1, kind: "resolved" });
-    expect(requests.filter(isMultiGet)).toHaveLength(3);
+    expect(requests.filter((request) => isMultiGet(request))).toHaveLength(3);
   });
 
   it("reports credentials revoked partway through as an authentication failure", async () => {
     serve(scriptedServer({
       hrefCount: BATCH_SIZE * 2 + 1,
-      multigetOutcome: (batchIndex) => batchIndex === 1 ? unauthorized() : null,
+      multigetOutcome: outcomeAtBatch(1, unauthorized),
     }));
 
     expect(await runRead(createClient())).toEqual({
@@ -211,7 +240,7 @@ describe("a multiget that spans several batches", () => {
   it("does not blame the credentials when a later batch times out", async () => {
     serve(scriptedServer({
       hrefCount: BATCH_SIZE * 2 + 1,
-      multigetOutcome: (batchIndex) => batchIndex === 1 ? new RequestTimeoutError(30_000) : null,
+      multigetOutcome: outcomeAtBatch(1, () => new RequestTimeoutError(30_000)),
       wellKnownUnauthorized: true,
     }));
 
@@ -225,7 +254,7 @@ describe("a multiget that spans several batches", () => {
   it("stops at the denied batch instead of reporting a short object set", async () => {
     serve(scriptedServer({
       hrefCount: BATCH_SIZE * 2 + 1,
-      multigetOutcome: (batchIndex) => batchIndex === 0 ? unauthorized() : null,
+      multigetOutcome: outcomeAtBatch(0, unauthorized),
     }));
 
     expect(await runRead(createClient())).toEqual({
@@ -233,7 +262,7 @@ describe("a multiget that spans several batches", () => {
       kind: "rejected",
       name: "CalDAVAuthenticationError",
     });
-    expect(requests.filter(isMultiGet)).toHaveLength(1);
+    expect(requests.filter((request) => isMultiGet(request))).toHaveLength(1);
   });
 
   it("converges on the same verdict across repeated reads on one client", async () => {
@@ -243,7 +272,7 @@ describe("a multiget that spans several batches", () => {
     for (let round = 0; round < 4; round += 1) {
       serve(scriptedServer({
         hrefCount: BATCH_SIZE + 1,
-        multigetOutcome: (batchIndex) => batchIndex === 1 ? unauthorized() : null,
+        multigetOutcome: outcomeAtBatch(1, unauthorized),
       }));
       verdicts.push(await runRead(client));
     }
@@ -262,7 +291,7 @@ describe("a multiget that spans several batches", () => {
 
     serve(scriptedServer({
       hrefCount: BATCH_SIZE + 1,
-      multigetOutcome: (batchIndex) => batchIndex === 1 ? unauthorized() : null,
+      multigetOutcome: outcomeAtBatch(1, unauthorized),
     }));
     await runRead(client);
 
@@ -280,7 +309,7 @@ describe("collection sizes at the edges of a batch", () => {
     serve(scriptedServer({ hrefCount: 0, wellKnownUnauthorized: true }));
 
     expect(await runRead(createClient())).toEqual({ count: 0, kind: "resolved" });
-    expect(requests.filter(isMultiGet)).toHaveLength(0);
+    expect(requests.filter((request) => isMultiGet(request))).toHaveLength(0);
   });
 
   it("reads a single-object collection after a denied well-known probe", async () => {
@@ -293,13 +322,13 @@ describe("collection sizes at the edges of a batch", () => {
     serve(scriptedServer({ hrefCount: BATCH_SIZE }));
 
     expect(await runRead(createClient())).toEqual({ count: BATCH_SIZE, kind: "resolved" });
-    expect(requests.filter(isMultiGet)).toHaveLength(1);
+    expect(requests.filter((request) => isMultiGet(request))).toHaveLength(1);
   });
 
   it("reports a denied final batch of a full-batch-plus-one collection as an authentication failure", async () => {
     serve(scriptedServer({
       hrefCount: BATCH_SIZE + 1,
-      multigetOutcome: (batchIndex) => batchIndex === 1 ? unauthorized() : null,
+      multigetOutcome: outcomeAtBatch(1, unauthorized),
     }));
 
     expect(await runRead(createClient())).toEqual({

@@ -60,18 +60,40 @@ const isCalendarQuery = (request: RecordedRequest): boolean =>
   request.method === "REPORT" && request.body.includes("calendar-query");
 
 let requests: RecordedRequest[] = [];
-let originalFetch: typeof globalThis.fetch;
+
+const requestUrl = (input: string | Request | URL): URL => {
+  if (input instanceof Request) {
+    return new URL(input.url);
+  }
+  return new URL(input.toString());
+};
+
+const requestBody = (init?: RequestInit): string => {
+  if (typeof init?.body === "string") {
+    return init.body;
+  }
+  return "";
+};
+
+const errorName = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.name;
+  }
+  return "unknown";
+};
+
+let originalFetch: typeof globalThis.fetch = globalThis.fetch;
 
 const serve = (responder: Responder): void => {
   globalThis.fetch = (async (input: string | Request | URL, init?: RequestInit) => {
-    const url = new URL(input instanceof Request ? input.url : input.toString());
+    const url = requestUrl(input);
     const recorded: RecordedRequest = {
-      body: typeof init?.body === "string" ? init.body : "",
+      body: requestBody(init),
       method: init?.method ?? "GET",
       path: url.pathname,
     };
     requests.push(recorded);
-    return responder(recorded);
+    return await responder(recorded);
   }) as unknown as typeof globalThis.fetch;
 };
 
@@ -119,9 +141,9 @@ type Verdict = { kind: "resolved"; names: string[] } | { kind: "rejected"; name:
 const runDiscovery = async (client: CalDAVClient): Promise<Verdict> => {
   try {
     const calendars = await client.discoverCalendars();
-    return { kind: "resolved", names: calendars.map(({ displayName }) => displayName).sort() };
+    return { kind: "resolved", names: calendars.map(({ displayName }) => displayName).toSorted() };
   } catch (error) {
-    return { kind: "rejected", name: error instanceof Error ? error.name : "unknown" };
+    return { kind: "rejected", name: errorName(error) };
   }
 };
 
@@ -241,7 +263,7 @@ describe("a source ingest against a server with one denied collection", () => {
       .then(({ events }) => ({ kind: "resolved" as const, count: events.length }))
       .catch((error: unknown) => ({
         kind: "rejected" as const,
-        name: error instanceof Error ? error.name : "unknown",
+        name: errorName(error),
       }));
 
     expect(outcome).toEqual({ kind: "resolved", count: 0 });
@@ -265,8 +287,9 @@ describe("a timeout racing a denied probe in the same discovery", () => {
     if (request.path === SHARED_PATH) {
       return settleAfter(deniedTicks, unauthorized());
     }
-    return settleAfter(timeoutTicks, new Response("", { status: 200 }))
-      .then(() => Promise.reject(new RequestTimeoutError(30_000)));
+    return settleAfter(timeoutTicks, new Response("", { status: 200 })).then(() => {
+      throw new RequestTimeoutError(30_000);
+    });
   };
 
   it("reports the timeout, not invalid credentials, when the denial lands first", async () => {

@@ -272,7 +272,7 @@ class CalDAVClient {
     await assertSuccessfulResponse(response, "delete");
   }
 
-  async fetchCalendarObject(params: {
+  fetchCalendarObject(params: {
     calendarUrl: string;
     filename: string;
   }): Promise<CalendarObject | null> {

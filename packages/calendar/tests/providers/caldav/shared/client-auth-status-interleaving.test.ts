@@ -139,20 +139,35 @@ const healthyServer: Responder = (request) => {
 };
 
 let requests: RecordedRequest[] = [];
-let originalFetch: typeof globalThis.fetch;
+
+const requestUrl = (input: string | Request | URL): URL => {
+  if (input instanceof Request) {
+    return new URL(input.url);
+  }
+  return new URL(input.toString());
+};
+
+const requestBody = (init?: RequestInit): string => {
+  if (typeof init?.body === "string") {
+    return init.body;
+  }
+  return "";
+};
+
+let originalFetch: typeof globalThis.fetch = globalThis.fetch;
 
 const serve = (responder: Responder): void => {
   globalThis.fetch = (async (input: string | Request | URL, init?: RequestInit) => {
-    const url = new URL(input instanceof Request ? input.url : input.toString());
+    const url = requestUrl(input);
     const recorded: RecordedRequest = {
       authorization: new Headers(init?.headers).get("authorization") ?? "",
-      body: typeof init?.body === "string" ? init.body : "",
+      body: requestBody(init),
       method: init?.method ?? "GET",
       path: url.pathname,
       username: readUsername(init?.headers),
     };
     requests.push(recorded);
-    return responder(recorded);
+    return await responder(recorded);
   }) as unknown as typeof globalThis.fetch;
 };
 
@@ -171,6 +186,13 @@ const captureRejection = async (operation: () => Promise<unknown>): Promise<unkn
   throw new Error("expected the operation to reject");
 };
 
+const errorName = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.name;
+  }
+  return typeof error;
+};
+
 const describeVerdict = (error: unknown): string => {
   if (error instanceof CalDAVAuthenticationError) {
     return "auth";
@@ -181,7 +203,7 @@ const describeVerdict = (error: unknown): string => {
   if (error instanceof RequestTimeoutError) {
     return "timeout";
   }
-  return `other:${error instanceof Error ? error.name : typeof error}`;
+  return `other:${errorName(error)}`;
 };
 
 beforeEach(() => {
@@ -207,7 +229,7 @@ describe("CalDAV auth attribution across interleaved and repeated operations", (
         return unauthorized();
       }
       if (isCalendarListing(request)) {
-        return Promise.reject(new RequestTimeoutError(90_000));
+        throw new RequestTimeoutError(90_000);
       }
       return healthyServer(request);
     });

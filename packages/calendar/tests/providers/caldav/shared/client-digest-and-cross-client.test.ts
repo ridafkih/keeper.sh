@@ -56,12 +56,26 @@ interface RecordedRequest {
 
 type Responder = (request: RecordedRequest) => Promise<Response>;
 
-let originalFetch: typeof globalThis.fetch;
+const requestUrl = (input: string | Request | URL): URL => {
+  if (input instanceof Request) {
+    return new URL(input.url);
+  }
+  return new URL(input.toString());
+};
+
+const errorName = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.name;
+  }
+  return "unknown";
+};
+
+let originalFetch: typeof globalThis.fetch = globalThis.fetch;
 let requestLog: RecordedRequest[] = [];
 
 const serve = (responder: Responder): void => {
   globalThis.fetch = (async (input: string | Request | URL, init?: RequestInit) => {
-    const url = new URL(input instanceof Request ? input.url : input.toString());
+    const url = requestUrl(input);
     const recorded: RecordedRequest = {
       authorization: new Headers(init?.headers).get("authorization") ?? "",
       host: url.host,
@@ -69,7 +83,7 @@ const serve = (responder: Responder): void => {
       path: url.pathname,
     };
     requestLog.push(recorded);
-    return responder(recorded);
+    return await responder(recorded);
   }) as unknown as typeof globalThis.fetch;
 };
 
@@ -78,6 +92,13 @@ const settleAfter = async (ticks: number, response: Response): Promise<Response>
     await Promise.resolve();
   }
   return response;
+};
+
+const delayFor = (early: boolean): number => {
+  if (early) {
+    return 1;
+  }
+  return 7;
 };
 
 const createClient = (serverUrl: string): CalDAVClient =>
@@ -93,12 +114,12 @@ type Verdict =
 const runDiscovery = async (client: CalDAVClient): Promise<Verdict> => {
   try {
     const calendars = await client.discoverCalendars();
-    return { kind: "resolved", names: calendars.map(({ displayName }) => displayName).sort() };
+    return { kind: "resolved", names: calendars.map(({ displayName }) => displayName).toSorted() };
   } catch (error) {
     return {
       authenticationError: error instanceof CalDAVAuthenticationError,
       kind: "rejected",
-      name: error instanceof Error ? error.name : "unknown",
+      name: errorName(error),
     };
   }
 };
@@ -278,7 +299,7 @@ describe("a CalDAV server that answers a digest challenge before serving", () =>
       const seen = new Set<string>();
       return (request) => {
         if (request.path === PERSONAL_PATH || request.path === SHARED_PATH) {
-          const delay = (request.path === SHARED_PATH) === sharedFirst ? 1 : 7;
+          const delay = delayFor((request.path === SHARED_PATH) === sharedFirst);
           if (!seen.has(request.path)) {
             seen.add(request.path);
             return settleAfter(

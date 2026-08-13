@@ -53,12 +53,26 @@ interface RecordedRequest {
 
 type Responder = (request: RecordedRequest) => Promise<Response>;
 
-let originalFetch: typeof globalThis.fetch;
+const requestUrl = (input: string | Request | URL): URL => {
+  if (input instanceof Request) {
+    return new URL(input.url);
+  }
+  return new URL(input.toString());
+};
+
+const errorName = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.name;
+  }
+  return "unknown";
+};
+
+let originalFetch: typeof globalThis.fetch = globalThis.fetch;
 
 const serve = (responder: Responder): void => {
   globalThis.fetch = (async (input: string | Request | URL, init?: RequestInit) => {
-    const url = new URL(input instanceof Request ? input.url : input.toString());
-    return responder({ method: init?.method ?? "GET", path: url.pathname });
+    const url = requestUrl(input);
+    return await responder({ method: init?.method ?? "GET", path: url.pathname });
   }) as unknown as typeof globalThis.fetch;
 };
 
@@ -75,7 +89,7 @@ interface ServerOptions {
   wellKnown: "not-found" | "timeout" | "reset";
 }
 
-const CONNECTION_RESET = (): Error =>
+const connectionReset = (): Error =>
   Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET", name: "Error" });
 
 const buildServer = (options: ServerOptions): Responder => (request) => {
@@ -84,7 +98,7 @@ const buildServer = (options: ServerOptions): Responder => (request) => {
       return Promise.reject(new RequestTimeoutError(90_000));
     }
     if (options.wellKnown === "reset") {
-      return Promise.reject(CONNECTION_RESET());
+      return Promise.reject(connectionReset());
     }
     return Promise.resolve(new Response("", { status: 404, statusText: "Not Found" }));
   }
@@ -118,7 +132,7 @@ const runDiscovery = async (client: CalDAVClient): Promise<Verdict> => {
     return {
       authenticationError: error instanceof CalDAVAuthenticationError,
       kind: "rejected",
-      name: error instanceof Error ? error.name : "unknown",
+      name: errorName(error),
     };
   }
 };
@@ -133,7 +147,7 @@ const runQuery = async (client: CalDAVClient): Promise<Verdict> => {
     return {
       authenticationError: error instanceof CalDAVAuthenticationError,
       kind: "rejected",
-      name: error instanceof Error ? error.name : "unknown",
+      name: errorName(error),
     };
   }
 };

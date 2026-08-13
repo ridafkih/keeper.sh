@@ -15,6 +15,13 @@ type FetchFn = (input: string | Request | URL, init?: RequestInit) => Promise<Re
 
 const AUTHORIZATION = "Basic dXNlcjpwYXNz";
 
+const requestHref = (input: string | Request | URL): string => {
+  if (input instanceof Request) {
+    return input.url;
+  }
+  return input.toString();
+};
+
 const redirectTo = (location: string): Response =>
   new Response(null, { headers: { location }, status: 301 });
 
@@ -24,11 +31,11 @@ interface Attempt {
 }
 
 let attempts: Attempt[] = [];
-let originalFetch: typeof globalThis.fetch;
+let originalFetch: typeof globalThis.fetch = globalThis.fetch;
 
 const serveRedirectThen = (location: string): void => {
   const mockFetch = vi.fn<FetchFn>(async (input, init) => {
-    const url = input instanceof Request ? input.url : input.toString();
+    const url = requestHref(input);
     attempts.push({ authorization: new Headers(init?.headers).get("authorization") ?? "", url });
     await Promise.resolve();
     if (attempts.length === 1) {

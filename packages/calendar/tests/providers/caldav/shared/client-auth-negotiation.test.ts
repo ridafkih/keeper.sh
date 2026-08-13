@@ -55,19 +55,33 @@ interface RecordedRequest {
 
 type Responder = (request: RecordedRequest) => Promise<Response>;
 
-let originalFetch: typeof globalThis.fetch;
+const requestUrl = (input: string | Request | URL): URL => {
+  if (input instanceof Request) {
+    return new URL(input.url);
+  }
+  return new URL(input.toString());
+};
+
+const errorName = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.name;
+  }
+  return "unknown";
+};
+
+let originalFetch: typeof globalThis.fetch = globalThis.fetch;
 let requestLog: RecordedRequest[] = [];
 
 const serve = (responder: Responder): void => {
   globalThis.fetch = (async (input: string | Request | URL, init?: RequestInit) => {
-    const url = new URL(input instanceof Request ? input.url : input.toString());
+    const url = requestUrl(input);
     const recorded: RecordedRequest = {
       authorization: new Headers(init?.headers).get("authorization") ?? "",
       method: init?.method ?? "GET",
       path: url.pathname,
     };
     requestLog.push(recorded);
-    return responder(recorded);
+    return await responder(recorded);
   }) as unknown as typeof globalThis.fetch;
 };
 
@@ -115,12 +129,12 @@ const createClient = (authMethod?: "basic" | "digest"): CalDAVClient =>
 const runDiscovery = async (client: CalDAVClient): Promise<Verdict> => {
   try {
     const calendars = await client.discoverCalendars();
-    return { kind: "resolved", names: calendars.map(({ displayName }) => displayName).sort() };
+    return { kind: "resolved", names: calendars.map(({ displayName }) => displayName).toSorted() };
   } catch (error) {
     return {
       authenticationError: error instanceof CalDAVAuthenticationError,
       kind: "rejected",
-      name: error instanceof Error ? error.name : "unknown",
+      name: errorName(error),
     };
   }
 };

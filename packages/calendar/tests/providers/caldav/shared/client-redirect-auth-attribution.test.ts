@@ -54,14 +54,35 @@ interface RecordedRequest {
   url: string;
 }
 
-let originalFetch: typeof globalThis.fetch;
+const requestUrl = (input: string | Request | URL): URL => {
+  if (input instanceof Request) {
+    return new URL(input.url);
+  }
+  return new URL(input.toString());
+};
+
+const errorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+};
+
+const errorName = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.name;
+  }
+  return typeof error;
+};
+
+let originalFetch: typeof globalThis.fetch = globalThis.fetch;
 let requestLog: RecordedRequest[] = [];
 
 type Responder = (url: URL, authorization: string, init?: RequestInit) => Response;
 
 const serve = (responder: Responder): void => {
   globalThis.fetch = (async (input: string | Request | URL, init?: RequestInit) => {
-    const url = new URL(input instanceof Request ? input.url : input.toString());
+    const url = requestUrl(input);
     const authorization = new Headers(init?.headers).get("authorization") ?? "";
     requestLog.push({ authorization, url: url.href });
     await Promise.resolve();
@@ -87,8 +108,8 @@ const settle = async <Result>(
     return {
       authenticationError: error instanceof CalDAVAuthenticationError,
       kind: "rejected",
-      message: error instanceof Error ? error.message : String(error),
-      name: error instanceof Error ? error.name : typeof error,
+      message: errorMessage(error),
+      name: errorName(error),
     };
   }
 };

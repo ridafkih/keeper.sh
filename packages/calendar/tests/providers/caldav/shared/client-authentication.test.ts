@@ -9,7 +9,7 @@ const fetchMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../../src/utils/safe-fetch", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../../../src/utils/safe-fetch")>()),
+  ...(await importOriginal<Record<string, unknown>>()),
   createSafeFetch: () => fetchMocks.safeFetch,
 }));
 
