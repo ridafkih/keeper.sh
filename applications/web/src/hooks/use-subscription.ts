@@ -10,7 +10,7 @@ export interface SubscriptionState {
 }
 
 const customerStateSchema = type({
-  "activeSubscriptions?": type({
+  activeSubscriptions: type({
     "recurringInterval?": "'month' | 'year' | null",
   })
     .array()
