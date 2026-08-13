@@ -21,6 +21,13 @@ interface CalendarObject {
   data?: string;
 }
 
+interface CalDAVListingStats {
+  listedCount: number;
+  requestedCount: number;
+  returnedCount: number;
+  unrequestedCount: number;
+}
+
 interface CalDAVIncompleteMultiGetDetails {
   batchCount: number;
   calendarUrl: string;
@@ -290,6 +297,7 @@ class CalDAVClient {
 
   fetchCalendarObjects(params: {
     calendarUrl: string;
+    onListing?: (stats: CalDAVListingStats) => void;
     timeRange?: { start: string; end: string };
   }): Promise<CalendarObject[]> {
     return mapAuthenticationFailure(async () => {
@@ -304,6 +312,12 @@ class CalDAVClient {
 
       const requestedPaths = toRequestedPaths(queryResponses, params.calendarUrl);
       if (requestedPaths.length === 0) {
+        params.onListing?.({
+          listedCount: 0,
+          requestedCount: 0,
+          returnedCount: 0,
+          unrequestedCount: 0,
+        });
         return [];
       }
 
@@ -328,6 +342,14 @@ class CalDAVClient {
       );
 
       const missingHrefs = requestedPaths.filter((path) => !objectsByPath.has(path));
+      const requestedPathSet = new Set(requestedPaths);
+      params.onListing?.({
+        listedCount: requestedPaths.length,
+        requestedCount: batches.reduce((total, batch) => total + batch.length, 0),
+        returnedCount: requestedPaths.length - missingHrefs.length,
+        unrequestedCount: [...objectsByPath.keys()].filter((path) => !requestedPathSet.has(path)).length,
+      });
+
       if (missingHrefs.length > 0) {
         throw new CalDAVIncompleteMultiGetError({
           batchCount: batches.length,
@@ -374,3 +396,4 @@ export {
   CalDAVWithheldCredentialsError,
   createCalDAVClient,
 };
+export type { CalDAVListingStats };

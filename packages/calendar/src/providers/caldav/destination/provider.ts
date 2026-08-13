@@ -14,6 +14,7 @@ import type {
   RemoteEvent,
 } from "../../../core/types";
 import { CalDAVClient, CalDAVCreateConflictError, CalDAVHttpError } from "../shared/client";
+import type { CalDAVListingStats } from "../shared/client";
 import {
   assertAllEventsSupported,
   assertAllResourcesRead,
@@ -129,7 +130,46 @@ const recoverCreateConflict = async (
   });
 };
 
+interface CalDAVRemoveCounts {
+  byPath: number;
+  byUid: number;
+  failureStatuses: Map<number, number>;
+  notFound: number;
+  succeeded: number;
+}
+
+const toRemoveDiagnostics = (counts: CalDAVRemoveCounts): Record<string, number> => ({
+  "events.remove_by_path": counts.byPath,
+  "events.remove_by_uid": counts.byUid,
+  "events.remove_not_found": counts.notFound,
+  "events.remove_succeeded": counts.succeeded,
+  ...Object.fromEntries(
+    [...counts.failureStatuses].map(([status, count]) => [
+      `events.remove_failed_status.${status}`,
+      count,
+    ]),
+  ),
+});
+
+const toListingDiagnostics = (listing: CalDAVListingStats): Record<string, number> => ({
+  "remote_objects.listed_count": listing.listedCount,
+  "remote_objects.requested_count": listing.requestedCount,
+  "remote_objects.returned_count": listing.returnedCount,
+  "remote_objects.unrequested_count": listing.unrequestedCount,
+});
+
 const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
+  const calendarHost = new URL(config.calendarUrl).hostname;
+  const removeCounts: CalDAVRemoveCounts = {
+    byPath: 0,
+    byUid: 0,
+    failureStatuses: new Map(),
+    notFound: 0,
+    succeeded: 0,
+  };
+  let removeAttempts = 0;
+  let listing: CalDAVListingStats | null = null;
+
   const client = new CalDAVClient({
     authMethod: config.authMethod,
     credentials: { password: config.password, username: config.username },
@@ -189,15 +229,34 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
       ),
     );
 
+  const recordRemoveFailure = (error: unknown): void => {
+    const httpError = findCalDAVHttpError(error);
+    if (!httpError) {
+      return;
+    }
+    removeCounts.failureStatuses.set(
+      httpError.status,
+      (removeCounts.failureStatuses.get(httpError.status) ?? 0) + 1,
+    );
+  };
+
   const deleteEvents = (eventIds: string[]): Promise<DeleteResult[]> =>
     Promise.all(
       eventIds.map((uid) =>
         rateLimiter.execute(async (): Promise<DeleteResult> => {
+          removeAttempts += 1;
+          if (uid.includes("/")) {
+            removeCounts.byPath += 1;
+          } else {
+            removeCounts.byUid += 1;
+          }
+
           try {
             await client.deleteCalendarObject({
               calendarUrl: config.calendarUrl,
               filename: `${uid}.ics`,
             });
+            removeCounts.succeeded += 1;
             return { success: true };
           } catch (error) {
             if (config.safeFetchOptions?.signal?.aborted) {
@@ -205,13 +264,21 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
             }
             const notFound = error instanceof CalDAVHttpError && error.status === 404;
             if (notFound) {
+              removeCounts.notFound += 1;
               return { success: true };
             }
+            recordRemoveFailure(error);
             return createFailureResult(error);
           }
         }, config.safeFetchOptions?.signal),
       ),
     );
+
+  const getSyncDiagnostics = (): Record<string, number | string> => ({
+    "provider.caldav.host": calendarHost,
+    ...(listing && toListingDiagnostics(listing)),
+    ...(removeAttempts > 0 && toRemoveDiagnostics(removeCounts)),
+  });
 
   const listRemoteEvents = async (
     options: ListRemoteEventsOptions,
@@ -220,6 +287,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
     const objects = await client.fetchCalendarObjects({
       calendarUrl,
+      onListing: (stats) => { listing = stats; },
     });
 
     const remoteEvents: RemoteEvent[] = [];
@@ -259,7 +327,13 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     return remoteEvents;
   };
 
-  return { pushEvents, deleteEvents, listRemoteEvents, normalizeEvent: normalizeCalDAVEvent };
+  return {
+    pushEvents,
+    deleteEvents,
+    getSyncDiagnostics,
+    listRemoteEvents,
+    normalizeEvent: normalizeCalDAVEvent,
+  };
 };
 
 export { createCalDAVSyncProvider };

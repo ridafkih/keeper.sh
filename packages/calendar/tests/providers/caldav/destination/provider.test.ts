@@ -106,6 +106,7 @@ describe("createCalDAVSyncProvider", () => {
     expect(remoteEvents.map((event) => event.uid)).toEqual([keeperUid]);
     expect(clientMocks.fetchCalendarObjects).toHaveBeenCalledWith({
       calendarUrl: "https://caldav.example.com/calendar/",
+      onListing: expect.any(Function),
     });
   });
 
@@ -251,6 +252,88 @@ describe("createCalDAVSyncProvider", () => {
       statusCode: 503,
       success: false,
     })]);
+  });
+
+  it("counts a delete the server answers 404 apart from a delete that removed something", async () => {
+    clientMocks.deleteCalendarObject
+      .mockRejectedValueOnce(new CalDAVHttpError(new Response(null, { status: 404 }), "delete"))
+      .mockResolvedValueOnce(null);
+    const provider = createProvider();
+
+    const results = await provider.deleteEvents(["gone-uid", "present-uid"]);
+
+    expect(results).toEqual([{ success: true }, { success: true }]);
+    expect(provider.getSyncDiagnostics()).toMatchObject({
+      "events.remove_not_found": 1,
+      "events.remove_succeeded": 1,
+    });
+  });
+
+  it("breaks non-404 delete rejections out by status code", async () => {
+    clientMocks.deleteCalendarObject
+      .mockRejectedValueOnce(new CalDAVHttpError(new Response(null, { status: 403 }), "delete"))
+      .mockRejectedValueOnce(new CalDAVHttpError(new Response(null, { status: 403 }), "delete"))
+      .mockRejectedValueOnce(new CalDAVHttpError(new Response(null, { status: 405 }), "delete"));
+    const provider = createProvider();
+
+    await provider.deleteEvents(["a-uid", "b-uid", "c-uid"]);
+
+    expect(provider.getSyncDiagnostics()).toMatchObject({
+      "events.remove_failed_status.403": 2,
+      "events.remove_failed_status.405": 1,
+      "events.remove_not_found": 0,
+    });
+  });
+
+  it("reports which delete identifier form each remove used", async () => {
+    clientMocks.deleteCalendarObject.mockResolvedValue(null);
+    const provider = createProvider();
+
+    await provider.deleteEvents([
+      "bare-uid@keeper.sh",
+      "/calendar/an-object@keeper.sh.ics",
+      "/calendar/another-object@keeper.sh.ics",
+    ]);
+
+    expect(provider.getSyncDiagnostics()).toMatchObject({
+      "events.remove_by_path": 2,
+      "events.remove_by_uid": 1,
+    });
+  });
+
+  it("reports the CalDAV host so one server can be told apart from the fleet", () => {
+    expect(createProvider().getSyncDiagnostics()).toMatchObject({
+      "provider.caldav.host": "caldav.example.com",
+    });
+  });
+
+  it("reports what the listing asked the server for against what it listed", async () => {
+    clientMocks.resolveCalendarUrl.mockResolvedValueOnce("https://caldav.example.com/calendar/");
+    clientMocks.fetchCalendarObjects.mockImplementationOnce(
+      ({ onListing }: { onListing?: (stats: unknown) => void }) => {
+        onListing?.({
+          listedCount: 900,
+          requestedCount: 12,
+          returnedCount: 12,
+          unrequestedCount: 4,
+        });
+        return Promise.resolve([]);
+      },
+    );
+    const provider = createProvider();
+
+    await provider.listRemoteEvents({ timeMin: new Date("2026-03-01T00:00:00.000Z") });
+
+    expect(provider.getSyncDiagnostics()).toMatchObject({
+      "remote_objects.listed_count": 900,
+      "remote_objects.requested_count": 12,
+      "remote_objects.returned_count": 12,
+      "remote_objects.unrequested_count": 4,
+    });
+  });
+
+  it("omits listing counts until a listing has actually happened", () => {
+    expect(createProvider().getSyncDiagnostics()).not.toHaveProperty("remote_objects.listed_count");
   });
 
   it("preserves the HTTP status and recovery phase when conflict recovery fails", async () => {

@@ -3,6 +3,7 @@ import {
   CalDAVClient,
   CalDAVIncompleteMultiGetError,
 } from "../../../../src/providers/caldav/shared/client";
+import type { CalDAVListingStats } from "../../../../src/providers/caldav/shared/client";
 import { isCalDAVAuthenticationError } from "../../../../src/providers/caldav/source/auth-error-classification";
 
 const davMocks = vi.hoisted(() => ({
@@ -223,6 +224,67 @@ describe("CalDAVClient.fetchCalendarObjects on healthy calendars", () => {
     const objects = await fetchObjects();
 
     expect(pathsOf(objects)).toEqual(paths);
+  });
+});
+
+describe("CalDAVClient.fetchCalendarObjects listing diagnostics", () => {
+  const captureListings = async (): Promise<CalDAVListingStats[]> => {
+    const listings: CalDAVListingStats[] = [];
+    await createClient()
+      .fetchCalendarObjects({
+        calendarUrl: CALENDAR_URL,
+        onListing: (stats) => { listings.push(stats); },
+      })
+      .catch(() => null);
+    return listings;
+  };
+
+  it("reports what the calendar-query listed, what the multiget asked for, and what came back", async () => {
+    answerQueryWith(objectPaths(3));
+
+    await expect(captureListings()).resolves.toEqual([{
+      listedCount: 3,
+      requestedCount: 3,
+      returnedCount: 3,
+      unrequestedCount: 0,
+    }]);
+  });
+
+  it("counts objects the server returned that were never requested", async () => {
+    answerQueryWith(objectPaths(3));
+    answerMultigetWith((objectUrls) => rowsFor([...objectUrls, `${CALENDAR_PATH}surprise.ics`]));
+
+    const [listing] = await captureListings();
+
+    expect(listing).toMatchObject({ requestedCount: 3, returnedCount: 3, unrequestedCount: 1 });
+  });
+
+  it("does not count listed hrefs that are not calendar objects", async () => {
+    answerQueryWith([CALENDAR_PATH, `${CALENDAR_PATH}notes.txt`, objectPath(0)]);
+
+    const [listing] = await captureListings();
+
+    expect(listing).toMatchObject({ listedCount: 1, requestedCount: 1 });
+  });
+
+  it("reports an empty listing when the calendar-query returns no hrefs", async () => {
+    answerQueryWith([]);
+
+    await expect(captureListings()).resolves.toEqual([{
+      listedCount: 0,
+      requestedCount: 0,
+      returnedCount: 0,
+      unrequestedCount: 0,
+    }]);
+  });
+
+  it("reports the listing before rejecting an incomplete multiget", async () => {
+    answerQueryWith(objectPaths(4));
+    answerMultigetWith(respondsWithAtMost(1));
+
+    const [listing] = await captureListings();
+
+    expect(listing).toMatchObject({ listedCount: 4, requestedCount: 4, returnedCount: 1 });
   });
 });
 
