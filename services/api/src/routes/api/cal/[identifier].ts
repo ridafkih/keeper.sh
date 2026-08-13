@@ -47,6 +47,9 @@ const GET = withWideEvent(async ({ params, request }) => {
 
   widelog.set("feed.event_count", feed.eventCount);
   widelog.set("feed.byte_size", Buffer.byteLength(feed.body, "utf8"));
+  widelog.set("feed.withheld.working_location", feed.withheld.workingLocation);
+  widelog.set("feed.withheld.working_elsewhere", feed.withheld.workingElsewhere);
+  widelog.set("feed.withheld.all_day", feed.withheld.allDay);
 
   return new Response(feed.body, {
     headers: {
