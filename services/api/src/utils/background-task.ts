@@ -1,4 +1,5 @@
 import { context, widelog } from "@/utils/logging";
+import { labelFailure } from "@/utils/error-labelling";
 
 type BackgroundJobCallback<TResult> = () => Promise<TResult>;
 
@@ -18,7 +19,7 @@ const spawnBackgroundJob = <TResult>(
       widelog.set("outcome", "success");
     } catch (error) {
       widelog.set("outcome", "error");
-      widelog.errorFields(error, { slug: "unclassified" });
+      labelFailure(error, { slug: "unclassified" });
     } finally {
       widelog.flush();
     }
