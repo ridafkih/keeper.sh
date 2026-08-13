@@ -38,12 +38,46 @@ interface DatabaseErrorDetails {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-const readCause = (error: unknown): Record<string, unknown> | null => {
+const MAX_CAUSE_DEPTH = 4;
+
+const readCauseLinks = (error: unknown): unknown[] => {
   if (isRecord(error) && isRecord(error.cause)) {
-    return error.cause;
+    return [error.cause];
   }
-  return null;
+  return [];
 };
+
+const readAggregateLinks = (error: unknown): unknown[] => {
+  if (error instanceof AggregateError && Array.isArray(error.errors)) {
+    return [...error.errors];
+  }
+  return [];
+};
+
+const readLinkedErrors = (error: unknown): unknown[] => [
+  ...readCauseLinks(error),
+  ...readAggregateLinks(error),
+];
+
+const collectErrorChain = (
+  links: unknown[],
+  depth: number,
+  seen: Set<unknown>,
+): unknown[] => {
+  if (depth > MAX_CAUSE_DEPTH) {
+    return [];
+  }
+  return links.flatMap((link) => {
+    if (!isRecord(link) || seen.has(link)) {
+      return [];
+    }
+    seen.add(link);
+    return [link, ...collectErrorChain(readLinkedErrors(link), depth + 1, seen)];
+  });
+};
+
+const readErrorChain = (error: unknown): unknown[] =>
+  collectErrorChain([error], 0, new Set());
 
 const readString = (value: unknown): string | null => {
   if (typeof value === "string" && value.length > 0) {
@@ -75,16 +109,8 @@ const isDatabaseErrorShape = (value: unknown): boolean => {
   return code !== null && code.startsWith(DRIVER_CODE_PREFIX);
 };
 
-const readDetailSource = (error: unknown): unknown => {
-  if (isDatabaseErrorShape(error)) {
-    return error;
-  }
-  const cause = readCause(error);
-  if (isDatabaseErrorShape(cause)) {
-    return cause;
-  }
-  return null;
-};
+const readDetailSource = (error: unknown): unknown =>
+  readErrorChain(error).find((link) => isDatabaseErrorShape(link)) ?? null;
 
 const getDatabaseErrorDetails = (error: unknown): DatabaseErrorDetails | null => {
   const source = readDetailSource(error);
@@ -104,49 +130,33 @@ const getDatabaseErrorDetails = (error: unknown): DatabaseErrorDetails | null =>
   return details;
 };
 
-const readFromErrorOrCause = (
-  error: unknown,
-  cause: Record<string, unknown> | null,
-  field: string,
-): string | null => readField(error, field) ?? readField(cause, field);
-
-const hasDriverCode = (
-  error: unknown,
-  cause: Record<string, unknown> | null,
-  matches: (code: string) => boolean,
-): boolean => {
-  const directCode = readField(error, "code");
-  if (directCode !== null && matches(directCode)) {
-    return true;
-  }
-
-  const causeCode = readField(cause, "code");
-  if (causeCode !== null && matches(causeCode)) {
-    return true;
-  }
-
-  return false;
-};
-
 const isConnectionTerminatedCode = (code: string): boolean =>
   code === CONNECTION_TERMINATED_CODE;
 
 const isConnectionUnavailableCode = (code: string): boolean =>
   CONNECTION_UNAVAILABLE_CODES.has(code);
 
+const hasDriverCode = (chain: unknown[], matches: (code: string) => boolean): boolean =>
+  chain.some((link) => {
+    const code = readField(link, "code");
+    return code !== null && matches(code);
+  });
+
 const classifyDatabaseError = (error: unknown): DatabaseErrorClassification | null => {
-  const cause = readCause(error);
-  const sqlState = readFromErrorOrCause(error, cause, "errno");
+  const chain = readErrorChain(error);
+  const sqlState = chain
+    .map((link) => readField(link, "errno"))
+    .find((value) => value !== null) ?? null;
 
   if (sqlState === STATEMENT_TIMEOUT_SQLSTATE) {
     return { slug: "db-statement-timeout", sqlState: STATEMENT_TIMEOUT_SQLSTATE };
   }
 
-  if (hasDriverCode(error, cause, isConnectionTerminatedCode)) {
+  if (hasDriverCode(chain, isConnectionTerminatedCode)) {
     return { slug: "db-connection-terminated", sqlState: null };
   }
 
-  if (hasDriverCode(error, cause, isConnectionUnavailableCode)) {
+  if (hasDriverCode(chain, isConnectionUnavailableCode)) {
     return { slug: "db-connection-unavailable", sqlState: null };
   }
 

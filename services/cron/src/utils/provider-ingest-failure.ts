@@ -2,6 +2,7 @@ import {
   CalDAVIncompleteMultiGetError,
   CalDAVUnreadableResourceError,
 } from "@keeper.sh/calendar/caldav";
+import { classifyDatabaseError } from "@keeper.sh/database";
 
 interface MissingCalendarFailure {
   disableCalendar: false;
@@ -20,7 +21,14 @@ const resolveMissingCalendarFailure = (error: unknown): MissingCalendarFailure |
     return null;
   }
 
-  if (!(error instanceof Error) || (!hasNotFoundStatus(error) && !error.message.includes("404"))) {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+
+  const mentionsNotFound = error.message.includes("404")
+    && classifyDatabaseError(error) === null;
+
+  if (!hasNotFoundStatus(error) && !mentionsNotFound) {
     return null;
   }
 
