@@ -149,21 +149,45 @@ describe("CalDAV request scope", () => {
     expect(unauthorized).toBe(true);
   });
 
-  it("reports a request that never produced a response as a transport failure", async () => {
-    const failure = await runInRequestScope(async (requests) => {
-      await failingRequest(new Error("socket hang up")).catch(() => null);
-      return requests.hasTransportFailure();
+  it("recognises the error a request that never produced a response propagated", async () => {
+    const reason = new Error("socket hang up");
+
+    const propagated = await runInRequestScope(async (requests) => {
+      await failingRequest(reason).catch(() => null);
+      return requests.isPropagatedTransportFailure(reason);
     });
 
-    expect(failure).toBe(true);
+    expect(propagated).toBe(true);
+  });
+
+  it("recognises a transport failure carried as the cause of a wrapping error", async () => {
+    const reason = new Error("socket hang up");
+
+    const propagated = await runInRequestScope(async (requests) => {
+      await failingRequest(reason).catch(() => null);
+      return requests.isPropagatedTransportFailure(
+        new Error("Collection query failed", { cause: new Error("wrapped", { cause: reason }) }),
+      );
+    });
+
+    expect(propagated).toBe(true);
+  });
+
+  it("does not treat an unrelated error as a transport failure the caller recovered from", async () => {
+    const propagated = await runInRequestScope(async (requests) => {
+      await failingRequest(new Error("socket hang up")).catch(() => null);
+      return requests.isPropagatedTransportFailure(new Error("Invalid credentials"));
+    });
+
+    expect(propagated).toBe(false);
   });
 
   it("reports no transport failure when every request produced a response", async () => {
-    const failure = await runInRequestScope(async (requests) => {
+    const propagated = await runInRequestScope(async (requests) => {
       await request(401);
-      return requests.hasTransportFailure();
+      return requests.isPropagatedTransportFailure(new Error("Invalid credentials"));
     });
 
-    expect(failure).toBe(false);
+    expect(propagated).toBe(false);
   });
 });

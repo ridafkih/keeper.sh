@@ -1,8 +1,12 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 
+interface RequestFailure {
+  reason: unknown;
+}
+
 interface RequestRecord {
-  failed: boolean;
+  failure: RequestFailure | null;
   settledAt: number | null;
   startedAt: number;
   status: number | null;
@@ -14,9 +18,11 @@ interface RequestScope {
 }
 
 interface RequestScopeView {
-  hasTransportFailure: () => boolean;
   hasUnrefutedUnauthorized: () => boolean;
+  isPropagatedTransportFailure: (error: unknown) => boolean;
 }
+
+const MAX_CAUSE_DEPTH = 16;
 
 const storage = new AsyncLocalStorage<RequestScope>();
 
@@ -26,7 +32,7 @@ const nextTick = (scope: RequestScope): number => {
 };
 
 const wasAccepted = (record: RequestRecord): boolean =>
-  !record.failed && record.status !== null && record.status < HTTP_STATUS.BAD_REQUEST;
+  record.failure === null && record.status !== null && record.status < HTTP_STATUS.BAD_REQUEST;
 
 const refutes = (accepted: RequestRecord, unauthorized: RequestRecord): boolean =>
   accepted.settledAt !== null && accepted.settledAt > unauthorized.startedAt;
@@ -38,8 +44,28 @@ const hasUnrefutedUnauthorized = (scope: RequestScope): boolean =>
       && !scope.records.some((other) => wasAccepted(other) && refutes(other, record)),
   );
 
-const hasTransportFailure = (scope: RequestScope): boolean =>
-  scope.records.some((record) => record.failed);
+const causeChain = (error: unknown): unknown[] => {
+  const chain: unknown[] = [error];
+  let current = error;
+
+  while (chain.length < MAX_CAUSE_DEPTH && current instanceof Error && "cause" in current) {
+    const { cause } = current;
+    if (chain.includes(cause)) {
+      return chain;
+    }
+    chain.push(cause);
+    current = cause;
+  }
+
+  return chain;
+};
+
+const isPropagatedTransportFailure = (scope: RequestScope, error: unknown): boolean => {
+  const chain = causeChain(error);
+  return scope.records.some(
+    (record) => record.failure !== null && chain.includes(record.failure.reason),
+  );
+};
 
 const recordRequest = async (perform: () => Promise<Response>): Promise<Response> => {
   const scope = storage.getStore();
@@ -50,10 +76,10 @@ const recordRequest = async (perform: () => Promise<Response>): Promise<Response
   const index = scope.records.length;
   scope.records = [
     ...scope.records,
-    { failed: false, settledAt: null, startedAt: nextTick(scope), status: null },
+    { failure: null, settledAt: null, startedAt: nextTick(scope), status: null },
   ];
 
-  const settle = (outcome: { failed: boolean; status: number | null }): void => {
+  const settle = (outcome: { failure: RequestFailure | null; status: number | null }): void => {
     const settledAt = nextTick(scope);
     scope.records = scope.records.map((record, position) => {
       if (position !== index) {
@@ -65,10 +91,10 @@ const recordRequest = async (perform: () => Promise<Response>): Promise<Response
 
   try {
     const response = await perform();
-    settle({ failed: false, status: response.status });
+    settle({ failure: null, status: response.status });
     return response;
   } catch (error) {
-    settle({ failed: true, status: null });
+    settle({ failure: { reason: error }, status: null });
     throw error;
   }
 };
@@ -79,8 +105,8 @@ const runInRequestScope = <Result>(
   const scope: RequestScope = { clock: 0, records: [] };
   return storage.run(scope, () =>
     operation({
-      hasTransportFailure: () => hasTransportFailure(scope),
       hasUnrefutedUnauthorized: () => hasUnrefutedUnauthorized(scope),
+      isPropagatedTransportFailure: (error: unknown) => isPropagatedTransportFailure(scope, error),
     }));
 };
 

@@ -107,7 +107,7 @@ class CalDAVUnauthorizedResponseError extends Error {
 const mapAuthenticationFailure = <Result>(operation: () => Promise<Result>): Promise<Result> =>
   runInRequestScope(async (requests) => {
     const result = await operation().catch((error: unknown) => {
-      if (!requests.hasTransportFailure() && requests.hasUnrefutedUnauthorized()) {
+      if (!requests.isPropagatedTransportFailure(error) && requests.hasUnrefutedUnauthorized()) {
         throw new CalDAVAuthenticationError(error);
       }
       throw error;
