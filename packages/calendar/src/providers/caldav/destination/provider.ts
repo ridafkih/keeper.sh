@@ -27,6 +27,9 @@ import { normalizeCalDAVEvent } from "./normalize-event";
 
 const CALDAV_RATE_LIMIT_CONCURRENCY = 5;
 
+// A CalDAV PUT answers 201/204 with no body, so there is nothing to compare the write against.
+const CALDAV_PUSH_ECHO = { comparable: false, reason: "echo-body-missing" } as const;
+
 interface CalDAVSyncProviderConfig {
   authMethod?: "basic" | "digest";
   calendarUrl: string;
@@ -176,10 +179,16 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
               } catch (recoveryError) {
                 throw new CalDAVConflictRecoveryError(uid, recoveryError);
               }
-              return { conflictResolved: true, deleteId: uid, remoteId: uid, success: true };
+              return {
+                conflictResolved: true,
+                deleteId: uid,
+                echo: CALDAV_PUSH_ECHO,
+                remoteId: uid,
+                success: true,
+              };
             }
 
-            return { deleteId: uid, remoteId: uid, success: true };
+            return { deleteId: uid, echo: CALDAV_PUSH_ECHO, remoteId: uid, success: true };
           } catch (error) {
             if (config.safeFetchOptions?.signal?.aborted) {
               throw error;

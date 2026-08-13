@@ -9,9 +9,13 @@ import type {
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
   ProviderThrottleMetrics,
+  PushEchoComparison,
   PushResult,
   RemoteEvent,
 } from "../../../core/types";
+import type { OutlookEvent } from "@keeper.sh/data-schemas";
+import { comparePushEchoObservations } from "../../../core/events/push-echo";
+import type { PushEchoObservation } from "../../../core/events/push-echo";
 import { getErrorMessage } from "../../../core/utils/error";
 import { ensureValidToken } from "../../../core/oauth/ensure-valid-token";
 import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-valid-token";
@@ -86,6 +90,46 @@ const parseRemoteAvailability = (
   return "busy";
 };
 
+const buildOutlookEchoObservation = (resource: OutlookEvent): PushEchoObservation | null => {
+  const isAllDay = resource.isAllDay ?? false;
+  const startTime = parseEventTime(resource.start, isAllDay);
+  const endTime = parseEventTime(resource.end, isAllDay);
+  if (!startTime || !endTime) {
+    return null;
+  }
+  return {
+    content: createEditableEventContentSnapshot({
+      availability: parseRemoteAvailability(resource.showAs),
+      description: resource.body?.content,
+      endTime,
+      isAllDay,
+      location: resource.location?.displayName,
+      startTime,
+      summary: resource.subject ?? "",
+    }),
+    endTime,
+    startTime,
+  };
+};
+
+const compareOutlookCreateEcho = (
+  sent: OutlookEvent,
+  echo: OutlookEvent,
+): PushEchoComparison => {
+  if (echo.body && echo.body.contentType !== "text") {
+    return { comparable: false, reason: "echo-body-not-text" };
+  }
+  const echoObservation = buildOutlookEchoObservation(echo);
+  const sentObservation = buildOutlookEchoObservation(sent);
+  if (!echoObservation || !sentObservation) {
+    return { comparable: false, reason: "echo-times-missing" };
+  }
+  return {
+    comparable: true,
+    divergence: comparePushEchoObservations(sentObservation, echoObservation),
+  };
+};
+
 const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
   const tokenState: TokenState = {
     accessToken: config.accessToken,
@@ -157,7 +201,10 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
 
         const response = await sendRequestWithRetry(url, {
           body: JSON.stringify(resource),
-          headers: getHeaders(),
+          headers: {
+            ...getHeaders(),
+            Prefer: `outlook.body-content-type="text"`,
+          },
           method: "POST",
         });
 
@@ -173,7 +220,12 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
 
         const body = await response.json();
         const created = outlookEventSchema.assert(body);
-        results.push({ deleteId: created.id, remoteId: created.iCalUId ?? created.id, success: true });
+        results.push({
+          deleteId: created.id,
+          echo: compareOutlookCreateEcho(resource, created),
+          remoteId: created.iCalUId ?? created.id,
+          success: true,
+        });
       } catch (error) {
         if (config.signal?.aborted) {
           throw error;

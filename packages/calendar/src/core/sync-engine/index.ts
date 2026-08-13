@@ -7,6 +7,7 @@ import type {
   SyncOperation,
   SyncResult,
 } from "../types";
+import { hasPushEchoDivergence } from "../events/push-echo";
 import type { EventMapping } from "../events/mappings";
 import { getDatabaseErrorDetails } from "@keeper.sh/database";
 import type { SyncProgressUpdate } from "../sync/types";
@@ -102,6 +103,83 @@ interface OperationError {
   errorType?: string;
   statusCode?: number;
 }
+
+interface PushEchoCounts {
+  allDay: number;
+  changed: number;
+  compared: number;
+  description: number;
+  end: number;
+  location: number;
+  start: number;
+  summary: number;
+  uncomparable: number;
+}
+
+const createPushEchoCounts = (): PushEchoCounts => ({
+  allDay: 0,
+  changed: 0,
+  compared: 0,
+  description: 0,
+  end: 0,
+  location: 0,
+  start: 0,
+  summary: 0,
+  uncomparable: 0,
+});
+
+/*
+ * A successful push whose result carries no echo verdict counts as uncomparable:
+ * a zero that means "we never looked" must not be distinguishable from a zero
+ * that means "we looked and it matched" only by reading the provider's source.
+ */
+const tallyPushEcho = (counts: PushEchoCounts, pushResults: PushResult[]): void => {
+  for (const pushResult of pushResults) {
+    if (!pushResult.success || !pushResult.remoteId) {
+      continue;
+    }
+    const { echo } = pushResult;
+    if (!echo || !echo.comparable) {
+      counts.uncomparable += 1;
+      continue;
+    }
+    counts.compared += 1;
+    const { divergence } = echo;
+    if (!hasPushEchoDivergence(divergence)) {
+      continue;
+    }
+    counts.changed += 1;
+    counts.allDay += Number(divergence.allDay);
+    counts.description += Number(divergence.description);
+    counts.end += Number(divergence.end);
+    counts.location += Number(divergence.location);
+    counts.start += Number(divergence.start);
+    counts.summary += Number(divergence.summary);
+  }
+};
+
+const appendPushEchoFields = (
+  event: Record<string, unknown>,
+  counts: PushEchoCounts,
+): void => {
+  const fields: [string, number][] = [
+    ["push_echo.compared_count", counts.compared],
+    ["push_echo.uncomparable_count", counts.uncomparable],
+    ["push_echo.changed_count", counts.changed],
+    ["push_echo.summary_changed_count", counts.summary],
+    ["push_echo.description_changed_count", counts.description],
+    ["push_echo.location_changed_count", counts.location],
+    ["push_echo.all_day_changed_count", counts.allDay],
+    ["push_echo.start_changed_count", counts.start],
+    ["push_echo.end_changed_count", counts.end],
+  ];
+
+  for (const [field, count] of fields) {
+    if (count > 0) {
+      event[field] = count;
+    }
+  }
+};
 
 const processAddResults = (
   addOperations: Extract<SyncOperation, { type: "add" }>[],
@@ -203,6 +281,7 @@ interface ExecuteRemoteResult {
   result: SyncResult;
   conflictsResolved: number;
   errors: OperationError[];
+  pushEcho: PushEchoCounts;
   superseded: boolean;
   checkpointRejected: boolean;
 }
@@ -212,6 +291,7 @@ interface RunResult {
   result: SyncResult;
   conflictsResolved: number;
   errors: OperationError[];
+  pushEcho?: PushEchoCounts;
 }
 
 const executeAddRun = async (
@@ -222,11 +302,14 @@ const executeAddRun = async (
   const addEvents = adds.map((op) => op.event);
   const pushResults = await provider.pushEvents(addEvents);
   const { added, addFailed, conflictsResolved, changes, errors } = processAddResults(adds, pushResults, calendarId);
+  const pushEcho = createPushEchoCounts();
+  tallyPushEcho(pushEcho, pushResults);
   return {
     changes,
     result: { added, addFailed, removed: 0, removeFailed: 0 },
     conflictsResolved,
     errors,
+    pushEcho,
   };
 };
 
@@ -263,6 +346,11 @@ const mergeRunResult = (
   };
   state.conflictsResolved += runResult.conflictsResolved;
   state.errors.push(...runResult.errors);
+  if (runResult.pushEcho) {
+    for (const key of Object.keys(state.pushEcho) as (keyof PushEchoCounts)[]) {
+      state.pushEcho[key] += runResult.pushEcho[key];
+    }
+  }
   if (includeChanges) {
     for (const insert of runResult.changes.inserts) {
       state.protectedRemoteUids.add(insert.destinationEventUid);
@@ -289,6 +377,7 @@ interface ChunkedExecutionState {
   conflictsResolved: number;
   errors: OperationError[];
   processed: number;
+  pushEcho: PushEchoCounts;
   superseded: boolean;
   checkpointRejected: boolean;
   protectedRemoteUids: Set<string>;
@@ -474,6 +563,7 @@ const executeRemoteOperations = async (
     conflictsResolved: 0,
     errors: [],
     processed: 0,
+    pushEcho: createPushEchoCounts(),
     superseded: false,
     checkpointRejected: false,
     protectedRemoteUids: new Set<string>(),
@@ -541,6 +631,7 @@ const executeRemoteOperations = async (
     result: state.result,
     conflictsResolved: state.conflictsResolved,
     errors: state.errors,
+    pushEcho: state.pushEcho,
     superseded: state.superseded,
     checkpointRejected: state.checkpointRejected,
   };
@@ -753,6 +844,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     wideEvent["events.remove_failed"] = outcome.result.removeFailed;
     wideEvent["events.conflicts_resolved"] = outcome.conflictsResolved;
     wideEvent["superseded"] = outcome.superseded;
+    appendPushEchoFields(wideEvent, outcome.pushEcho);
 
     if (outcome.errors.length > 0) {
       wideEvent["operation_errors"] = outcome.errors.slice(0, OPERATION_ERROR_SAMPLE_SIZE);
