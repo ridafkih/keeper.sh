@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 interface DatabasePoolWindowSample {
   inFlight: number;
   queryCount: number;
@@ -17,21 +19,37 @@ interface InstrumentableClient extends Record<string, unknown> {
 const counters = {
   inFlight: 0,
   heldConnections: 0,
-  pendingAcquisitions: 0,
   pooledQueriesInFlight: 0,
-  queriesStarted: 0,
-  queriesFailed: 0,
-  queriesQueued: 0,
-  queryDurationMs: 0,
 };
 
-interface QueryRecord {
-  settled: boolean;
-  failed: boolean;
-  durationMs: number;
+/*
+ * A window belongs to the unit of work that opened it -- one destination sync
+ * attempt -- and a process runs many of those at once. Counting queries on
+ * process-wide totals would hand every concurrent attempt the sum of all of
+ * them: query counts multiplied by the concurrency factor and a query duration
+ * larger than the attempt that reports it. A query is therefore charged to the
+ * window open in the async context that issued it, so `queryCount`,
+ * `queryDurationMs`, `queuedQueryCount` and `failedQueryCount` all describe the
+ * same population, the queries this window's own work issued.
+ *
+ * `inFlight` stays process-wide on purpose: it is a pool gauge, and how much of
+ * the pool is busy right now is a property of the process, not of one attempt.
+ *
+ * Windows partition a context rather than nest inside it: opening one declares
+ * a new unit of work and ends the span of the window the context was carrying.
+ * Nothing distinguishes a window opened inside another from a window opened by
+ * the next concurrent attempt to start -- both find the earlier window in the
+ * context they were handed -- and treating the two alike is what would put
+ * another attempt's queries on this attempt's event.
+ */
+interface WindowScope {
+  failedQueryCount: number;
+  queryCount: number;
+  queryDurationMs: number;
+  queuedQueryCount: number;
 }
 
-const inFlightQueries = new Set<QueryRecord>();
+const windowScopes = new AsyncLocalStorage<WindowScope | null>();
 
 let maxConnections = 0;
 
@@ -52,8 +70,41 @@ const roundDuration = (durationMs: number): number => Math.round(durationMs * 10
  * the burst and every member of it would look unqueued no matter how long the
  * pool actually made it wait.
  */
-const occupiedConnections = (): number =>
-  counters.heldConnections + counters.pooledQueriesInFlight + counters.pendingAcquisitions;
+interface PendingAcquisition {
+  awaited: Promise<unknown> | null;
+  released: boolean;
+}
+
+const pendingAcquisitions = new Set<PendingAcquisition>();
+
+/*
+ * A transaction that dies before the pool ever grants it a connection never runs
+ * its callback, so its demand has to be dropped from the outcome or it inflates
+ * occupancy for the rest of the process. Attaching a rejection handler to that
+ * outcome would mark the transaction's rejection handled and silence the
+ * process-level unhandled-rejection signal, and re-throwing from the handler
+ * would instead invent a rejection nobody can catch, so the outcome is read
+ * without being consumed: `Bun.peek.status` reports a promise's state without
+ * attaching anything to it. Settled demand is swept the next time occupancy is
+ * computed, which is before any verdict that would have used it.
+ */
+const releaseSettledAcquisitions = (): void => {
+  if (pendingAcquisitions.size === 0) {
+    return;
+  }
+  for (const acquisition of pendingAcquisitions) {
+    if (!acquisition.awaited || Bun.peek.status(acquisition.awaited) === "pending") {
+      continue;
+    }
+    acquisition.released = true;
+    pendingAcquisitions.delete(acquisition);
+  }
+};
+
+const occupiedConnections = (): number => {
+  releaseSettledAcquisitions();
+  return counters.heldConnections + counters.pooledQueriesInFlight + pendingAcquisitions.size;
+};
 
 const waitsForConnection = (): boolean =>
   maxConnections > 0 && occupiedConnections() >= maxConnections;
@@ -82,8 +133,8 @@ const instrumentQuery = (
   transactional: boolean,
   transactionState: TransactionState | undefined,
 ): object => {
-  counters.queriesStarted += 1;
   counters.inFlight += 1;
+  let queued = false;
   if (transactional) {
     /*
      * A statement inside a transaction runs on a connection the transaction
@@ -92,33 +143,38 @@ const instrumentQuery = (
      */
     if (transactionState?.pendingQueued) {
       transactionState.pendingQueued = false;
-      counters.queriesQueued += 1;
+      queued = true;
     }
   } else {
-    if (waitsForConnection()) {
-      counters.queriesQueued += 1;
-    }
+    queued = waitsForConnection();
     counters.pooledQueriesInFlight += 1;
   }
 
+  const scope = windowScopes.getStore() ?? null;
+  if (scope) {
+    scope.queryCount += 1;
+    if (queued) {
+      scope.queuedQueryCount += 1;
+    }
+  }
+
   const startedAt = performance.now();
-  const record: QueryRecord = { settled: false, failed: false, durationMs: 0 };
-  inFlightQueries.add(record);
+  let settled = false;
   const settle = (failed: boolean): void => {
-    if (record.settled) {
+    if (settled) {
       return;
     }
-    record.settled = true;
-    record.failed = failed;
-    record.durationMs = performance.now() - startedAt;
-    inFlightQueries.delete(record);
+    settled = true;
+    const durationMs = performance.now() - startedAt;
     counters.inFlight -= 1;
     if (!transactional) {
       counters.pooledQueriesInFlight -= 1;
     }
-    counters.queryDurationMs += record.durationMs;
-    if (failed) {
-      counters.queriesFailed += 1;
+    if (scope) {
+      scope.queryDurationMs += durationMs;
+      if (failed) {
+        scope.failedQueryCount += 1;
+      }
     }
   };
 
@@ -227,13 +283,24 @@ const instrumentClient = (
      */
     const acquiresConnection = !transactional && method !== "savepoint";
     client[method] = (...args: unknown[]): unknown => {
+      /*
+       * A transaction that has to wait for a connection is resumed by whoever
+       * released one, so the pool hands its callback that releaser's async
+       * context rather than the context the transaction was opened from. The
+       * scope open at the call is therefore captured here and re-established
+       * around the callback, or every statement of a transaction that queued
+       * would be charged to a stranger's window, or to no window at all.
+       */
+      const issuingScope = windowScopes.getStore() ?? null;
+
       if (!acquiresConnection) {
         const instrumentNested = (argument: unknown): unknown => {
           if (typeof argument !== "function") {
             return argument;
           }
           const callback = argument as (transactionClient: InstrumentableClient) => unknown;
-          return (inner: InstrumentableClient): unknown => callback(instrumentClient(inner, true));
+          return (inner: InstrumentableClient): unknown =>
+            windowScopes.run(issuingScope, () => callback(instrumentClient(inner, true)));
         };
         return (original as AnyFunction).apply(
           client,
@@ -242,14 +309,14 @@ const instrumentClient = (
       }
 
       const queued = waitsForConnection();
-      counters.pendingAcquisitions += 1;
-      let acquisitionResolved = false;
+      const acquisition: PendingAcquisition = { awaited: null, released: false };
+      pendingAcquisitions.add(acquisition);
       const resolveAcquisition = (): void => {
-        if (acquisitionResolved) {
+        if (acquisition.released) {
           return;
         }
-        acquisitionResolved = true;
-        counters.pendingAcquisitions -= 1;
+        acquisition.released = true;
+        pendingAcquisitions.delete(acquisition);
       };
 
       const instrumentArgument = (argument: unknown): unknown => {
@@ -262,7 +329,10 @@ const instrumentClient = (
           counters.heldConnections += 1;
           transactionStates.set(inner, { pendingQueued: queued });
           try {
-            return await callback(instrumentClient(inner, true));
+            return await windowScopes.run(
+              issuingScope,
+              () => callback(instrumentClient(inner, true)),
+            );
           } finally {
             counters.heldConnections -= 1;
           }
@@ -270,17 +340,20 @@ const instrumentClient = (
       };
 
       /*
-       * The callback is the normal end of an acquisition, but a transaction can
-       * fail before the pool ever grants it a connection, in which case the
-       * callback never runs and the demand has to be released from the outcome
-       * instead or it would inflate occupancy for the rest of the process.
+       * The callback is the normal end of an acquisition; the outcome is only a
+       * fallback for the transaction that dies before the pool grants it one,
+       * and it is read by sweeping rather than by subscribing so that the
+       * caller's promise keeps exactly the rejection semantics it had
+       * uninstrumented.
        */
       try {
         const returned = (original as AnyFunction).apply(
           client,
           args.map((argument) => instrumentArgument(argument)),
         );
-        if (typeof (returned as PromiseLike<unknown> | undefined)?.then === "function") {
+        if (returned instanceof Promise) {
+          acquisition.awaited = returned;
+        } else if (typeof (returned as PromiseLike<unknown> | undefined)?.then === "function") {
           (returned as PromiseLike<unknown>).then(resolveAcquisition, resolveAcquisition);
         } else {
           resolveAcquisition();
@@ -304,61 +377,32 @@ const instrumentDatabasePool = (
   instrumentClient(client, false);
 };
 
-/*
- * The counters are process-wide, so a window opened around one sync attempt also
- * sees every query another concurrent attempt issued. That is the point: pool
- * pressure is a property of the process, not of a single attempt.
- */
 const openDatabasePoolWindow = (): DatabasePoolWindow => {
-  const startedQueries = counters.queriesStarted;
-  const startedFailures = counters.queriesFailed;
-  const startedQueued = counters.queriesQueued;
-  const startedDurationMs = counters.queryDurationMs;
-  /*
-   * A query is counted when it is issued but its duration and its failure land
-   * on the process counters when it settles, so a query already in flight when
-   * the window opened would otherwise charge this window for work it never
-   * counted -- a window reporting one failure and zero queries. Those queries
-   * are known at open time, so their contributions are subtracted back out and
-   * every field describes the same population: the queries this window counted.
-   */
-  const inheritedQueries = [...inFlightQueries];
-
-  return () => {
-    let inheritedDurationMs = 0;
-    let inheritedFailures = 0;
-    for (const record of inheritedQueries) {
-      if (!record.settled) {
-        continue;
-      }
-      inheritedDurationMs += record.durationMs;
-      if (record.failed) {
-        inheritedFailures += 1;
-      }
-    }
-
-    return {
-      inFlight: counters.inFlight,
-      queryCount: counters.queriesStarted - startedQueries,
-      queryDurationMs: roundDuration(
-        counters.queryDurationMs - startedDurationMs - inheritedDurationMs,
-      ),
-      queuedQueryCount: counters.queriesQueued - startedQueued,
-      failedQueryCount: counters.queriesFailed - startedFailures - inheritedFailures,
-    };
+  const scope: WindowScope = {
+    failedQueryCount: 0,
+    queryCount: 0,
+    queryDurationMs: 0,
+    queuedQueryCount: 0,
   };
+  windowScopes.enterWith(scope);
+
+  return () => ({
+    inFlight: counters.inFlight,
+    queryCount: scope.queryCount,
+    queryDurationMs: roundDuration(scope.queryDurationMs),
+    queuedQueryCount: scope.queuedQueryCount,
+    failedQueryCount: scope.failedQueryCount,
+  });
 };
 
 const resetDatabasePoolTelemetry = (): void => {
-  inFlightQueries.clear();
+  for (const acquisition of pendingAcquisitions) {
+    acquisition.released = true;
+  }
+  pendingAcquisitions.clear();
   counters.inFlight = 0;
   counters.heldConnections = 0;
-  counters.pendingAcquisitions = 0;
   counters.pooledQueriesInFlight = 0;
-  counters.queriesStarted = 0;
-  counters.queriesFailed = 0;
-  counters.queriesQueued = 0;
-  counters.queryDurationMs = 0;
   maxConnections = 0;
 };
 

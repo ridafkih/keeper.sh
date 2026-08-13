@@ -54,7 +54,7 @@ describe("database pool telemetry demand accounting", () => {
     const inner = openDatabasePoolWindow();
     const second = client.unsafe("select 2") as Promise<unknown>;
 
-    expect(outer().queryCount).toBe(2);
+    expect(outer().queryCount).toBe(1);
     expect(inner().queryCount).toBe(1);
     expect(outer().inFlight).toBe(2);
 
@@ -62,7 +62,7 @@ describe("database pool telemetry demand accounting", () => {
     pending[1]?.resolve([]);
     await Promise.all([first, second]);
 
-    expect(outer().queryCount).toBe(2);
+    expect(outer().queryCount).toBe(1);
     expect(inner().queryCount).toBe(1);
     expect(outer().inFlight).toBe(0);
     expect(inner().inFlight).toBe(0);
