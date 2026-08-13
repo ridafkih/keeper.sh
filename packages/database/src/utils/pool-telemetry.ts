@@ -16,6 +16,8 @@ interface InstrumentableClient extends Record<string, unknown> {
 
 const counters = {
   inFlight: 0,
+  heldConnections: 0,
+  pooledQueriesInFlight: 0,
   queriesStarted: 0,
   queriesFailed: 0,
   queriesQueued: 0,
@@ -25,6 +27,25 @@ const counters = {
 let maxConnections = 0;
 
 const roundDuration = (durationMs: number): number => Math.round(durationMs * 100) / 100;
+
+/*
+ * A Bun pool connection is occupied for the whole lifetime of a transaction,
+ * idle gaps between statements included, not merely while a statement is on the
+ * wire. Query concurrency therefore says nothing about pool availability: two
+ * open transactions can exhaust a `max: 2` pool while a single statement is in
+ * flight. Occupancy is held transactions plus the queries issued outside any
+ * transaction, and that is what a newly issued unit of work has to get past.
+ */
+const occupiedConnections = (): number => counters.heldConnections + counters.pooledQueriesInFlight;
+
+const waitsForConnection = (): boolean =>
+  maxConnections > 0 && occupiedConnections() >= maxConnections;
+
+interface TransactionState {
+  pendingQueued: boolean;
+}
+
+const transactionStates = new WeakMap<object, TransactionState>();
 
 /*
  * Bun's SQL exposes no pool statistics: the whole prototype chain carries only
@@ -39,11 +60,28 @@ const roundDuration = (durationMs: number): number => Math.round(durationMs * 10
  * `then`, so they are routed back through the hooked one; leaving them to the
  * generic forwarder would let a query settle without ever releasing in-flight.
  */
-const instrumentQuery = (query: object): object => {
+const instrumentQuery = (
+  query: object,
+  transactional: boolean,
+  transactionState: TransactionState | undefined,
+): object => {
   counters.queriesStarted += 1;
   counters.inFlight += 1;
-  if (maxConnections > 0 && counters.inFlight > maxConnections) {
-    counters.queriesQueued += 1;
+  if (transactional) {
+    /*
+     * A statement inside a transaction runs on a connection the transaction
+     * already owns, so it never queues; the wait its transaction served before
+     * the pool let it start is charged to the first statement that follows.
+     */
+    if (transactionState?.pendingQueued) {
+      transactionState.pendingQueued = false;
+      counters.queriesQueued += 1;
+    }
+  } else {
+    if (waitsForConnection()) {
+      counters.queriesQueued += 1;
+    }
+    counters.pooledQueriesInFlight += 1;
   }
 
   const startedAt = performance.now();
@@ -54,6 +92,9 @@ const instrumentQuery = (query: object): object => {
     }
     settled = true;
     counters.inFlight -= 1;
+    if (!transactional) {
+      counters.pooledQueriesInFlight -= 1;
+    }
     counters.queryDurationMs += performance.now() - startedAt;
     if (failed) {
       counters.queriesFailed += 1;
@@ -135,7 +176,10 @@ const TRANSACTION_METHODS = ["begin", "savepoint", "transaction"] as const;
  */
 const instrumentedClients = new WeakSet<object>();
 
-const instrumentClient = (client: InstrumentableClient): InstrumentableClient => {
+const instrumentClient = (
+  client: InstrumentableClient,
+  transactional: boolean,
+): InstrumentableClient => {
   if (instrumentedClients.has(client)) {
     return client;
   }
@@ -143,23 +187,49 @@ const instrumentClient = (client: InstrumentableClient): InstrumentableClient =>
 
   const originalUnsafe = client.unsafe;
   client.unsafe = (query: string, params?: unknown[]): object =>
-    instrumentQuery(originalUnsafe.call(client, query, params));
-
-  const instrumentArgument = (argument: unknown): unknown => {
-    if (typeof argument !== "function") {
-      return argument;
-    }
-    return (inner: InstrumentableClient): unknown =>
-      (argument as (transactionClient: InstrumentableClient) => unknown)(instrumentClient(inner));
-  };
+    instrumentQuery(
+      originalUnsafe.call(client, query, params),
+      transactional,
+      transactionStates.get(client),
+    );
 
   for (const method of TRANSACTION_METHODS) {
     const original = client[method];
     if (typeof original !== "function") {
       continue;
     }
-    client[method] = (...args: unknown[]): unknown =>
-      (original as AnyFunction).apply(client, args.map((argument) => instrumentArgument(argument)));
+    /*
+     * `begin` on a pool client takes a connection out of the pool for as long as
+     * its callback runs. `savepoint`, and any transaction method reached from a
+     * client already inside a transaction, run on the connection that
+     * transaction holds and must not be counted as a second occupant.
+     */
+    const acquiresConnection = !transactional && method !== "savepoint";
+    client[method] = (...args: unknown[]): unknown => {
+      const queued = acquiresConnection && waitsForConnection();
+      const instrumentArgument = (argument: unknown): unknown => {
+        if (typeof argument !== "function") {
+          return argument;
+        }
+        const callback = argument as (transactionClient: InstrumentableClient) => unknown;
+        if (!acquiresConnection) {
+          return (inner: InstrumentableClient): unknown => callback(instrumentClient(inner, true));
+        }
+        return async (inner: InstrumentableClient): Promise<unknown> => {
+          counters.heldConnections += 1;
+          transactionStates.set(inner, { pendingQueued: queued });
+          try {
+            return await callback(instrumentClient(inner, true));
+          } finally {
+            counters.heldConnections -= 1;
+          }
+        };
+      };
+      return (original as AnyFunction).apply(
+        client,
+        args.map((argument) => instrumentArgument(argument)),
+      );
+    };
   }
 
   return client;
@@ -170,7 +240,7 @@ const instrumentDatabasePool = (
   poolMaxConnections: number,
 ): void => {
   maxConnections = poolMaxConnections;
-  instrumentClient(client);
+  instrumentClient(client, false);
 };
 
 /*
@@ -195,6 +265,8 @@ const openDatabasePoolWindow = (): DatabasePoolWindow => {
 
 const resetDatabasePoolTelemetry = (): void => {
   counters.inFlight = 0;
+  counters.heldConnections = 0;
+  counters.pooledQueriesInFlight = 0;
   counters.queriesStarted = 0;
   counters.queriesFailed = 0;
   counters.queriesQueued = 0;
