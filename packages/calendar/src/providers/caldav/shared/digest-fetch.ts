@@ -1,5 +1,5 @@
 import { createDigestClient } from "@keeper.sh/digest-fetch";
-import { recordResponseStatus } from "./response-status-scope";
+import { recordRequest } from "./response-status-scope";
 
 type FetchFunction = (input: string | Request | URL, init?: RequestInit) => Promise<Response>;
 
@@ -92,17 +92,8 @@ const createDigestAwareFetch = (options: DigestAwareFetchOptions): DigestAwareFe
     return digestClient.fetch(input, init);
   };
 
-  const performFetch: FetchFunction = async (input, init) => {
-    recordResponseStatus(null);
-    try {
-      const response = await authenticatedFetch(input, init);
-      recordResponseStatus(response.status);
-      return response;
-    } catch (error) {
-      recordResponseStatus(null);
-      throw error;
-    }
-  };
+  const performFetch: FetchFunction = (input, init) =>
+    recordRequest(() => authenticatedFetch(input, init));
 
   const getResolvedMethod = (): CalDAVAuthMethod | null => {
     if (state.method === "unknown") {

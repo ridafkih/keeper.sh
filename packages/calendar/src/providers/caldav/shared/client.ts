@@ -8,7 +8,7 @@ import {
   isCalendarObjectPath,
 } from "./api";
 import { createDigestAwareFetch } from "./digest-fetch";
-import { runInResponseStatusScope } from "./response-status-scope";
+import { runInRequestScope } from "./response-status-scope";
 import type { CalDAVAuthMethod } from "./digest-fetch";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import type { CalDAVClientConfig, CalendarInfo } from "../types";
@@ -105,15 +105,15 @@ class CalDAVUnauthorizedResponseError extends Error {
 }
 
 const mapAuthenticationFailure = <Result>(operation: () => Promise<Result>): Promise<Result> =>
-  runInResponseStatusScope(async (getResponseStatus) => {
+  runInRequestScope(async (requests) => {
     const result = await operation().catch((error: unknown) => {
-      if (getResponseStatus() === HTTP_STATUS.UNAUTHORIZED) {
+      if (!requests.hasTransportFailure() && requests.hasUnrefutedUnauthorized()) {
         throw new CalDAVAuthenticationError(error);
       }
       throw error;
     });
 
-    if (getResponseStatus() === HTTP_STATUS.UNAUTHORIZED) {
+    if (requests.hasUnrefutedUnauthorized()) {
       throw new CalDAVAuthenticationError(new CalDAVUnauthorizedResponseError());
     }
 
