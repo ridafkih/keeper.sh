@@ -31,6 +31,13 @@ interface DiscardedSourceEventCounts {
 interface FetchEventsResult {
   events: SourceEvent[];
   discardedEventCounts?: DiscardedSourceEventCounts;
+  /**
+   * Keeper's own mirrored events, which the parser skips on purpose. They are
+   * not losses, so they stay out of `discardedEventCounts` — folding them in
+   * would leave the discard counters permanently non-zero on mirrored
+   * calendars and drown the one-off drop those counters exist to surface.
+   */
+  selfAuthoredEventCount?: number;
   changedEventIds?: string[];
   snapshot?: CalendarSnapshotChange;
   nextSyncToken?: string;
@@ -165,6 +172,19 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
         fetchResult.discardedEventCounts.outsideSyncWindow;
       wideEvent["source_events.discarded_unrepresentable"] =
         fetchResult.discardedEventCounts.unrepresentable;
+    }
+    if (typeof fetchResult.selfAuthoredEventCount === "number") {
+      wideEvent["source_events.skipped_self_authored"] = fetchResult.selfAuthoredEventCount;
+    }
+    /*
+     * A resource the provider returned but Keeper could not read is absent from
+     * the diff, so a snapshot source deletes the stored row behind it. That is
+     * the same silent disappearance the discard counters exist to catch.
+     */
+    if (fetchResult.skippedResourceCount) {
+      wideEvent["source_events.skipped_resources"] = fetchResult.skippedResourceCount;
+      wideEvent["source_events.skipped_resource_reasons"] =
+        (fetchResult.skippedResourceReasons ?? []).join("; ");
     }
     let sourceEvents = fetchResult.events;
     const unsupportedEventUids = new Set(fetchResult.unsupportedEventUids);

@@ -61,11 +61,16 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
       }),
     );
 
+    let selfAuthoredEventCount = 0;
+    let outsideSyncWindowCount = 0;
+
     for (const parsed of resources.events) {
       if (isKeeperEvent(parsed.uid)) {
+        selfAuthoredEventCount += 1;
         continue;
       }
       if (!isCalDAVEventInSyncWindow(parsed, syncWindow)) {
+        outsideSyncWindowCount += 1;
         continue;
       }
 
@@ -88,6 +93,16 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
 
     return {
       events,
+      /*
+       * CalDAV is a snapshot source: anything dropped here is absent from the
+       * diff, so the stored row it left behind is deleted. The counts have to
+       * travel with the fetch or the deletion leaves no trace at all.
+       */
+      discardedEventCounts: {
+        outsideSyncWindow: outsideSyncWindowCount,
+        unrepresentable: 0,
+      },
+      selfAuthoredEventCount,
       syncWindow,
       coverage: {
         futureRange,

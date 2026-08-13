@@ -8,18 +8,23 @@ const SCENARIO = join(import.meta.dirname, "../fixtures/ingest-wide-event-scenar
  * The scenario runs the real cron logging context and the real ingestion engine
  * in a child process: two sources ingested inside one job tick, one of which
  * discards an unrepresentable event and deletes the stored row it left behind.
+ * Each source opens its own widelog context and flushes its own event, exactly
+ * as all three ingest families in src/jobs/ingest-sources.ts do, so the counts
+ * of one source can never land on another source's event.
  */
-const runJobTick = (mode: string): Record<string, unknown> => {
+const runJobTick = (mode: string): Record<string, unknown>[] => {
   const output = execFileSync("bun", [SCENARIO, mode], {
     cwd: join(import.meta.dirname, "../.."),
     encoding: "utf8",
   });
-  const lines = output.split("\n").filter(Boolean);
-  const [line] = lines;
-  if (lines.length !== 1 || !line) {
-    throw new Error(`Expected one wide event, received: ${output}`);
+  const events = output
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  if (events.length !== 3) {
+    throw new Error(`Expected two source events and one job event, received: ${output}`);
   }
-  return JSON.parse(line) as Record<string, unknown>;
+  return events;
 };
 
 const readNested = (event: Record<string, unknown>, path: string): unknown => {
@@ -33,32 +38,46 @@ const readNested = (event: Record<string, unknown>, path: string): unknown => {
   return value;
 };
 
-describe("ingest wide events merged onto one cron job event", () => {
-  it("keeps the removal count of a source ingested before a quiet one", () => {
-    const event = runJobTick("discarding-source-first");
+const sourceEventFor = (
+  events: Record<string, unknown>[],
+  calendarId: string,
+): Record<string, unknown> => {
+  const event = events.find((candidate) => readNested(candidate, "calendar.id") === calendarId);
+  if (!event) {
+    throw new Error(`No wide event for ${calendarId} in ${JSON.stringify(events)}`);
+  }
+  return event;
+};
 
-    expect(readNested(event, "events.removed")).toBe(1);
-  });
+describe("ingest wide events emitted inside one cron job tick", () => {
+  it.each(["discarding-source-first", "discarding-source-last", "concurrent"])(
+    "keeps the discard and removal counts of the discarding source (%s)",
+    (mode) => {
+      const events = runJobTick(mode);
+      const google = sourceEventFor(events, "google-calendar");
 
-  it("keeps the discard count of a source ingested after a quiet one", () => {
-    const event = runJobTick("discarding-source-last");
+      expect(readNested(google, "source_events.discarded_unrepresentable")).toBe(1);
+      expect(readNested(google, "events.removed")).toBe(1);
+    },
+  );
 
-    expect(readNested(event, "source_events.discarded_unrepresentable")).toBe(1);
-    expect(readNested(event, "events.removed")).toBe(1);
-  });
+  it.each(["discarding-source-first", "discarding-source-last", "concurrent"])(
+    "never attributes a discard or removal to a calendar that had none (%s)",
+    (mode) => {
+      const events = runJobTick(mode);
+      const ics = sourceEventFor(events, "ics-calendar");
 
-  it("never attributes a discard to a calendar that did not discard", () => {
-    const event = runJobTick("discarding-source-first");
+      expect(readNested(ics, "source_events.discarded_unrepresentable")).toBeFalsy();
+      expect(readNested(ics, "events.removed")).toBe(0);
+    },
+  );
 
-    if (readNested(event, "source_events.discarded_unrepresentable") !== 1) {
-      return;
-    }
-    expect(readNested(event, "calendar.id")).toBe("google-calendar");
-  });
+  it("leaves the job-level tick event free of any single source's counts", () => {
+    const events = runJobTick("discarding-source-first");
+    const job = events.find((candidate) => readNested(candidate, "operation.name") === "ingest-sources");
 
-  it("keeps a trace when the two sources interleave", () => {
-    const event = runJobTick("concurrent");
-
-    expect(readNested(event, "events.removed")).toBe(1);
+    expect(job).toBeDefined();
+    expect(readNested(job ?? {}, "calendar.id")).toBeNull();
+    expect(readNested(job ?? {}, "source_events.discarded_unrepresentable")).toBeNull();
   });
 });

@@ -9,9 +9,10 @@ import {
   buildEventStateInsertRow,
   ingestSource,
   insertEventStatesWithConflictResolution,
+  selectIngestWideEventFields,
   withSourceIngestLock,
 } from "@keeper.sh/calendar";
-import type { IngestionPersistenceWork } from "@keeper.sh/calendar";
+import type { IngestionPersistenceWork, IngestWideEventFields } from "@keeper.sh/calendar";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { enqueuePushSync } from "./enqueue-push-sync";
 import {
@@ -29,6 +30,7 @@ import { safeFetchOptions } from "./safe-fetch-options";
 
 import { spawnBackgroundJob } from "./background-task";
 import { database, premiumService, redis } from "@/context";
+import { widelog } from "@/utils/logging";
 import { createSyncLock } from "@keeper.sh/sync";
 
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
@@ -104,6 +106,12 @@ const createIngestionPersistenceTransaction = (calendarId: string) =>
     }),
   );
 
+const recordIngestWideEvent = (event: IngestWideEventFields): void => {
+  for (const [key, value] of Object.entries(selectIngestWideEventFields(event))) {
+    widelog.set(key, value);
+  }
+};
+
 const ingestIcsSource = async (source: Source): Promise<void> => {
   if (!source.url) {
     return;
@@ -136,6 +144,7 @@ const ingestIcsSource = async (source: Source): Promise<void> => {
             }),
         }),
       isCurrent: lockResult.handle.isCurrent,
+      onIngestEvent: recordIngestWideEvent,
       withPersistenceTransaction: createIngestionPersistenceTransaction(source.id),
     });
   } finally {
@@ -258,6 +267,7 @@ export {
   SourceLimitError,
   InvalidSourceUrlError,
   getUserSources,
+  ingestIcsSource,
   verifySourceOwnership,
   createSource,
 };

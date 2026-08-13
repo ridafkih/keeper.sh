@@ -336,14 +336,31 @@ const resolveSourceEventType = (
   return "default";
 };
 
-const parseGoogleEvents = (events: GoogleCalendarEvent[]): EventTimeSlot[] => {
+/**
+ * Skipping a Keeper-authored mirror is a deliberate no-op, not a lost event.
+ * Counting the two together would leave `unrepresentable` permanently non-zero
+ * on any mirrored calendar, drowning the one-off drop it exists to surface.
+ */
+interface ParsedSourceEventDiagnostics {
+  events: EventTimeSlot[];
+  selfAuthoredCount: number;
+  unrepresentableCount: number;
+}
+
+const parseGoogleEventsWithDiagnostics = (
+  events: GoogleCalendarEvent[],
+): ParsedSourceEventDiagnostics => {
   const result: EventTimeSlot[] = [];
+  let selfAuthoredCount = 0;
+  let unrepresentableCount = 0;
 
   for (const event of events) {
     if (!event.start || !event.end || !event.iCalUID) {
+      unrepresentableCount += 1;
       continue;
     }
     if (isKeeperEvent(event.iCalUID)) {
+      selfAuthoredCount += 1;
       continue;
     }
     result.push({
@@ -361,7 +378,15 @@ const parseGoogleEvents = (events: GoogleCalendarEvent[]): EventTimeSlot[] => {
     });
   }
 
-  return result;
+  return { events: result, selfAuthoredCount, unrepresentableCount };
 };
 
-export { fetchCalendarEvents, parseGoogleEvents, EventsFetchError };
+const parseGoogleEvents = (events: GoogleCalendarEvent[]): EventTimeSlot[] =>
+  parseGoogleEventsWithDiagnostics(events).events;
+
+export {
+  fetchCalendarEvents,
+  parseGoogleEvents,
+  parseGoogleEventsWithDiagnostics,
+  EventsFetchError,
+};

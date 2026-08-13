@@ -486,8 +486,23 @@ const resolveOutlookStartTimeZone = (
   return resolvedResponseTimeZone;
 };
 
-const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => {
+/**
+ * Skipping a Keeper-authored mirror is a deliberate no-op, not a lost event.
+ * Counting the two together would leave `unrepresentable` permanently non-zero
+ * on any mirrored calendar, drowning the one-off drop it exists to surface.
+ */
+interface ParsedOutlookEventDiagnostics {
+  events: EventTimeSlot[];
+  selfAuthoredCount: number;
+  unrepresentableCount: number;
+}
+
+const parseOutlookEventsWithDiagnostics = (
+  events: OutlookCalendarEvent[],
+): ParsedOutlookEventDiagnostics => {
   const result: EventTimeSlot[] = [];
+  let selfAuthoredCount = 0;
+  let unrepresentableCount = 0;
 
   for (const event of events) {
     if (
@@ -497,12 +512,15 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
       || !event.end.timeZone
       || !event.iCalUId
     ) {
+      unrepresentableCount += 1;
       continue;
     }
     if (isKeeperEvent(event.iCalUId)) {
+      selfAuthoredCount += 1;
       continue;
     }
     if (event.categories?.includes(KEEPER_CATEGORY)) {
+      selfAuthoredCount += 1;
       continue;
     }
 
@@ -521,6 +539,7 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
     const startTime = parseEventTime(start, event.isAllDay);
     const endTime = parseEventTime(end, event.isAllDay);
     if (!startTime || !endTime) {
+      unrepresentableCount += 1;
       continue;
     }
 
@@ -541,7 +560,16 @@ const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] => 
     });
   }
 
-  return result;
+  return { events: result, selfAuthoredCount, unrepresentableCount };
 };
 
-export { fetchCalendarEvents, fetchCalendarName, parseOutlookEvents, EventsFetchError };
+const parseOutlookEvents = (events: OutlookCalendarEvent[]): EventTimeSlot[] =>
+  parseOutlookEventsWithDiagnostics(events).events;
+
+export {
+  fetchCalendarEvents,
+  fetchCalendarName,
+  parseOutlookEvents,
+  parseOutlookEventsWithDiagnostics,
+  EventsFetchError,
+};
