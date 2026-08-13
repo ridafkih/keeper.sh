@@ -1,5 +1,5 @@
 import useSWR from "swr";
-import { fetcher } from "@/lib/fetcher";
+import { fetcher, HttpError } from "@/lib/fetcher";
 import { getCommercialMode } from "@/config/commercial";
 
 export interface SubscriptionState {
@@ -15,7 +15,13 @@ interface CustomerStateResponse {
   activeSubscriptions?: ActiveSubscription[] | null;
 }
 
+interface EntitlementsPlanResponse {
+  plan: "free" | "pro";
+}
+
 const SUBSCRIPTION_STATE_CACHE_KEY = "customer-state";
+const CUSTOMER_STATE_PATH = "/api/auth/customer/state";
+const ENTITLEMENTS_PATH = "/api/entitlements";
 
 export const resolveSubscriptionState = (
   customerState: CustomerStateResponse,
@@ -32,10 +38,11 @@ export const resolveSubscriptionState = (
   };
 };
 
-const fetchSubscriptionState = async (): Promise<SubscriptionState> => {
-  const data = await fetcher<CustomerStateResponse>("/api/auth/customer/state");
-  return resolveSubscriptionState(data);
-};
+const isUnauthorized = (error: unknown): boolean =>
+  error instanceof HttpError && error.status === 401;
+
+const fetchSubscriptionState = (): Promise<SubscriptionState> =>
+  fetchSubscriptionStateWithApi((path) => fetcher(path));
 
 interface UseSubscriptionOptions {
   enabled?: boolean;
@@ -64,8 +71,17 @@ export function useSubscription(options: UseSubscriptionOptions = {}) {
 export async function fetchSubscriptionStateWithApi(
   fetchApi: <T>(path: string, init?: RequestInit) => Promise<T>,
 ): Promise<SubscriptionState> {
-  const data = await fetchApi<CustomerStateResponse>("/api/auth/customer/state");
-  return resolveSubscriptionState(data);
+  try {
+    const data = await fetchApi<CustomerStateResponse>(CUSTOMER_STATE_PATH);
+    return resolveSubscriptionState(data);
+  } catch (error) {
+    if (isUnauthorized(error)) {
+      throw error;
+    }
+
+    const entitlements = await fetchApi<EntitlementsPlanResponse>(ENTITLEMENTS_PATH);
+    return { plan: entitlements.plan, interval: null };
+  }
 }
 
 export { fetchSubscriptionState };
