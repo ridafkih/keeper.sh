@@ -1,5 +1,5 @@
 import type { CronOptions } from "cronbake";
-import { classifyDatabaseError } from "@keeper.sh/database";
+import { resolveDatabaseErrorClassification } from "@keeper.sh/database";
 import { context, widelog } from "./logging";
 
 const withCronWideEvent = (options: CronOptions): CronOptions => ({
@@ -14,7 +14,7 @@ const withCronWideEvent = (options: CronOptions): CronOptions => ({
         widelog.set("outcome", "success");
       } catch (error) {
         widelog.set("outcome", "error");
-        const databaseError = classifyDatabaseError(error);
+        const databaseError = resolveDatabaseErrorClassification(error);
         if (databaseError?.sqlState) {
           widelog.set("db.error_sqlstate", databaseError.sqlState);
         }

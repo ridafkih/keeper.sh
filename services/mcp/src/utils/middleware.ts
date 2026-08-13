@@ -1,4 +1,4 @@
-import { classifyDatabaseError } from "@keeper.sh/database";
+import { resolveDatabaseErrorClassification } from "@keeper.sh/database";
 import { context, widelog } from "./logging";
 
 type RouteHandler = (request: Request) => Response | Promise<Response>;
@@ -38,7 +38,7 @@ const withWideEvent =
       } catch (error) {
         widelog.set("status_code", 500);
         widelog.set("outcome", "error");
-        const databaseError = classifyDatabaseError(error);
+        const databaseError = resolveDatabaseErrorClassification(error);
         if (databaseError?.sqlState) {
           widelog.set("db.error_sqlstate", databaseError.sqlState);
         }

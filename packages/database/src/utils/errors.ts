@@ -1,6 +1,7 @@
 const SQLSTATE_PATTERN = /^[0-9A-Z]{5}$/;
 const DRIVER_CODE_PREFIX = "ERR_POSTGRES_";
 const STATEMENT_TIMEOUT_SQLSTATE = "57014";
+const UNCLASSIFIED_DATABASE_SLUG = "db-query-failed";
 const CONNECTION_TERMINATED_CODE = "ERR_POSTGRES_EXPECTED_REQUEST";
 const CONNECTION_UNAVAILABLE_CODES = new Set([
   "ERR_POSTGRES_CONNECTION_CLOSED",
@@ -212,5 +213,26 @@ const classifyDatabaseError = (error: unknown): DatabaseErrorClassification | nu
   return { slug: source.slug, sqlState: source.sqlState };
 };
 
-export { classifyDatabaseError, getDatabaseErrorDetails, isDatabaseError };
+const resolveDatabaseErrorClassification = (
+  error: unknown,
+): DatabaseErrorClassification | null => {
+  const classification = classifyDatabaseError(error);
+  if (classification !== null) {
+    return classification;
+  }
+  if (!isDatabaseError(error)) {
+    return null;
+  }
+  return {
+    slug: UNCLASSIFIED_DATABASE_SLUG,
+    sqlState: getDatabaseErrorDetails(error)?.sqlState ?? null,
+  };
+};
+
+export {
+  classifyDatabaseError,
+  getDatabaseErrorDetails,
+  isDatabaseError,
+  resolveDatabaseErrorClassification,
+};
 export type { DatabaseErrorClassification, DatabaseErrorDetails };

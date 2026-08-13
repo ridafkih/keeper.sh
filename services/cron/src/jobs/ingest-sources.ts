@@ -30,7 +30,7 @@ import {
   createCalDAVSourceFetcher,
   isCalDAVAuthenticationError,
 } from "@keeper.sh/calendar/caldav";
-import { classifyDatabaseError, decryptPassword } from "@keeper.sh/database";
+import { decryptPassword, resolveDatabaseErrorClassification } from "@keeper.sh/database";
 import {
   calendarAccountsTable,
   calendarsTable,
@@ -152,7 +152,7 @@ const recordSkippedResources = (skippedResourceCount: number, reasons: string[])
 };
 
 const resolveDatabaseIngestErrorSlug = (error: unknown): string | null => {
-  const databaseError = classifyDatabaseError(error);
+  const databaseError = resolveDatabaseErrorClassification(error);
   if (!databaseError) {
     return null;
   }
