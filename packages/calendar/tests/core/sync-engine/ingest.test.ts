@@ -673,6 +673,35 @@ describe("ingestSource", () => {
     expect(typeof emittedEvents[0]?.["duration_ms"]).toBe("number");
   });
 
+  it("reports the events the fetch dropped before the diff on the wide event", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+
+    const storedEvent = makeSourceEvent(
+      "uid-1",
+      new Date("2026-03-15T09:00:00Z"),
+      new Date("2026-03-15T10:00:00Z"),
+    );
+    storedEvent.sourceEventId = "provider-1";
+    const emittedEvents: Record<string, unknown>[] = [];
+
+    await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({
+        changedEventIds: ["provider-1"],
+        discardedEventCounts: { outsideSyncWindow: 2, unrepresentable: 1 },
+        events: [],
+        isDeltaSync: true,
+      }),
+      readExistingEvents: () => Promise.resolve([toExistingEvent("state-1", storedEvent)]),
+      flush: () => Promise.resolve(),
+      onIngestEvent: (event) => { emittedEvents.push(event); },
+    });
+
+    expect(emittedEvents[0]?.["source_events.discarded_outside_window"]).toBe(2);
+    expect(emittedEvents[0]?.["source_events.discarded_unrepresentable"]).toBe(1);
+    expect(emittedEvents[0]?.["events.removed"]).toBe(1);
+  });
+
   it("repairs a matching corrupt stored recurrence row without deleting its stable ID", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
     const sourceEvent = makeSourceEvent(
@@ -704,10 +733,10 @@ describe("ingestSource", () => {
       inserts: [sourceEvent],
     }]);
     expect(emittedEvents[0]?.["stored_events.invalid_count"]).toBe(1);
-    expect(emittedEvents[0]?.["stored_events.invalid_ids"]).toEqual(["state-corrupt"]);
-    expect(emittedEvents[0]?.["stored_events.validation_errors"]).toEqual([
+    expect(emittedEvents[0]?.["stored_events.invalid_ids"]).toBe("state-corrupt");
+    expect(emittedEvents[0]?.["stored_events.validation_errors"]).toBe(
       "Failed to JSON.parse recurrenceRule for event state-corrupt",
-    ]);
+    );
   });
 
   it("resets delta sync when a corrupt stored row requires full-sync recovery", async () => {

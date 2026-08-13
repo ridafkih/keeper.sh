@@ -56,10 +56,14 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
     }
 
     const parsedEvents = parseOutlookEvents(result.events);
-    const { events } = filterSourceEventsToSyncWindow(parsedEvents, syncWindow);
+    const { events, filteredCount } = filterSourceEventsToSyncWindow(parsedEvents, syncWindow);
 
     return {
       events,
+      discardedEventCounts: {
+        outsideSyncWindow: filteredCount,
+        unrepresentable: result.events.length - parsedEvents.length,
+      },
       changedEventIds: result.changedEventIds,
       cancelledEventIds: result.cancelledEventIds,
       isDeltaSync: result.isDeltaSync,

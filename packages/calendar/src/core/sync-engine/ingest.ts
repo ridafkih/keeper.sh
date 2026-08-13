@@ -15,8 +15,22 @@ import {
   type StoredSourceEventState,
 } from "../source/stored-event-state";
 
+type IngestWideEventFields = Record<string, boolean | number | string>;
+
+/**
+ * Events the provider reported that never reach the diff: the parser could not
+ * build a source event from them, or they fell outside the sync window. A delta
+ * still names them as changed, so the diff removes their stored state — the loss
+ * has to stay visible on the wide event rather than leaving no trace at all.
+ */
+interface DiscardedSourceEventCounts {
+  outsideSyncWindow: number;
+  unrepresentable: number;
+}
+
 interface FetchEventsResult {
   events: SourceEvent[];
+  discardedEventCounts?: DiscardedSourceEventCounts;
   changedEventIds?: string[];
   snapshot?: CalendarSnapshotChange;
   nextSyncToken?: string;
@@ -66,7 +80,7 @@ interface BaseIngestSourceOptions {
   calendarId: string;
   fetchEvents: () => Promise<FetchEventsResult>;
   isCurrent?: () => Promise<boolean>;
-  onIngestEvent?: (event: Record<string, unknown>) => void;
+  onIngestEvent?: (event: IngestWideEventFields) => void;
 }
 
 interface DirectIngestSourceOptions extends BaseIngestSourceOptions {
@@ -133,7 +147,7 @@ const getNonRecurringStoredEventIdsOutsideWindow = (
 const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResult> => {
   const { calendarId, fetchEvents, isCurrent, onIngestEvent } = options;
 
-  const wideEvent: Record<string, unknown> = {
+  const wideEvent: IngestWideEventFields = {
     "calendar.id": calendarId,
     "operation.name": "ingest:source",
     "operation.type": "ingest",
@@ -146,6 +160,12 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     const withPersistenceTransaction = resolvePersistenceTransaction(options);
     const fetchResult = await fetchEvents();
     wideEvent["source_events.count"] = fetchResult.events.length;
+    if (fetchResult.discardedEventCounts) {
+      wideEvent["source_events.discarded_outside_window"] =
+        fetchResult.discardedEventCounts.outsideSyncWindow;
+      wideEvent["source_events.discarded_unrepresentable"] =
+        fetchResult.discardedEventCounts.unrepresentable;
+    }
     let sourceEvents = fetchResult.events;
     const unsupportedEventUids = new Set(fetchResult.unsupportedEventUids);
     if (unsupportedEventUids.size > 0) {
@@ -208,10 +228,10 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       const invalidStoredEventIds = parseResult.failures.map((failure) => failure.eventId);
       if (parseResult.failures.length > 0) {
         wideEvent["stored_events.invalid_count"] = parseResult.failures.length;
-        wideEvent["stored_events.invalid_ids"] = invalidStoredEventIds;
-        wideEvent["stored_events.validation_errors"] = parseResult.failures.map(
-          (failure) => failure.error.message,
-        );
+        wideEvent["stored_events.invalid_ids"] = invalidStoredEventIds.join(",");
+        wideEvent["stored_events.validation_errors"] = parseResult.failures
+          .map((failure) => failure.error.message)
+          .join("; ");
       }
 
       if (isDeltaSync && parseResult.failures.length > 0) {
@@ -316,7 +336,9 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     if (error instanceof RecurrenceMaterializationLimitError) {
       wideEvent["recurrence.calendar_id"] = error.calendarId;
       wideEvent["recurrence.event_id"] = error.eventId;
-      wideEvent["recurrence.event_state_id"] = error.eventStateId;
+      if (error.eventStateId) {
+        wideEvent["recurrence.event_state_id"] = error.eventStateId;
+      }
       wideEvent["recurrence.limit"] = error.limit;
       wideEvent["recurrence.source_event_uid"] = error.sourceEventUid;
     }
@@ -331,6 +353,8 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
 export { ingestSource };
 export type {
   CalendarSnapshotChange,
+  DiscardedSourceEventCounts,
+  IngestWideEventFields,
   IngestSourceOptions,
   IngestionPersistence,
   IngestionPersistenceWork,

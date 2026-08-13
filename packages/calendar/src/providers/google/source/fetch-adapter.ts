@@ -53,10 +53,14 @@ const createGoogleSourceFetcher = (config: GoogleSourceFetcherConfig): GoogleSou
     }
 
     const parsedEvents = parseGoogleEvents(result.events);
-    const { events } = filterSourceEventsToSyncWindow(parsedEvents, syncWindow);
+    const { events, filteredCount } = filterSourceEventsToSyncWindow(parsedEvents, syncWindow);
 
     return {
       events,
+      discardedEventCounts: {
+        outsideSyncWindow: filteredCount,
+        unrepresentable: result.events.length - parsedEvents.length,
+      },
       changedEventIds: result.changedEventIds,
       cancelledEventIds: result.cancelledEventIds,
       isDeltaSync: result.isDeltaSync,

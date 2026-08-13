@@ -249,5 +249,7 @@ export type {
   IngestionPersistence,
   IngestionPersistenceWork,
   CalendarSnapshotChange,
+  DiscardedSourceEventCounts,
+  IngestWideEventFields,
   FetchEventsResult as IngestionFetchEventsResult,
 } from "./core/sync-engine/ingest";
