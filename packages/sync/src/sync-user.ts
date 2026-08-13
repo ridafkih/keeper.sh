@@ -31,7 +31,7 @@ import {
 import { and, arrayContains, eq, inArray } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
-import { getErrorMessage, isBackoffEligibleError } from "./destination-errors";
+import { getErrorMessage, hasNoSuccessfulOperations, isBackoffEligibleError } from "./destination-errors";
 import { resolveSyncProvider } from "./resolve-provider";
 import type { OAuthConfig } from "./resolve-provider";
 import {
@@ -722,7 +722,11 @@ const syncDestinationsForUser = async (
         continue;
       }
 
-      await resetDestinationBackoffIfNeeded(database, destination);
+      if (hasNoSuccessfulOperations(result)) {
+        await applyDestinationBackoff(database, destination.calendarId, destination.failureCount);
+      } else {
+        await resetDestinationBackoffIfNeeded(database, destination);
+      }
 
       added += result.added;
       addFailed += result.addFailed;

@@ -35,4 +35,19 @@ const isBackoffEligibleError = (error: unknown): boolean => {
   return false;
 };
 
-export { getErrorMessage, isBackoffEligibleError, BACKOFF_ERROR_PATTERNS };
+interface DestinationOperationCounts {
+  added: number;
+  addFailed: number;
+  conflictsResolved: number;
+  removed: number;
+  removeFailed: number;
+}
+
+const hasNoSuccessfulOperations = (result: DestinationOperationCounts): boolean =>
+  result.added === 0
+  && result.removed === 0
+  && result.conflictsResolved === 0
+  && result.addFailed + result.removeFailed > 0;
+
+export { getErrorMessage, hasNoSuccessfulOperations, isBackoffEligibleError, BACKOFF_ERROR_PATTERNS };
+export type { DestinationOperationCounts };

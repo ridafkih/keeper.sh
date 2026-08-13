@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RecurrenceMaterializationLimitError } from "@keeper.sh/calendar";
-import { isBackoffEligibleError } from "../src/destination-errors";
+import { hasNoSuccessfulOperations, isBackoffEligibleError } from "../src/destination-errors";
 
 describe("isBackoffEligibleError", () => {
   it("matches invalid credentials", () => {
@@ -42,5 +42,40 @@ describe("isBackoffEligibleError", () => {
   it("handles non-Error values", () => {
     expect(isBackoffEligibleError("Invalid credentials")).toBe(true);
     expect(isBackoffEligibleError("random string")).toBe(false);
+  });
+});
+
+describe("hasNoSuccessfulOperations", () => {
+  const result = (overrides: Partial<Parameters<typeof hasNoSuccessfulOperations>[0]> = {}) => ({
+    added: 0,
+    addFailed: 0,
+    conflictsResolved: 0,
+    removed: 0,
+    removeFailed: 0,
+    ...overrides,
+  });
+
+  it("reports a sync whose every delete failed", () => {
+    expect(hasNoSuccessfulOperations(result({ removeFailed: 18 }))).toBe(true);
+  });
+
+  it("reports a sync whose every add failed", () => {
+    expect(hasNoSuccessfulOperations(result({ addFailed: 4 }))).toBe(true);
+  });
+
+  it("does not report a sync that had nothing to do", () => {
+    expect(hasNoSuccessfulOperations(result())).toBe(false);
+  });
+
+  it("does not report a sync that removed something alongside failures", () => {
+    expect(hasNoSuccessfulOperations(result({ removeFailed: 17, removed: 1 }))).toBe(false);
+  });
+
+  it("does not report a sync that added something alongside failures", () => {
+    expect(hasNoSuccessfulOperations(result({ addFailed: 3, added: 2 }))).toBe(false);
+  });
+
+  it("treats a resolved conflict as progress", () => {
+    expect(hasNoSuccessfulOperations(result({ addFailed: 1, conflictsResolved: 1 }))).toBe(false);
   });
 });
