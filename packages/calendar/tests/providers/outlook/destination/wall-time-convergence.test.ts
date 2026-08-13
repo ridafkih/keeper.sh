@@ -104,7 +104,10 @@ const createOutlookHarness = (events: () => MaterializedSyncableEvent[]): Harnes
   const listRemoteEvents = (): Promise<RemoteEvent[]> => Promise.resolve(
     [...resources.entries()].flatMap(([id, stored]) => {
       const remoteEvent = toRemoteEvent(id, stored);
-      return remoteEvent ? [remoteEvent] : [];
+      if (!remoteEvent) {
+        return [];
+      }
+      return [remoteEvent];
     }),
   );
 

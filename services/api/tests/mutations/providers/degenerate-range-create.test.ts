@@ -95,7 +95,7 @@ const readRequestBody = (fetchMock: ReturnType<typeof vi.fn>): Record<string, un
   const [, init] = fetchMock.mock.calls[0] ?? [];
   const body = (init as RequestInit | undefined)?.body;
   if (typeof body !== "string") {
-    throw new Error("No request body was sent to the provider");
+    throw new TypeError("No request body was sent to the provider");
   }
   return JSON.parse(body);
 };
@@ -111,11 +111,7 @@ const readRange = (
   };
 };
 
-const jsonResponse = (payload: unknown): Response =>
-  new Response(JSON.stringify(payload), {
-    headers: { "Content-Type": "application/json" },
-    status: 200,
-  });
+const jsonResponse = (payload: unknown): Response => Response.json(payload, { status: 200 });
 
 describe("creating an event whose range covers no interval", () => {
   beforeEach(() => {

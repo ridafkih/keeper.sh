@@ -183,12 +183,10 @@ describe("resolving a wall time in the historical half of tzdata", () => {
 });
 
 const createRandom = (seed: number): (() => number) => {
-  let state = seed;
+  let state = seed % 4_294_967_296;
   return () => {
-    state = (state + 0x6d2b79f5) | 0;
-    let value = Math.imul(state ^ (state >>> 15), 1 | state);
-    value = (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^ value;
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+    state = (state * 1_664_525 + 1_013_904_223) % 4_294_967_296;
+    return state / 4_294_967_296;
   };
 };
 
@@ -198,7 +196,7 @@ const RANDOM_RANGE_END = Date.UTC(2045, 0, 1);
 
 describe("resolving an arbitrary wall time in an arbitrary zone", () => {
   it("agrees with an exhaustive sweep on seeded random samples", () => {
-    const random = createRandom(0x5eed);
+    const random = createRandom(24_301);
     const failures: string[] = [];
 
     for (const timeZone of ZONES) {

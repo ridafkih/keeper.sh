@@ -1,5 +1,4 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type { SyncableEvent } from "../../core/types";
 
 interface CalDAVProviderOptions {
   providerId: string;
@@ -67,7 +66,6 @@ interface CalDAVService {
   getCalDAVAccountsForUser: (userId: string, providerFilter?: string) => Promise<CalDAVAccount[]>;
   getCalDAVAccountsByProvider: (provider: string) => Promise<CalDAVAccount[]>;
   getDecryptedPassword: (encryptedPassword: string) => string;
-  getUserEvents: (userId: string) => Promise<SyncableEvent[]>;
 }
 
 interface CalDAVClientConfig {

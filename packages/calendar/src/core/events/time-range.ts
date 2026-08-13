@@ -65,7 +65,7 @@ const resolveTimeRangeEnd = ({ endTime, startTime }: EventTimeRange): Date => {
   return startTime;
 };
 
-const isEmptyTimeRange =({ endTime, startTime }: EventTimeRange): boolean =>
+const isEmptyTimeRange = ({ endTime, startTime }: EventTimeRange): boolean =>
   endTime.getTime() === startTime.getTime();
 
 const isInvertedTimeRange = ({ endTime, startTime }: EventTimeRange): boolean =>

@@ -66,9 +66,9 @@ interface Shape {
 }
 
 /*
- * get_event_count and get_events answer the same question about the same window, so a
- * caller that asks how many events a window holds and then asks for them must not be told
- * two different numbers. Every shape here is one the read publishes across a span wider
+ * The get_event_count and get_events reads answer the same question about the same window,
+ * so a caller that asks how many events a window holds and then asks for them must not be
+ * told two different numbers. Every shape here is one the read publishes across a span wider
  * than the stored range: the count clause compares the stored columns alone.
  */
 const SHAPES: Shape[] = [

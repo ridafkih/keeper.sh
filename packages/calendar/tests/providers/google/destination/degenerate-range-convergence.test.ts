@@ -67,6 +67,13 @@ interface Harness {
  * dateTime fields the destination provider reads, and refuses outright any event that
  * does not end after it starts.
  */
+const toGoogleAvailability = (transparency: GoogleEvent["transparency"]) => {
+  if (transparency === "transparent") {
+    return "free";
+  }
+  return "busy";
+};
+
 const createGoogleHarness = (events: () => MaterializedSyncableEvent[]): Harness => {
   const mappings: EventMapping[] = [];
   const resources = new Map<string, GoogleEvent>();
@@ -83,9 +90,9 @@ const createGoogleHarness = (events: () => MaterializedSyncableEvent[]): Harness
     }
     return {
       deleteId: id,
-      editableAvailability: stored.transparency === "transparent" ? "free" : "busy",
+      editableAvailability: toGoogleAvailability(stored.transparency),
       editableContentHash: createEditableEventContentHash({
-        availability: stored.transparency === "transparent" ? "free" : "busy",
+        availability: toGoogleAvailability(stored.transparency),
         description: stored.description,
         endTime,
         isAllDay: Boolean(stored.start?.date),
@@ -104,7 +111,10 @@ const createGoogleHarness = (events: () => MaterializedSyncableEvent[]): Harness
   const listRemoteEvents = (): Promise<RemoteEvent[]> => Promise.resolve(
     [...resources.entries()].flatMap(([id, stored]) => {
       const remoteEvent = toRemoteEvent(id, stored);
-      return remoteEvent ? [remoteEvent] : [];
+      if (!remoteEvent) {
+        return [];
+      }
+      return [remoteEvent];
     }),
   );
 
@@ -330,14 +340,16 @@ describe("google destination convergence across repeated runs", () => {
     expect(await harness.runSync()).toMatchObject(IDLE);
 
     current = collapsed;
-    expect((await harness.runSync()).addFailed).toBe(0);
+    const collapsedRun = await harness.runSync();
+    expect(collapsedRun.addFailed).toBe(0);
     expect(await harness.runSync()).toMatchObject(IDLE);
     expect(harness.remoteRanges()).toEqual([
       "2027-06-01T16:00:00.000Z/2027-06-01T16:01:00.000Z",
     ]);
 
     current = timed;
-    expect((await harness.runSync()).addFailed).toBe(0);
+    const restoredRun = await harness.runSync();
+    expect(restoredRun.addFailed).toBe(0);
     expect(await harness.runSync()).toMatchObject(IDLE);
     expect(harness.remoteRanges()).toEqual([
       "2027-06-01T16:00:00.000Z/2027-06-01T17:00:00.000Z",

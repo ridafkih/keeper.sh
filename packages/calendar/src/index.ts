@@ -174,7 +174,6 @@ export {
 export {
   getOAuthAccountsByPlan,
   getOAuthAccountsForUser,
-  getUserEventsForSync,
   type OAuthAccount,
 } from "./core/oauth/accounts";
 export {

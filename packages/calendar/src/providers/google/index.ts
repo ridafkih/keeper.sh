@@ -23,7 +23,6 @@ export {
 export {
   getGoogleAccountsByPlan,
   getGoogleAccountsForUser,
-  getUserEvents,
   type GoogleAccount,
 } from "./destination/sync";
 

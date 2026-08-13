@@ -23,7 +23,6 @@ export {
 export {
   getOutlookAccountsByPlan,
   getOutlookAccountsForUser,
-  getUserEvents,
   type OutlookAccount,
 } from "./destination/sync";
 

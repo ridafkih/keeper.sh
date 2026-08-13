@@ -59,6 +59,17 @@ const collectTransitions = (timeZone: string, from: number, to: number): ZoneTra
   return transitions;
 };
 
+const wallTimeIsRepresentable = (
+  wallTime: number,
+  expected: number,
+  transition: ZoneTransition,
+): boolean => {
+  if (expected < transition.instant) {
+    return expected === wallTime - transition.offsetFromMs;
+  }
+  return expected === wallTime - transition.offsetToMs;
+};
+
 /*
  * The instant a wall time names, derived without the implementation's shortcut: the two
  * offsets the zone holds either side of the transition are the only candidates, an
@@ -125,9 +136,7 @@ const sweep = (timeZones: string[], from: number, to: number): SweepOutcome => {
           continue;
         }
         const readBack = instantToWallTime(new Date(actual), timeZone).getTime();
-        const wallTimeExists = expected < transition.instant
-          ? expected === wallTime - transition.offsetFromMs
-          : expected === wallTime - transition.offsetToMs;
+        const wallTimeExists = wallTimeIsRepresentable(wallTime, expected, transition);
         if (wallTimeExists && readBack !== wallTime) {
           mismatches.push(
             `${timeZone} round trip wall=${new Date(wallTime).toISOString()} `
@@ -181,7 +190,7 @@ describe("resolving a wall time near every transition IANA declares", () => {
     );
 
     expect(outcome.mismatches).toEqual([]);
-    expect(outcome.checked).toBeGreaterThan(1_000);
+    expect(outcome.checked).toBeGreaterThan(1000);
   }, SWEEP_TIMEOUT_MS);
 
   it("finds no zone that changes offset twice within two days", () => {

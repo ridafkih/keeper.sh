@@ -5,7 +5,6 @@ import {
   overlapsRepresentableTimeWindow,
   overlapsTimeWindow,
   REPRESENTABLE_RANGE_SLACK_MS,
-  resolveRepresentableTimeRange,
   resolveTimeRangeEnd,
 } from "../../../src/core/events/time-range";
 import { normalizeCalDAVEvent } from "../../../src/providers/caldav/destination/normalize-event";
@@ -22,10 +21,10 @@ const MS_PER_MINUTE = 60_000;
  * exactly, rather than a case that vanishes on the next run.
  */
 const createRandom = (seed: number) => {
-  let state = seed >>> 0;
+  let state = seed % 4_294_967_296;
   return () => {
-    state = (state * 1_664_525 + 1_013_904_223) >>> 0;
-    return state / 0x1_0000_0000;
+    state = (state * 1_664_525 + 1_013_904_223) % 4_294_967_296;
+    return state / 4_294_967_296;
   };
 };
 
@@ -81,7 +80,7 @@ const ITERATIONS = 4000;
 describe("destination shaping reaches a fixed point", () => {
   for (const { label, normalize } of NORMALIZERS) {
     it(`settles after one application for ${label}`, () => {
-      const random = createRandom(0x5eed_1234);
+      const random = createRandom(1_592_594_996);
       for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
         const event = buildEvent(random);
         const once = normalize(event);
@@ -119,9 +118,9 @@ describe("destination shaping reaches a fixed point", () => {
  * be handed one, whatever the source stated.
  */
 describe("shaping produces a range the destination accepts", () => {
-  for (const { label, normalize } of [NORMALIZERS[0], NORMALIZERS[1]]) {
+  for (const { label, normalize } of NORMALIZERS.slice(0, 2)) {
     it(`never hands ${label} a non-positive span`, () => {
-      const random = createRandom(0xc0ff_ee01);
+      const random = createRandom(3_237_998_081);
       for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
         const event = buildEvent(random);
         const shaped = normalize(event);
@@ -134,7 +133,7 @@ describe("shaping produces a range the destination accepts", () => {
   }
 
   it("keeps an all-day span on whole UTC days", () => {
-    const random = createRandom(0xda7e_0001);
+    const random = createRandom(3_665_690_625);
     for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
       const event = buildEvent(random);
       if (!event.isAllDay) {
@@ -174,7 +173,7 @@ const admittedByScan = (
 
 describe("the widened scan reaches every row the read predicate admits", () => {
   it("never drops a row whose published span touches the window", () => {
-    const random = createRandom(0xbeef_7777);
+    const random = createRandom(3_203_364_727);
     for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
       const event = buildEvent(random);
       const windowStart = new Date(BASE_MS + Math.floor((random() - 0.5) * 40 * MS_PER_DAY));
@@ -202,7 +201,7 @@ describe("the widened scan reaches every row the read predicate admits", () => {
  */
 describe("window membership agrees across the layers that apply one", () => {
   it("admits a degenerate range on the instant it names", () => {
-    const random = createRandom(0x1234_abcd);
+    const random = createRandom(305_441_741);
     for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
       const event = buildEvent(random);
       if (!isEmptyTimeRange(event) && !isInvertedTimeRange(event)) {

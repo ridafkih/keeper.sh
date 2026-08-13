@@ -135,7 +135,8 @@ describe("reading a daily all-day series across a daylight transition", () => {
       to: new Date(WEEK_END),
     });
 
-    expect(count).toBe((await readWeek()).length);
+    const published = await readWeek();
+    expect(count).toBe(published.length);
   });
 
   it("blocks the last day of the series", async () => {

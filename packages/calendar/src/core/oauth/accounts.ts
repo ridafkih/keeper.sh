@@ -1,19 +1,12 @@
 import {
   calendarAccountsTable,
   calendarsTable,
-  eventStatesTable,
   oauthCredentialsTable,
   userSubscriptionsTable,
 } from "@keeper.sh/database/schema";
-import { and, arrayContains, asc, eq, gte } from "drizzle-orm";
+import { and, arrayContains, eq } from "drizzle-orm";
 import type { Plan } from "@keeper.sh/data-schemas";
-import type { SyncableEvent } from "../types";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import {
-  DEFAULT_FUTURE_SYNC_RANGE,
-  DEFAULT_HISTORIC_SYNC_RANGE,
-  getConfigurableSyncWindow,
-} from "../sync/sync-range";
 
 interface OAuthAccount {
   calendarId: string;
@@ -120,51 +113,5 @@ const getOAuthAccountsForUser = async (
   }));
 };
 
-const getUserEventsForSync = async (
-  database: BunSQLDatabase,
-  userId: string,
-): Promise<SyncableEvent[]> => {
-  const { timeMin: syncWindowStart } = getConfigurableSyncWindow(
-    DEFAULT_HISTORIC_SYNC_RANGE,
-    DEFAULT_FUTURE_SYNC_RANGE,
-  );
-
-  const results = await database
-    .select({
-      calendarId: eventStatesTable.calendarId,
-      calendarName: calendarsTable.name,
-      calendarUrl: calendarsTable.url,
-      endTime: eventStatesTable.endTime,
-      id: eventStatesTable.id,
-      sourceEventUid: eventStatesTable.sourceEventUid,
-      startTime: eventStatesTable.startTime,
-    })
-    .from(eventStatesTable)
-    .innerJoin(calendarsTable, eq(eventStatesTable.calendarId, calendarsTable.id))
-    .where(and(eq(calendarsTable.userId, userId), gte(eventStatesTable.startTime, syncWindowStart)))
-    .orderBy(asc(eventStatesTable.startTime));
-
-  const events: SyncableEvent[] = [];
-
-  for (const result of results) {
-    if (result.sourceEventUid === null) {
-      continue;
-    }
-
-    events.push({
-      calendarId: result.calendarId,
-      calendarName: result.calendarName,
-      calendarUrl: result.calendarUrl,
-      endTime: result.endTime,
-      id: result.id,
-      sourceEventUid: result.sourceEventUid,
-      startTime: result.startTime,
-      summary: result.calendarName ?? "Busy",
-    });
-  }
-
-  return events;
-};
-
-export { getOAuthAccountsByPlan, getOAuthAccountsForUser, getUserEventsForSync };
+export { getOAuthAccountsByPlan, getOAuthAccountsForUser };
 export type { OAuthAccount };

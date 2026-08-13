@@ -111,6 +111,13 @@ const runOnce = async (
   };
 };
 
+const toGoogleAvailability = (transparency: GoogleEvent["transparency"]) => {
+  if (transparency === "transparent") {
+    return "free";
+  }
+  return "busy";
+};
+
 const createGoogleHarness = (events: LocalEvents): Harness => {
   const mappings: EventMapping[] = [];
   const resources = new Map<string, GoogleEvent>();
@@ -126,9 +133,9 @@ const createGoogleHarness = (events: LocalEvents): Harness => {
     }
     return {
       deleteId: id,
-      editableAvailability: stored.transparency === "transparent" ? "free" : "busy",
+      editableAvailability: toGoogleAvailability(stored.transparency),
       editableContentHash: createEditableEventContentHash({
-        availability: stored.transparency === "transparent" ? "free" : "busy",
+        availability: toGoogleAvailability(stored.transparency),
         description: stored.description,
         endTime,
         isAllDay: Boolean(stored.start?.date),
@@ -147,7 +154,10 @@ const createGoogleHarness = (events: LocalEvents): Harness => {
   const listRemoteEvents = (): Promise<RemoteEvent[]> => Promise.resolve(
     [...resources.entries()].flatMap(([id, stored]) => {
       const remoteEvent = toRemoteEvent(id, stored);
-      return remoteEvent ? [remoteEvent] : [];
+      if (!remoteEvent) {
+        return [];
+      }
+      return [remoteEvent];
     }),
   );
 
@@ -230,7 +240,10 @@ const createOutlookHarness = (events: LocalEvents): Harness => {
   const listRemoteEvents = (): Promise<RemoteEvent[]> => Promise.resolve(
     [...resources.entries()].flatMap(([id, stored]) => {
       const remoteEvent = toRemoteEvent(id, stored);
-      return remoteEvent ? [remoteEvent] : [];
+      if (!remoteEvent) {
+        return [];
+      }
+      return [remoteEvent];
     }),
   );
 
@@ -472,13 +485,13 @@ describe("mirroring an all-day series across a daylight transition", () => {
 
     it(`mirrors a moved day once and only once on ${harnessCase.name}`, async () => {
       const master = buildAllDayMaster();
+      const { recurrenceRule: _recurrenceRule, ...masterFields } = buildAllDayMaster();
       const override = {
-        ...buildAllDayMaster(),
+        ...masterFields,
         endTime: new Date("2027-03-23T00:00:00.000Z"),
         eventStateId: "event-state-2",
         id: "event-state-2",
         recurrenceId: new Date("2027-03-16T00:00:00.000Z"),
-        recurrenceRule: undefined,
         startTime: new Date("2027-03-22T00:00:00.000Z"),
       } as SyncableEvent;
       const harness = harnessCase.create(() => materialize([master, override]));
