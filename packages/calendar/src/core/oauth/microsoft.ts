@@ -144,12 +144,19 @@ const fetchUserInfo = async (accessToken: string): Promise<MicrosoftUserInfo> =>
   return microsoftUserInfoSchema.assert(body);
 };
 
-/**
- * Checks if the granted scopes include all required scopes for calendar operations.
- * Microsoft returns scopes as a space-separated string.
- */
+const MICROSOFT_GRAPH_RESOURCE_PREFIX = "https://graph.microsoft.com/";
+
+// The v2.0 token response returns Graph scopes short-form (Calendars.ReadWrite) or resource-qualified (https://graph.microsoft.com/Calendars.ReadWrite).
+const normalizeGrantedScope = (scope: string): string => {
+  const lowered = scope.toLowerCase();
+  if (lowered.startsWith(MICROSOFT_GRAPH_RESOURCE_PREFIX.toLowerCase())) {
+    return lowered.slice(MICROSOFT_GRAPH_RESOURCE_PREFIX.length);
+  }
+  return lowered;
+};
+
 const hasRequiredScopes = (grantedScopes: string): boolean => {
-  const scopes = grantedScopes.toLowerCase().split(" ");
+  const scopes = grantedScopes.split(" ").map((scope) => normalizeGrantedScope(scope));
   return scopes.includes(MICROSOFT_CALENDAR_SCOPE.toLowerCase());
 };
 
