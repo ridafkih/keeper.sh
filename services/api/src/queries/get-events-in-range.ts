@@ -7,12 +7,14 @@ import {
 import { normalizeDateRange } from "@/utils/date-range";
 import { and, arrayContains, asc, eq, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
+import { overlapsTimeWindow } from "@keeper.sh/calendar";
 import type { KeeperDatabase, KeeperEvent, KeeperEventFilters, KeeperEventRangeInput } from "@/types";
-import { projectSyncedEvents, toKeeperEvent } from "./event-read-model";
+import { projectSyncedEvents, toKeeperEvent, toUserProjection } from "./event-read-model";
 import type {
   KeeperEventProjection,
   SourceInfo,
   SyncedEventRow,
+  UserEventRow,
 } from "./event-read-model";
 
 const EMPTY_RESULT_COUNT = 0;
@@ -72,16 +74,6 @@ const getSourcesForUser = async (
   return { calendarIds, sourceMap };
 };
 
-interface UserEventRow {
-  calendarId: string;
-  description: string | null;
-  endTime: Date;
-  id: string;
-  location: string | null;
-  startTime: Date;
-  title: string | null;
-}
-
 const flattenSyncedEvents = (
   rows: SyncedEventRow[],
   sourceMap: Map<string, SourceInfo>,
@@ -124,6 +116,33 @@ const buildSyncedRangeCondition = (start: Date, end: Date): SQL | undefined =>
     ),
     isNotNull(eventStatesTable.recurrenceId),
   );
+
+/**
+ * The same scan for locally created rows: one whose end predates the window is scanned
+ * anyway when its start does not, because an inverted range says nothing about where it
+ * sits through its end. Membership is decided in memory by isWithinReadWindow.
+ */
+const buildUserRangeCondition = (start: Date, end: Date): SQL | undefined =>
+  and(
+    or(
+      gte(userEventsTable.endTime, start),
+      gte(userEventsTable.startTime, start),
+    ),
+    lte(userEventsTable.startTime, end),
+  );
+
+/*
+ * The window bound a read publishes is inclusive of its end, while the shared predicate
+ * treats a window as half-open; materializeSyncedEvents widens the synced window the same
+ * way so both tables answer one question.
+ */
+const INCLUSIVE_WINDOW_END_MS = 1;
+
+const isWithinReadWindow = (
+  row: { endTime: Date; startTime: Date },
+  start: Date,
+  end: Date,
+): boolean => overlapsTimeWindow(row, start, new Date(end.getTime() + INCLUSIVE_WINDOW_END_MS));
 
 const getEventsInRange = async (
   database: KeeperDatabase,
@@ -172,9 +191,11 @@ const getEventsInRange = async (
   const userConditions: SQL[] = [
     inArray(userEventsTable.calendarId, calendarIds),
     eq(userEventsTable.userId, userId),
-    gte(userEventsTable.endTime, start),
-    lte(userEventsTable.startTime, end),
   ];
+  const userRangeCondition = buildUserRangeCondition(start, end);
+  if (userRangeCondition) {
+    userConditions.push(userRangeCondition);
+  }
 
   if (filters?.availability && filters.availability.length > 0) {
     userConditions.push(inArray(userEventsTable.availability, filters.availability));
@@ -183,12 +204,13 @@ const getEventsInRange = async (
     userConditions.push(eq(userEventsTable.isAllDay, filters.isAllDay));
   }
 
-  const userEvents: UserEventRow[] = await database
+  const userEventRows: UserEventRow[] = await database
     .select({
       calendarId: userEventsTable.calendarId,
       description: userEventsTable.description,
       endTime: userEventsTable.endTime,
       id: userEventsTable.id,
+      isAllDay: userEventsTable.isAllDay,
       location: userEventsTable.location,
       startTime: userEventsTable.startTime,
       title: userEventsTable.title,
@@ -199,7 +221,9 @@ const getEventsInRange = async (
 
   const allEvents: KeeperEventProjection[] = [
     ...syncedEvents,
-    ...userEvents.map((event) => ({ ...event, eventStateId: null })),
+    ...userEventRows
+      .filter((event) => isWithinReadWindow(event, start, end))
+      .map((event) => toUserProjection(event)),
   ];
   allEvents.sort((left, right) => left.startTime.getTime() - right.startTime.getTime());
 
@@ -214,8 +238,10 @@ const getEventsInRange = async (
 
 export {
   buildSyncedRangeCondition,
+  buildUserRangeCondition,
   flattenSyncedEvents,
   getEventsInRange,
   getSourcesForUser,
+  isWithinReadWindow,
   normalizeEventRange,
 };

@@ -34,6 +34,17 @@ interface SyncedEventRow {
   title: string | null;
 }
 
+interface UserEventRow {
+  calendarId: string;
+  description: string | null;
+  endTime: Date;
+  id: string;
+  isAllDay: boolean | null;
+  location: string | null;
+  startTime: Date;
+  title: string | null;
+}
+
 interface EventReference {
   occurrenceStart: Date | null;
   resourceId: string;
@@ -167,6 +178,25 @@ const toSyncedProjection = (
   };
 };
 
+/*
+ * A locally created event owes a caller the same range a synced one does: get_event,
+ * get_events and find_free_time all publish the span the feed and every destination mirror
+ * carry, so a stored row names one event however it is read.
+ */
+const toUserProjection = (row: UserEventRow): KeeperEventProjection => ({
+  calendarId: row.calendarId,
+  description: row.description,
+  eventStateId: null,
+  id: row.id,
+  location: row.location,
+  title: row.title,
+  ...resolveRepresentableTimeRange({
+    endTime: row.endTime,
+    startTime: row.startTime,
+    ...(row.isAllDay !== null && { isAllDay: row.isAllDay }),
+  }),
+});
+
 const isIncludedByFilters = (
   occurrence: MaterializedSyncableEvent,
   filters?: KeeperEventFilters,
@@ -244,10 +274,12 @@ export {
   projectSyncedEvents,
   toKeeperEvent,
   toSyncableEvent,
+  toUserProjection,
 };
 export type {
   EventReference,
   KeeperEventProjection,
   SourceInfo,
   SyncedEventRow,
+  UserEventRow,
 };

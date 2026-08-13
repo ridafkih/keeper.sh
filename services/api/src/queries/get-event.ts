@@ -12,6 +12,7 @@ import {
   parseEventReference,
   projectSyncedEvents,
   toKeeperEvent,
+  toUserProjection,
 } from "./event-read-model";
 import type {
   KeeperEventProjection,
@@ -59,6 +60,7 @@ const getUserEvent = async (
       calendarId: userEventsTable.calendarId,
       startTime: userEventsTable.startTime,
       endTime: userEventsTable.endTime,
+      isAllDay: userEventsTable.isAllDay,
       title: userEventsTable.title,
       description: userEventsTable.description,
       location: userEventsTable.location,
@@ -82,7 +84,7 @@ const getUserEvent = async (
   }
 
   return toKeeperEvent(
-    { ...result, eventStateId: null },
+    toUserProjection(result),
     {
       name: result.calendarName,
       provider: result.calendarProvider,

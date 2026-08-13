@@ -1,5 +1,5 @@
 import { eventStatesTable, userEventsTable } from "@keeper.sh/database/schema";
-import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { resolveRepresentableTimeRange } from "@keeper.sh/calendar";
 import type { SQL } from "drizzle-orm";
 import type {
@@ -13,7 +13,9 @@ import { findFreeSlots } from "@/utils/free-time";
 import type { TimeInterval } from "@/utils/free-time";
 import {
   buildSyncedRangeCondition,
+  buildUserRangeCondition,
   getSourcesForUser,
+  isWithinReadWindow,
   normalizeEventRange,
 } from "./get-events-in-range";
 import { materializeSyncedEvents } from "./event-read-model";
@@ -99,6 +101,15 @@ const collectBusyIntervals = async (
     .where(and(...syncedConditions))
     .orderBy(asc(eventStatesTable.startTime));
 
+  const userConditions: SQL[] = [
+    inArray(userEventsTable.calendarId, calendarIds),
+    eq(userEventsTable.userId, userId),
+  ];
+  const userRangeCondition = buildUserRangeCondition(range.start, range.end);
+  if (userRangeCondition) {
+    userConditions.push(userRangeCondition);
+  }
+
   const userEvents = await database
     .select({
       availability: userEventsTable.availability,
@@ -107,19 +118,12 @@ const collectBusyIntervals = async (
       startTime: userEventsTable.startTime,
     })
     .from(userEventsTable)
-    .where(
-      and(
-        inArray(userEventsTable.calendarId, calendarIds),
-        eq(userEventsTable.userId, userId),
-        gte(userEventsTable.endTime, range.start),
-        lte(userEventsTable.startTime, range.end),
-      ),
-    )
+    .where(and(...userConditions))
     .orderBy(asc(userEventsTable.startTime));
 
   const candidates: BusyCandidate[] = [
     ...materializeSyncedEvents(syncedRows, sourceMap, range.start, range.end),
-    ...userEvents,
+    ...userEvents.filter((event) => isWithinReadWindow(event, range.start, range.end)),
   ];
 
   return candidates
