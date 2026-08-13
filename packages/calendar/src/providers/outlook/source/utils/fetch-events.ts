@@ -5,7 +5,7 @@ import type {
   OutlookEventsListResponse,
   EventTimeSlot,
 } from "../types";
-import type { MicrosoftApiError } from "../../types";
+import type { MicrosoftApiError, OutlookDateTime } from "../../types";
 import { MICROSOFT_GRAPH_API, GONE_STATUS } from "../../shared/api";
 import { isAuthError, isSimpleAuthError } from "../../shared/errors";
 import { parseEventTime } from "../../shared/date-time";
@@ -507,6 +507,44 @@ const resolveOutlookStartTimeZone = (
   return resolvedResponseTimeZone;
 };
 
+interface OutlookEventInstant {
+  endTime: Date;
+  startTime: Date;
+  startTimeZone: string;
+}
+
+/*
+ * `parseEventTime` and `resolveOutlookStartTimeZone` are partial: Graph answers
+ * with zones it cannot name (`tzone://Microsoft/Custom`) and with dateTime
+ * shapes outside its own contract, and both raise RangeError. A source parse
+ * has to be total per event, or one malformed item aborts the whole fetch
+ * before the diff — leaving nothing counted, nothing applied, and a delta token
+ * that never advances past the offending payload.
+ */
+const parseOutlookEventInstant = (
+  event: OutlookCalendarEvent,
+  start: OutlookDateTime,
+  end: OutlookDateTime,
+): OutlookEventInstant | null => {
+  try {
+    const startTime = parseEventTime(start, event.isAllDay);
+    const endTime = parseEventTime(end, event.isAllDay);
+    if (!startTime || !endTime) {
+      return null;
+    }
+    return {
+      endTime,
+      startTime,
+      startTimeZone: resolveOutlookStartTimeZone(event.originalStartTimeZone, start.timeZone),
+    };
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return null;
+    }
+    throw error;
+  }
+};
+
 /**
  * Skipping a Keeper-authored mirror is a deliberate no-op, not a lost event.
  * Counting the two together would leave `unrepresentable` permanently non-zero
@@ -557,9 +595,8 @@ const parseOutlookEventsWithDiagnostics = (
 
     const availability = parseAvailability(event.showAs);
 
-    const startTime = parseEventTime(start, event.isAllDay);
-    const endTime = parseEventTime(end, event.isAllDay);
-    if (!startTime || !endTime) {
+    const instant = parseOutlookEventInstant(event, start, end);
+    if (!instant) {
       unrepresentableCount += 1;
       continue;
     }
@@ -567,15 +604,12 @@ const parseOutlookEventsWithDiagnostics = (
     result.push({
       ...availability && { availability },
       description: event.body?.content,
-      endTime,
+      endTime: instant.endTime,
       isAllDay: event.isAllDay ?? false,
       location: event.location?.displayName,
       sourceEventId: event.id,
-      startTime,
-      startTimeZone: resolveOutlookStartTimeZone(
-        event.originalStartTimeZone,
-        start.timeZone,
-      ),
+      startTime: instant.startTime,
+      startTimeZone: instant.startTimeZone,
       ...event.subject && { title: event.subject },
       uid: event.iCalUId,
     });

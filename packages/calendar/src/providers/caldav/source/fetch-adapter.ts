@@ -52,14 +52,13 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
     });
 
     const events: SourceEvent[] = [];
-    const resources = parseICalCalendarsToRemoteEvents(
-      objects.flatMap(({ data }) => {
-        if (!data) {
-          return [];
-        }
-        return [data];
-      }),
-    );
+    /*
+     * An href answered with an empty body is a resource we could not read, not
+     * a resource that was not there. Filtering it out here would hide it from
+     * the only thing that counts skipped resources, and a snapshot source
+     * deletes the stored row it leaves behind.
+     */
+    const resources = parseICalCalendarsToRemoteEvents(objects.map(({ data }) => data ?? ""));
 
     let selfAuthoredEventCount = 0;
     let outsideSyncWindowCount = 0;

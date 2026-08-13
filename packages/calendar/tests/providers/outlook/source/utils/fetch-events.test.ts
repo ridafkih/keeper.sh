@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { EventsFetchError, fetchCalendarEvents, parseOutlookEvents } from "../../../../../src/providers/outlook/source/utils/fetch-events";
+import { EventsFetchError, fetchCalendarEvents, parseOutlookEvents, parseOutlookEventsWithDiagnostics } from "../../../../../src/providers/outlook/source/utils/fetch-events";
 import type { OutlookCalendarEvent } from "../../../../../src/providers/outlook/source/types";
 
 const createOutlookEvent = (
@@ -484,14 +484,32 @@ describe("parseOutlookEvents", () => {
     expect(parsedEvents[0]?.startTimeZone).toBe("Etc/UTC");
   });
 
-  it("rejects an unsupported response timezone instead of dropping timezone semantics", () => {
-    expect(() => parseOutlookEvents([createOutlookEvent({
+  it("discards and counts an unsupported response timezone instead of dropping timezone semantics", () => {
+    const parsed = parseOutlookEventsWithDiagnostics([createOutlookEvent({
       originalStartTimeZone: "Mailbox Specific Time",
       start: {
         dateTime: "2026-03-08T14:00:00.0000000",
         timeZone: "Unexpected Response Time",
       },
-    })])).toThrow("Unsupported calendar timezone: Unexpected Response Time");
+    })]);
+
+    expect(parsed.events).toEqual([]);
+    expect(parsed.unrepresentableCount).toBe(1);
+  });
+
+  it("keeps the rest of the batch when one event's response timezone is unsupported", () => {
+    const parsed = parseOutlookEventsWithDiagnostics([
+      createOutlookEvent({
+        start: {
+          dateTime: "2026-03-08T14:00:00.0000000",
+          timeZone: "Unexpected Response Time",
+        },
+      }),
+      createOutlookEvent({ iCalUId: "external-uid-2", id: "outlook-event-id-2" }),
+    ]);
+
+    expect(parsed.events.map(({ uid }) => uid)).toEqual(["external-uid-2"]);
+    expect(parsed.unrepresentableCount).toBe(1);
   });
 
   it("skips keeper-managed and malformed events", () => {
