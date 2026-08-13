@@ -47,12 +47,6 @@ const calendar = (events: string[][]): string =>
     "END:VCALENDAR",
   ].join("\r\n");
 
-/*
- * A publisher that reuses one UID for two genuinely different events, where one
- * copy carries the revision properties every mainstream exporter emits and the
- * bare copy does not. The two are different meetings at different times, so
- * only one of them can survive Keeper's storage model.
- */
 const REVISED_COPY = [
   "UID:collides@test",
   "DTSTAMP:20260601T000000Z",
@@ -71,11 +65,6 @@ const BARE_COPY = [
   "SUMMARY:Review",
 ];
 
-/*
- * The same collision between two copies that both carry revision properties,
- * edited at different moments. Nothing about the pair is tied, so the older
- * copy loses on revision time rather than on a slot tie-break.
- */
 const EDITED_LATER_COPY = [
   "UID:twins@test",
   "DTSTAMP:20260601T000000Z",

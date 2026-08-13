@@ -1,12 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { IngestWideEventFields } from "@keeper.sh/calendar";
 
-/*
- * A user-triggered ICS ingest performs the same snapshot diff as the cron job,
- * deletions included. It runs inside the `ical-source-sync` background job's
- * wide event, so the ingestion engine's discard and removal counts have to be
- * merged onto that event or a user-triggered deletion leaves no trace at all.
- */
 const captured = vi.hoisted(() => ({
   ingestOptions: [] as { onIngestEvent?: (event: IngestWideEventFields) => void }[],
   setCalls: [] as [string, unknown][],

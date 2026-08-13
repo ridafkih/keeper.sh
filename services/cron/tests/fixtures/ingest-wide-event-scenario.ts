@@ -3,21 +3,14 @@ import type { IngestWideEventFields } from "@keeper.sh/calendar";
 import { context, destroy, widelog } from "../../src/utils/logging";
 import { selectIngestWideEventFields } from "../../src/utils/ingest-wide-event";
 
-/*
- * Mirrors `recordIngestWideEvent` in src/jobs/ingest-sources.ts, the only
- * consumer of `selectIngestWideEventFields`.
- */
+// Mirrors `recordIngestWideEvent` in src/jobs/ingest-sources.ts.
 const recordIngestWideEvent = (event: IngestWideEventFields): void => {
   for (const [key, value] of Object.entries(selectIngestWideEventFields(event))) {
     widelog.set(key, value);
   }
 };
 
-/*
- * Mirrors the per-source wide event each of the three ingest families opens in
- * src/jobs/ingest-sources.ts: every source runs inside its own widelog context
- * and flushes its own event, nested inside the job-level tick event.
- */
+// Mirrors the per-source wide event src/jobs/ingest-sources.ts opens.
 const withSourceWideEvent = (
   provider: string,
   calendarId: string,

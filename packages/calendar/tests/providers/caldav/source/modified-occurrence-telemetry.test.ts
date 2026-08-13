@@ -53,10 +53,7 @@ const OVERRIDE_LINES_MISSING_DTSTART = [
   "SUMMARY:Standup (moved)",
 ];
 
-/*
- * A CalDAV resource holds a whole series: the master and every modified
- * occurrence share one .ics file, which is how iCloud and Fastmail store them.
- */
+// A master and all its overrides share one .ics on iCloud and Fastmail.
 const seriesResource = (overrideLines: string[]): string => [
   "BEGIN:VCALENDAR",
   "VERSION:2.0",

@@ -63,11 +63,6 @@ const DINNER = [
   "SUMMARY:Dinner",
 ];
 
-/*
- * A wall-clock DTSTART with no TZID in a feed that declares no X-WR-TIMEZONE.
- * There is no zone to anchor it to, so it must be withheld and counted rather
- * than syncing at a guessed offset — and it must not take the feed with it.
- */
 const FLOATING_START = [
   "UID:floating@test",
   "DTSTAMP:20260101T000000Z",

@@ -94,20 +94,13 @@ interface ParseICalCalendarsOptions {
 
 interface ParsedCalendarResources {
   events: ParsedCalendarEvent[];
-  /**
-   * VEVENTs inside resources that parsed fine but carried no UID or no DTSTART.
-   * The resource is readable, so `skippedResourceCount` never sees them, yet
-   * the event is absent from the diff and its stored row is deleted.
-   */
+  /** VEVENTs in a readable resource that `skippedResourceCount` cannot see. */
   unrepresentableEventCount: number;
   skippedResourceCount: number;
   skippedResourceReasons: string[];
   /**
-   * Events Keeper parsed but cannot sync. Every href in a collection is merged
-   * into one calendar before the VEVENTs are read, so rejecting one of them
-   * loudly would take the user's whole calendar with it. They stay in `events`
-   * — a snapshot diff reading them as absent would delete the stored rows the
-   * server never removed — and the caller withholds them from ingestion.
+   * Withheld from ingestion, yet kept in `events` so a snapshot diff does not
+   * read them as deleted.
    */
   unsupportedEvents: UnsupportedRecurrenceEvent[];
 }
@@ -130,15 +123,8 @@ class CalDAVUnreadableResourceError extends Error {
 }
 
 /*
- * Skipping is only safe where a missing event means "stale", never where it
- * means "absent". The destination reconciler re-creates any Keeper event it
- * cannot see remotely, so an unreadable Keeper resource would be duplicated on
- * every run instead of repaired.
- */
-/*
- * Callers with no wide event to report a partial read on keep rejecting loudly:
- * quietly returning a series whose ranged override or timezone Keeper cannot
- * honour would sync it at the wrong time.
+ * For callers with no wide event to report a partial read on: returning the
+ * series quietly would sync it at a stale time.
  */
 const assertAllEventsSupported = (
   resources: Pick<ParsedCalendarResources, "unsupportedEvents">,
@@ -151,6 +137,12 @@ const assertAllEventsSupported = (
   );
 };
 
+/*
+ * Skipping is only safe where a missing event means "stale", never where it
+ * means "absent". The destination reconciler re-creates any Keeper event it
+ * cannot see remotely, so an unreadable Keeper resource would be duplicated on
+ * every run instead of repaired.
+ */
 const assertAllResourcesRead = (resources: ParsedCalendarResources): void => {
   if (resources.skippedResourceCount > 0) {
     throw new CalDAVUnreadableResourceError(resources);

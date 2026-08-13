@@ -53,10 +53,8 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
 
     const events: SourceEvent[] = [];
     /*
-     * An href answered with an empty body is a resource we could not read, not
-     * a resource that was not there. Filtering it out here would hide it from
-     * the only thing that counts skipped resources, and a snapshot source
-     * deletes the stored row it leaves behind.
+     * An empty body is an unread resource, not an absent one; it must reach the
+     * parser to be counted as skipped.
      */
     const resources = parseICalCalendarsToRemoteEvents(objects.map(({ data }) => data ?? ""));
 
@@ -92,11 +90,6 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
 
     return {
       events,
-      /*
-       * CalDAV is a snapshot source: anything dropped here is absent from the
-       * diff, so the stored row it left behind is deleted. The counts have to
-       * travel with the fetch or the deletion leaves no trace at all.
-       */
       discardedEventCounts: {
         outsideSyncWindow: outsideSyncWindowCount,
         unrepresentable: resources.unrepresentableEventCount,
@@ -110,11 +103,6 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
       },
       skippedResourceCount: resources.skippedResourceCount,
       skippedResourceReasons: resources.skippedResourceReasons,
-      /*
-       * Withheld from ingestion but left in `events`: a collection is a
-       * snapshot, so treating a series Keeper cannot honour as absent would
-       * delete the stored rows the server still serves.
-       */
       ...resources.unsupportedEvents.length > 0 && {
         unsupportedEventUids: resources.unsupportedEvents.map(({ uid }) => uid),
       },

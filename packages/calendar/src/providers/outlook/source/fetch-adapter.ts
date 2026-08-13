@@ -61,10 +61,8 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
     return {
       events,
       /*
-       * A series master that expanded to zero instances was asked for over the
-       * sync window itself, so "no occurrence in the window" is exactly what an
-       * empty expansion means. It is counted alongside the events the window
-       * filter dropped rather than invented as a category of its own.
+       * An empty expansion was asked for over the sync window itself, so it
+       * means "no occurrence in the window" like any other filtered event.
        */
       discardedEventCounts: {
         outsideSyncWindow: filteredCount + (result.unexpandedSeriesMasterCount ?? 0),

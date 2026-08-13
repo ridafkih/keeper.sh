@@ -37,12 +37,6 @@ const event = (uid: string, start: string, end: string): SourceEvent => ({
   uid,
 });
 
-/**
- * Mirrors what a delta provider actually hands the engine: the adapter filters
- * the feed to the sync window, then ingestion prunes stored rows it considers
- * outside that same window. If the two predicates disagree for any event, the
- * event is inserted and deleted forever.
- */
 const runDeltaRound = async (
   initialStore: readonly StoredSourceEventState[],
   candidates: SourceEvent[],

@@ -157,11 +157,6 @@ const ingestCollection = async (
   return outcome;
 };
 
-/*
- * The multiget guard upstream only rejects an href whose calendar-data is not a
- * string; an href answered with an empty body satisfies that guard and reaches
- * the adapter, which drops it before anything counts resources.
- */
 describe("CalDAV resources returned with an empty body", () => {
   beforeEach(() => {
     vi.clearAllMocks();

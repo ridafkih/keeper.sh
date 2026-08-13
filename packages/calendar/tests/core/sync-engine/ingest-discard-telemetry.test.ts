@@ -401,11 +401,6 @@ describe("CalDAV discards", () => {
     const discardKeys = Object.keys(wideEvent).filter((key) =>
       key.includes("discard") || key.includes("skipped") || key.includes("unsupported"));
     expect(discardKeys).not.toEqual([]);
-    /*
-     * The presence of a discard key alone is satisfied by the zero-valued
-     * counters, so name the resource that actually went missing: this is the
-     * only field that ties the deleted row to an unreadable resource.
-     */
     expect(wideEvent["source_events.skipped_resources"]).toBe(1);
     expect(wideEvent["source_events.skipped_resource_reasons"]).toContain("END:VEVENT");
   });

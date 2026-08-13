@@ -18,11 +18,8 @@ import {
 type IngestWideEventFields = Record<string, boolean | number | string>;
 
 /*
- * Identifier lists on the wide event grow with the feed, and the counts beside
- * them are the point of the record: a few thousand unsupported UIDs would push
- * the whole line past what a log pipeline keeps, taking the counters with it.
- * The list is a sample, so it is capped by entry count and by total length; the
- * unbounded truth stays in the count field next to it.
+ * Identifier lists are a capped sample; an uncapped one would push the line
+ * past what the log pipeline keeps and take the counters with it.
  */
 const WIDE_EVENT_LIST_LIMIT = 20;
 const WIDE_EVENT_LIST_MAX_LENGTH = 2048;
@@ -51,10 +48,8 @@ const summarizeWideEventList = (
 );
 
 /**
- * Events the provider reported that never reach the diff: the parser could not
- * build a source event from them, or they fell outside the sync window. A delta
- * still names them as changed, so the diff removes their stored state — the loss
- * has to stay visible on the wide event rather than leaving no trace at all.
+ * Events the provider reported that never reach the diff, so the diff removes
+ * their stored state. These counts are the only trace that removal leaves.
  */
 interface DiscardedSourceEventCounts {
   outsideSyncWindow: number;
@@ -65,10 +60,8 @@ interface FetchEventsResult {
   events: SourceEvent[];
   discardedEventCounts?: DiscardedSourceEventCounts;
   /**
-   * Keeper's own mirrored events, which the parser skips on purpose. They are
-   * not losses, so they stay out of `discardedEventCounts` — folding them in
-   * would leave the discard counters permanently non-zero on mirrored
-   * calendars and drown the one-off drop those counters exist to surface.
+   * Keeper's own mirrored events, skipped on purpose. Kept out of
+   * `discardedEventCounts` so those stay zero on a healthy mirrored calendar.
    */
   selfAuthoredEventCount?: number;
   changedEventIds?: string[];
@@ -209,11 +202,6 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     if (typeof fetchResult.selfAuthoredEventCount === "number") {
       wideEvent["source_events.skipped_self_authored"] = fetchResult.selfAuthoredEventCount;
     }
-    /*
-     * A resource the provider returned but Keeper could not read is absent from
-     * the diff, so a snapshot source deletes the stored row behind it. That is
-     * the same silent disappearance the discard counters exist to catch.
-     */
     if (fetchResult.skippedResourceCount) {
       wideEvent["source_events.skipped_resources"] = fetchResult.skippedResourceCount;
       wideEvent["source_events.skipped_resource_reasons"] =

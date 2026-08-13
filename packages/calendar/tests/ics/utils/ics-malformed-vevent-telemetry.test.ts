@@ -63,11 +63,7 @@ const DINNER = [
   "SUMMARY:Dinner",
 ];
 
-/*
- * An all-day VEVENT whose publisher expressed the span in hours. RFC 5545 wants
- * a day or week duration next to a DATE-valued DTSTART, so this is a mangled
- * export — exactly the population the discard counters exist for.
- */
+// RFC 5545 wants a day or week DURATION beside a DATE-valued DTSTART.
 const ALL_DAY_HOUR_DURATION = [
   "UID:offsite@test",
   "DTSTAMP:20260101T000000Z",

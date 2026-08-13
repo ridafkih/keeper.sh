@@ -13,12 +13,7 @@ import { MS_PER_DAY } from "@keeper.sh/constants";
 const getEventStartTimeZone = (event: IcsEvent): string | undefined =>
   normalizeTimezone(event.start.local?.timezone);
 
-/*
- * Total on purpose: a DURATION shape Keeper cannot represent resolves to null
- * so the single VEVENT carrying it can be counted and dropped. Throwing would
- * take the whole calendar down with it, and a snapshot source that never
- * finishes a parse never applies another change the publisher made either.
- */
+// Total by design: throwing here would drop the whole calendar, not the one VEVENT.
 const resolveEventEndTime = (event: IcsEvent, startTime: Date): Date | null => {
   const isAllDay = event.start.type === "DATE";
   if ("end" in event && event.end) {
@@ -128,12 +123,6 @@ const compareEventRevisions = (candidate: IcsEvent, current: IcsEvent): number =
 const isNewerEventRevision = (candidate: IcsEvent, current: IcsEvent): boolean =>
   compareEventRevisions(candidate, current) > 0;
 
-/*
- * The slot a VEVENT would occupy in storage, read straight off the parsed
- * properties so it can be built for any VEVENT without evaluating a DURATION
- * that convertCanonicalEvent would reject. Two VEVENTs sharing a revision
- * identity but not a slot signature cannot both be stored.
- */
 const describeEventDuration = (event: IcsEvent): string => {
   if (!event.duration) {
     return "none";
@@ -152,15 +141,6 @@ interface CanonicalEventRevision {
   event: IcsEvent;
 }
 
-/*
- * Revision ties carry no ordering information, so the winner is pinned to the
- * lowest slot signature rather than to feed order: a publisher that renders
- * from an unordered query would otherwise swap the stored row on every poll,
- * deleting and re-creating it forever. Every slot the group holds other than
- * the winner's is a row the storage model cannot keep, whether it lost on a
- * tie-break or on revision order; an event superseded by a genuinely newer
- * revision of the same slot is not a loss and stays uncounted.
- */
 const collapsedSlotSignatures = (
   events: readonly IcsEvent[],
   winner: IcsEvent,
@@ -173,6 +153,10 @@ const collapsedSlotSignatures = (
   );
 };
 
+/*
+ * Ties break on the lowest slot signature, never on feed order: an unordered
+ * publisher would otherwise delete and re-create the stored row on every poll.
+ */
 const selectGroupRevision = (group: readonly IcsEvent[]): CanonicalEventRevision => {
   const [first, ...rest] = group;
   if (!first) {
@@ -234,12 +218,6 @@ const selectCanonicalEventRevisions = (
     }
   }
 
-  /*
-   * A bare copy superseded by a revised namesake never met that namesake in a
-   * revision group, so nothing upstream has counted it. It still vanishes from
-   * the diff and takes its stored row with it, so the slot it would have
-   * occupied is reported here alongside the ones the groups collapsed.
-   */
   const survivesAuthoritativeMaster = (event: IcsEvent): boolean => {
     if (!event.uid || event.recurrenceId) {
       return true;
@@ -295,11 +273,8 @@ interface CancellationState {
 }
 
 /*
- * A ranged override rewrites every later occurrence of its series, which the
- * recurrence materializer cannot express. Reporting the series instead of
- * throwing keeps the rejection scoped to that one UID: the caller withholds it
- * — master and overrides together, so nothing is synced at a stale time — while
- * every other event in the feed still syncs.
+ * Reported rather than thrown so the caller withholds only this UID; the rest
+ * of the feed still syncs.
  */
 const collectRangedOverrideEvents = (
   events: readonly IcsEvent[],
@@ -407,14 +382,8 @@ const convertCanonicalEvent = (
 };
 
 /**
- * Skipping a Keeper-authored mirror is a deliberate no-op, not a lost event.
- * Counting the two together would leave `unrepresentable` permanently non-zero
- * on any mirrored calendar, drowning the one-off drop it exists to surface.
- */
-/**
- * An event Keeper parsed but must not sync. It stays in `events` so a snapshot
- * diff still sees it as present — dropping it would delete the stored row the
- * publisher never removed — and the caller withholds it from ingestion.
+ * Withheld from ingestion, yet kept in `events` so a snapshot diff does not
+ * read it as deleted.
  */
 interface UnsupportedIcsEvent {
   reason: string;
@@ -428,12 +397,6 @@ interface ParsedIcsEventDiagnostics {
   unsupportedEvents: UnsupportedIcsEvent[];
 }
 
-/*
- * Stored rows are keyed per instance, so a modified occurrence is its own row
- * even though it shares its UID with the series master. Counting per UID would
- * hide the drop of an override behind a master that still parses, which is the
- * one deletion this counter most needs to surface.
- */
 const buildInstanceIdentity = (uid: string, recurrenceDate: Date | undefined): string => {
   if (!recurrenceDate) {
     return `${uid}|master`;
@@ -447,11 +410,8 @@ interface StaleRevisions {
 }
 
 /*
- * An unbuildable VEVENT is dropped before revision selection runs, so an older
- * revision of the same instance wins the group and the instance would sync at
- * the time the publisher already moved it away from. Withholding the UID keeps
- * the rule the ranged-override path already follows — nothing is ever synced at
- * a stale time — and the identity is reported so the drop is still counted.
+ * An unbuildable newest revision must withhold its UID: letting the older
+ * revision it superseded win would sync the instance at a stale time.
  */
 const collectStaleRevisions = (
   rawEvents: readonly IcsEvent[],
@@ -496,12 +456,8 @@ const mergeUnsupportedEvents = (
 ];
 
 /*
- * A VEVENT with no UID, no DTSTART, or a span Keeper cannot build is dropped
- * before it ever reaches the output, and every snapshot source reads that
- * absence as "the publisher removed it" and deletes the stored row. Counting
- * the drop here is what keeps that deletion from being silent. Revisions of the
- * same instance are counted once, and an instance that still produced an event
- * is not a loss.
+ * A dropped VEVENT is read downstream as a deletion; this counter is the only
+ * trace it leaves.
  */
 const countDiscardedIcsEvents = (
   rawEvents: readonly IcsEvent[],

@@ -4,14 +4,6 @@ import { describe, expect, it } from "vitest";
 
 const SCENARIO = join(import.meta.dirname, "../fixtures/ingest-wide-event-scenario.ts");
 
-/*
- * The scenario runs the real cron logging context and the real ingestion engine
- * in a child process: two sources ingested inside one job tick, one of which
- * discards an unrepresentable event and deletes the stored row it left behind.
- * Each source opens its own widelog context and flushes its own event, exactly
- * as all three ingest families in src/jobs/ingest-sources.ts do, so the counts
- * of one source can never land on another source's event.
- */
 const runJobTick = (mode: string): Record<string, unknown>[] => {
   const output = execFileSync("bun", [SCENARIO, mode], {
     cwd: join(import.meta.dirname, "../.."),

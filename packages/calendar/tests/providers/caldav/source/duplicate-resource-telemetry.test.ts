@@ -37,11 +37,6 @@ const resource = (lines: string[]): string => [
   "END:VCALENDAR",
 ].join("\r\n");
 
-/*
- * One UID stored at two hrefs. A server that duplicated a resource, or a client
- * that re-uploaded one under a new name, leaves the collection holding two
- * separate objects that disagree on when the event is.
- */
 const FIRST_COPY = [
   "UID:duplicated@example.com",
   "DTSTAMP:20260601T000000Z",

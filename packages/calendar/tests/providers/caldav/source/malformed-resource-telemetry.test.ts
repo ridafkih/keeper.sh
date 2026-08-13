@@ -53,11 +53,6 @@ const DINNER = [
   "SUMMARY:Dinner",
 ];
 
-/*
- * A perfectly readable .ics whose VEVENT expresses an all-day span in hours.
- * The resource parses as a calendar, so nothing resource-level notices it; the
- * VEVENT itself is what Keeper cannot build.
- */
 const ALL_DAY_HOUR_DURATION = [
   "UID:offsite@example.com",
   "DTSTAMP:20260601T000000Z",
@@ -66,11 +61,6 @@ const ALL_DAY_HOUR_DURATION = [
   "SUMMARY:Offsite",
 ];
 
-/*
- * A recurring event anchored to a zone no runtime can interpret. The ICS feed
- * path withholds and counts exactly this shape through unsupportedEventUids;
- * the CalDAV path asserts on it instead.
- */
 const UNRESOLVABLE_ZONE_SERIES = [
   "UID:weekly@example.com",
   "DTSTAMP:20260601T000000Z",
@@ -191,12 +181,6 @@ const ingestCollection = async (
   return outcome;
 };
 
-/*
- * Every href in a collection is merged into one synthetic calendar before the
- * VEVENTs are parsed, so a per-VEVENT rejection is not scoped to the resource
- * that carried it. The resource-level skip counters cannot see it either: the
- * body was readable.
- */
 describe("CalDAV collections holding one unbuildable VEVENT", () => {
   beforeEach(() => {
     vi.clearAllMocks();

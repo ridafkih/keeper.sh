@@ -1,10 +1,5 @@
 import type { IngestWideEventFields } from "./ingest";
 
-/*
- * The ingestion engine emits its own wide event describing the diff it applied.
- * A caller that already owns an enclosing wide event owns these fields too, so
- * merging them would overwrite the caller's own identity and failure reporting.
- */
 const JOB_OWNED_WIDE_EVENT_KEYS = new Set([
   "error.message",
   "error.type",
@@ -13,10 +8,8 @@ const JOB_OWNED_WIDE_EVENT_KEYS = new Set([
 ]);
 
 /*
- * The engine's outcome and timing describe the ingestion alone and answer a
- * different question than the job's own: "superseded" and "unchanged" both
- * leave flushed false, and only this field tells them apart during a loss
- * investigation. They move under their own prefix rather than being dropped.
+ * Namespaced rather than dropped: "superseded" and "unchanged" both leave
+ * `flushed` false, and only `ingest.outcome` tells them apart.
  */
 const INGEST_NAMESPACED_WIDE_EVENT_KEYS = new Map([
   ["duration_ms", "ingest.duration_ms"],

@@ -61,11 +61,7 @@ const collectRecurrenceDateEventUids = (ical: string): string[] => {
     .map((state) => state.uid);
 };
 
-/**
- * Recurring events whose TZID no runtime can interpret. Reported per event so a
- * caller can withhold and count the one series, rather than losing every event
- * that shares the collection with it.
- */
+/** Recurring events whose TZID no runtime can interpret. */
 const collectUnsupportedRecurrenceTimeZones = (
   events: readonly RecurrenceTimeZoneInput[],
 ): UnsupportedRecurrenceEvent[] => {

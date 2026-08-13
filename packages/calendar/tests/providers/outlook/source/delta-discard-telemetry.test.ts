@@ -310,12 +310,7 @@ describe("Outlook delta discards", () => {
     expect(store.ids()).toEqual(["state-outlook-standup"]);
   });
 
-  /*
-   * Graph answers with `tzone://Microsoft/Custom` when the event carries a
-   * timezone definition it cannot name, and the parser's own
-   * `originalStartTimeZone` branch is already written to survive exactly that
-   * string. The response-side zone gets no such treatment.
-   */
+  // Graph answers `tzone://Microsoft/Custom` for a zone it cannot name.
   it("does not let one event with an uninterpretable response zone fail the calendar", async () => {
     const store = createStore();
     const seeded = await seedFullSync(store);

@@ -24,11 +24,7 @@ vi.mock("tsdav", () => ({
   }),
 }));
 
-/**
- * Reproduces what Postgres does to an insert row: absent optional values come
- * back as null, not undefined. A convergence test that keeps undefined in the
- * store would hide an identity mismatch that only appears after a real write.
- */
+// Postgres reads an absent optional value back as null, never undefined.
 const nullify = <Value,>(value: Value | undefined): Value | null => value ?? null;
 
 let nextRowId = 0;

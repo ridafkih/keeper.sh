@@ -4,12 +4,6 @@ import {
   selectIngestWideEventFields,
 } from "@keeper.sh/calendar";
 
-/**
- * The behaviour this branch claims is that a discarded event always leaves a
- * trace on the wide event the job emits. The engine builds those fields, but the
- * job filters the engine's event before merging it, so a key accidentally added
- * to the job-owned set would silently delete the trace.
- */
 const ENGINE_TELEMETRY_KEYS = [
   "events.added",
   "events.removed",

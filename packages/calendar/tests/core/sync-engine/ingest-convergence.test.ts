@@ -62,11 +62,6 @@ interface Round {
   storeAfter: string[];
 }
 
-/**
- * Drives ingestSource once against a store that actually persists what flush
- * reports, so an oscillation shows up as a repeating add/remove pattern across
- * rounds rather than being hidden by a store reset between runs.
- */
 const runRound = async (
   initialStore: readonly StoredSourceEventState[],
   buildFetchResult: () => FetchEventsResult,
@@ -232,15 +227,7 @@ describe("ingest convergence — delta window pruning", () => {
     }
   });
 
-  /*
-   * Characterizes an engine-level invariant rather than a shipped defect. The
-   * engine inserts whatever a delta reports and then prunes stored rows it
-   * considers outside the window, so a delta result containing an out-of-window
-   * event oscillates forever. Every shipped delta adapter (Google, Outlook) runs
-   * filterSourceEventsToSyncWindow first, and the snapshot adapters never set
-   * isDeltaSync, so nothing reaches the engine in this shape today. This test
-   * exists so that a future adapter that stops pre-filtering fails loudly here.
-   */
+  // No shipped adapter hands the engine this shape; the next test proves it.
   it("oscillates if a delta ever reports an event outside the sync window", async () => {
     const outside = timedEvent("outside-1", "2026-09-10T09:00:00Z", "2026-09-10T10:00:00Z");
 

@@ -78,11 +78,6 @@ const MOVED_OCCURRENCE_MISSING_DTSTART = [
   "SUMMARY:Standup (moved)",
 ];
 
-/*
- * A publisher that reuses one UID across genuinely distinct events. Both carry
- * STATUS and LAST-MODIFIED, which every mainstream exporter emits and which is
- * what collapses them onto a single revision identity.
- */
 const COLLIDING_UID_LUNCH = [
   "UID:collides@test",
   "DTSTAMP:20260601T000000Z",

@@ -267,13 +267,6 @@ const readEventUid = (lines: readonly string[]): string | undefined => lines
   .map((line) => parseIcsPropertyParts(line))
   .find((parts) => parts?.propertyName === "UID")?.value;
 
-/*
- * Anchoring a feed's floating dates is not an all-or-nothing pass: a VEVENT
- * whose dates cannot be anchored keeps its own lines and is reported, so one
- * zoneless EXDATE cannot stop every other event in the feed from ever syncing
- * again. The reported event is withheld from ingestion rather than synced at a
- * guessed offset.
- */
 const normalizeFloatingEventDates = (
   ical: string,
   calendarTimeZone: string | undefined,
@@ -302,8 +295,8 @@ const normalizeFloatingEventDates = (
 };
 
 /*
- * CalDAV reads one resource at a time and already quarantines and counts a
- * resource it cannot read, so that path keeps the loud failure.
+ * For CalDAV, which reads one resource at a time and already quarantines and
+ * counts the resources it cannot read.
  */
 const applyCalendarTimeZoneToFloatingEventDates = (
   ical: string,
@@ -401,12 +394,7 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
     ])];
     const result: FetchEventsResult = {
       events,
-      /*
-       * A feed is a snapshot: a VEVENT the publisher mangled is absent from the
-       * diff, so the stored row behind it is deleted. The count has to travel
-       * with the fetch or that deletion leaves no trace at all. Nothing is
-       * dropped for the window here — the whole feed is retained on purpose.
-       */
+      // Zero outside the window: an ICS feed is retained whole, never filtered.
       discardedEventCounts: {
         outsideSyncWindow: 0,
         unrepresentable: parsed.unrepresentableCount,

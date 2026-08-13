@@ -336,11 +336,6 @@ const resolveSourceEventType = (
   return "default";
 };
 
-/**
- * Skipping a Keeper-authored mirror is a deliberate no-op, not a lost event.
- * Counting the two together would leave `unrepresentable` permanently non-zero
- * on any mirrored calendar, drowning the one-off drop it exists to surface.
- */
 interface ParsedSourceEventDiagnostics {
   events: EventTimeSlot[];
   selfAuthoredCount: number;
@@ -357,9 +352,7 @@ const parseGoogleEventsWithDiagnostics = (
   for (const event of events) {
     /*
      * Every member of a Google time object is optional, so `{ timeZone: "UTC" }`
-     * reaches this loop. Guarding on the object alone would let it through to a
-     * parser that throws, failing the whole calendar's ingest on one event and
-     * stalling it for good; the drop belongs in the counter like any other.
+     * reaches here; guarding on the object alone would let it through.
      */
     const startTime = parseEventTime(event.start);
     const endTime = parseEventTime(event.end);

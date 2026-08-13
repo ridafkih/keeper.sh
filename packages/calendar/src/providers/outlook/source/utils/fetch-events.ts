@@ -253,12 +253,6 @@ const fetchSeriesMasterInstances = async (
   return instances;
 };
 
-/**
- * A master whose `/instances` response is empty has no occurrence inside the
- * requested range, so it vanishes here — before the parser and before the
- * window filter, where the discard counters live. Reporting the count keeps the
- * stored rows this deletes from disappearing untraced.
- */
 interface ExpandedSeriesMasters {
   events: OutlookCalendarEvent[];
   unexpandedSeriesMasterCount: number;
@@ -514,12 +508,8 @@ interface OutlookEventInstant {
 }
 
 /*
- * `parseEventTime` and `resolveOutlookStartTimeZone` are partial: Graph answers
- * with zones it cannot name (`tzone://Microsoft/Custom`) and with dateTime
- * shapes outside its own contract, and both raise RangeError. A source parse
- * has to be total per event, or one malformed item aborts the whole fetch
- * before the diff — leaving nothing counted, nothing applied, and a delta token
- * that never advances past the offending payload.
+ * Graph answers with zones it cannot name (`tzone://Microsoft/Custom`) and with
+ * dateTime shapes outside its own contract; both raise RangeError.
  */
 const parseOutlookEventInstant = (
   event: OutlookCalendarEvent,
@@ -545,11 +535,6 @@ const parseOutlookEventInstant = (
   }
 };
 
-/**
- * Skipping a Keeper-authored mirror is a deliberate no-op, not a lost event.
- * Counting the two together would leave `unrepresentable` permanently non-zero
- * on any mirrored calendar, drowning the one-off drop it exists to surface.
- */
 interface ParsedOutlookEventDiagnostics {
   events: EventTimeSlot[];
   selfAuthoredCount: number;
