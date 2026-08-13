@@ -84,6 +84,27 @@ describe("isCalDAVAuthenticationError", () => {
     ))).toBe(false);
   });
 
+  it("returns true when the only [45]xx-shaped number is the server's port", () => {
+    expect(isCalDAVAuthenticationError(new Error(
+      "Invalid credentials for https://caldav.example.test:443/principals/user/",
+    ))).toBe(true);
+    expect(isCalDAVAuthenticationError(new Error(
+      "Authentication required by https://caldav.example.test:465/cal/u/",
+    ))).toBe(true);
+  });
+
+  it("returns false when a non-401 status sits in HTTP-status position anywhere in the message", () => {
+    expect(isCalDAVAuthenticationError(new Error(
+      "Invalid credentials for https://caldav.example.test:443/ (status 502)",
+    ))).toBe(false);
+    expect(isCalDAVAuthenticationError(new Error(
+      "Authentication required. Server replied HTTP/1.1 511 Network Authentication Required",
+    ))).toBe(false);
+    expect(isCalDAVAuthenticationError(new Error(
+      "Collection query failed with 407 Proxy Authentication Required",
+    ))).toBe(false);
+  });
+
   it("returns false for a Postgres pg_hba rejection", () => {
     const cause = Object.assign(
       new Error('no pg_hba.conf entry for host "10.0.0.4", SSL off'),

@@ -105,10 +105,11 @@ describe("CalDAV response status is scoped to the operation that produced it", (
     });
 
     const client = createClient();
-    await client.discoverCalendars();
+    const discovery = await captureRejection(() => client.discoverCalendars());
 
     const error = await captureRejection(() => client.fetchCalendarObjects({ calendarUrl: CALENDAR_URL }));
 
+    expect(discovery).toBeInstanceOf(CalDAVAuthenticationError);
     expect(error).not.toBeInstanceOf(CalDAVAuthenticationError);
     expect(error).toBeInstanceOf(RequestTimeoutError);
   });
@@ -151,6 +152,21 @@ describe("CalDAV response status is scoped to the operation that produced it", (
 
     const error = await captureRejection(() =>
       createClient().fetchCalendarObjects({ calendarUrl: CALENDAR_URL }));
+
+    expect(error).toBeInstanceOf(CalDAVAuthenticationError);
+  });
+
+  it("does not report a single-object read rejected with 401 as a missing object", async () => {
+    stubTransport([respondWith(unauthorized())]);
+    stubDavClient({
+      fetchCalendarObjects: (davFetch) => davFetch(CALENDAR_URL).then(drainResponse).then(() => []),
+    });
+
+    const error = await captureRejection(() =>
+      createClient().fetchCalendarObject({
+        calendarUrl: CALENDAR_URL,
+        filename: "keeper-0001.ics",
+      }));
 
     expect(error).toBeInstanceOf(CalDAVAuthenticationError);
   });

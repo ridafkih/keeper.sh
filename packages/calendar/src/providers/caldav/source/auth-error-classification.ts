@@ -11,7 +11,8 @@ const CALDAV_AUTH_ERROR_NAME = "CalDAVAuthenticationError";
 
 const CALDAV_TRANSPORT_ERROR_NAMES = new Set(["Error", CALDAV_AUTH_ERROR_NAME]);
 
-const HTTP_FAILURE_STATUS_PATTERN = /\b[45]\d{2}\b/g;
+const HTTP_FAILURE_STATUS_PATTERN =
+  /(?:\bhttp\/\d(?:\.\d)?\s+|\bstatus(?:\s*code)?\b\s*[:=]?\s*|\bfailed\b\s*(?:with\s+)?[:=]?\s*)([45]\d{2})(?!\d)/gi;
 
 const SQLSTATE_PATTERN = /^[0-9A-Z]{5}$/;
 
@@ -55,7 +56,7 @@ const hasAuthStatusCode = (value: unknown): boolean => {
 
 const namesNonAuthHttpFailure = (message: string): boolean => {
   const statuses = [...message.matchAll(HTTP_FAILURE_STATUS_PATTERN)]
-    .map(([status]) => Number(status));
+    .map(([, status]) => Number(status));
   if (statuses.length === 0) {
     return false;
   }

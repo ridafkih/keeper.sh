@@ -95,16 +95,29 @@ const assertSuccessfulResponse = async (
 
 type DAVClientInstance = Awaited<ReturnType<typeof createDAVClient>>;
 
+class CalDAVUnauthorizedResponseError extends Error {
+  readonly status = HTTP_STATUS.UNAUTHORIZED;
+
+  constructor() {
+    super("CalDAV operation completed on an unauthorized response");
+    this.name = "CalDAVUnauthorizedResponseError";
+  }
+}
+
 const mapAuthenticationFailure = <Result>(operation: () => Promise<Result>): Promise<Result> =>
   runInResponseStatusScope(async (getResponseStatus) => {
-    try {
-      return await operation();
-    } catch (error) {
+    const result = await operation().catch((error: unknown) => {
       if (getResponseStatus() === HTTP_STATUS.UNAUTHORIZED) {
         throw new CalDAVAuthenticationError(error);
       }
       throw error;
+    });
+
+    if (getResponseStatus() === HTTP_STATUS.UNAUTHORIZED) {
+      throw new CalDAVAuthenticationError(new CalDAVUnauthorizedResponseError());
     }
+
+    return result;
   });
 
 const getDisplayName = (name: unknown): string => {
@@ -237,14 +250,16 @@ class CalDAVClient {
     calendarUrl: string;
     filename: string;
   }): Promise<CalendarObject | null> {
-    const client = await this.getClient();
-    const objectUrl = CalDAVClient.normalizeUrl(params.calendarUrl, params.filename);
-    const objects = await client.fetchCalendarObjects({
-      calendar: { url: params.calendarUrl },
-      objectUrls: [objectUrl],
-    });
+    return mapAuthenticationFailure(async () => {
+      const client = await this.getClient();
+      const objectUrl = CalDAVClient.normalizeUrl(params.calendarUrl, params.filename);
+      const objects = await client.fetchCalendarObjects({
+        calendar: { url: params.calendarUrl },
+        objectUrls: [objectUrl],
+      });
 
-    return objects[0] ?? null;
+      return objects[0] ?? null;
+    });
   }
 
   fetchCalendarObjects(params: {
