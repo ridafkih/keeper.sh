@@ -70,12 +70,6 @@ const wallTimeIsRepresentable = (
   return expected === wallTime - transition.offsetToMs;
 };
 
-/*
- * The instant a wall time names, derived without the implementation's shortcut: the two
- * offsets the zone holds either side of the transition are the only candidates, an
- * instant is valid when the zone reads it back as the wall time asked for, a fold takes
- * the earlier valid instant and a gap shifts forward by the offset that preceded it.
- */
 const resolveExpectedInstant = (wallTime: number, transition: ZoneTransition): number => {
   const beforeCandidate = wallTime - transition.offsetFromMs;
   const afterCandidate = wallTime - transition.offsetToMs;
@@ -152,11 +146,6 @@ const sweep = (timeZones: string[], from: number, to: number): SweepOutcome => {
 
 const ALL_TIME_ZONES = Intl.supportedValuesOf("timeZone");
 
-/*
- * Resolving a wall time reads the offset a day either side of it and trusts that pair to
- * name every candidate instant. That holds only while no zone changes offset twice inside
- * two days, so the claim is checked against the platform's own rules rather than assumed.
- */
 describe("resolving a wall time near every transition IANA declares", () => {
   it("names the same instant a two-offset derivation does, in every zone", () => {
     const outcome = sweep(
@@ -211,11 +200,6 @@ describe("resolving a wall time near every transition IANA declares", () => {
   }, SWEEP_TIMEOUT_MS);
 });
 
-/*
- * Every instant must survive the trip out to a wall time and back, except the second pass
- * through a fold, which no wall clock can name. A drift either way moves a mirrored event
- * and makes it look changed on the next run.
- */
 describe("a dense sweep of instants through the wall clock and back", () => {
   const ZONES = [
     "America/New_York",

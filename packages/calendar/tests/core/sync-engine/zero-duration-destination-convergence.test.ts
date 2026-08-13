@@ -63,11 +63,6 @@ interface Harness {
   runSync: () => Promise<{ added: number; removed: number; addFailed: number; removeFailed: number }>;
 }
 
-/*
- * Google refuses any event that does not end after it starts. The fake mirrors that so a
- * range the serializer cannot widen shows up as a rejected push rather than silently
- * succeeding.
- */
 const googleRejectsRange = (payload: GoogleEvent): boolean => {
   if (payload.start?.date && payload.end?.date) {
     return payload.end.date <= payload.start.date;

@@ -51,11 +51,6 @@ const listWithResource = (uid: string, start: string, end: string) => {
   return createProvider().listRemoteEvents({ timeMin: TIME_MIN });
 };
 
-/*
- * An unreported mapping is treated as a missing mirror and gets deleted and re-created,
- * so the reconciliation read has to admit every range whose start sits in the window —
- * including a legacy resource written before destinations widened inverted ranges.
- */
 describe("caldav reconciliation read of a degenerate remote range", () => {
   beforeEach(() => {
     vi.clearAllMocks();

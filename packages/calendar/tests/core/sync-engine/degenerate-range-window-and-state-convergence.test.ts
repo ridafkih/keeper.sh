@@ -130,12 +130,6 @@ const toRangeText = (startTime: Date, endTime: Date): { end: string; start: stri
   start: startTime.toISOString(),
 });
 
-/*
- * The destination read applies the lower bound of the source authority window to the
- * raw source event, before any destination normalization widens it. Modelling that here
- * keeps the harness from handing reconciliation an event the real read would have left
- * behind.
- */
 const readLocalEvents = (
   events: MaterializedSyncableEvent[],
   scope: ScopeShape,

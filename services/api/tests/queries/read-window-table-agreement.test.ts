@@ -64,12 +64,6 @@ interface Shape {
   startTime: string;
 }
 
-/*
- * A stored range says the same thing whichever table holds it, so the window a read
- * applies has to admit a synced row and a locally created row with the same range
- * together or not at all. The two tables are scanned by separate clauses, which is
- * exactly where they drift apart.
- */
 const SHAPES: Shape[] = [
   {
     endTime: WINDOW_START,

@@ -203,12 +203,7 @@ const getEventsForCalendarsWithDiagnostics = async (
     .where(
       and(
         inArray(eventStatesTable.calendarId, calendarIds),
-        /*
-         * A row whose end predates the window is fetched anyway when its start does not,
-         * because an inverted range says nothing about where it sits through its end.
-         * The lower bound is decided in memory by the one predicate every layer shares;
-         * this clause only keeps the scan off rows no predicate could admit.
-         */
+        // Deliberately a superset of the real lower bound; the shared in-memory predicate decides.
         or(
           gte(eventStatesTable.endTime, syncWindow.timeMin),
           gte(eventStatesTable.startTime, syncWindow.timeMin),
@@ -298,12 +293,6 @@ const getEventsForCalendarsWithDiagnostics = async (
     },
   });
 
-  /*
-   * A zero-duration occurrence is a legal source event that some destinations cannot
-   * represent, and an inverted one is inconsistent source data. Neither is dropped —
-   * each destination decides how to render it — but both are counted, because the shape
-   * is invisible in every other field and it is what makes a push fail on repeat.
-   */
   const emptyTimeRangeCount = events.filter((event) => isEmptyTimeRange(event)).length;
   const invertedTimeRangeCount = events.filter((event) => isInvertedTimeRange(event)).length;
 

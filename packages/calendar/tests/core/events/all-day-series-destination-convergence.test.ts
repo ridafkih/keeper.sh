@@ -393,12 +393,6 @@ const spanDayLengths = (spans: string[]): number[] =>
 
 const IDLE = { added: 0, addFailed: 0, removed: 0, removeFailed: 0 };
 
-/*
- * An all-day series is expanded on the dates it names and every occurrence is mirrored as
- * a standalone whole-day event, so a destination should receive one write per occurrence
- * and nothing at all on any later run — the sync runs on a schedule and a mirror that is
- * rewritten every run is the churn this behaviour exists to prevent.
- */
 describe("mirroring an all-day series across a daylight transition", () => {
   for (const harnessCase of HARNESSES) {
     it(`writes each occurrence once and settles on ${harnessCase.name}`, async () => {
@@ -509,11 +503,6 @@ describe("mirroring an all-day series across a daylight transition", () => {
   }
 });
 
-/*
- * A source that states an all-day range off the UTC day grid — Graph reports one at the
- * user's own midnight — still names whole days, so the mirror settles on the days it
- * touches instead of being rewritten toward a grid it never reaches.
- */
 describe("mirroring an all-day series a source states off the UTC day grid", () => {
   for (const harnessCase of HARNESSES) {
     it(`settles on the days it touches on ${harnessCase.name}`, async () => {

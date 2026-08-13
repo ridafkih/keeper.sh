@@ -50,12 +50,6 @@ interface Shape {
   startTime: string;
 }
 
-/*
- * The ranges a caller can hand create_event verbatim: the body schema carries no
- * end-after-start rule and the mutation stores what it is given, so a model asking for
- * "all day on the tenth" or an assistant echoing a start back as an end reaches the
- * provider with a range that covers no interval.
- */
 const SHAPES: Shape[] = [
   {
     endTime: "2027-05-10T14:00:00.000Z",

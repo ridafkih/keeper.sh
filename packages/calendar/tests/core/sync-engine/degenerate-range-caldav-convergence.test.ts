@@ -63,10 +63,6 @@ interface CalDAVHarness {
   }>;
 }
 
-/*
- * A VTIMEZONE observance carries its own DTSTART, so a resource is only readable by
- * scanning the VEVENT component itself.
- */
 const getIcsLine = (ics: string, name: string): string => {
   const lines = ics.split(/\r?\n/);
   const begin = lines.indexOf("BEGIN:VEVENT");
@@ -77,15 +73,7 @@ const getIcsLine = (ics: string, name: string): string => {
   return lines.slice(begin, end).find((line) => line.startsWith(name)) ?? "";
 };
 
-/*
- * RFC 5545 §3.6.1 requires DTEND to be later in time than DTSTART whenever both are
- * present. A server is entitled to reject anything else, so the store records every
- * resource that violates it rather than accepting it silently.
- *
- * DTSTART and DTEND can each be written as a UTC instant or as a TZID-qualified wall
- * time, so conformance is decided on the instants a reader resolves rather than on the
- * text, where comparing the two forms lexically would be meaningless.
- */
+// RFC 5545 §3.6.1 requires DTEND later than DTSTART, judged on resolved instants rather than text.
 const isNonConformantResource = (ics: string): boolean => {
   if (!getIcsLine(ics, "DTSTART") || !getIcsLine(ics, "DTEND")) {
     return false;
@@ -267,13 +255,6 @@ describe("caldav destination convergence for degenerate ranges", () => {
   }
 });
 
-/*
- * A TZID-qualified DTSTART written within the hour before a DST transition is read back
- * an hour out, so the mapping and the resource disagree and the mirror is replaced on
- * every run. The zero-duration cases are listed beside their ordinary-duration controls
- * because the controls fail identically: the fault is in the TZID round trip, not in the
- * degenerate range.
- */
 describe("caldav convergence near a dst transition", () => {
   const cases: { name: string; event: MaterializedSyncableEvent }[] = [
     {

@@ -360,15 +360,7 @@ const getOverriddenSlotsByMaster = (
   return slotsByMaster;
 };
 
-/*
- * A DATE-valued series is floating: RFC 5545 §3.3.10 expands it against the dates
- * themselves, not against any zone's wall clock, and a source that states a calendar
- * timezone alongside the DATE — Google does so on every recurring event — is naming the
- * calendar, not a rule for shifting the days. Expanding such a series in that zone drags
- * every occurrence after a daylight transition off UTC midnight, and the whole-day snap
- * then publishes it as a two-day span over a day its predecessor already holds. The zone
- * is still resolved so an unsupported one is rejected wherever it appears.
- */
+// DATE-valued series are floating (RFC 5545 §3.3.10); the zone is still resolved so unsupported ones throw.
 const resolveExpansionTimeZone = (master: SyncableEvent): string | undefined => {
   const timeZone = resolveTimeZone(master.startTimeZone);
   if (resolveIsAllDayEvent(master)) {

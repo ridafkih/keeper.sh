@@ -41,13 +41,7 @@ const isBlocking = (candidate: BusyCandidate, ignoreAllDayEvents: boolean): bool
   return !NON_BLOCKING_AVAILABILITY.has(candidate.availability);
 };
 
-/*
- * Merging keeps only an interval that ends after it starts, so a candidate whose
- * stored range is degenerate would contribute no busy time and leave the day it occupies
- * reported as free — while the feed and every destination mirror report it as busy. The
- * candidate is shaped by the same rule those surfaces publish before it becomes an
- * interval, so one stored event blocks one span everywhere it is read.
- */
+// Shaped first: interval merging drops non-positive spans, so a degenerate event would read as free.
 const toBusyInterval = (candidate: BusyCandidate, range: TimeInterval): TimeInterval => {
   const { endTime, startTime } = resolveRepresentableTimeRange({
     endTime: candidate.endTime,

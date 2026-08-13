@@ -103,12 +103,6 @@ const readWeek = async (): Promise<{ end: string; start: string }[]> => {
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-/*
- * A daily all-day series synced from Google carries the calendar's timezone, and the read
- * model expands it in that zone's wall clock. Every occurrence after a daylight transition
- * therefore leaves UTC midnight, and the whole-day span the read publishes swells to cover
- * a day the previous occurrence already holds.
- */
 describe("reading a daily all-day series across a daylight transition", () => {
   it("publishes one whole day per occurrence", async () => {
     const spans = await readWeek();

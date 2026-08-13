@@ -63,11 +63,6 @@ interface Harness {
   writes: number;
 }
 
-/*
- * Graph stores what the serializer sent — a wall time and the zone it belongs to — and
- * hands it back the same way, so the reconciler compares against whatever the real
- * serializer wrote and the real parser resolved.
- */
 const createOutlookHarness = (events: () => MaterializedSyncableEvent[]): Harness => {
   const mappings: EventMapping[] = [];
   const resources = new Map<string, OutlookEvent>();
@@ -261,14 +256,6 @@ describe("outlook destination convergence across repeated runs", () => {
   }
 });
 
-/*
- * A wall clock repeats an hour at a fall-back transition, so a wall time and a zone name
- * two instants and cannot say which is meant. The ICS serializer answers this by writing
- * the instant in UTC whenever its own reader would resolve the local value to a different
- * instant (build-zoned-date.ts); the Outlook serializer owes Graph the same guarantee,
- * since an outbound value that names the wrong pass moves the mirror an hour off the
- * source and leaves the reconciler comparing two different instants on every run.
- */
 describe("outlook wall times that name a single instant", () => {
   const ambiguous: { instant: string; name: string; timeZone: string }[] = [
     {

@@ -81,12 +81,6 @@ describe("the read model behind get_events, get_event and find_free_time", () =>
     expect(second).toEqual(first);
   });
 
-  /*
-   * Every other outbound surface was given a range a reader can act on: the destination
-   * providers through normalizeEvent, the published feed through resolveFeedTimeRange.
-   * The API and MCP read model is the surface a person and a model read directly, and a
-   * range whose end precedes its start has no reading at all.
-   */
   it("never emits a range that ends before it starts", () => {
     const inverted = project()
       .filter((event) => event.endTime.getTime() < event.startTime.getTime())

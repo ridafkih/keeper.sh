@@ -48,10 +48,6 @@ const readValue = (ics: string, name: string): string => {
   return value;
 };
 
-/*
- * RFC 5545 §3.6.1: when both are present, DTEND has to be later in time than DTSTART —
- * for DATE values as well, where DTEND is the exclusive end of the last day.
- */
 describe("published ical feed for a degenerate time range", () => {
   it.each([
     {

@@ -50,13 +50,7 @@ const transitionsByZone = new Map<string, Transition[]>(
   ZONES.map((timeZone) => [timeZone, findTransitions(timeZone)]),
 );
 
-/*
- * Resolving a wall time from the offsets a day either side of it only names every
- * candidate while no zone transitions twice inside that bracket. The premise is a
- * property of the tzdata the runtime carries rather than of this codebase, so it is
- * asserted rather than assumed: a future release that packed two transitions into one
- * day would silently hand back a wrong instant for every event near them.
- */
+// Asserts a property of the runtime tzdata, not of this codebase: no zone transitions twice within a day.
 describe("the bracket the two-probe wall-time resolution rests on", () => {
   it("finds no zone that transitions twice within two days", () => {
     const close: string[] = [];
@@ -76,11 +70,6 @@ describe("the bracket the two-probe wall-time resolution rests on", () => {
   }, SUITE_TIMEOUT_MS);
 });
 
-/*
- * The probes sit a day either side of the wall time, so an instant a day away from a
- * transition is where a bracket that reads the wrong pair of offsets shows itself. The
- * ±2h probes the invariant suite already runs would never reach that far.
- */
 const PROBE_DELTAS_MS = [
   -49 * MS_PER_HOUR,
   -25 * MS_PER_HOUR,

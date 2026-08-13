@@ -53,11 +53,6 @@ const readEventDuration = (ics: string) => {
   return event.duration ?? null;
 };
 
-/*
- * A subscriber only ever sees the bytes. Reading them back with Keeper's own parser is
- * the closest available stand-in for one, and it is exactly what another Keeper install
- * subscribed to this feed would do.
- */
 const readRanges = (ics: string): ParsedRange[] => {
   const calendar = parseIcsCalendar({ icsString: ics });
   return (calendar.events ?? []).flatMap((event): ParsedRange[] => {
@@ -87,13 +82,6 @@ describe("published ical feed for degenerate recurring rows", () => {
     expectPositiveSpan(range);
   });
 
-  /*
-   * An ICS or CalDAV source may state a series as DTSTART plus DURATION — parsing
-   * `DURATION:PT0S` on an RRULE event stores `{ seconds: 0 }` verbatim — and the feed
-   * writes that duration back in place of a DTEND, so the widening every other
-   * degenerate shape receives is skipped and the feed still publishes a zero-length
-   * occurrence: the one thing the boundary was widened to stop publishing.
-   */
   it("publishes a positive span for a series carried by a zero DURATION", () => {
     const ics = formatEventsAsIcal([makeEvent({
       endTime: new Date("2027-03-08T16:00:00.000Z"),

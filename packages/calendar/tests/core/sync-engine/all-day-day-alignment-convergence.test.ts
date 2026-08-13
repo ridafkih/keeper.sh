@@ -363,13 +363,6 @@ const DESTINATIONS: { factory: HarnessFactory; name: string }[] = [
   { factory: createOutlookHarness, name: "outlook" },
 ];
 
-/*
- * Every destination writes an all-day event as a pair of calendar dates and reads it
- * back as UTC midnights. A stored all-day range that is not a whole number of UTC days
- * therefore cannot survive its own round trip: the mapping keeps the range the source
- * stated and the remote copy reports the truncated one, so reconciliation sees a change
- * that no source made.
- */
 const MISALIGNED_SHAPES: { event: MaterializedSyncableEvent; name: string }[] = [
   {
     event: buildEvent({
@@ -489,12 +482,6 @@ describe("repeated runs over an all-day range that is not a whole UTC day", () =
   }
 });
 
-/*
- * The shape is not invented: a DATE-valued DTSTART paired with a DATE-TIME DTEND is
- * accepted verbatim by the ICS reader every ICS and CalDAV source shares, while the
- * sibling DURATION path rejects sub-day units outright. Whatever the reader stores is
- * what the destinations must be able to hold.
- */
 describe("an ICS source stating an all-day event with a date-time end", () => {
   const readFeed = (lines: string[]) => {
     const icsString = [

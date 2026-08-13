@@ -158,13 +158,7 @@ const findTimeZoneTransitions = (
   return transitions;
 };
 
-/*
- * A UTC offset applying to a wall time is one of the two the zone is in a day either
- * side of it: no zone transitions twice within that span, and no offset is far enough
- * from UTC for the instant to fall outside the bracket. Two probes therefore name every
- * candidate, which keeps this off the critical path of parsing a TZID-heavy feed — the
- * calendar-wide sweep it used to take cost tens of microseconds on every event.
- */
+// Premise: no zone transitions twice within a day either side of a wall time, so two probes name every candidate offset.
 const wallTimeToInstant = (wallTime: Date, timeZone: string): Date => {
   const desiredTime = wallTime.getTime();
   const offsetBefore = getTimeZoneOffsetMilliseconds(
@@ -176,12 +170,6 @@ const wallTimeToInstant = (wallTime: Date, timeZone: string): Date => {
     timeZone,
   );
   if (offsetBefore === offsetAfter) {
-    /*
-     * No transition brackets the wall time, so the one offset the zone is in holds at
-     * the instant it names as well — that instant sits inside the bracket, no zone
-     * being more than a day from UTC. Re-reading the offset there would only confirm
-     * what the two probes already agree on.
-     */
     return new Date(desiredTime - offsetBefore);
   }
 

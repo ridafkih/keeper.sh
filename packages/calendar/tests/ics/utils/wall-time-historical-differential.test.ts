@@ -76,12 +76,6 @@ const historicalTransitions = new Map<string, Transition[]>(
   ]),
 );
 
-/*
- * The reference resolution the two-probe implementation has to agree with: every offset
- * the zone is in anywhere near the wall time is tried, and the earliest instant the zone
- * actually renders as that wall time wins. A wall time no instant renders is resolved
- * through the transition that removed it.
- */
 const resolveByExhaustiveSweep = (wallTime: number, timeZone: string): number => {
   const offsets = new Set<number>();
   for (
@@ -129,12 +123,6 @@ const PROBE_DELTAS_MS = [
   49 * MS_PER_HOUR,
 ];
 
-/*
- * Every wall time in the historical half of tzdata, where the offsets are ragged: sub-minute
- * LMT offsets, wartime double shifts, whole days skipped by a date-line move. A two-probe
- * bracket that reads the wrong pair of offsets answers with an instant the zone renders as
- * some other wall time, so the sweep that tries every nearby offset is the arbiter.
- */
 describe("resolving a wall time in the historical half of tzdata", () => {
   it("resolves every wall time around every transition since 1925 back to the instant that renders it", () => {
     const failures: string[] = [];
@@ -219,11 +207,6 @@ describe("resolving an arbitrary wall time in an arbitrary zone", () => {
   }, SUITE_TIMEOUT_MS);
 });
 
-/*
- * Zones whose history holds the shapes a bracket is most likely to misread: a skipped
- * calendar day, a half-hour DST step, an offset that moved by fifteen minutes, and
- * Ramadan pairs that transition twice within weeks.
- */
 const PATHOLOGICAL_ZONES = [
   "Africa/Cairo",
   "Africa/Casablanca",

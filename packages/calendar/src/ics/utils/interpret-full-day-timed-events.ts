@@ -125,13 +125,7 @@ interface InterpretedSpan {
   timeZone: string;
 }
 
-/*
- * The days a series cancels, the slot a detached instance replaces and the day the rule
- * stops on are all stated as occurrence starts in the source's zone, so they name the same
- * local midnights the range does. Expansion matches them against the re-anchored slots by
- * exact instant, so leaving them behind resurrects a cancelled day, double-books an
- * overridden one and trims the last day off the series.
- */
+// EXDATE, RECURRENCE-ID and UNTIL are matched by exact instant, so they must be re-anchored with the range.
 const interpretFullDayTimedEventsAsAllDay = (
   events: SourceEvent[],
   options: InterpretFullDayTimedEventsOptions,
@@ -171,12 +165,7 @@ const interpretFullDayTimedEventsAsAllDay = (
       ...(event.recurrenceId && seriesTimeZone && {
         recurrenceId: reanchorToUtcDay(event.recurrenceId, seriesTimeZone),
       }),
-      /*
-       * The originating timezone is dropped along with the times it described.
-       * Recurrence expansion walks wall clock in `startTimeZone`, so keeping it
-       * would re-introduce an hour of drift on every occurrence past a DST
-       * transition, pushing those occurrences back off UTC midnight.
-       */
+      // Dropping startTimeZone is required: expansion walks its wall clock and would re-introduce DST drift.
       ...(interpreted && {
         ...interpreted.span,
         isAllDay: true,

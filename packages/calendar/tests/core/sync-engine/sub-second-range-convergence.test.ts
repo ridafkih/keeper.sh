@@ -92,12 +92,6 @@ const parseResource = (ics: string) => parseICalCalendarsToRemoteEvents([ics], {
   rejectUnsupportedRecurrenceDates: false,
 }).events[0];
 
-/*
- * An iCalendar DATE-TIME carries whole seconds and nothing finer, so a CalDAV resource
- * cannot hold the milliseconds a stored range may carry. The write therefore comes back
- * as a different instant from the one that was pushed, which is the seam where a mirror
- * is judged changed on a run that changed nothing.
- */
 const createCalDAVHarness = (events: MaterializedSyncableEvent[]) => {
   const mappings: EventMapping[] = [];
   const resources = new Map<string, string>();

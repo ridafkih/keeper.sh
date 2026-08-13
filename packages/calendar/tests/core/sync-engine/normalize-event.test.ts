@@ -53,11 +53,6 @@ const createHarness = () => {
     normalizeEvent: normalizeGoogleEvent,
     pushEvents: (events) => Promise.resolve(events.map((event, index) => {
       pushedRanges.push({ endTime: event.endTime, startTime: event.startTime });
-      /*
-       * Google holds what its serializer writes, not what the engine handed over, so the
-       * fake stores the serialized range. A mapping recorded from an un-normalized event
-       * would disagree with this on the next read and replace the event every run.
-       */
       const stored = normalizeGoogleEvent(event);
       const remoteId = `remote-${index}`;
       remoteEvents.push({

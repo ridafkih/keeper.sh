@@ -103,11 +103,6 @@ const buildMappingFlush = (mappings: EventMapping[]) => (changes: PendingChanges
   return Promise.resolve();
 };
 
-/*
- * The destination read materializes the stored rows against the window the run is
- * scoped to, so a sliding window changes which events reach the destination without
- * the stored rows changing at all.
- */
 const readLocalEvents = (
   rows: SyncableEvent[],
   window: Window,

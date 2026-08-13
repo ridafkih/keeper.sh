@@ -55,13 +55,7 @@ const buildZonedIcsDate = (
   }
 
   const localDate = instantToWallTime(instant, resolved);
-  /*
-   * A wall clock repeats an hour at a fall-back transition, so an instant in the
-   * second pass through it cannot be recovered from the local value alone: RFC 5545
-   * gives no way to say which pass is meant, and reading the resource back would
-   * move the event to the first pass, making the mirror look changed on every run.
-   * Writing that instant in UTC names it exactly.
-   */
+  // RFC 5545 cannot name which pass of a repeated fall-back hour is meant, so write UTC instead.
   if (wallTimeToInstant(localDate, resolved).getTime() !== instant.getTime()) {
     return { date: instant };
   }

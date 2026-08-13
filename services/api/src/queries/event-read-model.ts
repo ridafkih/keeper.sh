@@ -152,12 +152,7 @@ const toSyncableEvent = (
   };
 };
 
-/*
- * The read model is the surface get_events, get_event and find_free_time answer from, so
- * it owes a caller the same range every other outbound surface publishes. The occurrence
- * identifier stays keyed to the stored start, so widening the published range does not
- * move the event a caller can look up again.
- */
+// The occurrence id stays keyed to the stored start, so shaping never moves a lookup.
 const toSyncedProjection = (
   occurrence: MaterializedSyncableEvent,
 ): KeeperEventProjection => {
@@ -180,11 +175,6 @@ const toSyncedProjection = (
   };
 };
 
-/*
- * A locally created event owes a caller the same range a synced one does: get_event,
- * get_events and find_free_time all publish the span the feed and every destination mirror
- * carry, so a stored row names one event however it is read.
- */
 const toUserProjection = (row: UserEventRow): KeeperEventProjection => ({
   calendarId: row.calendarId,
   description: row.description,
@@ -236,12 +226,7 @@ const materializeSyncedEvents = (
   });
   const exclusiveWindowEnd = new Date(windowEnd.getTime() + 1);
 
-  /*
-   * The materializer judges an occurrence by its stored range, while this read publishes
-   * the shaped one. Occurrences are therefore generated over a window loosened by the
-   * furthest shaping can carry a bound, and the window a caller actually asked for is
-   * applied afterwards against the span the read goes on to publish.
-   */
+  // Materialize wider than asked — the materializer judges stored ranges — then filter on the published span.
   const occurrences = materializeRecurrenceEvents(events, {
     end: new Date(exclusiveWindowEnd.getTime() + REPRESENTABLE_RANGE_SLACK_MS),
     start: new Date(windowStart.getTime() - REPRESENTABLE_RANGE_SLACK_MS),

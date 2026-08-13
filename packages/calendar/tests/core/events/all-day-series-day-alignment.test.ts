@@ -58,13 +58,6 @@ const overlappingSpans = (spans: { end: string; start: string }[]): string[] => 
 const SPRING_WINDOW = { end: "2027-03-25T00:00:00.000Z", start: "2027-03-01T00:00:00.000Z" };
 const AUTUMN_WINDOW = { end: "2027-11-18T00:00:00.000Z", start: "2027-11-01T00:00:00.000Z" };
 
-/*
- * Google states the calendar's timezone on every recurring event, all-day ones included,
- * so a daily all-day series arrives carrying an IANA zone. Expanding it in that zone's
- * wall clock moves every occurrence after a daylight transition off UTC midnight, and the
- * whole-day snap then turns each of them into a two-day event covering a day the previous
- * occurrence already holds.
- */
 describe("a daily all-day series expanded across a daylight transition", () => {
   it("publishes exactly one whole UTC day per occurrence through spring forward", () => {
     const spans = publishedSpans(buildAllDayMaster(), SPRING_WINDOW);
@@ -134,11 +127,6 @@ describe("a daily all-day series expanded across a daylight transition", () => {
   });
 });
 
-/*
- * The series only carries a zone because the source hands one over: Google states
- * `timeZone` alongside the DATE value of a recurring all-day event, and the parser keeps
- * it. Nothing downstream can treat the zone as absent.
- */
 describe("a recurring all-day event as Google states it", () => {
   it("is parsed as an all-day event carrying the calendar's timezone", () => {
     const [parsed] = parseGoogleEvents([{
@@ -162,11 +150,6 @@ describe("a recurring all-day event as Google states it", () => {
   });
 });
 
-/*
- * The mirror carries whatever the occurrence publishes, so a widened span is written to
- * the destination as an all-day event of the wrong length — Google's end date is
- * exclusive, so a one-day event has to name the day after the one it starts on.
- */
 describe("mirroring an occurrence that follows a daylight transition", () => {
   it("writes a single day to Google", () => {
     const occurrences = materializeRecurrenceEvents([buildAllDayMaster()], {

@@ -150,11 +150,6 @@ const freeSlots = async (
 const DAY_START = "2027-05-10T00:00:00.000Z";
 const DAY_END = "2027-05-11T00:00:00.000Z";
 
-/*
- * A read publishes the span every other surface carries, so a narrower read of the same
- * day must answer the same question about the same instants: the event a whole-day read
- * says covers 02:00 has to be the event a read of the morning says covers 02:00.
- */
 describe("an off-grid all-day event read through a narrower window", () => {
   it("is published across the whole day when the window is the whole day", async () => {
     const events = await getEventsInRange(
@@ -215,10 +210,6 @@ describe("an off-grid all-day event read through a narrower window", () => {
   });
 });
 
-/*
- * A zero-duration event a half minute before midnight is published as the minute it
- * occupies, which reaches into the next day. The day that minute lands on must report it.
- */
 describe("a point event whose published minute crosses midnight", () => {
   it("is published as a minute that ends on the following day", async () => {
     const events = await getEventsInRange(

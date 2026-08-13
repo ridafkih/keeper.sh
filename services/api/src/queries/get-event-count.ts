@@ -10,12 +10,6 @@ interface EventCountOptions {
   to: Date;
 }
 
-/*
- * A window holds the events that window lists, so the count is decided by the same rule
- * the listing decides membership with rather than by a second reading of the stored
- * columns: a row whose published span is wider than its stored one belongs to every
- * window that span touches, and a recurring master contributes one event per occurrence.
- */
 const countEventsInWindow = async (
   database: KeeperDatabase,
   userId: string,

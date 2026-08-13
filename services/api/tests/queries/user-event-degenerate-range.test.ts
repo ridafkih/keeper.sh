@@ -60,11 +60,6 @@ create table user_events (
 const client = new PGlite();
 const database = drizzle(client) as unknown as KeeperDatabase;
 
-/*
- * Every scenario gets its own user and calendar so one degenerate row cannot mask
- * another: a whole-day block from an unrelated event would otherwise make a day that is
- * wrongly reported free look correctly reported busy.
- */
 interface Scenario {
   calendarId: string;
   endTime: string;

@@ -26,11 +26,6 @@ const buildEvent = (overrides: Partial<MaterializedSyncableEvent>): Materialized
 const toInstant = (value: OutlookEvent["start"]): number =>
   new Date(`${value?.dateTime ?? ""}Z`).getTime();
 
-/*
- * Graph refuses to create an event whose end precedes its start, so a range the source
- * states inverted has to be given a representation before it is pushed, exactly as it is
- * for the other destinations.
- */
 describe("outlook destination representation of an inverted timed range", () => {
   it("never serializes an end that precedes the start", () => {
     const payload = serializeOutlookEvent(normalizeOutlookEvent(buildEvent({

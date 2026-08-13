@@ -123,12 +123,6 @@ const buildMappingFlush = (mappings: EventMapping[]) => (changes: PendingChanges
   return Promise.resolve();
 };
 
-/*
- * Google refuses a range that does not end after it starts with "The specified time
- * range is empty." (400); Graph refuses an inverted one with "The end date must be after
- * the start date." Both fakes reject rather than accept silently, so a destination that
- * is handed a range it cannot hold shows up as a failed push instead of a passing test.
- */
 const googleRejectsRange = (payload: GoogleEvent): boolean => {
   if (payload.start?.date && payload.end?.date) {
     return payload.end.date <= payload.start.date;
@@ -419,12 +413,6 @@ const DESTINATIONS: { factory: HarnessFactory; name: string }[] = [
   { factory: createOutlookHarness, name: "outlook" },
 ];
 
-/*
- * Every shape here is a range a source can state outright and no destination can hold
- * verbatim. The zones are the ones whose arithmetic is least like UTC: a half-hour DST
- * shift (Lord Howe), a 45-minute offset (Chatham, Kathmandu), a day-boundary DST change
- * (Santiago), and a zone that skipped a whole calendar day in living memory (Apia).
- */
 const SHAPES: { event: MaterializedSyncableEvent; name: string }[] = [
   {
     event: buildEvent({
@@ -533,12 +521,6 @@ describe("degenerate range mirroring across every destination", () => {
   }
 });
 
-/*
- * `timeMin` is a local midnight derived from the configured historic range, so a
- * degenerate event landing exactly on it is an everyday value, not a contrivance. The
- * widening a destination applies must not decide whether the event is in the window,
- * and it must not push the event out of the window it was admitted through either.
- */
 const EDGE_WINDOW: Window = {
   timeMax: new Date("2027-04-08T00:00:00.000Z"),
   timeMin: new Date("2027-03-08T00:00:00.000Z"),
@@ -578,11 +560,6 @@ describe("degenerate range window edges across every destination", () => {
     }
   }
 
-  /*
-   * The window advances a day at a time, so an event the window will eventually leave
-   * behind must be retired once and never resurrected — the widening a destination
-   * applies must not hand it back on a later run.
-   */
   for (const destination of DESTINATIONS) {
     it(`${destination.name} retires a zero-duration event exactly once as the window sweeps past it`, async () => {
       const event = buildEvent({

@@ -74,10 +74,6 @@ interface CalDAVHarness {
   }>;
 }
 
-/*
- * A VTIMEZONE observance carries its own DTSTART, so a resource is only readable by
- * scanning the VEVENT component itself.
- */
 const getEventIcsLine = (ics: string, name: string): string => {
   const lines = ics.split(/\r?\n/);
   const begin = lines.indexOf("BEGIN:VEVENT");
@@ -90,11 +86,7 @@ const getEventIcsLine = (ics: string, name: string): string => {
 
 const getIcsLine = (ics: string, name: string): string => getEventIcsLine(ics, name);
 
-/*
- * DTSTART and DTEND can each be written as a UTC instant or as a TZID-qualified wall
- * time, so conformance is decided on the instants a reader resolves rather than on the
- * text: RFC 5545 §3.6.1 requires DTEND to be later in time than DTSTART.
- */
+// RFC 5545 §3.6.1 requires DTEND later than DTSTART, judged on resolved instants rather than text.
 const isNonConformantResource = (ics: string): boolean => {
   if (!getIcsLine(ics, "DTSTART") || !getIcsLine(ics, "DTEND")) {
     return false;
@@ -244,11 +236,6 @@ const readInstants = (ics: string): { end: string; start: string } => ({
   start: getIcsLine(ics, "DTSTART"),
 });
 
-/*
- * Europe/London leaves BST at 2027-10-31T01:00Z, so the wall clock reads 01:30 twice:
- * once at 00:30Z and again at 01:30Z. America/New_York enters EDT at 2027-03-14T07:00Z,
- * so 02:30 on that date is a wall time the zone never renders.
- */
 const cases: { event: MaterializedSyncableEvent; name: string }[] = [
   {
     event: buildEvent({
@@ -462,12 +449,6 @@ const NARROW_SCOPE: ReconciliationScopeShape = {
   },
 };
 
-/*
- * A source window is the requested window intersected with the coverage that source has
- * actually verified, so it is never wider than the requested window. An event inside the
- * requested window but outside its own source's verified coverage is not authoritative
- * yet, and whatever the engine decides has to be the same decision on every run.
- */
 const PARTIALLY_VERIFIED_SCOPE: ReconciliationScopeShape = {
   authoritativeSourceWindows: new Map([
     ["source-calendar", {

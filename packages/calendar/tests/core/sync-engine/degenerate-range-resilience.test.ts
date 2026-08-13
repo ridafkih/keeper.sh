@@ -50,10 +50,6 @@ const toAvailability = (isFree: boolean): "busy" | "free" => {
   return "busy";
 };
 
-/*
- * Google refuses anything that does not end after it starts, so the store rejects such a
- * payload rather than accepting a range the real destination never would.
- */
 const googleRejectsRange = (payload: GoogleEvent): boolean => {
   if (payload.start?.date && payload.end?.date) {
     return payload.end.date <= payload.start.date;

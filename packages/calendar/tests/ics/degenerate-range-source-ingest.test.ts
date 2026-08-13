@@ -18,12 +18,7 @@ const SYNC_WINDOW = {
   timeMin: new Date("2027-03-08T00:00:00.000Z"),
 };
 
-/*
- * RFC 5545 §3.6.1 gives a timed VEVENT with no DTEND and no DURATION a zero duration,
- * and a DATE-valued one the single day it starts on. Both are legal, and an exporter
- * that writes DTEND equal to (or before) DTSTART is common enough that Keeper counts
- * those rows in its own diagnostics. This is the feed shape those rows come from.
- */
+// RFC 5545 §3.6.1: a timed VEVENT with no DTEND has zero duration, a DATE-valued one covers its start day.
 const FEED = [
   "BEGIN:VCALENDAR",
   "PRODID:-//Adversary//EN",
@@ -142,11 +137,6 @@ describe("ics feeds that state a degenerate range", () => {
     expect(toRemove).toEqual([]);
   });
 
-  /*
-   * The window filter runs on the fetched feed before anything is stored. A degenerate
-   * range names one instant, so an event landing on the window's lower edge — a local
-   * midnight in production — has to survive it, or nothing downstream ever sees it.
-   */
   it("admits every degenerate event whose instant lies inside the sync window", () => {
     const events = toSourceEvents(FEED);
     const { events: inWindow, filteredCount } = filterSourceEventsToSyncWindow(
@@ -206,11 +196,6 @@ describe("ics feeds that state a degenerate range", () => {
     }
   });
 
-  /*
-   * Widening must never leak back into the stored source row: the diff compares the
-   * stored range against the freshly parsed one, so a stored widened range would look
-   * changed on every fetch and the row would be deleted and re-inserted forever.
-   */
   it("does not treat a stored source row as changed after a destination widened its mirror", () => {
     const events = toSourceEvents(FEED);
     const stored = events.map((event, index) => toStoredState(event, index));

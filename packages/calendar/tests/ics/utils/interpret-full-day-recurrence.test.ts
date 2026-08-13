@@ -18,10 +18,6 @@ const buildSourceEvent = (overrides: Partial<SourceEvent>): SourceEvent => ({
   ...overrides,
 });
 
-/*
- * The persisted event state hands the materializer the same recurrence properties the
- * source event carries, with each exception date unwrapped to the instant it names.
- */
 const toSyncableEvent = (event: SourceEvent): SyncableEvent => ({
   availability: event.availability,
   calendarId: "calendar-1",
@@ -54,13 +50,6 @@ const interpret = (events: SourceEvent[], calendarTimeZone?: string): SourceEven
     ...(calendarTimeZone && { calendarTimeZone }),
   });
 
-/*
- * A feed that states a whole day as a timed span from local midnight to local midnight is
- * re-anchored onto UTC midnight so it reaches every destination as the day it names. The
- * recurrence properties the source states alongside it — the days it cancels, the slot a
- * detached instance replaces, the day it stops on — name the very same occurrences, so
- * re-anchoring the series has to carry them with it or the series stops matching itself.
- */
 describe("re-anchoring a recurring full-day timed series onto UTC midnight", () => {
   it("keeps a cancelled day cancelled", () => {
     const master = buildSourceEvent({

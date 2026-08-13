@@ -27,10 +27,6 @@ const durationsOf = (events: SyncableEvent[]): number[] =>
   events.map((event) => event.endTime.getTime() - event.startTime.getTime());
 
 describe("a zero-duration series crossing a daylight transition", () => {
-  /*
-   * The series names 02:30 America/New_York, a wall time the spring-forward gap removes
-   * on 2027-03-14, so that occurrence lands on the first instant after the gap.
-   */
   it("shifts only the occurrence the spring-forward gap removes", () => {
     const events = materializeRecurrenceEvents([createEvent({
       recurrenceRule: { count: 6, frequency: "DAILY" },
@@ -47,10 +43,6 @@ describe("a zero-duration series crossing a daylight transition", () => {
     expect(durationsOf(events)).toEqual([0, 0, 0, 0, 0, 0]);
   });
 
-  /*
-   * The series names 01:30 America/New_York, a wall time 2027-11-07 renders twice, so
-   * that occurrence takes the earlier of the two instants.
-   */
   it("takes the earlier instant for the occurrence the fold repeats", () => {
     const events = materializeRecurrenceEvents([createEvent({
       endTime: new Date("2027-11-04T05:30:00.000Z"),

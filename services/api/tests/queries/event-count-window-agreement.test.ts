@@ -65,12 +65,6 @@ interface Shape {
   windowStart: string;
 }
 
-/*
- * The get_event_count and get_events reads answer the same question about the same window,
- * so a caller that asks how many events a window holds and then asks for them must not be
- * told two different numbers. Every shape here is one the read publishes across a span wider
- * than the stored range: the count clause compares the stored columns alone.
- */
 const SHAPES: Shape[] = [
   {
     endTime: "2027-05-10T17:00:00.000Z",
@@ -198,11 +192,6 @@ describe("the number a window reports and the events that window lists", () => {
   }
 });
 
-/*
- * A window a tool reports as holding no events is a window a caller will treat as free,
- * so a count of zero has to mean the same thing find_free_time means by an unblocked
- * window. These are the same stored rows read through the same windows.
- */
 describe("a window counted as empty", () => {
   for (const [index, shape] of SHAPES.entries()) {
     it(`is offered as free time only when nothing occupies it: ${shape.name}`, async () => {

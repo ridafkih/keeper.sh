@@ -108,12 +108,6 @@ const listTitles = async (from: string, to: string): Promise<string[]> => {
   return events.map((event) => event.title ?? "");
 };
 
-/*
- * A synced row is shaped by the same rule a local one is before it is published, so the
- * window that decides whether it is in a read has to be applied to the same span. A
- * recurring master is materialized before the window is applied, which is a second place
- * the two can drift apart.
- */
 describe("an off-grid all-day synced event read through a narrower window", () => {
   it("is published across the whole day when the window is the whole day", async () => {
     const events = await getEventsInRange(

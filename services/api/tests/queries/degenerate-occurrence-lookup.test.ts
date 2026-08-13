@@ -29,12 +29,6 @@ const buildRow = (overrides: Partial<SyncedEventRow> & { id: string }): SyncedEv
   ...overrides,
 });
 
-/*
- * A series whose range the read model widens still has to be reachable by the identifier
- * it published: the identifier is keyed to the stored occurrence start while the range a
- * caller sees is the widened one, so a lookup that judged membership by the published
- * range would answer 404 for an event it had just listed.
- */
 const SERIES: { label: string; row: SyncedEventRow }[] = [
   {
     label: "an all-day series that does not sit on the UTC day grid",

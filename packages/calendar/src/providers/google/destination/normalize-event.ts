@@ -4,14 +4,7 @@ import {
   resolveRepresentableTimeRange,
 } from "../../../core/events/time-range";
 
-/*
- * Google rejects any event that does not end after it starts with
- * "The specified time range is empty." (400), so a zero-duration event — legal per
- * RFC 5545 §3.6.1, which ends a timed VEVENT with no DTEND at its DTSTART — has no
- * native Google representation. A range that ends before it starts is inconsistent
- * instead of legal, but its start is still the instant the source states outright.
- * Both become a point in time so the event reaches the destination.
- */
+// Google 400s any non-positive span with "The specified time range is empty."
 const normalizeGoogleEvent = (event: MaterializedSyncableEvent): MaterializedSyncableEvent =>
   ({ ...event, ...resolveRepresentableTimeRange(event) });
 

@@ -10,12 +10,6 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const toIsoPair = ({ endTime, startTime }: { endTime: Date; startTime: Date }) =>
   ({ end: endTime.toISOString(), start: startTime.toISOString() });
 
-/*
- * A destination writes the shaped range, reads it back, and shapes it again before the
- * next comparison. A shaping that moved the range a second time would make every run
- * read the mirror as changed, which is the delete-and-recreate churn the snapping was
- * added to stop — so the operation has to be a fixed point after one application.
- */
 const shapeTwice = (range: AllDayEventShape) => {
   const once = resolveRepresentableTimeRange(range);
   const twice = resolveRepresentableTimeRange({

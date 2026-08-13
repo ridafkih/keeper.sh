@@ -57,12 +57,6 @@ interface Failure {
   wallTime: string;
 }
 
-/*
- * The wallTimeToInstant helper is the inverse the parser applies to every TZID-qualified
- * value it reads back, so it has to answer with an instant the zone really renders as that wall
- * time, and with the earliest such instant during a fold. Anything else moves a mirrored
- * event on the read side and makes it look changed on the next run.
- */
 const checkInstant = (instant: Date, timeZone: string): Failure | undefined => {
   const wallTime = instantToWallTime(instant, timeZone);
   const resolved = wallTimeToInstant(wallTime, timeZone);

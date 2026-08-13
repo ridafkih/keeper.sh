@@ -12,12 +12,6 @@ const toMs = ({ end, start }: { end: Date; start: Date }) => ({
   start: start.getTime(),
 });
 
-/*
- * Free-time answers come from the same stored rows the feed and every destination mirror
- * read. Merging keeps only intervals whose end is after their start, so a candidate
- * that reaches it degenerate contributes no busy time at all and Keeper reports a day as
- * free that every other surface reports as busy.
- */
 describe("the busy intervals behind find_free_time", () => {
   it("keeps an ordinary range exactly as stated", () => {
     const interval = toBusyInterval({

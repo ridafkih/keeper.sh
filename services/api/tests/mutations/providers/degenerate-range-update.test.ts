@@ -130,11 +130,6 @@ describe("updating an event to a range that covers no interval", () => {
   });
 });
 
-/*
- * An update that moves one end alone inverts the range just as surely as one that sends
- * both, so the seam that shapes the outbound range has to be handed the bound the caller
- * left where it was.
- */
 describe("an update that names only one end of the range", () => {
   const stored = {
     endTime: new Date("2027-05-10T10:00:00.000Z"),

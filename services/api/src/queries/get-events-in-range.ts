@@ -91,12 +91,7 @@ const flattenSyncedEvents = (
   filters,
 );
 
-/*
- * A read publishes the shaped range, so the scan has to reach every row whose shaped range
- * could touch the window even though the clause can only compare the stored columns. The
- * bounds are therefore loosened by the furthest shaping can carry either of them, and the
- * rows that widening pulls in are dropped in memory by isWithinReadWindow.
- */
+// Scan wider than the window — the clause sees only stored columns — and let isWithinReadWindow decide.
 const toScanBounds = (start: Date, end: Date): { scanEnd: Date; scanStart: Date } => ({
   scanEnd: new Date(end.getTime() + REPRESENTABLE_RANGE_SLACK_MS),
   scanStart: new Date(start.getTime() - REPRESENTABLE_RANGE_SLACK_MS),
@@ -107,11 +102,6 @@ const toScanBounds = (start: Date, end: Date): { scanEnd: Date; scanStart: Date 
  * to [start, end]: overlapping one-offs, recurring masters whose first
  * occurrence is at-or-before the window end, and detached overrides that either
  * overlap the range at their moved time or originally occupied a slot in it.
- *
- * A one-off whose end predates the window is scanned anyway when its start does
- * not, because an inverted range says nothing about where it sits through its
- * end. Membership is decided in memory by the one predicate every layer shares;
- * this clause only keeps the scan off rows no predicate could admit.
  */
 const buildSyncedRangeCondition = (start: Date, end: Date): SQL | undefined => {
   const { scanEnd, scanStart } = toScanBounds(start, end);
@@ -134,11 +124,6 @@ const buildSyncedRangeCondition = (start: Date, end: Date): SQL | undefined => {
   );
 };
 
-/**
- * The same scan for locally created rows: one whose end predates the window is scanned
- * anyway when its start does not, because an inverted range says nothing about where it
- * sits through its end. Membership is decided in memory by isWithinReadWindow.
- */
 const buildUserRangeCondition = (start: Date, end: Date): SQL | undefined => {
   const { scanEnd, scanStart } = toScanBounds(start, end);
 
@@ -151,11 +136,7 @@ const buildUserRangeCondition = (start: Date, end: Date): SQL | undefined => {
   );
 };
 
-/*
- * The window bound a read publishes is inclusive of its end, while the shared predicate
- * treats a window as half-open; materializeSyncedEvents widens the synced window the same
- * way so both tables answer one question.
- */
+// Read windows are inclusive of their end; the shared predicate is half-open.
 const INCLUSIVE_WINDOW_END_MS = 1;
 
 const isWithinReadWindow = (

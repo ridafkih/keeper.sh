@@ -180,11 +180,6 @@ describe("delta ingest window pruning of degenerate ranges", () => {
     expect(disagreements).toEqual([]);
   });
 
-  /*
-   * Google and Outlook run a full fetch whenever the sync token is refused, then go back
-   * to delta fetches. The full fetch reports the whole window and never prunes; the delta
-   * fetch prunes. A row the two disagree about is therefore added and deleted forever.
-   */
   it("does not oscillate across the full-sync / delta-sync cycle", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
     const edgeEvent = makeEvent(

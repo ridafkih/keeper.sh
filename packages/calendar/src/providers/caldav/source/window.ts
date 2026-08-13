@@ -4,23 +4,13 @@ import type { SyncWindow } from "../../../core/sync/sync-range";
 import { isKeeperEvent } from "../../../core/events/identity";
 import { overlapsTimeWindow } from "../../../core/events/time-range";
 
-/*
- * Recurring masters are kept regardless of their own start/end: the CalDAV
- * time-range filter already returned their in-window occurrences. Non-recurring events
- * go through the one shared window predicate every other layer applies, so a boundary
- * event is treated identically wherever the window is applied.
- */
+// Masters are kept unconditionally: the CalDAV time-range filter already returned their in-window occurrences.
 const isCalDAVEventInSyncWindow = (
   event: { endTime: Date; recurrenceRule?: unknown; startTime: Date },
   syncWindow: SyncWindow,
 ): boolean => Boolean(event.recurrenceRule)
   || overlapsTimeWindow(event, syncWindow.timeMin, syncWindow.timeMax);
 
-/*
- * Every CalDAV ingest path — the cron fetcher and the on-demand provider alike — reads
- * the same collection and must keep the same events, so both build their source events
- * here rather than restating the window rule.
- */
 const buildCalDAVSourceEvents = (
   parsedEvents: ParsedCalendarEvent[],
   syncWindow: SyncWindow,

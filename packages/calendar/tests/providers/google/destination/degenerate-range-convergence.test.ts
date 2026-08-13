@@ -62,11 +62,6 @@ interface Harness {
   writes: () => number;
 }
 
-/*
- * Google stores what the serializer sent and hands it back through the same date or
- * dateTime fields the destination provider reads, and refuses outright any event that
- * does not end after it starts.
- */
 const toGoogleAvailability = (transparency: GoogleEvent["transparency"]) => {
   if (transparency === "transparent") {
     return "free";
@@ -293,10 +288,6 @@ describe("google destination convergence across repeated runs", () => {
     });
   }
 
-  /*
-   * Two stored all-day ranges that name the same UTC day publish the same span, so the
-   * mirror the destination already holds is the one the second range asks for.
-   */
   it("does not rewrite the mirror when an all-day range moves within the day it names", async () => {
     let current = buildEvent({
       endTime: new Date("2027-06-01T17:00:00.000Z"),
@@ -323,10 +314,6 @@ describe("google destination convergence across repeated runs", () => {
     ]);
   });
 
-  /*
-   * A source event that collapses to a point and is restored has to settle at each
-   * shape rather than trade one mirror for another on every run.
-   */
   it("settles again after a timed range collapses to a point and is restored", async () => {
     const timed = buildEvent({});
     const collapsed = buildEvent({

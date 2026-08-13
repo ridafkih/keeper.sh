@@ -69,12 +69,6 @@ interface Harness {
   writes: string[];
 }
 
-/*
- * Mirrors the CalDAV destination provider: resources are addressed by a deterministic
- * uid, the listing drops anything that ended before the requested lower bound, and the
- * event the reconciler compares against is whatever the real serializer wrote and the
- * real parser read back.
- */
 const createCalDAVHarness = (options: HarnessOptions): Harness => {
   const mappings: EventMapping[] = options.mappings ?? [];
   const resources = new Map<string, string>();

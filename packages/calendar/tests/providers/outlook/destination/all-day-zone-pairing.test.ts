@@ -32,12 +32,6 @@ const ZONES = [
   "UTC",
 ];
 
-/*
- * An all-day range names whole UTC days, and a dateTime paired with a zone names the
- * instant that zone's clock reads it at. The other two destinations receive a zone-free
- * date for the same event and the API's own Outlook writer states the pair in UTC, so
- * the instant the pair names has to be the one the range recorded.
- */
 describe("the all-day value the Outlook serializer sends", () => {
   for (const zone of ZONES) {
     it(`names the UTC day the range covers in ${zone}`, () => {
