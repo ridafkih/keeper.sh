@@ -178,6 +178,7 @@ describe("buildRemoveOperations", () => {
     expect(operations).toHaveLength(1);
     expect(operations[0]).toEqual({
       deleteId: "future-delete-id",
+      mappingId: "future-mapping-id",
       startTime: new Date("2026-03-08T13:00:00.000Z"),
       type: "remove",
       uid: "future-uid",
@@ -268,6 +269,7 @@ describe("buildRemoveOperations", () => {
       { syncWindowStart: new Date("2026-03-01T00:00:00.000Z") },
     )).toEqual([{
       deleteId: mapping.deleteIdentifier,
+      mappingId: "mapping-id-1",
       startTime: mapping.startTime,
       type: "remove",
       uid: mapping.destinationEventUid,
@@ -340,6 +342,7 @@ describe("computeSyncOperations", () => {
     expect(operations).toEqual([
       {
         deleteId: "google-event-id",
+        mappingId: "mapping-id-1",
         startTime: mapping.startTime,
         type: "remove",
         uid: "legacy-uid@google.com",
@@ -454,6 +457,7 @@ describe("computeSyncOperations", () => {
       mappingUpdates: [],
       operations: [{
         deleteId: mapping.deleteIdentifier,
+        mappingId: "expired-occurrence-mapping",
         startTime: mapping.startTime,
         type: "remove",
         uid: mapping.destinationEventUid,
@@ -933,6 +937,7 @@ describe("computeSyncOperations", () => {
     ]);
     expect(result.operations).toEqual([{
       deleteId: "google-provider-id-1",
+      mappingId: "legacy-mapping-1",
       startTime: removedSlot.startTime,
       type: "remove",
       uid: "legacy-1@keeper.sh",
@@ -1054,6 +1059,7 @@ describe("computeSyncOperations", () => {
 
     expect(result.operations).toEqual([{
       deleteId: outsideMapping.deleteIdentifier,
+      mappingId: "outside-mapping",
       startTime: outsideMapping.startTime,
       type: "remove",
       uid: outsideMapping.destinationEventUid,
@@ -1147,6 +1153,7 @@ describe("computeSyncOperations", () => {
 
     expect(result.operations).toEqual([{
       deleteId: deletedSourceMapping.deleteIdentifier,
+      mappingId: "deleted-source-mapping",
       startTime: deletedSourceMapping.startTime,
       type: "remove",
       uid: deletedSourceMapping.destinationEventUid,
@@ -1179,6 +1186,7 @@ describe("computeSyncOperations", () => {
 
     expect(result.operations).toEqual([{
       deleteId: deletedSourceMapping.deleteIdentifier,
+      mappingId: "migration-window-tombstone",
       startTime: deletedSourceMapping.startTime,
       type: "remove",
       uid: deletedSourceMapping.destinationEventUid,
@@ -1208,6 +1216,7 @@ describe("computeSyncOperations", () => {
 
     expect(result.operations).toEqual([{
       deleteId: farFutureMapping.deleteIdentifier,
+      mappingId: "far-future-mapping",
       startTime: farFutureMapping.startTime,
       type: "remove",
       uid: farFutureMapping.destinationEventUid,
@@ -1235,6 +1244,7 @@ describe("computeSyncOperations", () => {
 
     expect(result.operations).toEqual([{
       deleteId: beyondEdgeMapping.deleteIdentifier,
+      mappingId: "beyond-edge-mapping",
       startTime: beyondEdgeMapping.startTime,
       type: "remove",
       uid: beyondEdgeMapping.destinationEventUid,
@@ -1284,6 +1294,7 @@ describe("computeSyncOperations", () => {
 
     expect(result.operations).toEqual([{
       deleteId: withheldOutsideMapping.deleteIdentifier,
+      mappingId: "over-budget-outside-mapping",
       startTime: withheldOutsideMapping.startTime,
       type: "remove",
       uid: withheldOutsideMapping.destinationEventUid,

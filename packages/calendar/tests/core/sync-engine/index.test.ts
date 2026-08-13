@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { executeRemoteOperations, OPERATION_ERROR_SAMPLE_SIZE } from "../../../src/core/sync-engine/index";
+import { computeSyncOperations } from "../../../src/core/sync/operations";
 import type {
   DeleteResult,
   MaterializedSyncableEvent,
@@ -67,6 +68,35 @@ const makeProvider = (overrides: Partial<{
 });
 
 describe("executeRemoteOperations", () => {
+  it("retires a mapping whose remove targeted the listed object path instead of the stored delete identifier", async () => {
+    const mapping = makeMapping("map-1", "ev-1", "abc123@keeper.sh");
+    const remoteEvent = {
+      deleteId: "/calendar/renamed-object@keeper.sh.ics",
+      endTime: mapping.endTime,
+      isKeeperEvent: true,
+      startTime: mapping.startTime,
+      uid: mapping.destinationEventUid,
+    };
+    const { operations } = computeSyncOperations(
+      [],
+      [mapping],
+      [remoteEvent],
+      TEST_RECONCILIATION_SCOPE,
+    );
+    expect(operations).toEqual([expect.objectContaining({
+      deleteId: "/calendar/renamed-object@keeper.sh.ics",
+      type: "remove",
+    })]);
+    const provider = makeProvider({
+      deleteEvents: (ids) => Promise.resolve(ids.map(() => ({ success: true }))),
+    });
+
+    const outcome = await executeRemoteOperations(operations, [mapping], "dest-cal-1", provider);
+
+    expect(outcome.result.removed).toBe(1);
+    expect(outcome.changes.deletes).toEqual(["map-1"]);
+  });
+
   it("accumulates mapping inserts from successful pushes", async () => {
     const event = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
     const operations: SyncOperation[] = [{ type: "add", event }];

@@ -142,7 +142,7 @@ interface RemoteEvent {
 
 type SyncOperation =
   | { type: "add"; event: MaterializedSyncableEvent; staleMappingId?: string }
-  | { type: "remove"; uid: string; deleteId: string; startTime: Date }
+  | { type: "remove"; uid: string; deleteId: string; startTime: Date; mappingId?: string }
   | {
     type: "replace";
     event: MaterializedSyncableEvent;

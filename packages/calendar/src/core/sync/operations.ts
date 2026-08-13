@@ -419,6 +419,7 @@ const buildAddOperations = (
 const buildRemoveOperationsForMappings = (mappings: EventMapping[]): SyncOperation[] =>
   mappings.map((mapping) => ({
     deleteId: mapping.deleteIdentifier,
+    mappingId: mapping.id,
     startTime: mapping.startTime,
     type: "remove",
     uid: mapping.destinationEventUid,
@@ -525,6 +526,7 @@ const buildRemoveOperations = (
     ) {
       operations.push({
         deleteId: resolveMappingDeleteId(mapping, remoteEventsByMappingId),
+        mappingId: mapping.id,
         startTime: mapping.startTime,
         type: "remove",
         uid: mapping.destinationEventUid,

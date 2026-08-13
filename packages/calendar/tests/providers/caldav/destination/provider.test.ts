@@ -8,6 +8,7 @@ import { eventToICalString } from "../../../../src/providers/caldav/shared/ics";
 const clientMocks = vi.hoisted(() => ({
   createCalendarObject: vi.fn(),
   deleteCalendarObject: vi.fn(),
+  deleteCalendarObjectByUrl: vi.fn(),
   fetchCalendarObject: vi.fn(),
   fetchCalendarObjects: vi.fn(),
   resolveCalendarUrl: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock("../../../../src/providers/caldav/shared/client", () => {
   class CalDAVClient {
     createCalendarObject = clientMocks.createCalendarObject;
     deleteCalendarObject = clientMocks.deleteCalendarObject;
+    deleteCalendarObjectByUrl = clientMocks.deleteCalendarObjectByUrl;
     fetchCalendarObject = clientMocks.fetchCalendarObject;
     fetchCalendarObjects = clientMocks.fetchCalendarObjects;
     resolveCalendarUrl = clientMocks.resolveCalendarUrl;
@@ -245,6 +247,68 @@ describe("createCalDAVSyncProvider", () => {
       etag: "etag-1",
     }));
     expect(clientMocks.createCalendarObject).toHaveBeenCalledTimes(2);
+  });
+
+  it("lists a remote object's own path as its deleteId when the filename differs from the embedded UID", async () => {
+    const event = createEvent();
+    const embeddedUid = generateDeterministicEventUid(event.id);
+    const fileUid = generateDeterministicEventUid("a-different-event");
+    clientMocks.resolveCalendarUrl.mockResolvedValueOnce(
+      "https://caldav.example.com/calendar/",
+    );
+    clientMocks.fetchCalendarObjects.mockResolvedValueOnce([{
+      data: eventToICalString(event, embeddedUid),
+      url: `https://caldav.example.com/calendar/${fileUid}.ics`,
+    }]);
+
+    const remoteEvents = await createProvider().listRemoteEvents({
+      timeMin: new Date("2026-03-01T00:00:00.000Z"),
+    });
+
+    expect(remoteEvents).toHaveLength(1);
+    expect(remoteEvents[0]?.uid).toBe(embeddedUid);
+    expect(remoteEvents[0]?.deleteId).toBe(`/calendar/${fileUid}.ics`);
+  });
+
+  it("deletes a swept remote object at its listed URL rather than a UID-derived filename", async () => {
+    const event = createEvent();
+    const embeddedUid = generateDeterministicEventUid(event.id);
+    const fileUid = generateDeterministicEventUid("a-different-event");
+    clientMocks.resolveCalendarUrl.mockResolvedValueOnce(
+      "https://caldav.example.com/calendar/",
+    );
+    clientMocks.fetchCalendarObjects.mockResolvedValueOnce([{
+      data: eventToICalString(event, embeddedUid),
+      url: `https://caldav.example.com/calendar/${fileUid}.ics`,
+    }]);
+    clientMocks.deleteCalendarObjectByUrl.mockImplementationOnce(() => Promise.resolve());
+    const provider = createProvider();
+    const remoteEvents = await provider.listRemoteEvents({
+      timeMin: new Date("2026-03-01T00:00:00.000Z"),
+    });
+    const deleteId = remoteEvents[0]?.deleteId ?? "";
+
+    const results = await provider.deleteEvents([deleteId]);
+
+    expect(results).toEqual([{ success: true }]);
+    expect(clientMocks.deleteCalendarObjectByUrl).toHaveBeenCalledWith({
+      objectUrl: `https://caldav.example.com/calendar/${fileUid}.ics`,
+    });
+    expect(clientMocks.deleteCalendarObject).not.toHaveBeenCalled();
+  });
+
+  it("deletes a legacy UID deleteId at the calendar's UID-derived filename", async () => {
+    const uid = generateDeterministicEventUid("legacy-event");
+    clientMocks.deleteCalendarObject.mockImplementationOnce(() => Promise.resolve());
+    const provider = createProvider();
+
+    const results = await provider.deleteEvents([uid]);
+
+    expect(results).toEqual([{ success: true }]);
+    expect(clientMocks.deleteCalendarObject).toHaveBeenCalledWith({
+      calendarUrl: "https://caldav.example.com/calendar/",
+      filename: `${uid}.ics`,
+    });
   });
 
   it("returns structured diagnostics for a failed CalDAV write", async () => {

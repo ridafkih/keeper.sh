@@ -250,22 +250,32 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     );
   };
 
+  /* Listed deleteIds are object paths; deleteIds stored before path recording are bare UIDs. */
+  const deleteEventObject = (deleteId: string): Promise<void> => {
+    if (deleteId.includes("/")) {
+      return client.deleteCalendarObjectByUrl({
+        objectUrl: new URL(deleteId, config.calendarUrl).href,
+      });
+    }
+    return client.deleteCalendarObject({
+      calendarUrl: config.calendarUrl,
+      filename: `${deleteId}.ics`,
+    });
+  };
+
   const deleteEvents = (eventIds: string[]): Promise<DeleteResult[]> =>
     Promise.all(
-      eventIds.map((uid) =>
+      eventIds.map((deleteId) =>
         rateLimiter.execute(async (): Promise<DeleteResult> => {
           removeAttempts += 1;
-          if (uid.includes("/")) {
+          if (deleteId.includes("/")) {
             removeCounts.byPath += 1;
           } else {
             removeCounts.byUid += 1;
           }
 
           try {
-            await client.deleteCalendarObject({
-              calendarUrl: config.calendarUrl,
-              filename: `${uid}.ics`,
-            });
+            await deleteEventObject(deleteId);
             removeCounts.succeeded += 1;
             return { success: true };
           } catch (error) {
@@ -302,38 +312,43 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
     const remoteEvents: RemoteEvent[] = [];
 
-    const resources = parseICalCalendarsToRemoteEvents(
-      objects.flatMap(({ data, url }) => {
-        if (!data || !isKeeperCalendarObjectUrl(url)) {
-          return [];
-        }
-        return [data];
-      }),
-      { rejectUnsupportedRecurrenceDates: false },
-    );
-    assertAllResourcesRead(resources);
-    assertAllEventsSupported(resources);
-    for (const parsed of resources.events) {
-      if (!isKeeperEvent(parsed.uid) || resolveTimeRangeEnd(parsed) < options.timeMin) {
-        continue;
+    const keeperObjects = objects.flatMap(({ data, url }) => {
+      if (!data || !isKeeperCalendarObjectUrl(url)) {
+        return [];
       }
+      return [{ data, url }];
+    });
+    for (const { data, url } of keeperObjects) {
+      const resources = parseICalCalendarsToRemoteEvents(
+        [data],
+        { rejectUnsupportedRecurrenceDates: false },
+      );
+      assertAllResourcesRead(resources);
+      assertAllEventsSupported(resources);
+      const objectPath = new URL(url, calendarUrl).pathname;
+      for (const parsed of resources.events) {
+        if (!isKeeperEvent(parsed.uid) || resolveTimeRangeEnd(parsed) < options.timeMin) {
+          continue;
+        }
 
-      const editableContent = createEditableEventContentSnapshot({
-        availability: parsed.availability,
-        description: parsed.description,
-        endTime: parsed.endTime,
-        isAllDay: parsed.isAllDay,
-        location: parsed.location,
-        startTime: parsed.startTime,
-        summary: parsed.title ?? "",
-      });
-      remoteEvents.push({
-        ...parsed,
-        editableAvailability: parsed.availability,
-        editableContent,
-        editableContentHash: hashEditableEventContentSnapshot(editableContent),
-        supportedAvailabilities: ["busy", "free"],
-      });
+        const editableContent = createEditableEventContentSnapshot({
+          availability: parsed.availability,
+          description: parsed.description,
+          endTime: parsed.endTime,
+          isAllDay: parsed.isAllDay,
+          location: parsed.location,
+          startTime: parsed.startTime,
+          summary: parsed.title ?? "",
+        });
+        remoteEvents.push({
+          ...parsed,
+          deleteId: objectPath,
+          editableAvailability: parsed.availability,
+          editableContent,
+          editableContentHash: hashEditableEventContentSnapshot(editableContent),
+          supportedAvailabilities: ["busy", "free"],
+        });
+      }
     }
 
     return remoteEvents;

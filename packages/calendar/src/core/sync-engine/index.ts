@@ -268,9 +268,10 @@ const processDeleteResults = (
     }
 
     removed += 1;
-    const mapping = mappingsByRemoteIdentity.get(`${operation.uid}\u0000${operation.deleteId}`);
-    if (mapping) {
-      deleteIds.push(mapping.id);
+    const mappingId = operation.mappingId
+      ?? mappingsByRemoteIdentity.get(`${operation.uid}\u0000${operation.deleteId}`)?.id;
+    if (mappingId) {
+      deleteIds.push(mappingId);
     }
   }
 

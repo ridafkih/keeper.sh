@@ -269,11 +269,20 @@ class CalDAVClient {
     filename: string;
     etag?: string;
   }): Promise<void> {
+    await this.deleteCalendarObjectByUrl({
+      etag: params.etag,
+      objectUrl: CalDAVClient.normalizeUrl(params.calendarUrl, params.filename),
+    });
+  }
+
+  async deleteCalendarObjectByUrl(params: {
+    objectUrl: string;
+    etag?: string;
+  }): Promise<void> {
     const client = await this.getClient();
-    const objectUrl = CalDAVClient.normalizeUrl(params.calendarUrl, params.filename);
 
     const response = await client.deleteCalendarObject({
-      calendarObject: { url: objectUrl, etag: params.etag },
+      calendarObject: { url: params.objectUrl, etag: params.etag },
     });
 
     await assertSuccessfulResponse(response, "delete");
