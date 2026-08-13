@@ -10,6 +10,7 @@ import {
 const TEST_DATABASE_URL = process.env.KEEPER_TEST_DATABASE_URL;
 
 interface FakeClient extends Record<string, unknown> {
+  begin: (callback: (transactionClient: FakeClient) => Promise<unknown>) => Promise<unknown>;
   unsafe: (query: string, params?: unknown[]) => object;
 }
 

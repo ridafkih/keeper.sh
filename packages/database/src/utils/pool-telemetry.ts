@@ -34,6 +34,10 @@ const roundDuration = (durationMs: number): number => Math.round(durationMs * 10
  * way to see how much demand the process is putting on the pool. The returned
  * query is lazy and its result mode is chosen by a later `.values()` call, so the
  * proxy must forward untouched and hook `then` rather than awaiting anything.
+ *
+ * `catch` and `finally` are own methods on Bun's SQLQuery that reach the raw
+ * `then`, so they are routed back through the hooked one; leaving them to the
+ * generic forwarder would let a query settle without ever releasing in-flight.
  */
 const instrumentQuery = (query: object): object => {
   counters.queriesStarted += 1;
@@ -78,6 +82,17 @@ const instrumentQuery = (query: object): object => {
     throw error;
   };
 
+  const settledThen = (
+    target: object,
+    onFulfilled?: (result: unknown) => unknown,
+    onRejected?: (error: unknown) => unknown,
+  ): Promise<unknown> =>
+    (Reflect.get(target, "then") as AnyFunction).call(
+      target,
+      (result: unknown) => settleFulfilled(onFulfilled, result),
+      (error: unknown) => settleRejected(onRejected, error),
+    ) as Promise<unknown>;
+
   return new Proxy(query, {
     get(target, property, receiver) {
       const value = Reflect.get(target, property, receiver);
@@ -85,12 +100,14 @@ const instrumentQuery = (query: object): object => {
         return (
           onFulfilled?: (result: unknown) => unknown,
           onRejected?: (error: unknown) => unknown,
-        ): unknown =>
-          (value as AnyFunction).call(
-            target,
-            (result: unknown) => settleFulfilled(onFulfilled, result),
-            (error: unknown) => settleRejected(onRejected, error),
-          );
+        ): unknown => settledThen(target, onFulfilled, onRejected);
+      }
+      if (property === "catch") {
+        return (onRejected?: (error: unknown) => unknown): unknown =>
+          settledThen(target).catch(onRejected);
+      }
+      if (property === "finally") {
+        return (onFinally?: () => unknown): unknown => settledThen(target).finally(onFinally);
       }
       if (typeof value === "function") {
         return (...args: unknown[]): unknown => {
@@ -108,7 +125,22 @@ const instrumentQuery = (query: object): object => {
 
 const TRANSACTION_METHODS = ["begin", "savepoint", "transaction"] as const;
 
+/*
+ * Bun hands `begin` a fresh transaction client but hands `savepoint` the very
+ * client it was called on, so a savepoint would otherwise stack a second set of
+ * wrappers on an already-wrapped client and count every later query once per
+ * layer — 2^depth inflation of query counts, durations and queued queries.
+ * Instrumentation mutates the client in place, so it must run at most once per
+ * client object.
+ */
+const instrumentedClients = new WeakSet<object>();
+
 const instrumentClient = (client: InstrumentableClient): InstrumentableClient => {
+  if (instrumentedClients.has(client)) {
+    return client;
+  }
+  instrumentedClients.add(client);
+
   const originalUnsafe = client.unsafe;
   client.unsafe = (query: string, params?: unknown[]): object =>
     instrumentQuery(originalUnsafe.call(client, query, params));
