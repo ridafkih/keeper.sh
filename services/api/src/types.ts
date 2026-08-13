@@ -174,7 +174,7 @@ interface KeeperApi {
   listMappings: (userId: string) => Promise<KeeperMapping[]>;
   getEventsInRange: (userId: string, range: KeeperEventRangeInput, filters?: KeeperEventFilters) => Promise<KeeperEvent[]>;
   getEvent: (userId: string, eventId: string) => Promise<KeeperEvent | null>;
-  getEventCount: (userId: string, options?: { from?: Date; to?: Date }) => Promise<number>;
+  getEventCount: (userId: string, options?: { from: Date; to: Date }) => Promise<number>;
   findFreeTime: (
     userId: string,
     range: KeeperEventRangeInput,
