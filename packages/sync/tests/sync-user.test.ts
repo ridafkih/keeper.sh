@@ -287,12 +287,6 @@ describe("createDestinationReconciliationScope", () => {
     syncEventId: `over-budget-series::occurrence-${index}`,
   }));
 
-  /*
-   * The reconciliation scope is what stops a series withheld for exceeding the
-   * occurrence budget from reading as deleted at the source. Dropping or renaming
-   * the field mass-deletes every mirror of that series and mass-re-adds them once
-   * the series recovers, so the wiring is asserted through its real consumer.
-   */
   it("withholds an over-budget series from removal when its state ids are threaded through", () => {
     const scope = createScope(["over-budget-series"]);
 

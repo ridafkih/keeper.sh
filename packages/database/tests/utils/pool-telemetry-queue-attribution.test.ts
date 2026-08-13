@@ -23,11 +23,6 @@ interface AttemptResult {
   waited: boolean;
 }
 
-/*
- * One attempt is one window plus one transaction, the shape a destination sync
- * attempt has. The offset between issuing the transaction and its callback
- * starting is the ground truth for whether this attempt waited on the pool.
- */
 const runAttempt = async (client: PoolClient): Promise<AttemptResult> =>
   await withDatabasePoolWindow(async (window) => {
     const issuedAt = performance.now();

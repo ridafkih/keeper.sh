@@ -48,12 +48,7 @@ const delay = (durationMs: number): Promise<void> =>
     setTimeout(resolve, durationMs);
   });
 
-/*
- * Bun hands `begin` a fresh transaction client and hands `savepoint` the very
- * client it was called on, which is what the nested drizzle transaction inside a
- * flush reaches. `issued` is the ground truth every attribution assertion is
- * measured against.
- */
+// Bun hands `begin` a fresh client and `savepoint` the one it was called on.
 const createClient = (statementDurationMs: number) => {
   const issued: string[] = [];
   const buildClient = (): FakeClient => {
@@ -102,12 +97,6 @@ interface AttemptOutcome {
   threw: boolean;
 }
 
-/*
- * The ordering below is the ordering of one destination attempt in
- * syncDestinationsForUser: the window opens before the lock, every lookup that
- * precedes the reconcile is timed, and the fields are built when the engine
- * emits its event.
- */
 const runAttempt = async (
   client: FakeClient,
   issued: string[],

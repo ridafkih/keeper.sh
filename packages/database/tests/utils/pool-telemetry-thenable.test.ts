@@ -11,11 +11,6 @@ interface ThenableClient extends Record<string, unknown> {
   unsafe: (query: string, params?: unknown[]) => object;
 }
 
-/*
- * A client whose transaction returns a thenable that is not a native Promise:
- * the branch instrumentClient takes when it cannot read the outcome with
- * Bun.peek.status.
- */
 const createThenableClient = (): ThenableClient => ({
   begin: (callback) => {
     const settled = (async () => await callback(createThenableClient()))();

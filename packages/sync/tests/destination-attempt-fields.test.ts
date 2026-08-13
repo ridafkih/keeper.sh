@@ -14,6 +14,14 @@ const EXPECTED_FIELDS = [
   "sync.phase.source_authority.duration_ms",
 ] as const;
 
+const burnWallTime = (durationMs: number): void => {
+  const busyUntil = performance.now() + durationMs;
+  let now = performance.now();
+  while (now < busyUntil) {
+    now = performance.now();
+  }
+};
+
 const makeWindow = (overrides: Partial<{
   failedQueryCount: number;
   inFlight: number;
@@ -96,10 +104,7 @@ describe("createDestinationAttemptWideEventFields", () => {
       providerResolveDurationMs: 3,
       sourceAuthorityDurationMs: 4,
     });
-    const busyUntil = performance.now() + 20;
-    while (performance.now() < busyUntil) {
-      // Burn wall time so the attempt total exceeds the named phases
-    }
+    burnWallTime(20);
 
     const fields = createDestinationAttemptWideEventFields(timings);
     const namedTotal = timings.destinationLookupDurationMs

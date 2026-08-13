@@ -14,10 +14,7 @@ interface FakeClient extends Record<string, unknown> {
   unsafe: (query: string, params?: unknown[]) => object;
 }
 
-/*
- * Bun hands `begin` a fresh transaction client and hands `savepoint` the very
- * same client it was called on, which this fake reproduces.
- */
+// Bun hands `begin` a fresh client and `savepoint` the one it was called on.
 const createFakeClient = () => {
   const executed: string[] = [];
 

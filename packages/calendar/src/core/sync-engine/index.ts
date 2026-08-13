@@ -22,12 +22,6 @@ import type { CalendarSyncProvider, PendingChanges } from "./types";
  */
 const OPERATION_ERROR_SAMPLE_SIZE = 20;
 
-/*
- * The duration_ms field has always measured only the reconcile call, which starts
- * after the local and remote reads have completed. Every phase below is timed
- * separately so the wall-time of a sync can be attributed instead of guessed, and
- * unattributed carries whatever the named phases do not account for.
- */
 const SYNC_PHASES = [
   "read_state",
   "currency_check",
@@ -785,6 +779,10 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
 
     throw error;
   } finally {
+    /*
+     * These two cover the same span on different clocks -- duration_ms is wall-clock and
+     * sync.reconcile.duration_ms is monotonic -- and must never be differenced.
+     */
     wideEvent["duration_ms"] = Date.now() - startTime;
     timer.appendFields(wideEvent, performance.now() - reconcileStartedAt);
     onSyncEvent?.(wideEvent);

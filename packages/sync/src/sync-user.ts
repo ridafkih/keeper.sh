@@ -362,12 +362,6 @@ interface DestinationAttemptTimings {
   sourceAuthorityDurationMs: number;
 }
 
-/*
- * The duration_ms field on a sync event covers the reconcile call alone, which
- * begins only after the lock, the provider resolve and both reconciliation reads
- * have finished. sync.attempt.duration_ms is the unambiguous total for one
- * destination attempt, and the phase fields beside it say where that total went.
- */
 const createDestinationAttemptWideEventFields = (
   timings: DestinationAttemptTimings,
 ): Record<string, number> => {

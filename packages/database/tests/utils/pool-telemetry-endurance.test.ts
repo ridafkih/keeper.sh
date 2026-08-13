@@ -27,12 +27,6 @@ const swallow = async (work: () => Promise<unknown>): Promise<unknown> => {
   }
 };
 
-/*
- * A probe on an otherwise idle pool: anything the telemetry failed to release --
- * an in-flight query, a held connection, a pending acquisition -- shows up here
- * as residue, and it can only ever accumulate, so a ratchet is visible on the
- * first round that leaks.
- */
 const probeIdlePool = async (client: PoolClient) =>
   await withDatabasePoolWindow(async (readWindow) => {
     await run(client, "select 1");

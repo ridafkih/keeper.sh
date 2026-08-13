@@ -22,25 +22,6 @@ const counters = {
   pooledQueriesInFlight: 0,
 };
 
-/*
- * A window belongs to the unit of work that opened it -- one destination sync
- * attempt -- and a process runs many of those at once. Counting queries on
- * process-wide totals would hand every concurrent attempt the sum of all of
- * them: query counts multiplied by the concurrency factor and a query duration
- * larger than the attempt that reports it. A query is therefore charged to the
- * window open in the async context that issued it, so `queryCount`,
- * `queryDurationMs`, `queuedQueryCount` and `failedQueryCount` all describe the
- * same population, the queries this window's own work issued.
- *
- * `inFlight` stays process-wide on purpose: it is a pool gauge, and how much of
- * the pool is busy right now is a property of the process, not of one attempt.
- *
- * A window is bounded by the body it is opened around rather than left set on
- * the context it was opened from. Scoping it to a callback is what keeps a
- * caller's later queries off the window a function it called had opened, and it
- * keeps the module off `AsyncLocalStorage.enterWith`, which segfaults Bun when
- * it is reached from a top-level-await chain.
- */
 interface WindowScope {
   failedQueryCount: number;
   queryCount: number;
@@ -48,6 +29,7 @@ interface WindowScope {
   queuedQueryCount: number;
 }
 
+// Always scoped with `run`: `enterWith` segfaults Bun 1.3.14 under top-level await.
 const windowScopes = new AsyncLocalStorage<WindowScope | null>();
 
 let maxConnections = 0;
@@ -55,19 +37,10 @@ let maxConnections = 0;
 const roundDuration = (durationMs: number): number => Math.round(durationMs * 100) / 100;
 
 /*
- * A Bun pool connection is occupied for the whole lifetime of a transaction,
- * idle gaps between statements included, not merely while a statement is on the
- * wire. Query concurrency therefore says nothing about pool availability: two
- * open transactions can exhaust a `max: 2` pool while a single statement is in
- * flight. Occupancy is held transactions plus the queries issued outside any
- * transaction, and that is what a newly issued unit of work has to get past.
- *
- * Demand that has been requested but not yet granted counts too. A transaction
- * only raises `heldConnections` once the pool hands it a connection and its
- * callback runs, which is at best a tick after `begin` was called, so a burst
- * issued in a single tick would otherwise all read the occupancy that preceded
- * the burst and every member of it would look unqueued no matter how long the
- * pool actually made it wait.
+ * Bun holds a connection for a transaction's whole lifetime, idle gaps included, and
+ * raises `heldConnections` only once the callback runs — a tick or more after `begin`.
+ * Requested-but-ungranted demand therefore has to count, or a burst issued in one tick
+ * reads the occupancy that preceded it and every member looks unqueued.
  */
 interface PendingAcquisition {
   awaited: Promise<unknown> | null;
@@ -76,17 +49,7 @@ interface PendingAcquisition {
 
 const pendingAcquisitions = new Set<PendingAcquisition>();
 
-/*
- * A transaction that dies before the pool ever grants it a connection never runs
- * its callback, so its demand has to be dropped from the outcome or it inflates
- * occupancy for the rest of the process. Attaching a rejection handler to that
- * outcome would mark the transaction's rejection handled and silence the
- * process-level unhandled-rejection signal, and re-throwing from the handler
- * would instead invent a rejection nobody can catch, so the outcome is read
- * without being consumed: `Bun.peek.status` reports a promise's state without
- * attaching anything to it. Settled demand is swept the next time occupancy is
- * computed, which is before any verdict that would have used it.
- */
+// Swept via `Bun.peek.status`: subscribing would mark the caller's rejection handled.
 const releaseSettledAcquisitions = (): void => {
   if (pendingAcquisitions.size === 0) {
     return;
@@ -115,28 +78,12 @@ interface TransactionState {
 const transactionStates = new WeakMap<object, TransactionState>();
 
 /*
- * Bun's SQL exposes no pool statistics: the whole prototype chain carries only
- * `options`, and `reserve()` hands back a connection that already has queries in
- * flight instead of waiting for a free one. Counting issue and settlement at the
- * single seam every drizzle query passes through — `client.unsafe` — is the only
- * way to see how much demand the process is putting on the pool. The returned
- * query is lazy and its result mode is chosen by a later `.values()` call, so the
- * proxy must forward untouched and hook `then` rather than awaiting anything.
- *
- * `catch` and `finally` are own methods on Bun's SQLQuery that reach the raw
- * `then`, so they are routed back through the hooked one; leaving them to the
- * generic forwarder would let a query settle without ever releasing in-flight.
- *
- * A lazy query only reaches the wire when something subscribes to it, and only a
- * subscription can ever settle it, so issue is counted on the first subscription
- * rather than on construction. Counting at construction would pair an increment
- * that always happens with a decrement that happens only if the query is
- * awaited: a query built and dropped would hold `inFlight` and
- * `pooledQueriesInFlight` for the life of the process, and enough of them would
- * park `waitsForConnection` at true and report every later query on an idle pool
- * as queued. Both counters now move on the same guaranteed-paired event, the
- * transition of one query through issued and then settled, which each happen at
- * most once however many times `then`, `catch` and `finally` are called.
+ * Bun's SQL exposes no pool statistics, so `client.unsafe` is the only seam every
+ * drizzle query passes through. Its SQLQuery is lazy: a query is counted when a
+ * subscription issues it, never on construction, so that each increment is paired with
+ * a decrement — a built-and-dropped query would otherwise hold `inFlight` forever and
+ * park `waitsForConnection` at true. `catch` and `finally` are own methods reaching the
+ * raw `then`, so they must route through the hooked one or a query settles unreleased.
  */
 const instrumentQuery = (
   query: object,
@@ -157,9 +104,8 @@ const instrumentQuery = (
     let queued = false;
     if (transactional) {
       /*
-       * A statement inside a transaction runs on a connection the transaction
-       * already owns, so it never queues; the wait its transaction served before
-       * the pool let it start is charged to the first statement that follows.
+       * A statement never queues on its own transaction's connection; it inherits the
+       * wait the transaction served before the pool let it start.
        */
       if (transactionState?.pendingQueued) {
         transactionState.pendingQueued = false;
@@ -267,12 +213,9 @@ const instrumentQuery = (
 const TRANSACTION_METHODS = ["begin", "savepoint", "transaction"] as const;
 
 /*
- * Bun hands `begin` a fresh transaction client but hands `savepoint` the very
- * client it was called on, so a savepoint would otherwise stack a second set of
- * wrappers on an already-wrapped client and count every later query once per
- * layer — 2^depth inflation of query counts, durations and queued queries.
- * Instrumentation mutates the client in place, so it must run at most once per
- * client object.
+ * Bun hands `savepoint` the very client it was called on, so without this dedup a
+ * nested transaction stacks a second set of wrappers and inflates every count by
+ * 2^depth. Instrumentation mutates in place and must run once per client object.
  */
 const instrumentedClients = new WeakSet<object>();
 
@@ -298,21 +241,11 @@ const instrumentClient = (
     if (typeof original !== "function") {
       continue;
     }
-    /*
-     * `begin` on a pool client takes a connection out of the pool for as long as
-     * its callback runs. `savepoint`, and any transaction method reached from a
-     * client already inside a transaction, run on the connection that
-     * transaction holds and must not be counted as a second occupant.
-     */
     const acquiresConnection = !transactional && method !== "savepoint";
     client[method] = (...args: unknown[]): unknown => {
       /*
-       * A transaction that has to wait for a connection is resumed by whoever
-       * released one, so the pool hands its callback that releaser's async
-       * context rather than the context the transaction was opened from. The
-       * scope open at the call is therefore captured here and re-established
-       * around the callback, or every statement of a transaction that queued
-       * would be charged to a stranger's window, or to no window at all.
+       * A queued transaction's callback runs in the async context of whoever released the
+       * connection, so the issuing scope is captured here and restored around it.
        */
       const issuingScope = windowScopes.getStore() ?? null;
 
@@ -363,14 +296,8 @@ const instrumentClient = (
       };
 
       /*
-       * The callback is the normal end of an acquisition; the outcome is only a
-       * fallback for the transaction that dies before the pool grants it one,
-       * and it is read by sweeping rather than by subscribing so that the
-       * caller's promise keeps exactly the rejection semantics it had
-       * uninstrumented. An outcome that is not a native promise cannot be swept
-       * -- reading it at all means calling its `then`, which would mark its
-       * rejection handled -- so its demand is dropped immediately rather than
-       * bought at the price of changing what the process observes.
+       * A non-native thenable cannot be read without consuming its rejection, so its
+       * demand is dropped rather than swept.
        */
       try {
         const returned = (original as AnyFunction).apply(

@@ -116,13 +116,7 @@ describe("database pool telemetry demand accounting", () => {
       return performance.now() - startedAt;
     };
 
-    /*
-     * A single batch each way measures whichever of the two paid for the JIT
-     * warm-up and the garbage collection that landed in it, which on a batch
-     * this short swamps the difference being measured. The fastest of several
-     * batches is the one least perturbed by both, so the comparison is between
-     * the steady state of each path.
-     */
+    // Fastest of several batches: a single batch is swamped by JIT warm-up and GC.
     const runFastestBatch = async (): Promise<number> => {
       let fastestMs = Number.POSITIVE_INFINITY;
       for (let round = 0; round < 4; round += 1) {

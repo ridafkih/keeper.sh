@@ -24,11 +24,7 @@ const createSlowClient = (statementDurationMs: number): FakeClient => {
   return buildClient();
 };
 
-/*
- * A pool that has no connection left defers the callback until another holder
- * releases one, so the callback runs in the releaser's async context rather than
- * the context that opened the transaction.
- */
+// A deferred callback runs in the releaser's async context, not the opener's.
 const createHandOffClient = () => {
   const waiting: (() => void)[] = [];
   const buildClient = (): FakeClient => ({
