@@ -121,7 +121,7 @@ describe("classifyDatabaseError non-database failures", () => {
 });
 
 describe("getDatabaseErrorDetails alongside classification", () => {
-  it("reports the driver code as the sqlState for a wrapped pool failure", () => {
+  it("describes a wrapped pool failure without inventing a sqlState", () => {
     const error = drizzleWrapped(
       postgresError("Max lifetime timeout reached after 1800s", {
         code: "ERR_POSTGRES_LIFETIME_TIMEOUT",
@@ -132,7 +132,11 @@ describe("getDatabaseErrorDetails alongside classification", () => {
       constraint: null,
       detail: null,
       message: "Max lifetime timeout reached after 1800s",
-      sqlState: "ERR_POSTGRES_LIFETIME_TIMEOUT",
+      sqlState: null,
+    });
+    expect(classifyDatabaseError(error)).toEqual({
+      slug: "db-connection-unavailable",
+      sqlState: null,
     });
   });
 });

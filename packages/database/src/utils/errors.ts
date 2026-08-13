@@ -1,3 +1,5 @@
+const SQLSTATE_PATTERN = /^[0-9A-Z]{5}$/;
+const DRIVER_CODE_PREFIX = "ERR_POSTGRES_";
 const STATEMENT_TIMEOUT_SQLSTATE = "57014";
 const CONNECTION_TERMINATED_CODE = "ERR_POSTGRES_EXPECTED_REQUEST";
 const CONNECTION_UNAVAILABLE_CODES = new Set([
@@ -50,29 +52,56 @@ const readString = (value: unknown): string | null => {
   return null;
 };
 
-const getDatabaseErrorDetails = (error: unknown): DatabaseErrorDetails | null => {
-  const cause = readCause(error);
-  if (!cause) {
-    return null;
-  }
-
-  const details = {
-    constraint: readString(cause.constraint),
-    detail: readString(cause.detail),
-    message: readString(cause.message),
-    sqlState: readString(cause.errno) ?? readString(cause.code),
-  };
-  if (Object.values(details).every((value) => value === null)) {
-    return null;
-  }
-  return details;
-};
-
 const readField = (value: unknown, field: string): string | null => {
   if (!isRecord(value)) {
     return null;
   }
   return readString(value[field]);
+};
+
+const readSqlState = (value: unknown): string | null => {
+  const errno = readField(value, "errno");
+  if (errno !== null && SQLSTATE_PATTERN.test(errno)) {
+    return errno;
+  }
+  return null;
+};
+
+const isDatabaseErrorShape = (value: unknown): boolean => {
+  if (readSqlState(value) !== null) {
+    return true;
+  }
+  const code = readField(value, "code");
+  return code !== null && code.startsWith(DRIVER_CODE_PREFIX);
+};
+
+const readDetailSource = (error: unknown): unknown => {
+  if (isDatabaseErrorShape(error)) {
+    return error;
+  }
+  const cause = readCause(error);
+  if (isDatabaseErrorShape(cause)) {
+    return cause;
+  }
+  return null;
+};
+
+const getDatabaseErrorDetails = (error: unknown): DatabaseErrorDetails | null => {
+  const source = readDetailSource(error);
+  if (source === null) {
+    return null;
+  }
+
+  const details = {
+    constraint: readField(source, "constraint"),
+    detail: readField(source, "detail"),
+    message: readField(source, "message"),
+    sqlState: readSqlState(source),
+  };
+  if (Object.values(details).every((value) => value === null)) {
+    return null;
+  }
+  return details;
 };
 
 const readFromErrorOrCause = (
