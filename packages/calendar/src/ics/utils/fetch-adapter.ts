@@ -3,7 +3,7 @@ import type { FetchEventsResult } from "../../core/sync-engine/ingest";
 import type { SafeFetchOptions } from "../../utils/safe-fetch";
 import { coerceCompliantDate } from "../patches/coerce-compliant-date";
 import { parseIcsCalendarLenient } from "./lenient-parser";
-import { parseIcsEvents } from "./parse-ics-events";
+import { parseIcsEventsWithDiagnostics } from "./parse-ics-events";
 import { pullRemoteCalendar } from "./pull-remote-calendar";
 import { prepareCalendarSnapshot } from "./create-snapshot";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
@@ -307,9 +307,9 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
         patches: [coerceCompliantDate],
       });
     }
-    const parsed = parseIcsEvents(calendar);
+    const parsed = parseIcsEventsWithDiagnostics(calendar);
     const recurrenceTimeZones = resolveRecurrenceTimeZones(
-      parsed,
+      parsed.events,
       readDeclaredTimeZoneOffsets(ical),
     );
     let events: SourceEvent[] = recurrenceTimeZones.events.map((event) => ({
@@ -350,6 +350,17 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
     ])];
     const result: FetchEventsResult = {
       events,
+      /*
+       * A feed is a snapshot: a VEVENT the publisher mangled is absent from the
+       * diff, so the stored row behind it is deleted. The count has to travel
+       * with the fetch or that deletion leaves no trace at all. Nothing is
+       * dropped for the window here — the whole feed is retained on purpose.
+       */
+      discardedEventCounts: {
+        outsideSyncWindow: 0,
+        unrepresentable: parsed.unrepresentableCount,
+      },
+      selfAuthoredEventCount: parsed.selfAuthoredCount,
       syncWindow,
       coverage: {
         futureRange,

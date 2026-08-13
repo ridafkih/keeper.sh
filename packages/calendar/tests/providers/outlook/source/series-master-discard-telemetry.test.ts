@@ -61,11 +61,16 @@ const DISCARD_KEYS = [
   "source_events.unsupported_count",
 ];
 
-const discardTotal = (wideEvent: IngestWideEventFields): number =>
-  DISCARD_KEYS.reduce((total, key) => {
+const discardTotal = (wideEvent: IngestWideEventFields): number => {
+  let total = 0;
+  for (const key of DISCARD_KEYS) {
     const value = wideEvent[key];
-    return typeof value === "number" ? total + value : total;
-  }, 0);
+    if (typeof value === "number") {
+      total += value;
+    }
+  }
+  return total;
+};
 
 const runIngest = async (
   stored: StoredSourceEventState[],

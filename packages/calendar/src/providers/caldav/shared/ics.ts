@@ -5,7 +5,7 @@ import {
   buildZonedIcsDate,
   normalizeTimezone,
   parseIcsCalendar,
-  parseIcsEvents,
+  parseIcsEventsWithDiagnostics,
 } from "../../../ics";
 import type {
   IcsCalendar,
@@ -93,6 +93,12 @@ interface ParseICalCalendarsOptions {
 
 interface ParsedCalendarResources {
   events: ParsedCalendarEvent[];
+  /**
+   * VEVENTs inside resources that parsed fine but carried no UID or no DTSTART.
+   * The resource is readable, so `skippedResourceCount` never sees them, yet
+   * the event is absent from the diff and its stored row is deleted.
+   */
+  unrepresentableEventCount: number;
   skippedResourceCount: number;
   skippedResourceReasons: string[];
 }
@@ -179,15 +185,20 @@ const parseICalCalendarsToRemoteEvents = (
         skippedResourceReasons,
       });
     }
-    return { events: [], skippedResourceCount: 0, skippedResourceReasons };
+    return {
+      events: [],
+      skippedResourceCount: 0,
+      skippedResourceReasons,
+      unrepresentableEventCount: 0,
+    };
   }
   const calendar = {
     ...firstCalendar,
     events: calendars.flatMap((entry) => entry.events ?? []),
   };
-  const parsedEvents = parseIcsEvents(calendar, { includeKeeperEvents: true });
-  assertSupportedRecurrenceTimeZones(parsedEvents);
-  const events = parsedEvents.map((event) => ({
+  const parsed = parseIcsEventsWithDiagnostics(calendar, { includeKeeperEvents: true });
+  assertSupportedRecurrenceTimeZones(parsed.events);
+  const events = parsed.events.map((event) => ({
     availability: event.availability ?? "busy",
     deleteId: event.uid,
     description: event.description,
@@ -208,6 +219,7 @@ const parseICalCalendarsToRemoteEvents = (
     events,
     skippedResourceCount: skippedResourceReasons.length,
     skippedResourceReasons,
+    unrepresentableEventCount: parsed.unrepresentableCount,
   };
 };
 

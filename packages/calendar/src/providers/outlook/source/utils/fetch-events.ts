@@ -253,6 +253,17 @@ const fetchSeriesMasterInstances = async (
   return instances;
 };
 
+/**
+ * A master whose `/instances` response is empty has no occurrence inside the
+ * requested range, so it vanishes here — before the parser and before the
+ * window filter, where the discard counters live. Reporting the count keeps the
+ * stored rows this deletes from disappearing untraced.
+ */
+interface ExpandedSeriesMasters {
+  events: OutlookCalendarEvent[];
+  unexpandedSeriesMasterCount: number;
+}
+
 const expandSeriesMasters = async (
   accessToken: string,
   calendarId: string,
@@ -260,23 +271,29 @@ const expandSeriesMasters = async (
   timeMin: Date,
   timeMax: Date,
   signal?: AbortSignal,
-): Promise<OutlookCalendarEvent[]> => {
+): Promise<ExpandedSeriesMasters> => {
   const expanded: OutlookCalendarEvent[] = [];
+  let unexpandedSeriesMasterCount = 0;
   for (const event of events) {
     if (event.type !== SERIES_MASTER_TYPE || !event.id) {
       expanded.push(event);
       continue;
     }
-    expanded.push(...await fetchSeriesMasterInstances(
+    const instances = await fetchSeriesMasterInstances(
       accessToken,
       calendarId,
       event.id,
       timeMin,
       timeMax,
       signal,
-    ));
+    );
+    if (instances.length === 0) {
+      unexpandedSeriesMasterCount += 1;
+      continue;
+    }
+    expanded.push(...instances);
   }
-  return expanded;
+  return { events: expanded, unexpandedSeriesMasterCount };
 };
 
 const deduplicateOutlookEvents = (events: OutlookCalendarEvent[]): OutlookCalendarEvent[] => {
@@ -372,21 +389,25 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
      */
     return { events: [], fullSyncRequired: true };
   }
+  let unexpandedSeriesMasterCount = 0;
   if (timeMin && timeMax) {
-    latestChangedEvents = deduplicateOutlookEvents(await expandSeriesMasters(
+    const expansion = await expandSeriesMasters(
       accessToken,
       calendarId,
       latestChangedEvents,
       timeMin,
       timeMax,
       signal,
-    ));
+    );
+    latestChangedEvents = deduplicateOutlookEvents(expansion.events);
+    ({ unexpandedSeriesMasterCount } = expansion);
   }
   const result: FetchEventsResult = {
     events: latestChangedEvents.filter((event) => !event["@removed"] && !event.isCancelled),
     fullSyncRequired: false,
     isDeltaSync,
     nextDeltaLink: lastDeltaLink,
+    unexpandedSeriesMasterCount,
   };
 
   if (isDeltaSync) {

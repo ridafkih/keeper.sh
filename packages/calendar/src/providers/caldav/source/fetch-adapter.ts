@@ -100,7 +100,7 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
        */
       discardedEventCounts: {
         outsideSyncWindow: outsideSyncWindowCount,
-        unrepresentable: 0,
+        unrepresentable: resources.unrepresentableEventCount,
       },
       selfAuthoredEventCount,
       syncWindow,

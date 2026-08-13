@@ -265,19 +265,82 @@ const convertCanonicalEvent = (
   };
 };
 
-const parseIcsEvents = (
+/**
+ * Skipping a Keeper-authored mirror is a deliberate no-op, not a lost event.
+ * Counting the two together would leave `unrepresentable` permanently non-zero
+ * on any mirrored calendar, drowning the one-off drop it exists to surface.
+ */
+interface ParsedIcsEventDiagnostics {
+  events: EventTimeSlot[];
+  selfAuthoredCount: number;
+  unrepresentableCount: number;
+}
+
+/*
+ * A VEVENT with no UID or no DTSTART is dropped before it ever reaches the
+ * output, and every snapshot source reads that absence as "the publisher
+ * removed it" and deletes the stored row. Counting the drop here is what keeps
+ * that deletion from being silent. Revisions of the same UID are counted once,
+ * and a UID that still produced an event elsewhere in the feed is not a loss.
+ */
+const countDiscardedIcsEvents = (
+  rawEvents: readonly IcsEvent[],
+  options: ParseIcsEventsOptions,
+  parsedUids: ReadonlySet<string>,
+): Pick<ParsedIcsEventDiagnostics, "selfAuthoredCount" | "unrepresentableCount"> => {
+  const selfAuthoredUids = new Set<string>();
+  const unrepresentableUids = new Set<string>();
+  let anonymousUnrepresentableCount = 0;
+
+  for (const event of rawEvents) {
+    if (!event.uid) {
+      anonymousUnrepresentableCount += 1;
+      continue;
+    }
+    if (!options.includeKeeperEvents && isKeeperEvent(event.uid)) {
+      selfAuthoredUids.add(event.uid);
+      continue;
+    }
+    if (!event.start?.date && !parsedUids.has(event.uid)) {
+      unrepresentableUids.add(event.uid);
+    }
+  }
+
+  return {
+    selfAuthoredCount: selfAuthoredUids.size,
+    unrepresentableCount: anonymousUnrepresentableCount + unrepresentableUids.size,
+  };
+};
+
+const parseIcsEventsWithDiagnostics = (
   calendar: IcsCalendar,
   options: ParseIcsEventsOptions = {},
-): EventTimeSlot[] => {
-  const canonicalEvents = selectCanonicalEventRevisions(calendar.events ?? []);
+): ParsedIcsEventDiagnostics => {
+  const rawEvents = calendar.events ?? [];
+  const canonicalEvents = selectCanonicalEventRevisions(rawEvents);
   assertNoRangedOverrides(canonicalEvents);
   const cancellations = collectCancellationState(canonicalEvents);
-  return canonicalEvents.flatMap((event) => {
+  const events = canonicalEvents.flatMap((event) => {
     if (shouldSkipEvent(event, options, cancellations)) {
       return [];
     }
     return [convertCanonicalEvent(event, cancellations)];
   });
+
+  return {
+    events,
+    ...countDiscardedIcsEvents(
+      rawEvents,
+      options,
+      new Set(events.map(({ uid }) => uid)),
+    ),
+  };
 };
 
-export { parseIcsEvents };
+const parseIcsEvents = (
+  calendar: IcsCalendar,
+  options: ParseIcsEventsOptions = {},
+): EventTimeSlot[] => parseIcsEventsWithDiagnostics(calendar, options).events;
+
+export { parseIcsEvents, parseIcsEventsWithDiagnostics };
+export type { ParsedIcsEventDiagnostics };

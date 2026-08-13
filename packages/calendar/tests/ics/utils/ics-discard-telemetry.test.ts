@@ -1,4 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ingestSource } from "../../../src/core/sync-engine/ingest";
+import type { IngestWideEventFields } from "../../../src/core/sync-engine/ingest";
+import type { StoredSourceEventState } from "../../../src/core/source/stored-event-state";
+import type { SourceEvent } from "../../../src/core/types";
+import { createIcsSourceFetcher } from "../../../src/ics/utils/fetch-adapter";
 
 const { mockPullRemoteCalendar } = vi.hoisted(() => ({
   mockPullRemoteCalendar: vi.fn<(...args: unknown[]) => Promise<{ ical: string }>>(),
@@ -16,12 +21,6 @@ vi.mock("../../../src/ics/utils/pull-remote-calendar", () => ({
 vi.mock("../../../src/ics/utils/create-snapshot", () => ({
   prepareCalendarSnapshot: mockPrepareCalendarSnapshot,
 }));
-
-import { ingestSource } from "../../../src/core/sync-engine/ingest";
-import type { IngestWideEventFields } from "../../../src/core/sync-engine/ingest";
-import type { StoredSourceEventState } from "../../../src/core/source/stored-event-state";
-import type { SourceEvent } from "../../../src/core/types";
-import { createIcsSourceFetcher } from "../../../src/ics/utils/fetch-adapter";
 
 const CALENDAR_ID = "ics-calendar";
 
@@ -156,11 +155,16 @@ const DISCARD_KEYS = [
   "source_events.unsupported_count",
 ];
 
-const discardTotal = (wideEvent: IngestWideEventFields): number =>
-  DISCARD_KEYS.reduce((total, key) => {
+const discardTotal = (wideEvent: IngestWideEventFields): number => {
+  let total = 0;
+  for (const key of DISCARD_KEYS) {
     const value = wideEvent[key];
-    return typeof value === "number" ? total + value : total;
-  }, 0);
+    if (typeof value === "number") {
+      total += value;
+    }
+  }
+  return total;
+};
 
 describe("ICS feed discards", () => {
   beforeEach(() => {
