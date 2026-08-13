@@ -99,10 +99,6 @@ export async function fetchSubscriptionStateWithApi(
       throw error;
     }
 
-    console.error(
-      `[subscription] ${CUSTOMER_STATE_PATH} read failed, falling back to ${ENTITLEMENTS_PATH}:`,
-      error,
-    );
 
     const entitlements = entitlementsPlanSchema.assert(
       await fetchApi<unknown>(ENTITLEMENTS_PATH),
