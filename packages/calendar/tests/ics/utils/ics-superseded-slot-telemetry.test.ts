@@ -197,6 +197,13 @@ const discardTotal = (wideEvent: IngestWideEventFields): number => {
   return total;
 };
 
+const alternatingCollisionOrder = (poll: number): string[][] => {
+  if (poll % 2 === 0) {
+    return [BARE_COPY, REVISED_COPY];
+  }
+  return [REVISED_COPY, BARE_COPY];
+};
+
 describe("ICS revision-superseded slot discards", () => {
   beforeEach(() => {
     mockPullRemoteCalendar.mockReset();
@@ -243,7 +250,7 @@ describe("ICS revision-superseded slot discards", () => {
     for (let poll = 0; poll < 3; poll += 1) {
       const repeat = await ingestFeed(
         store,
-        calendar(poll % 2 === 0 ? [BARE_COPY, REVISED_COPY] : [REVISED_COPY, BARE_COPY]),
+        calendar(alternatingCollisionOrder(poll)),
       );
       expect(repeat.inserts).toEqual([]);
       expect(repeat.deletes).toEqual([]);

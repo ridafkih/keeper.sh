@@ -134,11 +134,23 @@ interface CanonicalEventRevision {
  * Revision ties carry no ordering information, so the winner is pinned to the
  * lowest slot signature rather than to feed order: a publisher that renders
  * from an unordered query would otherwise swap the stored row on every poll,
- * deleting and re-creating it forever. Ties that disagree on their slot are
- * distinct events the storage model cannot both hold, so the losing slots are
- * reported as discarded; an event superseded by a genuinely newer revision is
- * not a loss and stays uncounted.
+ * deleting and re-creating it forever. Every slot the group holds other than
+ * the winner's is a row the storage model cannot keep, whether it lost on a
+ * tie-break or on revision order; an event superseded by a genuinely newer
+ * revision of the same slot is not a loss and stays uncounted.
  */
+const collapsedSlotSignatures = (
+  events: readonly IcsEvent[],
+  winner: IcsEvent,
+): Set<string> => {
+  const winnerSignature = buildEventSlotSignature(winner);
+  return new Set(
+    events
+      .map((event) => buildEventSlotSignature(event))
+      .filter((signature) => signature !== winnerSignature),
+  );
+};
+
 const selectGroupRevision = (group: readonly IcsEvent[]): CanonicalEventRevision => {
   const [first, ...rest] = group;
   if (!first) {
@@ -154,12 +166,10 @@ const selectGroupRevision = (group: readonly IcsEvent[]): CanonicalEventRevision
       winner = event;
     }
   }
-  const tiedSlots = new Set(
-    group
-      .filter((event) => compareEventRevisions(event, winner) === 0)
-      .map((event) => buildEventSlotSignature(event)),
-  );
-  return { collapsedSlotCount: tiedSlots.size - 1, event: winner };
+  return {
+    collapsedSlotCount: collapsedSlotSignatures(group, winner).size,
+    event: winner,
+  };
 };
 
 interface CanonicalEventRevisions {
@@ -186,7 +196,7 @@ const selectCanonicalEventRevisions = (
 ): CanonicalEventRevisions => {
   const revisions = [...groupEventsByRevisionIdentity(events).values()]
     .map((group) => selectGroupRevision(group));
-  const collapsedSlotCount = revisions.reduce(
+  const groupedCollapsedSlotCount = revisions.reduce(
     (total, revision) => total + revision.collapsedSlotCount,
     0,
   );
@@ -202,19 +212,39 @@ const selectCanonicalEventRevisions = (
     }
   }
 
+  /*
+   * A bare copy superseded by a revised namesake never met that namesake in a
+   * revision group, so nothing upstream has counted it. It still vanishes from
+   * the diff and takes its stored row with it, so the slot it would have
+   * occupied is reported here alongside the ones the groups collapsed.
+   */
+  const survivesAuthoritativeMaster = (event: IcsEvent): boolean => {
+    if (!event.uid || event.recurrenceId) {
+      return true;
+    }
+    const identity = buildEventRevisionIdentity(event);
+    if (!identity?.includes("|slot|")) {
+      return true;
+    }
+    const authoritativeMaster = authoritativeMasterByUid.get(event.uid);
+    return !authoritativeMaster || isNewerEventRevision(event, authoritativeMaster);
+  };
+  const supersededSlots = new Set(
+    canonicalEvents
+      .filter((event) => !survivesAuthoritativeMaster(event))
+      .flatMap((event) => {
+        const authoritativeMaster = authoritativeMasterByUid.get(event.uid ?? "");
+        if (!authoritativeMaster) {
+          throw new TypeError("A superseded VEVENT must have an authoritative master");
+        }
+        return [...collapsedSlotSignatures([event], authoritativeMaster)]
+          .map((signature) => `${event.uid ?? ""}|${signature}`);
+      }),
+  );
+
   return {
-    collapsedSlotCount,
-    events: canonicalEvents.filter((event) => {
-      if (!event.uid || event.recurrenceId) {
-        return true;
-      }
-      const identity = buildEventRevisionIdentity(event);
-      if (!identity?.includes("|slot|")) {
-        return true;
-      }
-      const authoritativeMaster = authoritativeMasterByUid.get(event.uid);
-      return !authoritativeMaster || isNewerEventRevision(event, authoritativeMaster);
-    }),
+    collapsedSlotCount: groupedCollapsedSlotCount + supersededSlots.size,
+    events: canonicalEvents.filter((event) => survivesAuthoritativeMaster(event)),
   };
 };
 

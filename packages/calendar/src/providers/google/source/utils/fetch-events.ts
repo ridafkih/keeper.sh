@@ -13,7 +13,7 @@ import {
 import { isAuthError } from "../../shared/errors";
 import type { GoogleApiError } from "../../types";
 import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
-import { parseEventDateTime } from "../../shared/date-time";
+import { parseEventTime } from "../../shared/date-time";
 import { isKeeperEvent } from "../../../../core/events/identity";
 import { withBackoff } from "../../shared/backoff";
 import { isRateLimitApiError } from "../../shared/errors";
@@ -355,7 +355,15 @@ const parseGoogleEventsWithDiagnostics = (
   let unrepresentableCount = 0;
 
   for (const event of events) {
-    if (!event.start || !event.end || !event.iCalUID) {
+    /*
+     * Every member of a Google time object is optional, so `{ timeZone: "UTC" }`
+     * reaches this loop. Guarding on the object alone would let it through to a
+     * parser that throws, failing the whole calendar's ingest on one event and
+     * stalling it for good; the drop belongs in the counter like any other.
+     */
+    const startTime = parseEventTime(event.start);
+    const endTime = parseEventTime(event.end);
+    if (!startTime || !endTime || !event.iCalUID) {
       unrepresentableCount += 1;
       continue;
     }
@@ -366,12 +374,12 @@ const parseGoogleEventsWithDiagnostics = (
     result.push({
       availability: resolveGoogleAvailability(event),
       description: event.description,
-      endTime: parseEventDateTime(event.end),
+      endTime,
       isAllDay: isAllDayGoogleEvent(event),
       location: resolveGoogleLocation(event),
       sourceEventType: resolveSourceEventType(event.eventType),
-      startTime: parseEventDateTime(event.start),
-      startTimeZone: event.start.timeZone ?? event.end.timeZone,
+      startTime,
+      startTimeZone: event.start?.timeZone ?? event.end?.timeZone,
       sourceEventId: event.id,
       title: event.summary,
       uid: event.iCalUID,

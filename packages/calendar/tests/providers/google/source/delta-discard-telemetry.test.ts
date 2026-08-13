@@ -258,13 +258,17 @@ describe("Google delta discards", () => {
       token,
     );
     expect(dropped.deletes).toEqual(["state-google-dinner"]);
-    token = typeof dropped.syncToken === "string" ? dropped.syncToken : token;
+    if (typeof dropped.syncToken === "string") {
+      token = dropped.syncToken;
+    }
 
     for (let run = 0; run < 3; run += 1) {
       const quiet = await ingestGoogle(store, [], token);
       expect(quiet.inserts).toEqual([]);
       expect(quiet.deletes).toEqual([]);
-      token = typeof quiet.syncToken === "string" ? quiet.syncToken : token;
+      if (typeof quiet.syncToken === "string") {
+        token = quiet.syncToken;
+      }
     }
 
     expect(store.ids()).toEqual(["state-google-standup"]);

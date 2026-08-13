@@ -177,6 +177,13 @@ const ingestCollection = async (
   return outcome;
 };
 
+const alternatingCollisionOrder = (poll: number): string[] => {
+  if (poll % 2 === 0) {
+    return [resource(SECOND_COPY), resource(FIRST_COPY)];
+  }
+  return [resource(FIRST_COPY), resource(SECOND_COPY)];
+};
+
 describe("CalDAV duplicate-UID resources", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -206,9 +213,7 @@ describe("CalDAV duplicate-UID resources", () => {
     for (let poll = 0; poll < 3; poll += 1) {
       const repeat = await ingestCollection(
         store,
-        poll % 2 === 0
-          ? [resource(SECOND_COPY), resource(FIRST_COPY)]
-          : [resource(FIRST_COPY), resource(SECOND_COPY)],
+        alternatingCollisionOrder(poll),
       );
       expect(repeat.inserts).toEqual([]);
       expect(repeat.deletes).toEqual([]);
