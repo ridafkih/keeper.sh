@@ -315,20 +315,46 @@ describe("destination attempt telemetry composed with the sync engine", () => {
     instrumentDatabasePool(client, 10);
 
     const counts = new Set<number>();
-    const durations: number[] = [];
     for (let round = 0; round < 50; round++) {
       const outcome = await runAttempt(client, issued, { eventIds: ["a"] });
       counts.add(outcome.fields["database.queries.count"] as number);
-      durations.push(outcome.fields["database.queries.duration_ms"] as number);
       expect(outcome.fields["database.pool.in_flight"]).toBe(0);
       expect(outcome.fields["database.queries.queued_count"]).toBe(0);
     }
 
     expect(counts.size, `counts drifted: ${[...counts].join(",")}`).toBe(1);
-    const firstTen = durations.slice(0, 10).reduce((total, value) => total + value, 0);
-    const lastTen = durations.slice(-10).reduce((total, value) => total + value, 0);
-    expect(lastTen).toBeLessThan(firstTen + 50);
+
+    // Tightening the pool to one connection turns any leaked occupancy into queued demand.
+    instrumentDatabasePool(client, 1);
+    const probe = await runAttempt(client, issued, { eventIds: ["a"] });
+    expect(probe.threw).toBe(false);
+    expect(probe.fields["database.queries.queued_count"]).toBe(0);
+    expect(probe.fields["database.pool.in_flight"]).toBe(0);
+    expect(probe.fields["database.queries.count"]).toBe(probe.issuedDuringAttempt);
   });
+
+  /*
+   * The durations are timer-backed wall-clock sums, so a preempted tick on a contended
+   * CI runner exceeds any allowance tight enough to still detect accumulation. Opt in
+   * on quiet hardware; CI reports it as skipped, never silently absent.
+   */
+  it.runIf(Boolean(process.env.KEEPER_PERF_TESTS))(
+    "does not accumulate query latency across fifty attempts",
+    async () => {
+      const { client, issued } = createClient(0);
+      instrumentDatabasePool(client, 10);
+
+      const durations: number[] = [];
+      for (let round = 0; round < 50; round++) {
+        const outcome = await runAttempt(client, issued, { eventIds: ["a"] });
+        durations.push(outcome.fields["database.queries.duration_ms"] as number);
+      }
+
+      const firstTen = durations.slice(0, 10).reduce((total, value) => total + value, 0);
+      const lastTen = durations.slice(-10).reduce((total, value) => total + value, 0);
+      expect(lastTen).toBeLessThan(firstTen + 50);
+    },
+  );
 
   it("emits only finite non-negative numbers on every field of every attempt", async () => {
     const { client, issued } = createClient(1);
