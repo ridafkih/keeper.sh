@@ -52,6 +52,8 @@ export function seoMeta({
   ];
 }
 
+const PERSON_ID = entityId("/about", "person");
+
 export const organizationSchema = {
   "@context": "https://schema.org",
   "@graph": [
@@ -67,6 +69,7 @@ export const organizationSchema = {
         height: 512,
       },
       sameAs: ["https://github.com/ridafkih/keeper.sh"],
+      founder: { "@id": PERSON_ID },
     },
     {
       "@type": "WebSite",
@@ -239,13 +242,21 @@ export function collectionPageSchema(posts: Array<{ slug: string; metadata: { ti
   };
 }
 
-export const authorPersonSchema = {
-  "@type": "Person",
-  "@id": `${SITE_URL}/#author`,
-  name: "Rida F'kih",
-  url: "https://rida.dev",
-  sameAs: ["https://github.com/ridafkih"],
-};
+export function personSchema(description: string) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    "@id": PERSON_ID,
+    name: "Rida F'kih",
+    description,
+    url: canonicalUrl("/about"),
+    sameAs: ["https://github.com/ridafkih", "https://rida.dev"],
+    worksFor: { "@id": `${SITE_URL}/#organization` },
+    mainEntityOfPage: { "@id": entityId("/about", "webpage") },
+  };
+}
+
+export const authorReference = { "@id": PERSON_ID };
 
 export function blogPostingSchema(post: {
   title: string;
@@ -268,7 +279,7 @@ export function blogPostingSchema(post: {
     datePublished: post.createdAt,
     dateModified: post.updatedAt,
     keywords: post.tags,
-    author: authorPersonSchema,
+    author: authorReference,
     publisher: { "@id": `${SITE_URL}/#organization` },
     isPartOf: { "@id": `${SITE_URL}/#website` },
     mainEntityOfPage: { "@type": "WebPage", "@id": url },

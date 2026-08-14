@@ -2,7 +2,7 @@ import { createFileRoute, notFound } from "@tanstack/react-router";
 import type { AllowedTags, Components } from "streamdown";
 import { Heading1 } from "@/components/ui/primitives/heading";
 import { Prose } from "@/components/ui/primitives/prose";
-import { ExternalTextLink } from "@/components/ui/primitives/text-link";
+import { TextLink } from "@/components/ui/primitives/text-link";
 import { Text } from "@/components/ui/primitives/text";
 import { NotFoundState } from "@/components/ui/shells/not-found";
 import { ArticleCta } from "@/features/marketing/components/article-cta";
@@ -101,16 +101,9 @@ function BlogPostPage() {
         <div className="flex flex-col">
           <Text size="sm" tone="muted" align="left">
             By{" "}
-            <ExternalTextLink
-              align="left"
-              href="https://rida.dev"
-              rel="noopener noreferrer"
-              size="sm"
-              target="_blank"
-              tone="default"
-            >
+            <TextLink align="left" size="sm" to="/about" tone="default">
               Rida F&apos;kih
-            </ExternalTextLink>
+            </TextLink>
             {" · "}{createdDate}
             {showUpdated && <> · Updated {updatedDate}</>}
           </Text>

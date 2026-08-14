@@ -1,5 +1,5 @@
 import { useSetAtom } from 'jotai'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, type LinkProps } from '@tanstack/react-router'
 import { canonicalUrl, faqSchema, jsonLdScript, seoMeta, softwareApplicationSchema } from '../../lib/seo'
 import { Heading1, Heading2, Heading3 } from '../../components/ui/primitives/heading'
 import { Text } from '../../components/ui/primitives/text'
@@ -13,6 +13,7 @@ import {
 import { MarketingFaqSection, MarketingFaqList, MarketingFaqItem, MarketingFaqQuestion } from '../../features/marketing/components/marketing-faq'
 import { MarketingCtaSection, MarketingCtaCard } from '../../features/marketing/components/marketing-cta'
 import { Collapsible } from '../../components/ui/primitives/collapsible'
+import { TextLink } from '../../components/ui/primitives/text-link'
 import { ButtonIcon, ButtonText, ExternalLinkButton, LinkButton } from '../../components/ui/primitives/button'
 import { MarketingIllustrationCalendar, MarketingIllustrationCalendarCard, type Skew, type SkewTuple } from '../../features/marketing/components/marketing-illustration-calendar'
 import { MarketingHeroScreenshot } from '../../features/marketing/components/marketing-hero-screenshot'
@@ -74,6 +75,7 @@ type MarketingFeature = {
   description: string
   gridClassName: string
   illustration?: React.ReactNode
+  link?: { to: LinkProps["to"]; label: string }
 }
 
 const MARKETING_FEATURES: MarketingFeature[] = [
@@ -84,6 +86,7 @@ const MARKETING_FEATURES: MarketingFeature[] = [
       'Open-source, released under an AGPL-3.0 license. Community driven, and anyone can read the code to check what it does with your calendars. Here are some of the latest contributors.',
     gridClassName: 'lg:col-start-1 lg:col-span-4 lg:row-start-1',
     illustration: <MarketingIllustrationContributors />,
+    link: { to: '/about', label: 'Who builds Keeper.sh, and why AGPL-3.0' },
   },
   {
     id: 2,
@@ -261,6 +264,11 @@ function MarketingPage() {
                     <Text size="sm" className="text-left">
                       {feature.description}
                     </Text>
+                    {feature.link && (
+                      <TextLink align="left" size="sm" to={feature.link.to} tone="muted">
+                        {feature.link.label}
+                      </TextLink>
+                    )}
                   </MarketingFeatureBentoBody>
                 </MarketingFeatureBentoCard>
               ))}

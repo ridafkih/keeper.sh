@@ -3,6 +3,8 @@ import {
   blogPostingSchema,
   canonicalUrl,
   collectionPageSchema,
+  organizationSchema,
+  personSchema,
   seoMeta,
   webPageSchema,
 } from "@/lib/seo";
@@ -137,6 +139,29 @@ describe("blogPostingSchema", () => {
     });
     expect(schema["@id"]).toBe("https://www.keeper.sh/blog/why-keeper/#blogposting");
     expect(schema.url).toBe("https://www.keeper.sh/blog/why-keeper");
+  });
+});
+
+describe("personSchema", () => {
+  const PERSON_ID = "https://www.keeper.sh/about/#person";
+
+  it("is identified by the about page", () => {
+    const schema = personSchema("The maintainer.");
+    expect(schema["@id"]).toBe(PERSON_ID);
+    expect(schema.url).toBe("https://www.keeper.sh/about");
+    expect(schema.mainEntityOfPage).toEqual({ "@id": "https://www.keeper.sh/about/#webpage" });
+  });
+
+  it("claims both author profiles", () => {
+    expect(personSchema("The maintainer.").sameAs).toEqual([
+      "https://github.com/ridafkih",
+      "https://rida.dev",
+    ]);
+  });
+
+  it("is the author a blog post points at and the organization's founder", () => {
+    expect(blogPostingSchema(post).author).toEqual({ "@id": PERSON_ID });
+    expect(organizationSchema["@graph"][0]).toMatchObject({ founder: { "@id": PERSON_ID } });
   });
 });
 
