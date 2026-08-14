@@ -51,7 +51,10 @@ const readPng = (file: URL) => {
     /* Palette entries past the end of tRNS are fully opaque. */
     const alpha = transparency[entry] ?? 255;
     if (alpha === 255) {
-      const [red, green, blue] = palette.subarray(entry * 3, entry * 3 + 3);
+      const channels = palette.subarray(entry * 3, entry * 3 + 3);
+      const red = channels[0] ?? 0;
+      const green = channels[1] ?? 0;
+      const blue = channels[2] ?? 0;
       opaqueLuminances.push(0.2126 * red + 0.7152 * green + 0.0722 * blue);
     }
   }
