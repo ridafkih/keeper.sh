@@ -54,12 +54,17 @@ const makeFeed = (overrides: Partial<Feed> = {}): Feed => ({
 });
 
 describe("generateFeedToken", () => {
-  it("mints an opaque prefixed token that is never derived from a username", () => {
-
+  it("mints an opaque prefixed token", () => {
     const token = generateFeedToken();
 
     expect(token).toMatch(/^feed_[0-9a-f]{64}$/);
-    expect(token).not.toContain("ada");
+  });
+
+  /* "ada" is valid hex, so a substring check against a random token fails on
+   * roughly one draw in seventy. Taking no arguments is what actually makes the
+   * token underivable from user data. */
+  it("takes no caller input a token could be derived from", () => {
+    expect(generateFeedToken).toHaveLength(0);
   });
 
   it("never repeats a token across a thousand draws", () => {
