@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR, { preload, useSWRConfig } from "swr";
 import Calendar from "lucide-react/dist/esm/icons/calendar";
-import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { Pagination, PaginationPrevious, PaginationNext } from "@/components/ui/primitives/pagination";
@@ -25,21 +24,22 @@ import {
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { DeleteConfirmation } from "@/components/ui/primitives/delete-confirmation";
 import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
+import { Button, ButtonText } from "@/components/ui/primitives/button";
+import {
+  Modal,
+  ModalContent,
+  ModalDescription,
+  ModalFooter,
+  ModalTitle,
+} from "@/components/ui/primitives/modal";
 import { pluralize } from "@/lib/pluralize";
 import { resolveErrorMessage } from "@/utils/errors";
 import {
   buildSetupSearchForNewCalendars,
   formatRefreshSummary,
+  refreshCalendarsResponseSchema,
 } from "@/features/dashboard/components/refresh-summary";
-
-interface RefreshCalendarsResponse {
-  added: { id: string; name: string }[];
-  revived: number;
-  unavailable: number;
-  unchanged: number;
-  suppressed: boolean;
-  checkedAt: string;
-}
+import type { RefreshCalendarsResponse } from "@/features/dashboard/components/refresh-summary";
 
 export const Route = createFileRoute(
   "/(dashboard)/dashboard/accounts/$accountId/",
@@ -70,30 +70,51 @@ function CalendarList({ calendars, accountId }: { calendars: CalendarSource[]; a
   ));
 }
 
-function RefreshSummary(
-  { accountId, result }: { accountId: string; result: RefreshCalendarsResponse },
-) {
-  const setupSearch = buildSetupSearchForNewCalendars(result.added.map(({ id }) => id));
+function RefreshResultModal({
+  accountId,
+  result,
+  onDismiss,
+}: {
+  accountId: string;
+  result: RefreshCalendarsResponse | null;
+  onDismiss: () => void;
+}) {
+  const navigate = useNavigate();
+  const setupSearch = result && buildSetupSearchForNewCalendars(result.added.map(({ id }) => id));
+
+  const goToSetup = () => {
+    if (!setupSearch) return;
+    onDismiss();
+    navigate({
+      to: "/dashboard/accounts/$accountId/setup",
+      params: { accountId },
+      search: setupSearch,
+    });
+  };
 
   return (
-    <div className="flex items-center gap-2">
-      <Text size="sm" tone="muted">
-        {formatRefreshSummary({
-          added: result.added.length,
-          revived: result.revived,
-          unavailable: result.unavailable,
-        })}
-      </Text>
-      {setupSearch && (
-        <Link
-          to="/dashboard/accounts/$accountId/setup"
-          params={{ accountId }}
-          search={setupSearch}
-        >
-          <Text size="sm">Set them up</Text>
-        </Link>
-      )}
-    </div>
+    <Modal open={!!result} onOpenChange={(open) => { if (!open) onDismiss(); }}>
+      <ModalContent>
+        <ModalTitle>Calendars refreshed</ModalTitle>
+        <ModalDescription>
+          {result && formatRefreshSummary({
+            added: result.added.length,
+            revived: result.revived,
+            unavailable: result.unavailable,
+          })}
+        </ModalDescription>
+        <ModalFooter>
+          {setupSearch && (
+            <Button className="w-full justify-center" onClick={goToSetup}>
+              <ButtonText>Set Up New Calendars</ButtonText>
+            </Button>
+          )}
+          <Button variant="elevated" className="w-full justify-center" onClick={onDismiss}>
+            <ButtonText>Done</ButtonText>
+          </Button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
   );
 }
 
@@ -127,7 +148,7 @@ function AccountDetailPage() {
         const response = await apiFetch(`/api/accounts/${accountId}/refresh-calendars`, {
           method: "POST",
         });
-        const result = await response.json() as RefreshCalendarsResponse;
+        const result = refreshCalendarsResponseSchema.assert(await response.json());
         if (account) {
           track(ANALYTICS_EVENTS.calendar_account_refreshed, { provider: account.provider });
         }
@@ -182,30 +203,28 @@ function AccountDetailPage() {
         <MetadataRow label="Provider" value={account.providerName} />
         <MetadataRow label="Authenticated" value={account.authType} />
         <MetadataRow label="Connected" value={formatDate(account.createdAt)} />
-        <MetadataRow
-          label="Calendars Checked"
-          value={account.calendarsRefreshedAt ? formatDate(account.calendarsRefreshedAt) : "Never"}
-        />
+        {account.calendarsRefreshedAt && (
+          <MetadataRow label="Calendars Checked" value={formatDate(account.calendarsRefreshedAt)} />
+        )}
       </NavigationMenu>
       <NavigationMenu>
         {account.authType !== "none" && (
-          <NavigationMenuButtonItem onClick={handleRefreshCalendars} disabled={isRefreshing}>
+          <NavigationMenuButtonItem
+            onClick={isRefreshing ? undefined : handleRefreshCalendars}
+            disabled={isRefreshing}
+          >
             <NavigationMenuItemIcon>
-              {isRefreshing
-                ? <LoaderCircle size={15} className="animate-spin text-foreground-muted" />
-                : <RefreshCw size={15} />}
+              <RefreshCw size={15} />
             </NavigationMenuItemIcon>
             <NavigationMenuItemLabel>
-              {isRefreshing ? "Checking for calendars…" : "Refresh Calendars"}
+              {isRefreshing ? "Refreshing..." : "Refresh Calendars"}
             </NavigationMenuItemLabel>
-            <NavigationMenuItemTrailing />
           </NavigationMenuButtonItem>
         )}
         <NavigationMenuButtonItem onClick={() => setDeleteOpen(true)}>
           <Text size="sm" tone="danger">Delete Account</Text>
         </NavigationMenuButtonItem>
       </NavigationMenu>
-      {refreshResult && <RefreshSummary accountId={accountId} result={refreshResult} />}
       {refreshError && <Text size="sm" tone="danger">{refreshError}</Text>}
       <DashboardSection
         title="Account Calendars"
@@ -215,6 +234,11 @@ function AccountDetailPage() {
         <CalendarList calendars={calendars} accountId={accountId} />
       </NavigationMenu>
       {deleteError && <Text size="sm" tone="danger">{deleteError}</Text>}
+      <RefreshResultModal
+        accountId={accountId}
+        result={refreshResult}
+        onDismiss={() => setRefreshResult(null)}
+      />
       <DeleteConfirmation
         title="Delete calendar account?"
         description="This will remove the account and all its calendars. Any sync profiles using these calendars will be affected."

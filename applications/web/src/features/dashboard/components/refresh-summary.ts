@@ -1,4 +1,13 @@
+import { type } from "arktype";
 import { pluralize } from "@/lib/pluralize";
+
+const refreshCalendarsResponseSchema = type({
+  added: type({ id: "string", name: "string" }).array(),
+  revived: "number",
+  unavailable: "number",
+});
+
+type RefreshCalendarsResponse = typeof refreshCalendarsResponseSchema.infer;
 
 interface RefreshCounts {
   added: number;
@@ -47,3 +56,6 @@ export function buildSetupSearchForNewCalendars(
 
   return { id: calendarIds.join(","), step: "rename" };
 }
+
+export { refreshCalendarsResponseSchema };
+export type { RefreshCalendarsResponse };

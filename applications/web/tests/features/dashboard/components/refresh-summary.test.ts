@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildSetupSearchForNewCalendars,
   formatRefreshSummary,
+  refreshCalendarsResponseSchema,
 } from "../../../../src/features/dashboard/components/refresh-summary";
 
 describe("formatRefreshSummary", () => {
@@ -46,5 +47,32 @@ describe("buildSetupSearchForNewCalendars", () => {
 
   it("offers no link when nothing was added", () => {
     expect(buildSetupSearchForNewCalendars([])).toBeNull();
+  });
+});
+
+describe("refreshCalendarsResponseSchema", () => {
+  it("accepts the server payload and keeps the fields the summary reads", () => {
+    expect(refreshCalendarsResponseSchema.assert({
+      added: [{ id: "calendar-a", name: "Work" }],
+      checkedAt: "2026-01-02T03:04:05.000Z",
+      revived: 1,
+      suppressed: false,
+      unavailable: 2,
+      unchanged: 3,
+    })).toMatchObject({
+      added: [{ id: "calendar-a", name: "Work" }],
+      revived: 1,
+      unavailable: 2,
+    });
+  });
+
+  it.each([
+    ["a missing added list", { revived: 0, unavailable: 0 }],
+    ["added entries without an id", { added: [{ name: "Work" }], revived: 0, unavailable: 0 }],
+    ["a non-numeric count", { added: [], revived: "1", unavailable: 0 }],
+    ["a non-object body", "boom"],
+    ["a null body", null],
+  ])("rejects %s", (_label, body) => {
+    expect(() => refreshCalendarsResponseSchema.assert(body)).toThrow();
   });
 });
