@@ -96,6 +96,7 @@ function MarketingLayout() {
               <MarketingFooterNavItem to="/register">Get Started</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/features">Features</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/pricing">Pricing</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/self-hosting">Self-Hosting</MarketingFooterNavItem>
             </MarketingFooterNavGroup>
             <MarketingFooterNavGroup>
               <MarketingFooterNavGroupLabel>Resources</MarketingFooterNavGroupLabel>
