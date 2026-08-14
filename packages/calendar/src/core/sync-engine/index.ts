@@ -110,10 +110,16 @@ interface PushEchoCounts {
   changed: number;
   compared: number;
   description: number;
+  descriptionEchoLength: number;
+  descriptionSentLength: number;
   end: number;
   location: number;
+  locationEchoLength: number;
+  locationSentLength: number;
   start: number;
   summary: number;
+  summaryEchoLength: number;
+  summarySentLength: number;
   uncomparable: number;
 }
 
@@ -122,10 +128,16 @@ const createPushEchoCounts = (): PushEchoCounts => ({
   changed: 0,
   compared: 0,
   description: 0,
+  descriptionEchoLength: 0,
+  descriptionSentLength: 0,
   end: 0,
   location: 0,
+  locationEchoLength: 0,
+  locationSentLength: 0,
   start: 0,
   summary: 0,
+  summaryEchoLength: 0,
+  summarySentLength: 0,
   uncomparable: 0,
 });
 
@@ -156,6 +168,13 @@ const tallyPushEcho = (counts: PushEchoCounts, pushResults: PushResult[]): void 
     counts.location += Number(divergence.location);
     counts.start += Number(divergence.start);
     counts.summary += Number(divergence.summary);
+    const { lengths } = divergence;
+    counts.descriptionEchoLength += lengths.description?.echo ?? 0;
+    counts.descriptionSentLength += lengths.description?.sent ?? 0;
+    counts.locationEchoLength += lengths.location?.echo ?? 0;
+    counts.locationSentLength += lengths.location?.sent ?? 0;
+    counts.summaryEchoLength += lengths.summary?.echo ?? 0;
+    counts.summarySentLength += lengths.summary?.sent ?? 0;
   }
 };
 
@@ -179,6 +198,35 @@ const appendPushEchoFields = (
     if (count > 0) {
       event[field] = count;
     }
+  }
+
+  const lengthTotals: { changed: number; echo: number; field: string; sent: number }[] = [
+    {
+      changed: counts.summary,
+      echo: counts.summaryEchoLength,
+      field: "summary",
+      sent: counts.summarySentLength,
+    },
+    {
+      changed: counts.description,
+      echo: counts.descriptionEchoLength,
+      field: "description",
+      sent: counts.descriptionSentLength,
+    },
+    {
+      changed: counts.location,
+      echo: counts.locationEchoLength,
+      field: "location",
+      sent: counts.locationSentLength,
+    },
+  ];
+
+  for (const { changed, echo, field, sent } of lengthTotals) {
+    if (changed === 0) {
+      continue;
+    }
+    event[`push_echo.${field}_sent_length_total`] = sent;
+    event[`push_echo.${field}_echo_length_total`] = echo;
   }
 };
 
@@ -708,6 +756,35 @@ const appendStaleReasonFields = (
     if (count > 0) {
       event[field] = count;
     }
+  }
+
+  const lengthTotals: { changed: number; field: string; local: number; remote: number }[] = [
+    {
+      changed: counts.remoteContentSummaryChanged,
+      field: "summary",
+      local: counts.remoteContentSummaryLocalLengthTotal,
+      remote: counts.remoteContentSummaryRemoteLengthTotal,
+    },
+    {
+      changed: counts.remoteContentDescriptionChanged,
+      field: "description",
+      local: counts.remoteContentDescriptionLocalLengthTotal,
+      remote: counts.remoteContentDescriptionRemoteLengthTotal,
+    },
+    {
+      changed: counts.remoteContentLocationChanged,
+      field: "location",
+      local: counts.remoteContentLocationLocalLengthTotal,
+      remote: counts.remoteContentLocationRemoteLengthTotal,
+    },
+  ];
+
+  for (const { changed, field, local, remote } of lengthTotals) {
+    if (changed === 0) {
+      continue;
+    }
+    event[`stale_mappings.remote_content_${field}_local_length_total`] = local;
+    event[`stale_mappings.remote_content_${field}_remote_length_total`] = remote;
   }
 };
 

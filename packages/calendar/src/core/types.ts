@@ -89,10 +89,20 @@ interface PushResult {
   conflictResolved?: boolean;
 }
 
+interface PushEchoValueLengths {
+  echo: number;
+  sent: number;
+}
+
+type PushEchoDivergedLengths = Partial<
+  Record<"description" | "location" | "summary", PushEchoValueLengths>
+>;
+
 interface PushEchoFieldDivergence {
   allDay: boolean;
   description: boolean;
   end: boolean;
+  lengths: PushEchoDivergedLengths;
   location: boolean;
   start: boolean;
   summary: boolean;
@@ -219,8 +229,10 @@ export type {
   MaterializedSyncableEvent,
   ProviderThrottleMetrics,
   PushEchoComparison,
+  PushEchoDivergedLengths,
   PushEchoFieldDivergence,
   PushEchoUncomparableReason,
+  PushEchoValueLengths,
   PushResult,
   DeleteResult,
   SyncResult,

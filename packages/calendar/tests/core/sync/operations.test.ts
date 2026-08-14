@@ -66,8 +66,14 @@ const EMPTY_STALE_REASON_COUNTS = {
   remoteContentChanged: 0,
   remoteContentAllDayChanged: 0,
   remoteContentDescriptionChanged: 0,
+  remoteContentDescriptionLocalLengthTotal: 0,
+  remoteContentDescriptionRemoteLengthTotal: 0,
   remoteContentLocationChanged: 0,
+  remoteContentLocationLocalLengthTotal: 0,
+  remoteContentLocationRemoteLengthTotal: 0,
   remoteContentSummaryChanged: 0,
+  remoteContentSummaryLocalLengthTotal: 0,
+  remoteContentSummaryRemoteLengthTotal: 0,
   remoteMissing: 0,
   remoteTimeChanged: 0,
 };
@@ -623,6 +629,8 @@ describe("computeSyncOperations", () => {
       ...EMPTY_STALE_REASON_COUNTS,
       remoteContentChanged: 1,
       remoteContentDescriptionChanged: 1,
+      remoteContentDescriptionLocalLengthTotal: 9,
+      remoteContentDescriptionRemoteLengthTotal: 9,
     });
   });
 
@@ -656,6 +664,8 @@ describe("computeSyncOperations", () => {
       remoteContentChanged: 1,
       remoteContentAllDayChanged: 1,
       remoteContentSummaryChanged: 1,
+      remoteContentSummaryLocalLengthTotal: 4,
+      remoteContentSummaryRemoteLengthTotal: 11,
     });
   });
 

@@ -43,6 +43,7 @@ const runRealSync = async (): Promise<Record<string, unknown>> => {
         allDay: false,
         description: true,
         end: false,
+        lengths: { description: { echo: 4, sent: 21 } },
         location: false,
         start: true,
         summary: false,
@@ -117,6 +118,9 @@ describe("push echo log emission", () => {
     expect(pushEcho["description_changed_count"]).toBe(1);
     expect(pushEcho["start_changed_count"]).toBe(1);
     expect(pushEcho["summary_changed_count"]).toBeUndefined();
+    expect(pushEcho["description_sent_length_total"]).toBe(21);
+    expect(pushEcho["description_echo_length_total"]).toBe(4);
+    expect(pushEcho["summary_sent_length_total"]).toBeUndefined();
 
     const serialized = JSON.stringify(emittedLine);
     expect(serialized).not.toContain("Event ev-1");

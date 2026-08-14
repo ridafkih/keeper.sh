@@ -34,6 +34,7 @@ const matchedDivergence = {
   allDay: false,
   description: false,
   end: false,
+  lengths: {},
   location: false,
   start: false,
   summary: false,

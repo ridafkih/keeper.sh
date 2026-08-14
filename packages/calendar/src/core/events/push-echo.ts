@@ -1,12 +1,13 @@
 import type { EditableEventContentSnapshot } from "./content-hash";
-import type { PushEchoFieldDivergence } from "../types";
+import type { PushEchoDivergedLengths, PushEchoFieldDivergence } from "../types";
 
 /*
  * One observation of an event's editable state, built by the same conversion a
  * provider uses when reading the calendar back. Field values stay in memory —
- * only boolean divergence flags ever leave this module. Per-field value
- * fingerprints are deliberately deferred pending the keyed-digest
- * recommendation; they would slot in here as an extension of this shape.
+ * only boolean divergence flags and UTF-16 lengths ever leave this module.
+ * Per-field value fingerprints are deliberately deferred pending the
+ * keyed-digest recommendation; they would slot in here as an extension of this
+ * shape.
  */
 interface PushEchoObservation {
   content: EditableEventContentSnapshot;
@@ -17,6 +18,26 @@ interface PushEchoObservation {
 const isSameSerializedSecond = (first: Date, second: Date): boolean =>
   Math.trunc(first.getTime() / 1000) === Math.trunc(second.getTime() / 1000);
 
+const divergedLengths = (
+  field: "description" | "location" | "summary",
+  sent: string,
+  echo: string,
+): PushEchoDivergedLengths => {
+  if (sent === echo) {
+    return {};
+  }
+  return { [field]: { echo: echo.length, sent: sent.length } };
+};
+
+const collectDivergedLengths = (
+  sent: PushEchoObservation,
+  echo: PushEchoObservation,
+): PushEchoDivergedLengths => ({
+  ...divergedLengths("description", sent.content.description, echo.content.description),
+  ...divergedLengths("location", sent.content.location, echo.content.location),
+  ...divergedLengths("summary", sent.content.summary, echo.content.summary),
+});
+
 const comparePushEchoObservations = (
   sent: PushEchoObservation,
   echo: PushEchoObservation,
@@ -24,6 +45,7 @@ const comparePushEchoObservations = (
   allDay: sent.content.isAllDay !== echo.content.isAllDay,
   description: sent.content.description !== echo.content.description,
   end: !isSameSerializedSecond(sent.endTime, echo.endTime),
+  lengths: collectDivergedLengths(sent, echo),
   location: sent.content.location !== echo.content.location,
   start: !isSameSerializedSecond(sent.startTime, echo.startTime),
   summary: sent.content.summary !== echo.content.summary,

@@ -41,15 +41,27 @@ interface StaleReasonCounts {
   remoteContentChanged: number;
   remoteContentAllDayChanged: number;
   remoteContentDescriptionChanged: number;
+  remoteContentDescriptionLocalLengthTotal: number;
+  remoteContentDescriptionRemoteLengthTotal: number;
   remoteContentLocationChanged: number;
+  remoteContentLocationLocalLengthTotal: number;
+  remoteContentLocationRemoteLengthTotal: number;
   remoteContentSummaryChanged: number;
+  remoteContentSummaryLocalLengthTotal: number;
+  remoteContentSummaryRemoteLengthTotal: number;
   remoteMissing: number;
   remoteTimeChanged: number;
+}
+
+interface RemoteContentValueLengths {
+  local: number;
+  remote: number;
 }
 
 interface RemoteContentFieldChanges {
   allDay: boolean;
   description: boolean;
+  lengths: Partial<Record<"description" | "location" | "summary", RemoteContentValueLengths>>;
   location: boolean;
   summary: boolean;
 }
@@ -80,8 +92,14 @@ const createStaleReasonCounts = (): StaleReasonCounts => ({
   remoteContentChanged: 0,
   remoteContentAllDayChanged: 0,
   remoteContentDescriptionChanged: 0,
+  remoteContentDescriptionLocalLengthTotal: 0,
+  remoteContentDescriptionRemoteLengthTotal: 0,
   remoteContentLocationChanged: 0,
+  remoteContentLocationLocalLengthTotal: 0,
+  remoteContentLocationRemoteLengthTotal: 0,
   remoteContentSummaryChanged: 0,
+  remoteContentSummaryLocalLengthTotal: 0,
+  remoteContentSummaryRemoteLengthTotal: 0,
   remoteMissing: 0,
   remoteTimeChanged: 0,
 });
@@ -254,6 +272,17 @@ const matchRemoteEventsToMappings = (
   return matches;
 };
 
+const divergedContentLengths = (
+  field: "description" | "location" | "summary",
+  local: string,
+  remote: string,
+): RemoteContentFieldChanges["lengths"] => {
+  if (local === remote) {
+    return {};
+  }
+  return { [field]: { local: local.length, remote: remote.length } };
+};
+
 const getRemoteStateChanges = (
   mapping: EventMapping,
   localEvent: MaterializedSyncableEvent,
@@ -264,11 +293,17 @@ const getRemoteStateChanges = (
   let contentFields: RemoteContentFieldChanges | null = null;
   if (remoteContentChanged && remoteEvent.editableContent) {
     const localContent = createEditableEventContentSnapshot(localEvent);
+    const remoteContent = remoteEvent.editableContent;
     contentFields = {
-      allDay: remoteEvent.editableContent.isAllDay !== localContent.isAllDay,
-      description: remoteEvent.editableContent.description !== localContent.description,
-      location: remoteEvent.editableContent.location !== localContent.location,
-      summary: remoteEvent.editableContent.summary !== localContent.summary,
+      allDay: remoteContent.isAllDay !== localContent.isAllDay,
+      description: remoteContent.description !== localContent.description,
+      lengths: {
+        ...divergedContentLengths("description", localContent.description, remoteContent.description),
+        ...divergedContentLengths("location", localContent.location, remoteContent.location),
+        ...divergedContentLengths("summary", localContent.summary, remoteContent.summary),
+      },
+      location: remoteContent.location !== localContent.location,
+      summary: remoteContent.summary !== localContent.summary,
     };
   }
   const localAvailability = localEvent.availability ?? "busy";
@@ -299,6 +334,24 @@ const hasRemoteStateChanged = (
   return changes.availability || changes.content || changes.time;
 };
 
+const recordRemoteContentLengths = (
+  staleReasonCounts: StaleReasonCounts,
+  contentFields: RemoteContentFieldChanges | null,
+): void => {
+  const lengths = contentFields?.lengths ?? {};
+  const empty = { local: 0, remote: 0 };
+  const description = lengths.description ?? empty;
+  const location = lengths.location ?? empty;
+  const summary = lengths.summary ?? empty;
+
+  staleReasonCounts.remoteContentDescriptionLocalLengthTotal += description.local;
+  staleReasonCounts.remoteContentDescriptionRemoteLengthTotal += description.remote;
+  staleReasonCounts.remoteContentLocationLocalLengthTotal += location.local;
+  staleReasonCounts.remoteContentLocationRemoteLengthTotal += location.remote;
+  staleReasonCounts.remoteContentSummaryLocalLengthTotal += summary.local;
+  staleReasonCounts.remoteContentSummaryRemoteLengthTotal += summary.remote;
+};
+
 const recordStaleReasons = (
   staleReasonCounts: StaleReasonCounts,
   localHashChanged: boolean,
@@ -325,6 +378,7 @@ const recordStaleReasons = (
   if (remoteChanges.contentFields?.summary) {
     staleReasonCounts.remoteContentSummaryChanged += 1;
   }
+  recordRemoteContentLengths(staleReasonCounts, remoteChanges.contentFields);
   if (remoteChanges.time) {
     staleReasonCounts.remoteTimeChanged += 1;
   }
