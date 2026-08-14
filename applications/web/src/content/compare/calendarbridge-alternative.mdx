@@ -1,7 +1,7 @@
 ---
 title: "CalendarBridge Alternative: Keeper.sh vs CalendarBridge"
 description: "Eight calendars costs $40 a month on CalendarBridge and $5 on Keeper.sh. What each one connects, how fast changes land, and where CalendarBridge is still the right call."
-blurb: "Keeper.sh is $5 a month however many calendars you have, connects CalDAV servers CalendarBridge cannot write to, and runs on your own hardware. CalendarBridge owns the regulated flank. Here is how the two differ."
+blurb: "Keeper.sh is $5 a month however many calendars you have, runs on your own hardware, and is open source. CalendarBridge owns the regulated flank. Here is how the two differ."
 createdAt: "2026-08-11"
 slug: "calendarbridge-alternative"
 updatedAt: "2026-08-14"
@@ -28,9 +28,9 @@ Both of those are paperwork about somebody else's cloud, which is the trade. Buy
 
 CalendarBridge connects Google Calendar, Microsoft 365 for Business, Microsoft personal accounts on outlook.com, hotmail.com, live.com and msn.com, and iCloud. Microsoft 365 personal and family plans cannot be supported, because those plans do not expose a calendar over the internet.
 
-For anything outside that list, [their answer](https://calendarbridge.com/) is an `.ics` link, which reads a calendar but cannot write to one.
+In August 2026 they added [CalDAV accounts](https://help.calendarbridge.com/user-docs/connecting-caldav-accounts/) covering Fastmail, Zoho, Yahoo, AOL, Nextcloud and self-hosted servers, and those accounts work across the rest of their product too.
 
-Keeper.sh connects the same big three plus Fastmail, any CalDAV server and any public `.ics` link. On Nextcloud, Fastmail, Zimbra, Radicale or a server in your own house, Keeper.sh both reads and writes.
+Keeper.sh connects the same big three plus Fastmail, any CalDAV server and any public `.ics` link, so on which calendars each one reaches, the two now land in much the same place.
 
 ## What happens when you change an event?
 
@@ -58,7 +58,7 @@ Keeper.sh does not price the symptom. However scattered your calendars get, unsc
 
 **You need other people to book time with you.** CalendarBridge includes up to 10 [scheduling pages](https://calendarbridge.com/scheduling-pages-for-people-with-multiple-calendars/) on every plan, built for people whose availability is spread across calendars. Keeper.sh does not ship booking links today, so it sits underneath whichever booking tool you use.
 
-**Procurement wants paperwork.** CalendarBridge lists a verified SOC 2 Type 1 and offers a [trust centre](https://calendarbridge.com/calendarbridge-security-overview/) on request. Keeper.sh answers that from the other end: read the code, or keep the calendar on your own hardware so there is no third party to audit.
+**Procurement wants paperwork.** CalendarBridge lists a verified SOC 2 Type 1, says Type 2 is in progress, and runs a public [trust centre](https://calendarbridge.com/calendarbridge-security-overview/). Keeper.sh answers that from the other end: read the code, or keep the calendar on your own hardware so there is no third party to audit.
 
 **One admin sets up the whole team.** CalendarBridge [group plans](https://calendarbridge.com/pricing-group/) let an admin manage everyone's connections on one bill, with no end-user involvement. Keeper.sh is set up one person at a time.
 
@@ -66,7 +66,7 @@ Keeper.sh does not price the symptom. However scattered your calendars get, unsc
 
 ## Where Keeper.sh fits better
 
-**Your calendar speaks CalDAV.** Fastmail and Nextcloud calendars can be written to by Keeper.sh, and only read through a link by CalendarBridge.
+**You would rather nobody else held the tokens.** Keeper.sh is AGPL-3.0, so the code that touches your calendars can be read, and a self-hosted instance keeps the whole thing on hardware you own. CalendarBridge is hosted only.
 
 **Your setup is wide.** Nine client calendars, four family ones and a shared team calendar all cost $5 a month. Nothing in the price depends on how many you have.
 
@@ -100,7 +100,7 @@ Yes, as two connections. Each connection runs one way, so you create one in each
 
 ### Which one should I pick?
 
-Pick CalendarBridge for a HIPAA BAA, GCC High, mobile apps or scheduling pages. Pick Keeper.sh for CalDAV, a free tier, a flat price across a lot of calendars, or a copy you run yourself.
+Pick CalendarBridge for a HIPAA BAA, GCC High, mobile apps or scheduling pages. Pick Keeper.sh for a free tier, a flat price across a lot of calendars, or a copy you run yourself.
 
 ## Other comparisons
 
@@ -116,7 +116,7 @@ Still weighing tools? These cover the rest of the field.
 
 ## Where these facts come from
 
-Everything above about CalendarBridge comes from their own public pages, checked on 11 August 2026. Everything about Keeper.sh comes from our code and our pricing. Prices and features change, so follow the links if a detail matters to your decision.
+Everything above about CalendarBridge comes from their own public pages, checked on 14 August 2026. Everything about Keeper.sh comes from our code and our pricing. Prices and features change, so follow the links if a detail matters to your decision.
 
 - CalendarBridge supported calendars, sync speeds, apps, SOC 2 Type 1, HIPAA and GCC High: [calendarbridge.com](https://calendarbridge.com/)
 - CalendarBridge individual plans, prices, calendar counts and the HIPAA BAA tier: [calendarbridge.com/pricing-individual](https://calendarbridge.com/pricing-individual/)

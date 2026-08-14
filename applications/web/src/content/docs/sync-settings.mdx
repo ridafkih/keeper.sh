@@ -17,7 +17,7 @@ Both sections are Pro features. On Free the defaults apply, and the dashboard sa
 
 ## Sync Settings
 
-**Sync Event Name** decides whether the original title travels. Turn it off and copies carry a stand-in title instead of the real one.
+**Sync Event Name** decides whether the original title travels. It starts off, so copies carry a stand-in title until you turn it on.
 
 The stand-in title is set in **Event Name**, which becomes editable as soon as the toggle is off and starts out as `{{calendar_name}}`. Two templates are available: `{{event_name}}` for the original title and `{{calendar_name}}` for the name of the calendar the event came from. Plain text works too, so "Busy" is a fine answer; `{{calendar_name}}` is the more useful one when copies from several calendars land in one place and you want to know which is which without reading the titles.
 
@@ -36,7 +36,7 @@ An excluded event is not copied, and an event you exclude after the fact is remo
 
 ## What Free gets
 
-Free copies events with their details as they stand, on every connection. If your goal is to share that you are busy without sharing what you are doing, an [iCal feed](/docs/ical-feeds) does that on Free: a feed hides titles, descriptions and locations by default and every event in it reads "Busy".
+Free keeps the private defaults and cannot change them. Every copy carries the source calendar's name in place of the real title, and the description and location stay behind on the original. Pro is what makes those three settings editable, so Pro is what you need to let detail through. An [iCal feed](/docs/ical-feeds) applies the same defaults to a calendar you can hand to someone else, and every event in it reads "Busy".
 
 ## Where to go next
 
