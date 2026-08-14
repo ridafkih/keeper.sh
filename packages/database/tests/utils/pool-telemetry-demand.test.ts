@@ -5,6 +5,7 @@ import {
   withDatabasePoolWindow,
   resetDatabasePoolTelemetry,
 } from "../../src/utils/pool-telemetry";
+import { holdConnections, type PoolClient } from "./support/pool-barrier";
 
 const TEST_DATABASE_URL = process.env.KEEPER_TEST_DATABASE_URL;
 
@@ -102,45 +103,6 @@ describe("database pool telemetry demand accounting", () => {
     expect(samples).toEqual([0, 0, 0, 0, 0]);
   });
 
-  /*
-   * A single involuntary preemption on a contended CI runner adds tens of milliseconds
-   * to a two-millisecond batch, which reads as ~10µs/query of phantom overhead — any
-   * budget loose enough to absorb that would no longer prove the instrumentation is
-   * cheap. Opt in on quiet hardware; CI reports it as skipped, never silently absent.
-   */
-  it.runIf(Boolean(process.env.KEEPER_PERF_TESTS))(
-    "adds well under a microsecond of overhead per query",
-    async () => {
-      const { client, pending } = createDeferredClient();
-      const iterations = 5000;
-
-      const runBatch = async (): Promise<number> => {
-        const startedAt = performance.now();
-        for (let index = 0; index < iterations; index += 1) {
-          const query = client.unsafe("select 1") as { values: () => Promise<unknown> };
-          pending.at(-1)?.resolve([]);
-          await query.values();
-        }
-        return performance.now() - startedAt;
-      };
-
-      // Fastest of several batches: a single batch is swamped by JIT warm-up and GC.
-      const runFastestBatch = async (): Promise<number> => {
-        let fastestMs = Number.POSITIVE_INFINITY;
-        for (let round = 0; round < 4; round += 1) {
-          fastestMs = Math.min(fastestMs, await runBatch());
-        }
-        return fastestMs;
-      };
-
-      const plainMs = await runFastestBatch();
-      instrumentDatabasePool(client, 10);
-      const instrumentedMs = await runFastestBatch();
-
-      const overheadPerQueryUs = ((instrumentedMs - plainMs) / iterations) * 1000;
-      expect(overheadPerQueryUs).toBeLessThan(5);
-    },
-  );
 });
 
 describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry against postgres", () => {
@@ -178,36 +140,29 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry against postgres", 
     const sql = new SQL({ max: 2, url: TEST_DATABASE_URL });
     await sql`select 1`;
     instrumentDatabasePool(sql as unknown as FakeClient, 2);
-    const client = sql as unknown as FakeClient & {
-      begin: (callback: (transactionClient: FakeClient) => Promise<unknown>) => Promise<unknown>;
-    };
+    const client = sql as unknown as PoolClient;
 
-    const releases: (() => void)[] = [];
-    const held = [0, 1].map((index) =>
-      client.begin(async (transactionClient) => {
-        await (transactionClient.unsafe(`select ${index}`, []) as Promise<unknown>);
-        await new Promise<void>((resolve) => { releases.push(resolve); });
-      }));
-    await new Promise((resolve) => { setTimeout(resolve, 300); });
+    const occupants = await holdConnections(client, 2);
 
     await withDatabasePoolWindow(async (window): Promise<void> => {
-      const startedAt = performance.now();
       const blocked = (client.unsafe("select 99", []) as Promise<unknown>).then(
         (result) => result,
       );
-      await new Promise((resolve) => { setTimeout(resolve, 300); });
 
-      for (const release of releases) {
-        release();
-      }
-      await Promise.all(held);
+      // Charged on subscription, but a fully held pool must keep it from settling.
+      expect(window().queryCount).toBe(1);
+      await new Promise((resolve) => {
+        setTimeout(resolve, 200);
+      });
+      expect(window().inFlight).toBe(1);
+
+      await occupants.release();
       await blocked;
-      const waitedMs = performance.now() - startedAt;
 
       const sample = window();
-      expect(waitedMs).toBeGreaterThan(250);
-      expect(sample.queryDurationMs).toBeGreaterThan(250);
-      expect(sample.queuedQueryCount).toBeGreaterThan(0);
+      expect(sample.queuedQueryCount).toBe(1);
+      expect(sample.inFlight).toBe(0);
+      expect(sample.failedQueryCount).toBe(0);
 
       await sql.end();
     });

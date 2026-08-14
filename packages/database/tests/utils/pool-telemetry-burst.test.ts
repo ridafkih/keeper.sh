@@ -5,90 +5,76 @@ import {
   withDatabasePoolWindow,
   resetDatabasePoolTelemetry,
 } from "../../src/utils/pool-telemetry";
+import { holdConnections, type PoolClient } from "./support/pool-barrier";
 
 const TEST_DATABASE_URL = process.env.KEEPER_TEST_DATABASE_URL;
 
-interface PoolClient extends Record<string, unknown> {
-  begin: (callback: (transactionClient: PoolClient) => Promise<unknown>) => Promise<unknown>;
-  unsafe: (query: string, params?: unknown[]) => object;
-}
-
 const POOL_MAX = 2;
-const STATEMENT_SECONDS = 0.1;
 
-const runBurst = async (
-  client: PoolClient,
-  transactionCount: number,
-): Promise<{ startOffsetsMs: number[]; wallMs: number }> => {
-  const startedAt = performance.now();
-  const startOffsetsMs: number[] = [];
-  await Promise.all(Array.from({ length: transactionCount }, () =>
-    client.begin(async (transactionClient) => {
-      startOffsetsMs.push(performance.now() - startedAt);
-      await (transactionClient.unsafe(`select pg_sleep(${STATEMENT_SECONDS})`, []) as Promise<unknown>);
-    })));
-  return { startOffsetsMs, wallMs: performance.now() - startedAt };
-};
+const openTransaction = (client: PoolClient): Promise<unknown> =>
+  client.begin(async (transactionClient) => {
+    await (transactionClient.unsafe("select 1", []) as Promise<unknown>);
+  });
 
 describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry under a burst of transactions", () => {
   beforeEach(() => {
     resetDatabasePoolTelemetry();
   });
 
-  it("counts transactions that demonstrably waited for a connection as queued", async () => {
+  it("counts every transaction issued against a fully held pool as queued", async () => {
     const sql = new SQL({ max: POOL_MAX, prepare: false, url: TEST_DATABASE_URL });
     try {
       await sql`select 1`;
       const client = sql as unknown as PoolClient;
       instrumentDatabasePool(client, POOL_MAX);
 
+      const occupants = await holdConnections(client, POOL_MAX);
+
       await withDatabasePoolWindow(async (window): Promise<void> => {
-        const burst = await runBurst(client, 6);
+        const burst = Array.from({ length: 6 }, () => openTransaction(client));
+        await occupants.release();
+        await Promise.all(burst);
         const sample = window();
 
-        const waited = burst.startOffsetsMs.filter((offset) => offset > STATEMENT_SECONDS * 500);
-        // Scheduling stalls on a contended runner can push any start past the threshold, so only the pool-derived lower bound is deterministic.
-        const mustHaveWaited = 6 - POOL_MAX;
-
-        expect(waited.length).toBeGreaterThanOrEqual(mustHaveWaited);
-        expect(burst.wallMs).toBeGreaterThan(STATEMENT_SECONDS * 1000 * 2);
         expect(sample.queryCount).toBe(6);
-        expect(sample.queuedQueryCount).toBeGreaterThanOrEqual(mustHaveWaited);
-        expect(sample.queuedQueryCount).toBeLessThanOrEqual(6);
+        expect(sample.queuedQueryCount).toBe(6);
+        expect(sample.inFlight).toBe(0);
+        expect(sample.failedQueryCount).toBe(0);
       });
     } finally {
       await sql.end();
     }
   });
 
-  it("keeps the queued verdict the same whether the same work is issued at once or staggered", async () => {
+  it("keeps the queued verdict the same whether the same work is issued at once or one at a time", async () => {
     const sql = new SQL({ max: POOL_MAX, prepare: false, url: TEST_DATABASE_URL });
     try {
       await sql`select 1`;
       const client = sql as unknown as PoolClient;
       instrumentDatabasePool(client, POOL_MAX);
 
-      await withDatabasePoolWindow(async (burstWindow): Promise<void> => {
-        await runBurst(client, 6);
-        const burstSample = burstWindow();
-
-        await withDatabasePoolWindow(async (staggeredWindow): Promise<void> => {
-          const staggered: Promise<unknown>[] = [];
-          for (let index = 0; index < 6; index += 1) {
-            staggered.push(client.begin(async (transactionClient) => {
-              await (transactionClient.unsafe(`select pg_sleep(${STATEMENT_SECONDS})`, []) as Promise<unknown>);
-            }));
-            await new Promise((resolve) => {
-              setTimeout(resolve, 5);
-            });
-          }
-          await Promise.all(staggered);
-          const staggeredSample = staggeredWindow();
-
-          expect(staggeredSample.queuedQueryCount).toBeGreaterThan(0);
-          expect(burstSample.queuedQueryCount).toBe(staggeredSample.queuedQueryCount);
-        });
+      const atOnceOccupants = await holdConnections(client, POOL_MAX);
+      const atOnce = await withDatabasePoolWindow(async (window) => {
+        const burst = Array.from({ length: 6 }, () => openTransaction(client));
+        await atOnceOccupants.release();
+        await Promise.all(burst);
+        return window();
       });
+
+      const staggeredOccupants = await holdConnections(client, POOL_MAX);
+      const staggered = await withDatabasePoolWindow(async (window) => {
+        const issued: Promise<unknown>[] = [];
+        for (let index = 0; index < 6; index += 1) {
+          issued.push(openTransaction(client));
+          await Promise.resolve();
+        }
+        await staggeredOccupants.release();
+        await Promise.all(issued);
+        return window();
+      });
+
+      expect(staggered.queuedQueryCount).toBe(atOnce.queuedQueryCount);
+      expect(staggered.queryCount).toBe(atOnce.queryCount);
     } finally {
       await sql.end();
     }
@@ -103,8 +89,11 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry under a burst of tr
 
       const rounds: number[] = [];
       for (let round = 0; round < 3; round += 1) {
+        const occupants = await holdConnections(client, POOL_MAX);
         await withDatabasePoolWindow(async (window): Promise<void> => {
-          await runBurst(client, 4);
+          const burst = Array.from({ length: 4 }, () => openTransaction(client));
+          await occupants.release();
+          await Promise.all(burst);
           const sample = window();
           expect(sample.queryCount).toBe(4);
           expect(sample.inFlight).toBe(0);
@@ -113,7 +102,7 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry under a burst of tr
         });
       }
 
-      expect(new Set(rounds).size).toBe(1);
+      expect(rounds).toEqual([4, 4, 4]);
 
       await withDatabasePoolWindow(async (idleWindow): Promise<void> => {
         await (client.unsafe("select 1", []) as Promise<unknown>);

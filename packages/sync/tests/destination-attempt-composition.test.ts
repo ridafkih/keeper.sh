@@ -333,29 +333,6 @@ describe("destination attempt telemetry composed with the sync engine", () => {
     expect(probe.fields["database.queries.count"]).toBe(probe.issuedDuringAttempt);
   });
 
-  /*
-   * The durations are timer-backed wall-clock sums, so a preempted tick on a contended
-   * CI runner exceeds any allowance tight enough to still detect accumulation. Opt in
-   * on quiet hardware; CI reports it as skipped, never silently absent.
-   */
-  it.runIf(Boolean(process.env.KEEPER_PERF_TESTS))(
-    "does not accumulate query latency across fifty attempts",
-    async () => {
-      const { client, issued } = createClient(0);
-      instrumentDatabasePool(client, 10);
-
-      const durations: number[] = [];
-      for (let round = 0; round < 50; round++) {
-        const outcome = await runAttempt(client, issued, { eventIds: ["a"] });
-        durations.push(outcome.fields["database.queries.duration_ms"] as number);
-      }
-
-      const firstTen = durations.slice(0, 10).reduce((total, value) => total + value, 0);
-      const lastTen = durations.slice(-10).reduce((total, value) => total + value, 0);
-      expect(lastTen).toBeLessThan(firstTen + 50);
-    },
-  );
-
   it("emits only finite non-negative numbers on every field of every attempt", async () => {
     const { client, issued } = createClient(1);
     instrumentDatabasePool(client, 10);

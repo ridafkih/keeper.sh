@@ -5,40 +5,9 @@ import {
   withDatabasePoolWindow,
   resetDatabasePoolTelemetry,
 } from "../../src/utils/pool-telemetry";
+import { holdConnections, type PoolClient } from "./support/pool-barrier";
 
 const TEST_DATABASE_URL = process.env.KEEPER_TEST_DATABASE_URL;
-
-interface PoolClient extends Record<string, unknown> {
-  begin: (callback: (transactionClient: PoolClient) => Promise<unknown>) => Promise<unknown>;
-  unsafe: (query: string, params?: unknown[]) => object;
-}
-
-const holdConnections = async (
-  client: PoolClient,
-  count: number,
-): Promise<{ release: () => Promise<void> }> => {
-  const releases: (() => void)[] = [];
-  const held = Array.from({ length: count }, (_unused, index) =>
-    client.begin(async (transactionClient) => {
-      await (transactionClient.unsafe(`select ${index}`, []) as Promise<unknown>);
-      await new Promise<void>((resolve) => {
-        releases.push(resolve);
-      });
-    }));
-  while (releases.length < count) {
-    await new Promise((resolve) => {
-      setTimeout(resolve, 20);
-    });
-  }
-  return {
-    release: async () => {
-      for (const release of releases) {
-        release();
-      }
-      await Promise.all(held);
-    },
-  };
-};
 
 describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry under saturation", () => {
   beforeEach(() => {
@@ -57,9 +26,6 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry under saturation", 
         const blocked = client.begin(async (transactionClient) => {
           await (transactionClient.unsafe("select 98", []) as Promise<unknown>);
           await (transactionClient.unsafe("select 99", []) as Promise<unknown>);
-        });
-        await new Promise((resolve) => {
-          setTimeout(resolve, 200);
         });
         expect(window().queryCount).toBe(0);
 
@@ -121,9 +87,7 @@ describe.skipIf(!TEST_DATABASE_URL)("database pool telemetry under saturation", 
           await (transactionClient.unsafe("select 2", []) as Promise<unknown>);
           await (transactionClient.unsafe("select 3", []) as Promise<unknown>);
         });
-        await new Promise((resolve) => {
-          setTimeout(resolve, 200);
-        });
+        expect(window().queryCount).toBe(0);
         await occupants.release();
         await blocked;
 
