@@ -1,5 +1,5 @@
 import { AnimatePresence } from "motion/react";
-import Star from "lucide-react/dist/esm/icons/star";
+import Github from "lucide-react/dist/esm/icons/github";
 import {
   Component,
   type PropsWithChildren,
@@ -32,11 +32,13 @@ function isGithubStarsResponse(value: unknown): value is GithubStarsResponse {
 }
 
 function formatStarCount(starCount: number): string {
-  return new Intl.NumberFormat("en-US", {
+  const formattedStarCount = new Intl.NumberFormat("en-US", {
     compactDisplay: "short",
     maximumFractionDigits: 1,
     notation: "compact",
   }).format(starCount);
+
+  return `${formattedStarCount} ${starCount === 1 ? "star" : "stars"}`;
 }
 
 async function fetchGithubStarCount(url: string): Promise<number> {
@@ -95,14 +97,14 @@ function GithubStarButtonShell({ countLabel }: GithubStarButtonShellProps) {
   return (
     <ExternalLinkButton
       size="compact"
-      variant="ghost"
+      variant="border"
       href={GITHUB_REPOSITORY_URL}
       target="_blank"
       rel="noreferrer"
       aria-label="Star Keeper.sh on GitHub"
     >
-      <Star size={14} aria-hidden="true" />
-      {typeof countLabel === "string" ? <ButtonText>{countLabel}</ButtonText> : null}
+      <Github size={14} aria-hidden="true" />
+      <ButtonText>{countLabel ?? "GitHub"}</ButtonText>
     </ExternalLinkButton>
   );
 }
@@ -121,12 +123,10 @@ function GithubStarButtonCount({ initialStarCount }: GithubStarButtonProps) {
   }
 
   if (typeof starCount !== "number") {
-    return <GithubStarButtonShell countLabel="…" />;
+    return <GithubStarButtonShell />;
   }
 
-  const formattedStarCount = formatStarCount(starCount);
-
-  return <GithubStarButtonShell countLabel={formattedStarCount} />;
+  return <GithubStarButtonShell countLabel={formatStarCount(starCount)} />;
 }
 
 export function GithubStarButton({ initialStarCount }: GithubStarButtonProps) {
