@@ -7,6 +7,8 @@ const database = drizzle(client);
 
 vi.mock("@/context", () => ({ database }));
 
+vi.mock("../../src/utils/safe-fetch-options", () => ({ safeFetchOptions: {} }));
+
 const { loadRefreshableAccountsForUser } = await import(
   "../../src/utils/account-calendar-discovery"
 );
