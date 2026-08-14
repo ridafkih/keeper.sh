@@ -183,11 +183,10 @@ export const Route = createFileRoute('/(marketing)/')({
   head: () => ({
     links: [{ rel: "canonical", href: canonicalUrl("/") }],
     meta: seoMeta({
-      title: "Open-Source Calendar Syncing for Google, Outlook & iCloud",
+      title: "Sync Google Calendar with Outlook & iCloud",
       description:
-        "Keep your personal, work, and school calendars in sync automatically. Open source, and works with Google Calendar, Outlook, iCloud, Fastmail and more.",
+        "Keeper.sh syncs busy time between your Google, Outlook, iCloud and Fastmail calendars so you never double-book, without sharing event titles, locations or attendees. Open source and auditable.",
       path: "/",
-      brandPosition: "before",
     }),
     scripts: [
       jsonLdScript(softwareApplicationSchema()),
@@ -201,9 +200,9 @@ function MarketingPage() {
 
   return (
     <div className="flex flex-col gap-2 pt-8">
-      <Heading1 className="text-center">All of your calendars in-sync.</Heading1>
+      <Heading1 className="text-center">Every calendar knows when you're busy. None of them know why.</Heading1>
       <Text align="center" className="max-w-[48ch] mx-auto">
-        Synchronize events between your personal, work, business and school calendars automatically. Works with Google Calendar, Outlook, iCloud, CalDAV, and ICS/iCal feeds. Open-source under AGPL-3.0.
+        Keeper.sh copies your events between your personal, work and school calendars, so all of them show you as busy at the same times. Event titles, descriptions, locations and attendees are left behind by default. Open source, so you can check what it sends for yourself.
       </Text>
       <div className="contents *:z-20">
         <div className="flex items-center gap-2 mx-auto pt-1">
