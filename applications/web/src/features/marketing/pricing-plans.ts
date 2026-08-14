@@ -47,5 +47,6 @@ export const PRICING_FEATURES: PricingFeature[] = [
   { label: 'iCal Feed Customization', free: 'minus', pro: 'check' },
   { label: 'Event Filters & Exclusions', free: 'minus', pro: 'check' },
   { label: 'API & MCP Access', free: '25 calls/day', pro: 'infinity' },
+  { label: 'Email & Passkey Sign-In', free: 'check', pro: 'check' },
   { label: 'Priority Support', free: 'minus', pro: 'check' },
 ];

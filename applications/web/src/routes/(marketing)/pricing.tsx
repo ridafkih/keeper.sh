@@ -55,6 +55,10 @@ const FAQ_ITEMS: FaqItem[] = [
     answer: "Keeper.sh is open-source under AGPL-3.0. A self-hosted instance runs without commercial mode, so every account on it gets the Pro feature set and no plan limits.",
   },
   {
+    question: "Do I need a Google or Microsoft account to sign up?",
+    answer: "No. On both plans you can create an account with an email address and password, and add a passkey afterwards. Google and Microsoft sign-in are optional, and connecting a calendar is separate from how you sign in.",
+  },
+  {
     question: "Can I cancel my subscription?",
     answer: "Billing is handled by Polar. You can manage or cancel your subscription from the customer portal linked in your account settings.",
   },

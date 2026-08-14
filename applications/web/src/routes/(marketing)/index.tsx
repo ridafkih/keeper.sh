@@ -152,6 +152,11 @@ const FAQ_ITEMS: FaqItem[] = [
       'Keeper.sh works with Google Calendar, Microsoft Outlook, Apple iCloud, FastMail, and any provider that supports CalDAV or ICS feeds. If your calendar supports one of these, it should work with Keeper.sh.',
   },
   {
+    question: 'Do I need a Google account to use Keeper.sh?',
+    answer:
+      'No. You can sign up with an email address and password, and add a passkey afterwards. Signing in with Google or Microsoft is optional, and it is separate from connecting a calendar, so you can run Keeper.sh with only iCloud, Fastmail, or another CalDAV calendar.',
+  },
+  {
     question: 'Can I self-host Keeper.sh?',
     answer:
       'Yes. Keeper.sh is open-source under the AGPL-3.0 license. Check the README on GitHub for setup instructions, or use one of the many Docker images we offer for quick deployment.',
