@@ -34,6 +34,8 @@ import { Route as dashboardDashboardIndexRouteImport } from './../../routes/(das
 import { Route as oauthOauthConsentRouteImport } from './../../routes/(oauth)/oauth/consent'
 import { Route as oauthAuthOutlookRouteImport } from './../../routes/(oauth)/auth/outlook'
 import { Route as oauthAuthGoogleRouteImport } from './../../routes/(oauth)/auth/google'
+import { Route as marketingToolsIcsViewerRouteImport } from './../../routes/(marketing)/tools/ics-viewer'
+import { Route as marketingToolsIcsGeneratorRouteImport } from './../../routes/(marketing)/tools/ics-generator'
 import { Route as marketingBlogSlugRouteImport } from './../../routes/(marketing)/blog/$slug'
 import { Route as dashboardDashboardReportRouteImport } from './../../routes/(dashboard)/dashboard/report'
 import { Route as dashboardDashboardFeedbackRouteImport } from './../../routes/(dashboard)/dashboard/feedback'
@@ -186,6 +188,17 @@ const oauthAuthGoogleRoute = oauthAuthGoogleRouteImport.update({
   path: '/google',
   getParentRoute: () => oauthAuthRouteRoute,
 } as any)
+const marketingToolsIcsViewerRoute = marketingToolsIcsViewerRouteImport.update({
+  id: '/tools/ics-viewer',
+  path: '/tools/ics-viewer',
+  getParentRoute: () => marketingRouteRoute,
+} as any)
+const marketingToolsIcsGeneratorRoute =
+  marketingToolsIcsGeneratorRouteImport.update({
+    id: '/tools/ics-generator',
+    path: '/tools/ics-generator',
+    getParentRoute: () => marketingRouteRoute,
+  } as any)
 const marketingBlogSlugRoute = marketingBlogSlugRouteImport.update({
   id: '/$slug',
   path: '/$slug',
@@ -384,6 +397,8 @@ export interface FileRoutesByFullPath {
   '/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/dashboard/report': typeof dashboardDashboardReportRoute
   '/blog/$slug': typeof marketingBlogSlugRoute
+  '/tools/ics-generator': typeof marketingToolsIcsGeneratorRoute
+  '/tools/ics-viewer': typeof marketingToolsIcsViewerRoute
   '/auth/google': typeof oauthAuthGoogleRoute
   '/auth/outlook': typeof oauthAuthOutlookRoute
   '/oauth/consent': typeof oauthOauthConsentRoute
@@ -432,6 +447,8 @@ export interface FileRoutesByTo {
   '/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/dashboard/report': typeof dashboardDashboardReportRoute
   '/blog/$slug': typeof marketingBlogSlugRoute
+  '/tools/ics-generator': typeof marketingToolsIcsGeneratorRoute
+  '/tools/ics-viewer': typeof marketingToolsIcsViewerRoute
   '/auth/google': typeof oauthAuthGoogleRoute
   '/auth/outlook': typeof oauthAuthOutlookRoute
   '/oauth/consent': typeof oauthOauthConsentRoute
@@ -487,6 +504,8 @@ export interface FileRoutesById {
   '/(dashboard)/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/(dashboard)/dashboard/report': typeof dashboardDashboardReportRoute
   '/(marketing)/blog/$slug': typeof marketingBlogSlugRoute
+  '/(marketing)/tools/ics-generator': typeof marketingToolsIcsGeneratorRoute
+  '/(marketing)/tools/ics-viewer': typeof marketingToolsIcsViewerRoute
   '/(oauth)/auth/google': typeof oauthAuthGoogleRoute
   '/(oauth)/auth/outlook': typeof oauthAuthOutlookRoute
   '/(oauth)/oauth/consent': typeof oauthOauthConsentRoute
@@ -540,6 +559,8 @@ export interface FileRouteTypes {
     | '/dashboard/feedback'
     | '/dashboard/report'
     | '/blog/$slug'
+    | '/tools/ics-generator'
+    | '/tools/ics-viewer'
     | '/auth/google'
     | '/auth/outlook'
     | '/oauth/consent'
@@ -588,6 +609,8 @@ export interface FileRouteTypes {
     | '/dashboard/feedback'
     | '/dashboard/report'
     | '/blog/$slug'
+    | '/tools/ics-generator'
+    | '/tools/ics-viewer'
     | '/auth/google'
     | '/auth/outlook'
     | '/oauth/consent'
@@ -642,6 +665,8 @@ export interface FileRouteTypes {
     | '/(dashboard)/dashboard/feedback'
     | '/(dashboard)/dashboard/report'
     | '/(marketing)/blog/$slug'
+    | '/(marketing)/tools/ics-generator'
+    | '/(marketing)/tools/ics-viewer'
     | '/(oauth)/auth/google'
     | '/(oauth)/auth/outlook'
     | '/(oauth)/oauth/consent'
@@ -853,6 +878,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/auth/google'
       preLoaderRoute: typeof oauthAuthGoogleRouteImport
       parentRoute: typeof oauthAuthRouteRoute
+    }
+    '/(marketing)/tools/ics-viewer': {
+      id: '/(marketing)/tools/ics-viewer'
+      path: '/tools/ics-viewer'
+      fullPath: '/tools/ics-viewer'
+      preLoaderRoute: typeof marketingToolsIcsViewerRouteImport
+      parentRoute: typeof marketingRouteRoute
+    }
+    '/(marketing)/tools/ics-generator': {
+      id: '/(marketing)/tools/ics-generator'
+      path: '/tools/ics-generator'
+      fullPath: '/tools/ics-generator'
+      preLoaderRoute: typeof marketingToolsIcsGeneratorRouteImport
+      parentRoute: typeof marketingRouteRoute
     }
     '/(marketing)/blog/$slug': {
       id: '/(marketing)/blog/$slug'
@@ -1213,6 +1252,8 @@ interface marketingRouteRouteChildren {
   marketingSelfHostingRoute: typeof marketingSelfHostingRoute
   marketingTermsRoute: typeof marketingTermsRoute
   marketingIndexRoute: typeof marketingIndexRoute
+  marketingToolsIcsGeneratorRoute: typeof marketingToolsIcsGeneratorRoute
+  marketingToolsIcsViewerRoute: typeof marketingToolsIcsViewerRoute
 }
 
 const marketingRouteRouteChildren: marketingRouteRouteChildren = {
@@ -1224,6 +1265,8 @@ const marketingRouteRouteChildren: marketingRouteRouteChildren = {
   marketingSelfHostingRoute: marketingSelfHostingRoute,
   marketingTermsRoute: marketingTermsRoute,
   marketingIndexRoute: marketingIndexRoute,
+  marketingToolsIcsGeneratorRoute: marketingToolsIcsGeneratorRoute,
+  marketingToolsIcsViewerRoute: marketingToolsIcsViewerRoute,
 }
 
 const marketingRouteRouteWithChildren = marketingRouteRoute._addFileChildren(

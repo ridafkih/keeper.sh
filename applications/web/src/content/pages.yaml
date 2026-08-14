@@ -8,6 +8,10 @@
   updatedAt: "2026-08-14"
 - path: /about
   updatedAt: "2026-08-14"
+- path: /tools/ics-generator
+  updatedAt: "2026-08-14"
+- path: /tools/ics-viewer
+  updatedAt: "2026-08-14"
 - path: /privacy
   updatedAt: "2025-12-01"
 - path: /terms
