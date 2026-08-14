@@ -1,0 +1,48 @@
+---
+title: "iCal Feeds: One Link With Everything In It"
+description: "How Keeper.sh iCal feeds work: one subscribable link per feed, which calendars it carries, which event details it shares, and what the link gives away by default."
+blurb: "A feed is one link you can subscribe to from any calendar app, carrying the calendars you pick. By default it shares event times only, and every event in it reads Busy."
+createdAt: "2026-08-14"
+slug: "ical-feeds"
+updatedAt: "2026-08-14"
+tags:
+  - "reference"
+  - "ical-feeds"
+  - "privacy"
+---
+
+A feed is a link. Subscribe to it from any calendar app and the calendars you put in it show up there, refreshed by that app on its own schedule. Feeds live under iCal Feeds in the dashboard, and each one has its own calendars, its own settings and its own link.
+
+Unlike a [connection](/docs/connections), a feed copies nothing. Nothing is written into anyone's calendar, and revoking a feed is a matter of deleting it.
+
+## What a feed carries
+
+**Calendars** picks which of your calendars the feed includes. Only calendars Keeper.sh can read are listed.
+
+**Feed Settings** decides how much of each event the link gives away:
+
+- **Include Event Name** — off by default, so events carry a stand-in title instead
+- **Event Name** — the stand-in title, "Busy" by default, and it accepts `{{event_name}}` and `{{calendar_name}}` as templates
+- **Include Event Description** and **Include Event Location** — both off by default
+
+**Event Filters** leaves categories out of the link: all-day events, and on Google calendars, focus time and out-of-office blocks.
+
+Feed settings and filters are Pro features. On Free a feed runs on the defaults, which are the private ones: times only, every event titled "Busy".
+
+## Reading the disclosure line
+
+Under the feed link, Keeper.sh states in plain words what that link currently shares — "This link shares event times only", or times and names, and so on. It is written from the live settings, so it is the quickest way to check a link before you hand it to someone.
+
+## Anyone with the link can read it
+
+A feed link is a bearer link: it carries no sign-in, so whoever holds it can subscribe. Treat it like a password, and if a link has spread further than you meant, delete the feed. Calendar apps subscribed to it stop receiving events, and you can build a new feed with a new link.
+
+## How many feeds you get
+
+Free plans include one feed. Pro is unlimited, so you can hand a times-only link to a colleague and keep a fuller one for your own phone. [Plans and limits](/docs/plans-and-limits) has the rest of the counts.
+
+## Where to go next
+
+- [Share your availability with a colleague](/recipes/share-availability-with-a-colleague) — a feed set up for exactly that
+- [Why the calendar you subscribed to is out of date](/guides/subscribed-link-out-of-date) — when a feed reads stale in another app
+- [Sync settings](/docs/sync-settings) — the same idea applied to copied events

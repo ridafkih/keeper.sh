@@ -1,0 +1,50 @@
+---
+title: "One Calendar per Client, One Calendar to Live By"
+description: "A Keeper.sh setup for freelancers and contractors: each client's calendar copies into a single working calendar, with client detail stripped so nothing crosses between them."
+blurb: "Needs Pro. Each client calendar copies into one working calendar you live by, with names stripped so no client's detail is ever visible in the others' events."
+createdAt: "2026-08-14"
+slug: "one-calendar-per-client"
+updatedAt: "2026-08-14"
+tags:
+  - "recipe"
+  - "pro-plan"
+  - "freelance"
+---
+
+**Plan: Pro.** Uses one linked account per client plus your own, and one connection per client.
+
+You work with several clients, each of whom put you on their own calendar system. You need one calendar that shows your real week, and none of those clients should end up seeing another's meetings.
+
+## What you build
+
+- Client A calendar → your working calendar
+- Client B calendar → your working calendar
+- …and so on, one connection each
+
+All the connections point inwards. Nothing flows back out to a client, which is what keeps the clients separate from each other.
+
+## Steps
+
+1. Connect each client account. Every provider is one linked account, which is why this needs Pro: Free allows two in total. See [plans and limits](/docs/plans-and-limits).
+2. Pick or create the calendar you live by — usually one in your own personal account.
+3. On each client calendar, tick your working calendar under **Send Events to Calendars**.
+4. On each client calendar, open **Sync Settings** and turn **Sync Event Name** off, setting **Event Name** to `{{calendar_name}}`. Every copy then names the client rather than the meeting.
+5. Leave the working calendar sending to nobody.
+
+Step 4 is optional but it is what makes the result readable: your week fills with blocks labelled by client, and the detail stays in the client's own system where it belongs.
+
+## Why not connect the clients to each other
+
+Because a connection is a copy, and a copy in a client's calendar is a real event they can read. Keeping every arrow pointing inwards means no client system ever receives another client's events. If a client needs your availability, give them a times-only [feed](/docs/ical-feeds) built from your working calendar — [share your availability without sharing your schedule](/recipes/share-availability-with-a-colleague) covers that.
+
+## Keeping it manageable
+
+- **Volume.** One busy client can double the size of your working calendar. **Sync Window** on the working calendar keeps history in check, and narrowing a range also removes copies already outside it: [sync window](/docs/sync-window).
+- **Noise.** Exclusions drop all-day markers, focus time and out-of-office blocks per client calendar.
+- **Ending an engagement.** Untick the destination on that client's calendar. Copies already made stay behind, so clear them out of your working calendar afterwards — [connections](/docs/connections).
+
+## Where to go next
+
+- [Connections](/docs/connections) — one direction per connection, and what removing one leaves behind
+- [Keep titles on one side only](/recipes/keep-titles-on-one-side-only) — the two-way version of the same privacy trick
+- [Best calendar sync tools](/blog/best-calendar-sync-tools) — how the alternatives price multi-account setups

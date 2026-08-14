@@ -292,3 +292,30 @@ export function comparePlugin(): Plugin {
     virtualModuleId: "virtual:compare-pages",
   });
 }
+
+export function docsPlugin(): Plugin {
+  return contentCollectionPlugin({
+    directory: "src/content/docs",
+    exportName: "docsPages",
+    name: "keeper-docs",
+    virtualModuleId: "virtual:docs-pages",
+  });
+}
+
+export function guidesPlugin(): Plugin {
+  return contentCollectionPlugin({
+    directory: "src/content/guides",
+    exportName: "guidesPages",
+    name: "keeper-guides",
+    virtualModuleId: "virtual:guides-pages",
+  });
+}
+
+export function recipesPlugin(): Plugin {
+  return contentCollectionPlugin({
+    directory: "src/content/recipes",
+    exportName: "recipesPages",
+    name: "keeper-recipes",
+    virtualModuleId: "virtual:recipes-pages",
+  });
+}

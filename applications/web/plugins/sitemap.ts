@@ -119,6 +119,9 @@ function buildSitemapXml(entries: SitemapEntry[]): string {
 export function sitemapPlugin(): Plugin {
   let blogDir: string;
   let compareDir: string;
+  let docsDir: string;
+  let guidesDir: string;
+  let recipesDir: string;
   let pagesFile: string;
 
   return {
@@ -128,6 +131,9 @@ export function sitemapPlugin(): Plugin {
     configResolved(config) {
       blogDir = resolve(config.root, "src/content/blog");
       compareDir = resolve(config.root, "src/content/compare");
+      docsDir = resolve(config.root, "src/content/docs");
+      guidesDir = resolve(config.root, "src/content/guides");
+      recipesDir = resolve(config.root, "src/content/recipes");
       pagesFile = resolve(config.root, "src/content/pages.yaml");
     },
 
@@ -138,12 +144,21 @@ export function sitemapPlugin(): Plugin {
         "/compare",
         "Comparison page",
       );
+      const docsEntries = discoverContentEntries(docsDir, "/docs", "Docs page");
+      const guidesEntries = discoverContentEntries(guidesDir, "/guides", "Guide");
+      const recipesEntries = discoverContentEntries(recipesDir, "/recipes", "Recipe");
       const entries = [
         ...readStaticEntries(pagesFile),
         buildIndexEntry("/blog", blogEntries),
         ...blogEntries,
         buildIndexEntry("/compare", compareEntries),
         ...compareEntries,
+        buildIndexEntry("/docs", docsEntries),
+        ...docsEntries,
+        buildIndexEntry("/guides", guidesEntries),
+        ...guidesEntries,
+        buildIndexEntry("/recipes", recipesEntries),
+        ...recipesEntries,
       ];
 
       this.emitFile({

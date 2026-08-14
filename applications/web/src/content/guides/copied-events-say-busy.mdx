@@ -1,0 +1,45 @@
+---
+title: "Why Your Copied Events Say Busy"
+description: "Copied events or a subscribed feed showing Busy instead of the real titles is a privacy setting doing its job. Here is which setting it is and how to change it."
+blurb: "Events arriving as Busy with no title, description or location is a setting, not a fault. Which setting depends on whether you are looking at a copied event or a subscribed feed."
+createdAt: "2026-08-14"
+slug: "copied-events-say-busy"
+updatedAt: "2026-08-14"
+tags:
+  - "troubleshooting"
+  - "privacy"
+  - "sync-settings"
+---
+
+You open the other calendar and the week is full of grey blocks reading "Busy", with no titles, no notes and no locations. Nothing is broken. Something is set to hide those details, and which thing depends on what you are looking at.
+
+## First, which one are you looking at?
+
+A **copied event** lives in a real calendar you connected, because a [connection](/docs/connections) put it there. A **subscribed feed** is a calendar your app pulls from a Keeper.sh link. If you or someone else added a calendar by pasting a link, it is a feed.
+
+## If it is a subscribed feed
+
+This is the default, and it is deliberate. A feed shares event times only until you say otherwise: names, descriptions and locations are all off, and the stand-in title is "Busy". The disclosure line under the feed link states exactly what the link currently shares.
+
+To share more, open the feed and turn on **Include Event Name**, **Include Event Description** or **Include Event Location** in Feed Settings. Those are Pro settings. [iCal feeds](/docs/ical-feeds) covers the rest of the feed options.
+
+Changing a feed changes it for everyone subscribed to that link. If only some people should see titles, make a second feed and hand out the right link to each — that is what the [share your availability with a colleague](/recipes/share-availability-with-a-colleague) recipe does.
+
+## If it is a copied event
+
+Then **Sync Event Name** is off on the calendar the events come from, and copies are carrying the stand-in title from the **Event Name** field instead of the real one. Turn the toggle back on and the copies pick up their real titles at the next sync.
+
+If the titles are right but the notes or the meeting link are missing, the culprits are **Sync Event Description** and **Sync Event Location** on that same calendar. [Sync settings](/docs/sync-settings) covers all three.
+
+## If nothing looks off but the copies still hide detail
+
+Two things worth checking:
+
+- **You are looking at a different calendar than you set up.** Settings live per calendar, so a provider account with several calendars can easily have the right toggles on the wrong one.
+- **You changed the setting a moment ago.** Existing copies are corrected on the next sync, not instantly — within 30 minutes on Free and within a minute on Pro.
+
+## Where to go next
+
+- [Sync settings](/docs/sync-settings) — every setting that decides what a copy says
+- [Why your event has not appeared yet](/guides/events-have-not-appeared) — when the copy is missing rather than vague
+- [Keep titles on one side only](/recipes/keep-titles-on-one-side-only) — a setup that hides detail in one direction on purpose

@@ -1,0 +1,48 @@
+---
+title: "Why Your Event Has Not Appeared in the Other Calendar Yet"
+description: "A checklist for events that have not been copied: how long a sync actually takes, whether the connection points the way you think, and the sync window that may be excluding the event."
+blurb: "You made an event and the other calendar is still empty. Work through the interval, the direction of the connection, the sync window, and the calendar you are actually looking at."
+createdAt: "2026-08-14"
+slug: "events-have-not-appeared"
+updatedAt: "2026-08-14"
+tags:
+  - "troubleshooting"
+  - "connections"
+  - "sync"
+---
+
+You created an event, switched to the other calendar, and it is not there. Start at the top of this list — the first two causes account for most of it.
+
+## Has enough time passed?
+
+Your calendars are checked every minute on both plans, but delivery is not instant. A change reaches your other calendars within 30 minutes on Free and within a minute on Pro. If you are on Free and it has been two minutes, that is normal; wait out the half hour before treating it as a fault.
+
+Calendar apps add their own delay on top. A subscribed link is refreshed on the app's schedule, not yours — see [why the calendar you subscribed to is out of date](/guides/subscribed-link-out-of-date).
+
+## Does the connection point the way you think?
+
+Connections go one way. A connection from A to B copies events created in A into B, and does nothing at all for events created in B.
+
+Open the calendar the event was created in and check **Send Events to Calendars**. If the destination is not ticked there, no connection exists in that direction, however complete the setup looks from the other side. [Connections](/docs/connections) covers setting up the second direction.
+
+## Is the event inside the sync window?
+
+The calendar receiving events has a sync window: one month back and two years ahead by default. An event outside it is not copied, which is what usually explains a missing event far in the future or one dragged well into the past. On Pro the ranges can be widened under **Sync Window**, up to two years in each direction. [Sync window](/docs/sync-window) has the detail.
+
+## Is the event being excluded?
+
+Exclusions leave whole categories out: all-day events, and on Google, focus time and out-of-office blocks. If the thing that will not copy is a birthday, a holiday or a focus block, check **Exclusions** on the source calendar.
+
+## Are you at a limit?
+
+If you set the connection up recently and it did not take, you may have hit the connection limit — 3 on Free. [Why you cannot connect another calendar](/guides/cannot-connect-another-calendar) covers what that looks like.
+
+## Is the account still connected?
+
+A provider can revoke access: a password change, a revoked app-specific password, an administrator policy. If an account has stopped working, reconnect it from the dashboard and the queued changes flow again.
+
+## Where to go next
+
+- [Connections](/docs/connections) — what a connection copies and how quickly
+- [Why events vanished from the calendar receiving them](/guides/events-vanished-from-destination) — for copies that arrived and then left
+- [How calendar sync actually works](/blog/how-calendar-sync-actually-works) — the mechanics underneath all of this

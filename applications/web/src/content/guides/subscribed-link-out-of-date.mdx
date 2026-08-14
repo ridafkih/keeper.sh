@@ -1,0 +1,38 @@
+---
+title: "Why the Calendar You Subscribed To Is Out of Date"
+description: "A subscribed iCal link showing stale events is usually the calendar app's own refresh interval. What each app does, and what to do when the delay is not acceptable."
+blurb: "Your feed is current but the app showing it is hours behind. Subscribed calendars refresh on the app's schedule, not yours, and some apps are slow by design."
+createdAt: "2026-08-14"
+slug: "subscribed-link-out-of-date"
+updatedAt: "2026-08-14"
+tags:
+  - "troubleshooting"
+  - "ical-feeds"
+  - "sync"
+---
+
+You changed an event, the Keeper.sh feed reflects it, and the calendar app subscribed to that link still shows yesterday's version. This is almost always the subscribing app, not the feed.
+
+## Subscribed calendars refresh on the app's schedule
+
+A subscribed link is pulled by whatever app you gave it to, on that app's timetable. Keeper.sh serves whatever the link is asked for at the moment it is asked — it cannot make an app ask sooner.
+
+The refresh interval is set by the app, and on several of the big ones it is neither short nor adjustable. Some let you choose an interval per subscribed calendar; some refresh only when you open the app; some sit on a fixed interval measured in hours. Check the subscription's settings in the app first, and pull to refresh if it offers that.
+
+## Confirming the feed itself is current
+
+Open the feed link in a browser. You get the raw calendar file, and you can search it for the event you changed. If your change is there, the feed is doing its job and the delay is entirely on the subscribing side. If it is not there, treat it as a sync question rather than a feed question and work through [why your event has not appeared yet](/guides/events-have-not-appeared).
+
+Remember the feed can only be as current as the sync behind it: changes reach Keeper.sh every minute, and land within 30 minutes on Free or within a minute on Pro.
+
+## When the delay is not acceptable
+
+If you need a calendar to be current within minutes rather than hours, a subscribed link is the wrong tool for that particular calendar. Set up a [connection](/docs/connections) into a calendar the app syncs natively instead — a real calendar in the account the app is signed into, refreshed by the provider's own push mechanism rather than by polling a URL.
+
+Feeds are the better tool when you want one link, no writes, and easy revocation. Connections are the better tool when you want speed in an app you do not control.
+
+## Where to go next
+
+- [iCal feeds](/docs/ical-feeds) — what a feed carries and how to change it
+- [One link with your whole week](/recipes/one-link-for-your-whole-week) — a feed built for exactly this
+- [How calendar sync actually works](/blog/how-calendar-sync-actually-works) — polling versus push, in detail

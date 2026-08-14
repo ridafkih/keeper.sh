@@ -1,0 +1,49 @@
+---
+title: "Keep Titles on One Side Only"
+description: "A two-way Keeper.sh setup where work events reach your personal calendar in full, and personal events block time at work as an unlabelled busy block."
+blurb: "Needs Pro. A two-way pair where one direction carries full detail and the other carries only a block of time, so personal appointments hold the slot at work without naming themselves."
+createdAt: "2026-08-14"
+slug: "keep-titles-on-one-side-only"
+updatedAt: "2026-08-14"
+tags:
+  - "recipe"
+  - "pro-plan"
+  - "privacy"
+---
+
+**Plan: Pro.** Uses 2 linked accounts, 2 connections, and the per-calendar sync settings.
+
+You want your personal commitments to hold their slot on your work calendar, without a colleague — or an administrator with access to it — reading what they are.
+
+## What you build
+
+- Work calendar → personal calendar, with full detail
+- Personal calendar → work calendar, with the title, description and location stripped
+
+Same two connections as [work and personal calendar in both directions](/recipes/work-and-personal-both-ways); the difference is entirely in the settings on one of them.
+
+## Steps
+
+1. Set up both connections as in that recipe.
+2. Open the **personal** calendar — the one events are read *from* in the private direction — and find **Sync Settings**.
+3. Turn **Sync Event Name** off. The **Event Name** field becomes editable and starts at `{{calendar_name}}`; replace it with whatever you want the block to say. "Busy" and "Personal" are the usual answers.
+4. Turn **Sync Event Description** and **Sync Event Location** off.
+5. Leave the **work** calendar's settings alone, so copies going the other way keep their titles, notes and joining links.
+
+## Why the settings live where they do
+
+Sync settings sit on the calendar events are read *from*, and they apply to everything that calendar sends. That is what makes this recipe work: the personal calendar is the source in the private direction and the destination in the detailed one, so stripping detail there affects only the events leaving it. [Sync settings](/docs/sync-settings) covers the whole section.
+
+It also means the setting is not per destination. If your personal calendar sends to two places and only one should be discreet, this shape cannot express that — use a [feed](/docs/ical-feeds) for the discreet audience instead.
+
+## Tuning it
+
+- **Exclusions** can keep whole categories out of work entirely — all-day birthdays being the obvious one.
+- **Sync Window** on the work calendar keeps the far future out of it, though narrowing a range also clears out copies already beyond it: [sync window](/docs/sync-window).
+- If the copies come out blank when you wanted them named, you have the direction inverted — [why your copied events say Busy](/guides/copied-events-say-busy).
+
+## Where to go next
+
+- [Sync settings](/docs/sync-settings) — every toggle used here
+- [Plans and limits](/docs/plans-and-limits) — what else Pro unlocks
+- [Share your availability without sharing your schedule](/recipes/share-availability-with-a-colleague) — the same instinct, for people rather than calendars

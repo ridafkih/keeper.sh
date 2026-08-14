@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
 import { jsonLdScript, organizationSchema } from '../../lib/seo'
 import { Layout, LayoutItem } from '../../components/ui/shells/layout'
-import { MarketingHeader, MarketingHeaderActions, MarketingHeaderBranding } from '../../features/marketing/components/marketing-header'
+import { MarketingHeader, MarketingHeaderActions, MarketingHeaderBranding, MarketingHeaderNav, MarketingHeaderNavItem } from '../../features/marketing/components/marketing-header'
 import { MarketingFooter, MarketingFooterTagline, MarketingFooterNav, MarketingFooterNavGroup, MarketingFooterNavGroupLabel, MarketingFooterNavItem } from '../../features/marketing/components/marketing-footer'
 import KeeperLogo from "@/assets/keeper.svg?react";
 import { ButtonText, LinkButton } from '../../components/ui/primitives/button';
@@ -48,6 +48,13 @@ function MarketingLayout() {
         <MarketingHeaderBranding label="Keeper.sh home">
           <KeeperLogo className="w-full max-w-6" aria-hidden="true" />
         </MarketingHeaderBranding>
+        <MarketingHeaderNav>
+          <MarketingHeaderNavItem to="/features">Features</MarketingHeaderNavItem>
+          <MarketingHeaderNavItem to="/pricing">Pricing</MarketingHeaderNavItem>
+          <MarketingHeaderNavItem to="/docs">Docs</MarketingHeaderNavItem>
+          <MarketingHeaderNavItem to="/guides">Guides</MarketingHeaderNavItem>
+          <MarketingHeaderNavItem to="/recipes">Recipes</MarketingHeaderNavItem>
+        </MarketingHeaderNav>
         <MarketingHeaderActions>
           <GithubStarButton initialStarCount={githubStars.count} />
           <SessionSlot
@@ -96,6 +103,12 @@ function MarketingLayout() {
               <MarketingFooterNavItem to="/register">Get Started</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/features">Features</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/pricing">Pricing</MarketingFooterNavItem>
+            </MarketingFooterNavGroup>
+            <MarketingFooterNavGroup>
+              <MarketingFooterNavGroupLabel>Learn</MarketingFooterNavGroupLabel>
+              <MarketingFooterNavItem to="/docs">Docs</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/guides">Guides</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/recipes">Recipes</MarketingFooterNavItem>
             </MarketingFooterNavGroup>
             <MarketingFooterNavGroup>
               <MarketingFooterNavGroupLabel>Resources</MarketingFooterNavGroupLabel>

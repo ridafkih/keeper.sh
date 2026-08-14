@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const CONTENT_DIRECTORIES = ["blog", "compare"].map((collection) =>
+const CONTENT_DIRECTORIES = ["blog", "compare", "docs", "guides", "recipes"].map((collection) =>
   join(import.meta.dirname, "../../src/content", collection),
 );
 const ABSOLUTE_SELF_LINK = /]\(https?:\/\/(?:www\.)?keeper\.sh(?![\w.-])[^)]*\)/g;

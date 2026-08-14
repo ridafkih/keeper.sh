@@ -1,0 +1,48 @@
+---
+title: "Work and Personal Calendar in Both Directions"
+description: "A two-way Keeper.sh setup between a work and a personal calendar, using two linked accounts and two connections, so neither calendar can be double-booked."
+blurb: "Runs on Free. Two linked accounts, two connections: work events show in your personal calendar and personal commitments block time at work, so neither side can be double-booked."
+createdAt: "2026-08-14"
+slug: "work-and-personal-both-ways"
+updatedAt: "2026-08-14"
+tags:
+  - "recipe"
+  - "free-plan"
+  - "two-way"
+---
+
+**Plan: Free.** Uses 2 of 2 linked accounts and 2 of 3 connections.
+
+The classic setup. You have a work calendar and a personal one, and you want each to know about the other so nobody books over a dentist appointment and you do not schedule a birthday dinner during a release.
+
+## What you build
+
+- Work calendar → personal calendar
+- Personal calendar → work calendar
+
+Two connections, one each way, because a [connection](/docs/connections) only ever copies in one direction.
+
+## Steps
+
+1. Connect both providers under Integrations. Two providers is two linked accounts, which is the whole Free allowance — see [plans and limits](/docs/plans-and-limits).
+2. Open the **work** calendar, and under **Send Events to Calendars**, tick the personal calendar.
+3. Open the **personal** calendar, and tick the work calendar.
+4. Wait a sync cycle. Within 30 minutes on Free, both calendars carry the other's events.
+
+## Worth deciding before you build it
+
+Every event now exists twice, and each copy is a real event in a real calendar. That is the point — a copy is what makes the time show as taken — but it means the count of events in each calendar roughly doubles.
+
+If you would rather your employer's calendar did not carry the titles of your personal appointments, this recipe wants its sibling: [keep titles on one side only](/recipes/keep-titles-on-one-side-only), which is the same shape with the detail stripped in one direction. That one needs Pro.
+
+## Keeping it tidy
+
+- **Too much history.** On Pro, narrow **Sync Historic Events** on each destination. Be aware that narrowing a range also clears out copies already outside it — [sync window](/docs/sync-window) explains.
+- **Birthdays and holidays crossing over.** Exclusions can leave all-day events out, on Pro.
+- **Seeing a meeting twice.** Check nothing else is also copying between these two calendars: [why the same event shows up twice](/guides/same-event-twice).
+
+## Where to go next
+
+- [Connections](/docs/connections) — the reference for what you just built
+- [How to sync Google Calendar with Outlook](/blog/how-to-sync-google-calendar-with-outlook) — the same idea, written out provider by provider
+- [Recipes](/recipes) — the rest of the ready-made setups

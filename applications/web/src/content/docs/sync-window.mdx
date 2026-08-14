@@ -1,0 +1,40 @@
+---
+title: "Sync Window: How Far Back and Ahead a Sync Reaches"
+description: "The Sync Window setting in Keeper.sh sets how far into the past and future events are copied into a calendar, and narrowing it removes already-copied events outside the new range."
+blurb: "The sync window sets how far back and ahead Keeper.sh copies events into a calendar. Narrowing it also clears out copies that fall outside the new range."
+createdAt: "2026-08-14"
+slug: "sync-window"
+updatedAt: "2026-08-14"
+tags:
+  - "reference"
+  - "sync-window"
+  - "sync"
+---
+
+The sync window is the span of time a calendar accepts copies for. It sits on the calendar **receiving** events, under **Sync Window**, and it applies to everything copied into that calendar.
+
+## Two ranges
+
+**Sync Historic Events** sets how far into the past copies reach, and defaults to one month. **Sync Future Events** sets how far ahead, and defaults to two years. Each takes one of six spans: 1 week, 1 month, 3 months, 6 months, 12 months, or 2 years. An event outside the window is not copied, however recently it was created.
+
+Choosing a span is a Pro feature. On Free the defaults apply and the dashboard says as much where the setting would be.
+
+## Narrowing a window removes events
+
+This is the part worth reading twice. Narrowing a range does not only stop new copies being made outside it — it also removes copies already sitting in that calendar outside the new range. That is deliberate: the window describes what the calendar should contain, not only what it should accept next.
+
+Widening a range works the other way. Events inside the newly covered span are copied in on the next sync rather than immediately, so give it a cycle before concluding something is wrong. [How quickly a change lands](/docs/connections) covers the timings.
+
+If events you expected have gone missing, [why events vanished from the calendar receiving them](/guides/events-vanished-from-destination) starts from that symptom.
+
+## Choosing a range
+
+A narrow future range keeps a shared or work calendar tidy and stops next year's provisional plans leaking into it. A wide historic range is useful when the destination calendar is the one you search through for what you did and when.
+
+Every event inside the window is a real event in the destination calendar, so a wide window on a busy source is a lot of events. If a destination calendar is only there to be read, an [iCal feed](/docs/ical-feeds) may fit better than a connection: a feed is one link rather than thousands of copies.
+
+## Where to go next
+
+- [Connections](/docs/connections) — what a connection is and how to set one up
+- [Sync settings](/docs/sync-settings) — which details a copied event carries
+- [Recipes](/recipes) — complete setups that use these settings together

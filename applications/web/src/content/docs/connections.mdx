@@ -1,0 +1,46 @@
+---
+title: "Connections: Sending Events From One Calendar to Another"
+description: "How a Keeper.sh connection works: it copies events one way, from one source calendar into one destination calendar, and keeps the copy corrected as the original changes."
+blurb: "A connection copies events from one calendar into another, in one direction only. Here is where you set one up, what happens to the copy when the original moves, and what two-way syncing actually means."
+createdAt: "2026-08-14"
+slug: "connections"
+updatedAt: "2026-08-14"
+tags:
+  - "reference"
+  - "connections"
+  - "sync"
+---
+
+A connection is the unit of work in Keeper.sh: one source calendar, one destination calendar, one direction. Everything else on this site is either a setting on a connection or a way of looking at what a connection produced.
+
+## Setting one up
+
+Open the calendar you want events to come **from**, and use **Send Events to Calendars**. Every calendar Keeper.sh can write to is listed there; tick the ones that should receive this calendar's events. Each tick is one connection.
+
+There is no separate screen for connections, and no ordering to get right. If the destination you want is not in the list, the calendar behind it cannot be written to — a calendar subscribed from a link is the usual case. [Linked accounts and calendars](/docs/accounts-and-calendars) covers which calendars can receive events.
+
+## Connections only go one way
+
+A connection copies from the source to the destination and never back. If you want a change made in either calendar to reach the other, set up two connections — one in each direction — from each calendar's own page.
+
+Two-way setups are worth thinking about before you build them, because every event you create in one calendar now exists twice, and each copy is a real event in a real calendar. The [work and personal calendar in both directions](/recipes/work-and-personal-both-ways) recipe walks through a two-way setup that stays readable.
+
+## What the copy does over time
+
+The copy is maintained, not fired and forgotten. Move the original and the copy moves. Change its length and the copy changes. Delete the original and the copy is deleted too. That is the difference between a sync tool and an import: your destination calendar gets corrected rather than accumulating a new copy each time something changes.
+
+If you are seeing two of something anyway, [why the same event shows up twice](/guides/same-event-twice) covers the setups that cause it.
+
+## How quickly a change lands
+
+Your calendars are checked every minute on both plans. A change then reaches your other calendars within 30 minutes on Free and within a minute on Pro. Google and Outlook tell Keeper.sh what changed rather than handing over the whole calendar, so checking stays quick even on a busy calendar; a calendar subscribed from a link has no such mechanism and is read in full each time.
+
+## Removing a connection
+
+Untick the destination in **Send Events to Calendars**. New events stop being copied. Events already copied stay where they are, so clear them out of the destination calendar yourself if you do not want them.
+
+## Where to go next
+
+- [Sync settings](/docs/sync-settings) — which details of an event get copied
+- [Sync window](/docs/sync-window) — how far back and ahead a connection reaches
+- [Why your event has not appeared yet](/guides/events-have-not-appeared) — if a connection is set up but nothing arrived

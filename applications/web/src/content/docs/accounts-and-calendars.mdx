@@ -1,0 +1,47 @@
+---
+title: "Linked Accounts and Calendars"
+description: "What a linked account is in Keeper.sh, which providers you can connect, and how the calendars inside an account are listed and renamed."
+blurb: "An account is one connected calendar provider, and every calendar inside it shows up on its own page. Here is what each provider connection needs and what the calendar page holds."
+createdAt: "2026-08-14"
+slug: "accounts-and-calendars"
+updatedAt: "2026-08-14"
+tags:
+  - "reference"
+  - "accounts"
+  - "calendars"
+---
+
+Everything in Keeper.sh hangs off a linked account. This page covers what an account is, what connecting one asks of you, and what you find on a calendar's page once it is connected.
+
+## What counts as an account
+
+An account is one connected calendar provider: a Google or Outlook login, an iCloud or Fastmail sign-in, a CalDAV server, or a calendar link you paste in. One provider login is one account no matter how many calendars sit inside it, which matters because plan limits are counted in accounts and connections, not calendars. The [plans and limits](/docs/plans-and-limits) page has the counts.
+
+## Connecting one
+
+You connect an account from the dashboard's connect screen. Google, Outlook and Microsoft accounts connect by signing in and granting calendar access. iCloud and Fastmail connect with an app-specific password generated in the provider's own settings, because neither accepts your ordinary password from a third-party client. Anything else connects over CalDAV with a server URL and credentials, from a calendar link you paste in, or from an `.ics` file you upload.
+
+Once an account is connected, Keeper.sh lists the calendars inside it. Nothing is copied anywhere until you set up a connection, which is covered in [connections](/docs/connections).
+
+## What a calendar can do
+
+Each calendar carries capabilities, shown on its page under Calendar Information, and they decide which settings appear:
+
+- A calendar Keeper.sh can **read** can act as a source. Its page carries **Send Events to Calendars**, plus [sync settings](/docs/sync-settings) and exclusions.
+- A calendar Keeper.sh can **write to** can act as a destination. Its page carries the [sync window](/docs/sync-window).
+
+A calendar subscribed from a link is read-only by nature, so it can be a source but never a destination. Provider calendars you own are usually both.
+
+## Renaming a calendar
+
+The **Calendar Name** section renames a calendar inside Keeper.sh. The name is yours alone: it does not touch the name at the provider, and nobody you share a feed with sees it. Renaming helps when two providers both call a calendar "Calendar" and you have to tell them apart in a destination list.
+
+## Removing an account
+
+Disconnecting an account stops Keeper.sh reading from or writing to it and frees up the account slot on your plan. Events already copied into another calendar are not swept up when the account behind them goes away — delete them in the destination calendar if you want them gone.
+
+## Where to go next
+
+- [Connections](/docs/connections) — how events move from one calendar to another
+- [Guides](/guides) — if a connection is set up and something is not behaving
+- [Recipes](/recipes) — complete setups you can copy

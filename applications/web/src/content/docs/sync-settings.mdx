@@ -1,0 +1,45 @@
+---
+title: "Sync Settings: Which Event Details Get Copied"
+description: "The Sync Settings and Exclusions sections in Keeper.sh: the event name template, the description and location toggles, the event types you can leave out, and which plan each needs."
+blurb: "Sync Settings decides what a copied event says, and Exclusions decides which events are copied at all. Both sit on the calendar events come from, and both are Pro features."
+createdAt: "2026-08-14"
+slug: "sync-settings"
+updatedAt: "2026-08-14"
+tags:
+  - "reference"
+  - "privacy"
+  - "sync-settings"
+---
+
+Two sections on a calendar's page decide what the copies look like: **Sync Settings** for what each copied event says, and **Exclusions** for which events are copied at all. Both live on the calendar events are read **from**, so they apply to every destination that calendar sends to.
+
+Both sections are Pro features. On Free the defaults apply, and the dashboard says so where the settings would be.
+
+## Sync Settings
+
+**Sync Event Name** decides whether the original title travels. Turn it off and copies carry a stand-in title instead of the real one.
+
+The stand-in title is set in **Event Name**, which becomes editable as soon as the toggle is off and starts out as `{{calendar_name}}`. Two templates are available: `{{event_name}}` for the original title and `{{calendar_name}}` for the name of the calendar the event came from. Plain text works too, so "Busy" is a fine answer; `{{calendar_name}}` is the more useful one when copies from several calendars land in one place and you want to know which is which without reading the titles.
+
+**Sync Event Description** and **Sync Event Location** do the same job for the other two fields people would rather not hand over: the meeting notes, the conferencing link, the address.
+
+For a calendar subscribed from a link, one extra toggle appears: **Sync Full-Day Events as All-Day**, which turns an event that covers a whole day but is stored with times into a real all-day event in the destination.
+
+## Exclusions
+
+Exclusions leave whole categories of event out of the copy:
+
+- **Exclude All Day Events** — for the birthdays, holidays and all-day markers that clutter a work calendar
+- **Exclude Focus Time Events** and **Exclude Out of Office Events** — on Google calendars, for the blocks Google creates as their own event types
+
+An excluded event is not copied, and an event you exclude after the fact is removed from the destination.
+
+## What Free gets
+
+Free copies events with their details as they stand, on every connection. If your goal is to share that you are busy without sharing what you are doing, an [iCal feed](/docs/ical-feeds) does that on Free: a feed hides titles, descriptions and locations by default and every event in it reads "Busy".
+
+## Where to go next
+
+- [Why your copied events say Busy](/guides/copied-events-say-busy) — when the stand-in title was not what you wanted
+- [Keep titles on one side only](/recipes/keep-titles-on-one-side-only) — a two-way setup where only one direction carries detail
+- [Plans and limits](/docs/plans-and-limits) — what Free and Pro each include

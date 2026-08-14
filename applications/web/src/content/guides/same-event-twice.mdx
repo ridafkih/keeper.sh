@@ -1,0 +1,40 @@
+---
+title: "Why the Same Event Shows Up Twice"
+description: "Duplicate events after setting up calendar sync usually come from a loop between two calendars, a second sync tool still running, or the same calendar arriving by two routes."
+blurb: "Seeing one meeting twice in the same calendar has three usual causes: a two-way setup you did not mean to build, another sync tool still running, or the same calendar reaching you by two routes."
+createdAt: "2026-08-14"
+slug: "same-event-twice"
+updatedAt: "2026-08-14"
+tags:
+  - "troubleshooting"
+  - "connections"
+  - "duplicates"
+---
+
+Keeper.sh maintains its copies rather than re-creating them, so a copy that already exists is corrected, not duplicated. When the same meeting does show up twice, something is producing two of it. There are three usual suspects.
+
+## Two connections pointing at each other
+
+If A sends to B and B also sends to A, then an event created in A is copied into B, and B's copy is a real event in B. Whether that becomes visible clutter depends on what you were trying to build: a genuine two-way pair of calendars is exactly this, and it is fine. The problem case is a two-way setup between calendars that already share events by some other route.
+
+Open each calendar's **Send Events to Calendars** and read the pair as a whole. If you only wanted events flowing one way, untick the return direction. Already-copied events stay behind when a connection is removed, so delete them in that calendar afterwards.
+
+## Another sync tool is still running
+
+Duplicates very often mean two tools are copying the same events. A desktop sync utility left running, a provider's own built-in sync, a shared calendar someone else is also mirroring — any of them will keep re-adding what you just cleaned up.
+
+Turn the other tool off before untangling anything, then delete the leftovers once.
+
+## The same calendar arriving twice
+
+A calendar can reach one app by two routes at once: connected directly at the provider, and also included in an [iCal feed](/docs/ical-feeds) you subscribed to. Both routes are working correctly; you are simply seeing the same events through two windows. Remove one — usually by taking that calendar out of the feed, or unsubscribing from the feed in the app.
+
+## Duplicates that will not go away
+
+If you delete a copy and it comes back, something is still copying it. That is a connection you have not found or another tool still running — not a stuck sync. Removing the source of the copy first, then clearing up, is the order that sticks.
+
+## Where to go next
+
+- [Connections](/docs/connections) — one direction per connection, and what removing one does
+- [Work and personal calendar in both directions](/recipes/work-and-personal-both-ways) — a two-way setup built on purpose
+- [Why your event has not appeared yet](/guides/events-have-not-appeared) — the opposite symptom

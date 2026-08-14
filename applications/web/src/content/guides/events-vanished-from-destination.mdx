@@ -1,0 +1,42 @@
+---
+title: "Why Events Vanished From the Calendar Receiving Them"
+description: "Copied events disappearing from a destination calendar usually follows a narrowed sync window, a removed connection, an exclusion, or a deletion at the source."
+blurb: "Copies that were there yesterday and are gone today have a short list of causes, and a narrowed sync window is the most common of them."
+createdAt: "2026-08-14"
+slug: "events-vanished-from-destination"
+updatedAt: "2026-08-14"
+tags:
+  - "troubleshooting"
+  - "sync-window"
+  - "connections"
+---
+
+Copies are maintained, which means Keeper.sh removes them as readily as it creates them. When events disappear from a calendar that was receiving them, something told Keeper.sh they no longer belong there.
+
+## Did you narrow a sync window?
+
+This is the usual answer. Narrowing **Sync Historic Events** or **Sync Future Events** does not only stop new copies outside the range — it also removes copies already in that calendar that now fall outside it. Shortening a future range from two years to three months clears out everything further ahead than three months.
+
+Widen the range again and the events are copied back in on the next sync rather than immediately. [Sync window](/docs/sync-window) covers the ranges available.
+
+## Did the event change at the source?
+
+Delete an event in the source calendar and its copy goes too. Move it and the copy moves, which can look like a disappearance if you were looking at the old date. Both are the tool working as intended — see [connections](/docs/connections).
+
+## Did an exclusion start applying?
+
+Turning on an exclusion removes the events it covers from the destination, not just future ones. If all-day events, focus time or out-of-office blocks are the ones that vanished, check **Exclusions** on the source calendar.
+
+## Was the connection removed?
+
+Removing a connection leaves already-copied events in place, so a removed connection does not itself clear a calendar. But if you removed a connection *and* the events are gone, someone or something else deleted them — worth knowing before you go looking for a bug.
+
+## Did the source account lose access?
+
+If a provider revoked access — a changed password, a withdrawn app-specific password, an administrator policy — Keeper.sh can no longer read the source. Reconnect the account from the dashboard, and check whether the events came back on the next sync before doing anything more drastic.
+
+## Where to go next
+
+- [Sync window](/docs/sync-window) — how the ranges decide what a calendar holds
+- [Why your event has not appeared yet](/guides/events-have-not-appeared) — for copies that never arrived in the first place
+- [Sync settings](/docs/sync-settings) — the exclusions and detail toggles in full
