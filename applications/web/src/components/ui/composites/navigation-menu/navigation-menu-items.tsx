@@ -158,7 +158,7 @@ export function NavigationMenuItemLabel({
 
   return (
     <Text
-      size="sm"
+      size="base"
       tone={toneMap[variant ?? "default"]}
       align="left"
       className={cn("min-w-0 truncate", className)}
@@ -175,7 +175,7 @@ export function NavigationMenuEmptyItem({ children }: PropsWithChildren) {
     <li>
       <div className={navigationMenuItemStyle({ variant, interactive: false })}>
         <Text
-          size="sm"
+          size="base"
           tone={LABEL_TONE[variant ?? "default"]}
           align="center"
           className="w-full"
