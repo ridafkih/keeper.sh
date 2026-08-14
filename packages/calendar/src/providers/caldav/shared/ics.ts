@@ -17,6 +17,7 @@ import type {
 import type { MaterializedSyncableEvent, SyncableEvent } from "../../../core/types";
 import { isKeeperEvent } from "../../../core/events/identity";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
+import { toPlainTextDescription } from "../../../core/events/plain-text-description";
 import {
   assertNoUnsupportedRecurrenceDates,
   collectUnsupportedRecurrenceTimeZones,
@@ -25,6 +26,10 @@ import type { UnsupportedRecurrenceEvent } from "../../../ics/utils/validate-rec
 
 const normalizeIcsText = (value: string | undefined): string | undefined =>
   value?.replaceAll(/\r\n?/g, "\n");
+
+/** RFC 5545 3.8.1.5 makes DESCRIPTION a TEXT property, so markup in it is shown as markup. */
+const normalizeIcsDescription = (value: string | undefined): string | undefined =>
+  normalizeIcsText(toPlainTextDescription(value));
 
 /*
  * A TZID-qualified DTSTART is only interpretable against a VTIMEZONE. Omitting
@@ -50,7 +55,7 @@ const eventToICalString = (event: MaterializedSyncableEvent, uid: string): strin
   const isAllDay = resolveIsAllDayEvent(event);
   const timezones = resolveEventTimezones(event, isAllDay);
   const icsEvent: IcsEvent = {
-    description: normalizeIcsText(event.description),
+    description: normalizeIcsDescription(event.description),
     end: buildZonedIcsDate(event.endTime, event.startTimeZone, isAllDay),
     location: normalizeIcsText(event.location),
     stamp: { date: new Date() },

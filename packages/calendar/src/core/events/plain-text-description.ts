@@ -90,6 +90,7 @@ const TAG_TOKEN_PATTERN = new RegExp(String.raw`</?${TAG_NAME}(?:\s[^<>]*)?/?>`,
 const LINK_SCHEME_PATTERN = /^(?:[a-z][a-z\d+.-]*:\/\/|mailto:|tel:)/i;
 const TRAILING_SLASH_PATTERN = /\/+$/;
 const CARRIAGE_RETURN_PATTERN = /\r\n?/g;
+const DOCUMENT_DIRECTIVE_PATTERN = /^(?:!doctype\b|\?)/i;
 
 /*
  * `<https://tel.meet/x?pin=1&hs=2>` is text, not a tag, and htmlparser2 would
@@ -207,6 +208,9 @@ const renderNode = (node: ChildNode, closedElements: ReadonlySet<ChildNode>): st
     return stripSentinels(node.data);
   }
   if (node.type === ElementType.Directive) {
+    if (DOCUMENT_DIRECTIVE_PATTERN.test(node.data)) {
+      return "";
+    }
     return `<${stripSentinels(node.data)}>`;
   }
   if (!DomUtils.isTag(node)) {
@@ -247,7 +251,7 @@ const renderNode = (node: ChildNode, closedElements: ReadonlySet<ChildNode>): st
 const stripMarkupTokens = (source: string): string =>
   decodeHTML(source.replaceAll(TAG_TOKEN_PATTERN, " "));
 
-const hasMarkupElement = (
+const hasMarkupNode = (
   nodes: ChildNode[],
   closedElements: ReadonlySet<ChildNode>,
 ): boolean =>
@@ -256,33 +260,24 @@ const hasMarkupElement = (
       return true;
     }
     return DomUtils.isTag(node)
-      && (isMarkup(node, closedElements) || hasMarkupElement(node.children, closedElements));
+      && (isMarkup(node, closedElements) || hasMarkupNode(node.children, closedElements));
   });
 
 /*
  * Entities stay encoded in a description that carries no markup: `A &amp; B`
  * is then the sentence its author typed, not an escape of one.
  */
-const containsMarkup = (value: string): boolean => {
-  if (!value.includes("<")) {
-    return false;
-  }
-  const parsed = parseDescription(escapeStrayAngles(normalizeLineEndings(value)));
-  if (!parsed.isReadable) {
-    return true;
-  }
-
-  return hasMarkupElement(parsed.children, parsed.closedElements);
-};
-
 const projectOnce = (value: string): string => {
-  if (!containsMarkup(value)) {
+  if (!value.includes("<")) {
     return value;
   }
   const source = escapeStrayAngles(normalizeLineEndings(value));
   const parsed = parseDescription(source);
   if (!parsed.isReadable) {
     return stripMarkupTokens(source).trim();
+  }
+  if (!hasMarkupNode(parsed.children, parsed.closedElements)) {
+    return value;
   }
 
   return resolveSeparators(
@@ -310,4 +305,4 @@ const toPlainTextDescription = (value: string | undefined): string | undefined =
   return current;
 };
 
-export { containsMarkup, toPlainTextDescription };
+export { toPlainTextDescription };

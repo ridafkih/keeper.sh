@@ -45,9 +45,7 @@ const getPropertyValue = (ics: string, name: string): string | undefined =>
 
 describe("the Google destination write boundary", () => {
   it("sends the Meet block as text rather than as a span Google discards", () => {
-    const serialized = serializeGoogleEvent(normalizeGoogleEvent(createEvent()), "uid-1");
-
-    expect(serialized?.description).toBe(MEET_BLOCK);
+    expect(serializeGoogleEvent(createEvent(), "uid-1")?.description).toBe(MEET_BLOCK);
   });
 
   it("expects back what it sent, so the mirror is compared against the text", () => {
@@ -65,19 +63,21 @@ describe("the Google destination write boundary", () => {
 
 describe("the CalDAV destination write boundary", () => {
   it("writes DESCRIPTION as the iCalendar TEXT that RFC 5545 3.8.1.5 defines", () => {
-    const ics = eventToICalString(normalizeCalDAVEvent(createEvent()), "uid-1@keeper.sh");
+    const ics = eventToICalString(createEvent(), "uid-1@keeper.sh");
 
     expect(getPropertyValue(ics, "DESCRIPTION:")).toBe(MEET_BLOCK.replaceAll("\n", String.raw`\n`));
     expect(ics).not.toContain("white-space:pre");
   });
 
+  it("expects back what it wrote, so the mirror is compared against the text", () => {
+    expect(createEditableEventContentHash(normalizeCalDAVEvent(createEvent())))
+      .toBe(createEditableEventContentHash(createEvent({ description: MEET_BLOCK })));
+  });
+
   it("does not render an Outlook body's markup as literal text to the reader", () => {
     const body = "<html><head><style>p.MsoNormal {margin:0in}</style></head>"
       + "<body><p class=\"MsoNormal\">Quarterly planning</p></body></html>";
-    const ics = eventToICalString(
-      normalizeCalDAVEvent(createEvent({ description: body })),
-      "uid-1@keeper.sh",
-    );
+    const ics = eventToICalString(createEvent({ description: body }), "uid-1@keeper.sh");
 
     expect(getPropertyValue(ics, "DESCRIPTION:")).toBe("Quarterly planning");
   });

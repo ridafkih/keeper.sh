@@ -43,7 +43,7 @@ const serializeGoogleEvent = (
   const normalized = normalizeGoogleEvent(event);
 
   return {
-    description: event.description,
+    description: normalized.description,
     end: buildDateField(normalized.endTime, isAllDay, event.startTimeZone, recurrenceRule),
     iCalUID: uid,
     location: event.location,
