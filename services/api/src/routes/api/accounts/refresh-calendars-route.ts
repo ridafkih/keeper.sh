@@ -84,6 +84,18 @@ const resolveFailureSlug = (error: unknown): string => {
   return "refresh-failed";
 };
 
+const releaseRefreshLock = async (
+  handle: RefreshLockHandle,
+  accountId: string,
+): Promise<void> => {
+  try {
+    await handle.release();
+  } catch (error) {
+    widelog.set("calendar_refresh.lock_release_failed_account_id", accountId);
+    widelog.errorFields(error, { slug: "refresh-lock-release-failed", retriable: true });
+  }
+};
+
 const refreshAccount = async (
   account: RefreshableAccountRef,
   context: RefreshCalendarsRouteContext,
@@ -119,7 +131,7 @@ const refreshAccount = async (
     });
     return { ...EMPTY_TOTALS, failed: 1 };
   } finally {
-    await lock.handle.release();
+    await releaseRefreshLock(lock.handle, account.id);
   }
 };
 

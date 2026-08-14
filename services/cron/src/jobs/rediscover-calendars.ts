@@ -37,6 +37,7 @@ import { context, widelog } from "@/utils/logging";
 import { database, premiumService, refreshLockRedis, refreshLockStore } from "@/context";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
+import { releaseRefreshLock } from "@/utils/refresh-lock-release";
 import { raceAbortSignal, withAbortTimeout } from "@/utils/with-abort-timeout";
 import { filterSourcesByPlan } from "@/utils/source-plan-selection";
 import {
@@ -269,7 +270,7 @@ const runAccountWithLock = async (
   try {
     return await rediscoverAccount(account, signal);
   } finally {
-    await refreshLockStore.release(lockKey);
+    await releaseRefreshLock(refreshLockStore, lockKey);
   }
 };
 

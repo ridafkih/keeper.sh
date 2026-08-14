@@ -143,6 +143,26 @@ describe("handleRefreshCalendarsRoute", () => {
     expect(harness.releases).toEqual(["account-1", "account-2"]);
   });
 
+  it("still reports the calendars it inserted when releasing the account mutex fails", async () => {
+    const harness = createHarness({
+      acquireRefreshLock: () =>
+        Promise.resolve({
+          acquired: true as const,
+          handle: { release: () => Promise.reject(new Error("Redis connection lost")) },
+        }),
+    });
+
+    const response = await handleRefreshCalendarsRoute({ userId: "user-1" }, harness.dependencies);
+
+    expect(response.status).toBe(200);
+    await expect(readJson(response)).resolves.toMatchObject({
+      accounts: 2,
+      added: 2,
+      failed: 0,
+      refreshed: 2,
+    });
+  });
+
   it("skips an account whose mutex is already held by the cron", async () => {
     const harness = createHarness({
       acquireRefreshLock: (accountId) => {
