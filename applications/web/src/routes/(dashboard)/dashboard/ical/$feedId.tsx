@@ -3,15 +3,15 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR, { preload } from "swr";
 import Check from "lucide-react/dist/esm/icons/check";
 import Copy from "lucide-react/dist/esm/icons/copy";
-import Link2 from "lucide-react/dist/esm/icons/link-2";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import { icalFeedNameSchema } from "@keeper.sh/data-schemas";
 import { apiFetch, fetcher } from "@/lib/fetcher";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { serializedPatch } from "@/lib/serialized-mutate";
 import { formatDate } from "@/lib/time";
-import { pluralize } from "@/lib/pluralize";
 import { BackButton } from "@/components/ui/primitives/back-button";
+import { Button, ButtonIcon } from "@/components/ui/primitives/button";
+import { Input } from "@/components/ui/primitives/input";
 import { DashboardHeading1, DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { DeleteConfirmation } from "@/components/ui/primitives/delete-confirmation";
 import { Pagination, PaginationPrevious, PaginationNext } from "@/components/ui/primitives/pagination";
@@ -200,15 +200,13 @@ function ICalFeedDetailPage() {
         <BackButton fallback="/dashboard/ical" />
         <FeedPrevNext feedId={feedId} />
       </div>
-      <FeedHeader name={feed.name} calendarCount={selected.size} />
+      <FeedHeader name={feed.name} />
       {mutationError && <Text size="sm" tone="danger">{mutationError}</Text>}
       <DashboardSection
         title="Feed Link"
         description="Subscribe to this link in any calendar app."
       />
-      <NavigationMenu>
-        <CopyFeedLinkItem url={feed.icalUrl} onError={setMutationError} />
-      </NavigationMenu>
+      <FeedLinkField url={feed.icalUrl} onError={setMutationError} />
       <Text size="sm" tone="muted" className="px-0.5">{resolveFeedDisclosure(feed)}</Text>
       <DashboardSection
         title="Feed Name"
@@ -276,9 +274,14 @@ function ICalFeedDetailPage() {
       />
       <NavigationMenu>
         <MetadataRow label="Resource Type" value={feed.isDefault ? "Default Feed" : "Feed"} />
-        <MetadataRow label="Calendars" value={String(selected.size)} />
         <MetadataRow label="Created" value={formatDate(feed.createdAt)} />
       </NavigationMenu>
+      {feed.isDefault && (
+        <Text size="sm" tone="muted" className="px-0.5">
+          Your default feed cannot be deleted. Create another feed to share a narrower set of
+          calendars.
+        </Text>
+      )}
       {!feed.isDefault && (
         <>
           <NavigationMenu>
@@ -303,21 +306,15 @@ function ICalFeedDetailPage() {
   );
 }
 
-function FeedHeader({ name, calendarCount }: { name: string; calendarCount: number }) {
+function FeedHeader({ name }: { name: string }) {
   return (
     <div className="flex flex-col px-0.5 pt-4">
       <DashboardHeading1 className="select-none">{name}</DashboardHeading1>
-      <div className="flex items-center gap-1.5 pt-0.5">
-        <Link2 size={14} className="shrink-0 text-foreground-muted" />
-        <Text className="truncate overflow-hidden" size="sm" tone="muted">
-          {pluralize(calendarCount, "calendar")}
-        </Text>
-      </div>
     </div>
   );
 }
 
-function CopyFeedLinkItem({
+function FeedLinkField({
   url,
   onError,
 }: {
@@ -330,7 +327,7 @@ function CopyFeedLinkItem({
     try {
       await navigator.clipboard.writeText(url);
     } catch {
-      onError("Failed to copy this feed's link.");
+      onError("Failed to copy this feed's link. Select it above to copy it manually.");
       return;
     }
     track(ANALYTICS_EVENTS.ical_link_copied);
@@ -338,28 +335,27 @@ function CopyFeedLinkItem({
   };
 
   return (
-    <NavigationMenuButtonItem onClick={() => { void handleCopy(); }}>
-      <NavigationMenuItemIcon>
-        <Link2 size={15} />
-      </NavigationMenuItemIcon>
-      <NavigationMenuItemLabel className="shrink-0">
-        {copied ? "Link Copied" : "Copy Link"}
-      </NavigationMenuItemLabel>
-      <NavigationMenuItemTrailing className="overflow-hidden">
-        <Text size="sm" tone="muted" align="right" className="flex-1 min-w-0 truncate">
-          {url}
-        </Text>
-        <CopyStateIcon copied={copied} />
-      </NavigationMenuItemTrailing>
-    </NavigationMenuButtonItem>
+    <div className="flex gap-1.5">
+      <Input readOnly value={url} className="text-sm" />
+      <Button
+        variant="border"
+        className="shrink-0 aspect-square"
+        onClick={() => { void handleCopy(); }}
+        aria-label="Copy feed link"
+      >
+        <ButtonIcon>
+          <CopyStateIcon copied={copied} />
+        </ButtonIcon>
+      </Button>
+    </div>
   );
 }
 
 function CopyStateIcon({ copied }: { copied: boolean }) {
   if (copied) {
-    return <Check size={15} className="shrink-0 text-foreground-muted" />;
+    return <Check size={16} />;
   }
-  return <Copy size={15} className="shrink-0 text-foreground-muted" />;
+  return <Copy size={16} />;
 }
 
 function EventNameTemplateItem({
