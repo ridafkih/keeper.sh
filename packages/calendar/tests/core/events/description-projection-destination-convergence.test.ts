@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { eventToICalString, parseICalToRemoteEvent } from "../../src/providers/caldav/shared/ics";
-import { normalizeCalDAVEvent } from "../../src/providers/caldav/destination/normalize-event";
-import { normalizeGoogleEvent } from "../../src/providers/google/destination/normalize-event";
-import { normalizeOutlookEvent } from "../../src/providers/outlook/destination/normalize-event";
-import { serializeGoogleEvent } from "../../src/providers/google/destination/serialize-event";
-import { createEditableEventContentHash } from "../../src/core/events/content-hash";
-import type { MaterializedSyncableEvent } from "../../src/core/types";
+import { eventToICalString, parseICalToRemoteEvent } from "../../../src/providers/caldav/shared/ics";
+import { normalizeCalDAVEvent } from "../../../src/providers/caldav/destination/normalize-event";
+import { normalizeGoogleEvent } from "../../../src/providers/google/destination/normalize-event";
+import { normalizeOutlookEvent } from "../../../src/providers/outlook/destination/normalize-event";
+import { serializeGoogleEvent } from "../../../src/providers/google/destination/serialize-event";
+import { createEditableEventContentHash } from "../../../src/core/events/content-hash";
+import type { MaterializedSyncableEvent } from "../../../src/core/types";
 
 const CONFERENCE_DELIMITER =
   "-::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~::~:~::-";
