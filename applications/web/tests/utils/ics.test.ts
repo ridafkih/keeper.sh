@@ -61,7 +61,7 @@ describe("buildIcsCalendar", () => {
     expect(propertyLines(ics)).toEqual(expect.arrayContaining([
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
-      "PRODID:-//Keeper//Keeper ICS Generator//EN",
+      "PRODID:-//Keeper.sh//Keeper.sh ICS Generator//EN",
       "BEGIN:VEVENT",
       "UID:event-1@keeper.sh",
       "DTSTAMP:20260814T120000Z",
@@ -112,6 +112,22 @@ describe("buildIcsCalendar", () => {
     expect(lines.filter((line) => line.startsWith(" ")).length).toBeGreaterThan(0);
   });
 
+  it("folds on octets rather than characters, so multi-byte titles stay within the limit", () => {
+    const ics = buildIcsCalendar(makeDraft({ summary: "\u00e9".repeat(80) }), options);
+    const lines = ics.split("\r\n");
+    const octets = (line: string) => new TextEncoder().encode(line).length;
+
+    expect(lines.every((line) => octets(line) <= 75)).toBe(true);
+    expect(lines.some((line) => line.length < octets(line))).toBe(true);
+  });
+
+  it("never splits a character across two lines", () => {
+    const ics = buildIcsCalendar(makeDraft({ summary: "\u{1f5d3}\u00e9".repeat(40) }), options);
+
+    expect(ics).not.toContain("\ufffd");
+    expect(ics.split("\r\n").join("").includes("\u{1f5d3}")).toBe(true);
+  });
+
   it("refuses to write a calendar for an event that would not validate", () => {
     expect(() => buildIcsCalendar(makeDraft({ summary: "" }), options)).toThrow(/incomplete event/);
   });
@@ -126,7 +142,7 @@ describe("parseIcsFile", () => {
     const parsed = parseIcsFile(ics);
 
     expect(parsed.errors).toEqual([]);
-    expect(parsed.productId).toBe("-//Keeper//Keeper ICS Generator//EN");
+    expect(parsed.productId).toBe("-//Keeper.sh//Keeper.sh ICS Generator//EN");
     expect(parsed.version).toBe("2.0");
     expect(parsed.events).toHaveLength(1);
 
@@ -153,6 +169,33 @@ describe("parseIcsFile", () => {
     const [event] = parseIcsFile(ics).events;
 
     expect(event.summary).toBe(summary);
+  });
+
+  it("keeps a reminder's own properties out of the event that contains it", () => {
+    const parsed = parseIcsFile([
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "BEGIN:VEVENT",
+      "UID:real-event",
+      "DTSTART:20260820T090000Z",
+      "SUMMARY:Real event title",
+      "DESCRIPTION:Real event description",
+      "BEGIN:VALARM",
+      "ACTION:DISPLAY",
+      "UID:alarm-uid",
+      "SUMMARY:Reminder headline",
+      "DESCRIPTION:Reminder popup text",
+      "TRIGGER:-PT10M",
+      "END:VALARM",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n"));
+
+    const [event] = parsed.events;
+
+    expect(event.uid).toBe("real-event");
+    expect(event.summary).toBe("Real event title");
+    expect(event.description).toBe("Real event description");
   });
 
   it("reads the calendar name, several events, and the properties they carry", () => {

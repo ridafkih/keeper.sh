@@ -3,7 +3,7 @@ import { formatIsoDate } from "@/utils/date";
 const LINE_BREAK = "\r\n";
 const MAX_LINE_OCTETS = 75;
 const CONTINUATION_PREFIX = " ";
-const PRODUCT_ID = "-//Keeper//Keeper ICS Generator//EN";
+const PRODUCT_ID = "-//Keeper.sh//Keeper.sh ICS Generator//EN";
 const DAY_IN_MILLISECONDS = 86_400_000;
 const ISO_DATE_LENGTH = 10;
 
@@ -409,10 +409,12 @@ export function parseIcsFile(text: string): ParsedIcsFile {
       continue;
     }
 
-    if (event) {
+    if (event && components[components.length - 1] === "VEVENT") {
       applyEventProperty(event, line);
       continue;
     }
+
+    if (event) continue;
 
     if (components[components.length - 1] !== "VCALENDAR") continue;
 

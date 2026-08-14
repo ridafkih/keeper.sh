@@ -211,7 +211,7 @@ function MarketingPage() {
     <div className="flex flex-col gap-2 pt-8">
       <Heading1 className="text-center">Every calendar knows when you're busy. None of them know why.</Heading1>
       <Text align="center" className="max-w-[48ch] mx-auto">
-        Keeper.sh copies your events between your personal, work and school calendars, so all of them show you as busy at the same times. Event titles, descriptions, locations and attendees are left behind by default. Open source, so you can check what it sends for yourself.
+        Keeper.sh copies your events between your personal, work and school calendars, so all of them show you as busy at the same times. Event titles, descriptions and locations are left behind by default, and attendee lists are never copied at all. Open source, so you can check what it sends for yourself.
       </Text>
       <div className="contents *:z-20">
         <div className="flex items-center gap-2 mx-auto pt-1">

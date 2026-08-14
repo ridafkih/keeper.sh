@@ -52,7 +52,7 @@ const FAQ_ITEMS: FaqItem[] = [
   },
   {
     question: "Is self-hosting free?",
-    answer: "Keeper.sh is open-source under AGPL-3.0. A self-hosted instance runs without commercial mode, so every account on it gets the Pro feature set and no plan limits.",
+    answer: "Keeper.sh is open-source under AGPL-3.0. A self-hosted instance runs without commercial mode, so every account on it gets every paid sync feature and no plan limits.",
   },
   {
     question: "Do I need a Google or Microsoft account to sign up?",

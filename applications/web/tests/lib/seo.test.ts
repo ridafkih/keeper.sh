@@ -160,8 +160,17 @@ describe("personSchema", () => {
   });
 
   it("is the author a blog post points at and the organization's founder", () => {
-    expect(blogPostingSchema(post).author).toEqual({ "@id": PERSON_ID });
-    expect(organizationSchema["@graph"][0]).toMatchObject({ founder: { "@id": PERSON_ID } });
+    const reference = { "@id": PERSON_ID, "@type": "Person", name: "Rida F'kih" };
+
+    expect(blogPostingSchema(post).author).toEqual(reference);
+    expect(organizationSchema["@graph"][0]).toMatchObject({ founder: reference });
+  });
+
+  it("names the person everywhere it is referenced, because the node itself is only on /about", () => {
+    const { author } = blogPostingSchema(post);
+
+    expect(author["@type"]).toBe("Person");
+    expect(author.name).toBe(personSchema("The maintainer.").name);
   });
 });
 

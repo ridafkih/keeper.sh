@@ -34,7 +34,7 @@ const breadcrumbs = breadcrumbTrail({ name: "Self-Hosting", path: "/self-hosting
 const README_URL = "https://github.com/ridafkih/keeper.sh#self-hosted";
 
 const PAGE_DESCRIPTION =
-  "Run Keeper.sh on your own server. It is open-source under AGPL-3.0, ships as Docker images, and every account on a self-hosted instance gets the Pro feature set with no plan limits.";
+  "Run Keeper.sh on your own server. It is open-source under AGPL-3.0, ships as Docker images, and every account on a self-hosted instance gets every paid sync feature, with no plan limits.";
 
 type SelfHostingCard = {
   title: string;
@@ -46,7 +46,7 @@ type SelfHostingCard = {
 const SELF_HOSTING_CARDS: SelfHostingCard[] = [
   {
     title: "Every Pro feature, with no plan limits",
-    body: "A self-hosted instance runs without commercial mode, so every account on it gets the Pro feature set: unlimited linked accounts and sync mappings, changes written out to your calendars every minute, event filters, iCal feed customization, and uncapped API and MCP access.",
+    body: "A self-hosted instance runs without commercial mode, so every account on it gets every paid sync feature: unlimited linked accounts and sync mappings, changes written out to your calendars every minute, event filters, iCal feed customization, and uncapped API and MCP access.",
     gridClassName: "lg:col-start-1 lg:col-span-6 lg:row-start-1",
     illustration: <MarketingIllustrationSync />,
   },
@@ -88,7 +88,7 @@ type FaqItem = {
 const FAQ_ITEMS: FaqItem[] = [
   {
     question: "Is self-hosting free?",
-    answer: "Keeper.sh is open-source under AGPL-3.0. A self-hosted instance runs without commercial mode, so every account on it gets the Pro feature set and no plan limits.",
+    answer: "Keeper.sh is open-source under AGPL-3.0. A self-hosted instance runs without commercial mode, so every account on it gets every paid sync feature and no plan limits.",
   },
   {
     question: "Which image should I start with?",
@@ -176,7 +176,7 @@ function SelfHostingPage() {
             <MarketingFeatureBentoBody>
               <Heading3 as="h3">The short version</Heading3>
               <Text size="sm" className="text-left">
-                Pull keeper-standalone, generate the auth secret and encryption key it asks for, point it at the URL you
+                Pull keeper-standalone, generate the auth secret and encryption key it asks for, set TRUSTED_ORIGINS to the URL you
                 will serve it on, and put it behind a reverse proxy that terminates TLS.
               </Text>
               <ExternalTextLink align="left" href={README_URL} rel="noreferrer" size="sm" target="_blank" tone="muted">

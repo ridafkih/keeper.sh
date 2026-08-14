@@ -125,7 +125,7 @@ function AboutPage() {
           </Text>
           <Text size="sm">
             Self-hosting is a first-class path rather than a stripped-down one: every account on a
-            self-hosted instance gets the Pro feature set, with no plan limits. Paying for the{" "}
+            self-hosted instance gets every paid sync feature, with no plan limits. Paying for the{" "}
             <TextLink align="left" size="sm" to="/pricing" tone="default">hosted version</TextLink>
             {" "}buys the server, the upgrades and the backups, and it funds the work on both.
           </Text>
