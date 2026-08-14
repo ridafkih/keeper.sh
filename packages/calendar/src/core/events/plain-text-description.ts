@@ -73,7 +73,7 @@ const PARAGRAPH_ELEMENTS = new Set([
   "ul",
 ]);
 
-/** Deeper than any real description nests, and shallow enough for the render recursion. */
+// Deeper than any real description nests, and shallow enough for the render recursion.
 const MAX_RENDERED_DEPTH = 1000;
 
 const PARSE_OPTIONS = {
@@ -99,13 +99,7 @@ const TRAILING_SLASH_PATTERN = /\/+$/;
 const CARRIAGE_RETURN_PATTERN = /\r\n?/g;
 const DOCUMENT_DIRECTIVE_PATTERN = /^(?:!doctype\b|\?)/i;
 
-/*
- * `<https://tel.meet/x?pin=1&hs=2>` is text, not a tag, and htmlparser2 would
- * read it as an element named `https:` and drop the URL. Only a well-formed
- * opener keeps its angle bracket into the parse. Every test stops at the next
- * angle bracket, and a comment's terminator is looked up once, so a document
- * of unterminated openers costs one pass rather than one pass each.
- */
+// Only a well-formed opener keeps its `<`: htmlparser2 reads `<https://tel.meet/x>` as an element and drops the URL.
 const escapeStrayAngles = (value: string): string => {
   const lastCommentEnd = value.lastIndexOf("-->");
 
@@ -131,11 +125,7 @@ const normalizeLineEndings = (value: string): string =>
 
 const stripSentinels = (value: string): string => value.replaceAll(SENTINEL_PATTERN, "");
 
-/*
- * Whitespace between two tags is insignificant in HTML, so it joins the
- * separator run rather than splitting it, and a paragraph is worth the blank
- * line every renderer draws around it.
- */
+// Inter-tag whitespace joins a run rather than splitting it; a paragraph draws a blank line, a line boundary one.
 const countSeparatorLines = (run: string): number => {
   const breaks = run.split(LINE_BREAK).length - 1;
   if (run.includes(PARAGRAPH_BOUNDARY)) {
@@ -150,11 +140,7 @@ const countSeparatorLines = (run: string): number => {
 const resolveSeparators = (value: string): string =>
   value.replaceAll(SEPARATOR_RUN_PATTERN, (run) => "\n".repeat(countSeparatorLines(run)));
 
-/*
- * Whether an end tag was written or inferred is htmlparser2's answer to give,
- * recorded against the element so nothing has to be matched back up by source
- * offset afterwards.
- */
+// Only htmlparser2 can tell a written end tag from an inferred one, and only written ones count as structure.
 class DescriptionHandler extends DomHandler {
   readonly closedElements = new Set<ChildNode>();
   maxDepth = 0;
@@ -173,11 +159,7 @@ class DescriptionHandler extends DomHandler {
   }
 }
 
-/*
- * Nesting deeper than the render recursion can descend overflows the stack, and
- * a description projection that throws costs the whole calendar its mirror, so
- * that document takes the token-stripping path instead.
- */
+// Nesting past the render recursion overflows the stack, and a throwing projection costs the calendar its mirror.
 const parseDescription = (source: string): ParsedDescription => {
   const handler = new DescriptionHandler();
   new Parser(handler, PARSE_OPTIONS).end(source);
@@ -192,12 +174,7 @@ const parseDescription = (source: string): ParsedDescription => {
 const hasValuedAttribute = (node: ElementNode): boolean =>
   Object.values(node.attribs).some((value) => value.length > 0);
 
-/*
- * A plain-text field may never lose a word to make one: `Set the <input> field`
- * is the sentence its author typed. An end tag someone wrote and a line break
- * are structure on their own; an attribute value is only a hint, and one hint
- * in a whole description is a bracketed placeholder rather than a document.
- */
+// `Set the <input> field` is a sentence, not markup: a written end tag or `br` is structure, an attribute only a hint.
 const isStructuralElement = (node: ElementNode, closedElements: ReadonlySet<ChildNode>): boolean =>
   BREAK_ELEMENTS.has(node.name.toLowerCase()) || closedElements.has(node);
 
@@ -205,18 +182,14 @@ const isMarkup = (node: ElementNode, context: MarkupContext): boolean =>
   isStructuralElement(node, context.closedElements)
   || (context.hasStructure && hasValuedAttribute(node));
 
-/** Only an element with no attribute value reaches here as text, so nothing needs quoting. */
+// Only an element with no attribute value reaches here as text, so nothing needs quoting.
 const readOpenTag = (node: ElementNode): string =>
   `<${node.name}${Object.keys(node.attribs).map((name) => ` ${name}`).join("")}>`;
 
 const normalizeLinkTarget = (value: string): string =>
   value.replace(LINK_SCHEME_PATTERN, "").replace(TRAILING_SLASH_PATTERN, "");
 
-/*
- * An anchor whose text is its own destination projects to that destination
- * once. A labelled anchor keeps the destination beside the label, which is the
- * only place a CalDAV client can still read it.
- */
+// A CalDAV client sees only the projected text, so a labelled anchor must carry its href beside the label.
 const renderAnchor = (element: ElementNode, inner: string): string => {
   const href = element.attribs["href"]?.trim() ?? "";
   const text = resolveSeparators(inner).trim();
@@ -273,10 +246,6 @@ const renderNode = (node: ChildNode, context: MarkupContext): string => {
   return inner;
 };
 
-/*
- * Markup a parser cannot finish reading is markup that would take the author's
- * words with it, so the tags come off as text and every word survives.
- */
 const stripMarkupTokens = (source: string): string =>
   decodeHTML(source.replaceAll(TAG_TOKEN_PATTERN, " "));
 
@@ -310,17 +279,14 @@ const countStructuralEvidence = (
   };
 };
 
-/*
- * A stylesheet is worth discarding only from a document that has something
- * else to read: `Notes <script>the script team</script> owns this` is a
- * sentence about a team, and dropping it would delete the sentence.
- */
+// `Notes <script>the script team</script> owns this` is a sentence, so discard only where something else remains.
 const hasRenderableMarkup = (nodes: ChildNode[], context: MarkupContext): boolean =>
   nodes.some((node) =>
     DomUtils.isTag(node)
     && ((isMarkup(node, context) && !DISCARDED_ELEMENTS.has(node.name.toLowerCase()))
       || hasRenderableMarkup(node.children, context)));
 
+// A single attribute hint is a bracketed placeholder such as `<name here>`, not a document.
 const resolveMarkupContext = (parsed: ParsedDescription): MarkupContext => {
   const evidence = countStructuralEvidence(parsed.children, parsed.closedElements);
   const structural: MarkupContext = {
@@ -332,10 +298,7 @@ const resolveMarkupContext = (parsed: ParsedDescription): MarkupContext => {
   return { ...structural, canDiscard: hasRenderableMarkup(parsed.children, structural) };
 };
 
-/*
- * Entities stay encoded in a description that carries no markup: `A &amp; B`
- * is then the sentence its author typed, not an escape of one.
- */
+// Entities stay encoded where no markup was found: `A &amp; B` is the sentence its author typed, not an escape.
 const projectOnce = (value: string): string => {
   if (!value.includes("<")) {
     return value;
@@ -355,12 +318,7 @@ const projectOnce = (value: string): string => {
   ).trim();
 };
 
-/*
- * Exactly one pass, and never a pass over a pass: reading the output back
- * would take `Set &lt;timeout&gt;30&lt;/timeout&gt;` — the tags an author
- * escaped, and the words between them — for markup to strip, and delete a
- * sentence the reader wrote.
- */
+// Never project twice: a second pass reads `Set &lt;timeout&gt;30&lt;/timeout&gt;` as markup and deletes the sentence.
 const toPlainTextDescription = (value: string | undefined): string | undefined => {
   if (!value) {
     return value;
