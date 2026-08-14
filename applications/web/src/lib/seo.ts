@@ -219,21 +219,25 @@ export function faqSchema(
   };
 }
 
-export function collectionPageSchema(posts: Array<{ slug: string; metadata: { title: string } }>) {
+export function collectionPageSchema(
+  path: string,
+  name: string,
+  entries: Array<{ slug: string; metadata: { title: string } }>,
+) {
   return {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
-    "@id": entityId("/blog", "collectionpage"),
-    name: "Blog",
-    url: canonicalUrl("/blog"),
+    "@id": entityId(path, "collectionpage"),
+    name,
+    url: canonicalUrl(path),
     isPartOf: { "@id": `${SITE_URL}/#website` },
     mainEntity: {
       "@type": "ItemList",
-      itemListElement: posts.map((post, index) => ({
+      itemListElement: entries.map((entry, index) => ({
         "@type": "ListItem",
         position: index + 1,
-        url: canonicalUrl(`/blog/${post.slug}`),
-        name: post.metadata.title,
+        url: canonicalUrl(`${path}/${entry.slug}`),
+        name: entry.metadata.title,
       })),
     },
   };
@@ -250,17 +254,17 @@ export const authorPersonSchema = {
 export function blogPostingSchema(post: {
   title: string;
   description: string;
-  slug: string;
+  path: string;
   createdAt: string;
   updatedAt: string;
   tags: string[];
   imagePath?: string;
 }) {
-  const url = canonicalUrl(`/blog/${post.slug}`);
+  const url = canonicalUrl(post.path);
   return {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
-    "@id": entityId(`/blog/${post.slug}`, "blogposting"),
+    "@id": entityId(post.path, "blogposting"),
     headline: post.title,
     description: post.description,
     image: canonicalUrl(post.imagePath ?? DEFAULT_IMAGE_PATH),

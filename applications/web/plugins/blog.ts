@@ -232,35 +232,40 @@ export function processBlogDirectory(
   );
 }
 
-const VIRTUAL_MODULE_ID = "virtual:blog-posts";
-const RESOLVED_ID = `\0${VIRTUAL_MODULE_ID}`;
+interface ContentCollection {
+  directory: string;
+  exportName: string;
+  name: string;
+  virtualModuleId: string;
+}
 
-export function blogPlugin(): Plugin {
-  let blogDir: string;
+function contentCollectionPlugin(collection: ContentCollection): Plugin {
+  const resolvedId = `\0${collection.virtualModuleId}`;
+  let contentDir: string;
   let publicDir: string;
 
   return {
-    name: "keeper-blog",
+    name: collection.name,
 
     configResolved(config) {
-      blogDir = resolve(config.root, "src/content/blog");
+      contentDir = resolve(config.root, collection.directory);
       publicDir = config.publicDir;
     },
 
     resolveId(id) {
-      if (id === VIRTUAL_MODULE_ID) return RESOLVED_ID;
+      if (id === collection.virtualModuleId) return resolvedId;
     },
 
     load(id) {
-      if (id !== RESOLVED_ID) return;
+      if (id !== resolvedId) return;
 
-      const posts = processBlogDirectory(blogDir, publicDir);
-      return `export const blogPosts = ${JSON.stringify(posts)};`;
+      const posts = processBlogDirectory(contentDir, publicDir);
+      return `export const ${collection.exportName} = ${JSON.stringify(posts)};`;
     },
 
     handleHotUpdate({ file, server }) {
-      if (file.startsWith(blogDir) && file.endsWith(".mdx")) {
-        const module = server.moduleGraph.getModuleById(RESOLVED_ID);
+      if (file.startsWith(contentDir) && file.endsWith(".mdx")) {
+        const module = server.moduleGraph.getModuleById(resolvedId);
         if (module) {
           server.moduleGraph.invalidateModule(module);
           return [module];
@@ -268,4 +273,22 @@ export function blogPlugin(): Plugin {
       }
     },
   };
+}
+
+export function blogPlugin(): Plugin {
+  return contentCollectionPlugin({
+    directory: "src/content/blog",
+    exportName: "blogPosts",
+    name: "keeper-blog",
+    virtualModuleId: "virtual:blog-posts",
+  });
+}
+
+export function comparePlugin(): Plugin {
+  return contentCollectionPlugin({
+    directory: "src/content/compare",
+    exportName: "comparePages",
+    name: "keeper-compare",
+    virtualModuleId: "virtual:compare-pages",
+  });
 }

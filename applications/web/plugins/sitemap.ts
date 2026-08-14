@@ -47,18 +47,18 @@ function readStaticEntries(pagesFile: string): SitemapEntry[] {
   });
 }
 
-function buildBlogIndexEntry(blogEntries: SitemapEntry[]): SitemapEntry {
-  const [first] = blogEntries;
+function buildIndexEntry(path: string, entries: SitemapEntry[]): SitemapEntry {
+  const [first] = entries;
   if (!first) {
-    throw new Error("The blog index lastmod cannot be derived without any blog posts.");
+    throw new Error(`The "${path}" index lastmod cannot be derived without any entries.`);
   }
 
-  const lastmod = blogEntries.reduce(
+  const lastmod = entries.reduce(
     (newest, entry) => (entry.lastmod > newest ? entry.lastmod : newest),
     first.lastmod,
   );
 
-  return { loc: `${SITE_URL}/blog`, lastmod };
+  return { loc: `${SITE_URL}${path}`, lastmod };
 }
 
 function parseFrontmatter(raw: string, file: string): Record<string, unknown> {
@@ -118,6 +118,7 @@ function buildSitemapXml(entries: SitemapEntry[]): string {
 
 export function sitemapPlugin(): Plugin {
   let blogDir: string;
+  let compareDir: string;
   let pagesFile: string;
 
   return {
@@ -126,15 +127,23 @@ export function sitemapPlugin(): Plugin {
 
     configResolved(config) {
       blogDir = resolve(config.root, "src/content/blog");
+      compareDir = resolve(config.root, "src/content/compare");
       pagesFile = resolve(config.root, "src/content/pages.yaml");
     },
 
     generateBundle() {
       const blogEntries = discoverContentEntries(blogDir, "/blog", "Blog post");
+      const compareEntries = discoverContentEntries(
+        compareDir,
+        "/compare",
+        "Comparison page",
+      );
       const entries = [
         ...readStaticEntries(pagesFile),
-        buildBlogIndexEntry(blogEntries),
+        buildIndexEntry("/blog", blogEntries),
         ...blogEntries,
+        buildIndexEntry("/compare", compareEntries),
+        ...compareEntries,
       ];
 
       this.emitFile({

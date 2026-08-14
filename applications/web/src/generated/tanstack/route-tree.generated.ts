@@ -27,11 +27,13 @@ import { Route as authForgotPasswordRouteImport } from './../../routes/(auth)/fo
 import { Route as oauthDashboardRouteRouteImport } from './../../routes/(oauth)/dashboard/route'
 import { Route as oauthAuthRouteRouteImport } from './../../routes/(oauth)/auth/route'
 import { Route as marketingBlogRouteRouteImport } from './../../routes/(marketing)/blog/route'
+import { Route as marketingCompareIndexRouteImport } from './../../routes/(marketing)/compare/index'
 import { Route as marketingBlogIndexRouteImport } from './../../routes/(marketing)/blog/index'
 import { Route as dashboardDashboardIndexRouteImport } from './../../routes/(dashboard)/dashboard/index'
 import { Route as oauthOauthConsentRouteImport } from './../../routes/(oauth)/oauth/consent'
 import { Route as oauthAuthOutlookRouteImport } from './../../routes/(oauth)/auth/outlook'
 import { Route as oauthAuthGoogleRouteImport } from './../../routes/(oauth)/auth/google'
+import { Route as marketingCompareSlugRouteImport } from './../../routes/(marketing)/compare/$slug'
 import { Route as marketingBlogSlugRouteImport } from './../../routes/(marketing)/blog/$slug'
 import { Route as dashboardDashboardReportRouteImport } from './../../routes/(dashboard)/dashboard/report'
 import { Route as dashboardDashboardFeedbackRouteImport } from './../../routes/(dashboard)/dashboard/feedback'
@@ -149,6 +151,11 @@ const marketingBlogRouteRoute = marketingBlogRouteRouteImport.update({
   path: '/blog',
   getParentRoute: () => marketingRouteRoute,
 } as any)
+const marketingCompareIndexRoute = marketingCompareIndexRouteImport.update({
+  id: '/compare/',
+  path: '/compare/',
+  getParentRoute: () => marketingRouteRoute,
+} as any)
 const marketingBlogIndexRoute = marketingBlogIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -173,6 +180,11 @@ const oauthAuthGoogleRoute = oauthAuthGoogleRouteImport.update({
   id: '/google',
   path: '/google',
   getParentRoute: () => oauthAuthRouteRoute,
+} as any)
+const marketingCompareSlugRoute = marketingCompareSlugRouteImport.update({
+  id: '/compare/$slug',
+  path: '/compare/$slug',
+  getParentRoute: () => marketingRouteRoute,
 } as any)
 const marketingBlogSlugRoute = marketingBlogSlugRouteImport.update({
   id: '/$slug',
@@ -370,11 +382,13 @@ export interface FileRoutesByFullPath {
   '/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/dashboard/report': typeof dashboardDashboardReportRoute
   '/blog/$slug': typeof marketingBlogSlugRoute
+  '/compare/$slug': typeof marketingCompareSlugRoute
   '/auth/google': typeof oauthAuthGoogleRoute
   '/auth/outlook': typeof oauthAuthOutlookRoute
   '/oauth/consent': typeof oauthOauthConsentRoute
   '/dashboard/': typeof dashboardDashboardIndexRoute
   '/blog/': typeof marketingBlogIndexRoute
+  '/compare/': typeof marketingCompareIndexRoute
   '/dashboard/ical/$feedId': typeof dashboardDashboardIcalFeedIdRoute
   '/dashboard/settings/api-tokens': typeof dashboardDashboardSettingsApiTokensRoute
   '/dashboard/settings/change-password': typeof dashboardDashboardSettingsChangePasswordRoute
@@ -416,10 +430,12 @@ export interface FileRoutesByTo {
   '/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/dashboard/report': typeof dashboardDashboardReportRoute
   '/blog/$slug': typeof marketingBlogSlugRoute
+  '/compare/$slug': typeof marketingCompareSlugRoute
   '/auth/google': typeof oauthAuthGoogleRoute
   '/auth/outlook': typeof oauthAuthOutlookRoute
   '/oauth/consent': typeof oauthOauthConsentRoute
   '/blog': typeof marketingBlogIndexRoute
+  '/compare': typeof marketingCompareIndexRoute
   '/dashboard/ical/$feedId': typeof dashboardDashboardIcalFeedIdRoute
   '/dashboard/settings/api-tokens': typeof dashboardDashboardSettingsApiTokensRoute
   '/dashboard/settings/change-password': typeof dashboardDashboardSettingsChangePasswordRoute
@@ -469,11 +485,13 @@ export interface FileRoutesById {
   '/(dashboard)/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/(dashboard)/dashboard/report': typeof dashboardDashboardReportRoute
   '/(marketing)/blog/$slug': typeof marketingBlogSlugRoute
+  '/(marketing)/compare/$slug': typeof marketingCompareSlugRoute
   '/(oauth)/auth/google': typeof oauthAuthGoogleRoute
   '/(oauth)/auth/outlook': typeof oauthAuthOutlookRoute
   '/(oauth)/oauth/consent': typeof oauthOauthConsentRoute
   '/(dashboard)/dashboard/': typeof dashboardDashboardIndexRoute
   '/(marketing)/blog/': typeof marketingBlogIndexRoute
+  '/(marketing)/compare/': typeof marketingCompareIndexRoute
   '/(dashboard)/dashboard/ical/$feedId': typeof dashboardDashboardIcalFeedIdRoute
   '/(dashboard)/dashboard/settings/api-tokens': typeof dashboardDashboardSettingsApiTokensRoute
   '/(dashboard)/dashboard/settings/change-password': typeof dashboardDashboardSettingsChangePasswordRoute
@@ -520,11 +538,13 @@ export interface FileRouteTypes {
     | '/dashboard/feedback'
     | '/dashboard/report'
     | '/blog/$slug'
+    | '/compare/$slug'
     | '/auth/google'
     | '/auth/outlook'
     | '/oauth/consent'
     | '/dashboard/'
     | '/blog/'
+    | '/compare/'
     | '/dashboard/ical/$feedId'
     | '/dashboard/settings/api-tokens'
     | '/dashboard/settings/change-password'
@@ -566,10 +586,12 @@ export interface FileRouteTypes {
     | '/dashboard/feedback'
     | '/dashboard/report'
     | '/blog/$slug'
+    | '/compare/$slug'
     | '/auth/google'
     | '/auth/outlook'
     | '/oauth/consent'
     | '/blog'
+    | '/compare'
     | '/dashboard/ical/$feedId'
     | '/dashboard/settings/api-tokens'
     | '/dashboard/settings/change-password'
@@ -618,11 +640,13 @@ export interface FileRouteTypes {
     | '/(dashboard)/dashboard/feedback'
     | '/(dashboard)/dashboard/report'
     | '/(marketing)/blog/$slug'
+    | '/(marketing)/compare/$slug'
     | '/(oauth)/auth/google'
     | '/(oauth)/auth/outlook'
     | '/(oauth)/oauth/consent'
     | '/(dashboard)/dashboard/'
     | '/(marketing)/blog/'
+    | '/(marketing)/compare/'
     | '/(dashboard)/dashboard/ical/$feedId'
     | '/(dashboard)/dashboard/settings/api-tokens'
     | '/(dashboard)/dashboard/settings/change-password'
@@ -781,6 +805,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof marketingBlogRouteRouteImport
       parentRoute: typeof marketingRouteRoute
     }
+    '/(marketing)/compare/': {
+      id: '/(marketing)/compare/'
+      path: '/compare'
+      fullPath: '/compare/'
+      preLoaderRoute: typeof marketingCompareIndexRouteImport
+      parentRoute: typeof marketingRouteRoute
+    }
     '/(marketing)/blog/': {
       id: '/(marketing)/blog/'
       path: '/'
@@ -815,6 +846,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/auth/google'
       preLoaderRoute: typeof oauthAuthGoogleRouteImport
       parentRoute: typeof oauthAuthRouteRoute
+    }
+    '/(marketing)/compare/$slug': {
+      id: '/(marketing)/compare/$slug'
+      path: '/compare/$slug'
+      fullPath: '/compare/$slug'
+      preLoaderRoute: typeof marketingCompareSlugRouteImport
+      parentRoute: typeof marketingRouteRoute
     }
     '/(marketing)/blog/$slug': {
       id: '/(marketing)/blog/$slug'
@@ -1173,6 +1211,8 @@ interface marketingRouteRouteChildren {
   marketingPrivacyRoute: typeof marketingPrivacyRoute
   marketingTermsRoute: typeof marketingTermsRoute
   marketingIndexRoute: typeof marketingIndexRoute
+  marketingCompareSlugRoute: typeof marketingCompareSlugRoute
+  marketingCompareIndexRoute: typeof marketingCompareIndexRoute
 }
 
 const marketingRouteRouteChildren: marketingRouteRouteChildren = {
@@ -1182,6 +1222,8 @@ const marketingRouteRouteChildren: marketingRouteRouteChildren = {
   marketingPrivacyRoute: marketingPrivacyRoute,
   marketingTermsRoute: marketingTermsRoute,
   marketingIndexRoute: marketingIndexRoute,
+  marketingCompareSlugRoute: marketingCompareSlugRoute,
+  marketingCompareIndexRoute: marketingCompareIndexRoute,
 }
 
 const marketingRouteRouteWithChildren = marketingRouteRoute._addFileChildren(

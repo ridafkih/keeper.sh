@@ -12,7 +12,7 @@ const GENERIC_IMAGE_URL = "https://www.keeper.sh/open-graph.png";
 const post = {
   title: "How Calendar Sync Actually Works",
   description: "A long-form explainer.",
-  slug: "how-calendar-sync-actually-works",
+  path: "/blog/how-calendar-sync-actually-works",
   createdAt: "2026-08-01",
   updatedAt: "2026-08-02",
   tags: ["calendar"],
@@ -130,7 +130,7 @@ describe("blogPostingSchema", () => {
     const schema = blogPostingSchema({
       title: "Why Keeper",
       description: "A post",
-      slug: "why-keeper",
+      path: "/blog/why-keeper",
       createdAt: "2026-01-01",
       updatedAt: "2026-01-02",
       tags: ["calendar"],
@@ -142,6 +142,19 @@ describe("blogPostingSchema", () => {
 
 describe("collectionPageSchema", () => {
   it("keeps the published identifier", () => {
-    expect(collectionPageSchema([])["@id"]).toBe("https://www.keeper.sh/blog/#collectionpage");
+    expect(collectionPageSchema("/blog", "Blog", [])["@id"]).toBe(
+      "https://www.keeper.sh/blog/#collectionpage",
+    );
+  });
+
+  it("lists every entry under the collection it belongs to", () => {
+    const schema = collectionPageSchema("/compare", "Compare", [
+      { slug: "onecal-alternative", metadata: { title: "OneCal Alternative" } },
+    ]);
+
+    expect(schema.name).toBe("Compare");
+    expect(schema.mainEntity.itemListElement[0].url).toBe(
+      "https://www.keeper.sh/compare/onecal-alternative",
+    );
   });
 });

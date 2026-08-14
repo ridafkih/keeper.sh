@@ -128,6 +128,7 @@ MCP is fully optional — all related environment variables are optional across 
 
 - Homepage: https://www.keeper.sh
 - Blog: https://www.keeper.sh/blog
+- Compare: https://www.keeper.sh/compare
 - Privacy Policy: https://www.keeper.sh/privacy
 - Terms & Conditions: https://www.keeper.sh/terms
 - GitHub: https://github.com/ridafkih/keeper.sh

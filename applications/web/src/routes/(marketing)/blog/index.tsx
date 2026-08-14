@@ -1,17 +1,13 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { Heading1, Heading3 } from "@/components/ui/primitives/heading";
+import { createFileRoute } from "@tanstack/react-router";
+import { Heading1 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
+import { TextLink } from "@/components/ui/primitives/text-link";
+import { ArticleCard } from "@/features/marketing/components/article-card";
 import { blogPosts } from "@/lib/blog-posts";
-import { formatIsoDate } from "@/utils/date";
 import { canonicalUrl, jsonLdScript, seoMeta, breadcrumbSchema, breadcrumbTrail, collectionPageSchema } from "@/lib/seo";
 import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
 
 const breadcrumbs = breadcrumbTrail({ name: "Blog", path: "/blog" });
-
-const BLOG_ILLUSTRATION_STYLE = {
-  backgroundImage:
-    "repeating-linear-gradient(-45deg, transparent 0 14px, var(--color-illustration-stripe) 14px 15px)",
-} as const;
 
 export const Route = createFileRoute("/(marketing)/blog/")({
   component: BlogDirectoryPage,
@@ -24,7 +20,7 @@ export const Route = createFileRoute("/(marketing)/blog/")({
     }),
     scripts: [
       jsonLdScript(breadcrumbSchema(breadcrumbs)),
-      jsonLdScript(collectionPageSchema(blogPosts)),
+      jsonLdScript(collectionPageSchema("/blog", "Blog", blogPosts)),
     ],
   }),
 });
@@ -37,36 +33,20 @@ function BlogDirectoryPage() {
         <Heading1>Blog</Heading1>
         <Text size="base" tone="muted" className="leading-6">
           Product updates, engineering deep-dives, and calendar syncing tips from the Keeper.sh team.
+          Weighing Keeper.sh against another tool? Read the{" "}
+          <TextLink align="left" size="base" to="/compare">comparison pages</TextLink>.
         </Text>
       </header>
 
       <div className="flex flex-col gap-3">
         {blogPosts.map((blogPost) => (
-          <Link
+          <ArticleCard
             key={blogPost.slug}
-            className="group block overflow-hidden rounded-2xl border border-interactive-border bg-background shadow-xs transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            params={{ slug: blogPost.slug }}
-            to="/blog/$slug"
-          >
-            <article className="grid grid-cols-1 sm:grid-cols-3 sm:items-stretch">
-              <div
-                className="bg-background h-28 sm:col-span-1 sm:h-full"
-                style={BLOG_ILLUSTRATION_STYLE}
-                role="presentation"
-              />
-              <div className="flex flex-col gap-1 p-4 md:p-5 sm:col-span-2">
-                <Heading3 as="h2" className="group-hover:text-foreground-hover">
-                  {blogPost.metadata.title}
-                </Heading3>
-                <Text size="xs" tone="muted">
-                  Created {formatIsoDate(blogPost.metadata.createdAt)}
-                </Text>
-                <Text size="sm" tone="muted" className="line-clamp-3">
-                  {blogPost.metadata.blurb}
-                </Text>
-              </div>
-            </article>
-          </Link>
+            blurb={blogPost.metadata.blurb}
+            createdAt={blogPost.metadata.createdAt}
+            path={`/blog/${blogPost.slug}`}
+            title={blogPost.metadata.title}
+          />
         ))}
       </div>
     </div>
