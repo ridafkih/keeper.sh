@@ -1,4 +1,4 @@
-import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
+import { calendarAccountsTable, calendarsTable } from "./schema";
 import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 

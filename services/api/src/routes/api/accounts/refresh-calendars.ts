@@ -1,21 +1,26 @@
+import { allSettledWithConcurrency } from "@keeper.sh/calendar";
 import { handleRefreshCalendarsRoute } from "./refresh-calendars-route";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { redis, refreshLockStore } from "@/context";
-import { checkAndClaimCalendarRefresh } from "@/utils/sync-trigger-limit";
+import {
+  CALENDAR_REFRESH_COOLDOWN_SECONDS,
+  checkAndClaimCalendarRefresh,
+} from "@/utils/sync-trigger-limit";
 import {
   createDefaultAccountCalendarRefreshDependencies,
   runAccountCalendarRefresh,
 } from "@/utils/calendar-rediscovery";
-import { loadRefreshableAccount } from "@/utils/account-calendar-discovery";
+import { loadRefreshableAccountsForUser } from "@/utils/account-calendar-discovery";
 
 const CALENDAR_REDISCOVER_LOCK_TTL_SECONDS = 120;
+const REFRESH_CONCURRENCY = 3;
 
 const buildRefreshLockKey = (accountId: string): string =>
   `calendar-rediscover:${accountId}`;
 
 const POST = withWideEvent(
-  withAuth(({ params, userId }) =>
-    handleRefreshCalendarsRoute({ params, userId }, {
+  withAuth(({ userId }) =>
+    handleRefreshCalendarsRoute({ userId }, {
       acquireRefreshLock: async (accountId) => {
         const key = buildRefreshLockKey(accountId);
         const acquired = await refreshLockStore.tryAcquire(
@@ -32,13 +37,16 @@ const POST = withWideEvent(
           handle: { release: () => refreshLockStore.release(key) },
         };
       },
-      claimRefreshCooldown: (accountId) => checkAndClaimCalendarRefresh(redis, accountId),
-      loadAccount: loadRefreshableAccount,
+      claimRefreshCooldown: (id) => checkAndClaimCalendarRefresh(redis, id),
+      cooldownSeconds: CALENDAR_REFRESH_COOLDOWN_SECONDS,
+      loadAccounts: loadRefreshableAccountsForUser,
       refreshCalendars: async (options) =>
         runAccountCalendarRefresh(
           options,
           await createDefaultAccountCalendarRefreshDependencies(),
         ),
+      runConcurrently: (tasks) =>
+        allSettledWithConcurrency(tasks, { concurrency: REFRESH_CONCURRENCY }),
     })),
 );
 

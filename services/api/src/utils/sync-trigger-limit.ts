@@ -35,11 +35,11 @@ const checkAndClaimSyncTrigger = (
 
 const checkAndClaimCalendarRefresh = (
   redisClient: Redis,
-  accountId: string,
+  userId: string,
 ): Promise<SyncTriggerLimitResult> =>
   claimCooldown(
     redisClient,
-    `refresh_calendars:${accountId}`,
+    `refresh_calendars:${userId}`,
     CALENDAR_REFRESH_COOLDOWN_SECONDS,
   );
 

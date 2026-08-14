@@ -17,6 +17,7 @@ const NOW = new Date("2026-08-12T10:00:00.000Z");
 const oauthAccount: RefreshableAccount = {
   authType: "oauth",
   calendarType: "oauth",
+  hasImportedCalendar: true,
   id: "account-1",
   provider: "google",
   userId: "user-1",
@@ -25,6 +26,7 @@ const oauthAccount: RefreshableAccount = {
 const caldavAccount: RefreshableAccount = {
   authType: "caldav",
   calendarType: "caldav",
+  hasImportedCalendar: true,
   id: "account-2",
   provider: "caldav",
   userId: "user-1",
@@ -165,6 +167,17 @@ describe("runAccountCalendarRefresh", () => {
         provider: "ical",
         userId: "user-1",
       } as unknown as RefreshableAccount),
+    });
+
+    await expect(run(harness)).rejects.toBeInstanceOf(CalendarRefreshUnsupportedError);
+    expect(harness.discoverCalls).toEqual([]);
+    expect(harness.applyPlanCalls).toEqual([]);
+    expect(harness.markAttemptCalls).toEqual([]);
+  });
+
+  it("never enumerates a destination-only account, so its calendars stay unimported", async () => {
+    const harness = createHarness({
+      loadAccount: () => Promise.resolve({ ...caldavAccount, hasImportedCalendar: false }),
     });
 
     await expect(run(harness)).rejects.toBeInstanceOf(CalendarRefreshUnsupportedError);

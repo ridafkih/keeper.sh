@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { buildImportedCalendarExists } from "../../src/utils/rediscovery-candidates";
+import { buildImportedCalendarExists } from "../../src/database/rediscovery-candidates";
 
 const render = (): string =>
   new PgDialect().sqlToQuery(buildImportedCalendarExists()).sql;

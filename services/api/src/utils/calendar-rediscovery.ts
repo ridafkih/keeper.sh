@@ -49,6 +49,12 @@ const assertRefreshable = (
     );
   }
 
+  if (!account.hasImportedCalendar) {
+    throw new CalendarRefreshUnsupportedError(
+      "This account has no imported calendars to refresh.",
+    );
+  }
+
   if (account.authType === "caldav" && !encryptionKey) {
     throw new CalendarRefreshUnconfiguredError("Encryption key not configured");
   }

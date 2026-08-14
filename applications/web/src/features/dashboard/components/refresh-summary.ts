@@ -2,7 +2,10 @@ import { type } from "arktype";
 import { pluralize } from "@/lib/pluralize";
 
 const refreshCalendarsResponseSchema = type({
-  added: type({ id: "string", name: "string" }).array(),
+  accounts: "number",
+  added: "number",
+  cooldownSeconds: "number",
+  failed: "number",
   revived: "number",
   unavailable: "number",
 });
@@ -13,11 +16,6 @@ interface RefreshCounts {
   added: number;
   revived: number;
   unavailable: number;
-}
-
-interface SetupSearchForNewCalendars {
-  step: "rename";
-  id: string;
 }
 
 function buildChangeClauses({ added, revived }: RefreshCounts): string[] {
@@ -49,12 +47,10 @@ export function formatRefreshSummary(counts: RefreshCounts): string {
   return clauses.join(" ");
 }
 
-export function buildSetupSearchForNewCalendars(
-  calendarIds: string[],
-): SetupSearchForNewCalendars | null {
-  if (calendarIds.length === 0) return null;
+export function formatRefreshFailures(failed: number): string | null {
+  if (failed === 0) return null;
 
-  return { id: calendarIds.join(","), step: "rename" };
+  return `${pluralize(failed, "account")} could not be refreshed. Open the account to reconnect it.`;
 }
 
 export { refreshCalendarsResponseSchema };

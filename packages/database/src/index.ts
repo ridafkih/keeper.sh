@@ -14,6 +14,7 @@ export type { DatabasePoolWindow, DatabasePoolWindowSample } from "./utils/pool-
 export type { DatabaseErrorClassification, DatabaseErrorDetails } from "./utils/errors";
 export { account, user } from "./database/auth-schema";
 export { encryptPassword, decryptPassword } from "./encryption";
+export { buildImportedCalendarExists } from "./database/rediscovery-candidates";
 export {
   createMigrationReadinessDatabase,
   waitForDatabaseMigrations,

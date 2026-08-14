@@ -1,5 +1,6 @@
+import { useState, useTransition } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import useSWR, { preload } from "swr";
+import useSWR, { preload, useSWRConfig } from "swr";
 import { AnimatedReveal } from "@/components/ui/primitives/animated-reveal";
 import Calendar from "lucide-react/dist/esm/icons/calendar";
 import CalendarPlus from "lucide-react/dist/esm/icons/calendar-plus";
@@ -10,11 +11,20 @@ import LogOut from "lucide-react/dist/esm/icons/log-out";
 import MessageSquare from "lucide-react/dist/esm/icons/message-square";
 import Bug from "lucide-react/dist/esm/icons/bug";
 import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import User from "lucide-react/dist/esm/icons/user";
 import { ErrorState } from "@/components/ui/primitives/error-state";
 import { signOut } from "@/lib/auth";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
-import { fetcher } from "@/lib/fetcher";
+import { apiFetch, fetcher } from "@/lib/fetcher";
+import { invalidateAccountsAndSources } from "@/lib/swr";
+import { resolveErrorMessage } from "@/utils/errors";
+import { useCountdown } from "@/hooks/use-countdown";
+import {
+  formatRefreshFailures,
+  formatRefreshSummary,
+  refreshCalendarsResponseSchema,
+} from "@/features/dashboard/components/refresh-summary";
 import KeeperLogo from "@/assets/keeper.svg?react";
 import { EventGraph } from "@/features/dashboard/components/event-graph";
 import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
@@ -52,15 +62,7 @@ function DashboardPage() {
       <SyncStatus />
       <EventGraph />
       <div className="flex flex-col gap-1.5">
-        <NavigationMenu>
-          <NavigationMenuLinkItem to="/dashboard/connect">
-            <NavigationMenuItemIcon>
-              <CalendarPlus size={15} />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>Import Calendars</NavigationMenuItemLabel>
-            <NavigationMenuItemTrailing />
-          </NavigationMenuLinkItem>
-        </NavigationMenu>
+        <CalendarSourcesMenu />
         <CalendarsMenu />
         <NavigationMenu>
           <NavigationMenuLinkItem to="/dashboard/feedback">
@@ -101,6 +103,74 @@ function DashboardPage() {
         <KeeperLogo className="size-8 text-border-elevated self-center" />
       </div>
     </div>
+  );
+}
+
+interface RefreshStatus {
+  message: string;
+  tone: "muted" | "danger";
+}
+
+function CalendarSourcesMenu() {
+  const { mutate: globalMutate } = useSWRConfig();
+  const [isRefreshing, startRefreshTransition] = useTransition();
+  const [status, setStatus] = useState<RefreshStatus | null>(null);
+  const { secondsRemaining, start: startCooldown } = useCountdown();
+
+  const handleRefresh = () => {
+    setStatus(null);
+
+    startRefreshTransition(async () => {
+      try {
+        const response = await apiFetch("/api/accounts/refresh-calendars", { method: "POST" });
+        const result = refreshCalendarsResponseSchema.assert(await response.json());
+        track(ANALYTICS_EVENTS.calendars_refreshed, { accounts: result.accounts });
+        await invalidateAccountsAndSources(globalMutate);
+        startCooldown(result.cooldownSeconds);
+
+        const failures = formatRefreshFailures(result.failed);
+        setStatus({
+          message: [formatRefreshSummary(result), failures].filter(Boolean).join(" "),
+          tone: failures ? "danger" : "muted",
+        });
+      } catch (err) {
+        setStatus({
+          message: resolveErrorMessage(err, "Failed to refresh calendars."),
+          tone: "danger",
+        });
+      }
+    });
+  };
+
+  const isCoolingDown = secondsRemaining > 0;
+
+  return (
+    <>
+      <NavigationMenu>
+        <NavigationMenuLinkItem to="/dashboard/connect">
+          <NavigationMenuItemIcon>
+            <CalendarPlus size={15} />
+          </NavigationMenuItemIcon>
+          <NavigationMenuItemLabel>Import Calendars</NavigationMenuItemLabel>
+          <NavigationMenuItemTrailing />
+        </NavigationMenuLinkItem>
+        <NavigationMenuButtonItem
+          onClick={isRefreshing || isCoolingDown ? undefined : handleRefresh}
+          disabled={isRefreshing || isCoolingDown}
+        >
+          <NavigationMenuItemIcon>
+            <RefreshCw size={15} />
+          </NavigationMenuItemIcon>
+          <NavigationMenuItemLabel>
+            {isRefreshing ? "Refreshing..." : "Refresh Calendars"}
+          </NavigationMenuItemLabel>
+          <NavigationMenuItemTrailing>
+            {isCoolingDown && <Text size="sm" tone="muted">{secondsRemaining}s</Text>}
+          </NavigationMenuItemTrailing>
+        </NavigationMenuButtonItem>
+      </NavigationMenu>
+      {status && <Text size="sm" tone={status.tone}>{status.message}</Text>}
+    </>
   );
 }
 

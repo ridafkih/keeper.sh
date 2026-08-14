@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildSetupSearchForNewCalendars,
+  formatRefreshFailures,
   formatRefreshSummary,
   refreshCalendarsResponseSchema,
 } from "../../../../src/features/dashboard/components/refresh-summary";
@@ -39,37 +39,48 @@ describe("formatRefreshSummary", () => {
   });
 });
 
-describe("buildSetupSearchForNewCalendars", () => {
-  it("routes new calendars straight into the rename step of the setup wizard", () => {
-    expect(buildSetupSearchForNewCalendars(["calendar-a", "calendar-b"]))
-      .toEqual({ id: "calendar-a,calendar-b", step: "rename" });
+describe("formatRefreshFailures", () => {
+  it("stays silent when every account refreshed", () => {
+    expect(formatRefreshFailures(0)).toBeNull();
   });
 
-  it("offers no link when nothing was added", () => {
-    expect(buildSetupSearchForNewCalendars([])).toBeNull();
+  it("names how many accounts need attention", () => {
+    expect(formatRefreshFailures(2)).toContain("2 accounts could not be refreshed");
+  });
+
+  it("uses the singular form for a single failure", () => {
+    expect(formatRefreshFailures(1)).toContain("1 account could not be refreshed");
   });
 });
 
 describe("refreshCalendarsResponseSchema", () => {
-  it("accepts the server payload and keeps the fields the summary reads", () => {
+  it("accepts the server payload and keeps the fields the control reads", () => {
     expect(refreshCalendarsResponseSchema.assert({
-      added: [{ id: "calendar-a", name: "Work" }],
-      checkedAt: "2026-01-02T03:04:05.000Z",
+      accounts: 2,
+      added: 1,
+      cooldownSeconds: 60,
+      failed: 0,
+      refreshed: 2,
       revived: 1,
-      suppressed: false,
+      skipped: 0,
       unavailable: 2,
-      unchanged: 3,
     })).toMatchObject({
-      added: [{ id: "calendar-a", name: "Work" }],
+      accounts: 2,
+      added: 1,
+      cooldownSeconds: 60,
+      failed: 0,
       revived: 1,
       unavailable: 2,
     });
   });
 
   it.each([
-    ["a missing added list", { revived: 0, unavailable: 0 }],
-    ["added entries without an id", { added: [{ name: "Work" }], revived: 0, unavailable: 0 }],
-    ["a non-numeric count", { added: [], revived: "1", unavailable: 0 }],
+    ["a body without a cooldown the control can count down", {
+      accounts: 1, added: 0, failed: 0, revived: 0, unavailable: 0,
+    }],
+    ["a non-numeric count", {
+      accounts: 1, added: "1", cooldownSeconds: 60, failed: 0, revived: 0, unavailable: 0,
+    }],
     ["a non-object body", "boom"],
     ["a null body", null],
   ])("rejects %s", (_label, body) => {

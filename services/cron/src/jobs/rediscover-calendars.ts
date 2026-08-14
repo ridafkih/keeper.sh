@@ -25,7 +25,7 @@ import {
 import type { CalDAVAuthMethod } from "@keeper.sh/calendar/digest-fetch";
 import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/google";
 import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/outlook";
-import { decryptPassword } from "@keeper.sh/database";
+import { buildImportedCalendarExists, decryptPassword } from "@keeper.sh/database";
 import {
   caldavCredentialsTable,
   calendarAccountsTable,
@@ -44,7 +44,6 @@ import {
   excludeUnconfiguredCalDAVAccounts,
   selectAccountsDueForRediscovery,
 } from "@/utils/rediscovery-selection";
-import { buildImportedCalendarExists } from "@/utils/rediscovery-candidates";
 import type { RediscoveryCandidate } from "@/utils/rediscovery-selection";
 
 const REDISCOVER_ACCOUNT_TIMEOUT_MS = 60_000;

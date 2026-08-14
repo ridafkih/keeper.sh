@@ -75,21 +75,21 @@ describe("checkAndClaimSyncTrigger", () => {
 });
 
 describe("checkAndClaimCalendarRefresh", () => {
-  it("claims a per-account cooldown on the first refresh", async () => {
+  it("claims a per-user cooldown on the first refresh", async () => {
     const redis = createMockRedis();
 
-    const result = await checkAndClaimCalendarRefresh(redis as never, "account-1");
+    const result = await checkAndClaimCalendarRefresh(redis as never, "user-1");
 
     expect(result.allowed).toBe(true);
-    expect(redis.store.get("refresh_calendars:account-1"))
+    expect(redis.store.get("refresh_calendars:user-1"))
       .toBe(CALENDAR_REFRESH_COOLDOWN_SECONDS);
   });
 
-  it("blocks a second refresh of the same account inside the cooldown", async () => {
+  it("blocks a second refresh by the same user inside the cooldown", async () => {
     const redis = createMockRedis();
-    await checkAndClaimCalendarRefresh(redis as never, "account-1");
+    await checkAndClaimCalendarRefresh(redis as never, "user-1");
 
-    const result = await checkAndClaimCalendarRefresh(redis as never, "account-1");
+    const result = await checkAndClaimCalendarRefresh(redis as never, "user-1");
 
     if (result.allowed) {
       throw new Error("Expected the second refresh to be throttled");
@@ -99,10 +99,10 @@ describe("checkAndClaimCalendarRefresh", () => {
 
   it("reports at least one second of remaining cooldown", async () => {
     const redis = createMockRedis();
-    await checkAndClaimCalendarRefresh(redis as never, "account-1");
-    redis.store.set("refresh_calendars:account-1", 0);
+    await checkAndClaimCalendarRefresh(redis as never, "user-1");
+    redis.store.set("refresh_calendars:user-1", 0);
 
-    const result = await checkAndClaimCalendarRefresh(redis as never, "account-1");
+    const result = await checkAndClaimCalendarRefresh(redis as never, "user-1");
 
     if (result.allowed) {
       throw new Error("Expected the second refresh to be throttled");
@@ -110,11 +110,11 @@ describe("checkAndClaimCalendarRefresh", () => {
     expect(result.retryAfterSeconds).toBe(1);
   });
 
-  it("throttles one account without blocking another account of the same user", async () => {
+  it("throttles one user without blocking another", async () => {
     const redis = createMockRedis();
-    await checkAndClaimCalendarRefresh(redis as never, "account-1");
+    await checkAndClaimCalendarRefresh(redis as never, "user-1");
 
-    const result = await checkAndClaimCalendarRefresh(redis as never, "account-2");
+    const result = await checkAndClaimCalendarRefresh(redis as never, "user-2");
 
     expect(result.allowed).toBe(true);
   });

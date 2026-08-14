@@ -3,7 +3,7 @@ import {
   calendarAccountsTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
-import { decryptPassword } from "@keeper.sh/database";
+import { buildImportedCalendarExists, decryptPassword } from "@keeper.sh/database";
 import {
   resolveRediscoveryCalendarType,
   toDiscoveredCalDAVCalendars,
@@ -17,7 +17,7 @@ import {
 } from "@keeper.sh/calendar/caldav";
 import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/google";
 import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/outlook";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { CalDAVAuthMethod } from "@keeper.sh/calendar/digest-fetch";
 import { safeFetchOptions } from "./safe-fetch-options";
 import {
@@ -33,6 +33,7 @@ interface RefreshableAccount {
   provider: string;
   authType: string;
   calendarType: RediscoveryCalendarType;
+  hasImportedCalendar: boolean;
   caldavServerHost?: string | null;
 }
 
@@ -141,6 +142,34 @@ const markAccountNeedsReauthentication = async (accountId: string): Promise<void
     .where(eq(calendarAccountsTable.id, accountId));
 };
 
+interface RefreshableAccountRow {
+  authType: string;
+  hasImportedCalendar: boolean;
+  id: string;
+  provider: string;
+  serverUrl: string | null;
+  userId: string;
+}
+
+const toRefreshableAccount = (account: RefreshableAccountRow): RefreshableAccount => ({
+  authType: account.authType,
+  caldavServerHost: resolveCalDAVServerHost(account.serverUrl),
+  calendarType: resolveRediscoveryCalendarType(account.authType),
+  hasImportedCalendar: account.hasImportedCalendar,
+  id: account.id,
+  provider: account.provider,
+  userId: account.userId,
+});
+
+const refreshableAccountColumns = {
+  authType: calendarAccountsTable.authType,
+  hasImportedCalendar: buildImportedCalendarExists(),
+  id: calendarAccountsTable.id,
+  provider: calendarAccountsTable.provider,
+  serverUrl: caldavCredentialsTable.serverUrl,
+  userId: calendarAccountsTable.userId,
+};
+
 const loadRefreshableAccount = async (
   accountId: string,
   userId: string,
@@ -148,13 +177,7 @@ const loadRefreshableAccount = async (
   const { database } = await import("@/context");
 
   const [account] = await database
-    .select({
-      authType: calendarAccountsTable.authType,
-      id: calendarAccountsTable.id,
-      provider: calendarAccountsTable.provider,
-      serverUrl: caldavCredentialsTable.serverUrl,
-      userId: calendarAccountsTable.userId,
-    })
+    .select(refreshableAccountColumns)
     .from(calendarAccountsTable)
     .leftJoin(
       caldavCredentialsTable,
@@ -170,20 +193,37 @@ const loadRefreshableAccount = async (
     return null;
   }
 
-  return {
-    authType: account.authType,
-    caldavServerHost: resolveCalDAVServerHost(account.serverUrl),
-    calendarType: resolveRediscoveryCalendarType(account.authType),
-    id: account.id,
-    provider: account.provider,
-    userId: account.userId,
-  };
+  return toRefreshableAccount(account);
+};
+
+const loadRefreshableAccountsForUser = async (
+  userId: string,
+): Promise<RefreshableAccount[]> => {
+  const { database } = await import("@/context");
+
+  const accounts = await database
+    .select(refreshableAccountColumns)
+    .from(calendarAccountsTable)
+    .leftJoin(
+      caldavCredentialsTable,
+      eq(calendarAccountsTable.caldavCredentialId, caldavCredentialsTable.id),
+    )
+    .where(and(
+      eq(calendarAccountsTable.userId, userId),
+      eq(calendarAccountsTable.needsReauthentication, false),
+      inArray(calendarAccountsTable.authType, ["oauth", "caldav"]),
+    ));
+
+  return accounts
+    .map((account) => toRefreshableAccount(account))
+    .filter((account) => account.hasImportedCalendar);
 };
 
 export {
   discoverCalDAVAccountCalendars,
   discoverOAuthAccountCalendars,
   loadRefreshableAccount,
+  loadRefreshableAccountsForUser,
   markAccountNeedsReauthentication,
 };
 export type { RefreshableAccount };
