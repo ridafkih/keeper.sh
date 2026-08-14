@@ -4,17 +4,20 @@ import {
   resolveRepresentableTimeRange,
 } from "../../../core/events/time-range";
 import { toPlainTextDescription } from "../../../core/events/plain-text-description";
+import { stripConferenceDelimiters } from "./conference-block";
 
 /*
  * Google 400s any non-positive span with "The specified time range is empty.",
  * and it rewrites an HTML description into the text it renders to, so what it
- * stores is never what was sent and the mirror is replaced on every run.
+ * stores is never what was sent and the mirror is replaced on every run. The
+ * delimiters come off after that, because the source may have wrapped them in
+ * markup and they are only recognisable on a line of their own.
  */
 const normalizeGoogleEvent = (event: MaterializedSyncableEvent): MaterializedSyncableEvent =>
   ({
     ...event,
     ...resolveRepresentableTimeRange(event),
-    description: toPlainTextDescription(event.description),
+    description: stripConferenceDelimiters(toPlainTextDescription(event.description)),
   });
 
 export { normalizeGoogleEvent, POINT_IN_TIME_DURATION_MS };

@@ -86,6 +86,38 @@ describe("toPlainTextDescription", () => {
     expect(project("<!-- hidden -->visible")).toBe("visible");
   });
 
+  it("keeps prose whose only markup is a discardable element", () => {
+    expect(project("Notes <script>the script team</script> owns this"))
+      .toBe("Notes the script team owns this");
+    expect(project("Use <style>the style guide</style> from design"))
+      .toBe("Use the style guide from design");
+    expect(project("The <title>Q3 Review</title> deck")).toBe("The Q3 Review deck");
+  });
+
+  it("keeps prose whose only markup is one bracketed placeholder with a value", () => {
+    const values = [
+      "Set the <input type=\"text\"> field to 3",
+      "Fill in <field name=\"owner\"> before the call",
+      "Bring the <source lang=\"en\"> handout",
+    ];
+
+    for (const value of values) {
+      expect(project(value)).toBe(value);
+    }
+  });
+
+  it("reads a placeholder with a value as markup once the document is markup", () => {
+    expect(project("<p>Photo: <img src=\"https://x.test/a.png\"></p>")).toBe("Photo:");
+  });
+
+  it("escapes stray angles in linear time", () => {
+    const start = performance.now();
+
+    project("<!--".repeat(60_000));
+
+    expect(performance.now() - start).toBeLessThan(2000);
+  });
+
   it("is a fixed point", () => {
     const values = [
       SPAN_WRAPPED_MEET_BLOCK,

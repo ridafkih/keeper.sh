@@ -7,14 +7,21 @@ import { serializeGoogleEvent } from "../../src/providers/google/destination/ser
 import { createEditableEventContentHash } from "../../src/core/events/content-hash";
 import type { MaterializedSyncableEvent } from "../../src/core/types";
 
-const MEET_BLOCK = [
-  "-::~:~::~:~:~:~:~:~:~:~:~:~:~::~:~::-",
+const CONFERENCE_DELIMITER =
+  "-::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~::~:~::-";
+
+const MEET_DETAILS = [
   "Join with Google Meet: https://meet.google.com/abc-defg-hij",
   "Or dial: (US) +1 555-555-5555 PIN: 123456789#",
   "More phone numbers: https://tel.meet/abc-defg-hij?pin=1234567890123",
   "",
   "Please do not edit this section.",
-  "-::~:~::~:~:~:~:~:~:~:~:~:~:~::~:~::-",
+].join("\n");
+
+const MEET_BLOCK = [
+  CONFERENCE_DELIMITER,
+  MEET_DETAILS,
+  CONFERENCE_DELIMITER,
 ].join("\n");
 
 /*
@@ -44,20 +51,26 @@ const getPropertyValue = (ics: string, name: string): string | undefined =>
   unfold(ics).split("\r\n").find((line) => line.startsWith(name))?.slice(name.length);
 
 describe("the Google destination write boundary", () => {
-  it("sends the Meet block as text rather than as a span Google discards", () => {
-    expect(serializeGoogleEvent(createEvent(), "uid-1")?.description).toBe(MEET_BLOCK);
+  it("keeps the meeting details Google would delete along with its own delimiters", () => {
+    expect(serializeGoogleEvent(createEvent(), "uid-1")?.description).toBe(MEET_DETAILS);
+  });
+
+  it("leaves punctuation that is not Google's conference delimiter alone", () => {
+    const value = "Agenda\n----------\n:~: notes :~:\n-::~:~:: not the marker"
+      + "\n-::~:~::~:~::~:~::-\nBudget";
+
+    expect(serializeGoogleEvent(createEvent({ description: value }), "uid-1")?.description)
+      .toBe(value);
   });
 
   it("expects back what it sent, so the mirror is compared against the text", () => {
-    const normalized = normalizeGoogleEvent(createEvent());
-
-    expect(createEditableEventContentHash(normalized))
-      .toBe(createEditableEventContentHash(createEvent({ description: MEET_BLOCK })));
+    expect(createEditableEventContentHash(normalizeGoogleEvent(createEvent())))
+      .toBe(createEditableEventContentHash(createEvent({ description: MEET_DETAILS })));
   });
 
-  it("leaves a description that carries no markup alone", () => {
-    expect(normalizeGoogleEvent(createEvent({ description: MEET_BLOCK })).description)
-      .toBe(MEET_BLOCK);
+  it("leaves a description that carries no markup and no delimiter alone", () => {
+    expect(normalizeGoogleEvent(createEvent({ description: MEET_DETAILS })).description)
+      .toBe(MEET_DETAILS);
   });
 });
 
@@ -80,6 +93,12 @@ describe("the CalDAV destination write boundary", () => {
     const ics = eventToICalString(createEvent({ description: body }), "uid-1@keeper.sh");
 
     expect(getPropertyValue(ics, "DESCRIPTION:")).toBe("Quarterly planning");
+  });
+});
+
+describe("the CalDAV and Outlook destinations, which keep Google's delimiters", () => {
+  it("keeps the delimited block a CalDAV client renders as the author saw it", () => {
+    expect(normalizeCalDAVEvent(createEvent()).description).toBe(MEET_BLOCK);
   });
 });
 
