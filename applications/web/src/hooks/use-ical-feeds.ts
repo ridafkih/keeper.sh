@@ -7,7 +7,6 @@ export interface IcalFeed {
   name: string;
   token: string;
   isDefault: boolean;
-  legacyAlias: boolean;
   includeEventName: boolean;
   includeEventDescription: boolean;
   includeEventLocation: boolean;
@@ -17,7 +16,6 @@ export interface IcalFeed {
   customEventName: string;
   createdAt: string;
   icalUrl: string;
-  legacyIcalUrl?: string;
   calendarCount?: number;
 }
 

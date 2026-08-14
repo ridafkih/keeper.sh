@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   canCreateFeed,
-  groupCalendarsByAccount,
+  resolveCalendarSelection,
+  resolveEventNamePatch,
   resolveFeedDisclosure,
+  resolveFeedNeighbours,
+  resolvePickableCalendars,
 } from "../../src/utils/ical-feeds";
 import type { CalendarSource } from "../../src/types/api";
 
@@ -24,40 +27,19 @@ const makeSource = (overrides: Partial<CalendarSource> = {}): CalendarSource => 
   ...overrides,
 });
 
-describe("groupCalendarsByAccount", () => {
-  it("groups calendars under their account label in source order", () => {
-    const groups = groupCalendarsByAccount([
-      makeSource({ id: "calendar-a", accountId: "account-1", name: "Work" }),
-      makeSource({
-        id: "calendar-b",
-        accountId: "account-2",
-        name: "Family",
-        accountLabel: "iCloud · ada@icloud.com",
-      }),
-      makeSource({ id: "calendar-c", accountId: "account-1", name: "Team" }),
-    ]);
-
-    expect(groups).toHaveLength(2);
-    expect(groups[0]?.accountId).toBe("account-1");
-    expect(groups[0]?.label).toBe("Google · ada@example.com");
-    expect(groups[0]?.calendars.map(({ id }) => id)).toEqual(["calendar-a", "calendar-c"]);
-    expect(groups[1]?.accountId).toBe("account-2");
-    expect(groups[1]?.calendars.map(({ id }) => id)).toEqual(["calendar-b"]);
-  });
-
-  it("keeps the pickable set to calendars that can be read from", () => {
-    const groups = groupCalendarsByAccount([
+describe("resolvePickableCalendars", () => {
+  it("keeps the pickable set to calendars that can be read from, in source order", () => {
+    const calendars = resolvePickableCalendars([
       makeSource({ id: "calendar-pull", capabilities: ["pull"] }),
-      makeSource({ id: "calendar-both", capabilities: ["pull", "push"] }),
       makeSource({ id: "calendar-push", capabilities: ["push"] }),
+      makeSource({ id: "calendar-both", capabilities: ["pull", "push"] }),
     ]);
 
-    expect(groups.flatMap(({ calendars }) => calendars.map(({ id }) => id)))
-      .toEqual(["calendar-pull", "calendar-both"]);
+    expect(calendars.map(({ id }) => id)).toEqual(["calendar-pull", "calendar-both"]);
   });
 
-  it("returns no groups for an account with nothing pickable", () => {
-    expect(groupCalendarsByAccount([makeSource({ capabilities: ["push"] })])).toEqual([]);
+  it("offers nothing when no calendar can be read from", () => {
+    expect(resolvePickableCalendars([makeSource({ capabilities: ["push"] })])).toEqual([]);
   });
 });
 
@@ -119,5 +101,67 @@ describe("resolveFeedDisclosure", () => {
       includeEventDescription: true,
       includeEventLocation: true,
     })).toBe("This link shares event times, names, descriptions and locations.");
+  });
+});
+
+describe("resolveEventNamePatch", () => {
+  it("restores the event name template when names are shared again", () => {
+    expect(resolveEventNamePatch(true)).toEqual({
+      includeEventName: true,
+      customEventName: "{{event_name}}",
+    });
+  });
+
+  it("falls back to a placeholder title when names are hidden", () => {
+    expect(resolveEventNamePatch(false)).toEqual({
+      includeEventName: false,
+      customEventName: "Busy",
+    });
+  });
+});
+
+describe("resolveCalendarSelection", () => {
+  it("adds a newly checked calendar to the end of the selection", () => {
+    expect(resolveCalendarSelection(["calendar-a"], "calendar-b", true))
+      .toEqual(["calendar-a", "calendar-b"]);
+  });
+
+  it("removes an unchecked calendar", () => {
+    expect(resolveCalendarSelection(["calendar-a", "calendar-b"], "calendar-a", false))
+      .toEqual(["calendar-b"]);
+  });
+
+  it("keeps the selection unchanged when a checked calendar is already selected", () => {
+    expect(resolveCalendarSelection(new Set(["calendar-a"]), "calendar-a", true))
+      .toEqual(["calendar-a"]);
+  });
+});
+
+describe("resolveFeedNeighbours", () => {
+  const feeds = [{ id: "feed-a" }, { id: "feed-b" }, { id: "feed-c" }];
+
+  it("finds the feeds either side of the current one", () => {
+    expect(resolveFeedNeighbours(feeds, "feed-b")).toEqual({
+      previous: { id: "feed-a" },
+      next: { id: "feed-c" },
+    });
+  });
+
+  it("has no previous feed at the start of the list", () => {
+    expect(resolveFeedNeighbours(feeds, "feed-a")).toEqual({
+      previous: null,
+      next: { id: "feed-b" },
+    });
+  });
+
+  it("has no next feed at the end of the list", () => {
+    expect(resolveFeedNeighbours(feeds, "feed-c")).toEqual({
+      previous: { id: "feed-b" },
+      next: null,
+    });
+  });
+
+  it("has no neighbours for a feed missing from the list", () => {
+    expect(resolveFeedNeighbours(feeds, "feed-z")).toEqual({ previous: null, next: null });
   });
 });

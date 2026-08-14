@@ -1,14 +1,13 @@
 import { useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import Calendar from "lucide-react/dist/esm/icons/calendar";
-import Check from "lucide-react/dist/esm/icons/check";
-import Copy from "lucide-react/dist/esm/icons/copy";
+import { preload } from "swr";
+import Link2 from "lucide-react/dist/esm/icons/link-2";
 import Plus from "lucide-react/dist/esm/icons/plus";
-import { Button, ButtonIcon, ButtonText } from "@/components/ui/primitives/button";
+import { Button, ButtonText } from "@/components/ui/primitives/button";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { Input } from "@/components/ui/primitives/input";
 import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
-import { ErrorState } from "@/components/ui/primitives/error-state";
+import { RouteShell } from "@/components/ui/shells/route-shell";
 import { Text } from "@/components/ui/primitives/text";
 import { UpgradeHint } from "@/components/ui/primitives/upgrade-hint";
 import {
@@ -21,89 +20,35 @@ import {
 import {
   NavigationMenu,
   NavigationMenuButtonItem,
+  NavigationMenuLinkItem,
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
   NavigationMenuItemTrailing,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { createIcalFeed, useIcalFeeds } from "@/hooks/use-ical-feeds";
-import type { IcalFeed } from "@/hooks/use-ical-feeds";
 import { useEntitlements, useMutateEntitlements } from "@/hooks/use-entitlements";
 import { canCreateFeed } from "@/utils/ical-feeds";
+import { fetcher } from "@/lib/fetcher";
+import { pluralize } from "@/lib/pluralize";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { resolveErrorMessage } from "@/utils/errors";
-import { useCopiedState } from "@/hooks/use-copied-state";
-
-const SINGLE_CALENDAR_COUNT = 1;
 
 export const Route = createFileRoute("/(dashboard)/dashboard/ical/")({
-  component: ICalPage,
+  component: ICalFeedsPage,
 });
 
-function resolveCalendarCountLabel(count: number): string {
-  if (count === SINGLE_CALENDAR_COUNT) {
-    return "1 calendar";
-  }
-  return `${count} calendars`;
-}
-
-function CopyFeedIcon({ copied }: { copied: boolean }) {
-  if (copied) {
-    return <Check size={16} />;
-  }
-  return <Copy size={16} />;
-}
-
-function FeedCopyButton({ feed }: { feed: IcalFeed }) {
-  const { copied, markCopied } = useCopiedState();
-
-  const handleCopy = async (event: React.MouseEvent) => {
-    event.stopPropagation();
-    await navigator.clipboard.writeText(feed.icalUrl);
-    track(ANALYTICS_EVENTS.ical_link_copied);
-    markCopied();
-  };
-
-  return (
-    <Button
-      variant="border"
-      className="shrink-0 aspect-square"
-      onClick={handleCopy}
-      aria-label={`Copy the link for ${feed.name}`}
-    >
-      <ButtonIcon>
-        <CopyFeedIcon copied={copied} />
-      </ButtonIcon>
-    </Button>
-  );
-}
-
-function FeedListItem({ feed }: { feed: IcalFeed }) {
-  const navigate = useNavigate();
-
-  return (
-    <NavigationMenuButtonItem
-      onClick={() => navigate({ to: "/dashboard/ical/$feedId", params: { feedId: feed.id } })}
-    >
-      <NavigationMenuItemIcon>
-        <Calendar size={15} />
-      </NavigationMenuItemIcon>
-      <NavigationMenuItemLabel>{feed.name}</NavigationMenuItemLabel>
-      <NavigationMenuItemTrailing>
-        <Text size="sm" tone="muted">
-          {resolveCalendarCountLabel(feed.calendarCount ?? 0)}
-        </Text>
-        <FeedCopyButton feed={feed} />
-      </NavigationMenuItemTrailing>
-    </NavigationMenuButtonItem>
-  );
-}
-
-function ICalPage() {
+function ICalFeedsPage() {
   const { data: entitlements } = useEntitlements();
   const { revalidateEntitlements } = useMutateEntitlements();
-  const { data: feeds = [], error, mutate } = useIcalFeeds();
+  const { data: feeds, isLoading, error, mutate } = useIcalFeeds();
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+
+  if (error || isLoading || !feeds) {
+    if (error) return <RouteShell status="error" onRetry={() => { void mutate(); }} />;
+    return <RouteShell status="loading" />;
+  }
+
   const canCreate = canCreateFeed(entitlements);
 
   return (
@@ -111,17 +56,31 @@ function ICalPage() {
       <BackButton />
       <DashboardSection
         title="iCal Feeds"
-        description="Each feed is its own link with its own calendars, privacy settings and filters. Subscribe to a link in any calendar app."
+        description="Each feed is a link you can subscribe to in any calendar app, with its own calendars and privacy settings."
       />
-      {error && (
-        <ErrorState message="Failed to load iCal feeds." onRetry={() => mutate()} />
-      )}
       {mutationError && <Text size="sm" tone="danger">{mutationError}</Text>}
       <NavigationMenu>
         {feeds.map((feed) => (
-          <FeedListItem key={feed.id} feed={feed} />
+          <NavigationMenuLinkItem
+            key={feed.id}
+            to={`/dashboard/ical/${feed.id}`}
+            onMouseEnter={() => {
+              preload(`/api/ical/feeds/${feed.id}`, fetcher);
+              preload(`/api/ical/feeds/${feed.id}/calendars`, fetcher);
+            }}
+          >
+            <NavigationMenuItemIcon>
+              <Link2 size={15} />
+            </NavigationMenuItemIcon>
+            <NavigationMenuItemLabel>{feed.name}</NavigationMenuItemLabel>
+            <NavigationMenuItemTrailing>
+              <Text size="sm" tone="muted">
+                {pluralize(feed.calendarCount ?? 0, "calendar")}
+              </Text>
+            </NavigationMenuItemTrailing>
+          </NavigationMenuLinkItem>
         ))}
-        <CreateFeedButton
+        <CreateFeedItem
           disabled={!canCreate}
           createOpen={createOpen}
           setCreateOpen={setCreateOpen}
@@ -132,12 +91,7 @@ function ICalPage() {
           onError={setMutationError}
         />
       </NavigationMenu>
-      {!canCreate && (
-        <UpgradeHint>
-          Free includes 1 iCal feed. Keeper.sh Pro adds unlimited feeds — share a work-only link
-          with a colleague without exposing everything else.
-        </UpgradeHint>
-      )}
+      {!canCreate && <UpgradeHint>Free plans include one iCal feed.</UpgradeHint>}
     </div>
   );
 }
@@ -158,7 +112,7 @@ function CreateSubmitButton({ isCreating }: { isCreating: boolean }) {
   );
 }
 
-function CreateFeedButton({
+function CreateFeedItem({
   disabled,
   createOpen,
   setCreateOpen,
@@ -209,7 +163,7 @@ function CreateFeedButton({
           <form onSubmit={handleSubmit} className="contents">
             <ModalTitle>Create iCal feed</ModalTitle>
             <ModalDescription>
-              Give the feed a name so you remember who you shared it with.
+              Give your feed a name to help you remember what it is for.
             </ModalDescription>
             <Input ref={nameRef} name="name" placeholder="Feed name" autoFocus />
             <ModalFooter>

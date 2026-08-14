@@ -198,7 +198,7 @@ const buildFeedListQuery = (client: Pick<DatabaseClient, "select">, userId: stri
   client
     .select({
       ...FEED_ROW_COLUMNS,
-      calendarCount: sql<number>`count(${icalFeedCalendarsTable.calendarId})`,
+      calendarCount: sql<number>`count(${icalFeedCalendarsTable.calendarId})::int`,
     })
     .from(icalFeedsTable)
     .leftJoin(icalFeedCalendarsTable, eq(icalFeedCalendarsTable.feedId, icalFeedsTable.id))

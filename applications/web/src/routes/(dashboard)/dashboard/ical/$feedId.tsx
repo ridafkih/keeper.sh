@@ -1,40 +1,58 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import useSWR from "swr";
+import useSWR, { preload } from "swr";
 import Check from "lucide-react/dist/esm/icons/check";
 import Copy from "lucide-react/dist/esm/icons/copy";
+import Link2 from "lucide-react/dist/esm/icons/link-2";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
-import { fetcher, apiFetch } from "@/lib/fetcher";
+import { icalFeedNameSchema } from "@keeper.sh/data-schemas";
+import { apiFetch, fetcher } from "@/lib/fetcher";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { serializedPatch } from "@/lib/serialized-mutate";
+import { formatDate } from "@/lib/time";
+import { pluralize } from "@/lib/pluralize";
 import { BackButton } from "@/components/ui/primitives/back-button";
-import { Button, ButtonIcon, ButtonText } from "@/components/ui/primitives/button";
-import { Input } from "@/components/ui/primitives/input";
+import { DashboardHeading1, DashboardSection } from "@/components/ui/primitives/dashboard-heading";
+import { DeleteConfirmation } from "@/components/ui/primitives/delete-confirmation";
+import { Pagination, PaginationPrevious, PaginationNext } from "@/components/ui/primitives/pagination";
+import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
+import { RouteShell } from "@/components/ui/shells/route-shell";
+import { TemplateText } from "@/components/ui/primitives/template-text";
 import { Text } from "@/components/ui/primitives/text";
 import { PremiumFeatureGate } from "@/components/ui/primitives/upgrade-hint";
-import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
-import { DeleteConfirmation } from "@/components/ui/primitives/delete-confirmation";
-import { ErrorState } from "@/components/ui/primitives/error-state";
-import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import {
   NavigationMenu,
+  NavigationMenuButtonItem,
   NavigationMenuCheckboxItem,
+  NavigationMenuEmptyItem,
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
+  NavigationMenuItemTrailing,
   NavigationMenuToggleItem,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
+import {
+  NavigationMenuEditableItem,
+  NavigationMenuEditableTemplateItem,
+} from "@/components/ui/composites/navigation-menu/navigation-menu-editable";
+import { MetadataRow } from "@/features/dashboard/components/metadata-row";
+import { useCopiedState } from "@/hooks/use-copied-state";
 import { useEntitlements, useMutateEntitlements } from "@/hooks/use-entitlements";
 import {
   deleteIcalFeed,
   setFeedCalendars,
   useFeedCalendars,
   useIcalFeed,
+  useIcalFeeds,
 } from "@/hooks/use-ical-feeds";
 import type { IcalFeed } from "@/hooks/use-ical-feeds";
-import { groupCalendarsByAccount, resolveFeedDisclosure } from "@/utils/ical-feeds";
+import {
+  resolveCalendarSelection,
+  resolveEventNamePatch,
+  resolveFeedDisclosure,
+  resolveFeedNeighbours,
+  resolvePickableCalendars,
+} from "@/utils/ical-feeds";
 import { resolveErrorMessage } from "@/utils/errors";
-import { useCopiedState } from "@/hooks/use-copied-state";
-import { icalFeedNameSchema } from "@keeper.sh/data-schemas";
 import type { CalendarSource } from "@/types/api";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/ical/$feedId")({
@@ -42,7 +60,6 @@ export const Route = createFileRoute("/(dashboard)/dashboard/ical/$feedId")({
 });
 
 const SETTING_TOGGLES = [
-  { field: "includeEventName", label: "Include Event Name" },
   { field: "includeEventDescription", label: "Include Event Description" },
   { field: "includeEventLocation", label: "Include Event Location" },
   { field: "excludeAllDayEvents", label: "Exclude All Day Events" },
@@ -53,154 +70,46 @@ const FILTER_TOGGLES = [
   { field: "excludeOutOfOffice", label: "Exclude Out of Office" },
 ] as const;
 
-type ToggleField = (typeof SETTING_TOGGLES)[number]["field"]
+type ToggleField =
+  | (typeof SETTING_TOGGLES)[number]["field"]
   | (typeof FILTER_TOGGLES)[number]["field"];
 
-function CopyLinkIcon({ copied }: { copied: boolean }) {
-  if (copied) {
-    return <Check size={16} />;
-  }
-  return <Copy size={16} />;
-}
-
-function FeedLink({ url, caption }: { url: string; caption: string }) {
-  const { copied, markCopied } = useCopiedState();
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(url);
-    track(ANALYTICS_EVENTS.ical_link_copied);
-    markCopied();
-  };
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex gap-1.5">
-        <Input readOnly value={url} className="text-sm" />
-        <Button variant="border" className="shrink-0 aspect-square" onClick={handleCopy}>
-          <ButtonIcon>
-            <CopyLinkIcon copied={copied} />
-          </ButtonIcon>
-        </Button>
-      </div>
-      <Text size="sm" tone="muted">{caption}</Text>
-    </div>
-  );
-}
-
-function FeedLinkSection({ feed }: { feed: IcalFeed }) {
-  return (
-    <div className="flex flex-col gap-2">
-      <DashboardSection
-        title="Feed Link"
-        description="Subscribe to this link in any calendar app."
-      />
-      <FeedLink url={feed.icalUrl} caption={resolveFeedDisclosure(feed)} />
-      {feed.legacyIcalUrl && (
-        <FeedLink
-          url={feed.legacyIcalUrl}
-          caption="Your original link keeps working, so anything already subscribed to it stays up to date."
-        />
-      )}
-    </div>
-  );
-}
-
-function CalendarSelectionSection({
-  feedId,
-  isDefault,
-  selected,
-  onToggle,
-}: {
-  feedId: string;
-  isDefault: boolean;
-  selected: Set<string>;
-  onToggle: (calendarId: string, checked: boolean) => void;
-}) {
-  const { data: sources } = useSWR<CalendarSource[]>("/api/sources", fetcher);
-  const groups = useMemo(() => groupCalendarsByAccount(sources ?? []), [sources]);
-
-  if (groups.length === 0) {
-    return (
-      <DashboardSection
-        title="Calendars"
-        description={sources
-          ? "No calendar sources to include. Import calendars first."
-          : "Loading calendars..."}
-      />
-    );
-  }
-
-  const total = groups.reduce((count, group) => count + group.calendars.length, 0);
-
-  return (
-    <div className="flex flex-col gap-2">
-      <DashboardSection
-        title="Calendars"
-        description={`${selected.size} of ${total} calendars in this feed.`}
-      />
-      {isDefault && (
-        <Text size="sm" tone="muted">
-          Newly connected calendars are added to this feed automatically.
-        </Text>
-      )}
-      {groups.map((group) => (
-        <div key={group.accountId} className="flex flex-col gap-1.5">
-          <Text size="sm" tone="muted" className="px-0.5">{group.label}</Text>
-          <NavigationMenu>
-            {group.calendars.map((calendar) => (
-              <NavigationMenuCheckboxItem
-                key={`${feedId}:${calendar.id}`}
-                checked={selected.has(calendar.id)}
-                onCheckedChange={(checked) => onToggle(calendar.id, checked)}
-              >
-                <NavigationMenuItemIcon>
-                  <ProviderIcon
-                    provider={calendar.provider}
-                    calendarType={calendar.calendarType}
-                  />
-                </NavigationMenuItemIcon>
-                <NavigationMenuItemLabel>{calendar.name}</NavigationMenuItemLabel>
-              </NavigationMenuCheckboxItem>
-            ))}
-          </NavigationMenu>
-        </div>
-      ))}
-    </div>
-  );
-}
+const TEMPLATE_VARIABLES = { calendar_name: "Calendar Name", event_name: "Event Name" };
 
 function ICalFeedDetailPage() {
   const { feedId } = Route.useParams();
   const navigate = useNavigate();
-  const { data: entitlements } = useEntitlements();
   const { revalidateEntitlements } = useMutateEntitlements();
-  const { data: feed, error, mutate } = useIcalFeed(feedId);
-  const { data: calendars, mutate: mutateCalendars } = useFeedCalendars(feedId);
+  const { data: entitlements } = useEntitlements();
+  const { data: feed, isLoading: feedLoading, error, mutate } = useIcalFeed(feedId);
+  const {
+    data: calendarSelection,
+    isLoading: calendarsLoading,
+    mutate: mutateCalendars,
+  } = useFeedCalendars(feedId);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const locked = entitlements ? !entitlements.canCustomizeIcalFeed : false;
   const selected = useMemo(
-    () => new Set(calendars?.calendarIds ?? []),
-    [calendars?.calendarIds],
+    () => new Set(calendarSelection?.calendarIds ?? []),
+    [calendarSelection?.calendarIds],
   );
 
-  if (error) {
-    return (
-      <div className="flex flex-col gap-1.5">
-        <BackButton fallback="/dashboard/ical" />
-        <ErrorState message="Failed to load this iCal feed." onRetry={() => mutate()} />
-      </div>
-    );
-  }
+  const isLoading = feedLoading || calendarsLoading;
 
-  if (!feed) {
-    return (
-      <div className="flex flex-col gap-1.5">
-        <BackButton fallback="/dashboard/ical" />
-      </div>
-    );
+  if (error || isLoading || !feed) {
+    if (error) {
+      return (
+        <RouteShell
+          backFallback="/dashboard/ical"
+          status="error"
+          onRetry={() => { void mutate(); }}
+        />
+      );
+    }
+    return <RouteShell backFallback="/dashboard/ical" status="loading" />;
   }
 
   const patchFeed = (patch: Record<string, unknown>) => {
@@ -216,33 +125,50 @@ function ICalFeedDetailPage() {
       }),
       (patchError) => {
         setMutationError(resolveErrorMessage(patchError, "Failed to update this feed."));
-        mutate();
+        void mutate();
       },
     );
   };
 
+  const handleRename = (name: string) => {
+    if (!icalFeedNameSchema.allows(name)) {
+      setMutationError("Feed name cannot be empty.");
+      return;
+    }
+    setMutationError(null);
+    patchFeed({ name });
+  };
+
   const handleToggleSetting = (field: ToggleField) => {
     if (locked) return;
-    const nextValue = !feed[field];
-    track(ANALYTICS_EVENTS.ical_setting_toggled, { field, enabled: nextValue });
-    patchFeed({ [field]: nextValue });
+    const enabled = !feed[field];
+    track(ANALYTICS_EVENTS.ical_setting_toggled, { field, enabled });
+    patchFeed({ [field]: enabled });
+  };
+
+  const handleToggleEventName = () => {
+    if (locked) return;
+    const patch = resolveEventNamePatch(!feed.includeEventName);
+    track(ANALYTICS_EVENTS.ical_setting_toggled, {
+      field: "includeEventName",
+      enabled: patch.includeEventName,
+    });
+    patchFeed(patch);
   };
 
   const handleToggleCalendar = async (calendarId: string, checked: boolean) => {
-    const nextIds = checked
-      ? [...selected, calendarId]
-      : [...selected].filter((id) => id !== calendarId);
+    const calendarIds = resolveCalendarSelection(selected, calendarId, checked);
 
     track(ANALYTICS_EVENTS.ical_source_toggled, { enabled: checked, feedId });
     setMutationError(null);
     try {
       await mutateCalendars(
         async () => {
-          await setFeedCalendars(feedId, nextIds);
-          return { calendarIds: nextIds };
+          await setFeedCalendars(feedId, calendarIds);
+          return { calendarIds };
         },
         {
-          optimisticData: { calendarIds: nextIds },
+          optimisticData: { calendarIds },
           rollbackOnError: true,
           revalidate: false,
         },
@@ -270,25 +196,50 @@ function ICalFeedDetailPage() {
 
   return (
     <div className="flex flex-col gap-1.5">
-      <BackButton fallback="/dashboard/ical" />
+      <div className="flex items-center justify-between">
+        <BackButton fallback="/dashboard/ical" />
+        <FeedPrevNext feedId={feedId} />
+      </div>
+      <FeedHeader name={feed.name} calendarCount={selected.size} />
       {mutationError && <Text size="sm" tone="danger">{mutationError}</Text>}
-      <FeedLinkSection feed={feed} />
-      <FeedNameSection
-        name={feed.name}
-        onRename={(name) => patchFeed({ name })}
+      <DashboardSection
+        title="Feed Link"
+        description="Subscribe to this link in any calendar app."
       />
-      <CalendarSelectionSection
-        feedId={feedId}
+      <NavigationMenu>
+        <CopyFeedLinkItem url={feed.icalUrl} onError={setMutationError} />
+      </NavigationMenu>
+      <Text size="sm" tone="muted" className="px-0.5">{resolveFeedDisclosure(feed)}</Text>
+      <DashboardSection
+        title="Feed Name"
+        description="Click below to rename this feed. Only you can see this name."
+      />
+      <NavigationMenu>
+        <NavigationMenuEditableItem value={feed.name} onCommit={handleRename} />
+      </NavigationMenu>
+      <CalendarsSection
         isDefault={feed.isDefault}
         selected={selected}
         onToggle={handleToggleCalendar}
       />
       <DashboardSection
         title="Feed Settings"
-        description="Choose which event details this link includes."
+        description={<>Choose which event details this link includes. Use <Text as="span" size="sm" className="text-template inline">{"{{calendar_name}}"}</Text> or <Text as="span" size="sm" className="text-template inline">{"{{event_name}}"}</Text> in text fields for dynamic values.</>}
       />
-      <PremiumFeatureGate locked={locked} hint="Feed settings are Pro-only.">
+      <PremiumFeatureGate locked={locked} hint="Feed settings are a Pro feature.">
         <NavigationMenu>
+          <EventNameTemplateItem
+            customEventName={feed.customEventName}
+            disabled={locked || feed.includeEventName}
+            onCommit={(customEventName) => patchFeed({ customEventName })}
+          />
+          <NavigationMenuToggleItem
+            checked={feed.includeEventName}
+            disabled={locked}
+            onCheckedChange={handleToggleEventName}
+          >
+            <NavigationMenuItemLabel>Include Event Name</NavigationMenuItemLabel>
+          </NavigationMenuToggleItem>
           {SETTING_TOGGLES.map(({ field, label }) => (
             <NavigationMenuToggleItem
               key={field}
@@ -305,7 +256,7 @@ function ICalFeedDetailPage() {
         title="Event Filters"
         description="Leave these event types out of this link."
       />
-      <PremiumFeatureGate locked={locked} hint="Event filters are Pro-only.">
+      <PremiumFeatureGate locked={locked} hint="Event filters are a Pro feature.">
         <NavigationMenu>
           {FILTER_TOGGLES.map(({ field, label }) => (
             <NavigationMenuToggleItem
@@ -319,18 +270,25 @@ function ICalFeedDetailPage() {
           ))}
         </NavigationMenu>
       </PremiumFeatureGate>
+      <DashboardSection
+        title="Feed Information"
+        description="View details about this feed."
+      />
+      <NavigationMenu>
+        <MetadataRow label="Resource Type" value={feed.isDefault ? "Default Feed" : "Feed"} />
+        <MetadataRow label="Calendars" value={String(selected.size)} />
+        <MetadataRow label="Created" value={formatDate(feed.createdAt)} />
+      </NavigationMenu>
       {!feed.isDefault && (
         <>
-          <Button
-            variant="destructive"
-            className="w-full justify-center"
-            onClick={() => setDeleteOpen(true)}
-          >
-            <ButtonIcon>
-              <Trash2 size={16} />
-            </ButtonIcon>
-            <ButtonText>Delete Feed</ButtonText>
-          </Button>
+          <NavigationMenu>
+            <NavigationMenuButtonItem onClick={() => setDeleteOpen(true)}>
+              <NavigationMenuItemIcon>
+                <Trash2 size={15} className="text-destructive" />
+              </NavigationMenuItemIcon>
+              <Text size="sm" tone="danger">Delete Feed</Text>
+            </NavigationMenuButtonItem>
+          </NavigationMenu>
           <DeleteConfirmation
             title="Delete feed?"
             description={`This permanently removes "${feed.name}". Calendar apps subscribed to its link will stop receiving events.`}
@@ -345,34 +303,162 @@ function ICalFeedDetailPage() {
   );
 }
 
-function FeedNameSection({
-  name,
-  onRename,
-}: {
-  name: string;
-  onRename: (name: string) => void;
-}) {
-  const [draft, setDraft] = useState(name);
+function FeedHeader({ name, calendarCount }: { name: string; calendarCount: number }) {
+  return (
+    <div className="flex flex-col px-0.5 pt-4">
+      <DashboardHeading1 className="select-none">{name}</DashboardHeading1>
+      <div className="flex items-center gap-1.5 pt-0.5">
+        <Link2 size={14} className="shrink-0 text-foreground-muted" />
+        <Text className="truncate overflow-hidden" size="sm" tone="muted">
+          {pluralize(calendarCount, "calendar")}
+        </Text>
+      </div>
+    </div>
+  );
+}
 
-  const handleCommit = () => {
-    const trimmed = draft.trim();
-    if (!icalFeedNameSchema.allows(trimmed) || trimmed === name) {
-      setDraft(name);
+function CopyFeedLinkItem({
+  url,
+  onError,
+}: {
+  url: string;
+  onError: (message: string) => void;
+}) {
+  const { copied, markCopied } = useCopiedState();
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      onError("Failed to copy this feed's link.");
       return;
     }
-    onRename(trimmed);
+    track(ANALYTICS_EVENTS.ical_link_copied);
+    markCopied();
   };
 
   return (
-    <div className="flex flex-col gap-2">
-      <DashboardSection title="Name" description="Only you can see this name." />
-      <Input
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={handleCommit}
-        placeholder="Feed name"
-        className="text-sm"
-      />
-    </div>
+    <NavigationMenuButtonItem onClick={() => { void handleCopy(); }}>
+      <NavigationMenuItemIcon>
+        <Link2 size={15} />
+      </NavigationMenuItemIcon>
+      <NavigationMenuItemLabel className="shrink-0">
+        {copied ? "Link Copied" : "Copy Link"}
+      </NavigationMenuItemLabel>
+      <NavigationMenuItemTrailing className="overflow-hidden">
+        <Text size="sm" tone="muted" align="right" className="flex-1 min-w-0 truncate">
+          {url}
+        </Text>
+        <CopyStateIcon copied={copied} />
+      </NavigationMenuItemTrailing>
+    </NavigationMenuButtonItem>
+  );
+}
+
+function CopyStateIcon({ copied }: { copied: boolean }) {
+  if (copied) {
+    return <Check size={15} className="shrink-0 text-foreground-muted" />;
+  }
+  return <Copy size={15} className="shrink-0 text-foreground-muted" />;
+}
+
+function EventNameTemplateItem({
+  customEventName,
+  disabled,
+  onCommit,
+}: {
+  customEventName: string;
+  disabled: boolean;
+  onCommit: (customEventName: string) => void;
+}) {
+  const template = customEventName || "Busy";
+
+  return (
+    <NavigationMenuEditableTemplateItem
+      label="Event Name"
+      disabled={disabled}
+      value={template}
+      renderInput={(live) => <TemplateText template={live} variables={TEMPLATE_VARIABLES} />}
+      onCommit={onCommit}
+    >
+      <Text
+        size="sm"
+        tone={disabled ? "disabled" : "muted"}
+        className="min-w-0 truncate flex-1 text-right"
+      >
+        <TemplateText template={template} variables={TEMPLATE_VARIABLES} disabled={disabled} />
+      </Text>
+    </NavigationMenuEditableTemplateItem>
+  );
+}
+
+function resolveCalendarsDescription(isDefault: boolean): string {
+  if (isDefault) {
+    return "Select which calendars contribute events to this feed. Calendars you import later join this feed automatically.";
+  }
+  return "Select which calendars contribute events to this feed.";
+}
+
+function CalendarsSection({
+  isDefault,
+  selected,
+  onToggle,
+}: {
+  isDefault: boolean;
+  selected: Set<string>;
+  onToggle: (calendarId: string, checked: boolean) => void;
+}) {
+  const { data: sources } = useSWR<CalendarSource[]>("/api/sources");
+  const calendars = useMemo(() => resolvePickableCalendars(sources ?? []), [sources]);
+
+  return (
+    <>
+      <DashboardSection title="Calendars" description={resolveCalendarsDescription(isDefault)} />
+      <NavigationMenu>
+        {calendars.length === 0 ? (
+          <NavigationMenuEmptyItem>No calendars available</NavigationMenuEmptyItem>
+        ) : (
+          calendars.map((calendar) => (
+            <NavigationMenuCheckboxItem
+              key={calendar.id}
+              checked={selected.has(calendar.id)}
+              onCheckedChange={(checked) => onToggle(calendar.id, checked)}
+            >
+              <NavigationMenuItemIcon>
+                <ProviderIcon
+                  provider={calendar.provider}
+                  calendarType={calendar.calendarType}
+                />
+              </NavigationMenuItemIcon>
+              <NavigationMenuItemLabel className="shrink-0">{calendar.name}</NavigationMenuItemLabel>
+              <NavigationMenuItemTrailing className="overflow-hidden">
+                <Text size="sm" tone="muted" align="right" className="flex-1 min-w-0 truncate">
+                  {calendar.accountLabel}
+                </Text>
+              </NavigationMenuItemTrailing>
+            </NavigationMenuCheckboxItem>
+          ))
+        )}
+      </NavigationMenu>
+    </>
+  );
+}
+
+function FeedPrevNext({ feedId }: { feedId: string }) {
+  const { data: feeds } = useIcalFeeds();
+  const { previous, next } = resolveFeedNeighbours(feeds ?? [], feedId);
+
+  useEffect(() => {
+    if (previous) preload(`/api/ical/feeds/${previous.id}`, fetcher);
+    if (next) preload(`/api/ical/feeds/${next.id}`, fetcher);
+  }, [previous, next]);
+
+  if (!feeds || feeds.length <= 1) return null;
+
+  return (
+    <Pagination>
+      <PaginationPrevious to={previous ? `/dashboard/ical/${previous.id}` : undefined} />
+      <PaginationNext to={next ? `/dashboard/ical/${next.id}` : undefined} />
+    </Pagination>
   );
 }

@@ -170,7 +170,7 @@ function CalendarsMenu() {
           <NavigationMenuItemIcon>
             <Link2 size={15} />
           </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>iCal Link</NavigationMenuItemLabel>
+          <NavigationMenuItemLabel>iCal Feeds</NavigationMenuItemLabel>
           <NavigationMenuItemTrailing />
         </NavigationMenuLinkItem>
       </AnimatedReveal>

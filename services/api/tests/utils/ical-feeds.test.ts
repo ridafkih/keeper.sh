@@ -436,4 +436,10 @@ describe("buildFeedListQuery", () => {
       `"isDefault" desc, "createdAt" asc, "id" asc`,
     );
   });
+
+  it("counts calendars as an integer so clients do not receive a bigint string", () => {
+    const { sql } = buildFeedListQuery(drizzle.mock(), "user-1").toSQL();
+
+    expect(sql).toContain(`count("ical_feed_calendars"."calendarId")::int`);
+  });
 });
