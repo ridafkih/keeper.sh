@@ -23,6 +23,8 @@ const OUTLOOK_BODY = [
   "</div></body></html>",
 ].join("");
 
+const HOSTILE_MARKUP_BUDGET_MS = 2000;
+
 const project = (value: string): string => toPlainTextDescription(value) ?? "";
 
 describe("toPlainTextDescription", () => {
@@ -132,12 +134,12 @@ describe("toPlainTextDescription", () => {
     expect(project("<p>Photo: <img src=\"https://x.test/a.png\"></p>")).toBe("Photo:");
   });
 
-  it("escapes stray angles in linear time", () => {
+  it("does not stall on a long description of nothing but unclosed comment openers", () => {
     const start = performance.now();
 
     project("<!--".repeat(60_000));
 
-    expect(performance.now() - start).toBeLessThan(2000);
+    expect(performance.now() - start).toBeLessThan(HOSTILE_MARKUP_BUDGET_MS);
   });
 
   it("uncovers one escaped layer and stops, rather than peeling to the last", () => {
@@ -149,7 +151,7 @@ describe("toPlainTextDescription", () => {
     expect(toPlainTextDescription("")).toBe("");
   });
 
-  it("is total over markup no parser can walk", () => {
+  it("still returns a description for malformed, truncated or unpaired-surrogate markup", () => {
     const values = [
       "<div>".repeat(50_000),
       "<p>lone \uD800 surrogate</p>",
@@ -185,7 +187,7 @@ describe("toPlainTextDescription", () => {
       .toBe("Bring the <source> deck\nand the <link> handout");
   });
 
-  it("stops walking markup nested deeper than the render recursion can descend", () => {
+  it("keeps the words of a description nested thousands of elements deep, losing only its lines", () => {
     const shallow = "<div>a<br>b</div>";
     const deep = `${"<div>".repeat(1500)}a<br>b${"</div>".repeat(1500)}`;
 
