@@ -15,6 +15,7 @@ import { MarketingCtaSection, MarketingCtaCard } from '../../features/marketing/
 import { Collapsible } from '../../components/ui/primitives/collapsible'
 import { ButtonIcon, ButtonText, ExternalLinkButton, LinkButton } from '../../components/ui/primitives/button'
 import { MarketingIllustrationCalendar, MarketingIllustrationCalendarCard, type Skew, type SkewTuple } from '../../features/marketing/components/marketing-illustration-calendar'
+import { MarketingHeroScreenshot } from '../../features/marketing/components/marketing-hero-screenshot'
 import {
   MarketingFeatureBentoBody,
   MarketingFeatureBentoCard,
@@ -232,6 +233,9 @@ function MarketingPage() {
             </ButtonIcon>
           </ExternalLinkButton>
         </div>
+      </div>
+      <div className="contents *:z-20">
+        <MarketingHeroScreenshot />
       </div>
       <div className="contents *:z-10">
         <div className="flex flex-col">
