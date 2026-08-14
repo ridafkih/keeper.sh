@@ -7,8 +7,8 @@ import { toPlainTextDescription } from "../../../core/events/plain-text-descript
 
 /*
  * Google 400s any non-positive span with "The specified time range is empty.",
- * and it sanitizes a description by keeping an HTML wrapper while discarding
- * what the wrapper held, so the mirror loses the text.
+ * and it rewrites an HTML description into the text it renders to, so what it
+ * stores is never what was sent and the mirror is replaced on every run.
  */
 const normalizeGoogleEvent = (event: MaterializedSyncableEvent): MaterializedSyncableEvent =>
   ({

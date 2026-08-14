@@ -292,8 +292,8 @@ const projectOnce = (value: string): string => {
  * has.
  */
 const toPlainTextDescription = (value: string | undefined): string | undefined => {
-  if (value === globalThis.undefined) {
-    return globalThis.undefined;
+  if (!value) {
+    return value;
   }
   let current = value;
   let next = projectOnce(current);
