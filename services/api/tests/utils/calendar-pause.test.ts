@@ -57,7 +57,15 @@ describe("setCalendarPaused", () => {
 
     const result = await setCalendarPaused(database, "user-1", CALENDAR_ID, false);
 
-    expect(state.updates).toEqual([{ disabled: false }]);
+    expect(state.updates).toEqual([{
+      disabled: false,
+      failureCount: 0,
+      ingestFailureCount: 0,
+      ingestLastFailureAt: null,
+      ingestNextAttemptAt: null,
+      lastFailureAt: null,
+      nextAttemptAt: null,
+    }]);
     expect(result).toEqual({ calendarId: CALENDAR_ID, paused: false });
   });
 

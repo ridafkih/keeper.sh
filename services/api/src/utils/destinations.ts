@@ -28,8 +28,8 @@ import {
   withMappingMutationLocks,
 } from "./source-destination-mappings";
 import {
-  buildReconnectedCalendarState,
-  RECONNECTED_CALENDAR_STATE,
+  buildReconnectedCalDAVState,
+  RECONNECTED_BACKOFF_STATE,
 } from "@/utils/calendar-state";
 
 const FIRST_RESULT_LIMIT = 1;
@@ -296,6 +296,37 @@ const upsertAccountAndCalendarWithDatabase = async (
   return calendar?.id;
 };
 
+const clearAccountBackoff = async (
+  databaseClient: DestinationDatabase,
+  accountId: string,
+): Promise<void> => {
+  await databaseClient
+    .update(calendarsTable)
+    .set(RECONNECTED_BACKOFF_STATE)
+    .where(eq(calendarsTable.accountId, accountId));
+};
+
+const findMappedDestinationCalendar = async (
+  databaseClient: DestinationDatabase,
+  accountId: string,
+): Promise<{ id: string } | undefined> => {
+  const [calendar] = await databaseClient
+    .select({ id: calendarsTable.id })
+    .from(calendarsTable)
+    .where(
+      and(
+        eq(calendarsTable.accountId, accountId),
+        inArray(calendarsTable.id,
+          databaseClient.selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
+            .from(sourceDestinationMappingsTable)
+        ),
+      ),
+    )
+    .limit(FIRST_RESULT_LIMIT);
+
+  return calendar;
+};
+
 const saveCalendarDestinationWithDatabase = async (
   databaseClient: DestinationDatabase,
   userId: string,
@@ -327,25 +358,13 @@ const saveCalendarDestinationWithDatabase = async (
 
     recordGrantDemand(existingAccount.id, needsReauthentication, existingAccount);
 
-    const [existingCalendar] = await databaseClient
-      .select({ id: calendarsTable.id })
-      .from(calendarsTable)
-      .where(
-        and(
-          eq(calendarsTable.accountId, existingAccount.id),
-          inArray(calendarsTable.id,
-            databaseClient.selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
-              .from(sourceDestinationMappingsTable)
-          ),
-        ),
-      )
-      .limit(FIRST_RESULT_LIMIT);
+    if (!needsReauthentication) {
+      await clearAccountBackoff(databaseClient, existingAccount.id);
+    }
+
+    const existingCalendar = await findMappedDestinationCalendar(databaseClient, existingAccount.id);
 
     if (existingCalendar) {
-      await databaseClient
-        .update(calendarsTable)
-        .set(RECONNECTED_CALENDAR_STATE)
-        .where(eq(calendarsTable.id, existingCalendar.id));
       await initializeSyncStatusWithDatabase(databaseClient, existingCalendar.id);
     }
     return;
@@ -500,27 +519,17 @@ const saveCalDAVDestinationWithDatabase = async (
 
     await databaseClient
       .update(calendarAccountsTable)
-      .set({ email })
+      .set({ email, needsReauthentication: false })
       .where(eq(calendarAccountsTable.id, existingAccount.id));
 
-    const [existingCalendar] = await databaseClient
-      .select({ id: calendarsTable.id })
-      .from(calendarsTable)
-      .where(
-        and(
-          eq(calendarsTable.accountId, existingAccount.id),
-          inArray(calendarsTable.id,
-            databaseClient.selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
-              .from(sourceDestinationMappingsTable)
-          ),
-        ),
-      )
-      .limit(FIRST_RESULT_LIMIT);
+    await clearAccountBackoff(databaseClient, existingAccount.id);
+
+    const existingCalendar = await findMappedDestinationCalendar(databaseClient, existingAccount.id);
 
     if (existingCalendar) {
       await databaseClient
         .update(calendarsTable)
-        .set(buildReconnectedCalendarState(calendarUrl))
+        .set(buildReconnectedCalDAVState(calendarUrl))
         .where(eq(calendarsTable.id, existingCalendar.id));
       await initializeSyncStatusWithDatabase(databaseClient, existingCalendar.id);
     }

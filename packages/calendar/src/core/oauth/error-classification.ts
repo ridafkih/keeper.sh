@@ -13,4 +13,14 @@ const isOAuthReauthRequiredError = (error: unknown): boolean => {
   return false;
 };
 
-export { isOAuthReauthRequiredError };
+const isOAuthRefreshInProgressError = (error: unknown): boolean =>
+  isRecord(error) && error.oauthRefreshInProgress === true;
+
+const isOAuthRefreshLockUnavailableError = (error: unknown): boolean =>
+  isRecord(error) && error.oauthRefreshLockUnavailable === true;
+
+export {
+  isOAuthReauthRequiredError,
+  isOAuthRefreshInProgressError,
+  isOAuthRefreshLockUnavailableError,
+};

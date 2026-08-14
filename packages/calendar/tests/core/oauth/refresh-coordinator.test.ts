@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import {
+  isOAuthReauthRequiredError,
+  isOAuthRefreshInProgressError,
+} from "../../../src/core/oauth/error-classification";
 import { runWithCredentialRefreshLock } from "../../../src/core/oauth/refresh-coordinator";
 
 describe("runWithCredentialRefreshLock", () => {
@@ -46,5 +50,28 @@ describe("runWithCredentialRefreshLock", () => {
     ).rejects.toThrow("refresh failed");
 
     expect(calls).toBe(2);
+  });
+
+  it("marks a lost distributed lock as a coordination event, not a credential failure", async () => {
+    const acquiredKeys: string[] = [];
+    const lockStore = {
+      release: () => Promise.resolve(),
+      tryAcquire: (key: string) => {
+        acquiredKeys.push(key);
+        return Promise.resolve(false);
+      },
+    };
+
+    const contention = await runWithCredentialRefreshLock(
+      "credential-3",
+      () => {
+        throw new Error("refresh must not run");
+      },
+      lockStore,
+    ).catch((error: unknown) => error);
+
+    expect(acquiredKeys).toEqual(["oauth:refresh-lock:credential-3"]);
+    expect(isOAuthRefreshInProgressError(contention)).toBe(true);
+    expect(isOAuthReauthRequiredError(contention)).toBe(false);
   });
 });

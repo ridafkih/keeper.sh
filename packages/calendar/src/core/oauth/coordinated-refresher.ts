@@ -10,7 +10,7 @@ import {
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { REAUTHENTICATION_TOKEN_REFRESH } from "@keeper.sh/constants";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 const MS_PER_SECOND = 1000;
@@ -19,6 +19,7 @@ interface CoordinatedRefresherOptions {
   database: BunSQLDatabase;
   oauthCredentialId: string;
   calendarAccountId: string;
+  onBookkeepingError?: (scope: string, error: unknown) => void;
   refreshLockStore: RefreshLockStore | null;
   rawRefresh: (refreshToken: string) => Promise<{
     access_token: string;
@@ -27,8 +28,46 @@ interface CoordinatedRefresherOptions {
   }>;
 }
 
+const flagAccountReauthentication = async (
+  database: BunSQLDatabase,
+  oauthCredentialId: string,
+  calendarAccountId: string,
+  refreshToken: string,
+): Promise<void> => {
+  const prior = await readPriorReauthenticationState(database, calendarAccountId);
+  await database
+    .update(calendarAccountsTable)
+    .set({
+      needsReauthentication: true,
+      reauthenticationSource: REAUTHENTICATION_TOKEN_REFRESH,
+    })
+    .where(and(
+      eq(calendarAccountsTable.id, calendarAccountId),
+      sql`exists (
+        select 1 from ${oauthCredentialsTable}
+        where ${oauthCredentialsTable.id} = ${oauthCredentialId}
+          and ${oauthCredentialsTable.refreshToken} = ${refreshToken}
+      )`,
+    ));
+  recordReauthenticationDemand({
+    accountId: calendarAccountId,
+    action: "raise",
+    previous: prior?.needsReauthentication ?? null,
+    provenance: REAUTHENTICATION_TOKEN_REFRESH,
+    recordedProvenance: prior?.reauthenticationSource,
+    signal: "oauth-refresh-rejected",
+  });
+};
+
 const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
-  const { database, oauthCredentialId, calendarAccountId, refreshLockStore, rawRefresh } = options;
+  const {
+    database,
+    oauthCredentialId,
+    calendarAccountId,
+    onBookkeepingError,
+    refreshLockStore,
+    rawRefresh,
+  } = options;
 
   return (refreshToken: string) =>
     runWithCredentialRefreshLock(
@@ -46,26 +85,21 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
               expiresAt: newExpiresAt,
               refreshToken: result.refresh_token ?? refreshToken,
             })
-            .where(eq(oauthCredentialsTable.id, oauthCredentialId));
+            .where(and(
+              eq(oauthCredentialsTable.id, oauthCredentialId),
+              eq(oauthCredentialsTable.refreshToken, refreshToken),
+            ));
 
           return result;
         } catch (error) {
           if (isOAuthReauthRequiredError(error)) {
-            const prior = await readPriorReauthenticationState(database, calendarAccountId);
-            await database
-              .update(calendarAccountsTable)
-              .set({
-                needsReauthentication: true,
-                reauthenticationSource: REAUTHENTICATION_TOKEN_REFRESH,
-              })
-              .where(eq(calendarAccountsTable.id, calendarAccountId));
-            recordReauthenticationDemand({
-              accountId: calendarAccountId,
-              action: "raise",
-              previous: prior?.needsReauthentication ?? null,
-              provenance: REAUTHENTICATION_TOKEN_REFRESH,
-              recordedProvenance: prior?.reauthenticationSource,
-              signal: "oauth-refresh-rejected",
+            await flagAccountReauthentication(
+              database,
+              oauthCredentialId,
+              calendarAccountId,
+              refreshToken,
+            ).catch((bookkeepingError: unknown) => {
+              onBookkeepingError?.("oauth.reauth_flag_error", bookkeepingError);
             });
           }
           throw error;

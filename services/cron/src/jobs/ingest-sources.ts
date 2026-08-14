@@ -10,8 +10,12 @@ import {
   createGoogleUserRateLimiter,
   ensureValidToken,
   isTimeoutError,
+  isOAuthReauthRequiredError,
+  isOAuthRefreshInProgressError,
+  isOAuthRefreshLockUnavailableError,
   buildCalendarBackoffState,
   buildReauthenticationDemandFields,
+  readPriorReauthenticationState,
   resolveReauthenticationDemandAction,
   SOURCE_INGEST_LOCK_NAMESPACE,
   createRequiredSourceRanges,
@@ -46,6 +50,7 @@ import {
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq, isNull, ne, or, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import { database, refreshLockRedis, refreshLockStore } from "@/context";
@@ -55,8 +60,21 @@ import {
   resolveMissingCalendarFailure,
   shouldTreatAsProviderAuthFailure,
 } from "@/utils/provider-ingest-failure";
-import { hasErrorFlag, requiresReauthentication } from "@/utils/error-flags";
+import {
+  isOAuthRefreshContentionStalled,
+  runSourceIngest as runSourceIngestWithDependencies,
+} from "@/utils/run-source-ingest";
+import type {
+  SourceIngestAttempt,
+  SourceIngestDependencies,
+  SourceIngestHandlers,
+} from "@/utils/run-source-ingest";
+import { hasErrorFlag } from "@/utils/error-flags";
 import { resolveOAuthIngestionState } from "@/utils/oauth-ingestion-state";
+import {
+  caldavCredentialIsUnchanged,
+  oauthCredentialIsUnchanged,
+} from "@/utils/reauthentication-guard";
 import { withAbortTimeout } from "@/utils/with-abort-timeout";
 import { createSyncLock } from "@keeper.sh/sync";
 import { enqueueDestinationSyncsForUsers } from "@/utils/enqueue-destination-syncs";
@@ -69,7 +87,17 @@ const SOURCE_CONCURRENCY = 5;
 const SOURCE_INGEST_LOCK_KEY_PREFIX = "source-ingest:";
 const sourceIngestLock = createSyncLock(refreshLockRedis);
 
-const resetIngestBackoff = async (calendarId: string): Promise<void> => {
+const matchesObservedAttemptClock = (nextAttemptAt: Date | null) => {
+  if (nextAttemptAt === null) {
+    return isNull(calendarsTable.ingestNextAttemptAt);
+  }
+  return eq(calendarsTable.ingestNextAttemptAt, nextAttemptAt);
+};
+
+const resetIngestBackoff = async (
+  calendarId: string,
+  observedAttempt: SourceIngestAttempt,
+): Promise<void> => {
   await database
     .update(calendarsTable)
     .set({
@@ -77,22 +105,34 @@ const resetIngestBackoff = async (calendarId: string): Promise<void> => {
       ingestLastFailureAt: null,
       ingestNextAttemptAt: null,
     })
-    .where(eq(calendarsTable.id, calendarId));
+    .where(and(
+      eq(calendarsTable.id, calendarId),
+      eq(calendarsTable.ingestFailureCount, observedAttempt.failureCount),
+      matchesObservedAttemptClock(observedAttempt.nextAttemptAt),
+    ));
 };
 
 const applyIngestBackoff = async (
   calendarId: string,
-  currentFailureCount: number,
-): Promise<CalendarBackoffState> => {
-  const state = buildCalendarBackoffState(currentFailureCount);
-  await database
+  observedAttempt: SourceIngestAttempt,
+): Promise<CalendarBackoffState | null> => {
+  const state = buildCalendarBackoffState(observedAttempt.failureCount);
+  const updated = await database
     .update(calendarsTable)
     .set({
       ingestFailureCount: state.failureCount,
       ingestLastFailureAt: state.lastFailureAt,
       ingestNextAttemptAt: state.nextAttemptAt,
     })
-    .where(eq(calendarsTable.id, calendarId));
+    .where(and(
+      eq(calendarsTable.id, calendarId),
+      eq(calendarsTable.ingestFailureCount, observedAttempt.failureCount),
+      matchesObservedAttemptClock(observedAttempt.nextAttemptAt),
+    ))
+    .returning({ id: calendarsTable.id });
+  if (updated.length === 0) {
+    return null;
+  }
   return state;
 };
 
@@ -103,21 +143,22 @@ const logIngestBackoff = (state: CalendarBackoffState): void => {
   }
 };
 
-const runSourceIngest = async <TResult>(
-  calendarId: string,
-  signal: AbortSignal,
-  work: (isCurrent: () => Promise<boolean>) => Promise<TResult>,
-  shouldApplyBackoff: (error: unknown) => boolean,
-): Promise<TResult | null> => {
-  const lockResult = await sourceIngestLock.acquire(
-    `${SOURCE_INGEST_LOCK_KEY_PREFIX}${calendarId}`,
-    signal,
-  );
-  if (!lockResult.acquired) {
-    signal.throwIfAborted();
-    return null;
-  }
-  try {
+const sourceIngestDependencies: SourceIngestDependencies = {
+  acquireLease: async (calendarId, signal) => {
+    const lockResult = await sourceIngestLock.acquire(
+      `${SOURCE_INGEST_LOCK_KEY_PREFIX}${calendarId}`,
+      signal,
+    );
+    if (!lockResult.acquired) {
+      return null;
+    }
+    return {
+      isCurrent: lockResult.handle.isCurrent,
+      release: lockResult.handle.release,
+    };
+  },
+  applyBackoff: applyIngestBackoff,
+  readAttempt: async (calendarId) => {
     const [attempt] = await database
       .select({
         failureCount: calendarsTable.ingestFailureCount,
@@ -126,28 +167,56 @@ const runSourceIngest = async <TResult>(
       .from(calendarsTable)
       .where(eq(calendarsTable.id, calendarId))
       .limit(1);
-    if (!attempt || attempt.nextAttemptAt && attempt.nextAttemptAt > new Date()) {
-      return null;
-    }
-    try {
-      const result = await work(lockResult.handle.isCurrent);
-      if (attempt.failureCount > 0 && await lockResult.handle.isCurrent()) {
-        await resetIngestBackoff(calendarId);
-      }
-      return result;
-    } catch (error) {
-      if (shouldApplyBackoff(error)) {
-        logIngestBackoff(await applyIngestBackoff(calendarId, attempt.failureCount));
-      }
-      throw error;
-    }
-  } finally {
-    await lockResult.handle.release();
-  }
+    return attempt ?? null;
+  },
+  recordBackoff: logIngestBackoff,
+  resetBackoff: resetIngestBackoff,
 };
 
-const shouldApplyOAuthIngestBackoff = (error: unknown): boolean =>
-  !requiresReauthentication(error);
+const runSourceIngest = <TResult>(
+  calendarId: string,
+  signal: AbortSignal,
+  work: (isCurrent: () => Promise<boolean>) => Promise<TResult>,
+  handlers: SourceIngestHandlers = {},
+): Promise<TResult | null> =>
+  runSourceIngestWithDependencies(
+    sourceIngestDependencies,
+    calendarId,
+    signal,
+    work,
+    handlers,
+  );
+
+interface ObservedOAuthCredential {
+  oauthCredentialId: string;
+  tokenState: TokenState;
+}
+
+interface ObservedCalDAVCredential {
+  caldavCredentialId: string;
+  encryptedPassword: string;
+}
+
+const observedCredentialGuard = (
+  credential: ObservedOAuthCredential | null,
+): SQL | undefined => {
+  if (!credential) {
+    return;
+  }
+  return oauthCredentialIsUnchanged({
+    oauthCredentialId: credential.oauthCredentialId,
+    refreshToken: credential.tokenState.refreshToken,
+  });
+};
+
+const observedCalDAVCredentialGuard = (
+  credential: ObservedCalDAVCredential | null,
+): SQL | undefined => {
+  if (!credential) {
+    return;
+  }
+  return caldavCredentialIsUnchanged(credential);
+};
 
 const recordSkippedResources = (skippedResourceCount: number, reasons: string[]): void => {
   if (skippedResourceCount === 0) {
@@ -410,7 +479,13 @@ const REAUTHENTICATION_DEMAND_PRECEDENCE: ReauthenticationDemand[] = [
 
 interface ReauthenticationDemandRecord {
   accountId: string;
+  credentialIsUnchanged?: SQL;
   demand: ReauthenticationDemand;
+}
+
+interface ReauthenticationVerdict {
+  credentialIsUnchanged: SQL | null;
+  needsReauthentication: boolean;
 }
 
 interface SourceAccountContext {
@@ -446,27 +521,58 @@ interface IngestionSourceResult {
 
 const resolveReauthenticationDemands = (
   demands: ReauthenticationDemandRecord[],
-): Map<string, boolean> => {
+): Map<string, ReauthenticationVerdict> => {
   const castByAccount = new Map(
     [...new Set(demands.map(({ accountId }) => accountId))].map((
       accountId,
-    ): [string, Set<ReauthenticationDemand>] => [
+    ): [string, ReauthenticationDemandRecord[]] => [
       accountId,
-      new Set(
-        demands
-          .filter((record) => record.accountId === accountId)
-          .map(({ demand }) => demand),
-      ),
+      demands.filter((record) => record.accountId === accountId),
     ]),
   );
   return new Map(
-    [...castByAccount].flatMap(([accountId, cast]): [string, boolean][] => {
-      const decisive = REAUTHENTICATION_DEMAND_PRECEDENCE.find((demand) => cast.has(demand));
+    [...castByAccount].flatMap(([accountId, cast]): [string, ReauthenticationVerdict][] => {
+      const decisive = REAUTHENTICATION_DEMAND_PRECEDENCE.find((demand) =>
+        cast.some((record) => record.demand === demand));
       if (!decisive) {
         return [];
       }
-      return [[accountId, decisive !== "authenticated"]];
+      const decisiveRecord = cast.find((record) => record.demand === decisive);
+      return [[accountId, {
+        credentialIsUnchanged: decisiveRecord?.credentialIsUnchanged ?? null,
+        needsReauthentication: decisive !== "authenticated",
+      }]];
     }),
+  );
+};
+
+/**
+ * A demand is only worth raising against the credential the rejected run was
+ * judged on. A reconnect that landed while the batch was in flight replaces
+ * that credential, and the demand it would raise is already stale.
+ */
+const resolveDemandGuard = (verdict: ReauthenticationVerdict): SQL | null => {
+  if (!verdict.needsReauthentication) {
+    return null;
+  }
+  return verdict.credentialIsUnchanged;
+};
+
+const buildDemandPredicate = (
+  accountId: string,
+  verdict: ReauthenticationVerdict,
+): SQL | undefined => {
+  const guard = resolveDemandGuard(verdict);
+  if (!guard) {
+    return and(
+      eq(calendarAccountsTable.id, accountId),
+      ne(calendarAccountsTable.needsReauthentication, verdict.needsReauthentication),
+    );
+  }
+  return and(
+    eq(calendarAccountsTable.id, accountId),
+    guard,
+    ne(calendarAccountsTable.needsReauthentication, verdict.needsReauthentication),
   );
 };
 
@@ -520,11 +626,30 @@ const resolveRaiseSignal = (
   return decidingVote;
 };
 
+/**
+ * A raise that wrote nothing is ambiguous: the flag may already be standing,
+ * or the credential the verdict was judged on may have been replaced by a
+ * reconnect mid-batch. Only the live flag distinguishes the two; when it
+ * cannot be read the raise is reported as a re-raise rather than guessed
+ * to be suppressed.
+ */
+const demandGuardRejectedWrite = async (
+  accountId: string,
+  verdict: ReauthenticationVerdict,
+): Promise<boolean> => {
+  if (!resolveDemandGuard(verdict)) {
+    return false;
+  }
+  const prior = await readPriorReauthenticationState(database, accountId);
+  return prior?.needsReauthentication === false;
+};
+
 const applyReauthenticationDemands = async (
   demands: ReauthenticationDemandRecord[],
   recordedDemandSources: Map<string, string | null>,
 ): Promise<void> => {
-  for (const [accountId, needsReauthentication] of resolveReauthenticationDemands(demands)) {
+  for (const [accountId, verdict] of resolveReauthenticationDemands(demands)) {
+    const { needsReauthentication } = verdict;
     const recordedDemandSource = recordedDemandSources.get(accountId) ?? null;
     const cast = demands
       .filter((record) => record.accountId === accountId)
@@ -552,12 +677,22 @@ const applyReauthenticationDemands = async (
             needsReauthentication,
             reauthenticationSource: resolveRecordedDemandSource(needsReauthentication),
           })
-          .where(and(
-            eq(calendarAccountsTable.id, accountId),
-            ne(calendarAccountsTable.needsReauthentication, needsReauthentication),
-          ))
+          .where(buildDemandPredicate(accountId, verdict))
           .returning({ id: calendarAccountsTable.id });
         const transitioned = written.length > 0;
+        if (!transitioned && await demandGuardRejectedWrite(accountId, verdict)) {
+          recordReauthenticationDemandFields(buildReauthenticationDemandFields({
+            accountId,
+            action: "raise",
+            previous: null,
+            provenance: REAUTHENTICATION_SOURCE_INGEST,
+            recordedProvenance: recordedDemandSource,
+            signal: resolveRaiseSignal(needsReauthentication, decidingVote),
+          }));
+          widelog.set("reauth.suppressed", true);
+          widelog.set("outcome", "skipped");
+          return;
+        }
         recordReauthenticationDemandFields(buildReauthenticationDemandFields({
           accountId,
           action: resolveReauthenticationDemandAction(needsReauthentication),
@@ -605,10 +740,42 @@ const createRejectedIngestionResult = (
   userId: string,
   accountId: string,
   demand: AuthenticationRejection,
+  credentialIsUnchanged?: SQL,
 ): IngestionSourceResult => ({
   ...createSkippedIngestionResult(userId),
-  reauthentication: { accountId, demand },
+  reauthentication: {
+    accountId,
+    demand,
+    ...(credentialIsUnchanged && { credentialIsUnchanged }),
+  },
 });
+
+/**
+ * A run that lost its attempt mid-flight — a reconnect landed, or another
+ * replica settled the calendar — no longer speaks for the credential it was
+ * judged on, so it abstains instead of voting to raise a demand the reconnect
+ * has already answered.
+ */
+const createAuthenticationRejection = (
+  options: {
+    accountId: string;
+    credentialIsUnchanged: SQL | undefined;
+    demand: AuthenticationRejection;
+    isCurrent: boolean;
+    userId: string;
+  },
+): IngestionSourceResult => {
+  if (!options.isCurrent) {
+    widelog.set("failure.reauth_vote_skipped", "attempt-state-changed");
+    return createSkippedIngestionResult(options.userId);
+  }
+  return createRejectedIngestionResult(
+    options.userId,
+    options.accountId,
+    options.demand,
+    options.credentialIsUnchanged,
+  );
+};
 
 const collectReauthenticationDemands = (
   settlements: PromiseSettledResult<IngestionSourceResult>[],
@@ -706,6 +873,9 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
             widelog.set("provider.external_calendar_id", source.externalCalendarId);
           }
 
+          let observedCredential: ObservedOAuthCredential | null = null;
+          let rejectionIsCurrent = false;
+
           try {
             const result = await widelog.time.measure("duration_ms", () =>
               runSourceIngest(source.calendarId, signal, async (isCurrent) => {
@@ -751,11 +921,18 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
                   accessTokenExpiresAt: currentSource.expiresAt,
                   refreshToken: currentSource.refreshToken,
                 };
+                observedCredential = {
+                  oauthCredentialId: currentSource.oauthCredentialId,
+                  tokenState,
+                };
                 if (rawRefresher) {
                   const tokenRefresher = createCoordinatedRefresher({
                     database,
                     oauthCredentialId: currentSource.oauthCredentialId,
                     calendarAccountId: currentSource.accountId,
+                    onBookkeepingError: (scope, bookkeepingError) => {
+                      widelog.error(scope, bookkeepingError);
+                    },
                     refreshLockStore,
                     rawRefresh: rawRefresher,
                   });
@@ -810,7 +987,11 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
                     || ingestionResult.eventsRemoved > 0,
                   userId: currentSource.userId,
                 };
-              }, shouldApplyOAuthIngestBackoff),
+              }, {
+                onSettledFailure: () => {
+                  rejectionIsCurrent = true;
+                },
+              }),
             );
             if (!result) {
               widelog.set("outcome", "skipped");
@@ -824,19 +1005,56 @@ const ingestOAuthSources = async (): Promise<IngestionBatchResult> => {
 
             return result;
           } catch (error) {
+            if (
+              isOAuthRefreshInProgressError(error)
+              && !isOAuthRefreshContentionStalled(source.calendarId)
+            ) {
+              widelog.set("outcome", "skipped");
+              widelog.set("skip.reason", "oauth-refresh-in-progress");
+
+              return createSkippedIngestionResult(source.userId);
+            }
 
             widelog.set("outcome", "error");
+
+            if (isOAuthRefreshLockUnavailableError(error)) {
+              widelog.errorFields(error, {
+                slug: "oauth-refresh-lock-unavailable",
+                retriable: true,
+              });
+              throw error;
+            }
+
+            if (isOAuthRefreshInProgressError(error)) {
+              widelog.errorFields(error, {
+                slug: "oauth-refresh-contention-stalled",
+                retriable: true,
+              });
+              throw error;
+            }
 
             if (hasErrorFlag(error, "authRequired")) {
               widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
 
-              return createRejectedIngestionResult(source.userId, source.accountId, "request-rejected");
+              return createAuthenticationRejection({
+                accountId: source.accountId,
+                credentialIsUnchanged: observedCredentialGuard(observedCredential),
+                demand: "request-rejected",
+                isCurrent: rejectionIsCurrent,
+                userId: source.userId,
+              });
             }
 
-            if (hasErrorFlag(error, "oauthReauthRequired")) {
+            if (isOAuthReauthRequiredError(error)) {
               widelog.errorFields(error, { slug: "provider-token-refresh-failed", retriable: false, requiresReauth: true });
 
-              return createRejectedIngestionResult(source.userId, source.accountId, "credential-rejected");
+              return createAuthenticationRejection({
+                accountId: source.accountId,
+                credentialIsUnchanged: observedCredentialGuard(observedCredential),
+                demand: "credential-rejected",
+                isCurrent: rejectionIsCurrent,
+                userId: source.userId,
+              });
             }
 
             const missingCalendarFailure = resolveMissingCalendarFailure(error);
@@ -912,11 +1130,15 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
           widelog.set("provider.account_id", source.accountId);
           widelog.set("provider.calendar_id", source.calendarId);
 
+          let observedCredential: ObservedCalDAVCredential | null = null;
+          let rejectionIsCurrent = false;
+
           try {
             const result = await widelog.time.measure("duration_ms", () =>
               runSourceIngest(source.calendarId, signal, async (isCurrent) => {
                 const [currentSource] = await database
                   .select({
+                    caldavCredentialId: caldavCredentialsTable.id,
                     calendarUrl: calendarsTable.calendarUrl,
                     encryptedPassword: caldavCredentialsTable.encryptedPassword,
                     ingestFutureRange: calendarsTable.ingestFutureRange,
@@ -945,6 +1167,10 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                 if (!currentSource) {
                   return createSkippedIngestionResult(source.userId);
                 }
+                observedCredential = {
+                  caldavCredentialId: currentSource.caldavCredentialId,
+                  encryptedPassword: currentSource.encryptedPassword,
+                };
                 const ranges = await getRequiredSourceRanges(source.calendarId);
                 const fetcher = createCalDAVSourceFetcher({
                   calendarUrl: currentSource.calendarUrl ?? currentSource.serverUrl,
@@ -984,7 +1210,12 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                     || ingestionResult.eventsRemoved > 0,
                   userId: currentSource.userId,
                 };
-              }, (error) => !shouldTreatAsProviderAuthFailure(error)),
+              }, {
+                onSettledFailure: () => {
+                  rejectionIsCurrent = true;
+                },
+                shouldApplyBackoff: (error) => !shouldTreatAsProviderAuthFailure(error),
+              }),
             );
             if (!result) {
               widelog.set("outcome", "skipped");
@@ -1004,7 +1235,13 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
             if (shouldTreatAsProviderAuthFailure(error)) {
               widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
 
-              return createRejectedIngestionResult(source.userId, source.accountId, "request-rejected");
+              return createAuthenticationRejection({
+                accountId: source.accountId,
+                credentialIsUnchanged: observedCalDAVCredentialGuard(observedCredential),
+                demand: "request-rejected",
+                isCurrent: rejectionIsCurrent,
+                userId: source.userId,
+              });
             }
 
             const missingCalendarFailure = resolveMissingCalendarFailure(error);
@@ -1124,7 +1361,7 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
                     || ingestionResult.eventsRemoved > 0,
                   userId: currentSource.userId,
                 };
-              }, () => true),
+              }),
             );
             if (!result) {
               widelog.set("outcome", "skipped");

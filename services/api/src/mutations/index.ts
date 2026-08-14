@@ -12,6 +12,7 @@ import type {
 } from "@/types";
 import { createCoordinatedRefresher } from "@keeper.sh/calendar";
 import type { RefreshLockStore } from "@keeper.sh/calendar";
+import { widelog } from "@/utils/logging";
 import { resolveCredentialsByCalendarId, resolveCredentialsByEventId } from "./resolve-credentials";
 import { getEvent } from "@/queries/get-event";
 import { parseEventReference } from "@/queries/event-read-model";
@@ -75,6 +76,9 @@ const ensureValidAccessToken = async (
     database: deps.database,
     oauthCredentialId: oauth.credentialId,
     calendarAccountId: accountId,
+    onBookkeepingError: (scope, bookkeepingError) => {
+      widelog.error(scope, bookkeepingError);
+    },
     refreshLockStore: deps.refreshLockStore ?? null,
     rawRefresh: (refreshToken) => oauthProvider.refreshAccessToken(refreshToken),
   });

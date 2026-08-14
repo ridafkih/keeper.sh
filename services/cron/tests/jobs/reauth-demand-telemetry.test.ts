@@ -86,6 +86,12 @@ const resolveSelect = (projection: Record<string, unknown>): unknown[] => {
   if (keys.has("oauthCredentialId")) {
     return [readSource()];
   }
+  if (keys.has("needsReauthentication")) {
+    return [{
+      needsReauthentication: accountNeedsReauthentication,
+      reauthenticationSource: accountDemandSource,
+    }];
+  }
   throw new Error(`unexpected select projection: ${[...keys].join(",")}`);
 };
 
@@ -120,6 +126,9 @@ const demandWriteDeadlock = (): DrizzleQueryError =>
 
 const applyDemandWrite = (values: Record<string, unknown>): unknown[] => {
   if (!("needsReauthentication" in values)) {
+    if ("ingestFailureCount" in values) {
+      return [{ id: "calendar-primary" }];
+    }
     return [];
   }
   if (demandWriteFails) {

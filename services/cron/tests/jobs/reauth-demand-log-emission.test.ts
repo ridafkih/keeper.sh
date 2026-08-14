@@ -66,6 +66,12 @@ const resolveSelect = (projection: Record<string, unknown>): unknown[] => {
       reauthenticationSource: accountDemandSource,
     }];
   }
+  if (keys.has("needsReauthentication")) {
+    return [{
+      needsReauthentication: accountNeedsReauthentication,
+      reauthenticationSource: accountDemandSource,
+    }];
+  }
   throw new Error(`unexpected select projection: ${[...keys].join(",")}`);
 };
 
@@ -84,6 +90,9 @@ const createQuery = (resolve: () => unknown): unknown => {
 
 const applyDemandWrite = (values: Record<string, unknown>): unknown[] => {
   if (!("needsReauthentication" in values)) {
+    if ("ingestFailureCount" in values) {
+      return [{ id: "calendar-primary" }];
+    }
     return [];
   }
   const next = values.needsReauthentication === true;

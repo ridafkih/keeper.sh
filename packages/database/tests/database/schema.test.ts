@@ -43,6 +43,27 @@ describe("calendar schema", () => {
   });
 });
 
+describe("backoff clock schema", () => {
+  it("leaves the attempt clocks entirely to the writer so the reconnect guards can match them", () => {
+    const tableConfig = getTableConfig(calendarsTable);
+    const clockColumns = [
+      "nextAttemptAt",
+      "lastFailureAt",
+      "ingestNextAttemptAt",
+      "ingestLastFailureAt",
+    ];
+
+    for (const columnName of clockColumns) {
+      const column = tableConfig.columns.find((entry) => entry.name === columnName);
+      expect(column).toBeDefined();
+      expect(column?.hasDefault).toBe(false);
+      expect(column?.default).toBeUndefined();
+      expect(column?.defaultFn).toBeUndefined();
+      expect(column?.onUpdateFn).toBeUndefined();
+    }
+  });
+});
+
 describe("event state schema", () => {
   it("enforces provider and fallback instance identities", () => {
     const tableConfig = getTableConfig(eventStatesTable);

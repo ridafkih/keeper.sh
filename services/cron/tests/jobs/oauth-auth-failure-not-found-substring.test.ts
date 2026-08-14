@@ -130,6 +130,8 @@ const createQuery = (resolve: () => unknown): unknown => {
   });
 };
 
+const UPDATED_ROW_ID = "0f6f1f3a-9c1a-4a6f-9a0e-2a5c7b1d4e83";
+
 const applyWrite = (values: Record<string, unknown>): void => {
   if (!("needsReauthentication" in values)) {
     return;
@@ -153,7 +155,7 @@ const createUpdateQuery = (pending?: Record<string, unknown>): unknown => {
               if (pending) {
                 applyWrite(pending);
               }
-              return [];
+              return [{ id: UPDATED_ROW_ID }];
             })
             .then(onFulfilled);
       }

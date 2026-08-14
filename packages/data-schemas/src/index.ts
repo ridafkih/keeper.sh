@@ -133,6 +133,10 @@ const microsoftTokenResponseSchema = type({
 });
 type MicrosoftTokenResponse = typeof microsoftTokenResponseSchema.infer;
 
+const microsoftTokenErrorSchema = type({
+  error: "string",
+});
+
 const microsoftUserInfoSchema = type({
   "displayName?": "string",
   id: "string",
@@ -450,6 +454,7 @@ export {
   googleTokenResponseSchema,
   googleUserInfoSchema,
   microsoftTokenResponseSchema,
+  microsoftTokenErrorSchema,
   microsoftUserInfoSchema,
   outlookEventSchema,
   outlookEventListSchema,

@@ -4,7 +4,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { createGoogleTokenRefresher } from "@keeper.sh/calendar";
 import { createMicrosoftTokenRefresher } from "@keeper.sh/calendar";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { database, env } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;
@@ -45,7 +45,10 @@ const refreshGoogleAccessToken = async (
         expiresAt: newExpiresAt,
         refreshToken: tokenData.refresh_token ?? refreshToken,
       })
-      .where(eq(oauthCredentialsTable.id, account.oauthCredentialId));
+      .where(and(
+        eq(oauthCredentialsTable.id, account.oauthCredentialId),
+        eq(oauthCredentialsTable.refreshToken, refreshToken),
+      ));
   }
 
   return {
@@ -84,7 +87,10 @@ const refreshMicrosoftAccessToken = async (
         expiresAt: newExpiresAt,
         refreshToken: tokenData.refresh_token ?? refreshToken,
       })
-      .where(eq(oauthCredentialsTable.id, account.oauthCredentialId));
+      .where(and(
+        eq(oauthCredentialsTable.id, account.oauthCredentialId),
+        eq(oauthCredentialsTable.refreshToken, refreshToken),
+      ));
   }
 
   return {
@@ -116,7 +122,10 @@ const refreshGoogleSourceAccessToken = async (
       expiresAt: newExpiresAt,
       refreshToken: tokenData.refresh_token ?? refreshToken,
     })
-    .where(eq(oauthCredentialsTable.id, credentialId));
+    .where(and(
+      eq(oauthCredentialsTable.id, credentialId),
+      eq(oauthCredentialsTable.refreshToken, refreshToken),
+    ));
 
   return {
     accessToken: tokenData.access_token,
@@ -147,7 +156,10 @@ const refreshMicrosoftSourceAccessToken = async (
       expiresAt: newExpiresAt,
       refreshToken: tokenData.refresh_token ?? refreshToken,
     })
-    .where(eq(oauthCredentialsTable.id, credentialId));
+    .where(and(
+      eq(oauthCredentialsTable.id, credentialId),
+      eq(oauthCredentialsTable.refreshToken, refreshToken),
+    ));
 
   return {
     accessToken: tokenData.access_token,

@@ -35,6 +35,7 @@ type SelectPromise = Promise<unknown[]> & {
   innerJoin: () => SelectPromise;
   leftJoin: () => SelectPromise;
   where: () => SelectPromise;
+  orderBy: () => SelectPromise;
   limit: () => Promise<unknown[]>;
 };
 
@@ -44,6 +45,7 @@ const createSelectBuilder = (result: unknown[]): SelectPromise => {
   chain.innerJoin = () => chain;
   chain.leftJoin = () => chain;
   chain.where = () => chain;
+  chain.orderBy = () => chain;
   chain.limit = () => Promise.resolve(result);
   return chain;
 };
@@ -450,7 +452,7 @@ describe("Account locks", () => {
       }),
     };
 
-    const source = await createCalDAVSource("user-1", {
+    const { reconnected, source } = await createCalDAVSource("user-1", {
       authMethod: "basic",
       calendarUrl: "https://caldav.test/team",
       name: "Team CalDAV",
@@ -468,6 +470,7 @@ describe("Account locks", () => {
       provider: "icloud",
       userId: "user-1",
     });
+    expect(reconnected).toBe(false);
     expect(triggerSyncCalls).toEqual(["user-1"]);
   });
 });

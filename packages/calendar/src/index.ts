@@ -25,12 +25,19 @@ export {
   type TokenRefresher,
 } from "./core/oauth/ensure-valid-token";
 export {
+  OAuthRefreshInProgressError,
+  OAuthRefreshLockUnavailableError,
   runWithCredentialRefreshLock,
   type RefreshLockStore,
 } from "./core/oauth/refresh-coordinator";
-export { isOAuthReauthRequiredError } from "./core/oauth/error-classification";
+export {
+  isOAuthReauthRequiredError,
+  isOAuthRefreshInProgressError,
+  isOAuthRefreshLockUnavailableError,
+} from "./core/oauth/error-classification";
 export {
   buildReauthenticationDemandFields,
+  readPriorReauthenticationState,
   resolveReauthenticationDemandAction,
   type ReauthenticationDemandAction,
   type ReauthenticationDemandFields,

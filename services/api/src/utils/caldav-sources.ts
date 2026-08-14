@@ -8,6 +8,7 @@ import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { encryptPassword } from "@keeper.sh/database";
 import { database, premiumService, encryptionKey } from "@/context";
 import { enqueuePushSync } from "./enqueue-push-sync";
+import { clearAccountReauthentication } from "./source-reauthentication";
 import { applySourceSyncDefaults } from "./source-sync-defaults";
 
 const FIRST_RESULT_LIMIT = 1;
@@ -15,7 +16,7 @@ const CALDAV_CALENDAR_TYPE = "caldav";
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
 type CaldavSourceDatabase = Pick<
   typeof database,
-  "insert" | "select" | "selectDistinct"
+  "insert" | "select" | "selectDistinct" | "update"
 >;
 
 class CalDAVSourceLimitError extends Error {
@@ -42,6 +43,11 @@ interface CalDAVSource {
   createdAt: Date;
 }
 
+interface CreateCalDAVSourceResult {
+  reconnected: boolean;
+  source: CalDAVSource;
+}
+
 interface CreateCalDAVSourceData {
   authMethod: string;
   calendarUrl: string;
@@ -58,8 +64,9 @@ const findReusableCalDAVAccount = async (
   provider: string,
   serverUrl: string,
   username: string,
+  existingSourceAccountId: string | null,
 ): Promise<{ id: string; caldavCredentialId: string | null } | undefined> => {
-  const [account] = await databaseClient
+  const accounts = await databaseClient
     .select({
       id: calendarAccountsTable.id,
       caldavCredentialId: calendarAccountsTable.caldavCredentialId,
@@ -77,9 +84,9 @@ const findReusableCalDAVAccount = async (
         eq(caldavCredentialsTable.username, username),
       ),
     )
-    .limit(FIRST_RESULT_LIMIT);
+    .orderBy(calendarAccountsTable.createdAt, calendarAccountsTable.id);
 
-  return account;
+  return accounts.find(({ id }) => id === existingSourceAccountId) ?? accounts[0];
 };
 
 const createCalDAVAccount = async (
@@ -120,6 +127,27 @@ const createCalDAVAccount = async (
   }
 
   return account.id;
+};
+
+const reconnectCalDAVAccount = async (
+  databaseClient: CaldavSourceDatabase,
+  account: { id: string; caldavCredentialId: string | null },
+  data: CreateCalDAVSourceData,
+  resolvedEncryptionKey: string,
+): Promise<void> => {
+  if (!account.caldavCredentialId) {
+    throw new Error(`CalDAV account ${account.id} is missing caldavCredentialId`);
+  }
+
+  await databaseClient
+    .update(caldavCredentialsTable)
+    .set({
+      authMethod: data.authMethod,
+      encryptedPassword: encryptPassword(data.password, resolvedEncryptionKey),
+    })
+    .where(eq(caldavCredentialsTable.id, account.caldavCredentialId));
+
+  await clearAccountReauthentication(databaseClient, account.id);
 };
 
 const getUserCalDAVSources = async (userId: string, provider?: string): Promise<CalDAVSource[]> => {
@@ -183,7 +211,7 @@ const countUserAccountsWithDatabase = async (
 const createCalDAVSource = async (
   userId: string,
   data: CreateCalDAVSourceData,
-): Promise<CalDAVSource> => {
+): Promise<CreateCalDAVSourceResult> => {
   if (!encryptionKey) {
     throw new Error("Encryption key not configured");
   }
@@ -201,7 +229,12 @@ const createCalDAVSource = async (
     );
 
     const [existingSource] = await tx
-      .select({ id: calendarsTable.id })
+      .select({
+        accountId: calendarsTable.accountId,
+        createdAt: calendarsTable.createdAt,
+        id: calendarsTable.id,
+        name: calendarsTable.name,
+      })
       .from(calendarsTable)
       .where(
         and(
@@ -210,11 +243,8 @@ const createCalDAVSource = async (
           eq(calendarsTable.calendarType, CALDAV_CALENDAR_TYPE),
         ),
       )
+      .orderBy(calendarsTable.createdAt, calendarsTable.id)
       .limit(FIRST_RESULT_LIMIT);
-
-    if (existingSource) {
-      throw new DuplicateCalDAVSourceError();
-    }
 
     const existingAccount = await findReusableCalDAVAccount(
       tx,
@@ -222,7 +252,33 @@ const createCalDAVSource = async (
       data.provider,
       data.serverUrl,
       data.username,
+      existingSource?.accountId ?? null,
     );
+
+    if (existingSource && existingSource.accountId !== existingAccount?.id) {
+      return null;
+    }
+
+    if (existingAccount) {
+      await reconnectCalDAVAccount(tx, existingAccount, data, resolvedEncryptionKey);
+    }
+
+    if (existingSource && existingAccount) {
+      return {
+        reconnected: true,
+        source: {
+          accountId: existingAccount.id,
+          calendarUrl: data.calendarUrl,
+          createdAt: existingSource.createdAt,
+          id: existingSource.id,
+          name: existingSource.name,
+          provider: data.provider,
+          serverUrl: data.serverUrl,
+          userId,
+          username: data.username,
+        },
+      };
+    }
 
     if (!existingAccount) {
       const existingAccountCount = await countUserAccountsWithDatabase(tx, userId);
@@ -254,17 +310,24 @@ const createCalDAVSource = async (
     }
 
     return {
-      accountId,
-      calendarUrl: data.calendarUrl,
-      createdAt: source.createdAt,
-      id: source.id,
-      name: source.name,
-      provider: data.provider,
-      serverUrl: data.serverUrl,
-      userId: source.userId,
-      username: data.username,
+      reconnected: false,
+      source: {
+        accountId,
+        calendarUrl: data.calendarUrl,
+        createdAt: source.createdAt,
+        id: source.id,
+        name: source.name,
+        provider: data.provider,
+        serverUrl: data.serverUrl,
+        userId: source.userId,
+        username: data.username,
+      },
     };
   });
+
+  if (!result) {
+    throw new DuplicateCalDAVSourceError();
+  }
 
   await enqueuePushSync(userId, plan);
 
@@ -294,3 +357,4 @@ export {
   createCalDAVSource,
   verifyCalDAVSourceOwnership,
 };
+export type { CalDAVSource, CreateCalDAVSourceResult };

@@ -44,7 +44,13 @@ const POST = withWideEvent(
 
       widelog.set("provider.name", data.provider);
 
-      const source = await createCalDAVSource(userId, data);
+      const { reconnected, source } = await createCalDAVSource(userId, data);
+
+      widelog.set("caldav.reconnected", reconnected);
+
+      if (reconnected) {
+        return Response.json(source, { status: HTTP_STATUS.OK });
+      }
 
       return Response.json(source, { status: HTTP_STATUS.CREATED });
     } catch (error) {

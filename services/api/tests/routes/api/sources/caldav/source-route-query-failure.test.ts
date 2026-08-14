@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 let fields: Record<string, unknown> = {};
 let values: Record<string, unknown> = {};
 let createCalDAVSourceResult: () => Promise<unknown> = () =>
-  Promise.resolve({ id: "source-1" });
+  Promise.resolve({ reconnected: false, source: { id: "source-1" } });
 
 vi.mock("@/utils/logging", () => ({
   context: async (run: () => Promise<unknown>) => await run(),
@@ -101,7 +101,7 @@ describe("POST /api/sources/caldav under a Postgres server-side query failure", 
   beforeEach(() => {
     fields = {};
     values = {};
-    createCalDAVSourceResult = () => Promise.resolve({ id: "source-1" });
+    createCalDAVSourceResult = () => Promise.resolve({ reconnected: false, source: { id: "source-1" } });
   });
 
   it.each(SERVER_SIDE_FAILURES)(

@@ -1,7 +1,8 @@
 import type { Plan } from "@keeper.sh/data-schemas";
 import { calendarsTable } from "@keeper.sh/database/schema";
-import { and, arrayContains, eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull, or } from "drizzle-orm";
 import type { KeeperSyncTriggerResult } from "@/types";
+import { RECONNECTED_BACKOFF_STATE } from "./calendar-state";
 import { enqueuePushSync } from "./enqueue-push-sync";
 
 interface TriggerSyncDependencies {
@@ -27,12 +28,14 @@ const triggerSync = async (userId: string, plan: Plan): Promise<KeeperSyncTrigge
     clearIngestBackoff: async (backoffUserId) => {
       const cleared = await database
         .update(calendarsTable)
-        .set({ ingestNextAttemptAt: null })
+        .set(RECONNECTED_BACKOFF_STATE)
         .where(and(
           eq(calendarsTable.userId, backoffUserId),
           eq(calendarsTable.disabled, false),
-          arrayContains(calendarsTable.capabilities, ["pull"]),
-          isNotNull(calendarsTable.ingestNextAttemptAt),
+          or(
+            isNotNull(calendarsTable.ingestNextAttemptAt),
+            isNotNull(calendarsTable.nextAttemptAt),
+          ),
         ))
         .returning({ id: calendarsTable.id });
 

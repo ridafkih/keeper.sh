@@ -1,5 +1,4 @@
-const RECONNECTED_CALENDAR_STATE = {
-  disabled: false,
+const RECONNECTED_BACKOFF_STATE = {
   failureCount: 0,
   lastFailureAt: null,
   nextAttemptAt: null,
@@ -8,9 +7,18 @@ const RECONNECTED_CALENDAR_STATE = {
   ingestNextAttemptAt: null,
 } as const;
 
-const buildReconnectedCalendarState = (calendarUrl: string) => ({
+const RECONNECTED_CALENDAR_STATE = {
+  disabled: false,
+  ...RECONNECTED_BACKOFF_STATE,
+} as const;
+
+const buildReconnectedCalDAVState = (calendarUrl: string) => ({
   calendarUrl,
-  ...RECONNECTED_CALENDAR_STATE,
+  ...RECONNECTED_BACKOFF_STATE,
 });
 
-export { buildReconnectedCalendarState, RECONNECTED_CALENDAR_STATE };
+export {
+  buildReconnectedCalDAVState,
+  RECONNECTED_BACKOFF_STATE,
+  RECONNECTED_CALENDAR_STATE,
+};
