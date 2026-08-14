@@ -356,23 +356,17 @@ const projectOnce = (value: string): string => {
 };
 
 /*
- * A pass consumes tags and entity references and creates neither, so repeating
- * it reaches a value it leaves alone. Markup an author escaped uncovers one
- * layer at a time, and every layer costs a reference the next pass no longer
- * has.
+ * Exactly one pass, and never a pass over a pass: reading the output back
+ * would take `Set &lt;timeout&gt;30&lt;/timeout&gt;` — the tags an author
+ * escaped, and the words between them — for markup to strip, and delete a
+ * sentence the reader wrote.
  */
 const toPlainTextDescription = (value: string | undefined): string | undefined => {
   if (!value) {
     return value;
   }
-  let current = value;
-  let next = projectOnce(current);
-  while (next !== current) {
-    current = next;
-    next = projectOnce(current);
-  }
 
-  return current;
+  return projectOnce(value);
 };
 
 export { toPlainTextDescription };

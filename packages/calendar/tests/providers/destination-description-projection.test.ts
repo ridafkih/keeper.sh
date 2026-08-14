@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { eventToICalString } from "../../src/providers/caldav/shared/ics";
+import { eventToICalString, parseICalToRemoteEvent } from "../../src/providers/caldav/shared/ics";
 import { normalizeCalDAVEvent } from "../../src/providers/caldav/destination/normalize-event";
 import { normalizeGoogleEvent } from "../../src/providers/google/destination/normalize-event";
 import { normalizeOutlookEvent } from "../../src/providers/outlook/destination/normalize-event";
@@ -25,10 +25,25 @@ const MEET_BLOCK = [
 ].join("\n");
 
 /*
- * The shape Google guts on write: it keeps the span and discards everything
- * inside it, leaving a mirror with no link, no dial-in and no PIN.
+ * The shape Google guts on write: it recognises the delimited region as its own
+ * and discards everything the region holds, leaving a mirror with no link, no
+ * dial-in and no PIN.
  */
 const SPAN_WRAPPED_MEET_BLOCK = `<span style="white-space:pre">${MEET_BLOCK}</span>`;
+
+const OUTLOOK_BODY = "<html><head><style>p.MsoNormal {margin:0in}</style></head>"
+  + "<body><p class=\"MsoNormal\">Quarterly planning</p></body></html>";
+
+const DESCRIPTIONS = [
+  SPAN_WRAPPED_MEET_BLOCK,
+  MEET_BLOCK,
+  MEET_DETAILS,
+  OUTLOOK_BODY,
+  "<p>a &lt;br&gt; b</p>",
+  "<ul><li>one</li><li>two</li></ul>",
+  "Notes <b>bold</b> here",
+  "A &amp; B, budget <= 5",
+];
 
 const createEvent = (
   overrides: Partial<MaterializedSyncableEvent> = {},
@@ -52,7 +67,39 @@ const getPropertyValue = (ics: string, name: string): string | undefined =>
 
 describe("the Google destination write boundary", () => {
   it("keeps the meeting details Google would delete along with its own delimiters", () => {
-    expect(serializeGoogleEvent(createEvent(), "uid-1")?.description).toBe(MEET_DETAILS);
+    expect(serializeGoogleEvent(createEvent(), "uid-1")?.description)
+      .toBe(`<span style="white-space:pre">${MEET_DETAILS}</span>`);
+    expect(serializeGoogleEvent(createEvent({ description: MEET_BLOCK }), "uid-1")?.description)
+      .toBe(MEET_DETAILS);
+  });
+
+  it("keeps the markup Google accepts and stores back verbatim", () => {
+    const values = [
+      "Notes <b>bold</b> here",
+      "<ul><li>one</li><li>two</li></ul>",
+      "<a href=\"https://x.test/agenda\">Agenda</a>",
+      OUTLOOK_BODY,
+    ];
+
+    for (const value of values) {
+      expect(serializeGoogleEvent(createEvent({ description: value }), "uid-1")?.description)
+        .toBe(value);
+    }
+  });
+
+  it("sends back exactly what the comparison holds, for every description shape", () => {
+    for (const description of DESCRIPTIONS) {
+      const normalized = normalizeGoogleEvent(createEvent({ description }));
+
+      expect(serializeGoogleEvent(normalized, "uid-1")?.description).toBe(normalized.description);
+    }
+  });
+
+  it("closes the line its own delimiter sat on, without joining the prose around it", () => {
+    const value = `Agenda\n${CONFERENCE_DELIMITER}\nBudget`;
+
+    expect(serializeGoogleEvent(createEvent({ description: value }), "uid-1")?.description)
+      .toBe("Agenda\nBudget");
   });
 
   it("leaves punctuation that is not Google's conference delimiter alone", () => {
@@ -63,9 +110,11 @@ describe("the Google destination write boundary", () => {
       .toBe(value);
   });
 
-  it("expects back what it sent, so the mirror is compared against the text", () => {
+  it("expects back what it sent, so the mirror is compared against the undelimited text", () => {
+    const sent = `<span style="white-space:pre">${MEET_DETAILS}</span>`;
+
     expect(createEditableEventContentHash(normalizeGoogleEvent(createEvent())))
-      .toBe(createEditableEventContentHash(createEvent({ description: MEET_DETAILS })));
+      .toBe(createEditableEventContentHash(createEvent({ description: sent })));
   });
 
   it("leaves a description that carries no markup and no delimiter alone", () => {
@@ -76,7 +125,7 @@ describe("the Google destination write boundary", () => {
 
 describe("the CalDAV destination write boundary", () => {
   it("writes DESCRIPTION as the iCalendar TEXT that RFC 5545 3.8.1.5 defines", () => {
-    const ics = eventToICalString(createEvent(), "uid-1@keeper.sh");
+    const ics = eventToICalString(normalizeCalDAVEvent(createEvent()), "uid-1@keeper.sh");
 
     expect(getPropertyValue(ics, "DESCRIPTION:")).toBe(MEET_BLOCK.replaceAll("\n", String.raw`\n`));
     expect(ics).not.toContain("white-space:pre");
@@ -88,11 +137,27 @@ describe("the CalDAV destination write boundary", () => {
   });
 
   it("does not render an Outlook body's markup as literal text to the reader", () => {
-    const body = "<html><head><style>p.MsoNormal {margin:0in}</style></head>"
-      + "<body><p class=\"MsoNormal\">Quarterly planning</p></body></html>";
-    const ics = eventToICalString(createEvent({ description: body }), "uid-1@keeper.sh");
+    const ics = eventToICalString(
+      normalizeCalDAVEvent(createEvent({ description: OUTLOOK_BODY })),
+      "uid-1@keeper.sh",
+    );
 
     expect(getPropertyValue(ics, "DESCRIPTION:")).toBe("Quarterly planning");
+  });
+
+  /*
+   * The projection is a render, so applying it to its own output can peel a
+   * layer the author escaped. The comparison and the write must therefore share
+   * one application: a second one at the serializer would store text the
+   * comparison never holds and replace the mirror on every run.
+   */
+  it("reads back exactly what the comparison holds, for every description shape", () => {
+    for (const description of DESCRIPTIONS) {
+      const normalized = normalizeCalDAVEvent(createEvent({ description }));
+      const parsed = parseICalToRemoteEvent(eventToICalString(normalized, "uid-1@keeper.sh"));
+
+      expect(parsed?.description).toBe(normalized.description);
+    }
   });
 });
 

@@ -67,6 +67,28 @@ describe("toPlainTextDescription", () => {
       .toBe("https://meet.google.com/abc");
   });
 
+  it("keeps a link once when its label is the destination without scheme or trailing slash", () => {
+    expect(project("<p><a href=\"https://meet.google.com/abc\">meet.google.com/abc</a></p>"))
+      .toBe("meet.google.com/abc");
+    expect(project("<p><a href=\"https://x.test/\">https://x.test</a></p>")).toBe("https://x.test");
+  });
+
+  it("reads a list as a line each and a table row as its cells", () => {
+    const value = "<p>Agenda</p><ul><li>Budget</li><li>Hiring</li></ul>"
+      + "<table><tr><td>Q3</td><td>Done</td></tr></table>";
+
+    expect(project(value)).toBe("Agenda\n\nBudget\nHiring\n\nQ3  Done");
+  });
+
+  it("keeps every word an author escaped, including the tags they wrote about", () => {
+    expect(project("<p>Set &lt;timeout&gt;30&lt;/timeout&gt; in the config</p>"))
+      .toBe("Set <timeout>30</timeout> in the config");
+    expect(project(
+      "<p>&lt;html&gt;&lt;head&gt;&lt;title&gt;T&lt;/title&gt;&lt;/head&gt;"
+      + "&lt;body&gt;B&lt;/body&gt;&lt;/html&gt;</p>",
+    )).toBe("<html><head><title>T</title></head><body>B</body></html>");
+  });
+
   it("keeps an unterminated tag's text instead of swallowing the rest of the value", () => {
     expect(project("Grade a<b or better</blockquote>")).toContain("or better");
     expect(project("<p>Agenda</p><div class=\"x\">Bring the deck")).toContain("Bring the deck");
@@ -118,23 +140,8 @@ describe("toPlainTextDescription", () => {
     expect(performance.now() - start).toBeLessThan(2000);
   });
 
-  it("is a fixed point", () => {
-    const values = [
-      SPAN_WRAPPED_MEET_BLOCK,
-      OUTLOOK_BODY,
-      "<p>a &lt;br&gt; b</p>",
-      "&amp;amp;amp;",
-      "Compare <div with <span> tags",
-      "<p>Agenda</p><p>Bring the deck<br>and a laptop</p>",
-      "<a href=\"https://x.test/j?a=1&amp;b=2\">Join</a>",
-      "<p>&lt;p&gt;&amp;lt;br&amp;gt;&lt;/p&gt;</p>",
-    ];
-
-    for (const value of values) {
-      const once = project(value);
-
-      expect(project(once)).toBe(once);
-    }
+  it("uncovers one escaped layer and stops, rather than peeling to the last", () => {
+    expect(project("<p>&lt;p&gt;&amp;lt;br&amp;gt;&lt;/p&gt;</p>")).toBe("<p>&lt;br&gt;</p>");
   });
 
   it("returns an absent description as it found it", () => {
