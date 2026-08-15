@@ -141,10 +141,7 @@ describe("calendar insert call sites", () => {
     const glob = new Bun.Glob("**/*.ts");
 
     for await (const relativePath of glob.scan({ cwd: API_SOURCE_ROOT })) {
-      if (
-        relativePath === "utils/source-calendar-insert.ts"
-        || relativePath === "utils/destinations.ts"
-      ) {
+      if (relativePath === "utils/source-calendar-insert.ts") {
         continue;
       }
       const content = await readSource(relativePath);
@@ -154,14 +151,6 @@ describe("calendar insert call sites", () => {
     }
 
     expect(offenders).toEqual([]);
-  });
-
-  it("leaves destination calendar creation outside the feed auto-join", async () => {
-    const destinations = await readSource("utils/destinations.ts");
-
-    expect(destinations).not.toContain("insertSourceCalendars");
-    expect(destinations).not.toContain("applySourceSyncDefaults");
-    expect(destinations).not.toContain("icalFeedCalendarsTable");
   });
 
   it("makes the membership insert re-runnable", async () => {
