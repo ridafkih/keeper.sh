@@ -6,7 +6,6 @@
     "**/*.test.tsx",
     "tests/**/*",
     "scripts/**/*",
-    ".claude/skills/**/*",
     "services/cron/src/jobs/**/*",
     "applications/web/src/generated/**/*"
   ],
