@@ -17,7 +17,7 @@ export const HOW_IT_WORKS_STEPS: HowItWorksStep[] = [
   },
   {
     title: "Keeper.sh takes it from there",
-    body: "Your calendars are read every minute on both plans. A change reaches your other calendars within 30 minutes on Free, and within a minute on Pro.",
+    body: "On Pro, Google and Outlook tell Keeper.sh the moment something changes, so the copy lands within seconds. Free checks every minute and copies within 30.",
     note: "Calendars you connect with a pasted link are read in full each time.",
   },
 ];

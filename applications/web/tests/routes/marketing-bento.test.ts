@@ -9,24 +9,34 @@ import { describe, expect, it } from "vitest";
  * therefore renders as a visible blank square rather than as empty space, so the
  * cards have to add up to a whole number of rows at that width.
  */
-const HOMEPAGE = resolve(
-  fileURLToPath(import.meta.url),
-  "../../../src/routes/(marketing)/index.tsx",
-);
+const PAGES = [
+  {
+    name: "homepage",
+    path: "../../../src/routes/(marketing)/index.tsx",
+    from: "const MARKETING_FEATURES",
+    to: "type FaqItem",
+    quote: "'",
+  },
+  {
+    name: "features page",
+    path: "../../../src/routes/(marketing)/features.tsx",
+    from: "const FEATURE_CARDS",
+    to: "const MCP_READ_TOOLS",
+    quote: '"',
+  },
+] as const;
 
-function gridClassNames(): string[] {
-  const source = readFileSync(HOMEPAGE, "utf-8");
-  const block = source.slice(
-    source.indexOf("const MARKETING_FEATURES"),
-    source.indexOf("type FaqItem"),
-  );
+function gridClassNames(page: (typeof PAGES)[number]): string[] {
+  const source = readFileSync(resolve(fileURLToPath(import.meta.url), page.path), "utf-8");
+  const block = source.slice(source.indexOf(page.from), source.indexOf(page.to));
+  const pattern = new RegExp(`gridClassName: ${page.quote}([^${page.quote}]+)${page.quote}`, "g");
 
-  return [...block.matchAll(/gridClassName: '([^']+)'/g)].map(([, value]) => value!);
+  return [...block.matchAll(pattern)].map(([, value]) => value!);
 }
 
-describe("the homepage bento grid", () => {
+describe.each(PAGES)("the $name bento grid", (page) => {
   it("fills every row of the two-column layout, leaving no blank cell", () => {
-    const classNames = gridClassNames();
+    const classNames = gridClassNames(page);
     expect(classNames.length).toBeGreaterThan(0);
 
     const columnsUsed = classNames.reduce(
@@ -40,7 +50,7 @@ describe("the homepage bento grid", () => {
   it("fills every row of the ten-column layout", () => {
     const spansByRow = new Map<string, number>();
 
-    for (const className of gridClassNames()) {
+    for (const className of gridClassNames(page)) {
       const row = /lg:row-start-(\d+)/.exec(className)?.[1];
       const span = /lg:col-span-(\d+)/.exec(className)?.[1];
       if (!row || !span) continue;

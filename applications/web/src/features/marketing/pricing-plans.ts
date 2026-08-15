@@ -48,12 +48,15 @@ export const PRICING_PLANS: PricingPlan[] = [
 ];
 
 export const PRICING_FEATURES: PricingFeature[] = [
-  { label: 'Reading Your Calendars', free: 'Every 1 minute', pro: 'Every 1 minute' },
+  { label: 'Reading Your Calendars', free: 'Every 1 minute', pro: 'As it happens' },
   {
     label: 'Updating Your Calendars',
     free: 'Every 30 minutes',
-    pro: 'Every 1 minute',
-    highlight: { free: 'Updates every 30 minutes', pro: 'Updates every minute' },
+    pro: 'Within seconds',
+    highlight: {
+      free: 'Updates every 30 minutes',
+      pro: 'Google and Outlook update within seconds',
+    },
   },
   {
     label: 'Linked Accounts',

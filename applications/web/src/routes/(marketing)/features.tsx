@@ -46,48 +46,54 @@ type FeatureCard = {
 
 const FEATURE_CARDS: FeatureCard[] = [
   {
+    title: "Changes land within seconds, not on a timer",
+    body: "Google and Microsoft tell Keeper.sh the moment an event changes, so the copy is written as it happens rather than at the next check. Included with a paid plan.",
+    gridClassName: "sm:col-span-2 lg:col-start-1 lg:col-span-10 lg:row-start-1",
+    illustration: <MarketingIllustrationSync />,
+  },
+  {
     title: "Works with the calendars you already use",
     body: "Google, Outlook, iCloud and Fastmail sign in directly. Anything else connects with a link you paste in, or over CalDAV.",
-    gridClassName: "lg:col-start-1 lg:col-span-4 lg:row-start-1",
+    gridClassName: "lg:col-start-1 lg:col-span-4 lg:row-start-2",
     illustration: <MarketingIllustrationProviders />,
   },
   {
     title: "See your whole week in one place",
     body: "Every calendar you connect also lands in a single link. Subscribe to it from any calendar app.",
-    gridClassName: "lg:col-start-5 lg:col-span-6 lg:row-start-1",
+    gridClassName: "lg:col-start-5 lg:col-span-6 lg:row-start-2",
     illustration: <MarketingIllustrationSync />,
   },
   {
     title: "Keep your event details off the link you share",
     body: "Every event on the link reads “Busy”, with no title, description or location. On Pro you choose which details it keeps.",
-    gridClassName: "lg:col-start-1 lg:col-span-6 lg:row-start-2",
+    gridClassName: "lg:col-start-1 lg:col-span-6 lg:row-start-3",
   },
   {
     title: "Pick which calendar your events land in",
     body: "You choose where each calendar's events are copied to. Copying runs one way, so set up both directions if you want the two to match.",
-    gridClassName: "lg:col-start-7 lg:col-span-4 lg:row-start-2",
+    gridClassName: "lg:col-start-7 lg:col-span-4 lg:row-start-3",
     illustration: <MarketingIllustrationSetup />,
   },
   {
     title: "Move an event and the copy moves too",
     body: "Delete it and the copy goes with it. Your other calendar gets corrected instead of collecting duplicates.",
-    gridClassName: "lg:col-start-1 lg:col-span-5 lg:row-start-3",
+    gridClassName: "lg:col-start-1 lg:col-span-5 lg:row-start-4",
   },
   {
     title: "Anyone can read the code",
     body: "Check exactly what Keeper.sh sends to your calendars, or run it on your own server. It is open source under AGPL-3.0, with Docker images ready to deploy.",
-    gridClassName: "lg:col-start-6 lg:col-span-5 lg:row-start-3",
+    gridClassName: "lg:col-start-6 lg:col-span-5 lg:row-start-4",
     illustration: <MarketingIllustrationContributors />,
   },
   {
     title: "Let AI agents view and manage your calendar",
     body: "Connect Claude, Cursor or any MCP client and let it check your week, book events and reschedule. Revoke it whenever you like.",
-    gridClassName: "lg:col-start-1 lg:col-span-6 lg:row-start-4",
+    gridClassName: "lg:col-start-1 lg:col-span-6 lg:row-start-5",
   },
   {
     title: "Build your own tools on top",
     body: "A REST API under /api/v1, with a token you create under Settings → API Tokens. Free allows 25 calls a day; Pro is uncapped.",
-    gridClassName: "lg:col-start-7 lg:col-span-4 lg:row-start-4",
+    gridClassName: "lg:col-start-7 lg:col-span-4 lg:row-start-5",
   },
 ];
 

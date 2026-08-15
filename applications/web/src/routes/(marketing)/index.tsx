@@ -156,7 +156,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'How often do calendars update?',
     answer:
-      'Keeper.sh reads every calendar every minute. Your changes reach the other calendars every 30 minutes on Free, and every minute on Pro.',
+      'On Pro, Google and Outlook notify Keeper.sh as changes happen, so copies land within seconds. Free checks every minute and copies every 30. iCloud, Fastmail and other CalDAV calendars are always checked on a timer, because Apple offers no way to be told.',
   },
   {
     question: 'Can I run Keeper.sh myself?',

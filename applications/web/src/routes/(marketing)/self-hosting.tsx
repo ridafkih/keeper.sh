@@ -46,7 +46,7 @@ type SelfHostingCard = {
 const SELF_HOSTING_CARDS: SelfHostingCard[] = [
   {
     title: "Every paid sync feature, with no plan limits",
-    body: "Every account on your own instance gets every paid feature: unlimited accounts and connections, updates every minute, event filters, and uncapped API and MCP calls.",
+    body: "Every account on your own instance gets every paid feature: unlimited accounts and connections, event filters, and uncapped API and MCP calls. Realtime updates from Google and Outlook come too, once you give the instance a public address those providers can reach.",
     gridClassName: "lg:col-start-1 lg:col-span-6 lg:row-start-1",
     illustration: <MarketingIllustrationSync />,
   },
