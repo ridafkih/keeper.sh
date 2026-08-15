@@ -581,6 +581,702 @@ export const changelogReleases: ChangelogRelease[] = [
       },
     ],
   },
+  {
+    date: "2026-04-09",
+    build: "Builds 2.3 – 2.9.34",
+    features: [
+      {
+        slug: "2026-04-09-assistant-connector",
+        title: "Connect Keeper.sh to Claude and other AI assistants",
+        summary:
+          "Keeper.sh can now be added as a connector in AI assistants such as Claude.",
+        body: [
+          "Once connected, the assistant can see which calendars you have linked, look up your events over a date range in a timezone you specify, and count how many events fall in that range.",
+          "At launch this access was read-only: the assistant could look, but not change anything.",
+        ],
+        link: { label: "everything Keeper.sh does", to: "/features" },
+      },
+      {
+        slug: "2026-04-09-assistant-actions",
+        title: "Assistants can now book, change and reply to events",
+        summary: "Assistant access grew past looking things up.",
+        body: [
+          "An assistant can create an event, edit one, delete one, see invitations waiting for a reply, RSVP to them, list your connected accounts, and fetch your combined calendar feed link.",
+          "The same abilities are available directly as an API. A new API tokens page under Settings lets you create and revoke your own tokens. Free accounts include 25 calls a day, and Pro includes unlimited API and assistant access.",
+        ],
+        link: { label: "what Pro includes", to: "/pricing" },
+      },
+    ],
+    added: [
+      {
+        id: "2026-04-09-cookie-consent",
+        area: "Site",
+        summary:
+          "Visitors in the EU, EEA and UK are asked whether Keeper.sh may use analytics and advertising cookies, and the choice is remembered.",
+      },
+    ],
+    improved: [
+      {
+        id: "2026-04-09-assistant-session-length",
+        area: "Assistants",
+        summary: "A connected assistant stays signed in considerably longer before it asks you to connect again.",
+      },
+      {
+        id: "2026-04-09-destination-retries",
+        area: "Syncing",
+        summary:
+          "A calendar you sync into that hits a passing error keeps retrying on the normal schedule instead of being switched off.",
+      },
+    ],
+    fixed: [
+      {
+        id: "2026-04-09-claude-desktop-connect",
+        area: "Assistants",
+        summary: "Connecting Keeper.sh from Claude Desktop goes through, instead of failing before the approval screen.",
+      },
+      {
+        id: "2026-04-09-event-thrash",
+        area: "Syncing",
+        summary: "Events no longer appear on your other calendars, vanish on the next sync, and come back again.",
+      },
+      {
+        id: "2026-04-09-duplicate-copies",
+        area: "Syncing",
+        summary: "Copies of the same event no longer pile up, one more added on every sync.",
+      },
+      {
+        id: "2026-04-09-windows-timezones",
+        area: "Outlook",
+        summary:
+          "Calendars that label times the Microsoft way, such as Eastern Standard Time, now arrive at the right hour.",
+      },
+      {
+        id: "2026-04-09-false-reconnect-prompts",
+        area: "Connected accounts",
+        summary: "An ordinary hiccup no longer flags a working account as needing to be reconnected.",
+      },
+      {
+        id: "2026-04-09-dead-calendars",
+        area: "Syncing",
+        summary: "A calendar deleted at your provider is switched off instead of failing on every run.",
+      },
+      {
+        id: "2026-04-09-google-error-bodies",
+        area: "Google Calendar",
+        summary: "An empty or cut-short error from Google no longer stops the whole sync.",
+      },
+      {
+        id: "2026-04-09-calendar-list-fallback",
+        area: "Connected accounts",
+        summary: "Your calendar list still loads when a provider declines to hand it over.",
+      },
+      {
+        id: "2026-04-09-checkout-window",
+        area: "Billing",
+        summary: "The checkout window on the upgrade page opens instead of coming up blank.",
+      },
+      {
+        id: "2026-04-09-microsoft-365-connect",
+        area: "Outlook",
+        summary:
+          "Starting a Microsoft 365 connection takes you to the Microsoft sign-in page instead of failing immediately.",
+      },
+      {
+        id: "2026-04-09-caldav-changed-occurrence",
+        area: "iCloud",
+        summary: "An occurrence of a repeating meeting moved or retitled on a CalDAV calendar now comes across.",
+      },
+      {
+        id: "2026-04-09-caldav-expand",
+        area: "iCloud",
+        summary: "CalDAV servers that return unusable data for repeating events, Lark among them, now sync.",
+      },
+      {
+        id: "2026-04-09-google-multiple-destinations",
+        area: "Google Calendar",
+        summary: "One event copied into two Google calendars is no longer treated as a duplicate of itself.",
+      },
+    ],
+  },
+  {
+    date: "2026-03-11",
+    build: "Builds 2.1.8 – 2.2.20",
+    features: [
+      {
+        slug: "2026-03-11-event-types",
+        title: "All-day events, out of office and working location",
+        summary:
+          "All-day events now stay all-day when copied to another calendar, instead of turning into a timed block.",
+        body: [
+          "Events marked free stay free, across Google, Outlook and CalDAV.",
+          "Out-of-office and working-elsewhere events from Google and Outlook are copied as the matching kind of entry, rather than a plain busy block.",
+        ],
+        link: { label: "everything Keeper.sh does", to: "/features" },
+      },
+    ],
+    added: [],
+    improved: [
+      {
+        id: "2026-03-11-settings-plan",
+        area: "Billing",
+        summary: "Your plan shows on the settings page as soon as it loads, instead of filling in a moment later.",
+      },
+      {
+        id: "2026-03-11-www-redirect",
+        area: "Site",
+        summary: "keeper.sh without the www prefix redirects to the www address, so every link lands in the same place.",
+      },
+    ],
+    fixed: [
+      {
+        id: "2026-03-11-page-scrolling",
+        area: "Site",
+        summary:
+          "Marketing pages, the dashboard and long settings screens scroll again, and size themselves to the visible area on mobile.",
+      },
+      {
+        id: "2026-03-11-touch-tooltips",
+        area: "Site",
+        summary: "Hover hints no longer stick to the screen on phones and tablets.",
+      },
+      {
+        id: "2026-03-11-passkey-sign-in",
+        area: "Sign-in",
+        summary:
+          "Passkey sign-in is only offered where it can complete, says why it failed, and leaves the password field in place for autofill.",
+      },
+      {
+        id: "2026-03-11-header-flicker",
+        area: "Site",
+        summary: "A freshly loaded page shows the signed-in menu straight away, rather than the signed-out links first.",
+      },
+      {
+        id: "2026-03-11-caldav-duplicates",
+        area: "iCloud",
+        summary: "Events written to a CalDAV calendar are matched to the copies already there instead of written twice.",
+      },
+      {
+        id: "2026-03-11-calendar-names",
+        area: "Google Calendar",
+        summary:
+          "A connected calendar keeps the name it had when you connected it, instead of being rewritten on every sync.",
+      },
+      {
+        id: "2026-03-11-stale-calendar-settings",
+        area: "Dashboard",
+        summary:
+          "Moving between calendars refills the details and destination list, instead of leaving the last one on screen.",
+      },
+      {
+        id: "2026-03-11-caldav-original-name",
+        area: "iCloud",
+        summary: "The name a CalDAV calendar carries on its server is now shown in the calendar details.",
+      },
+      {
+        id: "2026-03-11-caldav-reauth",
+        area: "iCloud",
+        summary:
+          "A CalDAV account whose credentials are refused is marked as needing to be reconnected, instead of retrying forever.",
+      },
+      {
+        id: "2026-03-11-write-only-calendars",
+        area: "Syncing",
+        summary: "A calendar you only write to is no longer read from as well.",
+      },
+      {
+        id: "2026-03-11-ics-refresh-job",
+        area: "Subscribed calendars",
+        summary:
+          "The refresh handles genuine subscription links only, instead of reading connected accounts as calendar files.",
+      },
+      {
+        id: "2026-03-11-provider-timeouts",
+        area: "Syncing",
+        summary: "A request Google or Microsoft never answers is given up on after fifteen seconds, so the sync moves on.",
+      },
+      {
+        id: "2026-03-11-exclude-toggles",
+        area: "Syncing",
+        summary:
+          "The exclude toggles for all-day, focus time, out of office and working location apply to every calendar you sync into.",
+      },
+      {
+        id: "2026-03-11-event-metadata-backfill",
+        area: "Syncing",
+        summary:
+          "Events stored before all-day and event-type support arrived are matched to their incoming version, not deleted and recreated.",
+      },
+      {
+        id: "2026-03-11-disabled-menu-rows",
+        area: "Dashboard",
+        summary: "A row inside a switched-off section now looks switched off.",
+      },
+      {
+        id: "2026-03-11-sitemap-serving",
+        area: "Site",
+        summary: "The sitemap, llms.txt and llms-full.txt are published with the site and reachable again.",
+      },
+    ],
+  },
+  {
+    date: "2026-03-10",
+    build: "Builds 2.0 – 2.1.7",
+    features: [
+      {
+        slug: "2026-03-10-new-website",
+        title: "A new Keeper.sh website",
+        summary: "The marketing site has been rebuilt from scratch.",
+        body: [
+          "A new landing page with illustrated explanations of how syncing works, a How it works walkthrough, an FAQ, refreshed pricing, and privacy and terms pages.",
+          "Pages are rendered on the server, so they load quickly and read correctly when shared as links.",
+        ],
+        link: { label: "everything Keeper.sh does", to: "/features" },
+      },
+      {
+        slug: "2026-03-10-rebuilt-dashboard",
+        title: "A rebuilt dashboard",
+        summary: "The whole signed-in experience is new.",
+        body: [
+          "Accounts and their calendars are browsed together, and every calendar has its own page where you set what it does.",
+          "The old dashboard has been retired.",
+        ],
+        link: { label: "everything Keeper.sh does", to: "/features" },
+      },
+      {
+        slug: "2026-03-10-custom-event-names",
+        title: "Name your copied events however you like",
+        summary: "Copied events can carry a name you write yourself.",
+        body: [
+          "Write {{event_name}} and {{calendar_name}} where you want them, and Keeper.sh fills them in for each event.",
+          "The editor highlights the placeholders as you type, and shows a live preview.",
+        ],
+        link: { label: "everything Keeper.sh does", to: "/features" },
+      },
+    ],
+    added: [
+      {
+        id: "2026-03-10-dark-mode",
+        area: "Site",
+        summary: "Keeper.sh follows your system's light or dark appearance, across the website and the dashboard.",
+      },
+      {
+        id: "2026-03-10-passkeys",
+        area: "Sign-in",
+        summary:
+          "A saved passkey is offered as soon as you focus the email field, and passkeys can be added and removed from settings.",
+      },
+      {
+        id: "2026-03-10-forgot-password",
+        area: "Sign-in",
+        summary: "A Forgot password link emails you a reset link, and a screen for choosing a new password.",
+      },
+      {
+        id: "2026-03-10-settings-page",
+        area: "Account",
+        summary:
+          "Settings brings your account controls into one place: change your password, manage your passkeys, and delete your account.",
+      },
+      {
+        id: "2026-03-10-event-graph",
+        area: "Dashboard",
+        summary:
+          "The dashboard opens with a bar graph of your event activity over time, with a running total and a count for the day you hover.",
+      },
+      {
+        id: "2026-03-10-event-detail-sync",
+        area: "Syncing",
+        summary: "On Pro, you decide per calendar whether an event's title, description and location travel with it.",
+      },
+      {
+        id: "2026-03-10-feed-customisation",
+        area: "Calendar feeds",
+        summary:
+          "You pick which calendars appear in your Keeper.sh link, and Pro adds control over names, descriptions, locations and all-day events.",
+      },
+      {
+        id: "2026-03-10-feed-credentials",
+        area: "Subscribed calendars",
+        summary: "A calendar feed behind a username and password can be added by ticking a box and supplying them.",
+      },
+      {
+        id: "2026-03-10-backfill-week",
+        area: "Syncing",
+        summary: "Syncing looks back seven days as well as forward, so events from earlier in the week come across.",
+      },
+      {
+        id: "2026-03-10-post-connect-flow",
+        area: "Dashboard",
+        summary: "Connecting an account walks you straight into choosing which calendars to sync, and where their events go.",
+      },
+      {
+        id: "2026-03-10-sync-indicator",
+        area: "Dashboard",
+        summary:
+          "A live progress ring shows how many events have been processed, and when your calendars last finished syncing.",
+      },
+      {
+        id: "2026-03-10-plan-limits",
+        area: "Billing",
+        summary:
+          "Free covers two linked accounts, three sync connections and the aggregated calendar link; Pro lifts the limits and syncs every minute.",
+      },
+      {
+        id: "2026-03-10-manage-plan",
+        area: "Billing",
+        summary:
+          "The upgrade page has a monthly and yearly toggle, and Pro subscribers get a Manage plan option that opens their billing portal.",
+      },
+    ],
+    improved: [
+      {
+        id: "2026-03-10-per-calendar-settings",
+        area: "Dashboard",
+        summary:
+          "Each calendar has its own settings page, where you choose which calendars it sends events to and, on Pro, what is carried across.",
+      },
+    ],
+    fixed: [
+      {
+        id: "2026-03-10-recurring-events",
+        area: "Syncing",
+        summary:
+          "A repeating event whose first occurrence has passed is kept as long as it still has occurrences ahead, and its skipped dates are respected.",
+      },
+      {
+        id: "2026-03-10-event-timezones",
+        area: "Syncing",
+        summary: "An event keeps the timezone it was created in, so it no longer shifts hours on the way to another calendar.",
+      },
+      {
+        id: "2026-03-10-ics-all-day",
+        area: "Subscribed calendars",
+        summary: "All-day events published without an end time, holiday calendars among them, now come across.",
+      },
+      {
+        id: "2026-03-10-past-events",
+        area: "Syncing",
+        summary: "Copies of events that have already started are left alone, instead of being deleted.",
+      },
+      {
+        id: "2026-03-10-private-defaults",
+        area: "Syncing",
+        summary:
+          "A newly connected calendar copies only the calendar's name onto the events it sends on; titles, descriptions and locations stay behind.",
+      },
+      {
+        id: "2026-03-10-sync-without-mappings",
+        area: "Syncing",
+        summary: "A freshly connected calendar is picked up by the scheduled sync as soon as it can receive events.",
+      },
+      {
+        id: "2026-03-10-stuck-indicator",
+        area: "Dashboard",
+        summary: "The sync indicator returns to idle when the work is done, instead of claiming a sync is still running.",
+      },
+      {
+        id: "2026-03-10-destination-toggles",
+        area: "Dashboard",
+        summary: "Toggling destination calendars in quick succession applies your changes in order, instead of losing one.",
+      },
+      {
+        id: "2026-03-10-duplicate-accounts",
+        area: "Connected accounts",
+        summary: "Two overlapping attempts to connect the same account leave you with one account, not two.",
+      },
+      {
+        id: "2026-03-10-account-deletion",
+        area: "Account",
+        summary: "Deleting your account finishes cleanly when your billing record has already been removed.",
+      },
+      {
+        id: "2026-03-10-passkey-support-check",
+        area: "Sign-in",
+        summary: "The sign-in page checks for passkey support first, and falls back to email and password.",
+      },
+      {
+        id: "2026-03-10-graph-drag",
+        area: "Dashboard",
+        summary: "Dragging along the event graph on a phone reads daily counts instead of scrolling the page.",
+      },
+      {
+        id: "2026-03-10-auth-state",
+        area: "Site",
+        summary:
+          "The header follows your actual session, and the sign-in page sends you to your dashboard if you are already signed in.",
+      },
+    ],
+  },
+  {
+    date: "2026-01-10",
+    build: "Builds 1.7.1 – 1.11.5",
+    features: [
+      {
+        slug: "2026-01-10-google-source",
+        title: "Connect Google Calendar as a source",
+        summary:
+          "You can connect a Google account directly and pick which of its calendars Keeper.sh reads from, instead of finding and pasting a secret iCal link.",
+        body: [
+          "Connected calendars are pulled in on a schedule, and their busy time is copied to your destination calendars like any other source.",
+          "Events Keeper.sh itself created are skipped, so a calendar used as both a source and a destination does not feed its own events back in.",
+        ],
+        link: { label: "everything Keeper.sh does", to: "/features" },
+      },
+      {
+        slug: "2026-01-10-outlook-source",
+        title: "Connect Outlook as a source",
+        summary: "Outlook joins Google Calendar as a source you can connect with your account.",
+        body: [
+          "Sign in, choose the calendar you want read, and Keeper.sh keeps its busy time flowing to your destinations.",
+          "Outlook was previously only available as a destination.",
+        ],
+        link: { label: "everything Keeper.sh does", to: "/features" },
+      },
+      {
+        slug: "2026-01-10-caldav-source",
+        title: "Connect iCloud, Fastmail, or any CalDAV calendar as a source",
+        summary:
+          "Alongside Google and Outlook, you can add an iCloud, Fastmail, or generic CalDAV calendar as a source by entering your address and an app password.",
+        body: [
+          "The connect dialog tells you where to generate that password for iCloud and Fastmail.",
+          "Once connected, the calendar is synced on a schedule like any other source.",
+        ],
+        link: { label: "the calendars Keeper.sh works with", to: "/features" },
+      },
+    ],
+    added: [
+      {
+        id: "2026-01-10-google-event-filters",
+        area: "Google Calendar",
+        summary:
+          "When you add a Google source you can uncheck Focus Time, Out of Office and Working Location, so those blocks stay out of your other calendars.",
+      },
+      {
+        id: "2026-01-10-cookie-consent",
+        area: "Site",
+        summary:
+          "Visitors in the EU, EEA and UK are asked whether Keeper.sh may use cookies for analytics, with a link to the privacy policy.",
+      },
+    ],
+    improved: [
+      {
+        id: "2026-01-10-immediate-source-sync",
+        area: "Syncing",
+        summary:
+          "Adding a Google or Outlook calendar as a source starts a sync straight away, rather than waiting for the next scheduled run.",
+      },
+    ],
+    fixed: [
+      {
+        id: "2026-01-10-reauth-prompt",
+        area: "Connected accounts",
+        summary:
+          "A Google or Outlook account that stops accepting Keeper.sh is marked as needing to be reconnected, instead of failing quietly.",
+      },
+      {
+        id: "2026-01-10-orphan-events",
+        area: "Syncing",
+        summary:
+          "Events Keeper.sh left on a calendar that no longer match anything in your sources are removed, not just the ones in the past.",
+      },
+      {
+        id: "2026-01-10-outlook-no-description",
+        area: "Outlook",
+        summary: "An event with no description no longer stops Outlook syncing in either direction.",
+      },
+      {
+        id: "2026-01-10-failed-sync-progress",
+        area: "Dashboard",
+        summary: "A sync that runs into a problem ends the run, instead of showing progress that never finishes.",
+      },
+      {
+        id: "2026-01-10-delete-without-password",
+        area: "Account",
+        summary: "Deleting your account only asks for a password when your account actually has one.",
+      },
+    ],
+  },
+  {
+    date: "2025-12-30",
+    build: "Builds 1.1.4 – 1.7",
+    features: [
+      {
+        slug: "2025-12-30-add-calendar-link",
+        title: "Add a calendar by pasting its link",
+        summary: "Give a calendar a name, paste its iCal link, and Keeper.sh starts pulling in its events.",
+        body: [
+          "Added calendars are listed on the integrations page, and can be removed again at any time.",
+          "Keeper.sh refetches them on a schedule, so what it holds stays in step with the calendar you pointed it at.",
+        ],
+        link: { label: "everything Keeper.sh does", to: "/features" },
+      },
+      {
+        slug: "2025-12-30-google-calendar-destination",
+        title: "Push your busy time into Google Calendar",
+        summary: "Connect a Google account and Keeper.sh writes your combined busy time straight into that calendar.",
+        body: [
+          "Events Keeper.sh created are tracked, so as your sources change they are updated or removed at the other end.",
+          "Your Google calendar stays an accurate picture, without you doing anything.",
+        ],
+        link: { label: "everything Keeper.sh does", to: "/features" },
+      },
+      {
+        slug: "2025-12-30-one-calendar-link",
+        title: "One calendar link for everything",
+        summary: "Keeper.sh gives you a single iCal link that combines every calendar you have added.",
+        body: [
+          "Copy it from the integrations page, and subscribe to it anywhere that accepts a calendar URL.",
+          "You get all of your busy time in one feed, instead of subscribing to each source separately.",
+        ],
+        link: { label: "everything Keeper.sh does", to: "/features" },
+      },
+    ],
+    added: [
+      {
+        id: "2025-12-30-accounts",
+        area: "Account",
+        summary:
+          "You can sign up with an email address and password, continue with Google, or sign in with a passkey, and reset a forgotten password.",
+      },
+      {
+        id: "2025-12-30-agenda-view",
+        area: "Dashboard",
+        summary:
+          "Your events read as a day-by-day agenda rather than a grid, with a colour dot per calendar and further days loading as you scroll.",
+      },
+      {
+        id: "2025-12-30-outlook-destination",
+        area: "Outlook",
+        summary:
+          "Outlook joins Google Calendar as a place to write your busy time to, for both work and personal Microsoft accounts.",
+      },
+      {
+        id: "2025-12-30-caldav-destination",
+        area: "iCloud",
+        summary: "You can send your busy time to iCloud, Fastmail, or any other calendar that speaks CalDAV.",
+      },
+      {
+        id: "2025-12-30-live-sync-status",
+        area: "Dashboard",
+        summary: "Each connected calendar shows what Keeper.sh is doing right now, and updates itself as the work happens.",
+      },
+      {
+        id: "2025-12-30-plans",
+        area: "Billing",
+        summary:
+          "A Free plan covers two calendar sources, one destination and the combined iCal feed; Pro lifts those limits and syncs every minute.",
+      },
+      {
+        id: "2025-12-30-billing-history",
+        area: "Billing",
+        summary: "The billing page lists your past purchases, so you can see what you were charged and when.",
+      },
+      {
+        id: "2025-12-30-source-destination-mapping",
+        area: "Syncing",
+        summary:
+          "You can pick, per destination, which of your calendar sources feed it, so work and personal calendars stay apart.",
+      },
+      {
+        id: "2025-12-30-reauth-badge",
+        area: "Connected accounts",
+        summary:
+          "A connection that needs reconnecting is badged as such, with one click to fix it, and does not count against the Free plan limit.",
+      },
+      {
+        id: "2025-12-30-feed-credentials",
+        area: "Subscribed calendars",
+        summary: "A calendar link that needs a username and password asks you for them, and uses them when fetching.",
+      },
+      {
+        id: "2025-12-30-self-hosting",
+        area: "Self-hosting",
+        summary:
+          "Keeper.sh can be self-hosted, with published container images, a documented compose setup, and an all-in-one image.",
+      },
+    ],
+    improved: [
+      {
+        id: "2025-12-30-multiple-accounts",
+        area: "Connected accounts",
+        summary: "You can connect more than one account per provider, each with its own status and address.",
+      },
+      {
+        id: "2025-12-30-pricing",
+        area: "Billing",
+        summary: "Pro dropped from $8 a month to $5, and from $48 a year to $42.",
+      },
+    ],
+    fixed: [
+      {
+        id: "2025-12-30-outlook-to-outlook",
+        area: "Outlook",
+        summary: "Pushing busy time into an Outlook calendar that is also read as a source no longer piles up duplicates.",
+      },
+      {
+        id: "2025-12-30-repush-deleted",
+        area: "Syncing",
+        summary:
+          "An event deleted at the calendar it was pushed to is written again on the next sync, rather than leaving a hole.",
+      },
+      {
+        id: "2025-12-30-google-collisions",
+        area: "Google Calendar",
+        summary: "Two busy periods sharing a slot no longer overwrite each other, and removed events are removed from Google.",
+      },
+      {
+        id: "2025-12-30-sourceless-accounts",
+        area: "Syncing",
+        summary:
+          "Someone with a connected destination but no sources is included in every sync run, so stale busy time is cleared.",
+      },
+      {
+        id: "2025-12-30-pro-cadence",
+        area: "Syncing",
+        summary: "The Pro sync job runs at the intended once-a-minute interval.",
+      },
+      {
+        id: "2025-12-30-status-flicker",
+        area: "Dashboard",
+        summary: "The sync status no longer flashes back to idle mid-sync, and a genuine count of zero shows as zero.",
+      },
+      {
+        id: "2025-12-30-initial-status",
+        area: "Dashboard",
+        summary: "A calendar you just connected has a sync status straight away.",
+      },
+      {
+        id: "2025-12-30-passkey-prompt",
+        area: "Sign-in",
+        summary: "Passkey sign-in no longer prompts twice, and takes you to your dashboard once you have authenticated.",
+      },
+      {
+        id: "2025-12-30-live-status-connection",
+        area: "Dashboard",
+        summary: "Sync status updates in real time on the hosted site again.",
+      },
+      {
+        id: "2025-12-30-icloud-sync",
+        area: "iCloud",
+        summary: "iCloud calendars sync again, and a full ten years of repeating events is read rather than a short window.",
+      },
+      {
+        id: "2025-12-30-own-events-reimport",
+        area: "Subscribed calendars",
+        summary:
+          "Events Keeper.sh created are ignored when importing, so a calendar it also writes to no longer inflates your busy time.",
+      },
+      {
+        id: "2025-12-30-reset-password-page",
+        area: "Account",
+        summary: "The password reset page loads, so a reset link can be followed through to a new password.",
+      },
+      {
+        id: "2025-12-30-header-auth-state",
+        area: "Site",
+        summary: "The site header follows your sign-in state, instead of needing a reload.",
+      },
+    ],
+  },
 ];
 
 export const changelogFeatures: ChangelogFeature[] = changelogReleases.flatMap(
