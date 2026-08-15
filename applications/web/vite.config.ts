@@ -6,6 +6,7 @@ import svgr from "vite-plugin-svgr";
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
 import { blogPlugin, comparePlugin, docsPlugin, guidesPlugin, recipesPlugin } from "./plugins/blog";
+import { changelogPlugin } from "./plugins/changelog";
 import { feedPlugin } from "./plugins/feed";
 import { changelogFeedPlugin } from "./plugins/changelog-feed";
 import { sitemapPlugin } from "./plugins/sitemap";
@@ -18,6 +19,7 @@ export default defineConfig(({ isSsrBuild }) => ({
   },
   plugins: [
     blogPlugin(),
+    changelogPlugin(),
     comparePlugin(),
     docsPlugin(),
     guidesPlugin(),

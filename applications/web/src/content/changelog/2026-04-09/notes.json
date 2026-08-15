@@ -1,0 +1,24 @@
+{
+  "features": [
+    "Visitors in the EU, EEA and UK are asked whether Keeper.sh may use analytics and advertising cookies, and the choice is remembered."
+  ],
+  "improvements": [
+    "A connected assistant stays signed in considerably longer before it asks you to connect again.",
+    "A calendar you sync into that hits a passing error keeps retrying on the normal schedule instead of being switched off."
+  ],
+  "fixes": [
+    "Connecting Keeper.sh from Claude Desktop goes through, instead of failing before the approval screen.",
+    "Events no longer appear on your other calendars, vanish on the next sync, and come back again.",
+    "Copies of the same event no longer pile up, one more added on every sync.",
+    "Calendars that label times the Microsoft way, such as Eastern Standard Time, now arrive at the right hour.",
+    "An ordinary hiccup no longer flags a working account as needing to be reconnected.",
+    "A calendar deleted at your provider is switched off instead of failing on every run.",
+    "An empty or cut-short error from Google no longer stops the whole sync.",
+    "Your calendar list still loads when a provider declines to hand it over.",
+    "The checkout window on the upgrade page opens instead of coming up blank.",
+    "Starting a Microsoft 365 connection takes you to the Microsoft sign-in page instead of failing immediately.",
+    "An occurrence of a repeating meeting moved or retitled on a CalDAV calendar now comes across.",
+    "CalDAV servers that return unusable data for repeating events, Lark among them, now sync.",
+    "One event copied into two Google calendars is no longer treated as a duplicate of itself."
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "features": [
+    "Keeper.sh follows your system's light or dark appearance, across the website and the dashboard.",
+    "A saved passkey is offered as soon as you focus the email field, and passkeys can be added and removed from settings.",
+    "A Forgot password link emails you a reset link, and a screen for choosing a new password.",
+    "Settings brings your account controls into one place: change your password, manage your passkeys, and delete your account.",
+    "The dashboard opens with a bar graph of your event activity over time, with a running total and a count for the day you hover.",
+    "On Pro, you decide per calendar whether an event's title, description and location travel with it.",
+    "You pick which calendars appear in your Keeper.sh link, and Pro adds control over names, descriptions, locations and all-day events.",
+    "A calendar feed behind a username and password can be added by ticking a box and supplying them.",
+    "Syncing looks back seven days as well as forward, so events from earlier in the week come across.",
+    "Connecting an account walks you straight into choosing which calendars to sync, and where their events go.",
+    "A live progress ring shows how many events have been processed, and when your calendars last finished syncing.",
+    "Free covers two linked accounts, three sync connections and the aggregated calendar link; Pro lifts the limits and syncs every minute.",
+    "The upgrade page has a monthly and yearly toggle, and Pro subscribers get a Manage plan option that opens their billing portal."
+  ],
+  "improvements": [
+    "Each calendar has its own settings page, where you choose which calendars it sends events to and, on Pro, what is carried across."
+  ],
+  "fixes": [
+    "A repeating event whose first occurrence has passed is kept as long as it still has occurrences ahead, and its skipped dates are respected.",
+    "An event keeps the timezone it was created in, so it no longer shifts hours on the way to another calendar.",
+    "All-day events published without an end time, holiday calendars among them, now come across.",
+    "Copies of events that have already started are left alone, instead of being deleted.",
+    "A newly connected calendar copies only the calendar's name onto the events it sends on; titles, descriptions and locations stay behind.",
+    "A freshly connected calendar is picked up by the scheduled sync as soon as it can receive events.",
+    "The sync indicator returns to idle when the work is done, instead of claiming a sync is still running.",
+    "Toggling destination calendars in quick succession applies your changes in order, instead of losing one.",
+    "Two overlapping attempts to connect the same account leave you with one account, not two.",
+    "Deleting your account finishes cleanly when your billing record has already been removed.",
+    "The sign-in page checks for passkey support first, and falls back to email and password.",
+    "Dragging along the event graph on a phone reads daily counts instead of scrolling the page.",
+    "The header follows your actual session, and the sign-in page sends you to your dashboard if you are already signed in."
+  ]
+}

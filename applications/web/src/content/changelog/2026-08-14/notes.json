@@ -1,0 +1,32 @@
+{
+  "features": [
+    "Anyone running their own copy gets the same assistant tools, with nothing extra to run alongside it."
+  ],
+  "improvements": [
+    "Syncing a busy iCloud or Fastmail calendar is quicker, because Keeper.sh now asks only for the copies it made.",
+    "A repeating event that has already ended is no longer worked out again on every sync."
+  ],
+  "fixes": [
+    "Events created with a time offset rather than a Z now land at the time you gave.",
+    "Reading a repeating series too large to expand now returns a clear explanation.",
+    "A paid plan no longer shows as free when the billing provider is slow.",
+    "The subscription button no longer flickers between two labels while your details reload.",
+    "Your published feed now covers the full range you set, and no longer drops events once it grows large.",
+    "Signed-in pages no longer fail, and scheduled syncing is no longer cut short, on a half-hourly cadence.",
+    "Events copied to Google keep their meeting details instead of being rewritten every sync.",
+    "Connecting an account works when it has no readable calendars, or one calendar has no name.",
+    "Descriptions copied to iCloud and other CalDAV calendars arrive as plain readable text, not full of markup.",
+    "Events on iCloud, Fastmail and other CalDAV calendars keep the right time across a daylight saving change.",
+    "Large CalDAV calendars, Zoho among them, import every event instead of stopping at a thousand.",
+    "Deleting an event removes it from iCloud and other CalDAV calendars instead of leaving it behind.",
+    "A slow server or a timeout no longer asks you to reconnect a working CalDAV account.",
+    "Events no longer go missing when Microsoft rate-limits your mailbox. Writes wait and retry.",
+    "An Outlook event with no title no longer stops the whole calendar from being read.",
+    "A properly connected Outlook account no longer asks to be reconnected.",
+    "Following a link from the bottom of a page opens the next page at the top.",
+    "One event with an unreadable timezone no longer stops a whole subscribed calendar.",
+    "The first import of a calendar you just added uses the range you configured.",
+    "An event with no duration arrives on the other calendar instead of being retried forever.",
+    "All-day events that came from a timed calendar are no longer deleted and recreated every sync."
+  ]
+}

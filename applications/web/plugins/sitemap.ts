@@ -8,7 +8,7 @@ import {
   assertIndexableRoutesCovered,
   parseIndexableRoutePaths,
 } from "../src/lib/indexable-routes";
-import { changelogReleases } from "../src/lib/changelog";
+import { processChangelogDirectory } from "../src/lib/changelog-content";
 
 const SITE_URL = "https://www.keeper.sh";
 const BLOG_BASE_PATH = "/blog";
@@ -50,25 +50,25 @@ function buildIndexEntry(path: string, entries: SitemapEntry[]): SitemapEntry {
   return { path, lastmod };
 }
 
-function buildChangelogEntries(): SitemapEntry[] {
-  const releases = changelogReleases.map((release) => ({
-    loc: `${SITE_URL}/changelog`,
-    lastmod: release.date,
-  }));
-
+/**
+ * The hub takes the newest release's date, and every release folder becomes its
+ * own entry. `buildSitemapXml` prepends the origin, so these carry a path only.
+ */
+function buildChangelogEntries(changelogDir: string): SitemapEntry[] {
+  const releases = processChangelogDirectory(changelogDir);
   const [newest] = releases;
+
   if (!newest) {
     throw new Error("The changelog sitemap entries cannot be built without a release.");
   }
 
-  const featureEntries = changelogReleases.flatMap((release) =>
-    release.features.map((feature) => ({
-      loc: `${SITE_URL}/changelog/${feature.slug}`,
+  return [
+    { path: "/changelog", lastmod: newest.date },
+    ...releases.map((release) => ({
+      path: `/changelog/${release.slug}`,
       lastmod: release.date,
     })),
-  );
-
-  return [newest, ...featureEntries];
+  ];
 }
 
 function parseFrontmatter(raw: string, file: string): Record<string, unknown> {
@@ -129,6 +129,7 @@ function buildSitemapXml(entries: SitemapEntry[]): string {
 export function sitemapPlugin(): Plugin {
   let blogDir: string;
   let compareDir: string;
+  let changelogDir: string;
   let docsDir: string;
   let guidesDir: string;
   let recipesDir: string;
@@ -141,6 +142,7 @@ export function sitemapPlugin(): Plugin {
     configResolved(config) {
       blogDir = resolve(config.root, "src/content/blog");
       compareDir = resolve(config.root, "src/content/compare");
+      changelogDir = resolve(config.root, "src/content/changelog");
       docsDir = resolve(config.root, "src/content/docs");
       guidesDir = resolve(config.root, "src/content/guides");
       recipesDir = resolve(config.root, "src/content/recipes");
@@ -189,7 +191,7 @@ export function sitemapPlugin(): Plugin {
         ...guidesEntries,
         recipesIndexEntry,
         ...recipesEntries,
-        ...buildChangelogEntries(),
+        ...buildChangelogEntries(changelogDir),
       ];
 
       this.emitFile({

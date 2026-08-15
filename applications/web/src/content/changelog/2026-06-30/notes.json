@@ -1,0 +1,22 @@
+{
+  "features": [
+    "An assistant can set an event's timezone, such as America/New_York, when it creates one."
+  ],
+  "improvements": [
+    "A calendar that keeps failing to fetch backs off and retries, while its events still go out."
+  ],
+  "fixes": [
+    "A repeating event in your Keeper.sh feed expands properly instead of showing once.",
+    "A skipped date no longer drops the whole repeating series from your feed.",
+    "Events in your Keeper.sh feed show at their local time in Outlook, not in UTC.",
+    "Google Calendar events that failed to write on every single sync now go through.",
+    "Events written to iCloud, Fastmail and other CalDAV calendars keep their own timezone.",
+    "Outlook calendars that returned an error and never fetched any events now sync.",
+    "When a calendar link cannot be loaded, the events already synced from it are kept.",
+    "Calendar links that write dates in an unusual form now import.",
+    "A calendar your provider reports as missing is retried instead of being switched off.",
+    "An edit to an event's title, description or location reaches your other calendars.",
+    "A slow provider no longer freezes a sync part-way through.",
+    "An account wrongly flagged as needing reconnection keeps syncing."
+  ]
+}

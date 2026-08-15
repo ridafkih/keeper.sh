@@ -1,0 +1,28 @@
+{
+  "features": [],
+  "improvements": [
+    "Access for each account is renewed one request at a time, so accounts stay signed in.",
+    "Google's working from home entries are always left out, and the option to include them is gone.",
+    "Large Google and Outlook calendars are fetched in smaller pages, so they stall less often.",
+    "The check your email screen reminds you to look in spam or junk.",
+    "A calendar link that comes back unchanged is no longer rebuilt from scratch.",
+    "Keeper.sh runs many more syncs at once, and a repeat sync replaces the one already waiting."
+  ],
+  "fixes": [
+    "You can delete your account when you signed in with Google or Microsoft.",
+    "An assistant's request for events between two times returns exactly that window.",
+    "Times an assistant reads are correct in zones with a single-digit offset, such as Montevideo.",
+    "Repeating events show every occurrence in your Keeper.sh feed, not just the first.",
+    "All-day events read as all-day in the feed Keeper.sh publishes.",
+    "Calendar and feed settings save the value you typed.",
+    "Sync progress only moves forward, and reaches the end when the sync is done.",
+    "An event already sitting in the calendar you sync into is replaced with the current version.",
+    "Keeper.sh waits and retries the way Google asks when it is being rate limited.",
+    "Ordinary hiccups from a CalDAV server no longer ask you to reconnect.",
+    "Outlook events land in the calendar you chose, not the default one, and stop repeating.",
+    "An Outlook account that returns no email address now connects.",
+    "Events no longer fail when Microsoft returns no identifier for them.",
+    "Calendar links hosted by Google load again.",
+    "A calendar you turned off is no longer synced on every scheduled run."
+  ]
+}

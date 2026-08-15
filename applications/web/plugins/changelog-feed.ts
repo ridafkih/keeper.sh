@@ -1,10 +1,7 @@
 import type { Plugin } from "vite";
 import { XMLBuilder } from "fast-xml-parser";
-import {
-  changelogReleases,
-  type ChangelogNote,
-  type ChangelogRelease,
-} from "../src/lib/changelog";
+import { resolve } from "node:path";
+import { processChangelogDirectory, type ChangelogRelease } from "../src/lib/changelog-content";
 
 const SITE_URL = "https://www.keeper.sh";
 const FEED_FILE_NAME = "changelog.xml";
@@ -35,34 +32,24 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
-function noteListHtml(label: string, notes: ChangelogNote[]): string {
+function noteListHtml(label: string, notes: string[]): string {
   if (notes.length === 0) {
     return "";
   }
 
-  const items = notes
-    .map((note) => `<li><strong>${escapeHtml(note.area)}</strong> — ${escapeHtml(note.summary)}</li>`)
-    .join("");
+  const items = notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("");
 
   return `<h3>${label}</h3><ul>${items}</ul>`;
 }
 
 function releaseHtml(release: ChangelogRelease): string {
-  const features = release.features
-    .map((feature) => {
-      const paragraphs = [feature.summary, ...feature.body]
-        .map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`)
-        .join("");
-      const url = `${SITE_URL}/changelog/${feature.slug}`;
-      return `<h2><a href="${url}">${escapeHtml(feature.title)}</a></h2>${paragraphs}`;
-    })
-    .join("");
+  const prose = release.description ? `<p>${escapeHtml(release.description)}</p>` : "";
 
   return [
-    features,
-    noteListHtml("New", release.added),
-    noteListHtml("Improved", release.improved),
-    noteListHtml("Fixed", release.fixed),
+    prose,
+    noteListHtml("New", release.features),
+    noteListHtml("Improved", release.improvements),
+    noteListHtml("Fixed", release.fixes),
     `<p>${escapeHtml(release.build)}</p>`,
   ].join("");
 }
@@ -91,13 +78,13 @@ function buildFeedXml(releases: ChangelogRelease[]): string {
           "@_type": "application/rss+xml",
         },
         item: releases.map((release) => {
-          const url = `${SITE_URL}/changelog#release-${release.date}`;
+          const url = `${SITE_URL}/changelog/${release.slug}`;
 
           return {
-            title: `Keeper.sh — ${release.date}`,
+            title: release.title,
             link: url,
             guid: { "#text": url, "@_isPermaLink": "true" },
-            description: FEED_DESCRIPTION,
+            description: release.description,
             "content:encoded": releaseHtml(release),
             pubDate: toRfc822Date(release.date),
           };
@@ -110,15 +97,21 @@ function buildFeedXml(releases: ChangelogRelease[]): string {
 }
 
 export function changelogFeedPlugin(): Plugin {
+  let changelogDir: string;
+
   return {
     name: "keeper-changelog-feed",
     apply: "build",
+
+    configResolved(config) {
+      changelogDir = resolve(config.root, "src/content/changelog");
+    },
 
     generateBundle() {
       this.emitFile({
         type: "asset",
         fileName: FEED_FILE_NAME,
-        source: buildFeedXml(changelogReleases),
+        source: buildFeedXml(processChangelogDirectory(changelogDir)),
       });
     },
   };

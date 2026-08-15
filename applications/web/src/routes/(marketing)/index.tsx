@@ -108,7 +108,7 @@ const MARKETING_FEATURES: MarketingFeature[] = [
   },
   {
     id: 3,
-    title: 'Synced events stay private by default',
+    title: 'Sync only the details you want shared',
     description:
       'A copy shows the calendar it came from. Your title, description, location and guest list stay behind.',
     gridClassName: 'lg:col-start-1 lg:col-span-10 lg:row-start-2',

@@ -1,0 +1,25 @@
+{
+  "features": [],
+  "improvements": [
+    "Your plan shows on the settings page as soon as it loads, instead of filling in a moment later.",
+    "keeper.sh without the www prefix redirects to the www address, so every link lands in the same place."
+  ],
+  "fixes": [
+    "Marketing pages, the dashboard and long settings screens scroll again, and size themselves to the visible area on mobile.",
+    "Hover hints no longer stick to the screen on phones and tablets.",
+    "Passkey sign-in is only offered where it can complete, says why it failed, and leaves the password field in place for autofill.",
+    "A freshly loaded page shows the signed-in menu straight away, rather than the signed-out links first.",
+    "Events written to a CalDAV calendar are matched to the copies already there instead of written twice.",
+    "A connected calendar keeps the name it had when you connected it, instead of being rewritten on every sync.",
+    "Moving between calendars refills the details and destination list, instead of leaving the last one on screen.",
+    "The name a CalDAV calendar carries on its server is now shown in the calendar details.",
+    "A CalDAV account whose credentials are refused is marked as needing to be reconnected, instead of retrying forever.",
+    "A calendar you only write to is no longer read from as well.",
+    "The refresh handles genuine subscription links only, instead of reading connected accounts as calendar files.",
+    "A request Google or Microsoft never answers is given up on after fifteen seconds, so the sync moves on.",
+    "The exclude toggles for all-day, focus time, out of office and working location apply to every calendar you sync into.",
+    "Events stored before all-day and event-type support arrived are matched to their incoming version, not deleted and recreated.",
+    "A row inside a switched-off section now looks switched off.",
+    "The sitemap, llms.txt and llms-full.txt are published with the site and reachable again."
+  ]
+}

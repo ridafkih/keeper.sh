@@ -1,127 +1,136 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import ArrowRight from "lucide-react/dist/esm/icons/arrow-right";
-import { Heading1 } from "@/components/ui/primitives/heading";
+import { Heading1, Heading2 } from "@/components/ui/primitives/heading";
+import { Prose } from "@/components/ui/primitives/prose";
 import { Text } from "@/components/ui/primitives/text";
 import { TextLink } from "@/components/ui/primitives/text-link";
 import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
 import { NotFoundState } from "@/components/ui/shells/not-found";
 import { ArticleCta } from "@/features/marketing/components/article-cta";
-import { ChangelogNewTag } from "@/features/marketing/components/changelog-new-tag";
 import {
-  changelogFeatureNeighbours,
-  changelogReleaseOf,
-  findChangelogFeature,
-  type ChangelogFeature,
+  changelogReleaseNeighbours,
+  findChangelogRelease,
+  type ChangelogRelease,
 } from "@/lib/changelog";
 import { formatIsoDate } from "@/utils/date";
 import {
   breadcrumbSchema,
   breadcrumbTrail,
-  canonicalUrl,
   changelogEntrySchema,
   jsonLdScript,
-  seoMeta,
+  seoHead,
 } from "@/lib/seo";
 
-/**
- * Matches the `TextLink` primitive, which cannot type a dynamic `to` alongside
- * its params. Underlined at rest, with a focus ring for anyone tabbing.
- */
-const INLINE_LINK_CLASS =
-  "text-sm tracking-tight underline underline-offset-2 rounded-sm text-foreground hover:text-foreground-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const NOTE_KINDS = [
+  { key: "features", label: "New" },
+  { key: "improvements", label: "Improved" },
+  { key: "fixes", label: "Fixed" },
+] as const;
 
 const NEIGHBOUR_LINK_CLASS =
-  "group flex flex-col gap-1 rounded-2xl border border-interactive-border bg-background p-4 shadow-xs transition-colors hover:bg-background-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "group flex flex-col gap-1 rounded-xl border border-interactive-border p-4 transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-const entryBreadcrumbs = (title: string, slug: string) =>
-  breadcrumbTrail({ name: "Changelog", path: "/changelog" }, { name: title, path: `/changelog/${slug}` });
+function releaseBreadcrumbs(title: string, slug: string) {
+  return breadcrumbTrail(
+    { name: "Changelog", path: "/changelog" },
+    { name: title, path: `/changelog/${slug}` },
+  );
+}
 
 export const Route = createFileRoute("/(marketing)/changelog/$slug")({
   loader: ({ params }) => {
-    if (!findChangelogFeature(params.slug)) {
+    if (!findChangelogRelease(params.slug)) {
       throw notFound();
     }
   },
-  component: ChangelogEntryPage,
+  component: ChangelogReleasePage,
   notFoundComponent: NotFoundState,
   head: ({ params }) => {
-    const feature = findChangelogFeature(params.slug);
-    const release = changelogReleaseOf(params.slug);
-    if (!feature || !release) {
-      return {
-        meta: [
-          { title: "Changelog · Keeper.sh" },
-          { content: "noindex", name: "robots" },
-        ],
-      };
+    const release = findChangelogRelease(params.slug);
+
+    if (!release) {
+      return {};
     }
 
-    const path = `/changelog/${params.slug}`;
-    return {
-      links: [{ rel: "canonical", href: canonicalUrl(path) }],
-      meta: [
-        ...seoMeta({
-          title: feature.title,
-          description: feature.summary,
-          path,
-          type: "article",
-        }),
-        { content: release.date, property: "article:published_time" },
-      ],
+    const breadcrumbs = releaseBreadcrumbs(release.title, release.slug);
+
+    return seoHead({
+      title: release.title,
+      description: release.description,
+      path: `/changelog/${release.slug}`,
+      type: "article",
       scripts: [
-        jsonLdScript(changelogEntrySchema({
-          title: feature.title,
-          description: feature.summary,
-          slug: params.slug,
-          date: release.date,
-        })),
-        jsonLdScript(breadcrumbSchema(entryBreadcrumbs(feature.title, params.slug))),
+        jsonLdScript(
+          changelogEntrySchema({
+            title: release.title,
+            description: release.description,
+            slug: release.slug,
+            date: release.date,
+          }),
+        ),
+        jsonLdScript(breadcrumbSchema(breadcrumbs)),
       ],
-    };
+    });
   },
 });
 
 function NeighbourLink({
   direction,
-  feature,
+  release,
 }: {
   direction: "newer" | "older";
-  feature: ChangelogFeature;
+  release: ChangelogRelease;
 }) {
   const Arrow = direction === "newer" ? ArrowLeft : ArrowRight;
 
   return (
-    <Link className={NEIGHBOUR_LINK_CLASS} params={{ slug: feature.slug }} to="/changelog/$slug">
+    <Link className={NEIGHBOUR_LINK_CLASS} params={{ slug: release.slug }} to="/changelog/$slug">
       <Text as="span" size="xs" tone="muted" className="flex items-center gap-1">
         {direction === "newer" && <Arrow aria-hidden="true" className="size-3.5" />}
-        {direction === "newer" ? "Newer change" : "Older change"}
+        {direction === "newer" ? "Newer release" : "Older release"}
         {direction === "older" && <Arrow aria-hidden="true" className="size-3.5" />}
       </Text>
       <Text as="span" size="sm" tone="default" className="leading-6 group-hover:text-foreground-hover">
-        {feature.title}
+        {release.title}
       </Text>
     </Link>
   );
 }
 
-function ChangelogEntryPage() {
+function NoteSection({ label, notes }: { label: string; notes: string[] }) {
+  return (
+    <section className="flex flex-col gap-3">
+      <Heading2 as="h2">{label}</Heading2>
+      <ul className="flex flex-col gap-2 list-none">
+        {notes.map((note) => (
+          <li key={note}>
+            <Text size="base" tone="muted" className="max-w-[64ch] leading-7">
+              {note}
+            </Text>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function ChangelogReleasePage() {
   const { slug } = Route.useParams();
-  const feature = findChangelogFeature(slug);
-  const release = changelogReleaseOf(slug);
-  if (!feature || !release) {
+  const release = findChangelogRelease(slug);
+
+  if (!release) {
     throw notFound();
   }
 
-  const { newer, older } = changelogFeatureNeighbours(slug);
+  const { newer, older } = changelogReleaseNeighbours(slug);
 
   return (
     <div className="flex flex-col gap-10 py-16">
       <div className="flex flex-col gap-8">
-        <Breadcrumb items={entryBreadcrumbs(feature.title, slug)} />
+        <Breadcrumb items={releaseBreadcrumbs(release.title, release.slug)} />
         <header className="flex flex-col items-start gap-3">
-          <ChangelogNewTag />
-          <Heading1>{feature.title}</Heading1>
+          <Heading1>{release.title}</Heading1>
           <Text size="sm" tone="muted">
             <time dateTime={release.date}>{formatIsoDate(release.date)}</time>
             {" · "}
@@ -132,42 +141,26 @@ function ChangelogEntryPage() {
         </header>
       </div>
 
-      <div className="flex flex-col gap-4 max-w-[64ch]">
-        <Text size="base" tone="default" className="leading-7">
-          {feature.summary}
-        </Text>
-        {feature.body.map((paragraph) => (
-          <Text key={paragraph} size="base" tone="muted" className="leading-7">
-            {paragraph}
-          </Text>
-        ))}
-        <Text size="sm" tone="muted" className="mt-2">
-          Read more about{" "}
-          {feature.link.to === "/blog/$slug" ? (
-            <Link
-              className={INLINE_LINK_CLASS}
-              params={feature.link.params}
-              to="/blog/$slug"
-            >
-              {feature.link.label}
-            </Link>
-          ) : (
-            <TextLink align="left" size="sm" to={feature.link.to} tone="default">
-              {feature.link.label}
-            </TextLink>
-          )}
-          .
-        </Text>
-      </div>
+      <Prose>{release.content}</Prose>
+
+      {NOTE_KINDS.map(({ key, label }) =>
+        release[key].length > 0 ? (
+          <NoteSection key={key} label={label} notes={release[key]} />
+        ) : null,
+      )}
 
       <nav
-        aria-label="More changes"
+        aria-label="More releases"
         className="flex flex-col items-start gap-6 border-t border-interactive-border pt-8"
       >
         {(newer || older) && (
           <div className="grid w-full gap-3 sm:grid-cols-2">
-            {newer ? <NeighbourLink direction="newer" feature={newer} /> : <div className="hidden sm:block" />}
-            {older && <NeighbourLink direction="older" feature={older} />}
+            {newer ? (
+              <NeighbourLink direction="newer" release={newer} />
+            ) : (
+              <div className="hidden sm:block" />
+            )}
+            {older && <NeighbourLink direction="older" release={older} />}
           </div>
         )}
         <TextLink align="left" size="sm" to="/changelog" tone="muted">
