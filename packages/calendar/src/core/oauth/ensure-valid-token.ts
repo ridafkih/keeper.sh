@@ -1,4 +1,5 @@
 import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
+import { widelog } from "widelogger";
 
 const MS_PER_SECOND = 1000;
 
@@ -21,9 +22,11 @@ const ensureValidToken = async (
   refreshAccessToken: TokenRefresher,
 ): Promise<void> => {
   if (tokenState.accessTokenExpiresAt.getTime() > Date.now() + TOKEN_REFRESH_BUFFER_MS) {
+    widelog.set("token.refresh_attempted", false);
     return;
   }
 
+  widelog.set("token.refresh_attempted", true);
   const result = await refreshAccessToken(tokenState.refreshToken);
   tokenState.accessToken = result.access_token;
   tokenState.accessTokenExpiresAt = new Date(Date.now() + result.expires_in * MS_PER_SECOND);

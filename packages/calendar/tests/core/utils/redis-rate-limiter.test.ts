@@ -7,7 +7,7 @@ import {
 
 describe("createRedisRateLimiter", () => {
   it("returns immediately when Redis grants capacity", async () => {
-    const redis = { eval: vi.fn(() => Promise.resolve(0)) };
+    const redis = { eval: vi.fn(() => Promise.resolve([0, 0])) };
     const limiter = createRedisRateLimiter(redis, "rate-limit", {
       requestsPerMinute: 10,
     });
@@ -17,7 +17,7 @@ describe("createRedisRateLimiter", () => {
   });
 
   it("aborts while waiting for capacity", async () => {
-    const redis = { eval: vi.fn(() => Promise.resolve(60_000)) };
+    const redis = { eval: vi.fn(() => Promise.resolve([60_000, 10])) };
     const limiter = createRedisRateLimiter(redis, "rate-limit", {
       requestsPerMinute: 10,
     });
@@ -33,7 +33,7 @@ describe("createRedisRateLimiter", () => {
 
 describe("createGoogleUserRateLimiter", () => {
   const acquireArguments = async (lane: "ingest" | "push"): Promise<string[]> => {
-    const redis = { eval: vi.fn(() => Promise.resolve(0)) };
+    const redis = { eval: vi.fn(() => Promise.resolve([0, 0])) };
     await createGoogleUserRateLimiter(redis, "user-id", lane).acquire(1);
     return vi.mocked(redis.eval).mock.calls[0]?.slice(2) as string[];
   };

@@ -5,11 +5,19 @@ import type { Plan } from "@keeper.sh/data-schemas";
 const PUSH_SYNC_QUEUE_NAME = "push-sync-v2";
 const USER_TIMEOUT_MS = 300_000;
 
+type PushSyncTrigger = "cron" | "push";
+
+/*
+ * `trigger` reflects the FIRST enqueue: the stable jobId makes addBulk a no-op when
+ * a job with that id already exists, exactly like BullMQ's own job.timestamp, so the
+ * two fields stay mutually consistent.
+ */
 interface PushSyncJobPayload {
   calendarId: string;
   userId: string;
   plan: Plan;
   correlationId: string;
+  trigger?: PushSyncTrigger;
 }
 
 interface PushSyncJobResult {
@@ -29,4 +37,4 @@ const createPushSyncQueue = (connection: ConnectionOptions): Queue<PushSyncJobPa
   });
 
 export { PUSH_SYNC_QUEUE_NAME, USER_TIMEOUT_MS, createPushSyncQueue };
-export type { PushSyncJobPayload, PushSyncJobResult };
+export type { PushSyncJobPayload, PushSyncJobResult, PushSyncTrigger };

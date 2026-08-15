@@ -28,6 +28,17 @@ export {
   runWithCredentialRefreshLock,
   type RefreshLockStore,
 } from "./core/oauth/refresh-coordinator";
+export {
+  ACCOUNTED_SEGMENT_KEY,
+  measureProviderRequest,
+  measureRedisCommand,
+  measureSegment,
+  measureSyncSegment,
+  recordRedisCommandDuration,
+  recordSegment,
+  REDIS_COMMAND_MAX_KEY,
+  type IngestSegmentKey,
+} from "./core/telemetry/segments";
 export { isOAuthReauthRequiredError } from "./core/oauth/error-classification";
 export {
   buildReauthenticationDemandFields,

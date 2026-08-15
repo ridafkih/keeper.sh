@@ -1,4 +1,6 @@
 import type { Plan } from "@keeper.sh/data-schemas";
+import type { PushSyncTrigger } from "@keeper.sh/queue";
+import { widelog } from "@/utils/logging";
 import type { PushDestinationJob } from "./push-destination-jobs";
 import { buildPushDestinationJobs } from "./push-destination-jobs";
 
@@ -31,6 +33,7 @@ interface EnqueueDestinationSyncDependencies {
 const runEnqueueDestinationSyncsForUsers = async (
   candidateUserIds: Iterable<string>,
   dependencies: EnqueueDestinationSyncDependencies,
+  trigger: PushSyncTrigger = "cron",
 ): Promise<number> => {
   if (!dependencies.enabled) {
     return 0;
@@ -70,6 +73,7 @@ const runEnqueueDestinationSyncsForUsers = async (
     pendingUserIds.has(userId) || plansByUserId.get(userId) === "pro");
 
   const correlationId = dependencies.generateCorrelationId();
+  widelog.set("correlation.id", correlationId);
   const jobs = (["free", "pro"] as const).flatMap((plan) =>
     buildPushDestinationJobs(
       eligibleDestinations.filter(
@@ -77,7 +81,9 @@ const runEnqueueDestinationSyncsForUsers = async (
       ),
       plan,
       correlationId,
+      trigger,
     ));
+  widelog.set("push_drain.jobs_enqueued", jobs.length);
   if (jobs.length === 0) {
     await dependencies.acknowledgePendingRequests?.(pendingRequests);
     return 0;

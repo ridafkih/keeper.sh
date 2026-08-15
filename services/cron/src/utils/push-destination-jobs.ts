@@ -1,5 +1,5 @@
 import type { Plan } from "@keeper.sh/data-schemas";
-import type { PushSyncJobPayload } from "@keeper.sh/queue";
+import type { PushSyncJobPayload, PushSyncTrigger } from "@keeper.sh/queue";
 import type { DestinationCalendarRef } from "./get-sources";
 
 interface PushDestinationJob {
@@ -19,13 +19,14 @@ const buildPushDestinationJobs = (
   destinations: DestinationCalendarRef[],
   plan: Plan,
   correlationId: string,
+  trigger: PushSyncTrigger = "cron",
 ): PushDestinationJob[] => destinations
   .toSorted((first, second) =>
     first.userId.localeCompare(second.userId)
     || first.calendarId.localeCompare(second.calendarId))
   .map(({ calendarId, userId }) => ({
     name: `sync-${userId}-${calendarId}`,
-    data: { calendarId, userId, plan, correlationId },
+    data: { calendarId, userId, plan, correlationId, trigger },
     opts: {
       jobId: `sync-${userId}-${calendarId}`,
       removeOnComplete: true,

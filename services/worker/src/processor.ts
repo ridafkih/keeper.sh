@@ -210,6 +210,11 @@ const processJob = (
     widelog.set("job.id", job.id ?? "").sticky();
     widelog.set("job.name", job.name).sticky();
     widelog.set("correlation.id", job.data.correlationId).sticky();
+    widelog.set("push_sync.trigger", job.data.trigger ?? "cron").sticky();
+    widelog.set(
+      "push_sync.queue_wait_ms",
+      (job.processedOn ?? Date.now()) - job.timestamp,
+    ).sticky();
 
     widelog.errors(classifySyncError);
 

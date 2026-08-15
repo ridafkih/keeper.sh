@@ -43,7 +43,7 @@ const createDefaultDependencies = async (): Promise<DrainPendingIngestDependenci
     countPending: () => refreshLockRedis.zcard(PENDING_INGEST_KEY),
     enabled: Boolean(environment.WEBHOOK_PUBLIC_URL),
     enqueueDestinationSyncs: async (userIds) => {
-      await enqueueDestinationSyncsForUsers(userIds);
+      await enqueueDestinationSyncsForUsers(userIds, "push");
     },
     ingestCalendars: async (calendarIds) => {
       const result = await ingestOAuthSources(calendarIds);
@@ -80,8 +80,18 @@ const createDefaultDependencies = async (): Promise<DrainPendingIngestDependenci
   };
 };
 
+/*
+ * Overrun protection suppresses a tick without invoking the callback, so a lost tick
+ * emits no event at all. The gap on the next surviving tick is the only positive
+ * evidence that ticks were eaten; ticks_skipped is round(gap / 10s) - 1.
+ */
+let lastTickCompletedAt: number | null = null;
+
 const observedDrain = withCronWideEvent({
   async callback() {
+    if (lastTickCompletedAt !== null) {
+      widelog.set("push_drain.tick_gap_ms", Date.now() - lastTickCompletedAt);
+    }
     const dependencies = await createDefaultDependencies();
 
     const { refreshLockStore } = await import("@/context");
@@ -94,6 +104,7 @@ const observedDrain = withCronWideEvent({
       await runDrainPendingIngest(dependencies);
     } finally {
       await refreshLockStore.release(DRAIN_LOCK_KEY);
+      lastTickCompletedAt = Date.now();
     }
   },
   cron: "*/10 * * * * *",

@@ -14,6 +14,7 @@ import { KEEPER_CATEGORY } from "@keeper.sh/constants";
 import { isKeeperEvent } from "../../../../core/events/identity";
 import { resolveTimeZone } from "../../../../ics/utils/timezone-instant";
 import { buildTimeoutSignal } from "../../../../core/utils/fetch-with-timeout";
+import { measureProviderRequest, measureSegment } from "../../../../core/telemetry/segments";
 
 class EventsFetchError extends Error {
   public readonly status: number;
@@ -175,7 +176,7 @@ const fetchEventsPage = async (
   const url = getRequestUrl(options);
   const timeout = buildTimeoutSignal(REQUEST_TIMEOUT_MS, options.signal);
 
-  const response = await fetch(url.toString(), {
+  const response = await measureProviderRequest(() => fetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Prefer: `odata.maxpagesize=${DEFAULT_PAGE_SIZE}, outlook.timezone="UTC", outlook.body-content-type="text"`,
@@ -191,7 +192,7 @@ const fetchEventsPage = async (
     }
 
     throw error;
-  });
+  }));
 
   if (response.status === GONE_STATUS) {
     return { fullSyncRequired: true };
@@ -210,9 +211,11 @@ const fetchEventsPage = async (
     );
   }
 
-  const responseBody = await response.json();
-  const data = outlookEventListSchema.assert(responseBody);
-  return { data, fullSyncRequired: false };
+  return await measureSegment("work.transform_ms", async () => {
+    const responseBody = await response.json();
+    const data = outlookEventListSchema.assert(responseBody);
+    return { data, fullSyncRequired: false };
+  });
 };
 
 const fetchSeriesMasterInstances = async (

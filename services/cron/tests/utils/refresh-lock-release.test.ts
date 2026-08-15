@@ -4,6 +4,9 @@ const errorFields = vi.fn();
 
 vi.mock("@/utils/logging", () => ({
   widelog: { errorFields, set: vi.fn() },
+    count: () => null,
+    max: () => null,
+    min: () => null,
 }));
 
 const { releaseRefreshLock } = await import("../../src/utils/refresh-lock-release");

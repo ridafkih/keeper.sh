@@ -13,6 +13,9 @@ let accountNeedsReauthentication = false;
 vi.mock("@/utils/logging", () => ({
   context: (run: () => Promise<unknown>) => run(),
   widelog: {
+    count: () => null,
+    max: () => null,
+    min: () => null,
     append: () => null,
     error: () => null,
     errorFields: (_error: unknown, fields: Record<string, unknown>) => {

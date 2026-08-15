@@ -129,12 +129,14 @@ const insertEventStateRows = async (
   database: EventStateInsertClient,
   rows: EventStateInsertRow[],
   conflictConfig: EventStateConflictConfig,
+  onStatement?: () => void,
 ): Promise<void> => {
   if (rows.length === EMPTY_ROW_COUNT) {
     return;
   }
 
   for (let offset = 0; offset < rows.length; offset += INSERT_CHUNK_SIZE) {
+    onStatement?.();
     await database
       .insert(eventStatesTable)
       .values(rows.slice(offset, offset + INSERT_CHUNK_SIZE))
@@ -145,6 +147,7 @@ const insertEventStateRows = async (
 const insertEventStatesWithConflictResolution = async (
   database: EventStateInsertClient,
   rows: EventStateInsertRow[],
+  onStatement?: () => void,
 ): Promise<void> => {
   const providerRows: EventStateInsertRow[] = [];
   const legacyRecurringRows: EventStateInsertRow[] = [];
@@ -164,17 +167,17 @@ const insertEventStatesWithConflictResolution = async (
     set: PROVIDER_EVENT_STATE_CONFLICT_SET,
     target: PROVIDER_EVENT_STATE_CONFLICT_TARGET,
     targetWhere: isNotNull(eventStatesTable.sourceEventId),
-  });
+  }, onStatement);
   await insertEventStateRows(database, legacyRecurringRows, {
     set: EVENT_STATE_CONFLICT_SET,
     target: LEGACY_RECURRING_EVENT_STATE_CONFLICT_TARGET,
     targetWhere: sql`${eventStatesTable.sourceEventId} is null and ${eventStatesTable.recurrenceId} is not null`,
-  });
+  }, onStatement);
   await insertEventStateRows(database, legacyNonRecurringRows, {
     set: EVENT_STATE_CONFLICT_SET,
     target: LEGACY_NON_RECURRING_EVENT_STATE_CONFLICT_TARGET,
     targetWhere: sql`${eventStatesTable.sourceEventId} is null and ${eventStatesTable.recurrenceId} is null`,
-  });
+  }, onStatement);
 };
 
 export { buildEventStateInsertRow, insertEventStatesWithConflictResolution };

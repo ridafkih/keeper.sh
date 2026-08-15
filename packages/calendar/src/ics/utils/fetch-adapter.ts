@@ -19,6 +19,7 @@ import {
 } from "./resolve-timezone-identifier";
 import type { DeclaredTimeZoneOffsets } from "./resolve-timezone-identifier";
 import { wallTimeToInstant } from "./timezone-instant";
+import { measureProviderRequest, measureSyncSegment } from "../../core/telemetry/segments";
 
 interface IcsSourceFetcherConfig {
   calendarId: string;
@@ -318,10 +319,10 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
    * event_state for the calendar on the next tick. Surfacing the error lets the
    * cron mark the run as failed and leave existing events intact for retry.
    */
-  const fetchRemoteIcal = async (): Promise<string> => {
+  const fetchRemoteIcal = (): Promise<string> => measureProviderRequest(async () => {
     const { ical } = await pullRemoteCalendar("ical", config.url, config.safeFetchOptions);
     return ical;
-  };
+  });
 
   const fetchEvents = async (options: FetchIcsSourceEventsOptions = {}): Promise<FetchEventsResult> => {
     const { futureRange, historicRange, window: syncWindow } = config.plan;
@@ -336,23 +337,33 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
     }
     const recurrenceDateUids = collectRecurrenceDateEventUids(ical);
     const snapshotResult = await prepareCalendarSnapshot(config.database, config.calendarId, ical);
-    const initialCalendar = parseIcsCalendarLenient({
-      icsString: ical,
-      patches: [coerceCompliantDate],
-    });
-    const calendarTimeZone = normalizeTimezone(initialCalendar.nonStandard?.wrTimezone);
-    const normalized = normalizeFloatingEventDates(ical, calendarTimeZone);
-    let calendar = initialCalendar;
-    if (normalized.ical !== ical) {
-      calendar = parseIcsCalendarLenient({
-        icsString: normalized.ical,
-        patches: [coerceCompliantDate],
-      });
-    }
-    const parsed = parseIcsEventsWithDiagnostics(calendar);
-    const recurrenceTimeZones = resolveRecurrenceTimeZones(
-      parsed.events,
-      readDeclaredTimeZoneOffsets(ical),
+    const { calendarTimeZone, normalized, parsed, recurrenceTimeZones } = measureSyncSegment(
+      "work.transform_ms",
+      () => {
+        const initialCalendar = parseIcsCalendarLenient({
+          icsString: ical,
+          patches: [coerceCompliantDate],
+        });
+        const timeZone = normalizeTimezone(initialCalendar.nonStandard?.wrTimezone);
+        const normalizedIcal = normalizeFloatingEventDates(ical, timeZone);
+        let calendar = initialCalendar;
+        if (normalizedIcal.ical !== ical) {
+          calendar = parseIcsCalendarLenient({
+            icsString: normalizedIcal.ical,
+            patches: [coerceCompliantDate],
+          });
+        }
+        const diagnosed = parseIcsEventsWithDiagnostics(calendar);
+        return {
+          calendarTimeZone: timeZone,
+          normalized: normalizedIcal,
+          parsed: diagnosed,
+          recurrenceTimeZones: resolveRecurrenceTimeZones(
+            diagnosed.events,
+            readDeclaredTimeZoneOffsets(ical),
+          ),
+        };
+      },
     );
     let events: SourceEvent[] = recurrenceTimeZones.events.map((event) => ({
       availability: event.availability,

@@ -38,6 +38,7 @@ describe("runEnqueueDestinationSyncsForUsers", () => {
         calendarId: "destination-pro",
         correlationId: "correlation-1",
         plan: "pro",
+        trigger: "cron",
         userId: "pro-user",
       },
     ]);

@@ -13,6 +13,7 @@ import { findCalendarByStoredUrl } from "./calendar-identity";
 import type { CalDAVAuthMethod } from "./digest-fetch";
 import type { SafeFetchOptions, WithheldCredentials } from "../../../utils/safe-fetch";
 import type { CalDAVClientConfig, CalendarInfo } from "../types";
+import { measureProviderRequest } from "../../../core/telemetry/segments";
 
 const MISSING_HREF_SAMPLE_SIZE = 5;
 
@@ -211,7 +212,7 @@ class CalDAVClient {
   async discoverCalendars(): Promise<CalendarInfo[]> {
     const calendars = await mapAuthenticationFailure(async () => {
       const client = await this.getClient();
-      return client.fetchCalendars();
+      return measureProviderRequest(() => client.fetchCalendars());
     });
 
     return calendars
@@ -304,12 +305,12 @@ class CalDAVClient {
     return mapAuthenticationFailure(async () => {
       const client = await this.getClient();
 
-      const queryResponses = await client.calendarQuery({
+      const queryResponses = await measureProviderRequest(() => client.calendarQuery({
         depth: "1",
         filters: buildCalendarObjectFilters(params.timeRange),
         props: { [`${DAVNamespaceShort.DAV}:getetag`]: {} },
         url: params.calendarUrl,
-      });
+      }));
 
       const listedPaths = toCalendarObjectPaths(queryResponses, params.calendarUrl);
       const requestedPaths = listedPaths.filter((path) => params.pathFilter?.(path) ?? true);
@@ -327,11 +328,11 @@ class CalDAVClient {
       const batchResults: CalendarObject[][] = [];
 
       for (const objectUrls of batches) {
-        const objects = await client.fetchCalendarObjects({
+        const objects = await measureProviderRequest(() => client.fetchCalendarObjects({
           calendar: { url: params.calendarUrl },
           objectUrls,
           urlFilter: (url) => isCalendarObjectPath(toCalendarObjectPath(url, params.calendarUrl)),
-        });
+        }));
         batchResults.push(
           objects.filter((object): object is CalendarObject => typeof object.data === "string"),
         );

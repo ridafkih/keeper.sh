@@ -18,6 +18,7 @@ import { isKeeperEvent } from "../../../../core/events/identity";
 import { withBackoff } from "../../../../core/utils/backoff";
 import { isRateLimitApiError } from "../../shared/errors";
 import { buildTimeoutSignal } from "../../../../core/utils/fetch-with-timeout";
+import { measureProviderRequest, measureSegment } from "../../../../core/telemetry/segments";
 
 const EMPTY_API_ERROR: GoogleApiError = {};
 
@@ -127,7 +128,7 @@ const fetchEventsPage = async (
   }
 
   const timeout = buildTimeoutSignal(REQUEST_TIMEOUT_MS, signal);
-  const response = await fetch(url.toString(), {
+  const response = await measureProviderRequest(() => fetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
@@ -142,7 +143,7 @@ const fetchEventsPage = async (
     }
 
     throw error;
-  });
+  }));
 
   if (response.status === GONE_STATUS) {
     return { fullSyncRequired: true };
@@ -161,9 +162,11 @@ const fetchEventsPage = async (
     );
   }
 
-  const responseBody = await response.json();
-  const data = googleEventListSchema.assert(responseBody);
-  return { data, fullSyncRequired: false };
+  return await measureSegment("work.transform_ms", async () => {
+    const responseBody = await response.json();
+    const data = googleEventListSchema.assert(responseBody);
+    return { data, fullSyncRequired: false };
+  });
 };
 
 const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEventsResult> => {

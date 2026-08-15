@@ -16,6 +16,9 @@ import {
   SOURCE_INGEST_LOCK_NAMESPACE,
   createRequiredSourceRanges,
   createSourceIngestionPlan,
+  measureRedisCommand,
+  measureSegment,
+  recordSegment,
 } from "@keeper.sh/calendar";
 import {
   INGEST_SOURCE_TIMEOUT_MS,
@@ -67,17 +70,44 @@ const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
 const SOURCE_TIMEOUT_DATABASE_GRACE_MS = 5000;
 const SOURCE_CONCURRENCY = 5;
 const SOURCE_INGEST_LOCK_KEY_PREFIX = "source-ingest:";
-const sourceIngestLock = createSyncLock(refreshLockRedis);
+
+/*
+ * Every lock round trip is timed so "the lock was held" and "Redis was slow" stay
+ * distinguishable; redis.command_ms_max is an overlay on wait.source_lock_ms, never
+ * a segment of its own.
+ */
+const instrumentedLockRedis = {
+  eval: (script: string, keyCount: number, ...parameters: string[]): Promise<unknown> =>
+    measureRedisCommand(() => refreshLockRedis.eval(script, keyCount, ...parameters)),
+  get: (key: string): Promise<string | null> =>
+    measureRedisCommand(() => refreshLockRedis.get(key)),
+};
+
+const sourceIngestLock = createSyncLock(instrumentedLockRedis);
+
+const measureDatabaseRead = async <TResult>(
+  read: () => PromiseLike<TResult>,
+): Promise<TResult> => {
+  widelog.count("db.read_count", 1);
+  return await measureSegment("work.db_read_ms", async () => await read());
+};
+
+const measureDatabaseWrite = async <TResult>(
+  write: () => PromiseLike<TResult>,
+): Promise<TResult> => {
+  widelog.count("db.write_count", 1);
+  return await measureSegment("work.db_write_ms", async () => await write());
+};
 
 const resetIngestBackoff = async (calendarId: string): Promise<void> => {
-  await database
+  await measureDatabaseWrite(() => database
     .update(calendarsTable)
     .set({
       ingestFailureCount: 0,
       ingestLastFailureAt: null,
       ingestNextAttemptAt: null,
     })
-    .where(eq(calendarsTable.id, calendarId));
+    .where(eq(calendarsTable.id, calendarId)));
 };
 
 const applyIngestBackoff = async (
@@ -85,14 +115,14 @@ const applyIngestBackoff = async (
   currentFailureCount: number,
 ): Promise<CalendarBackoffState> => {
   const state = buildCalendarBackoffState(currentFailureCount);
-  await database
+  await measureDatabaseWrite(() => database
     .update(calendarsTable)
     .set({
       ingestFailureCount: state.failureCount,
       ingestLastFailureAt: state.lastFailureAt,
       ingestNextAttemptAt: state.nextAttemptAt,
     })
-    .where(eq(calendarsTable.id, calendarId));
+    .where(eq(calendarsTable.id, calendarId)));
   return state;
 };
 
@@ -109,23 +139,24 @@ const runSourceIngest = async <TResult>(
   work: (isCurrent: () => Promise<boolean>) => Promise<TResult>,
   shouldApplyBackoff: (error: unknown) => boolean,
 ): Promise<TResult | null> => {
-  const lockResult = await sourceIngestLock.acquire(
+  const lockResult = await measureSegment("wait.source_lock_ms", () => sourceIngestLock.acquire(
     `${SOURCE_INGEST_LOCK_KEY_PREFIX}${calendarId}`,
     signal,
-  );
+  ));
+  widelog.set("ingest.lock_acquired", lockResult.acquired);
   if (!lockResult.acquired) {
     signal.throwIfAborted();
     return null;
   }
   try {
-    const [attempt] = await database
+    const [attempt] = await measureDatabaseRead(() => database
       .select({
         failureCount: calendarsTable.ingestFailureCount,
         nextAttemptAt: calendarsTable.ingestNextAttemptAt,
       })
       .from(calendarsTable)
       .where(eq(calendarsTable.id, calendarId))
-      .limit(1);
+      .limit(1));
     if (!attempt || attempt.nextAttemptAt && attempt.nextAttemptAt > new Date()) {
       return null;
     }
@@ -189,12 +220,85 @@ const resolveIngestErrorSlug = (error: unknown): string => {
   return "provider-request-timeout";
 };
 
+/*
+ * A queued transaction's callback runs in the async context of whoever released the
+ * connection (see packages/database/src/utils/pool-telemetry.ts), so nothing inside
+ * it may call widelog. Everything is measured into this ledger and emitted once the
+ * transaction promise resolves, back in the per-source context.
+ */
+interface PersistenceLedger {
+  advisoryLockMs: number;
+  callbackReturnedAt: number;
+  grantedAt: number;
+  readCount: number;
+  readMs: number;
+  writeCount: number;
+  writeMs: number;
+}
+
+const createPersistenceLedger = (): PersistenceLedger => ({
+  advisoryLockMs: 0,
+  callbackReturnedAt: 0,
+  grantedAt: 0,
+  readCount: 0,
+  readMs: 0,
+  writeCount: 0,
+  writeMs: 0,
+});
+
+const measureLedgerRead = async <TResult>(
+  ledger: PersistenceLedger,
+  statement: () => PromiseLike<TResult>,
+): Promise<TResult> => {
+  const startedAt = performance.now();
+  try {
+    return await statement();
+  } finally {
+    ledger.readMs += performance.now() - startedAt;
+  }
+};
+
+const measureLedgerWrite = async <TResult>(
+  ledger: PersistenceLedger,
+  statement: () => PromiseLike<TResult>,
+): Promise<TResult> => {
+  const startedAt = performance.now();
+  try {
+    return await statement();
+  } finally {
+    ledger.writeMs += performance.now() - startedAt;
+  }
+};
+
+const emitPersistenceLedger = (ledger: PersistenceLedger, requestedAt: number): void => {
+  if (ledger.grantedAt === 0) {
+    return;
+  }
+  recordSegment("wait.db_pool_ms", ledger.grantedAt - requestedAt);
+  recordSegment("wait.advisory_lock_ms", ledger.advisoryLockMs);
+  if (ledger.readCount > 0) {
+    widelog.count("db.read_count", ledger.readCount);
+    recordSegment("work.db_read_ms", ledger.readMs);
+  }
+  if (ledger.writeCount > 0) {
+    widelog.count("db.write_count", ledger.writeCount);
+    recordSegment("work.db_write_ms", ledger.writeMs);
+  }
+  if (ledger.callbackReturnedAt > 0) {
+    recordSegment("work.db_commit_ms", performance.now() - ledger.callbackReturnedAt);
+  }
+};
+
 const createIngestionPersistenceTransaction = (
   calendarId: string,
   signal: AbortSignal,
   deadlineAt: number,
 ) =>
-  (work: IngestionPersistenceWork) => database.transaction(async (transaction) => {
+  (work: IngestionPersistenceWork) => {
+    const ledger = createPersistenceLedger();
+    const requestedAt = performance.now();
+    return database.transaction(async (transaction) => {
+    ledger.grantedAt = performance.now();
     const setRemainingStatementTimeout = async (): Promise<void> => {
       signal.throwIfAborted();
       const remainingMs = Math.max(1, Math.ceil(deadlineAt - Date.now()));
@@ -211,15 +315,21 @@ const createIngestionPersistenceTransaction = (
       true
     )`);
     await setRemainingStatementTimeout();
-    await transaction.execute(
-      sql`select pg_advisory_xact_lock(${SOURCE_INGEST_LOCK_NAMESPACE}, hashtext(${calendarId}))`,
-    );
+    const advisoryLockRequestedAt = performance.now();
+    try {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(${SOURCE_INGEST_LOCK_NAMESPACE}, hashtext(${calendarId}))`,
+      );
+    } finally {
+      ledger.advisoryLockMs += performance.now() - advisoryLockRequestedAt;
+    }
     signal.throwIfAborted();
 
     const result = await work({
       readExistingEvents: async () => {
         await setRemainingStatementTimeout();
-        const events = await transaction.select({
+        ledger.readCount += 1;
+        const events = await measureLedgerRead(ledger, () => transaction.select({
           availability: eventStatesTable.availability,
           description: eventStatesTable.description,
           endTime: eventStatesTable.endTime,
@@ -237,7 +347,7 @@ const createIngestionPersistenceTransaction = (
           title: eventStatesTable.title,
         })
         .from(eventStatesTable)
-          .where(eq(eventStatesTable.calendarId, calendarId));
+          .where(eq(eventStatesTable.calendarId, calendarId)));
         signal.throwIfAborted();
         return events;
       },
@@ -245,25 +355,32 @@ const createIngestionPersistenceTransaction = (
         signal.throwIfAborted();
         if (changes.deletes.length > 0) {
           await setRemainingStatementTimeout();
-          await deleteEventStatesInChunks(transaction, calendarId, changes.deletes);
+          await measureLedgerWrite(ledger, () => deleteEventStatesInChunks(
+            transaction,
+            calendarId,
+            changes.deletes,
+            () => { ledger.writeCount += 1; },
+          ));
           signal.throwIfAborted();
         }
 
         if (changes.inserts.length > 0) {
           await setRemainingStatementTimeout();
-          await insertEventStatesWithConflictResolution(
+          await measureLedgerWrite(ledger, () => insertEventStatesWithConflictResolution(
             transaction,
             changes.inserts.map((event) => buildEventStateInsertRow(calendarId, event)),
-          );
+            () => { ledger.writeCount += 1; },
+          ));
           signal.throwIfAborted();
         }
 
         if ("syncToken" in changes) {
           await setRemainingStatementTimeout();
-          await transaction
+          ledger.writeCount += 1;
+          await measureLedgerWrite(ledger, () => transaction
             .update(calendarsTable)
             .set({ syncToken: changes.syncToken })
-            .where(eq(calendarsTable.id, calendarId));
+            .where(eq(calendarsTable.id, calendarId)));
           signal.throwIfAborted();
         }
 
@@ -275,7 +392,8 @@ const createIngestionPersistenceTransaction = (
            * the start of the day, so rewriting it unconditionally would churn this row
            * (and its updatedAt) once per tick rather than once per day.
            */
-          await transaction
+          ledger.writeCount += 1;
+          await measureLedgerWrite(ledger, () => transaction
             .update(calendarsTable)
             .set({
               ingestFutureRange: futureRange,
@@ -295,20 +413,27 @@ const createIngestionPersistenceTransaction = (
                 ne(calendarsTable.ingestWindowStart, window.timeMin),
                 ne(calendarsTable.ingestWindowEnd, window.timeMax),
               ),
-            ));
+            )));
           signal.throwIfAborted();
         }
 
-        if (changes.snapshot) {
+        const { snapshot } = changes;
+        if (snapshot) {
           await setRemainingStatementTimeout();
-          await persistCalendarSnapshot(transaction, calendarId, changes.snapshot);
+          ledger.writeCount += 1;
+          await measureLedgerWrite(ledger, () =>
+            persistCalendarSnapshot(transaction, calendarId, snapshot));
           signal.throwIfAborted();
         }
       },
     });
-    signal.throwIfAborted();
-    return result;
-  });
+      signal.throwIfAborted();
+      ledger.callbackReturnedAt = performance.now();
+      return result;
+    }).finally(() => {
+      emitPersistenceLedger(ledger, requestedAt);
+    });
+  };
 
 const resolveTokenRefresher = (provider: string) => {
   if (provider === "google" && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
@@ -339,7 +464,7 @@ const resolveRateLimiter = (provider: string, userId: string): RedisRateLimiter 
 const getRequiredSourceRanges = async (
   sourceCalendarId: string,
 ): Promise<RequiredSourceRanges> => {
-  const mappings = await database
+  const mappings = await measureDatabaseRead(() => database
     .select({
       syncFutureRange: calendarsTable.syncFutureRange,
       syncHistoricRange: calendarsTable.syncHistoricRange,
@@ -353,7 +478,7 @@ const getRequiredSourceRanges = async (
       eq(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarId),
       eq(calendarsTable.disabled, false),
       arrayContains(calendarsTable.capabilities, ["push"]),
-    ));
+    )));
   return createRequiredSourceRanges(mappings);
 };
 
@@ -718,9 +843,12 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
     );
 
   const settlements = await allSettledWithConcurrency(
-    oauthSources.map((source) => () =>
+    oauthSources.map((source) => {
+      const enqueuedAt = Date.now();
+      return () =>
       withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
         context(async () => {
+          widelog.set("wait.slot_ms", Date.now() - enqueuedAt);
           widelog.set("ingest.trigger", resolveIngestTrigger(calendarIds));
           widelog.set("operation.name", "ingest-source");
           widelog.set("operation.type", "job");
@@ -736,7 +864,7 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
           try {
             const result = await widelog.time.measure("duration_ms", () =>
               runSourceIngest(source.calendarId, signal, async (isCurrent) => {
-                const [currentSource] = await database
+                const [currentSource] = await measureDatabaseRead(() => database
                   .select({
                     accountId: calendarAccountsTable.id,
                     accessToken: oauthCredentialsTable.accessToken,
@@ -767,7 +895,7 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
                     eq(calendarsTable.disabled, false),
                     arrayContains(calendarsTable.capabilities, ["pull"]),
                   ))
-                  .limit(1);
+                  .limit(1));
                 if (!currentSource?.externalCalendarId) {
                   return createSkippedIngestionResult(source.userId);
                 }
@@ -786,7 +914,10 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
                     refreshLockStore,
                     rawRefresh: rawRefresher,
                   });
-                  await ensureValidToken(tokenState, tokenRefresher);
+                  await measureSegment(
+                    "wait.token_refresh_ms",
+                    () => ensureValidToken(tokenState, tokenRefresher),
+                  );
                 }
 
                 const ranges = await getRequiredSourceRanges(source.calendarId);
@@ -881,8 +1012,8 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
             widelog.flush();
           }
         }),
-      SOURCE_TIMEOUT_MS),
-    ),
+      SOURCE_TIMEOUT_MS);
+    }),
     { concurrency: SOURCE_CONCURRENCY },
   );
 
@@ -928,9 +1059,12 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
     );
 
   const settlements = await allSettledWithConcurrency(
-    caldavSources.map((source) => () =>
+    caldavSources.map((source) => {
+      const enqueuedAt = Date.now();
+      return () =>
       withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
         context(async () => {
+          widelog.set("wait.slot_ms", Date.now() - enqueuedAt);
           widelog.set("operation.name", "ingest-source");
           widelog.set("operation.type", "job");
           widelog.set("sync.direction", "ingest");
@@ -942,7 +1076,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
           try {
             const result = await widelog.time.measure("duration_ms", () =>
               runSourceIngest(source.calendarId, signal, async (isCurrent) => {
-                const [currentSource] = await database
+                const [currentSource] = await measureDatabaseRead(() => database
                   .select({
                     calendarUrl: calendarsTable.calendarUrl,
                     encryptedPassword: caldavCredentialsTable.encryptedPassword,
@@ -968,7 +1102,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                     eq(calendarsTable.disabled, false),
                     arrayContains(calendarsTable.capabilities, ["pull"]),
                   ))
-                  .limit(1);
+                  .limit(1));
                 if (!currentSource) {
                   return createSkippedIngestionResult(source.userId);
                 }
@@ -1049,8 +1183,8 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
             widelog.flush();
           }
         }),
-      SOURCE_TIMEOUT_MS),
-    ),
+      SOURCE_TIMEOUT_MS);
+    }),
     { concurrency: SOURCE_CONCURRENCY },
   );
 
@@ -1083,9 +1217,12 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
     );
 
   const settlements = await allSettledWithConcurrency(
-    icsSources.map((source) => () =>
+    icsSources.map((source) => {
+      const enqueuedAt = Date.now();
+      return () =>
       withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
         context(async () => {
+          widelog.set("wait.slot_ms", Date.now() - enqueuedAt);
           widelog.set("operation.name", "ingest-source");
           widelog.set("operation.type", "job");
           widelog.set("sync.direction", "ingest");
@@ -1096,7 +1233,7 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
           try {
             const result = await widelog.time.measure("duration_ms", () =>
               runSourceIngest(source.calendarId, signal, async (isCurrent) => {
-                const [currentSource] = await database
+                const [currentSource] = await measureDatabaseRead(() => database
                   .select({
                     ingestFutureRange: calendarsTable.ingestFutureRange,
                     ingestHistoricRange: calendarsTable.ingestHistoricRange,
@@ -1112,7 +1249,7 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
                     eq(calendarsTable.calendarType, "ical"),
                     eq(calendarsTable.disabled, false),
                   ))
-                  .limit(1);
+                  .limit(1));
                 if (!currentSource?.url) {
                   return createSkippedIngestionResult(source.userId);
                 }
@@ -1176,8 +1313,8 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
             widelog.flush();
           }
         }),
-      SOURCE_TIMEOUT_MS),
-    ),
+      SOURCE_TIMEOUT_MS);
+    }),
     { concurrency: SOURCE_CONCURRENCY },
   );
 

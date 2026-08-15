@@ -8,6 +8,9 @@ let createCalDAVSourceResult: () => Promise<unknown> = () =>
 vi.mock("@/utils/logging", () => ({
   context: async (run: () => Promise<unknown>) => await run(),
   widelog: {
+    count: () => null,
+    max: () => null,
+    min: () => null,
     error: () => null,
     errorFields: (_error: unknown, next: Record<string, unknown>) => {
       fields = { ...fields, ...next };

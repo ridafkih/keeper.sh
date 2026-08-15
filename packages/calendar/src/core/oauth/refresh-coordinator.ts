@@ -1,3 +1,5 @@
+import { widelog } from "widelogger";
+
 interface CredentialRefreshResult {
   access_token: string;
   expires_in: number;
@@ -47,6 +49,12 @@ const runWithCredentialRefreshLock = (
 ): Promise<CredentialRefreshResult> => {
   const inFlight = inFlightRefreshByCredentialId.get(oauthCredentialId);
   if (inFlight) {
+    /*
+     * Only this branch runs in the joining caller's async context. The refresh body
+     * below runs in whichever context first created the promise, so nothing may be
+     * logged from inside it without landing on a foreign wide event.
+     */
+    widelog.set("token.refresh_coalesced", true);
     return inFlight;
   }
 

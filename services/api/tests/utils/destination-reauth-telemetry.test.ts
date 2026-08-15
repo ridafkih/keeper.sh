@@ -7,6 +7,9 @@ const captured = vi.hoisted(() => ({
 vi.mock("@/utils/logging", () => ({
   context: (callback: () => unknown) => callback(),
   widelog: {
+    count: () => null,
+    max: () => null,
+    min: () => null,
     errorFields: () => null,
     flush: () => null,
     set: (key: string, value: unknown) => {

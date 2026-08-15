@@ -10,6 +10,9 @@ let current: { fields: Record<string, unknown>; values: Record<string, unknown> 
 vi.mock("@/utils/logging", () => ({
   context: async (run: () => Promise<void>) => await run(),
   widelog: {
+    count: () => null,
+    max: () => null,
+    min: () => null,
     error: () => null,
     errorFields: (_error: unknown, fields: Record<string, unknown>) => {
       current.fields = { ...current.fields, ...fields };

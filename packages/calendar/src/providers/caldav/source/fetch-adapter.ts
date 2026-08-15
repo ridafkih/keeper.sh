@@ -4,6 +4,7 @@ import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import { isCalDAVEventInSyncWindow, partitionCalDAVSourceEvents } from "./window";
 import { CalDAVClient } from "../shared/client";
 import { parseICalCalendarsToRemoteEvents } from "../shared/ics";
+import { measureSyncSegment } from "../../../core/telemetry/segments";
 
 interface CalDAVSourceFetcherConfig {
   authMethod?: "basic" | "digest";
@@ -42,10 +43,15 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
      * An empty body is an unread resource, not an absent one; it must reach the
      * parser to be counted as skipped.
      */
-    const resources = parseICalCalendarsToRemoteEvents(objects.map(({ data }) => data ?? ""));
-    const { events, outsideSyncWindowCount, selfAuthoredEventCount } = partitionCalDAVSourceEvents(
-      resources.events,
-      syncWindow,
+    const { events, outsideSyncWindowCount, resources, selfAuthoredEventCount } = measureSyncSegment(
+      "work.transform_ms",
+      () => {
+        const parsed = parseICalCalendarsToRemoteEvents(objects.map(({ data }) => data ?? ""));
+        return {
+          resources: parsed,
+          ...partitionCalDAVSourceEvents(parsed.events, syncWindow),
+        };
+      },
     );
 
     return {

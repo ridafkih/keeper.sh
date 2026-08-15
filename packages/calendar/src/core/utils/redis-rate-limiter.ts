@@ -2,9 +2,12 @@ import {
   GOOGLE_PUSH_REQUESTS_PER_MINUTE,
   GOOGLE_REQUESTS_PER_MINUTE,
 } from "@keeper.sh/constants";
+import { widelog } from "widelogger";
+import { measureRedisCommand, recordSegment } from "../telemetry/segments";
 
 const MS_PER_MINUTE = 60_000;
 const RETRY_POLL_MS = 100;
+const ACQUIRE_RESULT_LENGTH = 2;
 
 interface RedisRateLimiter {
   acquire(count: number, signal?: AbortSignal): Promise<void>;
@@ -27,9 +30,10 @@ interface RedisScriptClient {
  * ARGV[3] = count of slots to acquire
  * ARGV[4] = max requests per minute
  *
- * Returns:
- *   0 = acquired successfully
- *   N > 0 = wait time in ms before retrying
+ * Returns { waitTime, occupancy }:
+ *   waitTime 0 = acquired successfully
+ *   waitTime > 0 = wait time in ms before retrying
+ *   occupancy = slots already held in the window when the decision was taken
  */
 const ACQUIRE_SCRIPT = `
   redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
@@ -43,17 +47,46 @@ const ACQUIRE_SCRIPT = `
       redis.call('ZADD', KEYS[1], now, now .. ':' .. i .. ':' .. math.random(1000000))
     end
     redis.call('PEXPIRE', KEYS[1], 60000)
-    return 0
+    return {0, current}
   end
 
   local oldest = redis.call('ZRANGE', KEYS[1], 0, 0, 'WITHSCORES')
   if #oldest >= 2 then
     local oldestScore = tonumber(oldest[2])
-    return oldestScore + 60000 - now
+    return {oldestScore + 60000 - now, current}
   end
 
-  return 1000
+  return {1000, current}
 `;
+
+interface AcquireDecision {
+  occupancy: number;
+  waitTimeMs: number;
+}
+
+const parseAcquireDecision = (raw: unknown): AcquireDecision => {
+  if (!Array.isArray(raw) || raw.length < ACQUIRE_RESULT_LENGTH) {
+    throw new Error("Rate limiter acquire script returned an unexpected result shape");
+  }
+  return { occupancy: Number(raw[1]), waitTimeMs: Number(raw[0]) };
+};
+
+const inProcessWaitersByKey = new Map<string, number>();
+
+const enterRateLimiterQueue = (key: string): number => {
+  const depth = (inProcessWaitersByKey.get(key) ?? 0) + 1;
+  inProcessWaitersByKey.set(key, depth);
+  return depth;
+};
+
+const leaveRateLimiterQueue = (key: string): void => {
+  const depth = (inProcessWaitersByKey.get(key) ?? 1) - 1;
+  if (depth <= 0) {
+    inProcessWaitersByKey.delete(key);
+    return;
+  }
+  inProcessWaitersByKey.set(key, depth);
+};
 
 const waitForRetry = (delayMs: number, signal?: AbortSignal): Promise<void> => {
   if (!signal) {
@@ -84,27 +117,45 @@ const createRedisRateLimiter = (
   const { requestsPerMinute } = config;
 
   const acquire = async (count: number, signal?: AbortSignal): Promise<void> => {
-    while (true) {
-      signal?.throwIfAborted();
-      const now = Date.now();
-      const windowStart = now - MS_PER_MINUTE;
+    widelog.count("ratelimit.acquire_count", 1);
+    const startedAt = performance.now();
+    let queued = false;
+    try {
+      while (true) {
+        signal?.throwIfAborted();
+        const now = Date.now();
+        const windowStart = now - MS_PER_MINUTE;
 
-      const waitTime = Number((await redis.eval(
-        ACQUIRE_SCRIPT,
-        1,
-        key,
-        String(windowStart),
-        String(now),
-        String(count),
-        String(requestsPerMinute),
-      )));
+        const { occupancy, waitTimeMs } = parseAcquireDecision(await measureRedisCommand(() =>
+          redis.eval(
+            ACQUIRE_SCRIPT,
+            1,
+            key,
+            String(windowStart),
+            String(now),
+            String(count),
+            String(requestsPerMinute),
+          )));
+        widelog.max("ratelimit.window_occupancy_max", occupancy);
 
-      if (waitTime <= 0) {
-        return;
+        if (waitTimeMs <= 0) {
+          return;
+        }
+
+        widelog.count("ratelimit.throttled_count", 1);
+        if (!queued) {
+          queued = true;
+          widelog.max("ratelimit.queue_depth_max", enterRateLimiterQueue(key));
+        }
+
+        const sleepMs = Math.max(RETRY_POLL_MS, Math.min(waitTimeMs, MS_PER_MINUTE));
+        await waitForRetry(sleepMs, signal);
       }
-
-      const sleepMs = Math.max(RETRY_POLL_MS, Math.min(waitTime, MS_PER_MINUTE));
-      await waitForRetry(sleepMs, signal);
+    } finally {
+      if (queued) {
+        leaveRateLimiterQueue(key);
+      }
+      recordSegment("wait.rate_limiter_ms", performance.now() - startedAt);
     }
   };
 

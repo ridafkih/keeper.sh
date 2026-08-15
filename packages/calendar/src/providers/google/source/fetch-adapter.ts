@@ -5,6 +5,7 @@ import { encodeStoredSyncToken, resolveSyncTokenForWindow } from "../../../core/
 import { getOAuthSyncTokenVersion } from "../../../core/oauth/sync-window";
 import { filterSourceEventsToSyncWindow } from "../../../core/source/sync-diagnostics";
 import { fetchCalendarEvents, parseGoogleEventsWithDiagnostics } from "./utils/fetch-events";
+import { measureSyncSegment } from "../../../core/telemetry/segments";
 
 interface GoogleSourceFetcherConfig {
   accessToken: string;
@@ -52,8 +53,13 @@ const createGoogleSourceFetcher = (config: GoogleSourceFetcherConfig): GoogleSou
       return { events: [], fullSyncRequired: true, syncWindow };
     }
 
-    const parsed = parseGoogleEventsWithDiagnostics(result.events);
-    const { events, filteredCount } = filterSourceEventsToSyncWindow(parsed.events, syncWindow);
+    const { events, filteredCount, parsed } = measureSyncSegment("work.transform_ms", () => {
+      const diagnosed = parseGoogleEventsWithDiagnostics(result.events);
+      return {
+        parsed: diagnosed,
+        ...filterSourceEventsToSyncWindow(diagnosed.events, syncWindow),
+      };
+    });
 
     return {
       events,

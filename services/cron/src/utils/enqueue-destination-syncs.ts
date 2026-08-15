@@ -1,4 +1,5 @@
 import { createPushSyncQueue } from "@keeper.sh/queue";
+import type { PushSyncTrigger } from "@keeper.sh/queue";
 import {
   calendarsTable,
   userSyncRequestsTable,
@@ -15,6 +16,7 @@ import {
 
 const enqueueDestinationSyncsForUsers = async (
   candidateUserIds: Iterable<string>,
+  trigger: PushSyncTrigger = "cron",
 ): Promise<number> => {
   const { database, premiumService } = await import("@/context");
   return runEnqueueDestinationSyncsForUsers(candidateUserIds, {
@@ -55,7 +57,7 @@ const enqueueDestinationSyncsForUsers = async (
       })
       .from(userSyncRequestsTable),
     resolvePlan: (userId) => premiumService.getUserPlan(userId),
-  });
+  }, trigger);
 };
 
 export {

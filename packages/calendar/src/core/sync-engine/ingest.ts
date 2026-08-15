@@ -15,6 +15,7 @@ import {
   parseStoredSourceEventStatesRecoveringInvalid,
   type StoredSourceEventState,
 } from "../source/stored-event-state";
+import { measureSyncSegment } from "../telemetry/segments";
 
 type IngestWideEventFields = Record<string, boolean | number | string>;
 
@@ -214,17 +215,19 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
         summarizeWideEventList([...unsupportedEventUids]);
     }
     if (sourceEvents.some((event) => event.recurrenceRule)) {
-      if (!fetchResult.syncWindow) {
+      const recurrenceWindow = fetchResult.syncWindow;
+      if (!recurrenceWindow) {
         throw new RangeError("Recurring source ingestion requires an explicit sync window");
       }
-      const overBudget = findSourceEventsExceedingRecurrenceBudget(
-        calendarId,
-        sourceEvents,
-        {
-          end: fetchResult.syncWindow.timeMax,
-          start: fetchResult.syncWindow.timeMin,
-        },
-      );
+      const overBudget = measureSyncSegment("work.diff_ms", () =>
+        findSourceEventsExceedingRecurrenceBudget(
+          calendarId,
+          sourceEvents,
+          {
+            end: recurrenceWindow.timeMax,
+            start: recurrenceWindow.timeMin,
+          },
+        ));
       if (overBudget.length > 0) {
         /*
          * A widened sync range can pull a pathological series over the occurrence
@@ -263,7 +266,8 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       wideEvent["existing_events.count"] = storedEvents.length;
 
       const isDeltaSync = fetchResult.isDeltaSync ?? false;
-      const parseResult = parseStoredSourceEventStatesRecoveringInvalid(storedEvents);
+      const parseResult = measureSyncSegment("work.diff_ms", () =>
+        parseStoredSourceEventStatesRecoveringInvalid(storedEvents));
       const existingEvents = parseResult.events;
       const invalidStoredEventIds = parseResult.failures.map((failure) => failure.eventId);
       if (parseResult.failures.length > 0) {
@@ -283,35 +287,40 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
         return EMPTY_RESULT;
       }
 
-      const eventsToAdd = buildSourceEventsToAdd(existingEvents, sourceEvents, {
-        isDeltaSync,
-      });
-      const invalidStoredEventIdsToRemove = buildInvalidStoredEventIdsToRemove(
-        parseResult.failures,
-        fetchResult.events,
-      );
-      const eventStateIdsToRemove = [...new Set([
-        ...invalidStoredEventIdsToRemove,
-        ...getNonRecurringStoredEventIdsOutsideWindow(
-          existingEvents,
-          fetchResult.syncWindow,
+      const { eventStateIdsToRemove, eventsToAdd } = measureSyncSegment("work.diff_ms", () => {
+        const additions = buildSourceEventsToAdd(existingEvents, sourceEvents, {
           isDeltaSync,
-        ),
-        /*
-         * Removal is computed against the unfiltered fetch. An over-budget series is
-         * only withheld from ingestion; treating it as absent here would delete the
-         * states it already has, turning a stalled series into deleted user events.
-         */
-        ...buildSourceEventStateIdsToRemove(
-          existingEvents,
+        });
+        const invalidStoredEventIdsToRemove = buildInvalidStoredEventIdsToRemove(
+          parseResult.failures,
           fetchResult.events,
-          {
-            changedEventIds: fetchResult.changedEventIds,
-            cancelledEventIds: fetchResult.cancelledEventIds,
-            isDeltaSync,
-          },
-        ),
-      ])];
+        );
+        return {
+          eventsToAdd: additions,
+          eventStateIdsToRemove: [...new Set([
+            ...invalidStoredEventIdsToRemove,
+            ...getNonRecurringStoredEventIdsOutsideWindow(
+              existingEvents,
+              fetchResult.syncWindow,
+              isDeltaSync,
+            ),
+            /*
+             * Removal is computed against the unfiltered fetch. An over-budget series is
+             * only withheld from ingestion; treating it as absent here would delete the
+             * states it already has, turning a stalled series into deleted user events.
+             */
+            ...buildSourceEventStateIdsToRemove(
+              existingEvents,
+              fetchResult.events,
+              {
+                changedEventIds: fetchResult.changedEventIds,
+                cancelledEventIds: fetchResult.cancelledEventIds,
+                isDeltaSync,
+              },
+            ),
+          ])],
+        };
+      });
 
       wideEvent["events.added"] = eventsToAdd.length;
       wideEvent["events.removed"] = eventStateIdsToRemove.length;

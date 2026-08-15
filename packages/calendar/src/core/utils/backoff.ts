@@ -1,3 +1,6 @@
+import { widelog } from "widelogger";
+import { measureSegment } from "../telemetry/segments";
+
 const MAX_JITTER_MS = 1000;
 const MAX_BACKOFF_MS = 64_000;
 const DEFAULT_MAX_RETRIES = 5;
@@ -86,8 +89,12 @@ const withBackoff = async <TResult>(
         throw error;
       }
       const delayMs = resolveRetryDelayMs(options, error, attempt);
+      widelog.count("provider.retry_count", 1);
       options.onRetry?.({ attempt, delayMs, error });
-      await abortableSleep(delayMs, options.signal);
+      await measureSegment(
+        "wait.provider_retry_ms",
+        () => abortableSleep(delayMs, options.signal),
+      );
     }
   }
 
