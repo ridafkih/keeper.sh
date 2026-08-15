@@ -7,7 +7,7 @@ import {
   syncStatusTable,
 } from "@keeper.sh/database/schema";
 import { REAUTHENTICATION_DESTINATION_GRANT } from "@keeper.sh/constants";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   buildReauthenticationDemandFields,
   getErrorMessage,
@@ -270,10 +270,7 @@ const upsertAccountAndCalendarWithDatabase = async (
     .where(
       and(
         eq(calendarsTable.accountId, account.id),
-        inArray(calendarsTable.id,
-          databaseClient.selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
-            .from(sourceDestinationMappingsTable)
-        ),
+        isNull(calendarsTable.externalCalendarId),
       ),
     )
     .limit(FIRST_RESULT_LIMIT);
