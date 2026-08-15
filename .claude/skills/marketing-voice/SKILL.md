@@ -21,7 +21,7 @@ A person with two calendars and a scheduling problem. They use Google Calendar o
 
 **Default to Register A**; pick B or C only for a file named above. A and B hold sentence discipline, C does not. A explains what happens, C why it was hard — C may assume the reader has built something, never that they have read our source. Symptom-first failure modes and question-shaped headings apply in all three.
 
-Read `glossary.md` (tiered terms, with why each fails so you can rule on ones it omits) and `examples.md` (eleven before/after pairs from shipped copy, every edit enumerated) before any substantial rewrite. Also `formatting.md`, `positioning.md` and `length.md`.
+Read `glossary.md` (tiered terms, with why each fails so you can rule on ones it omits) and `examples.md` (eleven before/after pairs from shipped copy, every edit enumerated) before any substantial rewrite. Also `formatting.md`, `positioning.md`, `length.md` and `open-source-positioning.md` (where cal.com, Plausible, Bitwarden, PostHog and Ghost put the licence, surface by surface).
 
 ## Rules
 
