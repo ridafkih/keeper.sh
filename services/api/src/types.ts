@@ -32,21 +32,6 @@ interface KeeperSource {
   accountLabel: string;
 }
 
-interface KeeperDestination {
-  id: string;
-  provider: string;
-  email: string | null;
-  needsReauthentication: boolean;
-}
-
-interface KeeperMapping {
-  id: string;
-  sourceCalendarId: string;
-  destinationCalendarId: string;
-  createdAt: string;
-  calendarType: string;
-}
-
 interface KeeperEvent {
   id: string;
   /** Persisted event_states UUID for synced events; null for user-created events. */
@@ -171,8 +156,6 @@ interface ProviderCredentials {
 
 interface KeeperApi {
   listSources: (userId: string) => Promise<KeeperSource[]>;
-  listDestinations: (userId: string) => Promise<KeeperDestination[]>;
-  listMappings: (userId: string) => Promise<KeeperMapping[]>;
   getEventsInRange: (userId: string, range: KeeperEventRangeInput, filters?: KeeperEventFilters) => Promise<KeeperEvent[]>;
   getEvent: (userId: string, eventId: string) => Promise<KeeperEvent | null>;
   getEventCount: (userId: string, options?: { from: Date; to: Date }) => Promise<number>;
@@ -198,13 +181,11 @@ export type {
   KeeperApi,
   KeeperCalendarPauseResult,
   KeeperDatabase,
-  KeeperDestination,
   KeeperEvent,
   KeeperEventFilters,
   KeeperEventRangeInput,
   KeeperFreeTimeOptions,
   KeeperFreeTimeResult,
-  KeeperMapping,
   KeeperSyncTriggerResult,
   KeeperSource,
   KeeperSyncStatus,

@@ -6,6 +6,10 @@ const LOCK_RENEW_INTERVAL_MS = (LOCK_TTL_SECONDS * 1000) / 3;
 const SIGNAL_TTL_SECONDS = 320;
 const POLL_INTERVAL_MS = 250;
 const POLL_TIMEOUT_MS = 310_000;
+const sleep = (delayMs: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
 const MAPPING_MUTATION_LOCK_PREFIX = "mapping-mutation:";
 const BACKGROUND_HOLDER_PREFIX = "background:";
 const PREEMPTING_HOLDER_PREFIX = "preempting:";
@@ -342,7 +346,7 @@ const createSyncLock = (
             return { acquired: false };
           }
           if (currentWaiter !== holderId) {
-            await Bun.sleep(POLL_INTERVAL_MS);
+            await sleep(POLL_INTERVAL_MS);
             continue;
           }
         }
@@ -370,7 +374,7 @@ const createSyncLock = (
           }
         }
 
-        await Bun.sleep(POLL_INTERVAL_MS);
+        await sleep(POLL_INTERVAL_MS);
       }
 
       return { acquired: false };

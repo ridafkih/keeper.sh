@@ -1,0 +1,2 @@
+DROP INDEX "calendar_accounts_provider_account_idx";--> statement-breakpoint
+CREATE UNIQUE INDEX "calendar_accounts_provider_account_idx" ON "calendar_accounts" USING btree ("userId","provider","accountId");

@@ -15,11 +15,11 @@ const TEST_DATABASE_URL = process.env.KEEPER_TEST_DATABASE_URL;
  */
 describe.skipIf(!TEST_DATABASE_URL)("pool max lifetime with a query in flight", () => {
   it("kills a healthy in-flight query when a non-zero maxLifetime elapses", async () => {
-    const sql = new SQL({ max: 1, maxLifetime: 2, prepare: false, url: TEST_DATABASE_URL });
+    const sql = new SQL({ max: 1, maxLifetime: 1, prepare: false, url: TEST_DATABASE_URL });
     try {
       await sql.unsafe("select 1", []);
-      await Bun.sleep(500);
-      const failure = await sql.unsafe("select pg_sleep(3)", []).then(
+      await Bun.sleep(200);
+      const failure = await sql.unsafe("select pg_sleep(2)", []).then(
         () => null,
         (error: unknown) => error,
       );
@@ -44,7 +44,7 @@ describe.skipIf(!TEST_DATABASE_URL)("pool max lifetime with a query in flight", 
     try {
       await unretired.unsafe("select 1", []);
       const [row] = (await unretired.unsafe(
-        "select pg_sleep(2.5), 'survived' as outcome",
+        "select pg_sleep(1.5), 'survived' as outcome",
         [],
       )) as { outcome: string }[];
       expect(row?.outcome).toBe("survived");

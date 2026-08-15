@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildBatchRequestBody,
   parseBatchResponseBody,
@@ -295,14 +295,21 @@ describe("executeBatchChunked", () => {
       }));
     }, { preconnect: originalFetch.preconnect });
 
+    vi.useFakeTimers();
     try {
-      const responses = await executeBatchChunked(
+      const batch = executeBatchChunked(
         [{ method: "DELETE", path: "/calendar/v3/calendars/primary/events/abc" }],
         "access-token",
         { rateLimiter },
       );
+      await vi.waitFor(() => {
+        expect(calls).toBe(1);
+      });
+      await vi.runAllTimersAsync();
+      const responses = await batch;
       expect(responses[0]?.statusCode).toBe(204);
     } finally {
+      vi.useRealTimers();
       globalThis.fetch = originalFetch;
     }
 

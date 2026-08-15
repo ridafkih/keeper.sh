@@ -88,9 +88,14 @@ const leaveRateLimiterQueue = (key: string): void => {
   inProcessWaitersByKey.set(key, depth);
 };
 
+const sleep = (delayMs: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+
 const waitForRetry = (delayMs: number, signal?: AbortSignal): Promise<void> => {
   if (!signal) {
-    return Bun.sleep(delayMs);
+    return sleep(delayMs);
   }
   if (signal.aborted) {
     return Promise.reject(signal.reason);

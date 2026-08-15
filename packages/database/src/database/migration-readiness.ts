@@ -4,6 +4,11 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 const MIGRATION_READINESS_POLL_MS = 1000;
 const MIGRATION_READINESS_TIMEOUT_MS = 10 * 60 * 1000;
 
+const sleep = (delayMs: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+
 interface MigrationReadinessDatabase {
   isReady: () => Promise<boolean>;
 }
@@ -68,7 +73,7 @@ const waitForDatabaseMigrations = async (
     if (await database.isReady()) {
       return;
     }
-    await Bun.sleep(MIGRATION_READINESS_POLL_MS);
+    await sleep(MIGRATION_READINESS_POLL_MS);
   }
   if (!(await database.isReady())) {
     throw new Error("Database migrations did not reach the required runtime state");

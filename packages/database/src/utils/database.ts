@@ -54,6 +54,11 @@ interface DatabaseInstance extends BunSQLDatabase {
 const CONNECTION_RETRY_DELAY_MS = 500;
 const CONNECTION_MAX_RETRIES = 10;
 
+const sleep = (delayMs: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+
 const waitForConnection = async (database: DatabaseInstance): Promise<void> => {
   for (let attempt = 0; attempt < CONNECTION_MAX_RETRIES; attempt++) {
     try {
@@ -61,7 +66,7 @@ const waitForConnection = async (database: DatabaseInstance): Promise<void> => {
       return;
     } catch {
       if (attempt < CONNECTION_MAX_RETRIES - 1) {
-        await Bun.sleep(CONNECTION_RETRY_DELAY_MS);
+        await sleep(CONNECTION_RETRY_DELAY_MS);
       }
     }
   }

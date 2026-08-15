@@ -37,6 +37,7 @@ describe("importOAuthAccountCalendarsWithDependencies", () => {
           userId: "user-1",
         },
         {
+          adoptProviderAccountId: () => Promise.resolve(),
           canAddAccount: (userId, currentCount) => {
             canAddAccountCalls.push([userId, currentCount]);
             return Promise.resolve(canAddAccountResult);
@@ -70,6 +71,7 @@ describe("importOAuthAccountCalendarsWithDependencies", () => {
         userId: "user-1",
       },
       {
+        adoptProviderAccountId: () => Promise.resolve(),
         canAddAccount: (userId, currentCount) => {
           canAddAccountCalls.push([userId, currentCount]);
           return Promise.resolve(false);

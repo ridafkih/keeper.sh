@@ -132,10 +132,9 @@ describe.skipIf(!databaseUrl)("classifyDatabaseError against a live Bun SQL pool
 
     const error = await captureFailure(async () => {
       await database.execute(sql`select 1`);
-      await Bun.sleep(1500);
       await database.transaction(async (transaction) => {
         await transaction.execute(sql`select 1`);
-        await Bun.sleep(1500);
+        await Bun.sleep(1100);
         await transaction.execute(sql`select 2`);
       });
     });
