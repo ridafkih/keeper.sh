@@ -5,6 +5,11 @@ import { widelog } from "widelogger";
  * `duration_ms` timer. Recording one always credits `accounted_ms` too, so the
  * residual is a single subtraction at query time:
  * unaccounted_ms = duration_ms - accounted_ms.
+ *
+ * These are wall clock, not CPU: with five sources sharing one event loop, time a
+ * peer stole is charged to whichever segment happened to be awaiting. That makes
+ * head-of-line blocking visible, and it is why no segment may ever be read as
+ * "this much work was done".
  */
 type IngestSegmentKey =
   | "wait.source_lock_ms"
