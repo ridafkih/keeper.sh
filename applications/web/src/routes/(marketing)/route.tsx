@@ -101,11 +101,18 @@ function MarketingLayout() {
               <MarketingFooterNavItem to="/self-hosting">Self-Hosting</MarketingFooterNavItem>
             </MarketingFooterNavGroup>
             <MarketingFooterNavGroup>
+              <MarketingFooterNavGroupLabel>Learn</MarketingFooterNavGroupLabel>
+              <MarketingFooterNavItem to="/docs">Docs</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/guides">Guides</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/recipes">Recipes</MarketingFooterNavItem>
+            </MarketingFooterNavGroup>
+            <MarketingFooterNavGroup>
               <MarketingFooterNavGroupLabel>Resources</MarketingFooterNavGroupLabel>
               <MarketingFooterNavItem to="/blog">Blog</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/about">About</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/tools/ics-generator">ICS File Generator</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/tools/ics-viewer">ICS File Viewer</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/compare">Compare</MarketingFooterNavItem>
               <MarketingFooterNavItem href="https://github.com/ridafkih/keeper.sh">GitHub</MarketingFooterNavItem>
             </MarketingFooterNavGroup>
             <MarketingFooterNavGroup>

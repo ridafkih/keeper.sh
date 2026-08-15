@@ -179,6 +179,10 @@ MCP is optional. Every related environment variable is optional across every ser
 - Pricing: https://www.keeper.sh/pricing
 - MCP Server & REST API Documentation: https://www.keeper.sh/docs/mcp
 - Blog: https://www.keeper.sh/blog
+- Compare: https://www.keeper.sh/compare
+- Docs (setting reference): https://www.keeper.sh/docs
+- Guides (symptom-first fixes): https://www.keeper.sh/guides
+- Recipes (ready-made setups): https://www.keeper.sh/recipes
 - Privacy Policy: https://www.keeper.sh/privacy
 - Terms & Conditions: https://www.keeper.sh/terms
 - GitHub: https://github.com/ridafkih/keeper.sh

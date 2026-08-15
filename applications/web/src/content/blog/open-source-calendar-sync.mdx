@@ -20,7 +20,7 @@ This article sorts them by what they actually do.
 
 A tool that **mirrors events between accounts** reads from one calendar account and writes into another. That is what you want if your problem is double bookings across a work and a personal calendar.
 
-A **CalDAV server** is somewhere to keep calendars you control, using the standard most calendar apps can talk to. It solves a different problem: getting off a provider, not making two of them agree.
+A **CalDAV server** is somewhere to keep calendars you control, using the standard most calendar apps can talk to. It solves a different problem: getting off a provider, rather than getting two of them to agree.
 
 A **client or device sync agent** puts a server's calendars onto a phone or a desktop. It will not copy events between two cloud accounts either.
 
@@ -111,18 +111,11 @@ Hosted plans are Personal at $2 a month billed yearly and Supporter at $4 a mont
 - **Comfortable with a command line and a cron job?** vdirsyncer costs nothing to run and is a small, well-understood tool.
 - **Already running n8n or Activepieces?** Build the sync logic there rather than adding another service.
 - **Need your CalDAV calendars on Android?** DAVx⁵, alongside whatever else you use.
+- **Want copying between accounts to just work?** Keeper.sh. It reaches Google and Microsoft through their own APIs, and the hosted and self-hosted versions have the same features.
 
-Keeper.sh is the better fit when you want copying between accounts to work without assembling it yourself. It reaches Google and Microsoft through their own APIs rather than CalDAV workarounds, and the hosted and self-hosted versions have the same features.
+By default Keeper.sh writes a busy block with no title, description or location. AGPL-3.0 also matters if n8n's use restrictions rule it out for you.
 
-It writes anonymised busy blocks by default rather than full event copies. AGPL-3.0 also matters if a source available licence with use restrictions does not work for you.
-
-## What Keeper.sh does not do
-
-Keeper.sh is not a calendar server. It does not store your calendars in a way you would want to point a calendar app at, so it does not replace Radicale, Baïkal or Nextcloud. It has no mobile app and no desktop client.
-
-It checks on a timer rather than being pinged the moment something changes. Changes take up to a minute on Pro, and up to 30 minutes on the free plan, to reach the other calendar. Keeper.sh only fetches what changed on Google and Outlook, while CalDAV calendars are re-read and compared in full every cycle.
-
-Self-hosting is genuinely full-featured, with one caveat worth stating. Passkey and social login are only enabled in commercial mode, so a self-hosted instance uses email and password.
+Keeper.sh sits alongside a calendar server instead of replacing one, and it runs in a browser with no mobile or desktop app. It checks on a timer: a change reaches the other calendar within a minute on Pro and within 30 minutes on the free plan.
 
 ## Frequently asked questions
 

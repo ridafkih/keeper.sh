@@ -4,7 +4,7 @@ description: "Keeper.sh and Morgen compared for blocking time across work and pe
 blurb: "Morgen is a calendar app with native apps on five platforms and Swiss hosting. It blocks busy time on your other calendars once a day at 6pm. That gap is the whole comparison."
 createdAt: "2026-08-11"
 updatedAt: "2026-08-12"
-slug: "keeper-sh-vs-morgen"
+slug: "morgen-alternative"
 tags:
   - "comparison"
   - "morgen"
@@ -18,7 +18,7 @@ Keeper.sh is not a calendar app at all. It runs in the background and keeps busy
 
 ## How often does each one block out your time?
 
-Morgen's Calendar Propagation workflow "will run daily at 6:00 pm" and covers "the upcoming 14 days" ([Morgen's guide](https://www.morgen.so/guides/how-to-use-morgens-calendar-propagation-workflow)). The same guide is upfront about the consequence. When an event is cancelled or moved, "there will be a lag as the workflow runs daily at 6pm".
+Morgen's calendar-blocking workflow "will run daily at 6:00 pm" and covers "the upcoming 14 days" ([Morgen's guide](https://www.morgen.so/guides/how-to-use-morgens-calendar-propagation-workflow)). The same guide is upfront about the consequence. When an event is cancelled or moved, "there will be a lag as the workflow runs daily at 6pm".
 
 Say you book a dentist appointment at 9am, for 2pm the same day. Your work calendar still looks free at 2pm all morning, because the workflow has not run yet. Anything more than two weeks out is not blocked at all until the day gets close.
 
@@ -54,7 +54,7 @@ Morgen's guide describes a "Nerd Mode" that lets you add custom filters on thing
 
 Keeper.sh switches are per calendar. You can let event names, descriptions, and locations back through, and exclude all-day events, focus time, or out-of-office blocks.
 
-If you want to write filter rules that decide event by event, Morgen's controls go further than ours.
+For filter rules that decide event by event, Morgen's controls go further than ours.
 
 ## Where does your calendar data live?
 
@@ -64,15 +64,13 @@ Their privacy policy adds that "Our data centers are located in Switzerland or i
 
 Keeper.sh keeps a copy of your events in a database. That copy is what makes minute-level timing possible, and it is why a block can appear while you are still walking out of the dentist.
 
-It is a real trade. If you would rather no service held a copy of your events, Morgen's design suits you better. If you want that copy in a database you own, see the self-hosting section below.
+It is a real trade. Morgen's design holds no copy of your events, and ours holds one. The self-hosting section below puts that copy in a database you own.
 
 ## What apps does each one have?
 
 Morgen ships desktop apps for macOS 12 and above, Windows 10 and above, and Linux on x86 64-bit ([downloads](https://platform.morgen.so/download)). There are iOS and Android apps too, though the download page says to set up your account on desktop first.
 
-Keeper.sh is a web app you open in a browser, set up once, and close.
-
-If part of what you are buying is a calendar client that lives on your laptop and your phone, that is Morgen.
+Keeper.sh is a web app you open in a browser, set up once, and close. There is no Keeper.sh desktop or phone app.
 
 ## What does each one cost?
 
@@ -90,9 +88,9 @@ Keeper.sh ships an MCP server with 14 tools, so Claude or ChatGPT can list your 
 
 ## Can you use both?
 
-Yes, and for some people this is the right answer.
+Yes. The two do not conflict, because Morgen reads your calendars and Keeper.sh writes to them.
 
-Run Morgen as your calendar app, for the interface, the task tools, and the native apps. Run Keeper.sh underneath for the blocking, so your availability is right within about a minute on Pro. The two do not conflict, because Morgen reads your calendars and Keeper.sh writes to them.
+Some people keep Morgen as the calendar app, with Keeper.sh underneath doing the blocking.
 
 ## Can you run Keeper.sh yourself?
 
@@ -108,13 +106,11 @@ Upgrades, backups, and uptime are yours after that. Most people should use hoste
 
 ## So which should you pick?
 
-Pick Morgen if you want a calendar app you enjoy opening every morning. Pick Morgen if you need native desktop apps, and especially if you are on Linux.
+Pick Keeper.sh if a stale calendar has already got you double-booked, or if your availability needs to be right within about a minute of a change. Pick Keeper.sh if you need your time blocked further out than the next two weeks.
 
-Pick Morgen if EU or Swiss hosting matters, or if you want your tasks and calendar in one place.
+Pick Keeper.sh if $5 a month, flat, is the right size for a background job.
 
-Pick Keeper.sh if a stale calendar has already got you double-booked. Pick Keeper.sh if you need your time blocked further out than the next two weeks.
-
-Pick Keeper.sh if $5 a month is the right size for a background job, or if you would rather run the whole thing on your own server.
+Morgen's case is the app itself: native apps on desktop, phone and Linux, tasks beside your calendar, and EU or Swiss hosting.
 
 If you are not sure, ask one question. Has anyone booked over you because your other calendar looked free? If the answer is no, Morgen's timing will not bother you.
 
@@ -122,7 +118,7 @@ If you are not sure, ask one question. Has anyone booked over you because your o
 
 ### How often does Morgen block out my events?
 
-Once a day. Morgen's guide states that the workflow runs daily at 6:00 pm and covers the upcoming 14 days. Keeper.sh reads every minute, and a block lands in about a minute on Pro, or about fifteen minutes on the free plan.
+Once a day. Morgen's guide states that the workflow runs daily at 6:00 pm and covers the upcoming 14 days. Keeper.sh reads every minute instead.
 
 ### Can Keeper.sh sync in both directions?
 
@@ -133,6 +129,18 @@ Only by setting up two connections, one pointing each way, because each connecti
 No. A copy carries the times, the busy or free status, and whatever detail your settings let through.
 
 Attendees, meeting links, and reminders are never copied across. Keeper.sh does read attendees, so you can see pending invites and RSVP.
+
+## Other comparisons
+
+Still weighing tools? These cover the rest of the field.
+
+- [Keeper.sh vs CalendarBridge](/compare/calendarbridge-alternative)
+- [Keeper.sh vs Kalender Sync](/compare/kalender-sync-alternative)
+- [Keeper.sh vs OneCal](/compare/onecal-alternative)
+- [Keeper.sh vs Reclaim.ai](/compare/reclaim-ai-alternative)
+- [Keeper.sh vs SyncDate](/compare/syncdate-alternative)
+- [Keeper.sh vs SyncThemCalendars](/compare/syncthemcalendars-alternative)
+- [Nine calendar sync tools compared on price, speed and privacy](/compare/best-calendar-sync-tools)
 
 ## Sources
 

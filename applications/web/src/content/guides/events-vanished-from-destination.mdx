@@ -1,0 +1,42 @@
+---
+title: "Copied events have disappeared from the other calendar"
+description: "Copies disappearing from a calendar usually follows a narrowed date range, a deleted or moved original event, an exclusion that started applying, or an account that lost access."
+blurb: "Copies that were there yesterday and are gone today have a short list of causes, and a narrowed date range is the most common of them."
+createdAt: "2026-08-14"
+slug: "copied-events-have-disappeared"
+updatedAt: "2026-08-14"
+tags:
+  - "troubleshooting"
+  - "sync-window"
+  - "connections"
+---
+
+Keeper.sh maintains its copies, so it removes them as readily as it creates them. Something told it those events no longer belong in that calendar. A narrowed date range is the most common cause.
+
+## Did the date range get narrowed?
+
+This is the usual answer. Narrowing **Sync Historic Events** or **Sync Future Events** does more than stop new copies. Copies already in the calendar that now fall outside the range are removed too — shorten the future range to three months, and everything further out is cleared.
+
+Widen the range again and the events come back on the next update. [How far events are copied](/docs/how-far-events-are-copied) covers the ranges available.
+
+## Did the original event change?
+
+Delete an event in the calendar it came from and its copy goes too. Move it and the copy moves, which can read as a disappearance if you were watching the old date. Both are the tool working as intended — see [sending events to another calendar](/docs/sending-events-to-another-calendar).
+
+## Did an exclusion get turned on?
+
+Turning on an exclusion removes the copies it covers, not just future ones. If all-day events, focus time or out-of-office blocks vanished, check **Exclusions** on the calendar they come from.
+
+## Was the connection removed?
+
+Remove a connection and Keeper.sh stops maintaining the copies it made. It may clean them up too. If a connection went missing recently, open **Send Events to Calendars** on the calendar the events came from and add it back.
+
+## Did the account lose access?
+
+Google or Outlook can revoke access after a password change, a withdrawn app-specific password, or an administrator policy. Keeper.sh then cannot read the calendar the events come from. Reconnect the account from the dashboard, and check whether the events return on the next update.
+
+## Where to go next
+
+- [How far events are copied](/docs/how-far-events-are-copied) — how the ranges decide what a calendar holds
+- [An event has not arrived in the other calendar](/guides/event-has-not-arrived) — for copies that never arrived in the first place
+- [What a copied event shows](/docs/what-a-copied-event-shows) — the exclusions and detail settings in full

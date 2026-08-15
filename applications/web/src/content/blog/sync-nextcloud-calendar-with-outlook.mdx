@@ -29,7 +29,7 @@ That is a connection, and it runs in one direction only. Want both directions? B
 - Your Nextcloud username, which is often not your email address
 - An app password if you have two-factor enabled, and ideally even if you do not
 - An Outlook or Microsoft 365 account
-- An account on [keeper.sh](https://keeper.sh/register)
+- An account on [keeper.sh](/register)
 
 One thing worth settling early: hosted Keeper.sh has to reach your Nextcloud over the public internet. A Nextcloud on `192.168.1.50` or `nextcloud.local` is not reachable, and no setting on your account changes that. Self-hosting Keeper.sh is the answer for a LAN-only instance.
 
@@ -140,7 +140,7 @@ Revoking works from either end: delete the app password in Nextcloud, or open th
 
 ## Would you rather run Keeper.sh yourself too?
 
-Running Nextcloud does not mean you want another service to babysit, so this is a real choice rather than the obvious one.
+Running Nextcloud does not mean you want another service to babysit, so weigh this one up properly.
 
 Self-hosting is not a downgrade. It is AGPL-3.0 with every Pro feature included, and it removes the public-reachability problem, since Keeper.sh can then sit on the same network as your Nextcloud.
 
@@ -152,4 +152,4 @@ The honest costs:
 - `BETTER_AUTH_SECRET` and `ENCRYPTION_KEY` kept safe, because losing the second loses your stored credentials
 - Backups, updates, and being the person who gets paged when it stops
 
-The [README](https://github.com/ridafkih/keeper.sh) has a single-container setup and a full Compose file. If you would rather not own another thing, [keeper.sh](https://keeper.sh/register) runs it and funds the project.
+The [README](https://github.com/ridafkih/keeper.sh) has a single-container setup and a full Compose file. If you would rather not own another thing, [keeper.sh](/register) runs it and funds the project.

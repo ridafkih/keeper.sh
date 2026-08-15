@@ -16,7 +16,7 @@ Your personal life sits in Google Calendar. Your work sits in Outlook. Nobody at
 
 This guide fixes that in one direction, so your Google events start appearing in Outlook as busy time. It takes about five minutes and costs nothing.
 
-The tool doing the copying is Keeper.sh, at [keeper.sh](https://keeper.sh) or on your own hardware.
+The tool doing the copying is Keeper.sh, at [keeper.sh](/). It signs into both calendars and keeps the copies in step.
 
 ## What will my colleagues actually see?
 
@@ -24,7 +24,7 @@ Meet Priya, a contract product designer. Her Thursday physio appointment and her
 
 Once this is set up, each becomes an event in her work Outlook calendar at the same day, time and length. When her project lead checks her availability, the 3pm pickup is a blocked hour.
 
-The title is not "Physio". Keeper.sh writes the name of the Google calendar instead, so colleagues see an hour called "Personal". They need to know the hour is gone, not why.
+The title is not "Physio". Keeper.sh writes the name of the Google calendar instead, so colleagues see an hour called "Personal". They only need to know the hour is gone.
 
 ## What should I do before I start?
 
@@ -34,7 +34,7 @@ Make it before you connect Outlook to Keeper.sh. Keeper.sh reads your list of Ou
 
 ## How do I set it up?
 
-Sign in at [keeper.sh](https://keeper.sh) to reach your dashboard. Connect Outlook first, because it is the calendar receiving events, and Keeper.sh can only offer a target it already knows about.
+Sign in at [keeper.sh](/) to reach your dashboard. Connect Outlook first, because it is the calendar receiving events, and Keeper.sh can only offer a target it already knows about.
 
 1. Choose **Import Calendars**.
 2. Choose **Connect Outlook**.
@@ -65,7 +65,7 @@ If you routinely add meetings for that same morning, that gap is the reason to p
 
 ## Who can see what?
 
-Keeper.sh copies the time, but whether it copies the detail is a setting you should look at rather than assume.
+Keeper.sh always copies the time. Whether it copies the detail is a setting worth checking before you trust it.
 
 Open the Google calendar inside Keeper.sh and find **Sync Settings**. Three switches decide what leaves: **Sync Event Name**, **Sync Event Description** and **Sync Event Location**.
 
@@ -79,7 +79,7 @@ Every event Keeper.sh creates in Outlook carries a coloured category label calle
 
 Keeper.sh carries the title or its stand-in, the description, the location, the start and end, the timezone, all-day status, busy or free, and any repeat pattern. It does not carry attendees, video call links or reminders.
 
-So the copy in Outlook is a block of time rather than a joinable meeting. If Priya's client call has a Meet link, she still joins from Google, and nobody at work can dial into her physio appointment.
+So the copy in Outlook is a block of time and nothing more. If Priya's client call has a Meet link, she still joins from Google, and nobody at work can dial into her physio appointment.
 
 ## Can I make it work both ways?
 
@@ -103,11 +103,11 @@ Do it deliberately, though. Copying a work calendar into a personal Google calen
 
 ## Can I run this myself?
 
-Yes, and it is a genuine alternative rather than a consolation prize. Keeper.sh is open source under AGPL-3.0, and a copy you run yourself has every Pro feature at no cost, including the one-minute updates and the detail switches.
+Yes, and you get the full product. Keeper.sh is open source under AGPL-3.0, and a copy you run yourself has every Pro feature at no cost, including the one-minute updates and the detail switches.
 
 The honest cost is a real evening's work. You need somewhere to run Docker, a PostgreSQL database and a Redis instance, and you must register your own application with both Google and Microsoft.
 
-The [README on GitHub](https://github.com/ridafkih/keeper.sh#readme) has the walkthrough and prepared Docker images. If that sounds like a chore, [keeper.sh](https://keeper.sh) is the same software with the setup already done.
+The [README on GitHub](https://github.com/ridafkih/keeper.sh#readme) has the walkthrough and prepared Docker images. If that sounds like a chore, [keeper.sh](/) is the same software with the setup already done.
 
 ## What does it cost?
 

@@ -20,13 +20,13 @@ Keeper.sh signs into Radicale and iCloud and keeps copies of your events in step
 
 Add an event in Radicale and a copy appears in iCloud, which means it appears on your iPhone. Move it, the copy moves. Delete it, the copy goes.
 
-By default the copy is a block of busy time, not a readable event. Your notes do not come along.
+By default the copy is a plain block of busy time with no title. Your notes do not come along.
 
-Copies travel one way per connection: Radicale to iCloud, or iCloud to Radicale. Want both? That is two connections, not a single "two-way" switch.
+Copies travel one way per connection: Radicale to iCloud, or iCloud to Radicale. Want both directions? Set up two connections, one each way.
 
 ## Can Keeper.sh reach a Radicale on your home network?
 
-You need a username and password from your htpasswd file, an Apple Account with two-factor login on, and an account on [keeper.sh](https://keeper.sh/register). You also need Radicale answering on an address Keeper.sh can reach, and that is the part to settle first.
+You need a username and password from your htpasswd file, an Apple Account with two-factor login on, and an account on [keeper.sh](/register). You also need Radicale answering on an address Keeper.sh can reach, and that is the part to settle first.
 
 Most Radicale instances sit on a home network — `192.168.1.x`, a `.local` hostname, or `localhost:5232`.
 
@@ -104,19 +104,19 @@ If you are mirroring Radicale so your phone knows you are busy, thirty minutes c
 
 ## What does not come across?
 
-Guest lists, video call links and reminders do not travel at all, so a copied meeting is a block of time rather than a working invite. Guest lists are read only to show you invitations you have not answered yet.
+Guest lists, video call links and reminders do not travel at all, so a copied meeting is a block of time and nothing more. Guest lists are read only to show you invitations you have not answered yet.
 
 Keeper.sh also looks at a fixed stretch of time — from a week ago to two years ahead. A one-off event further out is not copied. A repeating event that began before the window is still picked up, so its dates inside the window survive.
 
 ## What goes wrong, and what does it look like?
 
-**The page says "Invalid credentials".** The server was reached and rejected the sign-in. On the Radicale side, check the details against your htpasswd file. On the iCloud side, the normal Apple password was pasted, or the app-specific one has been cancelled.
+**The page says "Invalid credentials".** The server was reached and rejected the sign-in. On the Radicale side, check the details against your htpasswd file; on the iCloud side, the normal Apple password was pasted or the app-specific one has been cancelled.
 
-**The page says "Failed to discover calendars".** This means something different. Keeper.sh never got a usable answer from that address, so the credentials were never tested. Check the address for a typo, confirm Radicale is running, and if you self-host, check the private-address setting above.
+**The page says "Failed to discover calendars".** Keeper.sh never got a usable answer from that address, so the credentials were never tested. Check the address for a typo, confirm Radicale is running, and check the private-address setting above.
 
 **The page says "No calendars found".** Your credentials worked, but Keeper.sh found nothing to import at that address. This is when to try `https://radicale.example.com/username/` with the trailing slash.
 
-**One bad repeating event freezes a whole calendar.** Not one missing event — everything stops updating. Keeper.sh refuses to work through a repeating series producing more than 10,000 dates in two years, and today that stops the whole calendar. Delete the runaway event and it catches up.
+**One bad repeating event freezes a whole calendar.** Keeper.sh refuses to work through a repeating series producing more than 10,000 dates in two years, and everything on that calendar stops updating. Delete the runaway event and the calendar catches up.
 
 **Events disappear from iCloud that still exist in Radicale.** Keeper.sh reads the whole calendar each round. If a proxy in front of Radicale caps how many items come back in one response, Keeper.sh sees a shorter calendar and removes the difference.
 

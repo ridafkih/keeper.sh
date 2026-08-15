@@ -1,0 +1,40 @@
+---
+title: "How far back and ahead events are copied"
+description: "The sync window sets how far into the past and future Keeper.sh copies events into a calendar. Narrowing it also removes copies that now fall outside the new range."
+blurb: "One month back and two years ahead to start with. Narrowing the range does not only stop new copies being made — it clears out copies already outside it."
+createdAt: "2026-08-14"
+slug: "how-far-events-are-copied"
+updatedAt: "2026-08-14"
+tags:
+  - "reference"
+  - "sync-window"
+  - "sync"
+---
+
+Keeper.sh copies events from one month back to two years ahead, unless you change that. The range is called the sync window. It sits under **Sync Window** on the calendar receiving the events, and covers everything copied into it.
+
+## The two settings you change
+
+**Sync Historic Events** sets how far into the past copies reach, one month by default. **Sync Future Events** sets how far ahead, two years by default. Each takes one of six spans: 1 week, 1 month, 3 months, 6 months, 12 months, or 2 years.
+
+An event outside the range is not copied, however recently it was created. Choosing a span is a Pro feature. On Free the defaults hold, and the dashboard says so where the setting would be.
+
+## Narrowing a range removes events
+
+This is the part worth reading twice. Narrowing a range does not just stop new copies outside it. Copies already in the calendar that now fall outside are removed too, because the range describes what the calendar should contain.
+
+Widening works the other way. Events in the newly covered span arrive on the next check, so give it a few minutes before deciding something is wrong. [Sending events to another calendar](/docs/sending-events-to-another-calendar) covers the timings.
+
+If events you expected have gone missing, [copied events have disappeared from the other calendar](/guides/copied-events-have-disappeared) starts from that symptom.
+
+## Choosing a range
+
+A short future range keeps a shared or work calendar tidy. Next year's provisional plans stay out of it. A long historic range suits the calendar you search through for what you did and when.
+
+Every event inside the range is a real event in the receiving calendar. A wide range on a busy calendar is a lot of events. If that calendar is only ever read, a [shareable calendar link](/docs/shareable-calendar-links) may fit better: one link rather than thousands of copies.
+
+## Where to go next
+
+- [Sending events to another calendar](/docs/sending-events-to-another-calendar) — how the copying works
+- [What a copied event shows](/docs/what-a-copied-event-shows) — which details travel with the copy
+- [Recipes](/recipes) — complete setups that use these settings together

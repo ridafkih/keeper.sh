@@ -39,6 +39,10 @@ import { Route as AboutRoute } from "../../src/routes/(marketing)/about";
 import { Route as SelfHostingRoute } from "../../src/routes/(marketing)/self-hosting";
 import { Route as IcsGeneratorRoute } from "../../src/routes/(marketing)/tools/ics-generator";
 import { Route as IcsViewerRoute } from "../../src/routes/(marketing)/tools/ics-viewer";
+import { Route as CompareIndexRoute } from "../../src/routes/(marketing)/compare/index";
+import { Route as DocsIndexRoute } from "../../src/routes/(marketing)/docs/index";
+import { Route as GuidesIndexRoute } from "../../src/routes/(marketing)/guides/index";
+import { Route as RecipesIndexRoute } from "../../src/routes/(marketing)/recipes/index";
 
 const ROUTE_TREE_FILE = resolve(
   fileURLToPath(import.meta.url),
@@ -54,10 +58,14 @@ const indexableRoutes: Record<string, HeadRoute> = {
   "/": HomeRoute as unknown as HeadRoute,
   "/about": AboutRoute as unknown as HeadRoute,
   "/blog": BlogIndexRoute as unknown as HeadRoute,
+  "/compare": CompareIndexRoute as unknown as HeadRoute,
+  "/docs": DocsIndexRoute as unknown as HeadRoute,
   "/docs/mcp": McpDocsRoute as unknown as HeadRoute,
   "/features": FeaturesRoute as unknown as HeadRoute,
+  "/guides": GuidesIndexRoute as unknown as HeadRoute,
   "/pricing": PricingRoute as unknown as HeadRoute,
   "/privacy": PrivacyRoute as unknown as HeadRoute,
+  "/recipes": RecipesIndexRoute as unknown as HeadRoute,
   "/self-hosting": SelfHostingRoute as unknown as HeadRoute,
   "/terms": TermsRoute as unknown as HeadRoute,
   "/tools/ics-generator": IcsGeneratorRoute as unknown as HeadRoute,

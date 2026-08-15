@@ -1,0 +1,40 @@
+---
+title: "A subscribed calendar is showing out-of-date events"
+description: "A subscribed calendar showing stale events is nearly always the calendar app's own refresh schedule. How to check the link itself, and what to do when the delay is too long."
+blurb: "Your link is current but the app showing it is hours behind. A subscribed calendar refreshes when the app decides to, and some apps wait hours between reads."
+createdAt: "2026-08-14"
+slug: "subscribed-calendar-out-of-date"
+updatedAt: "2026-08-14"
+tags:
+  - "troubleshooting"
+  - "ical-feeds"
+  - "sync"
+---
+
+A subscribed calendar goes stale because the app showing it decides when to re-read the link. Some apps wait hours between reads. The Keeper.sh link itself is almost always current — the delay is on the subscribing side.
+
+## The app decides when to refresh
+
+The app you gave the link to reads it on its own timetable. Keeper.sh answers with the current calendar every time the link is asked. It cannot make an app ask sooner.
+
+Some apps let you pick how often each subscribed calendar refreshes. Some refresh only when opened, and others sit on a fixed schedule measured in hours. Check the subscription's settings in the app first, and refresh by hand if it offers that.
+
+## Check the link itself is current
+
+Open the link in a browser. You get the raw calendar file, and you can search it for the event you changed.
+
+If the change is there, the link is doing its job. The whole delay is the app's. If it is not there, work through [an event has not arrived in the other calendar](/guides/event-has-not-arrived) instead.
+
+The link is rebuilt every time it is read, from calendars Keeper.sh checks every minute on every plan. It is rarely more than a minute or two behind.
+
+## When the delay is too long
+
+If a calendar must be current within minutes, a subscribed link is the wrong tool for it. Set up a [connection](/docs/sending-events-to-another-calendar) into a real calendar in the account the app is signed into — that calendar is kept current by Google or Outlook themselves, at full speed.
+
+Links are best when you want one link, no writes, and an easy way to cut someone off. Connections are best when you need speed in an app you do not control.
+
+## Where to go next
+
+- [Shareable calendar links](/docs/shareable-calendar-links) — what a link carries and how to change it
+- [See all your calendars in one app](/recipes/see-all-calendars-in-one-app) — a link built for exactly this
+- [How calendar sync actually works](/blog/how-calendar-sync-actually-works) — the mechanics underneath

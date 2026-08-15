@@ -12,7 +12,11 @@ export const staticPagePaths: string[] = [
   "/about",
   "/tools/ics-generator",
   "/tools/ics-viewer",
+  "/docs",
   "/docs/mcp",
+  "/guides",
+  "/recipes",
+  "/compare",
   "/privacy",
   "/terms",
 ];

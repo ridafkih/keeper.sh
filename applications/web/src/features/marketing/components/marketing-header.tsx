@@ -20,7 +20,9 @@ type MarketingNavItem = {
 const NAV_ITEMS: MarketingNavItem[] = [
   { to: "/features", label: "Features" },
   { to: "/pricing", label: "Pricing" },
-  { to: "/blog", label: "Blog" },
+  { to: "/docs", label: "Docs" },
+  { to: "/guides", label: "Guides" },
+  { to: "/recipes", label: "Recipes" },
 ];
 
 const navItem = tv({

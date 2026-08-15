@@ -1,4 +1,5 @@
 import { Children, isValidElement, type JSX, type ReactNode } from "react";
+import { Link } from "@tanstack/react-router";
 import { Heading1, Heading2, Heading3 } from "./heading";
 import { ListItem, OrderedList, UnorderedList } from "./list";
 import { Text } from "./text";
@@ -8,28 +9,65 @@ type MarkdownElementProps<Tag extends keyof JSX.IntrinsicElements> =
   node?: unknown;
 };
 
-const SITE_ORIGIN = "https://keeper.sh";
+const SITE_HOSTNAMES = ["keeper.sh", "www.keeper.sh"];
 const HTTP_PROTOCOLS = ["http:", "https:"];
+const LINK_CLASS_NAME = "text-foreground underline underline-offset-2 hover:text-foreground-hover";
 const LABEL_COLUMN_MIN_WIDTH = "18ch";
 const COLUMN_MIN_WIDTH = "13ch";
+const COMBINING_MARKS = /\p{M}+/gu;
+const NON_SLUG_CHARACTERS = /[^a-z0-9]+/g;
+const SLUG_EDGE_SEPARATORS = /^-+|-+$/g;
+
+function isSiteHttpUrl(url: URL): boolean {
+  return HTTP_PROTOCOLS.includes(url.protocol) && SITE_HOSTNAMES.includes(url.hostname);
+}
 
 function isExternalHttpLink(href: string): boolean {
   if (!URL.canParse(href)) return false;
 
   const url = new URL(href);
-  return HTTP_PROTOCOLS.includes(url.protocol) && url.origin !== SITE_ORIGIN;
+  return HTTP_PROTOCOLS.includes(url.protocol) && !isSiteHttpUrl(url);
+}
+
+function toInternalPath(href: string): string | undefined {
+  if (href.startsWith("/")) return href;
+  if (!URL.canParse(href)) return undefined;
+
+  const url = new URL(href);
+  if (!isSiteHttpUrl(url)) return undefined;
+
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function toPlainText(children: ReactNode): string {
+  return Children.toArray(children).reduce<string>((text, child) => {
+    if (typeof child === "string" || typeof child === "number") return `${text}${child}`;
+    if (!isValidElement<{ children?: ReactNode }>(child)) return text;
+    return `${text}${toPlainText(child.props.children)}`;
+  }, "");
+}
+
+function headingId(children: ReactNode): string | undefined {
+  const slug = toPlainText(children)
+    .normalize("NFKD")
+    .replace(COMBINING_MARKS, "")
+    .toLowerCase()
+    .replace(NON_SLUG_CHARACTERS, "-")
+    .replace(SLUG_EDGE_SEPARATORS, "");
+
+  return slug.length > 0 ? slug : undefined;
 }
 
 export function MarkdownHeadingOne({ children }: MarkdownElementProps<"h1">) {
-  return <Heading1 as="h1" className="mb-3 mt-6 first:mt-0">{children}</Heading1>;
+  return <Heading1 as="h1" className="mb-3 mt-6 first:mt-0" id={headingId(children)}>{children}</Heading1>;
 }
 
 export function MarkdownHeadingTwo({ children }: MarkdownElementProps<"h2">) {
-  return <Heading2 as="h2" className="mb-2.5 mt-6 first:mt-0">{children}</Heading2>;
+  return <Heading2 as="h2" className="mb-2.5 mt-6 first:mt-0" id={headingId(children)}>{children}</Heading2>;
 }
 
 export function MarkdownHeadingThree({ children }: MarkdownElementProps<"h3">) {
-  return <Heading3 as="h3" className="mb-2 mt-5 first:mt-0">{children}</Heading3>;
+  return <Heading3 as="h3" className="mb-2 mt-5 first:mt-0" id={headingId(children)}>{children}</Heading3>;
 }
 
 export function MarkdownParagraph({ children }: MarkdownElementProps<"p">) {
@@ -47,10 +85,19 @@ export function MarkdownLink({
 }: MarkdownElementProps<"a">) {
   const normalizedHref = typeof href === "string" ? href : "#";
   const normalizedTitle = typeof title === "string" ? title : undefined;
+  const internalPath = toInternalPath(normalizedHref);
+
+  if (internalPath) {
+    return (
+      <Link className={LINK_CLASS_NAME} title={normalizedTitle} to={internalPath}>
+        {children}
+      </Link>
+    );
+  }
 
   return (
     <a
-      className="text-foreground underline underline-offset-2 hover:text-foreground-hover"
+      className={LINK_CLASS_NAME}
       href={normalizedHref}
       rel={isExternalHttpLink(normalizedHref) ? "noopener noreferrer" : undefined}
       target={isExternalHttpLink(normalizedHref) ? "_blank" : undefined}

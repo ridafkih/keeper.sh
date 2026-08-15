@@ -4,6 +4,7 @@ import { faqSchema, jsonLdScript, seoHead, softwareApplicationSchema, webPageSch
 import { Heading1, Heading2, Heading3 } from '../../components/ui/primitives/heading'
 import { Text } from '../../components/ui/primitives/text'
 import { MarketingFaqSection, MarketingFaqList, MarketingFaqItem, MarketingFaqQuestion } from '../../features/marketing/components/marketing-faq'
+import { MarketingArticleCard, MarketingArticleGrid, MarketingArticleSection } from '../../features/marketing/components/marketing-article-section'
 import { MarketingCtaSection, MarketingCtaCard } from '../../features/marketing/components/marketing-cta'
 import { Collapsible } from '../../components/ui/primitives/collapsible'
 import { TextLink } from '../../components/ui/primitives/text-link'
@@ -50,6 +51,7 @@ import {
 import { PRICING_FEATURE_DIFFERENCES, PRICING_PLANS, pricingPlanHighlights } from '../../features/marketing/pricing-plans'
 import { TESTIMONIALS } from '../../features/marketing/testimonials'
 import { GithubStarButton } from '../../components/ui/primitives/github-star-button'
+import { latestArticles } from '../../lib/article-library'
 import { calendarEmphasizedAtom } from '../../state/calendar-emphasized'
 import { ANALYTICS_EVENTS } from '../../lib/analytics'
 import ArrowRightIcon from "lucide-react/dist/esm/icons/arrow-right";
@@ -336,6 +338,26 @@ function MarketingPage() {
               </MarketingPricingFeatureMatrix>
             </MarketingPricingComparisonGrid>
           </MarketingPricingSection>
+
+          <MarketingArticleSection>
+            <Heading2 className="text-center">Latest content</Heading2>
+            <Text size="sm" align="center" className="mt-2 max-w-[48ch] mx-auto">
+              Step-by-step guides for the calendars you use, and comparisons with the other
+              sync tools. Browse them all on the{' '}
+              <TextLink size="sm" to="/blog">blog</TextLink> and the{' '}
+              <TextLink size="sm" to="/compare">comparison pages</TextLink>.
+            </Text>
+            <MarketingArticleGrid>
+              {latestArticles.map((article) => (
+                <MarketingArticleCard
+                  key={article.path}
+                  blurb={article.blurb}
+                  path={article.path}
+                  title={article.title}
+                />
+              ))}
+            </MarketingArticleGrid>
+          </MarketingArticleSection>
 
           <MarketingFaqSection>
             <Heading2 className="text-center">Frequently Asked Questions</Heading2>

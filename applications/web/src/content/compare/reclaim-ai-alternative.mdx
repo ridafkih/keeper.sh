@@ -1,10 +1,10 @@
 ---
 title: "Keeper.sh vs Reclaim.ai"
 description: "Keeper.sh and Reclaim.ai compared for keeping work and personal calendars in sync: which calendars each one reaches, how fast copies land, and what each costs."
-blurb: "Reclaim's free plan covers one sync between two Google or Outlook calendars. Keeper.sh reaches iCloud, Fastmail and any CalDAV server too, flat at $5 a month."
+blurb: "Reclaim's free plan covers one sync between two Google or Outlook calendars. Keeper.sh reaches iCloud, Fastmail and self-run calendar servers too, flat at $5 a month."
 createdAt: "2026-08-11"
 updatedAt: "2026-08-12"
-slug: "keeper-sh-vs-reclaim-ai"
+slug: "reclaim-ai-alternative"
 tags:
   - "comparison"
   - "reclaim"
@@ -15,22 +15,6 @@ tags:
 Reclaim.ai is an AI scheduling assistant. It plans your tasks, defends your focus time, and copies events between calendars.
 
 Keeper.sh does the copying, and reaches calendars Reclaim cannot: iCloud, Fastmail and any CalDAV server. That difference decides most of this comparison.
-
-## Should you just use Reclaim's free plan?
-
-If both calendars are Google or Outlook and you need exactly one copy running, yes.
-
-Reclaim's Lite plan is free and includes one Calendar Sync and two connected calendars, per their [pricing page](https://reclaim.ai/pricing). Picture a Gmail account and a Google Workspace account, with personal events showing as busy at work. Lite does that at $0.
-
-The Keeper.sh free plan does it too, with copies landing in about fifteen minutes rather than about a minute on Pro.
-
-That offer is narrower than it first looks. Reclaim supports Google and Outlook only, on every tier including the paid ones.
-
-So if either calendar lives on iCloud, Fastmail, Nextcloud, Radicale or another CalDAV server, Reclaim cannot connect it. The same goes for a public calendar link.
-
-The counts are not comparable either. Reclaim Lite is one sync between two calendars. Keeper.sh free is two linked accounts and three connections, and one account can expose many calendars.
-
-So the rule is simple. Google and Outlook only, one connection, and Reclaim Lite is the right answer. Anything wider than that and the free plan runs out.
 
 ## Which calendars can each one connect?
 
@@ -72,17 +56,19 @@ So a dentist appointment on a calendar you called "Personal" shows up at work as
 
 Reclaim lets any plan, Lite included, choose how much detail travels. On Keeper.sh the private version is what you get by default, and changing it is a Pro feature.
 
-Reclaim's filters also work per event, with working-hours rules and a keyword you type into an event. Keeper.sh filters per calendar instead: all-day events, focus time and out-of-office blocks, on Pro. If you want to decide event by event what gets copied, that is Reclaim.
+Reclaim's filters also work per event, with working-hours rules and a keyword you type into an event. Keeper.sh filters per calendar instead: all-day events, focus time and out-of-office blocks, on Pro.
 
 ## What does each one cost?
 
-Reclaim's paid tiers are listed at $10, $15, and $22 per seat per month for Starter, Business, and Enterprise ([pricing](https://reclaim.ai/pricing)). Enterprise is where SSO and SCIM user provisioning live. None of those tiers add a calendar service, so paying more does not get you iCloud or CalDAV.
+Reclaim's Lite plan is free and includes one Calendar Sync between two connected Google or Outlook calendars ([pricing](https://reclaim.ai/pricing)). Paid tiers are $10, $15, and $22 per seat per month for Starter, Business, and Enterprise. Enterprise is where SSO and SCIM user provisioning live.
+
+None of those tiers add a calendar service, so paying more does not get you iCloud or CalDAV.
 
 Keeper.sh is $0 or $5 a month, flat, for one person. Our free plan gives you two linked accounts and three connections, with no limit on how many calendars each account exposes.
 
 Pro removes both limits. It also writes copies every minute, and lets you change what shows through on a copy.
 
-Keeper.sh is priced per person rather than per seat, and there is no SSO or SCIM today. A company buying identity-managed seats wants Reclaim's Business or Enterprise tier.
+Keeper.sh is priced per person rather than per seat, and there is no SSO or SCIM today.
 
 ## What else does Keeper.sh give you?
 
@@ -94,7 +80,7 @@ And it is open source under AGPL-3.0, so you can read every line of code that to
 
 ## Can you run Keeper.sh yourself?
 
-Yes, and it is a real option rather than a token gesture. The whole codebase is on [GitHub](https://github.com/ridafkih/keeper.sh) under AGPL-3.0, with Docker images to make a first deployment quick.
+Yes, and you get the full product. The whole codebase is on [GitHub](https://github.com/ridafkih/keeper.sh) under AGPL-3.0, with Docker images to make a first deployment quick.
 
 Self-hosting turns on every Pro feature at no cost, deliberately. Running our code on your own hardware gets you the same product we host.
 
@@ -106,9 +92,9 @@ Most people should use hosted Keeper.sh and pay the $5. Run it yourself if you w
 
 ## So which should you pick?
 
-Pick Reclaim if both calendars are Google or Outlook and one free sync covers you. Pick Reclaim if you want AI scheduling and task planning, or if you are buying seats for a team that needs SSO.
+Pick Keeper.sh if any calendar you care about lives on iCloud or Fastmail, or on a server Reclaim cannot reach. Pick Keeper.sh if you want more than three connections for a flat $5, or one link that shows your availability everywhere.
 
-Pick Keeper.sh if any calendar you care about is on iCloud, Fastmail, or CalDAV. Pick Keeper.sh if you want more than three connections for a flat $5. Pick Keeper.sh if you want an availability link, an API, or the code.
+Reclaim's case is two Google or Outlook calendars on one free sync, AI task planning, and seats with SSO.
 
 ## FAQ
 
@@ -125,6 +111,18 @@ Attendees, meeting links, and reminders are never copied across. Keeper.sh does 
 ### Can I use both tools together?
 
 Yes, though most people will not need to. Reclaim can handle scheduling on your Google and Outlook calendars while Keeper.sh covers an iCloud or CalDAV calendar it cannot reach.
+
+## Other comparisons
+
+Still weighing tools? These cover the rest of the field.
+
+- [Keeper.sh vs CalendarBridge](/compare/calendarbridge-alternative)
+- [Keeper.sh vs Kalender Sync](/compare/kalender-sync-alternative)
+- [Keeper.sh vs Morgen](/compare/morgen-alternative)
+- [Keeper.sh vs OneCal](/compare/onecal-alternative)
+- [Keeper.sh vs SyncDate](/compare/syncdate-alternative)
+- [Keeper.sh vs SyncThemCalendars](/compare/syncthemcalendars-alternative)
+- [Nine calendar sync tools compared on price, speed and privacy](/compare/best-calendar-sync-tools)
 
 ## Sources
 

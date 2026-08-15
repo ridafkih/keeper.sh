@@ -226,6 +226,25 @@ describe("resolveCanonicalRedirect", () => {
   it("leaves canonical paths untouched", () => {
     expect(resolveCanonicalRedirect(new URL("https://www.keeper.sh/blog"))).toBeNull();
   });
+
+  it("permanently redirects a moved comparison post to its /compare path", () => {
+    const response = resolveCanonicalRedirect(
+      new URL("https://www.keeper.sh/blog/keeper-sh-vs-calendarbridge"),
+    );
+
+    expect(response?.status).toBe(308);
+    expect(response?.headers.get("location")).toBe("/compare/calendarbridge-alternative");
+  });
+
+  it("reaches the moved comparison post in one hop from a trailing slash", () => {
+    const response = resolveCanonicalRedirect(
+      new URL("https://www.keeper.sh/blog/keeper-sh-vs-onecal/?ref=newsletter"),
+    );
+
+    expect(response?.headers.get("location")).toBe(
+      "/compare/onecal-alternative?ref=newsletter",
+    );
+  });
 });
 
 function cspDirectives(header: string): Map<string, string[]> {

@@ -20,9 +20,9 @@ Apple offers one way out: publish the calendar as a public link that Google refr
 
 Add a dentist appointment in iCloud and a copy appears on your Google calendar. Move it, the copy moves. Cancel it, the copy disappears.
 
-By default that copy is a block of busy time, not a readable event. Your coworkers see that you are unavailable, not why.
+By default that copy is a plain block of busy time with no title. Your coworkers see an hour of busy time with no title on it.
 
-Copies travel one way per connection: iCloud to Google, or Google to iCloud. Want both? That is two connections, not a single "two-way" switch.
+Copies travel one way per connection: iCloud to Google, or Google to iCloud. Want both directions? Set up two connections, one each way.
 
 ## Why do you need a special Apple password?
 
@@ -91,19 +91,19 @@ If you are blocking out evenings so nobody books them, thirty minutes changes no
 
 ## What does not come across?
 
-Guest lists, video call links and reminders do not travel at all. So a copied meeting is a block of time, not a working invite — you cannot join the call from it, and nobody gets notified. Guest lists are read only to show you invitations you have not answered yet.
+Guest lists, video call links and reminders do not travel at all, so a copied meeting is a block of time and nothing more. You cannot join the call from it, and nobody gets notified. Guest lists are read only to show you invitations you have not answered yet.
 
 Keeper.sh also looks at a fixed stretch of time — from a week ago to two years ahead. A one-off event further out is not copied. A repeating event that began before that window is still picked up, so its dates inside the window survive.
 
 ## What goes wrong, and what does it look like?
 
-**The page says "Invalid credentials".** Apple was reached and turned Keeper.sh away. In practice it is one of two things. You pasted your normal Apple password instead of the app-specific one, or the app-specific one has been cancelled.
+**The page says "Invalid credentials".** Apple was reached and turned Keeper.sh away. Either you pasted your normal Apple password instead of the app-specific one, or the app-specific one has been cancelled.
 
-**The page says "Failed to discover calendars".** That is a different problem, and your password is probably fine. Keeper.sh could not reach Apple at all, so it never got as far as checking. Wait a minute and try again.
+**The page says "Failed to discover calendars".** Keeper.sh could not reach Apple at all, so your password was never tested. Wait a minute and try again.
 
-**Everything stopped, and Apple gave no warning.** Changing your Apple password cancels every app-specific password. You find out when events stop appearing. Generate a new one and paste it in.
+**Everything stopped, and Apple gave no warning.** Changing your Apple password cancels every app-specific password you have made. Generate a new one and paste it in.
 
-**One bad repeating event freezes a whole calendar.** Not one missing event — everything stops. Keeper.sh refuses to work through a repeating series producing more than 10,000 dates in two years, and today that stops the whole calendar. Delete the event repeating every minute or hour and it catches up.
+**One bad repeating event freezes a whole calendar.** Keeper.sh refuses to work through a repeating series producing more than 10,000 dates in two years, and everything on that calendar stops updating. Delete the event repeating every minute or hour and the calendar catches up.
 
 **A shared calendar will not accept copies.** Calendars other people shared with you, and ones you subscribed to from a link, usually arrive read-only. They work fine as the calendar events come from, and fail as the one events are copied to.
 
@@ -117,7 +117,7 @@ Three connections covers both directions here with one spare. There is no cap on
 
 ## Would you rather run Keeper.sh yourself?
 
-Keeper.sh is open source under AGPL-3.0, and self-hosting is a real alternative rather than a lesser one. Every Pro feature comes with it, including real event titles and updates every minute. It is a Docker Compose stack with Postgres and Redis behind it, documented in the [repository](https://github.com/ridafkih/keeper.sh).
+Keeper.sh is open source under AGPL-3.0, and running it yourself gets you the full product. Every Pro feature comes with it, including real event titles and updates every minute. It is a Docker Compose stack with Postgres and Redis behind it, documented in the [repository](https://github.com/ridafkih/keeper.sh).
 
 Be honest about the cost. A server, a domain and a certificate, plus upgrades and backups. When it stops on a Monday morning, you are the person who fixes it.
 

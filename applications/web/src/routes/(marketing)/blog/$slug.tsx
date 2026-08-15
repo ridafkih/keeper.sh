@@ -7,7 +7,10 @@ import { Text } from "@/components/ui/primitives/text";
 import { MarketingNotFound } from "@/features/marketing/components/marketing-not-found";
 import { ArticleCta } from "@/features/marketing/components/article-cta";
 import { MarkdownFaq, MarkdownFaqItem } from "@/features/marketing/components/markdown-faq";
+import { RelatedArticles } from "@/features/marketing/components/related-articles";
+import { articleLibrary } from "@/lib/article-library";
 import { findBlogPostBySlug } from "@/lib/blog-posts";
+import { selectRelatedArticles } from "@/lib/related-articles";
 import { formatIsoDate } from "@/utils/date";
 import { jsonLdScript, notFoundHead, seoHead, blogPostingSchema, breadcrumbSchema, breadcrumbTrail, faqPageSchema } from "@/lib/seo";
 import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
@@ -59,7 +62,7 @@ export const Route = createFileRoute("/(marketing)/blog/$slug")({
         jsonLdScript(blogPostingSchema({
           title: blogPost.metadata.title,
           description: blogPost.metadata.description,
-          slug: params.slug,
+          path: postUrl,
           createdAt: blogPost.metadata.createdAt,
           updatedAt: blogPost.metadata.updatedAt,
           tags: blogPost.metadata.tags,
@@ -105,6 +108,8 @@ function BlogPostPage() {
       <Prose allowedTags={MARKDOWN_FAQ_TAGS} components={MARKDOWN_FAQ_COMPONENTS}>
         {blogPost.content}
       </Prose>
+
+      <RelatedArticles articles={selectRelatedArticles(`/blog/${slug}`, articleLibrary)} />
 
       <ArticleCta />
     </div>

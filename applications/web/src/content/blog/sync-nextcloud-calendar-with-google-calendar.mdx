@@ -20,16 +20,16 @@ Keeper.sh signs into both calendars and keeps copies of your events in step. It 
 
 Add an event in Nextcloud and a copy appears on your Google calendar. Move it, and the copy moves. Delete it, and the copy disappears.
 
-By default the copy is a block of busy time, not a readable event. Your coworkers see that you are unavailable, not what you are doing.
+By default the copy is a plain block of busy time with no title. Your coworkers see an hour of busy time with no title on it.
 
-Copies travel one way per connection: Nextcloud to Google, or Google to Nextcloud. Want both? That is one connection each way, not a single "two-way" switch.
+Copies travel one way per connection: Nextcloud to Google, or Google to Nextcloud. Want both directions? Set up two connections, one each way.
 
 ## What you need before you start
 
 - A Nextcloud server you can reach over the internet
 - Your Nextcloud username, and your password or an [app password](https://docs.nextcloud.com/server/latest/user_manual/en/session_management.html)
 - A Google account
-- A free account on [keeper.sh](https://keeper.sh/register)
+- A free account on [keeper.sh](/register)
 
 If two-factor login is switched on in Nextcloud, your normal password will not work here. An app password is a second password that only reaches your calendar and can be cancelled on its own. Make one under **Settings → Security → Devices & sessions**.
 
@@ -62,7 +62,7 @@ The setup flow asks four things, word for word:
 3. **Where should 'Personal' send events?** Tick Google, and copies of your Nextcloud events start appearing there.
 4. **Where should 'Personal' pull events from?** Tick Google here to get the reverse.
 
-Each tick is one connection. Ticking both directions is two connections, not one.
+Each tick is one connection. Both directions is two connections.
 
 You can change all of this later. Open the calendar under **Calendars** and use the **Send Events to Calendars** section.
 
@@ -84,21 +84,21 @@ If you are blocking out evenings so nobody books them, thirty minutes changes no
 
 ## What does not come across?
 
-Guest lists, video call links and reminders do not travel at all. So a copied meeting is a block of time, not a working invite — you cannot join the call from it, and nobody else gets notified. Guest lists are read only to show you invitations you have not replied to yet.
+Guest lists, video call links and reminders do not travel at all, so a copied meeting is a block of time and nothing more. You cannot join the call from it, and nobody else gets notified. Guest lists are read only to show you invitations you have not replied to yet.
 
 Keeper.sh also looks at a fixed stretch of time — from a week ago to two years ahead. A one-off event further out than that is not copied. A repeating event that started before the window is still picked up, so its dates inside the window survive.
 
 ## What goes wrong, and what does it look like?
 
-**The page says "Invalid credentials".** Keeper.sh reached your Nextcloud, and Nextcloud turned it away. Almost always this is two-factor login, which stops your normal password working here. Use an app password instead, and check the username too.
+**The page says "Invalid credentials".** Keeper.sh reached your Nextcloud and Nextcloud turned it away. Almost always this is two-factor login, which stops your normal password working here — use an app password instead.
 
-**The page says "Failed to discover calendars".** This means something different. Keeper.sh never got a usable answer from the address you gave, so your username and password were never tested. Check the web address for a typo, and confirm the server is reachable from outside your own network.
+**The page says "Failed to discover calendars".** Keeper.sh never got a usable answer from that address, so your username and password were never tested. Check the address for a typo, and confirm the server is reachable from outside your own network.
 
 **The page says "No calendars found".** Your credentials worked, but Keeper.sh found nothing to import at that address. Try the longer `remote.php/dav/calendars/username/` form instead.
 
-**One bad repeating event freezes a whole calendar.** Not one missing event — everything stops updating. Keeper.sh refuses to work through a repeating series producing more than 10,000 dates in two years, and today that stops the whole calendar. Delete the event repeating every minute or hour and it catches up.
+**One bad repeating event freezes a whole calendar.** Keeper.sh refuses to work through a repeating series producing more than 10,000 dates in two years, and everything on that calendar stops updating. Delete the event repeating every minute or hour and the calendar catches up.
 
-**Events vanish from Google that still exist in Nextcloud.** Keeper.sh reads your whole Nextcloud calendar each time. If something in front of it caps how much comes back in one response, Keeper.sh sees a shorter calendar and removes the difference. A reverse proxy with a tight response limit does this.
+**Events vanish from Google that still exist in Nextcloud.** Keeper.sh reads your whole Nextcloud calendar each time. If a reverse proxy in front of it caps how much comes back in one response, Keeper.sh sees a shorter calendar and removes the difference.
 
 **There is no "sync now" button.** You wait for the next round. Removing the account and adding it again is the blunt way to start clean.
 
@@ -110,7 +110,7 @@ Three connections covers both directions here with one to spare. There is no cap
 
 ## Do you want to run Keeper.sh yourself?
 
-Keeper.sh is open source under AGPL-3.0, and self-hosting is a genuine option rather than a consolation prize. Every Pro feature is included. It is a Docker Compose stack with Postgres and Redis behind it.
+Keeper.sh is open source under AGPL-3.0, and running it yourself gets you the full product. Every Pro feature is included. It is a Docker Compose stack with Postgres and Redis behind it.
 
 You already run Nextcloud, so you know the cost: a server, a domain, upgrades, backups, and being the one who gets paged at 7am.
 
