@@ -4,19 +4,20 @@ import { type } from "arktype";
 import { parse as parseYaml } from "yaml";
 
 /**
- * One release is one folder: `index.mdx` carries the prose that explains what
- * shipped, and `notes.json` carries the smaller changes as three lists of full
- * sentences. The folder name is the release date, which is also its URL.
+ * One entry is one folder: `index.mdx` carries the prose that explains what
+ * changed, and `notes.json` carries the smaller changes as three lists of full
+ * sentences. The folder name is the entry's slug, which is also its URL.
  *
- * Two releases can share a date. The folder name disambiguates them — `2026-08-14`
- * and `2026-08-14-2` both render under their own path and both show the same date.
+ * The entry is the unit, not the release. Several entries can share a date, and
+ * the timeline repeats that date rather than batching them into one row.
  */
 
 const releaseMetadataSchema = type({
   title: "string",
   description: "string",
   date: "string",
-  build: "string",
+  version: "string",
+  position: "number",
 });
 
 const releaseNotesSchema = type({
@@ -30,9 +31,12 @@ export interface ChangelogRelease {
   slug: string;
   title: string;
   description: string;
-  /** Publish date, ISO. Not unique — several releases can share one. */
+  /** Release date, ISO. Not unique — several entries can share one. */
   date: string;
-  build: string;
+  /** The release this shipped in, e.g. "v2.15.0". */
+  version: string;
+  /** Orders entries that share a date, lowest first. */
+  position: number;
   content: string;
   features: string[];
   improvements: string[];
@@ -91,7 +95,8 @@ function readRelease(directory: string, slug: string): ChangelogRelease {
     title: metadata.title,
     description: metadata.description,
     date: metadata.date,
-    build: metadata.build,
+    version: metadata.version,
+    position: metadata.position,
     content,
     features: notes.features,
     improvements: notes.improvements,
@@ -106,5 +111,7 @@ export function processChangelogDirectory(changelogDir: string): ChangelogReleas
 
   const releases = slugs.map((slug) => readRelease(join(changelogDir, slug), slug));
 
-  return releases.sort((a, b) => b.slug.localeCompare(a.slug));
+  return releases.sort(
+    (a, b) => b.date.localeCompare(a.date) || a.position - b.position,
+  );
 }

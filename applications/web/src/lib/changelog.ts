@@ -14,9 +14,12 @@ export interface ChangelogRelease {
   slug: string;
   title: string;
   description: string;
-  /** Publish date, ISO. Several releases can share one. */
+  /** Release date, ISO. Several entries can share one. */
   date: string;
-  build: string;
+  /** The release this shipped in, e.g. "v2.15.0". */
+  version: string;
+  /** Orders entries that share a date, lowest first. */
+  position: number;
   content: string;
   features: string[];
   improvements: string[];

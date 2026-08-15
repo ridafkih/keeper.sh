@@ -102,10 +102,10 @@ function NoteSection({ label, notes }: { label: string; notes: string[] }) {
   return (
     <section className="flex flex-col gap-3">
       <Heading2 as="h2">{label}</Heading2>
-      <ul className="flex flex-col gap-2 list-none">
+      <ul className="flex flex-col gap-2 list-disc pl-5 marker:text-foreground-muted">
         {notes.map((note) => (
           <li key={note}>
-            <Text size="base" tone="muted" className="max-w-[64ch] leading-7">
+            <Text size="base" tone="default" className="max-w-[64ch] leading-7">
               {note}
             </Text>
           </li>
@@ -134,8 +134,8 @@ function ChangelogReleasePage() {
           <Text size="sm" tone="muted">
             <time dateTime={release.date}>{formatIsoDate(release.date)}</time>
             {" · "}
-            <Text as="span" size="sm" tone="disabled">
-              {release.build}
+            <Text as="span" size="sm" tone="muted">
+              {release.version}
             </Text>
           </Text>
         </header>

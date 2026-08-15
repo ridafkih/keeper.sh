@@ -3,10 +3,11 @@ import { NAV_ITEMS } from "@/features/marketing/components/nav-items";
 import { changelogPaths, changelogReleases } from "@/lib/changelog";
 
 describe("NAV_ITEMS", () => {
-  it("keeps the header to the pages someone deciding whether to buy needs", () => {
+  it("keeps the header to the four pages someone deciding whether to buy needs", () => {
     expect(NAV_ITEMS.map((item) => item.to)).toEqual([
       "/features",
       "/pricing",
+      "/blog",
       "/changelog",
     ]);
   });
@@ -34,9 +35,18 @@ describe("changelogPaths", () => {
 });
 
 describe("changelogReleases", () => {
-  it("runs newest first", () => {
-    const slugs = changelogReleases.map((release) => release.slug);
-    expect(slugs).toEqual([...slugs].sort().reverse());
+  it("runs newest first, and keeps entries that share a date in order", () => {
+    const keys = changelogReleases.map((release) => [release.date, release.position] as const);
+
+    for (let index = 1; index < keys.length; index += 1) {
+      const [previousDate, previousPosition] = keys[index - 1]!;
+      const [date, position] = keys[index]!;
+
+      expect(previousDate >= date).toBe(true);
+      if (previousDate === date) {
+        expect(position).toBeGreaterThan(previousPosition);
+      }
+    }
   });
 
   it("writes every note as a full sentence, not an area-prefixed fragment", () => {
@@ -55,7 +65,8 @@ describe("changelogReleases", () => {
     for (const release of changelogReleases) {
       expect(release.title.length).toBeGreaterThan(0);
       expect(release.description.length).toBeGreaterThan(0);
-      expect(release.build.length).toBeGreaterThan(0);
+      expect(release.version).toMatch(/^v\d+\.\d+/);
+      expect(release.position).toBeGreaterThanOrEqual(0);
       expect(release.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(release.content.length).toBeGreaterThan(0);
     }

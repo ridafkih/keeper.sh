@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import ArrowRight from "lucide-react/dist/esm/icons/arrow-right";
+import { Collapsible } from "@/components/ui/primitives/collapsible";
 import { Heading1, Heading2 } from "@/components/ui/primitives/heading";
+import { Prose } from "@/components/ui/primitives/prose";
 import { Text } from "@/components/ui/primitives/text";
 import { ExternalTextLink } from "@/components/ui/primitives/text-link";
 import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
@@ -29,19 +30,11 @@ const PAGE_DESCRIPTION =
   "Every change to Keeper.sh, newest first: new features, improvements, and the bugs we fixed.";
 
 /**
- * Every row on the hub is this card, and every card goes to its release. The
- * title inside stays plain text: the card carries the hover, the focus ring and
- * the arrow, the way a blog card does.
+ * The entry is not one big link: the prose inside carries links of its own and an
+ * anchor cannot nest, so the title is what links to the entry's page.
  */
-const ENTRY_CARD =
-  "group block rounded-2xl border border-interactive-border bg-background p-5 shadow-xs transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:p-6";
-
-/**
- * A label for the list beneath it, not another line of that list: smaller than
- * its own items, in the plain foreground, and set in caps so the eye reads it
- * as a heading rather than as the first note.
- */
-const NOTE_GROUP_LABEL = "font-medium uppercase tracking-wide";
+const ENTRY_TITLE_LINK =
+  "rounded-lg hover:text-foreground-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 const NOTE_KINDS = [
   { key: "features", label: "New" },
@@ -70,55 +63,55 @@ export const Route = createFileRoute("/(marketing)/changelog/")({
     }),
 });
 
-function NoteList({ label, notes }: { label: string; notes: string[] }) {
+function NoteDisclosure({ label, notes }: { label: string; notes: string[] }) {
   return (
-    <section className="flex flex-col gap-2">
-      <h3>
-        <Text as="span" size="xs" tone="default" className={NOTE_GROUP_LABEL}>
+    <Collapsible
+      className="rounded-xl border border-interactive-border"
+      trigger={
+        <Text as="span" size="sm" tone="default" className="font-medium">
           {label}
+          <Text as="span" size="sm" tone="muted">
+            {` (${notes.length})`}
+          </Text>
         </Text>
-      </h3>
-      <ul className="flex flex-col gap-2 list-none">
+      }
+    >
+      <ul className="flex flex-col gap-2 list-disc pl-5 marker:text-foreground-muted">
         {notes.map((note) => (
           <li key={note}>
-            <Text size="sm" tone="muted" className="max-w-[64ch] leading-6">
+            <Text size="sm" tone="default" className="max-w-[64ch] leading-6">
               {note}
             </Text>
           </li>
         ))}
       </ul>
-    </section>
+    </Collapsible>
   );
 }
 
-function ReleaseCard({ release }: { release: ChangelogRelease }) {
+function EntryCard({ entry }: { entry: ChangelogRelease }) {
+  const hasNotes = NOTE_KINDS.some(({ key }) => entry[key].length > 0);
+
   return (
-    <Link className={ENTRY_CARD} params={{ slug: release.slug }} to="/changelog/$slug">
-      <article className="flex flex-col gap-4">
-        <div className="flex flex-col gap-3">
-          <Heading2 as="h2" className="group-hover:text-foreground-hover">
-            {release.title}
-          </Heading2>
-          <Text size="base" tone="default" className="max-w-[64ch] leading-7">
-            {release.description}
-          </Text>
+    <article className="flex flex-col gap-4">
+      <Heading2 as="h2">
+        <Link className={ENTRY_TITLE_LINK} params={{ slug: entry.slug }} to="/changelog/$slug">
+          {entry.title}
+        </Link>
+      </Heading2>
+
+      <Prose>{entry.content}</Prose>
+
+      {hasNotes && (
+        <div className="flex flex-col gap-2">
+          {NOTE_KINDS.map(({ key, label }) =>
+            entry[key].length > 0 ? (
+              <NoteDisclosure key={key} label={label} notes={entry[key]} />
+            ) : null,
+          )}
         </div>
-
-        {NOTE_KINDS.map(({ key, label }) =>
-          release[key].length > 0 ? (
-            <NoteList key={key} label={label} notes={release[key]} />
-          ) : null,
-        )}
-
-        <Text as="span" size="sm" tone="default" className="mt-1 flex items-center gap-1">
-          Read the full entry
-          <ArrowRight
-            aria-hidden="true"
-            className="size-4 transition-transform group-hover:translate-x-0.5"
-          />
-        </Text>
-      </article>
-    </Link>
+      )}
+    </article>
   );
 }
 
@@ -145,13 +138,13 @@ function ChangelogPage() {
               <Text as="p" size="sm" tone="default">
                 <time dateTime={release.date}>{formatIsoDate(release.date)}</time>
               </Text>
-              <Text size="xs" tone="disabled">
-                {release.build}
+              <Text size="xs" tone="muted">
+                {release.version}
               </Text>
             </TimelineAside>
 
             <TimelineContent>
-              <ReleaseCard release={release} />
+              <EntryCard entry={release} />
             </TimelineContent>
           </TimelineEntry>
         ))}

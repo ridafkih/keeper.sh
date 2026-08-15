@@ -1,0 +1,15 @@
+---
+title: "Add any calendar by pasting its link"
+description: "Give a calendar a name, paste its iCal link, and Keeper.sh starts pulling its events — including calendars that sit behind a username and password."
+date: "2025-12-30"
+version: "v1.7.0"
+position: 0
+---
+
+Most calendar apps will hand you a subscription link, and that is now all Keeper.sh needs. Give the calendar a name, paste the link, and its events start arriving. Added calendars are listed on the integrations page and can be removed again at any time.
+
+Some of those links are not public. Keeper.sh detects when a link asks for credentials and prompts you for a username and password rather than failing with nothing to act on, so a work calendar behind basic authentication connects the same way a public one does.
+
+When an import does fail, the error says what actually went wrong — the link was unreachable, the credentials were refused, the file was not a calendar — instead of reporting a generic failure. Keeper.sh then refetches on a schedule, so what it holds stays in step with the calendar you pointed it at.
+
+Read more about [everything Keeper.sh does](/features).

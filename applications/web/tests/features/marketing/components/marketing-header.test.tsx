@@ -32,6 +32,7 @@ describe("MarketingHeaderNav", () => {
     expect(markup).toContain('aria-label="Primary"');
     expect(markup).toContain('href="/features"');
     expect(markup).toContain('href="/pricing"');
+    expect(markup).toContain('href="/blog"');
     expect(markup).toContain('href="/changelog"');
   });
 });

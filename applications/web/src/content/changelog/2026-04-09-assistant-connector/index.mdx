@@ -1,0 +1,15 @@
+---
+title: "Connect Keeper.sh to Claude and other AI assistants"
+description: "Add Keeper.sh as a connector and an assistant can see which calendars you have linked and look up what is on them."
+date: "2026-04-09"
+version: "v2.9.33"
+position: 1
+---
+
+Keeper.sh can now be added as a connector in Claude and other assistants that speak the same protocol. Once it is connected, the assistant can see which calendars you have linked, look up the events in a date range and a timezone you specify, and count how many fall inside it — so "what does my Thursday look like" is answered from your actual calendars rather than from whatever you last pasted into the conversation.
+
+You approve the connection once, on a consent screen in your browser, and the assistant signs in with OAuth rather than holding a password. Access is yours to revoke at any point, and revoking it cuts the assistant off without touching the calendars themselves.
+
+At launch this is deliberately read-only. The assistant can look and it cannot change anything, which is the right place to start for something that has your whole schedule in view and occasionally misunderstands you.
+
+Read more about [everything Keeper.sh does](/features).

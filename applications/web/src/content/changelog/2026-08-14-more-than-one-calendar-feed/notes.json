@@ -1,0 +1,7 @@
+{
+  "features": [],
+  "improvements": [],
+  "fixes": [
+    "Google no longer deletes the copies it makes of meeting blocks, and descriptions are written as plain text where the field expects text."
+  ]
+}

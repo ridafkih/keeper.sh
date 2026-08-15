@@ -77,7 +77,7 @@ describe("content silos", () => {
     expect(broken).toEqual([]);
   });
 
-  it.each(recipes)("states the plan $path runs on in its blurb", ({ metadata }) => {
-    expect(metadata.blurb).toMatch(/\b(Free|Pro)\b/);
+  it.each(recipes)("leads $path with what it does, not with the plan it needs", ({ metadata }) => {
+    expect(metadata.blurb).not.toMatch(/^(Needs|Requires|Runs on)\b/);
   });
 });

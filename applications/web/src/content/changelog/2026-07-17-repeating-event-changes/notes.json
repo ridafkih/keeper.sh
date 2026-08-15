@@ -1,0 +1,17 @@
+{
+  "features": [],
+  "improvements": [
+    "Each calendar you sync into runs on its own, so a slow one no longer holds up the rest."
+  ],
+  "fixes": [
+    "Events you marked as free show as free in the feed you share.",
+    "The home page no longer sits on Syncing long after a sync has finished.",
+    "A deleted event is no longer left behind when the lookup that finds it fails.",
+    "Replying to one occurrence of a repeating invitation no longer changes the rest.",
+    "mailbox.org calendars connect on the first try.",
+    "An event with no series identifier no longer stops a sync.",
+    "A request that stops responding is given up on after 30 seconds, so the sync finishes.",
+    "A rescheduled event no longer leaves the old copy behind on your other calendars.",
+    "A sync running over two minutes keeps its claim on the calendar it is writing to."
+  ]
+}

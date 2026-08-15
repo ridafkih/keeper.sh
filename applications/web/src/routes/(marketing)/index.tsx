@@ -111,7 +111,7 @@ const MARKETING_FEATURES: MarketingFeature[] = [
     title: 'Sync only the details you want shared',
     description:
       'A copy shows the calendar it came from. Your title, description, location and guest list stay behind.',
-    gridClassName: 'lg:col-start-1 lg:col-span-10 lg:row-start-2',
+    gridClassName: 'sm:col-span-2 lg:col-start-1 lg:col-span-10 lg:row-start-2',
   },
   {
     id: 4,

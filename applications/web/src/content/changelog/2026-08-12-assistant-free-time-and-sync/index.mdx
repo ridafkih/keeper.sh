@@ -1,0 +1,15 @@
+---
+title: "Ask an assistant to find free time, sync now, or pause a calendar"
+description: "Three new tools let a connected assistant work out when you are actually free, force a sync, or stop a calendar syncing without disconnecting it."
+date: "2026-08-12"
+version: "v2.14.0"
+position: 1
+---
+
+An assistant connected to Keeper.sh could already read and write events, but not answer the question people actually ask it, which is when you are free.
+
+Finding free time works out the open slots across everything you have connected, over a range you give it. It reads availability rather than counting events: something marked free, or marked as working elsewhere, does not block a slot, while busy and out-of-office do. Give it working hours and working days in a named timezone and "find me an hour on Thursday" stops offering you 6am.
+
+The other two are about control. Syncing on demand clears the backoff on any source that had been backing off after errors and queues a push to every calendar you copy into, throttled to once a minute. Pausing stops a calendar syncing in both directions while leaving it connected and its settings intact. All three work over the REST API as well, so the same actions run from a script.
+
+Read more about [everything Keeper.sh does](/features).

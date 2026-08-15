@@ -50,7 +50,7 @@ function releaseHtml(release: ChangelogRelease): string {
     noteListHtml("New", release.features),
     noteListHtml("Improved", release.improvements),
     noteListHtml("Fixed", release.fixes),
-    `<p>${escapeHtml(release.build)}</p>`,
+    `<p>${escapeHtml(release.version)}</p>`,
   ].join("");
 }
 

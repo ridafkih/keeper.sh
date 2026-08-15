@@ -1,0 +1,15 @@
+---
+title: "Connect a calendar server that uses digest sign-in"
+description: "Servers that ask for digest authentication instead of the usual kind now connect, and Keeper.sh remembers which one yours wants."
+date: "2026-05-22"
+version: "v2.9.34"
+position: 0
+---
+
+Not every calendar server asks for a password the same way. Most accept the straightforward exchange Keeper.sh already used, but a good number of self-hosted and university servers expect digest authentication, where the server issues a challenge and the client answers with a hash rather than the password itself. Keeper.sh could not answer that challenge, so those servers rejected credentials that were perfectly correct.
+
+Both schemes now work. When a server asks for digest, Keeper.sh completes the exchange and the connection goes through on the details you already had — nothing about how you enter them changes, and there is no setting to find.
+
+Which scheme your server wants is recorded the first time it tells us, so later syncs answer correctly on the first attempt instead of getting turned away and trying again. If a server refused your details at the connect screen before, it is worth another go.
+
+Read more about [the calendars Keeper.sh works with](/features).
