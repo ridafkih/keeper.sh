@@ -48,15 +48,22 @@ export const PRICING_PLANS: PricingPlan[] = [
 ];
 
 export const PRICING_FEATURES: PricingFeature[] = [
-  { label: 'Reading Your Calendars', free: 'Every 1 minute', pro: 'Instant' },
   {
-    label: 'Updating Your Calendars',
+    label: 'Updates from Google and Outlook',
     free: 'Every 30 minutes',
     pro: 'Within seconds',
     highlight: {
       free: 'Updates every 30 minutes',
-      pro: 'Google and Outlook update within seconds',
+      pro: 'Updates from Google and Outlook within seconds',
     },
+  },
+  {
+    // Free carries no bullet here: it is the same 30 minutes as the row above,
+    // and the cards would otherwise repeat it.
+    label: 'Updates from iCloud, Fastmail and CalDAV',
+    free: 'Every 30 minutes',
+    pro: 'Within a minute',
+    highlight: { pro: 'Updates from iCloud, Fastmail and CalDAV within a minute' },
   },
   {
     label: 'Linked Accounts',
