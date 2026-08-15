@@ -213,6 +213,51 @@ describe("linking a provider account that the user already holds", () => {
     expect(await countCalendars(accountRowId)).toBe(1);
   });
 
+  it("lets a second user link the same provider account as a source", async () => {
+    await seedSourceAccount({
+      accountId: PROVIDER_ACCOUNT_ID,
+      email: "person@example.com",
+    });
+
+    await expect(createOAuthAccountIdWithDatabase(sourceClient, {
+      email: "person@example.com",
+      oauthCredentialId: "00000000-0000-4000-8000-0000000000ff",
+      provider: "google",
+      providerAccountId: PROVIDER_ACCOUNT_ID,
+      userId: "user-2",
+    })).resolves.toEqual(expect.any(String));
+  });
+
+  it("resolves a destination against the caller's row, not another holder's", async () => {
+    await seedSourceAccount({
+      accountId: PROVIDER_ACCOUNT_ID,
+      email: "person@example.com",
+    });
+    const secondHolder = await client.query<{ id: string }>(
+      `insert into calendar_accounts ("accountId", "authType", "provider", "userId")
+       values ($1, 'oauth', 'google', 'user-2') returning "id"`,
+      [PROVIDER_ACCOUNT_ID],
+    );
+    const secondHolderRowId = secondHolder.rows[0]?.id;
+    if (!secondHolderRowId) {
+      throw new Error("Failed to seed the second holder");
+    }
+
+    await saveCalendarDestinationWithDatabase(
+      destinationClient,
+      "user-2",
+      "google",
+      PROVIDER_ACCOUNT_ID,
+      "person@example.com",
+      "destination-access",
+      "destination-refresh",
+      EXPIRES_AT,
+    );
+
+    expect(await countAccounts()).toBe(2);
+    expect(await countCalendars(secondHolderRowId)).toBe(1);
+  });
+
   it("reuses the existing row when the source flow arrives on a different credential", async () => {
     const { accountRowId } = await seedSourceAccount({
       accountId: PROVIDER_ACCOUNT_ID,
