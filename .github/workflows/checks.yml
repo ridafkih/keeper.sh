@@ -28,7 +28,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run unused
 
-  test:
+  test-shard:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -60,6 +60,17 @@ jobs:
       - run: bunx turbo run test ${{ matrix.filter }}
         env:
           KEEPER_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+
+  test:
+    runs-on: ubuntu-latest
+    needs: test-shard
+    if: always()
+    steps:
+      - run: |
+          if [ "${{ needs.test-shard.result }}" != "success" ]; then
+            echo "test-shard result: ${{ needs.test-shard.result }}"
+            exit 1
+          fi
 
   migrations:
     runs-on: ubuntu-latest
