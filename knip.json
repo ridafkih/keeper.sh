@@ -36,7 +36,7 @@
       "project": "src/**/*.{ts,tsx}"
     },
     "services/api": {
-      "entry": ["src/routes/**/*.ts"],
+      "entry": ["src/routes/**/*.ts", "src/scripts/**/*.ts"],
       "project": "src/**/*.{ts,tsx}"
     },
     "services/cron": {
