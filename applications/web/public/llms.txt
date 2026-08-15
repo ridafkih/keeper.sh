@@ -13,8 +13,8 @@ Keeper.sh is for people whose commitments are split across accounts that cannot 
 - A REST API under `/api/v1` for calendars, accounts, events, invitations, free-time search and on-demand sync, using `kpr_` API tokens
 - An MCP server with fourteen tools over OAuth 2.1. An AI agent can read your week, book and amend events, RSVP, find open slots, and pause or force a sync
 - Open source under AGPL-3.0, with Docker Compose images you can run yourself
-- Every calendar is read every minute on every plan. How fast your changes reach the other calendars is the part that differs by plan
-- Free covers 2 calendar accounts, 3 connections and 1 shared link, with changes landing every 30 minutes. Pro is $5 a month or $42 a year, unlimited, with changes landing every minute
+- On Pro, Google and Outlook notify Keeper.sh as changes happen, so copies land within seconds. iCloud, Fastmail and other CalDAV calendars are read on a timer, because Apple publishes no way to be told an event changed
+- Free covers 2 calendar accounts, 3 connections and 1 shared link, reading every minute and copying every 30. Pro is $5 a month or $42 a year, unlimited, with Google and Outlook changes copied within seconds
 
 ## Links
 

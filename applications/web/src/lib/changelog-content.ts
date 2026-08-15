@@ -111,6 +111,17 @@ export function processChangelogDirectory(changelogDir: string): ChangelogReleas
 
   const releases = slugs.map((slug) => readRelease(join(changelogDir, slug), slug));
 
+  const seen = new Set<string>();
+  for (const release of releases) {
+    const key = `${release.date}#${release.position}`;
+    if (seen.has(key)) {
+      throw new Error(
+        `Two changelog entries share ${release.date} at position ${release.position}. Give each entry on a date its own position, lowest first.`,
+      );
+    }
+    seen.add(key);
+  }
+
   return releases.sort(
     (a, b) => b.date.localeCompare(a.date) || a.position - b.position,
   );
