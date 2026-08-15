@@ -15,7 +15,7 @@ import {
   parseStoredSourceEventStatesRecoveringInvalid,
   type StoredSourceEventState,
 } from "../source/stored-event-state";
-import { measureSyncSegment } from "../telemetry/segments";
+import { recordSegment } from "../telemetry/segments";
 
 type IngestWideEventFields = Record<string, boolean | number | string>;
 
@@ -188,6 +188,22 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
   const startTime = Date.now();
   let flushed = false;
 
+  /*
+   * Part of the diff runs inside the persistence transaction's callback, which a
+   * pooled driver invokes in the async context of whoever released the connection.
+   * A widelog call there would land on another source's event, so the diff is
+   * accumulated locally and recorded once below, back in this function's context.
+   */
+  let diffMs = 0;
+  const measureDiff = <TResult>(operation: () => TResult): TResult => {
+    const startedAt = performance.now();
+    try {
+      return operation();
+    } finally {
+      diffMs += performance.now() - startedAt;
+    }
+  };
+
   try {
     const withPersistenceTransaction = resolvePersistenceTransaction(options);
     const fetchResult = await fetchEvents();
@@ -219,7 +235,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       if (!recurrenceWindow) {
         throw new RangeError("Recurring source ingestion requires an explicit sync window");
       }
-      const overBudget = measureSyncSegment("work.diff_ms", () =>
+      const overBudget = measureDiff(() =>
         findSourceEventsExceedingRecurrenceBudget(
           calendarId,
           sourceEvents,
@@ -266,7 +282,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       wideEvent["existing_events.count"] = storedEvents.length;
 
       const isDeltaSync = fetchResult.isDeltaSync ?? false;
-      const parseResult = measureSyncSegment("work.diff_ms", () =>
+      const parseResult = measureDiff(() =>
         parseStoredSourceEventStatesRecoveringInvalid(storedEvents));
       const existingEvents = parseResult.events;
       const invalidStoredEventIds = parseResult.failures.map((failure) => failure.eventId);
@@ -287,7 +303,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
         return EMPTY_RESULT;
       }
 
-      const { eventStateIdsToRemove, eventsToAdd } = measureSyncSegment("work.diff_ms", () => {
+      const { eventStateIdsToRemove, eventsToAdd } = measureDiff(() => {
         const additions = buildSourceEventsToAdd(existingEvents, sourceEvents, {
           isDeltaSync,
         });
@@ -395,6 +411,9 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
 
     throw error;
   } finally {
+    if (diffMs > 0) {
+      recordSegment("work.diff_ms", diffMs);
+    }
     wideEvent["duration_ms"] = Date.now() - startTime;
     onIngestEvent?.(wideEvent);
   }

@@ -84,14 +84,23 @@ const createDefaultDependencies = async (): Promise<DrainPendingIngestDependenci
  * Overrun protection suppresses a tick without invoking the callback, so a lost tick
  * emits no event at all. The gap on the next surviving tick is the only positive
  * evidence that ticks were eaten; ticks_skipped is round(gap / 10s) - 1.
+ *
+ * It has to be start-to-start. Measuring from the previous tick's completion would
+ * report the scheduler's idle time — about 10s no matter how long the suppressing
+ * tick ran — and so read "nothing was skipped" during exactly the overrun it exists
+ * to expose. It is stamped before the drain lock is contested so a tick that loses
+ * the lock still anchors the next gap, and it is per process while the lock is
+ * cross-replica, so read it grouped by instance.
  */
-let lastTickCompletedAt: number | null = null;
+let lastTickStartedAt: number | null = null;
 
 const observedDrain = withCronWideEvent({
   async callback() {
-    if (lastTickCompletedAt !== null) {
-      widelog.set("push_drain.tick_gap_ms", Date.now() - lastTickCompletedAt);
+    const tickStartedAt = Date.now();
+    if (lastTickStartedAt !== null) {
+      widelog.set("push_drain.tick_gap_ms", tickStartedAt - lastTickStartedAt);
     }
+    lastTickStartedAt = tickStartedAt;
     const dependencies = await createDefaultDependencies();
 
     const { refreshLockStore } = await import("@/context");
@@ -104,7 +113,6 @@ const observedDrain = withCronWideEvent({
       await runDrainPendingIngest(dependencies);
     } finally {
       await refreshLockStore.release(DRAIN_LOCK_KEY);
-      lastTickCompletedAt = Date.now();
     }
   },
   cron: "*/10 * * * * *",

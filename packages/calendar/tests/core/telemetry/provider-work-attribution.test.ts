@@ -106,6 +106,31 @@ describe("provider work attribution", () => {
     expect(event.accounted_ms).toBeCloseTo(httpMs + transformMs, 1);
   });
 
+  it("charges a slow body download to the http segment, not to transform", async () => {
+    const payload = new TextEncoder().encode(JSON.stringify({
+      items: [],
+      nextSyncToken: "sync-token",
+    }));
+    globalThis.fetch = ((): Promise<Response> => Promise.resolve(new Response(
+      new ReadableStream({
+        async pull(controller) {
+          await Bun.sleep(SLOW_PAGE_MS);
+          controller.enqueue(payload);
+          controller.close();
+        },
+      }),
+      { headers: { "content-type": "application/json" } },
+    ))) as unknown as typeof fetch;
+
+    await runInEvent("slow-body", async () => {
+      await fetchEvents();
+    });
+
+    const event = eventFor("slow-body");
+    expect(event.work?.provider_http_ms ?? 0).toBeGreaterThanOrEqual(SLOW_PAGE_MS);
+    expect(event.work?.transform_ms ?? 0).toBeLessThan(SLOW_PAGE_MS);
+  });
+
   it("gives two concurrent fetches their own request counts", async () => {
     globalThis.fetch = (async (input: Request | URL | string): Promise<Response> => {
       const url = new URL(String(input));

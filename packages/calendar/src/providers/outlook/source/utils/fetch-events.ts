@@ -14,7 +14,7 @@ import { KEEPER_CATEGORY } from "@keeper.sh/constants";
 import { isKeeperEvent } from "../../../../core/events/identity";
 import { resolveTimeZone } from "../../../../ics/utils/timezone-instant";
 import { buildTimeoutSignal } from "../../../../core/utils/fetch-with-timeout";
-import { measureProviderRequest, measureSegment } from "../../../../core/telemetry/segments";
+import { measureProviderRequest, measureSegment, measureSyncSegment } from "../../../../core/telemetry/segments";
 
 class EventsFetchError extends Error {
   public readonly status: number;
@@ -211,11 +211,11 @@ const fetchEventsPage = async (
     );
   }
 
-  return await measureSegment("work.transform_ms", async () => {
-    const responseBody = await response.json();
-    const data = outlookEventListSchema.assert(responseBody);
-    return { data, fullSyncRequired: false };
-  });
+  const responseBody = await measureSegment("work.provider_http_ms", () => response.json());
+  return measureSyncSegment("work.transform_ms", () => ({
+    data: outlookEventListSchema.assert(responseBody),
+    fullSyncRequired: false,
+  }));
 };
 
 const fetchSeriesMasterInstances = async (

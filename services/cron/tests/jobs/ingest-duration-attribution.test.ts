@@ -10,10 +10,10 @@ interface EmittedEvent {
   provider?: { calendar_id?: string };
   redis?: { command_ms_max?: number };
   token?: { refresh_attempted?: boolean };
+  concurrency?: { slot_wait_ms?: number };
   wait?: {
     advisory_lock_ms?: number;
     db_pool_ms?: number;
-    slot_ms?: number;
     source_lock_ms?: number;
     token_refresh_ms?: number;
   };
@@ -51,6 +51,7 @@ let redisCommandMs = 0;
 let poolWaitMs = 0;
 let advisoryWaitMs = 0;
 let commitMs = 0;
+let poolAcquisitionFails = false;
 
 const baseSource = {
   accessToken: "access-token",
@@ -128,6 +129,9 @@ const nextPoolWaitMs = (): number => {
 
 const runTransaction = async (work: (transaction: unknown) => Promise<unknown>): Promise<unknown> => {
   await Bun.sleep(nextPoolWaitMs());
+  if (poolAcquisitionFails) {
+    throw new Error("timeout exceeded when trying to connect");
+  }
   let executeCount = 0;
   const transaction = {
     delete: () => createQuery(() => []),
@@ -235,6 +239,7 @@ beforeEach(() => {
   poolWaitMs = 0;
   advisoryWaitMs = 0;
   commitMs = 0;
+  poolAcquisitionFails = false;
   process.stdout.write = ((chunk: unknown) => {
     for (const line of String(chunk).split("\n")) {
       if (line.trim().length > 0) {
@@ -300,6 +305,16 @@ describe("ingest duration decomposition", () => {
     expect(event.wait?.db_pool_ms).toBeLessThan(POOL_WAIT_MS + ADVISORY_WAIT_MS);
   });
 
+  it("still charges the pool wait when the connection is never granted", async () => {
+    poolWaitMs = POOL_WAIT_MS;
+    poolAcquisitionFails = true;
+
+    const event = await runTick();
+
+    expect(event.outcome).toBe("error");
+    expect(event.wait?.db_pool_ms ?? 0).toBeGreaterThanOrEqual(POOL_WAIT_MS);
+  });
+
   it("counts the statements it timed on both sides of the transaction boundary", async () => {
     const event = await runTick();
 
@@ -309,11 +324,12 @@ describe("ingest duration decomposition", () => {
     expect(event.work?.db_write_ms).toBeDefined();
   });
 
-  it("keeps the slot wait outside duration_ms", async () => {
+  it("keeps the slot wait outside duration_ms and outside the wait namespace", async () => {
     const event = await runTick();
 
-    expect(event.wait?.slot_ms).toBeDefined();
-    expect(event.wait?.slot_ms ?? -1).toBeGreaterThanOrEqual(0);
+    expect(event.concurrency?.slot_wait_ms).toBeDefined();
+    expect(event.concurrency?.slot_wait_ms ?? -1).toBeGreaterThanOrEqual(0);
+    expect(event.wait).not.toHaveProperty("slot_ms");
   });
 
   it("says the lock was lost rather than reporting a fast acquire", async () => {

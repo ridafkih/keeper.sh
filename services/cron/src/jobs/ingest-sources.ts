@@ -271,7 +271,13 @@ const measureLedgerWrite = async <TResult>(
 };
 
 const emitPersistenceLedger = (ledger: PersistenceLedger, requestedAt: number): void => {
+  /*
+   * A transaction that never got a connection is the pool-exhaustion case this
+   * exists to catch, so the wait still has to be charged; there is simply nothing
+   * after it to report.
+   */
   if (ledger.grantedAt === 0) {
+    recordSegment("wait.db_pool_ms", performance.now() - requestedAt);
     return;
   }
   recordSegment("wait.db_pool_ms", ledger.grantedAt - requestedAt);
@@ -431,7 +437,16 @@ const createIngestionPersistenceTransaction = (
       ledger.callbackReturnedAt = performance.now();
       return result;
     }).finally(() => {
-      emitPersistenceLedger(ledger, requestedAt);
+      /*
+       * This is the one instrumentation site whose own failure could rewrite the
+       * ingest's result: a throw here would reject a committed transaction, or
+       * replace the real ingest error with a telemetry one.
+       */
+      try {
+        emitPersistenceLedger(ledger, requestedAt);
+      } catch (error) {
+        widelog.errorFields(error, { retriable: false, slug: "persistence-ledger-emit" });
+      }
     });
   };
 
@@ -848,7 +863,7 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
       return () =>
       withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
         context(async () => {
-          widelog.set("wait.slot_ms", Date.now() - enqueuedAt);
+          widelog.set("concurrency.slot_wait_ms", Date.now() - enqueuedAt);
           widelog.set("ingest.trigger", resolveIngestTrigger(calendarIds));
           widelog.set("operation.name", "ingest-source");
           widelog.set("operation.type", "job");
@@ -1064,7 +1079,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
       return () =>
       withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
         context(async () => {
-          widelog.set("wait.slot_ms", Date.now() - enqueuedAt);
+          widelog.set("concurrency.slot_wait_ms", Date.now() - enqueuedAt);
           widelog.set("operation.name", "ingest-source");
           widelog.set("operation.type", "job");
           widelog.set("sync.direction", "ingest");
@@ -1222,7 +1237,7 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
       return () =>
       withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
         context(async () => {
-          widelog.set("wait.slot_ms", Date.now() - enqueuedAt);
+          widelog.set("concurrency.slot_wait_ms", Date.now() - enqueuedAt);
           widelog.set("operation.name", "ingest-source");
           widelog.set("operation.type", "job");
           widelog.set("sync.direction", "ingest");
