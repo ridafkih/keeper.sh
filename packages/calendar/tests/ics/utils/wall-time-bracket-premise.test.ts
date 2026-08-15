@@ -47,16 +47,21 @@ const findTransitions = (timeZone: string): Transition[] => {
   return transitions;
 };
 
-const transitionsByZone = new Map<string, Transition[]>(
-  ZONES.map((timeZone) => [timeZone, findTransitions(timeZone)]),
-);
+let cachedTransitionsByZone: Map<string, Transition[]> | null = null;
+
+const transitionsByZone = (): Map<string, Transition[]> => {
+  cachedTransitionsByZone ??= new Map<string, Transition[]>(
+    ZONES.map((timeZone) => [timeZone, findTransitions(timeZone)]),
+  );
+  return cachedTransitionsByZone;
+};
 
 // Asserts a property of the runtime tzdata, not of this codebase: no zone transitions twice within a day.
 describe("the bracket the two-probe wall-time resolution rests on", () => {
   it("finds no zone that transitions twice within two days", () => {
     const close: string[] = [];
 
-    for (const [timeZone, transitions] of transitionsByZone) {
+    for (const [timeZone, transitions] of transitionsByZone()) {
       for (const [index, transition] of transitions.entries()) {
         const previous = transitions[index - 1];
         if (previous && transition.instant - previous.instant < 2 * MS_PER_DAY) {
@@ -89,7 +94,7 @@ describe("every wall time every IANA zone renders", () => {
   it("resolves to the earliest instant the zone renders as that wall time", () => {
     const failures: string[] = [];
 
-    for (const [timeZone, transitions] of transitionsByZone) {
+    for (const [timeZone, transitions] of transitionsByZone()) {
       for (const transition of transitions) {
         for (const delta of PROBE_DELTAS_MS) {
           const instant = transition.instant + delta;
@@ -119,7 +124,7 @@ describe("every wall time every IANA zone skips", () => {
   it("shifts forward by the size of the gap that removed it", () => {
     const failures: string[] = [];
 
-    for (const [timeZone, transitions] of transitionsByZone) {
+    for (const [timeZone, transitions] of transitionsByZone()) {
       for (const transition of transitions) {
         if (transition.to <= transition.from) {
           continue;

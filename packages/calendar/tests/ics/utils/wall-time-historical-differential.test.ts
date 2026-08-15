@@ -70,12 +70,17 @@ const scanTransitions = (
   return transitions;
 };
 
-const historicalTransitions = new Map<string, Transition[]>(
-  ZONES.map((timeZone) => [
-    timeZone,
-    scanTransitions(timeZone, HISTORICAL_START, HISTORICAL_END, DAILY_STEP_MS),
-  ]),
-);
+let cachedHistoricalTransitions: Map<string, Transition[]> | null = null;
+
+const historicalTransitions = (): Map<string, Transition[]> => {
+  cachedHistoricalTransitions ??= new Map<string, Transition[]>(
+    ZONES.map((timeZone) => [
+      timeZone,
+      scanTransitions(timeZone, HISTORICAL_START, HISTORICAL_END, DAILY_STEP_MS),
+    ]),
+  );
+  return cachedHistoricalTransitions;
+};
 
 const resolveByExhaustiveSweep = (wallTime: number, timeZone: string): number => {
   const offsets = new Set<number>();
@@ -128,7 +133,7 @@ describe("resolving a wall time in the historical half of tzdata", () => {
   it("resolves every wall time around every transition since 1925 back to the instant that renders it", () => {
     const failures: string[] = [];
 
-    for (const [timeZone, transitions] of historicalTransitions) {
+    for (const [timeZone, transitions] of historicalTransitions()) {
       for (const transition of transitions) {
         for (const delta of PROBE_DELTAS_MS) {
           const instant = transition.instant + delta;
@@ -156,7 +161,7 @@ describe("resolving a wall time in the historical half of tzdata", () => {
   it("never brackets a wall time with two transitions inside the same two days", () => {
     const close: string[] = [];
 
-    for (const [timeZone, transitions] of historicalTransitions) {
+    for (const [timeZone, transitions] of historicalTransitions()) {
       for (const [index, transition] of transitions.entries()) {
         const previous = transitions[index - 1];
         if (previous && transition.instant - previous.instant < 2 * MS_PER_DAY) {

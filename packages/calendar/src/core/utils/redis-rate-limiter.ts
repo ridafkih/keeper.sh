@@ -55,9 +55,14 @@ const ACQUIRE_SCRIPT = `
   return 1000
 `;
 
+const sleep = (delayMs: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+
 const waitForRetry = (delayMs: number, signal?: AbortSignal): Promise<void> => {
   if (!signal) {
-    return Bun.sleep(delayMs);
+    return sleep(delayMs);
   }
   if (signal.aborted) {
     return Promise.reject(signal.reason);

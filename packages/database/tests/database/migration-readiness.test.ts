@@ -27,12 +27,12 @@ describe("waitForDatabaseMigrations", () => {
       isReady: () => Promise.resolve(false),
     };
 
-    const readiness = waitForDatabaseMigrations(database, 1000);
-    await vi.advanceTimersByTimeAsync(1000);
-
-    await expect(readiness).rejects.toThrow(
+    const readiness = expect(waitForDatabaseMigrations(database, 1000)).rejects.toThrow(
       "Database migrations did not reach the required runtime state",
     );
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await readiness;
     vi.useRealTimers();
   });
 });

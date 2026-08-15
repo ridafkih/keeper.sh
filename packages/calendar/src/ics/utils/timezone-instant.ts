@@ -71,19 +71,52 @@ const resolveTimeZone = (timeZone: string | undefined): string | undefined => {
 };
 
 const instantToWallTime = (date: Date, timeZone: string): Date => {
-  const values = new Map(
-    getDateTimeFormatter(timeZone).formatToParts(date).map((part) => [part.type, part.value]),
-  );
-  const readPart = (name: Intl.DateTimeFormatPartTypes): number =>
-    Number(values.get(name));
+  let year = Number.NaN;
+  let month = Number.NaN;
+  let day = Number.NaN;
+  let hour = Number.NaN;
+  let minute = Number.NaN;
+  let second = Number.NaN;
+
+  for (const part of getDateTimeFormatter(timeZone).formatToParts(date)) {
+    switch (part.type) {
+      case "year": {
+        year = Number(part.value);
+        break;
+      }
+      case "month": {
+        month = Number(part.value);
+        break;
+      }
+      case "day": {
+        day = Number(part.value);
+        break;
+      }
+      case "hour": {
+        hour = Number(part.value);
+        break;
+      }
+      case "minute": {
+        minute = Number(part.value);
+        break;
+      }
+      case "second": {
+        second = Number(part.value);
+        break;
+      }
+      default: {
+        break;
+      }
+    }
+  }
 
   return new Date(Date.UTC(
-    readPart("year"),
-    readPart("month") - 1,
-    readPart("day"),
-    readPart("hour"),
-    readPart("minute"),
-    readPart("second"),
+    year,
+    month - 1,
+    day,
+    hour,
+    minute,
+    second,
     date.getUTCMilliseconds(),
   ));
 };
