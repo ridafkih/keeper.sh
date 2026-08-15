@@ -70,6 +70,35 @@ Phrases that contain a Tier 1 word but are correct as written. The checker blank
 | Docker / environment variable / reverse proxy | Register B vocabulary, where the reader runs containers | Auto-fail in Register A, unglossed and correct in Register B |
 | 410 GONE / RECURRENCE-ID / VTIMEZONE / RRULE / DST | Register C vocabulary. Flattening these would cost more credibility than it gains | Register C only |
 
+## Audience triggers — a placement list, not a tier
+
+The tiers above rule on **words**. This list rules on **position**, and nothing on it is banned anywhere. Every term here is true, provable and load-bearing somewhere on the page — the failure is only ever putting it in a slot that answers "what is this and who is it for", because a reader or an answer engine takes that slot as the product's classification and stops reading. Rule 12 and the defining-position list are in `positioning.md`.
+
+`scripts/readability.ts` parses these bullets and flags them in frontmatter `title`, `description` and `blurb`, and in the first sentence of a page or a section — and only when the sentence predicates them of Keeper.sh. A bullet added here is enforced on the next run.
+
+- open source
+- open-source
+- AGPL
+- self-host
+- self-hosting
+- your own hardware
+- your own server
+- own hardware
+- own server
+- Docker
+- Postgres
+- Redis
+- CLI
+- MCP
+- REST API
+
+Three trigger terms are deliberately **not** on the machine list, because no pattern separates the violation from the correct use:
+
+- **CalDAV and Fastmail**, which are usually a compatibility answer a buyer wants. "Keeper.sh reaches iCloud, Fastmail and any CalDAV server too" is a defining sentence doing its job.
+- **developers** and **API**, which are ordinary words outside our own copy — a competitor's developer audience, a provider's API.
+
+Those stay a reading job, and they are question 11 in the publishing checklist.
+
 ## The product name
 
 The product is **Keeper.sh** in every sentence a customer reads, including headings, titles, meta descriptions and alt text. There is no shortened form and no distinction between the hosted service and the self-hosted one — both are Keeper.sh, and self-hosting is described by what the reader does, not by a second name.

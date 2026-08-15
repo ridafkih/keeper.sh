@@ -261,6 +261,29 @@ Source: `applications/web/src/content/blog/introducing-keeper-blog.mdx`
 
 ---
 
+## 11. Comparison blurb — two thirds of what we are is machinery
+
+Source: `applications/web/src/content/blog/keeper-sh-vs-calendarbridge.mdx`, frontmatter
+
+**Before**
+
+> `blurb: "Keeper.sh is $5 a month however many calendars you have, runs on your own hardware, and is open source. CalendarBridge owns the regulated flank. Here is how the two differ."`
+
+**After**
+
+> `blurb: "Keeper.sh is $5 a month however many calendars you have, and copies your busy time without copying your event titles. CalendarBridge owns the regulated flank. Here is how the two differ."`
+
+**Transformation notes**
+
+- Every word of the before is true, and none of it is Tier 1. This is a placement failure, not a vocabulary one — see "Defining positions" in `positioning.md`
+- Two of the three things the sentence says Keeper.sh *is* are technical, so a reader or an assistant quoting the blurb classifies us as self-hoster tooling and sends the non-technical asker to a hosted rival
+- The price advantage — the thing that actually wins this page for an ordinary buyer — was buried in the middle of the three. It now leads
+- "runs on your own hardware" → replaced by the default privacy behaviour, which is at least as specific and which this page proves at length. Vagueness would not have been an improvement (rule 12)
+- "is open source" → demoted, not deleted. It survives at five later positions in this same file: the lede, the procurement paragraph, the "you want to read the code" verdict line, the self-hosting FAQ answer and the sources list
+- Facts preserved: `[FACT: $5/month]`, `[FACT: unlimited calendars on Pro]`, `[FACT: event titles hidden by default]` — `excludeEventName` defaults to true in `packages/database/src/database/schema.ts`. `[FACT: open source]` and `[FACT: runs on your own hardware]` are relocations, and the five later positions are where they landed
+
+---
+
 ## Fact preservation in practice
 
 Examples 8, 9 and 10 show the three outcomes the `[FACT]` diff has to distinguish:

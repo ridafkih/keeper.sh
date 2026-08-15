@@ -21,7 +21,7 @@ A person with two calendars and a scheduling problem. They use Google Calendar o
 
 **Default to Register A**; pick B or C only for a file named above. A and B hold sentence discipline, C does not. A explains what happens, C why it was hard — C may assume the reader has built something, never that they have read our source. Symptom-first failure modes and question-shaped headings apply in all three.
 
-Read `glossary.md` (tiered terms, with why each fails so you can rule on ones it omits) and `examples.md` (ten before/after pairs from shipped copy, every edit enumerated) before any substantial rewrite. Also `formatting.md`, `positioning.md` and `length.md`.
+Read `glossary.md` (tiered terms, with why each fails so you can rule on ones it omits) and `examples.md` (eleven before/after pairs from shipped copy, every edit enumerated) before any substantial rewrite. Also `formatting.md`, `positioning.md` and `length.md`.
 
 ## Rules
 
@@ -36,6 +36,7 @@ Read `glossary.md` (tiered terms, with why each fails so you can rule on ones it
 9. **Attach a person to every capability** — a freelancer with three client calendars, a parent with a school timetable.
 10. **Always "Keeper.sh", never bare "Keeper".** A password manager owns that word — AlternativeTo already files us under `keeper-1` because of it — so dropping the `.sh` blurs us in the exact copy meant to tell us apart. Code identifiers, literal strings and other people's words are exempt; the list is at the end of `glossary.md`. Second person; "I" only in signed founder posts.
 11. **Length is a section problem, not a sentence problem.** Rule 8 has passed on every article that still shipped far too long. Ceilings by content type, the four redundancy patterns and the deletion test are in `length.md`.
+12. **A defining position says what the product does for the reader, never what it is built out of.** Frontmatter, `<title>`, the H1, the hero subhead, a page's or section's first sentence, a comparison's verdict, the opening of `llms.txt` — these are where a reader and an answer engine decide who we are for, and open source, self-hosting, Docker, the API and the licence all read there as "for technical people". Demote, never delete: privacy is the promise, open source is the proof, and the proof keeps its place later in the same surface. Positions, exemptions and the measured cost are in `positioning.md`.
 
 ## Hosted first, self-hosting as the alternative
 
@@ -59,7 +60,7 @@ Run the checker; do not estimate what it measures.
 bun .claude/skills/marketing-voice/scripts/readability.ts [--register=a|b|c] <file...>
 ```
 
-It reports body words and section count, median sentence length, sentences over 30 words, the longest and where, paragraphs over three sentences, and every Tier 1 term with its line, exiting non-zero when Register A breaks. Word count is reported and never gated, because the ceiling depends on content type — read it against the table in `length.md`. Then answer what it cannot:
+It reports body words and section count, median sentence length, sentences over 30 words, the longest and where, paragraphs over three sentences, every Tier 1 term with its line, and every audience trigger predicated of Keeper.sh in a defining position, exiting non-zero when Register A breaks. Word count is reported and never gated, because the ceiling depends on content type — read it against the table in `length.md`. Then answer what it cannot:
 
 1. Does the first sentence describe the reader's situation or answer the title's question?
 2. Any unglossed Tier 1 or Tier 2 term in the first 40 words?
@@ -71,3 +72,4 @@ It reports body words and section count, median sentence length, sentences over 
 8. Did every `[FACT]` tag land in one bucket?
 9. Is the piece inside its ceiling, and would deleting any section leave the reader unable to act?
 10. Is every mention of the product "Keeper.sh", and is every bare "Keeper" left standing one of the exemptions in `glossary.md`? The checker does not test this and cannot: bare "Keeper" is correct inside a quotation and inside an identifier, and no pattern separates those from a slip.
+11. Do the defining positions the checker cannot reach — a feature card title, a nav label, a product-defining FAQ answer, a hero written in `.tsx`, and any mention of CalDAV, the API or developers — say what the reader gets rather than what we are built out of? The list is in `positioning.md`.
