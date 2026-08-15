@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { tv, type VariantProps } from "tailwind-variants/lite";
 
 const textLink = tv({
-  base: "tracking-tight underline underline-offset-2",
+  base: "tracking-tight underline underline-offset-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
   variants: {
     size: {
       base: "text-base",
@@ -12,7 +12,7 @@ const textLink = tv({
     },
     tone: {
       muted: "text-foreground-muted hover:text-foreground",
-      default: "text-foreground",
+      default: "text-foreground hover:text-foreground-hover",
     },
     align: {
       center: "text-center",

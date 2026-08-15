@@ -29,11 +29,13 @@ import { Route as authLoginRouteImport } from './../../routes/(auth)/login'
 import { Route as authForgotPasswordRouteImport } from './../../routes/(auth)/forgot-password'
 import { Route as oauthDashboardRouteRouteImport } from './../../routes/(oauth)/dashboard/route'
 import { Route as oauthAuthRouteRouteImport } from './../../routes/(oauth)/auth/route'
+import { Route as marketingChangelogRouteRouteImport } from './../../routes/(marketing)/changelog/route'
 import { Route as marketingBlogRouteRouteImport } from './../../routes/(marketing)/blog/route'
 import { Route as marketingRecipesIndexRouteImport } from './../../routes/(marketing)/recipes/index'
 import { Route as marketingGuidesIndexRouteImport } from './../../routes/(marketing)/guides/index'
 import { Route as marketingDocsIndexRouteImport } from './../../routes/(marketing)/docs/index'
 import { Route as marketingCompareIndexRouteImport } from './../../routes/(marketing)/compare/index'
+import { Route as marketingChangelogIndexRouteImport } from './../../routes/(marketing)/changelog/index'
 import { Route as marketingBlogIndexRouteImport } from './../../routes/(marketing)/blog/index'
 import { Route as dashboardDashboardIndexRouteImport } from './../../routes/(dashboard)/dashboard/index'
 import { Route as oauthOauthConsentRouteImport } from './../../routes/(oauth)/oauth/consent'
@@ -46,6 +48,7 @@ import { Route as marketingGuidesSlugRouteImport } from './../../routes/(marketi
 import { Route as marketingDocsMcpRouteImport } from './../../routes/(marketing)/docs/mcp'
 import { Route as marketingDocsSlugRouteImport } from './../../routes/(marketing)/docs/$slug'
 import { Route as marketingCompareSlugRouteImport } from './../../routes/(marketing)/compare/$slug'
+import { Route as marketingChangelogSlugRouteImport } from './../../routes/(marketing)/changelog/$slug'
 import { Route as marketingBlogSlugRouteImport } from './../../routes/(marketing)/blog/$slug'
 import { Route as dashboardDashboardReportRouteImport } from './../../routes/(dashboard)/dashboard/report'
 import { Route as dashboardDashboardFeedbackRouteImport } from './../../routes/(dashboard)/dashboard/feedback'
@@ -173,6 +176,11 @@ const oauthAuthRouteRoute = oauthAuthRouteRouteImport.update({
   path: '/auth',
   getParentRoute: () => oauthRouteRoute,
 } as any)
+const marketingChangelogRouteRoute = marketingChangelogRouteRouteImport.update({
+  id: '/changelog',
+  path: '/changelog',
+  getParentRoute: () => marketingRouteRoute,
+} as any)
 const marketingBlogRouteRoute = marketingBlogRouteRouteImport.update({
   id: '/blog',
   path: '/blog',
@@ -197,6 +205,11 @@ const marketingCompareIndexRoute = marketingCompareIndexRouteImport.update({
   id: '/compare/',
   path: '/compare/',
   getParentRoute: () => marketingRouteRoute,
+} as any)
+const marketingChangelogIndexRoute = marketingChangelogIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => marketingChangelogRouteRoute,
 } as any)
 const marketingBlogIndexRoute = marketingBlogIndexRouteImport.update({
   id: '/',
@@ -258,6 +271,11 @@ const marketingCompareSlugRoute = marketingCompareSlugRouteImport.update({
   id: '/compare/$slug',
   path: '/compare/$slug',
   getParentRoute: () => marketingRouteRoute,
+} as any)
+const marketingChangelogSlugRoute = marketingChangelogSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => marketingChangelogRouteRoute,
 } as any)
 const marketingBlogSlugRoute = marketingBlogSlugRouteImport.update({
   id: '/$slug',
@@ -435,6 +453,7 @@ const dashboardDashboardAccountsAccountIdCalendarIdRoute =
 
 export interface FileRoutesByFullPath {
   '/blog': typeof marketingBlogRouteRouteWithChildren
+  '/changelog': typeof marketingChangelogRouteRouteWithChildren
   '/auth': typeof oauthAuthRouteRouteWithChildren
   '/dashboard': typeof oauthDashboardRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
@@ -458,6 +477,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/dashboard/report': typeof dashboardDashboardReportRoute
   '/blog/$slug': typeof marketingBlogSlugRoute
+  '/changelog/$slug': typeof marketingChangelogSlugRoute
   '/compare/$slug': typeof marketingCompareSlugRoute
   '/docs/$slug': typeof marketingDocsSlugRoute
   '/docs/mcp': typeof marketingDocsMcpRoute
@@ -470,6 +490,7 @@ export interface FileRoutesByFullPath {
   '/oauth/consent': typeof oauthOauthConsentRoute
   '/dashboard/': typeof dashboardDashboardIndexRoute
   '/blog/': typeof marketingBlogIndexRoute
+  '/changelog/': typeof marketingChangelogIndexRoute
   '/compare/': typeof marketingCompareIndexRoute
   '/docs/': typeof marketingDocsIndexRoute
   '/guides/': typeof marketingGuidesIndexRoute
@@ -518,6 +539,7 @@ export interface FileRoutesByTo {
   '/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/dashboard/report': typeof dashboardDashboardReportRoute
   '/blog/$slug': typeof marketingBlogSlugRoute
+  '/changelog/$slug': typeof marketingChangelogSlugRoute
   '/compare/$slug': typeof marketingCompareSlugRoute
   '/docs/$slug': typeof marketingDocsSlugRoute
   '/docs/mcp': typeof marketingDocsMcpRoute
@@ -529,6 +551,7 @@ export interface FileRoutesByTo {
   '/auth/outlook': typeof oauthAuthOutlookRoute
   '/oauth/consent': typeof oauthOauthConsentRoute
   '/blog': typeof marketingBlogIndexRoute
+  '/changelog': typeof marketingChangelogIndexRoute
   '/compare': typeof marketingCompareIndexRoute
   '/docs': typeof marketingDocsIndexRoute
   '/guides': typeof marketingGuidesIndexRoute
@@ -561,6 +584,7 @@ export interface FileRoutesById {
   '/(marketing)': typeof marketingRouteRouteWithChildren
   '/(oauth)': typeof oauthRouteRouteWithChildren
   '/(marketing)/blog': typeof marketingBlogRouteRouteWithChildren
+  '/(marketing)/changelog': typeof marketingChangelogRouteRouteWithChildren
   '/(oauth)/auth': typeof oauthAuthRouteRouteWithChildren
   '/(oauth)/dashboard': typeof oauthDashboardRouteRouteWithChildren
   '/(auth)/forgot-password': typeof authForgotPasswordRoute
@@ -585,6 +609,7 @@ export interface FileRoutesById {
   '/(dashboard)/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/(dashboard)/dashboard/report': typeof dashboardDashboardReportRoute
   '/(marketing)/blog/$slug': typeof marketingBlogSlugRoute
+  '/(marketing)/changelog/$slug': typeof marketingChangelogSlugRoute
   '/(marketing)/compare/$slug': typeof marketingCompareSlugRoute
   '/(marketing)/docs/$slug': typeof marketingDocsSlugRoute
   '/(marketing)/docs/mcp': typeof marketingDocsMcpRoute
@@ -597,6 +622,7 @@ export interface FileRoutesById {
   '/(oauth)/oauth/consent': typeof oauthOauthConsentRoute
   '/(dashboard)/dashboard/': typeof dashboardDashboardIndexRoute
   '/(marketing)/blog/': typeof marketingBlogIndexRoute
+  '/(marketing)/changelog/': typeof marketingChangelogIndexRoute
   '/(marketing)/compare/': typeof marketingCompareIndexRoute
   '/(marketing)/docs/': typeof marketingDocsIndexRoute
   '/(marketing)/guides/': typeof marketingGuidesIndexRoute
@@ -627,6 +653,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/blog'
+    | '/changelog'
     | '/auth'
     | '/dashboard'
     | '/forgot-password'
@@ -650,6 +677,7 @@ export interface FileRouteTypes {
     | '/dashboard/feedback'
     | '/dashboard/report'
     | '/blog/$slug'
+    | '/changelog/$slug'
     | '/compare/$slug'
     | '/docs/$slug'
     | '/docs/mcp'
@@ -662,6 +690,7 @@ export interface FileRouteTypes {
     | '/oauth/consent'
     | '/dashboard/'
     | '/blog/'
+    | '/changelog/'
     | '/compare/'
     | '/docs/'
     | '/guides/'
@@ -710,6 +739,7 @@ export interface FileRouteTypes {
     | '/dashboard/feedback'
     | '/dashboard/report'
     | '/blog/$slug'
+    | '/changelog/$slug'
     | '/compare/$slug'
     | '/docs/$slug'
     | '/docs/mcp'
@@ -721,6 +751,7 @@ export interface FileRouteTypes {
     | '/auth/outlook'
     | '/oauth/consent'
     | '/blog'
+    | '/changelog'
     | '/compare'
     | '/docs'
     | '/guides'
@@ -752,6 +783,7 @@ export interface FileRouteTypes {
     | '/(marketing)'
     | '/(oauth)'
     | '/(marketing)/blog'
+    | '/(marketing)/changelog'
     | '/(oauth)/auth'
     | '/(oauth)/dashboard'
     | '/(auth)/forgot-password'
@@ -776,6 +808,7 @@ export interface FileRouteTypes {
     | '/(dashboard)/dashboard/feedback'
     | '/(dashboard)/dashboard/report'
     | '/(marketing)/blog/$slug'
+    | '/(marketing)/changelog/$slug'
     | '/(marketing)/compare/$slug'
     | '/(marketing)/docs/$slug'
     | '/(marketing)/docs/mcp'
@@ -788,6 +821,7 @@ export interface FileRouteTypes {
     | '/(oauth)/oauth/consent'
     | '/(dashboard)/dashboard/'
     | '/(marketing)/blog/'
+    | '/(marketing)/changelog/'
     | '/(marketing)/compare/'
     | '/(marketing)/docs/'
     | '/(marketing)/guides/'
@@ -964,6 +998,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof oauthAuthRouteRouteImport
       parentRoute: typeof oauthRouteRoute
     }
+    '/(marketing)/changelog': {
+      id: '/(marketing)/changelog'
+      path: '/changelog'
+      fullPath: '/changelog'
+      preLoaderRoute: typeof marketingChangelogRouteRouteImport
+      parentRoute: typeof marketingRouteRoute
+    }
     '/(marketing)/blog': {
       id: '/(marketing)/blog'
       path: '/blog'
@@ -998,6 +1039,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/compare/'
       preLoaderRoute: typeof marketingCompareIndexRouteImport
       parentRoute: typeof marketingRouteRoute
+    }
+    '/(marketing)/changelog/': {
+      id: '/(marketing)/changelog/'
+      path: '/'
+      fullPath: '/changelog/'
+      preLoaderRoute: typeof marketingChangelogIndexRouteImport
+      parentRoute: typeof marketingChangelogRouteRoute
     }
     '/(marketing)/blog/': {
       id: '/(marketing)/blog/'
@@ -1082,6 +1130,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/compare/$slug'
       preLoaderRoute: typeof marketingCompareSlugRouteImport
       parentRoute: typeof marketingRouteRoute
+    }
+    '/(marketing)/changelog/$slug': {
+      id: '/(marketing)/changelog/$slug'
+      path: '/$slug'
+      fullPath: '/changelog/$slug'
+      preLoaderRoute: typeof marketingChangelogSlugRouteImport
+      parentRoute: typeof marketingChangelogRouteRoute
     }
     '/(marketing)/blog/$slug': {
       id: '/(marketing)/blog/$slug'
@@ -1433,8 +1488,25 @@ const marketingBlogRouteRouteChildren: marketingBlogRouteRouteChildren = {
 const marketingBlogRouteRouteWithChildren =
   marketingBlogRouteRoute._addFileChildren(marketingBlogRouteRouteChildren)
 
+interface marketingChangelogRouteRouteChildren {
+  marketingChangelogSlugRoute: typeof marketingChangelogSlugRoute
+  marketingChangelogIndexRoute: typeof marketingChangelogIndexRoute
+}
+
+const marketingChangelogRouteRouteChildren: marketingChangelogRouteRouteChildren =
+  {
+    marketingChangelogSlugRoute: marketingChangelogSlugRoute,
+    marketingChangelogIndexRoute: marketingChangelogIndexRoute,
+  }
+
+const marketingChangelogRouteRouteWithChildren =
+  marketingChangelogRouteRoute._addFileChildren(
+    marketingChangelogRouteRouteChildren,
+  )
+
 interface marketingRouteRouteChildren {
   marketingBlogRouteRoute: typeof marketingBlogRouteRouteWithChildren
+  marketingChangelogRouteRoute: typeof marketingChangelogRouteRouteWithChildren
   marketingSplatRoute: typeof marketingSplatRoute
   marketingAboutRoute: typeof marketingAboutRoute
   marketingFeaturesRoute: typeof marketingFeaturesRoute
@@ -1458,6 +1530,7 @@ interface marketingRouteRouteChildren {
 
 const marketingRouteRouteChildren: marketingRouteRouteChildren = {
   marketingBlogRouteRoute: marketingBlogRouteRouteWithChildren,
+  marketingChangelogRouteRoute: marketingChangelogRouteRouteWithChildren,
   marketingSplatRoute: marketingSplatRoute,
   marketingAboutRoute: marketingAboutRoute,
   marketingFeaturesRoute: marketingFeaturesRoute,

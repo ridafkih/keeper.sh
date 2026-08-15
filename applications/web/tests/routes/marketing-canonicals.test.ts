@@ -40,6 +40,7 @@ import { Route as SelfHostingRoute } from "../../src/routes/(marketing)/self-hos
 import { Route as IcsGeneratorRoute } from "../../src/routes/(marketing)/tools/ics-generator";
 import { Route as IcsViewerRoute } from "../../src/routes/(marketing)/tools/ics-viewer";
 import { Route as CompareIndexRoute } from "../../src/routes/(marketing)/compare/index";
+import { Route as ChangelogIndexRoute } from "../../src/routes/(marketing)/changelog/index";
 import { Route as DocsIndexRoute } from "../../src/routes/(marketing)/docs/index";
 import { Route as GuidesIndexRoute } from "../../src/routes/(marketing)/guides/index";
 import { Route as RecipesIndexRoute } from "../../src/routes/(marketing)/recipes/index";
@@ -58,6 +59,7 @@ const indexableRoutes: Record<string, HeadRoute> = {
   "/": HomeRoute as unknown as HeadRoute,
   "/about": AboutRoute as unknown as HeadRoute,
   "/blog": BlogIndexRoute as unknown as HeadRoute,
+  "/changelog": ChangelogIndexRoute as unknown as HeadRoute,
   "/compare": CompareIndexRoute as unknown as HeadRoute,
   "/docs": DocsIndexRoute as unknown as HeadRoute,
   "/docs/mcp": McpDocsRoute as unknown as HeadRoute,

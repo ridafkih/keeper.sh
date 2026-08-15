@@ -109,6 +109,7 @@ function MarketingLayout() {
             <MarketingFooterNavGroup>
               <MarketingFooterNavGroupLabel>Resources</MarketingFooterNavGroupLabel>
               <MarketingFooterNavItem to="/blog">Blog</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/changelog">Changelog</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/about">About</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/tools/ics-generator">ICS File Generator</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/tools/ics-viewer">ICS File Viewer</MarketingFooterNavItem>

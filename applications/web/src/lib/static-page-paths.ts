@@ -17,6 +17,7 @@ export const staticPagePaths: string[] = [
   "/guides",
   "/recipes",
   "/compare",
+  "/changelog",
   "/privacy",
   "/terms",
 ];

@@ -288,6 +288,56 @@ export function collectionPageSchema(
   };
 }
 
+export function changelogCollectionSchema(
+  description: string,
+  entries: Array<{ slug: string; title: string }>,
+) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    "@id": entityId("/changelog", "collectionpage"),
+    name: "What's new in Keeper.sh",
+    description,
+    url: canonicalUrl("/changelog"),
+    isPartOf: { "@id": `${SITE_URL}/#website` },
+    publisher: { "@id": `${SITE_URL}/#organization` },
+    mainEntity: {
+      "@type": "ItemList",
+      itemListElement: entries.map((entry, index) => ({
+        "@type": "ListItem",
+        position: index + 1,
+        url: canonicalUrl(`/changelog/${entry.slug}`),
+        name: entry.title,
+      })),
+    },
+  };
+}
+
+export function changelogEntrySchema(entry: {
+  title: string;
+  description: string;
+  slug: string;
+  date: string;
+}) {
+  const path = `/changelog/${entry.slug}`;
+  const url = canonicalUrl(path);
+  return {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "@id": entityId(path, "blogposting"),
+    headline: entry.title,
+    description: entry.description,
+    image: canonicalUrl(DEFAULT_IMAGE_PATH),
+    url,
+    datePublished: entry.date,
+    dateModified: entry.date,
+    author: authorReference,
+    publisher: { "@id": `${SITE_URL}/#organization` },
+    isPartOf: { "@id": `${SITE_URL}/#website` },
+    mainEntityOfPage: { "@type": "WebPage", "@id": url },
+  };
+}
+
 export function personSchema(description: string) {
   return {
     "@context": "https://schema.org",

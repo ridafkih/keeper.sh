@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef, PropsWithChildren } from "react";
+import type { PropsWithChildren } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "@tanstack/react-router";
@@ -12,19 +12,6 @@ import { SessionSlot } from "@/components/ui/shells/session-slot";
 
 const MENU_ID = "marketing-header-menu";
 
-type MarketingNavItem = {
-  to: ComponentPropsWithoutRef<typeof Link>["to"];
-  label: string;
-};
-
-const NAV_ITEMS: MarketingNavItem[] = [
-  { to: "/features", label: "Features" },
-  { to: "/pricing", label: "Pricing" },
-  { to: "/docs", label: "Docs" },
-  { to: "/guides", label: "Guides" },
-  { to: "/recipes", label: "Recipes" },
-];
-
 const navItem = tv({
   base: "px-2 py-1 rounded-lg text-sm tracking-tight font-light text-foreground-muted hover:text-foreground-hover aria-[current=page]:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 });
@@ -32,6 +19,7 @@ const navItem = tv({
 const overlayNavItem = tv({
   base: "font-lora font-medium leading-tight -tracking-[0.05em] text-4xl text-foreground-muted hover:text-foreground-hover aria-[current=page]:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg",
 });
+import { NAV_ITEMS } from "./nav-items";
 
 export function MarketingHeader({ children }: PropsWithChildren) {
   return (

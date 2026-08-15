@@ -8,6 +8,7 @@ import {
   assertIndexableRoutesCovered,
   parseIndexableRoutePaths,
 } from "../src/lib/indexable-routes";
+import { changelogReleases } from "../src/lib/changelog";
 
 const SITE_URL = "https://www.keeper.sh";
 const BLOG_BASE_PATH = "/blog";
@@ -47,6 +48,27 @@ function buildIndexEntry(path: string, entries: SitemapEntry[]): SitemapEntry {
   );
 
   return { path, lastmod };
+}
+
+function buildChangelogEntries(): SitemapEntry[] {
+  const releases = changelogReleases.map((release) => ({
+    loc: `${SITE_URL}/changelog`,
+    lastmod: release.date,
+  }));
+
+  const [newest] = releases;
+  if (!newest) {
+    throw new Error("The changelog sitemap entries cannot be built without a release.");
+  }
+
+  const featureEntries = changelogReleases.flatMap((release) =>
+    release.features.map((feature) => ({
+      loc: `${SITE_URL}/changelog/${feature.slug}`,
+      lastmod: release.date,
+    })),
+  );
+
+  return [newest, ...featureEntries];
 }
 
 function parseFrontmatter(raw: string, file: string): Record<string, unknown> {
@@ -167,6 +189,7 @@ export function sitemapPlugin(): Plugin {
         ...guidesEntries,
         recipesIndexEntry,
         ...recipesEntries,
+        ...buildChangelogEntries(),
       ];
 
       this.emitFile({
