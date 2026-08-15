@@ -109,27 +109,6 @@ const getUserOAuthSources = async (
   }));
 };
 
-const verifyOAuthSourceOwnership = async (userId: string, calendarId: string): Promise<boolean> => {
-  const { database } = await import("@/context");
-  const [source] = await database
-    .select({ id: calendarsTable.id })
-    .from(calendarsTable)
-    .where(
-      and(
-        eq(calendarsTable.id, calendarId),
-        eq(calendarsTable.userId, userId),
-        eq(calendarsTable.calendarType, OAUTH_CALENDAR_TYPE),
-        inArray(calendarsTable.id,
-          database.selectDistinct({ id: sourceDestinationMappingsTable.sourceCalendarId })
-            .from(sourceDestinationMappingsTable)
-        ),
-      ),
-    )
-    .limit(FIRST_RESULT_LIMIT);
-
-  return Boolean(source);
-};
-
 const getOAuthDestinationCredentials = async (
   userId: string,
   accountId: string,
@@ -945,7 +924,6 @@ export {
   SourceCredentialNotFoundError,
   SourceCredentialProviderMismatchError,
   getUserOAuthSources,
-  verifyOAuthSourceOwnership,
   getOAuthDestinationCredentials,
   getOAuthSourceCredentials,
   createOAuthSource,

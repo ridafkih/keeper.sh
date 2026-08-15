@@ -41,7 +41,6 @@ const SOURCE_INGEST_LOCK_KEY_PREFIX = "source-ingest:";
 const sourceIngestLock = createSyncLock(redis);
 const destinationRangesReader = createDestinationRangesReader(database);
 
-const FIRST_RESULT_LIMIT = 1;
 const ICAL_CALENDAR_TYPE = "ical";
 type Source = typeof calendarsTable.$inferSelect;
 
@@ -169,22 +168,6 @@ const getUserSources = async (userId: string): Promise<Source[]> => {
   return sources;
 };
 
-const verifySourceOwnership = async (userId: string, calendarId: string): Promise<boolean> => {
-  const [source] = await database
-    .select({ id: calendarsTable.id })
-    .from(calendarsTable)
-    .where(
-      and(
-        eq(calendarsTable.id, calendarId),
-        eq(calendarsTable.userId, userId),
-        eq(calendarsTable.calendarType, ICAL_CALENDAR_TYPE),
-      ),
-    )
-    .limit(FIRST_RESULT_LIMIT);
-
-  return Boolean(source);
-};
-
 const validateSourceUrl = async (url: string): Promise<void> => {
   await pullRemoteCalendar("json", url, safeFetchOptions);
 };
@@ -272,7 +255,6 @@ export {
   InvalidSourceUrlError,
   getUserSources,
   ingestIcsSource,
-  verifySourceOwnership,
   createSource,
 };
 export type { Source };

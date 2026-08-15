@@ -25,8 +25,6 @@ import {
   buildReconnectedCalendarState,
   RECONNECTED_CALENDAR_STATE,
 } from "@/utils/calendar-state";
-import { runDeleteCalendarAccount } from "@/utils/delete-calendar-account";
-import { createDeleteCalendarAccountDependencies } from "@/utils/delete-calendar-account-dependencies";
 
 const FIRST_RESULT_LIMIT = 1;
 type DestinationDatabase = Pick<typeof database, "delete" | "insert" | "select" | "selectDistinct" | "update">;
@@ -418,15 +416,6 @@ const listCalendarDestinations = async (userId: string): Promise<CalendarDestina
   return accounts;
 };
 
-const deleteCalendarDestination = (
-  userId: string,
-  accountId: string,
-): Promise<boolean> =>
-  runDeleteCalendarAccount(
-    { accountId, userId },
-    createDeleteCalendarAccountDependencies(),
-  );
-
 const getAccountExternalId = async (userId: string, accountId: string): Promise<string | null> => {
   const [account] = await database
     .select({ accountId: calendarAccountsTable.accountId })
@@ -570,7 +559,6 @@ export {
   validateState,
   saveCalendarDestination,
   listCalendarDestinations,
-  deleteCalendarDestination,
   getAccountExternalId as getDestinationAccountId,
   saveCalDAVDestination,
   saveCalDAVDestinationWithDatabase,
