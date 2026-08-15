@@ -4,6 +4,7 @@ import {
   instantToWallTime,
   wallTimeToInstant,
 } from "../../../src/ics/utils/timezone-instant";
+import { sweepTimeZones } from "./tz-sweep-support";
 
 const MS_PER_MINUTE = 60_000;
 const MS_PER_HOUR = 60 * MS_PER_MINUTE;
@@ -185,7 +186,7 @@ describe("resolving a wall time near every transition IANA declares", () => {
   it("finds no zone that changes offset twice within two days", () => {
     const closePairs: string[] = [];
 
-    for (const timeZone of ALL_TIME_ZONES) {
+    for (const timeZone of sweepTimeZones()) {
       const transitions = collectTransitions(timeZone, Date.UTC(1970, 0, 1), Date.UTC(2038, 0, 1));
       for (let index = 1; index < transitions.length; index += 1) {
         const previous = transitions[index - 1];

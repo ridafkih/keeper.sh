@@ -37,7 +37,7 @@ const abortableSleep = (delayMs: number, signal?: AbortSignal): Promise<void> =>
     return Promise.reject(signal.reason);
   }
   if (!signal) {
-    return Bun.sleep(delayMs);
+    return new Promise((resolve) => { setTimeout(resolve, delayMs); });
   }
   return new Promise((resolve, reject) => {
     createAbortableTimer(delayMs, signal, resolve, reject);

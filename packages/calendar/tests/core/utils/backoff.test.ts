@@ -8,7 +8,7 @@ const flushAsync = async (): Promise<void> => {
 };
 
 const advanceBackoff = async (): Promise<void> => {
-  vi.advanceTimersByTime(65_000);
+  await vi.advanceTimersToNextTimerAsync();
   await flushAsync();
 };
 
@@ -136,11 +136,12 @@ describe("withBackoff", () => {
       maxRetries: 2,
       shouldRetry: () => true,
     });
+    const rejection = expect(promise).rejects.toThrow("rate limited");
 
     await advanceBackoff();
     await advanceBackoff();
 
-    await expect(promise).rejects.toThrow("rate limited");
+    await rejection;
 
     expect(callCount).toBe(3);
   });
@@ -162,7 +163,7 @@ describe("withBackoff", () => {
       shouldRetry: () => true,
     });
 
-    vi.advanceTimersByTime(250);
+    await vi.advanceTimersToNextTimerAsync();
     await flushAsync();
 
     expect(await promise).toBe("recovered");

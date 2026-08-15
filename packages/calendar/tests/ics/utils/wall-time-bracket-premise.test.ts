@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { instantToWallTime, wallTimeToInstant } from "../../../src/ics/utils/timezone-instant";
+import { sweepTimeZones } from "./tz-sweep-support";
 
 const MS_PER_HOUR = 60 * 60 * 1000;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
@@ -8,7 +9,7 @@ const SCAN_START = Date.UTC(2015, 0, 1);
 const SCAN_END = Date.UTC(2045, 0, 1);
 const SUITE_TIMEOUT_MS = 300_000;
 
-const ZONES = Intl.supportedValuesOf("timeZone");
+const ZONES = sweepTimeZones();
 
 interface Transition {
   from: number;
