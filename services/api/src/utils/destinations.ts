@@ -7,7 +7,7 @@ import {
   syncStatusTable,
 } from "@keeper.sh/database/schema";
 import { REAUTHENTICATION_DESTINATION_GRANT } from "@keeper.sh/constants";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   buildReauthenticationDemandFields,
   getErrorMessage,
@@ -79,6 +79,7 @@ interface ExistingAccount {
 
 const findExistingAccount = async (
   databaseClient: DestinationDatabase,
+  userId: string,
   provider: string,
   accountId: string,
 ): Promise<ExistingAccount | undefined> => {
@@ -98,6 +99,7 @@ const findExistingAccount = async (
         eq(calendarAccountsTable.accountId, accountId),
       ),
     )
+    .orderBy(desc(sql`${calendarAccountsTable.userId} = ${userId}`))
     .limit(FIRST_RESULT_LIMIT);
 
   return account;
@@ -246,13 +248,16 @@ const upsertAccountAndCalendarWithDatabase = async (
     })
     .onConflictDoUpdate({
       set: setClause,
-      setWhere: eq(calendarAccountsTable.userId, base.userId),
-      target: [calendarAccountsTable.provider, calendarAccountsTable.accountId],
+      target: [
+        calendarAccountsTable.userId,
+        calendarAccountsTable.provider,
+        calendarAccountsTable.accountId,
+      ],
     })
     .returning({ id: calendarAccountsTable.id });
 
   if (!account) {
-    throw new Error("This account is already linked to another user");
+    throw new Error("Failed to find or create the calendar account");
   }
 
   if (oauthCredentialId) {
@@ -291,19 +296,21 @@ const upsertAccountAndCalendarWithDatabase = async (
   return calendar?.id;
 };
 
-const saveCalendarDestinationWithDatabase = async (
+interface DestinationCredentialPayload {
+  accessToken: string;
+  email: string | null;
+  expiresAt: Date;
+  provider: string;
+  refreshToken: string;
+  userId: string;
+}
+
+const resolveDestinationCredentialId = async (
   databaseClient: DestinationDatabase,
-  userId: string,
-  provider: string,
-  accountId: string,
-  email: string | null,
-  accessToken: string,
-  refreshToken: string,
-  expiresAt: Date,
-  needsReauthentication = false,
-): Promise<void> => {
-  const existingAccount = await findExistingAccount(databaseClient, provider, accountId);
-  validateAccountOwnership(existingAccount, userId);
+  existingAccount: ExistingAccount | undefined,
+  payload: DestinationCredentialPayload,
+): Promise<string> => {
+  const { accessToken, email, expiresAt, provider, refreshToken, userId } = payload;
 
   if (existingAccount?.oauthCredentialId) {
     await databaseClient
@@ -311,39 +318,7 @@ const saveCalendarDestinationWithDatabase = async (
       .set({ accessToken, expiresAt, refreshToken })
       .where(eq(oauthCredentialsTable.id, existingAccount.oauthCredentialId));
 
-    await databaseClient
-      .update(calendarAccountsTable)
-      .set({
-        email,
-        needsReauthentication,
-        reauthenticationSource: resolveGrantDemandSource(needsReauthentication),
-      })
-      .where(eq(calendarAccountsTable.id, existingAccount.id));
-
-    recordGrantDemand(existingAccount.id, needsReauthentication, existingAccount);
-
-    const [existingCalendar] = await databaseClient
-      .select({ id: calendarsTable.id })
-      .from(calendarsTable)
-      .where(
-        and(
-          eq(calendarsTable.accountId, existingAccount.id),
-          inArray(calendarsTable.id,
-            databaseClient.selectDistinct({ id: sourceDestinationMappingsTable.destinationCalendarId })
-              .from(sourceDestinationMappingsTable)
-          ),
-        ),
-      )
-      .limit(FIRST_RESULT_LIMIT);
-
-    if (existingCalendar) {
-      await databaseClient
-        .update(calendarsTable)
-        .set(RECONNECTED_CALENDAR_STATE)
-        .where(eq(calendarsTable.id, existingCalendar.id));
-      await initializeSyncStatusWithDatabase(databaseClient, existingCalendar.id);
-    }
-    return;
+    return existingAccount.oauthCredentialId;
   }
 
   const [credential] = await databaseClient
@@ -355,18 +330,50 @@ const saveCalendarDestinationWithDatabase = async (
     throw new Error("Failed to create OAuth credentials");
   }
 
+  return credential.id;
+};
+
+const saveCalendarDestinationWithDatabase = async (
+  databaseClient: DestinationDatabase,
+  userId: string,
+  provider: string,
+  accountId: string,
+  email: string | null,
+  accessToken: string,
+  refreshToken: string,
+  expiresAt: Date,
+  needsReauthentication = false,
+): Promise<void> => {
+  const existingAccount = await findExistingAccount(databaseClient, userId, provider, accountId);
+  validateAccountOwnership(existingAccount, userId);
+
+  const oauthCredentialId = await resolveDestinationCredentialId(databaseClient, existingAccount, {
+    accessToken,
+    email,
+    expiresAt,
+    provider,
+    refreshToken,
+    userId,
+  });
+
   const calendarId = await upsertAccountAndCalendarWithDatabase(databaseClient, {
     accountId,
     email,
     needsReauthentication,
-    oauthCredentialId: credential.id,
+    oauthCredentialId,
     provider,
     userId,
   });
 
-  if (calendarId) {
-    await setupNewDestinationWithDatabase(databaseClient, calendarId);
+  if (!calendarId) {
+    return;
   }
+
+  await databaseClient
+    .update(calendarsTable)
+    .set(RECONNECTED_CALENDAR_STATE)
+    .where(eq(calendarsTable.id, calendarId));
+  await setupNewDestinationWithDatabase(databaseClient, calendarId);
 };
 
 const saveCalendarDestination = (
@@ -453,7 +460,7 @@ const saveCalDAVDestinationWithDatabase = async (
   encryptedPassword: string,
   authMethod: string,
 ): Promise<void> => {
-  const existingAccount = await findExistingAccount(databaseClient, provider, accountId);
+  const existingAccount = await findExistingAccount(databaseClient, userId, provider, accountId);
   validateAccountOwnership(existingAccount, userId);
 
   if (existingAccount?.caldavCredentialId) {

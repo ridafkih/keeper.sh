@@ -80,12 +80,19 @@ const createInsertQuery = (rows: unknown[]): unknown => {
 
 let insertSequence = 0;
 
+const resolveInsertedId = (values: Record<string, unknown>): string => {
+  if (existingAccountRow && "accountId" in values && "provider" in values) {
+    return existingAccountRow.id;
+  }
+  return `row-${String(insertSequence)}`;
+};
+
 const createDatabase = (): Parameters<typeof saveCalendarDestinationWithDatabase>[0] => ({
   delete: () => createSelectQuery([]),
   insert: () => ({
-    values: () => {
+    values: (values: Record<string, unknown>) => {
       insertSequence += 1;
-      return createInsertQuery([{ id: `row-${String(insertSequence)}` }]);
+      return createInsertQuery([{ id: resolveInsertedId(values) }]);
     },
   }),
   select: (projection: Record<string, unknown>) =>

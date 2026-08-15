@@ -13,7 +13,7 @@ import {
 } from "../../src/database/schema";
 
 describe("calendar account schema", () => {
-  it("enforces provider account identity for OAuth upserts", () => {
+  it("enforces one row per user for a provider account", () => {
     const tableConfig = getTableConfig(calendarAccountsTable);
     const identityIndex = tableConfig.indexes.find(
       (index) => index.config.name === "calendar_accounts_provider_account_idx",
@@ -27,6 +27,7 @@ describe("calendar account schema", () => {
       return null;
     });
     expect(columnNames).toEqual([
+      "userId",
       "provider",
       "accountId",
     ]);
