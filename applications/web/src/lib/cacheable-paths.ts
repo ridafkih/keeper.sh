@@ -1,8 +1,8 @@
 import { blogPosts } from "./blog-posts";
-
-const marketingPaths = ["/", "/blog", "/privacy", "/terms"];
+import { staticPagePaths } from "./static-page-paths";
 
 export const cacheableHtmlPaths: string[] = [
-  ...marketingPaths,
+  ...staticPagePaths,
+  "/blog",
   ...blogPosts.map((blogPost) => `/blog/${blogPost.slug}`),
 ];

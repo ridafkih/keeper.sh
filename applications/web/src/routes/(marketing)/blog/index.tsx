@@ -17,7 +17,7 @@ export const Route = createFileRoute("/(marketing)/blog/")({
   component: BlogDirectoryPage,
   head: () => seoHead({
     title: "Blog",
-    description: "Product updates, engineering deep-dives, and calendar syncing tips from the Keeper.sh team.",
+    description: "Guides for each calendar provider, comparisons with other sync tools, and how Keeper.sh works.",
     path: "/blog",
     scripts: [
       jsonLdScript(breadcrumbSchema(breadcrumbs)),
@@ -33,7 +33,7 @@ function BlogDirectoryPage() {
       <header className="flex flex-col gap-1.5">
         <Heading1>Blog</Heading1>
         <Text size="base" tone="muted" className="leading-6">
-          Product updates, engineering deep-dives, and calendar syncing tips from the Keeper.sh team.
+          Guides for each calendar provider, comparisons with other sync tools, and how Keeper.sh works.
         </Text>
       </header>
 

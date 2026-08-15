@@ -35,6 +35,10 @@ import { Route as TermsRoute } from "../../src/routes/(marketing)/terms";
 import { Route as BlogIndexRoute } from "../../src/routes/(marketing)/blog/index";
 import { Route as BlogPostRoute } from "../../src/routes/(marketing)/blog/$slug";
 import { Route as McpDocsRoute } from "../../src/routes/(marketing)/docs/mcp";
+import { Route as AboutRoute } from "../../src/routes/(marketing)/about";
+import { Route as SelfHostingRoute } from "../../src/routes/(marketing)/self-hosting";
+import { Route as IcsGeneratorRoute } from "../../src/routes/(marketing)/tools/ics-generator";
+import { Route as IcsViewerRoute } from "../../src/routes/(marketing)/tools/ics-viewer";
 
 const ROUTE_TREE_FILE = resolve(
   fileURLToPath(import.meta.url),
@@ -48,12 +52,16 @@ type HeadRoute = {
 
 const indexableRoutes: Record<string, HeadRoute> = {
   "/": HomeRoute as unknown as HeadRoute,
+  "/about": AboutRoute as unknown as HeadRoute,
   "/blog": BlogIndexRoute as unknown as HeadRoute,
   "/docs/mcp": McpDocsRoute as unknown as HeadRoute,
   "/features": FeaturesRoute as unknown as HeadRoute,
   "/pricing": PricingRoute as unknown as HeadRoute,
   "/privacy": PrivacyRoute as unknown as HeadRoute,
+  "/self-hosting": SelfHostingRoute as unknown as HeadRoute,
   "/terms": TermsRoute as unknown as HeadRoute,
+  "/tools/ics-generator": IcsGeneratorRoute as unknown as HeadRoute,
+  "/tools/ics-viewer": IcsViewerRoute as unknown as HeadRoute,
 };
 
 function canonicalsOf(route: HeadRoute, params: Record<string, string> = {}): string[] {

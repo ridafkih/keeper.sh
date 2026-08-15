@@ -15,9 +15,11 @@ import { Route as dashboardRouteRouteImport } from './../../routes/(dashboard)/r
 import { Route as authRouteRouteImport } from './../../routes/(auth)/route'
 import { Route as marketingIndexRouteImport } from './../../routes/(marketing)/index'
 import { Route as marketingTermsRouteImport } from './../../routes/(marketing)/terms'
+import { Route as marketingSelfHostingRouteImport } from './../../routes/(marketing)/self-hosting'
 import { Route as marketingPrivacyRouteImport } from './../../routes/(marketing)/privacy'
 import { Route as marketingPricingRouteImport } from './../../routes/(marketing)/pricing'
 import { Route as marketingFeaturesRouteImport } from './../../routes/(marketing)/features'
+import { Route as marketingAboutRouteImport } from './../../routes/(marketing)/about'
 import { Route as marketingSplatRouteImport } from './../../routes/(marketing)/$'
 import { Route as authVerifyEmailRouteImport } from './../../routes/(auth)/verify-email'
 import { Route as authVerifyAuthenticationRouteImport } from './../../routes/(auth)/verify-authentication'
@@ -33,6 +35,8 @@ import { Route as dashboardDashboardIndexRouteImport } from './../../routes/(das
 import { Route as oauthOauthConsentRouteImport } from './../../routes/(oauth)/oauth/consent'
 import { Route as oauthAuthOutlookRouteImport } from './../../routes/(oauth)/auth/outlook'
 import { Route as oauthAuthGoogleRouteImport } from './../../routes/(oauth)/auth/google'
+import { Route as marketingToolsIcsViewerRouteImport } from './../../routes/(marketing)/tools/ics-viewer'
+import { Route as marketingToolsIcsGeneratorRouteImport } from './../../routes/(marketing)/tools/ics-generator'
 import { Route as marketingDocsMcpRouteImport } from './../../routes/(marketing)/docs/mcp'
 import { Route as marketingBlogSlugRouteImport } from './../../routes/(marketing)/blog/$slug'
 import { Route as dashboardDashboardReportRouteImport } from './../../routes/(dashboard)/dashboard/report'
@@ -90,6 +94,11 @@ const marketingTermsRoute = marketingTermsRouteImport.update({
   path: '/terms',
   getParentRoute: () => marketingRouteRoute,
 } as any)
+const marketingSelfHostingRoute = marketingSelfHostingRouteImport.update({
+  id: '/self-hosting',
+  path: '/self-hosting',
+  getParentRoute: () => marketingRouteRoute,
+} as any)
 const marketingPrivacyRoute = marketingPrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
@@ -103,6 +112,11 @@ const marketingPricingRoute = marketingPricingRouteImport.update({
 const marketingFeaturesRoute = marketingFeaturesRouteImport.update({
   id: '/features',
   path: '/features',
+  getParentRoute: () => marketingRouteRoute,
+} as any)
+const marketingAboutRoute = marketingAboutRouteImport.update({
+  id: '/about',
+  path: '/about',
   getParentRoute: () => marketingRouteRoute,
 } as any)
 const marketingSplatRoute = marketingSplatRouteImport.update({
@@ -181,6 +195,17 @@ const oauthAuthGoogleRoute = oauthAuthGoogleRouteImport.update({
   path: '/google',
   getParentRoute: () => oauthAuthRouteRoute,
 } as any)
+const marketingToolsIcsViewerRoute = marketingToolsIcsViewerRouteImport.update({
+  id: '/tools/ics-viewer',
+  path: '/tools/ics-viewer',
+  getParentRoute: () => marketingRouteRoute,
+} as any)
+const marketingToolsIcsGeneratorRoute =
+  marketingToolsIcsGeneratorRouteImport.update({
+    id: '/tools/ics-generator',
+    path: '/tools/ics-generator',
+    getParentRoute: () => marketingRouteRoute,
+  } as any)
 const marketingDocsMcpRoute = marketingDocsMcpRouteImport.update({
   id: '/docs/mcp',
   path: '/docs/mcp',
@@ -371,9 +396,11 @@ export interface FileRoutesByFullPath {
   '/verify-authentication': typeof authVerifyAuthenticationRoute
   '/verify-email': typeof authVerifyEmailRoute
   '/$': typeof marketingSplatRoute
+  '/about': typeof marketingAboutRoute
   '/features': typeof marketingFeaturesRoute
   '/pricing': typeof marketingPricingRoute
   '/privacy': typeof marketingPrivacyRoute
+  '/self-hosting': typeof marketingSelfHostingRoute
   '/terms': typeof marketingTermsRoute
   '/': typeof marketingIndexRoute
   '/dashboard/accounts': typeof dashboardDashboardAccountsRouteRouteWithChildren
@@ -384,6 +411,8 @@ export interface FileRoutesByFullPath {
   '/dashboard/report': typeof dashboardDashboardReportRoute
   '/blog/$slug': typeof marketingBlogSlugRoute
   '/docs/mcp': typeof marketingDocsMcpRoute
+  '/tools/ics-generator': typeof marketingToolsIcsGeneratorRoute
+  '/tools/ics-viewer': typeof marketingToolsIcsViewerRoute
   '/auth/google': typeof oauthAuthGoogleRoute
   '/auth/outlook': typeof oauthAuthOutlookRoute
   '/oauth/consent': typeof oauthOauthConsentRoute
@@ -421,9 +450,11 @@ export interface FileRoutesByTo {
   '/verify-authentication': typeof authVerifyAuthenticationRoute
   '/verify-email': typeof authVerifyEmailRoute
   '/$': typeof marketingSplatRoute
+  '/about': typeof marketingAboutRoute
   '/features': typeof marketingFeaturesRoute
   '/pricing': typeof marketingPricingRoute
   '/privacy': typeof marketingPrivacyRoute
+  '/self-hosting': typeof marketingSelfHostingRoute
   '/terms': typeof marketingTermsRoute
   '/': typeof marketingIndexRoute
   '/dashboard/accounts': typeof dashboardDashboardAccountsRouteRouteWithChildren
@@ -432,6 +463,8 @@ export interface FileRoutesByTo {
   '/dashboard/report': typeof dashboardDashboardReportRoute
   '/blog/$slug': typeof marketingBlogSlugRoute
   '/docs/mcp': typeof marketingDocsMcpRoute
+  '/tools/ics-generator': typeof marketingToolsIcsGeneratorRoute
+  '/tools/ics-viewer': typeof marketingToolsIcsViewerRoute
   '/auth/google': typeof oauthAuthGoogleRoute
   '/auth/outlook': typeof oauthAuthOutlookRoute
   '/oauth/consent': typeof oauthOauthConsentRoute
@@ -473,9 +506,11 @@ export interface FileRoutesById {
   '/(auth)/verify-authentication': typeof authVerifyAuthenticationRoute
   '/(auth)/verify-email': typeof authVerifyEmailRoute
   '/(marketing)/$': typeof marketingSplatRoute
+  '/(marketing)/about': typeof marketingAboutRoute
   '/(marketing)/features': typeof marketingFeaturesRoute
   '/(marketing)/pricing': typeof marketingPricingRoute
   '/(marketing)/privacy': typeof marketingPrivacyRoute
+  '/(marketing)/self-hosting': typeof marketingSelfHostingRoute
   '/(marketing)/terms': typeof marketingTermsRoute
   '/(marketing)/': typeof marketingIndexRoute
   '/(dashboard)/dashboard/accounts': typeof dashboardDashboardAccountsRouteRouteWithChildren
@@ -487,6 +522,8 @@ export interface FileRoutesById {
   '/(dashboard)/dashboard/report': typeof dashboardDashboardReportRoute
   '/(marketing)/blog/$slug': typeof marketingBlogSlugRoute
   '/(marketing)/docs/mcp': typeof marketingDocsMcpRoute
+  '/(marketing)/tools/ics-generator': typeof marketingToolsIcsGeneratorRoute
+  '/(marketing)/tools/ics-viewer': typeof marketingToolsIcsViewerRoute
   '/(oauth)/auth/google': typeof oauthAuthGoogleRoute
   '/(oauth)/auth/outlook': typeof oauthAuthOutlookRoute
   '/(oauth)/oauth/consent': typeof oauthOauthConsentRoute
@@ -527,9 +564,11 @@ export interface FileRouteTypes {
     | '/verify-authentication'
     | '/verify-email'
     | '/$'
+    | '/about'
     | '/features'
     | '/pricing'
     | '/privacy'
+    | '/self-hosting'
     | '/terms'
     | '/'
     | '/dashboard/accounts'
@@ -540,6 +579,8 @@ export interface FileRouteTypes {
     | '/dashboard/report'
     | '/blog/$slug'
     | '/docs/mcp'
+    | '/tools/ics-generator'
+    | '/tools/ics-viewer'
     | '/auth/google'
     | '/auth/outlook'
     | '/oauth/consent'
@@ -577,9 +618,11 @@ export interface FileRouteTypes {
     | '/verify-authentication'
     | '/verify-email'
     | '/$'
+    | '/about'
     | '/features'
     | '/pricing'
     | '/privacy'
+    | '/self-hosting'
     | '/terms'
     | '/'
     | '/dashboard/accounts'
@@ -588,6 +631,8 @@ export interface FileRouteTypes {
     | '/dashboard/report'
     | '/blog/$slug'
     | '/docs/mcp'
+    | '/tools/ics-generator'
+    | '/tools/ics-viewer'
     | '/auth/google'
     | '/auth/outlook'
     | '/oauth/consent'
@@ -628,9 +673,11 @@ export interface FileRouteTypes {
     | '/(auth)/verify-authentication'
     | '/(auth)/verify-email'
     | '/(marketing)/$'
+    | '/(marketing)/about'
     | '/(marketing)/features'
     | '/(marketing)/pricing'
     | '/(marketing)/privacy'
+    | '/(marketing)/self-hosting'
     | '/(marketing)/terms'
     | '/(marketing)/'
     | '/(dashboard)/dashboard/accounts'
@@ -642,6 +689,8 @@ export interface FileRouteTypes {
     | '/(dashboard)/dashboard/report'
     | '/(marketing)/blog/$slug'
     | '/(marketing)/docs/mcp'
+    | '/(marketing)/tools/ics-generator'
+    | '/(marketing)/tools/ics-viewer'
     | '/(oauth)/auth/google'
     | '/(oauth)/auth/outlook'
     | '/(oauth)/oauth/consent'
@@ -721,6 +770,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof marketingTermsRouteImport
       parentRoute: typeof marketingRouteRoute
     }
+    '/(marketing)/self-hosting': {
+      id: '/(marketing)/self-hosting'
+      path: '/self-hosting'
+      fullPath: '/self-hosting'
+      preLoaderRoute: typeof marketingSelfHostingRouteImport
+      parentRoute: typeof marketingRouteRoute
+    }
     '/(marketing)/privacy': {
       id: '/(marketing)/privacy'
       path: '/privacy'
@@ -740,6 +796,13 @@ declare module '@tanstack/react-router' {
       path: '/features'
       fullPath: '/features'
       preLoaderRoute: typeof marketingFeaturesRouteImport
+      parentRoute: typeof marketingRouteRoute
+    }
+    '/(marketing)/about': {
+      id: '/(marketing)/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof marketingAboutRouteImport
       parentRoute: typeof marketingRouteRoute
     }
     '/(marketing)/$': {
@@ -846,6 +909,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/auth/google'
       preLoaderRoute: typeof oauthAuthGoogleRouteImport
       parentRoute: typeof oauthAuthRouteRoute
+    }
+    '/(marketing)/tools/ics-viewer': {
+      id: '/(marketing)/tools/ics-viewer'
+      path: '/tools/ics-viewer'
+      fullPath: '/tools/ics-viewer'
+      preLoaderRoute: typeof marketingToolsIcsViewerRouteImport
+      parentRoute: typeof marketingRouteRoute
+    }
+    '/(marketing)/tools/ics-generator': {
+      id: '/(marketing)/tools/ics-generator'
+      path: '/tools/ics-generator'
+      fullPath: '/tools/ics-generator'
+      preLoaderRoute: typeof marketingToolsIcsGeneratorRouteImport
+      parentRoute: typeof marketingRouteRoute
     }
     '/(marketing)/docs/mcp': {
       id: '/(marketing)/docs/mcp'
@@ -1207,23 +1284,31 @@ const marketingBlogRouteRouteWithChildren =
 interface marketingRouteRouteChildren {
   marketingBlogRouteRoute: typeof marketingBlogRouteRouteWithChildren
   marketingSplatRoute: typeof marketingSplatRoute
+  marketingAboutRoute: typeof marketingAboutRoute
   marketingFeaturesRoute: typeof marketingFeaturesRoute
   marketingPricingRoute: typeof marketingPricingRoute
   marketingPrivacyRoute: typeof marketingPrivacyRoute
+  marketingSelfHostingRoute: typeof marketingSelfHostingRoute
   marketingTermsRoute: typeof marketingTermsRoute
   marketingIndexRoute: typeof marketingIndexRoute
   marketingDocsMcpRoute: typeof marketingDocsMcpRoute
+  marketingToolsIcsGeneratorRoute: typeof marketingToolsIcsGeneratorRoute
+  marketingToolsIcsViewerRoute: typeof marketingToolsIcsViewerRoute
 }
 
 const marketingRouteRouteChildren: marketingRouteRouteChildren = {
   marketingBlogRouteRoute: marketingBlogRouteRouteWithChildren,
   marketingSplatRoute: marketingSplatRoute,
+  marketingAboutRoute: marketingAboutRoute,
   marketingFeaturesRoute: marketingFeaturesRoute,
   marketingPricingRoute: marketingPricingRoute,
   marketingPrivacyRoute: marketingPrivacyRoute,
+  marketingSelfHostingRoute: marketingSelfHostingRoute,
   marketingTermsRoute: marketingTermsRoute,
   marketingIndexRoute: marketingIndexRoute,
   marketingDocsMcpRoute: marketingDocsMcpRoute,
+  marketingToolsIcsGeneratorRoute: marketingToolsIcsGeneratorRoute,
+  marketingToolsIcsViewerRoute: marketingToolsIcsViewerRoute,
 }
 
 const marketingRouteRouteWithChildren = marketingRouteRoute._addFileChildren(

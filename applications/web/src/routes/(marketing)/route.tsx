@@ -5,7 +5,6 @@ import { MarketingHeader, MarketingHeaderActions, MarketingHeaderBranding, Marke
 import { MarketingFooter, MarketingFooterTagline, MarketingFooterNav, MarketingFooterNavGroup, MarketingFooterNavGroupLabel, MarketingFooterNavItem } from '../../features/marketing/components/marketing-footer'
 import KeeperLogo from "@/assets/keeper.svg?react";
 import { ButtonText, LinkButton } from '../../components/ui/primitives/button';
-import { GithubStarButton } from '../../components/ui/primitives/github-star-button';
 import { SessionSlot } from '../../components/ui/shells/session-slot';
 import HeartIcon from "lucide-react/dist/esm/icons/heart";
 import { ExternalTextLink } from "@/components/ui/primitives/text-link";
@@ -40,8 +39,6 @@ export const Route = createFileRoute('/(marketing)')({
 })
 
 function MarketingLayout() {
-  const githubStars = Route.useLoaderData();
-
   return (
     <>
       <MarketingHeader>
@@ -50,7 +47,6 @@ function MarketingLayout() {
         </MarketingHeaderBranding>
         <MarketingHeaderNav />
         <MarketingHeaderActions>
-          <GithubStarButton initialStarCount={githubStars.count} />
           <span className="contents max-md:[body:has(#marketing-header-menu)_&]:hidden">
             <SessionSlot
               authenticated={
@@ -99,13 +95,17 @@ function MarketingLayout() {
           <MarketingFooterNav>
             <MarketingFooterNavGroup>
               <MarketingFooterNavGroupLabel>Product</MarketingFooterNavGroupLabel>
-              <MarketingFooterNavItem to="/register">Get Started</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/register">Create an Account</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/features">Features</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/pricing">Pricing</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/self-hosting">Self-Hosting</MarketingFooterNavItem>
             </MarketingFooterNavGroup>
             <MarketingFooterNavGroup>
               <MarketingFooterNavGroupLabel>Resources</MarketingFooterNavGroupLabel>
               <MarketingFooterNavItem to="/blog">Blog</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/about">About</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/tools/ics-generator">ICS File Generator</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/tools/ics-viewer">ICS File Viewer</MarketingFooterNavItem>
               <MarketingFooterNavItem href="https://github.com/ridafkih/keeper.sh">GitHub</MarketingFooterNavItem>
             </MarketingFooterNavGroup>
             <MarketingFooterNavGroup>

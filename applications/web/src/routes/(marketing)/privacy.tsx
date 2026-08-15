@@ -16,7 +16,7 @@ export const Route = createFileRoute("/(marketing)/privacy")({
       "How Keeper.sh collects, uses, and protects your calendar data. Per-calendar controls over what event details are shared, and minimal data retention.",
     path: "/privacy",
     scripts: [
-      jsonLdScript(webPageSchema("Privacy Policy", "Privacy policy for Keeper.sh, which copies your events between your calendars.", "/privacy")),
+      jsonLdScript(webPageSchema("Privacy Policy", "Privacy policy for Keeper.sh, the calendar sync service that stops your calendars double-booking each other.", "/privacy")),
       jsonLdScript(breadcrumbSchema(breadcrumbs)),
     ],
   }),
@@ -52,9 +52,8 @@ function PrivacyPage() {
           </Text>
           <Heading3 as="h3">Calendar Data</Heading3>
           <Text size="sm">
-            To provide our service, we access calendar data from sources you connect. This includes
-            event titles, times, durations, and associated metadata. We only access calendars you
-            explicitly authorize.
+            To run the service, we read the calendars you connect. That includes event titles, times,
+            durations, and related details. We only read calendars you have authorized.
           </Text>
           <Heading3 as="h3">Usage Data</Heading3>
           <Text size="sm">
@@ -68,8 +67,8 @@ function PrivacyPage() {
           <Text size="sm">We use the information we collect to:</Text>
           <ul className="list-disc list-inside flex flex-col gap-1 ml-2 text-sm tracking-tight text-foreground-muted">
             <li>Provide, maintain, and improve our calendar syncing service</li>
-            <li>Aggregate calendar events for shared feeds, hiding event names, descriptions, and locations by default</li>
-            <li>Push synchronized events to your designated destination calendars</li>
+            <li>Combine your events into a shared calendar link, which hides event names, descriptions, and locations by default</li>
+            <li>Copy your events into the other calendars you have chosen</li>
             <li>Send service-related communications and respond to inquiries</li>
             <li>Monitor and analyze usage patterns to improve user experience</li>
             <li>Detect, prevent, and address technical issues or abuse</li>
@@ -78,11 +77,13 @@ function PrivacyPage() {
 
         <Section title="Controlling What Is Shared">
           <Text size="sm">
-            Your shared iCal feed hides event names, descriptions, and locations by default, showing
-            only time blocks labelled &ldquo;Busy&rdquo;. Events copied to your own destination calendars keep
-            their original name, description, and location unless you turn those off, which you can do
-            for each source calendar. Attendee lists are never copied to your destination calendars or
-            your shared feed.
+            Your shared calendar link hides event names, descriptions, and locations by default. It shows
+            only time blocks labelled &ldquo;Busy&rdquo;. A copy made in one of your own calendars carries the
+            name of the calendar it came from, and no title, description, or location.
+          </Text>
+          <Text size="sm">
+            Showing those details instead requires a Pro plan. Attendee lists are never copied, on any
+            plan.
           </Text>
         </Section>
 
@@ -93,9 +94,9 @@ function PrivacyPage() {
             security assessments.
           </Text>
           <Text size="sm">
-            Calendar data is stored to enable synchronization and is refreshed from your source
-            calendars every minute, on every plan. We do not retain historical calendar data beyond
-            what is necessary for the service to function.
+            Calendar data is stored so the service can sync, and it is read again from your calendars
+            every minute on every plan. We do not keep old calendar data beyond what the service needs
+            to work.
           </Text>
         </Section>
 
@@ -131,7 +132,7 @@ function PrivacyPage() {
             <li>Access the personal data we hold about you</li>
             <li>Request correction of inaccurate data</li>
             <li>Request deletion of your data and account</li>
-            <li>Disconnect calendar sources at any time</li>
+            <li>Disconnect any calendar at any time</li>
             <li>Export your data in a portable format</li>
             <li>Withdraw consent for data processing</li>
           </ul>

@@ -1,15 +1,8 @@
 import { useSetAtom } from 'jotai'
-import { createFileRoute } from '@tanstack/react-router'
-import { faqSchema, jsonLdScript, seoHead, softwareApplicationSchema } from '../../lib/seo'
+import { createFileRoute, useLoaderData, type LinkProps } from '@tanstack/react-router'
+import { faqSchema, jsonLdScript, seoHead, softwareApplicationSchema, webPageSchema } from '../../lib/seo'
 import { Heading1, Heading2, Heading3 } from '../../components/ui/primitives/heading'
 import { Text } from '../../components/ui/primitives/text'
-import {
-  MarketingHowItWorksSection,
-  MarketingHowItWorksCard,
-  MarketingHowItWorksRow,
-  MarketingHowItWorksStepBody,
-  MarketingHowItWorksStepIllustration,
-} from '../../features/marketing/components/marketing-how-it-works'
 import { MarketingFaqSection, MarketingFaqList, MarketingFaqItem, MarketingFaqQuestion } from '../../features/marketing/components/marketing-faq'
 import { MarketingCtaSection, MarketingCtaCard } from '../../features/marketing/components/marketing-cta'
 import { Collapsible } from '../../components/ui/primitives/collapsible'
@@ -26,6 +19,19 @@ import {
 import { MarketingIllustrationContributors } from '../../illustrations/marketing-illustration-contributors'
 import { MarketingIllustrationProviders } from '../../illustrations/marketing-illustration-providers'
 import { MarketingIllustrationSync } from '../../illustrations/marketing-illustration-sync'
+import {
+  MarketingTestimonialCard,
+  MarketingTestimonialsGrid,
+  MarketingTestimonialsSection,
+} from '../../features/marketing/components/marketing-testimonials'
+import {
+  MarketingHowItWorksCard,
+  MarketingHowItWorksRow,
+  MarketingHowItWorksSection,
+  MarketingHowItWorksStepBody,
+  MarketingHowItWorksStepIllustration,
+} from '../../features/marketing/components/marketing-how-it-works'
+import { HOW_IT_WORKS_STEPS } from '../../features/marketing/how-it-works-steps'
 import { HowItWorksConnect } from '../../illustrations/how-it-works-connect'
 import { HowItWorksConfigure } from '../../illustrations/how-it-works-configure'
 import { HowItWorksSync } from '../../illustrations/how-it-works-sync'
@@ -41,7 +47,9 @@ import {
   MarketingPricingPlanCard,
   MarketingPricingSection,
 } from '../../features/marketing/components/marketing-pricing-section'
-import { PRICING_FEATURES, PRICING_PLANS, pricingPlanFeatures } from '../../features/marketing/pricing-plans'
+import { PRICING_FEATURE_DIFFERENCES, PRICING_PLANS, pricingPlanHighlights } from '../../features/marketing/pricing-plans'
+import { TESTIMONIALS } from '../../features/marketing/testimonials'
+import { GithubStarButton } from '../../components/ui/primitives/github-star-button'
 import { calendarEmphasizedAtom } from '../../state/calendar-emphasized'
 import { ANALYTICS_EVENTS } from '../../lib/analytics'
 import ArrowRightIcon from "lucide-react/dist/esm/icons/arrow-right";
@@ -76,6 +84,7 @@ type MarketingFeature = {
   description: string
   gridClassName: string
   illustration?: React.ReactNode
+  link?: { to: LinkProps["to"]; label: string }
 }
 
 const MARKETING_FEATURES: MarketingFeature[] = [
@@ -99,7 +108,7 @@ const MARKETING_FEATURES: MarketingFeature[] = [
     id: 3,
     title: 'Synced events stay private by default',
     description:
-      'A copy carries the calendar name in place of your event title. No description, location or guest list.',
+      'A copy shows the calendar it came from. Your title, description, location and guest list stay behind.',
     gridClassName: 'lg:col-start-1 lg:col-span-10 lg:row-start-2',
   },
   {
@@ -116,29 +125,7 @@ const MARKETING_FEATURES: MarketingFeature[] = [
       'Check exactly what Keeper.sh sends to your calendars, or run it on your own server.',
     gridClassName: 'lg:col-start-5 lg:col-span-6 lg:row-start-3',
     illustration: <MarketingIllustrationContributors />,
-  },
-]
-
-type HowItWorksStep = {
-  title: string
-  description: string
-}
-
-const HOW_IT_WORKS_STEPS: HowItWorksStep[] = [
-  {
-    title: 'Connect your calendars',
-    description:
-      'Sign in with Google, Outlook, iCloud or Fastmail. For anything else, paste a calendar link.',
-  },
-  {
-    title: 'Say where your events should land',
-    description:
-      'Point each calendar at the one you want its events copied into, and choose how much detail travels.',
-  },
-  {
-    title: 'Keeper.sh takes it from there',
-    description:
-      'Your calendars are read every minute. Changes reach the others every 30 minutes on Free, and every minute on Pro.',
+    link: { to: '/about', label: 'Who builds Keeper.sh' },
   },
 ]
 
@@ -150,30 +137,30 @@ type FaqItem = {
 
 const FAQ_ITEMS: FaqItem[] = [
   {
-    question: 'My calendar only gives me a link to paste. Does that work?',
+    question: 'What if my calendar only gives me a share link?',
     answer:
-      'Yes. Paste the link and those events copy to your other calendars. Copying goes one way, so nothing you change reaches the original calendar.',
+      'Paste the link and those events copy into your other calendars. The copying runs one way, so nothing you change later reaches the original calendar.',
   },
   {
     question: 'Which calendars does Keeper.sh work with?',
     answer:
-      'Google Calendar, Outlook, iCloud and Fastmail sign in directly. Most others work too, as long as yours gives you a calendar link or a CalDAV login.',
+      'Google Calendar, Outlook, iCloud and Fastmail sign in directly. Most others work too, as long as yours gives you a calendar link or a login.',
   },
   {
     question: 'Can my colleagues see what my personal events are?',
     answer:
-      'No. A copy carries the calendar name in place of your event title, and leaves the description and location behind. Guest lists are never copied on any plan, and the rest you can turn back on per calendar whenever you want.',
+      'No. A copy shows the name of the calendar it came from, with no title, description, location or guest list. Pro lets you pass the title, description and location through, and the guest list is never copied on any plan.',
   },
   {
     question: 'How often do calendars update?',
     answer:
-      'Keeper.sh reads every calendar every minute on both plans. Your changes reach the other calendars every 30 minutes on Free, and every minute on Pro.',
+      'Keeper.sh reads every calendar every minute. Your changes reach the other calendars every 30 minutes on Free, and every minute on Pro.',
   },
   {
     question: 'Can I run Keeper.sh myself?',
     answer:
-      'Yes. Keeper.sh is open source under AGPL-3.0, and the README on GitHub has the Docker setup steps. Every account on a server you run gets the Pro feature set, with no plan limits.',
-    content: <>Yes. Keeper.sh is open source under AGPL-3.0, and the <a href="https://github.com/ridafkih/keeper.sh#readme" target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-2">README on GitHub</a> has the Docker setup steps. Every account on a server you run gets the Pro feature set, with no plan limits.</>,
+      'Yes. Keeper.sh is open source under AGPL-3.0. The self-hosting page covers what you get, and the README on GitHub has the setup steps.',
+    content: <>Yes. Keeper.sh is open source under AGPL-3.0. The <TextLink align="left" size="sm" to="/self-hosting" tone="default">self-hosting page</TextLink> covers what you get, and the <a href="https://github.com/ridafkih/keeper.sh#readme" target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-2">README on GitHub</a> has the setup steps.</>,
   },
   {
     question: 'Can I cancel any time?',
@@ -190,6 +177,7 @@ export const Route = createFileRoute('/(marketing)/')({
     path: "/",
     brandPosition: "before",
     scripts: [
+      jsonLdScript(webPageSchema("Keeper.sh", PAGE_DESCRIPTION, "/")),
       jsonLdScript(softwareApplicationSchema()),
       jsonLdScript(faqSchema("", FAQ_ITEMS)),
     ],
@@ -198,6 +186,7 @@ export const Route = createFileRoute('/(marketing)/')({
 
 function MarketingPage() {
   const setEmphasized = useSetAtom(calendarEmphasizedAtom)
+  const githubStars = useLoaderData({ from: '/(marketing)' })
 
   return (
     <div className="flex flex-col gap-2 pt-8">
@@ -220,18 +209,7 @@ function MarketingPage() {
               <ArrowRightIcon size={16} />
             </ButtonIcon>
           </LinkButton>
-          <ExternalLinkButton
-            href="https://github.com/ridafkih/keeper.sh"
-            target="_blank"
-            rel="noreferrer"
-            size="compact"
-            variant="border"
-          >
-            <ButtonText>View GitHub</ButtonText>
-            <ButtonIcon>
-              <ArrowUpRightIcon size={16} />
-            </ButtonIcon>
-          </ExternalLinkButton>
+          <GithubStarButton starCount={githubStars.count} />
         </div>
       </div>
       <div className="contents *:z-10">
@@ -253,11 +231,68 @@ function MarketingPage() {
                     <Text size="sm" className="text-left">
                       {feature.description}
                     </Text>
+                    {feature.link && (
+                      <TextLink align="left" size="sm" to={feature.link.to} tone="muted">
+                        {feature.link.label}
+                      </TextLink>
+                    )}
                   </MarketingFeatureBentoBody>
                 </MarketingFeatureBentoCard>
               ))}
             </MarketingFeatureBentoGrid>
           </MarketingFeatureBentoSection>
+
+          <MarketingHowItWorksSection>
+            <Heading2 className="text-center">How your calendars stay in step</Heading2>
+            <Text size="sm" align="center" tone="muted" className="mt-2">
+              You set a connection up once. After that, Keeper.sh keeps the copies right.
+            </Text>
+            <MarketingHowItWorksCard>
+              <MarketingHowItWorksRow>
+                <MarketingHowItWorksStepBody step={1}>
+                  <Heading3 as="h3">{HOW_IT_WORKS_STEPS[0].title}</Heading3>
+                  <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[0].body}</Text>
+                </MarketingHowItWorksStepBody>
+                <MarketingHowItWorksStepIllustration align="right">
+                  <HowItWorksConnect />
+                </MarketingHowItWorksStepIllustration>
+              </MarketingHowItWorksRow>
+
+              <MarketingHowItWorksRow reverse>
+                <MarketingHowItWorksStepBody step={2}>
+                  <Heading3 as="h3">{HOW_IT_WORKS_STEPS[1].title}</Heading3>
+                  <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[1].body}</Text>
+                </MarketingHowItWorksStepBody>
+                <MarketingHowItWorksStepIllustration align="left">
+                  <HowItWorksConfigure />
+                </MarketingHowItWorksStepIllustration>
+              </MarketingHowItWorksRow>
+
+              <MarketingHowItWorksRow>
+                <MarketingHowItWorksStepBody step={3}>
+                  <Heading3 as="h3">{HOW_IT_WORKS_STEPS[2].title}</Heading3>
+                  <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[2].body}</Text>
+                </MarketingHowItWorksStepBody>
+                <MarketingHowItWorksStepIllustration align="right">
+                  <HowItWorksSync />
+                </MarketingHowItWorksStepIllustration>
+              </MarketingHowItWorksRow>
+            </MarketingHowItWorksCard>
+          </MarketingHowItWorksSection>
+
+          {TESTIMONIALS.length > 0 && (
+            <MarketingTestimonialsSection id="testimonials">
+              <Heading2 className="text-center">What people say</Heading2>
+              <Text size="sm" align="center" tone="muted" className="mt-2">
+                Quotes from Reddit, X and email, each shown with who wrote it.
+              </Text>
+              <MarketingTestimonialsGrid>
+                {TESTIMONIALS.map((testimonial) => (
+                  <MarketingTestimonialCard key={`${testimonial.source}-${testimonial.author}`} {...testimonial} />
+                ))}
+              </MarketingTestimonialsGrid>
+            </MarketingTestimonialsSection>
+          )}
 
           <MarketingPricingSection id="pricing">
             <MarketingPricingIntro>
@@ -280,12 +315,12 @@ function MarketingPage() {
                   period={plan.period}
                   description={plan.description}
                   ctaLabel={plan.ctaLabel}
-                  features={pricingPlanFeatures(plan.id)}
+                  features={pricingPlanHighlights(plan.id)}
                 />
               ))}
 
               <MarketingPricingFeatureMatrix>
-                {PRICING_FEATURES.map((feature) => (
+                {PRICING_FEATURE_DIFFERENCES.map((feature) => (
                   <MarketingPricingFeatureRow key={feature.label}>
                     <MarketingPricingFeatureLabel>
                       <Text size="sm" className="text-left text-nowrap">{feature.label}</Text>
@@ -301,44 +336,6 @@ function MarketingPage() {
               </MarketingPricingFeatureMatrix>
             </MarketingPricingComparisonGrid>
           </MarketingPricingSection>
-
-          <MarketingHowItWorksSection>
-            <Heading2 className="text-center">How It Works</Heading2>
-            <Text size="sm" align="center" className="mt-2 max-w-[48ch] mx-auto">
-              Three steps, and then you can forget about it.
-            </Text>
-            <MarketingHowItWorksCard>
-              <MarketingHowItWorksRow>
-                <MarketingHowItWorksStepBody step={1}>
-                  <Heading3 as="h3">{HOW_IT_WORKS_STEPS[0].title}</Heading3>
-                  <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[0].description}</Text>
-                </MarketingHowItWorksStepBody>
-                <MarketingHowItWorksStepIllustration align="right">
-                  <HowItWorksConnect />
-                </MarketingHowItWorksStepIllustration>
-              </MarketingHowItWorksRow>
-
-              <MarketingHowItWorksRow reverse>
-                <MarketingHowItWorksStepBody step={2}>
-                  <Heading3 as="h3">{HOW_IT_WORKS_STEPS[1].title}</Heading3>
-                  <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[1].description}</Text>
-                </MarketingHowItWorksStepBody>
-                <MarketingHowItWorksStepIllustration align="left">
-                  <HowItWorksConfigure />
-                </MarketingHowItWorksStepIllustration>
-              </MarketingHowItWorksRow>
-
-              <MarketingHowItWorksRow>
-                <MarketingHowItWorksStepBody step={3}>
-                  <Heading3 as="h3">{HOW_IT_WORKS_STEPS[2].title}</Heading3>
-                  <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[2].description}</Text>
-                </MarketingHowItWorksStepBody>
-                <MarketingHowItWorksStepIllustration align="right">
-                  <HowItWorksSync />
-                </MarketingHowItWorksStepIllustration>
-              </MarketingHowItWorksRow>
-            </MarketingHowItWorksCard>
-          </MarketingHowItWorksSection>
 
           <MarketingFaqSection>
             <Heading2 className="text-center">Frequently Asked Questions</Heading2>
@@ -367,7 +364,7 @@ function MarketingPage() {
               </Text>
               <div className="flex items-center gap-2 mt-2">
                 <LinkButton to="/register" size="compact" variant="inverse" data-visitors-event={ANALYTICS_EVENTS.marketing_cta_clicked} data-visitors-cta="bottom">
-                  <ButtonText>Get Started</ButtonText>
+                  <ButtonText>Sync Calendars</ButtonText>
                   <ButtonIcon>
                     <ArrowRightIcon size={16} />
                   </ButtonIcon>
@@ -379,7 +376,7 @@ function MarketingPage() {
                   size="compact"
                   variant="inverse-ghost"
                 >
-                  <ButtonText>View on GitHub</ButtonText>
+                  <ButtonText>GitHub</ButtonText>
                   <ButtonIcon>
                     <ArrowUpRightIcon size={16} />
                   </ButtonIcon>

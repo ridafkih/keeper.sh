@@ -16,7 +16,7 @@ export const Route = createFileRoute("/(marketing)/terms")({
       "Terms of service for Keeper.sh. Covers account registration, subscription billing, acceptable use, and data ownership for our calendar syncing service.",
     path: "/terms",
     scripts: [
-      jsonLdScript(webPageSchema("Terms & Conditions", "Terms and conditions for using Keeper.sh, which copies your events between your calendars.", "/terms")),
+      jsonLdScript(webPageSchema("Terms & Conditions", "Terms and conditions for using Keeper.sh, the calendar sync service that stops your calendars double-booking each other.", "/terms")),
       jsonLdScript(breadcrumbSchema(breadcrumbs)),
     ],
   }),
@@ -33,27 +33,25 @@ function TermsPage() {
       <div className="flex flex-col gap-8">
         <Section title="Agreement to Terms">
           <Text size="sm">
-            These Terms and Conditions (&ldquo;Terms&rdquo;) constitute a legally binding agreement between you
-            and Keeper.sh (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;us&rdquo;) governing your access to and use of the Keeper.sh calendar
-            synchronization service.
+            These Terms and Conditions (&ldquo;Terms&rdquo;) are a legally binding agreement between you and
+            Keeper.sh (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;us&rdquo;). They govern your access to and use of the
+            service.
           </Text>
           <Text size="sm">
-            By accessing or using Keeper.sh, you agree to be bound by these Terms. If you disagree with
-            any part of these Terms, you may not access or use the service.
+            By using Keeper.sh, you agree to these Terms. If you disagree with any part of them, you may
+            not use the service.
           </Text>
         </Section>
 
         <Section title="Description of Service">
           <Text size="sm">
-            Keeper.sh provides calendar aggregation and synchronization services that allow you to
-            combine events from multiple calendar sources into a single feed, with per-calendar control
-            over which event details it carries. The service
-            includes generating iCal feeds and pushing events to external calendar providers.
+            Keeper.sh combines events from several calendars into one shared link, and you control which
+            event details that link carries. It also copies your events into other calendar accounts you
+            connect.
           </Text>
           <Text size="sm">
-            We reserve the right to modify, suspend, or discontinue any aspect of the service at any
-            time, with or without notice. We shall not be liable to you or any third party for any
-            modification, suspension, or discontinuation of the service.
+            We may change, suspend, or discontinue any part of the service at any time, with or without
+            notice. We are not liable to you or to any third party for doing so.
           </Text>
         </Section>
 
@@ -115,13 +113,13 @@ function TermsPage() {
 
         <Section title="Your Content">
           <Text size="sm">
-            You retain ownership of any calendar data and content you provide to the service. By using
-            Keeper.sh, you grant us a limited license to access, process, and display your content solely
-            as necessary to provide the service.
+            You keep ownership of any calendar data and content you give the service. By using Keeper.sh,
+            you grant us a limited license to access, process, and display that content. It covers only
+            what is needed to provide the service.
           </Text>
           <Text size="sm">
-            You represent that you have the right to share any calendar data you connect to Keeper.sh and
-            that doing so does not violate any third-party rights or agreements.
+            You confirm that you have the right to share any calendar data you connect. You also confirm
+            that sharing it breaks no third-party rights or agreements.
           </Text>
         </Section>
 
@@ -135,36 +133,36 @@ function TermsPage() {
 
         <Section title="Disclaimer of Warranties">
           <Text size="sm">
-            THE SERVICE IS PROVIDED &ldquo;AS IS&rdquo; AND &ldquo;AS AVAILABLE&rdquo; WITHOUT WARRANTIES OF ANY KIND, EITHER
-            EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO IMPLIED WARRANTIES OF MERCHANTABILITY,
-            FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+            THE SERVICE IS PROVIDED &ldquo;AS IS&rdquo; AND &ldquo;AS AVAILABLE&rdquo;, WITHOUT WARRANTIES OF ANY
+            KIND, EXPRESS OR IMPLIED. THIS INCLUDES THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS
+            FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
           </Text>
           <Text size="sm">
-            We do not warrant that the service will be uninterrupted, secure, or error-free, that
-            defects will be corrected, or that the service is free of viruses or other harmful
-            components.
+            We do not warrant that the service will be uninterrupted, secure, or error-free. We do not
+            warrant that defects will be corrected, or that the service is free of viruses or other
+            harmful components.
           </Text>
         </Section>
 
         <Section title="Limitation of Liability">
           <Text size="sm">
-            TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT SHALL KEEPER.SH, ITS OFFICERS, DIRECTORS,
-            EMPLOYEES, OR AGENTS BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR
-            PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO LOSS OF PROFITS, DATA, USE, OR GOODWILL,
-            ARISING OUT OF OR IN CONNECTION WITH YOUR USE OF THE SERVICE.
+            TO THE MAXIMUM EXTENT PERMITTED BY LAW, KEEPER.SH IS NOT LIABLE FOR ANY INDIRECT, INCIDENTAL,
+            SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING FROM YOUR USE OF THE SERVICE. THIS
+            INCLUDES LOSS OF PROFITS, DATA, USE, OR GOODWILL. IT APPLIES EQUALLY TO OUR OFFICERS,
+            DIRECTORS, EMPLOYEES, AND AGENTS.
           </Text>
           <Text size="sm">
-            OUR TOTAL LIABILITY FOR ANY CLAIMS ARISING FROM YOUR USE OF THE SERVICE SHALL NOT EXCEED
-            THE AMOUNT YOU PAID US, IF ANY, DURING THE TWELVE (12) MONTHS PRECEDING THE CLAIM.
+            OUR TOTAL LIABILITY FOR ANY CLAIM ARISING FROM YOUR USE OF THE SERVICE IS CAPPED. IT WILL NOT
+            EXCEED WHAT YOU PAID US IN THE TWELVE (12) MONTHS BEFORE THE CLAIM.
           </Text>
         </Section>
 
         <Section title="Indemnification">
           <Text size="sm">
             You agree to indemnify and hold harmless Keeper.sh and its officers, directors, employees,
-            and agents from any claims, damages, losses, or expenses (including reasonable attorneys&apos;
-            fees) arising from your use of the service, violation of these Terms, or infringement of
-            any third-party rights.
+            and agents. That covers any claims, damages, losses, or expenses, including reasonable
+            attorneys&apos; fees. It applies where they arise from your use of the service, your breach of
+            these Terms, or your infringement of third-party rights.
           </Text>
         </Section>
 
@@ -183,10 +181,9 @@ function TermsPage() {
 
         <Section title="Governing Law">
           <Text size="sm">
-            These Terms shall be governed by and construed in accordance with the laws of the
-            Province of Alberta, Canada, and the federal laws of Canada applicable therein, without
-            regard to conflict of law principles. Any disputes arising under these Terms shall be
-            subject to the exclusive jurisdiction of the courts of the Province of Alberta.
+            These Terms are governed by the laws of the Province of Alberta, Canada, and the federal
+            laws of Canada that apply there. Conflict of law principles do not apply. Any dispute under
+            these Terms goes to the courts of the Province of Alberta.
           </Text>
         </Section>
 
@@ -201,9 +198,8 @@ function TermsPage() {
 
         <Section title="Severability">
           <Text size="sm">
-            If any provision of these Terms is found to be unenforceable or invalid, that provision
-            shall be limited or eliminated to the minimum extent necessary, and the remaining
-            provisions shall remain in full force and effect.
+            If any provision of these Terms is found unenforceable or invalid, it is limited or removed
+            to the smallest extent necessary. The remaining provisions stay in full force.
           </Text>
         </Section>
 

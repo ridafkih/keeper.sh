@@ -86,6 +86,13 @@ export function seoHead({
 export function notFoundHead() {
   return { meta: [{ title: `Page not found · ${SITE_NAME}` }] };
 }
+const AUTHOR_NAME = "Rida F'kih";
+const PERSON_ID = entityId("/about", "person");
+
+// Consumers resolve @id within one page's graph, not across pages, and the Person
+// node itself is only emitted on /about. Carrying the type and name alongside the
+// id keeps the reference meaningful everywhere else it appears.
+export const authorReference = { "@id": PERSON_ID, "@type": "Person", name: AUTHOR_NAME };
 
 export const organizationSchema = {
   "@context": "https://schema.org",
@@ -104,6 +111,7 @@ export const organizationSchema = {
       },
       disambiguatingDescription: BRAND_DISAMBIGUATION,
       sameAs: ["https://github.com/ridafkih/keeper.sh"],
+      founder: authorReference,
     },
     {
       "@type": "WebSite",
@@ -170,7 +178,7 @@ export function softwareApplicationSchema() {
     "@id": `${SITE_URL}/#software`,
     name: SITE_NAME,
     description:
-      "Copies your events between your personal, work and school calendars, so all of them show you as busy at the same times.",
+      "Keeper.sh keeps your personal, work and school calendars in sync, so a booking on one shows you as busy on the others. Your event titles stay private.",
     url: SITE_URL,
     image: `${SITE_URL}/open-graph.png`,
     applicationCategory: "BusinessApplication",
@@ -182,7 +190,7 @@ export function softwareApplicationSchema() {
         price: "0",
         priceCurrency: "USD",
         description:
-          "Enough for two calendar accounts and three connections.",
+          "For keeping two calendar accounts from double-booking each other.",
       },
       {
         "@type": "Offer",
@@ -196,7 +204,7 @@ export function softwareApplicationSchema() {
           billingDuration: "P1M",
         },
         description:
-          "As many calendars as you want, and changes that land within a minute.",
+          "For more than two calendar accounts, or when you need updates within the minute.",
       },
     ],
     provider: { "@id": `${SITE_URL}/#organization` },
@@ -276,13 +284,19 @@ export function collectionPageSchema(posts: Array<{ slug: string; metadata: { ti
   };
 }
 
-export const authorPersonSchema = {
-  "@type": "Person",
-  "@id": `${SITE_URL}/#author`,
-  name: "Rida F'kih",
-  url: "https://rida.dev",
-  sameAs: ["https://github.com/ridafkih"],
-};
+export function personSchema(description: string) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    "@id": PERSON_ID,
+    name: AUTHOR_NAME,
+    description,
+    url: canonicalUrl("/about"),
+    sameAs: ["https://github.com/ridafkih", "https://rida.dev"],
+    worksFor: { "@id": `${SITE_URL}/#organization` },
+    mainEntityOfPage: { "@id": entityId("/about", "webpage") },
+  };
+}
 
 export function blogPostingSchema(post: {
   title: string;
@@ -305,7 +319,7 @@ export function blogPostingSchema(post: {
     datePublished: post.createdAt,
     dateModified: post.updatedAt,
     keywords: post.tags,
-    author: authorPersonSchema,
+    author: authorReference,
     publisher: { "@id": `${SITE_URL}/#organization` },
     isPartOf: { "@id": `${SITE_URL}/#website` },
     mainEntityOfPage: { "@type": "WebPage", "@id": url },

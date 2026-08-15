@@ -25,6 +25,7 @@ import { MarketingIllustrationSync } from "@/illustrations/marketing-illustratio
 import { HowItWorksConnect } from "@/illustrations/how-it-works-connect";
 import { HowItWorksConfigure } from "@/illustrations/how-it-works-configure";
 import { HowItWorksSync } from "@/illustrations/how-it-works-sync";
+import { HOW_IT_WORKS_STEPS } from "@/features/marketing/how-it-works-steps";
 import { jsonLdScript, seoHead, webPageSchema, breadcrumbSchema, breadcrumbTrail } from "@/lib/seo";
 import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
 import { ANALYTICS_EVENTS } from "@/lib/analytics";
@@ -57,8 +58,8 @@ const FEATURE_CARDS: FeatureCard[] = [
     illustration: <MarketingIllustrationSync />,
   },
   {
-    title: "Share your free time and keep your diary private",
-    body: "Every event in that link reads “Busy”. Titles, descriptions and locations stay behind. Pro lets you choose what it shows instead.",
+    title: "Keep your event details off the link you share",
+    body: "Every event on the link reads “Busy”, with no title, description or location. On Pro you choose which details it keeps.",
     gridClassName: "lg:col-start-1 lg:col-span-6 lg:row-start-2",
   },
   {
@@ -74,7 +75,7 @@ const FEATURE_CARDS: FeatureCard[] = [
   },
   {
     title: "Anyone can read the code",
-    body: "Check exactly what Keeper.sh sends to your calendars. It is open source under AGPL-3.0, with Docker images ready to deploy, and a server you run yourself has no plan limits.",
+    body: "Check exactly what Keeper.sh sends to your calendars, or run it on your own server. It is open source under AGPL-3.0, with Docker images ready to deploy.",
     gridClassName: "lg:col-start-6 lg:col-span-5 lg:row-start-3",
     illustration: <MarketingIllustrationContributors />,
   },
@@ -90,27 +91,6 @@ const FEATURE_CARDS: FeatureCard[] = [
   },
 ];
 
-type UpdateStep = {
-  title: string;
-  body: string;
-  note?: string;
-};
-
-const UPDATE_STEPS: UpdateStep[] = [
-  {
-    title: "Connect a calendar, then say where it copies to",
-    body: "Connecting takes a sign-in or a pasted link. You then point that calendar at the one you want its events to land in.",
-  },
-  {
-    title: "Choose what each calendar shows",
-    body: "You set this per calendar. One can carry the full title, description and location while another shows a plain block. Pro adds filters to skip events.",
-  },
-  {
-    title: "Keeper.sh takes it from there",
-    body: "Your calendars are read every minute on both plans. A change reaches your other calendars within 30 minutes on Free, and within a minute on Pro.",
-    note: "Calendars you connect with a pasted link are read in full each time.",
-  },
-];
 
 export const Route = createFileRoute("/(marketing)/features")({
   component: FeaturesPage,
@@ -130,7 +110,7 @@ function FeaturesPage() {
     <div className="flex flex-col gap-6 py-16">
       <Breadcrumb items={breadcrumbs} />
       <header className="flex flex-col gap-1.5">
-        <Heading1>Features</Heading1>
+        <Heading1>What Keeper.sh does for your calendars</Heading1>
         <Text size="base" tone="muted" className="max-w-[64ch] leading-6">
           {PAGE_DESCRIPTION}
         </Text>
@@ -160,8 +140,8 @@ function FeaturesPage() {
         <MarketingHowItWorksCard>
           <MarketingHowItWorksRow>
             <MarketingHowItWorksStepBody step={1}>
-              <Heading3 as="h3">{UPDATE_STEPS[0].title}</Heading3>
-              <Text size="sm" tone="muted">{UPDATE_STEPS[0].body}</Text>
+              <Heading3 as="h3">{HOW_IT_WORKS_STEPS[0].title}</Heading3>
+              <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[0].body}</Text>
             </MarketingHowItWorksStepBody>
             <MarketingHowItWorksStepIllustration align="right">
               <HowItWorksConnect />
@@ -170,8 +150,8 @@ function FeaturesPage() {
 
           <MarketingHowItWorksRow reverse>
             <MarketingHowItWorksStepBody step={2}>
-              <Heading3 as="h3">{UPDATE_STEPS[1].title}</Heading3>
-              <Text size="sm" tone="muted">{UPDATE_STEPS[1].body}</Text>
+              <Heading3 as="h3">{HOW_IT_WORKS_STEPS[1].title}</Heading3>
+              <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[1].body}</Text>
             </MarketingHowItWorksStepBody>
             <MarketingHowItWorksStepIllustration align="left">
               <HowItWorksConfigure />
@@ -180,9 +160,9 @@ function FeaturesPage() {
 
           <MarketingHowItWorksRow>
             <MarketingHowItWorksStepBody step={3}>
-              <Heading3 as="h3">{UPDATE_STEPS[2].title}</Heading3>
-              <Text size="sm" tone="muted">{UPDATE_STEPS[2].body}</Text>
-              <Text size="sm" tone="muted">{UPDATE_STEPS[2].note}</Text>
+              <Heading3 as="h3">{HOW_IT_WORKS_STEPS[2].title}</Heading3>
+              <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[2].body}</Text>
+              <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[2].note}</Text>
             </MarketingHowItWorksStepBody>
             <MarketingHowItWorksStepIllustration align="right">
               <HowItWorksSync />
