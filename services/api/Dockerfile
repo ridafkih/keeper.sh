@@ -31,4 +31,6 @@ RUN chmod +x ./services/api/entrypoint.sh
 ENV DEV=production
 EXPOSE 3001
 
+COPY docker/certs/rds-us-east-2-bundle.pem /certs/global-bundle.pem
+
 ENTRYPOINT ["./services/api/entrypoint.sh"]

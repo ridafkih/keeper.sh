@@ -26,4 +26,6 @@ RUN chmod +x ./services/cron/entrypoint.sh
 
 ENV ENV=production
 
+COPY docker/certs/rds-us-east-2-bundle.pem /certs/global-bundle.pem
+
 ENTRYPOINT ["./services/cron/entrypoint.sh"]

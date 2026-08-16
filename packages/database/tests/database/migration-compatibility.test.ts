@@ -176,6 +176,29 @@ describe("0077 self-hosted upgrade compatibility", () => {
     const compose = await Bun.file(`${repositoryRoot}/deploy/compose.yaml`).text();
     expect(compose).toContain("condition: service_healthy");
   });
+
+  it("gates api migrations behind RUN_MIGRATIONS so replicas do not race the migrator", async () => {
+    const repositoryRoot = `${import.meta.dirname}/../../../..`;
+    const entrypoint = await Bun.file(`${repositoryRoot}/services/api/entrypoint.sh`).text();
+
+    expect(entrypoint).toContain("RUN_MIGRATIONS:-true");
+    expect(entrypoint).toContain("packages/database/scripts/migrate.ts");
+  });
+
+  it("bakes the RDS certificate authority into every service image", async () => {
+    const repositoryRoot = `${import.meta.dirname}/../../../..`;
+
+    for (const service of ["api", "cron", "worker", "mcp"]) {
+      const dockerfile = await Bun.file(`${repositoryRoot}/services/${service}/Dockerfile`).text();
+      expect(dockerfile).toContain("docker/certs/rds-us-east-2-bundle.pem");
+      expect(dockerfile).toContain("/certs/global-bundle.pem");
+    }
+
+    const bundle = await Bun.file(
+      `${repositoryRoot}/docker/certs/rds-us-east-2-bundle.pem`,
+    ).text();
+    expect(bundle).toContain("BEGIN CERTIFICATE");
+  });
 });
 
 /*
