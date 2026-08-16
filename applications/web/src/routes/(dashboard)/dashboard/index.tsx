@@ -6,6 +6,7 @@ import Calendar from "lucide-react/dist/esm/icons/calendar";
 import CalendarPlus from "lucide-react/dist/esm/icons/calendar-plus";
 import CalendarDays from "lucide-react/dist/esm/icons/calendar-days";
 import Link2 from "lucide-react/dist/esm/icons/link-2";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import Settings from "lucide-react/dist/esm/icons/settings";
 import LogOut from "lucide-react/dist/esm/icons/log-out";
 import MessageSquare from "lucide-react/dist/esm/icons/message-square";
@@ -243,8 +244,36 @@ function CalendarsMenu() {
           <NavigationMenuItemLabel>iCal Feeds</NavigationMenuItemLabel>
           <NavigationMenuItemTrailing />
         </NavigationMenuLinkItem>
+        <DeletedEventsMenuItem />
       </AnimatedReveal>
     </NavigationMenu>
+  );
+}
+
+/*
+ * The record of originals Keeper.sh deleted is what the deletion consent was given
+ * against, so it needs a way in from the dashboard rather than only from the modal that
+ * made the promise. It stays hidden until there is something in it: a user who never
+ * turned deletions on has no record to read.
+ */
+function DeletedEventsMenuItem() {
+  const { data, error } = useSWR<{ deletions: unknown[] }>("/api/write-back/deletions");
+  const deletionCount = error ? 0 : data?.deletions.length ?? 0;
+
+  if (deletionCount === 0) {
+    return null;
+  }
+
+  return (
+    <NavigationMenuLinkItem to="/dashboard/deleted-events">
+      <NavigationMenuItemIcon>
+        <Trash2 size={15} />
+      </NavigationMenuItemIcon>
+      <NavigationMenuItemLabel>Deleted Events</NavigationMenuItemLabel>
+      <NavigationMenuItemTrailing>
+        <Text size="sm" tone="muted">{pluralize(deletionCount, "event")}</Text>
+      </NavigationMenuItemTrailing>
+    </NavigationMenuLinkItem>
   );
 }
 

@@ -105,7 +105,7 @@ const createCalDAVHarness = (options: HarnessOptions): CalDAVHarness => {
       const parsed = parseICalCalendarsToRemoteEvents([...resources.values()], {
         rejectUnsupportedRecurrenceDates: false,
       });
-      return Promise.resolve(parsed.events.flatMap((event): RemoteEvent[] => {
+      const items = parsed.events.flatMap((event): RemoteEvent[] => {
         if (event.endTime < listOptions.timeMin) {
           return [];
         }
@@ -127,7 +127,8 @@ const createCalDAVHarness = (options: HarnessOptions): CalDAVHarness => {
           supportedAvailabilities: ["busy", "free"],
           uid: event.uid,
         }];
-      }));
+      });
+      return Promise.resolve({ items, rawItemCount: items.length });
     },
     normalizeEvent: normalizeCalDAVEvent,
     pushEvents: (events) => Promise.resolve(events.map((event) => {
@@ -179,13 +180,17 @@ const createCalDAVHarness = (options: HarnessOptions): CalDAVHarness => {
       },
       isCurrent: () => Promise.resolve(true),
       provider,
-      readState: async () => ({
-        existingMappings: [...mappings],
-        localEvents: options.events,
-        remoteEvents: await provider.listRemoteEvents({
+      readState: async () => {
+        const listing = await provider.listRemoteEvents({
           timeMin: (options.scope ?? WIDE_SCOPE).requestedWindow.timeMin,
-        }),
-      }),
+        });
+        return {
+          existingMappings: [...mappings],
+          localEvents: options.events,
+          remoteEvents: listing.items,
+          remoteRawItemCount: listing.rawItemCount,
+        };
+      },
       reconciliationScope: options.scope ?? WIDE_SCOPE,
       userId: "user-1",
     }),

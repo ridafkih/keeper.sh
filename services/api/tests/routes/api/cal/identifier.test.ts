@@ -1,6 +1,8 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { FeedResponse } from "../../../../src/utils/ical-feed";
 
+const COLD_IMPORT_TIMEOUT_MS = 30_000;
+
 const generateUserCalendar =
   vi.fn<(identifier: string, ifNoneMatch: string | null) => Promise<FeedResponse | null>>();
 const widelogSet = vi.fn<(key: string, value: unknown) => void>();
@@ -63,7 +65,7 @@ beforeAll(async () => {
     GET: CalendarHandler;
   };
   serveFeed = module.GET;
-});
+}, COLD_IMPORT_TIMEOUT_MS);
 
 afterEach(() => {
   generateUserCalendar.mockReset();

@@ -1,10 +1,10 @@
 ---
 title: "Sending events to another calendar"
 description: "How Keeper.sh copies events from one calendar into another: one direction per connection, the copy kept corrected as the original changes, and how quickly a change lands."
-blurb: "A connection copies events from one calendar into another, one way only. Where you set one up, what happens to the copy when the original moves, and what it takes to get events flowing both ways."
+blurb: "A connection copies events from one calendar into another, one way unless you turn on two-way sync. Where you set one up, what happens to the copy when the original moves, and what it takes to get changes travelling both ways."
 createdAt: "2026-08-14"
 slug: "sending-events-to-another-calendar"
-updatedAt: "2026-08-14"
+updatedAt: "2026-08-16"
 tags:
   - "reference"
   - "connections"
@@ -21,9 +21,11 @@ If the calendar you want is not listed, Keeper.sh cannot write to it. A calendar
 
 ## Getting events to travel both ways
 
-Events flow into the calendars you ticked and never back. For a change in either calendar to reach the other, set up two connections, one from each calendar's page.
+A connection copies events into the calendars you ticked and, by default, nothing comes back. There are two different ways to change that, and they are not the same thing.
 
-Think before building a two-way setup. Every event now exists twice, and each copy is a real event in a real calendar. The [sync your work and personal calendars](/recipes/sync-work-and-personal-calendars) recipe walks through one that stays readable.
+[Two-way sync](/docs/two-way-sync) makes the copy editable: an edit you make to the copy is written back to the original event, and there is still only one event on each side. It is a Pro feature, you turn it on per connection, and deleting the original is a separate option you have to confirm.
+
+The other way is to set up two connections, one from each calendar's page, so each calendar sends its own events to the other. Think before building that. Every event now exists twice, and each copy is a real event in a real calendar — turning on two-way sync as well means deleting one of those copies can delete a real event. The [sync your work and personal calendars](/recipes/sync-work-and-personal-calendars) recipe walks through a setup that stays readable.
 
 ## The copy follows the original
 

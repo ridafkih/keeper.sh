@@ -6,12 +6,21 @@ import {
 import { and, asc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
 import type { BunSQLClient } from "../database-client";
 import type {
-  EventAvailability,
   MaterializedSyncableEvent,
   SourceEventType,
   SyncableEvent,
 } from "../types";
 import type { SyncWindow } from "../sync/sync-range";
+import { TWO_WAY_DELETE_APPROVAL_TTL_MS } from "@keeper.sh/constants";
+import { resolveWritableWriteBackMode } from "@keeper.sh/data-schemas";
+import { parseAvailability } from "./availability";
+import { DEFAULT_EVENT_NAME } from "./default-event-name";
+import {
+  isSourceSnapshotFresh,
+  isWriteBackMode,
+  resolveWriteBackPolicyState,
+} from "../sync/write-back-policy";
+import type { WriteBackPolicy } from "../sync/write-back-policy";
 import { parseStoredRecurrenceForMaterialization } from "./stored-recurrence";
 import { materializeRecurrenceEvents } from "./recurrence-materializer";
 import { isEmptyTimeRange, isInvertedTimeRange, resolveTimeRangeEnd } from "./time-range";
@@ -75,19 +84,6 @@ const orAbsentBoolean = (value: boolean | null): boolean | undefined => {
   return value;
 };
 
-const isEventAvailability = (value: string | null): value is EventAvailability =>
-  value === "busy"
-  || value === "free"
-  || value === "oof"
-  || value === "workingElsewhere";
-
-const parseAvailability = (value: string | null): EventAvailability | undefined => {
-  if (!isEventAvailability(value)) {
-    return;
-  }
-
-  return value;
-};
 const parseSourceEventType = (
   value: string | null,
   availability: string | null,
@@ -133,7 +129,6 @@ const shouldExcludeSyncEvent = (event: {
   return false;
 };
 const TEMPLATE_TOKEN_PATTERN = /\{\{(\w+)\}\}/g;
-const DEFAULT_EVENT_NAME = "Busy";
 const DEFAULT_EVENT_NAME_TEMPLATE = "{{calendar_name}}";
 const resolveEventNameTemplate = (
   template: string,
@@ -157,6 +152,78 @@ const getMappedSourceCalendarIds = async (
     .where(eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId));
 
   return mappings.map((mapping) => mapping.sourceCalendarId);
+};
+
+const getWriteBackPoliciesForDestination = async (
+  database: BunSQLClient,
+  destinationCalendarId: string,
+  now: Date = new Date(),
+): Promise<Map<string, WriteBackPolicy>> => {
+  const rows = await database
+    .select({
+      calendarType: calendarsTable.calendarType,
+      capabilities: calendarsTable.capabilities,
+      deleteConfirmationApprovedAt:
+        sourceDestinationMappingsTable.deleteConfirmationApprovedAt,
+      disabled: calendarsTable.disabled,
+      excludeEventDescription: calendarsTable.excludeEventDescription,
+      excludeEventLocation: calendarsTable.excludeEventLocation,
+      excludeEventName: calendarsTable.excludeEventName,
+      ingestLastSucceededAt: calendarsTable.ingestLastSucceededAt,
+      sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId,
+      writeBackMode: sourceDestinationMappingsTable.writeBackMode,
+      writeBackState: sourceDestinationMappingsTable.writeBackState,
+    })
+    .from(sourceDestinationMappingsTable)
+    .innerJoin(
+      calendarsTable,
+      eq(sourceDestinationMappingsTable.sourceCalendarId, calendarsTable.id),
+    )
+    .where(eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId));
+
+  const policies = new Map<string, WriteBackPolicy>();
+  for (const row of rows) {
+    if (!isWriteBackMode(row.writeBackMode)) {
+      throw new Error(
+        `Source-destination mapping for ${row.sourceCalendarId} has an unknown write-back mode`,
+      );
+    }
+    /*
+     * Rediscovery rewrites a source's capabilities when the provider stops granting write
+     * access, and nothing rewrites the mode the pair is carrying. The stored preference is
+     * kept so it comes back with the access, but a calendar Keeper.sh may only read is
+     * written to by nothing in the meantime.
+     */
+    const effectiveMode = resolveWritableWriteBackMode(row.writeBackMode, {
+      calendarType: row.calendarType,
+      capabilities: row.capabilities,
+      disabled: row.disabled,
+    });
+    /*
+     * A stale snapshot pauses the pair rather than turning it off. Turning it off hands
+     * every mapping back to the one-way repair, which rebuilds the copies from the same
+     * stale snapshot and discards whatever the user changed on them — the one outcome
+     * worse than writing nothing. Pausing writes nothing and rebuilds nothing, and the
+     * pair resumes on its own the moment the source is read again.
+     */
+    const state = resolveWriteBackPolicyState(effectiveMode, row.writeBackState, {
+      approvedAt: row.deleteConfirmationApprovedAt,
+      now,
+      ttlMs: TWO_WAY_DELETE_APPROVAL_TTL_MS,
+    });
+    const staleSource = state.writeBackMode !== "off"
+      && !isSourceSnapshotFresh(row, now);
+    policies.set(row.sourceCalendarId, {
+      destinationCalendarId,
+      excludeEventDescription: row.excludeEventDescription,
+      excludeEventLocation: row.excludeEventLocation,
+      excludeEventName: row.excludeEventName,
+      sourceCalendarId: row.sourceCalendarId,
+      ...state,
+      ...(staleSource && { deleteApproved: false, paused: true }),
+    });
+  }
+  return policies;
 };
 
 const getEventsForCalendarsWithDiagnostics = async (
@@ -270,6 +337,11 @@ const getEventsForCalendarsWithDiagnostics = async (
       location: excludeOrAbsent(result.excludeEventLocation, result.location),
       ...recurrence,
       sourceEventUid: result.sourceEventUid,
+      sourceFields: {
+        description: result.description,
+        location: result.location,
+        title: result.title,
+      },
       startTime: result.startTime,
       startTimeZone: orAbsent(result.startTimeZone),
       summary,
@@ -337,7 +409,9 @@ const getEventsForDestination = async (
 };
 
 export {
+  DEFAULT_EVENT_NAME,
   getEventsForCalendars,
+  getWriteBackPoliciesForDestination,
   getEventsForCalendarsWithDiagnostics,
   getEventsForDestination,
   getMappedSourceCalendarIds,

@@ -146,9 +146,27 @@ const resolvePersistenceTransaction = (
 interface IngestionResult {
   eventsAdded: number;
   eventsRemoved: number;
+  /*
+   * Whether this run actually read the source through to a diff against what is
+   * stored. Two-way sync writes to a real calendar on the strength of the stored
+   * copy and only while that copy is young, so a run that read nothing — a
+   * rejected sync token, a superseded run — must not be counted as a confirmation
+   * that the copy still matches the source.
+   */
+  snapshotConfirmed: boolean;
 }
 
-const EMPTY_RESULT: IngestionResult = { eventsAdded: 0, eventsRemoved: 0 };
+const EMPTY_RESULT: IngestionResult = {
+  eventsAdded: 0,
+  eventsRemoved: 0,
+  snapshotConfirmed: true,
+};
+
+const UNCONFIRMED_RESULT: IngestionResult = {
+  eventsAdded: 0,
+  eventsRemoved: 0,
+  snapshotConfirmed: false,
+};
 
 /*
  * Only delta sources need this. A snapshot source re-reports its whole coverage
@@ -260,7 +278,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     if (isCurrent && !(await isCurrent())) {
       wideEvent["outcome"] = "superseded";
       wideEvent["flushed"] = false;
-      return EMPTY_RESULT;
+      return UNCONFIRMED_RESULT;
     }
 
     return await withPersistenceTransaction(async ({ readExistingEvents, flush }) => {
@@ -275,7 +293,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
         wideEvent["flushed"] = true;
         await flush({ inserts: [], deletes: [], syncToken: null });
         flushed = true;
-        return EMPTY_RESULT;
+        return UNCONFIRMED_RESULT;
       }
 
       const storedEvents = await readExistingEvents();
@@ -300,7 +318,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
         flushed = true;
         wideEvent["outcome"] = "full-sync-required";
         wideEvent["flushed"] = true;
-        return EMPTY_RESULT;
+        return UNCONFIRMED_RESULT;
       }
 
       const { eventStateIdsToRemove, eventsToAdd } = measureDiff(() => {
@@ -389,6 +407,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       return {
         eventsAdded: eventsToAdd.length,
         eventsRemoved: eventStateIdsToRemove.length,
+        snapshotConfirmed: true,
       };
     });
   } catch (error) {

@@ -2,6 +2,8 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { StoredPushChannel } from "@keeper.sh/calendar";
 import type { handleOutlookPushWebhook as handleOutlookPushWebhookFn } from "../../../../src/routes/api/webhook/outlook";
 
+const COLD_IMPORT_TIMEOUT_MS = 30_000;
+
 let handleOutlookPushWebhook: typeof handleOutlookPushWebhookFn = () =>
   Promise.reject(new Error("Module not loaded"));
 
@@ -160,7 +162,7 @@ vi.mock("../../../../src/utils/logging", () => ({
 
 beforeAll(async () => {
   ({ handleOutlookPushWebhook } = await import("../../../../src/routes/api/webhook/outlook"));
-});
+}, COLD_IMPORT_TIMEOUT_MS);
 
 describe("handleOutlookPushWebhook validation handshake", () => {
   it("answers the handshake before any dependency is consulted", async () => {

@@ -47,6 +47,13 @@ const resolveOutlookShowAs = (availability?: string | null): string => {
   return "busy";
 };
 
+/*
+ * Whoever invites the user picks the UID of the event that lands on their calendar, so a
+ * quote in it would close the filter's literal and let the rest of the UID name a
+ * different event for the update or the delete to land on.
+ */
+const quoteODataLiteral = (value: string): string => `'${value.replaceAll("'", "''")}'`;
+
 const createOutlookEvent = async (
   accessToken: string,
   input: EventInput,
@@ -101,7 +108,7 @@ const findOutlookEventByUid = async (
   sourceEventUid: string,
 ): Promise<OutlookEvent | null> => {
   const url = new URL(`${MICROSOFT_GRAPH_API}/me/events`);
-  url.searchParams.set("$filter", `iCalUId eq '${sourceEventUid}'`);
+  url.searchParams.set("$filter", `iCalUId eq ${quoteODataLiteral(sourceEventUid)}`);
   url.searchParams.set("$top", "1");
 
   const response = await fetch(url, {

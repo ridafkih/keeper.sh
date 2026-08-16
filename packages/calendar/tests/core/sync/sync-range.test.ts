@@ -77,7 +77,13 @@ describe("configurable sync ranges", () => {
   });
 
   it("anchors to local midnight in any server timezone", () => {
-    const originalTimeZone = process.env.TZ;
+    /*
+     * Deleting TZ does not put the process back in the zone it started in — the runtime
+     * keeps the last one it was told — so the zone the machine resolved to is what is
+     * written back, whether or not TZ was set to begin with.
+     */
+    const originalTimeZone = process.env.TZ
+      ?? new Intl.DateTimeFormat().resolvedOptions().timeZone;
     const originalOffset = new Date().getTimezoneOffset();
     const observedOffsets = new Set<number>();
     try {
@@ -93,11 +99,7 @@ describe("configurable sync ranges", () => {
         expect(window.timeMin.getTime()).toBeLessThan(window.timeMax.getTime());
       }
     } finally {
-      if (typeof originalTimeZone === "string") {
-        process.env.TZ = originalTimeZone;
-      } else {
-        delete process.env.TZ;
-      }
+      process.env.TZ = originalTimeZone;
     }
 
     expect(observedOffsets.size).toBe(4);

@@ -10,6 +10,7 @@ import type {
   EventMapping,
   MaterializedSyncableEvent,
   RemoteEvent,
+  RemoteEventListing,
   SyncableEvent,
 } from "../../../src/index";
 import { createEditableEventContentHash } from "../../../src/core/events/content-hash";
@@ -92,14 +93,18 @@ const runOnce = async (
     flush: createMappingFlush(mappings),
     isCurrent: () => Promise.resolve(true),
     provider,
-    readState: async () => ({
-      existingMappings: [...mappings],
-      localEvents: events(),
-      remoteEvents: await provider.listRemoteEvents({
+    readState: async () => {
+      const listing = await provider.listRemoteEvents({
         timeMin: WIDE_SCOPE.requestedWindow.timeMin,
         timeMax: WIDE_SCOPE.requestedWindow.timeMax,
-      } as Parameters<CalendarSyncProvider["listRemoteEvents"]>[0]),
-    }),
+      } as Parameters<CalendarSyncProvider["listRemoteEvents"]>[0]);
+      return {
+        existingMappings: [...mappings],
+        localEvents: events(),
+        remoteEvents: listing.items,
+        remoteRawItemCount: listing.rawItemCount,
+      };
+    },
     reconciliationScope: WIDE_SCOPE,
     userId: "user-1",
   });
@@ -151,15 +156,16 @@ const createGoogleHarness = (events: LocalEvents): Harness => {
     } as RemoteEvent;
   };
 
-  const listRemoteEvents = (): Promise<RemoteEvent[]> => Promise.resolve(
-    [...resources.entries()].flatMap(([id, stored]) => {
+  const listRemoteEvents = (): Promise<RemoteEventListing> => {
+    const items = [...resources.entries()].flatMap(([id, stored]) => {
       const remoteEvent = toRemoteEvent(id, stored);
       if (!remoteEvent) {
         return [];
       }
       return [remoteEvent];
-    }),
-  );
+    });
+    return Promise.resolve({ items, rawItemCount: items.length });
+  };
 
   const provider = {
     deleteEvents: (eventIds: string[]) => {
@@ -237,15 +243,16 @@ const createOutlookHarness = (events: LocalEvents): Harness => {
     } as RemoteEvent;
   };
 
-  const listRemoteEvents = (): Promise<RemoteEvent[]> => Promise.resolve(
-    [...resources.entries()].flatMap(([id, stored]) => {
+  const listRemoteEvents = (): Promise<RemoteEventListing> => {
+    const items = [...resources.entries()].flatMap(([id, stored]) => {
       const remoteEvent = toRemoteEvent(id, stored);
       if (!remoteEvent) {
         return [];
       }
       return [remoteEvent];
-    }),
-  );
+    });
+    return Promise.resolve({ items, rawItemCount: items.length });
+  };
 
   const provider = {
     deleteEvents: (eventIds: string[]) => {
@@ -290,8 +297,8 @@ const createCalDAVHarness = (events: LocalEvents): Harness => {
   const deletes: string[] = [];
   let writes = 0;
 
-  const listRemoteEvents = (): Promise<RemoteEvent[]> => Promise.resolve(
-    [...resources.values()].flatMap((iCalString) => {
+  const listRemoteEvents = (): Promise<RemoteEventListing> => {
+    const items = [...resources.values()].flatMap((iCalString) => {
       const parsed = parseICalToRemoteEvent(iCalString);
       if (!parsed) {
         return [];
@@ -316,8 +323,9 @@ const createCalDAVHarness = (events: LocalEvents): Harness => {
         supportedAvailabilities: ["busy", "free"],
         uid: parsed.uid,
       } as RemoteEvent];
-    }),
-  );
+    });
+    return Promise.resolve({ items, rawItemCount: items.length });
+  };
 
   const provider = {
     deleteEvents: (eventIds: string[]) => {

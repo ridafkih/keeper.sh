@@ -4,7 +4,7 @@ import type {
   DeleteResult,
   MaterializedSyncableEvent,
   PushResult,
-  RemoteEvent,
+  RemoteEventListing,
 } from "../../../src/core/types";
 import type { PendingChanges } from "../../../src/core/sync-engine/types";
 
@@ -51,7 +51,7 @@ interface RunOptions {
   localEvents?: MaterializedSyncableEvent[];
   provider?: {
     deleteEvents: (eventIds: string[]) => Promise<DeleteResult[]>;
-    listRemoteEvents: () => Promise<RemoteEvent[]>;
+    listRemoteEvents: () => Promise<RemoteEventListing>;
     pushEvents: (events: MaterializedSyncableEvent[]) => Promise<PushResult[]>;
   };
 }
@@ -71,7 +71,7 @@ const runSync = async (
       },
       provider: options.provider ?? {
         deleteEvents: () => Promise.resolve([]),
-        listRemoteEvents: () => Promise.resolve([]),
+        listRemoteEvents: () => Promise.resolve({ items: [], rawItemCount: 0 }),
         pushEvents: (events) =>
           Promise.resolve(events.map((event) => ({
             eventId: event.id,
@@ -84,6 +84,7 @@ const runSync = async (
         existingMappings: [],
         localEvents: options.localEvents ?? [],
         remoteEvents: [],
+        remoteRawItemCount: 0,
       }),
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       userId: "user-1",

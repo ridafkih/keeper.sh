@@ -38,7 +38,7 @@ describe("ingestSource supersession", () => {
   it("discards the fetch without flushing when a waiter supersedes the holder", async () => {
     const { flush, readExistingEvents, result, wideEvents } = await runIngest([false]);
 
-    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0, snapshotConfirmed: false });
     expect(flush).not.toHaveBeenCalled();
     expect(readExistingEvents).not.toHaveBeenCalled();
     expect(wideEvents[0]).toMatchObject({ flushed: false, outcome: "superseded" });

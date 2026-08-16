@@ -4,11 +4,11 @@ import type {
   PushChannelRegistration,
   SourcePushRegistrar,
   StoredPushChannel,
-} from "@keeper.sh/calendar";
+} from "../../../src/core/source/push-channel";
 import {
   runManagePushChannels,
   type RegistrarContextRequest,
-} from "../../src/utils/manage-push-channels-core";
+} from "../../../src/core/source/manage-push-channels";
 
 const NOW = new Date("2026-08-12T00:00:00.000Z");
 const HOUR_MS = 60 * 60 * 1000;

@@ -7,6 +7,18 @@ const calendarIdsBodySchema = type({
 });
 type CalendarIdsBody = typeof calendarIdsBodySchema.infer;
 
+const writeBackModeBodySchema = type({
+  writeBackMode: "'edits' | 'edits_and_deletes' | 'off'",
+  "+": "reject",
+});
+type WriteBackModeBody = typeof writeBackModeBodySchema.infer;
+
+const deleteConfirmationBodySchema = type({
+  decision: "'apply' | 'apply_empty_destination' | 'decline'",
+  "+": "reject",
+});
+type DeleteConfirmationBody = typeof deleteConfirmationBodySchema.infer;
+
 const sourcePatchBodySchema = type({
   "name?": "string",
   "customEventName?": "string",
@@ -95,6 +107,8 @@ type TokenCreateBody = typeof tokenCreateBodySchema.infer;
 
 export {
   calendarIdsBodySchema,
+  deleteConfirmationBodySchema,
+  writeBackModeBodySchema,
   calendarPausePatchBodySchema,
   sourcePatchBodySchema,
   icalSettingsPatchBodySchema,
@@ -106,6 +120,8 @@ export {
 };
 export type {
   CalendarIdsBody,
+  DeleteConfirmationBody,
+  WriteBackModeBody,
   CalendarPausePatchBody,
   SourcePatchBody,
   IcalSettingsPatchBody,

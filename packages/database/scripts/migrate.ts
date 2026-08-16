@@ -20,6 +20,11 @@ import {
   SYNC_RANGE_DEFINITIONS,
 } from "@keeper.sh/data-schemas";
 
+import {
+  describeNonUtcTimeZone,
+  isUtcTimeZoneName,
+} from "../src/database/migration-timezone";
+
 const connectionString = Bun.env.DATABASE_URL;
 
 if (!connectionString) {
@@ -258,6 +263,45 @@ const installEventMappingConstraints = async (): Promise<void> => {
       END IF;
       IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
+        WHERE conname = 'event_mappings_destination_witness_check'
+          AND conrelid = 'event_mappings'::regclass
+      ) THEN
+        ALTER TABLE "event_mappings"
+          ADD CONSTRAINT "event_mappings_destination_witness_check"
+          CHECK (
+            "destinationContentHash" IS NULL
+            OR (
+              "destinationStartTime" IS NOT NULL
+              AND "destinationEndTime" IS NOT NULL
+              AND "destinationSummary" IS NOT NULL
+              AND "destinationDescription" IS NOT NULL
+              AND "destinationLocation" IS NOT NULL
+              AND "destinationIsAllDay" IS NOT NULL
+            )
+          ) NOT VALID;
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'event_mappings_pending_delete_check'
+          AND conrelid = 'event_mappings'::regclass
+      ) THEN
+        ALTER TABLE "event_mappings"
+          ADD CONSTRAINT "event_mappings_pending_delete_check"
+          CHECK (("missingFirstObservedAt" IS NULL) = ("missingObservationCount" = 0))
+          NOT VALID;
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'source_destination_mappings_write_back_mode_check'
+          AND conrelid = 'source_destination_mappings'::regclass
+      ) THEN
+        ALTER TABLE "source_destination_mappings"
+          ADD CONSTRAINT "source_destination_mappings_write_back_mode_check"
+          CHECK ("writeBackMode" IN ('off', 'edits', 'edits_and_deletes'))
+          NOT VALID;
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
         WHERE conname = 'calendars_sync_ranges_check'
           AND conrelid = 'calendars'::regclass
       ) THEN
@@ -301,6 +345,9 @@ const validateEventMappingConstraints = async (): Promise<void> => {
   for (const [table, constraint] of [
     ["event_mappings", "event_mappings_eventStateId_event_states_id_fk"],
     ["event_mappings", "event_mappings_identity_check"],
+    ["event_mappings", "event_mappings_destination_witness_check"],
+    ["event_mappings", "event_mappings_pending_delete_check"],
+    ["source_destination_mappings", "source_destination_mappings_write_back_mode_check"],
     ["calendars", "calendars_sync_ranges_check"],
     ["calendars", "calendars_ingest_coverage_check"],
   ] as const) {
@@ -367,10 +414,13 @@ const isPostMigrationRuntimeReady = async (): Promise<boolean> => {
           AND conname = 'event_mappings_sourceCalendarId_calendars_id_fk'
       )
       AND (
-        SELECT count(*) = 3
+        SELECT count(*) = 6
         FROM pg_constraint
         WHERE conname IN (
           'event_mappings_identity_check',
+          'event_mappings_destination_witness_check',
+          'event_mappings_pending_delete_check',
+          'source_destination_mappings_write_back_mode_check',
           'calendars_sync_ranges_check',
           'calendars_ingest_coverage_check'
         )
@@ -388,10 +438,26 @@ const isPostMigrationRuntimeReady = async (): Promise<boolean> => {
   return state.rows[0]?.ready === true;
 };
 
+const assertUtcServerTimeZone = async (): Promise<void> => {
+  const state = await connection.query<{ TimeZone: string }>("SHOW TimeZone");
+  const [row] = state.rows;
+  if (isUtcTimeZoneName(row?.TimeZone)) {
+    return;
+  }
+  throw new Error(describeNonUtcTimeZone(row?.TimeZone));
+};
+
 try {
   await connection.query(`
     SELECT pg_advisory_lock(hashtext('keeper.sh:database-migration'))
   `);
+  await assertUtcServerTimeZone();
+  /*
+   * With the session in UTC a timestamp -> timestamptz change is binary-identical, so
+   * Postgres records it as metadata and skips the table rewrite. The same ALTER under any
+   * other zone rewrites every row while holding ACCESS EXCLUSIVE.
+   */
+  await connection.query(`SET TimeZone = 'UTC'`);
   await connection.query(`SET lock_timeout = '10s'`);
   await connection.query(`SET statement_timeout = '30min'`);
   await installPreMigrationTombstoneProtection();

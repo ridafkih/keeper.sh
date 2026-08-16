@@ -6,6 +6,7 @@ import type {
   importOAuthAccountCalendars as importOAuthAccountCalendarsFn,
 } from "../../src/utils/oauth-sources";
 
+const COLD_IMPORT_TIMEOUT_MS = 30_000;
 let createCalDAVSource: typeof createCalDAVSourceFn = () =>
   Promise.reject(new Error("Module not loaded"));
 let createOAuthSource: typeof createOAuthSourceFn = () =>
@@ -18,6 +19,7 @@ let googleCalendars = [{ id: "external-1", summary: "Team Calendar" }];
 let insertCalls: unknown[] = [];
 let selectResults: unknown[][] = [];
 let triggerSyncCalls: string[] = [];
+let spawnedJobNames: string[] = [];
 let txInstance: object = {};
 
 type SelectPromise = Promise<unknown[]> & {
@@ -139,7 +141,8 @@ beforeAll(async () => {
   }));
 
   vi.mock("../../src/utils/background-task", () => ({
-    spawnBackgroundJob: (_jobName: string, fields: { userId: string }, _callback: () => Promise<void>) => {
+    spawnBackgroundJob: (jobName: string, fields: { userId: string }, _callback: () => Promise<void>) => {
+      spawnedJobNames.push(jobName);
       triggerSyncCalls.push(fields.userId);
     },
   }));
@@ -206,7 +209,7 @@ beforeAll(async () => {
   ({
     createCalDAVSource,
   } = await import("../../src/utils/caldav-sources"));
-});
+}, COLD_IMPORT_TIMEOUT_MS);
 
 afterAll(() => {
   vi.restoreAllMocks();
@@ -218,6 +221,7 @@ beforeEach(() => {
   insertCalls = [];
   selectResults = [];
   triggerSyncCalls = [];
+  spawnedJobNames = [];
   txInstance = createTxInstance();
 });
 
@@ -262,7 +266,11 @@ describe("Account locks", () => {
       provider: "google",
     });
     expect(insertCalls).toHaveLength(2);
-    expect(triggerSyncCalls).toEqual(["user-1"]);
+    expect(triggerSyncCalls).toEqual(["user-1", "user-1"]);
+    expect(spawnedJobNames).toEqual([
+      "oauth-source-push-enqueue",
+      "oauth-source-push-register",
+    ]);
   });
 
   it("imports OAuth calendars without escaping the locked transaction", async () => {
@@ -300,7 +308,11 @@ describe("Account locks", () => {
 
     expect(accountId).toBe("account-1");
     expect(insertCalls).toHaveLength(2);
-    expect(triggerSyncCalls).toEqual(["user-1"]);
+    expect(triggerSyncCalls).toEqual(["user-1", "user-1"]);
+    expect(spawnedJobNames).toEqual([
+      "oauth-account-import-push-enqueue",
+      "oauth-account-import-push-register",
+    ]);
   });
 
   it("creates CalDAV sources through the locked transaction client", async () => {

@@ -1,0 +1,84 @@
+---
+title: "Two-way sync"
+description: "How Keeper.sh writes an edit made on a copy back to the original event: where to turn it on, which details travel, what happens when both sides changed, and what deleting a copy does."
+blurb: "Turn a connection two-way and editing the copy changes the original. What is written back, what is never written back, which side wins a conflict, and what deleting a copy really deletes."
+createdAt: "2026-08-16"
+slug: "two-way-sync"
+updatedAt: "2026-08-16"
+tags:
+  - "reference"
+  - "connections"
+  - "sync"
+---
+
+A connection copies events one way by default. Two-way sync adds the return trip: an edit you make to the copy is written back to the original event. It is off until you turn it on, and you turn it on for one connection at a time.
+
+Two-way sync is a Pro feature.
+
+## Turning it on
+
+Open the calendar the events live in, find the receiving calendar under **Send Events to Calendars**, and pick one of the three options:
+
+- **One-way** — changes flow from this calendar to the copy only. This is the default.
+- **Two-way** — editing the copy changes the original event here.
+- **Two-way, including deletions** — editing the copy changes the original, and deleting the copy permanently deletes the original here and removes it from every other calendar it is copied to. Keeper.sh asks you to confirm this one before it takes effect, and keeps a record of every original it deletes for 30 days.
+
+The options are only offered on a calendar Keeper.sh can write to. A calendar you subscribed to by link is read-only, and so is one shared with you without permission to change it. A CalDAV account that signs in with a plain username rather than an email address is also refused: Keeper.sh cannot tell which events on it you created, and it will not change an event somebody else made.
+
+## What gets written back
+
+The title, description, location, start and end, and whether the event is all-day. Any of those you chose to hide on copies is never written back — a field the copy does not carry is a field an edit to it cannot mean anything about. Only the fields you actually changed are written.
+
+Free/busy status is never written back. Repeating events stay one-way in both directions of this feature: an edit to a copy of a repeating event is not carried to the original.
+
+Two things are never touched, whatever the mode:
+
+- An event other people are invited to. Moving or cancelling it notifies them, and that notice cannot be recalled.
+- An event created by somebody else on a calendar shared with you.
+
+When Keeper.sh meets one of these it leaves the original alone, pauses two-way sync for the connection, and says so on the calendar's page. The copy goes back to matching the original, so the edit you made on the copy is not kept.
+
+## When both sides changed
+
+The original wins. If the original also changed since Keeper.sh last updated the copy, the copy is rebuilt from the original and the edit made on the copy is replaced.
+
+There is one window where an edit is neither written back nor undone: a copy Keeper.sh has not observed yet — just after two-way sync is switched on, or in the first minute after Keeper.sh updates that copy. That edit stays on the copy and the two calendars simply stay different until the original changes again.
+
+## Bulk changes are refused, not applied
+
+An edit destroys the previous values of a real event and there is nothing to restore them from, so a change that looks like a machine rather than a person is refused outright.
+
+Editing more than 10 copies before Keeper.sh next checks reads as something moving the whole calendar — a timezone change, an import over the top of the copies — rather than as edits you made. None of those edits reach the original, those copies are rebuilt from it, and two-way sync pauses until you switch it on again.
+
+The 10 are counted on the receiving calendar, across every calendar copied into it, and not per calendar: if two calendars are copied into the same one, six edits on each is twelve, which is over the ceiling, and both connections pause. A batch spread thinly across several calendars is the same event the ceiling exists to catch, so it is counted where it lands.
+
+The same applies to one copy edited over and over. Several write-backs to a single copy within a few minutes, or more than 20 in a day, read as that copy changing by itself rather than as edits you made: two-way sync pauses and the copies are rebuilt from the original, so an edit that had not reached it yet is replaced.
+
+## Deleting a copy
+
+Only **Two-way, including deletions** deletes anything, and only after Keeper.sh is satisfied the copy is really gone. A copy missing from one reading of a calendar is far more often a provider that did not return it than an event somebody deleted, so a disappearance has to be seen more than once, over a span of minutes, and the copy is checked for directly before the original is touched.
+
+Two situations stop the deletions and ask you instead:
+
+- A reading of the receiving calendar came back with none of the copies on it.
+- More than 5 copies disappeared between two readings, however large the calendar is — counted for one calendar on its own, and again across every calendar copied into the receiving calendar.
+
+While Keeper.sh waits for your answer, the whole connection holds: nothing is written back, and no copy is rebuilt. Your answer is good for 30 minutes.
+
+A reading that came back with nothing at all is the one case where **Delete the originals** is not offered straight away. It looks the same as a broken connection — a sign-in that stopped working, a calendar that is no longer there, a provider answering with nothing — and Keeper.sh cannot tell that from copies you deleted. The answer is offered once a reading that comes back with at least one copy has landed since they went missing, which proves both that the sign-in works and that Keeper.sh is still looking at the right calendar. Until then the answer offered is to put the copies back.
+
+A receiving calendar that holds nothing but the copies can never produce that reading: emptying it again just comes back with nothing again. So it is offered a second answer, **I emptied it myself**, which deletes the originals on your word rather than on a reading. Use it only once you have checked the receiving calendar is still connected and still the one you picked — Keeper.sh refuses that answer outright while the account is waiting to be signed in again or the calendar is paused, because that is the other thing an empty reading means. The remaining route is to switch the connection to one-way and delete the originals yourself.
+
+There is also a ceiling of 50 deleted originals per source calendar per day. Past it, two-way sync pauses and the copies go back to matching the original.
+
+Deleting the original removes it from every other calendar it is copied to, because those copies are copies of it. Keeper.sh keeps a record of every original it deletes — title, time, place and description — for 30 days, under **Deleted Events** in the dashboard. The record is there to read and copy from; Keeper.sh will not put the event back on your calendar, because recreating it would re-invite anybody it named.
+
+## When it pauses
+
+Two-way sync reverts a connection to one-way whenever it meets something it will not do unattended, and the calendar's page says which one. Switching it back on is a matter of picking the two-way option again. In every paused state the copies go back to matching the original, which means an edit made on a copy that was not written back is not kept.
+
+## Where to go next
+
+- [Sending events to another calendar](/docs/sending-events-to-another-calendar) — what a connection does, and what a copy is
+- [What a copied event shows](/docs/what-a-copied-event-shows) — which details travel with the copy, and which you can hide
+- [Plans and limits](/docs/plans-and-limits) — what Pro includes

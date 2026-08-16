@@ -14,6 +14,7 @@ const PLAN_KEYS = [
   "toMarkUnavailable",
   "toRetargetUrl",
   "toRevive",
+  "toUpdateCapabilities",
   "unchangedCount",
 ];
 
@@ -28,6 +29,7 @@ const discovered = (overrides: Partial<DiscoveredCalendar> = {}): DiscoveredCale
 
 const existing = (overrides: Partial<ExistingCalendar> = {}): ExistingCalendar => ({
   calendarUrl: null,
+  capabilities: ["pull", "push"],
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
   id: "calendar-1",
   identityKey: "external-1",
@@ -137,6 +139,7 @@ describe("planCalendarRediscovery", () => {
       discovered: [caldavDiscovered("https://cloud.example.com/dav/bob/My%20Work")],
       existing: [{
         calendarUrl: "https://cloud.example.com/dav/bob/My Work",
+        capabilities: ["pull", "push"],
         createdAt: new Date("2026-01-01T00:00:00.000Z"),
         id: "calendar-1",
         identityKey: "/dav/bob/My Work",

@@ -1,6 +1,8 @@
 import { eventMappingsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { and, count, eq } from "drizzle-orm";
 import type { BunSQLClient } from "../database-client";
+import type { EventAvailability } from "../types";
+import { parseAvailability } from "./availability";
 
 const DEFAULT_COUNT = 0;
 
@@ -15,6 +17,23 @@ interface EventMapping {
   syncEventHash: string | null;
   startTime: Date;
   endTime: Date;
+  destinationAvailability?: EventAvailability | null;
+  destinationContentHash?: string | null;
+  destinationDescription?: string | null;
+  destinationEndTime?: Date | null;
+  destinationIsAllDay?: boolean | null;
+  destinationLocation?: string | null;
+  destinationStartTime?: Date | null;
+  destinationSummary?: string | null;
+  missingFirstObservedAt?: Date | null;
+  missingObservationCount?: number;
+  recurrenceId?: Date | null;
+  recurrenceRule?: string | null;
+  writeBackDailyCount?: number;
+  writeBackDailyWindowStart?: Date | null;
+  writeBackEpoch?: number;
+  writeBackEpochWindowStart?: Date | null;
+  writeBackLastAppliedAt?: Date | null;
 }
 
 const requireMappingSyncEventId = (
@@ -50,15 +69,32 @@ const getEventMappingsForDestination = async (
     .select({
       calendarId: eventMappingsTable.calendarId,
       deleteIdentifier: eventMappingsTable.deleteIdentifier,
+      destinationAvailability: eventMappingsTable.destinationAvailability,
+      destinationContentHash: eventMappingsTable.destinationContentHash,
+      destinationDescription: eventMappingsTable.destinationDescription,
+      destinationEndTime: eventMappingsTable.destinationEndTime,
       destinationEventUid: eventMappingsTable.destinationEventUid,
+      destinationIsAllDay: eventMappingsTable.destinationIsAllDay,
+      destinationLocation: eventMappingsTable.destinationLocation,
+      destinationStartTime: eventMappingsTable.destinationStartTime,
+      destinationSummary: eventMappingsTable.destinationSummary,
       endTime: eventMappingsTable.endTime,
       eventStateCalendarId: eventStatesTable.calendarId,
       eventStateId: eventMappingsTable.eventStateId,
       id: eventMappingsTable.id,
+      missingFirstObservedAt: eventMappingsTable.missingFirstObservedAt,
+      missingObservationCount: eventMappingsTable.missingObservationCount,
+      recurrenceId: eventStatesTable.recurrenceId,
+      recurrenceRule: eventStatesTable.recurrenceRule,
       sourceCalendarId: eventMappingsTable.sourceCalendarId,
       syncEventId: eventMappingsTable.syncEventId,
       syncEventHash: eventMappingsTable.syncEventHash,
       startTime: eventMappingsTable.startTime,
+      writeBackDailyCount: eventMappingsTable.writeBackDailyCount,
+      writeBackDailyWindowStart: eventMappingsTable.writeBackDailyWindowStart,
+      writeBackEpoch: eventMappingsTable.writeBackEpoch,
+      writeBackEpochWindowStart: eventMappingsTable.writeBackEpochWindowStart,
+      writeBackLastAppliedAt: eventMappingsTable.writeBackLastAppliedAt,
     })
     .from(eventMappingsTable)
     .leftJoin(eventStatesTable, eq(eventMappingsTable.eventStateId, eventStatesTable.id))
@@ -70,6 +106,7 @@ const getEventMappingsForDestination = async (
     return {
       ...mapping,
       deleteIdentifier: mapping.deleteIdentifier ?? mapping.destinationEventUid,
+      destinationAvailability: parseAvailability(mapping.destinationAvailability) ?? null,
       sourceCalendarId,
       syncEventId,
     };

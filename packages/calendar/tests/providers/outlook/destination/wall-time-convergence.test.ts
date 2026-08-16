@@ -10,6 +10,7 @@ import type {
   EventMapping,
   MaterializedSyncableEvent,
   RemoteEvent,
+  RemoteEventListing,
 } from "../../../../src/index";
 import { createEditableEventContentHash } from "../../../../src/core/events/content-hash";
 import { normalizeOutlookEvent } from "../../../../src/providers/outlook/destination/normalize-event";
@@ -96,15 +97,16 @@ const createOutlookHarness = (events: () => MaterializedSyncableEvent[]): Harnes
     } as RemoteEvent;
   };
 
-  const listRemoteEvents = (): Promise<RemoteEvent[]> => Promise.resolve(
-    [...resources.entries()].flatMap(([id, stored]) => {
+  const listRemoteEvents = (): Promise<RemoteEventListing> => {
+    const items = [...resources.entries()].flatMap(([id, stored]) => {
       const remoteEvent = toRemoteEvent(id, stored);
       if (!remoteEvent) {
         return [];
       }
       return [remoteEvent];
-    }),
-  );
+    });
+    return Promise.resolve({ items, rawItemCount: items.length });
+  };
 
   const provider: CalendarSyncProvider = {
     deleteEvents: (eventIds) => {
@@ -162,11 +164,15 @@ const createOutlookHarness = (events: () => MaterializedSyncableEvent[]): Harnes
         },
         isCurrent: () => Promise.resolve(true),
         provider,
-        readState: async () => ({
-          existingMappings: [...mappings],
-          localEvents: events(),
-          remoteEvents: await listRemoteEvents(),
-        }),
+        readState: async () => {
+          const listing = await listRemoteEvents();
+          return {
+            existingMappings: [...mappings],
+            localEvents: events(),
+            remoteEvents: listing.items,
+            remoteRawItemCount: listing.rawItemCount,
+          };
+        },
         reconciliationScope: WIDE_SCOPE,
         userId: "user-1",
       });

@@ -5,6 +5,7 @@ import type {
   EventMapping,
   MaterializedSyncableEvent,
   RemoteEvent,
+  RemoteEventListing,
 } from "../../../src/index";
 import { createEditableEventContentHash } from "../../../src/core/events/content-hash";
 import { generateDeterministicEventUid } from "../../../src/core/events/identity";
@@ -111,11 +112,11 @@ const createCalDAVHarness = (options: HarnessOptions): CalDAVHarness => {
     scope: options.scope ?? WIDE_SCOPE,
   };
 
-  const listRemoteEvents = (listOptions: { timeMin: Date }): Promise<RemoteEvent[]> => {
+  const listRemoteEvents = (listOptions: { timeMin: Date }): Promise<RemoteEventListing> => {
     const parsed = parseICalCalendarsToRemoteEvents([...resources.values()], {
       rejectUnsupportedRecurrenceDates: false,
     });
-    return Promise.resolve(parsed.events.flatMap((event): RemoteEvent[] => {
+    const items = parsed.events.flatMap((event): RemoteEvent[] => {
       if (event.endTime < listOptions.timeMin) {
         return [];
       }
@@ -137,7 +138,8 @@ const createCalDAVHarness = (options: HarnessOptions): CalDAVHarness => {
         supportedAvailabilities: ["busy", "free"],
         uid: event.uid,
       }];
-    }));
+    });
+    return Promise.resolve({ items, rawItemCount: items.length });
   };
 
   const provider: CalendarSyncProvider = {
@@ -213,11 +215,15 @@ const createCalDAVHarness = (options: HarnessOptions): CalDAVHarness => {
       },
       isCurrent: () => Promise.resolve(true),
       provider,
-      readState: async () => ({
-        existingMappings: [...mappings],
-        localEvents: state.events,
-        remoteEvents: await listRemoteEvents({ timeMin: state.scope.requestedWindow.timeMin }),
-      }),
+      readState: async () => {
+        const listing = await listRemoteEvents({ timeMin: state.scope.requestedWindow.timeMin });
+        return {
+          existingMappings: [...mappings],
+          localEvents: state.events,
+          remoteEvents: listing.items,
+          remoteRawItemCount: listing.rawItemCount,
+        };
+      },
       reconciliationScope: state.scope,
       userId: "user-1",
     }),

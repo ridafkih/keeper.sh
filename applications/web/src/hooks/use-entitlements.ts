@@ -15,6 +15,7 @@ interface Entitlements {
   mappings: EntitlementLimit;
   canCustomizeIcalFeed: boolean;
   canUseEventFilters: boolean;
+  canUseTwoWaySync: boolean;
   realtimeSync: boolean;
 }
 
@@ -28,6 +29,7 @@ function buildOptimisticProEntitlements(): Entitlements {
     mappings: { current: 0, limit: null },
     canCustomizeIcalFeed: true,
     canUseEventFilters: true,
+    canUseTwoWaySync: true,
     realtimeSync: false,
   };
 }

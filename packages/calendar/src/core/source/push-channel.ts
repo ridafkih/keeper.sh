@@ -193,6 +193,25 @@ const toPushChannelState = (state: string): PushChannelState =>
 const isPullCalendar = (calendar: EligibleSourceCalendar): boolean =>
   !calendar.disabled && calendar.capabilities.includes(PULL_CAPABILITY);
 
+/*
+ * A registration that never got an answer out of the provider leaves a row holding no
+ * provider identifiers. There is nothing at the provider to stop, so tearing the account
+ * down must not fail on it. A channel that reached "active" or "degraded" without those
+ * identifiers is a broken invariant rather than an absent registration, and is reported.
+ */
+const neverReachedProvider = (channel: StoredPushChannel): boolean => {
+  switch (channel.state) {
+    case "failed":
+    case "registering":
+    case "removed": {
+      return true;
+    }
+    default: {
+      return false;
+    }
+  }
+};
+
 const resolvePushChannelHealth = (
   channel: StoredPushChannel,
   now: Date,
@@ -581,6 +600,7 @@ export {
   FULL_POLL_INTERVAL_MS,
   isPushChannelGoneError,
   LIVE_PUSH_CHANNEL_STATES,
+  neverReachedProvider,
   planPushChannelActions,
   PUSH_HEALTHY_POLL_FLOOR_MS,
   resolveAffectedCalendarIds,

@@ -3,6 +3,7 @@ import {
   clampToProviderLifetime,
   GOOGLE_WATCH_MAX_LIFETIME_MS,
 } from "../../../core/source/push-provider-profile";
+import { neverReachedProvider } from "../../../core/source/push-channel";
 import type {
   PushChannelRegistration,
   PushChannelScope,
@@ -27,6 +28,21 @@ class GoogleWatchChannelError extends Error {
     this.status = status;
   }
 }
+
+const FAILURE_REASON_LIMIT = 300;
+
+/*
+ * Google answers a refused watch with a JSON error whose reason is the only thing that
+ * separates "this calendar cannot be watched" from "this request was malformed". Keeping
+ * only the status turns every one of them into the same unactionable line.
+ */
+const readFailureReason = async (response: Response): Promise<string> => {
+  const body = await response.text().catch(() => "");
+  if (body.length === 0) {
+    return "no response body";
+  }
+  return body.slice(0, FAILURE_REASON_LIMIT);
+};
 
 interface GoogleWatchResponse {
   expiration?: string;
@@ -55,8 +71,9 @@ const resolveTtlSeconds = (registrarContext: RegistrarContext): number => {
 
 const readWatchResponse = async (response: Response): Promise<GoogleWatchResponse> => {
   if (!response.ok) {
+    const reason = await readFailureReason(response);
     throw new GoogleWatchChannelError(
-      `Google watch request failed with status ${response.status}`,
+      `Google watch request failed with status ${response.status}: ${reason}`,
       response.status,
     );
   }
@@ -171,6 +188,9 @@ const stopGoogleWatchChannel = async (
   registrarContext: RegistrarContext,
 ): Promise<void> => {
   if (!channel.providerChannelId || !channel.providerResourceId) {
+    if (neverReachedProvider(channel)) {
+      return;
+    }
     throw new GoogleWatchChannelError(
       "Google push deregistration requires both a channel id and a resource id",
       0,

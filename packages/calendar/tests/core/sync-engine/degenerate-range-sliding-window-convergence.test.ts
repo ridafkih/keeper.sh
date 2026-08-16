@@ -6,6 +6,7 @@ import type {
   EventMapping,
   MaterializedSyncableEvent,
   RemoteEvent,
+  RemoteEventListing,
   SyncableEvent,
 } from "../../../src/index";
 import { createEditableEventContentHash } from "../../../src/core/events/content-hash";
@@ -123,8 +124,8 @@ const createGoogleHarness: HarnessFactory = (rows) => {
   const stored = new Map<string, GoogleEvent & { id: string }>();
   const counters = { deletes: 0, writes: 0 };
 
-  const listRemoteEvents = (timeMin: Date): Promise<RemoteEvent[]> =>
-    Promise.resolve([...stored.values()].flatMap((event): RemoteEvent[] => {
+  const listRemoteEvents = (timeMin: Date): Promise<RemoteEventListing> => {
+    const items = [...stored.values()].flatMap((event): RemoteEvent[] => {
       const startTime = parseGoogleEventTime(event.start);
       const endTime = parseGoogleEventTime(event.end);
       if (!startTime || !endTime || endTime <= timeMin) {
@@ -149,7 +150,9 @@ const createGoogleHarness: HarnessFactory = (rows) => {
         supportedAvailabilities: ["busy", "free"],
         uid: event.iCalUID ?? "",
       }];
-    }));
+    });
+    return Promise.resolve({ items, rawItemCount: items.length });
+  };
 
   const provider: CalendarSyncProvider = {
     deleteEvents: (eventIds) => {
@@ -183,11 +186,15 @@ const createGoogleHarness: HarnessFactory = (rows) => {
       flush: buildMappingFlush(mappings),
       isCurrent: () => Promise.resolve(true),
       provider,
-      readState: async () => ({
-        existingMappings: [...mappings],
-        localEvents: readLocalEvents(rows, window),
-        remoteEvents: await listRemoteEvents(window.timeMin),
-      }),
+      readState: async () => {
+        const listing = await listRemoteEvents(window.timeMin);
+        return {
+          existingMappings: [...mappings],
+          localEvents: readLocalEvents(rows, window),
+          remoteEvents: listing.items,
+          remoteRawItemCount: listing.rawItemCount,
+        };
+      },
       reconciliationScope: { authoritativeWindow: window, requestedWindow: window },
       userId: "user-1",
     })),
@@ -200,8 +207,8 @@ const createOutlookHarness: HarnessFactory = (rows) => {
   const stored = new Map<string, OutlookEvent & { id: string }>();
   const counters = { deletes: 0, writes: 0 };
 
-  const listRemoteEvents = (timeMin: Date): Promise<RemoteEvent[]> =>
-    Promise.resolve([...stored.values()].flatMap((event): RemoteEvent[] => {
+  const listRemoteEvents = (timeMin: Date): Promise<RemoteEventListing> => {
+    const items = [...stored.values()].flatMap((event): RemoteEvent[] => {
       const isAllDay = event.isAllDay ?? false;
       const startTime = parseOutlookEventTime(event.start, isAllDay);
       const endTime = parseOutlookEventTime(event.end, isAllDay);
@@ -227,7 +234,9 @@ const createOutlookHarness: HarnessFactory = (rows) => {
         supportedAvailabilities: ["busy", "free"],
         uid: event.iCalUId ?? "",
       }];
-    }));
+    });
+    return Promise.resolve({ items, rawItemCount: items.length });
+  };
 
   const provider: CalendarSyncProvider = {
     deleteEvents: (eventIds) => {
@@ -260,11 +269,15 @@ const createOutlookHarness: HarnessFactory = (rows) => {
       flush: buildMappingFlush(mappings),
       isCurrent: () => Promise.resolve(true),
       provider,
-      readState: async () => ({
-        existingMappings: [...mappings],
-        localEvents: readLocalEvents(rows, window),
-        remoteEvents: await listRemoteEvents(window.timeMin),
-      }),
+      readState: async () => {
+        const listing = await listRemoteEvents(window.timeMin);
+        return {
+          existingMappings: [...mappings],
+          localEvents: readLocalEvents(rows, window),
+          remoteEvents: listing.items,
+          remoteRawItemCount: listing.rawItemCount,
+        };
+      },
       reconciliationScope: { authoritativeWindow: window, requestedWindow: window },
       userId: "user-1",
     })),
@@ -281,11 +294,11 @@ const createCalDAVHarness: HarnessFactory = (rows) => {
   const resources = new Map<string, string>();
   const counters = { deletes: 0, writes: 0 };
 
-  const listRemoteEvents = (timeMin: Date): Promise<RemoteEvent[]> => {
+  const listRemoteEvents = (timeMin: Date): Promise<RemoteEventListing> => {
     const parsed = parseICalCalendarsToRemoteEvents([...resources.values()], {
       rejectUnsupportedRecurrenceDates: false,
     });
-    return Promise.resolve(parsed.events.flatMap((event): RemoteEvent[] => {
+    const items = parsed.events.flatMap((event): RemoteEvent[] => {
       if (event.endTime < timeMin) {
         return [];
       }
@@ -307,7 +320,8 @@ const createCalDAVHarness: HarnessFactory = (rows) => {
         supportedAvailabilities: ["busy", "free"],
         uid: event.uid,
       }];
-    }));
+    });
+    return Promise.resolve({ items, rawItemCount: items.length });
   };
 
   const provider: CalendarSyncProvider = {
@@ -348,11 +362,15 @@ const createCalDAVHarness: HarnessFactory = (rows) => {
       flush: buildMappingFlush(mappings),
       isCurrent: () => Promise.resolve(true),
       provider,
-      readState: async () => ({
-        existingMappings: [...mappings],
-        localEvents: readLocalEvents(rows, window),
-        remoteEvents: await listRemoteEvents(window.timeMin),
-      }),
+      readState: async () => {
+        const listing = await listRemoteEvents(window.timeMin);
+        return {
+          existingMappings: [...mappings],
+          localEvents: readLocalEvents(rows, window),
+          remoteEvents: listing.items,
+          remoteRawItemCount: listing.rawItemCount,
+        };
+      },
       reconciliationScope: { authoritativeWindow: window, requestedWindow: window },
       userId: "user-1",
     })),

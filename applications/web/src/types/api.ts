@@ -58,6 +58,7 @@ export interface CalendarDetail {
   destinationIds: string[];
   sourceIds: string[];
   unavailableSince: string | null;
+  paused: boolean;
   createdAt: string;
   updatedAt: string;
 }

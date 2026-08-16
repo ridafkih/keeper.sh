@@ -8,6 +8,7 @@ import type {
   EventMapping,
   MaterializedSyncableEvent,
   RemoteEvent,
+  RemoteEventListing,
 } from "../../../../src/index";
 import { createEditableEventContentHash } from "../../../../src/core/events/content-hash";
 import { generateDeterministicEventUid } from "../../../../src/core/events/identity";
@@ -76,7 +77,7 @@ const createCalDAVHarness = (options: HarnessOptions): Harness => {
   const deletes: string[] = [];
   const scope = options.scope ?? WIDE_SCOPE;
 
-  const listRemoteEvents = (listOptions: { timeMin: Date }): Promise<RemoteEvent[]> => {
+  const listRemoteEvents = (listOptions: { timeMin: Date }): Promise<RemoteEventListing> => {
     const remoteEvents: RemoteEvent[] = [];
     for (const iCalString of resources.values()) {
       const parsed = parseICalToRemoteEvent(iCalString);
@@ -104,7 +105,7 @@ const createCalDAVHarness = (options: HarnessOptions): Harness => {
         uid: parsed.uid,
       } as RemoteEvent);
     }
-    return Promise.resolve(remoteEvents);
+    return Promise.resolve({ items: remoteEvents, rawItemCount: remoteEvents.length });
   };
 
   const provider: CalendarSyncProvider = {
@@ -169,11 +170,15 @@ const createCalDAVHarness = (options: HarnessOptions): Harness => {
         },
         isCurrent: () => Promise.resolve(true),
         provider,
-        readState: async () => ({
-          existingMappings: [...mappings],
-          localEvents: options.events(),
-          remoteEvents: await listRemoteEvents({ timeMin: scope.requestedWindow.timeMin }),
-        }),
+        readState: async () => {
+          const listing = await listRemoteEvents({ timeMin: scope.requestedWindow.timeMin });
+          return {
+            existingMappings: [...mappings],
+            localEvents: options.events(),
+            remoteEvents: listing.items,
+            remoteRawItemCount: listing.rawItemCount,
+          };
+        },
         reconciliationScope: scope,
         userId: "user-1",
       });

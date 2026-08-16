@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const syncCalendarMock = vi.fn();
-const listRemoteEventsMock = vi.fn(() => Promise.resolve([]));
+const listRemoteEventsMock = vi.fn(() => Promise.resolve({ items: [], rawItemCount: 0 }));
 const resolveSyncProviderMock = vi.fn();
 const isCalendarInvalidatedMock = vi.fn(
   (_redis: unknown, _calendarId: string) => Promise.resolve(false),
@@ -30,6 +30,7 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
       events: [],
     }),
     getMappedSourceCalendarIds: () => Promise.resolve([]),
+    getWriteBackPoliciesForDestination: () => Promise.resolve(new Map()),
     syncCalendar: (options: unknown) => syncCalendarMock(options),
     withSourceIngestLocks: (
       database: unknown,
@@ -153,7 +154,7 @@ beforeEach(() => {
   vi.setSystemTime(START);
   handleIsCurrentMock.mockImplementation(() => Promise.resolve(true));
   isCalendarInvalidatedMock.mockImplementation(() => Promise.resolve(false));
-  listRemoteEventsMock.mockImplementation(() => Promise.resolve([]));
+  listRemoteEventsMock.mockImplementation(() => Promise.resolve({ items: [], rawItemCount: 0 }));
   acquireMock.mockImplementation(() => Promise.resolve({
     acquired: true,
     handle: { isCurrent: handleIsCurrentMock, release: () => Promise.resolve() },
@@ -367,7 +368,7 @@ describe("a run that did no work because it was superseded", () => {
     setOutcome({ added: 3 });
     listRemoteEventsMock.mockImplementation(() => {
       controller.abort();
-      return Promise.resolve([]);
+      return Promise.resolve({ items: [], rawItemCount: 0 });
     });
 
     await syncDestinationsForUser(USER_ID, {

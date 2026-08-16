@@ -85,5 +85,6 @@ export {
   createEditableEventContentSnapshot,
   createSyncEventContentHash,
   hashEditableEventContentSnapshot,
+  normalizeText,
 };
 export type { EditableEventContentSnapshot, SyncableEventContent };

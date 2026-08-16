@@ -45,8 +45,22 @@ interface ProviderDefinition {
   capabilities: ProviderCapabilities;
 }
 
+/*
+ * The event exactly as the source holds it, before any privacy projection. Summary,
+ * description and location on a syncable event are what Keeper pushes to a destination —
+ * a calendar-name template, or nothing at all, for a field the user chose to hide — so
+ * they cannot be compared against the source row. Anything that has to decide whether the
+ * real event still looks the way it did reads these instead.
+ */
+interface SourceEventFields {
+  description: string | null;
+  location: string | null;
+  title: string | null;
+}
+
 interface SyncableEvent {
   id: string;
+  sourceFields?: SourceEventFields;
   /** The persisted event_states row that owns this logical event. */
   eventStateId?: string;
   sourceEventUid: string;
@@ -138,6 +152,13 @@ interface SyncResult {
   removeFailed: number;
 }
 
+interface RemoteEditableFields {
+  description?: string;
+  isAllDay: boolean;
+  location?: string;
+  summary: string;
+}
+
 interface RemoteEvent {
   uid: string;
   deleteId: string;
@@ -147,7 +168,20 @@ interface RemoteEvent {
   editableContent?: EditableEventContentSnapshot;
   editableContentHash?: string;
   editableAvailability?: EventAvailability;
+  editableFields?: RemoteEditableFields;
   supportedAvailabilities?: EventAvailability[];
+}
+
+interface RemoteEventListing {
+  items: RemoteEvent[];
+  rawItemCount: number;
+}
+
+type RemoteEventPresence = "absent" | "present";
+
+interface RemoteEventReference {
+  deleteId: string;
+  uid: string;
 }
 
 type SyncOperation =
@@ -225,6 +259,7 @@ export type {
   ProviderDefinition,
   SourcePreferenceOption,
   SourcePreferencesConfig,
+  SourceEventFields,
   SyncableEvent,
   MaterializedSyncableEvent,
   ProviderThrottleMetrics,
@@ -236,7 +271,11 @@ export type {
   PushResult,
   DeleteResult,
   SyncResult,
+  RemoteEditableFields,
   RemoteEvent,
+  RemoteEventListing,
+  RemoteEventPresence,
+  RemoteEventReference,
   SyncOperation,
   ListRemoteEventsOptions,
   BroadcastSyncStatus,

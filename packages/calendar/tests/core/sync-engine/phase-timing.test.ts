@@ -5,6 +5,7 @@ import type {
   MaterializedSyncableEvent,
   PushResult,
   RemoteEvent,
+  RemoteEventListing,
 } from "../../../src/core/types";
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { PendingChanges } from "../../../src/core/sync-engine/types";
@@ -52,11 +53,11 @@ const makeEvent = (
 const makeProvider = (overrides: Partial<{
   pushEvents: (events: MaterializedSyncableEvent[]) => Promise<PushResult[]>;
   deleteEvents: (eventIds: string[]) => Promise<DeleteResult[]>;
-  listRemoteEvents: () => Promise<RemoteEvent[]>;
+  listRemoteEvents: () => Promise<RemoteEventListing>;
 }> = {}) => ({
   pushEvents: overrides.pushEvents ?? (() => Promise.resolve([])),
   deleteEvents: overrides.deleteEvents ?? (() => Promise.resolve([])),
-  listRemoteEvents: overrides.listRemoteEvents ?? (() => Promise.resolve([])),
+  listRemoteEvents: overrides.listRemoteEvents ?? (() => Promise.resolve({ items: [], rawItemCount: 0 })),
 });
 
 const readPhaseTotal = (event: Record<string, unknown>): number =>
@@ -98,6 +99,7 @@ const runSync = async (options: RunOptions = {}): Promise<Record<string, unknown
       existingMappings: options.existingMappings ?? [],
       localEvents: options.localEvents ?? [],
       remoteEvents: options.remoteEvents ?? [],
+      remoteRawItemCount: (options.remoteEvents ?? []).length,
     }),
     reconciliationScope: TEST_RECONCILIATION_SCOPE,
     userId: "user-1",
@@ -206,6 +208,7 @@ describe("syncCalendar phase attribution", () => {
         existingMappings: [],
         localEvents: [makeEvent("ev-1")],
         remoteEvents: [],
+        remoteRawItemCount: 0,
       }),
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       userId: "user-1",

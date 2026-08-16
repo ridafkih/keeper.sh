@@ -85,7 +85,7 @@ const expectStepAndReplay = async (
   expectedFirstFlushes = 1,
 ): Promise<void> => {
   const first = await harness.ingestIcs(ics);
-  expect(first.result).toEqual(expectedFirstResult);
+  expect(first.result).toEqual({ ...expectedFirstResult, snapshotConfirmed: true });
   expect(first.flushes).toBe(expectedFirstFlushes);
   expect(harness.persistedEventCount).toBe(expectedPersistedCount);
   expect(harness.parseKeeperCalendar().occurrences).toEqual(expected);
@@ -93,7 +93,11 @@ const expectStepAndReplay = async (
   const persistedBeforeReplay = harness.persistedSnapshot;
   const replay = await harness.ingestIcs(ics);
 
-  expect(replay.result).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+  expect(replay.result).toEqual({
+    eventsAdded: 0,
+    eventsRemoved: 0,
+    snapshotConfirmed: true,
+  });
   expect(replay.flushes).toBe(0);
   expect(harness.persistedSnapshot).toEqual(persistedBeforeReplay);
   expect(harness.parseKeeperCalendar().occurrences).toEqual(expected);

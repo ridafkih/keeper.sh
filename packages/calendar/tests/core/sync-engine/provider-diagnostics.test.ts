@@ -4,7 +4,7 @@ import type {
   DeleteResult,
   MaterializedSyncableEvent,
   PushResult,
-  RemoteEvent,
+  RemoteEventListing,
 } from "../../../src/core/types";
 import type { CalendarSyncProvider } from "../../../src/core/sync-engine/types";
 
@@ -32,7 +32,7 @@ const makeEvent = (id: string): MaterializedSyncableEvent => ({
 
 const makeProvider = (overrides: Partial<CalendarSyncProvider> = {}): CalendarSyncProvider => ({
   deleteEvents: (): Promise<DeleteResult[]> => Promise.resolve([]),
-  listRemoteEvents: (): Promise<RemoteEvent[]> => Promise.resolve([]),
+  listRemoteEvents: (): Promise<RemoteEventListing> => Promise.resolve({ items: [], rawItemCount: 0 }),
   pushEvents: (): Promise<PushResult[]> => Promise.resolve([]),
   ...overrides,
 });
@@ -53,6 +53,7 @@ const runSync = async (options: {
       existingMappings: [],
       localEvents: options.localEvents ?? [],
       remoteEvents: [],
+      remoteRawItemCount: 0,
     })),
     reconciliationScope: TEST_RECONCILIATION_SCOPE,
     userId: "user-1",

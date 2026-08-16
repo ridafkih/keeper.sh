@@ -5,6 +5,7 @@ import type {
   DeleteResult,
   MaterializedSyncableEvent,
   PushResult,
+  RemoteEventListing,
   SyncOperation,
 } from "../../../src/core/types";
 import type { EventMapping } from "../../../src/core/events/mappings";
@@ -60,11 +61,12 @@ const makeMapping = (id: string, eventStateId: string, destinationEventUid: stri
 const makeProvider = (overrides: Partial<{
   pushEvents: (events: MaterializedSyncableEvent[]) => Promise<PushResult[]>;
   deleteEvents: (eventIds: string[]) => Promise<DeleteResult[]>;
-  listRemoteEvents: () => Promise<never[]>;
+  listRemoteEvents: () => Promise<RemoteEventListing>;
 }> = {}) => ({
   pushEvents: overrides.pushEvents ?? (() => Promise.resolve([])),
   deleteEvents: overrides.deleteEvents ?? (() => Promise.resolve([])),
-  listRemoteEvents: overrides.listRemoteEvents ?? (() => Promise.resolve([])),
+  listRemoteEvents: overrides.listRemoteEvents
+    ?? (() => Promise.resolve({ items: [], rawItemCount: 0 })),
 });
 
 describe("executeRemoteOperations", () => {
@@ -516,7 +518,7 @@ describe("syncCalendar", () => {
       },
       listRemoteEvents: () => {
         providerCalled = true;
-        return Promise.resolve([]);
+        return Promise.resolve({ items: [], rawItemCount: 0 });
       },
       pushEvents: () => {
         providerCalled = true;
@@ -570,6 +572,7 @@ describe("syncCalendar", () => {
           startTime: previousEvent.startTime,
           uid: "remote-1",
         }],
+        remoteRawItemCount: 1,
       }),
       isCurrent: () => Promise.resolve(true),
       flush: () => Promise.resolve(),
@@ -595,7 +598,7 @@ describe("syncCalendar", () => {
       calendarId: "dest-cal-1",
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       provider,
-      readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
+      readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [], remoteRawItemCount: 0 }),
       isCurrent: () => Promise.resolve(true),
       flush: (changes) => { flushCapture.push(changes); return Promise.resolve(); },
     });
@@ -620,7 +623,7 @@ describe("syncCalendar", () => {
       calendarId: "dest-cal-1",
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       provider,
-      readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
+      readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [], remoteRawItemCount: 0 }),
       isCurrent: () => { checkCount += 1; return Promise.resolve(checkCount <= 1); },
       flush: () => { flushCalled = true; return Promise.resolve(); },
     });
@@ -653,7 +656,7 @@ describe("syncCalendar", () => {
       calendarId: "dest-cal-1",
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       provider,
-      readState: () => Promise.resolve({ localEvents, existingMappings: [], remoteEvents: [] }),
+      readState: () => Promise.resolve({ localEvents, existingMappings: [], remoteEvents: [], remoteRawItemCount: 0 }),
       isCurrent: () => Promise.resolve(true),
       flush: (changes) => {
         checkpoints.push(changes);
@@ -675,7 +678,7 @@ describe("syncCalendar", () => {
       calendarId: "dest-cal-1",
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       provider,
-      readState: () => Promise.resolve({ localEvents: [], existingMappings: [], remoteEvents: [] }),
+      readState: () => Promise.resolve({ localEvents: [], existingMappings: [], remoteEvents: [], remoteRawItemCount: 0 }),
       isCurrent: () => Promise.resolve(true),
       flush: () => { flushCalled = true; return Promise.resolve(); },
     });
@@ -709,6 +712,7 @@ describe("syncCalendar", () => {
           new Date("2026-03-15T10:00:00Z"),
         )],
         remoteEvents: [],
+        remoteRawItemCount: 0,
       }),
       isCurrent: () => Promise.resolve(false),
       flush: () => Promise.reject(new Error("superseded reconciliation must not flush")),
@@ -768,6 +772,7 @@ describe("syncCalendar", () => {
           startTime: occurrence.startTime,
           uid: mapping.destinationEventUid,
         }],
+        remoteRawItemCount: 1,
       }),
       isCurrent: () => Promise.resolve(true),
       flush: (changes) => {
@@ -803,7 +808,7 @@ describe("syncCalendar", () => {
       calendarId: "dest-cal-1",
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       provider,
-      readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
+      readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [], remoteRawItemCount: 0 }),
       isCurrent: () => Promise.resolve(true),
       flush: () => Promise.resolve(),
       onSyncEvent: (event) => { emittedEvents.push(event); },
@@ -843,7 +848,7 @@ describe("syncCalendar", () => {
       calendarId: "dest-cal-1",
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       provider,
-      readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
+      readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [], remoteRawItemCount: 0 }),
       isCurrent: () => Promise.resolve(true),
       flush: () => Promise.resolve(),
       onSyncEvent: (event) => { emittedEvents.push(event); },
@@ -872,7 +877,7 @@ describe("syncCalendar", () => {
       provider,
       readState: async () => {
         await delay(20);
-        return { localEvents: [localEvent], existingMappings: [], remoteEvents: [] };
+        return { localEvents: [localEvent], existingMappings: [], remoteEvents: [], remoteRawItemCount: 0 };
       },
       isCurrent: () => Promise.resolve(true),
       flush: async () => { await delay(10); },
@@ -902,7 +907,7 @@ describe("syncCalendar", () => {
       calendarId: "dest-cal-1",
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       provider: makeProvider(),
-      readState: () => Promise.resolve({ localEvents: [], existingMappings: [], remoteEvents: [] }),
+      readState: () => Promise.resolve({ localEvents: [], existingMappings: [], remoteEvents: [], remoteRawItemCount: 0 }),
       isCurrent: async () => {
         await delay(25);
         return true;
@@ -977,6 +982,7 @@ describe("syncCalendar", () => {
           startTime: localEvent.startTime,
           uid: "remote-1",
         }],
+        remoteRawItemCount: 1,
       }),
       isCurrent: () => Promise.resolve(true),
       flush: () => Promise.resolve(),
@@ -1009,7 +1015,7 @@ describe("syncCalendar", () => {
       calendarId: "dest-cal-1",
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       provider,
-      readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
+      readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [], remoteRawItemCount: 0 }),
       isCurrent: () => { checkCount += 1; return Promise.resolve(checkCount <= 1); },
       flush: () => Promise.resolve(),
       onSyncEvent: (event) => { emittedEvents.push(event); },
@@ -1031,7 +1037,7 @@ describe("syncCalendar", () => {
       calendarId: "dest-cal-1",
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       provider,
-      readState: () => Promise.resolve({ localEvents: [], existingMappings: [], remoteEvents: [] }),
+      readState: () => Promise.resolve({ localEvents: [], existingMappings: [], remoteEvents: [], remoteRawItemCount: 0 }),
       isCurrent: () => Promise.resolve(true),
       flush: () => Promise.resolve(),
       onSyncEvent: (event) => { emittedEvents.push(event); },
@@ -1061,7 +1067,7 @@ describe("syncCalendar", () => {
       calendarId: "dest-cal-1",
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       provider,
-      readState: () => Promise.resolve({ localEvents, existingMappings: [], remoteEvents: [] }),
+      readState: () => Promise.resolve({ localEvents, existingMappings: [], remoteEvents: [], remoteRawItemCount: 0 }),
       isCurrent: () => Promise.resolve(true),
       flush: () => Promise.resolve(),
       onSyncEvent: (event) => { emittedEvents.push(event); },
@@ -1089,7 +1095,7 @@ describe("syncCalendar", () => {
       calendarId: "dest-cal-1",
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       provider,
-      readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
+      readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [], remoteRawItemCount: 0 }),
       isCurrent: () => Promise.resolve(true),
       flush: () => Promise.resolve(),
       onSyncEvent: (event) => { emittedEvents.push(event); },

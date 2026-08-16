@@ -85,10 +85,10 @@ beforeAll(async () => {
   await database.query(`create table event_states (
     "id" uuid primary key,
     "calendarId" uuid not null,
-    "startTime" timestamp not null,
-    "endTime" timestamp not null,
+    "startTime" timestamptz not null,
+    "endTime" timestamptz not null,
     "recurrenceRule" text,
-    "recurrenceId" timestamp
+    "recurrenceId" timestamptz
   )`);
 
   for (const fixture of fixtures) {

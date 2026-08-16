@@ -2,6 +2,8 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StoredPushChannel } from "@keeper.sh/calendar";
 import type { handleGooglePushWebhook as handleGooglePushWebhookFn } from "../../../../src/routes/api/webhook/google";
 
+const COLD_IMPORT_TIMEOUT_MS = 30_000;
+
 let handleGooglePushWebhook: typeof handleGooglePushWebhookFn = () =>
   Promise.reject(new Error("Module not loaded"));
 
@@ -129,7 +131,7 @@ vi.mock("../../../../src/utils/logging", () => ({
 
 beforeAll(async () => {
   ({ handleGooglePushWebhook } = await import("../../../../src/routes/api/webhook/google"));
-});
+}, COLD_IMPORT_TIMEOUT_MS);
 
 describe("handleGooglePushWebhook when push is unconfigured", () => {
   it("returns 501 and performs no work at all", async () => {

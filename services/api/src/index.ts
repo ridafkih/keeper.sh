@@ -5,7 +5,7 @@ import { withCors } from "./middleware/cors";
 import { handleAuthRequest } from "./handlers/auth";
 import { websocketHandler } from "./handlers/websocket";
 import { validateSocketToken } from "./utils/state";
-import { isHttpMethod, isRouteModule } from "./utils/route-handler";
+import { isHttpMethod, isRouteModule, normalizeRouteParams } from "./utils/route-handler";
 import { socketQuerySchema } from "./utils/request-query";
 import { closeDatabase } from "@keeper.sh/database";
 import { broadcastService, database, redis } from "./context";
@@ -86,7 +86,7 @@ await entry({
           return new Response("Method not allowed", { status: HTTP_METHOD_NOT_ALLOWED });
         }
 
-        return handler(request, match.params, match.name);
+        return handler(request, normalizeRouteParams(match.params), match.name);
       }),
     });
 

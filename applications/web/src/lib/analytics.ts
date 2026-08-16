@@ -72,6 +72,7 @@ export const ANALYTICS_EVENTS = {
   calendar_connect_started: "calendar_connect_started",
   calendar_renamed: "calendar_renamed",
   destination_toggled: "destination_toggled",
+  write_back_mode_changed: "write_back_mode_changed",
   calendar_setting_toggled: "calendar_setting_toggled",
   calendar_account_deleted: "calendar_account_deleted",
   calendars_refreshed: "calendars_refreshed",

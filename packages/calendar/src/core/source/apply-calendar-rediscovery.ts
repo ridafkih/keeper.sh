@@ -1,4 +1,4 @@
-import { applySourceSyncDefaults } from "@keeper.sh/data-schemas";
+import { applySourceSyncDefaults, resolveSourceCalendarCapabilities } from "@keeper.sh/data-schemas";
 import {
   calendarAccountsTable,
   caldavCredentialsTable,
@@ -45,6 +45,7 @@ const readExistingCalendars = async (
   const rows = await transaction
     .select({
       calendarUrl: calendarsTable.calendarUrl,
+      capabilities: calendarsTable.capabilities,
       createdAt: calendarsTable.createdAt,
       externalCalendarId: calendarsTable.externalCalendarId,
       id: calendarsTable.id,
@@ -107,13 +108,6 @@ const readCrossAccountCalDAVKeys = async (
   );
 };
 
-const resolveCapabilities = (writable: boolean): string[] => {
-  if (writable) {
-    return ["pull", "push"];
-  }
-  return ["pull"];
-};
-
 const resolveIdentityColumn = (
   calendar: DiscoveredCalendar,
 ): { calendarUrl: string | null } | { externalCalendarId: string } => {
@@ -129,7 +123,7 @@ const buildInsertRow = (
 ) => applySourceSyncDefaults({
   accountId: input.accountId,
   calendarType: input.calendarType,
-  capabilities: resolveCapabilities(calendar.writable),
+  capabilities: resolveSourceCalendarCapabilities(calendar.writable),
   name: calendar.name,
   originalName: calendar.name,
   userId: input.userId,
@@ -187,6 +181,19 @@ const applyCalendarRediscoveryPlan = (
         .update(calendarsTable)
         .set({ unavailableSince: input.now })
         .where(inArray(calendarsTable.id, plan.toMarkUnavailable));
+    }
+
+    /*
+     * A calendar the provider has since shared read-only keeps claiming it can be
+     * written to until this runs, and the write-back gate reads nothing else. The
+     * enumeration was already refused above if it came back empty, so this only ever
+     * restates an answer the provider actually gave.
+     */
+    for (const correction of plan.toUpdateCapabilities) {
+      await transaction
+        .update(calendarsTable)
+        .set({ capabilities: correction.capabilities })
+        .where(eq(calendarsTable.id, correction.id));
     }
 
     for (const retarget of plan.toRetargetUrl) {

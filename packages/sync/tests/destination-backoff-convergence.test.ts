@@ -6,6 +6,7 @@ import type {
   PendingChanges,
   PushResult,
   RemoteEvent,
+  RemoteEventListing,
 } from "@keeper.sh/calendar";
 import { createSyncEventContentHash } from "../../calendar/src/core/events/content-hash";
 import { shouldExcludeSyncEvent } from "../../calendar/src/core/events/events";
@@ -67,6 +68,7 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
       events: localEventsMock(),
     }),
     getMappedSourceCalendarIds: () => Promise.resolve([SOURCE_ID]),
+    getWriteBackPoliciesForDestination: () => Promise.resolve(new Map()),
     withSourceIngestLocks: (
       database: unknown,
       _ids: string[],
@@ -214,13 +216,13 @@ const config = (database: unknown, overrides: Record<string, unknown> = {}) => (
 
 const setProvider = (overrides: {
   deleteEvents?: (ids: string[]) => Promise<DeleteResult[]>;
-  listRemoteEvents?: () => Promise<RemoteEvent[]>;
+  listRemoteEvents?: () => Promise<RemoteEventListing>;
   pushEvents?: (events: MaterializedSyncableEvent[]) => Promise<PushResult[]>;
 }) => {
   const provider = {
     deleteEvents: overrides.deleteEvents
       ?? ((ids: string[]) => Promise.resolve(ids.map(() => ({ success: true })))),
-    listRemoteEvents: overrides.listRemoteEvents ?? (() => Promise.resolve([])),
+    listRemoteEvents: overrides.listRemoteEvents ?? (() => Promise.resolve({ items: [], rawItemCount: 0 })),
     pushEvents: overrides.pushEvents
       ?? ((events: MaterializedSyncableEvent[]) =>
         Promise.resolve(events.map((_event, index) => ({
@@ -332,7 +334,10 @@ describe("a destination the provider always rejects, driven by the real schedule
         }
         return Promise.resolve(ids.map(() => ({ success: true })));
       },
-      listRemoteEvents: () => Promise.resolve([...remote.values()]),
+      listRemoteEvents: () => Promise.resolve({
+        items: [...remote.values()],
+        rawItemCount: remote.size,
+      }),
       pushEvents: (events) => {
         attemptedAt.push(Date.now());
         return Promise.resolve(events.map((event, index) => {
@@ -603,7 +608,10 @@ describe("a mirror replaced by a push the provider accepts without a remote id",
         }
         return Promise.resolve(ids.map(() => ({ success: true })));
       },
-      listRemoteEvents: () => Promise.resolve([...remote.values()]),
+      listRemoteEvents: () => Promise.resolve({
+        items: [...remote.values()],
+        rawItemCount: remote.size,
+      }),
       pushEvents: (events) => {
         pushed.push(...events.map((pushedEvent) => pushedEvent.id));
         return Promise.resolve(events.map(() => ({ success: true })));
@@ -634,9 +642,10 @@ describe("a mirror the provider refuses to delete", () => {
         error: "Forbidden",
         success: false,
       }))),
-      listRemoteEvents: () => Promise.resolve([
-        makeRemoteEvent("remote-1", orphan.startTime),
-      ]),
+      listRemoteEvents: () => Promise.resolve({
+        items: [makeRemoteEvent("remote-1", orphan.startTime)],
+        rawItemCount: 1,
+      }),
       pushEvents: (events) => {
         pushed.push(...events.map((event) => event.id));
         return Promise.resolve(events.map((_event, index) => ({

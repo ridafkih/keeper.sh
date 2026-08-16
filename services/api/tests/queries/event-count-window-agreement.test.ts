@@ -26,14 +26,14 @@ create table event_states (
   "calendarId" uuid not null,
   "availability" text,
   "description" text,
-  "endTime" timestamp not null,
+  "endTime" timestamptz not null,
   "exceptionDates" text,
   "isAllDay" boolean,
   "location" text,
-  "recurrenceId" timestamp,
+  "recurrenceId" timestamptz,
   "recurrenceRule" text,
   "sourceEventUid" text,
-  "startTime" timestamp not null,
+  "startTime" timestamptz not null,
   "startTimeZone" text,
   "title" text
 );
@@ -47,8 +47,8 @@ create table user_events (
   "location" text,
   "availability" text,
   "isAllDay" boolean,
-  "startTime" timestamp not null,
-  "endTime" timestamp not null,
+  "startTime" timestamptz not null,
+  "endTime" timestamptz not null,
   "startTimeZone" text
 );
 `;

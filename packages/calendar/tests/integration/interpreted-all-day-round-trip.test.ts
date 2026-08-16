@@ -14,7 +14,7 @@ import type {
   IngestionChanges,
   MaterializedSyncableEvent,
   PendingChanges,
-  RemoteEvent,
+  RemoteEventListing,
   SourceEvent,
   StoredSourceEventState,
 } from "../../src/index";
@@ -176,8 +176,9 @@ class RoundTrippingDestinationProvider implements CalendarSyncProvider {
     return Promise.resolve(eventIds.map(() => ({ success: true })));
   };
 
-  public listRemoteEvents = (): Promise<RemoteEvent[]> => Promise.resolve(
-    [...this.remoteEvents.entries()].map(([uid, stored]) => ({
+  public listRemoteEvents = (): Promise<RemoteEventListing> => Promise.resolve({
+    rawItemCount: this.remoteEvents.size,
+    items: [...this.remoteEvents.entries()].map(([uid, stored]) => ({
       deleteId: uid,
       editableAvailability: "busy" as const,
       editableContentHash: stored.contentHash,
@@ -187,7 +188,7 @@ class RoundTrippingDestinationProvider implements CalendarSyncProvider {
       supportedAvailabilities: ["busy", "free"] as const,
       uid,
     })),
-  );
+  });
 
   public pushEvents = (events: MaterializedSyncableEvent[]) => {
     this.writes.pushes += events.length;
@@ -369,11 +370,15 @@ describe("stored rows written under the local-midnight behaviour", () => {
       flush: mappings.flush,
       isCurrent: () => Promise.resolve(true),
       provider,
-      readState: async () => ({
-        existingMappings: [...mappings.mappings.values()],
-        localEvents: eventStates.syncableEvents(),
-        remoteEvents: await provider.listRemoteEvents(),
-      }),
+      readState: async () => {
+        const listing = await provider.listRemoteEvents();
+        return {
+          existingMappings: [...mappings.mappings.values()],
+          localEvents: eventStates.syncableEvents(),
+          remoteEvents: listing.items,
+          remoteRawItemCount: listing.rawItemCount,
+        };
+      },
       reconciliationScope: RECONCILIATION_SCOPE,
       userId: "user-1",
     });
@@ -436,11 +441,15 @@ describe.each(DESTINATION_CODECS)("%s round trip", (_name, codec) => {
       flush: mappings.flush,
       isCurrent: () => Promise.resolve(true),
       provider,
-      readState: async () => ({
-        existingMappings: [...mappings.mappings.values()],
-        localEvents: eventStates.syncableEvents(),
-        remoteEvents: await provider.listRemoteEvents(),
-      }),
+      readState: async () => {
+        const listing = await provider.listRemoteEvents();
+        return {
+          existingMappings: [...mappings.mappings.values()],
+          localEvents: eventStates.syncableEvents(),
+          remoteEvents: listing.items,
+          remoteRawItemCount: listing.rawItemCount,
+        };
+      },
       reconciliationScope: RECONCILIATION_SCOPE,
       userId: "user-1",
     });

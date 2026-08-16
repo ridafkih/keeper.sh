@@ -159,7 +159,7 @@ const runAttempt = async (
         },
         provider: {
           deleteEvents: () => Promise.resolve([]),
-          listRemoteEvents: () => Promise.resolve([]),
+          listRemoteEvents: () => Promise.resolve({ items: [], rawItemCount: 0 }),
           pushEvents: (events) =>
             Promise.resolve(
               events.map((event) => ({
@@ -178,11 +178,13 @@ const runAttempt = async (
               existingMappings: [],
               localEvents: options.eventIds.map((id) => makeLocalEvent(id)),
               remoteEvents: [],
+              remoteRawItemCount: 0,
             };
           }) as Promise<{
             existingMappings: never[];
             localEvents: MaterializedSyncableEvent[];
             remoteEvents: never[];
+            remoteRawItemCount: number;
           }>),
         reconciliationScope: RECONCILIATION_SCOPE,
         userId: "user-1",

@@ -208,7 +208,7 @@ describe("ingestSource", () => {
     expect(stateAfterRestore).toHaveLength(3);
 
     const replayResult = await ingestDelta([restoredEvent]);
-    expect(replayResult).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+    expect(replayResult).toEqual({ eventsAdded: 0, eventsRemoved: 0, snapshotConfirmed: true });
     expect(state.events.map((event) => ({
       id: event.sourceEventId,
       start: event.startTime.toISOString(),
@@ -316,7 +316,7 @@ describe("ingestSource", () => {
       readExistingEvents: () => Promise.resolve([existingEvent]),
     });
 
-    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 0 });
+    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 0, snapshotConfirmed: true });
     expect(flushCapture).toHaveLength(1);
     expect(flushCapture[0]?.deletes).toEqual([]);
     expect(flushCapture[0]?.inserts).toEqual([movedEvent]);
@@ -346,7 +346,7 @@ describe("ingestSource", () => {
       readExistingEvents: () => Promise.resolve([existingEvent]),
     });
 
-    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 0 });
+    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 0, snapshotConfirmed: true });
     expect(flushes).toEqual([{
       deletes: [],
       inserts: [incomingEvent],
@@ -383,7 +383,7 @@ describe("ingestSource", () => {
     const { ingestDelta, state } = await createStatefulIngestion(recurringEvents);
 
     const unchangedResult = await ingestDelta([recurringEvents[1] as SourceEvent]);
-    expect(unchangedResult).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+    expect(unchangedResult).toEqual({ eventsAdded: 0, eventsRemoved: 0, snapshotConfirmed: true });
     expect(state.events).toHaveLength(3);
 
     const changedOccurrence = {
@@ -391,7 +391,7 @@ describe("ingestSource", () => {
       title: "Changed title",
     };
     const changedResult = await ingestDelta([changedOccurrence]);
-    expect(changedResult).toEqual({ eventsAdded: 1, eventsRemoved: 0 });
+    expect(changedResult).toEqual({ eventsAdded: 1, eventsRemoved: 0, snapshotConfirmed: true });
     expect(state.events).toHaveLength(3);
     expect(state.events.find(
       (event) => event.sourceEventId === "provider-instance-2",
@@ -403,14 +403,14 @@ describe("ingestSource", () => {
       startTime: new Date("2026-03-04T11:00:00Z"),
     };
     const movedResult = await ingestDelta([movedOccurrence]);
-    expect(movedResult).toEqual({ eventsAdded: 1, eventsRemoved: 0 });
+    expect(movedResult).toEqual({ eventsAdded: 1, eventsRemoved: 0, snapshotConfirmed: true });
     expect(state.events).toHaveLength(3);
     expect(state.events.find(
       (event) => event.sourceEventId === "provider-instance-2",
     )?.startTime).toEqual(new Date("2026-03-04T11:00:00Z"));
 
     const replayResult = await ingestDelta([movedOccurrence]);
-    expect(replayResult).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+    expect(replayResult).toEqual({ eventsAdded: 0, eventsRemoved: 0, snapshotConfirmed: true });
     expect(state.events).toHaveLength(3);
   });
 
@@ -440,7 +440,7 @@ describe("ingestSource", () => {
 
     const result = await ingestDelta([movedOccurrence]);
 
-    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 0 });
+    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 0, snapshotConfirmed: true });
     expect(state.events).toHaveLength(2);
     expect(state.events.map((event) => event.sourceEventId).toSorted()).toEqual([
       "provider-instance-1",
@@ -474,7 +474,7 @@ describe("ingestSource", () => {
 
     const result = await ingestDelta([], ["provider-instance-1"]);
 
-    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 1 });
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 1, snapshotConfirmed: true });
     expect(state.events.map((event) => event.sourceEventId)).toEqual([
       "provider-instance-2",
     ]);
@@ -493,7 +493,7 @@ describe("ingestSource", () => {
 
     const result = await ingestDelta([], [], ["provider-event-1"]);
 
-    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 1 });
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 1, snapshotConfirmed: true });
     expect(state.events).toEqual([]);
   });
 
@@ -520,7 +520,7 @@ describe("ingestSource", () => {
 
     const result = await ingestDelta([intermediateVersion, finalVersion]);
 
-    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 0 });
+    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 0, snapshotConfirmed: true });
     expect(state.events).toHaveLength(1);
     expect(state.events[0]?.startTime).toEqual(new Date("2026-03-02T11:00:00Z"));
   });
@@ -599,11 +599,15 @@ describe("ingestSource", () => {
       isCurrent: () => Promise.resolve(false),
       withPersistenceTransaction: () => {
         transactionEntered = true;
-        return Promise.resolve({ eventsAdded: 0, eventsRemoved: 0 });
+        return Promise.resolve({ eventsAdded: 0, eventsRemoved: 0, snapshotConfirmed: true });
       },
     });
 
-    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+    /*
+     * A superseded run read the source but threw the read away, so it confirms nothing
+     * about the stored copy that two-way sync weighs a write against.
+     */
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0, snapshotConfirmed: false });
     expect(transactionEntered).toBe(false);
   });
 
@@ -630,7 +634,7 @@ describe("ingestSource", () => {
       },
     });
 
-    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0, snapshotConfirmed: true });
     expect(transactionEntered).toBe(true);
     expect(persistenceUsed).toBe(false);
   });
@@ -727,7 +731,7 @@ describe("ingestSource", () => {
       onIngestEvent: (event) => { emittedEvents.push(event); },
     });
 
-    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 0 });
+    expect(result).toEqual({ eventsAdded: 1, eventsRemoved: 0, snapshotConfirmed: true });
     expect(flushes).toEqual([{
       deletes: [],
       inserts: [sourceEvent],
@@ -763,7 +767,11 @@ describe("ingestSource", () => {
       },
     });
 
-    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+    /*
+     * The delta was discarded and the token cleared, so nothing was diffed against the
+     * stored copy: the next full sync is what confirms it.
+     */
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0, snapshotConfirmed: false });
     expect(flushes).toEqual([{ deletes: [], inserts: [], syncToken: null }]);
   });
 
@@ -790,7 +798,7 @@ describe("ingestSource", () => {
       },
     });
 
-    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0, snapshotConfirmed: true });
     expect(flushed).toBe(false);
   });
 
@@ -891,7 +899,7 @@ describe("ingestSource", () => {
       },
     });
 
-    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 1 });
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 1, snapshotConfirmed: true });
     expect(flushed).toEqual({
       coverage: {
         futureRange: "1_month",
@@ -951,7 +959,7 @@ describe("ingestSource", () => {
       },
     });
 
-    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0 });
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 0, snapshotConfirmed: true });
     expect(flushed).toEqual({
       coverage: {
         futureRange: "1_month",
@@ -988,7 +996,7 @@ describe("ingestSource", () => {
       },
     });
 
-    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 1 });
+    expect(result).toEqual({ eventsAdded: 0, eventsRemoved: 1, snapshotConfirmed: true });
     expect(flushed).toEqual({ deletes: ["historical-state"], inserts: [] });
   });
 

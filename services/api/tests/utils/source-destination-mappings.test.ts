@@ -201,9 +201,11 @@ describe("runSetDestinationsForSource", () => {
         withTransaction: (transactionCallback) =>
           transactionCallback({
             acquireUserLock: () => Promise.resolve(),
-            findOwnedDestinationIds: () => Promise.resolve(["dest-1"]),
-            replaceSourceMappings: () => Promise.resolve(),
+            deleteSourceMappings: () => Promise.resolve(),
             ensureDestinationSyncStatuses: () => Promise.resolve(),
+            findExistingDestinationIds: () => Promise.resolve([]),
+            findOwnedDestinationIds: () => Promise.resolve(["dest-1"]),
+            insertSourceMappings: () => Promise.resolve(),
             sourceExists: () => Promise.resolve(false),
           }),
       }),
@@ -218,9 +220,11 @@ describe("runSetDestinationsForSource", () => {
         withTransaction: (transactionCallback) =>
           transactionCallback({
             acquireUserLock: () => Promise.resolve(),
-            findOwnedDestinationIds: () => Promise.resolve(["dest-1"]),
-            replaceSourceMappings: () => Promise.resolve(),
+            deleteSourceMappings: () => Promise.resolve(),
             ensureDestinationSyncStatuses: () => Promise.resolve(),
+            findExistingDestinationIds: () => Promise.resolve([]),
+            findOwnedDestinationIds: () => Promise.resolve(["dest-1"]),
+            insertSourceMappings: () => Promise.resolve(),
             sourceExists: () => Promise.resolve(true),
           }),
       }),
@@ -241,9 +245,14 @@ describe("runSetDestinationsForSource", () => {
             operationLog.push(`status:${destinationIds.join(",")}`);
             return Promise.resolve();
           },
+          deleteSourceMappings: (_sourceCalendarId, destinationIds) => {
+            operationLog.push(`delete:${destinationIds.join(",")}`);
+            return Promise.resolve();
+          },
+          findExistingDestinationIds: () => Promise.resolve(["dest-1"]),
           findOwnedDestinationIds: () => Promise.resolve(["dest-1", "dest-2"]),
-          replaceSourceMappings: (_sourceCalendarId, destinationIds) => {
-            operationLog.push(`replace:${destinationIds.join(",")}`);
+          insertSourceMappings: (_sourceCalendarId, destinationIds) => {
+            operationLog.push(`insert:${destinationIds.join(",")}`);
             return Promise.resolve();
           },
           requestUserSync: (userId) => {
@@ -256,7 +265,8 @@ describe("runSetDestinationsForSource", () => {
 
     expect(operationLog).toEqual([
       "lock:user-1",
-      "replace:dest-1,dest-2",
+      "delete:",
+      "insert:dest-2",
       "status:dest-1,dest-2",
       "request:user-1",
     ]);
@@ -273,8 +283,13 @@ describe("runSetDestinationsForSource", () => {
             countMappingsForSource: () => Promise.resolve(1),
             countUserMappings: () => Promise.resolve(3),
             ensureDestinationSyncStatuses: () => Promise.resolve(),
+            deleteSourceMappings: () => {
+              replaceCalled = true;
+              return Promise.resolve();
+            },
+            findExistingDestinationIds: () => Promise.resolve([]),
             findOwnedDestinationIds: () => Promise.resolve(["dest-1", "dest-2", "dest-3"]),
-            replaceSourceMappings: () => {
+            insertSourceMappings: () => {
               replaceCalled = true;
               return Promise.resolve();
             },
@@ -303,7 +318,12 @@ describe("mapping transaction adversarial behavior", () => {
           userId: string,
           destinationCalendarIds: string[],
         ) => Promise<string[]>;
-        replaceSourceMappings: (
+        findExistingDestinationIds: (sourceCalendarId: string) => Promise<string[]>;
+        deleteSourceMappings: (
+          sourceCalendarId: string,
+          destinationCalendarIds: string[],
+        ) => Promise<void>;
+        insertSourceMappings: (
           sourceCalendarId: string,
           destinationCalendarIds: string[],
         ) => Promise<void>;
@@ -321,20 +341,19 @@ describe("mapping transaction adversarial behavior", () => {
           ensureDestinationSyncStatuses: () => Promise.resolve(),
           findOwnedDestinationIds: (_userId, destinationCalendarIds) =>
             Promise.resolve(destinationCalendarIds),
-          replaceSourceMappings: async (sourceCalendarId, destinationCalendarIds) => {
-            const mappingKeys = [...draftMappings];
-            for (const mappingKey of mappingKeys) {
-              const mapping = parseMappingKey(mappingKey);
-              if (mapping.sourceCalendarId === sourceCalendarId) {
-                draftMappings.delete(mappingKey);
-              }
+          deleteSourceMappings: async (sourceCalendarId, destinationCalendarIds) => {
+            for (const destinationCalendarId of destinationCalendarIds) {
+              draftMappings.delete(createMappingKey(sourceCalendarId, destinationCalendarId));
             }
-
             await new Promise((resolve) => { setTimeout(resolve, 5); });
-
+          },
+          findExistingDestinationIds: (sourceCalendarId) =>
+            Promise.resolve(collectDestinationIds(draftMappings, sourceCalendarId)),
+          insertSourceMappings: (sourceCalendarId, destinationCalendarIds) => {
             for (const destinationCalendarId of destinationCalendarIds) {
               draftMappings.add(createMappingKey(sourceCalendarId, destinationCalendarId));
             }
+            return Promise.resolve();
           },
           sourceExists: () => Promise.resolve(true),
         });
@@ -372,7 +391,12 @@ describe("mapping transaction adversarial behavior", () => {
           userId: string,
           destinationCalendarIds: string[],
         ) => Promise<string[]>;
-        replaceSourceMappings: (
+        findExistingDestinationIds: (sourceCalendarId: string) => Promise<string[]>;
+        deleteSourceMappings: (
+          sourceCalendarId: string,
+          destinationCalendarIds: string[],
+        ) => Promise<void>;
+        insertSourceMappings: (
           sourceCalendarId: string,
           destinationCalendarIds: string[],
         ) => Promise<void>;
@@ -386,14 +410,15 @@ describe("mapping transaction adversarial behavior", () => {
           Promise.reject(new Error("status upsert failed")),
         findOwnedDestinationIds: (_userId, destinationCalendarIds) =>
           Promise.resolve(destinationCalendarIds),
-        replaceSourceMappings: (sourceCalendarId, destinationCalendarIds) => {
-          const mappingKeys = [...draftMappings];
-          for (const mappingKey of mappingKeys) {
-            const mapping = parseMappingKey(mappingKey);
-            if (mapping.sourceCalendarId === sourceCalendarId) {
-              draftMappings.delete(mappingKey);
-            }
+        deleteSourceMappings: (sourceCalendarId, destinationCalendarIds) => {
+          for (const destinationCalendarId of destinationCalendarIds) {
+            draftMappings.delete(createMappingKey(sourceCalendarId, destinationCalendarId));
           }
+          return Promise.resolve();
+        },
+        findExistingDestinationIds: (sourceCalendarId) =>
+          Promise.resolve(collectDestinationIds(draftMappings, sourceCalendarId)),
+        insertSourceMappings: (sourceCalendarId, destinationCalendarIds) => {
           for (const destinationCalendarId of destinationCalendarIds) {
             draftMappings.add(createMappingKey(sourceCalendarId, destinationCalendarId));
           }
@@ -430,7 +455,12 @@ describe("mapping transaction adversarial behavior", () => {
           userId: string,
           destinationCalendarIds: string[],
         ) => Promise<string[]>;
-        replaceSourceMappings: (
+        findExistingDestinationIds: (sourceCalendarId: string) => Promise<string[]>;
+        deleteSourceMappings: (
+          sourceCalendarId: string,
+          destinationCalendarIds: string[],
+        ) => Promise<void>;
+        insertSourceMappings: (
           sourceCalendarId: string,
           destinationCalendarIds: string[],
         ) => Promise<void>;
@@ -447,20 +477,19 @@ describe("mapping transaction adversarial behavior", () => {
           ensureDestinationSyncStatuses: () => Promise.resolve(),
           findOwnedDestinationIds: (_userId, destinationCalendarIds) =>
             Promise.resolve(destinationCalendarIds),
-          replaceSourceMappings: async (sourceCalendarId, destinationCalendarIds) => {
-            const mappingKeys = [...mappings];
-            for (const mappingKey of mappingKeys) {
-              const mapping = parseMappingKey(mappingKey);
-              if (mapping.sourceCalendarId === sourceCalendarId) {
-                mappings.delete(mappingKey);
-              }
+          deleteSourceMappings: async (sourceCalendarId, destinationCalendarIds) => {
+            for (const destinationCalendarId of destinationCalendarIds) {
+              mappings.delete(createMappingKey(sourceCalendarId, destinationCalendarId));
             }
-
             await new Promise((resolve) => { setTimeout(resolve, 5); });
-
+          },
+          findExistingDestinationIds: (sourceCalendarId) =>
+            Promise.resolve(collectDestinationIds(mappings, sourceCalendarId)),
+          insertSourceMappings: (sourceCalendarId, destinationCalendarIds) => {
             for (const destinationCalendarId of destinationCalendarIds) {
               mappings.add(createMappingKey(sourceCalendarId, destinationCalendarId));
             }
+            return Promise.resolve();
           },
           sourceExists: () => Promise.resolve(true),
         });
@@ -478,11 +507,16 @@ describe("mapping transaction adversarial behavior", () => {
           userId: string,
           sourceCalendarIds: string[],
         ) => Promise<string[]>;
-        replaceDestinationMappings: (
+        findExistingSourceIds: (destinationCalendarId: string) => Promise<string[]>;
+        deleteDestinationMappings: (
           destinationCalendarId: string,
           sourceCalendarIds: string[],
         ) => Promise<void>;
-        ensureDestinationSyncStatus: (destinationCalendarId: string) => Promise<void>;
+        insertDestinationMappings: (
+          destinationCalendarId: string,
+          sourceCalendarIds: string[],
+        ) => Promise<void>;
+        ensureDestinationSyncStatuses: (destinationCalendarIds: string[]) => Promise<void>;
       }) => Promise<TResult>,
     ): Promise<TResult> => {
       let releaseLock: () => void = releaseLockNoop;
@@ -493,23 +527,22 @@ describe("mapping transaction adversarial behavior", () => {
             releaseLock = await lockManager.acquire(userId);
           },
           destinationExists: () => Promise.resolve(true),
-          ensureDestinationSyncStatus: () => Promise.resolve(),
+          ensureDestinationSyncStatuses: () => Promise.resolve(),
           findOwnedSourceIds: (_userId, sourceCalendarIds) =>
             Promise.resolve(sourceCalendarIds),
-          replaceDestinationMappings: async (destinationCalendarId, sourceCalendarIds) => {
-            const mappingKeys = [...mappings];
-            for (const mappingKey of mappingKeys) {
-              const mapping = parseMappingKey(mappingKey);
-              if (mapping.destinationCalendarId === destinationCalendarId) {
-                mappings.delete(mappingKey);
-              }
+          deleteDestinationMappings: async (destinationCalendarId, sourceCalendarIds) => {
+            for (const sourceCalendarId of sourceCalendarIds) {
+              mappings.delete(createMappingKey(sourceCalendarId, destinationCalendarId));
             }
-
             await new Promise((resolve) => { setTimeout(resolve, 5); });
-
+          },
+          findExistingSourceIds: (destinationCalendarId) =>
+            Promise.resolve(collectSourceIds(mappings, destinationCalendarId)),
+          insertDestinationMappings: (destinationCalendarId, sourceCalendarIds) => {
             for (const sourceCalendarId of sourceCalendarIds) {
               mappings.add(createMappingKey(sourceCalendarId, destinationCalendarId));
             }
+            return Promise.resolve();
           },
         });
         return result;
@@ -550,10 +583,12 @@ describe("runSetSourcesForDestination", () => {
         withTransaction: (transactionCallback) =>
           transactionCallback({
             acquireUserLock: () => Promise.resolve(),
+            deleteDestinationMappings: () => Promise.resolve(),
             destinationExists: () => Promise.resolve(false),
-            ensureDestinationSyncStatus: () => Promise.resolve(),
+            ensureDestinationSyncStatuses: () => Promise.resolve(),
+            findExistingSourceIds: () => Promise.resolve([]),
             findOwnedSourceIds: () => Promise.resolve(["source-1"]),
-            replaceDestinationMappings: () => Promise.resolve(),
+            insertDestinationMappings: () => Promise.resolve(),
           }),
       }),
     ).rejects.toThrow("Destination calendar not found");
@@ -565,10 +600,12 @@ describe("runSetSourcesForDestination", () => {
         withTransaction: (transactionCallback) =>
           transactionCallback({
             acquireUserLock: () => Promise.resolve(),
+            deleteDestinationMappings: () => Promise.resolve(),
             destinationExists: () => Promise.resolve(true),
-            ensureDestinationSyncStatus: () => Promise.resolve(),
+            ensureDestinationSyncStatuses: () => Promise.resolve(),
+            findExistingSourceIds: () => Promise.resolve([]),
             findOwnedSourceIds: () => Promise.resolve(["source-1"]),
-            replaceDestinationMappings: () => Promise.resolve(),
+            insertDestinationMappings: () => Promise.resolve(),
           }),
       }),
     ).rejects.toThrow("Some source calendars not found");
@@ -584,14 +621,19 @@ describe("runSetSourcesForDestination", () => {
             operationLog.push(`lock:${userId}`);
             return Promise.resolve();
           },
+          deleteDestinationMappings: (_destinationCalendarId, sourceCalendarIds) => {
+            operationLog.push(`delete:${sourceCalendarIds.length}`);
+            return Promise.resolve();
+          },
           destinationExists: () => Promise.resolve(true),
-          ensureDestinationSyncStatus: () => {
+          ensureDestinationSyncStatuses: () => {
             operationLog.push("status");
             return Promise.resolve();
           },
+          findExistingSourceIds: () => Promise.resolve([]),
           findOwnedSourceIds: () => Promise.resolve([]),
-          replaceDestinationMappings: (_destinationCalendarId, sourceCalendarIds) => {
-            operationLog.push(`replace:${sourceCalendarIds.length}`);
+          insertDestinationMappings: (_destinationCalendarId, sourceCalendarIds) => {
+            operationLog.push(`insert:${sourceCalendarIds.length}`);
             return Promise.resolve();
           },
           requestUserSync: (userId) => {
@@ -603,7 +645,8 @@ describe("runSetSourcesForDestination", () => {
 
     expect(operationLog).toEqual([
       "lock:user-1",
-      "replace:0",
+      "delete:0",
+      "insert:0",
       "request:user-1",
     ]);
   });
@@ -615,21 +658,27 @@ describe("runSetSourcesForDestination", () => {
       withTransaction: (transactionCallback) =>
         transactionCallback({
           acquireUserLock: () => Promise.resolve(),
-          destinationExists: () => Promise.resolve(true),
-          ensureDestinationSyncStatus: (destinationCalendarId) => {
-            operationLog.push(`status:${destinationCalendarId}`);
+          deleteDestinationMappings: (_destinationCalendarId, sourceCalendarIds) => {
+            operationLog.push(`delete:${sourceCalendarIds.join(",")}`);
             return Promise.resolve();
           },
+          destinationExists: () => Promise.resolve(true),
+          ensureDestinationSyncStatuses: (destinationCalendarIds) => {
+            operationLog.push(`status:${destinationCalendarIds.join(",")}`);
+            return Promise.resolve();
+          },
+          findExistingSourceIds: () => Promise.resolve([]),
           findOwnedSourceIds: () => Promise.resolve(["source-1"]),
-          replaceDestinationMappings: (_destinationCalendarId, sourceCalendarIds) => {
-            operationLog.push(`replace:${sourceCalendarIds.join(",")}`);
+          insertDestinationMappings: (_destinationCalendarId, sourceCalendarIds) => {
+            operationLog.push(`insert:${sourceCalendarIds.join(",")}`);
             return Promise.resolve();
           },
         }),
     });
 
     expect(operationLog).toEqual([
-      "replace:source-1",
+      "delete:",
+      "insert:source-1",
       "status:dest-1",
     ]);
   });
@@ -644,10 +693,15 @@ describe("runSetSourcesForDestination", () => {
             acquireUserLock: () => Promise.resolve(),
             countMappingsForDestination: () => Promise.resolve(1),
             countUserMappings: () => Promise.resolve(3),
+            deleteDestinationMappings: () => {
+              replaceCalled = true;
+              return Promise.resolve();
+            },
             destinationExists: () => Promise.resolve(true),
-            ensureDestinationSyncStatus: () => Promise.resolve(),
+            ensureDestinationSyncStatuses: () => Promise.resolve(),
+            findExistingSourceIds: () => Promise.resolve([]),
             findOwnedSourceIds: () => Promise.resolve(["source-1", "source-2"]),
-            replaceDestinationMappings: () => {
+            insertDestinationMappings: () => {
               replaceCalled = true;
               return Promise.resolve();
             },

@@ -110,6 +110,19 @@ const resetIngestBackoff = async (calendarId: string): Promise<void> => {
     .where(eq(calendarsTable.id, calendarId)));
 };
 
+/*
+ * Written on every clean read, not only on the ones that change something. Two-way sync
+ * refuses to overwrite or delete a real source event whose stored copy is older than the
+ * freshness bound, so a run that confirms the copy is current has to say so even when it
+ * found nothing to change.
+ */
+const recordIngestSuccess = async (calendarId: string): Promise<void> => {
+  await measureDatabaseWrite(() => database
+    .update(calendarsTable)
+    .set({ ingestLastSucceededAt: new Date() })
+    .where(eq(calendarsTable.id, calendarId)));
+};
+
 const applyIngestBackoff = async (
   calendarId: string,
   currentFailureCount: number,
@@ -133,7 +146,7 @@ const logIngestBackoff = (state: CalendarBackoffState): void => {
   }
 };
 
-const runSourceIngest = async <TResult>(
+const runSourceIngest = async <TResult extends { snapshotConfirmed: boolean }>(
   calendarId: string,
   signal: AbortSignal,
   work: (isCurrent: () => Promise<boolean>) => Promise<TResult>,
@@ -162,8 +175,13 @@ const runSourceIngest = async <TResult>(
     }
     try {
       const result = await work(lockResult.handle.isCurrent);
-      if (attempt.failureCount > 0 && await lockResult.handle.isCurrent()) {
-        await resetIngestBackoff(calendarId);
+      if (await lockResult.handle.isCurrent()) {
+        if (attempt.failureCount > 0) {
+          await resetIngestBackoff(calendarId);
+        }
+        if (result.snapshotConfirmed) {
+          await recordIngestSuccess(calendarId);
+        }
       }
       return result;
     } catch (error) {
@@ -581,6 +599,7 @@ interface IngestionSourceResult {
   eventsRemoved: number;
   reauthentication: ReauthenticationDemandRecord | null;
   shouldPush: boolean;
+  snapshotConfirmed: boolean;
   userId: string;
 }
 
@@ -732,6 +751,7 @@ const createSkippedIngestionResult = (userId: string): IngestionSourceResult => 
   eventsRemoved: 0,
   reauthentication: null,
   shouldPush: false,
+  snapshotConfirmed: false,
   userId,
 });
 
@@ -981,6 +1001,7 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
                   shouldPush: ingestionState.authorityChanged
                     || ingestionResult.eventsAdded > 0
                     || ingestionResult.eventsRemoved > 0,
+                  snapshotConfirmed: ingestionResult.snapshotConfirmed,
                   userId: currentSource.userId,
                 };
               }, shouldApplyOAuthIngestBackoff),
@@ -1158,6 +1179,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                   shouldPush: hasSourceAuthorityChanged(currentSource, ranges)
                     || ingestionResult.eventsAdded > 0
                     || ingestionResult.eventsRemoved > 0,
+                  snapshotConfirmed: ingestionResult.snapshotConfirmed,
                   userId: currentSource.userId,
                 };
               }, (error) => !shouldTreatAsProviderAuthFailure(error)),
@@ -1301,6 +1323,7 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
                   shouldPush: hasSourceAuthorityChanged(currentSource, ranges)
                     || ingestionResult.eventsAdded > 0
                     || ingestionResult.eventsRemoved > 0,
+                  snapshotConfirmed: ingestionResult.snapshotConfirmed,
                   userId: currentSource.userId,
                 };
               }, () => true),

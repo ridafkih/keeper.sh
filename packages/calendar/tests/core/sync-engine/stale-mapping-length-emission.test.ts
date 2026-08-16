@@ -68,13 +68,14 @@ const runSync = async (remoteDescription: string): Promise<Record<string, unknow
     onSyncEvent: (event) => { emitted.push(event); },
     provider: {
       deleteEvents: () => Promise.resolve([{ success: true }]),
-      listRemoteEvents: () => Promise.resolve([]),
+      listRemoteEvents: () => Promise.resolve({ items: [], rawItemCount: 0 }),
       pushEvents: () => Promise.resolve([{ remoteId: "remote-new", success: true }]),
     },
     readState: () => Promise.resolve({
       existingMappings: [mapping],
       localEvents: [localEvent],
       remoteEvents: [remoteEvent],
+      remoteRawItemCount: 1,
     }),
     reconciliationScope: TEST_RECONCILIATION_SCOPE,
     userId: "user-1",

@@ -11,6 +11,7 @@ import {
   getMappedSourceCalendarIds,
   withSourceIngestLocks,
   getConfigurableSyncWindow,
+  getWriteBackPoliciesForDestination,
   intersectSyncWindows,
 } from "@keeper.sh/calendar";
 import { OUTLOOK_REQUESTS_PER_MINUTE } from "@keeper.sh/constants";
@@ -18,22 +19,28 @@ import { syncRangeSchema } from "@keeper.sh/data-schemas";
 import type { Plan } from "@keeper.sh/data-schemas";
 import type { RedisRateLimiter } from "@keeper.sh/calendar";
 import type {
+  CalendarSyncProvider,
+  DeleteConfirmationRequest,
+  WriteBackHoldRequest,
   EventMapping,
+  WriteBackPolicy,
   DestinationEventReadDiagnostics,
   MaterializedSyncableEvent,
   ReconciliationScope,
   RefreshLockStore,
   RemoteEvent,
+  RemoteEventListing,
   SyncProgressUpdate,
   SyncWindow,
 } from "@keeper.sh/calendar";
 import {
   calendarAccountsTable,
   calendarsTable,
+  sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import { withDatabasePoolWindow } from "@keeper.sh/database";
 import type { DatabasePoolWindow } from "@keeper.sh/database";
-import { and, arrayContains, eq, inArray, isNull } from "drizzle-orm";
+import { and, arrayContains, eq, inArray, isNull, ne } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type Redis from "ioredis";
 import {
@@ -43,6 +50,7 @@ import {
 } from "./destination-errors";
 import type { DestinationAttemptVerdict } from "./destination-errors";
 import { resolveSyncProvider } from "./resolve-provider";
+import { clearDestinationWitnesses, createInboundWriteBackApplier } from "./write-back";
 import type { OAuthConfig } from "./resolve-provider";
 import {
   createMappingMutationLockId,
@@ -129,6 +137,8 @@ interface SyncConfig {
   refreshLockStore?: RefreshLockStore | null;
   deadlineMs?: number;
   abortSignal?: AbortSignal;
+  /* Wakes the user's other destinations after a write-back has changed a source. */
+  notifySourceChanged?: (userId: string) => Promise<void>;
 }
 
 interface SyncDestinationsResult {
@@ -349,6 +359,7 @@ interface DestinationReconciliationScopeContext {
   eventReadDiagnostics: DestinationEventReadDiagnostics;
   requestedWindow: SyncWindow;
   sourceCalendarIdsAtLocalRead: string[];
+  writeBackPolicies: ReconciliationScope["writeBackPolicies"];
 }
 
 /*
@@ -367,6 +378,7 @@ const createDestinationReconciliationScope = (
   withheldSourceEventStateIds: new Set(
     context.eventReadDiagnostics.overBudgetSourceEventStateIds,
   ),
+  writeBackPolicies: context.writeBackPolicies,
 });
 
 const createDestinationReconciliationWideEventFields = (
@@ -430,12 +442,18 @@ const createDestinationAttemptWideEventFields = (
 };
 
 const readDestinationReconciliationState = async (
-  readRemoteEvents: () => Promise<RemoteEvent[]>,
+  readRemoteEvents: () => Promise<RemoteEventListing>,
   readLocalState: () => Promise<DestinationLocalState>,
-): Promise<DestinationLocalState & { remoteEvents: RemoteEvent[] }> => {
-  const remoteEvents = await readRemoteEvents();
+): Promise<
+  DestinationLocalState & { remoteEvents: RemoteEvent[]; remoteRawItemCount: number }
+> => {
+  const listing = await readRemoteEvents();
   const localState = await readLocalState();
-  return { ...localState, remoteEvents };
+  return {
+    ...localState,
+    remoteEvents: listing.items,
+    remoteRawItemCount: listing.rawItemCount,
+  };
 };
 
 interface CalendarSyncCompletion {
@@ -463,11 +481,32 @@ interface CalendarSyncFailure {
   syncEvent?: Record<string, unknown>;
 }
 
+/*
+ * A destination attempt that returns before onCalendarComplete emits a wide event with no
+ * counts on it at all, which reads identically whether it mirrored nothing because there
+ * was nothing to mirror or because it never got far enough to look. Each way out says so.
+ */
+const DESTINATION_SKIP_REASONS = [
+  "destination_not_pushable",
+  "lock_not_acquired",
+  "destination_ineligible",
+  "provider_unresolved",
+] as const;
+
+type DestinationSkipReason = (typeof DESTINATION_SKIP_REASONS)[number];
+
+interface DestinationSyncSkip {
+  calendarId: string;
+  mappedSourceCount: number;
+  reason: DestinationSkipReason;
+}
+
 interface SyncCallbacks {
   onSyncEvent?: (event: Record<string, unknown>) => void;
   onProgress?: (update: SyncProgressUpdate) => void;
   onCalendarComplete?: (completion: CalendarSyncCompletion) => void;
   onCalendarError?: (failure: CalendarSyncFailure) => void;
+  onCalendarSkipped?: (skip: DestinationSyncSkip) => void;
 }
 
 interface DestinationAttempt {
@@ -619,6 +658,234 @@ const recordDestinationAttemptFailure = async (
   return [getErrorMessage(error)];
 };
 
+/*
+ * Unlike the sync window, the plan is re-checked at consumption: a lapsed plan must stop
+ * Keeper.sh writing to a real source calendar, and failing closed costs a delayed edit
+ * rather than an unauthorized write.
+ */
+const createWriteBackApplier = (
+  config: SyncConfig,
+  userId: string,
+  errors: string[],
+  probeDestinationEvent: CalendarSyncProvider["probeRemoteEvent"],
+) => createInboundWriteBackApplier({
+  abortSignal: config.abortSignal,
+  database: config.database,
+  ...(config.encryptionKey && { encryptionKey: config.encryptionKey }),
+  oauthConfig: config.oauthConfig,
+  onError: (error) => {
+    errors.push(getErrorMessage(error));
+  },
+  refreshLockStore: config.refreshLockStore,
+  userId,
+  /*
+   * Absent in deployments that have no queue to wake: write-back still applies, the
+   * other mirrors of the source just converge on their next scheduled pass.
+   */
+  ...(config.notifySourceChanged && { notifySourceChanged: config.notifySourceChanged }),
+  /*
+   * A destination that cannot say whether a copy is still there cannot delete anything
+   * on a source: the applier refuses without a confirmed not-found.
+   */
+  ...(probeDestinationEvent && { probeDestinationEvent }),
+});
+
+/*
+ * A blocked deletion that nobody can see is a support ticket. The mapping reverts to
+ * one-way until the user says whether the copies really are gone.
+ */
+/*
+ * The pair stops writing to the real calendar and says why. There is nothing to confirm:
+ * the values the destination replaced are only on the source now, so the safe answer is
+ * to write nothing and let the user decide whether two-way sync goes back on.
+ */
+const DELETE_CONFIRMATION_STATE = "delete_confirmation_required";
+
+/*
+ * A pass can trip both breakers on the same pair: copies vanished in bulk and other copies
+ * moved in bulk. The quarantine must not overwrite the question, because the two states are
+ * not equivalent. Quarantine reverts the pair to one-way, which lets the very copies the
+ * question is about be re-created on the destination and leaves the pending delete state on
+ * the mappings with nothing pointing at it; the question keeps the mode, pauses the pair and
+ * writes nothing anywhere until a human answers. Neither state writes to a source, so
+ * holding the question loses nothing: the edits stay held while it stands, and the edit
+ * breaker trips again on the first pass after it is answered.
+ */
+const createWriteBackHoldRecorder = (
+  database: BunSQLDatabase,
+  destinationCalendarId: string,
+) => async (request: WriteBackHoldRequest): Promise<void> => {
+  if (request.sourceCalendarIds.length === 0) {
+    return;
+  }
+  await database
+    .update(sourceDestinationMappingsTable)
+    .set({
+      writeBackState: "quarantined",
+      writeBackStateReason: request.reason,
+    })
+    .where(and(
+      eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
+      inArray(sourceDestinationMappingsTable.sourceCalendarId, request.sourceCalendarIds),
+      ne(sourceDestinationMappingsTable.writeBackState, DELETE_CONFIRMATION_STATE),
+    ));
+};
+
+/*
+ * A read that came back with at least one copy proves the credential still works and that
+ * the calendar id still points at the calendar the copies were in. It is stamped on every
+ * pair the read covered, and it is what "Delete the originals" is offered on once the
+ * copies have been observed missing.
+ */
+const createHealthyReadRecorder = (
+  database: BunSQLDatabase,
+  destinationCalendarId: string,
+) => async (sourceCalendarIds: string[]): Promise<void> => {
+  if (sourceCalendarIds.length === 0) {
+    return;
+  }
+  await database
+    .update(sourceDestinationMappingsTable)
+    .set({ lastHealthyReadAt: new Date() })
+    .where(and(
+      eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
+      inArray(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarIds),
+    ));
+};
+
+const COPIES_MISSING_REASON = "all_copies_missing";
+
+/*
+ * Only the blank read is stamped as a disappearance. The breaker trips on a read that
+ * returned items, so it carries its own evidence that the destination is readable and is
+ * not gated on a later read — which is also the route out for a destination the user
+ * really did empty.
+ */
+const buildDisappearanceObservation = (reason: string): { copiesMissingObservedAt: Date } | null => {
+  if (reason !== COPIES_MISSING_REASON) {
+    return null;
+  }
+  return { copiesMissingObservedAt: new Date() };
+};
+
+const createDeleteConfirmationRecorder = (
+  database: BunSQLDatabase,
+  destinationCalendarId: string,
+) => async (request: DeleteConfirmationRequest): Promise<void> => {
+  if (request.sourceCalendarIds.length === 0) {
+    return;
+  }
+  await database
+    .update(sourceDestinationMappingsTable)
+    .set({
+      ...buildDisappearanceObservation(request.reason),
+      writeBackState: "delete_confirmation_required",
+      writeBackStateReason: request.reason,
+    })
+    .where(and(
+      eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
+      inArray(sourceDestinationMappingsTable.sourceCalendarId, request.sourceCalendarIds),
+    ));
+};
+
+const PLAN_DOWNGRADED_REASON = "plan_downgraded";
+
+/*
+ * The pause a lapsed plan installs is the one quarantine whose cause ends without the
+ * user doing anything, and nothing else in the product ever clears it: the dashboard
+ * renders the stored mode as still selected, and pressing it changes nothing. Left here,
+ * a subscriber who missed a payment for a day never writes back again. Every other
+ * quarantine reason is a safety stop about the calendars themselves, and paying for the
+ * plan is no answer to any of them, so only this one is lifted.
+ */
+const restorePlanQuarantinedPairs = async (
+  database: BunSQLDatabase,
+  destinationCalendarId: string,
+): Promise<void> => {
+  const paused = await database
+    .select({
+      sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId,
+      writeBackState: sourceDestinationMappingsTable.writeBackState,
+      writeBackStateReason: sourceDestinationMappingsTable.writeBackStateReason,
+    })
+    .from(sourceDestinationMappingsTable)
+    .where(eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId));
+
+  const restorable = paused
+    .filter((pair) =>
+      pair.writeBackState === "quarantined"
+      && pair.writeBackStateReason === PLAN_DOWNGRADED_REASON)
+    .map((pair) => pair.sourceCalendarId);
+
+  if (restorable.length === 0) {
+    return;
+  }
+
+  await database
+    .update(sourceDestinationMappingsTable)
+    .set({ writeBackState: "ok", writeBackStateReason: null })
+    .where(and(
+      eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
+      inArray(sourceDestinationMappingsTable.sourceCalendarId, restorable),
+    ));
+};
+
+/*
+ * A plan check that prevents a write fails closed, unlike the window clamp above: the
+ * cost is a delayed edit, where failing open is an unauthorised write to a real calendar.
+ */
+const resolveWriteBackPolicies = async (
+  database: BunSQLDatabase,
+  destinationCalendarId: string,
+  plan: Plan,
+): Promise<Map<string, WriteBackPolicy>> => {
+  if (plan !== "pro") {
+    /*
+     * A pair standing on a delete question is downgraded with the rest. The question is a
+     * two-way question — its destructive answer is refused without the plan, and the hold it
+     * installs lives in a policy this branch no longer returns — so leaving the state alone
+     * leaves the user reading that their copies are held while every one of them is rebuilt
+     * from the source, under two buttons that answer nothing. Saying the plan lapsed is the
+     * one thing that is true, and the rebuild it announces is the same thing the harmless
+     * answer would have done. A pair already quarantined keeps the reason it stopped for:
+     * paying for the plan is no answer to a safety stop about the calendars themselves.
+     */
+    const downgraded = await database
+      .update(sourceDestinationMappingsTable)
+      .set({
+        deleteConfirmationApprovedAt: null,
+        writeBackState: "quarantined",
+        writeBackStateReason: PLAN_DOWNGRADED_REASON,
+      })
+      .where(and(
+        eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
+        ne(sourceDestinationMappingsTable.writeBackMode, "off"),
+        ne(sourceDestinationMappingsTable.writeBackState, "quarantined"),
+      ))
+      .returning({ sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId });
+    await clearDestinationWitnesses(
+      database,
+      destinationCalendarId,
+      downgraded.map((pair) => pair.sourceCalendarId),
+    );
+    return new Map<string, WriteBackPolicy>();
+  }
+  await restorePlanQuarantinedPairs(database, destinationCalendarId);
+  return getWriteBackPoliciesForDestination(database, destinationCalendarId);
+};
+
+const countMappedSources = async (
+  database: Pick<BunSQLDatabase, "select">,
+  destinationCalendarId: string,
+): Promise<number> => {
+  const mappings = await database
+    .select({ sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId })
+    .from(sourceDestinationMappingsTable)
+    .where(eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId));
+
+  return mappings.length;
+};
+
 const syncDestinationsForUser = async (
   userId: string,
   config: SyncConfig,
@@ -640,7 +907,14 @@ const syncDestinationsForUser = async (
       ),
     );
 
+  const mappedSourceCount = await countMappedSources(database, config.destinationCalendarId);
+
+  const reportSkip = (calendarId: string, reason: DestinationSkipReason): void => {
+    callbacks?.onCalendarSkipped?.({ calendarId, mappedSourceCount, reason });
+  };
+
   if (destinations.length === 0) {
+    reportSkip(config.destinationCalendarId, "destination_not_pushable");
     return EMPTY_RESULT;
   }
 
@@ -665,6 +939,7 @@ const syncDestinationsForUser = async (
       ));
       const lockResult = lockAcquire.value;
       if (!lockResult.acquired) {
+        reportSkip(destinationCandidate.calendarId, "lock_not_acquired");
         return;
       }
 
@@ -683,6 +958,7 @@ const syncDestinationsForUser = async (
         ));
         const currentDestination = destinationLookup.value;
         if (!currentDestination || !isDestinationAttemptEligible(currentDestination)) {
+          reportSkip(destinationCandidate.calendarId, "destination_ineligible");
           return;
         }
         const destination = currentDestination;
@@ -703,6 +979,7 @@ const syncDestinationsForUser = async (
         const syncProvider = providerResolve.value;
 
         if (!syncProvider) {
+          reportSkip(destinationCandidate.calendarId, "provider_unresolved");
           return;
         }
 
@@ -712,6 +989,11 @@ const syncDestinationsForUser = async (
         const sourceCalendarIds = await getMappedSourceCalendarIds(
           database,
           destination.calendarId,
+        );
+        const writeBackPolicies = await resolveWriteBackPolicies(
+          database,
+          destination.calendarId,
+          config.plan,
         );
         /*
          * The stored ranges are the window, with no plan clamp applied here. Only a Pro
@@ -855,6 +1137,18 @@ const syncDestinationsForUser = async (
           readState: () => Promise.resolve(reconciliationState),
           isCurrent: isAttemptCurrent,
           flush: createDatabaseFlush(database),
+          applyInboundChanges: createWriteBackApplier(
+            config,
+            destination.userId,
+            errors,
+            providerRef.probeRemoteEvent,
+          ),
+          requestDeleteConfirmation: createDeleteConfirmationRecorder(
+            database,
+            destination.calendarId,
+          ),
+          recordHealthyRead: createHealthyReadRecorder(database, destination.calendarId),
+          holdWriteBack: createWriteBackHoldRecorder(database, destination.calendarId),
           onProgress: callbacks?.onProgress,
           onSyncEvent: (event) => {
             const enrichedEvent = {
@@ -885,6 +1179,7 @@ const syncDestinationsForUser = async (
             eventReadDiagnostics,
             requestedWindow,
             sourceCalendarIdsAtLocalRead,
+            writeBackPolicies,
           }),
         });
 
@@ -952,13 +1247,24 @@ const syncDestinationsForUser = async (
 
 export {
   createAggregateAuthorityWindow,
+  createDeleteConfirmationRecorder,
+  createHealthyReadRecorder,
   createDestinationAttemptWideEventFields,
   createDestinationReconciliationScope,
   createDestinationReconciliationWideEventFields,
+  createWriteBackHoldRecorder,
   OVER_BUDGET_SERIES_UID_SAMPLE_SIZE,
   readDestinationReconciliationState,
   resolveSourceAuthority,
   resolveStoredSourceCoverage,
+  resolveWriteBackPolicies,
   syncDestinationsForUser,
 };
-export type { CalendarSyncCompletion, CalendarSyncFailure, SyncConfig, SyncDestinationsResult };
+export type {
+  CalendarSyncCompletion,
+  CalendarSyncFailure,
+  DestinationSkipReason,
+  DestinationSyncSkip,
+  SyncConfig,
+  SyncDestinationsResult,
+};

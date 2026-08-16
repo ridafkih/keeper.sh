@@ -52,6 +52,7 @@ import { Route as marketingChangelogSlugRouteImport } from './../../routes/(mark
 import { Route as marketingBlogSlugRouteImport } from './../../routes/(marketing)/blog/$slug'
 import { Route as dashboardDashboardReportRouteImport } from './../../routes/(dashboard)/dashboard/report'
 import { Route as dashboardDashboardFeedbackRouteImport } from './../../routes/(dashboard)/dashboard/feedback'
+import { Route as dashboardDashboardDeletedEventsRouteImport } from './../../routes/(dashboard)/dashboard/deleted-events'
 import { Route as oauthDashboardConnectRouteRouteImport } from './../../routes/(oauth)/dashboard/connect/route'
 import { Route as dashboardDashboardSettingsRouteRouteImport } from './../../routes/(dashboard)/dashboard/settings/route'
 import { Route as dashboardDashboardIcalRouteRouteImport } from './../../routes/(dashboard)/dashboard/ical/route'
@@ -294,6 +295,12 @@ const dashboardDashboardFeedbackRoute =
     path: '/dashboard/feedback',
     getParentRoute: () => dashboardRouteRoute,
   } as any)
+const dashboardDashboardDeletedEventsRoute =
+  dashboardDashboardDeletedEventsRouteImport.update({
+    id: '/dashboard/deleted-events',
+    path: '/dashboard/deleted-events',
+    getParentRoute: () => dashboardRouteRoute,
+  } as any)
 const oauthDashboardConnectRouteRoute =
   oauthDashboardConnectRouteRouteImport.update({
     id: '/connect',
@@ -474,6 +481,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/connect': typeof oauthDashboardConnectRouteRouteWithChildren
   '/dashboard/ical': typeof dashboardDashboardIcalRouteRouteWithChildren
   '/dashboard/settings': typeof dashboardDashboardSettingsRouteRouteWithChildren
+  '/dashboard/deleted-events': typeof dashboardDashboardDeletedEventsRoute
   '/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/dashboard/report': typeof dashboardDashboardReportRoute
   '/blog/$slug': typeof marketingBlogSlugRoute
@@ -536,6 +544,7 @@ export interface FileRoutesByTo {
   '/': typeof marketingIndexRoute
   '/dashboard/accounts': typeof dashboardDashboardAccountsRouteRouteWithChildren
   '/dashboard/connect': typeof dashboardDashboardConnectIndexRoute
+  '/dashboard/deleted-events': typeof dashboardDashboardDeletedEventsRoute
   '/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/dashboard/report': typeof dashboardDashboardReportRoute
   '/blog/$slug': typeof marketingBlogSlugRoute
@@ -606,6 +615,7 @@ export interface FileRoutesById {
   '/(dashboard)/dashboard/ical': typeof dashboardDashboardIcalRouteRouteWithChildren
   '/(dashboard)/dashboard/settings': typeof dashboardDashboardSettingsRouteRouteWithChildren
   '/(oauth)/dashboard/connect': typeof oauthDashboardConnectRouteRouteWithChildren
+  '/(dashboard)/dashboard/deleted-events': typeof dashboardDashboardDeletedEventsRoute
   '/(dashboard)/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/(dashboard)/dashboard/report': typeof dashboardDashboardReportRoute
   '/(marketing)/blog/$slug': typeof marketingBlogSlugRoute
@@ -674,6 +684,7 @@ export interface FileRouteTypes {
     | '/dashboard/connect'
     | '/dashboard/ical'
     | '/dashboard/settings'
+    | '/dashboard/deleted-events'
     | '/dashboard/feedback'
     | '/dashboard/report'
     | '/blog/$slug'
@@ -736,6 +747,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard/accounts'
     | '/dashboard/connect'
+    | '/dashboard/deleted-events'
     | '/dashboard/feedback'
     | '/dashboard/report'
     | '/blog/$slug'
@@ -805,6 +817,7 @@ export interface FileRouteTypes {
     | '/(dashboard)/dashboard/ical'
     | '/(dashboard)/dashboard/settings'
     | '/(oauth)/dashboard/connect'
+    | '/(dashboard)/dashboard/deleted-events'
     | '/(dashboard)/dashboard/feedback'
     | '/(dashboard)/dashboard/report'
     | '/(marketing)/blog/$slug'
@@ -1159,6 +1172,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof dashboardDashboardFeedbackRouteImport
       parentRoute: typeof dashboardRouteRoute
     }
+    '/(dashboard)/dashboard/deleted-events': {
+      id: '/(dashboard)/dashboard/deleted-events'
+      path: '/dashboard/deleted-events'
+      fullPath: '/dashboard/deleted-events'
+      preLoaderRoute: typeof dashboardDashboardDeletedEventsRouteImport
+      parentRoute: typeof dashboardRouteRoute
+    }
     '/(oauth)/dashboard/connect': {
       id: '/(oauth)/dashboard/connect'
       path: '/connect'
@@ -1445,6 +1465,7 @@ interface dashboardRouteRouteChildren {
   dashboardDashboardConnectRouteRoute: typeof dashboardDashboardConnectRouteRouteWithChildren
   dashboardDashboardIcalRouteRoute: typeof dashboardDashboardIcalRouteRouteWithChildren
   dashboardDashboardSettingsRouteRoute: typeof dashboardDashboardSettingsRouteRouteWithChildren
+  dashboardDashboardDeletedEventsRoute: typeof dashboardDashboardDeletedEventsRoute
   dashboardDashboardFeedbackRoute: typeof dashboardDashboardFeedbackRoute
   dashboardDashboardReportRoute: typeof dashboardDashboardReportRoute
   dashboardDashboardIndexRoute: typeof dashboardDashboardIndexRoute
@@ -1462,6 +1483,7 @@ const dashboardRouteRouteChildren: dashboardRouteRouteChildren = {
     dashboardDashboardIcalRouteRouteWithChildren,
   dashboardDashboardSettingsRouteRoute:
     dashboardDashboardSettingsRouteRouteWithChildren,
+  dashboardDashboardDeletedEventsRoute: dashboardDashboardDeletedEventsRoute,
   dashboardDashboardFeedbackRoute: dashboardDashboardFeedbackRoute,
   dashboardDashboardReportRoute: dashboardDashboardReportRoute,
   dashboardDashboardIndexRoute: dashboardDashboardIndexRoute,

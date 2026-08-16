@@ -45,6 +45,7 @@ const handleEntitlementsRoute = async (
     },
     canCustomizeIcalFeed: plan === "pro",
     canUseEventFilters: plan === "pro",
+    canUseTwoWaySync: plan === "pro",
     feeds: {
       current: feedCount,
       limit: toReportedLimit(dependencies.getFeedLimit(plan)),

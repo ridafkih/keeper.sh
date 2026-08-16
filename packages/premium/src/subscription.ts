@@ -34,6 +34,7 @@ interface PremiumService {
   canAddFeed: (userId: string, currentCount: number) => Promise<boolean>;
   canUseEventFilters: (userId: string) => Promise<boolean>;
   canCustomizeIcalFeed: (userId: string) => Promise<boolean>;
+  canUseTwoWaySync: (userId: string) => Promise<boolean>;
 }
 
 const createPremiumService = (config: PremiumConfig): PremiumService => {
@@ -114,12 +115,18 @@ const createPremiumService = (config: PremiumConfig): PremiumService => {
     return subscription.plan === "pro";
   };
 
+  const canUseTwoWaySync = async (userId: string): Promise<boolean> => {
+    const subscription = await getUserSubscription(userId);
+    return subscription.plan === "pro";
+  };
+
   return {
     canAddAccount,
     canAddFeed,
     canAddMapping,
     canCustomizeIcalFeed,
     canUseEventFilters,
+    canUseTwoWaySync,
     getAccountLimit,
     getFeedLimit,
     getMappingLimit,

@@ -1,6 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CronOptions } from "cronbake";
 
+const COLD_IMPORT_TIMEOUT_MS = 30_000;
+
 const flushes: number[] = [];
 const environment: { WEBHOOK_PUBLIC_URL?: string } = {};
 
@@ -47,7 +49,7 @@ vi.mock("../../src/utils/enqueue-destination-syncs", () => ({
 
 beforeAll(async () => {
   ({ default: drainJob } = await import("../../src/jobs/drain-pending-ingest"));
-});
+}, COLD_IMPORT_TIMEOUT_MS);
 
 beforeEach(() => {
   flushes.length = 0;

@@ -5,6 +5,7 @@ import type {
   EventMapping,
   MaterializedSyncableEvent,
   RemoteEvent,
+  RemoteEventListing,
 } from "../../../src/index";
 import { createEditableEventContentHash } from "../../../src/core/events/content-hash";
 import { generateDeterministicEventUid } from "../../../src/core/events/identity";
@@ -98,11 +99,11 @@ const createCalDAVHarness = (events: MaterializedSyncableEvent[]) => {
   const rejections: string[] = [];
   const counters = { deletes: 0, writes: 0 };
 
-  const listRemoteEvents = (): Promise<RemoteEvent[]> => {
+  const listRemoteEvents = (): Promise<RemoteEventListing> => {
     const parsed = parseICalCalendarsToRemoteEvents([...resources.values()], {
       rejectUnsupportedRecurrenceDates: false,
     });
-    return Promise.resolve(parsed.events.map((event): RemoteEvent => ({
+    const items = parsed.events.map((event): RemoteEvent => ({
       deleteId: event.uid,
       editableAvailability: event.availability,
       editableContentHash: createEditableEventContentHash({
@@ -119,7 +120,8 @@ const createCalDAVHarness = (events: MaterializedSyncableEvent[]) => {
       startTime: event.startTime,
       supportedAvailabilities: ["busy", "free"],
       uid: event.uid,
-    })));
+    }));
+    return Promise.resolve({ items, rawItemCount: items.length });
   };
 
   const provider: CalendarSyncProvider = {
@@ -162,11 +164,15 @@ const createCalDAVHarness = (events: MaterializedSyncableEvent[]) => {
       flush: buildMappingFlush(mappings),
       isCurrent: () => Promise.resolve(true),
       provider,
-      readState: async () => ({
-        existingMappings: [...mappings],
-        localEvents: events,
-        remoteEvents: await listRemoteEvents(),
-      }),
+      readState: async () => {
+        const listing = await listRemoteEvents();
+        return {
+          existingMappings: [...mappings],
+          localEvents: events,
+          remoteEvents: listing.items,
+          remoteRawItemCount: listing.rawItemCount,
+        };
+      },
       reconciliationScope: WIDE_SCOPE,
       userId: "user-1",
     }),

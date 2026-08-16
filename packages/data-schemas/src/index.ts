@@ -101,7 +101,13 @@ type GoogleAttendee = typeof googleAttendeeSchema.infer;
 
 const googleEventWithAttendeesSchema = googleEventSchema.and({
   "attendees?": googleAttendeeSchema.array(),
-  "organizer?": { "email?": "string", "displayName?": "string" },
+  "attendeesOmitted?": "boolean",
+  "creator?": { "email?": "string", "displayName?": "string", "self?": "boolean" },
+  "organizer?": {
+    "displayName?": "string",
+    "email?": "string",
+    "self?": "boolean",
+  },
 });
 type GoogleEventWithAttendees = typeof googleEventWithAttendeesSchema.infer;
 
@@ -180,6 +186,25 @@ const outlookEventSchema = type({
   "type?": "string",
 });
 type OutlookEvent = typeof outlookEventSchema.infer;
+
+const outlookAttendeeSchema = type({
+  "emailAddress?": { "address?": "string", "name?": "string" },
+  "status?": { "response?": "string" },
+  "type?": "string",
+});
+type OutlookAttendee = typeof outlookAttendeeSchema.infer;
+
+const outlookEventWithAttendeesSchema = outlookEventSchema.and({
+  "attendees?": outlookAttendeeSchema.array(),
+  "isOrganizer?": "boolean",
+  "organizer?": { "emailAddress?": { "address?": "string", "name?": "string" } },
+});
+type OutlookEventWithAttendees = typeof outlookEventWithAttendeesSchema.infer;
+
+const outlookEventWithAttendeesListSchema = type({
+  "value?": outlookEventWithAttendeesSchema.array(),
+});
+type OutlookEventWithAttendeesList = typeof outlookEventWithAttendeesListSchema.infer;
 
 const outlookEventListSchema = type({
   "@odata.deltaLink?": "string",
@@ -456,6 +481,18 @@ const DEFAULT_SOURCE_SYNC_RULES = {
   includeInIcalFeed: true,
 } as const;
 
+/*
+ * "push" on a source calendar is what two-way sync is offered on, so a calendar the
+ * account may only read must never carry it: the offer would promise the user a write the
+ * provider refuses. Every path that records a source calendar derives it here.
+ */
+const resolveSourceCalendarCapabilities = (writable: boolean): string[] => {
+  if (writable) {
+    return ["pull", "push"];
+  }
+  return ["pull"];
+};
+
 const applySourceSyncDefaults = <TValues extends object>(
   values: TValues,
 ): TValues & typeof DEFAULT_SOURCE_SYNC_RULES => ({
@@ -504,12 +541,141 @@ const googleWatchHeadersSchema = type({
 });
 type GoogleWatchHeaders = typeof googleWatchHeadersSchema.infer;
 
+/*
+ * The one description of what two-way sync writes to a real calendar. The applier builds
+ * its payload from this list and the dashboard builds its sentence from it, so a field the
+ * pass can write to a source event cannot be one the product forgot to tell the user about:
+ * adding a name to WriteBackFieldName without a label here fails to type-check.
+ */
+const WRITE_BACK_PROJECTION_IDENTITY_FIELDS = [
+  "endTime",
+  "isAllDay",
+  "startTime",
+  "startTimeZone",
+] as const;
+
+const WRITE_BACK_REDACTABLE_FIELDS = [
+  { exclusion: "excludeEventName", field: "summary" },
+  { exclusion: "excludeEventDescription", field: "description" },
+  { exclusion: "excludeEventLocation", field: "location" },
+] as const;
+
+type WriteBackFieldName =
+  | typeof WRITE_BACK_PROJECTION_IDENTITY_FIELDS[number]
+  | typeof WRITE_BACK_REDACTABLE_FIELDS[number]["field"];
+
+interface WriteBackFieldExclusions {
+  excludeEventDescription: boolean;
+  excludeEventLocation: boolean;
+  excludeEventName: boolean;
+}
+
+/*
+ * The zone is not an axis a user edits: it travels beside the instants so a provider handed
+ * a bare instant does not re-home the event, and naming it in the sentence would describe a
+ * change nobody can make.
+ */
+const WRITE_BACK_FIELD_LABELS: Record<WriteBackFieldName, string | null> = {
+  description: "description",
+  endTime: "time",
+  isAllDay: "all-day",
+  location: "location",
+  startTime: "date",
+  startTimeZone: null,
+  summary: "title",
+};
+
+const WRITE_BACK_DISCLOSURE_ORDER: WriteBackFieldName[] = [
+  "summary",
+  "description",
+  "location",
+  "startTime",
+  "endTime",
+  "isAllDay",
+  "startTimeZone",
+];
+
+const resolveWriteBackFieldNames = (
+  exclusions: WriteBackFieldExclusions,
+): Set<WriteBackFieldName> =>
+  new Set<WriteBackFieldName>([
+    ...WRITE_BACK_PROJECTION_IDENTITY_FIELDS,
+    ...WRITE_BACK_REDACTABLE_FIELDS
+      .filter(({ exclusion }) => !exclusions[exclusion])
+      .map(({ field }) => field),
+  ]);
+
+/*
+ * Two-way sync writes to the source calendar, so the account must hold the same write
+ * capability every other write path requires — a calendar shared read-only carries "pull"
+ * alone and would reject every write-back at the provider. The rule is declared once so
+ * the dashboard cannot offer a control the API refuses, or the reverse.
+ */
+const UNWRITABLE_SOURCE_CALENDAR_TYPE = "ical";
+
+const isWriteBackCapableSource = (
+  source:
+    | {
+      calendarType: string;
+      capabilities: readonly string[];
+    }
+    | null,
+): boolean => {
+  if (!source) {
+    return false;
+  }
+  return source.calendarType !== UNWRITABLE_SOURCE_CALENDAR_TYPE
+    && source.capabilities.includes("pull")
+    && source.capabilities.includes("push");
+};
+
+/*
+ * A source can lose write access long after two-way was switched on — a shared calendar
+ * regraded to reader, a revoked role — and rediscovery rewrites the capabilities without
+ * touching the mode the pair stored. The stored mode is kept so it returns with the
+ * access, and every reader resolves it through here so an unwritable source is offered as
+ * off to the screen and to the write-back pass alike.
+ */
+/*
+ * Pausing a calendar is the documented way to make Keeper.sh stop touching it: nothing is
+ * read from it or written to it while paused. A paused source is also a source Keeper.sh
+ * has stopped re-reading, so the stored snapshot it would compare against is frozen and
+ * every "refuse if the original moved" guard downstream is comparing it against itself.
+ */
+const resolveWritableWriteBackMode = <Mode extends string>(
+  writeBackMode: Mode,
+  source:
+    | {
+      calendarType: string;
+      capabilities: readonly string[];
+      disabled?: boolean | null;
+      writeBackIdentity?: string | null;
+    }
+    | null,
+): Mode | "off" => {
+  if (source?.disabled) {
+    return "off";
+  }
+  if (isWriteBackCapableSource(source)) {
+    return writeBackMode;
+  }
+  return "off";
+};
+
+const describeWriteBackFields = (exclusions: WriteBackFieldExclusions): string[] => {
+  const eligible = resolveWriteBackFieldNames(exclusions);
+  return WRITE_BACK_DISCLOSURE_ORDER
+    .filter((field) => eligible.has(field))
+    .flatMap((field) => WRITE_BACK_FIELD_LABELS[field] ?? []);
+};
+
 export {
   DEFAULT_FEED_NAME,
   DEFAULT_FEED_SETTINGS,
   DEFAULT_SOURCE_SYNC_RULES,
   apiErrorBodySchema,
   applySourceSyncDefaults,
+  resolveSourceCalendarCapabilities,
   readApiErrorMessage,
   DEFAULT_FUTURE_SYNC_RANGE,
   DEFAULT_HISTORIC_SYNC_RANGE,
@@ -534,6 +700,8 @@ export {
   microsoftUserInfoSchema,
   outlookEventSchema,
   outlookEventListSchema,
+  outlookEventWithAttendeesSchema,
+  outlookEventWithAttendeesListSchema,
   outlookCalendarViewEventSchema,
   outlookCalendarViewListSchema,
   microsoftApiErrorSchema,
@@ -567,6 +735,12 @@ export {
   graphNotificationCollectionSchema,
   graphNotificationSchema,
   pushChannelStateSchema,
+  describeWriteBackFields,
+  isWriteBackCapableSource,
+  resolveWritableWriteBackMode,
+  resolveWriteBackFieldNames,
+  WRITE_BACK_DISCLOSURE_ORDER,
+  WRITE_BACK_FIELD_LABELS,
 };
 
 export type {
@@ -587,7 +761,10 @@ export type {
   MicrosoftTokenResponse,
   MicrosoftUserInfo,
   OutlookEvent,
+  OutlookAttendee,
   OutlookEventList,
+  OutlookEventWithAttendees,
+  OutlookEventWithAttendeesList,
   OutlookCalendarViewEvent,
   OutlookCalendarViewList,
   MicrosoftApiError,
@@ -619,4 +796,6 @@ export type {
   GraphNotification,
   GraphNotificationCollection,
   PushChannelStateValue,
+  WriteBackFieldExclusions,
+  WriteBackFieldName,
 };

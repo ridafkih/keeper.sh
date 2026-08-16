@@ -250,14 +250,13 @@ const deleteCalDAVEvent = async (
         calendarObject: { url: objectUrl },
       });
     } catch (error) {
-      if (error instanceof Error && "status" in error) {
-        const { status } = error;
-        if (status !== HTTP_STATUS.NOT_FOUND) {
-          throw error;
-        }
+      if (
+        !(error instanceof Error)
+        || !("status" in error)
+        || error.status !== HTTP_STATUS.NOT_FOUND
+      ) {
+        throw error;
       }
-
-      throw error;
     }
 
     return { success: true };

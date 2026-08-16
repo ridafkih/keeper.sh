@@ -49,7 +49,7 @@ const createHarness = () => {
       }
       return Promise.resolve(eventIds.map(() => ({ success: true })));
     },
-    listRemoteEvents: () => Promise.resolve([...remoteEvents]),
+    listRemoteEvents: () => Promise.resolve({ items: [...remoteEvents], rawItemCount: remoteEvents.length }),
     normalizeEvent: normalizeGoogleEvent,
     pushEvents: (events) => Promise.resolve(events.map((event, index) => {
       pushedRanges.push({ endTime: event.endTime, startTime: event.startTime });
@@ -102,6 +102,7 @@ const createHarness = () => {
       existingMappings: [...mappings],
       localEvents: [zeroDurationEvent],
       remoteEvents: [...remoteEvents],
+      remoteRawItemCount: remoteEvents.length,
     }),
     reconciliationScope: TEST_RECONCILIATION_SCOPE,
     userId: "user-1",

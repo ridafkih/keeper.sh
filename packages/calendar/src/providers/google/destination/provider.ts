@@ -9,6 +9,9 @@ import type {
   PushEchoComparison,
   PushResult,
   RemoteEvent,
+  RemoteEventListing,
+  RemoteEventPresence,
+  RemoteEventReference,
 } from "../../../core/types";
 import {
   googleApiErrorSchema,
@@ -19,6 +22,7 @@ import type { GoogleEvent } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS, PROVIDER_PUSH_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
 import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
 import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS, GONE_STATUS } from "../shared/api";
+import { listUserCalendars } from "../source/utils/list-calendars";
 import { withBackoff } from "../../../core/utils/backoff";
 import { executeBatchChunked } from "../shared/batch";
 import { isRateLimitApiError, parseGoogleApiError } from "../shared/errors";
@@ -55,6 +59,9 @@ class GoogleCalendarApiError extends Error {
     this.apiError = parseGoogleApiError(body);
   }
 }
+
+const EMPTY_PROBE_RESULT = 0;
+const NO_UNREADABLE_ENTRIES = 0;
 
 const isDirectEventId = (identifier: string): boolean => !identifier.includes("@");
 
@@ -430,6 +437,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   ): Promise<{
     items: RemoteEvent[];
     nextPageToken: string | null;
+    rawItemCount: number;
   }> => {
     if (config.rateLimiter) {
       await config.rateLimiter.acquire(1, config.signal);
@@ -464,7 +472,8 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     const data = googleEventListSchema.assert(body);
 
     const items: RemoteEvent[] = [];
-    for (const event of data.items ?? []) {
+    const rawItems = data.items ?? [];
+    for (const event of rawItems) {
       if (!event.iCalUID || !isKeeperEvent(event.iCalUID)) {
         continue;
       }
@@ -472,11 +481,18 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       if (!observation) {
         continue;
       }
+      const isAllDay = Boolean(event.start?.date);
       items.push({
         deleteId: event.id ?? event.iCalUID,
         editableAvailability: parseGoogleAvailability(event),
         editableContent: observation.content,
         editableContentHash: hashEditableEventContentSnapshot(observation.content),
+        editableFields: {
+          isAllDay,
+          summary: event.summary ?? "",
+          ...(event.description && { description: event.description }),
+          ...(event.location && { location: event.location }),
+        },
         endTime: observation.endTime,
         isKeeperEvent: true,
         supportedAvailabilities: ["busy", "free"],
@@ -485,19 +501,24 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       });
     }
 
-    return { items, nextPageToken: data.nextPageToken ?? null };
+    return { items, nextPageToken: data.nextPageToken ?? null, rawItemCount: rawItems.length };
   };
 
   const listRemoteEvents = async (
     options: ListRemoteEventsOptions,
-  ): Promise<RemoteEvent[]> => {
+  ): Promise<RemoteEventListing> => {
     await refreshIfNeeded();
     const remoteEvents: RemoteEvent[] = [];
+    let rawItemCount = 0;
     let pageToken: string | null = null;
 
     do {
       const currentPageToken: string | null = pageToken;
-      const page: { items: RemoteEvent[]; nextPageToken: string | null } = await withBackoff(
+      const page: {
+        items: RemoteEvent[];
+        nextPageToken: string | null;
+        rawItemCount: number;
+      } = await withBackoff(
         () => fetchRemoteEventsPage(options, currentPageToken),
         {
           signal: config.signal,
@@ -506,13 +527,107 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         },
       );
       remoteEvents.push(...page.items);
+      rawItemCount += page.rawItemCount;
       pageToken = page.nextPageToken;
     } while (pageToken);
 
-    return remoteEvents;
+    return { items: remoteEvents, rawItemCount };
   };
 
-  return { deleteEvents, listRemoteEvents, normalizeEvent: normalizeGoogleEvent, pushEvents };
+  /*
+   * A missing event is an OK answer holding no items. The 404 and 410 this URL can return
+   * are the collection's, not the event's, and a calendar that has been deleted or whose
+   * access was revoked answers them for every copy in it at once.
+   */
+  const findLiveCopyIn = async (
+    externalCalendarId: string,
+    uid: string,
+  ): Promise<RemoteEventPresence> => {
+    const url = new URL(
+      `calendars/${encodeURIComponent(externalCalendarId)}/events`,
+      GOOGLE_CALENDAR_API,
+    );
+    url.searchParams.set("iCalUID", uid);
+    url.searchParams.set("showDeleted", "false");
+
+    const response = await fetchWithTimeout(
+      url,
+      { headers: { Authorization: `Bearer ${tokenState.accessToken}` }, method: "GET" },
+      PROVIDER_PUSH_REQUEST_TIMEOUT_MS,
+      config.signal,
+    );
+
+    if (!response.ok) {
+      throw new GoogleCalendarApiError(response.status, await response.text());
+    }
+
+    const { items } = googleEventListSchema.assert(await response.json());
+    const live = (items ?? []).filter((item) => item.status !== "cancelled");
+    if (live.length === EMPTY_PROBE_RESULT) {
+      return "absent";
+    }
+    return "present";
+  };
+
+  /*
+   * A copy missing from a page of the list read is a candidate, never evidence. Only a
+   * targeted lookup that comes back with nothing — or with nothing but cancelled
+   * occurrences — justifies destroying the original on the source.
+   *
+   * Google scopes every read to one calendar, so the destination alone cannot tell a
+   * deleted copy from one the user dragged into another calendar of the same account: a
+   * move keeps the event and its iCalUID, and it is still a copy the user can see. Every
+   * calendar the account can read is asked before the original is destroyed, and a
+   * calendar list that cannot be read is refused rather than assumed empty.
+   */
+  const probeRemoteEvent = async (
+    reference: RemoteEventReference,
+  ): Promise<RemoteEventPresence> => {
+    await refreshIfNeeded();
+    const inDestination = await findLiveCopyIn(config.externalCalendarId, reference.uid);
+    if (inDestination === "present") {
+      return "present";
+    }
+
+    let unreadableEntries = NO_UNREADABLE_ENTRIES;
+    const calendars = await listUserCalendars(tokenState.accessToken, {
+      onInvalidEntries: (count) => {
+        unreadableEntries = count;
+      },
+      ...(config.signal && { signal: config.signal }),
+    });
+    for (const calendar of calendars) {
+      if (calendar.id === config.externalCalendarId) {
+        continue;
+      }
+      const elsewhere = await findLiveCopyIn(calendar.id, reference.uid);
+      if (elsewhere === "present") {
+        return "present";
+      }
+    }
+    /*
+     * An entry the schema could not parse is a calendar this sweep never asked, and the
+     * copy could be sitting in it. A whole list that fails to load is already refused
+     * rather than read as an empty account; one calendar missing from the list is the same
+     * ignorance arriving in a smaller piece, and it is checked after the sweep so that a
+     * copy found in a calendar that did parse still answers straight away.
+     */
+    if (unreadableEntries > NO_UNREADABLE_ENTRIES) {
+      throw new Error(
+        `${unreadableEntries} of the account's calendars could not be read, so Keeper.sh`
+        + " cannot tell whether the copy still exists",
+      );
+    }
+    return "absent";
+  };
+
+  return {
+    deleteEvents,
+    listRemoteEvents,
+    normalizeEvent: normalizeGoogleEvent,
+    probeRemoteEvent,
+    pushEvents,
+  };
 };
 
 export { createGoogleSyncProvider };

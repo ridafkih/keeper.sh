@@ -37,4 +37,10 @@ const createPushSyncQueue = (connection: ConnectionOptions): Queue<PushSyncJobPa
   });
 
 export { PUSH_SYNC_QUEUE_NAME, USER_TIMEOUT_MS, createPushSyncQueue };
+export { runEnqueuePushSync } from "./enqueue-push-sync";
 export type { PushSyncJobPayload, PushSyncJobResult, PushSyncTrigger };
+export type {
+  EnqueuePushSyncDependencies,
+  PushSyncJobOptions,
+  PushSyncQueue,
+} from "./enqueue-push-sync";

@@ -59,7 +59,7 @@ describe("readDestinationReconciliationState", () => {
     const state = await readDestinationReconciliationState(
       () => {
         order.push("remote");
-        return Promise.resolve([]);
+        return Promise.resolve({ items: [], rawItemCount: 0 });
       },
       () => {
         order.push("local-transaction");
@@ -68,7 +68,12 @@ describe("readDestinationReconciliationState", () => {
     );
 
     expect(order).toEqual(["remote", "local-transaction"]);
-    expect(state).toEqual({ existingMappings: [], localEvents: [], remoteEvents: [] });
+    expect(state).toEqual({
+      existingMappings: [],
+      localEvents: [],
+      remoteEvents: [],
+      remoteRawItemCount: 0,
+    });
   });
 
   it("does not open a local transaction when the remote read fails", async () => {
@@ -281,6 +286,7 @@ describe("createDestinationReconciliationScope", () => {
       eventReadDiagnostics: { ...baseDiagnostics, overBudgetSourceEventStateIds },
       requestedWindow: WINDOW,
       sourceCalendarIdsAtLocalRead: [SOURCE_CALENDAR_ID],
+      writeBackPolicies: new Map(),
     });
 
   const occurrenceMappings: EventMapping[] = [1, 2, 3].map((index) => ({

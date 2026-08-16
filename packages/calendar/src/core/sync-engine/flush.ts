@@ -53,14 +53,14 @@ const createDatabaseFlush = (database: BunSQLClient): (changes: PendingChanges) 
         const updateBatches = chunk(updates, FLUSH_BATCH_SIZE);
         for (const batch of updateBatches) {
           for (const update of batch) {
+            const { id, ...assignments } = update;
+            if (Object.keys(assignments).length === 0) {
+              continue;
+            }
             await transaction
               .update(eventMappingsTable)
-              .set({
-                deleteIdentifier: update.deleteIdentifier,
-                syncEventHash: update.syncEventHash,
-                syncEventId: update.syncEventId,
-              })
-              .where(eq(eventMappingsTable.id, update.id));
+              .set(assignments)
+              .where(eq(eventMappingsTable.id, id));
           }
         }
       }

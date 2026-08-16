@@ -5,7 +5,7 @@ import type {
   MaterializedSyncableEvent,
   PushEchoComparison,
   PushResult,
-  RemoteEvent,
+  RemoteEventListing,
 } from "../../../src/core/types";
 
 const TEST_RECONCILIATION_SCOPE = {
@@ -48,7 +48,7 @@ const runSync = async (
   const provider = {
     deleteEvents: (eventIds: string[]): Promise<DeleteResult[]> =>
       Promise.resolve(eventIds.map(() => ({ success: true }))),
-    listRemoteEvents: (): Promise<RemoteEvent[]> => Promise.resolve([]),
+    listRemoteEvents: (): Promise<RemoteEventListing> => Promise.resolve({ items: [], rawItemCount: 0 }),
     pushEvents: (events: MaterializedSyncableEvent[]): Promise<PushResult[]> =>
       Promise.resolve(events.map((event, index): PushResult => ({
         deleteId: `delete-${event.id}`,
@@ -68,6 +68,7 @@ const runSync = async (
       existingMappings: [],
       localEvents,
       remoteEvents: [],
+      remoteRawItemCount: 0,
     }),
     reconciliationScope: TEST_RECONCILIATION_SCOPE,
     userId: "user-1",

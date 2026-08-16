@@ -59,7 +59,7 @@ describe("caldav reconciliation read of a degenerate remote range", () => {
   it("reports a Keeper resource whose start is inside the window and whose end predates it", async () => {
     const uid = generateDeterministicEventUid("event-state-id-1");
 
-    const remoteEvents = await listWithResource(uid, "20260320T160000Z", "20260305T160000Z");
+    const { items: remoteEvents } = await listWithResource(uid, "20260320T160000Z", "20260305T160000Z");
 
     expect(remoteEvents.map((event) => event.uid)).toEqual([uid]);
   });
@@ -67,7 +67,7 @@ describe("caldav reconciliation read of a degenerate remote range", () => {
   it("reports a zero-duration Keeper resource sitting exactly on the window's lower bound", async () => {
     const uid = generateDeterministicEventUid("event-state-id-2");
 
-    const remoteEvents = await listWithResource(uid, "20260308T000000Z", "20260308T000000Z");
+    const { items: remoteEvents } = await listWithResource(uid, "20260308T000000Z", "20260308T000000Z");
 
     expect(remoteEvents.map((event) => event.uid)).toEqual([uid]);
   });
@@ -75,7 +75,7 @@ describe("caldav reconciliation read of a degenerate remote range", () => {
   it("still skips a Keeper resource whose whole range predates the window", async () => {
     const uid = generateDeterministicEventUid("event-state-id-3");
 
-    const remoteEvents = await listWithResource(uid, "20260301T090000Z", "20260301T100000Z");
+    const { items: remoteEvents } = await listWithResource(uid, "20260301T090000Z", "20260301T100000Z");
 
     expect(remoteEvents).toEqual([]);
   });

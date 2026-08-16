@@ -4,6 +4,8 @@ import { withAuth, withWideEvent } from "@/utils/middleware";
 import { database } from "@/context";
 import {
   getDestinationsForSource,
+  getWriteBackModesForSource,
+  getWriteBackStatesForSource,
   setDestinationsForSource,
 } from "@/utils/source-destination-mappings";
 import {
@@ -17,6 +19,8 @@ const GET = withWideEvent(
       { params, userId },
       {
         getDestinationsForSource,
+        getWriteBackModesForSource,
+        getWriteBackStatesForSource,
         sourceExists: async (userIdToCheck, sourceCalendarId) => {
           const [source] = await database
             .select({ id: calendarsTable.id })

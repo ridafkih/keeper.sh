@@ -17,6 +17,7 @@ import {
 import { database, refreshLockRedis, refreshLockStore } from "./context";
 import { context, widelog } from "./utils/logging";
 import { applySyncEventFields } from "./utils/sync-event-fields";
+import { enqueuePushSync } from "./utils/enqueue-push-sync";
 import env from "./env";
 
 const resolveCount = (value: unknown): number => {
@@ -242,6 +243,8 @@ const processJob = (
           microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
         },
         plan: job.data.plan,
+        notifySourceChanged: (writeBackUserId) =>
+          enqueuePushSync(writeBackUserId, job.data.plan),
       }, {
         onProgress: (update) => {
           if (signal?.aborted) {
@@ -313,6 +316,14 @@ const processJob = (
             outcome = syncOutcome;
           }
           widelog.set("outcome", outcome);
+          widelog.flush();
+          needsFlush = false;
+        },
+        onCalendarSkipped: (skip) => {
+          widelog.set("calendar.id", skip.calendarId);
+          widelog.set("push_sync.mapped_source_count", skip.mappedSourceCount);
+          widelog.set("push_sync.skipped", skip.reason);
+          widelog.set("outcome", "skipped");
           widelog.flush();
           needsFlush = false;
         },

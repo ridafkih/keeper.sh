@@ -171,6 +171,26 @@ describe("caldav provider mutations", () => {
       const result = await deleteCalDAVEvent(mockCredentials, "uid");
       expect(result.success).toBe(true);
     });
+
+    it("treats a missing calendar object as already deleted", async () => {
+      deleteCalendarObjectMock.mockRejectedValueOnce(
+        Object.assign(new Error("Not Found"), { status: 404 }),
+      );
+
+      const result = await deleteCalDAVEvent(mockCredentials, "uid");
+
+      expect(result).toEqual({ success: true });
+    });
+
+    it("reports a failure the server did not attribute to a missing object", async () => {
+      deleteCalendarObjectMock.mockRejectedValueOnce(
+        Object.assign(new Error("Boom"), { status: 500 }),
+      );
+
+      const result = await deleteCalDAVEvent(mockCredentials, "uid");
+
+      expect(result.success).toBe(false);
+    });
   });
 
   describe("rsvpCalDAVEvent", () => {

@@ -5,6 +5,7 @@ import type {
   MaterializedSyncableEvent,
   PushResult,
   RemoteEvent,
+  RemoteEventListing,
 } from "@keeper.sh/calendar";
 import { createSyncEventContentHash } from "../../calendar/src/core/events/content-hash";
 
@@ -42,6 +43,7 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
       events: localEventsMock(),
     }),
     getMappedSourceCalendarIds: () => Promise.resolve([SOURCE_ID]),
+    getWriteBackPoliciesForDestination: () => Promise.resolve(new Map()),
     withSourceIngestLocks: (
       database: unknown,
       _ids: string[],
@@ -180,13 +182,13 @@ const config = (database: unknown, overrides: Record<string, unknown> = {}) => (
 
 const setProvider = (overrides: {
   deleteEvents?: (ids: string[]) => Promise<DeleteResult[]>;
-  listRemoteEvents?: () => Promise<RemoteEvent[]>;
+  listRemoteEvents?: () => Promise<RemoteEventListing>;
   pushEvents?: (events: MaterializedSyncableEvent[]) => Promise<PushResult[]>;
 }) => {
   const provider = {
     deleteEvents: overrides.deleteEvents
       ?? ((ids: string[]) => Promise.resolve(ids.map(() => ({ success: true })))),
-    listRemoteEvents: overrides.listRemoteEvents ?? (() => Promise.resolve([])),
+    listRemoteEvents: overrides.listRemoteEvents ?? (() => Promise.resolve({ items: [], rawItemCount: 0 })),
     pushEvents: overrides.pushEvents
       ?? ((events: MaterializedSyncableEvent[]) =>
         Promise.resolve(events.map((_event, index) => ({
@@ -312,7 +314,10 @@ describe("a run that completes after its deadline has passed", () => {
     localEventsMock.mockImplementation(() => [event]);
     mappingsMock.mockImplementation(() => [makeMapping("map-1", event, "remote-1")]);
     setProvider({
-      listRemoteEvents: () => Promise.resolve([makeRemoteEvent("remote-1", startTime)]),
+      listRemoteEvents: () => Promise.resolve({
+        items: [makeRemoteEvent("remote-1", startTime)],
+        rawItemCount: 1,
+      }),
       pushEvents: () => Promise.reject(new Error("must not push an in-sync destination")),
     });
   };
@@ -496,7 +501,7 @@ describe("a destination whose sources were all unlinked", () => {
         }
         return Promise.resolve(ids.map(() => ({ success: true })));
       },
-      listRemoteEvents: () => Promise.resolve([...remote]),
+      listRemoteEvents: () => Promise.resolve({ items: [...remote], rawItemCount: remote.length }),
     });
 
     const first = await syncDestinationsForUser(USER_ID, config(database));
@@ -518,7 +523,10 @@ describe("a destination whose sources were all unlinked", () => {
         error: "500 provider error",
         success: false,
       }))),
-      listRemoteEvents: () => Promise.resolve([makeRemoteEvent("remote-1", orphanStart)]),
+      listRemoteEvents: () => Promise.resolve({
+        items: [makeRemoteEvent("remote-1", orphanStart)],
+        rawItemCount: 1,
+      }),
     });
 
     await syncDestinationsForUser(USER_ID, config(database));
@@ -652,7 +660,7 @@ describe("a single permanently rejected event", () => {
         deleted.push(...ids);
         return Promise.resolve(ids.map(() => ({ success: true })));
       },
-      listRemoteEvents: () => Promise.resolve(remote),
+      listRemoteEvents: () => Promise.resolve({ items: remote, rawItemCount: remote.length }),
       pushEvents: (events) => Promise.resolve(events.map((event) => {
         if (event.id === "ev-poison") {
           return { error: "400 malformed payload", success: false };

@@ -13,6 +13,7 @@ import type {
   MaterializedSyncableEvent,
   PendingChanges,
   RemoteEvent,
+  RemoteEventListing,
   SourceEvent,
   StoredSourceEventState,
 } from "../../src/index";
@@ -169,15 +170,16 @@ class StatefulDestinationProvider implements CalendarSyncProvider {
     return Promise.resolve(eventIds.map(() => ({ success: true })));
   };
 
-  public listRemoteEvents = (): Promise<RemoteEvent[]> => Promise.resolve(
-    [...this.remoteEvents.entries()].map(([uid, event]) => ({
+  public listRemoteEvents = (): Promise<RemoteEventListing> => Promise.resolve({
+    items: [...this.remoteEvents.entries()].map(([uid, event]) => ({
       deleteId: uid,
       endTime: event.endTime,
       isKeeperEvent: !this.nonKeeperRemoteIds.has(uid),
       startTime: event.startTime,
       uid,
     })),
-  );
+    rawItemCount: this.remoteEvents.size,
+  });
 
   public pushEvents = (events: MaterializedSyncableEvent[]) => {
     this.calls.pushes.push(events.map((event) => ({ ...event })));
@@ -265,11 +267,15 @@ describe.each<ScenarioKind>([
       flush: mappings.flush,
       isCurrent: () => Promise.resolve(true),
       provider,
-      readState: async () => ({
-        existingMappings: [...mappings.mappings.values()],
-        localEvents: eventStates.syncableEvents(),
-        remoteEvents: await provider.listRemoteEvents(),
-      }),
+      readState: async () => {
+        const listing = await provider.listRemoteEvents();
+        return {
+          existingMappings: [...mappings.mappings.values()],
+          localEvents: eventStates.syncableEvents(),
+          remoteEvents: listing.items,
+          remoteRawItemCount: listing.rawItemCount,
+        };
+      },
       userId: "user-1",
     });
 
@@ -364,11 +370,15 @@ it("repairs Keeper orphans, retains user events, and converges", async () => {
     flush: mappings.flush,
     isCurrent: () => Promise.resolve(true),
     provider,
-    readState: async () => ({
-      existingMappings: [...mappings.mappings.values()],
-      localEvents: eventStates.syncableEvents(),
-      remoteEvents: await provider.listRemoteEvents(),
-    }),
+    readState: async () => {
+      const listing = await provider.listRemoteEvents();
+      return {
+        existingMappings: [...mappings.mappings.values()],
+        localEvents: eventStates.syncableEvents(),
+        remoteEvents: listing.items,
+        remoteRawItemCount: listing.rawItemCount,
+      };
+    },
     reconciliationScope: {
       authoritativeWindow: {
         timeMax: new Date("2100-01-01T00:00:00.000Z"),
@@ -416,11 +426,15 @@ it("retires a mirror that falls past the sync window's upper edge and converges"
     flush: mappings.flush,
     isCurrent: () => Promise.resolve(true),
     provider,
-    readState: async () => ({
-      existingMappings: [...mappings.mappings.values()],
-      localEvents: eventStates.syncableEvents(),
-      remoteEvents: await provider.listRemoteEvents(),
-    }),
+    readState: async () => {
+      const listing = await provider.listRemoteEvents();
+      return {
+        existingMappings: [...mappings.mappings.values()],
+        localEvents: eventStates.syncableEvents(),
+        remoteEvents: listing.items,
+        remoteRawItemCount: listing.items.length,
+      };
+    },
     reconciliationScope: {
       authoritativeWindow: {
         timeMax: syncWindowEnd,
@@ -496,7 +510,7 @@ it("migrates a legacy recurring Google mapping in place and converges", async ()
       remoteWrites.deletes += ids.length;
       return Promise.resolve(ids.map(() => ({ success: true })));
     },
-    listRemoteEvents: () => Promise.resolve([remoteEvent]),
+    listRemoteEvents: () => Promise.resolve({ items: [remoteEvent], rawItemCount: 1 }),
     pushEvents: (events) => {
       remoteWrites.pushes += events.length;
       return Promise.resolve(events.map(() => ({ success: true })));
@@ -512,6 +526,7 @@ it("migrates a legacy recurring Google mapping in place and converges", async ()
       existingMappings: [...mappings.mappings.values()],
       localEvents: [occurrence],
       remoteEvents: [remoteEvent],
+      remoteRawItemCount: 1,
     }),
     userId: "user-1",
   });
@@ -557,11 +572,12 @@ it("deletes an expired recurrence mapping when the cleanup window advances", asy
     isCurrent: () => Promise.resolve(true),
     provider,
     readState: async () => {
-      const remoteEvents = await provider.listRemoteEvents();
+      const { items: remoteEvents } = await provider.listRemoteEvents();
       return {
         existingMappings: [...mappings.mappings.values()],
         localEvents,
         remoteEvents: remoteEvents.filter((event) => event.endTime >= syncWindowStart),
+        remoteRawItemCount: remoteEvents.length,
       };
     },
     reconciliationScope: {

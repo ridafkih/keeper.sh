@@ -1,6 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthCapabilities } from "../../src/lib/auth-capabilities";
 
+const COLD_IMPORT_TIMEOUT_MS = 30_000;
+
 const authClientMock = vi.hoisted(() => ({
   signIn: {
     email: vi.fn(() => Promise.resolve({ error: null })),
@@ -34,7 +36,7 @@ const commercialCapabilities: AuthCapabilities = {
 
 beforeAll(async () => {
   ({ signInWithCredential, signUpWithCredential } = await import("../../src/lib/auth"));
-});
+}, COLD_IMPORT_TIMEOUT_MS);
 
 beforeEach(() => {
   authClientMock.signIn.email.mockClear();

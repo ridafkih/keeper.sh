@@ -13,6 +13,9 @@ import type {
   MaterializedSyncableEvent,
   PushResult,
   RemoteEvent,
+  RemoteEventListing,
+  RemoteEventPresence,
+  RemoteEventReference,
 } from "../../../core/types";
 import { CalDAVClient, CalDAVCreateConflictError, CalDAVHttpError } from "../shared/client";
 import type { CalDAVListingStats } from "../shared/client";
@@ -27,6 +30,7 @@ import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import { normalizeCalDAVEvent } from "./normalize-event";
 
 const CALDAV_RATE_LIMIT_CONCURRENCY = 5;
+const CALDAV_NOT_FOUND_STATUS = 404;
 
 // A CalDAV PUT answers 201/204 with no body, so there is nothing to compare the write against.
 const CALDAV_PUSH_ECHO = { comparable: false, reason: "echo-body-missing" } as const;
@@ -57,6 +61,26 @@ const findCalDAVHttpError = (value: unknown): CalDAVHttpError | null => {
   while (candidate instanceof Error && !visited.has(candidate)) {
     if (candidate instanceof CalDAVHttpError) {
       return candidate;
+    }
+    visited.add(candidate);
+    candidate = candidate.cause;
+  }
+  return null;
+};
+
+/*
+ * A probe may only answer "absent" on a definitive not-found, so the status is read off
+ * the error itself rather than inferred from its class: a transport wrapper that loses
+ * the CalDAVHttpError prototype must not be mistaken for a missing object.
+ */
+const findErrorStatus = (value: unknown): number | null => {
+  let candidate = value;
+  const visited = new Set<unknown>();
+
+  while (candidate instanceof Error && !visited.has(candidate)) {
+    const { status } = candidate as Error & { status?: unknown };
+    if (typeof status === "number") {
+      return status;
     }
     visited.add(candidate);
     candidate = candidate.cause;
@@ -289,7 +313,8 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
             if (config.safeFetchOptions?.signal?.aborted) {
               throw error;
             }
-            const notFound = error instanceof CalDAVHttpError && error.status === 404;
+            const notFound = error instanceof CalDAVHttpError
+              && error.status === CALDAV_NOT_FOUND_STATUS;
             if (notFound) {
               removeCounts.notFound += 1;
               return { success: true };
@@ -309,7 +334,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
   const listRemoteEvents = async (
     options: ListRemoteEventsOptions,
-  ): Promise<RemoteEvent[]> => {
+  ): Promise<RemoteEventListing> => {
     const calendarUrl = await client.resolveCalendarUrl(config.calendarUrl);
 
     const objects = await client.fetchCalendarObjects({
@@ -354,12 +379,122 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
           editableAvailability: parsed.availability,
           editableContent,
           editableContentHash: hashEditableEventContentSnapshot(editableContent),
+          editableFields: {
+            isAllDay: parsed.isAllDay ?? false,
+            summary: parsed.title ?? "",
+            ...(parsed.description && { description: parsed.description }),
+            ...(parsed.location && { location: parsed.location }),
+          },
           supportedAvailabilities: ["busy", "free"],
         });
       }
     }
 
-    return remoteEvents;
+    return { items: remoteEvents, rawItemCount: objects.length };
+  };
+
+  const readObjectFilename = (href: string): string | null => {
+    try {
+      return decodeURIComponent(
+        new URL(href, config.calendarUrl).pathname.split("/").at(-1) ?? "",
+      );
+    } catch {
+      /*
+       * An href this parser cannot read identifies nothing, and answering "not the copy"
+       * on its behalf points the corroboration at deletion. The object's own UID decides
+       * instead.
+       */
+      return null;
+    }
+  };
+
+  const isObjectForUid = (object: { data?: string; url: string }, uid: string): boolean => {
+    if (readObjectFilename(object.url) === `${uid}.ics`) {
+      return true;
+    }
+    if (!object.data) {
+      return false;
+    }
+    return parseICalToRemoteEvent(object.data)?.uid === uid;
+  };
+
+  /*
+   * An empty multiget answer is not proof: it is the same shape the collection read
+   * rejects as incomplete. Corroborating it against a listing the server proved complete
+   * is what turns "the object was not in the response" into "the object is not there".
+   */
+  const isMissingFromCompleteListing = async (
+    calendarUrl: string,
+    uid: string,
+  ): Promise<boolean> => {
+    const objects = await client.fetchCalendarObjects({ calendarUrl });
+    return !objects.some((object) => isObjectForUid(object, uid));
+  };
+
+  /*
+   * The ICS parser drops cancelled and start-less events, so a copy can be missing from
+   * listRemoteEvents while it is still on the server. A targeted fetch of the object
+   * itself is the only evidence of absence that justifies destroying the original on the
+   * source, and anything short of a definitive not-found refuses. A copy filed under
+   * another name keeps its UID, so the collection listing decides when the multiget
+   * answers nothing.
+   */
+  const findCopyIn = async (
+    calendarUrl: string,
+    uid: string,
+  ): Promise<RemoteEventPresence> => {
+    try {
+      const existing = await client.fetchCalendarObject({
+        calendarUrl,
+        filename: `${uid}.ics`,
+      });
+      if (existing?.data) {
+        return "present";
+      }
+    } catch (error) {
+      if (findErrorStatus(error) !== CALDAV_NOT_FOUND_STATUS) {
+        throw error;
+      }
+    }
+
+    if (await isMissingFromCompleteListing(calendarUrl, uid)) {
+      return "absent";
+    }
+    return "present";
+  };
+
+  /*
+   * A CalDAV read is scoped to one collection, so the destination collection alone cannot
+   * tell a deleted copy from one the user dragged into another calendar of the same
+   * account — a move the client performs as a delete here and a put there, UID intact,
+   * and the copy is still one the user can see. Every collection the account lists is
+   * asked before the original on the source is destroyed, and a collection that cannot be
+   * read is refused rather than assumed empty: the throw reaches the caller, which reads
+   * it as "do not delete".
+   */
+  const probeRemoteEvent = async (
+    reference: RemoteEventReference,
+  ): Promise<RemoteEventPresence> => {
+    /*
+     * Resolved exactly as the list read resolves it, and outside the catch below. A
+     * collection that has moved answers not-found for every object in it, and reading
+     * that as an absence would destroy originals whose copies are still there.
+     */
+    const calendarUrl = await client.resolveCalendarUrl(config.calendarUrl);
+    if (await findCopyIn(calendarUrl, reference.uid) === "present") {
+      return "present";
+    }
+
+    const calendars = await client.discoverCalendars();
+    for (const calendar of calendars) {
+      if (calendar.url === calendarUrl || calendar.url === config.calendarUrl) {
+        continue;
+      }
+      if (await findCopyIn(calendar.url, reference.uid) === "present") {
+        return "present";
+      }
+    }
+    return "absent";
   };
 
   return {
@@ -368,6 +503,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     getSyncDiagnostics,
     listRemoteEvents,
     normalizeEvent: normalizeCalDAVEvent,
+    probeRemoteEvent,
   };
 };
 

@@ -1,0 +1,2 @@
+ALTER TABLE "source_destination_mappings" ADD COLUMN IF NOT EXISTS "copiesMissingObservedAt" timestamp;--> statement-breakpoint
+ALTER TABLE "source_destination_mappings" ADD COLUMN IF NOT EXISTS "lastHealthyReadAt" timestamp;

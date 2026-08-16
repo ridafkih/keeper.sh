@@ -11,6 +11,7 @@ import { normalizeCalDAVServerHost } from "../../../src/providers/caldav/shared/
 
 interface CalendarRow {
   id: string;
+  capabilities: string[];
   externalCalendarId: string | null;
   calendarUrl: string | null;
   unavailableSince: Date | null;
@@ -55,6 +56,7 @@ const PLAN_KEYS = [
   "toMarkUnavailable",
   "toRetargetUrl",
   "toRevive",
+  "toUpdateCapabilities",
   "unchangedCount",
 ];
 
@@ -210,6 +212,7 @@ const oauthRow = (
   unavailableSince: Date | null = null,
 ): CalendarRow => ({
   calendarUrl: null,
+  capabilities: ["pull", "push"],
   createdAt: CREATED_AT,
   externalCalendarId,
   id,
@@ -495,6 +498,7 @@ describe("applyCalendarRediscoveryPlan", () => {
         oauthRow("calendar-source", "external-1"),
         {
           calendarUrl: null,
+          capabilities: ["pull", "push"],
           createdAt: CREATED_AT,
           externalCalendarId: null,
           id: "calendar-destination",
@@ -597,6 +601,42 @@ describe("applyCalendarRediscoveryPlan", () => {
     for (const update of fake.updates) {
       expect(Object.keys(update.values)).not.toContain("calendarsRefreshAttemptedAt");
     }
+  });
+
+  /*
+   * The capabilities column is written on insert and nothing has ever revised it, so a
+   * calendar shared read-only after it was connected — or connected before the column
+   * meant anything — keeps claiming it can be written to. The write-back gate reads it.
+   */
+  it("writes back the capabilities a calendar the provider demoted no longer has", async () => {
+    const fake = createFakeDatabase({
+      calendars: [{ ...oauthRow("calendar-1", "external-1"), capabilities: ["pull", "push"] }],
+      mappings: [],
+    });
+
+    await apply(fake, {
+      calendarType: "oauth",
+      discovered: [oauthDiscovery("external-1", "Kept", false)],
+    });
+
+    expect(calendarUpdates(fake.updates)).toContainEqual({
+      table: "calendars",
+      values: { capabilities: ["pull"] },
+    });
+  });
+
+  it("leaves the capabilities of a calendar whose stored row already agrees", async () => {
+    const fake = createFakeDatabase({
+      calendars: [{ ...oauthRow("calendar-1", "external-1"), capabilities: ["pull", "push"] }],
+      mappings: [],
+    });
+
+    await apply(fake, {
+      calendarType: "oauth",
+      discovered: [oauthDiscovery("external-1", "Kept", true)],
+    });
+
+    expect(calendarUpdates(fake.updates)).toEqual([]);
   });
 
   it("returns the whole plan alongside the inserted rows", async () => {

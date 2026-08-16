@@ -49,6 +49,7 @@ const emptyPlan = {
   toMarkUnavailable: [] as string[],
   toRetargetUrl: [] as { id: string; calendarUrl: string }[],
   toRevive: [] as string[],
+  toUpdateCapabilities: [] as { id: string; capabilities: string[] }[],
   unchangedCount: 0,
 };
 

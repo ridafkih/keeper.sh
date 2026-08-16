@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { handlePatchIcalSettingsRoute as handlePatchIcalSettingsRouteFn } from "../../../../src/routes/api/ical/settings";
 
+const COLD_IMPORT_TIMEOUT_MS = 30_000;
+
 let handlePatchIcalSettingsRoute: typeof handlePatchIcalSettingsRouteFn = () =>
   Promise.reject(new Error("Module not loaded"));
 
@@ -17,7 +19,7 @@ beforeAll(async () => {
   }));
 
   ({ handlePatchIcalSettingsRoute } = await import("../../../../src/routes/api/ical/settings"));
-});
+}, COLD_IMPORT_TIMEOUT_MS);
 
 describe("handlePatchIcalSettingsRoute", () => {
   it("returns 403 when free users customize iCal feed settings", async () => {

@@ -157,7 +157,9 @@ export {
   mergeAbortSignals,
 } from "./core/utils/fetch-with-timeout";
 export {
+  DEFAULT_EVENT_NAME,
   getEventsForCalendars,
+  getWriteBackPoliciesForDestination,
   getEventsForCalendarsWithDiagnostics,
   getEventsForDestination,
   getMappedSourceCalendarIds,
@@ -314,7 +316,11 @@ export type {
   PushResult,
   DeleteResult,
   SyncResult,
+  RemoteEditableFields,
   RemoteEvent,
+  RemoteEventListing,
+  RemoteEventPresence,
+  RemoteEventReference,
   EventAvailability,
   ProviderConfig,
   OAuthProviderConfig,
@@ -375,3 +381,57 @@ export type {
   IngestWideEventFields,
   FetchEventsResult as IngestionFetchEventsResult,
 } from "./core/sync-engine/ingest";
+
+export { createGoogleSourceWriter } from "./providers/google/source/mutations";
+export { createOutlookSourceWriter } from "./providers/outlook/source/mutations";
+export { createCalDAVSourceWriter } from "./providers/caldav/source/mutations";
+export {
+  classifyInboundChanges,
+  getDestinationDrift,
+  TWO_WAY_EPOCH_QUARANTINE_LIMIT,
+  TWO_WAY_EPOCH_WINDOW_MS,
+  TWO_WAY_FAILURE_EPOCH_QUARANTINE_LIMIT,
+} from "./core/sync/write-back";
+export type {
+  DeleteConfirmationRequest,
+  ExpectedSourceFields,
+  InboundClassification,
+  InboundClassificationResult,
+  WriteBackHoldRequest,
+} from "./core/sync/write-back";
+export {
+  createEditableEventContentHash,
+  createSyncEventContentHash,
+  normalizeText,
+} from "./core/events/content-hash";
+export {
+  isSourceSnapshotFresh,
+  isWriteBackMode,
+  resolveWriteBackPolicyState,
+  WRITE_BACK_MODES,
+  WRITE_BACK_WITNESS_RESET,
+} from "./core/sync/write-back-policy";
+export type {
+  WriteBackFieldExclusions,
+  WriteBackMode,
+  WriteBackPolicy,
+  WriteBackUpdates,
+} from "./core/sync/write-back-policy";
+export type {
+  CalendarSourceWriter,
+  SourceEventUpdate,
+  SourceWriteResult,
+} from "./core/source/writer";
+export {
+  MAX_DEREGISTER_ATTEMPTS,
+  PUSH_ACTIONS_PER_TICK,
+  runManagePushChannels,
+} from "./core/source/manage-push-channels";
+export type {
+  ManagePushChannelsDependencies,
+  RegistrarContextRequest,
+} from "./core/source/manage-push-channels";
+export { createManagePushChannelsDependencies } from "./core/source/manage-push-channels-dependencies";
+export type { ManagePushChannelsConfig } from "./core/source/manage-push-channels-dependencies";
+export { createRegistrarContextFactory } from "./core/source/push-registrar-context";
+export type { RegistrarContextConfig } from "./core/source/push-registrar-context";

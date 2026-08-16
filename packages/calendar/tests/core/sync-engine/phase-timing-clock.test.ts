@@ -52,7 +52,7 @@ const runSync = async (
     },
     provider: {
       deleteEvents: () => Promise.resolve([]),
-      listRemoteEvents: () => Promise.resolve([]),
+      listRemoteEvents: () => Promise.resolve({ items: [], rawItemCount: 0 }),
       pushEvents: (events) =>
         Promise.resolve(
           events.map((event) => ({
@@ -69,6 +69,7 @@ const runSync = async (
         existingMappings: [],
         localEvents: [makeLocalEvent("a")],
         remoteEvents: [],
+        remoteRawItemCount: 0,
       };
     },
     reconciliationScope: TEST_RECONCILIATION_SCOPE,

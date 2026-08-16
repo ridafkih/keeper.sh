@@ -3,6 +3,7 @@ import {
   clampToProviderLifetime,
   GRAPH_SUBSCRIPTION_MAX_LIFETIME_MS,
 } from "../../../core/source/push-provider-profile";
+import { neverReachedProvider } from "../../../core/source/push-channel";
 import type {
   ListedPushChannel,
   PushChannelRegistration,
@@ -177,6 +178,9 @@ const deregisterOutlookSubscription = async (
   registrarContext: RegistrarContext,
 ): Promise<void> => {
   if (!channel.providerChannelId) {
+    if (neverReachedProvider(channel)) {
+      return;
+    }
     throw new GraphSubscriptionError(
       "Outlook push deregistration requires the recorded subscription id",
       0,

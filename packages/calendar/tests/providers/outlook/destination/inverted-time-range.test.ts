@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OutlookEvent } from "@keeper.sh/data-schemas";
-import type { MaterializedSyncableEvent, RemoteEvent } from "../../../../src/core/types";
+import type { MaterializedSyncableEvent, RemoteEvent, RemoteEventListing } from "../../../../src/core/types";
 import type { EventMapping } from "../../../../src/index";
 import type { PendingChanges } from "../../../../src/core/sync-engine/types";
 import { parseEventTime as parseOutlookEventTime } from "../../../../src/providers/outlook/shared/date-time";
@@ -55,8 +55,8 @@ describe("outlook destination representation of an inverted timed range", () => 
     const attempts: string[] = [];
     const deletes: string[] = [];
 
-    const listRemoteEvents = (): Promise<RemoteEvent[]> =>
-      Promise.resolve([...stored.values()].flatMap((event): RemoteEvent[] => {
+    const listRemoteEvents = (): Promise<RemoteEventListing> => {
+      const items = [...stored.values()].flatMap((event): RemoteEvent[] => {
         const startTime = parseOutlookEventTime(event.start, event.isAllDay);
         const endTime = parseOutlookEventTime(event.end, event.isAllDay);
         if (!startTime || !endTime) {
@@ -80,7 +80,9 @@ describe("outlook destination representation of an inverted timed range", () => 
           supportedAvailabilities: ["busy", "free", "oof", "workingElsewhere"],
           uid: event.iCalUId,
         }];
-      }));
+      });
+      return Promise.resolve({ items, rawItemCount: items.length });
+    };
 
     const runSync = () => syncCalendar({
       calendarId: "destination-calendar",
@@ -116,14 +118,18 @@ describe("outlook destination representation of an inverted timed range", () => 
           return { deleteId: event.id, remoteId: uid, success: true as const };
         })),
       },
-      readState: async () => ({
-        existingMappings: [...mappings],
-        localEvents: [buildEvent({
-          endTime: new Date("2027-03-08T15:00:00.000Z"),
-          startTime: new Date("2027-03-08T16:00:00.000Z"),
-        })],
-        remoteEvents: await listRemoteEvents(),
-      }),
+      readState: async () => {
+        const listing = await listRemoteEvents();
+        return {
+          existingMappings: [...mappings],
+          localEvents: [buildEvent({
+            endTime: new Date("2027-03-08T15:00:00.000Z"),
+            startTime: new Date("2027-03-08T16:00:00.000Z"),
+          })],
+          remoteEvents: listing.items,
+          remoteRawItemCount: listing.rawItemCount,
+        };
+      },
       reconciliationScope: {
         authoritativeWindow: {
           timeMax: new Date("2100-01-01T00:00:00.000Z"),

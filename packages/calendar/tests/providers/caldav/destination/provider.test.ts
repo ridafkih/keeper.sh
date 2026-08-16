@@ -110,7 +110,7 @@ describe("createCalDAVSyncProvider", () => {
       url: "https://caldav.example.com/calendar/user-owned.ics",
     }]);
 
-    const remoteEvents = await createProvider().listRemoteEvents({
+    const { items: remoteEvents } = await createProvider().listRemoteEvents({
       timeMin: new Date("2026-07-10T00:00:00.000Z"),
     });
 
@@ -158,7 +158,7 @@ describe("createCalDAVSyncProvider", () => {
       url: `https://caldav.example.com/calendar/${keeperUid}.ics`,
     }]);
 
-    const remoteEvents = await createProvider().listRemoteEvents({
+    const { items: remoteEvents } = await createProvider().listRemoteEvents({
       timeMin: new Date("2026-01-01T00:00:00.000Z"),
     });
 
@@ -180,7 +180,7 @@ describe("createCalDAVSyncProvider", () => {
       url: `https://caldav.example.com/calendar/${keeperUid}.ics`,
     }]);
 
-    const remoteEvents = await createProvider().listRemoteEvents({
+    const { items: remoteEvents } = await createProvider().listRemoteEvents({
       timeMin: new Date("2026-01-01T00:00:00.000Z"),
     });
 
@@ -201,7 +201,7 @@ describe("createCalDAVSyncProvider", () => {
       url: `https://caldav.example.com/calendar/${keeperUid}.ics`,
     }]);
 
-    const remoteEvents = await createProvider().listRemoteEvents({
+    const { items: remoteEvents } = await createProvider().listRemoteEvents({
       timeMin: new Date("2026-01-01T00:00:00.000Z"),
     });
 
@@ -280,7 +280,7 @@ describe("createCalDAVSyncProvider", () => {
       url: `https://caldav.example.com/calendar/${fileUid}.ics`,
     }]);
 
-    const remoteEvents = await createProvider().listRemoteEvents({
+    const { items: remoteEvents } = await createProvider().listRemoteEvents({
       timeMin: new Date("2026-03-01T00:00:00.000Z"),
     });
 
@@ -302,7 +302,7 @@ describe("createCalDAVSyncProvider", () => {
     }]);
     clientMocks.deleteCalendarObjectByUrl.mockImplementationOnce(() => Promise.resolve());
     const provider = createProvider();
-    const remoteEvents = await provider.listRemoteEvents({
+    const { items: remoteEvents } = await provider.listRemoteEvents({
       timeMin: new Date("2026-03-01T00:00:00.000Z"),
     });
     const deleteId = remoteEvents[0]?.deleteId ?? "";

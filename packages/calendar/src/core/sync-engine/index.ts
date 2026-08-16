@@ -14,7 +14,14 @@ import type { SyncProgressUpdate } from "../sync/types";
 import { createSyncEventContentHash } from "../events/content-hash";
 import { computeSyncOperations } from "../sync/operations";
 import type { ReconciliationScope, StaleReasonCounts } from "../sync/operations";
-import type { CalendarSyncProvider, PendingChanges } from "./types";
+import { classifyInboundChanges } from "../sync/write-back";
+import type {
+  DeleteConfirmationRequest,
+  InboundClassification,
+  InboundCounters,
+  WriteBackHoldRequest,
+} from "../sync/write-back";
+import type { CalendarSyncProvider, PendingChanges, PendingUpdate } from "./types";
 
 /*
  * A run whose provider rejects everything produces one error per operation. The wide
@@ -687,6 +694,19 @@ const executeRemoteOperations = async (
   };
 };
 
+interface ApplyInboundChangesInput {
+  calendarId: string;
+  classifications: InboundClassification[];
+  now: Date;
+}
+
+interface ApplyInboundChangesResult {
+  abandoned?: number;
+  applied: number;
+  deleteBlocked?: number;
+  failed: number;
+}
+
 interface SyncCalendarOptions {
   userId: string;
   calendarId: string;
@@ -695,9 +715,22 @@ interface SyncCalendarOptions {
     localEvents: MaterializedSyncableEvent[];
     existingMappings: EventMapping[];
     remoteEvents: RemoteEvent[];
+    remoteRawItemCount: number;
   }>;
   isCurrent: () => Promise<boolean>;
   flush: (changes: PendingChanges) => Promise<void>;
+  applyInboundChanges?: (
+    input: ApplyInboundChangesInput,
+  ) => Promise<ApplyInboundChangesResult>;
+  requestDeleteConfirmation?: (request: DeleteConfirmationRequest) => Promise<void>;
+  /*
+   * A read that came back with copies is the only thing that releases "Delete the
+   * originals" after a read that returned nothing at all, and it has to outlive the pass
+   * that observed it, so it is handed out to be recorded rather than kept in the counters.
+   */
+  recordHealthyRead?: (sourceCalendarIds: string[]) => Promise<void>;
+  holdWriteBack?: (request: WriteBackHoldRequest) => Promise<void>;
+  now?: () => Date;
   onSyncEvent?: (event: Record<string, unknown>) => void;
   onProgress?: (update: SyncProgressUpdate) => void;
   reconciliationScope: ReconciliationScope;
@@ -808,6 +841,194 @@ const appendProviderDiagnostics = (
   }
 };
 
+const appendTwoWayFields = (
+  event: Record<string, unknown>,
+  counters: InboundCounters,
+  readHealth: string,
+): void => {
+  const fields: [string, number][] = [
+    ["two_way.adopt_window_divergence_count", counters.adoptWindowDivergence],
+    ["two_way.ambiguous_empty_read_count", counters.ambiguousEmptyRead],
+    ["two_way.blocked_availability_count", counters.blockedAvailability],
+    ["two_way.blocked_redacted_field_count", counters.blockedRedactedField],
+    ["two_way.conflict_source_wins_count", counters.conflictSourceWins],
+    ["two_way.delete_breaker_tripped_count", counters.deleteBreakerTripped],
+    ["two_way.edit_breaker_tripped_count", counters.editBreakerTripped],
+  ];
+
+  for (const [field, count] of fields) {
+    if (count > 0) {
+      event[field] = count;
+    }
+  }
+
+  if (readHealth !== "healthy") {
+    event["two_way.read_health"] = readHealth;
+  }
+};
+
+const collectInboundMappingUpdates = (
+  classifications: InboundClassification[],
+): PendingUpdate[] => {
+  const updates: PendingUpdate[] = [];
+  for (const classification of classifications) {
+    if ("mappingUpdate" in classification && classification.mappingUpdate) {
+      updates.push(classification.mappingUpdate);
+    }
+  }
+  return updates;
+};
+
+const collectOperationMappingIds = (
+  operations: SyncOperation[],
+  existingMappings: EventMapping[],
+): Set<string> => {
+  const mappingsByRemoteIdentity = new Map<string, EventMapping>();
+  for (const mapping of existingMappings) {
+    mappingsByRemoteIdentity.set(
+      `${mapping.destinationEventUid}\u0000${mapping.deleteIdentifier}`,
+      mapping,
+    );
+  }
+
+  const touched = new Set<string>();
+  for (const operation of operations) {
+    if (operation.type === "remove") {
+      const mapping = mappingsByRemoteIdentity.get(
+        `${operation.uid}\u0000${operation.deleteId}`,
+      );
+      if (mapping) {
+        touched.add(mapping.id);
+      }
+      continue;
+    }
+    if (operation.staleMappingId) {
+      touched.add(operation.staleMappingId);
+    }
+  }
+  return touched;
+};
+
+/*
+ * A push rewrites the copy, so the observation recorded against it stops being true the
+ * moment the provider accepts the write. Clearing the witness before the remote
+ * operations rather than after them means a crash in between leaves a mapping that
+ * adopts what it finds instead of one that reads our own write as a user edit.
+ */
+const collectPreWriteUnverifyUpdates = (
+  operations: SyncOperation[],
+  existingMappings: EventMapping[],
+): PendingUpdate[] => {
+  const touched = collectOperationMappingIds(operations, existingMappings);
+  if (touched.size === 0) {
+    return [];
+  }
+
+  return existingMappings
+    .filter((mapping) =>
+      touched.has(mapping.id) && typeof mapping.destinationContentHash === "string")
+    .map((mapping) => ({
+      destinationAvailability: null,
+      destinationContentHash: null,
+      destinationDescription: null,
+      destinationEndTime: null,
+      destinationIsAllDay: null,
+      destinationLocation: null,
+      destinationStartTime: null,
+      destinationSummary: null,
+      id: mapping.id,
+    }));
+};
+
+const reportDeleteConfirmation = async (
+  request: DeleteConfirmationRequest | null,
+  report?: (request: DeleteConfirmationRequest) => Promise<void>,
+): Promise<void> => {
+  if (!request || !report) {
+    return;
+  }
+  await report(request);
+};
+
+const reportHealthyRead = async (
+  sourceCalendarIds: string[],
+  report?: (sourceCalendarIds: string[]) => Promise<void>,
+): Promise<void> => {
+  if (sourceCalendarIds.length === 0 || !report) {
+    return;
+  }
+  await report(sourceCalendarIds);
+};
+
+const reportWriteBackHold = async (
+  request: WriteBackHoldRequest | null,
+  report?: (request: WriteBackHoldRequest) => Promise<void>,
+): Promise<void> => {
+  if (!request || !report) {
+    return;
+  }
+  await report(request);
+};
+
+const NO_APPLIED_CHANGES = 0;
+
+const isApplierActionable = (classification: InboundClassification): boolean =>
+  classification.type === "write-back" || classification.type === "delete";
+
+const runInboundWriteBack = async (input: {
+  applyInboundChanges?: (
+    applyInput: ApplyInboundChangesInput,
+  ) => Promise<ApplyInboundChangesResult>;
+  calendarId: string;
+  classifications: InboundClassification[];
+  flush: (changes: PendingChanges) => Promise<void>;
+  mappingUpdates: PendingUpdate[];
+  now: Date;
+  wideEvent: Record<string, unknown>;
+}): Promise<{ claimedThePass: boolean; flushed: boolean }> => {
+  if (!input.applyInboundChanges || input.classifications.length === NO_APPLIED_CHANGES) {
+    return { claimedThePass: false, flushed: false };
+  }
+  const applied = await input.applyInboundChanges({
+    calendarId: input.calendarId,
+    classifications: input.classifications,
+    now: input.now,
+  });
+  input.wideEvent["two_way.write_back_count"] = applied.applied;
+  if (applied.failed > 0) {
+    input.wideEvent["two_way.write_back_failed_count"] = applied.failed;
+  }
+  /*
+   * A deletion the destination refused to confirm is indistinguishable from the feature
+   * not working unless it is reported.
+   */
+  if (applied.deleteBlocked && applied.deleteBlocked > 0) {
+    input.wideEvent["two_way.delete_probe_blocked_count"] = applied.deleteBlocked;
+  }
+  if (applied.abandoned && applied.abandoned > 0) {
+    input.wideEvent["two_way.write_back_abandoned_count"] = applied.abandoned;
+  }
+
+  /*
+   * Only a write-back that reached the source may claim the pass. Inbound work that
+   * applied nothing left event_states exactly as the diff will read it, and claiming the
+   * pass on it anyway would freeze every ordinary push to this destination for as long as
+   * that work keeps failing to complete.
+   */
+  if (applied.applied === NO_APPLIED_CHANGES) {
+    return { claimedThePass: false, flushed: false };
+  }
+
+  let flushed = false;
+  if (input.mappingUpdates.length > 0) {
+    await input.flush({ deletes: [], inserts: [], updates: input.mappingUpdates });
+    flushed = true;
+  }
+  input.wideEvent["outcome"] = "write_back_applied";
+  input.wideEvent["flushed"] = flushed;
+  return { claimedThePass: true, flushed };
+};
+
 const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarResult> => {
   const {
     userId,
@@ -816,6 +1037,11 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     readState,
     isCurrent,
     flush,
+    applyInboundChanges,
+    requestDeleteConfirmation,
+    recordHealthyRead,
+    holdWriteBack,
+    now,
     onSyncEvent,
     onProgress,
     reconciliationScope,
@@ -869,6 +1095,45 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     }
 
     emitProgress("comparing", localEvents.length, state.remoteEvents.length);
+    const passNow = now?.() ?? new Date();
+    const inbound = classifyInboundChanges({
+      existingMappings: state.existingMappings,
+      localEvents: state.localEvents,
+      now: passNow,
+      projectLocalEvent: (event) => provider.normalizeEvent?.(event) ?? event,
+      remoteEvents: state.remoteEvents,
+      remoteRawItemCount: state.remoteRawItemCount,
+      scope: reconciliationScope,
+    });
+    appendTwoWayFields(wideEvent, inbound.counters, inbound.readHealth);
+    /*
+     * A pass can raise both at once for the same pair, and both are recorded on the one
+     * write-back state the pair has. The question about the copies that vanished is written
+     * last so it is the state that stands: a quarantine reverts the pair to one-way, which
+     * re-creates the copies the question is about and strands their pending state, while the
+     * question keeps the mode and writes nothing anywhere until a human answers.
+     */
+    await reportHealthyRead(inbound.healthyReadSourceCalendarIds, recordHealthyRead);
+    await reportWriteBackHold(inbound.writeBackHold, holdWriteBack);
+    await reportDeleteConfirmation(inbound.deleteConfirmation, requestDeleteConfirmation);
+    const inboundMappingUpdates = collectInboundMappingUpdates(inbound.classifications);
+    const actionableInboundChanges = inbound.classifications.filter(isApplierActionable);
+
+    const inboundPass = await runInboundWriteBack({
+      ...(applyInboundChanges && { applyInboundChanges }),
+      calendarId,
+      classifications: actionableInboundChanges,
+      flush,
+      mappingUpdates: inboundMappingUpdates,
+      now: passNow,
+      wideEvent,
+    });
+
+    if (inboundPass.claimedThePass) {
+      ({ flushed } = inboundPass);
+      return EMPTY_RESULT;
+    }
+
     const {
       mappingUpdates,
       operations,
@@ -879,8 +1144,10 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       state.existingMappings,
       state.remoteEvents,
       reconciliationScope,
+      new Set(inbound.suppressedMappingIds),
     ));
 
+    const allMappingUpdates = [...mappingUpdates, ...inboundMappingUpdates];
     const addCount = operations.filter((op) => op.type === "add" || op.type === "replace").length;
     const removeCount = operations.filter((op) => op.type === "remove" || op.type === "replace").length;
 
@@ -889,12 +1156,12 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     wideEvent["operations.total"] = addCount + removeCount;
     wideEvent["stale_mappings.count"] = staleMappingIds.length;
     appendStaleReasonFields(wideEvent, staleReasonCounts);
-    wideEvent["mapping_updates.count"] = mappingUpdates.length;
+    wideEvent["mapping_updates.count"] = allMappingUpdates.length;
 
     if (
       operations.length === 0
       && staleMappingIds.length === 0
-      && mappingUpdates.length === 0
+      && allMappingUpdates.length === 0
     ) {
       wideEvent["outcome"] = "in-sync";
       wideEvent["flushed"] = false;
@@ -909,6 +1176,16 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       current: 0,
       total: getTotalOperationCount(operations),
     });
+
+    const unverifyUpdates = collectPreWriteUnverifyUpdates(
+      operations,
+      state.existingMappings,
+    );
+    if (unverifyUpdates.length > 0) {
+      await flush({ deletes: [], inserts: [], updates: unverifyUpdates });
+      flushed = true;
+      wideEvent["two_way.pre_write_unverify_count"] = unverifyUpdates.length;
+    }
 
     const outcome = await executeRemoteOperations(
       operations,
@@ -940,10 +1217,10 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       wideEvent["operation_errors.truncated"] = outcome.errors.length > OPERATION_ERROR_SAMPLE_SIZE;
     }
 
-    if (mappingUpdates.length > 0) {
+    if (allMappingUpdates.length > 0) {
       await timer.measure(
         "mapping_flush",
-        () => flush({ deletes: [], inserts: [], updates: mappingUpdates }),
+        () => flush({ deletes: [], inserts: [], updates: allMappingUpdates }),
       );
       flushed = true;
     }

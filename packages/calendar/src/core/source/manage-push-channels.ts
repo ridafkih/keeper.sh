@@ -1,12 +1,12 @@
+import { allSettledWithConcurrency } from "../utils/concurrency";
+import { buildCalendarBackoffState } from "../utils/calendar-backoff";
+import { hashPushSecret } from "./push-secret";
 import {
-  allSettledWithConcurrency,
-  buildCalendarBackoffState,
-  hashPushSecret,
   isPushChannelGoneError,
   planPushChannelActions,
   resolvePushChannelHealth,
   shouldRetainPushChannelAction,
-} from "@keeper.sh/calendar";
+} from "./push-channel";
 import type {
   EligibleSourceCalendar,
   ListedPushChannel,
@@ -17,8 +17,12 @@ import type {
   RegistrarContext,
   SourcePushRegistrar,
   StoredPushChannel,
-} from "@keeper.sh/calendar";
+} from "./push-channel";
 import type { Plan } from "@keeper.sh/data-schemas";
+import type { calendarPushChannelsTable } from "@keeper.sh/database/schema";
+
+type NewPushChannel = typeof calendarPushChannelsTable.$inferInsert;
+type PushChannelUpdate = Partial<NewPushChannel>;
 
 const TICK_LOCK_KEY = "push-channel:tick";
 const TICK_LOCK_TTL_SECONDS = 300;
@@ -40,7 +44,7 @@ interface ManagePushChannelsDependencies {
   deleteNegativeCacheKey: (provider: string, providerChannelId: string) => Promise<void>;
   generateChannelId: () => string;
   generateSecret: () => string;
-  insertChannel: (row: Record<string, unknown>) => Promise<StoredPushChannel>;
+  insertChannel: (row: NewPushChannel) => Promise<StoredPushChannel>;
   now: () => Date;
   observe: (fields: Record<string, unknown>) => void;
   readChannel: (channelId: string) => Promise<StoredPushChannel | null>;
@@ -51,7 +55,7 @@ interface ManagePushChannelsDependencies {
   selectChannels: () => Promise<StoredPushChannel[]>;
   selectEligibleCalendars: () => Promise<EligibleSourceCalendar[]>;
   tryAcquireLock: (key: string, ttlSeconds: number) => Promise<boolean>;
-  updateChannel: (channelId: string, updates: Record<string, unknown>) => Promise<void>;
+  updateChannel: (channelId: string, updates: PushChannelUpdate) => Promise<void>;
   webhookPublicUrl: string | null;
 }
 

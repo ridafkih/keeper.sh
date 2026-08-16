@@ -6,6 +6,7 @@ import type {
   EventMapping,
   MaterializedSyncableEvent,
   RemoteEvent,
+  RemoteEventListing,
 } from "../../../src/index";
 import { createEditableEventContentHash } from "../../../src/core/events/content-hash";
 import { isEventInDestinationReconciliationWindow } from "../../../src/core/events/events";
@@ -118,9 +119,8 @@ const applyChanges = (mappings: EventMapping[], changes: PendingChanges): void =
   for (const update of changes.updates ?? []) {
     const mapping = mappings.find((candidate) => candidate.id === update.id);
     if (mapping) {
-      mapping.deleteIdentifier = update.deleteIdentifier;
-      mapping.syncEventHash = update.syncEventHash;
-      mapping.syncEventId = update.syncEventId;
+      const { id: _id, ...assignments } = update;
+      Object.assign(mapping, assignments);
     }
   }
 };
@@ -150,8 +150,8 @@ const createGoogleHarness = (options: HarnessOptions): Harness => {
   const state = createSharedState(options);
   let nextRemoteId = 0;
 
-  const listRemoteEvents = (listOptions: { timeMin: Date }): Promise<RemoteEvent[]> =>
-    Promise.resolve([...stored.values()].flatMap((event): RemoteEvent[] => {
+  const listRemoteEvents = (listOptions: { timeMin: Date }): Promise<RemoteEventListing> => {
+    const items = [...stored.values()].flatMap((event): RemoteEvent[] => {
       const startTime = parseGoogleEventTime(event.start);
       const endTime = parseGoogleEventTime(event.end);
       if (!startTime || !endTime || endTime < listOptions.timeMin) {
@@ -176,7 +176,9 @@ const createGoogleHarness = (options: HarnessOptions): Harness => {
         supportedAvailabilities: ["busy", "free"],
         uid: event.iCalUID ?? "",
       }];
-    }));
+    });
+    return Promise.resolve({ items, rawItemCount: items.length });
+  };
 
   const provider: CalendarSyncProvider = {
     deleteEvents: (eventIds) => {
@@ -235,11 +237,15 @@ const createGoogleHarness = (options: HarnessOptions): Harness => {
       },
       isCurrent: () => Promise.resolve(true),
       provider,
-      readState: async () => ({
-        existingMappings: [...mappings],
-        localEvents: readLocalEvents(state.events, state.scope),
-        remoteEvents: await listRemoteEvents({ timeMin: state.scope.requestedWindow.timeMin }),
-      }),
+      readState: async () => {
+        const listing = await listRemoteEvents({ timeMin: state.scope.requestedWindow.timeMin });
+        return {
+          existingMappings: [...mappings],
+          localEvents: readLocalEvents(state.events, state.scope),
+          remoteEvents: listing.items,
+          remoteRawItemCount: listing.rawItemCount,
+        };
+      },
       reconciliationScope: state.scope,
       userId: "user-1",
     }),
@@ -274,8 +280,8 @@ const createOutlookHarness = (options: HarnessOptions): Harness => {
     return { endTime, startTime };
   };
 
-  const listRemoteEvents = (listOptions: { timeMin: Date }): Promise<RemoteEvent[]> =>
-    Promise.resolve([...stored.values()].flatMap((event): RemoteEvent[] => {
+  const listRemoteEvents = (listOptions: { timeMin: Date }): Promise<RemoteEventListing> => {
+    const items = [...stored.values()].flatMap((event): RemoteEvent[] => {
       const range = readRange(event);
       if (!range || range.endTime < listOptions.timeMin) {
         return [];
@@ -299,7 +305,9 @@ const createOutlookHarness = (options: HarnessOptions): Harness => {
         supportedAvailabilities: ["busy", "free", "oof", "workingElsewhere"],
         uid: event.iCalUId,
       }];
-    }));
+    });
+    return Promise.resolve({ items, rawItemCount: items.length });
+  };
 
   const provider: CalendarSyncProvider = {
     deleteEvents: (eventIds) => {
@@ -354,11 +362,15 @@ const createOutlookHarness = (options: HarnessOptions): Harness => {
       },
       isCurrent: () => Promise.resolve(true),
       provider,
-      readState: async () => ({
-        existingMappings: [...mappings],
-        localEvents: readLocalEvents(state.events, state.scope),
-        remoteEvents: await listRemoteEvents({ timeMin: state.scope.requestedWindow.timeMin }),
-      }),
+      readState: async () => {
+        const listing = await listRemoteEvents({ timeMin: state.scope.requestedWindow.timeMin });
+        return {
+          existingMappings: [...mappings],
+          localEvents: readLocalEvents(state.events, state.scope),
+          remoteEvents: listing.items,
+          remoteRawItemCount: listing.rawItemCount,
+        };
+      },
       reconciliationScope: state.scope,
       userId: "user-1",
     }),
@@ -385,8 +397,8 @@ const createCalDAVHarness = (options: HarnessOptions): Harness => {
     rejectUnsupportedRecurrenceDates: false,
   }).events;
 
-  const listRemoteEvents = (listOptions: { timeMin: Date }): Promise<RemoteEvent[]> =>
-    Promise.resolve(readResources().flatMap((event): RemoteEvent[] => {
+  const listRemoteEvents = (listOptions: { timeMin: Date }): Promise<RemoteEventListing> => {
+    const items = readResources().flatMap((event): RemoteEvent[] => {
       if (event.endTime < listOptions.timeMin) {
         return [];
       }
@@ -408,7 +420,9 @@ const createCalDAVHarness = (options: HarnessOptions): Harness => {
         supportedAvailabilities: ["busy", "free"],
         uid: event.uid,
       }];
-    }));
+    });
+    return Promise.resolve({ items, rawItemCount: items.length });
+  };
 
   const provider: CalendarSyncProvider = {
     deleteEvents: (eventIds) => {
@@ -444,11 +458,15 @@ const createCalDAVHarness = (options: HarnessOptions): Harness => {
       },
       isCurrent: () => Promise.resolve(true),
       provider,
-      readState: async () => ({
-        existingMappings: [...mappings],
-        localEvents: readLocalEvents(state.events, state.scope),
-        remoteEvents: await listRemoteEvents({ timeMin: state.scope.requestedWindow.timeMin }),
-      }),
+      readState: async () => {
+        const listing = await listRemoteEvents({ timeMin: state.scope.requestedWindow.timeMin });
+        return {
+          existingMappings: [...mappings],
+          localEvents: readLocalEvents(state.events, state.scope),
+          remoteEvents: listing.items,
+          remoteRawItemCount: listing.rawItemCount,
+        };
+      },
       reconciliationScope: state.scope,
       userId: "user-1",
     }),

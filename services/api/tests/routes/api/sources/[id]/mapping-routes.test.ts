@@ -44,7 +44,28 @@ describe("handleGetSourceDestinationsRoute", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(await readJson(response)).toEqual({ destinationIds: ["dest-1", "dest-2"] });
+    expect(await readJson(response)).toEqual({
+      destinationIds: ["dest-1", "dest-2"],
+      writeBackModes: {},
+      writeBackStates: {},
+    });
+  });
+
+  it("reports why a mapping stopped writing back", async () => {
+    const response = await handleGetSourceDestinationsRoute(
+      { params: { id: "source-1" }, userId: "user-1" },
+      {
+        getDestinationsForSource: () => Promise.resolve(["dest-1"]),
+        getWriteBackStatesForSource: () => Promise.resolve({
+          "dest-1": { reason: "runaway_write_back", state: "quarantined" },
+        }),
+        sourceExists: () => Promise.resolve(true),
+      },
+    );
+
+    expect(await readJson(response)).toMatchObject({
+      writeBackStates: { "dest-1": { reason: "runaway_write_back", state: "quarantined" } },
+    });
   });
 });
 

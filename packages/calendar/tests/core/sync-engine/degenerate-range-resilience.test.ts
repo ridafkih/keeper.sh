@@ -94,32 +94,35 @@ const createGoogleHarness = (options: HarnessOptions): Harness => {
       }
       return Promise.resolve(eventIds.map(() => ({ success: true })));
     },
-    listRemoteEvents: () => Promise.resolve([...stored.values()].flatMap((event): RemoteEvent[] => {
-      const startTime = parseGoogleEventTime(event.start);
-      const endTime = parseGoogleEventTime(event.end);
-      if (!startTime || !endTime) {
-        return [];
-      }
-      const availability = toAvailability(event.transparency === "transparent");
-      return [{
-        deleteId: event.id,
-        editableAvailability: availability,
-        editableContentHash: createEditableEventContentHash({
-          availability,
-          description: event.description,
+    listRemoteEvents: () => {
+      const items = [...stored.values()].flatMap((event): RemoteEvent[] => {
+        const startTime = parseGoogleEventTime(event.start);
+        const endTime = parseGoogleEventTime(event.end);
+        if (!startTime || !endTime) {
+          return [];
+        }
+        const availability = toAvailability(event.transparency === "transparent");
+        return [{
+          deleteId: event.id,
+          editableAvailability: availability,
+          editableContentHash: createEditableEventContentHash({
+            availability,
+            description: event.description,
+            endTime,
+            isAllDay: Boolean(event.start?.date),
+            location: event.location,
+            startTime,
+            summary: event.summary ?? "",
+          }),
           endTime,
-          isAllDay: Boolean(event.start?.date),
-          location: event.location,
+          isKeeperEvent: true,
           startTime,
-          summary: event.summary ?? "",
-        }),
-        endTime,
-        isKeeperEvent: true,
-        startTime,
-        supportedAvailabilities: ["busy", "free"],
-        uid: event.iCalUID ?? "",
-      }];
-    })),
+          supportedAvailabilities: ["busy", "free"],
+          uid: event.iCalUID ?? "",
+        }];
+      });
+      return Promise.resolve({ items, rawItemCount: items.length });
+    },
     normalizeEvent: normalizeGoogleEvent,
     pushEvents: (events) => Promise.resolve(events.map((event) => {
       counters.pushAttempts += 1;
@@ -183,13 +186,17 @@ const createGoogleHarness = (options: HarnessOptions): Harness => {
       },
       isCurrent: () => Promise.resolve(true),
       provider,
-      readState: async () => ({
-        existingMappings: [...mappings],
-        localEvents: options.events(),
-        remoteEvents: await provider.listRemoteEvents({
+      readState: async () => {
+        const listing = await provider.listRemoteEvents({
           timeMin: WIDE_SCOPE.requestedWindow.timeMin,
-        }),
-      }),
+        });
+        return {
+          existingMappings: [...mappings],
+          localEvents: options.events(),
+          remoteEvents: listing.items,
+          remoteRawItemCount: listing.rawItemCount,
+        };
+      },
       reconciliationScope: WIDE_SCOPE,
       userId: "user-1",
     }),

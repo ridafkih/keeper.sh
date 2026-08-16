@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { handleEntitlementsRoute as handleEntitlementsRouteFn } from "../../../src/routes/api/entitlements";
 
+const COLD_IMPORT_TIMEOUT_MS = 30_000;
+
 let handleEntitlementsRoute: typeof handleEntitlementsRouteFn = () =>
   Promise.reject(new Error("Module not loaded"));
 
@@ -33,7 +35,7 @@ vi.mock("../../../src/context", () => ({
 
 beforeAll(async () => {
   ({ handleEntitlementsRoute } = await import("../../../src/routes/api/entitlements"));
-});
+}, COLD_IMPORT_TIMEOUT_MS);
 
 describe("handleEntitlementsRoute realtimeSync", () => {
   it("is true only for a pro plan on a configured deployment", async () => {
@@ -67,6 +69,7 @@ describe("handleEntitlementsRoute realtimeSync", () => {
       accounts: { current: 2, limit: null },
       canCustomizeIcalFeed: true,
       canUseEventFilters: true,
+      canUseTwoWaySync: true,
       feeds: { current: 1, limit: null },
       mappings: { current: 3, limit: null },
       plan: "pro",

@@ -35,13 +35,13 @@ const DDL = `
 create table oauth_credentials (
   "id" uuid primary key default gen_random_uuid(),
   "accessToken" text not null,
-  "createdAt" timestamp not null default now(),
+  "createdAt" timestamptz not null default now(),
   "email" text,
-  "expiresAt" timestamp not null,
+  "expiresAt" timestamptz not null,
   "needsReauthentication" boolean not null default false,
   "provider" text not null,
   "refreshToken" text not null,
-  "updatedAt" timestamp not null default now(),
+  "updatedAt" timestamptz not null default now(),
   "userId" text not null
 );
 create table caldav_credentials (
@@ -56,16 +56,16 @@ create table calendar_accounts (
   "accountId" text,
   "authType" text not null,
   "caldavCredentialId" uuid,
-  "calendarsRefreshAttemptedAt" timestamp,
-  "calendarsRefreshedAt" timestamp,
-  "createdAt" timestamp not null default now(),
+  "calendarsRefreshAttemptedAt" timestamptz,
+  "calendarsRefreshedAt" timestamptz,
+  "createdAt" timestamptz not null default now(),
   "displayName" text,
   "email" text,
   "needsReauthentication" boolean not null default false,
   "oauthCredentialId" uuid,
   "provider" text not null,
   "reauthenticationSource" text,
-  "updatedAt" timestamp not null default now(),
+  "updatedAt" timestamptz not null default now(),
   "userId" text not null
 );
 create unique index "calendar_accounts_provider_account_idx"
@@ -76,7 +76,7 @@ create table calendars (
   "calendarType" text not null,
   "calendarUrl" text,
   "capabilities" text[] not null default array['pull'],
-  "createdAt" timestamp not null default now(),
+  "createdAt" timestamptz not null default now(),
   "customEventName" text not null default '{{calendar_name}}',
   "disabled" boolean not null default false,
   "excludeAllDayEvents" boolean not null default false,
@@ -91,37 +91,38 @@ create table calendars (
   "ingestFailureCount" integer not null default 0,
   "ingestFutureRange" text not null default '2_years',
   "ingestHistoricRange" text not null default '1_month',
-  "ingestLastFailureAt" timestamp,
-  "ingestNextAttemptAt" timestamp,
-  "ingestWindowEnd" timestamp,
-  "ingestWindowRecordedAt" timestamp,
-  "ingestWindowStart" timestamp,
-  "lastFailureAt" timestamp,
+  "ingestLastFailureAt" timestamptz,
+  "ingestNextAttemptAt" timestamptz,
+  "ingestWindowEnd" timestamptz,
+  "ingestWindowRecordedAt" timestamptz,
+  "ingestLastSucceededAt" timestamptz,
+  "ingestWindowStart" timestamptz,
+  "lastFailureAt" timestamptz,
   "name" text not null,
-  "nextAttemptAt" timestamp,
+  "nextAttemptAt" timestamptz,
   "originalName" text,
   "syncFutureRange" text not null default '2_years',
   "syncHistoricRange" text not null default '1_month',
   "syncToken" text,
   "treatFullDayTimedEventsAsAllDay" boolean not null default false,
-  "unavailableSince" timestamp,
-  "updatedAt" timestamp not null default now(),
+  "unavailableSince" timestamptz,
+  "updatedAt" timestamptz not null default now(),
   "url" text,
   "userId" text not null
 );
 create table source_destination_mappings (
   "id" uuid primary key default gen_random_uuid(),
-  "createdAt" timestamp not null default now(),
+  "createdAt" timestamptz not null default now(),
   "destinationCalendarId" uuid not null,
   "sourceCalendarId" uuid not null
 );
 create table sync_status (
   "id" uuid primary key default gen_random_uuid(),
   "calendarId" uuid not null,
-  "lastSyncedAt" timestamp,
+  "lastSyncedAt" timestamptz,
   "localEventCount" integer not null default 0,
   "remoteEventCount" integer not null default 0,
-  "updatedAt" timestamp not null default now()
+  "updatedAt" timestamptz not null default now()
 );
 create unique index "sync_status_calendar_idx" on "sync_status" ("calendarId");
 `;

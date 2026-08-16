@@ -11,9 +11,11 @@ import {
 } from "../events/content-hash";
 import { overlapsTimeWindow } from "../events/time-range";
 import type { SyncWindow } from "./sync-range";
+import type { WriteBackPolicy } from "./write-back-policy";
 
 interface ReconciliationScope {
   authoritativeWindow: SyncWindow | null;
+  writeBackPolicies?: ReadonlyMap<string, WriteBackPolicy>;
   authoritativeSourceWindows?: ReadonlyMap<string, SyncWindow>;
   configuredSourceCalendarIds?: ReadonlySet<string>;
   requestedWindow: SyncWindow;
@@ -260,12 +262,17 @@ const matchRemoteEventsToMappings = (
       continue;
     }
 
-    if (mapping.deleteIdentifier !== mapping.destinationEventUid) {
-      continue;
-    }
-    const legacyUidMatches = remoteEventsByUid.get(mapping.destinationEventUid) ?? [];
-    if (legacyUidMatches.length === 1 && legacyUidMatches[0]) {
-      matches.set(mapping.id, legacyUidMatches[0]);
+    /*
+     * The copy's uid survives what its delete identifier does not. Graph reassigns an
+     * event id when the item is restored from Deleted Items, moved between folders or
+     * migrated, and a CalDAV object rewritten under a new href does the same. Reading
+     * the pair as unmatched would call the copy gone, and two-way sync answers "gone"
+     * by destroying the original. One remote event under the mapping's own uid is that
+     * copy; more than one is ambiguous and is left unmatched.
+     */
+    const uidMatches = remoteEventsByUid.get(mapping.destinationEventUid) ?? [];
+    if (uidMatches.length === 1 && uidMatches[0]) {
+      matches.set(mapping.id, uidMatches[0]);
     }
   }
 
@@ -621,6 +628,7 @@ const computeSyncOperations = (
   existingMappings: EventMapping[],
   remoteEvents: RemoteEvent[],
   scope: ReconciliationScope,
+  suppressedMappingIds?: ReadonlySet<string>,
 ): ComputeSyncOperationsResult => {
   const authoritativeLocalEvents: MaterializedSyncableEvent[] = [];
   const activeMappings: EventMapping[] = [];
@@ -662,7 +670,8 @@ const computeSyncOperations = (
     occurrenceReassignments.map(({ event }) => event.id),
   );
   const standardMappings = activeMappings.filter(
-    (mapping) => !reassignedMappingIds.has(mapping.id),
+    (mapping) => !reassignedMappingIds.has(mapping.id)
+      && !suppressedMappingIds?.has(mapping.id),
   );
   const mappedRemoteIdentities = new Set(
     [...remoteEventsByMappingId.values()].map((remoteEvent) =>
@@ -685,7 +694,6 @@ const computeSyncOperations = (
       !staleMappingIdSet.has(mapping.id)
       && localEvent
       && remoteEvent
-      && mapping.deleteIdentifier === mapping.destinationEventUid
       && remoteEvent.deleteId !== mapping.deleteIdentifier
     ) {
       mappingUpdatesById.set(mapping.id, {
@@ -772,6 +780,8 @@ const computeSyncOperations = (
 
 export {
   buildAddOperations,
+  isInsideSourceAuthoritativeWindow,
+  isSameSerializedSecond,
   buildRemoveOperations,
   buildRemoveOperationsForMappings,
   buildReplacementOperations,

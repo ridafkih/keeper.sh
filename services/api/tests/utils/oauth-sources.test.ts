@@ -10,7 +10,7 @@ let createAccountCalls: unknown[] = [];
 let createSourceCalls: unknown[] = [];
 let insertCalendarsCalls: unknown[] = [];
 let triggerSyncCalls: { provider: string; userId: string }[] = [];
-let listedCalendars: { externalId: string; name: string }[] = [];
+let listedCalendars: { externalId: string; name: string; writable: boolean }[] = [];
 
 beforeEach(() => {
   canAddAccountCalls = [];
@@ -59,7 +59,7 @@ describe("importOAuthAccountCalendarsWithDependencies", () => {
   });
 
   it("reuses an existing OAuth account without checking the account limit", async () => {
-    listedCalendars = [{ externalId: "external-1", name: "Team Calendar" }];
+    listedCalendars = [{ externalId: "external-1", name: "Team Calendar", writable: true }];
 
     const accountId = await importOAuthAccountCalendarsWithDependencies(
       {
@@ -93,7 +93,11 @@ describe("importOAuthAccountCalendarsWithDependencies", () => {
 
     expect(accountId).toBe("account-1");
     expect(canAddAccountCalls).toHaveLength(0);
-    expect(insertCalendarsCalls).toEqual([[{ externalId: "external-1", name: "Team Calendar" }]]);
+    expect(insertCalendarsCalls).toEqual([[{
+      externalId: "external-1",
+      name: "Team Calendar",
+      writable: true,
+    }]]);
     expect(triggerSyncCalls).toEqual([{ provider: "google", userId: "user-1" }]);
   });
 });
@@ -125,6 +129,7 @@ describe("createOAuthSourceWithDependencies", () => {
         findCredentialEmail: () => Promise.resolve({ email: null, exists: true }),
         findExistingAccountId: () => Promise.resolve(null),
         hasExistingCalendar: () => Promise.resolve(false),
+        resolveWritability: () => Promise.resolve(true),
         triggerSync: (userId, provider) => {
           triggerSyncCalls.push({ provider, userId });
         },
@@ -171,6 +176,7 @@ describe("createOAuthSourceWithDependencies", () => {
         findCredentialEmail: () => Promise.resolve({ email: "person@example.com", exists: true }),
         findExistingAccountId: () => Promise.resolve("account-1"),
         hasExistingCalendar: () => Promise.resolve(false),
+        resolveWritability: () => Promise.resolve(true),
         triggerSync: (userId, provider) => {
           triggerSyncCalls.push({ provider, userId });
         },
@@ -219,6 +225,7 @@ describe("createOAuthSourceWithDependencies", () => {
           findCredentialEmail: () => Promise.resolve({ email: "person@example.com", exists: true }),
           findExistingAccountId: () => Promise.resolve(null),
           hasExistingCalendar: () => Promise.resolve(false),
+        resolveWritability: () => Promise.resolve(true),
           triggerSync: () => null,
         },
       ),

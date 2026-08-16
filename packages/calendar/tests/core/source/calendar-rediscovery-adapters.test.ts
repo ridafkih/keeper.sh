@@ -72,6 +72,7 @@ describe("toExistingCalendars", () => {
     const rows = toExistingCalendars(
       [{
         calendarUrl: null,
+        capabilities: ["pull", "push"],
         createdAt,
         externalCalendarId: "external-1",
         id: "calendar-1",
@@ -82,6 +83,7 @@ describe("toExistingCalendars", () => {
 
     expect(rows).toEqual([{
       calendarUrl: null,
+      capabilities: ["pull", "push"],
       createdAt,
       id: "calendar-1",
       identityKey: "external-1",
@@ -93,6 +95,7 @@ describe("toExistingCalendars", () => {
     const rows = toExistingCalendars(
       [{
         calendarUrl: "https://cloud.example.com/dav/bob/My%20Work/",
+        capabilities: ["pull", "push"],
         createdAt,
         externalCalendarId: null,
         id: "calendar-1",
@@ -109,6 +112,7 @@ describe("toExistingCalendars", () => {
     expect(() => toExistingCalendars(
       [{
         calendarUrl: "not-a-url",
+        capabilities: ["pull", "push"],
         createdAt,
         externalCalendarId: null,
         id: "calendar-broken",
@@ -123,6 +127,7 @@ describe("toExistingCalendars", () => {
       [
         {
           calendarUrl: null,
+          capabilities: ["pull", "push"],
           createdAt,
           externalCalendarId: null,
           id: "calendar-destination",
@@ -130,6 +135,7 @@ describe("toExistingCalendars", () => {
         },
         {
           calendarUrl: null,
+          capabilities: ["pull", "push"],
           createdAt,
           externalCalendarId: "external-1",
           id: "calendar-source",
@@ -146,6 +152,7 @@ describe("toExistingCalendars", () => {
     const rows = toExistingCalendars(
       [{
         calendarUrl: null,
+        capabilities: ["pull", "push"],
         createdAt,
         externalCalendarId: null,
         id: "calendar-destination",

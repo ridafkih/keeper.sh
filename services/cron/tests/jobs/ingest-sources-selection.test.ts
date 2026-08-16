@@ -3,6 +3,8 @@ import { and, arrayContains, eq, inArray } from "drizzle-orm";
 import { calendarsTable } from "@keeper.sh/database/schema";
 import type { ingestOAuthSources as ingestOAuthSourcesFn } from "../../src/jobs/ingest-sources";
 
+const COLD_IMPORT_TIMEOUT_MS = 30_000;
+
 const capturedPredicates: unknown[] = [];
 
 const createQueryBuilder = () => {
@@ -54,7 +56,7 @@ vi.mock("../../src/utils/enqueue-destination-syncs", () => ({
 
 beforeAll(async () => {
   ({ ingestOAuthSources } = await import("../../src/jobs/ingest-sources"));
-});
+}, COLD_IMPORT_TIMEOUT_MS);
 
 beforeEach(() => {
   capturedPredicates.length = 0;

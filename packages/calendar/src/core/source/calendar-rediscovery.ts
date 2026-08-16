@@ -1,3 +1,4 @@
+import { resolveSourceCalendarCapabilities } from "@keeper.sh/data-schemas";
 import type { GoogleCalendarListEntry } from "@keeper.sh/data-schemas";
 import { normalizeCalDAVCalendarKey } from "../../providers/caldav/shared/calendar-identity";
 import type { CalendarInfo } from "../../providers/caldav/types";
@@ -14,6 +15,7 @@ interface DiscoveredCalendar {
 
 interface ExistingCalendar {
   id: string;
+  capabilities: readonly string[];
   identityKey: string;
   calendarUrl: string | null;
   unavailableSince: Date | null;
@@ -25,11 +27,23 @@ interface CalendarRetarget {
   calendarUrl: string;
 }
 
+interface CalendarCapabilityCorrection {
+  id: string;
+  capabilities: string[];
+}
+
 interface CalendarRediscoveryPlan {
   toInsert: DiscoveredCalendar[];
   toRevive: string[];
   toMarkUnavailable: string[];
   toRetargetUrl: CalendarRetarget[];
+  /*
+   * What a calendar can do is the provider's current answer, not a fact settled when the
+   * row was first written. A calendar shared read-only after it was connected — or
+   * connected before the column meant anything — still claims it can be written to, and
+   * the write-back gate believes it. Every enumeration re-states the answer.
+   */
+  toUpdateCapabilities: CalendarCapabilityCorrection[];
   unchangedCount: number;
   duplicateCount: number;
   crossAccountSkippedCount: number;
@@ -45,6 +59,7 @@ interface CalendarRediscoveryInput {
 
 interface StoredCalendarRow {
   id: string;
+  capabilities: readonly string[];
   calendarUrl: string | null;
   externalCalendarId: string | null;
   unavailableSince: Date | null;
@@ -67,6 +82,7 @@ const EMPTY_PLAN: CalendarRediscoveryPlan = {
   toMarkUnavailable: [],
   toRetargetUrl: [],
   toRevive: [],
+  toUpdateCapabilities: [],
   unchangedCount: 0,
 };
 
@@ -127,6 +143,17 @@ const predatesEnumeration = (
   !enumerationStartedAt
   || calendar.createdAt.getTime() <= enumerationStartedAt.getTime();
 
+const buildCapabilityCorrection = (
+  calendar: DiscoveredCalendar,
+  match: ExistingCalendar,
+): CalendarCapabilityCorrection[] => {
+  const capabilities = resolveSourceCalendarCapabilities(calendar.writable);
+  if (capabilities.join(",") === [...match.capabilities].join(",")) {
+    return [];
+  }
+  return [{ capabilities, id: match.id }];
+};
+
 const buildUrlRetarget = (
   calendar: DiscoveredCalendar,
   match: ExistingCalendar,
@@ -179,6 +206,9 @@ const planCalendarRediscovery = (
     toRevive: matched
       .filter(({ match }) => match.unavailableSince !== null)
       .map(({ match }) => match.id),
+    toUpdateCapabilities: matched.flatMap(
+      ({ calendar, match }) => buildCapabilityCorrection(calendar, match),
+    ),
     unchangedCount: matched.length,
   };
 };
@@ -245,6 +275,7 @@ const toExistingCalendars = (
   rows.flatMap((row) =>
     resolveStoredIdentityKey(row, calendarType).map((identityKey) => ({
       calendarUrl: row.calendarUrl,
+      capabilities: row.capabilities,
       createdAt: row.createdAt,
       id: row.id,
       identityKey,
@@ -268,6 +299,7 @@ export {
   toExistingCalendars,
 };
 export type {
+  CalendarCapabilityCorrection,
   CalendarRediscoveryPlan,
   CalendarRetarget,
   DiscoveredCalendar,
